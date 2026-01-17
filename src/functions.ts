@@ -5,6 +5,7 @@ import {
 	findSemicolonOutsideBrackets,
 	getTypeRangeMax,
 	isVariableName,
+	type ParsedBinding,
 } from './common/types';
 import { stripLeadingSemicolon } from './common/helpers';
 
@@ -303,4 +304,89 @@ export function parseFunctionDefinition(input: string): Result<ParsedFunctionDef
 	};
 
 	return ok({ definition: def, remaining: bodyResult.value.remaining });
+}
+
+/**
+ * Checks if a type annotation looks like a function type (e.g., "() => I32" or "(I32, I32) => I32").
+ */
+export function isFunctionType(typeAnnotation: string): boolean {
+	const trimmed = typeAnnotation.trim();
+	return trimmed.startsWith('(') && trimmed.includes('=>');
+}
+
+/**
+ * Parses a function type annotation and extracts the return type.
+ * Format: (ParamType1, ParamType2, ...) => ReturnType
+ */
+export function parseFunctionType(typeAnnotation: string): Result<string> {
+	const trimmed = typeAnnotation.trim();
+	const arrowIndex = trimmed.indexOf('=>');
+	if (arrowIndex < 0) {
+		return err('Invalid function type: missing arrow');
+	}
+
+	const returnType = trimmed.substring(arrowIndex + 2).trim();
+	if (returnType.length === 0) {
+		return err('Invalid function type: missing return type');
+	}
+
+	return ok(returnType);
+}
+
+/**
+ * Validates that a function reference matches its type annotation.
+ */
+export function validateFunctionReference(
+	functionName: string,
+	typeAnnotation: string,
+): Result<void> {
+	const def = getFunctionDefinition(functionName);
+	if (def === undefined) {
+		return err(`Function '${functionName}' not defined`);
+	}
+
+	const expectedReturnTypeResult = parseFunctionType(typeAnnotation);
+	if (expectedReturnTypeResult.type === 'err') {
+		return expectedReturnTypeResult;
+	}
+
+	const expectedReturnType = expectedReturnTypeResult.value;
+	if (def.returnType !== expectedReturnType) {
+		return err(
+			`Function '${functionName}' has return type ${def.returnType}, expected ${expectedReturnType}`,
+		);
+	}
+
+	return ok(undefined as void);
+}
+
+/**
+ * Parses a function type binding declaration.
+ */
+export function parseFunctionTypeBinding(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string,
+	valueStr: string,
+	remaining: string,
+): Result<ParsedBinding> {
+	const trimmedValueStr = valueStr.trim();
+	if (!isVariableName(trimmedValueStr)) {
+		return err('Function reference value must be a variable name (function name)');
+	}
+
+	const validationResult = validateFunctionReference(trimmedValueStr, typeAnnotation);
+	if (validationResult.type === 'err') {
+		return validationResult;
+	}
+
+	return ok({
+		name: varName,
+		value: undefined,
+		isMutable,
+		remaining,
+		functionReferenceValue: {
+			functionName: trimmedValueStr,
+		},
+	});
 }

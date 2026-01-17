@@ -135,6 +135,12 @@ export function validateArrayInitialization(
 		);
 	}
 
+	// Allow uninitialized arrays (initializedCount = 0, capacity > 0)
+	if (arrayType.initializedCount === 0) {
+		return ok(undefined as void);
+	}
+
+	// For initialized arrays, all elements must match capacity
 	if (arrayType.initializedCount !== arrayType.totalCapacity) {
 		return err('Currently, all allocated array elements must be initialized');
 	}

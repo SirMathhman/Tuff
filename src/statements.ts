@@ -2,6 +2,7 @@
 import { err, ok, type Result } from './common/result';
 import {
 	type ContextAndRemaining,
+	type DestructuredFields,
 	type ExecutionContext,
 	findClosingBrace,
 	findSemicolonOutsideBrackets,
@@ -32,13 +33,16 @@ import {
 	registerStructDefinition,
 	isStructType,
 	handleStructInstantiation,
+	handleStructDestructuring,
 } from './structs';
 import {
 	isFunctionDefinition,
 	parseFunctionDefinition,
 	registerFunctionDefinition,
+	isFunctionType,
+	parseFunctionTypeBinding,
 } from './functions';
-import { parseArrayTypeBinding } from './arrays';
+import { parseArrayTypeBinding, parseArrayType } from './arrays';
 import { parseTupleTypeBinding } from './tuples';
 import {
 	isEnumType,
@@ -91,6 +95,38 @@ function handleUninitializedDeclaration(
 /**
  * Handles processing variable binding with value and semicolon.
  */
+/**
+ * Attempts to parse value binding with a specific type annotation.
+ */
+function tryTypeSpecificValueBinding(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> | undefined {
+	if (typeAnnotation.startsWith('[')) {
+		return parseArrayTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	}
+	if (typeAnnotation.startsWith('(') && isFunctionType(typeAnnotation)) {
+		return parseFunctionTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining);
+	}
+	if (typeAnnotation.startsWith('(')) {
+		return parseTupleTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	}
+	if (isPointerType(typeAnnotation)) {
+		return parsePointerTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	}
+	if (isEnumType(typeAnnotation)) {
+		return parseEnumTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining);
+	}
+	if (isStructType(typeAnnotation)) {
+		return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	}
+	return undefined;
+}
+
 function handleValueBinding(
 	varName: string,
 	isMutable: boolean,
@@ -106,20 +142,16 @@ function handleValueBinding(
 	const valueStr = withoutEqual.substring(0, semiIndex).trim();
 	const remaining = withoutEqual.substring(semiIndex + 1).trim();
 	if (typeAnnotation !== undefined) {
-		if (typeAnnotation.startsWith('[')) {
-			return parseArrayTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
-		}
-		if (typeAnnotation.startsWith('(')) {
-			return parseTupleTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
-		}
-		if (isPointerType(typeAnnotation)) {
-			return parsePointerTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
-		}
-		if (isEnumType(typeAnnotation)) {
-			return parseEnumTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining);
-		}
-		if (isStructType(typeAnnotation)) {
-			return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+		const typeSpecificResult = tryTypeSpecificValueBinding(
+			varName,
+			isMutable,
+			typeAnnotation,
+			valueStr,
+			remaining,
+			context,
+		);
+		if (typeSpecificResult !== undefined) {
+			return typeSpecificResult;
 		}
 	}
 	const valueResult = interpretInternal(valueStr, context);
@@ -142,6 +174,106 @@ function handleValueBinding(
 }
 
 /**
+ * Handles uninitialized array declaration.
+ */
+function handleUninitializedArrayDeclaration(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string,
+	withoutLet: string,
+): Result<ParsedBinding> {
+	const semiIndex = findSemicolonOutsideBrackets(withoutLet);
+	if (semiIndex < 0) {
+		return err('Variable declaration missing semicolon');
+	}
+	const remaining = withoutLet.substring(semiIndex + 1).trim();
+
+	const typeResult = parseArrayType(typeAnnotation);
+	if (typeResult.type === 'err') {
+		return typeResult;
+	}
+	const arrayType = typeResult.value;
+
+	return ok({
+		name: varName,
+		value: undefined,
+		isMutable,
+		remaining,
+		arrayValue: {
+			elementType: arrayType.elementType,
+			elements: [],
+			initializedCount: arrayType.initializedCount,
+			totalCapacity: arrayType.totalCapacity,
+		},
+	});
+}
+
+/**
+ * Handles uninitialized tuple declaration.
+ */
+function handleUninitializedTupleDeclaration(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string,
+	withoutLet: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
+	const semiIndex = findSemicolonOutsideBrackets(withoutLet);
+	if (semiIndex < 0) {
+		return err('Variable declaration missing semicolon');
+	}
+	const remaining = withoutLet.substring(semiIndex + 1).trim();
+	return parseTupleTypeBinding(varName, isMutable, typeAnnotation, '', remaining, context);
+}
+
+/**
+ * Parses a destructuring declaration (e.g., let { x, y } = myPoint;).
+ */
+function parseDestructuringDeclaration(
+	input: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
+	const trimmed = input.trim();
+
+	// Find the closing brace of the destructuring pattern
+	const closingBraceIndex = findClosingBrace(trimmed);
+	if (closingBraceIndex < 0) {
+		return err('Mismatched braces in destructuring pattern');
+	}
+
+	const pattern = trimmed.substring(0, closingBraceIndex + 1);
+	const afterPattern = trimmed.substring(closingBraceIndex + 1).trim();
+
+	// Check for mut keyword before the pattern (not applicable for destructuring)
+	// and check for assignment
+
+	if (!afterPattern.startsWith('=')) {
+		return err('Destructuring pattern must be followed by assignment (=)');
+	}
+
+	const isMutable = false; // Destructuring doesn't support mut keyword on the pattern
+	const valueAndRemaining = afterPattern.substring(1).trim();
+
+	const semiIndex = findSemicolonOutsideBrackets(valueAndRemaining);
+	if (semiIndex < 0) {
+		return err('Destructuring assignment missing semicolon');
+	}
+
+	const valueStr = valueAndRemaining.substring(0, semiIndex).trim();
+	const remaining = valueAndRemaining.substring(semiIndex + 1).trim();
+
+	// Import and use the destructuring handler from structs
+	const destructuringResult = handleStructDestructuring(
+		pattern,
+		isMutable,
+		valueStr,
+		remaining,
+		context,
+	);
+	return destructuringResult;
+}
+
+/**
  * Parses a variable binding declaration.
  */
 function parseVariableBinding(input: string, context: ExecutionContext): Result<ParsedBinding> {
@@ -151,6 +283,12 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 	}
 
 	const withoutLet = trimmed.substring(4).trim();
+
+	// Check if this is a destructuring pattern (starts with {)
+	if (withoutLet.trim().startsWith('{')) {
+		return parseDestructuringDeclaration(withoutLet, context);
+	}
+
 	const headerResult = parseVariableDeclarationHeader(withoutLet);
 	if (headerResult.type === 'err') {
 		return headerResult;
@@ -158,15 +296,92 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 
 	const { varName, isMutable, typeAnnotation, afterTypeOrName } = headerResult.value;
 
-	if (afterTypeOrName.length === 0) {
+	if (afterTypeOrName.length > 0) {
+		return handleValueBinding(varName, isMutable, typeAnnotation, afterTypeOrName, context);
+	}
+
+	if (typeAnnotation === undefined) {
 		return handleUninitializedDeclaration(varName, isMutable, withoutLet);
 	}
 
-	return handleValueBinding(varName, isMutable, typeAnnotation, afterTypeOrName, context);
+	if (typeAnnotation.startsWith('[')) {
+		return handleUninitializedArrayDeclaration(varName, isMutable, typeAnnotation, withoutLet);
+	}
+
+	if (typeAnnotation.startsWith('(')) {
+		return handleUninitializedTupleDeclaration(
+			varName,
+			isMutable,
+			typeAnnotation,
+			withoutLet,
+			context,
+		);
+	}
+
+	return handleUninitializedDeclaration(varName, isMutable, withoutLet);
 }
 /**
  * Processes a let declaration statement.
  */
+/**
+ * Handle destructured field bindings for struct destructuring.
+ */
+function handleDestructuredFields(
+	destructuredFields: DestructuredFields,
+	context: ExecutionContext,
+	remaining: string,
+): Result<ContextAndRemaining> {
+	const newBindings: VariableBinding[] = [];
+
+	for (const fieldName of destructuredFields.fields) {
+		const fieldValue = destructuredFields.structValue.values.get(fieldName);
+		if (fieldValue === undefined) {
+			return err(`Field '${fieldName}' not found in destructured struct`);
+		}
+
+		newBindings.push({
+			name: fieldName,
+			value: fieldValue,
+			isMutable: false,
+		});
+	}
+
+	const newContext = {
+		bindings: [...context.bindings, ...newBindings],
+	};
+	return ok({ context: newContext, remaining });
+}
+
+/**
+ * Create a variable binding from parsed binding data.
+ */
+function createVariableBinding(parsed: ParsedBinding): VariableBinding {
+	const binding: VariableBinding = {
+		name: parsed.name,
+		value: parsed.value,
+		isMutable: parsed.isMutable,
+	};
+	if (parsed.structValue !== undefined) {
+		binding.structValue = parsed.structValue;
+	}
+	if (parsed.arrayValue !== undefined) {
+		binding.arrayValue = parsed.arrayValue;
+	}
+	if (parsed.tupleValue !== undefined) {
+		binding.tupleValue = parsed.tupleValue;
+	}
+	if (parsed.enumValue !== undefined) {
+		binding.enumValue = parsed.enumValue;
+	}
+	if (parsed.pointerValue !== undefined) {
+		binding.pointerValue = parsed.pointerValue;
+	}
+	if (parsed.functionReferenceValue !== undefined) {
+		binding.functionReferenceValue = parsed.functionReferenceValue;
+	}
+	return binding;
+}
+
 function processLetDeclaration(
 	input: string,
 	context: ExecutionContext,
@@ -176,64 +391,75 @@ function processLetDeclaration(
 		return bindResult;
 	}
 
-	const { name, value, isMutable, structValue, arrayValue, tupleValue, enumValue, pointerValue } =
-		bindResult.value;
-	if (context.bindings.some((binding): boolean => binding.name === name)) {
-		return err(`Variable '${name}' is already defined`);
+	const parsed = bindResult.value;
+
+	// Handle struct destructuring
+	if (parsed.destructuredFields !== undefined) {
+		return handleDestructuredFields(parsed.destructuredFields, context, parsed.remaining);
 	}
 
-	const newBinding: VariableBinding = { name, value, isMutable };
-	if (structValue !== undefined) {
-		newBinding.structValue = structValue;
+	if (context.bindings.some((binding): boolean => binding.name === parsed.name)) {
+		return err(`Variable '${parsed.name}' is already defined`);
 	}
-	if (arrayValue !== undefined) {
-		newBinding.arrayValue = arrayValue;
-	}
-	if (tupleValue !== undefined) {
-		newBinding.tupleValue = tupleValue;
-	}
-	if (enumValue !== undefined) {
-		newBinding.enumValue = enumValue;
-	}
-	if (pointerValue !== undefined) {
-		newBinding.pointerValue = pointerValue;
-	}
+
+	const newBinding = createVariableBinding(parsed);
 	const newContext = {
 		bindings: [...context.bindings, newBinding],
 	};
-	return ok({ context: newContext, remaining: bindResult.value.remaining });
+	return ok({ context: newContext, remaining: parsed.remaining });
 }
-function processAssignmentStatement(
+
+/**
+ * Handles pointer assignment through dereference.
+ */
+function handlePointerAssignment(
+	input: string,
+	context: ExecutionContext,
+): Result<ContextAndRemaining> | undefined {
+	const pointerAssign = parsePointerAssignment(input, context);
+	if (pointerAssign === undefined) {
+		return undefined;
+	}
+
+	const pointerBinding = context.bindings.find(
+		(b): boolean => b.name === pointerAssign.pointerVarName,
+	);
+	if (!pointerBinding?.pointerValue) {
+		return err('Invalid pointer assignment');
+	}
+	if (!pointerBinding.pointerValue.isMutable) {
+		return err('Cannot assign through immutable pointer');
+	}
+	const pointsToName = pointerBinding.pointerValue.pointsToName;
+	const updatedBindings = context.bindings.map((binding): VariableBinding => {
+		if (binding.name === pointsToName) {
+			return { ...binding, value: pointerAssign.newValue };
+		}
+		return binding;
+	});
+	const newContext = { bindings: updatedBindings };
+	return ok({ context: newContext, remaining: pointerAssign.remaining });
+}
+
+/**
+ * Handles simple variable or array element assignment.
+ */
+function handleVariableAssignment(
 	input: string,
 	context: ExecutionContext,
 ): Result<ContextAndRemaining> {
-	const pointerAssign = parsePointerAssignment(input, context);
-	if (pointerAssign !== undefined) {
-		const pointerBinding = context.bindings.find(
-			(b): boolean => b.name === pointerAssign.pointerVarName,
-		);
-		if (!pointerBinding?.pointerValue) {
-			return err('Invalid pointer assignment');
-		}
-		if (!pointerBinding.pointerValue.isMutable) {
-			return err('Cannot assign through immutable pointer');
-		}
-		const pointsToName = pointerBinding.pointerValue.pointsToName;
-		const updatedBindings = context.bindings.map((binding): VariableBinding => {
-			if (binding.name === pointsToName) {
-				return { ...binding, value: pointerAssign.newValue };
-			}
-			return binding;
-		});
-		const newContext = { bindings: updatedBindings };
-		return ok({ context: newContext, remaining: pointerAssign.remaining });
-	}
-
 	const assignResult = parseAssignment(input, context);
 	if (assignResult.type === 'err') {
 		return assignResult;
 	}
-	const { name, value, structValue } = assignResult.value;
+	const { name, value, structValue, arrayAssignmentUpdatedBindings, remaining } = assignResult.value;
+
+	// Handle array element assignment
+	if (arrayAssignmentUpdatedBindings !== undefined) {
+		const newContext = { bindings: arrayAssignmentUpdatedBindings };
+		return ok({ context: newContext, remaining });
+	}
+
 	const updatedBindings = context.bindings.map((binding): VariableBinding => {
 		if (binding.name === name) {
 			const updated: VariableBinding = { name, value, isMutable: binding.isMutable };
@@ -246,7 +472,22 @@ function processAssignmentStatement(
 	});
 
 	const newContext = { bindings: updatedBindings };
-	return ok({ context: newContext, remaining: assignResult.value.remaining });
+	return ok({ context: newContext, remaining });
+}
+
+/**
+ * Processes an assignment statement (variable, array, or pointer).
+ */
+function processAssignmentStatement(
+	input: string,
+	context: ExecutionContext,
+): Result<ContextAndRemaining> {
+	const pointerResult = handlePointerAssignment(input, context);
+	if (pointerResult !== undefined) {
+		return pointerResult;
+	}
+
+	return handleVariableAssignment(input, context);
 }
 function processYieldInBlock(
 	innerRemaining: string,

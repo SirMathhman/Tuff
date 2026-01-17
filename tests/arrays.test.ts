@@ -1,22 +1,6 @@
-import { interpret } from '../src/interpret';
+import { expectInterpretOk, expectInterpretErrContains } from '../src/testing/test-helpers';
 
-function expectInterpretOk(input: string, expected: number): void {
-	const result = interpret(input);
-	expect(result.type).toBe('ok');
-	if (result.type === 'ok') {
-		expect(result.value).toBe(expected);
-	}
-}
-
-function expectInterpretErrContains(input: string, expectedMessage: string): void {
-	const result = interpret(input);
-	expect(result.type).toBe('err');
-	if (result.type === 'err') {
-		expect(result.error).toContain(expectedMessage);
-	}
-}
-
-describe('interpret - arrays', (): void => {
+describe('interpret - arrays - basic', (): void => {
 	it('should interpret array literal and access elements', (): void => {
 		expectInterpretOk('let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]', 6);
 	});
@@ -62,5 +46,37 @@ describe('interpret - arrays', (): void => {
 
 	it('should interpret array with computed elements in expression', (): void => {
 		expectInterpretOk('let array : [I32; 2; 2] = [10, 20]; let index : I32 = 1; array[index]', 20);
+	});
+});
+
+describe('interpret - arrays - sequential assignment', (): void => {
+	it('should return Err for reading uninitialized element', (): void => {
+		expectInterpretErrContains('let mut array : [I32; 0; 3]; array[0]', 'out of bounds');
+	});
+
+	it('should return Err for writing to uninitialized index out of order', (): void => {
+		expectInterpretErrContains('let mut array : [I32; 0; 3]; array[2] = 100;', 'out of bounds');
+	});
+
+	it('should succeed when writing to next sequential uninitialized index', (): void => {
+		expectInterpretOk('let mut array : [I32; 0; 3]; array[0] = 100; array[0]', 100);
+	});
+
+	it('should succeed when writing to indices in order', (): void => {
+		expectInterpretOk(
+			'let mut array : [I32; 0; 3]; array[0] = 100; array[1] = 200; array[0] + array[1]',
+			300,
+		);
+	});
+
+	it('should return Err when skipping index during sequential initialization', (): void => {
+		expectInterpretErrContains(
+			'let mut array : [I32; 0; 3]; array[0] = 100; array[2] = 300;',
+			'out of bounds',
+		);
+	});
+
+	it('should return Err when writing to arr[1] before arr[0]', (): void => {
+		expectInterpretErrContains('let mut array : [I32; 0; 3]; array[1] = 200;', 'out of bounds');
 	});
 });

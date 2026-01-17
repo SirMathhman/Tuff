@@ -136,6 +136,47 @@ function tryParseFunctionCall(
 	return executeFunctionCall(def, argValuesResult.value, context, interpretInternal);
 }
 
+function tryParseFunctionReferenceCall(
+	literal: string,
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> | undefined {
+	const parsed = extractFunctionCallExpression(literal);
+	if (parsed === undefined) {
+		return undefined;
+	}
+
+	const varName = parsed.functionName;
+	const binding = context.bindings.find((b): boolean => b.name === varName);
+	if (binding?.functionReferenceValue === undefined) {
+		return undefined;
+	}
+
+	const referencedFunctionName = binding.functionReferenceValue.functionName;
+	const def = getFunctionDefinition(referencedFunctionName);
+	if (def === undefined) {
+		return err(`Function reference points to undefined function: ${referencedFunctionName}`);
+	}
+
+	if (parsed.args.length !== def.parameters.length) {
+		return err(
+			`Function '${def.name}' expects ${def.parameters.length} argument(s), got ${parsed.args.length}`,
+		);
+	}
+
+	const argValuesResult = evaluateFunctionCallArguments(
+		def,
+		parsed.args,
+		context,
+		interpretInternal,
+	);
+	if (argValuesResult.type === 'err') {
+		return argValuesResult;
+	}
+
+	return executeFunctionCall(def, argValuesResult.value, context, interpretInternal);
+}
+
 function tryParseMethodCall(
 	literal: string,
 	context: ExecutionContext,
@@ -193,6 +234,11 @@ export function tryParseCallExpression(
 	const methodCallResult = tryParseMethodCall(literal, context, interpretInternal);
 	if (methodCallResult !== undefined) {
 		return methodCallResult;
+	}
+
+	const functionRefResult = tryParseFunctionReferenceCall(literal, context, interpretInternal);
+	if (functionRefResult !== undefined) {
+		return functionRefResult;
 	}
 
 	return tryParseFunctionCall(literal, context, interpretInternal);

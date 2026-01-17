@@ -4,6 +4,8 @@ import {
 	findClosingBrace,
 	type ExecutionContext,
 	type ParsedBinding,
+	type StructInstance,
+	type VariableBinding,
 } from './common/types';
 import { interpretInternal } from './evaluator';
 
@@ -362,6 +364,148 @@ export function handleStructInstantiation(
 		structValue: {
 			structType: instantRes.value.structType,
 			values: instantRes.value.fieldValues,
+		},
+	});
+}
+/**
+ * Checks if a pattern looks like struct destructuring (e.g., "{ x, y }").
+ */
+export function looksLikeStructDestructuring(pattern: string): boolean {
+	const trimmed = pattern.trim();
+	return trimmed.startsWith('{') && trimmed.endsWith('}');
+}
+
+/**
+ * Parses struct destructuring pattern to extract field names.
+ */
+export function parseDestructuringPattern(pattern: string): Result<string[]> {
+	const trimmed = pattern.trim();
+	if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+		return err('Invalid destructuring pattern');
+	}
+
+	const inner = trimmed.substring(1, trimmed.length - 1).trim();
+	if (inner.length === 0) {
+		return err('Destructuring pattern cannot be empty');
+	}
+
+	const fields = inner.split(',').map((f): string => f.trim());
+
+	for (const field of fields) {
+		if (!isVariableName(field)) {
+			return err(`Invalid field name in destructuring: ${field}`);
+		}
+	}
+
+	return ok(fields);
+}
+
+/**
+ * Handles struct destructuring assignment.
+ */
+/**
+ * Find struct binding by variable name from context.
+ */
+function findStructBinding(
+	varName: string,
+	context: ExecutionContext,
+): VariableBinding | undefined {
+	for (const binding of context.bindings) {
+		if (binding.name === varName) {
+			return binding;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Validate that destructuring target is a valid struct value.
+ */
+function getValidStructForDestructuring(
+	varName: string,
+	context: ExecutionContext,
+): Result<StructInstance> {
+	const structBinding = findStructBinding(varName, context);
+	if (structBinding === undefined) {
+		return err(`Variable '${varName}' is not initialized`);
+	}
+
+	if (structBinding.structValue === undefined) {
+		return err('Cannot destructure non-struct value');
+	}
+
+	return ok(structBinding.structValue);
+}
+
+/**
+ * Validate that all destructured fields exist in the struct definition.
+ */
+function validateDestructuredFieldsExist(
+	fields: string[],
+	structDef: StructDefinition,
+	structValue: StructInstance,
+): Result<void> {
+	for (const field of fields) {
+		const fieldExists = structDef.fields.some((f): boolean => f.name === field);
+		if (!fieldExists) {
+			return err(`Field '${field}' does not exist in struct ${structValue.structType}`);
+		}
+
+		const fieldValue = structValue.values.get(field);
+		if (fieldValue === undefined) {
+			return err(`Field '${field}' not found in struct instance`);
+		}
+	}
+	return ok(undefined);
+}
+
+export function handleStructDestructuring(
+	pattern: string,
+	isMutable: boolean,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
+	const fieldsResult = parseDestructuringPattern(pattern);
+	if (fieldsResult.type === 'err') {
+		return fieldsResult;
+	}
+
+	const fields = fieldsResult.value;
+
+	// Find the struct binding to get its type and values
+	const trimmedValueStr = valueStr.trim();
+	if (!isVariableName(trimmedValueStr)) {
+		return err('Destructuring value must be a variable name');
+	}
+
+	const structValueResult = getValidStructForDestructuring(trimmedValueStr, context);
+	if (structValueResult.type === 'err') {
+		return structValueResult;
+	}
+
+	const structValue = structValueResult.value;
+	const structDef = getStructDefinition(structValue.structType);
+
+	if (structDef === undefined) {
+		return err(`Struct type ${structValue.structType} not found`);
+	}
+
+	// Validate all fields exist in struct
+	const validationResult = validateDestructuredFieldsExist(fields, structDef, structValue);
+	if (validationResult.type === 'err') {
+		return validationResult;
+	}
+
+	// Return a special marker for destructuring
+	return ok({
+		name: '__destructuring__',
+		value: undefined,
+		isMutable,
+		remaining,
+		destructuredFields: {
+			fields,
+			structValue,
 		},
 	});
 }

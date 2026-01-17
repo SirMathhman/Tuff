@@ -5,9 +5,11 @@ import {
 	type ExecutionContext,
 	type ParsedBinding,
 	type VariableBinding,
+	type ArrayValue,
 } from './common/types';
 import { interpretInternal } from './evaluator';
 import { handleStructInstantiation } from './structs';
+import { looksLikeIndexing } from './arrays';
 
 /**
  * Detects compound assignment operators (+=, -=, *=, /=, ||=, &&=).
@@ -166,20 +168,205 @@ function tryParseStructAssignment(
 }
 
 /**
- * Parses a variable assignment statement.
- * @param input - The assignment statement string
- * @param context - The execution context with variable bindings
- * @returns A ParsedBinding result with the updated variable and remaining input
+ * Represents extracted array assignment components (array name and index expression).
  */
-export function parseAssignment(input: string, context: ExecutionContext): Result<ParsedBinding> {
-	const structResult = parseAssignmentStructure(input);
-	if (structResult.type === 'err') {
-		return structResult;
+interface ArrayAssignmentComponents {
+	arrayName: string;
+	indexExpr: string;
+}
+
+/**
+ * Extracts array name and index from array[index] = value assignment.
+ */
+function extractArrayAssignmentComponents(
+	beforeEqual: string,
+): ArrayAssignmentComponents | undefined {
+	const trimmed = beforeEqual.trim();
+	const lastBracketIndex = trimmed.lastIndexOf('[');
+	if (lastBracketIndex <= 0 || !trimmed.endsWith(']')) {
+		return undefined;
 	}
 
-	const { statementStr, remaining, equalIndex } = structResult.value;
+	const arrayName = trimmed.substring(0, lastBracketIndex).trim();
+	const indexExpr = trimmed.substring(lastBracketIndex + 1, trimmed.length - 1).trim();
 
-	const beforeEqualTrimmed = statementStr.substring(0, equalIndex).trimEnd();
+	if (!isVariableName(arrayName) || indexExpr.length === 0) {
+		return undefined;
+	}
+
+	return { arrayName, indexExpr };
+}
+
+/**
+ * Validates array binding exists and is mutable.
+ */
+function validateArrayBindingForAssignment(
+	arrayBinding: VariableBinding | undefined,
+	arrayName: string,
+): Result<VariableBinding> {
+	if (arrayBinding === undefined) {
+		return err(`Undefined array: ${arrayName}`);
+	}
+
+	if (arrayBinding.arrayValue === undefined) {
+		return err(`Variable '${arrayName}' is not an array`);
+	}
+
+	if (!arrayBinding.isMutable) {
+		return err(`Array '${arrayName}' is not mutable`);
+	}
+
+	return ok(arrayBinding);
+}
+
+/**
+ * Validates array index and evaluates to number.
+ */
+function evaluateArrayIndex(indexExpr: string, context: ExecutionContext): Result<number> {
+	const indexResult = interpretInternal(indexExpr, context);
+	if (indexResult.type === 'err') {
+		return indexResult;
+	}
+	return ok(indexResult.value);
+}
+
+/**
+ * Validates index is within bounds and sequential.
+ */
+function validateArrayIndexBounds(index: number, arrayValue: ArrayValue): Result<void> {
+	if (index !== arrayValue.initializedCount) {
+		return err(
+			`Array index ${index} out of bounds (can only assign to next sequential index ${arrayValue.initializedCount})`,
+		);
+	}
+
+	if (index < 0 || index >= arrayValue.totalCapacity) {
+		return err(`Array index ${index} out of bounds (capacity: ${arrayValue.totalCapacity})`);
+	}
+
+	return ok(undefined as void);
+}
+
+/**
+ * Evaluates the value to assign.
+ */
+function evaluateAssignmentValue(valueStr: string, context: ExecutionContext): Result<number> {
+	const valueResult = interpretInternal(valueStr, context);
+	if (valueResult.type === 'err') {
+		return valueResult;
+	}
+	return ok(valueResult.value);
+}
+
+/**
+ * Creates updated bindings with new array element.
+ */
+function createUpdatedBindingsWithArrayElement(
+	arrayName: string,
+	value: number,
+	bindings: VariableBinding[],
+): VariableBinding[] {
+	return bindings.map((binding): VariableBinding => {
+		if (binding.name === arrayName && binding.arrayValue !== undefined) {
+			const newElements = [...binding.arrayValue.elements];
+			newElements.push(value);
+			return {
+				...binding,
+				arrayValue: {
+					...binding.arrayValue,
+					elements: newElements,
+					initializedCount: binding.arrayValue.initializedCount + 1,
+				},
+			};
+		}
+		return binding;
+	});
+}
+
+/**
+ * Handles array element assignment (array[index] = value).
+ */
+/**
+ * Builds the result for successful array element assignment.
+ */
+function buildArrayAssignmentResult(
+	arrayName: string,
+	remaining: string,
+	updatedBindings: VariableBinding[],
+): Result<ParsedBinding> {
+	return ok({
+		name: arrayName,
+		value: undefined,
+		isMutable: true,
+		remaining,
+		arrayAssignmentUpdatedBindings: updatedBindings,
+	});
+}
+
+/**
+ * Handles array element assignment (array[index] = value).
+ */
+function parseArrayElementAssignment(
+	beforeEqual: string,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> | undefined {
+	const components = extractArrayAssignmentComponents(beforeEqual);
+	if (components === undefined) {
+		return undefined;
+	}
+
+	const { arrayName, indexExpr } = components;
+
+	// Find array binding
+	const arrayBinding = findVariableBinding(arrayName, context);
+
+	const validatedBinding = validateArrayBindingForAssignment(arrayBinding, arrayName);
+	if (validatedBinding.type === 'err') {
+		return validatedBinding;
+	}
+
+	const index = evaluateArrayIndex(indexExpr, context);
+	if (index.type === 'err') {
+		return index;
+	}
+
+	// arrayValue is guaranteed to exist after validateArrayBindingForAssignment
+	const arrayValue = validatedBinding.value.arrayValue;
+	if (arrayValue === undefined) {
+		return err('Array value not found');
+	}
+
+	const boundsValidation = validateArrayIndexBounds(index.value, arrayValue);
+	if (boundsValidation.type === 'err') {
+		return boundsValidation;
+	}
+
+	const value = evaluateAssignmentValue(valueStr, context);
+	if (value.type === 'err') {
+		return value;
+	}
+
+	const updatedBindings = createUpdatedBindingsWithArrayElement(
+		arrayName,
+		value.value,
+		context.bindings,
+	);
+
+	return buildArrayAssignmentResult(arrayName, remaining, updatedBindings);
+}
+
+/**
+ * Handles simple variable assignment (var = value).
+ */
+function parseSimpleVariableAssignment(
+	beforeEqualTrimmed: string,
+	statementStr: string,
+	equalIndex: number,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
 	const operator = detectCompoundOperator(beforeEqualTrimmed);
 
 	const varNameResult = extractVariableName(beforeEqualTrimmed, operator);
@@ -219,4 +406,43 @@ export function parseAssignment(input: string, context: ExecutionContext): Resul
 	}
 
 	return ok({ name: varName, value: valueResult.value, isMutable: varBinding.isMutable, remaining });
+}
+
+/**
+ * Parses a variable assignment statement.
+ * @param input - The assignment statement string
+ * @param context - The execution context with variable bindings
+ * @returns A ParsedBinding result with the updated variable and remaining input
+ */
+export function parseAssignment(input: string, context: ExecutionContext): Result<ParsedBinding> {
+	const structResult = parseAssignmentStructure(input);
+	if (structResult.type === 'err') {
+		return structResult;
+	}
+
+	const { statementStr, remaining, equalIndex } = structResult.value;
+
+	const beforeEqualTrimmed = statementStr.substring(0, equalIndex).trimEnd();
+
+	// Check if it's array element assignment
+	if (looksLikeIndexing(beforeEqualTrimmed)) {
+		const valueStr = statementStr.substring(equalIndex + 1).trim();
+		const arrayAssignResult = parseArrayElementAssignment(
+			beforeEqualTrimmed,
+			valueStr,
+			remaining,
+			context,
+		);
+		if (arrayAssignResult !== undefined) {
+			return arrayAssignResult;
+		}
+	}
+
+	return parseSimpleVariableAssignment(
+		beforeEqualTrimmed,
+		statementStr,
+		equalIndex,
+		remaining,
+		context,
+	);
 }

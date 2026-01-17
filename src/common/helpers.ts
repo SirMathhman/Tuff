@@ -226,6 +226,40 @@ export function stripLeadingSemicolon(input: string): string {
 /**
  * Parses the type annotation and assignment part after a colon.
  */
+/**
+ * Find the first '=' that is not part of '=>' and not inside brackets.
+ */
+function findAssignmentEqualOutsideBrackets(input: string): number {
+	let bracketDepth = 0;
+	let parenDepth = 0;
+	let squareBracketDepth = 0;
+	for (let i = 0; i < input.length; i++) {
+		const char = input[i];
+		if (char === '(') {
+			parenDepth++;
+		} else if (char === ')') {
+			parenDepth--;
+		} else if (char === '{') {
+			bracketDepth++;
+		} else if (char === '}') {
+			bracketDepth--;
+		} else if (char === '[') {
+			squareBracketDepth++;
+		} else if (char === ']') {
+			squareBracketDepth--;
+		} else if (
+			char === '=' &&
+			bracketDepth === 0 &&
+			parenDepth === 0 &&
+			squareBracketDepth === 0 &&
+			input[i + 1] !== '>'
+		) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 export function parseTypeAnnotationPart(afterColon: string): TypeAnnotationParts {
 	const semiIndex = findSemicolonOutsideBrackets(afterColon);
 	let searchForEqual: string;
@@ -234,7 +268,8 @@ export function parseTypeAnnotationPart(afterColon: string): TypeAnnotationParts
 	} else {
 		searchForEqual = afterColon;
 	}
-	const equalIndex = findCharOutsideBrackets(searchForEqual, '=');
+
+	const equalIndex = findAssignmentEqualOutsideBrackets(searchForEqual);
 
 	if (equalIndex >= 0) {
 		const typeAnnotation = searchForEqual.substring(0, equalIndex).trim();

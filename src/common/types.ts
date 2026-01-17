@@ -95,6 +95,13 @@ export interface PointerValue {
 }
 
 /**
+ * Represents a reference to a function by name.
+ */
+export interface FunctionReference {
+	functionName: string;
+}
+
+/**
  * Represents a variable binding with an optional value.
  */
 export interface VariableBinding {
@@ -106,6 +113,7 @@ export interface VariableBinding {
 	tupleValue?: TupleValue;
 	enumValue?: EnumValue;
 	pointerValue?: PointerValue;
+	functionReferenceValue?: FunctionReference;
 }
 
 /**
@@ -118,6 +126,14 @@ export interface ExecutionContext {
 /**
  * Represents a parsed variable binding with remaining input.
  */
+/**
+ * Represents destructured struct fields from a pattern match.
+ */
+export interface DestructuredFields {
+	fields: string[];
+	structValue: StructInstance;
+}
+
 export interface ParsedBinding {
 	name: string;
 	value: number | undefined;
@@ -128,6 +144,9 @@ export interface ParsedBinding {
 	tupleValue?: TupleValue;
 	enumValue?: EnumValue;
 	pointerValue?: PointerValue;
+	arrayAssignmentUpdatedBindings?: VariableBinding[];
+	destructuredFields?: DestructuredFields;
+	functionReferenceValue?: FunctionReference;
 }
 
 /**
@@ -733,8 +752,21 @@ export function isAssignmentStatement(input: string): boolean {
 	}
 
 	const beforeEqual = input.substring(0, eq).trimEnd();
+
+	// Check for simple variable assignment
 	const varName = stripCompoundOperator(beforeEqual).trim();
-	return isVariableName(varName);
+	if (isVariableName(varName)) {
+		return true;
+	}
+
+	// Check for array element assignment (array[index] = value)
+	const lastBracketIndex = beforeEqual.lastIndexOf('[');
+	if (lastBracketIndex > 0 && beforeEqual.endsWith(']')) {
+		const arrayName = beforeEqual.substring(0, lastBracketIndex).trim();
+		return isVariableName(arrayName);
+	}
+
+	return false;
 }
 
 /**
