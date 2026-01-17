@@ -27,7 +27,13 @@ import {
 	captureFunctionReferenceByName,
 	captureFunctionReferenceFromBinding,
 	setLastFunctionReference,
+	getLastFunctionReference,
 } from './common/function-references';
+import {
+	captureScopeAsStructInstance,
+	setLastStructInstance,
+	getLastStructInstance,
+} from './common/struct-values';
 import {
 	isDereferenceExpression,
 	parseDereferenceExpression,
@@ -124,7 +130,9 @@ function parseSimpleLiteral(
 		// Check if 'this' is a parameter name first (for method calls).
 		const thisBinding = context.bindings.find((b): boolean => b.name === 'this');
 		if (thisBinding === undefined) {
-			// 'this' is a keyword that evaluates to 0 (for this.field syntax).
+			// 'this' is a keyword that evaluates to the current scope.
+			const scopeStruct = captureScopeAsStructInstance(context);
+			setLastStructInstance(context, scopeStruct);
 			return ok(0);
 		}
 		if (thisBinding.value === undefined) {
@@ -240,6 +248,18 @@ function handleYieldMarker(
 	return interpretInternal(yieldExprStr, newContext);
 }
 
+function propagateSideChannels(from: ExecutionContext, to: ExecutionContext): void {
+	const structInstance = getLastStructInstance(from);
+	if (structInstance !== undefined) {
+		setLastStructInstance(to, structInstance);
+	}
+
+	const funcRef = getLastFunctionReference(from);
+	if (funcRef !== undefined) {
+		setLastFunctionReference(to, funcRef);
+	}
+}
+
 function applyScopedMutationsToContext(
 	outerContext: ExecutionContext,
 	innerContext: ExecutionContext,
@@ -268,15 +288,35 @@ function tryHandleReturnWithScopedMutations(
 		const returnResult = handleReturnMarker(trimmedRemaining, innerContext, interpretInternal);
 		if (returnResult !== undefined) {
 			applyScopedMutationsToContext(outerContext, innerContext);
+			propagateSideChannels(innerContext, outerContext);
 			return returnResult;
 		}
 		return undefined;
 	} catch (error) {
 		if (error instanceof ReturnSignal) {
 			applyScopedMutationsToContext(outerContext, innerContext);
+			propagateSideChannels(innerContext, outerContext);
 		}
 		throw error;
 	}
+}
+
+function evaluateFinalExpressionInBrace(
+	trimmedRemaining: string,
+	context: ExecutionContext,
+	newContext: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> {
+	if (trimmedRemaining.length === 0) {
+		return err('Braced expression must contain an expression after variable declarations');
+	}
+
+	const valueResult = interpretInternal(trimmedRemaining, newContext);
+	if (valueResult.type === 'ok') {
+		applyScopedMutationsToContext(context, newContext);
+		propagateSideChannels(newContext, context);
+	}
+	return valueResult;
 }
 
 function parseBracedExpression(
@@ -315,19 +355,12 @@ function parseBracedExpression(
 	if (yieldResult !== undefined) {
 		if (yieldResult.type === 'ok') {
 			applyScopedMutationsToContext(context, newContext);
+			propagateSideChannels(newContext, context);
 		}
 		return yieldResult;
 	}
 
-	if (trimmedRemaining.length === 0) {
-		return err('Braced expression must contain an expression after variable declarations');
-	}
-
-	const valueResult = interpretInternal(trimmedRemaining, newContext);
-	if (valueResult.type === 'ok') {
-		applyScopedMutationsToContext(context, newContext);
-	}
-	return valueResult;
+	return evaluateFinalExpressionInBrace(trimmedRemaining, context, newContext, interpretInternal);
 }
 
 function parseNumberLiteral(trimmed: string): Result<number> {

@@ -2,8 +2,19 @@ const js = require('@eslint/js');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const tsParser = require('@typescript-eslint/parser');
 const prettierPlugin = require('eslint-plugin-prettier');
+const jsdocPlugin = require('eslint-plugin-jsdoc');
 
 module.exports = [
+	{
+		ignores: [
+			'node_modules/**',
+			'dist/**',
+			'coverage/**',
+			'**/*.d.ts',
+			'tests/**/*.test.js',
+			'tests/**/*.spec.js',
+		],
+	},
 	{
 		files: ['src/**/*.ts', 'tests/**/*.ts'],
 		languageOptions: {
@@ -20,9 +31,30 @@ module.exports = [
 		},
 		plugins: {
 			'@typescript-eslint': tsPlugin,
+			jsdoc: jsdocPlugin,
 			prettier: prettierPlugin,
 		},
 		rules: {
+			// JSDoc validation (non-invasive repo-wide: validate/format only when JSDoc exists)
+			'jsdoc/check-alignment': 'error',
+			'jsdoc/check-indentation': 'error',
+			'jsdoc/check-param-names': 'error',
+			'jsdoc/check-tag-names': 'error',
+			'jsdoc/check-template-names': 'error',
+			'jsdoc/empty-tags': 'error',
+			'jsdoc/multiline-blocks': ['error', { noSingleLineBlocks: true }],
+			'jsdoc/no-bad-blocks': 'error',
+			'jsdoc/no-defaults': 'error',
+			'jsdoc/no-multi-asterisks': 'error',
+			'jsdoc/no-types': 'error',
+			'jsdoc/require-description': 'off',
+			'jsdoc/require-param': 'off',
+			'jsdoc/require-param-description': 'off',
+			'jsdoc/require-returns': 'off',
+			'jsdoc/require-returns-description': 'off',
+			'jsdoc/require-throws': 'off',
+			'jsdoc/tag-lines': 'off',
+
 			// ESLint core rules - extremely strict
 			'no-console': ['error', { allow: ['warn', 'error'] }],
 			'no-debugger': 'error',
@@ -39,7 +71,7 @@ module.exports = [
 			quotes: ['error', 'single', { avoidEscape: true }],
 			'no-multiple-empty-lines': ['error', { max: 1, maxEOF: 0 }],
 			indent: ['error', 'tab'],
-			'linebreak-style': ['error', 'unix'],
+			'linebreak-style': 'off',
 			'no-trailing-spaces': 'error',
 			'no-irregular-whitespace': 'error',
 			'object-curly-spacing': ['error', 'always'],
@@ -147,7 +179,35 @@ module.exports = [
 			],
 
 			// Prettier integration
-			'prettier/prettier': 'error',
+			'prettier/prettier': ['error', { endOfLine: 'auto' }],
+		},
+	},
+	{
+		files: ['src/interpret.ts'],
+		rules: {
+			// Public API must be documented
+			'jsdoc/require-jsdoc': [
+				'error',
+				{
+					publicOnly: {
+						cjs: true,
+						esm: true,
+						window: false,
+					},
+					require: {
+						FunctionDeclaration: true,
+						MethodDefinition: true,
+						ClassDeclaration: true,
+					},
+					contexts: ['ExportNamedDeclaration > FunctionDeclaration'],
+				},
+			],
+			'jsdoc/tag-lines': ['error', 'any', { startLines: 1 }],
+			'jsdoc/require-description': ['error', { contexts: ['FunctionDeclaration'] }],
+			'jsdoc/require-param': 'error',
+			'jsdoc/require-param-description': 'error',
+			'jsdoc/require-returns': 'error',
+			'jsdoc/require-returns-description': 'error',
 		},
 	},
 	{

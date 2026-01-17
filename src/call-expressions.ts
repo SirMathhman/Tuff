@@ -23,6 +23,7 @@ import {
 	getLastFunctionReference,
 	setLastFunctionReference,
 } from './common/function-references';
+import { getLastStructInstance, setLastStructInstance } from './common/struct-values';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -146,15 +147,20 @@ function executeFunctionCall(
 	interpretInternal: InterpretFunction,
 	capturedBindings?: VariableBinding[],
 ): Result<number> {
-	// Constructor pattern: fn Point(x: I32, y: I32): Point => this
-	if (def.bodyExpression.trim() === 'this' && def.returnType === def.name) {
-		return ok(0);
-	}
-
 	const callContext = createCallContext(def, argValues, context, capturedBindings);
 	const bodyResult = interpretFunctionBody(def, callContext, interpretInternal);
 	if (bodyResult.type === 'err') {
 		return bodyResult;
+	}
+
+	const structInstance = getLastStructInstance(callContext);
+	if (structInstance !== undefined) {
+		const isConstructor = def.name === def.returnType;
+		// If it's a constructor or effectively a struct return, ensure type matches
+		if (isConstructor) {
+			structInstance.structType = def.returnType;
+		}
+		setLastStructInstance(context, structInstance);
 	}
 
 	if (isFunctionTypeAnnotation(def.returnType)) {
@@ -163,7 +169,11 @@ function executeFunctionCall(
 			return err(`Function '${def.name}' must return a function reference`);
 		}
 
-		const validationResult = validateFunctionReference(returnedRef.functionName, def.returnType);
+		const validationResult = validateFunctionReference(
+			returnedRef.functionName,
+			def.returnType,
+			returnedRef.localDefinition,
+		);
 		if (validationResult.type === 'err') {
 			return validationResult;
 		}
@@ -171,6 +181,7 @@ function executeFunctionCall(
 		const capturedRef: FunctionReference = {
 			functionName: returnedRef.functionName,
 			capturedBindings: returnedRef.capturedBindings,
+			localDefinition: returnedRef.localDefinition,
 		};
 		setLastFunctionReference(context, capturedRef);
 		return ok(0);
@@ -204,12 +215,18 @@ function resolveFunctionReferenceDefinition(
 		return undefined;
 	}
 
-	const referencedFunctionName = binding.functionReferenceValue.functionName;
-	const def = getFunctionDefinition(referencedFunctionName);
-	if (def === undefined) {
-		return err(`Function reference points to undefined function: ${referencedFunctionName}`);
+	const ref = binding.functionReferenceValue;
+
+	// Use local definition if present (for inner/closure functions)
+	if (ref.localDefinition !== undefined) {
+		return ok({ def: ref.localDefinition, capturedBindings: ref.capturedBindings });
 	}
-	return ok({ def, capturedBindings: binding.functionReferenceValue.capturedBindings });
+
+	const def = getFunctionDefinition(ref.functionName);
+	if (def === undefined) {
+		return err(`Function reference points to undefined function: ${ref.functionName}`);
+	}
+	return ok({ def, capturedBindings: ref.capturedBindings });
 }
 
 function tryParseAndExecuteFunctionLikeCall(
@@ -308,7 +325,8 @@ function executeFunctionReferenceCall(
 	context: ExecutionContext,
 	interpretInternal: InterpretFunction,
 ): Result<number> {
-	const def = getFunctionDefinition(ref.functionName);
+	// Use local definition if present (for inner/closure functions)
+	const def = ref.localDefinition ?? getFunctionDefinition(ref.functionName);
 	if (def === undefined) {
 		return err(`Undefined function: ${ref.functionName}`);
 	}
@@ -359,6 +377,10 @@ function tryParseExpressionResultCall(
 	return executeFunctionReferenceCall(refResult.value, parsed.args, context, interpretInternal);
 }
 
+function isMethodDefinition(def: FunctionDefinition): boolean {
+	return def.parameters.length > 0 && def.parameters[0].name === 'this';
+}
+
 function tryParseMethodCall(
 	literal: string,
 	context: ExecutionContext,
@@ -370,12 +392,8 @@ function tryParseMethodCall(
 	}
 
 	const def = getFunctionDefinition(parsed.methodName);
-	if (def === undefined) {
-		return err(`Undefined function: ${parsed.methodName}`);
-	}
-
-	if (def.parameters.length === 0 || def.parameters[0].name !== 'this') {
-		return err(`Function '${def.name}' is not a method (first parameter must be 'this')`);
+	if (def === undefined || !isMethodDefinition(def)) {
+		return undefined;
 	}
 
 	if (parsed.args.length !== def.parameters.length - 1) {

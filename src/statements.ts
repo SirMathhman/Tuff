@@ -4,6 +4,7 @@ import {
 	type ContextAndRemaining,
 	type DestructuredFields,
 	type ExecutionContext,
+	type FunctionReference,
 	findClosingBrace,
 	findSemicolonOutsideBrackets,
 	isAssignmentStatement,
@@ -12,6 +13,7 @@ import {
 	isYieldStatement,
 	isVariableName,
 	shouldProcessAsStatementBlock,
+	type StructInstance,
 	validateValueForType,
 	type ParsedBinding,
 	type ProcessedBindings,
@@ -43,7 +45,14 @@ import {
 	getFunctionDefinition,
 	isFunctionType,
 	parseFunctionTypeBinding,
+	type FunctionDefinition,
 } from './functions';
+import {
+	captureFunctionReferenceByName,
+	clearLastFunctionReference,
+	getLastFunctionReference,
+} from './common/function-references';
+import { clearLastStructInstance, getLastStructInstance } from './common/struct-values';
 import { parseArrayTypeBinding, parseArrayType } from './arrays';
 import { parseTupleTypeBinding } from './tuples';
 import {
@@ -274,13 +283,12 @@ function tryTypeSpecificValueBinding(
 	return undefined;
 }
 
-function handleValueBinding(
-	varName: string,
-	isMutable: boolean,
-	typeAnnotation: string | undefined,
-	afterTypeOrName: string,
-	context: ExecutionContext,
-): Result<ParsedBinding> {
+interface ValueBindingParts {
+	valueStr: string;
+	remaining: string;
+}
+
+function extractValueBindingParts(afterTypeOrName: string): Result<ValueBindingParts> {
 	const withoutEqual = afterTypeOrName.substring(1).trim();
 	const semiIndex = findSemicolonOutsideBrackets(withoutEqual);
 	if (semiIndex < 0) {
@@ -288,40 +296,152 @@ function handleValueBinding(
 	}
 	const valueStr = withoutEqual.substring(0, semiIndex).trim();
 	const remaining = withoutEqual.substring(semiIndex + 1).trim();
-	const initValidation = validateInitializerExpression(valueStr);
-	if (initValidation.type === 'err') {
-		return initValidation;
-	}
-	if (typeAnnotation !== undefined) {
-		const typeSpecificResult = tryTypeSpecificValueBinding(
-			varName,
-			isMutable,
-			typeAnnotation,
-			valueStr,
-			remaining,
-			context,
-		);
-		if (typeSpecificResult !== undefined) {
-			return typeSpecificResult;
-		}
-	}
+	return ok({ valueStr, remaining });
+}
+
+interface CapturedSideChannels {
+	structValue: StructInstance | undefined;
+	functionRef: FunctionReference | undefined;
+}
+
+function captureAndClearSideChannels(context: ExecutionContext): CapturedSideChannels {
+	const structValue = getLastStructInstance(context);
+	clearLastStructInstance(context);
+	const functionRef = getLastFunctionReference(context);
+	clearLastFunctionReference(context);
+	return { structValue, functionRef };
+}
+
+function evaluateValueExpression(
+	valueStr: string,
+	varName: string,
+	isMutable: boolean,
+	remaining: string,
+	typeAnnotation: string | undefined,
+	context: ExecutionContext,
+): Result<ParsedBinding> | undefined {
 	const valueResult = interpretInternal(valueStr, context);
 	if (valueResult.type === 'err' && typeAnnotation === undefined) {
-		const res = tryParseImplicitStructBinding(varName, isMutable, valueStr, remaining, context);
-		if (res !== undefined) {
-			return res;
-		}
+		return tryParseImplicitStructBinding(varName, isMutable, valueStr, remaining, context);
 	}
 	if (valueResult.type === 'err') {
 		return valueResult;
 	}
+	return undefined;
+}
+
+function createBindingFromValue(
+	varName: string,
+	isMutable: boolean,
+	remaining: string,
+	value: number,
+	typeAnnotation: string | undefined,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
+	const { structValue, functionRef } = captureAndClearSideChannels(context);
+
 	if (typeAnnotation !== undefined) {
-		const typeValidation = validateValueForType(valueResult.value, typeAnnotation);
+		const typeValidation = validateValueForType(value, typeAnnotation);
 		if (typeValidation.type === 'err') {
 			return typeValidation;
 		}
 	}
-	return ok({ name: varName, value: valueResult.value, isMutable, remaining });
+	return ok({
+		name: varName,
+		value,
+		isMutable,
+		remaining,
+		structValue,
+		functionReferenceValue: functionRef,
+	});
+}
+
+function tryHandleTypeSpecificBinding(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string | undefined,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> | undefined {
+	if (typeAnnotation === undefined) {
+		return undefined;
+	}
+	return tryTypeSpecificValueBinding(
+		varName,
+		isMutable,
+		typeAnnotation,
+		valueStr,
+		remaining,
+		context,
+	);
+}
+
+function evaluateAndCreateBinding(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string | undefined,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
+	const earlyResult = evaluateValueExpression(
+		valueStr,
+		varName,
+		isMutable,
+		remaining,
+		typeAnnotation,
+		context,
+	);
+	if (earlyResult !== undefined) {
+		return earlyResult;
+	}
+
+	const valueResult = interpretInternal(valueStr, context);
+	if (valueResult.type === 'err') {
+		return valueResult;
+	}
+
+	return createBindingFromValue(
+		varName,
+		isMutable,
+		remaining,
+		valueResult.value,
+		typeAnnotation,
+		context,
+	);
+}
+
+function handleValueBinding(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string | undefined,
+	afterTypeOrName: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
+	const partsResult = extractValueBindingParts(afterTypeOrName);
+	if (partsResult.type === 'err') {
+		return partsResult;
+	}
+	const { valueStr, remaining } = partsResult.value;
+
+	const initValidation = validateInitializerExpression(valueStr);
+	if (initValidation.type === 'err') {
+		return initValidation;
+	}
+	const typeResult = tryHandleTypeSpecificBinding(
+		varName,
+		isMutable,
+		typeAnnotation,
+		valueStr,
+		remaining,
+		context,
+	);
+	if (typeResult !== undefined) {
+		return typeResult;
+	}
+
+	return evaluateAndCreateBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
 }
 
 function validateInitializerExpression(valueStr: string): Result<void> {
@@ -850,26 +970,65 @@ function processStructStatement(input: string, shouldRegister = true): Result<Co
 
 /**
  * Processes a function definition statement.
+ * @param input The full input starting with a function definition.
+ * @param context The current execution context.
+ * @param registerGlobally If false, the function is only added as a local binding (for inner functions).
+ * @returns The updated context and remaining input after the definition.
  */
-function processFunctionStatement(input: string): Result<ContextAndRemaining> {
+function processFunctionStatement(
+	input: string,
+	context: ExecutionContext,
+	registerGlobally: boolean,
+): Result<ContextAndRemaining> {
 	const parsed = parseFunctionDefinition(input);
 	if (parsed.type === 'err') {
 		return parsed;
 	}
-	const registerResult = registerFunctionDefinition(parsed.value.definition);
-	if (registerResult.type === 'err') {
-		return registerResult;
+
+	if (registerGlobally) {
+		const registerResult = registerFunctionDefinition(parsed.value.definition);
+		if (registerResult.type === 'err') {
+			return registerResult;
+		}
 	}
-	return ok({ context: { bindings: [] }, remaining: parsed.value.remaining });
+
+	let localDefinition: FunctionDefinition | undefined = parsed.value.definition;
+	if (registerGlobally) {
+		localDefinition = undefined;
+	}
+
+	// Create a local binding for the function so it can be captured by closures/this.
+	// This unifies function definitions with variable bindings for first-class functions.
+	const refBinding: VariableBinding = {
+		name: parsed.value.definition.name,
+		value: 0,
+		isMutable: false,
+		functionReferenceValue: captureFunctionReferenceByName(
+			parsed.value.definition.name,
+			context,
+			localDefinition,
+		),
+	};
+
+	const newContext = {
+		bindings: [...context.bindings, refBinding],
+	};
+
+	return ok({ context: newContext, remaining: parsed.value.remaining });
 }
 /**
  * Processes statements (declarations, assignments, if-else, blocks) in input.
+ * @param input The input containing one or more statements.
+ * @param context The current execution context.
+ * @param allowBlocks If true, braced statement blocks are treated as statements.
+ * @param registerGlobally If true, functions and structs are registered globally.
+ * @returns The updated context and remaining input after processing statements.
  */
 export function processStatements(
 	input: string,
 	context: ExecutionContext,
 	allowBlocks: boolean,
-	registerStructs = false,
+	registerGlobally = false,
 ): Result<ContextAndRemaining> {
 	let currentContext = context;
 	let remaining = input;
@@ -877,11 +1036,11 @@ export function processStatements(
 		const trimmed = remaining.trim();
 		let result: Result<ContextAndRemaining> | undefined;
 		if (isEnumDefinition(trimmed)) {
-			result = processEnumStatement(remaining, registerStructs);
+			result = processEnumStatement(remaining, registerGlobally);
 		} else if (isStructDefinition(trimmed)) {
-			result = processStructStatement(remaining, registerStructs);
+			result = processStructStatement(remaining, registerGlobally);
 		} else if (isFunctionDefinition(trimmed)) {
-			result = processFunctionStatement(remaining);
+			result = processFunctionStatement(remaining, currentContext, registerGlobally);
 		} else if (trimmed.startsWith('let ')) {
 			result = processLetDeclaration(remaining, currentContext);
 		} else if (allowBlocks && shouldProcessAsStatementBlock(trimmed)) {
@@ -905,9 +1064,7 @@ export function processStatements(
 			return result;
 		}
 		// For global definitions, don't update context (they are global)
-		if (
-			!(isStructDefinition(trimmed) || isFunctionDefinition(trimmed) || isEnumDefinition(trimmed))
-		) {
+		if (!(isStructDefinition(trimmed) || isEnumDefinition(trimmed))) {
 			currentContext = result.value.context;
 		}
 		remaining = result.value.remaining;

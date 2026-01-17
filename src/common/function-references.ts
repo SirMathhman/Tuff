@@ -1,4 +1,9 @@
-import { type ExecutionContext, type FunctionReference, type VariableBinding } from './types';
+import {
+	type ExecutionContext,
+	type FunctionReference,
+	type LocalFunctionDefinition,
+	type VariableBinding,
+} from './types';
 
 export const LAST_FUNCTION_REFERENCE_BINDING_NAME = '__LAST_FUNCTION_REFERENCE__';
 
@@ -9,7 +14,11 @@ function cloneWithCapturedBindings(
 	if (ref.capturedBindings !== undefined) {
 		return ref;
 	}
-	return { functionName: ref.functionName, capturedBindings: fallbackCapturedBindings };
+	return {
+		functionName: ref.functionName,
+		capturedBindings: fallbackCapturedBindings,
+		localDefinition: ref.localDefinition,
+	};
 }
 
 export function setLastFunctionReference(context: ExecutionContext, ref: FunctionReference): void {
@@ -60,6 +69,7 @@ export function captureFunctionReferenceFromBinding(
 export function captureFunctionReferenceByName(
 	functionName: string,
 	context: ExecutionContext,
+	localDefinition?: LocalFunctionDefinition,
 ): FunctionReference {
-	return { functionName, capturedBindings: context.bindings };
+	return { functionName, capturedBindings: context.bindings, localDefinition };
 }

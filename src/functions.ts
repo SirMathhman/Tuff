@@ -5,6 +5,7 @@ import {
 	findSemicolonOutsideBrackets,
 	getTypeRangeMax,
 	isVariableName,
+	type LocalFunctionDefinition,
 	type ParsedBinding,
 } from './common/types';
 import { stripLeadingSemicolon } from './common/helpers';
@@ -397,12 +398,16 @@ export function parseFunctionType(typeAnnotation: string): Result<string> {
 
 /**
  * Validates that a function reference matches its type annotation.
+ * @param functionName The name of the function to validate.
+ * @param typeAnnotation The expected type annotation (e.g., "() => I32").
+ * @param localDefinition Optional local definition for inner/closure functions.
  */
 export function validateFunctionReference(
 	functionName: string,
 	typeAnnotation: string,
+	localDefinition?: LocalFunctionDefinition,
 ): Result<void> {
-	const def = getFunctionDefinition(functionName);
+	const def = localDefinition ?? getFunctionDefinition(functionName);
 	if (def === undefined) {
 		return err(`Function '${functionName}' not defined`);
 	}

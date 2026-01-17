@@ -1,6 +1,7 @@
 import { err, ok, type Result } from './common/result';
 import { type ExecutionContext, isBalancedBrackets, isVariableName } from './common/types';
 import { evaluateStructInstantiation } from './structs';
+import { setLastFunctionReference } from './common/function-references';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -52,10 +53,19 @@ function lookupStructVariableField(
 		if (binding.name !== varName || binding.structValue === undefined) {
 			continue;
 		}
+
+		// Check function references first (they may also have a sentinel value in `values`)
+		const funcRef = binding.structValue.functionReferences?.get(fieldName);
+		if (funcRef !== undefined) {
+			setLastFunctionReference(context, funcRef);
+			return ok(0);
+		}
+
 		const fieldValue = binding.structValue.values.get(fieldName);
 		if (typeof fieldValue === 'number') {
 			return ok(fieldValue);
 		}
+
 		return err(`Field '${fieldName}' not found in struct '${binding.structValue.structType}'`);
 	}
 	return undefined;
@@ -66,6 +76,12 @@ function lookupThisField(fieldName: string, context: ExecutionContext): Result<n
 		if (binding.name !== fieldName) {
 			continue;
 		}
+
+		if (binding.functionReferenceValue !== undefined) {
+			setLastFunctionReference(context, binding.functionReferenceValue);
+			return ok(0);
+		}
+
 		if (binding.value === undefined) {
 			return err(`Variable '${fieldName}' is not initialized`);
 		}
@@ -91,11 +107,15 @@ function evaluateInlineStructFieldAccess(
 
 	const fieldValue = instanceResult.value.fieldValues.get(fieldName);
 	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-	if (fieldValue === undefined) {
-		return err(`Field '${fieldName}' not found in struct '${instanceResult.value.structType}'`);
+	if (fieldValue !== undefined) {
+		return ok(fieldValue);
 	}
 
-	return ok(fieldValue);
+	// This path (inline fields returning functions) is less common but possible
+	// if StructInstantiationResult supported functionReferences, which it currently doesn't
+	// (it only has fieldValues Map<string, number>).
+
+	return err(`Field '${fieldName}' not found in struct '${instanceResult.value.structType}'`);
 }
 
 function lookupThisFieldOrError(fieldName: string, context: ExecutionContext): Result<number> {

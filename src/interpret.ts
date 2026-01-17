@@ -125,6 +125,7 @@ function interpretExpressionStatements(
 /**
  * Interprets a mathematical expression with typed numeric literals and variable bindings.
  * Supports arithmetic operations, type annotations, variable declarations, and assignments.
+ *
  * @param input - The expression string to interpret
  * @returns Result containing the evaluated number or an error message
  */

@@ -24,6 +24,7 @@ export interface OperatorPrecedenceState {
 export interface StructInstance {
 	structType: string;
 	values: Map<string, number>;
+	functionReferences?: Map<string, FunctionReference>;
 }
 
 /**
@@ -94,12 +95,20 @@ export interface PointerValue {
 	isMutable: boolean;
 }
 
+export interface LocalFunctionDefinition {
+	name: string;
+	parameters: import('./local-function-parameter').LocalFunctionParameter[];
+	returnType: string;
+	bodyExpression: string;
+}
+
 /**
  * Represents a reference to a function by name.
  */
 export interface FunctionReference {
 	functionName: string;
 	capturedBindings?: VariableBinding[];
+	localDefinition?: LocalFunctionDefinition;
 }
 
 /**

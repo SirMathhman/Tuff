@@ -3,12 +3,10 @@ import { interpret } from '../interpret';
 
 export function expectOkValue(result: Result<number>, expected: number): void {
 	if (result.type === 'err') {
-		console.error('Expected ok but got err:', result.error);
+		throw new Error(`Expected ok but got err: ${result.error}`);
 	}
 	expect(result.type).toBe('ok');
-	if (result.type === 'ok') {
-		expect(result.value).toBe(expected);
-	}
+	expect(result.value).toBe(expected);
 }
 
 export function expectErrContains(result: Result<number>, expectedSubstring: string): void {
@@ -17,7 +15,7 @@ export function expectErrContains(result: Result<number>, expectedSubstring: str
 	}
 	expect(result.type).toBe('err');
 	if (result.type === 'ok') {
-		console.error('Expected err but got ok:', result.value);
+		throw new Error(`Expected err but got ok: ${result.value}`);
 	}
 }
 
