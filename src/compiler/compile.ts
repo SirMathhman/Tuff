@@ -6,8 +6,10 @@ import { ok, type Result } from '../common/result';
 function compileReadFunction(typeAnnotation: string): string {
 	const type = typeAnnotation.trim();
 	if (type === 'I32' || type === 'i32') {
-		// Use synchronous file reading to get stdin
 		return "parseInt(require('fs').readFileSync(0, 'utf-8').trim(), 10)";
+	}
+	if (type === 'U8' || type === 'u8') {
+		return "(v=>v<0||v>255?(() => { throw new Error('U8 value out of range: ' + v); })():v)(parseInt(require('fs').readFileSync(0, 'utf-8').trim(), 10))";
 	}
 	return `(() => { throw new Error('Unsupported type: ${type}'); })()`;
 }

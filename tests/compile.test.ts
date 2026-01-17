@@ -28,4 +28,12 @@ describe('run', (): void => {
 			expect(result.value).toBe(100);
 		}
 	});
+
+	it('reads U8 from stdin and validates range', (): void => {
+		const result = run('read<U8>()', '256');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(1);
+		}
+	});
 });
