@@ -1,5 +1,11 @@
 import { err, ok, type Result } from './result';
-import { findClosingBrace, findClosingParen, getTypeRangeMax, isVariableName } from './types';
+import {
+	findClosingBrace,
+	findClosingParen,
+	findSemicolonOutsideBrackets,
+	getTypeRangeMax,
+	isVariableName,
+} from './types';
 import { stripLeadingSemicolon } from './helpers';
 
 /**
@@ -187,8 +193,16 @@ function parseBodyExpression(afterArrow: string): Result<BodyExpressionParseResu
 		return err('Function body missing closing brace');
 	}
 
-	const bodyExpression = trimmed.substring(0, closingBraceIndex + 1);
-	const remaining = stripLeadingSemicolon(trimmed.substring(closingBraceIndex + 1));
+	const afterBrace = trimmed.substring(closingBraceIndex + 1);
+	const semicolonIndex = findSemicolonOutsideBrackets(afterBrace);
+	let expressionEndIndex = closingBraceIndex + 1;
+	let remainingStartIndex = closingBraceIndex + 1;
+	if (semicolonIndex >= 0) {
+		expressionEndIndex += semicolonIndex;
+		remainingStartIndex += semicolonIndex;
+	}
+	const bodyExpression = trimmed.substring(0, expressionEndIndex);
+	const remaining = stripLeadingSemicolon(trimmed.substring(remainingStartIndex));
 
 	return ok({ bodyExpression, remaining });
 }

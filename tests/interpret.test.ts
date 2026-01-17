@@ -497,6 +497,13 @@ describe('interpret - functions', (): void => {
 		expectInterpretOk('fn add(first : I32, second : I32) : I32 => { first + second } add(3, 4)', 7);
 	});
 
+	it('should handle yield plus additional expression in function body', (): void => {
+		expectInterpretOk(
+			'fn get() : I32 => { if (true) yield 100; 200 } + 1; get()',
+			101,
+		);
+	});
+
 	it('should return Err for calling undefined function', (): void => {
 		expectInterpretErrContains('add(1, 2)', 'Undefined function');
 	});
