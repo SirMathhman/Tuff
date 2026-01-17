@@ -1,5 +1,5 @@
 import { clearFunctionRegistry } from '../src/interpreter/functions';
-import { expectInterpretOk } from '../src/testing/test-helpers';
+import { assertInterpretValid } from '../src/testing/test-helpers';
 
 function makePointCode(withReturnType: boolean): string {
 	let returnType = '';
@@ -22,11 +22,11 @@ describe('interpret - closure objects via this', (): void => {
 	});
 
 	it('allows accessing inner functions via this', (): void => {
-		expectInterpretOk(makePointCode(false), 7);
+		assertInterpretValid(makePointCode(false), 7);
 	});
 
 	it('allows accessing inner functions with explicit return type', (): void => {
-		expectInterpretOk(makePointCode(true), 7);
+		assertInterpretValid(makePointCode(true), 7);
 	});
 });
 
@@ -36,10 +36,10 @@ describe('interpret - closure objects regression tests', (): void => {
 	});
 
 	it('standard let still works', (): void => {
-		expectInterpretOk('let value = 0; value', 0);
+		assertInterpretValid('let value = 0; value', 0);
 	});
 
 	it('function + let still works', (): void => {
-		expectInterpretOk('fn Foo() => 0; let value = 0; value', 0);
+		assertInterpretValid('fn Foo() => 0; let value = 0; value', 0);
 	});
 });

@@ -1,7 +1,7 @@
 import { type Result } from '../common/result';
 import { interpret } from '../interpret';
 
-export function expectOkValue(result: Result<number>, expected: number): void {
+export function assertValid(result: Result<number>, expected: number): void {
 	if (result.type === 'err') {
 		throw new Error(`Expected ok but got err: ${result.error}`);
 	}
@@ -9,7 +9,7 @@ export function expectOkValue(result: Result<number>, expected: number): void {
 	expect(result.value).toBe(expected);
 }
 
-export function expectErrContains(result: Result<number>, expectedSubstring: string): void {
+export function assertInvalid(result: Result<number>, expectedSubstring: string): void {
 	if (result.type === 'err') {
 		expect(result.error).toContain(expectedSubstring);
 	}
@@ -19,12 +19,12 @@ export function expectErrContains(result: Result<number>, expectedSubstring: str
 	}
 }
 
-export function expectInterpretOk(input: string, expected: number): void {
+export function assertInterpretValid(input: string, expected: number): void {
 	const result = interpret(input);
-	expectOkValue(result, expected);
+	assertValid(result, expected);
 }
 
-export function expectInterpretErrContains(input: string, expectedSubstring: string): void {
+export function assertInterpretInvalid(input: string, expectedSubstring: string): void {
 	const result = interpret(input);
-	expectErrContains(result, expectedSubstring);
+	assertInvalid(result, expectedSubstring);
 }
