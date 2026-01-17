@@ -1,4 +1,4 @@
-import { err, type Result } from './result';
+import { err, ok, type Result } from './result';
 import { processTopLevelStatements } from './statements';
 import { interpretInternal } from './evaluator';
 
@@ -16,6 +16,12 @@ export function interpret(input: string): Result<number> {
 
 	const trimmedRemaining = result.value.remaining.trim();
 	if (trimmedRemaining.length === 0) {
+		const trimmedInput = input.trim();
+		const hasOnlyStructDeclarations =
+			trimmedInput.startsWith('struct ') && result.value.context.bindings.length === 0;
+		if (hasOnlyStructDeclarations) {
+			return ok(0);
+		}
 		return err('expression required after variable declarations');
 	}
 
