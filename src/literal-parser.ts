@@ -19,7 +19,7 @@ import {
 import { ReturnSignal } from './function-call-utils';
 import { tryParseCallExpression } from './call-expressions';
 import { tryParseFieldAccess } from './field-access';
-import { tryParseArrayIndexing } from './arrays';
+import { tryParseIndexing } from './tuples';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -65,6 +65,12 @@ function lookupVariable(name: string, context: ExecutionContext): Result<number>
 	for (const binding of context.bindings) {
 		if (binding.name !== name) {
 			continue;
+		}
+		if (binding.arrayValue !== undefined) {
+			return ok(0);
+		}
+		if (binding.tupleValue !== undefined) {
+			return ok(0);
 		}
 		if (binding.value === undefined) {
 			return err(`Variable '${name}' is not initialized`);
@@ -273,9 +279,9 @@ export function parseLiteral(
 		return fieldAccessResult;
 	}
 
-	const arrayIndexResult = tryParseArrayIndexing(literal, context, interpretInternal);
-	if (arrayIndexResult !== undefined) {
-		return arrayIndexResult;
+	const indexResult = tryParseIndexing(literal, context, interpretInternal);
+	if (indexResult !== undefined) {
+		return indexResult;
 	}
 
 	const matchResult = parseMatchExpression(literal, context, interpretInternal);

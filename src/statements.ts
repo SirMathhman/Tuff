@@ -38,6 +38,7 @@ import {
 	registerFunctionDefinition,
 } from './functions';
 import { parseArrayTypeBinding } from './arrays';
+import { parseTupleTypeBinding } from './tuples';
 
 /**
  * Handles struct type variable binding.
@@ -112,6 +113,10 @@ function handleValueBinding(
 		return parseArrayTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
 	}
 
+	if (typeAnnotation !== undefined && typeAnnotation.startsWith('(')) {
+		return parseTupleTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	}
+
 	if (typeAnnotation !== undefined && isStructType(typeAnnotation)) {
 		return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
 	}
@@ -172,7 +177,7 @@ function processLetDeclaration(
 		return bindResult;
 	}
 
-	const { name, value, isMutable, structValue, arrayValue } = bindResult.value;
+	const { name, value, isMutable, structValue, arrayValue, tupleValue } = bindResult.value;
 	if (context.bindings.some((binding): boolean => binding.name === name)) {
 		return err(`Variable '${name}' is already defined`);
 	}
@@ -183,6 +188,9 @@ function processLetDeclaration(
 	}
 	if (arrayValue !== undefined) {
 		newBinding.arrayValue = arrayValue;
+	}
+	if (tupleValue !== undefined) {
+		newBinding.tupleValue = tupleValue;
 	}
 
 	const newContext = {

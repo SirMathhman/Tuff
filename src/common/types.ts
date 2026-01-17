@@ -46,6 +46,21 @@ export interface ArrayValue {
 }
 
 /**
+ * Represents a tuple type definition with element types.
+ */
+export interface TupleType {
+	elementTypes: string[];
+}
+
+/**
+ * Represents a tuple value with its elements and element types.
+ */
+export interface TupleValue {
+	elementTypes: string[];
+	elements: number[];
+}
+
+/**
  * Represents a variable binding with an optional value.
  */
 export interface VariableBinding {
@@ -54,6 +69,7 @@ export interface VariableBinding {
 	isMutable: boolean;
 	structValue?: StructInstance;
 	arrayValue?: ArrayValue;
+	tupleValue?: TupleValue;
 }
 
 /**
@@ -73,6 +89,7 @@ export interface ParsedBinding {
 	remaining: string;
 	structValue?: StructInstance;
 	arrayValue?: ArrayValue;
+	tupleValue?: TupleValue;
 }
 
 /**

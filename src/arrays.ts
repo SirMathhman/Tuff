@@ -194,7 +194,10 @@ export function parseArrayTypeBinding(
 /**
  * Checks if input looks like array indexing (var[index]).
  */
-export function looksLikeArrayIndexing(expr: string): boolean {
+/**
+ * Generic check for array or tuple indexing (var[index]).
+ */
+export function looksLikeIndexing(expr: string): boolean {
 	const trimmed = expr.trim();
 	const bracketIndex = trimmed.lastIndexOf('[');
 	if (bracketIndex <= 0) {
@@ -202,11 +205,18 @@ export function looksLikeArrayIndexing(expr: string): boolean {
 	}
 
 	const beforeBracket = trimmed.substring(0, bracketIndex).trim();
-	if (beforeBracket.includes('}')) {
+	if (beforeBracket.includes('}') || beforeBracket.includes(')')) {
 		return true;
 	}
 
 	return isVariableName(beforeBracket);
+}
+
+/**
+ * Checks if input looks like array or tuple indexing (var[index]).
+ */
+export function looksLikeArrayIndexing(expr: string): boolean {
+	return looksLikeIndexing(expr);
 }
 
 /**
