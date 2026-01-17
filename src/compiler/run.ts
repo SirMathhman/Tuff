@@ -58,7 +58,11 @@ export function run(input: string, stdin: string): Result<number> {
 		tempDir = mkdtempSync(join(tmpdir(), 'tuff-'));
 		tempFile = join(tempDir, 'compiled.js');
 		writeFileSync(tempFile, jsCode, 'utf8');
-		execSync(`node "${tempFile}"`, { stdio: 'inherit', cwd: process.cwd(), input: stdin });
+		execSync(`node "${tempFile}"`, {
+			stdio: ['pipe', 'inherit', 'inherit'],
+			cwd: process.cwd(),
+			input: stdin,
+		});
 		return ok(0);
 	} catch (e: unknown) {
 		if (isExecError(e)) {

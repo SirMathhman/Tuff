@@ -20,4 +20,12 @@ describe('run', (): void => {
 			expect(result.value).toBe(0);
 		}
 	});
+
+	it('reads from stdin and returns the value', (): void => {
+		const result = run('read<I32>()', '100');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(100);
+		}
+	});
 });
