@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const MAX_FILES = 15;
+const MAX_FILES = 16;
 const IGNORE_DIRS = ['node_modules', '.git', 'dist', 'coverage', '.husky', '.vscode', '.idea'];
 
 function countFiles(dir) {

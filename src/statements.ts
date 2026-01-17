@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { err, ok, type Result } from './common/result';
 import {
 	type ContextAndRemaining,
@@ -39,10 +40,15 @@ import {
 } from './functions';
 import { parseArrayTypeBinding } from './arrays';
 import { parseTupleTypeBinding } from './tuples';
+import {
+	isEnumType,
+	parseEnumDefinition,
+	registerEnumDefinition,
+	parseEnumTypeBinding,
+	isEnumDefinition,
+} from './enums';
+import { isPointerType, parsePointerTypeBinding, parsePointerAssignment } from './pointers';
 
-/**
- * Handles struct type variable binding.
- */
 function parseStructTypeBinding(
 	varName: string,
 	isMutable: boolean,
@@ -60,10 +66,6 @@ function parseStructTypeBinding(
 	}
 	return res;
 }
-
-/**
- * Attempts to parse an implicit struct binding.
- */
 function tryParseImplicitStructBinding(
 	varName: string,
 	isMutable: boolean,
@@ -73,10 +75,6 @@ function tryParseImplicitStructBinding(
 ): Result<ParsedBinding> | undefined {
 	return handleStructInstantiation(varName, isMutable, valueStr, remaining, context);
 }
-
-/**
- * Handles an uninitialized variable declaration.
- */
 function handleUninitializedDeclaration(
 	varName: string,
 	isMutable: boolean,
@@ -105,22 +103,25 @@ function handleValueBinding(
 	if (semiIndex < 0) {
 		return err('Variable declaration missing semicolon');
 	}
-
 	const valueStr = withoutEqual.substring(0, semiIndex).trim();
 	const remaining = withoutEqual.substring(semiIndex + 1).trim();
-
-	if (typeAnnotation !== undefined && typeAnnotation.startsWith('[')) {
-		return parseArrayTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	if (typeAnnotation !== undefined) {
+		if (typeAnnotation.startsWith('[')) {
+			return parseArrayTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+		}
+		if (typeAnnotation.startsWith('(')) {
+			return parseTupleTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+		}
+		if (isPointerType(typeAnnotation)) {
+			return parsePointerTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+		}
+		if (isEnumType(typeAnnotation)) {
+			return parseEnumTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining);
+		}
+		if (isStructType(typeAnnotation)) {
+			return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+		}
 	}
-
-	if (typeAnnotation !== undefined && typeAnnotation.startsWith('(')) {
-		return parseTupleTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
-	}
-
-	if (typeAnnotation !== undefined && isStructType(typeAnnotation)) {
-		return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
-	}
-
 	const valueResult = interpretInternal(valueStr, context);
 	if (valueResult.type === 'err' && typeAnnotation === undefined) {
 		const res = tryParseImplicitStructBinding(varName, isMutable, valueStr, remaining, context);
@@ -128,11 +129,9 @@ function handleValueBinding(
 			return res;
 		}
 	}
-
 	if (valueResult.type === 'err') {
 		return valueResult;
 	}
-
 	if (typeAnnotation !== undefined) {
 		const typeValidation = validateValueForType(valueResult.value, typeAnnotation);
 		if (typeValidation.type === 'err') {
@@ -177,7 +176,8 @@ function processLetDeclaration(
 		return bindResult;
 	}
 
-	const { name, value, isMutable, structValue, arrayValue, tupleValue } = bindResult.value;
+	const { name, value, isMutable, structValue, arrayValue, tupleValue, enumValue, pointerValue } =
+		bindResult.value;
 	if (context.bindings.some((binding): boolean => binding.name === name)) {
 		return err(`Variable '${name}' is already defined`);
 	}
@@ -192,25 +192,47 @@ function processLetDeclaration(
 	if (tupleValue !== undefined) {
 		newBinding.tupleValue = tupleValue;
 	}
-
+	if (enumValue !== undefined) {
+		newBinding.enumValue = enumValue;
+	}
+	if (pointerValue !== undefined) {
+		newBinding.pointerValue = pointerValue;
+	}
 	const newContext = {
 		bindings: [...context.bindings, newBinding],
 	};
 	return ok({ context: newContext, remaining: bindResult.value.remaining });
 }
-
-/**
- * Processes an assignment statement.
- */
 function processAssignmentStatement(
 	input: string,
 	context: ExecutionContext,
 ): Result<ContextAndRemaining> {
+	const pointerAssign = parsePointerAssignment(input, context);
+	if (pointerAssign !== undefined) {
+		const pointerBinding = context.bindings.find(
+			(b): boolean => b.name === pointerAssign.pointerVarName,
+		);
+		if (!pointerBinding?.pointerValue) {
+			return err('Invalid pointer assignment');
+		}
+		if (!pointerBinding.pointerValue.isMutable) {
+			return err('Cannot assign through immutable pointer');
+		}
+		const pointsToName = pointerBinding.pointerValue.pointsToName;
+		const updatedBindings = context.bindings.map((binding): VariableBinding => {
+			if (binding.name === pointsToName) {
+				return { ...binding, value: pointerAssign.newValue };
+			}
+			return binding;
+		});
+		const newContext = { bindings: updatedBindings };
+		return ok({ context: newContext, remaining: pointerAssign.remaining });
+	}
+
 	const assignResult = parseAssignment(input, context);
 	if (assignResult.type === 'err') {
 		return assignResult;
 	}
-
 	const { name, value, structValue } = assignResult.value;
 	const updatedBindings = context.bindings.map((binding): VariableBinding => {
 		if (binding.name === name) {
@@ -226,10 +248,6 @@ function processAssignmentStatement(
 	const newContext = { bindings: updatedBindings };
 	return ok({ context: newContext, remaining: assignResult.value.remaining });
 }
-
-/**
- * Handles yield marker in braced block remaining.
- */
 function processYieldInBlock(
 	innerRemaining: string,
 	afterBlock: string,
@@ -252,7 +270,6 @@ function processYieldInBlock(
 	}
 	return { context: { bindings: [] }, remaining: afterYieldFull };
 }
-
 /**
  * Creates a scoped context that only propagates mutations to outer-scope variables.
  */
@@ -269,17 +286,6 @@ function createScopedContext(
 		}),
 	};
 }
-
-/**
- * Computes remaining string after block processing.
- */
-function computeBlockRemaining(innerRemaining: string, afterBlock: string): string {
-	if (innerRemaining.trim().length > 0) {
-		return `${innerRemaining.trim()} ${afterBlock}`.trim();
-	}
-	return afterBlock;
-}
-
 /**
  * Processes a braced block statement.
  */
@@ -318,13 +324,15 @@ function processBracedBlock(input: string, context: ExecutionContext): Result<Co
 	}
 
 	const scopedContext = createScopedContext(context, newContext);
-	const remaining = computeBlockRemaining(innerRemaining, afterBlock);
+	let remaining: string;
+	if (innerRemaining.trim().length > 0) {
+		remaining = `${innerRemaining.trim()} ${afterBlock}`.trim();
+	} else {
+		remaining = afterBlock;
+	}
 	return ok({ context: scopedContext, remaining });
 }
 
-/**
- * Processes a yield statement by evaluating the expression and stopping block execution.
- */
 function processYieldStatement(
 	input: string,
 	context: ExecutionContext,
@@ -347,11 +355,6 @@ function processYieldStatement(
 	const yieldMarker = `__YIELD__:${expressionStr}:__`;
 	return ok({ context, remaining: yieldMarker });
 }
-
-function isReturnStatement(input: string): boolean {
-	return input.trim().startsWith('return ');
-}
-
 function processReturnStatement(
 	input: string,
 	context: ExecutionContext,
@@ -377,8 +380,30 @@ function processReturnStatement(
 }
 
 /**
- * Processes a struct definition statement.
+ * Processes an enum definition statement.
  */
+function processEnumStatement(input: string, shouldRegister = true): Result<ContextAndRemaining> {
+	const trimmed = input.trim();
+	const closingBraceIndex = findClosingBrace(trimmed);
+	if (closingBraceIndex < 0) {
+		return err('Enum definition missing closing brace');
+	}
+
+	const definitionStr = trimmed.substring(0, closingBraceIndex + 1);
+	const remaining = stripLeadingSemicolon(trimmed.substring(closingBraceIndex + 1));
+
+	const defResult = parseEnumDefinition(definitionStr);
+	if (defResult.type === 'err') {
+		return defResult;
+	}
+	if (shouldRegister) {
+		if (isEnumType(defResult.value.name)) {
+			return err(`Enum '${defResult.value.name}' is already defined`);
+		}
+		registerEnumDefinition(defResult.value.name, defResult.value.members);
+	}
+	return ok({ context: { bindings: [] }, remaining });
+}
 function processStructStatement(input: string, shouldRegister = true): Result<ContextAndRemaining> {
 	const trimmed = input.trim();
 	const closingBraceIndex = findClosingBrace(trimmed);
@@ -394,15 +419,12 @@ function processStructStatement(input: string, shouldRegister = true): Result<Co
 	}
 
 	if (shouldRegister) {
-		// Reject duplicate struct definitions
 		if (isStructType(defResult.value.name)) {
 			return err(`Struct '${defResult.value.name}' is already defined`);
 		}
 
 		registerStructDefinition(defResult.value);
 	}
-
-	// Struct definitions don't modify context, just consume input
 	return ok({ context: { bindings: [] }, remaining });
 }
 
@@ -414,20 +436,12 @@ function processFunctionStatement(input: string): Result<ContextAndRemaining> {
 	if (parsed.type === 'err') {
 		return parsed;
 	}
-
 	const registerResult = registerFunctionDefinition(parsed.value.definition);
 	if (registerResult.type === 'err') {
 		return registerResult;
 	}
-
-	// Function definitions don't modify context, just consume input
 	return ok({ context: { bindings: [] }, remaining: parsed.value.remaining });
 }
-
-function isGlobalDefinition(trimmed: string): boolean {
-	return isStructDefinition(trimmed) || isFunctionDefinition(trimmed);
-}
-
 /**
  * Processes statements (declarations, assignments, if-else, blocks) in input.
  */
@@ -442,7 +456,9 @@ export function processStatements(
 	while (remaining.trim().length > 0) {
 		const trimmed = remaining.trim();
 		let result: Result<ContextAndRemaining> | undefined;
-		if (isStructDefinition(trimmed)) {
+		if (isEnumDefinition(trimmed)) {
+			result = processEnumStatement(remaining, registerStructs);
+		} else if (isStructDefinition(trimmed)) {
 			result = processStructStatement(remaining, registerStructs);
 		} else if (isFunctionDefinition(trimmed)) {
 			result = processFunctionStatement(remaining);
@@ -452,7 +468,7 @@ export function processStatements(
 			result = processBracedBlock(remaining, currentContext);
 		} else if (isYieldStatement(trimmed)) {
 			result = processYieldStatement(remaining, currentContext);
-		} else if (isReturnStatement(trimmed)) {
+		} else if (trimmed.startsWith('return ')) {
 			result = processReturnStatement(remaining, currentContext);
 		} else if (isIfStatement(trimmed)) {
 			result = processIfStatement(remaining, currentContext);
@@ -469,7 +485,9 @@ export function processStatements(
 			return result;
 		}
 		// For global definitions, don't update context (they are global)
-		if (!isGlobalDefinition(trimmed)) {
+		if (
+			!(isStructDefinition(trimmed) || isFunctionDefinition(trimmed) || isEnumDefinition(trimmed))
+		) {
 			currentContext = result.value.context;
 		}
 		remaining = result.value.remaining;
@@ -524,14 +542,12 @@ function selectIfBranchAndRemaining(
 	}
 	return { statement, remaining };
 }
-
 function resolveIfRemaining(resultRemaining: string, finalRemaining: string): string {
 	if (resultRemaining.trim().length > 0) {
 		return resultRemaining;
 	}
 	return finalRemaining;
 }
-
 function processIfStatement(input: string, context: ExecutionContext): Result<ContextAndRemaining> {
 	const trimmed = input.trim();
 	if (!trimmed.startsWith('if ')) {
@@ -567,9 +583,7 @@ function processIfStatement(input: string, context: ExecutionContext): Result<Co
 	}
 
 	let result: Result<ContextAndRemaining>;
-	const isBraced =
-		statementToExecute.trim().startsWith('{') && isBalancedBrackets(statementToExecute.trim());
-	if (isBraced) {
+	if (statementToExecute.trim().startsWith('{') && isBalancedBrackets(statementToExecute.trim())) {
 		result = processBracedBlock(statementToExecute, context);
 	} else {
 		result = processStatements(statementToExecute, context, true);

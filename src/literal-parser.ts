@@ -20,6 +20,12 @@ import { ReturnSignal } from './function-call-utils';
 import { tryParseCallExpression } from './call-expressions';
 import { tryParseFieldAccess } from './field-access';
 import { tryParseIndexing } from './tuples';
+import { tryParseEnumMemberAccess } from './enums';
+import {
+	isDereferenceExpression,
+	parseDereferenceExpression,
+	dereferencePointer,
+} from './pointers';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -71,6 +77,9 @@ function lookupVariable(name: string, context: ExecutionContext): Result<number>
 		}
 		if (binding.tupleValue !== undefined) {
 			return ok(0);
+		}
+		if (binding.enumValue !== undefined) {
+			return ok(binding.enumValue.memberIndex);
 		}
 		if (binding.value === undefined) {
 			return err(`Variable '${name}' is not initialized`);
@@ -263,12 +272,36 @@ function parseNumberLiteral(trimmed: string): Result<number> {
 	return ok(value);
 }
 
-export function parseLiteral(
+function tryParseDereference(
+	literal: string,
+	context: ExecutionContext,
+): Result<number> | undefined {
+	if (!isDereferenceExpression(literal)) {
+		return undefined;
+	}
+
+	const pointerVarName = parseDereferenceExpression(literal);
+	if (pointerVarName === undefined) {
+		return err('Invalid dereference syntax');
+	}
+
+	const binding = context.bindings.find((b): boolean => b.name === pointerVarName);
+	if (binding === undefined) {
+		return err(`Variable '${pointerVarName}' is not defined`);
+	}
+
+	if (binding.pointerValue === undefined) {
+		return err(`Variable '${pointerVarName}' is not a pointer`);
+	}
+
+	return dereferencePointer(binding.pointerValue, context);
+}
+
+function tryParseComplexExpressions(
 	literal: string,
 	context: ExecutionContext,
 	interpretInternal: InterpretFunction,
-	processVariableBindings?: ProcessVariableBindingsFunction,
-): Result<number> {
+): Result<number> | undefined {
 	const callExprResult = tryParseCallExpression(literal, context, interpretInternal);
 	if (callExprResult !== undefined) {
 		return callExprResult;
@@ -277,6 +310,16 @@ export function parseLiteral(
 	const fieldAccessResult = tryParseFieldAccess(literal, context, interpretInternal);
 	if (fieldAccessResult !== undefined) {
 		return fieldAccessResult;
+	}
+
+	const dereferenceResult = tryParseDereference(literal, context);
+	if (dereferenceResult !== undefined) {
+		return dereferenceResult;
+	}
+
+	const enumMemberResult = tryParseEnumMemberAccess(literal);
+	if (enumMemberResult !== undefined) {
+		return enumMemberResult;
 	}
 
 	const indexResult = tryParseIndexing(literal, context, interpretInternal);
@@ -294,12 +337,15 @@ export function parseLiteral(
 		return ifElseResult;
 	}
 
-	const trimmed = literal.trim();
-	const simpleLiteral = parseSimpleLiteral(trimmed, context);
-	if (simpleLiteral !== undefined) {
-		return simpleLiteral;
-	}
+	return undefined;
+}
 
+function tryParseBracketExpressions(
+	trimmed: string,
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+	processVariableBindings?: ProcessVariableBindingsFunction,
+): Result<number> | undefined {
 	if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
 		if (isBalancedBrackets(trimmed)) {
 			const inner = trimmed.substring(1, trimmed.length - 1);
@@ -309,6 +355,36 @@ export function parseLiteral(
 
 	if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
 		return parseBracedExpression(trimmed, context, interpretInternal, processVariableBindings);
+	}
+
+	return undefined;
+}
+
+export function parseLiteral(
+	literal: string,
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+	processVariableBindings?: ProcessVariableBindingsFunction,
+): Result<number> {
+	const complexResult = tryParseComplexExpressions(literal, context, interpretInternal);
+	if (complexResult !== undefined) {
+		return complexResult;
+	}
+
+	const trimmed = literal.trim();
+	const simpleLiteral = parseSimpleLiteral(trimmed, context);
+	if (simpleLiteral !== undefined) {
+		return simpleLiteral;
+	}
+
+	const bracketResult = tryParseBracketExpressions(
+		trimmed,
+		context,
+		interpretInternal,
+		processVariableBindings,
+	);
+	if (bracketResult !== undefined) {
+		return bracketResult;
 	}
 
 	return parseNumberLiteral(trimmed);

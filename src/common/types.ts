@@ -61,6 +61,40 @@ export interface TupleValue {
 }
 
 /**
+ * Represents an enum definition with member names.
+ */
+export interface EnumDefinition {
+	name: string;
+	members: string[];
+}
+
+/**
+ * Represents an enum value (member of a specific enum).
+ */
+export interface EnumValue {
+	enumType: string;
+	memberName: string;
+	memberIndex: number;
+}
+
+/**
+ * Represents the result of parsing an enum definition.
+ */
+export interface EnumParseResult {
+	name: string;
+	members: string[];
+	remaining: string;
+}
+
+/**
+ * Represents a pointer to a variable (stores variable name and mutability).
+ */
+export interface PointerValue {
+	pointsToName: string;
+	isMutable: boolean;
+}
+
+/**
  * Represents a variable binding with an optional value.
  */
 export interface VariableBinding {
@@ -70,6 +104,8 @@ export interface VariableBinding {
 	structValue?: StructInstance;
 	arrayValue?: ArrayValue;
 	tupleValue?: TupleValue;
+	enumValue?: EnumValue;
+	pointerValue?: PointerValue;
 }
 
 /**
@@ -90,6 +126,8 @@ export interface ParsedBinding {
 	structValue?: StructInstance;
 	arrayValue?: ArrayValue;
 	tupleValue?: TupleValue;
+	enumValue?: EnumValue;
+	pointerValue?: PointerValue;
 }
 
 /**
