@@ -371,14 +371,27 @@ function compileLetWithoutType(code: string, idx: number): CompiledLet {
 	const ws3 = consumeWhitespace(code, j);
 	j = ws3.nextIndex;
 	// Skip type name until we hit '=', ';', or end of code
-	while (j < code.length && code[j] !== '=' && code[j] !== ';') {
-		j = j + 1;
-	}
+	j = skipLetTypeAnnotation(code, j);
 
 	return {
 		text: parts.join(''),
 		nextIndex: j,
 	};
+}
+
+function skipLetTypeAnnotation(code: string, startIdx: number): number {
+	let j = startIdx;
+	while (j < code.length) {
+		const ch = code[j];
+		if (ch === ';') {
+			return j;
+		}
+		if (ch === '=' && code[j + 1] !== '>') {
+			return j;
+		}
+		j = j + 1;
+	}
+	return j;
 }
 
 export function stripLetTypeAnnotations(code: string): string {
