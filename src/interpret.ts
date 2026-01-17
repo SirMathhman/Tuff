@@ -1,14 +1,14 @@
 import { err, ok, type Result } from './common/result';
-import { processTopLevelStatements } from './statements';
-import { interpretInternal } from './evaluator';
+import { processTopLevelStatements } from './interpreter/statements';
+import { interpretInternal } from './interpreter/evaluator';
 import {
 	findClosingBrace,
 	findSemicolonOutsideBrackets,
 	type VariableBinding,
 	type ExecutionContext,
 } from './common/types';
-import { parseFunctionDefinition } from './functions';
-import { ReturnSignal } from './function-call-utils';
+import { parseFunctionDefinition } from './interpreter/functions';
+import { ReturnSignal } from './parser/function-call-utils';
 
 function stripAfterIndex(s: string, idx: number): string {
 	let rem = s.substring(idx + 1).trim();

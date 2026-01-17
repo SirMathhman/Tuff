@@ -1,6 +1,6 @@
 import { interpret } from '../src/interpret';
-import { clearStructRegistry } from '../src/structs';
-import { clearFunctionRegistry } from '../src/functions';
+import { clearStructRegistry } from '../src/types/structs';
+import { clearFunctionRegistry } from '../src/interpreter/functions';
 import {
 	expectOkValue,
 	expectErrContains,

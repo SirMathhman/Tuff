@@ -1,5 +1,5 @@
-import { type ExecutionContext, type VariableBinding, isVariableName } from './common/types';
-import { type FunctionDefinition } from './functions';
+import { type ExecutionContext, type VariableBinding, isVariableName } from '../common/types';
+import { type FunctionDefinition } from '../interpreter/functions';
 
 export class ReturnSignal extends Error {
 	constructor(readonly value: number) {

@@ -3,9 +3,9 @@ import {
 	checkTwoCharOperator,
 	type OperatorMatch,
 	type OperatorPrecedenceState,
-} from './common/types';
+} from '../common/types';
 
-export { parseLiteral } from './literal-parser';
+export { parseLiteral } from '../parser/literal-parser';
 
 /**
  * Updates the lowest precedence state with a new operator.

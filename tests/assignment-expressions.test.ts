@@ -1,4 +1,4 @@
-import { clearFunctionRegistry } from '../src/functions';
+import { clearFunctionRegistry } from '../src/interpreter/functions';
 import { expectInterpretErrContains } from '../src/testing/test-helpers';
 
 describe('interpret - assignment expressions', (): void => {

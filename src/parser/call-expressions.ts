@@ -1,30 +1,30 @@
-import { err, ok, type Result } from './common/result';
+import { err, ok, type Result } from '../common/result';
 import {
 	type ExecutionContext,
 	isVariableName,
 	validateValueForType,
 	type VariableBinding,
 	type FunctionReference,
-} from './common/types';
+} from '../common/types';
 import {
 	getFunctionDefinition,
 	type FunctionDefinition,
 	validateFunctionReference,
-} from './functions';
+} from '../interpreter/functions';
 import {
 	createCallContext,
 	extractFunctionCallExpression,
 	findCallOpenParenIndex,
 	splitArguments,
 	ReturnSignal,
-} from './function-call-utils';
+} from '../parser/function-call-utils';
 import {
 	clearLastFunctionReference,
 	getLastFunctionReference,
 	setLastFunctionReference,
-} from './common/function-references';
-import { getLastStructInstance, setLastStructInstance } from './common/struct-values';
-import { getModule } from './modules';
+} from '../common/function-references';
+import { getLastStructInstance, setLastStructInstance } from '../common/struct-values';
+import { getModule } from '../interpreter/modules';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;

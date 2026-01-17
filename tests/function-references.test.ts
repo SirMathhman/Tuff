@@ -1,4 +1,4 @@
-import { clearFunctionRegistry } from '../src/functions';
+import { clearFunctionRegistry } from '../src/interpreter/functions';
 import { expectInterpretOk, expectInterpretErrContains } from '../src/testing/test-helpers';
 
 describe('interpret - function references', (): void => {

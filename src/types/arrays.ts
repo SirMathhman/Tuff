@@ -1,4 +1,4 @@
-import { err, ok, type Result } from './common/result';
+import { err, ok, type Result } from '../common/result';
 import {
 	type ArrayType,
 	type ArrayValue,
@@ -6,8 +6,8 @@ import {
 	validateValueForType,
 	type ParsedBinding,
 	isVariableName,
-} from './common/types';
-import { interpretInternal } from './evaluator';
+} from '../common/types';
+import { interpretInternal } from '../interpreter/evaluator';
 
 /**
  * Represents extracted array indexing components.

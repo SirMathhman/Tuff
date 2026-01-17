@@ -1,4 +1,4 @@
-import { err, ok, type Result } from './common/result';
+import { err, ok, type Result } from '../common/result';
 import {
 	findClosingBrace,
 	findClosingParen,
@@ -7,8 +7,8 @@ import {
 	type ExecutionContext,
 	isVariableName,
 	type VariableBinding,
-} from './common/types';
-import { interpretInternal } from './evaluator';
+} from '../common/types';
+import { interpretInternal } from '../interpreter/evaluator';
 
 /**
  * Represents a parsed range with start and end values.

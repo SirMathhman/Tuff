@@ -1,6 +1,6 @@
-import { err, ok, type Result } from './common/result';
-import { findClosingBrace, type ContextAndRemaining, type ExecutionContext } from './common/types';
-import { stripLeadingSemicolon } from './common/helpers';
+import { err, ok, type Result } from '../common/result';
+import { findClosingBrace, type ContextAndRemaining, type ExecutionContext } from '../common/types';
+import { stripLeadingSemicolon } from '../common/helpers';
 
 /**
  * Global registry of module definitions (module name -> module namespace with functions).

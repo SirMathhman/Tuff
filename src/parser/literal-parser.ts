@@ -1,4 +1,4 @@
-import { err, ok, type Result } from './common/result';
+import { err, ok, type Result } from '../common/result';
 import {
 	type ExecutionContext,
 	extractTypeSuffix,
@@ -10,35 +10,35 @@ import {
 	validateValueForType,
 	isMatchKeyword,
 	extractMatchExpression,
-} from './common/types';
+} from '../common/types';
 import {
 	extractIfConditionAndAfter,
 	findElseKeywordIndex,
 	type IfConditionAndAfter,
 	copyBindingValues,
-} from './common/helpers';
+} from '../common/helpers';
 import { ReturnSignal } from './function-call-utils';
 import { tryParseCallExpression } from './call-expressions';
 import { tryParseFieldAccess } from './field-access';
-import { tryParseIndexing } from './tuples';
-import { tryParseEnumMemberAccess } from './enums';
-import { getFunctionDefinition } from './functions';
+import { tryParseIndexing } from '../types/tuples';
+import { tryParseEnumMemberAccess } from '../types/enums';
+import { getFunctionDefinition } from '../interpreter/functions';
 import {
 	captureFunctionReferenceByName,
 	captureFunctionReferenceFromBinding,
 	setLastFunctionReference,
 	getLastFunctionReference,
-} from './common/function-references';
+} from '../common/function-references';
 import {
 	captureScopeAsStructInstance,
 	setLastStructInstance,
 	getLastStructInstance,
-} from './common/struct-values';
+} from '../common/struct-values';
 import {
 	isDereferenceExpression,
 	parseDereferenceExpression,
 	dereferencePointer,
-} from './pointers';
+} from '../types/pointers';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;

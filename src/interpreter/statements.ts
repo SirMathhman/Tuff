@@ -1,5 +1,5 @@
 /* eslint-disable max-lines */
-import { err, ok, type Result } from './common/result';
+import { err, ok, type Result } from '../common/result';
 import {
 	type ContextAndRemaining,
 	type DestructuredFields,
@@ -18,7 +18,7 @@ import {
 	type ParsedBinding,
 	type ProcessedBindings,
 	type VariableBinding,
-} from './common/types';
+} from '../common/types';
 import {
 	extractIfConditionAndAfter,
 	extractIfStatementBranches,
@@ -26,10 +26,10 @@ import {
 	parseVariableDeclarationHeader,
 	isIfStatement,
 	stripLeadingSemicolon,
-} from './common/helpers';
-import { interpretInternal } from './evaluator';
-import { parseAssignment } from './assignments';
-import { processWhileStatement, processForStatement, isForStatement } from './loops';
+} from '../common/helpers';
+import { interpretInternal } from '../interpreter/evaluator';
+import { parseAssignment } from '../interpreter/assignments';
+import { processWhileStatement, processForStatement, isForStatement } from '../interpreter/loops';
 import {
 	isStructDefinition,
 	parseStructDefinition,
@@ -37,7 +37,7 @@ import {
 	isStructType,
 	handleStructInstantiation,
 	handleStructDestructuring,
-} from './structs';
+} from '../types/structs';
 import {
 	isFunctionDefinition,
 	parseFunctionDefinition,
@@ -46,24 +46,24 @@ import {
 	isFunctionType,
 	parseFunctionTypeBinding,
 	type FunctionDefinition,
-} from './functions';
+} from '../interpreter/functions';
 import {
 	captureFunctionReferenceByName,
 	clearLastFunctionReference,
 	getLastFunctionReference,
-} from './common/function-references';
-import { clearLastStructInstance, getLastStructInstance } from './common/struct-values';
-import { parseArrayTypeBinding, parseArrayType } from './arrays';
-import { parseTupleTypeBinding } from './tuples';
+} from '../common/function-references';
+import { clearLastStructInstance, getLastStructInstance } from '../common/struct-values';
+import { parseArrayTypeBinding, parseArrayType } from '../types/arrays';
+import { parseTupleTypeBinding } from '../types/tuples';
 import {
 	isEnumType,
 	parseEnumDefinition,
 	registerEnumDefinition,
 	parseEnumTypeBinding,
 	isEnumDefinition,
-} from './enums';
-import { isPointerType, parsePointerTypeBinding, parsePointerAssignment } from './pointers';
-import { isModuleDefinition, parseModuleDefinition } from './modules';
+} from '../types/enums';
+import { isPointerType, parsePointerTypeBinding, parsePointerAssignment } from '../types/pointers';
+import { isModuleDefinition, parseModuleDefinition } from '../interpreter/modules';
 
 function parseStructTypeBinding(
 	varName: string,

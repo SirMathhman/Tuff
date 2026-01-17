@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const MAX_FILES = 17;
+const MAX_FILES = 16;
 const IGNORE_DIRS = ['node_modules', '.git', 'dist', 'coverage', '.husky', '.vscode', '.idea'];
 
 function countFiles(dir) {
@@ -39,6 +39,7 @@ function countFiles(dir) {
 const rootDir = process.cwd();
 console.log(`Checking directory sizes startting from ${rootDir}...`);
 if (!countFiles(rootDir)) {
+	console.error("Don't increase the limit! You must split up the directory!");
 	process.exit(1);
 }
 console.log('File count check passed.');

@@ -1,7 +1,7 @@
-import { err, ok, type Result } from './common/result';
-import { type ExecutionContext, isBalancedBrackets, isVariableName } from './common/types';
-import { evaluateStructInstantiation } from './structs';
-import { setLastFunctionReference } from './common/function-references';
+import { err, ok, type Result } from '../common/result';
+import { type ExecutionContext, isBalancedBrackets, isVariableName } from '../common/types';
+import { evaluateStructInstantiation } from '../types/structs';
+import { setLastFunctionReference } from '../common/function-references';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;

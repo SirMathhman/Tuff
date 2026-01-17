@@ -1,5 +1,5 @@
-import { err, ok, type Result } from './common/result';
-import { type ExecutionContext, type ParsedBinding, type PointerValue } from './common/types';
+import { err, ok, type Result } from '../common/result';
+import { type ExecutionContext, type ParsedBinding, type PointerValue } from '../common/types';
 
 interface PointerTypeInfo {
 	pointedToType: string;

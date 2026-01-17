@@ -1,4 +1,4 @@
-import { err, ok, type Result } from './common/result';
+import { err, ok, type Result } from '../common/result';
 import {
 	collectTypeSuffixes,
 	type ExecutionContext,
@@ -8,9 +8,9 @@ import {
 	type StatementsModule,
 	type VariableBinding,
 	validateValueForType,
-} from './common/types';
-import { copyBindingValues } from './common/helpers';
-import { parseLiteral, findOperator } from './parser';
+} from '../common/types';
+import { copyBindingValues } from '../common/helpers';
+import { parseLiteral, findOperator } from '../parser/parser';
 
 interface AssignmentsModule {
 	parseAssignment: (input: string, context: ExecutionContext) => Result<ParsedBinding>;

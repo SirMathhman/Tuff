@@ -1,4 +1,4 @@
-import { err, ok, type Result } from './common/result';
+import { err, ok, type Result } from '../common/result';
 import {
 	findSemicolonOutsideBrackets,
 	isVariableName,
@@ -6,10 +6,10 @@ import {
 	type ParsedBinding,
 	type VariableBinding,
 	type ArrayValue,
-} from './common/types';
-import { interpretInternal } from './evaluator';
-import { handleStructInstantiation } from './structs';
-import { looksLikeIndexing } from './arrays';
+} from '../common/types';
+import { interpretInternal } from '../interpreter/evaluator';
+import { handleStructInstantiation } from '../types/structs';
+import { looksLikeIndexing } from '../types/arrays';
 
 /**
  * Detects compound assignment operators (+=, -=, *=, /=, ||=, &&=).

@@ -1,5 +1,5 @@
-import { clearFunctionRegistry } from '../src/functions';
-import { clearModuleRegistry } from '../src/modules';
+import { clearFunctionRegistry } from '../src/interpreter/functions';
+import { clearModuleRegistry } from '../src/interpreter/modules';
 import { expectInterpretOk } from '../src/testing/test-helpers';
 
 describe('interpret - modules', (): void => {

@@ -1,11 +1,11 @@
-import { err, ok, type Result } from './common/result';
+import { err, ok, type Result } from '../common/result';
 import {
 	isVariableName,
 	findClosingBrace,
 	type ParsedBinding,
 	type EnumValue,
 	type EnumParseResult,
-} from './common/types';
+} from '../common/types';
 
 /**
  * Global registry of enum definitions.
