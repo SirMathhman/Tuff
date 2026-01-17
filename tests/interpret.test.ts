@@ -3,6 +3,9 @@ import { interpret } from '../src/interpret';
 import { clearStructRegistry } from '../src/structs';
 
 function expectOkValue(result: Result<number>, expected: number): void {
+	if (result.type === 'err') {
+		console.error('Expected ok but got err:', result.error);
+	}
 	expect(result.type).toBe('ok');
 	if (result.type === 'ok') {
 		expect(result.value).toBe(expected);
@@ -389,5 +392,20 @@ describe('interpret - struct definitions and field access', (): void => {
 	});
 	it('should return Err for accessing undefined field', (): void => {
 		expectErrContains(interpret('struct Point { x : I32 } Point { x : 5 }.y'), 'not found');
+	});
+	it('should interpret "struct Wrapper { field : I32 } let myWrapper : Wrapper = Wrapper { field : 100 }; myWrapper.field" as 100', (): void => {
+		expectInterpretOk(
+			'struct Wrapper { field : I32 } let myWrapper : Wrapper = Wrapper { field : 100 }; myWrapper.field',
+			100,
+		);
+	});
+	it('should interpret struct variable with multiple fields', (): void => {
+		expectInterpretOk(
+			'struct Point { x : I32, y : I32 } let p : Point = Point { x : 5, y : 12 }; p.x + p.y',
+			17,
+		);
+	});
+	it('should interpret struct variable in expressions', (): void => {
+		expectInterpretOk('struct S { val : I32 } let s : S = S { val : 8 }; s.val * 3', 24);
 	});
 });

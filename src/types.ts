@@ -19,12 +19,21 @@ export interface OperatorPrecedenceState {
 }
 
 /**
+ * Represents a struct instance value (field values).
+ */
+export interface StructInstance {
+	structType: string;
+	values: Record<string, number>;
+}
+
+/**
  * Represents a variable binding with an optional value.
  */
 export interface VariableBinding {
 	name: string;
 	value: number | undefined;
 	isMutable: boolean;
+	structValue?: StructInstance;
 }
 
 /**
@@ -42,6 +51,7 @@ export interface ParsedBinding {
 	value: number | undefined;
 	isMutable: boolean;
 	remaining: string;
+	structValue?: StructInstance;
 }
 
 /**
@@ -554,46 +564,6 @@ export function findClosingParen(input: string): number {
 }
 
 /**
- * Checks if 'if' keyword starts at the given position.
- */
-function isIfKeywordAt(input: string, i: number): boolean {
-	if (input.substring(i, i + 2) !== 'if') {
-		return false;
-	}
-	let beforeChar = ' ';
-	if (i > 0) {
-		beforeChar = input[i - 1];
-	}
-	let afterChar = ' ';
-	if (i + 2 < input.length) {
-		afterChar = input[i + 2];
-	}
-	const isWordBoundaryBefore = beforeChar === ' ' || beforeChar === '\t';
-	const isWordBoundaryAfter = afterChar === ' ' || afterChar === '\t' || afterChar === '(';
-	return isWordBoundaryBefore && isWordBoundaryAfter;
-}
-
-/**
- * Checks if 'else' keyword starts at the given position.
- */
-function isElseKeywordAt(input: string, i: number): boolean {
-	if (input.substring(i, i + 4) !== 'else') {
-		return false;
-	}
-	let beforeChar = ' ';
-	if (i > 0) {
-		beforeChar = input[i - 1];
-	}
-	let afterChar = ' ';
-	if (i + 4 < input.length) {
-		afterChar = input[i + 4];
-	}
-	const isWordBoundaryBefore = beforeChar === ' ' || beforeChar === '\t';
-	const isWordBoundaryAfter = afterChar === ' ' || afterChar === '\t';
-	return isWordBoundaryBefore && isWordBoundaryAfter;
-}
-
-/**
  * Finds the closing brace matching the opening brace at position 0.
  * @param input - The input string starting with '{'
  * @returns The index of the closing brace, or -1 if not found
@@ -682,74 +652,6 @@ export function shouldProcessAsStatementBlock(trimmed: string): boolean {
 		return false;
 	}
 	return ci < trimmed.length - 1;
-}
-
-export function findElseKeywordIndex(input: string): number {
-	let bracketDepth = 0;
-	let parenDepth = 0;
-	let ifDepth = 0;
-	for (let i = 0; i < input.length; i++) {
-		const char = input[i];
-		if (char === '(') {
-			parenDepth++;
-			continue;
-		}
-		if (char === ')') {
-			parenDepth--;
-			continue;
-		}
-		if (char === '{') {
-			bracketDepth++;
-			continue;
-		}
-		if (char === '}') {
-			bracketDepth--;
-			continue;
-		}
-
-		const inBrackets = parenDepth > 0 || bracketDepth > 0;
-		if (inBrackets) {
-			continue;
-		}
-
-		if (isIfKeywordAt(input, i)) {
-			ifDepth++;
-		} else if (isElseKeywordAt(input, i) && ifDepth === 0) {
-			return i;
-		} else if (isElseKeywordAt(input, i)) {
-			ifDepth--;
-		}
-	}
-
-	return -1;
-}
-
-/**
- * Represents parsed if condition and what comes after.
- */
-export interface IfConditionAndAfter {
-	conditionStr: string;
-	afterCondition: string;
-}
-
-/**
- * Extracts condition string and remaining text from after-if string.
- * @param afterIf - The string after 'if'
- * @returns Object with conditionStr and afterCondition, or undefined if invalid
- */
-export function extractIfConditionAndAfter(afterIf: string): IfConditionAndAfter | undefined {
-	if (!afterIf.startsWith('(')) {
-		return undefined;
-	}
-
-	const conditionEnd = findClosingParen(afterIf);
-	if (conditionEnd < 0) {
-		return undefined;
-	}
-
-	const conditionStr = afterIf.substring(1, conditionEnd);
-	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
-	return { conditionStr, afterCondition };
 }
 
 /**

@@ -1,5 +1,5 @@
 import { err, ok, type Result } from './result';
-import { isVariableName } from './types';
+import { isVariableName, findClosingBrace } from './types';
 
 /**
  * Represents a struct field definition.
@@ -15,6 +15,14 @@ export interface StructField {
 export interface StructDefinition {
 	name: string;
 	fields: StructField[];
+}
+
+/**
+ * Represents the result of evaluating a struct instantiation.
+ */
+export interface StructInstantiationResult {
+	structType: string;
+	fieldValues: Record<string, number>;
 }
 
 /**
@@ -34,6 +42,13 @@ export function registerStructDefinition(def: StructDefinition): void {
  */
 export function getStructDefinition(name: string): StructDefinition | undefined {
 	return structRegistry.get(name);
+}
+
+/**
+ * Checks if a type name is a registered struct type.
+ */
+export function isStructType(typeName: string): boolean {
+	return structRegistry.has(typeName);
 }
 
 /**
@@ -197,4 +212,95 @@ export function parseStructDefinition(input: string): Result<StructDefinition> {
 	}
 
 	return ok({ name: structName, fields: fieldsResult.value });
+}
+/**
+ * Checks if an expression looks like a struct instantiation.
+ */
+export function looksLikeStructInstantiation(expr: string): boolean {
+	const trimmed = expr.trim();
+	const braceIndex = trimmed.indexOf('{');
+	if (braceIndex <= 0) {
+		return false;
+	}
+
+	const typeName = trimmed.substring(0, braceIndex).trim();
+	return isVariableName(typeName) && isStructType(typeName);
+}
+
+/**
+ * Parses a single field in struct instantiation.
+ */
+function parseStructInstantiationField(
+	decl: string,
+	structDef: StructDefinition,
+	fieldValues: Record<string, number>,
+	parseValue: (expr: string) => Result<number>,
+): Result<void> {
+	const trimmedDecl = decl.trim();
+	if (trimmedDecl.length === 0) {
+		return ok(undefined as void);
+	}
+
+	const colonIndex = trimmedDecl.indexOf(':');
+	if (colonIndex < 0) {
+		return err(`Invalid struct field assignment: ${trimmedDecl}`);
+	}
+
+	const fieldName = trimmedDecl.substring(0, colonIndex).trim();
+	const fieldValueStr = trimmedDecl.substring(colonIndex + 1).trim();
+
+	const fieldDef = structDef.fields.find((f): boolean => f.name === fieldName);
+	if (fieldDef === undefined) {
+		return err(`Struct field '${fieldName}' not found in ${structDef.name}`);
+	}
+
+	const valueResult = parseValue(fieldValueStr);
+	if (valueResult.type === 'err') {
+		return valueResult;
+	}
+
+	fieldValues[fieldName] = valueResult.value;
+	return ok(undefined as void);
+}
+
+/**
+ * Evaluates a struct instantiation expression with a value parser.
+ */
+export function evaluateStructInstantiation(
+	expr: string,
+	parseValue: (expr: string) => Result<number>,
+): Result<StructInstantiationResult> {
+	const trimmed = expr.trim();
+	const braceIndex = trimmed.indexOf('{');
+	if (braceIndex <= 0) {
+		return err('Struct instantiation missing opening brace');
+	}
+
+	const typeName = trimmed.substring(0, braceIndex).trim();
+	if (!isVariableName(typeName)) {
+		return err(`Invalid struct type name: ${typeName}`);
+	}
+
+	const structDef = getStructDefinition(typeName);
+	if (structDef === undefined) {
+		return err(`Struct type '${typeName}' not defined`);
+	}
+
+	const closeIndex = findClosingBrace(trimmed.substring(braceIndex));
+	if (closeIndex < 0) {
+		return err('Struct instantiation missing closing brace');
+	}
+
+	const bodyStr = trimmed.substring(braceIndex + 1, braceIndex + closeIndex);
+	const fieldValues: Record<string, number> = {};
+
+	const fieldDecls = bodyStr.split(',');
+	for (const decl of fieldDecls) {
+		const fieldResult = parseStructInstantiationField(decl, structDef, fieldValues, parseValue);
+		if (fieldResult.type === 'err') {
+			return fieldResult;
+		}
+	}
+
+	return ok({ structType: typeName, fieldValues });
 }

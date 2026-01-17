@@ -2,93 +2,70 @@ import { err, ok, type Result } from './result';
 import {
 	type ContextAndRemaining,
 	type ExecutionContext,
-	type IfConditionAndBranches,
-	type IfStatementBranches,
-	type TypeAnnotationParts,
-	findClosingParen,
-	findElseKeywordIndex,
-	findSemicolonOutsideBrackets,
 	findClosingBrace,
+	findSemicolonOutsideBrackets,
 	isAssignmentStatement,
 	isBalancedBrackets,
-	isVariableName,
+	isWhileStatement,
 	isYieldStatement,
 	shouldProcessAsStatementBlock,
 	validateValueForType,
 	type ParsedBinding,
 	type ProcessedBindings,
 	type VariableBinding,
-	type VariableDeclarationParts,
-	extractIfConditionAndAfter,
-	isWhileStatement,
 } from './types';
+import {
+	extractIfConditionAndAfter,
+	extractIfStatementBranches,
+	extractRemainingFromStatement,
+	parseVariableDeclarationHeader,
+	isIfStatement,
+} from './helpers';
 import { interpretInternal } from './evaluator';
 import { parseAssignment } from './assignments';
 import { processWhileStatement, processForStatement, isForStatement } from './loops';
-import { isStructDefinition, parseStructDefinition, registerStructDefinition } from './structs';
+import {
+	isStructDefinition,
+	parseStructDefinition,
+	registerStructDefinition,
+	isStructType,
+	evaluateStructInstantiation,
+} from './structs';
 
 /**
- * Parses the type annotation and assignment part after a colon.
+ * Handles struct type variable binding.
  */
-function parseTypeAnnotationPart(afterColon: string): TypeAnnotationParts {
-	const semiIndex = afterColon.indexOf(';');
-	let searchForEqual: string;
-	if (semiIndex >= 0) {
-		searchForEqual = afterColon.substring(0, semiIndex);
-	} else {
-		searchForEqual = afterColon;
+function parseStructTypeBinding(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
+	const instantResult = evaluateStructInstantiation(
+		valueStr,
+		(expr): Result<number> => interpretInternal(expr, context),
+	);
+	if (instantResult.type === 'err') {
+		return instantResult;
 	}
-	const equalIndex = searchForEqual.indexOf('=');
-
-	if (equalIndex >= 0) {
-		const typeAnnotation = searchForEqual.substring(0, equalIndex).trim();
-		let afterTypeOrName = searchForEqual.substring(equalIndex);
-		if (semiIndex >= 0) {
-			afterTypeOrName += afterColon.substring(semiIndex);
-		}
-		return { typeAnnotation, afterTypeOrName };
-	}
-
-	const typeAnnotation = searchForEqual.trim();
-	return { typeAnnotation, afterTypeOrName: '' };
-}
-
-function parseVariableDeclarationHeader(withoutLet: string): Result<VariableDeclarationParts> {
-	let isMutable = false;
-	let remaining = withoutLet;
-
-	if (withoutLet.startsWith('mut ')) {
-		isMutable = true;
-		remaining = withoutLet.substring(4).trim();
+	if (instantResult.value.structType !== typeAnnotation) {
+		return err(
+			`Struct type mismatch: expected '${typeAnnotation}', got '${instantResult.value.structType}'`,
+		);
 	}
 
-	const colonIndex = remaining.indexOf(':');
-	let varName: string;
-	let typeAnnotation: string | undefined;
-	let afterTypeOrName: string;
-
-	if (colonIndex >= 0) {
-		varName = remaining.substring(0, colonIndex).trim();
-		const afterColon = remaining.substring(colonIndex + 1).trim();
-		const parts = parseTypeAnnotationPart(afterColon);
-		typeAnnotation = parts.typeAnnotation;
-		afterTypeOrName = parts.afterTypeOrName;
-	} else {
-		const equalIndex = remaining.indexOf('=');
-		if (equalIndex >= 0) {
-			varName = remaining.substring(0, equalIndex).trim();
-			afterTypeOrName = remaining.substring(equalIndex);
-		} else {
-			varName = remaining;
-			afterTypeOrName = '';
-		}
-	}
-
-	if (!isVariableName(varName)) {
-		return err(`Invalid variable name: ${varName}`);
-	}
-
-	return ok({ varName, isMutable, typeAnnotation, afterTypeOrName });
+	return ok({
+		name: varName,
+		value: undefined,
+		isMutable,
+		remaining,
+		structValue: {
+			structType: instantResult.value.structType,
+			values: instantResult.value.fieldValues,
+		},
+	});
 }
 
 /**
@@ -126,18 +103,21 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 	const valueStr = withoutEqual.substring(0, semiIndex).trim();
 	const remaining = withoutEqual.substring(semiIndex + 1).trim();
 
+	// Check if this is a struct type annotation
+	if (typeAnnotation !== undefined && isStructType(typeAnnotation)) {
+		return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	}
+
 	const valueResult = interpretInternal(valueStr, context);
 	if (valueResult.type === 'err') {
 		return valueResult;
 	}
-
 	if (typeAnnotation !== undefined) {
 		const typeValidation = validateValueForType(valueResult.value, typeAnnotation);
 		if (typeValidation.type === 'err') {
 			return typeValidation;
 		}
 	}
-
 	return ok({ name: varName, value: valueResult.value, isMutable, remaining });
 }
 /**
@@ -152,13 +132,18 @@ function processLetDeclaration(
 		return bindResult;
 	}
 
-	const { name, value, isMutable } = bindResult.value;
+	const { name, value, isMutable, structValue } = bindResult.value;
 	if (context.bindings.some((binding): boolean => binding.name === name)) {
 		return err(`Variable '${name}' is already defined`);
 	}
 
+	const newBinding: VariableBinding = { name, value, isMutable };
+	if (structValue !== undefined) {
+		newBinding.structValue = structValue;
+	}
+
 	const newContext = {
-		bindings: [...context.bindings, { name, value, isMutable }],
+		bindings: [...context.bindings, newBinding],
 	};
 	return ok({ context: newContext, remaining: bindResult.value.remaining });
 }
@@ -313,22 +298,14 @@ function processYieldStatement(
  */
 function processStructStatement(input: string): Result<ContextAndRemaining> {
 	const trimmed = input.trim();
-	const semiIndex = findSemicolonOutsideBrackets(trimmed);
-
-	let definitionStr: string;
-	let remaining: string;
-
-	if (semiIndex >= 0) {
-		definitionStr = trimmed.substring(0, semiIndex);
-		remaining = trimmed.substring(semiIndex + 1).trim();
-	} else {
-		// Struct definition without semicolon at the end
-		const closingBraceIndex = findClosingBrace(trimmed);
-		if (closingBraceIndex < 0) {
-			return err('Struct definition missing closing brace');
-		}
-		definitionStr = trimmed.substring(0, closingBraceIndex + 1);
-		remaining = trimmed.substring(closingBraceIndex + 1).trim();
+	const closingBraceIndex = findClosingBrace(trimmed);
+	if (closingBraceIndex < 0) {
+		return err('Struct definition missing closing brace');
+	}
+	const definitionStr = trimmed.substring(0, closingBraceIndex + 1);
+	let remaining = trimmed.substring(closingBraceIndex + 1).trim();
+	if (remaining.startsWith(';')) {
+		remaining = remaining.substring(1).trim();
 	}
 
 	const defResult = parseStructDefinition(definitionStr);
@@ -388,215 +365,57 @@ export function processStatements(
 }
 
 /**
- * Detects if a statement is an if-else statement (with semicolons).
+ * Represents branch and remaining text selection result.
  */
-function isIfStatement(trimmed: string): boolean {
-	if (!trimmed.startsWith('if ')) {
-		return false;
-	}
-
-	// Check if this looks like an if statement: if (...) <statement>; [else <statement>;]
-	const afterIf = trimmed.substring(3).trim();
-	if (!afterIf.startsWith('(')) {
-		return false;
-	}
-
-	const conditionEnd = findClosingParen(afterIf);
-	if (conditionEnd < 0) {
-		return false;
-	}
-
-	const afterCondition = afterIf.substring(conditionEnd + 1).trim();
-	if (afterCondition.length === 0) {
-		return false;
-	}
-
-	// Check if there's an else clause
-	const elseIndex = findElseKeywordIndex(afterCondition);
-	if (elseIndex >= 0) {
-		// If-else statement: both branches should have proper syntax
-		const trueStatementStr = afterCondition.substring(0, elseIndex).trim();
-		const falseStatementStr = afterCondition.substring(elseIndex + 4).trim();
-
-		const isTrueBraced = trueStatementStr.startsWith('{');
-		const isFalseBraced = falseStatementStr.startsWith('{');
-		const trueSemiIndex = findSemicolonOutsideBrackets(trueStatementStr);
-		const falseSemiIndex = findSemicolonOutsideBrackets(falseStatementStr);
-
-		const bothSemicolons = trueSemiIndex >= 0 && falseSemiIndex >= 0;
-		const bothBraced = isTrueBraced && isFalseBraced;
-
-		return bothSemicolons || bothBraced;
-	}
-
-	// If-only statement (no else): should have a semicolon or braced block
-	const isBraced = afterCondition.startsWith('{');
-	const semiIndex = findSemicolonOutsideBrackets(afterCondition);
-
-	return isBraced || semiIndex >= 0;
+interface IfBranchSelection {
+	statement: string | undefined;
+	remaining: string;
 }
 
 /**
- * Extracts the if-statement branches (returns undefined for false branch if no else).
+ * Represents if statement branches.
  */
-function extractIfStatementBranches(afterCondition: string): IfStatementBranches | undefined {
-	const elseIndex = findElseKeywordIndex(afterCondition);
-
-	if (elseIndex < 0) {
-		// If-only statement (no else)
-		const trueStatementStr = afterCondition.trim();
-		if (trueStatementStr.length === 0) {
-			return undefined;
-		}
-		return { trueStatementStr, falseStatementStr: undefined };
-	}
-
-	// If-else statement
-	const trueStatementStr = afterCondition.substring(0, elseIndex).trim();
-	const falseStatementStr = afterCondition.substring(elseIndex + 4).trim();
-
-	if (trueStatementStr.length === 0 || falseStatementStr.length === 0) {
-		return undefined;
-	}
-
-	return { trueStatementStr, falseStatementStr };
+interface IfStatementBranchesInput {
+	trueStatementStr: string;
+	falseStatementStr: string | undefined;
 }
 
 /**
- * Extracts remaining string after a braced block.
+ * Determines the branch to execute and its remaining text.
  */
-function extractRemainingFromBracedBlock(falseStatementStr: string): string {
-	const closingBraceIndex = findClosingBrace(falseStatementStr);
-	if (closingBraceIndex < 0) {
-		return '';
-	}
-	let remaining = falseStatementStr.substring(closingBraceIndex + 1).trim();
-	if (remaining.startsWith(';')) {
-		remaining = remaining.substring(1).trim();
-	}
-	return remaining;
-}
-
-/**
- * Extracts remaining string after an if statement (without else).
- */
-function extractRemainingFromIfStatement(trueStatementStr: string): string {
-	const isBraced = trueStatementStr.startsWith('{');
-	if (isBraced) {
-		return extractRemainingFromBracedBlock(trueStatementStr);
-	}
-
-	const semiIndex = findSemicolonOutsideBrackets(trueStatementStr);
-	if (semiIndex >= 0) {
-		return trueStatementStr.substring(semiIndex + 1).trim();
-	}
-	return '';
-}
-
-/**
- * Extracts remaining string after an else statement.
- */
-function extractRemainingFromElseStatement(falseStatementStr: string): string {
-	const isBraced = falseStatementStr.startsWith('{');
-	if (isBraced) {
-		return extractRemainingFromBracedBlock(falseStatementStr);
-	}
-
-	const semiIndex = findSemicolonOutsideBrackets(falseStatementStr);
-	if (semiIndex >= 0) {
-		return falseStatementStr.substring(semiIndex + 1).trim();
-	}
-	return '';
-}
-
-/**
- * Processes the selected branch of an if or if-else statement.
- */
-function processBranch(
-	statementStr: string,
-	context: ExecutionContext,
-): Result<ContextAndRemaining> {
-	const trimmedStatement = statementStr.trim();
-	if (trimmedStatement.startsWith('{') && isBalancedBrackets(trimmedStatement)) {
-		return processBracedBlock(statementStr, context);
-	}
-	return processStatements(statementStr, context, true);
-}
-
-/**
- * Determines which branch to execute based on condition truthiness.
- */
-function selectIfBranch(
+function selectIfBranchAndRemaining(
 	isTruthy: boolean,
 	hasElse: boolean,
-	branches: IfStatementBranches,
-): string | undefined {
+	branches: IfStatementBranchesInput,
+): IfBranchSelection {
+	let statement: string | undefined;
 	if (isTruthy) {
-		return branches.trueStatementStr;
-	}
-	if (hasElse) {
-		return branches.falseStatementStr;
-	}
-	return undefined;
-}
-
-/**
- * Determines remaining input after if branch execution.
- */
-function getRemainingAfterIfExecution(
-	branchRemaining: string,
-	isTruthy: boolean,
-	hasElse: boolean,
-	branches: IfStatementBranches,
-): string {
-	// Check if yield was encountered in the branch
-	const trimmedBranchRemaining = branchRemaining.trim();
-	if (trimmedBranchRemaining.startsWith('__YIELD__:')) {
-		return trimmedBranchRemaining;
+		statement = branches.trueStatementStr;
+	} else if (hasElse) {
+		statement = branches.falseStatementStr;
 	}
 
-	// Otherwise, extract remaining after the if-else structure
-	return getRemainingAfterIf(isTruthy, hasElse, branches);
-}
+	if (statement === undefined) {
+		return {
+			statement: undefined,
+			remaining: extractRemainingFromStatement(branches.trueStatementStr),
+		};
+	}
 
-/**
- * Determines remaining input after if branch.
- */
-function getRemainingAfterIf(
-	isTruthy: boolean,
-	hasElse: boolean,
-	branches: IfStatementBranches,
-): string {
+	let remaining: string;
 	if (isTruthy && hasElse) {
-		return extractRemainingFromElseStatement(branches.falseStatementStr as string);
+		remaining = extractRemainingFromStatement(branches.falseStatementStr as string);
+	} else {
+		remaining = extractRemainingFromStatement(statement);
 	}
-
-	if (isTruthy) {
-		return extractRemainingFromIfStatement(branches.trueStatementStr);
-	}
-
-	if (hasElse) {
-		return extractRemainingFromElseStatement(branches.falseStatementStr as string);
-	}
-
-	return extractRemainingFromIfStatement(branches.trueStatementStr);
+	return { statement, remaining };
 }
 
-/**
- * Parses if statement condition and branches.
- */
-function parseIfConditionAndBranches(afterIf: string): IfConditionAndBranches | undefined {
-	const parsed = extractIfConditionAndAfter(afterIf);
-	if (parsed === undefined) {
-		return undefined;
+function resolveIfRemaining(resultRemaining: string, finalRemaining: string): string {
+	if (resultRemaining.trim().length > 0) {
+		return resultRemaining;
 	}
-
-	const branches = extractIfStatementBranches(parsed.afterCondition);
-	if (branches === undefined) {
-		return undefined;
-	}
-
-	return { conditionStr: parsed.conditionStr, branches };
+	return finalRemaining;
 }
 
 function processIfStatement(input: string, context: ExecutionContext): Result<ContextAndRemaining> {
@@ -605,38 +424,48 @@ function processIfStatement(input: string, context: ExecutionContext): Result<Co
 		return err('Not an if statement');
 	}
 
-	const afterIf = trimmed.substring(3).trim();
-	const parsed = parseIfConditionAndBranches(afterIf);
-	if (parsed === undefined) {
+	const extracted = extractIfConditionAndAfter(trimmed.substring(3).trim());
+	if (extracted === undefined) {
 		return err('Invalid if statement');
 	}
 
-	const conditionResult = interpretInternal(parsed.conditionStr, context);
+	const branches = extractIfStatementBranches(extracted.afterCondition);
+	if (branches === undefined) {
+		return err('Invalid if statement');
+	}
+
+	const conditionResult = interpretInternal(extracted.conditionStr, context);
 	if (conditionResult.type === 'err') {
 		return conditionResult;
 	}
 
 	const isTruthy = conditionResult.value !== 0;
-	const hasElse = parsed.branches.falseStatementStr !== undefined;
-	const statementToExecute = selectIfBranch(isTruthy, hasElse, parsed.branches);
+	const hasElse = branches.falseStatementStr !== undefined;
 
-	if (statementToExecute === undefined) {
-		const remaining = extractRemainingFromIfStatement(parsed.branches.trueStatementStr);
-		return ok({ context, remaining });
-	}
-
-	const statementsResult = processBranch(statementToExecute, context);
-	if (statementsResult.type === 'err') {
-		return statementsResult;
-	}
-
-	const remaining = getRemainingAfterIfExecution(
-		statementsResult.value.remaining,
+	const { statement: statementToExecute, remaining: finalRemaining } = selectIfBranchAndRemaining(
 		isTruthy,
 		hasElse,
-		parsed.branches,
+		branches,
 	);
-	return ok({ context: statementsResult.value.context, remaining });
+
+	if (statementToExecute === undefined) {
+		return ok({ context, remaining: finalRemaining });
+	}
+
+	let result: Result<ContextAndRemaining>;
+	const isBraced =
+		statementToExecute.trim().startsWith('{') && isBalancedBrackets(statementToExecute.trim());
+	if (isBraced) {
+		result = processBracedBlock(statementToExecute, context);
+	} else {
+		result = processStatements(statementToExecute, context, true);
+	}
+
+	if (result.type === 'err') {
+		return result;
+	}
+	const remaining = resolveIfRemaining(result.value.remaining, finalRemaining);
+	return ok({ context: result.value.context, remaining });
 }
 
 /**
