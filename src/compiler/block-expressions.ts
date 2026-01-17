@@ -1,53 +1,7 @@
+import { isIdentifierChar, isIdentifierStartChar, isKeywordAt } from './compiler-utils';
+
 function isWhitespace(ch: string): boolean {
 	return ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r';
-}
-
-function isIdentifierChar(ch: string): boolean {
-	const code = ch.charCodeAt(0);
-	if (code >= 48 && code <= 57) {
-		return true;
-	}
-	if (code >= 65 && code <= 90) {
-		return true;
-	}
-	if (code >= 97 && code <= 122) {
-		return true;
-	}
-	return ch === '_';
-}
-
-function isKeywordBoundary(ch: string | undefined): boolean {
-	if (ch === undefined) {
-		return true;
-	}
-	return !isIdentifierChar(ch);
-}
-
-function isKeywordAt(code: string, index: number, keyword: string): boolean {
-	if (index < 0) {
-		return false;
-	}
-	if (index + keyword.length > code.length) {
-		return false;
-	}
-	if (code.substring(index, index + keyword.length) !== keyword) {
-		return false;
-	}
-	let before: string | undefined;
-	if (index > 0) {
-		before = code[index - 1];
-	}
-	let after: string | undefined;
-	if (index + keyword.length < code.length) {
-		after = code[index + keyword.length];
-	}
-	if (!isKeywordBoundary(before)) {
-		return false;
-	}
-	if (!isKeywordBoundary(after)) {
-		return false;
-	}
-	return true;
 }
 
 function findMatchingBrace(code: string, openIndex: number): number | undefined {
@@ -73,259 +27,154 @@ function findMatchingBrace(code: string, openIndex: number): number | undefined 
 	return undefined;
 }
 
+function skipToMatchingParen(block: string, startIdx: number): number {
+	let j = startIdx;
+	let depth = 1;
+	j += 1;
+	while (j < block.length && depth > 0) {
+		if (block[j] === '(') {
+			depth += 1;
+		} else if (block[j] === ')') {
+			depth -= 1;
+		}
+		j += 1;
+	}
+	return j;
+}
+
+function skipToMatchingBrace(block: string, startIdx: number): number {
+	let j = startIdx;
+	let depth = 1;
+	j += 1;
+	while (j < block.length && depth > 0) {
+		if (block[j] === '{') {
+			depth += 1;
+		} else if (block[j] === '}') {
+			depth -= 1;
+		}
+		j += 1;
+	}
+	return j;
+}
+
+function skipWhitespaceInBlock(block: string, startIdx: number): number {
+	let j = startIdx;
+	while (j < block.length && isWhitespace(block[j])) {
+		j += 1;
+	}
+	return j;
+}
+
+function parseControlFlowBody(block: string, startIdx: number): number {
+	let j = startIdx;
+	if (j < block.length && block[j] === '{') {
+		return skipToMatchingBrace(block, j);
+	}
+	while (j < block.length && block[j] !== ';' && !isKeywordAt(block, j, 'else')) {
+		j += 1;
+	}
+	if (j < block.length && block[j] === ';') {
+		j += 1;
+	}
+	return j;
+}
+
+function parseElseChain(block: string, startIdx: number): number {
+	let j = startIdx;
+	while (j < block.length && isWhitespace(block[j])) {
+		j += 1;
+	}
+	if (!isKeywordAt(block, j, 'else')) {
+		return j;
+	}
+	j += 4;
+	j = skipWhitespaceInBlock(block, j);
+	if (isKeywordAt(block, j, 'if')) {
+		j += 2;
+		j = parseControlFlowParensAndBody(block, j);
+		return parseElseChain(block, j);
+	}
+	if (j < block.length && block[j] === '{') {
+		return skipToMatchingBrace(block, j);
+	}
+	while (j < block.length && block[j] !== ';') {
+		j += 1;
+	}
+	if (j < block.length && block[j] === ';') {
+		j += 1;
+	}
+	return j;
+}
+
+function parseControlFlowParensAndBody(block: string, startIdx: number): number {
+	let j = skipWhitespaceInBlock(block, startIdx);
+	if (j < block.length && block[j] === '(') {
+		j = skipToMatchingParen(block, j);
+	}
+	j = skipWhitespaceInBlock(block, j);
+	return parseControlFlowBody(block, j);
+}
+
+function parseControlFlowStatement(block: string, startIdx: number): number {
+	const i = startIdx;
+	let keywordLen = 2;
+	if (isKeywordAt(block, i, 'while') || isKeywordAt(block, i, 'match')) {
+		keywordLen = 5;
+	} else if (isKeywordAt(block, i, 'for')) {
+		keywordLen = 3;
+	}
+	let j = i + keywordLen;
+	j = parseControlFlowParensAndBody(block, j);
+	if (isKeywordAt(block, i, 'if')) {
+		j = parseElseChain(block, j);
+	}
+	return j;
+}
+
 function splitTopLevelStatements(block: string): string[] {
 	const parts: string[] = [];
 	let start = 0;
 	let parenDepth = 0;
 	let braceDepth = 0;
 	let bracketDepth = 0;
-
 	let i = 0;
+
 	while (i < block.length) {
 		const ch = block[i];
-
-		// Check for control flow keywords at depth 0
-		if (parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
-			// Check for if/while/for/match keywords
-			if (
-				isKeywordAt(block, i, 'if') ||
+		if (
+			parenDepth === 0 &&
+			braceDepth === 0 &&
+			bracketDepth === 0 &&
+			(isKeywordAt(block, i, 'if') ||
 				isKeywordAt(block, i, 'while') ||
 				isKeywordAt(block, i, 'for') ||
-				isKeywordAt(block, i, 'match')
-			) {
-				// Find the keyword length
-				let keywordLen = 2;
-				if (isKeywordAt(block, i, 'while') || isKeywordAt(block, i, 'match')) {
-					keywordLen = 5;
-				} else if (isKeywordAt(block, i, 'for')) {
-					keywordLen = 3;
-				}
-
-				// Skip to condition
-				let j = i + keywordLen;
-				while (j < block.length && isWhitespace(block[j])) {
-					j++;
-				}
-
-				// Parse condition (skip parens or match expression)
-				if (block[j] === '(') {
-					let depth = 1;
-					j++;
-					while (j < block.length && depth > 0) {
-						if (block[j] === '(') {
-							depth++;
-						} else if (block[j] === ')') {
-							depth--;
-						}
-						j++;
-					}
-				}
-
-				// Skip whitespace after condition
-				while (j < block.length && isWhitespace(block[j])) {
-					j++;
-				}
-
-				// Parse body (could be block or single statement)
-				if (block[j] === '{') {
-					// Block body - find matching brace
-					let depth = 1;
-					j++;
-					while (j < block.length && depth > 0) {
-						if (block[j] === '{') {
-							depth++;
-						} else if (block[j] === '}') {
-							depth--;
-						}
-						j++;
-					}
-				} else {
-					// Single statement - find semicolon or else keyword
-					while (j < block.length) {
-						if (block[j] === ';') {
-							j++;
-							break;
-						}
-						if (isKeywordAt(block, j, 'else')) {
-							break;
-						}
-						j++;
-					}
-				}
-
-				// If this was an if statement, check for else
-				if (isKeywordAt(block, i, 'if')) {
-					// Skip whitespace
-					while (j < block.length && isWhitespace(block[j])) {
-						j++;
-					}
-
-					if (isKeywordAt(block, j, 'else')) {
-						j += 4;
-
-						// Skip whitespace
-						while (j < block.length && isWhitespace(block[j])) {
-							j++;
-						}
-
-						// Parse else body (could be if, block, or statement)
-						if (isKeywordAt(block, j, 'if')) {
-						// else if - recursively parse the nested if-else
-						// We need to find where the nested if ends
-						// Save current position
-						const nestedIfStart = j;
-
-						// Call ourselves recursively by simulating the if parsing
-						// Actually, let's just parse it manually inline
-
-						// Skip 'if'
-						j += 2;
-
-						// Skip whitespace
-						while (j < block.length && isWhitespace(block[j])) {
-							j++;
-						}
-
-						// Parse condition
-						if (block[j] === '(') {
-							let depth = 1;
-							j++;
-							while (j < block.length && depth > 0) {
-								if (block[j] === '(') {
-									depth++;
-								} else if (block[j] === ')') {
-									depth--;
-								}
-								j++;
-							}
-						}
-
-						// Skip whitespace
-						while (j < block.length && isWhitespace(block[j])) {
-							j++;
-						}
-
-						// Parse then branch
-						if (block[j] === '{') {
-							let depth = 1;
-							j++;
-							while (j < block.length && depth > 0) {
-								if (block[j] === '{') {
-									depth++;
-								} else if (block[j] === '}') {
-									depth--;
-								}
-								j++;
-							}
-						} else {
-							while (j < block.length) {
-								if (block[j] === ';') {
-									j++;
-									break;
-								}
-								if (isKeywordAt(block, j, 'else')) {
-									break;
-								}
-								j++;
-							}
-						}
-
-						// Check for else after nested if
-						while (j < block.length && isWhitespace(block[j])) {
-							j++;
-						}
-
-						if (isKeywordAt(block, j, 'else')) {
-							// There's another else - continue parsing
-							// Set i to continue from this else for next iteration
-							// But actually we want to keep parsing this entire chain
-							// Let's use a loop
-							j += 4;
-							while (j < block.length && isWhitespace(block[j])) {
-								j++;
-							}
-
-							// Parse this else branch
-							if (block[j] === '{') {
-								let depth = 1;
-								j++;
-								while (j < block.length && depth > 0) {
-									if (block[j] === '{') {
-										depth++;
-									} else if (block[j] === '}') {
-										depth--;
-									}
-									j++;
-								}
-							} else if (!isKeywordAt(block, j, 'if')) {
-								// Single statement
-								while (j < block.length && block[j] !== ';') {
-									j++;
-								}
-								if (j < block.length && block[j] === ';') {
-									j++;
-								}
-							}
-						}
-						} else if (block[j] === '{') {
-							// Block body
-							let depth = 1;
-							j++;
-							while (j < block.length && depth > 0) {
-								if (block[j] === '{') {
-									depth++;
-								} else if (block[j] === '}') {
-									depth--;
-								}
-								j++;
-							}
-						} else {
-							// Single statement
-							while (j < block.length && block[j] !== ';') {
-								j++;
-							}
-							if (j < block.length && block[j] === ';') {
-								j++;
-							}
-						}
-					}
-				}
-
-				// Add the complete control flow statement
-				parts.push(block.substring(start, j).trim());
-				start = j;
-				i = j;
-				continue;
-			}
+				isKeywordAt(block, i, 'match'))
+		) {
+			const j = parseControlFlowStatement(block, i);
+			parts.push(block.substring(start, j).trim());
+			start = j;
+			i = j;
+			continue;
 		}
-
 		if (ch === '(') {
-			parenDepth = parenDepth + 1;
+			parenDepth += 1;
+		} else if (ch === ')') {
+			parenDepth -= 1;
+		} else if (ch === '{') {
+			braceDepth += 1;
+		} else if (ch === '}') {
+			braceDepth -= 1;
+		} else if (ch === '[') {
+			bracketDepth += 1;
+		} else if (ch === ']') {
+			bracketDepth -= 1;
 		}
-		if (ch === ')') {
-			parenDepth = parenDepth - 1;
-		}
-		if (ch === '{') {
-			braceDepth = braceDepth + 1;
-		}
-		if (ch === '}') {
-			braceDepth = braceDepth - 1;
-		}
-		if (ch === '[') {
-			bracketDepth = bracketDepth + 1;
-		}
-		if (ch === ']') {
-			bracketDepth = bracketDepth - 1;
-		}
-
 		if (ch === ';' && parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
 			parts.push(block.substring(start, i).trim());
 			start = i + 1;
 		}
-
-		i = i + 1;
+		i += 1;
 	}
-
 	parts.push(block.substring(start).trim());
 	return parts.filter((p): boolean => p.length > 0);
 }
@@ -349,21 +198,48 @@ function isUninitializedLet(statement: string): boolean {
 	return !trimmed.includes('=');
 }
 
-interface UninitTracker {
-	varName: string;
-}
-
 function extractVarName(letStatement: string): string | undefined {
 	const trimmed = letStatement.trim();
 	if (!trimmed.startsWith('let ')) {
 		return undefined;
 	}
 	const afterLet = trimmed.substring(4).trim();
-	const match = afterLet.match(/^([a-zA-Z_][a-zA-Z0-9_]*)/);
-	if (!match) {
+	if (afterLet.length === 0) {
 		return undefined;
 	}
-	return match[1];
+	if (!isIdentifierStartChar(afterLet[0])) {
+		return undefined;
+	}
+	let i = 1;
+	while (i < afterLet.length && isIdentifierChar(afterLet[i])) {
+		i += 1;
+	}
+	return afterLet.substring(0, i);
+}
+
+function extractAssignedVarName(statement: string): string | undefined {
+	const trimmed = statement.trim();
+	if (trimmed.length === 0) {
+		return undefined;
+	}
+	if (!isIdentifierStartChar(trimmed[0])) {
+		return undefined;
+	}
+	let i = 1;
+	while (i < trimmed.length && isIdentifierChar(trimmed[i])) {
+		i += 1;
+	}
+	const name = trimmed.substring(0, i);
+	while (i < trimmed.length && isWhitespace(trimmed[i])) {
+		i += 1;
+	}
+	if (i >= trimmed.length || trimmed[i] !== '=') {
+		return undefined;
+	}
+	if (i + 1 < trimmed.length && trimmed[i + 1] === '=') {
+		return undefined;
+	}
+	return name;
 }
 
 function wrapUninitializedCheck(expr: string, uninitVars: Set<string>): string {
@@ -373,6 +249,32 @@ function wrapUninitializedCheck(expr: string, uninitVars: Set<string>): string {
 		return `(()=>{if(${trimmed}===Symbol.for('__uninitialized__'))throw new Error("Variable '${trimmed}' is not initialized");return ${trimmed};})()`;
 	}
 	return expr;
+}
+
+function trackUninitializedLet(statement: string, uninitVars: Set<string>): void {
+	const varName = extractVarName(statement);
+	if (varName !== undefined) {
+		uninitVars.add(varName);
+	}
+}
+
+function compileLetLastStatement(body: string, last: string): string {
+	if (isUninitializedLet(last)) {
+		return `(() => { ${body}${last} = Symbol.for('__uninitialized__'); return 0; })()`;
+	}
+	return `(() => { ${body}${last}; return 0; })()`;
+}
+
+function compileNonLetLastStatement(body: string, last: string, uninitVars: Set<string>): string {
+	const lastTrimmed = last.trim();
+	if (
+		lastTrimmed.startsWith('if ') &&
+		(lastTrimmed.includes('return') || lastTrimmed.includes('yield'))
+	) {
+		return `(() => { ${body}${last}; })()`;
+	}
+	const wrappedLast = wrapUninitializedCheck(last, uninitVars);
+	return `(() => { ${body}return ${wrappedLast}; })()`;
 }
 
 function compileBlockExpression(blockContent: string): string {
@@ -390,42 +292,25 @@ function compileBlockExpression(blockContent: string): string {
 	while (i < head.length) {
 		const stmt = head[i];
 		if (isUninitializedLet(stmt)) {
-			// Track uninitialized variable
-			const varName = extractVarName(stmt);
-			if (varName !== undefined) {
-				uninitVars.add(varName);
-			}
-			// Initialize with a sentinel value
+			trackUninitializedLet(stmt, uninitVars);
 			bodyParts.push(`${stmt} = Symbol.for('__uninitialized__');`);
-		} else {
-			// Check if this is an assignment that initializes a tracked variable
-			const assignMatch = stmt.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
-			if (assignMatch) {
-				uninitVars.delete(assignMatch[1]);
-			}
-			bodyParts.push(`${stmt};`);
+			i = i + 1;
+			continue;
 		}
+
+		const assignedName = extractAssignedVarName(stmt);
+		if (assignedName !== undefined) {
+			uninitVars.delete(assignedName);
+		}
+		bodyParts.push(`${stmt};`);
 		i = i + 1;
 	}
 	const body = bodyParts.join('');
 
 	if (last.trim().startsWith('let ')) {
-		if (isUninitializedLet(last)) {
-			return `(() => { ${body}${last} = Symbol.for('__uninitialized__'); return 0; })()`;
-		}
-		return `(() => { ${body}${last}; return 0; })()`;
+		return compileLetLastStatement(body, last);
 	}
-
-	// Check if last statement is already a complete statement (if/while/for with returns/yields)
-	const lastTrimmed = last.trim();
-	if (lastTrimmed.startsWith('if ') && (lastTrimmed.includes('return') || lastTrimmed.includes('yield'))) {
-		// If-statement with returns/yields - don't add another return
-		return `(() => { ${body}${last}; })()`;
-	}
-
-	// Wrap the last expression with uninitialized checks
-	const wrappedLast = wrapUninitializedCheck(last, uninitVars);
-	return `(() => { ${body}return ${wrappedLast}; })()`;
+	return compileNonLetLastStatement(body, last, uninitVars);
 }
 
 function consumeWhitespace(code: string, start: number): ConsumedText {
@@ -474,14 +359,7 @@ function compileLetWithoutType(code: string, idx: number): CompiledLet {
 	const ws2 = consumeWhitespace(code, j);
 	parts.push(ws2.text);
 	j = ws2.nextIndex;
-
-	if (j >= code.length) {
-		return {
-			text: parts.join(''),
-			nextIndex: j,
-		};
-	}
-	if (code[j] !== ':') {
+	if (j >= code.length || code[j] !== ':') {
 		return {
 			text: parts.join(''),
 			nextIndex: j,
@@ -540,67 +418,6 @@ export function compileBracedExpressionsToIife(code: string): string {
 			continue;
 		}
 
-		// Check if this block is preceded by a control flow keyword
-		// Look backwards to find if this is part of if/while/for/match/else
-		let j = i - 1;
-		while (j >= 0 && isWhitespace(code[j])) {
-			j--;
-		}
-
-		// Check for closing paren (condition) before the block
-		let isControlFlowBlock = false;
-		if (j >= 0 && code[j] === ')') {
-			// Find matching opening paren
-			let depth = 1;
-			j--;
-			while (j >= 0 && depth > 0) {
-				if (code[j] === ')') {
-					depth++;
-				} else if (code[j] === '(') {
-					depth--;
-				}
-				j--;
-			}
-
-			// Skip whitespace before paren
-			while (j >= 0 && isWhitespace(code[j])) {
-				j--;
-			}
-
-			// Check for control flow keyword ending at position j
-			// Try all keywords
-			if (j >= 1 && isKeywordAt(code, j - 1, 'if')) {
-				isControlFlowBlock = true;
-			} else if (j >= 2 && isKeywordAt(code, j - 2, 'for')) {
-				isControlFlowBlock = true;
-			} else if (j >= 4 && isKeywordAt(code, j - 4, 'while')) {
-				isControlFlowBlock = true;
-			} else if (j >= 4 && isKeywordAt(code, j - 4, 'match')) {
-				isControlFlowBlock = true;
-			}
-		} else if (j >= 3 && isKeywordAt(code, j - 3, 'else')) {
-			// Block directly after 'else'
-			isControlFlowBlock = true;
-		}
-
-		if (isControlFlowBlock) {
-			// Keep the block as-is, but recursively process its contents
-			const closeIndex = findMatchingBrace(code, i);
-			if (closeIndex === undefined) {
-				parts.push(ch);
-				i = i + 1;
-				continue;
-			}
-
-			const inner = code.substring(i + 1, closeIndex);
-			const compiledInner = compileBracedExpressionsToIife(inner);
-			parts.push('{');
-			parts.push(compiledInner);
-			parts.push('}');
-			i = closeIndex + 1;
-			continue;
-		}
-
 		const closeIndex = findMatchingBrace(code, i);
 		if (closeIndex === undefined) {
 			parts.push(ch);
@@ -608,11 +425,64 @@ export function compileBracedExpressionsToIife(code: string): string {
 			continue;
 		}
 
+		const isControlFlowBlock = isControlFlowBlockBeforeBrace(code, i);
+
 		const inner = code.substring(i + 1, closeIndex);
 		const compiledInner = compileBracedExpressionsToIife(inner);
+		if (isControlFlowBlock) {
+			parts.push('{');
+			parts.push(compiledInner);
+			parts.push('}');
+			i = closeIndex + 1;
+			continue;
+		}
 		parts.push(compileBlockExpression(compiledInner));
 		i = closeIndex + 1;
 	}
 
 	return parts.join('');
+}
+
+function isControlFlowBlockBeforeBrace(code: string, braceIndex: number): boolean {
+	let j = braceIndex - 1;
+	while (j >= 0 && isWhitespace(code[j])) {
+		j -= 1;
+	}
+
+	if (j >= 3 && isKeywordAt(code, j - 3, 'else')) {
+		return true;
+	}
+
+	if (j < 0 || code[j] !== ')') {
+		return false;
+	}
+
+	let depth = 1;
+	j -= 1;
+	while (j >= 0 && depth > 0) {
+		if (code[j] === ')') {
+			depth += 1;
+		} else if (code[j] === '(') {
+			depth -= 1;
+		}
+		j -= 1;
+	}
+
+	while (j >= 0 && isWhitespace(code[j])) {
+		j -= 1;
+	}
+
+	if (j >= 1 && isKeywordAt(code, j - 1, 'if')) {
+		return true;
+	}
+	if (j >= 2 && isKeywordAt(code, j - 2, 'for')) {
+		return true;
+	}
+	if (j >= 4 && isKeywordAt(code, j - 4, 'while')) {
+		return true;
+	}
+	if (j >= 4 && isKeywordAt(code, j - 4, 'match')) {
+		return true;
+	}
+	return false;
 }

@@ -131,6 +131,47 @@ function parseExecutionOutput(output: string): Result<number> {
 	return ok(resultValue);
 }
 
+function tryExtractErrorMessageFromLine(line: string): string | undefined {
+	const marker = 'Error:';
+	const idx = line.indexOf(marker);
+	if (idx === -1) {
+		return undefined;
+	}
+	const message = line.substring(idx + marker.length).trim();
+	if (!message) {
+		return undefined;
+	}
+	return message;
+}
+
+function extractErrorMessage(errorOutput: string): string | undefined {
+	const lines = errorOutput.split('\n');
+	for (const line of lines) {
+		const message = tryExtractErrorMessageFromLine(line);
+		if (message !== undefined) {
+			return message;
+		}
+	}
+	return undefined;
+}
+
+function parseNodeExecutionError(
+	exitCode: number,
+	errorOutput: string | undefined,
+): Result<number> | undefined {
+	if (exitCode === 0) {
+		return undefined;
+	}
+	if (errorOutput === undefined) {
+		return err('Compiled code failed with non-zero exit code');
+	}
+	const message = extractErrorMessage(errorOutput);
+	if (message !== undefined) {
+		return err(message);
+	}
+	return err(errorOutput);
+}
+
 /**
  * Compiles and runs Tuff source code by generating JavaScript and executing it with Node.js.
  *
@@ -159,19 +200,9 @@ export function run(input: string, stdin: string): Result<number> {
 
 		const { output, exitCode, errorOutput } = executeNode(tempFile, stdin);
 
-		// If there's an error (non-zero exit code), return the error message
-		if (exitCode !== 0 && errorOutput !== undefined) {
-			// Extract the error message from the error output
-			const lines = errorOutput.split('\n');
-			for (const line of lines) {
-				if (line.includes('Error:')) {
-					const match = line.match(/Error:\s*(.+)/);
-					if (match) {
-						return err(match[1]);
-					}
-				}
-			}
-			return err(errorOutput);
+		const errorResult = parseNodeExecutionError(exitCode, errorOutput);
+		if (errorResult !== undefined) {
+			return errorResult;
 		}
 
 		return parseExecutionOutput(output);
