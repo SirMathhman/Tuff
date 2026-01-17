@@ -1,6 +1,7 @@
 import {
 	assertInterpretAndCompileValid,
 	assertInterpretAndCompileInvalid,
+	assertInterpretInvalid,
 	assertCompileValid,
 } from '../../src/testing/test-helpers';
 
@@ -30,13 +31,13 @@ function testBasicArithmetic(): void {
 		assertInterpretAndCompileValid('1U8 + 2', 3);
 	});
 	it('should return Err for "1U8 + 255"', (): void => {
-		assertInterpretAndCompileInvalid('1U8 + 255', 'out of range');
+		assertInterpretInvalid('1U8 + 255', 'out of range');
 	});
 	it('should interpret "1U8 + 2U16" as 3', (): void => {
 		assertInterpretAndCompileValid('1U8 + 2U16', 3);
 	});
 	it('should return Err for "1U8 + 65535U16"', (): void => {
-		assertInterpretAndCompileInvalid('1U8 + 65535U16', 'out of range');
+		assertInterpretInvalid('1U8 + 65535U16', 'out of range');
 	});
 	it('should interpret "1U8 + 255U16" as 256', (): void => {
 		assertInterpretAndCompileValid('1U8 + 255U16', 256);
@@ -48,10 +49,10 @@ function testBasicArithmetic(): void {
 		assertInterpretAndCompileValid('1 + 2 + 3', 6);
 	});
 	it('should return Err for "254 + 1U8 + 1"', (): void => {
-		assertInterpretAndCompileInvalid('254 + 1U8 + 1', 'out of range');
+		assertInterpretInvalid('254 + 1U8 + 1', 'out of range');
 	});
 	it('should return Err for "1U8 - 2"', (): void => {
-		assertInterpretAndCompileInvalid('1U8 - 2', 'out of range');
+		assertInterpretInvalid('1U8 - 2', 'out of range');
 	});
 	it('should interpret "1I8 - 2" as -1', (): void => {
 		assertInterpretAndCompileValid('1I8 - 2', -1);
@@ -78,7 +79,7 @@ function testParenthesesAndDivision(): void {
 		assertInterpretAndCompileValid('1 + (4 + 2) * 3', 19);
 	});
 	it('should return Err for "10 / (2 - 2)"', (): void => {
-		assertInterpretAndCompileInvalid('10 / (2 - 2)', 'Division by zero');
+		assertInterpretInvalid('10 / (2 - 2)', 'Division by zero');
 	});
 }
 

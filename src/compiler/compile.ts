@@ -1,10 +1,16 @@
 import { ok, err, type Result } from '../common/result';
-import { interpret } from '../interpret';
 import { compileBracedExpressionsToIife, stripLetTypeAnnotations } from './block-expressions';
+import { validateValueForType, hasNegativeSign } from '../common/types';
 
 interface NumericToken {
 	consumed: number;
 	digits: string;
+}
+
+interface LiteralProcessResult {
+	token: NumericToken;
+	nextIdx: number;
+	error?: Result<never>;
 }
 
 function isDigit(char: string): boolean {
@@ -173,6 +179,75 @@ function wrapCompiledCode(code: string, usesStdin: boolean): string {
 	return wrapped;
 }
 
+function validateTypedLiteral(
+	fullLiteral: string,
+	typeSuffix: string,
+	digits: string,
+): Result<void> {
+	// Validate negative numbers for unsigned types
+	if (hasNegativeSign(digits)) {
+		const isUnsigned = typeSuffix.startsWith('U');
+		if (isUnsigned) {
+			return err('Negative numbers are not supported for unsigned types');
+		}
+	}
+
+	// Parse the numeric value
+	const value = Number.parseInt(digits, 10);
+	if (Number.isNaN(value)) {
+		return err(`Invalid number literal: ${fullLiteral}`);
+	}
+
+	// Validate the value for its type
+	const validation = validateValueForType(value, typeSuffix);
+	if (validation.type === 'err') {
+		return validation;
+	}
+
+	return ok(undefined as void);
+}
+
+function processLiteralAtPosition(code: string, idx: number): LiteralProcessResult {
+	const token = processNumericToken(code, idx);
+	const fullLiteral = code.substring(idx, idx + token.consumed);
+
+	// Check if this has a type suffix (last character(s) are type letters)
+	if (token.consumed <= token.digits.length) {
+		return { token, nextIdx: idx + token.consumed };
+	}
+
+	const typeSuffix = fullLiteral.substring(token.digits.length);
+	const validation = validateTypedLiteral(fullLiteral, typeSuffix, token.digits);
+	if (validation.type === 'err') {
+		return { token, nextIdx: idx, error: validation };
+	}
+
+	return { token, nextIdx: idx + token.consumed };
+}
+
+/**
+ * Validates numeric literals with type suffixes in the input.
+ * Checks that typed literals are within valid range for their type.
+ */
+function validateNumericLiterals(code: string): Result<void> {
+	let i = 0;
+
+	while (i < code.length) {
+		if (!isNumericStart(code, i)) {
+			i++;
+			continue;
+		}
+
+		const result = processLiteralAtPosition(code, i);
+		if (result.error !== undefined) {
+			return result.error;
+		}
+		i = result.nextIdx;
+	}
+
+	return ok(undefined as void);
+}
+
 /**
  * Compiles Tuff source code to JavaScript.
  *
@@ -180,16 +255,11 @@ function wrapCompiledCode(code: string, usesStdin: boolean): string {
  * @returns A Result containing the compiled JavaScript code or an error
  */
 export function compile(input: string): Result<string> {
-	// Validate the input by running the interpreter first
-	// This catches syntax errors, type errors, and other validation issues
-	// But skip validation for code that uses read<>() since it needs stdin
-	if (!input.includes('read<')) {
-		const validationResult = interpret(input);
-		if (validationResult.type === 'err') {
-			return err(validationResult.error);
-		}
+	// Validate numeric literals with type suffixes
+	const validation = validateNumericLiterals(input);
+	if (validation.type === 'err') {
+		return err(validation.error);
 	}
-
 	let jsCode = compileBracedExpressionsToIife(stripLetTypeAnnotations(input));
 
 	// Strip type suffixes from numeric literals (100U8 -> 100)

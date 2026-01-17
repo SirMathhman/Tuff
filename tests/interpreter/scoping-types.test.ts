@@ -1,6 +1,6 @@
 import {
 	assertInterpretAndCompileValid,
-	assertInterpretAndCompileInvalid,
+	assertInterpretInvalid,
 	assertCompileValid,
 } from '../../src/testing/test-helpers';
 
@@ -18,7 +18,7 @@ describe('let bindings and scoping', (): void => {
 		assertInterpretAndCompileValid('{ let x = 10; let y = 2; x / y }', 5);
 	});
 	it('should return Err for undefined variable', (): void => {
-		assertInterpretAndCompileInvalid('{ x }', 'Undefined');
+		assertInterpretInvalid('{ x }', 'Undefined');
 	});
 });
 
@@ -30,7 +30,7 @@ describe('type annotations and validation', (): void => {
 		assertInterpretAndCompileValid('10 / ({ let x : I32 = 7; x } - 2)', 2);
 	});
 	it('should return Err for out of range typed variable', (): void => {
-		assertInterpretAndCompileInvalid('{ let x : U8 = 256; x }', 'out of range');
+		assertInterpretInvalid('{ let x : U8 = 256; x }', 'out of range');
 	});
 	it('should interpret "{ let x : I16 = -100; x }" as -100', (): void => {
 		assertInterpretAndCompileValid('{ let x : I16 = -100; x }', -100);
@@ -39,16 +39,16 @@ describe('type annotations and validation', (): void => {
 		assertInterpretAndCompileValid('{ let x : U32 = 1000000; x + 1 }', 1000001);
 	});
 	it('should return Err for "{ let x : I32 = 7; }" (no expression)', (): void => {
-		assertInterpretAndCompileInvalid('{ let x : I32 = 7; }', 'expression');
+		assertInterpretInvalid('{ let x : I32 = 7; }', 'expression');
 	});
 	it('should return Err for "10 / ({ let x : I32 = 7; } - 2)"', (): void => {
-		assertInterpretAndCompileInvalid('10 / ({ let x : I32 = 7; } - 2)', 'expression');
+		assertInterpretInvalid('10 / ({ let x : I32 = 7; } - 2)', 'expression');
 	});
 	it('should return Err for duplicate variable names', (): void => {
-		assertInterpretAndCompileInvalid('{ let x = 7; let x = 20; x }', 'already defined');
+		assertInterpretInvalid('{ let x = 7; let x = 20; x }', 'already defined');
 	});
 	it('should return Err for "10 / ({ let x = 7; let x = 20; x } - 2)"', (): void => {
-		assertInterpretAndCompileInvalid('10 / ({ let x = 7; let x = 20; x } - 2)', 'already defined');
+		assertInterpretInvalid('10 / ({ let x = 7; let x = 20; x } - 2)', 'already defined');
 	});
 	it('should interpret "10 / ({ let x = 7; let y = x; y } - 2)" as 2', (): void => {
 		assertInterpretAndCompileValid('10 / ({ let x = 7; let y = x; y } - 2)', 2);
