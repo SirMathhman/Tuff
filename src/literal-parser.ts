@@ -208,6 +208,51 @@ function handleYieldMarker(
 	return interpretInternal(yieldExprStr, newContext);
 }
 
+function applyScopedMutationsToContext(
+	outerContext: ExecutionContext,
+	innerContext: ExecutionContext,
+): void {
+	// Block scoping rule: inner `let` bindings don’t leak;
+	// only mutations to existing outer variables propagate.
+	for (const outerBinding of outerContext.bindings) {
+		const updated = innerContext.bindings.find(
+			(binding): boolean => binding.name === outerBinding.name,
+		);
+		if (updated === undefined) {
+			continue;
+		}
+
+		outerBinding.value = updated.value;
+		outerBinding.structValue = updated.structValue;
+		outerBinding.arrayValue = updated.arrayValue;
+		outerBinding.tupleValue = updated.tupleValue;
+		outerBinding.enumValue = updated.enumValue;
+		outerBinding.pointerValue = updated.pointerValue;
+		outerBinding.functionReferenceValue = updated.functionReferenceValue;
+	}
+}
+
+function tryHandleReturnWithScopedMutations(
+	trimmedRemaining: string,
+	outerContext: ExecutionContext,
+	innerContext: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> | undefined {
+	try {
+		const returnResult = handleReturnMarker(trimmedRemaining, innerContext, interpretInternal);
+		if (returnResult !== undefined) {
+			applyScopedMutationsToContext(outerContext, innerContext);
+			return returnResult;
+		}
+		return undefined;
+	} catch (error) {
+		if (error instanceof ReturnSignal) {
+			applyScopedMutationsToContext(outerContext, innerContext);
+		}
+		throw error;
+	}
+}
+
 function parseBracedExpression(
 	trimmed: string,
 	context: ExecutionContext,
@@ -217,7 +262,6 @@ function parseBracedExpression(
 	if (!isBalancedBrackets(trimmed)) {
 		return err('Unbalanced brackets');
 	}
-
 	if (processVariableBindings === undefined) {
 		return err('Internal error: processVariableBindings not provided');
 	}
@@ -231,13 +275,21 @@ function parseBracedExpression(
 	const { context: newContext, remaining } = bindingsResult.value;
 	const trimmedRemaining = remaining.trim();
 
-	const returnResult = handleReturnMarker(trimmedRemaining, newContext, interpretInternal);
+	const returnResult = tryHandleReturnWithScopedMutations(
+		trimmedRemaining,
+		context,
+		newContext,
+		interpretInternal,
+	);
 	if (returnResult !== undefined) {
 		return returnResult;
 	}
 
 	const yieldResult = handleYieldMarker(trimmedRemaining, newContext, interpretInternal);
 	if (yieldResult !== undefined) {
+		if (yieldResult.type === 'ok') {
+			applyScopedMutationsToContext(context, newContext);
+		}
 		return yieldResult;
 	}
 
@@ -245,7 +297,11 @@ function parseBracedExpression(
 		return err('Braced expression must contain an expression after variable declarations');
 	}
 
-	return interpretInternal(trimmedRemaining, newContext);
+	const valueResult = interpretInternal(trimmedRemaining, newContext);
+	if (valueResult.type === 'ok') {
+		applyScopedMutationsToContext(context, newContext);
+	}
+	return valueResult;
 }
 
 function parseNumberLiteral(trimmed: string): Result<number> {

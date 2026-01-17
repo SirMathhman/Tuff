@@ -102,20 +102,53 @@ function executeFunctionCall(
 	return validateValueForType(bodyResult.value, def.returnType);
 }
 
-function tryParseFunctionCall(
+type ResolveFunctionDefinitionResult = Result<FunctionDefinition> | undefined;
+type ResolveFunctionDefinition = (functionName: string) => ResolveFunctionDefinitionResult;
+
+function resolveDirectFunctionDefinition(functionName: string): Result<FunctionDefinition> {
+	const def = getFunctionDefinition(functionName);
+	if (def === undefined) {
+		return err(`Undefined function: ${functionName}`);
+	}
+	return ok(def);
+}
+
+function resolveFunctionReferenceDefinition(
+	varName: string,
+	context: ExecutionContext,
+): ResolveFunctionDefinitionResult {
+	const binding = context.bindings.find((b): boolean => b.name === varName);
+	if (binding?.functionReferenceValue === undefined) {
+		return undefined;
+	}
+
+	const referencedFunctionName = binding.functionReferenceValue.functionName;
+	const def = getFunctionDefinition(referencedFunctionName);
+	if (def === undefined) {
+		return err(`Function reference points to undefined function: ${referencedFunctionName}`);
+	}
+	return ok(def);
+}
+
+function tryParseAndExecuteFunctionLikeCall(
 	literal: string,
 	context: ExecutionContext,
 	interpretInternal: InterpretFunction,
+	resolveDefinition: ResolveFunctionDefinition,
 ): Result<number> | undefined {
 	const parsed = extractFunctionCallExpression(literal);
 	if (parsed === undefined) {
 		return undefined;
 	}
 
-	const def = getFunctionDefinition(parsed.functionName);
-	if (def === undefined) {
-		return err(`Undefined function: ${parsed.functionName}`);
+	const defResult = resolveDefinition(parsed.functionName);
+	if (defResult === undefined) {
+		return undefined;
 	}
+	if (defResult.type === 'err') {
+		return defResult;
+	}
+	const def = defResult.value;
 
 	if (parsed.args.length !== def.parameters.length) {
 		return err(
@@ -136,45 +169,29 @@ function tryParseFunctionCall(
 	return executeFunctionCall(def, argValuesResult.value, context, interpretInternal);
 }
 
+function tryParseFunctionCall(
+	literal: string,
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> | undefined {
+	return tryParseAndExecuteFunctionLikeCall(
+		literal,
+		context,
+		interpretInternal,
+		resolveDirectFunctionDefinition,
+	);
+}
+
 function tryParseFunctionReferenceCall(
 	literal: string,
 	context: ExecutionContext,
 	interpretInternal: InterpretFunction,
 ): Result<number> | undefined {
-	const parsed = extractFunctionCallExpression(literal);
-	if (parsed === undefined) {
-		return undefined;
+	function resolveDefinition(functionName: string): ResolveFunctionDefinitionResult {
+		return resolveFunctionReferenceDefinition(functionName, context);
 	}
 
-	const varName = parsed.functionName;
-	const binding = context.bindings.find((b): boolean => b.name === varName);
-	if (binding?.functionReferenceValue === undefined) {
-		return undefined;
-	}
-
-	const referencedFunctionName = binding.functionReferenceValue.functionName;
-	const def = getFunctionDefinition(referencedFunctionName);
-	if (def === undefined) {
-		return err(`Function reference points to undefined function: ${referencedFunctionName}`);
-	}
-
-	if (parsed.args.length !== def.parameters.length) {
-		return err(
-			`Function '${def.name}' expects ${def.parameters.length} argument(s), got ${parsed.args.length}`,
-		);
-	}
-
-	const argValuesResult = evaluateFunctionCallArguments(
-		def,
-		parsed.args,
-		context,
-		interpretInternal,
-	);
-	if (argValuesResult.type === 'err') {
-		return argValuesResult;
-	}
-
-	return executeFunctionCall(def, argValuesResult.value, context, interpretInternal);
+	return tryParseAndExecuteFunctionLikeCall(literal, context, interpretInternal, resolveDefinition);
 }
 
 function tryParseMethodCall(

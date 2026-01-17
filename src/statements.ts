@@ -84,12 +84,22 @@ function handleUninitializedDeclaration(
 	isMutable: boolean,
 	withoutLet: string,
 ): Result<ParsedBinding> {
-	const semiIndex = findSemicolonOutsideBrackets(withoutLet);
-	if (semiIndex < 0) {
-		return err('Variable declaration missing semicolon');
+	const remainingResult = extractRemainingAfterSemicolon(
+		withoutLet,
+		'Variable declaration missing semicolon',
+	);
+	if (remainingResult.type === 'err') {
+		return remainingResult;
 	}
-	const remaining = withoutLet.substring(semiIndex + 1).trim();
-	return ok({ name: varName, value: undefined, isMutable, remaining });
+	return ok({ name: varName, value: undefined, isMutable, remaining: remainingResult.value });
+}
+
+function extractRemainingAfterSemicolon(input: string, errorMessage: string): Result<string> {
+	const semiIndex = findSemicolonOutsideBrackets(input);
+	if (semiIndex < 0) {
+		return err(errorMessage);
+	}
+	return ok(input.substring(semiIndex + 1).trim());
 }
 
 /**
@@ -182,11 +192,13 @@ function handleUninitializedArrayDeclaration(
 	typeAnnotation: string,
 	withoutLet: string,
 ): Result<ParsedBinding> {
-	const semiIndex = findSemicolonOutsideBrackets(withoutLet);
-	if (semiIndex < 0) {
-		return err('Variable declaration missing semicolon');
+	const remainingResult = extractRemainingAfterSemicolon(
+		withoutLet,
+		'Variable declaration missing semicolon',
+	);
+	if (remainingResult.type === 'err') {
+		return remainingResult;
 	}
-	const remaining = withoutLet.substring(semiIndex + 1).trim();
 
 	const typeResult = parseArrayType(typeAnnotation);
 	if (typeResult.type === 'err') {
@@ -198,7 +210,7 @@ function handleUninitializedArrayDeclaration(
 		name: varName,
 		value: undefined,
 		isMutable,
-		remaining,
+		remaining: remainingResult.value,
 		arrayValue: {
 			elementType: arrayType.elementType,
 			elements: [],
@@ -218,12 +230,21 @@ function handleUninitializedTupleDeclaration(
 	withoutLet: string,
 	context: ExecutionContext,
 ): Result<ParsedBinding> {
-	const semiIndex = findSemicolonOutsideBrackets(withoutLet);
-	if (semiIndex < 0) {
-		return err('Variable declaration missing semicolon');
+	const remainingResult = extractRemainingAfterSemicolon(
+		withoutLet,
+		'Variable declaration missing semicolon',
+	);
+	if (remainingResult.type === 'err') {
+		return remainingResult;
 	}
-	const remaining = withoutLet.substring(semiIndex + 1).trim();
-	return parseTupleTypeBinding(varName, isMutable, typeAnnotation, '', remaining, context);
+	return parseTupleTypeBinding(
+		varName,
+		isMutable,
+		typeAnnotation,
+		'',
+		remainingResult.value,
+		context,
+	);
 }
 
 /**

@@ -230,32 +230,19 @@ export function stripLeadingSemicolon(input: string): string {
  * Find the first '=' that is not part of '=>' and not inside brackets.
  */
 function findAssignmentEqualOutsideBrackets(input: string): number {
-	let bracketDepth = 0;
-	let parenDepth = 0;
-	let squareBracketDepth = 0;
-	for (let i = 0; i < input.length; i++) {
-		const char = input[i];
-		if (char === '(') {
-			parenDepth++;
-		} else if (char === ')') {
-			parenDepth--;
-		} else if (char === '{') {
-			bracketDepth++;
-		} else if (char === '}') {
-			bracketDepth--;
-		} else if (char === '[') {
-			squareBracketDepth++;
-		} else if (char === ']') {
-			squareBracketDepth--;
-		} else if (
-			char === '=' &&
-			bracketDepth === 0 &&
-			parenDepth === 0 &&
-			squareBracketDepth === 0 &&
-			input[i + 1] !== '>'
-		) {
-			return i;
+	let offset = 0;
+	let remaining = input;
+	while (remaining.length > 0) {
+		const equalIndex = findCharOutsideBrackets(remaining, '=');
+		if (equalIndex < 0) {
+			return -1;
 		}
+		if (remaining[equalIndex + 1] !== '>') {
+			return offset + equalIndex;
+		}
+		const afterArrowIndex = equalIndex + 2;
+		offset += afterArrowIndex;
+		remaining = remaining.substring(afterArrowIndex);
 	}
 	return -1;
 }

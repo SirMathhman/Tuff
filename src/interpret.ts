@@ -1,7 +1,12 @@
 import { err, ok, type Result } from './common/result';
 import { processTopLevelStatements } from './statements';
 import { interpretInternal } from './evaluator';
-import { findClosingBrace, type VariableBinding } from './common/types';
+import {
+	findClosingBrace,
+	findSemicolonOutsideBrackets,
+	type VariableBinding,
+	type ExecutionContext,
+} from './common/types';
 import { parseFunctionDefinition } from './functions';
 import { ReturnSignal } from './function-call-utils';
 
@@ -74,6 +79,49 @@ function handleNoRemainingExpression(input: string, bindings: VariableBinding[])
 	return err('expression required after variable declarations');
 }
 
+function trimLeadingSemicolons(input: string): string {
+	let remaining = input.trim();
+	while (remaining.startsWith(';')) {
+		remaining = remaining.substring(1).trim();
+	}
+	return remaining;
+}
+
+function interpretExpressionStatements(
+	remaining: string,
+	context: ExecutionContext,
+): Result<number> {
+	let rest = remaining.trim();
+	let lastValue = 0;
+	let hasValue = false;
+
+	while (rest.length > 0) {
+		const semiIndex = findSemicolonOutsideBrackets(rest);
+		if (semiIndex < 0) {
+			return interpretInternal(rest, context);
+		}
+
+		const expr = rest.substring(0, semiIndex).trim();
+		rest = trimLeadingSemicolons(rest.substring(semiIndex + 1));
+		if (expr.length === 0) {
+			continue;
+		}
+
+		const exprResult = interpretInternal(expr, context);
+		if (exprResult.type === 'err') {
+			return exprResult;
+		}
+		lastValue = exprResult.value;
+		hasValue = true;
+	}
+
+	if (!hasValue) {
+		return err('expression required');
+	}
+
+	return ok(lastValue);
+}
+
 /**
  * Interprets a mathematical expression with typed numeric literals and variable bindings.
  * Supports arithmetic operations, type annotations, variable declarations, and assignments.
@@ -95,7 +143,7 @@ export function interpret(input: string): Result<number> {
 			return handleNoRemainingExpression(input, result.value.context.bindings);
 		}
 
-		return interpretInternal(trimmedRemaining, result.value.context);
+		return interpretExpressionStatements(trimmedRemaining, result.value.context);
 	} catch (error) {
 		if (error instanceof ReturnSignal) {
 			return err('Return statement not allowed outside of function');
