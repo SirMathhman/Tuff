@@ -99,6 +99,7 @@ export interface PointerValue {
  */
 export interface FunctionReference {
 	functionName: string;
+	capturedBindings?: VariableBinding[];
 }
 
 /**
@@ -114,6 +115,7 @@ export interface VariableBinding {
 	enumValue?: EnumValue;
 	pointerValue?: PointerValue;
 	functionReferenceValue?: FunctionReference;
+	thisValue?: boolean;
 }
 
 /**
@@ -147,6 +149,7 @@ export interface ParsedBinding {
 	arrayAssignmentUpdatedBindings?: VariableBinding[];
 	destructuredFields?: DestructuredFields;
 	functionReferenceValue?: FunctionReference;
+	thisValue?: boolean;
 }
 
 /**
@@ -758,6 +761,14 @@ export function isAssignmentStatement(input: string): boolean {
 	}
 
 	const beforeEqual = input.substring(0, eq).trimEnd();
+
+	// Check for this.field assignment
+	if (beforeEqual.trim().startsWith('this.')) {
+		const fieldName = beforeEqual.trim().substring(5).trim();
+		if (isVariableName(fieldName)) {
+			return true;
+		}
+	}
 
 	// Check for simple variable assignment
 	const varName = stripCompoundOperator(beforeEqual).trim();

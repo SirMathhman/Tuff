@@ -1,7 +1,7 @@
 import { clearFunctionRegistry } from '../src/functions';
 import { expectInterpretOk } from '../src/testing/test-helpers';
 
-describe('interpret - closures', (): void => {
+describe('interpret - closures - basics', (): void => {
 	beforeEach((): void => {
 		clearFunctionRegistry();
 	});
@@ -30,5 +30,42 @@ describe('interpret - closures', (): void => {
 
 	it('closure sees variable updates', (): void => {
 		expectInterpretOk('let mut x = 1; x = 5; fn get() => x; get()', 5);
+	});
+});
+
+describe('interpret - closures - nested functions', (): void => {
+	beforeEach((): void => {
+		clearFunctionRegistry();
+	});
+
+	it('nested function captures outer function parameter', (): void => {
+		expectInterpretOk('fn pass(value : I32) => { fn get() => value; get() } pass(100)', 100);
+	});
+
+	it('nested function with multiple captures', (): void => {
+		expectInterpretOk(
+			'fn outer(a : I32, b : I32) => { fn inner() => a + b; inner() } outer(10, 20)',
+			30,
+		);
+	});
+
+	it('deeply nested functions', (): void => {
+		expectInterpretOk(
+			'fn outer(x : I32) => { fn middle(y : I32) => { fn inner() => x + y; inner() } middle(5) } outer(10)',
+			15,
+		);
+	});
+});
+
+describe('interpret - closures - returns closure', (): void => {
+	beforeEach((): void => {
+		clearFunctionRegistry();
+	});
+
+	it('returns a closure that captures a parameter', (): void => {
+		expectInterpretOk(
+			'fn pass(value : I32) : () => I32 => { fn get() => value; get } pass(100)()',
+			100,
+		);
 	});
 });

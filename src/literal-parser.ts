@@ -22,6 +22,12 @@ import { tryParseCallExpression } from './call-expressions';
 import { tryParseFieldAccess } from './field-access';
 import { tryParseIndexing } from './tuples';
 import { tryParseEnumMemberAccess } from './enums';
+import { getFunctionDefinition } from './functions';
+import {
+	captureFunctionReferenceByName,
+	captureFunctionReferenceFromBinding,
+	setLastFunctionReference,
+} from './common/function-references';
 import {
 	isDereferenceExpression,
 	parseDereferenceExpression,
@@ -73,6 +79,11 @@ function lookupVariable(name: string, context: ExecutionContext): Result<number>
 		if (binding.name !== name) {
 			continue;
 		}
+		const functionRefFromBinding = captureFunctionReferenceFromBinding(binding, context);
+		if (functionRefFromBinding !== undefined) {
+			setLastFunctionReference(context, functionRefFromBinding);
+			return ok(0);
+		}
 		if (binding.arrayValue !== undefined) {
 			return ok(0);
 		}
@@ -87,6 +98,13 @@ function lookupVariable(name: string, context: ExecutionContext): Result<number>
 		}
 		return ok(binding.value);
 	}
+
+	const def = getFunctionDefinition(name);
+	if (def !== undefined) {
+		setLastFunctionReference(context, captureFunctionReferenceByName(def.name, context));
+		return ok(0);
+	}
+
 	return err(`Undefined variable: ${name}`);
 }
 

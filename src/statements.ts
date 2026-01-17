@@ -10,6 +10,7 @@ import {
 	isBalancedBrackets,
 	isWhileStatement,
 	isYieldStatement,
+	isVariableName,
 	shouldProcessAsStatementBlock,
 	validateValueForType,
 	type ParsedBinding,
@@ -39,6 +40,7 @@ import {
 	isFunctionDefinition,
 	parseFunctionDefinition,
 	registerFunctionDefinition,
+	getFunctionDefinition,
 	isFunctionType,
 	parseFunctionTypeBinding,
 } from './functions';
@@ -106,6 +108,125 @@ function extractRemainingAfterSemicolon(input: string, errorMessage: string): Re
  * Handles processing variable binding with value and semicolon.
  */
 /**
+ * Parses This type binding (let temp : This = this).
+ */
+function parseThisTypeBinding(
+	varName: string,
+	isMutable: boolean,
+	valueStr: string,
+	remaining: string,
+): Result<ParsedBinding> {
+	if (valueStr.trim() !== 'this') {
+		return err('This type can only be assigned from this');
+	}
+	return ok({ name: varName, value: 0, isMutable, remaining, thisValue: true });
+}
+
+/**
+ * Parses constructor call arguments from value string.
+ */
+function parseConstructorCallArgs(
+	valueStr: string,
+	typeAnnotation: string,
+	expectedArgCount: number,
+): Result<string[]> {
+	const trimmedValue = valueStr.trim();
+	const openParenIndex = trimmedValue.indexOf('(');
+	const closeParenIndex = trimmedValue.lastIndexOf(')');
+
+	if (openParenIndex < 0 || closeParenIndex < 0) {
+		return err('Invalid constructor call');
+	}
+
+	const argsStr = trimmedValue.substring(openParenIndex + 1, closeParenIndex).trim();
+	const args: string[] = [];
+	if (argsStr.length > 0) {
+		args.push(...argsStr.split(','));
+	}
+
+	if (args.length !== expectedArgCount) {
+		return err(
+			`Constructor '${typeAnnotation}' expects ${expectedArgCount} arguments, got ${args.length}`,
+		);
+	}
+
+	return ok(args);
+}
+
+/**
+ * Represents a parameter with a name (simplified for constructor arg evaluation).
+ */
+interface ParameterWithName {
+	name: string;
+}
+
+/**
+ * Evaluates constructor arguments and builds field map.
+ */
+function evaluateConstructorArgs(
+	args: string[],
+	parameters: ParameterWithName[],
+	context: ExecutionContext,
+): Result<Map<string, number>> {
+	const fieldValues = new Map<string, number>();
+	for (let i = 0; i < parameters.length; i++) {
+		const argResult = interpretInternal(args[i].trim(), context);
+		if (argResult.type === 'err') {
+			return argResult;
+		}
+		fieldValues.set(parameters[i].name, argResult.value);
+	}
+	return ok(fieldValues);
+}
+
+/**
+ * Attempts to parse constructor type binding (e.g., let p : Point = Point(3, 4)).
+ */
+function tryParseConstructorTypeBinding(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> | undefined {
+	const def = getFunctionDefinition(typeAnnotation);
+	if (def === undefined || def.returnType !== def.name) {
+		return undefined;
+	}
+
+	if (def.bodyExpression.trim() !== 'this') {
+		return undefined;
+	}
+
+	const callResult = interpretInternal(valueStr, context);
+	if (callResult.type === 'err') {
+		return callResult;
+	}
+
+	const argsResult = parseConstructorCallArgs(valueStr, typeAnnotation, def.parameters.length);
+	if (argsResult.type === 'err') {
+		return argsResult;
+	}
+
+	const fieldValuesResult = evaluateConstructorArgs(argsResult.value, def.parameters, context);
+	if (fieldValuesResult.type === 'err') {
+		return fieldValuesResult;
+	}
+
+	return ok({
+		name: varName,
+		value: 0,
+		isMutable,
+		remaining,
+		structValue: {
+			structType: typeAnnotation,
+			values: fieldValuesResult.value,
+		},
+	});
+}
+
+/**
  * Attempts to parse value binding with a specific type annotation.
  */
 function tryTypeSpecificValueBinding(
@@ -116,6 +237,9 @@ function tryTypeSpecificValueBinding(
 	remaining: string,
 	context: ExecutionContext,
 ): Result<ParsedBinding> | undefined {
+	if (typeAnnotation === 'This') {
+		return parseThisTypeBinding(varName, isMutable, valueStr, remaining);
+	}
 	if (typeAnnotation.startsWith('[')) {
 		return parseArrayTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
 	}
@@ -133,6 +257,19 @@ function tryTypeSpecificValueBinding(
 	}
 	if (isStructType(typeAnnotation)) {
 		return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	}
+	if (isVariableName(typeAnnotation)) {
+		const constructorResult = tryParseConstructorTypeBinding(
+			varName,
+			isMutable,
+			typeAnnotation,
+			valueStr,
+			remaining,
+			context,
+		);
+		if (constructorResult !== undefined) {
+			return constructorResult;
+		}
 	}
 	return undefined;
 }
@@ -417,6 +554,9 @@ function createVariableBinding(parsed: ParsedBinding): VariableBinding {
 	}
 	if (parsed.functionReferenceValue !== undefined) {
 		binding.functionReferenceValue = parsed.functionReferenceValue;
+	}
+	if (parsed.thisValue !== undefined) {
+		binding.thisValue = parsed.thisValue;
 	}
 	return binding;
 }

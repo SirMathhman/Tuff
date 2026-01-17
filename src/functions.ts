@@ -107,6 +107,58 @@ function isKnownValueType(typeAnnotation: string): boolean {
 	return max !== 0;
 }
 
+function findLastTopLevelArrowIndex(input: string): number {
+	let parenDepth = 0;
+	let braceDepth = 0;
+	let squareDepth = 0;
+	let lastArrowIndex = -1;
+
+	for (let i = 0; i < input.length - 1; i++) {
+		const char = input.charAt(i);
+		if (char === '(') {
+			parenDepth++;
+			continue;
+		}
+		if (char === ')') {
+			parenDepth--;
+			continue;
+		}
+		if (char === '{') {
+			braceDepth++;
+			continue;
+		}
+		if (char === '}') {
+			braceDepth--;
+			continue;
+		}
+		if (char === '[') {
+			squareDepth++;
+			continue;
+		}
+		if (char === ']') {
+			squareDepth--;
+			continue;
+		}
+
+		if (
+			char === '=' &&
+			input.charAt(i + 1) === '>' &&
+			parenDepth === 0 &&
+			braceDepth === 0 &&
+			squareDepth === 0
+		) {
+			lastArrowIndex = i;
+		}
+	}
+
+	return lastArrowIndex;
+}
+
+function isFunctionTypeAnnotation(typeAnnotation: string): boolean {
+	const trimmed = typeAnnotation.trim();
+	return trimmed.startsWith('(') && trimmed.includes('=>');
+}
+
 function parseParameter(trimmed: string): Result<FunctionParameter> {
 	const colonIndex = trimmed.indexOf(':');
 	if (colonIndex < 0) {
@@ -169,7 +221,13 @@ function parseReturnType(afterParams: string): Result<ReturnTypeParseResult> {
 	}
 
 	const afterColon = trimmed.substring(1).trim();
-	const arrowIndex = afterColon.indexOf('=>');
+	const semicolonIndex = findSemicolonOutsideBrackets(afterColon);
+	let scanRegion = afterColon;
+	if (semicolonIndex >= 0) {
+		scanRegion = afterColon.substring(0, semicolonIndex);
+	}
+
+	const arrowIndex = findLastTopLevelArrowIndex(scanRegion);
 	if (arrowIndex < 0) {
 		return err('Function definition missing =>');
 	}
@@ -181,7 +239,11 @@ function parseReturnType(afterParams: string): Result<ReturnTypeParseResult> {
 		return err('Function definition missing return type');
 	}
 
-	if (!isKnownValueType(returnType)) {
+	if (
+		!isKnownValueType(returnType) &&
+		!isVariableName(returnType) &&
+		!isFunctionTypeAnnotation(returnType)
+	) {
 		return err(`Unknown return type '${returnType}'`);
 	}
 

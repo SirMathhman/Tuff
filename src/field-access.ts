@@ -98,6 +98,27 @@ function evaluateInlineStructFieldAccess(
 	return ok(fieldValue);
 }
 
+function lookupThisFieldOrError(fieldName: string, context: ExecutionContext): Result<number> {
+	const lookupResult = lookupThisField(fieldName, context);
+	if (lookupResult !== undefined) {
+		return lookupResult;
+	}
+	return err(`Variable '${fieldName}' not found`);
+}
+
+function tryLookupVariableFieldAccess(
+	varName: string,
+	fieldName: string,
+	context: ExecutionContext,
+): Result<number> | undefined {
+	const binding = context.bindings.find((b): boolean => b.name === varName);
+	if (binding?.thisValue === true) {
+		return lookupThisFieldOrError(fieldName, context);
+	}
+
+	return lookupStructVariableField(varName, fieldName, context);
+}
+
 export function tryParseFieldAccess(
 	literal: string,
 	context: ExecutionContext,
@@ -116,15 +137,11 @@ export function tryParseFieldAccess(
 	const trimmedExpr = instanceExpr.trim();
 
 	if (trimmedExpr === 'this') {
-		const lookupResult = lookupThisField(fieldName, context);
-		if (lookupResult !== undefined) {
-			return lookupResult;
-		}
-		return err(`Variable '${fieldName}' not found`);
+		return lookupThisFieldOrError(fieldName, context);
 	}
 
 	if (isVariableName(trimmedExpr)) {
-		const lookupResult = lookupStructVariableField(trimmedExpr, fieldName, context);
+		const lookupResult = tryLookupVariableFieldAccess(trimmedExpr, fieldName, context);
 		if (lookupResult !== undefined) {
 			return lookupResult;
 		}

@@ -98,6 +98,7 @@ export function createCallContext(
 	def: FunctionDefinition,
 	argValues: number[],
 	outerContext: ExecutionContext,
+	capturedBindings?: VariableBinding[],
 ): ExecutionContext {
 	const paramNames = new Set<string>();
 	const paramBindings: VariableBinding[] = def.parameters.map((p, idx): VariableBinding => {
@@ -105,6 +106,21 @@ export function createCallContext(
 		return { name: p.name, value: argValues[idx], isMutable: false };
 	});
 
-	const outerBindings = outerContext.bindings.filter((b): boolean => !paramNames.has(b.name));
-	return { bindings: [...paramBindings, ...outerBindings] };
+	const captured = capturedBindings ?? [];
+	const capturedNames = new Set<string>();
+	for (const b of captured) {
+		capturedNames.add(b.name);
+	}
+
+	const outerBindings = outerContext.bindings.filter((b): boolean => {
+		if (paramNames.has(b.name)) {
+			return false;
+		}
+		if (capturedNames.has(b.name)) {
+			return false;
+		}
+		return true;
+	});
+
+	return { bindings: [...paramBindings, ...captured, ...outerBindings] };
 }

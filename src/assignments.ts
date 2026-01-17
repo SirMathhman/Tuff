@@ -409,6 +409,53 @@ function parseSimpleVariableAssignment(
 }
 
 /**
+ * Checks if the left side is a this.field expression.
+ */
+function isThisFieldExpression(beforeEqual: string): boolean {
+	const trimmed = beforeEqual.trim();
+	if (!trimmed.startsWith('this.')) {
+		return false;
+	}
+	const fieldName = trimmed.substring(5).trim();
+	return isVariableName(fieldName);
+}
+
+/**
+ * Handles this.field = value assignment.
+ */
+function parseThisFieldAssignment(
+	beforeEqual: string,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
+	const trimmed = beforeEqual.trim();
+	const fieldName = trimmed.substring(5).trim();
+
+	const varBinding = findVariableBinding(fieldName, context);
+	if (varBinding === undefined) {
+		return err(`Undefined variable: ${fieldName}`);
+	}
+
+	const validationResult = validateMutableBinding(varBinding, fieldName);
+	if (validationResult.type === 'err') {
+		return validationResult;
+	}
+
+	const valueResult = interpretInternal(valueStr, context);
+	if (valueResult.type === 'err') {
+		return valueResult;
+	}
+
+	return ok({
+		name: fieldName,
+		value: valueResult.value,
+		isMutable: varBinding.isMutable,
+		remaining,
+	});
+}
+
+/**
  * Parses a variable assignment statement.
  * @param input - The assignment statement string
  * @param context - The execution context with variable bindings
@@ -423,6 +470,12 @@ export function parseAssignment(input: string, context: ExecutionContext): Resul
 	const { statementStr, remaining, equalIndex } = structResult.value;
 
 	const beforeEqualTrimmed = statementStr.substring(0, equalIndex).trimEnd();
+
+	// Check if it's this.field assignment
+	if (isThisFieldExpression(beforeEqualTrimmed)) {
+		const valueStr = statementStr.substring(equalIndex + 1).trim();
+		return parseThisFieldAssignment(beforeEqualTrimmed, valueStr, remaining, context);
+	}
 
 	// Check if it's array element assignment
 	if (looksLikeIndexing(beforeEqualTrimmed)) {

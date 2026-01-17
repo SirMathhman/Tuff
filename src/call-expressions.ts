@@ -1,6 +1,16 @@
 import { err, ok, type Result } from './common/result';
-import { type ExecutionContext, isVariableName, validateValueForType } from './common/types';
-import { getFunctionDefinition, type FunctionDefinition } from './functions';
+import {
+	type ExecutionContext,
+	isVariableName,
+	validateValueForType,
+	type VariableBinding,
+	type FunctionReference,
+} from './common/types';
+import {
+	getFunctionDefinition,
+	type FunctionDefinition,
+	validateFunctionReference,
+} from './functions';
 import {
 	createCallContext,
 	extractFunctionCallExpression,
@@ -8,6 +18,11 @@ import {
 	splitArguments,
 	ReturnSignal,
 } from './function-call-utils';
+import {
+	clearLastFunctionReference,
+	getLastFunctionReference,
+	setLastFunctionReference,
+} from './common/function-references';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -17,6 +32,16 @@ interface MethodCallExpression {
 	receiverExpr: string;
 	methodName: string;
 	args: string[];
+}
+
+interface ExpressionCallExpression {
+	calleeExpr: string;
+	args: string[];
+}
+
+function isFunctionTypeAnnotation(typeAnnotation: string): boolean {
+	const trimmed = typeAnnotation.trim();
+	return trimmed.startsWith('(') && trimmed.includes('=>');
 }
 
 function extractMethodCallExpression(literal: string): MethodCallExpression | undefined {
@@ -41,6 +66,41 @@ function extractMethodCallExpression(literal: string): MethodCallExpression | un
 	const argsStr = trimmed.substring(openIndex + 1, trimmed.length - 1);
 	const args = splitArguments(argsStr);
 	return { receiverExpr, methodName, args };
+}
+
+function extractExpressionCallExpression(literal: string): ExpressionCallExpression | undefined {
+	const trimmed = literal.trim();
+	const openIndex = findCallOpenParenIndex(trimmed);
+	if (openIndex <= 0) {
+		return undefined;
+	}
+
+	const calleeExpr = trimmed.substring(0, openIndex).trim();
+	if (calleeExpr.length === 0) {
+		return undefined;
+	}
+
+	const argsStr = trimmed.substring(openIndex + 1, trimmed.length - 1);
+	const args = splitArguments(argsStr);
+	return { calleeExpr, args };
+}
+
+function interpretFunctionBody(
+	def: FunctionDefinition,
+	callContext: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> {
+	try {
+		return interpretInternal(def.bodyExpression, callContext);
+	} catch (error) {
+		if (!(error instanceof ReturnSignal)) {
+			throw error;
+		}
+		if (isFunctionTypeAnnotation(def.returnType)) {
+			return err(`Function '${def.name}' cannot return a function reference via 'return' yet`);
+		}
+		return validateValueForType(error.value, def.returnType);
+	}
 }
 
 function evaluateFunctionCallArgumentsWithPrefix(
@@ -84,33 +144,55 @@ function executeFunctionCall(
 	argValues: number[],
 	context: ExecutionContext,
 	interpretInternal: InterpretFunction,
+	capturedBindings?: VariableBinding[],
 ): Result<number> {
-	const callContext = createCallContext(def, argValues, context);
-	let bodyResult: Result<number>;
-	try {
-		bodyResult = interpretInternal(def.bodyExpression, callContext);
-	} catch (error) {
-		if (error instanceof ReturnSignal) {
-			return validateValueForType(error.value, def.returnType);
-		}
-		throw error;
+	// Constructor pattern: fn Point(x: I32, y: I32): Point => this
+	if (def.bodyExpression.trim() === 'this' && def.returnType === def.name) {
+		return ok(0);
 	}
+
+	const callContext = createCallContext(def, argValues, context, capturedBindings);
+	const bodyResult = interpretFunctionBody(def, callContext, interpretInternal);
 	if (bodyResult.type === 'err') {
 		return bodyResult;
+	}
+
+	if (isFunctionTypeAnnotation(def.returnType)) {
+		const returnedRef = getLastFunctionReference(callContext);
+		if (returnedRef === undefined) {
+			return err(`Function '${def.name}' must return a function reference`);
+		}
+
+		const validationResult = validateFunctionReference(returnedRef.functionName, def.returnType);
+		if (validationResult.type === 'err') {
+			return validationResult;
+		}
+
+		const capturedRef: FunctionReference = {
+			functionName: returnedRef.functionName,
+			capturedBindings: returnedRef.capturedBindings,
+		};
+		setLastFunctionReference(context, capturedRef);
+		return ok(0);
 	}
 
 	return validateValueForType(bodyResult.value, def.returnType);
 }
 
-type ResolveFunctionDefinitionResult = Result<FunctionDefinition> | undefined;
+interface ResolvedFunctionDefinition {
+	def: FunctionDefinition;
+	capturedBindings?: VariableBinding[];
+}
+
+type ResolveFunctionDefinitionResult = Result<ResolvedFunctionDefinition> | undefined;
 type ResolveFunctionDefinition = (functionName: string) => ResolveFunctionDefinitionResult;
 
-function resolveDirectFunctionDefinition(functionName: string): Result<FunctionDefinition> {
+function resolveDirectFunctionDefinition(functionName: string): Result<ResolvedFunctionDefinition> {
 	const def = getFunctionDefinition(functionName);
 	if (def === undefined) {
 		return err(`Undefined function: ${functionName}`);
 	}
-	return ok(def);
+	return ok({ def });
 }
 
 function resolveFunctionReferenceDefinition(
@@ -127,7 +209,7 @@ function resolveFunctionReferenceDefinition(
 	if (def === undefined) {
 		return err(`Function reference points to undefined function: ${referencedFunctionName}`);
 	}
-	return ok(def);
+	return ok({ def, capturedBindings: binding.functionReferenceValue.capturedBindings });
 }
 
 function tryParseAndExecuteFunctionLikeCall(
@@ -148,16 +230,17 @@ function tryParseAndExecuteFunctionLikeCall(
 	if (defResult.type === 'err') {
 		return defResult;
 	}
-	const def = defResult.value;
+	const capturedBindings = defResult.value.capturedBindings;
+	const functionDef = defResult.value.def;
 
-	if (parsed.args.length !== def.parameters.length) {
+	if (parsed.args.length !== functionDef.parameters.length) {
 		return err(
-			`Function '${def.name}' expects ${def.parameters.length} argument(s), got ${parsed.args.length}`,
+			`Function '${functionDef.name}' expects ${functionDef.parameters.length} argument(s), got ${parsed.args.length}`,
 		);
 	}
 
 	const argValuesResult = evaluateFunctionCallArguments(
-		def,
+		functionDef,
 		parsed.args,
 		context,
 		interpretInternal,
@@ -166,7 +249,13 @@ function tryParseAndExecuteFunctionLikeCall(
 		return argValuesResult;
 	}
 
-	return executeFunctionCall(def, argValuesResult.value, context, interpretInternal);
+	return executeFunctionCall(
+		functionDef,
+		argValuesResult.value,
+		context,
+		interpretInternal,
+		capturedBindings,
+	);
 }
 
 function tryParseFunctionCall(
@@ -192,6 +281,82 @@ function tryParseFunctionReferenceCall(
 	}
 
 	return tryParseAndExecuteFunctionLikeCall(literal, context, interpretInternal, resolveDefinition);
+}
+
+function evaluateExpressionToFunctionReference(
+	calleeExpr: string,
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<FunctionReference> {
+	clearLastFunctionReference(context);
+	const calleeResult = interpretInternal(calleeExpr, context);
+	if (calleeResult.type === 'err') {
+		return calleeResult;
+	}
+
+	const ref = getLastFunctionReference(context);
+	if (ref === undefined) {
+		return err(`Expression '${calleeExpr}' did not evaluate to a function reference`);
+	}
+	clearLastFunctionReference(context);
+	return ok(ref);
+}
+
+function executeFunctionReferenceCall(
+	ref: FunctionReference,
+	args: string[],
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> {
+	const def = getFunctionDefinition(ref.functionName);
+	if (def === undefined) {
+		return err(`Undefined function: ${ref.functionName}`);
+	}
+
+	if (args.length !== def.parameters.length) {
+		return err(
+			`Function '${def.name}' expects ${def.parameters.length} argument(s), got ${args.length}`,
+		);
+	}
+
+	const argValuesResult = evaluateFunctionCallArguments(def, args, context, interpretInternal);
+	if (argValuesResult.type === 'err') {
+		return argValuesResult;
+	}
+
+	return executeFunctionCall(
+		def,
+		argValuesResult.value,
+		context,
+		interpretInternal,
+		ref.capturedBindings,
+	);
+}
+
+function tryParseExpressionResultCall(
+	literal: string,
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> | undefined {
+	if (extractFunctionCallExpression(literal) !== undefined) {
+		return undefined;
+	}
+
+	const parsed = extractExpressionCallExpression(literal);
+	if (parsed === undefined) {
+		return undefined;
+	}
+
+	const refResult = evaluateExpressionToFunctionReference(
+		parsed.calleeExpr,
+		context,
+		interpretInternal,
+	);
+	if (refResult.type === 'err') {
+		return refResult;
+	}
+
+	return executeFunctionReferenceCall(refResult.value, parsed.args, context, interpretInternal);
 }
 
 function tryParseMethodCall(
@@ -258,5 +423,10 @@ export function tryParseCallExpression(
 		return functionRefResult;
 	}
 
-	return tryParseFunctionCall(literal, context, interpretInternal);
+	const functionCallResult = tryParseFunctionCall(literal, context, interpretInternal);
+	if (functionCallResult !== undefined) {
+		return functionCallResult;
+	}
+
+	return tryParseExpressionResultCall(literal, context, interpretInternal);
 }
