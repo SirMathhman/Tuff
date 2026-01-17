@@ -15,6 +15,7 @@ import {
 	extractIfConditionAndAfter,
 	findElseKeywordIndex,
 	type IfConditionAndAfter,
+	copyBindingValues,
 } from './common/helpers';
 import { ReturnSignal } from './function-call-utils';
 import { tryParseCallExpression } from './call-expressions';
@@ -99,6 +100,19 @@ function parseSimpleLiteral(
 
 	if (trimmed === 'false') {
 		return ok(0);
+	}
+
+	if (trimmed === 'this') {
+		// Check if 'this' is a parameter name first (for method calls).
+		const thisBinding = context.bindings.find((b): boolean => b.name === 'this');
+		if (thisBinding === undefined) {
+			// 'this' is a keyword that evaluates to 0 (for this.field syntax).
+			return ok(0);
+		}
+		if (thisBinding.value === undefined) {
+			return err("Variable 'this' is not initialized");
+		}
+		return ok(thisBinding.value);
 	}
 
 	if (isVariableName(trimmed)) {
@@ -222,13 +236,7 @@ function applyScopedMutationsToContext(
 			continue;
 		}
 
-		outerBinding.value = updated.value;
-		outerBinding.structValue = updated.structValue;
-		outerBinding.arrayValue = updated.arrayValue;
-		outerBinding.tupleValue = updated.tupleValue;
-		outerBinding.enumValue = updated.enumValue;
-		outerBinding.pointerValue = updated.pointerValue;
-		outerBinding.functionReferenceValue = updated.functionReferenceValue;
+		copyBindingValues(outerBinding, updated);
 	}
 }
 
@@ -416,6 +424,32 @@ function tryParseBracketExpressions(
 	return undefined;
 }
 
+function tryParseReturnExpression(
+	trimmed: string,
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> | undefined {
+	if (!trimmed.startsWith('return')) {
+		return undefined;
+	}
+	if (trimmed === 'return') {
+		return err('Return statement missing expression');
+	}
+	const after = trimmed.substring(6);
+	if (!after.startsWith(' ') && !after.startsWith('\t')) {
+		return undefined;
+	}
+	const expr = after.trim();
+	if (expr.length === 0) {
+		return err('Return statement missing expression');
+	}
+
+	const valueResult = interpretInternal(expr, context);
+	if (valueResult.type === 'err') {
+		return valueResult;
+	}
+	throw new ReturnSignal(valueResult.value);
+}
 export function parseLiteral(
 	literal: string,
 	context: ExecutionContext,
@@ -428,6 +462,11 @@ export function parseLiteral(
 	}
 
 	const trimmed = literal.trim();
+	const returnExprResult = tryParseReturnExpression(trimmed, context, interpretInternal);
+	if (returnExprResult !== undefined) {
+		return returnExprResult;
+	}
+
 	const simpleLiteral = parseSimpleLiteral(trimmed, context);
 	if (simpleLiteral !== undefined) {
 		return simpleLiteral;

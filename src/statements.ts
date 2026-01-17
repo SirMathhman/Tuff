@@ -151,6 +151,10 @@ function handleValueBinding(
 	}
 	const valueStr = withoutEqual.substring(0, semiIndex).trim();
 	const remaining = withoutEqual.substring(semiIndex + 1).trim();
+	const initValidation = validateInitializerExpression(valueStr);
+	if (initValidation.type === 'err') {
+		return initValidation;
+	}
 	if (typeAnnotation !== undefined) {
 		const typeSpecificResult = tryTypeSpecificValueBinding(
 			varName,
@@ -181,6 +185,20 @@ function handleValueBinding(
 		}
 	}
 	return ok({ name: varName, value: valueResult.value, isMutable, remaining });
+}
+
+function validateInitializerExpression(valueStr: string): Result<void> {
+	if (!isAssignmentStatement(valueStr)) {
+		return ok(undefined as void);
+	}
+
+	const isBracedExpression =
+		valueStr.startsWith('{') && valueStr.endsWith('}') && isBalancedBrackets(valueStr);
+	if (isBracedExpression) {
+		return ok(undefined as void);
+	}
+
+	return err('Assignment not allowed in variable initializer');
 }
 
 /**

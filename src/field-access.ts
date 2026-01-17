@@ -61,6 +61,43 @@ function lookupStructVariableField(
 	return undefined;
 }
 
+function lookupThisField(fieldName: string, context: ExecutionContext): Result<number> | undefined {
+	for (const binding of context.bindings) {
+		if (binding.name !== fieldName) {
+			continue;
+		}
+		if (binding.value === undefined) {
+			return err(`Variable '${fieldName}' is not initialized`);
+		}
+		return ok(binding.value);
+	}
+	return undefined;
+}
+
+function evaluateInlineStructFieldAccess(
+	instanceExpr: string,
+	fieldName: string,
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> {
+	const instanceResult = evaluateStructInstantiation(
+		instanceExpr,
+		(expr): Result<number> => interpretInternal(expr, context),
+	);
+
+	if (instanceResult.type === 'err') {
+		return instanceResult;
+	}
+
+	const fieldValue = instanceResult.value.fieldValues.get(fieldName);
+	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+	if (fieldValue === undefined) {
+		return err(`Field '${fieldName}' not found in struct '${instanceResult.value.structType}'`);
+	}
+
+	return ok(fieldValue);
+}
+
 export function tryParseFieldAccess(
 	literal: string,
 	context: ExecutionContext,
@@ -78,6 +115,14 @@ export function tryParseFieldAccess(
 	const { instanceExpr, fieldName } = fieldAccessResult;
 	const trimmedExpr = instanceExpr.trim();
 
+	if (trimmedExpr === 'this') {
+		const lookupResult = lookupThisField(fieldName, context);
+		if (lookupResult !== undefined) {
+			return lookupResult;
+		}
+		return err(`Variable '${fieldName}' not found`);
+	}
+
 	if (isVariableName(trimmedExpr)) {
 		const lookupResult = lookupStructVariableField(trimmedExpr, fieldName, context);
 		if (lookupResult !== undefined) {
@@ -90,20 +135,5 @@ export function tryParseFieldAccess(
 		return err('Unbalanced brackets');
 	}
 
-	const instanceResult = evaluateStructInstantiation(
-		instanceExpr,
-		(expr): Result<number> => interpretInternal(expr, context),
-	);
-
-	if (instanceResult.type === 'err') {
-		return instanceResult;
-	}
-
-	const fieldValue = instanceResult.value.fieldValues.get(fieldName);
-	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-	if (fieldValue === undefined) {
-		return err(`Field '${fieldName}' not found in struct '${instanceResult.value.structType}'`);
-	}
-
-	return ok(fieldValue);
+	return evaluateInlineStructFieldAccess(instanceExpr, fieldName, context, interpretInternal);
 }

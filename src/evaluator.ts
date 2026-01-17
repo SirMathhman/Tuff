@@ -3,10 +3,74 @@ import {
 	collectTypeSuffixes,
 	type ExecutionContext,
 	getTypeRangeMax,
+	isAssignmentStatement,
+	type ParsedBinding,
 	type StatementsModule,
+	type VariableBinding,
 	validateValueForType,
 } from './common/types';
+import { copyBindingValues } from './common/helpers';
 import { parseLiteral, findOperator } from './parser';
+
+interface AssignmentsModule {
+	parseAssignment: (input: string, context: ExecutionContext) => Result<ParsedBinding>;
+}
+
+function loadAssignmentsModule(): AssignmentsModule {
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+	return require('./assignments') as AssignmentsModule;
+}
+
+function applyUpdatedBindingsInPlace(
+	context: ExecutionContext,
+	updatedBindings: VariableBinding[],
+): void {
+	// Keep binding object identity stable (closures/functions may hold references).
+	for (const outerBinding of context.bindings) {
+		const updated = updatedBindings.find((binding): boolean => binding.name === outerBinding.name);
+		if (updated === undefined) {
+			continue;
+		}
+
+		copyBindingValues(outerBinding, updated);
+	}
+}
+
+function applyAssignmentResultInPlace(context: ExecutionContext, parsed: ParsedBinding): void {
+	if (parsed.arrayAssignmentUpdatedBindings !== undefined) {
+		applyUpdatedBindingsInPlace(context, parsed.arrayAssignmentUpdatedBindings);
+		return;
+	}
+
+	const target = context.bindings.find((b): boolean => b.name === parsed.name);
+	if (target === undefined) {
+		return;
+	}
+
+	target.value = parsed.value;
+	if (parsed.structValue !== undefined) {
+		target.structValue = parsed.structValue;
+	}
+}
+
+function tryInterpretAssignmentExpression(
+	input: string,
+	context: ExecutionContext,
+): Result<number> | undefined {
+	const trimmed = input.trim();
+	if (!isAssignmentStatement(trimmed)) {
+		return undefined;
+	}
+
+	const assignmentsModule = loadAssignmentsModule();
+	const assignmentResult = assignmentsModule.parseAssignment(`${trimmed};`, context);
+	if (assignmentResult.type === 'err') {
+		return assignmentResult;
+	}
+
+	applyAssignmentResultInPlace(context, assignmentResult.value);
+	return ok(0);
+}
 
 /**
  * Evaluates a comparison operation.
@@ -86,6 +150,11 @@ export function evaluateBinaryOp(left: number, operator: string, right: number):
  * Recursively parses and evaluates binary operations and literals.
  */
 export function interpretInternal(input: string, context: ExecutionContext): Result<number> {
+	const assignmentExpressionResult = tryInterpretAssignmentExpression(input, context);
+	if (assignmentExpressionResult !== undefined) {
+		return assignmentExpressionResult;
+	}
+
 	const operatorMatch = findOperator(input);
 
 	if (operatorMatch === undefined) {

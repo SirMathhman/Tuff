@@ -3,6 +3,7 @@ import {
 	type IfStatementBranches,
 	type TypeAnnotationParts,
 	type VariableDeclarationParts,
+	type VariableBinding,
 	findClosingBrace,
 	findClosingParen,
 	findSemicolonOutsideBrackets,
@@ -285,7 +286,13 @@ export function parseVariableDeclarationHeader(
 		remaining = withoutLet.substring(4).trim();
 	}
 
-	const colonIndex = findCharOutsideBrackets(remaining, ':');
+	let headerSearch = remaining;
+	const semiIndex = findSemicolonOutsideBrackets(remaining);
+	if (semiIndex >= 0) {
+		headerSearch = remaining.substring(0, semiIndex);
+	}
+
+	const colonIndex = findCharOutsideBrackets(headerSearch, ':');
 	let varName: string;
 	let typeAnnotation: string | undefined;
 	let afterTypeOrName: string;
@@ -297,12 +304,12 @@ export function parseVariableDeclarationHeader(
 		typeAnnotation = parts.typeAnnotation;
 		afterTypeOrName = parts.afterTypeOrName;
 	} else {
-		const equalIndex = findCharOutsideBrackets(remaining, '=');
+		const equalIndex = findCharOutsideBrackets(headerSearch, '=');
 		if (equalIndex >= 0) {
 			varName = remaining.substring(0, equalIndex).trim();
 			afterTypeOrName = remaining.substring(equalIndex);
 		} else {
-			varName = remaining;
+			varName = headerSearch.trim();
 			afterTypeOrName = '';
 		}
 	}
@@ -312,4 +319,19 @@ export function parseVariableDeclarationHeader(
 	}
 
 	return { type: 'ok', value: { varName, isMutable, typeAnnotation, afterTypeOrName } };
+}
+
+/**
+ * Mutates target binding to match source binding's values.
+ * Preserves object identity for closures/function references.
+ */
+export function copyBindingValues(target: VariableBinding, source: VariableBinding): void {
+	target.value = source.value;
+	target.isMutable = source.isMutable;
+	target.structValue = source.structValue;
+	target.arrayValue = source.arrayValue;
+	target.tupleValue = source.tupleValue;
+	target.enumValue = source.enumValue;
+	target.pointerValue = source.pointerValue;
+	target.functionReferenceValue = source.functionReferenceValue;
 }

@@ -469,6 +469,12 @@ export function findSemicolonOutsideBrackets(input: string): number {
  * @returns The maximum value for the type, or 0 if type is unknown
  */
 export function getTypeRangeMax(typeSuffix: string): number {
+	if (typeSuffix === 'Void') {
+		// Void is a special "no value" type used mainly for function return types.
+		// Treat it as a known type by giving it a non-zero sentinel range.
+		return 1;
+	}
+
 	if (typeSuffix === 'Bool') {
 		return 1;
 	}
