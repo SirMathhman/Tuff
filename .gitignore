@@ -9,5 +9,9 @@
 /tests/**/*.d.ts
 /tests/**/*.map
 
+# Cache files
+/.eslintcache
+/.cpd-cache.json
+
 # Local debugging scratch files
 /test_debug*
