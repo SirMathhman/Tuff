@@ -41,9 +41,10 @@ function cleanup(tempFile: string | undefined, tempDir: string | undefined): voi
  * Compiles and runs Tuff source code by generating JavaScript and executing it with Node.js.
  *
  * @param input - The Tuff source code to compile and run
+ * @param stdin - Standard input to pass to the process
  * @returns A Result containing the exit code of the executed process
  */
-export function run(input: string): Result<number> {
+export function run(input: string, stdin: string): Result<number> {
 	const compileResult = compile(input);
 	if (compileResult.type === 'err') {
 		return compileResult;
@@ -57,7 +58,7 @@ export function run(input: string): Result<number> {
 		tempDir = mkdtempSync(join(tmpdir(), 'tuff-'));
 		tempFile = join(tempDir, 'compiled.js');
 		writeFileSync(tempFile, jsCode, 'utf8');
-		execSync(`node "${tempFile}"`, { stdio: 'inherit', cwd: process.cwd() });
+		execSync(`node "${tempFile}"`, { stdio: 'inherit', cwd: process.cwd(), input: stdin });
 		return ok(0);
 	} catch (e: unknown) {
 		if (isExecError(e)) {

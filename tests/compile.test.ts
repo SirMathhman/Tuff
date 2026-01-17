@@ -14,7 +14,7 @@ describe('compile', (): void => {
 
 describe('run', (): void => {
 	it('executes compiled code and returns exit code', (): void => {
-		const result = run('100');
+		const result = run('100', '');
 		expect(result.type).toBe('ok');
 		if (result.type === 'ok') {
 			expect(result.value).toBe(0);
