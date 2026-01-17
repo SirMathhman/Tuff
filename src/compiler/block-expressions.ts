@@ -437,10 +437,38 @@ export function compileBracedExpressionsToIife(code: string): string {
 			continue;
 		}
 		parts.push(compileBlockExpression(compiledInner));
+		if (shouldInsertSemicolonAfterIife(code, closeIndex + 1)) {
+			parts.push(';');
+		}
 		i = closeIndex + 1;
 	}
 
 	return parts.join('');
+}
+
+function shouldInsertSemicolonAfterIife(code: string, startIdx: number): boolean {
+	let i = startIdx;
+	while (i < code.length && isWhitespace(code[i])) {
+		i += 1;
+	}
+	if (i >= code.length) {
+		return false;
+	}
+
+	const next = code[i];
+	if (next === '(' || next === '[' || next === '.') {
+		return false;
+	}
+	if (isIdentifierStartChar(next)) {
+		return true;
+	}
+	if (next >= '0' && next <= '9') {
+		return true;
+	}
+	if (next === '{' || next === "'" || next === '"' || next === '`') {
+		return true;
+	}
+	return false;
 }
 
 function isControlFlowBlockBeforeBrace(code: string, braceIndex: number): boolean {

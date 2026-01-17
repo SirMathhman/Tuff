@@ -128,6 +128,15 @@ let x = 1;
 x                        // 1 (outer binding unchanged)
 ```
 
+Bindings declared inside a block do not exist outside that block:
+
+```tuff
+{
+	let x = 1;
+}
+x                        // Error: Undefined variable
+```
+
 ---
 
 ## Control Flow
@@ -146,10 +155,10 @@ let x = if 5 > 3 { 10 } else { 0 }; x  // 10
 Pattern matching on values:
 
 ```tuff
-match 2 {
-	1 => 100,
-	2 => 200,
-	_ => 300
+match (2) {
+	case 1 => 100;
+	case 2 => 200;
+	case _ => 300;
 }                        // 200
 ```
 
@@ -157,10 +166,10 @@ match 2 {
 
 ```tuff
 let x = 1;
-match x {
-	0 => 10,
-	1 => 20,
-	_ => 30
+match (x) {
+	case 0 => 10;
+	case 1 => 20;
+	case _ => 30;
 }                        // 20
 ```
 

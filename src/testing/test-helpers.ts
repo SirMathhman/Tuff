@@ -1,6 +1,17 @@
 import { type Result } from '../common/result';
 import { run } from '../compiler/run';
+import { clearFunctionRegistry } from '../interpreter/functions';
+import { clearModuleRegistry } from '../interpreter/modules';
 import { interpret } from '../interpret';
+import { clearEnumRegistry } from '../types/enums';
+import { clearStructRegistry } from '../types/structs';
+
+function resetGlobalRegistriesForTesting(): void {
+	clearFunctionRegistry();
+	clearModuleRegistry();
+	clearStructRegistry();
+	clearEnumRegistry();
+}
 
 function extractErrorMessage(e: unknown): string {
 	if (e instanceof Error) {
@@ -14,6 +25,7 @@ function runInterpretWithErrorHandling(
 	assertFn: (result: Result<number>) => void,
 ): void {
 	try {
+		resetGlobalRegistriesForTesting();
 		const result = interpret(input);
 		assertFn(result);
 	} catch (e) {
@@ -27,6 +39,7 @@ function runCompileWithErrorHandling(
 	assertFn: (result: Result<number>) => void,
 ): void {
 	try {
+		resetGlobalRegistriesForTesting();
 		const compileResult = run(input, stdin);
 		assertFn(compileResult);
 	} catch (e) {
@@ -53,16 +66,19 @@ export function assertInvalid(result: Result<number>, expectedSubstring: string)
 }
 
 export function assertInterpretValid(input: string, expected: number): void {
+	resetGlobalRegistriesForTesting();
 	const result = interpret(input);
 	assertValid(result, expected);
 }
 
 export function assertInterpretInvalid(input: string, expectedSubstring: string): void {
+	resetGlobalRegistriesForTesting();
 	const result = interpret(input);
 	assertInvalid(result, expectedSubstring);
 }
 
 export function assertCompileValid(input: string, stdIn: string, expected: number): void {
+	resetGlobalRegistriesForTesting();
 	const result = run(input, stdIn);
 	assertValid(result, expected);
 }

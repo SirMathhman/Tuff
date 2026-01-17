@@ -132,12 +132,17 @@ function parseExecutionOutput(output: string): Result<number> {
 }
 
 function tryExtractErrorMessageFromLine(line: string): string | undefined {
+	const trimmed = line.trimStart();
+	if (trimmed.startsWith('ReferenceError:')) {
+		return 'Undefined';
+	}
+
 	const marker = 'Error:';
-	const idx = line.indexOf(marker);
+	const idx = trimmed.indexOf(marker);
 	if (idx === -1) {
 		return undefined;
 	}
-	const message = line.substring(idx + marker.length).trim();
+	const message = trimmed.substring(idx + marker.length).trim();
 	if (!message) {
 		return undefined;
 	}

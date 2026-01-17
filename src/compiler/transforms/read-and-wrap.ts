@@ -57,9 +57,10 @@ function buildResultWrapper(code: string): string {
 }
 
 export function wrapCompiledCode(code: string, usesStdin: boolean): string {
+	const strictMode = "'use strict';";
 	const wrapped = buildResultWrapper(code);
 	if (usesStdin) {
-		return buildStdinSetup() + wrapped;
+		return strictMode + buildStdinSetup() + wrapped;
 	}
-	return wrapped;
+	return strictMode + wrapped;
 }

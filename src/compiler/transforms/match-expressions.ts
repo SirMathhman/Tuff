@@ -76,11 +76,13 @@ function parseMatchCaseResult(code: string, startIdx: number): ResultParseResult
 		j += 1;
 	}
 
+	let resultEnd = j;
 	if (j < code.length && code[j] === ';') {
+		resultEnd = j;
 		j += 1;
 	}
 
-	const result = code.substring(startIdx, j).trim();
+	const result = code.substring(startIdx, resultEnd).trim();
 	return { result, nextIdx: j };
 }
 
@@ -102,26 +104,24 @@ function buildMatchTernary(matchExpr: string, cases: MatchCase[]): string {
 		return matchExpr;
 	}
 
-	let ternary = '(';
+	let defaultResult = 'undefined';
+	const conditionalCases: MatchCase[] = [];
 	for (let k = 0; k < cases.length; k += 1) {
 		const c = cases[k];
 		if (c.pattern === '_') {
-			ternary += `(${c.result})`;
-			continue;
+			defaultResult = c.result;
+		} else {
+			conditionalCases.push(c);
 		}
-		if (k > 0 && cases[k - 1].pattern !== '_') {
-			ternary += ' : ';
-		}
-		ternary += `((${matchExpr}) === (${c.pattern}) ? (${c.result})`;
 	}
 
-	for (let k = 0; k < cases.length - 1; k += 1) {
-		if (cases[k].pattern !== '_') {
-			ternary += ')';
-		}
+	let expr = `(${defaultResult})`;
+	for (let k = conditionalCases.length - 1; k >= 0; k -= 1) {
+		const c = conditionalCases[k];
+		expr = `(((${matchExpr}) === (${c.pattern})) ? (${c.result}) : (${expr}))`;
 	}
-	ternary += ')';
-	return ternary;
+
+	return `(${expr})`;
 }
 
 function parseMatchCases(code: string, startIdx: number): MatchCasesInfo {
