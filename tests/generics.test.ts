@@ -1,5 +1,5 @@
 import { clearFunctionRegistry } from '../src/interpreter/functions';
-import { expectInterpretOk } from '../src/testing/test-helpers';
+import { assertValid } from '../src/testing/test-helpers';
 
 describe('interpret - generics', (): void => {
 	beforeEach((): void => {
@@ -7,6 +7,6 @@ describe('interpret - generics', (): void => {
 	});
 
 	it('generic function with identity', (): void => {
-		expectInterpretOk('fn pass<T>(value : T) : T => value; pass(100)', 100);
+		assertValid('fn pass<T>(value : T) : T => value; pass(100)', 100);
 	});
 });
