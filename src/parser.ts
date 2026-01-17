@@ -3,7 +3,6 @@ import {
 	checkSingleCharOperator,
 	checkTwoCharOperator,
 	type ExecutionContext,
-	type VariableBinding,
 	extractTypeSuffix,
 	findTypeSuffixStart,
 	hasNegativeSign,
@@ -23,6 +22,11 @@ import {
 } from './helpers';
 import { evaluateStructInstantiation } from './structs';
 import { getFunctionDefinition, type FunctionDefinition } from './functions';
+import {
+	createCallContext,
+	extractFunctionCallExpression,
+	ReturnSignal,
+} from './function-call-utils';
 
 interface InterpretFunction {
 	(input: string, context: ExecutionContext): Result<number>;
@@ -37,25 +41,11 @@ interface ProcessVariableBindingsFunction {
 	(input: string, context: ExecutionContext): Result<ProcessVariableBindingsResult>;
 }
 
-/**
- * Represents a field access expression result.
- */
 interface FieldAccessExpression {
 	instanceExpr: string;
 	fieldName: string;
 }
 
-/**
- * Represents a parsed function call.
- */
-interface FunctionCallExpression {
-	functionName: string;
-	args: string[];
-}
-
-/**
- * Checks if literal looks like field access (struct instantiation or variable).
- */
 export function hasFieldAccess(literal: string): boolean {
 	const trimmed = literal.trim();
 	const dotIndex = trimmed.lastIndexOf('.');
@@ -63,16 +53,13 @@ export function hasFieldAccess(literal: string): boolean {
 		return false;
 	}
 
-	// Check if it's a simple variable access or struct instantiation access
 	const beforeDot = trimmed.substring(0, dotIndex);
 
-	// For struct instantiation: Wrapper { field : 100 }.field
 	const hasClosingBrace = beforeDot.includes('}');
 	if (hasClosingBrace) {
 		return true;
 	}
 
-	// For variable access: myVariable.field
 	return isVariableName(beforeDot.trim());
 }
 
@@ -246,94 +233,29 @@ function parseSimpleLiteral(
 	return undefined;
 }
 
-function splitArguments(argsStr: string): string[] {
-	const args: string[] = [];
-	let current = '';
-	let parenDepth = 0;
-	let braceDepth = 0;
-
-	for (let i = 0; i < argsStr.length; i++) {
-		const char = argsStr[i];
-		if (char === '(') {
-			parenDepth++;
-		} else if (char === ')') {
-			parenDepth--;
-		} else if (char === '{') {
-			braceDepth++;
-		} else if (char === '}') {
-			braceDepth--;
-		}
-
-		if (char === ',' && parenDepth === 0 && braceDepth === 0) {
-			args.push(current.trim());
-			current = '';
-			continue;
-		}
-
-		current += char;
-	}
-
-	const last = current.trim();
-	if (last.length > 0) {
-		args.push(last);
-	}
-
-	return args;
-}
-
-function extractFunctionCallExpression(literal: string): FunctionCallExpression | undefined {
-	const trimmed = literal.trim();
-	if (!trimmed.endsWith(')')) {
-		return undefined;
-	}
-
-	let depth = 0;
-	let openIndex = -1;
-	for (let i = trimmed.length - 1; i >= 0; i--) {
-		const char = trimmed[i];
-		if (char === ')') {
-			depth++;
-			continue;
-		}
-		if (char !== '(') {
-			continue;
-		}
-
-		depth--;
-		if (depth !== 0) {
-			continue;
-		}
-		openIndex = i;
-		break;
-	}
-
-	if (openIndex <= 0) {
-		return undefined;
-	}
-
-	const functionName = trimmed.substring(0, openIndex).trim();
-	if (!isVariableName(functionName)) {
-		return undefined;
-	}
-
-	const argsStr = trimmed.substring(openIndex + 1, trimmed.length - 1);
-	const args = splitArguments(argsStr);
-	return { functionName, args };
-}
-
-function createCallContext(
+function evaluateFunctionCallArguments(
 	def: FunctionDefinition,
-	argValues: number[],
-	outerContext: ExecutionContext,
-): ExecutionContext {
-	const paramNames = new Set<string>();
-	const paramBindings: VariableBinding[] = def.parameters.map((p, idx): VariableBinding => {
-		paramNames.add(p.name);
-		return { name: p.name, value: argValues[idx], isMutable: false };
-	});
+	args: string[],
+	context: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number[]> {
+	const values: number[] = [];
+	for (let i = 0; i < def.parameters.length; i++) {
+		const argResult = interpretInternal(args[i], context);
+		if (argResult.type === 'err') {
+			return argResult;
+		}
 
-	const outerBindings = outerContext.bindings.filter((b): boolean => !paramNames.has(b.name));
-	return { bindings: [...paramBindings, ...outerBindings] };
+		const param = def.parameters[i];
+		const typeCheck = validateValueForType(argResult.value, param.typeAnnotation);
+		if (typeCheck.type === 'err') {
+			return typeCheck;
+		}
+
+		values.push(argResult.value);
+	}
+
+	return ok(values);
 }
 
 function tryParseFunctionCall(
@@ -357,29 +279,31 @@ function tryParseFunctionCall(
 		);
 	}
 
-	const argValues: number[] = [];
-	for (let i = 0; i < def.parameters.length; i++) {
-		const argResult = interpretInternal(parsed.args[i], context);
-		if (argResult.type === 'err') {
-			return argResult;
-		}
-
-		const param = def.parameters[i];
-		const typeCheck = validateValueForType(argResult.value, param.typeAnnotation);
-		if (typeCheck.type === 'err') {
-			return typeCheck;
-		}
-
-		argValues.push(argResult.value);
+	const argValuesResult = evaluateFunctionCallArguments(
+		def,
+		parsed.args,
+		context,
+		interpretInternal,
+	);
+	if (argValuesResult.type === 'err') {
+		return argValuesResult;
 	}
 
-	const callContext = createCallContext(def, argValues, context);
-	const result = interpretInternal(def.bodyExpression, callContext);
-	if (result.type === 'err') {
-		return result;
+	const callContext = createCallContext(def, argValuesResult.value, context);
+	let bodyResult: Result<number>;
+	try {
+		bodyResult = interpretInternal(def.bodyExpression, callContext);
+	} catch (error) {
+		if (error instanceof ReturnSignal) {
+			return validateValueForType(error.value, def.returnType);
+		}
+		throw error;
+	}
+	if (bodyResult.type === 'err') {
+		return bodyResult;
 	}
 
-	return validateValueForType(result.value, def.returnType);
+	return validateValueForType(bodyResult.value, def.returnType);
 }
 
 /**
@@ -597,6 +521,48 @@ function parseIfElseExpression(
 	return interpretInternal(components.falseExprStr, context);
 }
 
+function handleReturnMarker(
+	trimmedRemaining: string,
+	newContext: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> | undefined {
+	if (!trimmedRemaining.startsWith('__RETURN__:')) {
+		return undefined;
+	}
+
+	const afterReturn = trimmedRemaining.substring(11);
+	const endMarkerIndex = afterReturn.indexOf(':__');
+	if (endMarkerIndex < 0) {
+		return undefined;
+	}
+
+	const returnExprStr = afterReturn.substring(0, endMarkerIndex);
+	const returnResult = interpretInternal(returnExprStr, newContext);
+	if (returnResult.type === 'err') {
+		return returnResult;
+	}
+	throw new ReturnSignal(returnResult.value);
+}
+
+function handleYieldMarker(
+	trimmedRemaining: string,
+	newContext: ExecutionContext,
+	interpretInternal: InterpretFunction,
+): Result<number> | undefined {
+	if (!trimmedRemaining.startsWith('__YIELD__:')) {
+		return undefined;
+	}
+
+	const afterYield = trimmedRemaining.substring(10);
+	const endMarkerIndex = afterYield.indexOf(':__');
+	if (endMarkerIndex < 0) {
+		return undefined;
+	}
+
+	const yieldExprStr = afterYield.substring(0, endMarkerIndex);
+	return interpretInternal(yieldExprStr, newContext);
+}
+
 /**
  * Parses a braced expression.
  * Requires processVariableBindings passed from statements module to avoid circular imports.
@@ -624,14 +590,14 @@ function parseBracedExpression(
 	const { context: newContext, remaining } = bindingsResult.value;
 	const trimmedRemaining = remaining.trim();
 
-	// Check if yield was encountered
-	if (trimmedRemaining.startsWith('__YIELD__:')) {
-		const afterYield = trimmedRemaining.substring(10); // Remove __YIELD__:
-		const endMarkerIndex = afterYield.indexOf(':__');
-		if (endMarkerIndex >= 0) {
-			const yieldExprStr = afterYield.substring(0, endMarkerIndex);
-			return interpretInternal(yieldExprStr, newContext);
-		}
+	const returnResult = handleReturnMarker(trimmedRemaining, newContext, interpretInternal);
+	if (returnResult !== undefined) {
+		return returnResult;
+	}
+
+	const yieldResult = handleYieldMarker(trimmedRemaining, newContext, interpretInternal);
+	if (yieldResult !== undefined) {
+		return yieldResult;
 	}
 
 	if (trimmedRemaining.length === 0) {

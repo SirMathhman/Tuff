@@ -332,6 +332,34 @@ function processYieldStatement(
 	return ok({ context, remaining: yieldMarker });
 }
 
+function isReturnStatement(input: string): boolean {
+	return input.trim().startsWith('return ');
+}
+
+function processReturnStatement(
+	input: string,
+	context: ExecutionContext,
+): Result<ContextAndRemaining> {
+	const trimmed = input.trim();
+	if (!trimmed.startsWith('return ')) {
+		return err('Not a return statement');
+	}
+
+	const afterReturn = trimmed.substring(7).trim();
+	const semiIndex = findSemicolonOutsideBrackets(afterReturn);
+	if (semiIndex < 0) {
+		return err('Return statement missing semicolon');
+	}
+
+	const expressionStr = afterReturn.substring(0, semiIndex).trim();
+	if (expressionStr.length === 0) {
+		return err('Return statement missing expression');
+	}
+
+	const returnMarker = `__RETURN__:${expressionStr}:__`;
+	return ok({ context, remaining: returnMarker });
+}
+
 /**
  * Processes a struct definition statement.
  */
@@ -408,6 +436,8 @@ export function processStatements(
 			result = processBracedBlock(remaining, currentContext);
 		} else if (isYieldStatement(trimmed)) {
 			result = processYieldStatement(remaining, currentContext);
+		} else if (isReturnStatement(trimmed)) {
+			result = processReturnStatement(remaining, currentContext);
 		} else if (isIfStatement(trimmed)) {
 			result = processIfStatement(remaining, currentContext);
 		} else if (isForStatement(trimmed)) {

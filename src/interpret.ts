@@ -1,8 +1,9 @@
 import { err, ok, type Result } from './result';
 import { processTopLevelStatements } from './statements';
 import { interpretInternal } from './evaluator';
-import { findClosingBrace } from './types';
+import { findClosingBrace, type VariableBinding } from './types';
 import { parseFunctionDefinition } from './functions';
+import { ReturnSignal } from './function-call-utils';
 
 function stripAfterIndex(s: string, idx: number): string {
 	let rem = s.substring(idx + 1).trim();
@@ -63,6 +64,16 @@ function isOnlyStructsOrBlocks(inputStr: string): boolean {
 	return true;
 }
 
+function handleNoRemainingExpression(input: string, bindings: VariableBinding[]): Result<number> {
+	// If top-level only contained struct declarations (or braced blocks containing
+	// only struct declarations) and there are no variable bindings, accept as 0.
+	if (bindings.length === 0 && isOnlyStructsOrBlocks(input.trim())) {
+		return ok(0);
+	}
+
+	return err('expression required after variable declarations');
+}
+
 /**
  * Interprets a mathematical expression with typed numeric literals and variable bindings.
  * Supports arithmetic operations, type annotations, variable declarations, and assignments.
@@ -70,23 +81,25 @@ function isOnlyStructsOrBlocks(inputStr: string): boolean {
  * @returns Result containing the evaluated number or an error message
  */
 export function interpret(input: string): Result<number> {
-	const result = processTopLevelStatements(input, { bindings: [] });
-	if (result.type === 'err') {
-		return result;
-	}
-
-	const trimmedRemaining = result.value.remaining.trim();
-	if (trimmedRemaining.length === 0) {
-		const trimmedInput = input.trim();
-
-		// If top-level only contained struct declarations (or braced blocks containing
-		// only struct declarations) and there are no variable bindings, accept as 0.
-		if (result.value.context.bindings.length === 0 && isOnlyStructsOrBlocks(trimmedInput)) {
-			return ok(0);
+	try {
+		const result = processTopLevelStatements(input, { bindings: [] });
+		if (result.type === 'err') {
+			return result;
 		}
 
-		return err('expression required after variable declarations');
-	}
+		const trimmedRemaining = result.value.remaining.trim();
+		if (trimmedRemaining.startsWith('__RETURN__:')) {
+			return err('Return statement not allowed outside of function');
+		}
+		if (trimmedRemaining.length === 0) {
+			return handleNoRemainingExpression(input, result.value.context.bindings);
+		}
 
-	return interpretInternal(trimmedRemaining, result.value.context);
+		return interpretInternal(trimmedRemaining, result.value.context);
+	} catch (error) {
+		if (error instanceof ReturnSignal) {
+			return err('Return statement not allowed outside of function');
+		}
+		throw error;
+	}
 }
