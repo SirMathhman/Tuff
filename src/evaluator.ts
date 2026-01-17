@@ -1,11 +1,11 @@
-import { err, ok, type Result } from './result';
+import { err, ok, type Result } from './common/result';
 import {
 	collectTypeSuffixes,
 	type ExecutionContext,
 	getTypeRangeMax,
 	type StatementsModule,
 	validateValueForType,
-} from './types';
+} from './common/types';
 import { parseLiteral, findOperator } from './parser';
 
 /**

@@ -1,7 +1,7 @@
-import { err, ok, type Result } from './result';
+import { err, ok, type Result } from './common/result';
 import { processTopLevelStatements } from './statements';
 import { interpretInternal } from './evaluator';
-import { findClosingBrace, type VariableBinding } from './types';
+import { findClosingBrace, type VariableBinding } from './common/types';
 import { parseFunctionDefinition } from './functions';
 import { ReturnSignal } from './function-call-utils';
 

@@ -1,11 +1,11 @@
-import { err, ok, type Result } from './result';
+import { err, ok, type Result } from './common/result';
 import {
 	findSemicolonOutsideBrackets,
 	isVariableName,
 	type ExecutionContext,
 	type ParsedBinding,
 	type VariableBinding,
-} from './types';
+} from './common/types';
 import { interpretInternal } from './evaluator';
 import { handleStructInstantiation } from './structs';
 

@@ -3,7 +3,7 @@ import {
 	checkTwoCharOperator,
 	type OperatorMatch,
 	type OperatorPrecedenceState,
-} from './types';
+} from './common/types';
 
 export { parseLiteral } from './literal-parser';
 

@@ -1,10 +1,10 @@
-import { err, ok, type Result } from './result';
+import { err, ok, type Result } from './common/result';
 import {
 	isVariableName,
 	findClosingBrace,
 	type ExecutionContext,
 	type ParsedBinding,
-} from './types';
+} from './common/types';
 import { interpretInternal } from './evaluator';
 
 /**

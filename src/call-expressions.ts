@@ -1,5 +1,5 @@
-import { err, ok, type Result } from './result';
-import { type ExecutionContext, isVariableName, validateValueForType } from './types';
+import { err, ok, type Result } from './common/result';
+import { type ExecutionContext, isVariableName, validateValueForType } from './common/types';
 import { getFunctionDefinition, type FunctionDefinition } from './functions';
 import {
 	createCallContext,

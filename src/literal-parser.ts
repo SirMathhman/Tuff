@@ -1,4 +1,4 @@
-import { err, ok, type Result } from './result';
+import { err, ok, type Result } from './common/result';
 import {
 	type ExecutionContext,
 	extractTypeSuffix,
@@ -10,12 +10,12 @@ import {
 	validateValueForType,
 	isMatchKeyword,
 	extractMatchExpression,
-} from './types';
+} from './common/types';
 import {
 	extractIfConditionAndAfter,
 	findElseKeywordIndex,
 	type IfConditionAndAfter,
-} from './helpers';
+} from './common/helpers';
 import { ReturnSignal } from './function-call-utils';
 import { tryParseCallExpression } from './call-expressions';
 import { tryParseFieldAccess } from './field-access';

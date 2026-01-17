@@ -1,4 +1,4 @@
-import { type ExecutionContext, type VariableBinding, isVariableName } from './types';
+import { type ExecutionContext, type VariableBinding, isVariableName } from './common/types';
 import { type FunctionDefinition } from './functions';
 
 export class ReturnSignal extends Error {

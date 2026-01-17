@@ -28,7 +28,7 @@ Tuff is a TypeScript interpreter for a small expression language: typed integer 
 - Tests: `pnpm test` (watch: `pnpm test:watch`, coverage: `pnpm test:coverage`). Tests live in `tests/interpret.test.ts` and typically assert via `Result` exhaustively.
 - Lint/format: `pnpm lint` and always prefer `pnpm lint:fix` when formatting fights you.
 - Duplication gate: `pnpm cpd` (PMD CPD, 50 tokens).
-- Husky runs checks on commit; leave the repo with a clean commit when you change behavior.
+- Husky runs checks on commit; leave the repo with a clean commit when you change behavior.A
 
 ## ESLint constraints that shape code structure
 

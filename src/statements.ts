@@ -1,4 +1,4 @@
-import { err, ok, type Result } from './result';
+import { err, ok, type Result } from './common/result';
 import {
 	type ContextAndRemaining,
 	type ExecutionContext,
@@ -13,7 +13,7 @@ import {
 	type ParsedBinding,
 	type ProcessedBindings,
 	type VariableBinding,
-} from './types';
+} from './common/types';
 import {
 	extractIfConditionAndAfter,
 	extractIfStatementBranches,
@@ -21,7 +21,7 @@ import {
 	parseVariableDeclarationHeader,
 	isIfStatement,
 	stripLeadingSemicolon,
-} from './helpers';
+} from './common/helpers';
 import { interpretInternal } from './evaluator';
 import { parseAssignment } from './assignments';
 import { processWhileStatement, processForStatement, isForStatement } from './loops';

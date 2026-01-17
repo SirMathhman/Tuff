@@ -1,5 +1,5 @@
-import { err, ok, type Result } from './result';
-import { type ExecutionContext, isBalancedBrackets, isVariableName } from './types';
+import { err, ok, type Result } from './common/result';
+import { type ExecutionContext, isBalancedBrackets, isVariableName } from './common/types';
 import { evaluateStructInstantiation } from './structs';
 
 interface InterpretFunction {

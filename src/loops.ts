@@ -1,4 +1,4 @@
-import { err, ok, type Result } from './result';
+import { err, ok, type Result } from './common/result';
 import {
 	findClosingBrace,
 	findClosingParen,
@@ -7,7 +7,7 @@ import {
 	type ExecutionContext,
 	isVariableName,
 	type VariableBinding,
-} from './types';
+} from './common/types';
 import { interpretInternal } from './evaluator';
 
 /**

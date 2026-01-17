@@ -10,6 +10,7 @@
 		"test:coverage": "jest --coverage",
 		"lint": "eslint .",
 		"lint:fix": "eslint . --fix",
+		"check-size": "node scripts/check-dir-size.js",
 		"prepare": "husky"
 	},
 	"keywords": [],

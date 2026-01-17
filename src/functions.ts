@@ -1,12 +1,12 @@
-import { err, ok, type Result } from './result';
+import { err, ok, type Result } from './common/result';
 import {
 	findClosingBrace,
 	findClosingParen,
 	findSemicolonOutsideBrackets,
 	getTypeRangeMax,
 	isVariableName,
-} from './types';
-import { stripLeadingSemicolon } from './helpers';
+} from './common/types';
+import { stripLeadingSemicolon } from './common/helpers';
 
 /**
  * Represents a single function parameter.

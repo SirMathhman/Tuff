@@ -1,4 +1,4 @@
-import { type Result } from '../src/result';
+import { type Result } from '../src/common/result';
 import { interpret } from '../src/interpret';
 import { clearStructRegistry } from '../src/structs';
 import { clearFunctionRegistry } from '../src/functions';
