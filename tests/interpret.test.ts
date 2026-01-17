@@ -1,37 +1,12 @@
-import { type Result } from '../src/common/result';
 import { interpret } from '../src/interpret';
 import { clearStructRegistry } from '../src/structs';
 import { clearFunctionRegistry } from '../src/functions';
-
-function expectOkValue(result: Result<number>, expected: number): void {
-	if (result.type === 'err') {
-		console.error('Expected ok but got err:', result.error);
-	}
-	expect(result.type).toBe('ok');
-	if (result.type === 'ok') {
-		expect(result.value).toBe(expected);
-	}
-}
-
-function expectErrContains(result: Result<number>, expectedSubstring: string): void {
-	if (result.type === 'err') {
-		expect(result.error).toContain(expectedSubstring);
-	}
-	expect(result.type).toBe('err');
-	if (result.type === 'ok') {
-		console.error('Expected err but got ok:', result.value);
-	}
-}
-
-function expectInterpretOk(input: string, expected: number): void {
-	const result = interpret(input);
-	expectOkValue(result, expected);
-}
-
-function expectInterpretErrContains(input: string, expectedSubstring: string): void {
-	const result = interpret(input);
-	expectErrContains(result, expectedSubstring);
-}
+import {
+	expectOkValue,
+	expectErrContains,
+	expectInterpretOk,
+	expectInterpretErrContains,
+} from '../src/testing/test-helpers';
 
 describe('interpret - literals and arithmetic', (): void => {
 	it('should interpret "100" as 100', (): void => {
