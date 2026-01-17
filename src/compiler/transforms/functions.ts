@@ -76,6 +76,10 @@ function decrementDepth(depth: number): number {
 	return depth;
 }
 
+function incrementDepth(depth: number): number {
+	return depth + 1;
+}
+
 function skipQuotedString(code: string, startIdx: number): number {
 	const quote = code[startIdx];
 	let i = startIdx + 1;
@@ -100,18 +104,22 @@ function findFunctionBodyEnd(code: string, startIdx: number): number {
 			i = skipQuotedString(code, i);
 			continue;
 		}
-
 		if (ch === '(') {
-			parenDepth += 1;
-		} else if (ch === ')') {
-			parenDepth -= 1;
-		} else if (ch === '{') {
-			braceDepth += 1;
-		} else if (ch === '}') {
+			parenDepth = incrementDepth(parenDepth);
+		}
+		if (ch === ')') {
+			parenDepth = decrementDepth(parenDepth);
+		}
+		if (ch === '{') {
+			braceDepth = incrementDepth(braceDepth);
+		}
+		if (ch === '}') {
 			braceDepth = decrementDepth(braceDepth);
-		} else if (ch === '[') {
-			bracketDepth += 1;
-		} else if (ch === ']') {
+		}
+		if (ch === '[') {
+			bracketDepth = incrementDepth(bracketDepth);
+		}
+		if (ch === ']') {
 			bracketDepth = decrementDepth(bracketDepth);
 		}
 
