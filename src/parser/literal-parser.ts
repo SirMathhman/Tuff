@@ -276,6 +276,10 @@ function applyScopedMutationsToContext(
 
 		copyBindingValues(outerBinding, updated);
 	}
+	// Propagate stdin state changes back to outer context
+	if (innerContext.stdinIndex !== undefined) {
+		outerContext.stdinIndex = innerContext.stdinIndex;
+	}
 }
 
 function tryHandleReturnWithScopedMutations(

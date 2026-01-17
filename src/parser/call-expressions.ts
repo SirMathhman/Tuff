@@ -412,6 +412,38 @@ function isMethodDefinition(def: FunctionDefinition): boolean {
 	return def.parameters.length > 0 && def.parameters[0].name === 'this';
 }
 
+function tryParseReadCall(literal: string, context: ExecutionContext): Result<number> | undefined {
+	const trimmed = literal.trim();
+	if (!trimmed.startsWith('read<') || !trimmed.endsWith('>()')) {
+		return undefined;
+	}
+
+	const typeStart = 5; // length of 'read<'
+	const typeEnd = trimmed.length - 3; // before '>()'
+	const typeAnnotation = trimmed.substring(typeStart, typeEnd);
+	if (typeAnnotation.length === 0) {
+		return undefined;
+	}
+
+	if (!context.stdinTokens || context.stdinIndex === undefined) {
+		return err('No stdin available for read call');
+	}
+
+	if (context.stdinIndex >= context.stdinTokens.length) {
+		return err('Insufficient stdin tokens for read call');
+	}
+
+	const token = context.stdinTokens[context.stdinIndex];
+	context.stdinIndex += 1;
+
+	const value = parseInt(token, 10);
+	if (isNaN(value)) {
+		return err(`Invalid stdin value: '${token}' is not a number`);
+	}
+
+	return validateValueForType(value, typeAnnotation);
+}
+
 function tryParseMethodCall(
 	literal: string,
 	context: ExecutionContext,
@@ -462,6 +494,11 @@ export function tryParseCallExpression(
 	context: ExecutionContext,
 	interpretInternal: InterpretFunction,
 ): Result<number> | undefined {
+	const readCallResult = tryParseReadCall(literal, context);
+	if (readCallResult !== undefined) {
+		return readCallResult;
+	}
+
 	const methodCallResult = tryParseMethodCall(literal, context, interpretInternal);
 	if (methodCallResult !== undefined) {
 		return methodCallResult;

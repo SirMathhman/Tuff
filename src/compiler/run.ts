@@ -17,6 +17,9 @@ function isExecError(e: unknown): e is ExecError {
 	if (typeof e !== 'object') {
 		return false;
 	}
+	if (!e) {
+		return false;
+	}
 	return hasStatusProperty(e);
 }
 
@@ -45,6 +48,11 @@ function cleanup(tempFile: string | undefined, tempDir: string | undefined): voi
  * @returns A Result containing the exit code of the executed process
  */
 export function run(input: string, stdin: string): Result<number> {
+	// DO NOT CHANGE THIS. COMPILE MUST BE THE FIRST CALL.
+	// THIS BEATS THE POINT OF THIS FUNCTION.
+	// DO NOT FALLBACK TO THE INTERPRETER, but you can reuse code from it.
+
+	// Otherwise, use the compiled JavaScript approach
 	const compileResult = compile(input);
 	if (compileResult.type === 'err') {
 		return compileResult;

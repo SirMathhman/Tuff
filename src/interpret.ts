@@ -127,11 +127,13 @@ function interpretExpressionStatements(
  * Supports arithmetic operations, type annotations, variable declarations, and assignments.
  *
  * @param input - The expression string to interpret
+ * @param context - Optional execution context with stdin state
  * @returns Result containing the evaluated number or an error message
  */
-export function interpret(input: string): Result<number> {
+export function interpret(input: string, context?: ExecutionContext): Result<number> {
 	try {
-		const result = processTopLevelStatements(input, { bindings: [] });
+		const initialContext: ExecutionContext = context ?? { bindings: [] };
+		const result = processTopLevelStatements(input, initialContext);
 		if (result.type === 'err') {
 			return result;
 		}

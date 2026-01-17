@@ -95,9 +95,17 @@ export interface PointerValue {
 	isMutable: boolean;
 }
 
+/**
+ * Represents a single function parameter with name and type.
+ */
+export interface LocalFunctionParameter {
+	name: string;
+	typeAnnotation: string;
+}
+
 export interface LocalFunctionDefinition {
 	name: string;
-	parameters: import('./local-function-parameter').LocalFunctionParameter[];
+	parameters: LocalFunctionParameter[];
 	returnType: string;
 	bodyExpression: string;
 }
@@ -132,6 +140,8 @@ export interface VariableBinding {
  */
 export interface ExecutionContext {
 	bindings: VariableBinding[];
+	stdinTokens?: string[];
+	stdinIndex?: number;
 }
 
 /**
@@ -309,48 +319,27 @@ export function extractTypeSuffix(input: string, suffixStart: number): string {
  * @returns Result containing the value or an error message
  */
 export function validateValueForType(value: number, typeSuffix: string): Result<number> {
-	if (typeSuffix === 'Bool') {
-		if (value !== 0 && value !== 1) {
-			return err(`Value ${value} is out of range for Bool (0-1)`);
-		}
+	if (typeSuffix === 'Bool' && value !== 0 && value !== 1) {
+		return err(`Value ${value} is out of range for Bool (0-1)`);
 	}
-
-	if (typeSuffix === 'U8') {
-		if (value < 0 || value > 255) {
-			return err(`Value ${value} is out of range for U8 (0-255)`);
-		}
+	if (typeSuffix === 'U8' && (value < 0 || value > 255)) {
+		return err(`Value ${value} is out of range for U8 (0-255)`);
 	}
-
-	if (typeSuffix === 'U16') {
-		if (value < 0 || value > 65535) {
-			return err(`Value ${value} is out of range for U16 (0-65535)`);
-		}
+	if (typeSuffix === 'U16' && (value < 0 || value > 65535)) {
+		return err(`Value ${value} is out of range for U16 (0-65535)`);
 	}
-
-	if (typeSuffix === 'I8') {
-		if (value < -128 || value > 127) {
-			return err(`Value ${value} is out of range for I8 (-128-127)`);
-		}
+	if (typeSuffix === 'I8' && (value < -128 || value > 127)) {
+		return err(`Value ${value} is out of range for I8 (-128-127)`);
 	}
-
-	if (typeSuffix === 'I32') {
-		if (value < -2147483648 || value > 2147483647) {
-			return err(`Value ${value} is out of range for I32 (-2147483648-2147483647)`);
-		}
+	if (typeSuffix === 'I32' && (value < -2147483648 || value > 2147483647)) {
+		return err(`Value ${value} is out of range for I32 (-2147483648-2147483647)`);
 	}
-
-	if (typeSuffix === 'U32') {
-		if (value < 0 || value > 4294967295) {
-			return err(`Value ${value} is out of range for U32 (0-4294967295)`);
-		}
+	if (typeSuffix === 'U32' && (value < 0 || value > 4294967295)) {
+		return err(`Value ${value} is out of range for U32 (0-4294967295)`);
 	}
-
-	if (typeSuffix === 'I16') {
-		if (value < -32768 || value > 32767) {
-			return err(`Value ${value} is out of range for I16 (-32768-32767)`);
-		}
+	if (typeSuffix === 'I16' && (value < -32768 || value > 32767)) {
+		return err(`Value ${value} is out of range for I16 (-32768-32767)`);
 	}
-
 	return ok(value);
 }
 
@@ -481,40 +470,28 @@ export function findSemicolonOutsideBrackets(input: string): number {
  * @returns The maximum value for the type, or 0 if type is unknown
  */
 export function getTypeRangeMax(typeSuffix: string): number {
-	if (typeSuffix === 'Void') {
-		// Void is a special "no value" type used mainly for function return types.
-		// Treat it as a known type by giving it a non-zero sentinel range.
+	// Void is a special "no value" type used mainly for function return types.
+	if (typeSuffix === 'Void' || typeSuffix === 'Bool') {
 		return 1;
 	}
-
-	if (typeSuffix === 'Bool') {
-		return 1;
-	}
-
 	if (typeSuffix === 'U8') {
 		return 255;
 	}
-
 	if (typeSuffix === 'U16') {
 		return 65535;
 	}
-
 	if (typeSuffix === 'I8') {
 		return 127;
 	}
-
 	if (typeSuffix === 'I16') {
 		return 32767;
 	}
-
 	if (typeSuffix === 'U32') {
 		return 4294967295;
 	}
-
 	if (typeSuffix === 'I32') {
 		return 2147483647;
 	}
-
 	return 0;
 }
 

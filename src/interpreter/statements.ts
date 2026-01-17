@@ -320,7 +320,7 @@ function evaluateValueExpression(
 	remaining: string,
 	typeAnnotation: string | undefined,
 	context: ExecutionContext,
-): Result<ParsedBinding> | undefined {
+): Result<ParsedBinding> | Result<number> | undefined {
 	const valueResult = interpretInternal(valueStr, context);
 	if (valueResult.type === 'err' && typeAnnotation === undefined) {
 		return tryParseImplicitStructBinding(varName, isMutable, valueStr, remaining, context);
@@ -328,7 +328,8 @@ function evaluateValueExpression(
 	if (valueResult.type === 'err') {
 		return valueResult;
 	}
-	return undefined;
+	// Return the successful value result so caller doesn't evaluate again
+	return valueResult;
 }
 
 function createBindingFromValue(
@@ -378,6 +379,13 @@ function tryHandleTypeSpecificBinding(
 	);
 }
 
+function isValueResult(result: Result<ParsedBinding> | Result<number>): result is Result<number> {
+	if (result.type === 'err') {
+		return false;
+	}
+	return typeof result.value === 'number';
+}
+
 function evaluateAndCreateBinding(
 	varName: string,
 	isMutable: boolean,
@@ -386,7 +394,7 @@ function evaluateAndCreateBinding(
 	remaining: string,
 	context: ExecutionContext,
 ): Result<ParsedBinding> {
-	const earlyResult = evaluateValueExpression(
+	const evalResult = evaluateValueExpression(
 		valueStr,
 		varName,
 		isMutable,
@@ -394,20 +402,28 @@ function evaluateAndCreateBinding(
 		typeAnnotation,
 		context,
 	);
-	if (earlyResult !== undefined) {
-		return earlyResult;
+
+	// If undefined, expression failed without a result - shouldn't happen now
+	if (evalResult === undefined) {
+		return err('Internal error: no evaluation result');
 	}
 
-	const valueResult = interpretInternal(valueStr, context);
-	if (valueResult.type === 'err') {
-		return valueResult;
+	// If it's an error, return it
+	if (evalResult.type === 'err') {
+		return evalResult;
 	}
 
+	// If it's a ParsedBinding (from tryParseImplicitStructBinding), return it
+	if (!isValueResult(evalResult)) {
+		return evalResult;
+	}
+
+	// It's a successful number value, create the binding
 	return createBindingFromValue(
 		varName,
 		isMutable,
 		remaining,
-		valueResult.value,
+		evalResult.value,
 		typeAnnotation,
 		context,
 	);
@@ -643,8 +659,10 @@ function handleDestructuredFields(
 		});
 	}
 
-	const newContext = {
+	const newContext: ExecutionContext = {
 		bindings: [...context.bindings, ...newBindings],
+		stdinTokens: context.stdinTokens,
+		stdinIndex: context.stdinIndex,
 	};
 	return ok({ context: newContext, remaining });
 }
@@ -703,8 +721,10 @@ function processLetDeclaration(
 	}
 
 	const newBinding = createVariableBinding(parsed);
-	const newContext = {
+	const newContext: ExecutionContext = {
 		bindings: [...context.bindings, newBinding],
+		stdinTokens: context.stdinTokens,
+		stdinIndex: context.stdinIndex,
 	};
 	return ok({ context: newContext, remaining: parsed.remaining });
 }
@@ -737,7 +757,11 @@ function handlePointerAssignment(
 		}
 		return binding;
 	});
-	const newContext = { bindings: updatedBindings };
+	const newContext: ExecutionContext = {
+		bindings: updatedBindings,
+		stdinTokens: context.stdinTokens,
+		stdinIndex: context.stdinIndex,
+	};
 	return ok({ context: newContext, remaining: pointerAssign.remaining });
 }
 
@@ -756,7 +780,11 @@ function handleVariableAssignment(
 
 	// Handle array element assignment
 	if (arrayAssignmentUpdatedBindings !== undefined) {
-		const newContext = { bindings: arrayAssignmentUpdatedBindings };
+		const newContext: ExecutionContext = {
+			bindings: arrayAssignmentUpdatedBindings,
+			stdinTokens: context.stdinTokens,
+			stdinIndex: context.stdinIndex,
+		};
 		return ok({ context: newContext, remaining });
 	}
 
@@ -771,7 +799,11 @@ function handleVariableAssignment(
 		return binding;
 	});
 
-	const newContext = { bindings: updatedBindings };
+	const newContext: ExecutionContext = {
+		bindings: updatedBindings,
+		stdinTokens: context.stdinTokens,
+		stdinIndex: context.stdinIndex,
+	};
 	return ok({ context: newContext, remaining });
 }
 
@@ -825,6 +857,8 @@ function createScopedContext(
 			);
 			return updated ?? outerBinding;
 		}),
+		stdinTokens: innerContext.stdinTokens ?? outerContext.stdinTokens,
+		stdinIndex: innerContext.stdinIndex ?? outerContext.stdinIndex,
 	};
 }
 /**
@@ -1011,8 +1045,10 @@ function processFunctionStatement(
 		),
 	};
 
-	const newContext = {
+	const newContext: ExecutionContext = {
 		bindings: [...context.bindings, refBinding],
+		stdinTokens: context.stdinTokens,
+		stdinIndex: context.stdinIndex,
 	};
 
 	return ok({ context: newContext, remaining: parsed.value.remaining });

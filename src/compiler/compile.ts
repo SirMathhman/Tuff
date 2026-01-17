@@ -1,4 +1,5 @@
 import { ok, type Result } from '../common/result';
+import { compileBracedExpressionsToIife, stripLetTypeAnnotations } from './block-expressions';
 
 /**
  * Converts Tuff type annotation to JavaScript code for parsing stdin.
@@ -21,7 +22,7 @@ function compileReadFunction(typeAnnotation: string): string {
  * @returns A Result containing the compiled JavaScript code or an error
  */
 export function compile(input: string): Result<string> {
-	let jsCode = input;
+	let jsCode = compileBracedExpressionsToIife(stripLetTypeAnnotations(input));
 
 	// Replace read<T>() calls with JavaScript code to read from stdin
 	const readStart = 'read<';
