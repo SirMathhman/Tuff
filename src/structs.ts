@@ -1,5 +1,11 @@
 import { err, ok, type Result } from './result';
-import { isVariableName, findClosingBrace } from './types';
+import {
+	isVariableName,
+	findClosingBrace,
+	type ExecutionContext,
+	type ParsedBinding,
+} from './types';
+import { interpretInternal } from './evaluator';
 
 /**
  * Represents a struct field definition.
@@ -303,4 +309,39 @@ export function evaluateStructInstantiation(
 	}
 
 	return ok({ structType: typeName, fieldValues });
+}
+
+/**
+ * Common logic for parsing a struct instantiation into a ParsedBinding.
+ */
+export function handleStructInstantiation(
+	varName: string,
+	isMutable: boolean,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> | undefined {
+	if (!looksLikeStructInstantiation(valueStr)) {
+		return undefined;
+	}
+
+	const instantRes = evaluateStructInstantiation(
+		valueStr,
+		(expr): Result<number> => interpretInternal(expr, context),
+	);
+
+	if (instantRes.type === 'err') {
+		return instantRes;
+	}
+
+	return ok({
+		name: varName,
+		value: undefined,
+		isMutable,
+		remaining,
+		structValue: {
+			structType: instantRes.value.structType,
+			values: instantRes.value.fieldValues,
+		},
+	});
 }

@@ -326,23 +326,36 @@ export function isBalancedBrackets(input: string): boolean {
 }
 
 /**
- * Finds the index of a semicolon that is not inside brackets.
+ * Finds the index of a character that is not inside brackets.
  * @param input - The input string
- * @returns The index of the first semicolon outside brackets, or -1 if not found
+ * @param targetChar - The character to search for
+ * @returns The index of the first occurrence outside brackets, or -1 if not found
  */
-export function findSemicolonOutsideBrackets(input: string): number {
+export function findCharOutsideBrackets(input: string, targetChar: string): number {
 	let bracketDepth = 0;
+	let parenDepth = 0;
 	for (let i = 0; i < input.length; i++) {
 		const char = input[i];
-		if (char === '(' || char === '{') {
+		if (char === '(') {
+			parenDepth++;
+		} else if (char === ')') {
+			parenDepth--;
+		} else if (char === '{') {
 			bracketDepth++;
-		} else if (char === ')' || char === '}') {
+		} else if (char === '}') {
 			bracketDepth--;
-		} else if (char === ';' && bracketDepth === 0) {
+		} else if (char === targetChar && bracketDepth === 0 && parenDepth === 0) {
 			return i;
 		}
 	}
 	return -1;
+}
+
+/**
+ * Finds the index of a semicolon that is not inside brackets.
+ */
+export function findSemicolonOutsideBrackets(input: string): number {
+	return findCharOutsideBrackets(input, ';');
 }
 
 /**

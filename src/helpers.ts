@@ -7,6 +7,7 @@ import {
 	findClosingParen,
 	findSemicolonOutsideBrackets,
 	isVariableName,
+	findCharOutsideBrackets,
 } from './types';
 
 /**
@@ -215,14 +216,14 @@ export function extractRemainingFromStatement(statementStr: string): string {
  * Parses the type annotation and assignment part after a colon.
  */
 export function parseTypeAnnotationPart(afterColon: string): TypeAnnotationParts {
-	const semiIndex = afterColon.indexOf(';');
+	const semiIndex = findSemicolonOutsideBrackets(afterColon);
 	let searchForEqual: string;
 	if (semiIndex >= 0) {
 		searchForEqual = afterColon.substring(0, semiIndex);
 	} else {
 		searchForEqual = afterColon;
 	}
-	const equalIndex = searchForEqual.indexOf('=');
+	const equalIndex = findCharOutsideBrackets(searchForEqual, '=');
 
 	if (equalIndex >= 0) {
 		const typeAnnotation = searchForEqual.substring(0, equalIndex).trim();
@@ -251,7 +252,7 @@ export function parseVariableDeclarationHeader(
 		remaining = withoutLet.substring(4).trim();
 	}
 
-	const colonIndex = remaining.indexOf(':');
+	const colonIndex = findCharOutsideBrackets(remaining, ':');
 	let varName: string;
 	let typeAnnotation: string | undefined;
 	let afterTypeOrName: string;
@@ -263,7 +264,7 @@ export function parseVariableDeclarationHeader(
 		typeAnnotation = parts.typeAnnotation;
 		afterTypeOrName = parts.afterTypeOrName;
 	} else {
-		const equalIndex = remaining.indexOf('=');
+		const equalIndex = findCharOutsideBrackets(remaining, '=');
 		if (equalIndex >= 0) {
 			varName = remaining.substring(0, equalIndex).trim();
 			afterTypeOrName = remaining.substring(equalIndex);

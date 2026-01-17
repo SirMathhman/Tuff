@@ -29,7 +29,7 @@ import {
 	parseStructDefinition,
 	registerStructDefinition,
 	isStructType,
-	evaluateStructInstantiation,
+	handleStructInstantiation,
 } from './structs';
 
 /**
@@ -43,29 +43,87 @@ function parseStructTypeBinding(
 	remaining: string,
 	context: ExecutionContext,
 ): Result<ParsedBinding> {
-	const instantResult = evaluateStructInstantiation(
-		valueStr,
-		(expr): Result<number> => interpretInternal(expr, context),
-	);
-	if (instantResult.type === 'err') {
-		return instantResult;
+	const res = handleStructInstantiation(varName, isMutable, valueStr, remaining, context);
+	if (res === undefined) {
+		return err(`Expected ${typeAnnotation} instantiation`);
 	}
-	if (instantResult.value.structType !== typeAnnotation) {
-		return err(
-			`Struct type mismatch: expected '${typeAnnotation}', got '${instantResult.value.structType}'`,
-		);
+	if (res.type === 'ok' && res.value.structValue?.structType !== typeAnnotation) {
+		return err(`Type mismatch: expected ${typeAnnotation}, got ${res.value.structValue?.structType}`);
+	}
+	return res;
+}
+
+/**
+ * Attempts to parse an implicit struct binding.
+ */
+function tryParseImplicitStructBinding(
+	varName: string,
+	isMutable: boolean,
+	valueStr: string,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> | undefined {
+	return handleStructInstantiation(varName, isMutable, valueStr, remaining, context);
+}
+
+/**
+ * Handles an uninitialized variable declaration.
+ */
+function handleUninitializedDeclaration(
+	varName: string,
+	isMutable: boolean,
+	withoutLet: string,
+): Result<ParsedBinding> {
+	const semiIndex = findSemicolonOutsideBrackets(withoutLet);
+	if (semiIndex < 0) {
+		return err('Variable declaration missing semicolon');
+	}
+	const remaining = withoutLet.substring(semiIndex + 1).trim();
+	return ok({ name: varName, value: undefined, isMutable, remaining });
+}
+
+/**
+ * Handles processing variable binding with value and semicolon.
+ */
+function handleValueBinding(
+	varName: string,
+	isMutable: boolean,
+	typeAnnotation: string | undefined,
+	afterTypeOrName: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> {
+	const withoutEqual = afterTypeOrName.substring(1).trim();
+	const semiIndex = findSemicolonOutsideBrackets(withoutEqual);
+	if (semiIndex < 0) {
+		return err('Variable declaration missing semicolon');
 	}
 
-	return ok({
-		name: varName,
-		value: undefined,
-		isMutable,
-		remaining,
-		structValue: {
-			structType: instantResult.value.structType,
-			values: instantResult.value.fieldValues,
-		},
-	});
+	const valueStr = withoutEqual.substring(0, semiIndex).trim();
+	const remaining = withoutEqual.substring(semiIndex + 1).trim();
+
+	if (typeAnnotation !== undefined && isStructType(typeAnnotation)) {
+		return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
+	}
+
+	const valueResult = interpretInternal(valueStr, context);
+	if (valueResult.type === 'err' && typeAnnotation === undefined) {
+		const res = tryParseImplicitStructBinding(varName, isMutable, valueStr, remaining, context);
+		if (res !== undefined) {
+			return res;
+		}
+	}
+
+	if (valueResult.type === 'err') {
+		return valueResult;
+	}
+
+	if (typeAnnotation !== undefined) {
+		const typeValidation = validateValueForType(valueResult.value, typeAnnotation);
+		if (typeValidation.type === 'err') {
+			return typeValidation;
+		}
+	}
+	return ok({ name: varName, value: valueResult.value, isMutable, remaining });
 }
 
 /**
@@ -86,39 +144,10 @@ function parseVariableBinding(input: string, context: ExecutionContext): Result<
 	const { varName, isMutable, typeAnnotation, afterTypeOrName } = headerResult.value;
 
 	if (afterTypeOrName.length === 0) {
-		const semiIndex = findSemicolonOutsideBrackets(withoutLet);
-		if (semiIndex < 0) {
-			return err('Variable declaration missing semicolon');
-		}
-		const remaining = withoutLet.substring(semiIndex + 1).trim();
-		return ok({ name: varName, value: undefined, isMutable, remaining });
+		return handleUninitializedDeclaration(varName, isMutable, withoutLet);
 	}
 
-	const withoutEqual = afterTypeOrName.substring(1).trim();
-	const semiIndex = findSemicolonOutsideBrackets(withoutEqual);
-	if (semiIndex < 0) {
-		return err('Variable declaration missing semicolon');
-	}
-
-	const valueStr = withoutEqual.substring(0, semiIndex).trim();
-	const remaining = withoutEqual.substring(semiIndex + 1).trim();
-
-	// Check if this is a struct type annotation
-	if (typeAnnotation !== undefined && isStructType(typeAnnotation)) {
-		return parseStructTypeBinding(varName, isMutable, typeAnnotation, valueStr, remaining, context);
-	}
-
-	const valueResult = interpretInternal(valueStr, context);
-	if (valueResult.type === 'err') {
-		return valueResult;
-	}
-	if (typeAnnotation !== undefined) {
-		const typeValidation = validateValueForType(valueResult.value, typeAnnotation);
-		if (typeValidation.type === 'err') {
-			return typeValidation;
-		}
-	}
-	return ok({ name: varName, value: valueResult.value, isMutable, remaining });
+	return handleValueBinding(varName, isMutable, typeAnnotation, afterTypeOrName, context);
 }
 /**
  * Processes a let declaration statement.
@@ -160,10 +189,14 @@ function processAssignmentStatement(
 		return assignResult;
 	}
 
-	const { name, value } = assignResult.value;
+	const { name, value, structValue } = assignResult.value;
 	const updatedBindings = context.bindings.map((binding): VariableBinding => {
 		if (binding.name === name) {
-			return { name, value, isMutable: binding.isMutable };
+			const updated: VariableBinding = { name, value, isMutable: binding.isMutable };
+			if (structValue !== undefined) {
+				updated.structValue = structValue;
+			}
+			return updated;
 		}
 		return binding;
 	});

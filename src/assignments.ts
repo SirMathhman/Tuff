@@ -7,6 +7,7 @@ import {
 	type VariableBinding,
 } from './types';
 import { interpretInternal } from './evaluator';
+import { handleStructInstantiation } from './structs';
 
 /**
  * Detects compound assignment operators (+=, -=, *=, /=, ||=, &&=).
@@ -152,6 +153,19 @@ function buildValueString(
 }
 
 /**
+ * Attempts to parse a struct instantiation assignment.
+ */
+function tryParseStructAssignment(
+	valueStr: string,
+	varName: string,
+	isMutable: boolean,
+	remaining: string,
+	context: ExecutionContext,
+): Result<ParsedBinding> | undefined {
+	return handleStructInstantiation(varName, isMutable, valueStr, remaining, context);
+}
+
+/**
  * Parses a variable assignment statement.
  * @param input - The assignment statement string
  * @param context - The execution context with variable bindings
@@ -185,6 +199,20 @@ export function parseAssignment(input: string, context: ExecutionContext): Resul
 	}
 
 	const valueStr = buildValueString(statementStr, equalIndex, operator, varName);
+
+	if (operator === undefined) {
+		const structAssign = tryParseStructAssignment(
+			valueStr,
+			varName,
+			varBinding.isMutable,
+			remaining,
+			context,
+		);
+		if (structAssign !== undefined) {
+			return structAssign;
+		}
+	}
+
 	const valueResult = interpretInternal(valueStr, context);
 	if (valueResult.type === 'err') {
 		return valueResult;

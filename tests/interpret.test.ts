@@ -435,6 +435,15 @@ describe('interpret - struct definitions and field access', (): void => {
 			17,
 		);
 	});
+	it('should interpret "struct Wrapper { field : I32 } let myWrapper = Wrapper { field : 100 }; myWrapper.field" as 100', (): void => {
+		expectInterpretOk(
+			'struct Wrapper { field : I32 } let myWrapper = Wrapper { field : 100 }; myWrapper.field',
+			100,
+		);
+	});
+	it('should interpret struct reassignments', (): void => {
+		expectInterpretOk('struct S { v : I32 } let mut s = S { v : 10 }; s = S { v : 20 }; s.v', 20);
+	});
 	it('should interpret struct variable in expressions', (): void => {
 		expectInterpretOk('struct S { val : I32 } let s : S = S { val : 8 }; s.val * 3', 24);
 	});

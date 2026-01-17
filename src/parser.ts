@@ -371,6 +371,10 @@ function parseNumberLiteral(trimmed: string): Result<number> {
 	}
 
 	const value = Number.parseInt(numberPart, 10);
+	if (Number.isNaN(value)) {
+		return err(`Invalid number literal: ${trimmed}`);
+	}
+
 	if (suffixStart >= 0) {
 		const typeSuffix = extractTypeSuffix(trimmed, suffixStart);
 		return validateValueForType(value, typeSuffix);
