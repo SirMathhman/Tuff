@@ -8,11 +8,14 @@ import { type Result, err, ok } from '../common/result';
 interface ExecError {
 	status: number;
 	stdout?: string;
+	stderr?: string;
+	message?: string;
 }
 
 interface ExecutionResult {
 	output: string;
 	exitCode: number;
+	errorOutput?: string;
 }
 
 function hasStatusProperty(e: object): e is ExecError {
@@ -49,12 +52,13 @@ function cleanup(tempFile: string | undefined, tempDir: string | undefined): voi
 function executeNode(tempFile: string, stdin: string): ExecutionResult {
 	let output: string;
 	let exitCode = 0;
+	let errorOutput: string | undefined;
 
 	const env = process.env;
 	env.NODE_NO_COLORS = '1';
 
 	const execOptions: ExecSyncOptionsWithStringEncoding = {
-		stdio: ['pipe', 'pipe', 'inherit'],
+		stdio: ['pipe', 'pipe', 'pipe'], // capture stdout and stderr
 		cwd: process.cwd(),
 		input: stdin,
 		encoding: 'utf8',
@@ -67,12 +71,13 @@ function executeNode(tempFile: string, stdin: string): ExecutionResult {
 		if (isExecError(execError)) {
 			exitCode = execError.status;
 			output = execError.stdout ?? '';
+			errorOutput = execError.stderr ?? execError.message;
 		} else {
 			throw execError;
 		}
 	}
 
-	return { output, exitCode };
+	return { output, exitCode, errorOutput };
 }
 
 function isAnsiEscape(text: string, pos: number): boolean {
@@ -152,7 +157,23 @@ export function run(input: string, stdin: string): Result<number> {
 		tempFile = join(tempDir, 'compiled.js');
 		writeFileSync(tempFile, jsCode, 'utf8');
 
-		const { output } = executeNode(tempFile, stdin);
+		const { output, exitCode, errorOutput } = executeNode(tempFile, stdin);
+
+		// If there's an error (non-zero exit code), return the error message
+		if (exitCode !== 0 && errorOutput !== undefined) {
+			// Extract the error message from the error output
+			const lines = errorOutput.split('\n');
+			for (const line of lines) {
+				if (line.includes('Error:')) {
+					const match = line.match(/Error:\s*(.+)/);
+					if (match) {
+						return err(match[1]);
+					}
+				}
+			}
+			return err(errorOutput);
+		}
+
 		return parseExecutionOutput(output);
 	} catch (e: unknown) {
 		if (e instanceof Error) {

@@ -114,6 +114,420 @@ function stripTypeSuffixes(code: string): string {
 	return result;
 }
 
+function replaceBooleans(code: string): string {
+	let result = '';
+	let i = 0;
+
+	while (i < code.length) {
+		// Check for 'true' keyword
+		if (isKeywordAt(code, i, 'true')) {
+			result += '1';
+			i += 4;
+			continue;
+		}
+
+		// Check for 'false' keyword
+		if (isKeywordAt(code, i, 'false')) {
+			result += '0';
+			i += 5;
+			continue;
+		}
+
+		result += code[i];
+		i++;
+	}
+
+	return result;
+}
+
+function isKeywordAt(code: string, idx: number, keyword: string): boolean {
+	if (idx + keyword.length > code.length) {
+		return false;
+	}
+	if (code.substring(idx, idx + keyword.length) !== keyword) {
+		return false;
+	}
+
+	// Check boundaries
+	const before = idx > 0 ? code[idx - 1] : undefined;
+	const after = idx + keyword.length < code.length ? code[idx + keyword.length] : undefined;
+
+	const isIdentChar = (ch: string | undefined): boolean => {
+		if (ch === undefined) {
+			return false;
+		}
+		return (
+			(ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch === '_'
+		);
+	};
+
+	if (before !== undefined && isIdentChar(before)) {
+		return false;
+	}
+	if (after !== undefined && isIdentChar(after)) {
+		return false;
+	}
+
+	return true;
+}
+
+function findMatchingParen(code: string, openIdx: number): number {
+	let depth = 1;
+	let i = openIdx + 1;
+	while (i < code.length && depth > 0) {
+		if (code[i] === '(') {
+			depth++;
+		} else if (code[i] === ')') {
+			depth--;
+		}
+		if (depth === 0) {
+			return i;
+		}
+		i++;
+	}
+	return -1;
+}
+
+function findElseKeyword(code: string, startIdx: number): number {
+	let depth = 0;
+	let i = startIdx;
+
+	while (i < code.length) {
+		if (code[i] === '(') {
+			depth++;
+		} else if (code[i] === ')') {
+			depth--;
+		} else if (code[i] === '{') {
+			depth++;
+		} else if (code[i] === '}') {
+			depth--;
+		}
+
+		if (depth === 0 && isKeywordAt(code, i, 'else')) {
+			return i;
+		}
+
+		i++;
+	}
+
+	return -1;
+}
+
+interface IfParts {
+	condition: string;
+	thenBranch: string;
+	elseBranch: string;
+	endIdx: number;
+}
+
+function parseIfExpression(code: string, ifIdx: number): IfParts | undefined {
+	// Skip 'if'
+	let i = ifIdx + 2;
+
+	// Skip whitespace
+	while (i < code.length && (code[i] === ' ' || code[i] === '\t' || code[i] === '\n')) {
+		i++;
+	}
+
+	// Expect '('
+	if (i >= code.length || code[i] !== '(') {
+		return undefined;
+	}
+
+	const condStart = i + 1;
+	const condEnd = findMatchingParen(code, i);
+	if (condEnd === -1) {
+		return undefined;
+	}
+
+	const condition = code.substring(condStart, condEnd);
+	i = condEnd + 1;
+
+	// Skip whitespace
+	while (i < code.length && (code[i] === ' ' || code[i] === '\t' || code[i] === '\n')) {
+		i++;
+	}
+
+	// Parse then branch (can be a block or expression)
+	const thenStart = i;
+	let thenEnd = i;
+
+	if (code[i] === '{') {
+		// Block - find matching }
+		let depth = 1;
+		i++;
+		while (i < code.length && depth > 0) {
+			if (code[i] === '{') {
+				depth++;
+			} else if (code[i] === '}') {
+				depth--;
+			}
+			i++;
+		}
+		thenEnd = i;
+	} else {
+		// Expression - find 'else' keyword
+		const elseIdx = findElseKeyword(code, i);
+		if (elseIdx === -1) {
+			return undefined;
+		}
+		thenEnd = elseIdx;
+		i = elseIdx;
+	}
+
+	const thenBranch = code.substring(thenStart, thenEnd).trim();
+
+	// Skip 'else'
+	if (!isKeywordAt(code, i, 'else')) {
+		return undefined;
+	}
+	i += 4;
+
+	// Skip whitespace
+	while (i < code.length && (code[i] === ' ' || code[i] === '\t' || code[i] === '\n')) {
+		i++;
+	}
+
+	// Parse else branch
+	const elseStart = i;
+	let elseEnd = i;
+
+	if (code[i] === '{') {
+		// Block - find matching }
+		let depth = 1;
+		i++;
+		while (i < code.length && depth > 0) {
+			if (code[i] === '{') {
+				depth++;
+			} else if (code[i] === '}') {
+				depth--;
+			}
+			i++;
+		}
+		elseEnd = i;
+	} else if (isKeywordAt(code, i, 'if')) {
+		// Nested if-else - recursively parse it
+		const nested = parseIfExpression(code, i);
+		if (nested === undefined) {
+			return undefined;
+		}
+		elseEnd = nested.endIdx;
+		i = elseEnd;
+	} else {
+		// Expression - find end (semicolon, closing brace, or end of code)
+		// For simplicity, consume until we hit a character that suggests end of expression
+		while (i < code.length) {
+			const ch = code[i];
+			if (ch === ';' || ch === '}' || ch === ')') {
+				break;
+			}
+			i++;
+		}
+		elseEnd = i;
+	}
+
+	const elseBranch = code.substring(elseStart, elseEnd).trim();
+
+	return {
+		condition,
+		thenBranch,
+		elseBranch,
+		endIdx: elseEnd,
+	};
+}
+
+function replaceYieldWithReturn(code: string): string {
+	let result = '';
+	let i = 0;
+
+	while (i < code.length) {
+		if (isKeywordAt(code, i, 'yield')) {
+			result += 'return';
+			i += 5;
+		} else {
+			result += code[i];
+			i++;
+		}
+	}
+
+	return result;
+}
+
+function replaceForLoops(code: string): string {
+	let result = '';
+	let i = 0;
+
+	while (i < code.length) {
+		if (isKeywordAt(code, i, 'for')) {
+			// Parse: for (let mut VAR in START..END) BODY
+			let j = i + 3;
+
+			// Skip whitespace
+			while (j < code.length && (code[j] === ' ' || code[j] === '\t' || code[j] === '\n')) {
+				j++;
+			}
+
+			// Expect '('
+			if (j >= code.length || code[j] !== '(') {
+				result += code[i];
+				i++;
+				continue;
+			}
+			j++;
+
+			// Skip whitespace
+			while (j < code.length && (code[j] === ' ' || code[j] === '\t' || code[j] === '\n')) {
+				j++;
+			}
+
+			// Expect 'let'
+			if (!isKeywordAt(code, j, 'let')) {
+				result += code.substring(i, j);
+				i = j;
+				continue;
+			}
+			j += 3;
+
+			// Skip whitespace and optional 'mut'
+			while (j < code.length && (code[j] === ' ' || code[j] === '\t' || code[j] === '\n')) {
+				j++;
+			}
+			if (isKeywordAt(code, j, 'mut')) {
+				j += 3;
+				while (j < code.length && (code[j] === ' ' || code[j] === '\t' || code[j] === '\n')) {
+					j++;
+				}
+			}
+
+			// Read variable name
+			const varStart = j;
+			while (
+				j < code.length &&
+				((code[j] >= 'a' && code[j] <= 'z') ||
+					(code[j] >= 'A' && code[j] <= 'Z') ||
+					(code[j] >= '0' && code[j] <= '9') ||
+					code[j] === '_')
+			) {
+				j++;
+			}
+			const varName = code.substring(varStart, j);
+
+			// Skip whitespace
+			while (j < code.length && (code[j] === ' ' || code[j] === '\t' || code[j] === '\n')) {
+				j++;
+			}
+
+			// Expect 'in'
+			if (!isKeywordAt(code, j, 'in')) {
+				result += code.substring(i, j);
+				i = j;
+				continue;
+			}
+			j += 2;
+
+			// Skip whitespace
+			while (j < code.length && (code[j] === ' ' || code[j] === '\t' || code[j] === '\n')) {
+				j++;
+			}
+
+			// Read start expression (up to '..')
+			const rangeStart = j;
+			while (j < code.length && !(code[j] === '.' && code[j + 1] === '.')) {
+				j++;
+			}
+			const startExpr = code.substring(rangeStart, j).trim();
+
+			// Skip '..'
+			j += 2;
+
+			// Read end expression (up to ')')
+			const endStart = j;
+			while (j < code.length && code[j] !== ')') {
+				j++;
+			}
+			const endExpr = code.substring(endStart, j).trim();
+
+			// Skip ')'
+			j++;
+
+			// Skip whitespace
+			while (j < code.length && (code[j] === ' ' || code[j] === '\t' || code[j] === '\n')) {
+				j++;
+			}
+
+			// Read body
+			let body: string;
+			if (code[j] === '{') {
+				// Block body
+				let depth = 1;
+				j++;
+				const bodyStart = j;
+				while (j < code.length && depth > 0) {
+					if (code[j] === '{') {
+						depth++;
+					} else if (code[j] === '}') {
+						depth--;
+					}
+					if (depth > 0) {
+						j++;
+					}
+				}
+				body = code.substring(bodyStart, j);
+				j++; // skip closing }
+			} else {
+				// Single statement body (up to semicolon)
+				const bodyStart = j;
+				while (j < code.length && code[j] !== ';') {
+					j++;
+				}
+				body = code.substring(bodyStart, j);
+			}
+
+			// Generate JavaScript for loop
+			const jsFor = `for (let ${varName} = ${startExpr}; ${varName} < ${endExpr}; ${varName}++) { ${body} }`;
+			result += jsFor;
+			i = j;
+			continue;
+		}
+
+		result += code[i];
+		i++;
+	}
+
+	return result;
+}
+
+function replaceIfExpressions(code: string): string {
+	let result = '';
+	let i = 0;
+
+	while (i < code.length) {
+		if (isKeywordAt(code, i, 'if')) {
+			const parsed = parseIfExpression(code, i);
+			if (parsed !== undefined) {
+				// Check if there's a return inside - if so, don't convert to ternary
+				// (it's a statement, not an expression)
+				if (parsed.thenBranch.includes('return') || parsed.elseBranch.includes('return')) {
+					result += code[i];
+					i++;
+					continue;
+				}
+
+				// Convert to ternary
+				const ternary = `((${parsed.condition}) ? (${parsed.thenBranch}) : (${parsed.elseBranch}))`;
+				result += ternary;
+				i = parsed.endIdx;
+				continue;
+			}
+		}
+
+		result += code[i];
+		i++;
+	}
+
+	return result;
+}
+
 function parseI32(): string {
 	return 'parseInt(globalThis.__getNextInput__(), 10)';
 }
@@ -292,7 +706,21 @@ export function compile(input: string): Result<string> {
 		return err(constantValidation.error);
 	}
 
-	let jsCode = compileBracedExpressionsToIife(stripLetTypeAnnotations(input));
+	// Treat top-level code as a block by wrapping in braces
+	const wrappedInput = `{ ${input} }`;
+	let jsCode = compileBracedExpressionsToIife(stripLetTypeAnnotations(wrappedInput));
+
+	// Replace yield with return (before if-expression conversion)
+	jsCode = replaceYieldWithReturn(jsCode);
+
+	// Replace for loops (before if-expression conversion)
+	jsCode = replaceForLoops(jsCode);
+
+	// Replace if expressions with ternary operators
+	jsCode = replaceIfExpressions(jsCode);
+
+	// Replace boolean literals (true -> 1, false -> 0)
+	jsCode = replaceBooleans(jsCode);
 
 	// Strip type suffixes from numeric literals (100U8 -> 100)
 	jsCode = stripTypeSuffixes(jsCode);

@@ -124,6 +124,41 @@ interface CompiledLet {
 	nextIndex: number;
 }
 
+function isUninitializedLet(statement: string): boolean {
+	const trimmed = statement.trim();
+	if (!trimmed.startsWith('let ')) {
+		return false;
+	}
+	// Check if it has an equals sign (initializer)
+	return !trimmed.includes('=');
+}
+
+interface UninitTracker {
+	varName: string;
+}
+
+function extractVarName(letStatement: string): string | undefined {
+	const trimmed = letStatement.trim();
+	if (!trimmed.startsWith('let ')) {
+		return undefined;
+	}
+	const afterLet = trimmed.substring(4).trim();
+	const match = afterLet.match(/^([a-zA-Z_][a-zA-Z0-9_]*)/);
+	if (!match) {
+		return undefined;
+	}
+	return match[1];
+}
+
+function wrapUninitializedCheck(expr: string, uninitVars: Set<string>): string {
+	// If expr is a simple identifier in the uninitialized set, wrap it
+	const trimmed = expr.trim();
+	if (uninitVars.has(trimmed)) {
+		return `(()=>{if(${trimmed}===Symbol.for('__uninitialized__'))throw new Error("Variable '${trimmed}' is not initialized");return ${trimmed};})()`;
+	}
+	return expr;
+}
+
 function compileBlockExpression(blockContent: string): string {
 	const statements = splitTopLevelStatements(blockContent);
 	if (statements.length === 0) {
@@ -132,19 +167,42 @@ function compileBlockExpression(blockContent: string): string {
 
 	const last = statements[statements.length - 1];
 	const head = statements.slice(0, statements.length - 1);
+	const uninitVars = new Set<string>();
 
 	const bodyParts: string[] = [];
 	let i = 0;
 	while (i < head.length) {
-		bodyParts.push(`${head[i]};`);
+		const stmt = head[i];
+		if (isUninitializedLet(stmt)) {
+			// Track uninitialized variable
+			const varName = extractVarName(stmt);
+			if (varName !== undefined) {
+				uninitVars.add(varName);
+			}
+			// Initialize with a sentinel value
+			bodyParts.push(`${stmt} = Symbol.for('__uninitialized__');`);
+		} else {
+			// Check if this is an assignment that initializes a tracked variable
+			const assignMatch = stmt.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
+			if (assignMatch) {
+				uninitVars.delete(assignMatch[1]);
+			}
+			bodyParts.push(`${stmt};`);
+		}
 		i = i + 1;
 	}
 	const body = bodyParts.join('');
 
 	if (last.trim().startsWith('let ')) {
+		if (isUninitializedLet(last)) {
+			return `(() => { ${body}${last} = Symbol.for('__uninitialized__'); return 0; })()`;
+		}
 		return `(() => { ${body}${last}; return 0; })()`;
 	}
-	return `(() => { ${body}return ${last}; })()`;
+
+	// Wrap the last expression with uninitialized checks
+	const wrappedLast = wrapUninitializedCheck(last, uninitVars);
+	return `(() => { ${body}return ${wrappedLast}; })()`;
 }
 
 function consumeWhitespace(code: string, start: number): ConsumedText {
@@ -178,6 +236,14 @@ function compileLetWithoutType(code: string, idx: number): CompiledLet {
 	parts.push(ws1.text);
 	j = ws1.nextIndex;
 
+	// Check for 'mut' keyword and skip it
+	if (isKeywordAt(code, j, 'mut')) {
+		j = j + 3; // skip 'mut'
+		const ws1a = consumeWhitespace(code, j);
+		parts.push(ws1a.text);
+		j = ws1a.nextIndex;
+	}
+
 	const ident = consumeIdentifier(code, j);
 	parts.push(ident.text);
 	j = ident.nextIndex;
@@ -199,10 +265,12 @@ function compileLetWithoutType(code: string, idx: number): CompiledLet {
 		};
 	}
 
+	// Skip past the type annotation (after ':')
 	j = j + 1;
 	const ws3 = consumeWhitespace(code, j);
 	j = ws3.nextIndex;
-	while (j < code.length && code[j] !== '=') {
+	// Skip type name until we hit '=', ';', or end of code
+	while (j < code.length && code[j] !== '=' && code[j] !== ';') {
 		j = j + 1;
 	}
 
