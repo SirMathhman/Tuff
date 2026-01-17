@@ -403,7 +403,7 @@ describe('interpret - struct definitions and field access', (): void => {
 	});
 });
 
-describe('interpret - struct definitions and field access', (): void => {
+describe('interpret - struct instantiation', (): void => {
 	beforeEach((): void => {
 		clearStructRegistry();
 	});
@@ -423,6 +423,13 @@ describe('interpret - struct definitions and field access', (): void => {
 	it('should return Err for accessing undefined field', (): void => {
 		expectErrContains(interpret('struct Point { x : I32 } Point { x : 5 }.y'), 'not found');
 	});
+});
+
+describe('interpret - struct variables', (): void => {
+	beforeEach((): void => {
+		clearStructRegistry();
+	});
+
 	it('should interpret "struct Wrapper { field : I32 } let myWrapper : Wrapper = Wrapper { field : 100 }; myWrapper.field" as 100', (): void => {
 		expectInterpretOk(
 			'struct Wrapper { field : I32 } let myWrapper : Wrapper = Wrapper { field : 100 }; myWrapper.field',
@@ -446,5 +453,36 @@ describe('interpret - struct definitions and field access', (): void => {
 	});
 	it('should interpret struct variable in expressions', (): void => {
 		expectInterpretOk('struct S { val : I32 } let s : S = S { val : 8 }; s.val * 3', 24);
+	});
+});
+
+describe('interpret - struct validation', (): void => {
+	beforeEach((): void => {
+		clearStructRegistry();
+	});
+
+	it('should return Err for unknown field in struct instantiation', (): void => {
+		expectInterpretErrContains(
+			'struct Wrapper { field : I32 } let myWrapper = Wrapper { nothing : 100 }; myWrapper.field',
+			"Struct field 'nothing' not found in Wrapper",
+		);
+	});
+	it('should return Err for unknown field in direct struct instantiation', (): void => {
+		expectInterpretErrContains(
+			'struct Wrapper { field : I32 } Wrapper { nothing : 100 }.field',
+			"Struct field 'nothing' not found in Wrapper",
+		);
+	});
+	it('should return Err for duplicate fields in struct instantiation', (): void => {
+		expectInterpretErrContains(
+			'struct Point { x : I32, y : I32 } Point { x : 1, x : 2, y : 3 }.x',
+			"Duplicate field 'x' in instantiation",
+		);
+	});
+	it('should return Err for missing field in struct instantiation', (): void => {
+		expectInterpretErrContains(
+			'struct Point { x : I32, y : I32 } let p = Point { x : 1 }; p.y',
+			"Field 'y' not initialized in Point",
+		);
 	});
 });

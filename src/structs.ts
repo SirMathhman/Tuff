@@ -234,11 +234,27 @@ export function looksLikeStructInstantiation(expr: string): boolean {
 }
 
 /**
- * Parses a single field in struct instantiation.
+ * Validates that all fields defined in the struct are present.
  */
-function parseStructInstantiationField(
+function validateAllFieldsInitialized(
+	fieldValues: Record<string, number>,
+	structDef: StructDefinition,
+): Result<void> {
+	for (const field of structDef.fields) {
+		if (!Object.prototype.hasOwnProperty.call(fieldValues, field.name)) {
+			return err(`Field '${field.name}' not initialized in ${structDef.name}`);
+		}
+	}
+	return ok(undefined as void);
+}
+
+/**
+ * Parses and validates a single field assignment during instantiation.
+ */
+function processFieldAssignment(
 	decl: string,
 	structDef: StructDefinition,
+	seenFields: Set<string>,
 	fieldValues: Record<string, number>,
 	parseValue: (expr: string) => Result<number>,
 ): Result<void> {
@@ -253,14 +269,17 @@ function parseStructInstantiationField(
 	}
 
 	const fieldName = trimmedDecl.substring(0, colonIndex).trim();
-	const fieldValueStr = trimmedDecl.substring(colonIndex + 1).trim();
+	if (seenFields.has(fieldName)) {
+		return err(`Duplicate field '${fieldName}' in instantiation`);
+	}
+	seenFields.add(fieldName);
 
 	const fieldDef = structDef.fields.find((f): boolean => f.name === fieldName);
 	if (fieldDef === undefined) {
 		return err(`Struct field '${fieldName}' not found in ${structDef.name}`);
 	}
 
-	const valueResult = parseValue(fieldValueStr);
+	const valueResult = parseValue(trimmedDecl.substring(colonIndex + 1).trim());
 	if (valueResult.type === 'err') {
 		return valueResult;
 	}
@@ -283,10 +302,6 @@ export function evaluateStructInstantiation(
 	}
 
 	const typeName = trimmed.substring(0, braceIndex).trim();
-	if (!isVariableName(typeName)) {
-		return err(`Invalid struct type name: ${typeName}`);
-	}
-
 	const structDef = getStructDefinition(typeName);
 	if (structDef === undefined) {
 		return err(`Struct type '${typeName}' not defined`);
@@ -297,15 +312,20 @@ export function evaluateStructInstantiation(
 		return err('Struct instantiation missing closing brace');
 	}
 
-	const bodyStr = trimmed.substring(braceIndex + 1, braceIndex + closeIndex);
 	const fieldValues: Record<string, number> = {};
+	const seenFields = new Set<string>();
+	const fieldDecls = trimmed.substring(braceIndex + 1, braceIndex + closeIndex).split(',');
 
-	const fieldDecls = bodyStr.split(',');
 	for (const decl of fieldDecls) {
-		const fieldResult = parseStructInstantiationField(decl, structDef, fieldValues, parseValue);
-		if (fieldResult.type === 'err') {
-			return fieldResult;
+		const res = processFieldAssignment(decl, structDef, seenFields, fieldValues, parseValue);
+		if (res.type === 'err') {
+			return res;
 		}
+	}
+
+	const validation = validateAllFieldsInitialized(fieldValues, structDef);
+	if (validation.type === 'err') {
+		return validation;
 	}
 
 	return ok({ structType: typeName, fieldValues });
