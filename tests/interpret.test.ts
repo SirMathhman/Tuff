@@ -394,6 +394,10 @@ describe('interpret - struct definitions and field access', (): void => {
 		expectInterpretErrContains('struct Empty {} struct Empty {}', 'already defined');
 	});
 
+	it('should return Err for duplicate struct fields', (): void => {
+		expectInterpretErrContains('struct Example { x : I32, x : I32 }', 'already defined');
+	});
+
 	it('should interpret "struct Wrapper { field : I32 }" as 0', (): void => {
 		expectInterpretOk('struct Wrapper { field : I32 }', 0);
 	});

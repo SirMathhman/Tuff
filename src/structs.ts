@@ -143,20 +143,6 @@ function parseStructFieldDecl(trimmedDecl: string): Result<StructField> {
 /**
  * Parses a single field declaration and adds to fields list.
  */
-function addParsedField(trimmedDecl: string, fields: StructField[]): Result<void> {
-	if (trimmedDecl.length === 0) {
-		return ok(undefined as void);
-	}
-
-	const fieldResult = parseStructFieldDecl(trimmedDecl);
-	if (fieldResult.type === 'err') {
-		return fieldResult;
-	}
-
-	fields.push(fieldResult.value);
-	return ok(undefined as void);
-}
-
 /**
  * Parses struct body to extract fields.
  */
@@ -168,13 +154,26 @@ function parseStructBody(bodyStr: string): Result<StructField[]> {
 	}
 
 	const fields: StructField[] = [];
+	const seenFieldNames = new Set<string>();
 	const declarations = trimmed.split(',');
 
 	for (const decl of declarations) {
-		const fieldAddResult = addParsedField(decl.trim(), fields);
-		if (fieldAddResult.type === 'err') {
-			return fieldAddResult;
+		const trimmedDecl = decl.trim();
+		if (trimmedDecl.length === 0) {
+			continue;
 		}
+
+		const fieldResult = parseStructFieldDecl(trimmedDecl);
+		if (fieldResult.type === 'err') {
+			return fieldResult;
+		}
+
+		const field = fieldResult.value;
+		if (seenFieldNames.has(field.name)) {
+			return err(`Struct field '${field.name}' is already defined`);
+		}
+		seenFieldNames.add(field.name);
+		fields.push(field);
 	}
 
 	return ok(fields);
