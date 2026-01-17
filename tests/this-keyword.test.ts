@@ -64,3 +64,13 @@ describe('interpret - this keyword - constructor functions', (): void => {
 		);
 	});
 });
+
+describe('interpret - this keyword - method calls on this', (): void => {
+	beforeEach((): void => {
+		clearFunctionRegistry();
+	});
+
+	it('allows calling functions via this.functionName()', (): void => {
+		expectInterpretOk('fn get() => 100; this.get()', 100);
+	});
+});
