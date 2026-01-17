@@ -1,76 +1,100 @@
 import { clearFunctionRegistry } from '../../src/interpreter/functions';
-import { assertInterpretValid } from '../../src/testing/test-helpers';
+import { assertCompileValid, assertInterpretAndCompileValid } from '../../src/testing/test-helpers';
 
-describe('interpret - this keyword - field access', (): void => {
+describe('this keyword - field access', (): void => {
 	it('allows this.field to access current scope variables', (): void => {
-		assertInterpretValid('let x = 100; this.x', 100);
+		assertInterpretAndCompileValid('let x = 100; this.x', 100);
 	});
 
 	it('works with multiple variables', (): void => {
-		assertInterpretValid('let x = 10; let y = 20; this.x + this.y', 30);
+		assertInterpretAndCompileValid('let x = 10; let y = 20; this.x + this.y', 30);
 	});
 });
 
-describe('interpret - this keyword - field assignment', (): void => {
+describe('this keyword - field assignment', (): void => {
 	it('allows this.field to assign to current scope variables', (): void => {
-		assertInterpretValid('let mut x = 0; this.x = 100; x', 100);
+		assertInterpretAndCompileValid('let mut x = 0; this.x = 100; x', 100);
 	});
 
 	it('matches the exact user example', (): void => {
-		assertInterpretValid('let mut x = 0; this.x = 100; x', 100);
+		assertInterpretAndCompileValid('let mut x = 0; this.x = 100; x', 100);
 	});
 });
 
-describe('interpret - this keyword - This type', (): void => {
+describe('this keyword - This type', (): void => {
 	it('allows storing this in a variable with This type', (): void => {
-		assertInterpretValid('let x = 100; let y = 200; let temp : This = this; temp.x + temp.y', 300);
+		assertInterpretAndCompileValid(
+			'let x = 100; let y = 200; let temp : This = this; temp.x + temp.y',
+			300,
+		);
 	});
 
 	it('matches the second user example', (): void => {
-		assertInterpretValid('let x = 100; let y = 200; let temp : This = this; temp.x + temp.y', 300);
+		assertInterpretAndCompileValid(
+			'let x = 100; let y = 200; let temp : This = this; temp.x + temp.y',
+			300,
+		);
 	});
 });
 
-describe('interpret - this keyword - constructor functions', (): void => {
+describe('this keyword - constructor functions', (): void => {
 	beforeEach((): void => {
 		clearFunctionRegistry();
 	});
 
 	it('allows constructor functions that return this', (): void => {
-		assertInterpretValid(
+		assertInterpretAndCompileValid(
 			'fn Point(x : I32, y : I32) : Point => this; let temp : Point = Point(3, 4); temp.x',
 			3,
 		);
 	});
 
 	it('accesses constructor fields correctly', (): void => {
-		assertInterpretValid(
+		assertInterpretAndCompileValid(
 			'fn Point(x : I32, y : I32) : Point => this; let temp : Point = Point(3, 4); temp.y',
 			4,
 		);
 	});
 
 	it('works with multiple constructor calls', (): void => {
-		assertInterpretValid(
+		assertInterpretAndCompileValid(
 			'fn Point(x : I32, y : I32) : Point => this; let p1 : Point = Point(3, 4); let p2 : Point = Point(10, 20); p1.x + p2.y',
 			23,
 		);
 	});
 
 	it('matches the exact third user example', (): void => {
-		assertInterpretValid(
+		assertInterpretAndCompileValid(
 			'fn Point(x : I32, y : I32) : Point => this; let temp : Point = Point(3, 4); temp.x',
 			3,
 		);
 	});
 });
 
-describe('interpret - this keyword - method calls on this', (): void => {
+describe('this keyword - method calls on this', (): void => {
 	beforeEach((): void => {
 		clearFunctionRegistry();
 	});
 
 	it('allows calling functions via this.functionName()', (): void => {
-		assertInterpretValid('fn get() => 100; this.get()', 100);
+		assertInterpretAndCompileValid('fn get() => 100; this.get()', 100);
+	});
+});
+
+describe('this keyword - compiler read<T>() tests', (): void => {
+	beforeEach((): void => {
+		clearFunctionRegistry();
+	});
+
+	it('this.field with runtime input', (): void => {
+		assertCompileValid('let x = read<I32>(); this.x', '42', 42);
+	});
+
+	it('constructor with runtime input', (): void => {
+		assertCompileValid(
+			'fn Point(x : I32, y : I32) : Point => this; let temp : Point = Point(read<I32>(), 5); temp.x',
+			'10',
+			10,
+		);
 	});
 });

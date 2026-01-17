@@ -9,4 +9,11 @@ describe('compile', (): void => {
 			expect(result.value.length).toBeGreaterThan(0);
 		}
 	});
+
+	it.skip('DEBUG: exact failing test', (): void => {
+		const result = compile(
+			'fn add(first : U8, second : U8) : U8 => { first + second } add(255U8, 1U8)',
+		);
+		expect(result.type).toBe('err');
+	});
 });

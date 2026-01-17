@@ -1,183 +1,5 @@
 import { isIdentifierChar, isIdentifierStartChar, isKeywordAt } from './compiler-utils';
-
-function isWhitespace(ch: string): boolean {
-	return ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r';
-}
-
-function findMatchingBrace(code: string, openIndex: number): number | undefined {
-	let depth = 0;
-	let i = openIndex;
-	while (i < code.length) {
-		const ch = code[i];
-		if (ch === '{') {
-			depth = depth + 1;
-			i = i + 1;
-			continue;
-		}
-		if (ch !== '}') {
-			i = i + 1;
-			continue;
-		}
-		depth = depth - 1;
-		if (depth === 0) {
-			return i;
-		}
-		i = i + 1;
-	}
-	return undefined;
-}
-
-function skipToMatchingParen(block: string, startIdx: number): number {
-	let j = startIdx;
-	let depth = 1;
-	j += 1;
-	while (j < block.length && depth > 0) {
-		if (block[j] === '(') {
-			depth += 1;
-		} else if (block[j] === ')') {
-			depth -= 1;
-		}
-		j += 1;
-	}
-	return j;
-}
-
-function skipToMatchingBrace(block: string, startIdx: number): number {
-	let j = startIdx;
-	let depth = 1;
-	j += 1;
-	while (j < block.length && depth > 0) {
-		if (block[j] === '{') {
-			depth += 1;
-		} else if (block[j] === '}') {
-			depth -= 1;
-		}
-		j += 1;
-	}
-	return j;
-}
-
-function skipWhitespaceInBlock(block: string, startIdx: number): number {
-	let j = startIdx;
-	while (j < block.length && isWhitespace(block[j])) {
-		j += 1;
-	}
-	return j;
-}
-
-function parseControlFlowBody(block: string, startIdx: number): number {
-	let j = startIdx;
-	if (j < block.length && block[j] === '{') {
-		return skipToMatchingBrace(block, j);
-	}
-	while (j < block.length && block[j] !== ';' && !isKeywordAt(block, j, 'else')) {
-		j += 1;
-	}
-	if (j < block.length && block[j] === ';') {
-		j += 1;
-	}
-	return j;
-}
-
-function parseElseChain(block: string, startIdx: number): number {
-	let j = startIdx;
-	while (j < block.length && isWhitespace(block[j])) {
-		j += 1;
-	}
-	if (!isKeywordAt(block, j, 'else')) {
-		return j;
-	}
-	j += 4;
-	j = skipWhitespaceInBlock(block, j);
-	if (isKeywordAt(block, j, 'if')) {
-		j += 2;
-		j = parseControlFlowParensAndBody(block, j);
-		return parseElseChain(block, j);
-	}
-	if (j < block.length && block[j] === '{') {
-		return skipToMatchingBrace(block, j);
-	}
-	while (j < block.length && block[j] !== ';') {
-		j += 1;
-	}
-	if (j < block.length && block[j] === ';') {
-		j += 1;
-	}
-	return j;
-}
-
-function parseControlFlowParensAndBody(block: string, startIdx: number): number {
-	let j = skipWhitespaceInBlock(block, startIdx);
-	if (j < block.length && block[j] === '(') {
-		j = skipToMatchingParen(block, j);
-	}
-	j = skipWhitespaceInBlock(block, j);
-	return parseControlFlowBody(block, j);
-}
-
-function parseControlFlowStatement(block: string, startIdx: number): number {
-	const i = startIdx;
-	let keywordLen = 2;
-	if (isKeywordAt(block, i, 'while') || isKeywordAt(block, i, 'match')) {
-		keywordLen = 5;
-	} else if (isKeywordAt(block, i, 'for')) {
-		keywordLen = 3;
-	}
-	let j = i + keywordLen;
-	j = parseControlFlowParensAndBody(block, j);
-	if (isKeywordAt(block, i, 'if')) {
-		j = parseElseChain(block, j);
-	}
-	return j;
-}
-
-function splitTopLevelStatements(block: string): string[] {
-	const parts: string[] = [];
-	let start = 0;
-	let parenDepth = 0;
-	let braceDepth = 0;
-	let bracketDepth = 0;
-	let i = 0;
-
-	while (i < block.length) {
-		const ch = block[i];
-		if (
-			parenDepth === 0 &&
-			braceDepth === 0 &&
-			bracketDepth === 0 &&
-			(isKeywordAt(block, i, 'if') ||
-				isKeywordAt(block, i, 'while') ||
-				isKeywordAt(block, i, 'for') ||
-				isKeywordAt(block, i, 'match'))
-		) {
-			const j = parseControlFlowStatement(block, i);
-			parts.push(block.substring(start, j).trim());
-			start = j;
-			i = j;
-			continue;
-		}
-		if (ch === '(') {
-			parenDepth += 1;
-		} else if (ch === ')') {
-			parenDepth -= 1;
-		} else if (ch === '{') {
-			braceDepth += 1;
-		} else if (ch === '}') {
-			braceDepth -= 1;
-		} else if (ch === '[') {
-			bracketDepth += 1;
-		} else if (ch === ']') {
-			bracketDepth -= 1;
-		}
-		if (ch === ';' && parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
-			parts.push(block.substring(start, i).trim());
-			start = i + 1;
-		}
-		i += 1;
-	}
-	parts.push(block.substring(start).trim());
-	return parts.filter((p): boolean => p.length > 0);
-}
+import { findMatchingBrace, isWhitespace, splitTopLevelStatements } from './block-parsing';
 
 interface ConsumedText {
 	text: string;
@@ -419,6 +241,114 @@ export function stripLetTypeAnnotations(code: string): string {
 	return parts.join('');
 }
 
+function looksLikeObjectLiteralContent(
+	code: string,
+	braceStart: number,
+	braceEnd: number,
+): boolean {
+	// Object literals have format: { key: value, key: value }
+	// Block expressions have statements like let, if, etc.
+	const inner = code.substring(braceStart + 1, braceEnd).trim();
+	if (inner.length === 0) {
+		return true; // Empty braces {} could be empty object
+	}
+
+	// If it starts with a keyword like let, if, while, for, match, function, it's a block
+	if (
+		inner.startsWith('let ') ||
+		inner.startsWith('if ') ||
+		inner.startsWith('while ') ||
+		inner.startsWith('for ') ||
+		inner.startsWith('match ') ||
+		inner.startsWith('yield ') ||
+		inner.startsWith('return ') ||
+		inner.startsWith('function ')
+	) {
+		return false;
+	}
+
+	// If it looks like identifier: value (object literal syntax), it's an object
+	// Simple heuristic: if first non-ws char is an identifier followed by :
+	let i = 0;
+	while (i < inner.length && isWhitespace(inner[i])) {
+		i += 1;
+	}
+	if (i >= inner.length) {
+		return true;
+	}
+
+	// Check for identifier followed by :
+	if (!isIdentifierStartChar(inner[i])) {
+		return false;
+	}
+	while (i < inner.length && isIdentifierChar(inner[i])) {
+		i += 1;
+	}
+	while (i < inner.length && isWhitespace(inner[i])) {
+		i += 1;
+	}
+	return i < inner.length && inner[i] === ':';
+}
+
+function isDestructuringPattern(code: string, braceIndex: number): boolean {
+	// Check if this is `let { ... }` destructuring pattern
+	let j = braceIndex - 1;
+	while (j >= 0 && isWhitespace(code[j])) {
+		j -= 1;
+	}
+
+	// Check for 'let' or 'let mut' before the brace
+	if (j >= 2 && isKeywordAt(code, j - 2, 'let')) {
+		return true;
+	}
+	if (j >= 5 && isKeywordAt(code, j - 5, 'let')) {
+		// Could be 'let mut' - check if there's 'mut' in between
+		const potentialMut = code.substring(j - 2, j + 1).trim();
+		if (potentialMut === 'mut') {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function isObjectLiteralContext(code: string, braceIndex: number): boolean {
+	// Check if the brace is immediately preceded by '(' or '='
+	let j = braceIndex - 1;
+	while (j >= 0 && isWhitespace(code[j])) {
+		j -= 1;
+	}
+	if (j < 0) {
+		return false;
+	}
+	const prevChar = code[j];
+
+	// '=' indicates object literal as assignment: x = { ... }
+	// But make sure it's not '==' or '=>'
+	if (prevChar === '=') {
+		if (j > 0 && code[j - 1] === '=') {
+			return false;
+		}
+		// Find the matching closing brace
+		const closeIndex = findMatchingBrace(code, braceIndex);
+		if (closeIndex === undefined) {
+			return false;
+		}
+		return looksLikeObjectLiteralContent(code, braceIndex, closeIndex);
+	}
+
+	// '(' - need to check if content looks like object literal
+	if (prevChar === '(') {
+		const closeIndex = findMatchingBrace(code, braceIndex);
+		if (closeIndex === undefined) {
+			return false;
+		}
+		return looksLikeObjectLiteralContent(code, braceIndex, closeIndex);
+	}
+
+	return false;
+}
+
 export function compileBracedExpressionsToIife(code: string): string {
 	const parts: string[] = [];
 	let i = 0;
@@ -439,10 +369,13 @@ export function compileBracedExpressionsToIife(code: string): string {
 		}
 
 		const isControlFlowBlock = isControlFlowBlockBeforeBrace(code, i);
+		const isObjectLiteral = isObjectLiteralContext(code, i);
+		const isFunctionBody = isFunctionBodyBeforeBrace(code, i);
+		const isDestructuring = isDestructuringPattern(code, i);
 
 		const inner = code.substring(i + 1, closeIndex);
 		const compiledInner = compileBracedExpressionsToIife(inner);
-		if (isControlFlowBlock) {
+		if (isControlFlowBlock || isObjectLiteral || isFunctionBody || isDestructuring) {
 			parts.push('{');
 			parts.push(compiledInner);
 			parts.push('}');
@@ -484,11 +417,70 @@ function shouldInsertSemicolonAfterIife(code: string, startIdx: number): boolean
 	return false;
 }
 
-function isControlFlowBlockBeforeBrace(code: string, braceIndex: number): boolean {
-	let j = braceIndex - 1;
+function skipBackwardsToMatchingParen(code: string, startIdx: number): number {
+	let j = startIdx;
+	let depth = 1;
+	while (j >= 0 && depth > 0) {
+		if (code[j] === ')') {
+			depth += 1;
+		} else if (code[j] === '(') {
+			depth -= 1;
+		}
+		j -= 1;
+	}
+	return j;
+}
+
+function skipBackwardsWhitespace(code: string, startIdx: number): number {
+	let j = startIdx;
 	while (j >= 0 && isWhitespace(code[j])) {
 		j -= 1;
 	}
+	return j;
+}
+
+function skipBackwardsIdentifier(code: string, startIdx: number): number {
+	let j = startIdx;
+	while (j >= 0 && isIdentifierChar(code[j])) {
+		j -= 1;
+	}
+	return j;
+}
+
+function isFunctionBodyBeforeBrace(code: string, braceIndex: number): boolean {
+	let j = skipBackwardsWhitespace(code, braceIndex - 1);
+
+	if (j < 0 || code[j] !== ')') {
+		return false;
+	}
+
+	// Skip to matching (
+	j = skipBackwardsToMatchingParen(code, j - 1);
+
+	// Now j is before the (, skip whitespace
+	j = skipBackwardsWhitespace(code, j);
+
+	// Check for identifier (function name)
+	if (j < 0 || !isIdentifierChar(code[j])) {
+		return false;
+	}
+
+	// Skip the identifier backwards
+	j = skipBackwardsIdentifier(code, j);
+
+	// Skip whitespace
+	j = skipBackwardsWhitespace(code, j);
+
+	// Check for 'function' keyword
+	if (j >= 7 && code.substring(j - 7, j + 1) === 'function') {
+		return true;
+	}
+
+	return false;
+}
+
+function isControlFlowBlockBeforeBrace(code: string, braceIndex: number): boolean {
+	let j = skipBackwardsWhitespace(code, braceIndex - 1);
 
 	if (j >= 3 && isKeywordAt(code, j - 3, 'else')) {
 		return true;
@@ -498,20 +490,8 @@ function isControlFlowBlockBeforeBrace(code: string, braceIndex: number): boolea
 		return false;
 	}
 
-	let depth = 1;
-	j -= 1;
-	while (j >= 0 && depth > 0) {
-		if (code[j] === ')') {
-			depth += 1;
-		} else if (code[j] === '(') {
-			depth -= 1;
-		}
-		j -= 1;
-	}
-
-	while (j >= 0 && isWhitespace(code[j])) {
-		j -= 1;
-	}
+	j = skipBackwardsToMatchingParen(code, j - 1);
+	j = skipBackwardsWhitespace(code, j);
 
 	if (j >= 1 && isKeywordAt(code, j - 1, 'if')) {
 		return true;

@@ -308,5 +308,169 @@ function checkAssignmentMutability(code: string, mutVars: Set<string>): Result<v
 
 export function validateMutability(code: string): Result<void> {
 	const mutVars = collectMutableVariables(code);
+
+	const assignmentInLetResult = validateNoAssignmentInLetInitializer(code);
+	if (assignmentInLetResult.type === 'err') {
+		return assignmentInLetResult;
+	}
+
 	return checkAssignmentMutability(code, mutVars);
+}
+
+function skipLetDeclarationInAssignmentCheck(str: string, startIdx: number): number {
+	let i = startIdx;
+	let depth = 0;
+	while (i < str.length) {
+		if (str[i] === '{') {
+			depth += 1;
+		} else if (str[i] === '}') {
+			depth -= 1;
+		} else if (str[i] === ';' && depth === 0) {
+			return i + 1;
+		}
+		i += 1;
+	}
+	return i;
+}
+
+function isAssignmentEquals(str: string, i: number): boolean {
+	const notPrecededByComparison =
+		i === 0 || (str[i - 1] !== '!' && str[i - 1] !== '<' && str[i - 1] !== '>');
+	const notFollowedByEqualsOrArrow =
+		i + 1 >= str.length || (str[i + 1] !== '=' && str[i + 1] !== '>');
+	return str[i] === '=' && notPrecededByComparison && notFollowedByEqualsOrArrow;
+}
+
+function hasAssignmentOperator(str: string): boolean {
+	let i = 0;
+	while (i < str.length) {
+		// Skip 'let' declarations (their '=' is not an assignment)
+		if (isKeywordAt(str, i, 'let')) {
+			i = skipLetDeclarationInAssignmentCheck(str, i);
+			continue;
+		}
+
+		if (isAssignmentEquals(str, i)) {
+			return true;
+		}
+		i += 1;
+	}
+	return false;
+}
+
+function skipMutKeyword(code: string, startIdx: number): number {
+	let i = startIdx;
+	i = skipWhitespace(code, i);
+	if (isKeywordAt(code, i, 'mut')) {
+		i += 3;
+		i = skipWhitespace(code, i);
+	}
+	return i;
+}
+
+function skipVariableName(code: string, startIdx: number): number {
+	let i = startIdx;
+	while (i < code.length && isCharIdentifier(code[i])) {
+		i += 1;
+	}
+	return skipWhitespace(code, i);
+}
+
+function skipTypeAnnotation(code: string, startIdx: number): number {
+	let i = startIdx;
+	if (i < code.length && code[i] === ':') {
+		i += 1;
+		while (i < code.length && code[i] !== '=' && code[i] !== ';') {
+			i += 1;
+		}
+	}
+	return i;
+}
+
+function findInitializerEnd(code: string, startIdx: number): number {
+	let i = startIdx;
+	let depth = 0;
+	while (i < code.length) {
+		if (code[i] === '{' || code[i] === '(' || code[i] === '[') {
+			depth += 1;
+		} else if (code[i] === '}' || code[i] === ')' || code[i] === ']') {
+			depth -= 1;
+		} else if (code[i] === ';' && depth === 0) {
+			break;
+		}
+		i += 1;
+	}
+	return i;
+}
+
+function extractLetInitializer(code: string, letStart: number): string | undefined {
+	let i = letStart + 3;
+	i = skipMutKeyword(code, i);
+	i = skipVariableName(code, i);
+	i = skipTypeAnnotation(code, i);
+
+	// Find '='
+	if (i >= code.length || code[i] !== '=') {
+		return undefined;
+	}
+	if (i + 1 < code.length && code[i + 1] === '>') {
+		return undefined; // Function arrow, not assignment
+	}
+
+	i += 1;
+	i = skipWhitespace(code, i);
+	const valueStart = i;
+	const valueEnd = findInitializerEnd(code, i);
+
+	return code.substring(valueStart, valueEnd);
+}
+
+function isBlockExpression(str: string): boolean {
+	const trimmed = str.trim();
+	if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+		return false;
+	}
+	// Check if braces are balanced
+	let depth = 0;
+	for (let i = 0; i < trimmed.length; i += 1) {
+		if (trimmed[i] === '{') {
+			depth += 1;
+		} else if (trimmed[i] === '}') {
+			depth -= 1;
+		}
+	}
+	return depth === 0;
+}
+
+function checkInitializerForAssignment(initializer: string | undefined): Result<void> {
+	if (initializer === undefined) {
+		return ok(undefined as void);
+	}
+	if (!hasAssignmentOperator(initializer)) {
+		return ok(undefined as void);
+	}
+	// Allow if it's a braced expression
+	if (isBlockExpression(initializer)) {
+		return ok(undefined as void);
+	}
+	return err('Assignment not allowed in variable initializer');
+}
+
+function validateNoAssignmentInLetInitializer(code: string): Result<void> {
+	let i = 0;
+	while (i < code.length) {
+		if (!isKeywordAt(code, i, 'let')) {
+			i += 1;
+			continue;
+		}
+
+		const initializer = extractLetInitializer(code, i);
+		const result = checkInitializerForAssignment(initializer);
+		if (result.type === 'err') {
+			return result;
+		}
+
+		i += 1;
+	}
+	return ok(undefined as void);
 }

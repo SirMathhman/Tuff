@@ -1,5 +1,5 @@
 import { clearFunctionRegistry } from '../../src/interpreter/functions';
-import { assertInterpretValid } from '../../src/testing/test-helpers';
+import { assertInterpretAndCompileValid } from '../../src/testing/test-helpers';
 
 function makePointCode(withReturnType: boolean): string {
 	let returnType = '';
@@ -16,30 +16,30 @@ function makePointCode(withReturnType: boolean): string {
     `;
 }
 
-describe('interpret - closure objects via this', (): void => {
+describe('closure objects via this', (): void => {
 	beforeEach((): void => {
 		clearFunctionRegistry();
 	});
 
 	it('allows accessing inner functions via this', (): void => {
-		assertInterpretValid(makePointCode(false), 7);
+		assertInterpretAndCompileValid(makePointCode(false), 7);
 	});
 
 	it('allows accessing inner functions with explicit return type', (): void => {
-		assertInterpretValid(makePointCode(true), 7);
+		assertInterpretAndCompileValid(makePointCode(true), 7);
 	});
 });
 
-describe('interpret - closure objects regression tests', (): void => {
+describe('closure objects regression tests', (): void => {
 	beforeEach((): void => {
 		clearFunctionRegistry();
 	});
 
 	it('standard let still works', (): void => {
-		assertInterpretValid('let value = 0; value', 0);
+		assertInterpretAndCompileValid('let value = 0; value', 0);
 	});
 
 	it('function + let still works', (): void => {
-		assertInterpretValid('fn Foo() => 0; let value = 0; value', 0);
+		assertInterpretAndCompileValid('fn Foo() => 0; let value = 0; value', 0);
 	});
 });

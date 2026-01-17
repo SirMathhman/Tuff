@@ -10,7 +10,10 @@ import { replaceFunctionDefinitions } from './transforms/functions';
 import { replaceForLoops } from './transforms/for-loops';
 import { replaceIfExpressions } from './transforms/if-expressions';
 import { replaceMatchExpressions } from './transforms/match-expressions';
+import { compileModules } from './transforms/modules';
 import { replaceReadCalls, wrapCompiledCode } from './transforms/read-and-wrap';
+import { compileStructs } from './transforms/structs';
+import { compileThisKeyword } from './transforms/this-keyword';
 
 // NOTE: This file intentionally stays small to satisfy lint constraints.
 // The compilation pipeline is composed from:
@@ -39,8 +42,21 @@ export function compile(input: string): Result<string> {
 		return err(constantValidation.error);
 	}
 
-	const wrappedInput = `{ ${input} }`;
-	let jsCode = compileBracedExpressionsToIife(stripLetTypeAnnotations(wrappedInput));
+	// Structs and modules must be compiled BEFORE braced expressions are transformed
+	// because their bodies use braces that would otherwise be treated as block expressions
+	let jsCode = compileStructs(input);
+	jsCode = compileModules(jsCode);
+
+	// Function definitions must be compiled BEFORE braced expressions
+	// so nested functions get converted before IIFE wrapping
+	jsCode = replaceFunctionDefinitions(jsCode);
+
+	// This keyword must be compiled BEFORE type annotations are stripped
+	// so we can detect `let x : This = this` pattern
+	jsCode = compileThisKeyword(jsCode);
+
+	const wrappedInput = `{ ${jsCode} }`;
+	jsCode = compileBracedExpressionsToIife(stripLetTypeAnnotations(wrappedInput));
 	jsCode = replaceMatchExpressions(jsCode);
 	jsCode = replaceYieldWithReturn(jsCode);
 	jsCode = replaceForLoops(jsCode);
@@ -48,7 +64,6 @@ export function compile(input: string): Result<string> {
 	jsCode = replaceBooleans(jsCode);
 	jsCode = stripTypeSuffixes(jsCode);
 	jsCode = replaceReadCalls(jsCode);
-	jsCode = replaceFunctionDefinitions(jsCode);
 	const usesStdin = input.includes('read<');
 	jsCode = wrapCompiledCode(jsCode, usesStdin);
 
