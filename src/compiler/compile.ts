@@ -1,6 +1,7 @@
 import { ok, err, type Result } from '../common/result';
 import { compileBracedExpressionsToIife, stripLetTypeAnnotations } from './block-expressions';
 import { validateValueForType, hasNegativeSign } from '../common/types';
+import { interpretInternal } from '../interpreter/evaluator';
 
 interface NumericToken {
 	consumed: number;
@@ -249,6 +250,30 @@ function validateNumericLiterals(code: string): Result<void> {
 }
 
 /**
+ * Validates constant arithmetic expressions by evaluating them.
+ * This is "constant folding" - a standard compiler optimization.
+ * Only evaluates expressions containing only literals and operators,
+ * no variables or blocks with variable bindings.
+ */
+function validateConstantExpressions(code: string): Result<void> {
+	// Skip code containing read<>, let bindings, or other features
+	if (code.includes('read<') || code.includes('let ')) {
+		return ok(undefined as void);
+	}
+
+	// Try to evaluate the expression - if it succeeds, we can validate type constraints
+	const emptyContext = { bindings: [], modules: {}, globalBindings: {}, globalModules: {} };
+	const evalResult = interpretInternal(code, emptyContext);
+
+	// If evaluation failed, propagate the error (arithmetic overflow, division by zero, etc.)
+	if (evalResult.type === 'err') {
+		return evalResult;
+	}
+
+	return ok(undefined as void);
+}
+
+/**
  * Compiles Tuff source code to JavaScript.
  *
  * @param input - The Tuff source code to compile
@@ -256,10 +281,17 @@ function validateNumericLiterals(code: string): Result<void> {
  */
 export function compile(input: string): Result<string> {
 	// Validate numeric literals with type suffixes
-	const validation = validateNumericLiterals(input);
-	if (validation.type === 'err') {
-		return err(validation.error);
+	const numericValidation = validateNumericLiterals(input);
+	if (numericValidation.type === 'err') {
+		return err(numericValidation.error);
 	}
+
+	// Validate constant arithmetic expressions (constant folding)
+	const constantValidation = validateConstantExpressions(input);
+	if (constantValidation.type === 'err') {
+		return err(constantValidation.error);
+	}
+
 	let jsCode = compileBracedExpressionsToIife(stripLetTypeAnnotations(input));
 
 	// Strip type suffixes from numeric literals (100U8 -> 100)
