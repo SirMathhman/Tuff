@@ -68,4 +68,12 @@ describe('run', (): void => {
 			expect(result.value).toBe(2);
 		}
 	});
+
+	it('reads multiple values with multiplication precedence', (): void => {
+		const result = run('read<U8>() + read<U8>() * read<U8>()', '4 2 3');
+		expect(result.type).toBe('ok');
+		if (result.type === 'ok') {
+			expect(result.value).toBe(10);
+		}
+	});
 });
