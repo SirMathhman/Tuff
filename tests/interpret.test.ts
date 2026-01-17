@@ -378,6 +378,10 @@ describe('interpret - struct definitions and field access', (): void => {
 		clearStructRegistry();
 	});
 
+	it('should interpret "struct Empty {}" as 0', (): void => {
+		expectInterpretOk('struct Empty {}', 0);
+	});
+
 	it('should interpret "struct Wrapper { field : I32 }" as 0', (): void => {
 		expectInterpretOk('struct Wrapper { field : I32 }', 0);
 	});

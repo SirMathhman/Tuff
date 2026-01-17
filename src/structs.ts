@@ -163,7 +163,8 @@ function addParsedField(trimmedDecl: string, fields: StructField[]): Result<void
 function parseStructBody(bodyStr: string): Result<StructField[]> {
 	const trimmed = bodyStr.trim();
 	if (trimmed.length === 0) {
-		return err('Struct body cannot be empty');
+		// Allow empty struct bodies (no fields)
+		return ok([]);
 	}
 
 	const fields: StructField[] = [];
