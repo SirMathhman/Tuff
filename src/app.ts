@@ -138,9 +138,31 @@ function handleLetBindings(source: string): string {
 	return replaced;
 }
 
+interface VariableInfo {
+	name: string;
+	type: string;
+}
+
+function extractVariableType(source: string, letIndex: number): VariableInfo | undefined {
+	const typeStartIndex = source.indexOf(':', letIndex);
+	if (typeStartIndex === -1 || typeStartIndex > letIndex + 20) {
+		return undefined;
+	}
+	const typeEndIndex = source.indexOf('=', typeStartIndex);
+	if (typeEndIndex === -1) {
+		return undefined;
+	}
+	const varNameStart = letIndex + 4;
+	const varName = source.substring(varNameStart, typeStartIndex).trim();
+	const declaredType = source.substring(typeStartIndex + 1, typeEndIndex).trim();
+	return { name: varName, type: declaredType };
+}
+
 function validateLetBindingTypes(source: string): Result<void, string> {
 	// Check for type mismatches in let bindings
 	// Pattern: let <name> : <type> = <expr>
+	// Also track variable types for validation
+	const variableTypes = new Map<string, string>();
 	let searchIndex = 0;
 	while (searchIndex < source.length) {
 		const letIndex = source.indexOf('let ', searchIndex);
@@ -148,9 +170,15 @@ function validateLetBindingTypes(source: string): Result<void, string> {
 			break;
 		}
 
-		const result = checkLetBinding(source, letIndex);
+		const result = checkLetBinding(source, letIndex, variableTypes);
 		if (!result.success) {
 			return result;
+		}
+
+		// Extract the variable name and type for future validation
+		const varInfo = extractVariableType(source, letIndex);
+		if (varInfo !== undefined) {
+			variableTypes.set(varInfo.name, varInfo.type);
 		}
 
 		const nextIndex = result.value;
@@ -160,28 +188,7 @@ function validateLetBindingTypes(source: string): Result<void, string> {
 	return success(undefined);
 }
 
-function checkLetBinding(source: string, letIndex: number): Result<number, string> {
-	const typeStartIndex = source.indexOf(':', letIndex);
-	if (typeStartIndex === -1 || typeStartIndex > letIndex + 20) {
-		return success(letIndex + 4);
-	}
-
-	const typeEndIndex = source.indexOf('=', typeStartIndex);
-	if (typeEndIndex === -1) {
-		return success(letIndex + 4);
-	}
-
-	const declaredType = source.substring(typeStartIndex + 1, typeEndIndex).trim();
-	const exprEndIndex = findSemicolonIndex(source, typeEndIndex + 1);
-	if (exprEndIndex === -1) {
-		return success(letIndex + 4);
-	}
-
-	const expr = source.substring(typeEndIndex + 1, exprEndIndex).trim();
-
-	// Type checking rules:
-	// U8 can only accept U8 reads
-	// U16 can accept U8 or U16 reads
+function checkReadOperationTypes(expr: string, declaredType: string): Result<void, string> {
 	if (declaredType === 'U8') {
 		if (expr.includes('read U16')) {
 			return failure('Type mismatch: cannot assign read U16 to U8');
@@ -200,8 +207,60 @@ function checkLetBinding(source: string, letIndex: number): Result<number, strin
 			return failure('Type mismatch: cannot assign read I32 to U16');
 		}
 	}
+	return success(undefined);
+}
+
+function checkLetBinding(
+	source: string,
+	letIndex: number,
+	variableTypes: Map<string, string>,
+): Result<number, string> {
+	const typeStartIndex = source.indexOf(':', letIndex);
+	if (typeStartIndex === -1 || typeStartIndex > letIndex + 20) {
+		return success(letIndex + 4);
+	}
+
+	const typeEndIndex = source.indexOf('=', typeStartIndex);
+	if (typeEndIndex === -1) {
+		return success(letIndex + 4);
+	}
+
+	const declaredType = source.substring(typeStartIndex + 1, typeEndIndex).trim();
+	const exprEndIndex = findSemicolonIndex(source, typeEndIndex + 1);
+	if (exprEndIndex === -1) {
+		return success(letIndex + 4);
+	}
+
+	const expr = source.substring(typeEndIndex + 1, exprEndIndex).trim();
+
+	const readCheckResult = checkReadOperationTypes(expr, declaredType);
+	if (!readCheckResult.success) {
+		return readCheckResult;
+	}
+
+	const varCheckResult = checkVariableAssignmentType(expr, declaredType, variableTypes);
+	if (!varCheckResult.success) {
+		return varCheckResult;
+	}
 
 	return success(exprEndIndex + 1);
+}
+
+function checkVariableAssignmentType(
+	expr: string,
+	targetType: string,
+	variableTypes: Map<string, string>,
+): Result<void, string> {
+	// Check if the expression is just a variable reference
+	const trimmedExpr = expr.trim();
+	if (variableTypes.has(trimmedExpr)) {
+		const sourceType = variableTypes.get(trimmedExpr);
+		// U8 can only accept U8
+		if (targetType === 'U8' && sourceType === 'U16') {
+			return failure('Type mismatch: cannot assign U16 to U8');
+		}
+	}
+	return success(undefined);
 }
 
 export function compile(source: string): Result<string, string> {

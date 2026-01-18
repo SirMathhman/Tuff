@@ -89,6 +89,10 @@ describe('The compiler - error handling', (): void => {
 	it('fails on type mismatch: U8 = read U16', (): void => {
 		assertInvalid('let z : U8 = read U16; z');
 	});
+
+	it('fails on type mismatch: U8 = U16 variable', (): void => {
+		assertInvalid('let x : U16 = read U16; let y : U8 = x; y');
+	});
 });
 
 describe('The compiler - wrapping', (): void => {
