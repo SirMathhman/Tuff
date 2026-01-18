@@ -77,75 +77,6 @@ function getTypeRank(type: string): number {
 }
 
 /**
- * Format a type mismatch error message.
- *
- * @param declaredType - the declared type
- * @param readType - the read type
- * @returns formatted error message
- */
-function typeMismatchError(declaredType: string, readType: string): string {
-	return `Type mismatch: declared type '${declaredType}' cannot hold read type '${readType}'`;
-}
-
-/**
- * Validate a single read type against the declared type.
- *
- * @param readType - the read type
- * @param declaredType - the declared type
- * @returns error message or empty string if valid
- */
-function validateSingleReadType(readType: string, declaredType: string): string {
-	if (readType === declaredType) {
-		return '';
-	}
-
-	const readRank = getTypeRank(readType);
-	const declaredRank = getTypeRank(declaredType);
-
-	// Allow if declared type is larger or equal
-	if (declaredRank < readRank) {
-		return typeMismatchError(declaredType, readType);
-	}
-
-	return '';
-}
-
-/**
- * Check if expression contains read calls with mismatched types.
- *
- * @param expr - expression string
- * @param declaredType - the declared type for the variable
- * @returns error message if types are incompatible, empty string if valid
- */
-export function validateReadTypesInExpression(expr: string, declaredType: string): string {
-	if (!expr.includes('read<') || !declaredType) {
-		return '';
-	}
-
-	const types = getAllReadTypesInExpression(expr);
-	if (types.length === 0) {
-		return '';
-	}
-
-	// If only one read type, verify it's compatible with declared type
-	if (types.length === 1) {
-		return validateSingleReadType(types[0], declaredType);
-	}
-
-	// Multiple read types - check if they can be mixed
-	const declaredRank = getTypeRank(declaredType);
-	for (const type of types) {
-		const typeRank = getTypeRank(type);
-		// Declared type must be at least as large as any read type
-		if (declaredRank < typeRank) {
-			return typeMismatchError(declaredType, type);
-		}
-	}
-
-	return '';
-}
-
-/**
  * Information extracted from a let-binding statement.
  */
 interface ParsedLetStatement {
@@ -187,6 +118,62 @@ function parseLetStatement(stmt: string): ParsedLetStatement | undefined {
 }
 
 /**
+ * Get the effective type of an expression based on read calls and variables.
+ *
+ * @param expr - the expression string
+ * @param variableTypes - map of already declared variables and their types
+ * @returns the largest type found in the expression
+ */
+function getExpressionType(expr: string, variableTypes: Map<string, string>): string {
+	const readTypes = getAllReadTypesInExpression(expr);
+	let maxType = 'U8';
+	let maxRank = getTypeRank(maxType);
+
+	for (const rt of readTypes) {
+		const rank = getTypeRank(rt);
+		if (rank > maxRank) {
+			maxRank = rank;
+			maxType = rt;
+		}
+	}
+
+	variableTypes.forEach((varType: string, varName: string): void => {
+		const varRegex = new RegExp(`\\b${varName}\\b`);
+		const hasVar = varRegex.test(expr);
+		const rank = getTypeRank(varType);
+		if (hasVar && rank > maxRank) {
+			maxRank = rank;
+			maxType = varType;
+		}
+	});
+
+	return maxType;
+}
+
+/**
+ * Validate type compatibility in a single let-binding statement.
+ *
+ * @param parsed - the parsed let-statement info
+ * @param variableTypes - existing variables and their types
+ * @returns error message if any, empty string otherwise
+ */
+function validateStatement(parsed: ParsedLetStatement, variableTypes: Map<string, string>): string {
+	if (variableTypes.has(parsed.name)) {
+		return `Variable '${parsed.name}' is already declared`;
+	}
+
+	const exprType = getExpressionType(parsed.expr, variableTypes);
+	const declaredType = parsed.declaredType || exprType;
+
+	if (parsed.declaredType && getTypeRank(parsed.declaredType) < getTypeRank(exprType)) {
+		return `Type mismatch: declared type '${parsed.declaredType}' cannot hold expression of type '${exprType}'`;
+	}
+
+	variableTypes.set(parsed.name, declaredType);
+	return '';
+}
+
+/**
  * Validate type compatibility in a let-binding declaration at source level.
  * Handles multiple statements and checks for duplicate declarations.
  *
@@ -198,7 +185,7 @@ export function validateTopLevelLetBinding(source: string): string {
 		.split(';')
 		.map((s: string): string => s.trim())
 		.filter((s: string): string => s);
-	const seenVariables = new Set<string>();
+	const variableTypes = new Map<string, string>();
 
 	for (const stmt of statements) {
 		const parsed = parseLetStatement(stmt);
@@ -206,14 +193,9 @@ export function validateTopLevelLetBinding(source: string): string {
 			continue;
 		}
 
-		if (seenVariables.has(parsed.name)) {
-			return `Variable '${parsed.name}' is already declared`;
-		}
-		seenVariables.add(parsed.name);
-
-		const typeError = validateReadTypesInExpression(parsed.expr, parsed.declaredType);
-		if (typeError) {
-			return typeError;
+		const error = validateStatement(parsed, variableTypes);
+		if (error) {
+			return error;
 		}
 	}
 
