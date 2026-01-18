@@ -64,19 +64,54 @@ export function generateSingleReadWithOp(operator: string, operand: string): str
  * @returns lines for evaluateExpr
  */
 /**
- * Generate code for handling multiplication/division and addition/subtraction.
+ * Generate code for cleaning up an integer in the generated runtime.
  *
- * @returns lines for evaluateTokens function
+ * @returns lines for cleanInt function
  */
-function generateEvaluateTokensHelper(): string[] {
+function generateCleanIntHelper(): string[] {
 	return [
-		'function evaluateTokens(tokens) {',
 		'  const cleanInt = (s) => {',
 		'    const c = String(s).replace(new RegExp("[(){};]", "g"), "");',
 		'    if (c === "true") return 1;',
 		'    if (c === "false") return 0;',
 		'    return parseInt(c, 10);',
 		'  };',
+	];
+}
+
+/**
+ * Generate code for handling unary operators in the generated runtime.
+ *
+ * @returns lines for handleUnary function
+ */
+function generateHandleUnaryRuntime(): string[] {
+	return [
+		'  const handleUnary = (ts) => {',
+		'    for (let i = ts.length - 1; i >= 0; i--) {',
+		'      if (ts[i].startsWith("!") && ts[i].length > 1) {',
+		'        let opCount = 0;',
+		'        while (opCount < ts[i].length && ts[i][opCount] === "!") opCount++;',
+		'        let val = cleanInt(ts[i].substring(opCount));',
+		'        for (let j = 0; j < opCount; j++) val = (val === 0 ? 1 : 0);',
+		'        ts[i] = String(val);',
+		'      } else if (ts[i] === "!" && i < ts.length - 1) {',
+		'        const operand = cleanInt(ts[i+1]);',
+		'        if (!isNaN(operand)) {',
+		'          ts.splice(i, 2, String(operand === 0 ? 1 : 0));',
+		'        }',
+		'      }',
+		'    }',
+		'  };',
+	];
+}
+
+/**
+ * Generate code for handling binary operators in the generated runtime.
+ *
+ * @returns lines for handleOps function
+ */
+function generateHandleOpsRuntime(): string[] {
+	return [
 		'  const handleOps = (ts, ops) => {',
 		'    let i = 0;',
 		'    while (i < ts.length) {',
@@ -94,6 +129,24 @@ function generateEvaluateTokensHelper(): string[] {
 		'      } else i++;',
 		'    }',
 		'  };',
+	];
+}
+
+/**
+ * Generate code for handling multiplication/division and addition/subtraction.
+ *
+ * @returns lines for evaluateTokens function
+ */
+function generateEvaluateTokensHelper(): string[] {
+	const cleanIntCode = generateCleanIntHelper();
+	const unaryCode = generateHandleUnaryRuntime();
+	const opsCode = generateHandleOpsRuntime();
+	return [
+		'function evaluateTokens(tokens) {',
+		...cleanIntCode,
+		...unaryCode,
+		...opsCode,
+		'  handleUnary(tokens);',
 		'  handleOps(tokens, ["*", "/"]);',
 		'  handleOps(tokens, ["+", "-", "%"]);',
 		'  handleOps(tokens, ["&&"]);',
@@ -292,6 +345,22 @@ export function buildEvalFunction(): string {
     if (c === "false") return 0;
     return parseInt(c, 10);
   };
+  const handleUnary = (ts) => {
+    for (let i = ts.length - 1; i >= 0; i--) {
+      if (ts[i].startsWith("!") && ts[i].length > 1) {
+        let opCount = 0;
+        while (opCount < ts[i].length && ts[i][opCount] === "!") opCount++;
+        let val = cleanInt(ts[i].substring(opCount));
+        for (let j = 0; j < opCount; j++) val = (val === 0 ? 1 : 0);
+        ts[i] = String(val);
+      } else if (ts[i] === "!" && i < ts.length - 1) {
+        const operand = cleanInt(ts[i+1]);
+        if (!isNaN(operand)) {
+          ts.splice(i, 2, String(operand === 0 ? 1 : 0));
+        }
+      }
+    }
+  };
   let tokens = Array.isArray(input) ? [...input] : input.split(new RegExp("\\\\s+")).filter(t => t);
   for (let idx = 0; idx < tokens.length; idx++) {
     const t = tokens[idx], start = t.indexOf("values["), end = start > -1 ? t.indexOf("]", start) : -1;
@@ -300,6 +369,7 @@ export function buildEvalFunction(): string {
       tokens[idx] = t.substring(0, start) + values[valIdx] + t.substring(end + 1);
     }
   }
+  handleUnary(tokens);
   if (tokens.length === 1 && !tokens[0].includes("(") && !tokens[0].includes("{")) {
     return cleanInt(tokens[0]);
   }

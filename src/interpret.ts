@@ -11,6 +11,7 @@ import {
 	replaceVariablesInExpression,
 	removeDelimiters,
 	performOperation,
+	performUnaryOperation,
 	cleanInt,
 	findMatchingParen,
 } from './utils';
@@ -390,6 +391,57 @@ function processParenthesesAndBraces(
 }
 
 /**
+ * Handle attached unary operator ! (e.g., !1 or !!1).
+ *
+ * @param parts - expression parts
+ * @param i - index of the part
+ */
+function handleAttachedUnary(parts: string[], i: number): void {
+	const part = parts[i];
+	let opCount = 0;
+	while (opCount < part.length && part[opCount] === '!') {
+		opCount++;
+	}
+	let val = cleanInt(part.substring(opCount));
+	for (let j = 0; j < opCount; j++) {
+		val = performUnaryOperation('!', val);
+	}
+	parts[i] = String(val);
+}
+
+/**
+ * Handle unary operations (!) in parts array.
+ *
+ * @param parts - array of expression parts
+ */
+function handleUnaryOperators(parts: string[]): void {
+	// Process from right to left to handle multiple unary operators naturally
+	for (let i = parts.length - 1; i >= 0; i--) {
+		const part = parts[i];
+		if (part.startsWith('!') && part.length > 1) {
+			handleAttachedUnary(parts, i);
+		} else if (part === '!' && i < parts.length - 1) {
+			const operand = cleanInt(parts[i + 1]);
+			applySeparateUnary(parts, i, operand);
+		}
+	}
+}
+
+/**
+ * Apply separate unary operator ! results.
+ *
+ * @param parts - parts
+ * @param i - index
+ * @param operand - value
+ */
+function applySeparateUnary(parts: string[], i: number, operand: number): void {
+	if (!isNaN(operand)) {
+		const res = performUnaryOperation('!', operand);
+		parts.splice(i, 2, String(res));
+	}
+}
+
+/**
  * Handle specific binary operations in parts array in-place.
  *
  * @param parts - array of expression parts
@@ -445,6 +497,7 @@ function handleLogicalOperations(parts: string[]): void {
  * @returns result of the expression
  */
 function evaluateArithmeticParts(parts: string[]): number {
+	handleUnaryOperators(parts);
 	handleMultiplicationDivision(parts);
 	handleAdditionSubtraction(parts);
 	handleLogicalOperations(parts);
@@ -519,14 +572,26 @@ function evaluateExpression(expr: string): number {
 	const trimmed = expr.trim();
 	const parts = trimmed.split(' ').filter((p: string): boolean => Boolean(p));
 
-	if (parts.length === 1) {
+	if (
+		parts.length === 1 &&
+		!parts[0].startsWith('!') &&
+		!parts[0].includes('(') &&
+		!parts[0].includes('{')
+	) {
 		return cleanInt(parts[0]);
 	}
 
 	// First pass: handle parentheses and braces
 	processParenthesesAndBraces(parts, evaluateParentheses);
 
-	// Second pass: handle * and / (higher precedence)
+	// Second pass: handle unary operators
+	handleUnaryOperators(parts);
+
+	if (parts.length === 1) {
+		return cleanInt(parts[0]);
+	}
+
+	// Third pass: handle * and / (higher precedence)
 	handleMultiplicationDivision(parts);
 
 	// Third pass: handle + and - (lower precedence)
@@ -671,10 +736,14 @@ export const compile = (source: string): Result<string, string> => {
 	}
 
 	if (readExprs.length === 1) {
-		return { ok: true, value: generateSingleReadWithOpCode(source, readExprs[0]) };
+		const readExpr = readExprs[0];
+		const beforeRead = source.substring(0, readExpr.startIndex).trim();
+		if (!beforeRead) {
+			return { ok: true, value: generateSingleReadWithOpCode(source, readExpr) };
+		}
 	}
 
-	// Multiple read<>() calls - replace them with array indices and evaluate
+	// Multiple read<>() calls or complex single call - replace them with array indices and evaluate
 	return { ok: true, value: generateLetBindingCompileCode(source) };
 };
 

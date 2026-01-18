@@ -127,6 +127,26 @@ export function cleanInt(s: string): number {
 }
 
 /**
+ * Handle unary operation.
+ *
+ * @param operator - !
+ * @param operand - value
+ * @returns result
+ */
+export function performUnaryOperation(operator: string, operand: number): number {
+	switch (operator) {
+		case '!': {
+			if (operand === 0) {
+				return 1;
+			}
+			return 0;
+		}
+		default:
+			return operand;
+	}
+}
+
+/**
  * Find matching closing parenthesis or brace in parts array.
  *
  * @param parts - array of string parts
