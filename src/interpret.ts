@@ -683,6 +683,38 @@ export function interpret(source: string, stdIn: string): Result<number, string>
 	return { ok: true, value: evaluateExpressionSequential(evaluatedSource, stdinValues, 0).result };
 }
 
+function generateLetBindingCompileCode(source: string): string {
+	const readExprs = findAllReadExpressions(source);
+	let replacedSource = source;
+	for (let i = 0; i < readExprs.length; i++) {
+		replacedSource = replacedSource.replace(readExprs[i].expression, `values[${i}]`);
+	}
+	return generateMultiReadCode(replacedSource);
+}
+
+function generateNumericCompileCode(source: string): string {
+	const numericPart = extractNumericPart(source);
+	return `process.exit(${parseInt(numericPart, 10)});`;
+}
+
+interface ReadExpressionRange {
+	endIndex: number;
+}
+
+function generateSingleReadWithOpCode(source: string, readExpr: ReadExpressionRange): string {
+	const afterRead = source.substring(readExpr.endIndex).trim();
+
+	if (!afterRead || afterRead === ';') {
+		return generateSingleReadCode();
+	}
+
+	// read<>() with single operation
+	const operatorMatch = afterRead.split(' ');
+	const operator = operatorMatch[0];
+	const operand = operatorMatch[1] || '0';
+	return generateSingleReadWithOp(operator, operand);
+}
+
 /**
  * Compile the given source to a target string.
  *
@@ -698,46 +730,33 @@ export const compile = (source: string): Result<string, string> => {
 		return { ok: false, error: typeError };
 	}
 
-	// Check if this is a top-level let-binding with no final expression
 	const trimmedSource = source.trim();
+
+	// Check if this is a top-level let-binding
+	if (
+		trimmedSource.startsWith('let ') &&
+		trimmedSource.includes(';') &&
+		!trimmedSource.startsWith('{')
+	) {
+		return { ok: true, value: generateLetBindingCompileCode(source) };
+	}
+
+	// Check if this is a top-level let-binding with no final expression
 	if (trimmedSource.startsWith('let ') && trimmedSource.endsWith(';')) {
-		// This is a let-binding with no final expression, should exit with 0
-		return {
-			ok: true,
-			value: 'process.exit(0);',
-		};
+		return { ok: true, value: 'process.exit(0);' };
 	}
 
 	const readExprs = findAllReadExpressions(source);
 	if (readExprs.length === 0) {
-		// No read expression, compile as a numeric literal
-		const numericPart = extractNumericPart(source);
-		return { ok: true, value: `process.exit(${parseInt(numericPart, 10)});` };
+		return { ok: true, value: generateNumericCompileCode(source) };
 	}
 
 	if (readExprs.length === 1) {
-		// Single read<>() call - use optimized path
-		const readExpr = readExprs[0];
-		const afterRead = source.substring(readExpr.endIndex).trim();
-
-		if (!afterRead || afterRead === ';') {
-			return { ok: true, value: generateSingleReadCode() };
-		}
-
-		// read<>() with single operation
-		const operatorMatch = afterRead.split(' ');
-		const operator = operatorMatch[0];
-		const operand = operatorMatch[1] || '0';
-		return { ok: true, value: generateSingleReadWithOp(operator, operand) };
+		return { ok: true, value: generateSingleReadWithOpCode(source, readExprs[0]) };
 	}
 
 	// Multiple read<>() calls - replace them with array indices and evaluate
-	let replacedSource = source;
-	for (let i = 0; i < readExprs.length; i++) {
-		replacedSource = replacedSource.replace(readExprs[i].expression, `values[${i}]`);
-	}
-
-	return { ok: true, value: generateMultiReadCode(replacedSource) };
+	return { ok: true, value: generateLetBindingCompileCode(source) };
 };
 
 /**

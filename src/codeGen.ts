@@ -61,25 +61,32 @@ export function generateSingleReadWithOp(operator: string, operand: string): str
  *
  * @returns lines for evaluateExpr
  */
-function generateEvaluateExprHelper(): string[] {
+/**
+ * Generate code for handling multiplication/division and addition/subtraction.
+ *
+ * @returns lines for evaluateTokens function
+ */
+function generateEvaluateTokensHelper(): string[] {
 	return [
-		'const evaluateExpr = (exprStr) => {',
-		'  const parts = exprStr.split(" ").filter(p => p);',
-		'  if (parts.length === 1) return parseInt(parts[0], 10);',
+		'function evaluateTokens(tokens) {',
 		'  let i = 0;',
-		'  while (i < parts.length) {',
-		'    if (i > 0 && i < parts.length - 1 && (parts[i] === "*" || parts[i] === "/")) {',
-		'      const l = parseInt(parts[i - 1], 10), r = parseInt(parts[i + 1], 10);',
-		'      parts.splice(i - 1, 3, (parts[i] === "*" ? l * r : Math.floor(l / r)).toString());',
+		'  while (i < tokens.length) {',
+		'    if (i > 0 && i < tokens.length - 1 && (tokens[i] === "*" || tokens[i] === "/")) {',
+		'      const l = Number(tokens[i - 1]), r = Number(tokens[i + 1]);',
+		'      const res = tokens[i] === "*" ? l * r : Math.floor(l / r);',
+		'      tokens.splice(i - 1, 3, String(res));',
 		'    } else { i++; }',
 		'  }',
-		'  let res = parseInt(parts[0], 10);',
-		'  for (let j = 1; j < parts.length; j += 2) {',
-		'    const o = parseInt(parts[j + 1], 10);',
-		'    res = parts[j] === "+" ? res + o : parts[j] === "-" ? res - o : res % o;',
+		'  if (tokens.length === 0) return 0;',
+		'  let result = Number(tokens[0]);',
+		'  for (let j = 1; j < tokens.length; j += 2) {',
+		'    const o = Number(tokens[j + 1]);',
+		'    if (tokens[j] === "+") result += o;',
+		'    else if (tokens[j] === "-") result -= o;',
+		'    else if (tokens[j] === "%") result %= o;',
 		'  }',
-		'  return res;',
-		'};',
+		'  return Math.floor(result);',
+		'}',
 	];
 }
 
@@ -103,10 +110,10 @@ function generateBlockLetBindingHelper(): string[] {
 		'      if (varName && expr) {',
 		'        let exprEval = expr;',
 		'        for (const [vName, vValue] of Object.entries(bindings)) {',
-		'          const regex = new RegExp(`\\\\b\${vName}\\\\b`, "g");',
+		'          const regex = new RegExp("\\\\b" + vName + "\\\\b", "g");',
 		'          exprEval = exprEval.replace(regex, String(vValue));',
 		'        }',
-		'        bindings[varName] = evaluateExpr(exprEval);',
+		'        bindings[varName] = processAndEvaluate(exprEval, values);',
 		'      }',
 	];
 }
@@ -119,9 +126,10 @@ function generateBlockLetBindingHelper(): string[] {
 function generateEvaluateBlockHelper(): string[] {
 	const letBindingCode = generateBlockLetBindingHelper();
 	return [
-		'const evaluateBlock = (blockContent, values, readIdx) => {',
+		'function evaluateBlock(blockContent, values, readIdx) {',
 		'  const bindings = {};',
 		'  const statements = blockContent.split(";").map(s => s.trim()).filter(s => s);',
+		'  if (statements.length === 0) return 0;',
 		'  for (let i = 0; i < statements.length - 1; i++) {',
 		'    const stmt = statements[i];',
 		'    if (stmt.startsWith("let ")) {',
@@ -129,13 +137,14 @@ function generateEvaluateBlockHelper(): string[] {
 		'    }',
 		'  }',
 		'  const lastStmt = statements[statements.length - 1];',
+		'  if (lastStmt.startsWith("let ")) return 0;',
 		'  let lastEval = lastStmt;',
 		'  for (const [vName, vValue] of Object.entries(bindings)) {',
-		'    const regex = new RegExp(`\\\\b\${vName}\\\\b`, "g");',
+		'    const regex = new RegExp("\\\\b" + vName + "\\\\b", "g");',
 		'    lastEval = lastEval.replace(regex, String(vValue));',
 		'  }',
-		'  return evaluateExpr(lastEval);',
-		'};',
+		'  return processAndEvaluate(lastEval, values);',
+		'}',
 	];
 }
 
@@ -147,12 +156,12 @@ function generateEvaluateBlockHelper(): string[] {
  */
 function generateMinimalHelpers(): string {
 	const countCharLines = [
-		'const countChar = (s, c) => { let count = 0; for (let i = 0; i < s.length; i++) if (s[i] === c) count++; return count; };',
+		'function countChar(s, c) { let count = 0; for (let i = 0; i < s.length; i++) if (s[i] === c) count++; return count; }',
 	];
-	const evaluateExprLines = generateEvaluateExprHelper();
+	const evaluateTokensLines = generateEvaluateTokensHelper();
 	const evaluateBlockLines = generateEvaluateBlockHelper();
 
-	const lines = [...countCharLines, ...evaluateExprLines, ...evaluateBlockLines];
+	const lines = [...countCharLines, ...evaluateTokensLines, ...evaluateBlockLines];
 	return lines.join('\n');
 }
 
@@ -171,9 +180,9 @@ function generateBlockEvalExpr(): string {
         const delimClean = (s) => s.split("(").join("").split(")").join("").trim();
         const beforeClean = delimClean(beforeBrace);
         const afterClean = delimClean(afterBrace);
-        const blockResult = evaluateBlock(braceContent, values, 0);
-        exprToEval = beforeClean ? (beforeClean + " " + blockResult) : String(blockResult);
-        if (afterClean) exprToEval = exprToEval + " " + afterClean;`;
+        const blockVal = evaluateBlock(braceContent, values, 0);
+      exprToEval = beforeClean ? (beforeClean + " " + blockVal) : String(blockVal);
+      if (afterClean) exprToEval = exprToEval + " " + afterClean;`;
 }
 
 export function generateGroupedExprCode(): string {
@@ -204,13 +213,12 @@ export function generateGroupedExprCode(): string {
         const afterBrace = blockStr.substring(braceEnd + 1).trim();
         ${generateBlockEvalExpr()}
       } else {
-        let iTok = blockTokens.map(t => t.split("(").join("").split(")").join("").split("{").join("").split("}").join(""));
-        iTok = iTok.filter(t => t);
-        exprToEval = iTok.join(" ");
+        const iTok = blockTokens.map(t => t.split("(").join("").split(")").join("").split("{").join("").split("}").join(""));
+        exprToEval = iTok.filter(t => t).join(" ");
       }
       
-      const result = evaluateExpr(exprToEval);
-      tokens.splice(sIdx, eIdx - sIdx + 1, String(result));
+      const resVal = processAndEvaluate(exprToEval, values);
+      tokens.splice(sIdx, eIdx - sIdx + 1, String(resVal));
     } else { i++; }
   }`;
 }
@@ -221,14 +229,7 @@ export function generateGroupedExprCode(): string {
  * @returns JavaScript code string
  */
 export function generateMultDivCode(): string {
-	return `  i = 0;
-  while (i < tokens.length) {
-    if (i > 0 && i < tokens.length - 1 && (tokens[i] === "*" || tokens[i] === "/")) {
-      const l = parseInt(tokens[i - 1], 10), r = parseInt(tokens[i + 1], 10);
-      const res = tokens[i] === "*" ? l * r : Math.floor(l / r);
-      tokens.splice(i - 1, 3, res.toString());
-    } else { i++; }
-  }`;
+	return '';
 }
 
 /**
@@ -237,12 +238,7 @@ export function generateMultDivCode(): string {
  * @returns JavaScript code string
  */
 export function generateAddSubCode(): string {
-	return `  let result = parseInt(tokens[0], 10);
-  for (let j = 1; j < tokens.length; j += 2) {
-    const o = parseInt(tokens[j + 1], 10);
-    result = tokens[j] === "+" ? result + o : tokens[j] === "-" ? result - o : result % o;
-  }
-  return result;`;
+	return '  return evaluateTokens(tokens);';
 }
 
 /**
@@ -252,9 +248,9 @@ export function generateAddSubCode(): string {
  */
 export function buildEvalFunction(): string {
 	const groupCode = generateGroupedExprCode();
-	const multDivCode = generateMultDivCode();
 	const addSubCode = generateAddSubCode();
-	return `const processAndEvaluate = (tokens, values) => {
+	return `function processAndEvaluate(input, values) {
+  let tokens = Array.isArray(input) ? [...input] : input.split(/\\s+/).filter(t => t);
   for (let idx = 0; idx < tokens.length; idx++) {
     const t = tokens[idx], start = t.indexOf("values["), end = start > -1 ? t.indexOf("]", start) : -1;
     if (start > -1 && end > -1) {
@@ -263,9 +259,8 @@ export function buildEvalFunction(): string {
     }
   }
 ${groupCode}
-${multDivCode}
 ${addSubCode}
-};`;
+}`;
 }
 
 /**
@@ -275,78 +270,6 @@ ${addSubCode}
  */
 export function generateTokenProcessingCode(): string {
 	return `${generateMinimalHelpers()}\n${buildEvalFunction()}`;
-}
-
-/**
- * Result of extracting let binding information.
- */
-interface LetBindingInfo {
-	binding: string;
-	finalExpr: string;
-}
-
-/**
- * Information from parsing a let statement.
- */
-interface ParsedLetBinding {
-	varName: string;
-	rest: string;
-}
-
-/**
- * Extract binding and final expression from a top-level let statement.
- *
- * @param rest - the part after "let varName : type = "
- * @returns object with binding expression and final expression
- */
-function extractLetBinding(rest: string): LetBindingInfo {
-	const lastSemicolon = rest.lastIndexOf(';');
-	let bindingExpr = '';
-	let finalExpr = '';
-
-	if (lastSemicolon !== -1) {
-		bindingExpr = rest.substring(0, lastSemicolon).trim();
-		const afterSemi = rest.substring(lastSemicolon + 1).trim();
-		finalExpr = afterSemi;
-	} else {
-		bindingExpr = rest.trim();
-	}
-
-	return { binding: bindingExpr, finalExpr };
-}
-
-/**
- * Check if source is a top-level let-binding and extract variable name and rest.
- *
- * @param source - the source code
- * @returns match object with groups, or undefined if not a let-binding
- */
-function parseLetBinding(source: string): ParsedLetBinding | undefined {
-	if (!source.startsWith('let ')) {
-		return undefined;
-	}
-
-	const afterLet = source.substring(4); // remove 'let '
-	const equalsIdx = afterLet.indexOf('=');
-	if (equalsIdx === -1) {
-		return undefined;
-	}
-
-	const colonIdx = afterLet.indexOf(':');
-	let varName: string;
-	if (colonIdx !== -1 && colonIdx < equalsIdx) {
-		varName = afterLet.substring(0, colonIdx).trim();
-	} else {
-		varName = afterLet.substring(0, equalsIdx).trim();
-	}
-
-	const rest = afterLet.substring(equalsIdx + 1).trim();
-
-	if (!varName || !rest) {
-		return undefined;
-	}
-
-	return { varName, rest };
 }
 
 /**
@@ -370,25 +293,15 @@ function generateEvalSnippet(exprStr: string, resultVar: string): string {
  */
 export function generateMultiReadCode(source: string): string {
 	const processingCode = generateTokenProcessingCode();
-	const letInfo = parseLetBinding(source);
 	let evaluationCode = '';
 
-	if (letInfo) {
-		const { binding, finalExpr: exprName } = extractLetBinding(letInfo.rest);
-		const finalExprVal = exprName || letInfo.varName;
-		const bindingEval = generateEvalSnippet(binding, letInfo.varName);
+	const trimmed = source.trim();
+	const hasLet = trimmed.startsWith('let ');
+	const hasSemicolon = trimmed.includes(';');
+	const notInBraces = !trimmed.startsWith('{');
 
-		evaluationCode = `${bindingEval}
-  const finalExpr = '${finalExprVal}';
-  const finalTokens = finalExpr.split(" ").filter(t => t);
-  let resultVal = ${letInfo.varName};
-  if (finalTokens.length > 1 || finalTokens[0] !== '${letInfo.varName}') {
-    for (let idx = 0; idx < finalTokens.length; idx++) {
-      if (finalTokens[idx] === '${letInfo.varName}') finalTokens[idx] = String(${letInfo.varName});
-    }
-    resultVal = processAndEvaluate(finalTokens, values);
-  }
-  const result = resultVal;`;
+	if (hasLet && hasSemicolon && notInBraces) {
+		evaluationCode = `  const result = evaluateBlock(${JSON.stringify(source)}, values, 0);`;
 	} else {
 		evaluationCode = generateEvalSnippet(source, 'result');
 	}
