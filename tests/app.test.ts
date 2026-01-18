@@ -84,7 +84,9 @@ describe('The compiler - precedence and grouping', (): void => {
 			expect(result.value).toBe(14);
 		}
 	});
+});
 
+describe('The compiler - let bindings', (): void => {
 	it('handles let bindings in blocks', (): void => {
 		const result = run('(read U8 + { let x : U8 = read U8; x }) * read U8', '4 3 2');
 		expect(result.success).toBe(true);
@@ -98,6 +100,19 @@ describe('The compiler - precedence and grouping', (): void => {
 		expect(result.success).toBe(true);
 		if (result.success) {
 			expect(result.value).toBe(14);
+		}
+	});
+
+	it('handles outer let binding with nested blocks', (): void => {
+		const result = run(
+			'let z : U8 = (read U8 + { let x : U8 = read U8; let y : U8 = x; y }) * read U8; z',
+			'4 3 2',
+		);
+
+		if (result.success) {
+			expect(result.value).toBe(14);
+		} else {
+			expect(result.error).toBeUndefined();
 		}
 	});
 });

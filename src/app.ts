@@ -1,5 +1,19 @@
 import { Result, success, failure } from './result';
 
+function findSemicolonIndex(source: string, startPos: number): number {
+	let braceDepth = 0;
+	for (let i = startPos; i < source.length; i++) {
+		if (source[i] === '{') {
+			braceDepth++;
+		} else if (source[i] === '}') {
+			braceDepth--;
+		} else if (source[i] === ';' && braceDepth === 0) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 function wrapLetBindings(source: string): string {
 	let replaced = source;
 	let searchIndex = 0;
@@ -9,8 +23,13 @@ function wrapLetBindings(source: string): string {
 			break;
 		}
 		const eqIndex = replaced.indexOf('=', letIndex);
-		const semiIndex = replaced.indexOf(';', eqIndex);
-		if (eqIndex !== -1 && semiIndex !== -1) {
+		if (eqIndex === -1) {
+			searchIndex = letIndex + 4;
+			continue;
+		}
+
+		const semiIndex = findSemicolonIndex(replaced, eqIndex + 1);
+		if (semiIndex !== -1) {
 			const expr = replaced.substring(eqIndex + 1, semiIndex).trim();
 			const before = replaced.substring(0, eqIndex + 1);
 			const after = replaced.substring(semiIndex);
@@ -23,19 +42,13 @@ function wrapLetBindings(source: string): string {
 	return replaced;
 }
 
-function handleLetBindings(source: string): string {
+function handleBracesInLetBindings(source: string): string {
 	let replaced = source;
-	// Replace outer curly braces with IIFE wrapper
+	// Replace braces with IIFE wrapper
 	replaced = replaced.split('{').join('(() => { ');
 	replaced = replaced.split('}').join('})()');
 
-	// Replace let x : U8 = expr; with let x = (expr & 0xff);
-	replaced = wrapLetBindings(replaced);
-
-	// Remove remaining type annotations if any
-	replaced = replaced.split(': U8').join('');
-
-	// Ensure the last identity expression in a block is returned.
+	// Ensure the last expression in blocks is returned
 	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 	if (!replaced.includes(';')) {
 		return replaced;
@@ -57,6 +70,48 @@ function handleLetBindings(source: string): string {
 	const segmentBeforeReturn = beforeBlockEnd.substring(0, lastSemicolonIndex + 1);
 	const segmentToReturn = beforeBlockEnd.substring(lastSemicolonIndex + 1).trim();
 	return `${segmentBeforeReturn} return ${segmentToReturn}; ${afterBlockEnd}`;
+}
+
+function isTopLevelLet(source: string): boolean {
+	const trimmed = source.trimStart();
+	return trimmed.startsWith('let ') && trimmed.includes('=');
+}
+
+function wrapTopLevelLet(source: string): string {
+	const lastSemiIndex = source.lastIndexOf(';');
+	if (lastSemiIndex === -1) {
+		return `(function() { return ${source}; })()`;
+	}
+
+	const lastStmt = source.substring(lastSemiIndex + 1).trim();
+	// Check if last statement is a single identifier
+	if (lastStmt && lastStmt.indexOf(' ') === -1 && lastStmt.indexOf('(') === -1) {
+		const beforeLastStmt = source.substring(0, lastSemiIndex + 1);
+		return `(function() { ${beforeLastStmt} return ${lastStmt}; })()`;
+	}
+	return `(function() { ${source} })()`;
+}
+
+function handleLetBindings(source: string): string {
+	let replaced = source;
+
+	// First, wrap expressions in let assignments with & 0xff
+	replaced = wrapLetBindings(replaced);
+
+	// Then handle braces - only if there are any
+	if (replaced.includes('{')) {
+		replaced = handleBracesInLetBindings(replaced);
+	}
+
+	// Remove remaining type annotations
+	replaced = replaced.split(': U8').join('');
+
+	// For top-level let bindings, convert to return the value
+	if (isTopLevelLet(replaced)) {
+		replaced = wrapTopLevelLet(replaced);
+	}
+
+	return replaced;
 }
 
 function compile(source: string): Result<string, string> {
@@ -113,6 +168,6 @@ export function run(source: string, stdIn: string): Result<number, string> {
 		const value = eval(`(function(stdin){ return ((${code}) & 0xff); })(stdin)`) as number;
 		return success(value);
 	} catch (e) {
-		return failure(`Evaluation error: ${String(e)}`);
+		return failure(`Failed to evaluate '${code}': ${(e as Error).message}`);
 	}
 }
