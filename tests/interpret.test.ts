@@ -34,6 +34,25 @@ function testBothValid(source: string, stdIn: string, expectedExitCode: number):
 	testCompileAndExecuteValid(source, stdIn, expectedExitCode);
 }
 
+function testInterpretInvalid(source: string, stdIn: string): void {
+	test(`interpret('${source}', '${stdIn}') should return error`, (): void => {
+		const result = interp.interpret(source, stdIn);
+		expect(result.ok).toBe(false);
+	});
+}
+
+function testCompileInvalid(source: string): void {
+	test(`compile('${source}') should return error`, (): void => {
+		const result = interp.compile(source);
+		expect(result.ok).toBe(false);
+	});
+}
+
+function testBothInvalid(source: string, stdIn: string = ''): void {
+	testInterpretInvalid(source, stdIn);
+	testCompileInvalid(source);
+}
+
 describe('interpret and compileAndExecute stubs', (): void => {
 	test('interpret should be a function and return a Result', (): void => {
 		expect(typeof interp.interpret).toBe('function');
@@ -72,4 +91,5 @@ describe('interpret and compileAndExecute stubs', (): void => {
 	);
 	testBothValid('let z : U8 = read<U8>(); z', '2', 2);
 	testBothValid('let z : U8 = read<U8>();', '2', 0);
+	testBothInvalid('let z : U8 = read<U16>();');
 });

@@ -183,6 +183,63 @@ function replaceReadsInExpression(
  * @returns object with result and updated read index
  */
 /**
+ * Extract the type from a read<Type>() expression.
+ *
+ * @param expr - expression string
+ * @returns the type string or empty string if not found
+ */
+function extractReadTypeFromExpr(expr: string): string {
+	if (!expr.includes('read<')) {
+		return '';
+	}
+	const readStart = expr.indexOf('read<');
+	const typeStart = readStart + 5;
+	const typeEnd = expr.indexOf('>', typeStart);
+	if (typeEnd === -1) {
+		return '';
+	}
+	return expr.substring(typeStart, typeEnd).trim();
+}
+
+/**
+ * Validate type compatibility in a let-binding declaration at source level.
+ *
+ * @param source - the source code
+ * @returns error message if type mismatch, empty string if valid or not a let-binding
+ */
+function validateTopLevelLetBinding(source: string): string {
+	const trimmedSource = source.trim();
+	if (!trimmedSource.startsWith('let ')) {
+		return '';
+	}
+
+	const equalsIdx = trimmedSource.indexOf('=');
+	if (equalsIdx === -1) {
+		return '';
+	}
+
+	const colonIdx = trimmedSource.indexOf(':');
+	if (colonIdx === -1 || colonIdx >= equalsIdx) {
+		return '';
+	}
+
+	const declaredPart = trimmedSource.substring(colonIdx + 1, equalsIdx);
+	const declaredType = declaredPart.split(';')[0].trim();
+
+	let expr = trimmedSource.substring(equalsIdx + 1);
+	if (expr.endsWith(';')) {
+		expr = expr.substring(0, expr.length - 1);
+	}
+
+	const readType = extractReadTypeFromExpr(expr.trim());
+	if (readType && declaredType !== readType) {
+		return `Type mismatch: declared type '${declaredType}' does not match read type '${readType}'`;
+	}
+
+	return '';
+}
+
+/**
  * Process a let-binding statement and store the binding.
  *
  * @param stmt - the let-binding statement
@@ -219,6 +276,7 @@ function processLetBinding(
 	}
 
 	let expr = afterColon.substring(equalsIdx + 1).trim();
+
 	const readResult = replaceReadsInExpression(expr, stdinValues, readIndex);
 	expr = readResult.expr;
 	const nextReadIdx = readResult.readIndex;
@@ -633,6 +691,12 @@ function evaluateExpression(expr: string): number {
 export function interpret(source: string, stdIn: string): Result<number, string> {
 	// DO NOT CALL COMPILE
 
+	// Validate top-level let-bindings for type compatibility
+	const typeError = validateTopLevelLetBinding(source);
+	if (typeError) {
+		return { ok: false, error: typeError };
+	}
+
 	const readExprs = findAllReadExpressions(source);
 	if (readExprs.length === 0) {
 		// No read expression, parse as a numeric literal
@@ -677,6 +741,12 @@ export function interpret(source: string, stdIn: string): Result<number, string>
  */
 export const compile = (source: string): Result<string, string> => {
 	// DO NOT CALL INTERPRET
+
+	// Validate top-level let-bindings for type compatibility
+	const typeError = validateTopLevelLetBinding(source);
+	if (typeError) {
+		return { ok: false, error: typeError };
+	}
 
 	// Check if this is a top-level let-binding with no final expression
 	const trimmedSource = source.trim();
