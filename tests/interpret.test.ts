@@ -13,17 +13,18 @@ describe('interpret and compileAndExecute stubs', (): void => {
 		expect(typeof exitCode).toBe('number');
 	});
 
-
 	test('compileAndExecute should call compile and execute and return the execute exit code', (): void => {
 		const spyCompile = jest
 			.spyOn(interp.runtime, 'compile')
 			.mockImplementation((): string => 'TARGET');
-		const spyExecute = jest.spyOn(interp.runtime, 'execute').mockImplementation((): number => 7);
+		const spyExecute = jest
+			.spyOn(interp.runtime, 'execute')
+			.mockImplementation((): number => 7);
 
 		const exitCode = interp.compileAndExecute('SRC', 'STDIN');
 
 		expect(spyCompile).toHaveBeenCalledWith('SRC');
-		expect(spyExecute).toHaveBeenCalledWith('TARGET');
+		expect(spyExecute).toHaveBeenCalledWith('TARGET', 'STDIN');
 		expect(exitCode).toBe(7);
 
 		spyCompile.mockRestore();
