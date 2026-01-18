@@ -118,13 +118,70 @@ function performOperation(operator: string, left: number, right: number): number
 }
 
 /**
- * Evaluate a full arithmetic expression with proper order of operations.
+ * Find matching closing parenthesis in parts array.
  *
- * @param expr - arithmetic expression string (e.g., '1 + 2', '5 * 3 - 1')
+ * @param parts - array of string parts
+ * @param startIdx - index where opening parenthesis is found
+ * @returns index of matching closing parenthesis
+ */
+function findMatchingParen(parts: string[], startIdx: number): number {
+	let parenCount = 0;
+	for (let j = startIdx; j < parts.length; j++) {
+		const part = parts[j];
+		parenCount += part.split('(').length - 1;
+		parenCount -= part.split(')').length - 1;
+		if (parenCount === 0) {
+			return j;
+		}
+	}
+	return startIdx;
+}
+
+/**
+ * Evaluate expression inside parentheses (without outer parens).
+ *
+ * @param innerParts - parts inside parentheses
+ * @returns evaluated result
+ */
+function evaluateParentheses(innerParts: string[]): number {
+	const cleanParts = innerParts.map((p: string): string => {
+		let result = p;
+		result = result.split('(').join('');
+		result = result.split(')').join('');
+		return result;
+	});
+	// Handle * and /
+	let i = 0;
+	while (i < cleanParts.length) {
+		if (i > 0 && i < cleanParts.length - 1 && (cleanParts[i] === '*' || cleanParts[i] === '/')) {
+			const left = parseInt(cleanParts[i - 1], 10);
+			const operator = cleanParts[i];
+			const right = parseInt(cleanParts[i + 1], 10);
+			const result = performOperation(operator, left, right);
+			cleanParts.splice(i - 1, 3, String(result));
+		} else {
+			i++;
+		}
+	}
+	// Handle + and -
+	let result = parseInt(cleanParts[0], 10);
+	for (let j = 1; j < cleanParts.length; j += 2) {
+		const operator = cleanParts[j];
+		const operand = parseInt(cleanParts[j + 1], 10);
+		result = performOperation(operator, result, operand);
+	}
+	return result;
+}
+
+/**
+ * Evaluate a full arithmetic expression with proper order of operations.
+ * Supports parentheses, multiplication/division (higher precedence), and addition/subtraction (lower precedence).
+ *
+ * @param expr - arithmetic expression string (e.g., '1 + 2', '5 * 3 - 1', '(1 + 2) * 3')
  * @returns result of the expression
  */
 function evaluateExpression(expr: string): number {
-	// Parse expression with operator precedence (* and / before + and -)
+	// Parse expression with operator precedence and parentheses
 	const trimmed = expr.trim();
 	const parts = trimmed.split(' ').filter((p: string): boolean => Boolean(p));
 
@@ -132,8 +189,21 @@ function evaluateExpression(expr: string): number {
 		return parseInt(parts[0], 10);
 	}
 
-	// First pass: handle * and / (higher precedence)
+	// First pass: handle parentheses
 	let i = 0;
+	while (i < parts.length) {
+		if (parts[i].includes('(')) {
+			const endIdx = findMatchingParen(parts, i);
+			const innerParts = parts.slice(i, endIdx + 1);
+			const result = evaluateParentheses(innerParts);
+			parts.splice(i, endIdx - i + 1, String(result));
+		} else {
+			i++;
+		}
+	}
+
+	// Second pass: handle * and / (higher precedence)
+	i = 0;
 	while (i < parts.length) {
 		if (i > 0 && i < parts.length - 1 && (parts[i] === '*' || parts[i] === '/')) {
 			const left = parseInt(parts[i - 1], 10);
@@ -146,7 +216,7 @@ function evaluateExpression(expr: string): number {
 		}
 	}
 
-	// Second pass: handle + and - (lower precedence)
+	// Third pass: handle + and - (lower precedence)
 	let result = parseInt(parts[0], 10);
 	for (let j = 1; j < parts.length; j += 2) {
 		const operator = parts[j];
@@ -252,45 +322,83 @@ function generateSingleReadWithOp(operator: string, operand: string): string {
 }
 
 /**
+ * Generate helper function code for token processing.
+ *
+ * @returns JavaScript code for helper functions
+ */
+function generateHelperFunctions(): string {
+	const lines = [
+		'const countChar = (s, c) => {',
+		'  let count = 0;',
+		'  for (let i = 0; i < s.length; i++) if (s[i] === c) count++;',
+		'  return count;',
+		'};',
+	];
+	return lines.join('\n');
+}
+
+/**
+ * Build the main evaluation function as code string.
+ *
+ * @returns string
+ */
+function buildEvalFunction(): string {
+	return `const processAndEvaluate = (tokens, values) => {
+  for (let idx = 0; idx < tokens.length; idx++) {
+    const t = tokens[idx], start = t.indexOf("values["), end = start > -1 ? t.indexOf("]", start) : -1;
+    if (start > -1 && end > -1) {
+      const valIdx = parseInt(t.substring(start + 7, end), 10);
+      tokens[idx] = t.substring(0, start) + values[valIdx] + t.substring(end + 1);
+    }
+  }
+  let i = 0;
+  while (i < tokens.length) {
+    if (tokens[i].includes("(")) {
+      let pCount = 0, sIdx = i, eIdx = i;
+      for (let j = i; j < tokens.length; j++) {
+        pCount += countChar(tokens[j], "(") - countChar(tokens[j], ")");
+        if (pCount === 0) { eIdx = j; break; }
+      }
+      const iTok = tokens.slice(sIdx, eIdx + 1).map(t => t.split("(").join("").split(")").join(""));
+      let k = 0;
+      while (k < iTok.length) {
+        if (k > 0 && k < iTok.length - 1 && (iTok[k] === "*" || iTok[k] === "/")) {
+          const l = parseInt(iTok[k - 1], 10), r = parseInt(iTok[k + 1], 10);
+          iTok.splice(k - 1, 3, (iTok[k] === "*" ? l * r : Math.floor(l / r)).toString());
+        } else { k++; }
+      }
+      let res = parseInt(iTok[0], 10);
+      for (let m = 1; m < iTok.length; m += 2) {
+        const o = parseInt(iTok[m + 1], 10);
+        res = iTok[m] === "+" ? res + o : iTok[m] === "-" ? res - o : res % o;
+      }
+      tokens.splice(sIdx, eIdx - sIdx + 1, res.toString());
+    } else { i++; }
+  }
+  i = 0;
+  while (i < tokens.length) {
+    if (i > 0 && i < tokens.length - 1 && (tokens[i] === "*" || tokens[i] === "/")) {
+      const l = parseInt(tokens[i - 1], 10), r = parseInt(tokens[i + 1], 10);
+      const res = tokens[i] === "*" ? l * r : Math.floor(l / r);
+      tokens.splice(i - 1, 3, res.toString());
+    } else { i++; }
+  }
+  let result = parseInt(tokens[0], 10);
+  for (let j = 1; j < tokens.length; j += 2) {
+    const o = parseInt(tokens[j + 1], 10);
+    result = tokens[j] === "+" ? result + o : tokens[j] === "-" ? result - o : result % o;
+  }
+  return result;
+};`;
+}
+
+/**
  * Generate code for processing and evaluating tokens with operator precedence.
  *
  * @returns JavaScript code as string
  */
 function generateTokenProcessingCode(): string {
-	return `
-  const processAndEvaluate = (tokens, values) => {
-    for (let idx = 0; idx < tokens.length; idx++) {
-      const t = tokens[idx];
-      if (t.startsWith("values[") && t.endsWith("]")) {
-        const valIdx = parseInt(t.substring(7, t.length - 1), 10);
-        tokens[idx] = values[valIdx].toString();
-      }
-    }
-    let i = 0;
-    while (i < tokens.length) {
-      const isMultDiv = i > 0 && i < tokens.length - 1 && (tokens[i] === "*" || tokens[i] === "/");
-      if (isMultDiv) {
-        const left = parseInt(tokens[i - 1], 10);
-        const operator = tokens[i];
-        const right = parseInt(tokens[i + 1], 10);
-        let res = operator === "*" ? left * right : Math.floor(left / right);
-        tokens.splice(i - 1, 3, res.toString());
-      } else {
-        i++;
-      }
-    }
-    let result = parseInt(tokens[0], 10);
-    for (let j = 1; j < tokens.length; j += 2) {
-      const operator = tokens[j];
-      const operand = parseInt(tokens[j + 1], 10);
-      switch (operator) {
-        case '+': result = result + operand; break;
-        case '-': result = result - operand; break;
-        case '%': result = result % operand; break;
-      }
-    }
-    return result;
-  };`;
+	return `${generateHelperFunctions()}\n${buildEvalFunction()}`;
 }
 
 /**

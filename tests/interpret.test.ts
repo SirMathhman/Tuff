@@ -36,4 +36,5 @@ describe('interpret and compileAndExecute stubs', (): void => {
 	testBoth('read<U8>() + read<U8>() - read<U8>()', '2 3 4', 1);
 	testBoth('read<U8>() * read<U8>() - read<U8>()', '2 3 4', 2);
 	testBoth('read<U8>() + read<U8>() * read<U8>()', '2 3 4', 14);
+	testBoth('(read<U8>() + read<U8>()) * read<U8>()', '2 3 4', 20);
 });
