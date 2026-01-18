@@ -1,7 +1,9 @@
-function compile(source: string): string {
+import { Result, success, failure } from './result';
+
+function compile(source: string): Result<string, string> {
 	// Minimal compiler for the tests: return JavaScript that evaluates to 0 for empty input.
 	if (source.trim() === '') {
-		return '0';
+		return success('0');
 	}
 
 	// Replace occurrences of `read U8` with a runtime expression that reads from
@@ -21,23 +23,32 @@ function compile(source: string): string {
 	}
 
 	if (replaced !== source) {
-		return replaced;
+		return success(replaced);
 	}
 
 	// TODO: implement actual compilation logic.
-	return '0';
+	return success('0');
 }
 
-export function run(source: string, stdIn: string): number {
+export function run(source: string, stdIn: string): Result<number, string> {
 	// Compile without stdin; provide `stdin` at execution time so reads can be
 	// implemented as runtime expressions (easier to test and more flexible).
-	const code = compile(source);
+	const compilationResult = compile(source);
+	if (!compilationResult.success) {
+		return failure(compilationResult.error);
+	}
+	const code = compilationResult.value;
 
 	const stdin = stdIn.split(' ').filter((s: string): boolean => {
 		return s !== '';
 	});
 	void stdin;
 
-	// eslint-disable-next-line no-eval
-	return eval(`(function(stdin){ return (${code}); })(stdin)`) as number;
+	try {
+		// eslint-disable-next-line no-eval
+		const value = eval(`(function(stdin){ return (${code}); })(stdin)`) as number;
+		return success(value);
+	} catch (e) {
+		return failure(String(e));
+	}
 }
