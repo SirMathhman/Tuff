@@ -27,32 +27,42 @@ function extractNumericPart(source: string): string {
 }
 
 /**
- * Find the position and content of read<TYPE>() expression in source.
+ * Find all read<TYPE>() expressions in source and return them.
  *
  * @param source - source code
- * @returns object with startIndex, endIndex, and expression, or undefined if not found
+ * @returns array of ReadExpression objects
  */
-function findReadExpression(source: string): ReadExpression | undefined {
-	const readStart = source.indexOf('read<');
-	if (readStart === -1) {
-		return undefined;
+function findAllReadExpressions(source: string): ReadExpression[] {
+	const results: ReadExpression[] = [];
+	let searchStart = 0;
+
+	while (searchStart < source.length) {
+		const readStart = source.indexOf('read<', searchStart);
+		if (readStart === -1) {
+			break;
+		}
+
+		const closeAngle = findClosingAngle(source, readStart + 5);
+		if (closeAngle === -1) {
+			searchStart = readStart + 1;
+			continue;
+		}
+
+		// Find the closing parenthesis
+		const parenStart = closeAngle + 1;
+		if (source[parenStart] !== '(' || source[parenStart + 1] !== ')') {
+			searchStart = readStart + 1;
+			continue;
+		}
+
+		const endIndex = parenStart + 2;
+		const expression = source.substring(readStart, endIndex);
+		results.push({ startIndex: readStart, endIndex, expression });
+
+		searchStart = endIndex;
 	}
 
-	const closeAngle = findClosingAngle(source, readStart + 5);
-	if (closeAngle === -1) {
-		return undefined;
-	}
-
-	// Find the closing parenthesis
-	const parenStart = closeAngle + 1;
-	if (source[parenStart] !== '(' || source[parenStart + 1] !== ')') {
-		return undefined;
-	}
-
-	const endIndex = parenStart + 2;
-	const expression = source.substring(readStart, endIndex);
-
-	return { startIndex: readStart, endIndex, expression };
+	return results;
 }
 
 /**
@@ -108,26 +118,28 @@ function performOperation(operator: string, left: number, right: number): number
 }
 
 /**
- * Evaluate a simple arithmetic expression with a given value.
+ * Evaluate a full arithmetic expression with proper order of operations.
  *
- * @param value - the numeric value to use
- * @param operation - the operation string (e.g., ' + 1', ' * 2')
- * @returns the result of the operation
+ * @param expr - arithmetic expression string (e.g., '1 + 2', '5 * 3 - 1')
+ * @returns result of the expression
  */
-function evaluateOperation(value: number, operation: string): number {
-	const trimmed = operation.trim();
-	if (!trimmed) {
-		return value;
+function evaluateExpression(expr: string): number {
+	// Simple left-to-right evaluation for now (handles single operator)
+	const trimmed = expr.trim();
+	const parts = trimmed.split(' ').filter((p: string): boolean => Boolean(p));
+
+	if (parts.length === 1) {
+		return parseInt(parts[0], 10);
 	}
 
-	const operatorMatch = trimmed.split(' ');
-	if (operatorMatch.length < 2) {
-		return value;
+	let result = parseInt(parts[0], 10);
+	for (let i = 1; i < parts.length; i += 2) {
+		const operator = parts[i];
+		const operand = parseInt(parts[i + 1], 10);
+		result = performOperation(operator, result, operand);
 	}
 
-	const operator = operatorMatch[0];
-	const operand = parseInt(operatorMatch[1], 10);
-	return performOperation(operator, value, operand);
+	return result;
 }
 
 /**
@@ -141,31 +153,42 @@ function evaluateOperation(value: number, operation: string): number {
 export function interpret(source: string, stdIn: string): number {
 	// DO NOT CALL COMPILE
 
-	const readExpr = findReadExpression(source);
-	if (readExpr === undefined) {
+	const readExprs = findAllReadExpressions(source);
+	if (readExprs.length === 0) {
 		// No read expression, parse as a numeric literal
 		const numericPart = extractNumericPart(source);
 		return parseInt(numericPart, 10);
 	}
 
-	// Parse the value from stdIn
-	const readValue = parseInt(stdIn.trim(), 10);
+	// Parse all values from stdIn (space-separated)
+	const stdinValues = stdIn
+		.trim()
+		.split(' ')
+		.map((v: string): number => parseInt(v, 10));
 
-	// Check if there are operations after read<>()
-	const afterRead = source.substring(readExpr.endIndex).trim();
-	if (!afterRead) {
-		return readValue;
+	// Replace each read<>() with its corresponding value
+	let evaluatedSource = source;
+	for (let i = 0; i < readExprs.length; i++) {
+		evaluatedSource = evaluatedSource.replace(readExprs[i].expression, String(stdinValues[i]));
 	}
 
-	return evaluateOperation(readValue, afterRead);
+	// Now evaluate the expression with numeric values
+	const numericPart = extractNumericPart(evaluatedSource);
+	if (numericPart === evaluatedSource.trim()) {
+		// It's just a number
+		return parseInt(numericPart, 10);
+	}
+
+	// It has operations - parse and evaluate
+	return evaluateExpression(evaluatedSource);
 }
 
 /**
- * Generate JavaScript code for reading from stdin without operations.
+ * Generate code for single read<>() without operations.
  *
  * @returns generated JavaScript code
  */
-function generateReadPrefixCode(): string {
+function generateSingleReadCode(): string {
 	const parts = [
 		"const readline = require('readline');",
 		'const rl = readline.createInterface({',
@@ -174,24 +197,29 @@ function generateReadPrefixCode(): string {
 		'});',
 		"rl.on('line', (line) => {",
 		'  const value = parseInt(line.trim(), 10);',
+		'  rl.close();',
+		'  process.exit(value);',
+		'});',
 	];
-	return `${parts.join('\n')}\n`;
-}
-
-function generateReadOnlyCode(): string {
-	const suffixParts = ['  rl.close();', '  process.exit(value);', '});'];
-	return `${generateReadPrefixCode()}${suffixParts.join('\n')}`;
+	return parts.join('\n');
 }
 
 /**
- * Generate JavaScript code for reading from stdin with operations.
+ * Generate code for single read<>() with an operation.
  *
  * @param operator - the operator (+, -, *, /, %)
  * @param operand - the operand value
  * @returns generated JavaScript code
  */
-function generateReadWithOperationCode(operator: string, operand: string): string {
+function generateSingleReadWithOp(operator: string, operand: string): string {
 	const parts = [
+		"const readline = require('readline');",
+		'const rl = readline.createInterface({',
+		'  input: process.stdin,',
+		'  output: process.stdout',
+		'});',
+		"rl.on('line', (line) => {",
+		'  const value = parseInt(line.trim(), 10);',
 		'  let result;',
 		`  switch ('${operator}') {`,
 		`    case '+': result = value + ${operand}; break;`,
@@ -205,7 +233,46 @@ function generateReadWithOperationCode(operator: string, operand: string): strin
 		'  process.exit(result);',
 		'});',
 	];
-	return `${generateReadPrefixCode()}${parts.join('\n')}`;
+	return parts.join('\n');
+}
+
+/**
+ * Generate code for multiple read<>() calls.
+ *
+ * @param source - source with read<>() placeholders
+ * @returns generated JavaScript code
+ */
+function generateMultiReadCode(source: string): string {
+	const parts = [
+		"const readline = require('readline');",
+		'const rl = readline.createInterface({',
+		'  input: process.stdin,',
+		'  output: process.stdout',
+		'});',
+		'let allInput = "";',
+		"rl.on('line', (line) => {",
+		'  allInput += line + " ";',
+		'});',
+		'rl.on("close", () => {',
+		'  const values = allInput.trim().split(" ").map(v => parseInt(v, 10));',
+		'  const expr = ' + `'${source}'` + ';',
+		'  const tokens = expr.split(" ").filter(t => t);',
+		'  let result = eval(tokens[0]);',
+		'  for (let i = 1; i < tokens.length; i += 2) {',
+		'    const operator = tokens[i];',
+		'    const operand = eval(tokens[i + 1]);',
+		'    switch (operator) {',
+		"      case '+': result = result + operand; break;",
+		"      case '-': result = result - operand; break;",
+		"      case '*': result = result * operand; break;",
+		"      case '/': result = Math.floor(result / operand); break;",
+		"      case '%': result = result % operand; break;",
+		'    }',
+		'  }',
+		'  process.exit(result);',
+		'});',
+	];
+	return parts.join('\n');
 }
 
 /**
@@ -217,35 +284,38 @@ function generateReadWithOperationCode(operator: string, operand: string): strin
 export const compile = (source: string): string => {
 	// DO NOT CALL INTERPRET
 
-	const readExpr = findReadExpression(source);
-	if (readExpr === undefined) {
+	const readExprs = findAllReadExpressions(source);
+	if (readExprs.length === 0) {
 		// No read expression, compile as a numeric literal
 		const numericPart = extractNumericPart(source);
 		return `process.exit(${parseInt(numericPart, 10)});`;
 	}
 
-	// Check if there are operations after read<>()
-	const afterRead = source.substring(readExpr.endIndex).trim();
+	if (readExprs.length === 1) {
+		// Single read<>() call - use optimized path
+		const readExpr = readExprs[0];
+		const afterRead = source.substring(readExpr.endIndex).trim();
 
-	if (!afterRead) {
-		return generateReadOnlyCode();
+		if (!afterRead) {
+			return generateSingleReadCode();
+		}
+
+		// read<>() with single operation
+		const operatorMatch = afterRead.split(' ');
+		const operator = operatorMatch[0];
+		const operand = operatorMatch[1] || '0';
+		return generateSingleReadWithOp(operator, operand);
 	}
 
-	// read<>() with operations
-	const operatorMatch = afterRead.split(' ');
-	const operator = operatorMatch[0];
-	const operand = operatorMatch[1] || '0';
+	// Multiple read<>() calls - replace them with array indices and evaluate
+	let replacedSource = source;
+	for (let i = 0; i < readExprs.length; i++) {
+		replacedSource = replacedSource.replace(readExprs[i].expression, `values[${i}]`);
+	}
 
-	return generateReadWithOperationCode(operator, operand);
+	return generateMultiReadCode(replacedSource);
 };
 
-/**
- * Execute the given target string and return an exit code.
- *
- * @param target - compiled target to execute
- * @param stdIn
- * @returns exit code (number)
- */
 /**
  * Execute the given target string and return an exit code.
  *
