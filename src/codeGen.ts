@@ -16,7 +16,8 @@ export function generateSingleReadCode(): string {
 		'  output: process.stdout',
 		'});',
 		"rl.on('line', (line) => {",
-		'  const value = parseInt(line.trim(), 10);',
+		'  const trimmed = line.trim();',
+		'  const value = (trimmed === "true" ? 1 : (trimmed === "false" ? 0 : parseInt(trimmed, 10)));',
 		'  rl.close();',
 		'  process.exit(value);',
 		'});',
@@ -39,7 +40,8 @@ export function generateSingleReadWithOp(operator: string, operand: string): str
 		'  output: process.stdout',
 		'});',
 		"rl.on('line', (line) => {",
-		'  const value = parseInt(line.trim(), 10);',
+		'  const trimmed = line.trim();',
+		'  const value = (trimmed === "true" ? 1 : (trimmed === "false" ? 0 : parseInt(trimmed, 10)));',
 		'  let result;',
 		`  switch ('${operator}') {`,
 		`    case '+': result = value + ${operand}; break;`,
@@ -69,7 +71,12 @@ export function generateSingleReadWithOp(operator: string, operand: string): str
 function generateEvaluateTokensHelper(): string[] {
 	return [
 		'function evaluateTokens(tokens) {',
-		'  const cleanInt = (s) => parseInt(String(s).replace(/[(){};]/g, ""), 10);',
+		'  const cleanInt = (s) => {',
+		'    const c = String(s).replace(new RegExp("[(){};]", "g"), "");',
+		'    if (c === "true") return 1;',
+		'    if (c === "false") return 0;',
+		'    return parseInt(c, 10);',
+		'  };',
 		'  let i = 0;',
 		'  while (i < tokens.length) {',
 		'    if (i > 0 && i < tokens.length - 1 && (tokens[i] === "*" || tokens[i] === "/")) {',
@@ -276,7 +283,12 @@ export function buildEvalFunction(): string {
 	const groupCode = generateGroupedExprCode();
 	const addSubCode = generateAddSubCode();
 	return `function processAndEvaluate(input, values) {
-  const cleanInt = (s) => parseInt(String(s).replace(new RegExp("[(){};]", "g"), ""), 10);
+  const cleanInt = (s) => {
+    const c = String(s).replace(new RegExp("[(){};]", "g"), "");
+    if (c === "true") return 1;
+    if (c === "false") return 0;
+    return parseInt(c, 10);
+  };
   let tokens = Array.isArray(input) ? [...input] : input.split(new RegExp("\\\\s+")).filter(t => t);
   for (let idx = 0; idx < tokens.length; idx++) {
     const t = tokens[idx], start = t.indexOf("values["), end = start > -1 ? t.indexOf("]", start) : -1;
@@ -347,7 +359,11 @@ export function generateMultiReadCode(source: string): string {
 		'  allInput += line + " ";',
 		'});',
 		'rl.on("close", () => {',
-		'  const values = allInput.trim().split(" ").map(v => parseInt(v, 10));',
+		'  const values = allInput.trim().split(new RegExp("\\\\s+")).filter(v => v).map(v => {',
+		'    if (v === "true") return 1;',
+		'    if (v === "false") return 0;',
+		'    return parseInt(v, 10);',
+		'  });',
 		processingCode,
 		evaluationCode,
 		'  process.exit(result);',

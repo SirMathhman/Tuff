@@ -97,6 +97,8 @@ function getAllReadTypesInExpression(expr: string): string[] {
  */
 function getTypeRank(type: string): number {
 	switch (type) {
+		case 'Bool':
+			return 1;
 		case 'I8':
 		case 'U8':
 			return 8;

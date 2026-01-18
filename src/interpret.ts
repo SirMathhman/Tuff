@@ -5,6 +5,15 @@ import * as path from 'path';
 import { spawnSync, SpawnSyncReturns } from 'child_process';
 import { generateSingleReadCode, generateSingleReadWithOp, generateMultiReadCode } from './codeGen';
 import { validateTopLevelLetBinding, splitStatements } from './typeValidation';
+import {
+	extractNumericPart,
+	findClosingAngle,
+	replaceVariablesInExpression,
+	removeDelimiters,
+	performOperation,
+	cleanInt,
+	findMatchingParen,
+} from './utils';
 
 // Type definitions
 export interface ResultOk<T> {
@@ -29,34 +38,10 @@ interface ReplaceReadResult {
 	readIndex: number;
 }
 
-interface VariableBindings {
-	readonly [key: string]: number;
-}
-
-interface MutableVariableBindings {
-	[key: string]: number;
-}
-
 interface ReadExpression {
 	startIndex: number;
 	endIndex: number;
 	expression: string;
-}
-
-function extractNumericPart(source: string): string {
-	// Strip type suffix (e.g., 'U8', 'I32', etc.)
-	let endIndex = 0;
-	for (let i = 0; i < source.length; i++) {
-		const char = source.charCodeAt(i);
-		// Check if character is a digit, decimal point, or minus sign
-		if (!((char >= 48 && char <= 57) || char === 46 || char === 45)) {
-			// Found first non-digit, non-dot, non-minus character
-			endIndex = i;
-			break;
-		}
-		endIndex = i + 1;
-	}
-	return source.substring(0, endIndex);
 }
 
 /**
@@ -99,33 +84,6 @@ function findAllReadExpressions(source: string): ReadExpression[] {
 }
 
 /**
- * Find the closing angle bracket for a type parameter.
- *
- * @param source - source code
- * @param openAngleIndex - position after 'read<'
- * @returns index of closing '>', or -1 if not found
- */
-function findClosingAngle(source: string, openAngleIndex: number): number {
-	let angleDepth = 1;
-	for (let i = openAngleIndex; i < source.length; i++) {
-		const char = source[i];
-		if (char === '<') {
-			angleDepth++;
-			continue;
-		}
-		if (char !== '>') {
-			continue;
-		}
-
-		angleDepth--;
-		if (angleDepth === 0) {
-			return i;
-		}
-	}
-	return -1;
-}
-
-/**
  * Parse and evaluate a block with let-bindings.
  * Format: let varName : Type = expr; ... lastExpr
  *
@@ -134,22 +92,6 @@ function findClosingAngle(source: string, openAngleIndex: number): number {
  * @param readIndex - current index into read expressions
  * @returns object with result and updated readIndex
  */
-/**
- * Replace variable names in expression with their values.
- *
- * @param expr - expression string
- * @param bindings - variable name to value mapping
- * @returns expression with variables replaced
- */
-function replaceVariablesInExpression(expr: string, bindings: VariableBindings): string {
-	let result = expr;
-	for (const [vName, vValue] of Object.entries(bindings)) {
-		const regex = new RegExp(`\\b${vName}\\b`, 'g');
-		result = result.replace(regex, String(vValue));
-	}
-	return result;
-}
-
 /**
  * Replace read<>() calls in expression with values from stdin.
  *
@@ -197,7 +139,7 @@ function processStatement(
 	stmt: string,
 	stdinValues: number[],
 	readIndex: number,
-	bindings: MutableVariableBindings,
+	bindings: Map<string, number>,
 ): number {
 	let varName: string;
 	let expr: string;
@@ -238,7 +180,7 @@ function processStatement(
 	currentReadIdx = readResult.readIndex;
 
 	expr = replaceVariablesInExpression(expr, bindings);
-	bindings[varName] = evaluateExpression(expr);
+	bindings.set(varName, evaluateExpression(expr));
 	return currentReadIdx;
 }
 
@@ -255,7 +197,7 @@ function evaluateBlockWithReads(
 	stdinValues: number[],
 	readIndex: number,
 ): EvalResult {
-	const bindings: MutableVariableBindings = {};
+	const bindings = new Map<string, number>();
 	const statements = splitStatements(blockContent);
 
 	let currentReadIdx = readIndex;
@@ -389,67 +331,6 @@ function evaluateParenthesesSequential(
 }
 
 /**
- * Perform a binary operation.
- *
- * @param operator - the operator (+, -, *, /, %)
- * @param left - left operand
- * @param right - right operand
- * @returns result of the operation
- */
-function performOperation(operator: string, left: number, right: number): number {
-	switch (operator) {
-		case '+':
-			return left + right;
-		case '-':
-			return left - right;
-		case '*':
-			return left * right;
-		case '/':
-			return Math.floor(left / right);
-		case '%':
-			return left % right;
-		default:
-			return left;
-	}
-}
-
-/**
- * Find matching closing parenthesis or brace in parts array.
- *
- * @param parts - array of string parts
- * @param startIdx - index where opening parenthesis/brace is found
- * @returns index of matching closing parenthesis/brace
- */
-function findMatchingParen(parts: string[], startIdx: number): number {
-	let char = '(';
-	let closeChar = ')';
-	if (parts[startIdx].includes('{')) {
-		char = '{';
-		closeChar = '}';
-	}
-	let count = 0;
-	for (let j = startIdx; j < parts.length; j++) {
-		const part = parts[j];
-		count += part.split(char).length - 1;
-		count -= part.split(closeChar).length - 1;
-		if (count === 0) {
-			return j;
-		}
-	}
-	return startIdx;
-}
-
-/**
- * Remove all parentheses and braces from a string.
- *
- * @param str - input string
- * @returns string with all delimiters removed
- */
-function removeDelimiters(str: string): string {
-	return str.split('(').join('').split(')').join('').split('{').join('').split('}').join('').trim();
-}
-
-/**
  * Process a single segment with parentheses/braces using the evaluator.
  *
  * @param result - result from evaluator (number or EvalResult)
@@ -500,11 +381,6 @@ function processParenthesesAndBraces(
 		readIdx = extractReadIndex(result);
 	}
 	return readIdx;
-}
-
-function cleanInt(s: string): number {
-	const cleaned = s.replace(new RegExp('[(){};]', 'g'), '');
-	return parseInt(cleaned, 10);
 }
 
 /**
@@ -638,6 +514,22 @@ function evaluateExpression(expr: string): number {
 	return handleAdditionSubtraction(parts);
 }
 
+function parseStdIn(stdIn: string): number[] {
+	return stdIn
+		.trim()
+		.split(new RegExp('\\s+'))
+		.filter((v: string): boolean => Boolean(v))
+		.map((v: string): number => {
+			if (v === 'true') {
+				return 1;
+			}
+			if (v === 'false') {
+				return 0;
+			}
+			return parseInt(v, 10);
+		});
+}
+
 /**
  * Interpret the given source code with provided stdin.
  * This is a stub implementation that should return an exit code.
@@ -648,8 +540,6 @@ function evaluateExpression(expr: string): number {
  */
 export function interpret(source: string, stdIn: string): Result<number, string> {
 	// DO NOT CALL COMPILE
-
-	// Validate top-level let-bindings for type compatibility
 	const typeError = validateTopLevelLetBinding(source);
 	if (typeError) {
 		return { ok: false, error: typeError };
@@ -657,38 +547,29 @@ export function interpret(source: string, stdIn: string): Result<number, string>
 
 	const readExprs = findAllReadExpressions(source);
 	if (readExprs.length === 0) {
-		// No read expression, parse as a numeric literal
 		const numericPart = extractNumericPart(source);
 		return { ok: true, value: parseInt(numericPart, 10) };
 	}
 
-	// Parse all values from stdIn (space-separated)
-	const stdinValues = stdIn
-		.trim()
-		.split(' ')
-		.map((v: string): number => parseInt(v, 10));
+	const stdinValues = parseStdIn(stdIn);
 
-	// Check if source contains let-bindings
 	if (source.includes('let ')) {
 		const result = interpretWithLetBindings(source, stdinValues);
 		return { ok: true, value: result };
 	}
 
-	// Replace each read<>() with its corresponding value
 	let evaluatedSource = source;
 	for (let i = 0; i < readExprs.length; i++) {
 		evaluatedSource = evaluatedSource.replace(readExprs[i].expression, String(stdinValues[i]));
 	}
 
-	// Now evaluate the expression with numeric values
 	const numericPart = extractNumericPart(evaluatedSource);
 	if (numericPart === evaluatedSource.trim()) {
-		// It's just a number
 		return { ok: true, value: parseInt(numericPart, 10) };
 	}
 
-	// It has operations - parse and evaluate
-	return { ok: true, value: evaluateExpressionSequential(evaluatedSource, stdinValues, 0).result };
+	const seqResult = evaluateExpressionSequential(evaluatedSource, stdinValues, 0);
+	return { ok: true, value: seqResult.result };
 }
 
 function generateLetBindingCompileCode(source: string): string {

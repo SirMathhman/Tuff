@@ -102,6 +102,11 @@ describe('let-bindings and reassignment', (): void => {
 	testBothValid('let x = read<U32>(); let y = x; y', '100', 100);
 	testBothValid('let x = read<U32>(); let y = 1; x + y', '100', 101);
 	testBothValid('let x = { let y = read<I32>(); y}; x', '100', 100);
+	testBothValid('let x = read<Bool>(); x', 'true', 1);
+	testBothValid('let x = read<Bool>(); x', 'false', 0);
+	testBothValid('let x : Bool = read<Bool>(); x', 'true', 1);
+	testBothValid('let x : I32 = read<Bool>(); x', 'true', 1);
+	testBothInvalid('let x : Bool = read<I32>(); x', '100');
 	testBothValid('let x : U8  = read<U8>(); let y : U16 = x; y', '100', 100);
 	testBothValid('let mut x = 0; x = read<I32>(); x', '100', 100);
 	testBothInvalid('let x = 0; x = read<I32>(); x');
