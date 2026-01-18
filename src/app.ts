@@ -114,6 +114,64 @@ function handleLetBindings(source: string): string {
 	return replaced;
 }
 
+function validateLetBindingTypes(source: string): Result<void, string> {
+	// Check for type mismatches in let bindings
+	// Pattern: let <name> : <type> = <expr>
+	let searchIndex = 0;
+	while (searchIndex < source.length) {
+		const letIndex = source.indexOf('let ', searchIndex);
+		if (letIndex === -1) {
+			break;
+		}
+
+		const result = checkLetBinding(source, letIndex);
+		if (!result.success) {
+			return result;
+		}
+
+		const nextIndex = result.value;
+		searchIndex = nextIndex;
+	}
+
+	return success(undefined);
+}
+
+function checkLetBinding(source: string, letIndex: number): Result<number, string> {
+	const typeStartIndex = source.indexOf(':', letIndex);
+	if (typeStartIndex === -1 || typeStartIndex > letIndex + 20) {
+		return success(letIndex + 4);
+	}
+
+	const typeEndIndex = source.indexOf('=', typeStartIndex);
+	if (typeEndIndex === -1) {
+		return success(letIndex + 4);
+	}
+
+	const declaredType = source.substring(typeStartIndex + 1, typeEndIndex).trim();
+	const exprEndIndex = findSemicolonIndex(source, typeEndIndex + 1);
+	if (exprEndIndex === -1) {
+		return success(letIndex + 4);
+	}
+
+	const expr = source.substring(typeEndIndex + 1, exprEndIndex).trim();
+
+	// Check if expression contains read of a different type
+	if (declaredType === 'U8') {
+		// U8 can only accept U8 reads
+		if (expr.includes('read U16')) {
+			return failure('Type mismatch: cannot assign read U16 to U8');
+		}
+		if (expr.includes('read U32')) {
+			return failure('Type mismatch: cannot assign read U32 to U8');
+		}
+		if (expr.includes('read I32')) {
+			return failure('Type mismatch: cannot assign read I32 to U8');
+		}
+	}
+
+	return success(exprEndIndex + 1);
+}
+
 export function compile(source: string): Result<string, string> {
 	// Minimal compiler for the tests: return JavaScript that evaluates to 0 for empty input.
 	if (source.trim() === '') {
@@ -123,6 +181,12 @@ export function compile(source: string): Result<string, string> {
 	// Case-sensitive check for lowercase usage as requested.
 	if (source.includes('read u8')) {
 		return failure('Unexpected lowercase "read u8". Use "read U8" instead.');
+	}
+
+	// Type checking: validate let bindings don't have type mismatches
+	const typeCheckResult = validateLetBindingTypes(source);
+	if (!typeCheckResult.success) {
+		return failure(typeCheckResult.error);
 	}
 
 	// Replace occurrences of `read U8` with a runtime expression that reads from
