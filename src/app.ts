@@ -16,7 +16,13 @@ function findSemicolonIndex(source: string, startPos: number): number {
 
 function getDeclaredType(source: string, letIndex: number): string {
 	const typeStartIndex = source.indexOf(':', letIndex);
+	if (typeStartIndex === -1) {
+		return '';
+	}
 	const typeEndIndex = source.indexOf('=', typeStartIndex);
+	if (typeEndIndex === -1) {
+		return '';
+	}
 	return source.substring(typeStartIndex + 1, typeEndIndex).trim();
 }
 
@@ -126,9 +132,14 @@ function handleLetBindings(source: string): string {
 		replaced = handleBracesInLetBindings(replaced);
 	}
 
-	// Remove type annotations for both U8 and U16
+	// Remove type annotations for all supported types
 	replaced = replaced.split(': U8').join('');
 	replaced = replaced.split(': U16').join('');
+	replaced = replaced.split(': I32').join('');
+	replaced = replaced.split(': U32').join('');
+
+	// Remove mut keyword
+	replaced = replaced.split('mut ').join('');
 
 	// For top-level let bindings, convert to return the value
 	if (isTopLevelLet(replaced)) {
@@ -226,14 +237,17 @@ function validateLetBindingForType(
 	declaredType: string,
 	variableTypes: Map<string, string>,
 ): Result<void, string> {
-	const readCheckResult = checkReadOperationTypes(expr, declaredType);
-	if (!readCheckResult.success) {
-		return readCheckResult;
-	}
+	// Only validate read operations for types that care about it
+	if (declaredType === 'U8' || declaredType === 'U16') {
+		const readCheckResult = checkReadOperationTypes(expr, declaredType);
+		if (!readCheckResult.success) {
+			return readCheckResult;
+		}
 
-	const varCheckResult = checkVariableAssignmentType(expr, declaredType, variableTypes);
-	if (!varCheckResult.success) {
-		return varCheckResult;
+		const varCheckResult = checkVariableAssignmentType(expr, declaredType, variableTypes);
+		if (!varCheckResult.success) {
+			return varCheckResult;
+		}
 	}
 
 	return success(undefined);
@@ -252,7 +266,7 @@ function processLetBinding(
 	const eqIndex = source.indexOf('=', letIndex);
 	const expr = source.substring(eqIndex + 1, varInfo.exprEnd).trim();
 
-	if (varInfo.type !== undefined && varInfo.type.startsWith('U')) {
+	if (varInfo.type !== undefined && (varInfo.type.startsWith('U') || varInfo.type === 'I32')) {
 		const result = validateLetBindingForType(expr, varInfo.type, variableTypes);
 		if (!result.success) {
 			return { nextIndex: varInfo.exprEnd + 1, error: result.error };
@@ -339,17 +353,18 @@ export function compile(source: string): Result<string, string> {
 		return failure(typeCheckResult.error);
 	}
 
-	// Replace occurrences of `read U8` with a runtime expression that reads from
-	// the provided `stdin`.
+	// Replace occurrences of all read operations with runtime expressions
 	let replaced = source;
-	const search = 'read U8';
-	// Just use a simpler replacement without declarations.
+	const readTypes = ['read I32', 'read U32', 'read U16', 'read U8'];
 	const replacement = 'Number(stdin.shift())';
 
-	let index = replaced.indexOf(search);
-	while (index !== -1) {
-		replaced = replaced.substring(0, index) + replacement + replaced.substring(index + search.length);
-		index = replaced.indexOf(search);
+	for (const readType of readTypes) {
+		let index = replaced.indexOf(readType);
+		while (index !== -1) {
+			replaced =
+				replaced.substring(0, index) + replacement + replaced.substring(index + readType.length);
+			index = replaced.indexOf(readType);
+		}
 	}
 
 	// Handle `let x : U8 = expr;` inside `{}` by transforming it to JS.
