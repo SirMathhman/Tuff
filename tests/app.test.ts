@@ -2,15 +2,18 @@ import { compile, run } from '../src/app';
 
 function assertValid(source: string, stdin: string, expected: number): void {
 	const result = run(source, stdin);
-	expect(result.success).toBe(true);
 	if (result.success) {
 		expect(result.value).toBe(expected);
+	} else {
+		expect(result.error).toBeUndefined();
 	}
 }
 
 function assertInvalid(source: string): void {
 	const result = compile(source);
-	expect(result.success).toBe(false);
+	if (result.success) {
+		expect(result.value).toBeUndefined();
+	}
 }
 
 describe('The compiler - basic', (): void => {
@@ -100,6 +103,10 @@ describe('The compiler - error handling', (): void => {
 
 	it('fails on type mismatch: U8 = inferred U16 variable', (): void => {
 		assertInvalid('let z = read U16; let y : U8 = z; y');
+	});
+
+	it('fails on immutable variable reassignment', (): void => {
+		assertInvalid('let x = 0; x = read I32; x');
 	});
 });
 

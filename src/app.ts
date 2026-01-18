@@ -183,23 +183,37 @@ interface ProcessResult {
 	error: string | undefined;
 }
 
+interface VariableInfo {
+	type: string | undefined;
+	isMutable: boolean;
+}
+
 function getVariableNameAndType(
 	source: string,
 	letIndex: number,
 	eqIndex: number,
 ): VarNameAndType | undefined {
 	const typeStartIndex = source.indexOf(':', letIndex);
+	const varNameStart = letIndex + 4;
 
 	if (typeStartIndex !== -1 && typeStartIndex < eqIndex) {
-		const varNameStart = letIndex + 4;
 		const varName = source.substring(varNameStart, typeStartIndex).trim();
 		const declaredType = source.substring(typeStartIndex + 1, eqIndex).trim();
 		return { name: varName, type: declaredType };
 	}
 
-	const varNameStart = letIndex + 4;
 	const varName = source.substring(varNameStart, eqIndex).trim();
 	return { name: varName, type: undefined };
+}
+
+function isVariableMutable(source: string, letIndex: number): boolean {
+	// Check if there's a 'mut' keyword between 'let' and '='
+	const eqIndex = source.indexOf('=', letIndex);
+	if (eqIndex === -1) {
+		return false;
+	}
+	const betweenLetAndEq = source.substring(letIndex + 4, eqIndex);
+	return betweenLetAndEq.includes('mut');
 }
 
 function extractVariableTypeAndName(
@@ -235,7 +249,7 @@ function extractVariableTypeAndName(
 function validateLetBindingForType(
 	expr: string,
 	declaredType: string,
-	variableTypes: Map<string, string>,
+	variables: Map<string, VariableInfo>,
 ): Result<void, string> {
 	// Only validate read operations for types that care about it
 	if (declaredType === 'U8' || declaredType === 'U16') {
@@ -244,7 +258,7 @@ function validateLetBindingForType(
 			return readCheckResult;
 		}
 
-		const varCheckResult = checkVariableAssignmentType(expr, declaredType, variableTypes);
+		const varCheckResult = checkVariableAssignmentType(expr, declaredType, variables);
 		if (!varCheckResult.success) {
 			return varCheckResult;
 		}
@@ -256,7 +270,7 @@ function validateLetBindingForType(
 function processLetBinding(
 	source: string,
 	letIndex: number,
-	variableTypes: Map<string, string>,
+	variables: Map<string, VariableInfo>,
 ): ProcessResult {
 	const varInfo = extractVariableTypeAndName(source, letIndex);
 	if (varInfo === undefined) {
@@ -265,16 +279,17 @@ function processLetBinding(
 
 	const eqIndex = source.indexOf('=', letIndex);
 	const expr = source.substring(eqIndex + 1, varInfo.exprEnd).trim();
+	const isMutable = isVariableMutable(source, letIndex);
 
 	if (varInfo.type !== undefined && (varInfo.type.startsWith('U') || varInfo.type === 'I32')) {
-		const result = validateLetBindingForType(expr, varInfo.type, variableTypes);
+		const result = validateLetBindingForType(expr, varInfo.type, variables);
 		if (!result.success) {
 			return { nextIndex: varInfo.exprEnd + 1, error: result.error };
 		}
-		variableTypes.set(varInfo.name, varInfo.type);
-	} else if (varInfo.type !== undefined) {
-		variableTypes.set(varInfo.name, varInfo.type);
 	}
+
+	// Always track the variable, regardless of type
+	variables.set(varInfo.name, { type: varInfo.type, isMutable });
 
 	return { nextIndex: varInfo.exprEnd + 1, error: undefined };
 }
@@ -283,7 +298,7 @@ function validateLetBindingTypes(source: string): Result<void, string> {
 	// Check for type mismatches in let bindings
 	// Pattern: let <name> : <type> = <expr> or let <name> = <expr>
 	// Also track variable types for validation
-	const variableTypes = new Map<string, string>();
+	const variables = new Map<string, VariableInfo>();
 	let searchIndex = 0;
 	while (searchIndex < source.length) {
 		const letIndex = source.indexOf('let ', searchIndex);
@@ -291,12 +306,86 @@ function validateLetBindingTypes(source: string): Result<void, string> {
 			break;
 		}
 
-		const processResult = processLetBinding(source, letIndex, variableTypes);
+		const processResult = processLetBinding(source, letIndex, variables);
 		if (processResult.error !== undefined) {
 			return failure(processResult.error);
 		}
 
 		searchIndex = processResult.nextIndex;
+	}
+
+	// Check for reassignments to immutable variables (x = ... without let)
+	const reassignmentCheckResult = checkReassignments(source, variables);
+	if (!reassignmentCheckResult.success) {
+		return reassignmentCheckResult;
+	}
+
+	return success(undefined);
+}
+
+function isSimpleIdentifier(varPart: string): boolean {
+	// Check if it's a simple identifier (alphanumeric and underscore only)
+	if (varPart.length === 0) {
+		return false;
+	}
+	for (let i = 0; i < varPart.length; i++) {
+		const ch = varPart.charAt(i);
+		const isAlphaNum =
+			(ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch === '_';
+		if (!isAlphaNum) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function checkVariableReassignment(
+	varName: string,
+	variables: Map<string, VariableInfo>,
+): Result<void, string> {
+	if (variables.has(varName)) {
+		const varInfo = variables.get(varName);
+		if (varInfo && !varInfo.isMutable) {
+			return failure(`Cannot assign to immutable variable '${varName}'`);
+		}
+	}
+	return success(undefined);
+}
+
+function checkReassignments(
+	source: string,
+	variables: Map<string, VariableInfo>,
+): Result<void, string> {
+	// Split source into statements (by semicolon)
+	const statements = source
+		.split(';')
+		.map((s: string): string => s.trim())
+		.filter((s: string): boolean => s.length > 0);
+
+	for (const stmt of statements) {
+		// If statement doesn't start with 'let', it's a potential reassignment
+		if (stmt.startsWith('let ')) {
+			continue;
+		}
+
+		// Check if it contains an assignment (=)
+		const eqIndex = stmt.indexOf('=');
+		if (eqIndex === -1 || eqIndex === 0) {
+			continue;
+		}
+
+		// Extract variable name (should be before the =)
+		const varPart = stmt.substring(0, eqIndex).trim();
+		// Check if it's a simple identifier
+		if (!isSimpleIdentifier(varPart)) {
+			continue;
+		}
+
+		const varName = varPart;
+		const result = checkVariableReassignment(varName, variables);
+		if (!result.success) {
+			return result;
+		}
 	}
 
 	return success(undefined);
@@ -327,12 +416,13 @@ function checkReadOperationTypes(expr: string, declaredType: string): Result<voi
 function checkVariableAssignmentType(
 	expr: string,
 	targetType: string,
-	variableTypes: Map<string, string>,
+	variables: Map<string, VariableInfo>,
 ): Result<void, string> {
 	// Check if the expression is just a variable reference
 	const trimmedExpr = expr.trim();
-	if (variableTypes.has(trimmedExpr)) {
-		const sourceType = variableTypes.get(trimmedExpr);
+	if (variables.has(trimmedExpr)) {
+		const variableInfo = variables.get(trimmedExpr);
+		const sourceType = variableInfo?.type;
 		// U8 can only accept U8
 		if (targetType === 'U8' && sourceType === 'U16') {
 			return failure('Type mismatch: cannot assign U16 to U8');
