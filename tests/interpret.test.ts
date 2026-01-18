@@ -17,9 +17,7 @@ describe('interpret and compileAndExecute stubs', (): void => {
 		const spyCompile = jest
 			.spyOn(interp.runtime, 'compile')
 			.mockImplementation((): string => 'TARGET');
-		const spyExecute = jest
-			.spyOn(interp.runtime, 'execute')
-			.mockImplementation((): number => 7);
+		const spyExecute = jest.spyOn(interp.runtime, 'execute').mockImplementation((): number => 7);
 
 		const exitCode = interp.compileAndExecute('SRC', 'STDIN');
 

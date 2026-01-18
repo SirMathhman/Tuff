@@ -48,7 +48,8 @@ export const compile = (source: string): string => {
 export const execute = (target: string, stdIn: string): number => {
 	// Write the target to a temporary file and run it with Node.js, passing stdIn
 	const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tuff-'));
-	const filePath = path.join(tmpDir, 'program.js');
+	const id = Math.floor(Math.random() * 1_000_000);
+	const filePath = path.join(tmpDir, `program-${id}.js`);
 
 	fs.writeFileSync(filePath, target, 'utf8');
 
