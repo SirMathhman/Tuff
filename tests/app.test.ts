@@ -20,4 +20,8 @@ describe('The compiler', (): void => {
 	it('reads three U8 from stdin', (): void => {
 		expect(run('read U8 + read U8 + read U8', '1 2 3')).toBe(6);
 	});
+
+	it('supports mixed read U8 and readU8 with arithmetic', (): void => {
+		expect(run('read U8 - read U8 + readU8', '4 3 2')).toBe(3);
+	});
 });
