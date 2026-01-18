@@ -6,20 +6,23 @@ function compile(source: string): Result<string, string> {
 		return success('0');
 	}
 
+	// Case-sensitive check for lowercase usage as requested.
+	if (source.includes('read u8')) {
+		return failure('Unexpected lowercase "read u8". Use "read U8" instead.');
+	}
+
 	// Replace occurrences of `read U8` with a runtime expression that reads from
 	// the provided `stdin`. This allows expressions like `read U8 + 1` to work.
 	// We avoid RegExp and regex literals as they are banned by lint rules.
 	let replaced = source;
-	const search = 'read u8';
+	const search = 'read U8';
 	const replacement = '(Number(stdin.shift()) & 0xff)';
 
-	let lower = replaced.toLowerCase();
-	let index = lower.indexOf(search);
+	let index = replaced.indexOf(search);
 
 	while (index !== -1) {
 		replaced = replaced.substring(0, index) + replacement + replaced.substring(index + search.length);
-		lower = replaced.toLowerCase();
-		index = lower.indexOf(search);
+		index = replaced.indexOf(search);
 	}
 
 	if (replaced !== source) {
@@ -27,7 +30,7 @@ function compile(source: string): Result<string, string> {
 	}
 
 	// TODO: implement actual compilation logic.
-	return success('0');
+	return failure(`Unrecognized tokens in source: ${source}`);
 }
 
 export function run(source: string, stdIn: string): Result<number, string> {

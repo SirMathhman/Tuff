@@ -1,6 +1,6 @@
 import { run } from '../src/app';
 
-describe('The compiler', (): void => {
+describe('The compiler - basic', (): void => {
 	it('should compile a simple program', (): void => {
 		const result = run('', '');
 		expect(result.success).toBe(true);
@@ -24,7 +24,9 @@ describe('The compiler', (): void => {
 			expect(result.value).toBe(101);
 		}
 	});
+});
 
+describe('The compiler - multi-reads', (): void => {
 	it('reads multiple U8 from stdin', (): void => {
 		const result = run('read U8 + read U8', '1 2');
 		expect(result.success).toBe(true);
@@ -47,5 +49,12 @@ describe('The compiler', (): void => {
 		if (result.success) {
 			expect(result.value).toBe(3);
 		}
+	});
+});
+
+describe('The compiler - error handling', (): void => {
+	it('fails on lowercase read u8', (): void => {
+		const result = run('read u8', '100');
+		expect(result.success).toBe(false);
 	});
 });
