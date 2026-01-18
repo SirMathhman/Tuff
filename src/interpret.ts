@@ -7,10 +7,11 @@
  * @returns exit code (number)
  */
 export function interpret(source: string, stdIn: string): number {
+	// DO NOT CALL COMPILE
+
 	// Stub: not yet implemented
-	void source;
 	void stdIn;
-	return 0;
+	return parseInt(source, 10);
 }
 
 // Implementation dependencies
@@ -26,9 +27,10 @@ import { spawnSync, SpawnSyncReturns } from 'child_process';
  * @returns compiled target as a string
  */
 export const compile = (source: string): string => {
-	// Stub: not yet implemented
-	void source;
-	return '';
+	// DO NOT CALL INTERPRET
+
+	// Generate JavaScript that exits with the numeric value of source
+	return `process.exit(${parseInt(source, 10)});`;
 };
 
 /**
@@ -79,15 +81,9 @@ export const execute = (target: string, stdIn: string): number => {
 	return 1;
 };
 
-// Export runtime helpers as an object to enable mocking/spying in tests
-export const runtime = {
-	compile,
-	execute,
-};
-
 /**
  * Compile source code and execute with provided stdin.
- * This uses `runtime.compile` and `runtime.execute` helpers so tests can
+ * This uses `compile` and `execute` helpers so tests can
  * override/mock them.
  *
  * @param source - source code to compile and run
@@ -95,7 +91,7 @@ export const runtime = {
  * @returns exit code (number)
  */
 export function compileAndExecute(source: string, stdIn: string): number {
-	const target = runtime.compile(source);
-	const exitCode = runtime.execute(target, stdIn);
+	const target = compile(source);
+	const exitCode = execute(target, stdIn);
 	return exitCode;
 }
