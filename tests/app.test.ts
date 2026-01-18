@@ -21,7 +21,7 @@ describe('The compiler', (): void => {
 		expect(run('read U8 + read U8 + read U8', '1 2 3')).toBe(6);
 	});
 
-	it('supports mixed read U8 and readU8 with arithmetic', (): void => {
-		expect(run('read U8 - read U8 + readU8', '4 3 2')).toBe(3);
+	it('handles arithmetic with multiple reads', (): void => {
+		expect(run('read U8 - read U8 + read U8', '4 3 2')).toBe(3);
 	});
 });
