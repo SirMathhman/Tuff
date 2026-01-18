@@ -50,6 +50,14 @@ describe('The compiler - multi-reads', (): void => {
 			expect(result.value).toBe(3);
 		}
 	});
+
+	it('handles operator precedence with reads', (): void => {
+		const result = run('read U8 * read U8 + read U8', '4 3 2');
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.value).toBe(14);
+		}
+	});
 });
 
 describe('The compiler - error handling', (): void => {

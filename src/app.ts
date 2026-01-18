@@ -29,7 +29,6 @@ function compile(source: string): Result<string, string> {
 		return success(replaced);
 	}
 
-	// TODO: implement actual compilation logic.
 	return failure(`Unrecognized tokens in source: ${source}`);
 }
 
