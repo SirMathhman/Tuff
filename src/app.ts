@@ -1,14 +1,42 @@
 import { Result, success, failure } from './result';
 
+function wrapLetBindings(source: string): string {
+	let replaced = source;
+	let searchIndex = 0;
+	while (searchIndex < replaced.length) {
+		const letIndex = replaced.indexOf('let ', searchIndex);
+		if (letIndex === -1) {
+			break;
+		}
+		const eqIndex = replaced.indexOf('=', letIndex);
+		const semiIndex = replaced.indexOf(';', eqIndex);
+		if (eqIndex !== -1 && semiIndex !== -1) {
+			const expr = replaced.substring(eqIndex + 1, semiIndex).trim();
+			const before = replaced.substring(0, eqIndex + 1);
+			const after = replaced.substring(semiIndex);
+			replaced = `${before} (${expr} & 0xff) ${after}`;
+			searchIndex = semiIndex + 10;
+		} else {
+			searchIndex = letIndex + 4;
+		}
+	}
+	return replaced;
+}
+
 function handleLetBindings(source: string): string {
 	let replaced = source;
 	// Replace outer curly braces with IIFE wrapper
 	replaced = replaced.split('{').join('(() => { ');
 	replaced = replaced.split('}').join('})()');
-	// Remove type annotation
+
+	// Replace let x : U8 = expr; with let x = (expr & 0xff);
+	replaced = wrapLetBindings(replaced);
+
+	// Remove remaining type annotations if any
 	replaced = replaced.split(': U8').join('');
 
 	// Ensure the last identity expression in a block is returned.
+	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 	if (!replaced.includes(';')) {
 		return replaced;
 	}
@@ -46,7 +74,8 @@ function compile(source: string): Result<string, string> {
 	// the provided `stdin`.
 	let replaced = source;
 	const search = 'read U8';
-	const replacement = '(Number(stdin.shift()) & 0xff)';
+	// Just use a simpler replacement without declarations.
+	const replacement = 'Number(stdin.shift())';
 
 	let index = replaced.indexOf(search);
 	while (index !== -1) {
@@ -81,9 +110,9 @@ export function run(source: string, stdIn: string): Result<number, string> {
 
 	try {
 		// eslint-disable-next-line no-eval
-		const value = eval(`(function(stdin){ return (${code}); })(stdin)`) as number;
+		const value = eval(`(function(stdin){ return ((${code}) & 0xff); })(stdin)`) as number;
 		return success(value);
 	} catch (e) {
-		return failure(String(e));
+		return failure(`Evaluation error: ${String(e)}`);
 	}
 }
