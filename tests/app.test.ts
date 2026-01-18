@@ -1,4 +1,4 @@
-import { run } from '../src/app';
+import { compile, run } from '../src/app';
 
 function assertValid(source: string, stdin: string, expected: number): void {
 	const result = run(source, stdin);
@@ -8,8 +8,8 @@ function assertValid(source: string, stdin: string, expected: number): void {
 	}
 }
 
-function assertInvalid(source: string, stdin: string): void {
-	const result = run(source, stdin);
+function assertInvalid(source: string): void {
+	const result = compile(source);
 	expect(result.success).toBe(false);
 }
 

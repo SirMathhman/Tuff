@@ -114,7 +114,7 @@ function handleLetBindings(source: string): string {
 	return replaced;
 }
 
-function compile(source: string): Result<string, string> {
+export function compile(source: string): Result<string, string> {
 	// Minimal compiler for the tests: return JavaScript that evaluates to 0 for empty input.
 	if (source.trim() === '') {
 		return success('0');
