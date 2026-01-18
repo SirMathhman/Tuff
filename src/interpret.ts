@@ -118,19 +118,25 @@ function performOperation(operator: string, left: number, right: number): number
 }
 
 /**
- * Find matching closing parenthesis in parts array.
+ * Find matching closing parenthesis or brace in parts array.
  *
  * @param parts - array of string parts
- * @param startIdx - index where opening parenthesis is found
- * @returns index of matching closing parenthesis
+ * @param startIdx - index where opening parenthesis/brace is found
+ * @returns index of matching closing parenthesis/brace
  */
 function findMatchingParen(parts: string[], startIdx: number): number {
-	let parenCount = 0;
+	let char = '(';
+	let closeChar = ')';
+	if (parts[startIdx].includes('{')) {
+		char = '{';
+		closeChar = '}';
+	}
+	let count = 0;
 	for (let j = startIdx; j < parts.length; j++) {
 		const part = parts[j];
-		parenCount += part.split('(').length - 1;
-		parenCount -= part.split(')').length - 1;
-		if (parenCount === 0) {
+		count += part.split(char).length - 1;
+		count -= part.split(closeChar).length - 1;
+		if (count === 0) {
 			return j;
 		}
 	}
@@ -138,18 +144,22 @@ function findMatchingParen(parts: string[], startIdx: number): number {
 }
 
 /**
- * Evaluate expression inside parentheses (without outer parens).
+ * Evaluate expression inside parentheses or braces (without outer delimiters).
  *
- * @param innerParts - parts inside parentheses
+ * @param innerParts - parts inside parentheses/braces
  * @returns evaluated result
  */
 function evaluateParentheses(innerParts: string[]): number {
-	const cleanParts = innerParts.map((p: string): string => {
-		let result = p;
-		result = result.split('(').join('');
-		result = result.split(')').join('');
-		return result;
-	});
+	const cleanParts = innerParts
+		.map((p: string): string => {
+			let result = p;
+			result = result.split('(').join('');
+			result = result.split(')').join('');
+			result = result.split('{').join('');
+			result = result.split('}').join('');
+			return result;
+		})
+		.filter((p: string): boolean => Boolean(p));
 	// Handle * and /
 	let i = 0;
 	while (i < cleanParts.length) {
@@ -189,10 +199,10 @@ function evaluateExpression(expr: string): number {
 		return parseInt(parts[0], 10);
 	}
 
-	// First pass: handle parentheses
+	// First pass: handle parentheses and braces
 	let i = 0;
 	while (i < parts.length) {
-		if (parts[i].includes('(')) {
+		if (parts[i].includes('(') || parts[i].includes('{')) {
 			const endIdx = findMatchingParen(parts, i);
 			const innerParts = parts.slice(i, endIdx + 1);
 			const result = evaluateParentheses(innerParts);
@@ -338,28 +348,27 @@ function generateHelperFunctions(): string {
 }
 
 /**
- * Build the main evaluation function as code string.
+ * Generate code for handling grouped expressions (parentheses/braces).
  *
- * @returns string
+ * @returns JavaScript code string
  */
-function buildEvalFunction(): string {
-	return `const processAndEvaluate = (tokens, values) => {
-  for (let idx = 0; idx < tokens.length; idx++) {
-    const t = tokens[idx], start = t.indexOf("values["), end = start > -1 ? t.indexOf("]", start) : -1;
-    if (start > -1 && end > -1) {
-      const valIdx = parseInt(t.substring(start + 7, end), 10);
-      tokens[idx] = t.substring(0, start) + values[valIdx] + t.substring(end + 1);
-    }
-  }
-  let i = 0;
+function generateGroupedExprCode(): string {
+	return `  let i = 0;
   while (i < tokens.length) {
-    if (tokens[i].includes("(")) {
+    if (tokens[i].includes("(") || tokens[i].includes("{")) {
       let pCount = 0, sIdx = i, eIdx = i;
+      let delim = "(";
+      let close = ")";
+      if (tokens[i].includes("{")) {
+        delim = "{";
+        close = "}";
+      }
       for (let j = i; j < tokens.length; j++) {
-        pCount += countChar(tokens[j], "(") - countChar(tokens[j], ")");
+        pCount += countChar(tokens[j], delim) - countChar(tokens[j], close);
         if (pCount === 0) { eIdx = j; break; }
       }
-      const iTok = tokens.slice(sIdx, eIdx + 1).map(t => t.split("(").join("").split(")").join(""));
+      let iTok = tokens.slice(sIdx, eIdx + 1).map(t => t.split("(").join("").split(")").join("").split("{").join("").split("}").join(""));
+      iTok = iTok.filter(t => t);
       let k = 0;
       while (k < iTok.length) {
         if (k > 0 && k < iTok.length - 1 && (iTok[k] === "*" || iTok[k] === "/")) {
@@ -374,21 +383,59 @@ function buildEvalFunction(): string {
       }
       tokens.splice(sIdx, eIdx - sIdx + 1, res.toString());
     } else { i++; }
-  }
-  i = 0;
+  }`;
+}
+
+/**
+ * Generate code for handling multiplication/division.
+ *
+ * @returns JavaScript code string
+ */
+function generateMultDivCode(): string {
+	return `  i = 0;
   while (i < tokens.length) {
     if (i > 0 && i < tokens.length - 1 && (tokens[i] === "*" || tokens[i] === "/")) {
       const l = parseInt(tokens[i - 1], 10), r = parseInt(tokens[i + 1], 10);
       const res = tokens[i] === "*" ? l * r : Math.floor(l / r);
       tokens.splice(i - 1, 3, res.toString());
     } else { i++; }
-  }
-  let result = parseInt(tokens[0], 10);
+  }`;
+}
+
+/**
+ * Generate code for handling addition/subtraction.
+ *
+ * @returns JavaScript code string
+ */
+function generateAddSubCode(): string {
+	return `  let result = parseInt(tokens[0], 10);
   for (let j = 1; j < tokens.length; j += 2) {
     const o = parseInt(tokens[j + 1], 10);
     result = tokens[j] === "+" ? result + o : tokens[j] === "-" ? result - o : result % o;
   }
-  return result;
+  return result;`;
+}
+
+/**
+ * Build the main evaluation function as code string.
+ *
+ * @returns string
+ */
+function buildEvalFunction(): string {
+	const groupCode = generateGroupedExprCode();
+	const multDivCode = generateMultDivCode();
+	const addSubCode = generateAddSubCode();
+	return `const processAndEvaluate = (tokens, values) => {
+  for (let idx = 0; idx < tokens.length; idx++) {
+    const t = tokens[idx], start = t.indexOf("values["), end = start > -1 ? t.indexOf("]", start) : -1;
+    if (start > -1 && end > -1) {
+      const valIdx = parseInt(t.substring(start + 7, end), 10);
+      tokens[idx] = t.substring(0, start) + values[valIdx] + t.substring(end + 1);
+    }
+  }
+${groupCode}
+${multDivCode}
+${addSubCode}
 };`;
 }
 
