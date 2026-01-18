@@ -69,21 +69,24 @@ export function generateSingleReadWithOp(operator: string, operand: string): str
 function generateEvaluateTokensHelper(): string[] {
 	return [
 		'function evaluateTokens(tokens) {',
+		'  const cleanInt = (s) => parseInt(String(s).replace(/[(){};]/g, ""), 10);',
 		'  let i = 0;',
 		'  while (i < tokens.length) {',
 		'    if (i > 0 && i < tokens.length - 1 && (tokens[i] === "*" || tokens[i] === "/")) {',
-		'      const l = Number(tokens[i - 1]), r = Number(tokens[i + 1]);',
+		'      const l = cleanInt(tokens[i - 1]), r = cleanInt(tokens[i + 1]);',
 		'      const res = tokens[i] === "*" ? l * r : Math.floor(l / r);',
 		'      tokens.splice(i - 1, 3, String(res));',
 		'    } else { i++; }',
 		'  }',
 		'  if (tokens.length === 0) return 0;',
-		'  let result = Number(tokens[0]);',
+		'  let result = cleanInt(tokens[0]);',
 		'  for (let j = 1; j < tokens.length; j += 2) {',
-		'    const o = Number(tokens[j + 1]);',
-		'    if (tokens[j] === "+") result += o;',
-		'    else if (tokens[j] === "-") result -= o;',
-		'    else if (tokens[j] === "%") result %= o;',
+		'    if (j + 1 < tokens.length) {',
+		'      const o = cleanInt(tokens[j + 1]);',
+		'      if (tokens[j] === "+") result += o;',
+		'      else if (tokens[j] === "-") result -= o;',
+		'      else if (tokens[j] === "%") result %= o;',
+		'    }',
 		'  }',
 		'  return Math.floor(result);',
 		'}',
@@ -91,21 +94,32 @@ function generateEvaluateTokensHelper(): string[] {
 }
 
 /**
- * Generate code to evaluate let bindings within a block.
+ * Generate code to evaluate let bindings or reassignments within a block.
  *
- * @returns lines for let binding evaluation
+ * @returns lines for statement evaluation
  */
-function generateBlockLetBindingHelper(): string[] {
+function generateBlockStatementHelper(): string[] {
 	return [
 		'      let varName, expr;',
-		'      const equalsIdx = stmt.indexOf("=");',
-		'      const colonIdx = stmt.indexOf(":");',
-		'      if (colonIdx !== -1 && colonIdx < equalsIdx) {',
-		'        varName = stmt.substring(4, colonIdx).trim();',
-		'        expr = stmt.substring(equalsIdx + 1).trim();',
-		'      } else if (equalsIdx !== -1) {',
-		'        varName = stmt.substring(4, equalsIdx).trim();',
-		'        expr = stmt.substring(equalsIdx + 1).trim();',
+		'      const trimmed = stmt.trim();',
+		'      if (trimmed.startsWith("let ")) {',
+		'        let afterLet = trimmed.substring(4).trim();',
+		'        if (afterLet.startsWith("mut ")) afterLet = afterLet.substring(4).trim();',
+		'        const equalsIdx = afterLet.indexOf("=");',
+		'        const colonIdx = afterLet.indexOf(":");',
+		'        if (colonIdx !== -1 && colonIdx < equalsIdx) {',
+		'          varName = afterLet.substring(0, colonIdx).trim();',
+		'          expr = afterLet.substring(equalsIdx + 1).trim();',
+		'        } else if (equalsIdx !== -1) {',
+		'          varName = afterLet.substring(0, equalsIdx).trim();',
+		'          expr = afterLet.substring(equalsIdx + 1).trim();',
+		'        }',
+		'      } else {',
+		'        const reassignmentMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=(.*)$/s);',
+		'        if (reassignmentMatch) {',
+		'          varName = reassignmentMatch[1].trim();',
+		'          expr = reassignmentMatch[2].trim();',
+		'        }',
 		'      }',
 		'      if (varName && expr) {',
 		'        let exprEval = expr;',
@@ -124,20 +138,32 @@ function generateBlockLetBindingHelper(): string[] {
  * @returns lines for evaluateBlock
  */
 function generateEvaluateBlockHelper(): string[] {
-	const letBindingCode = generateBlockLetBindingHelper();
+	const statementCode = generateBlockStatementHelper();
 	return [
 		'function evaluateBlock(blockContent, values, readIdx) {',
 		'  const bindings = {};',
-		'  const statements = blockContent.split(";").map(s => s.trim()).filter(s => s);',
+		'  const splitStatements = (s) => {',
+		'    const stmts = []; let curr = "", depth = 0;',
+		'    for (let i = 0; i < s.length; i++) {',
+		'      if (s[i] === "{") depth++; else if (s[i] === "}") depth--;',
+		'      if (s[i] === ";" && depth === 0) { stmts.push(curr.trim()); curr = ""; } else curr += s[i];',
+		'    }',
+		'    if (curr.trim()) stmts.push(curr.trim());',
+		'    return stmts.filter(x => x);',
+		'  };',
+		'  const statements = splitStatements(blockContent);',
 		'  if (statements.length === 0) return 0;',
 		'  for (let i = 0; i < statements.length - 1; i++) {',
 		'    const stmt = statements[i];',
-		'    if (stmt.startsWith("let ")) {',
-		...letBindingCode,
-		'    }',
+		...statementCode,
 		'  }',
 		'  const lastStmt = statements[statements.length - 1];',
-		'  if (lastStmt.startsWith("let ")) return 0;',
+		'  const trimmedLast = lastStmt.trim();',
+		'  if (trimmedLast.startsWith("let ") || (new RegExp("^([a-zA-Z_][a-zA-Z0-9_]*)\\\\s*=")).test(trimmedLast)) {',
+		'    const stmt = lastStmt;',
+		...statementCode,
+		'    return 0;',
+		'  }',
 		'  let lastEval = lastStmt;',
 		'  for (const [vName, vValue] of Object.entries(bindings)) {',
 		'    const regex = new RegExp("\\\\b" + vName + "\\\\b", "g");',
@@ -250,13 +276,17 @@ export function buildEvalFunction(): string {
 	const groupCode = generateGroupedExprCode();
 	const addSubCode = generateAddSubCode();
 	return `function processAndEvaluate(input, values) {
-  let tokens = Array.isArray(input) ? [...input] : input.split(/\\s+/).filter(t => t);
+  const cleanInt = (s) => parseInt(String(s).replace(new RegExp("[(){};]", "g"), ""), 10);
+  let tokens = Array.isArray(input) ? [...input] : input.split(new RegExp("\\\\s+")).filter(t => t);
   for (let idx = 0; idx < tokens.length; idx++) {
     const t = tokens[idx], start = t.indexOf("values["), end = start > -1 ? t.indexOf("]", start) : -1;
     if (start > -1 && end > -1) {
       const valIdx = parseInt(t.substring(start + 7, end), 10);
       tokens[idx] = t.substring(0, start) + values[valIdx] + t.substring(end + 1);
     }
+  }
+  if (tokens.length === 1 && !tokens[0].includes("(") && !tokens[0].includes("{")) {
+    return cleanInt(tokens[0]);
   }
 ${groupCode}
 ${addSubCode}
@@ -296,11 +326,11 @@ export function generateMultiReadCode(source: string): string {
 	let evaluationCode = '';
 
 	const trimmed = source.trim();
-	const hasLet = trimmed.startsWith('let ');
+	const hasStatement = trimmed.startsWith('let ') || trimmed.includes('=');
 	const hasSemicolon = trimmed.includes(';');
 	const notInBraces = !trimmed.startsWith('{');
 
-	if (hasLet && hasSemicolon && notInBraces) {
+	if (hasStatement && hasSemicolon && notInBraces) {
 		evaluationCode = `  const result = evaluateBlock(${JSON.stringify(source)}, values, 0);`;
 	} else {
 		evaluationCode = generateEvalSnippet(source, 'result');

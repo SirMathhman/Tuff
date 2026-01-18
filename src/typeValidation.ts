@@ -3,6 +3,40 @@
  */
 
 /**
+ * Split source into statements, being aware of braces.
+ *
+ * @param source - the source code
+ * @returns array of statements
+ */
+export function splitStatements(source: string): string[] {
+	const statements: string[] = [];
+	let current = '';
+	let braceDepth = 0;
+
+	for (let i = 0; i < source.length; i++) {
+		const char = source[i];
+		if (char === '{') {
+			braceDepth++;
+			current += char;
+		} else if (char === '}') {
+			braceDepth--;
+			current += char;
+		} else if (char === ';' && braceDepth === 0) {
+			statements.push(current.trim());
+			current = '';
+		} else {
+			current += char;
+		}
+	}
+
+	if (current.trim()) {
+		statements.push(current.trim());
+	}
+
+	return statements.filter((s): boolean => Boolean(s));
+}
+
+/**
  * Extract the type from a read<Type>() expression.
  *
  * @param expr - expression string
@@ -63,12 +97,16 @@ function getAllReadTypesInExpression(expr: string): string[] {
  */
 function getTypeRank(type: string): number {
 	switch (type) {
+		case 'I8':
 		case 'U8':
 			return 8;
+		case 'I16':
 		case 'U16':
 			return 16;
+		case 'I32':
 		case 'U32':
 			return 32;
+		case 'I64':
 		case 'U64':
 			return 64;
 		default:
@@ -83,6 +121,7 @@ interface ParsedLetStatement {
 	name: string;
 	declaredType: string;
 	expr: string;
+	isMutable: boolean;
 }
 
 /**
@@ -97,7 +136,13 @@ function parseLetStatement(stmt: string): ParsedLetStatement | undefined {
 		return undefined;
 	}
 
-	const afterLet = trimmed.substring(4).trim();
+	let afterLet = trimmed.substring(4).trim();
+	let isMutable = false;
+	if (afterLet.startsWith('mut ')) {
+		isMutable = true;
+		afterLet = afterLet.substring(4).trim();
+	}
+
 	const equalsIdx = afterLet.indexOf('=');
 	if (equalsIdx === -1) {
 		return undefined;
@@ -108,13 +153,13 @@ function parseLetStatement(stmt: string): ParsedLetStatement | undefined {
 
 	const colonIdx = beforeEquals.indexOf(':');
 	if (colonIdx === -1) {
-		return { name: beforeEquals, declaredType: '', expr };
+		return { name: beforeEquals, declaredType: '', expr, isMutable };
 	}
 
 	const name = beforeEquals.substring(0, colonIdx).trim();
 	const declaredType = beforeEquals.substring(colonIdx + 1).trim();
 
-	return { name, declaredType, expr };
+	return { name, declaredType, expr, isMutable };
 }
 
 /**
@@ -126,8 +171,8 @@ function parseLetStatement(stmt: string): ParsedLetStatement | undefined {
  */
 function getExpressionType(expr: string, variableTypes: Map<string, string>): string {
 	const readTypes = getAllReadTypesInExpression(expr);
-	let maxType = 'U8';
-	let maxRank = getTypeRank(maxType);
+	let maxType = '';
+	let maxRank = -1;
 
 	for (const rt of readTypes) {
 		const rank = getTypeRank(rt);
@@ -151,26 +196,106 @@ function getExpressionType(expr: string, variableTypes: Map<string, string>): st
 }
 
 /**
+ * Variable information for type tracking.
+ */
+interface VariableInfo {
+	type: string;
+	isMutable: boolean;
+}
+
+/**
  * Validate type compatibility in a single let-binding statement.
  *
  * @param parsed - the parsed let-statement info
  * @param variableTypes - existing variables and their types
  * @returns error message if any, empty string otherwise
  */
-function validateStatement(parsed: ParsedLetStatement, variableTypes: Map<string, string>): string {
+function validateStatement(
+	parsed: ParsedLetStatement,
+	variableTypes: Map<string, VariableInfo>,
+): string {
 	if (variableTypes.has(parsed.name)) {
 		return `Variable '${parsed.name}' is already declared`;
 	}
 
-	const exprType = getExpressionType(parsed.expr, variableTypes);
-	const declaredType = parsed.declaredType || exprType;
+	const variableTypesOnly = new Map<string, string>();
+	variableTypes.forEach((info: VariableInfo, name: string): void => {
+		variableTypesOnly.set(name, info.type);
+	});
 
-	if (parsed.declaredType && getTypeRank(parsed.declaredType) < getTypeRank(exprType)) {
+	const exprType = getExpressionType(parsed.expr, variableTypesOnly);
+	// If it's a literal or doesn't have a clear type, default to I32 for mutable, or the declared type
+	let defaultType = 'U8';
+	if (parsed.isMutable) {
+		defaultType = 'I32';
+	}
+	const declaredType = parsed.declaredType || exprType || defaultType;
+
+	if (parsed.declaredType && exprType && getTypeRank(parsed.declaredType) < getTypeRank(exprType)) {
 		return `Type mismatch: declared type '${parsed.declaredType}' cannot hold expression of type '${exprType}'`;
 	}
 
-	variableTypes.set(parsed.name, declaredType);
+	variableTypes.set(parsed.name, { type: declaredType, isMutable: parsed.isMutable });
 	return '';
+}
+
+/**
+ * Validate a reassignment statement.
+ *
+ * @param stmt - the statement string
+ * @param variableTypes - existing variables
+ * @returns error message if any, empty string otherwise
+ */
+function validateReassignment(stmt: string, variableTypes: Map<string, VariableInfo>): string {
+	const trimmed = stmt.trim();
+	// Regex to match a simple variable assignment: varName = expression
+	// Should not match if it contains braces or complex syntax
+	if (!new RegExp('^[a-zA-Z_][a-zA-Z0-9_]*\\s*=').test(trimmed)) {
+		return '';
+	}
+
+	const equalsIdx = trimmed.indexOf('=');
+	const varName = trimmed.substring(0, equalsIdx).trim();
+	const expr = trimmed.substring(equalsIdx + 1).trim();
+
+	const info = variableTypes.get(varName);
+	if (!info) {
+		// If it's not a declared variable, it might just be an expression containing '=' (like in a block)
+		// but since we already check if it's at the start of the "statement", we should be careful.
+		return '';
+	}
+
+	if (!info.isMutable) {
+		return `Variable '${varName}' is immutable and cannot be reassigned`;
+	}
+
+	const variableTypesOnly = new Map<string, string>();
+	variableTypes.forEach((vInfo: VariableInfo, name: string): void => {
+		variableTypesOnly.set(name, vInfo.type);
+	});
+
+	const exprType = getExpressionType(expr, variableTypesOnly);
+	if (exprType && getTypeRank(info.type) < getTypeRank(exprType)) {
+		return `Type mismatch: cannot assign expression of type '${exprType}' to variable '${varName}' of type '${info.type}'`;
+	}
+
+	return '';
+}
+
+/**
+ * Process a single statement in the top-level let-binding validation.
+ *
+ * @param stmt - statement string
+ * @param variableTypes - map of variable types
+ * @returns error message or empty string
+ */
+function processBindingStatement(stmt: string, variableTypes: Map<string, VariableInfo>): string {
+	const parsed = parseLetStatement(stmt);
+	if (parsed) {
+		return validateStatement(parsed, variableTypes);
+	}
+
+	return validateReassignment(stmt, variableTypes);
 }
 
 /**
@@ -181,19 +306,11 @@ function validateStatement(parsed: ParsedLetStatement, variableTypes: Map<string
  * @returns error message if any error found, empty string if valid
  */
 export function validateTopLevelLetBinding(source: string): string {
-	const statements = source
-		.split(';')
-		.map((s: string): string => s.trim())
-		.filter((s: string): string => s);
-	const variableTypes = new Map<string, string>();
+	const statements = splitStatements(source);
+	const variableTypes = new Map<string, VariableInfo>();
 
 	for (const stmt of statements) {
-		const parsed = parseLetStatement(stmt);
-		if (!parsed) {
-			continue;
-		}
-
-		const error = validateStatement(parsed, variableTypes);
+		const error = processBindingStatement(stmt, variableTypes);
 		if (error) {
 			return error;
 		}

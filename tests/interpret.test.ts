@@ -83,6 +83,9 @@ describe('interpret and compileAndExecute stubs', (): void => {
 	testBothValid('{ read<U8>() }', '2', 2);
 	testBothValid('{ read<U8>() + read<U8>() }', '2 3', 5);
 	testBothValid('(read<U8>() + { read<U8>() }) * read<U8>()', '2 3 4', 20);
+});
+
+describe('let-bindings and reassignment', (): void => {
 	testBothValid('(read<U8>() + { let x : U8 = read<U8>(); x }) * read<U8>()', '2 3 4', 20);
 	testBothValid(
 		'(read<U8>() + { let x : U8 = read<U8>(); let y : U8 = x; y }) * read<U8>()',
@@ -99,6 +102,7 @@ describe('interpret and compileAndExecute stubs', (): void => {
 	testBothValid('let x = read<U32>(); let y = x; y', '100', 100);
 	testBothValid('let x = read<U32>(); let y = 1; x + y', '100', 101);
 	testBothValid('let x : U8  = read<U8>(); let y : U16 = x; y', '100', 100);
+	testBothValid('let mut x = 0; x = read<I32>(); x', '100', 100);
 	testBothInvalid('let x : U16  = read<U16>(); let y : U8 = x; y');
 	testBothInvalid('let x  = read<U16>(); let y : U8 = x; y');
 	testBothInvalid('let x = 0; let x = 0; x');

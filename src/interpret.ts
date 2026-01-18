@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawnSync, SpawnSyncReturns } from 'child_process';
 import { generateSingleReadCode, generateSingleReadWithOp, generateMultiReadCode } from './codeGen';
-import { validateTopLevelLetBinding } from './typeValidation';
+import { validateTopLevelLetBinding, splitStatements } from './typeValidation';
 
 // Type definitions
 export interface ResultOk<T> {
@@ -48,9 +48,9 @@ function extractNumericPart(source: string): string {
 	let endIndex = 0;
 	for (let i = 0; i < source.length; i++) {
 		const char = source.charCodeAt(i);
-		// Check if character is a digit or decimal point
-		if (!((char >= 48 && char <= 57) || char === 46)) {
-			// Found first non-digit, non-dot character
+		// Check if character is a digit, decimal point, or minus sign
+		if (!((char >= 48 && char <= 57) || char === 46 || char === 45)) {
+			// Found first non-digit, non-dot, non-minus character
 			endIndex = i;
 			break;
 		}
@@ -185,55 +185,61 @@ function replaceReadsInExpression(
  */
 
 /**
- * Process a let-binding statement and store the binding.
+ * Process a let-binding or reassignment statement and store the binding.
  *
- * @param stmt - the let-binding statement
+ * @param stmt - the statement
  * @param stdinValues - stdin values array
  * @param readIndex - current position in stdin values
  * @param bindings - variable bindings map to update
  * @returns updated readIndex after processing
  */
-function processLetBinding(
+function processStatement(
 	stmt: string,
 	stdinValues: number[],
 	readIndex: number,
 	bindings: MutableVariableBindings,
 ): number {
-	// Parse let-binding: 'let varName : Type = expression'
-	if (!stmt.startsWith('let ')) {
-		return readIndex;
-	}
-
-	// Extract variable name
-	const afterLet = stmt.substring(4).trim();
-	const equalsIdx = afterLet.indexOf('=');
-	if (equalsIdx === -1) {
-		return readIndex;
-	}
-
-	const colonIdx = afterLet.indexOf(':');
 	let varName: string;
-	let exprStartIdx: number;
+	let expr: string;
+	let currentReadIdx = readIndex;
 
-	if (colonIdx !== -1 && colonIdx < equalsIdx) {
-		// Explicit type: let varName : Type = expression
-		varName = afterLet.substring(0, colonIdx).trim();
-		exprStartIdx = equalsIdx + 1;
+	const trimmed = stmt.trim();
+	if (trimmed.startsWith('let ')) {
+		let afterLet = trimmed.substring(4).trim();
+		if (afterLet.startsWith('mut ')) {
+			afterLet = afterLet.substring(4).trim();
+		}
+
+		const equalsIdx = afterLet.indexOf('=');
+		if (equalsIdx === -1) {
+			return currentReadIdx;
+		}
+
+		const colonIdx = afterLet.indexOf(':');
+		if (colonIdx !== -1 && colonIdx < equalsIdx) {
+			varName = afterLet.substring(0, colonIdx).trim();
+		} else {
+			varName = afterLet.substring(0, equalsIdx).trim();
+		}
+		expr = afterLet.substring(equalsIdx + 1).trim();
 	} else {
-		// Inferred type: let varName = expression
-		varName = afterLet.substring(0, equalsIdx).trim();
-		exprStartIdx = equalsIdx + 1;
+		// Smartly check for reassignment: must start with identifier followed by =
+		const reassignmentMatch = trimmed.match(new RegExp('^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=(.*)$', 's'));
+		if (reassignmentMatch) {
+			varName = reassignmentMatch[1].trim();
+			expr = reassignmentMatch[2].trim();
+		} else {
+			return currentReadIdx;
+		}
 	}
 
-	let expr = afterLet.substring(exprStartIdx).trim();
-
-	const readResult = replaceReadsInExpression(expr, stdinValues, readIndex);
+	const readResult = replaceReadsInExpression(expr, stdinValues, currentReadIdx);
 	expr = readResult.expr;
-	const nextReadIdx = readResult.readIndex;
+	currentReadIdx = readResult.readIndex;
 
 	expr = replaceVariablesInExpression(expr, bindings);
 	bindings[varName] = evaluateExpression(expr);
-	return nextReadIdx;
+	return currentReadIdx;
 }
 
 /**
@@ -250,28 +256,22 @@ function evaluateBlockWithReads(
 	readIndex: number,
 ): EvalResult {
 	const bindings: MutableVariableBindings = {};
-	const statements = blockContent
-		.split(';')
-		.map((s: string): string => s.trim())
-		.filter((s: string): boolean => Boolean(s));
+	const statements = splitStatements(blockContent);
 
 	let currentReadIdx = readIndex;
 
-	// Process all but the last statement as let-bindings
+	// Process all but the last statement as statements (lets or reassignments)
 	for (let i = 0; i < statements.length - 1; i++) {
-		const stmt = statements[i];
-		if (!stmt.startsWith('let ')) {
-			continue;
-		}
-		currentReadIdx = processLetBinding(stmt, stdinValues, currentReadIdx, bindings);
+		currentReadIdx = processStatement(statements[i], stdinValues, currentReadIdx, bindings);
 	}
 
 	// Evaluate the last statement
 	let lastStmt = statements[statements.length - 1];
 
-	// Check if the last statement is also a let-binding (no final expression)
-	if (lastStmt.startsWith('let ')) {
-		currentReadIdx = processLetBinding(lastStmt, stdinValues, currentReadIdx, bindings);
+	// Check if the last statement is also a let-binding or reassignment (no final expression)
+	const trimmedLast = lastStmt.trim();
+	if (trimmedLast.startsWith('let ') || new RegExp('^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=').test(trimmedLast)) {
+		currentReadIdx = processStatement(lastStmt, stdinValues, currentReadIdx, bindings);
 		// No final expression, return 0 (default exit code)
 		return { result: 0, readIndex: currentReadIdx };
 	}
@@ -304,15 +304,10 @@ function interpretWithLetBindings(source: string, stdinValues: number[]): number
 		stdinIdx++;
 	}
 
-	// Check if result starts with a top-level let-binding (let ... = ...; expr)
-	// Only handle top-level let if the source starts with 'let' and is not inside braces
+	// Check if result contains top-level statements (let ... = ...; expr or x = ...; expr)
 	const trimmedResult = result.trim();
-	if (
-		trimmedResult.startsWith('let ') &&
-		trimmedResult.includes(';') &&
-		!trimmedResult.startsWith('{')
-	) {
-		// Use evaluateBlockWithReads to handle the let-bindings properly
+	if (trimmedResult.includes(';') && !trimmedResult.startsWith('{')) {
+		// Use evaluateBlockWithReads to handle the statements properly
 		return evaluateBlockWithReads(result, [], 0).result;
 	}
 
@@ -344,7 +339,7 @@ function evaluateExpressionSequential(
 	const parts = trimmed.split(' ').filter((p: string): boolean => Boolean(p));
 
 	if (parts.length === 1) {
-		return { result: parseInt(parts[0], 10), readIndex };
+		return { result: cleanInt(parts[0]), readIndex };
 	}
 
 	// First pass: handle parentheses and braces
@@ -504,6 +499,11 @@ function processParenthesesAndBraces(
 	return readIdx;
 }
 
+function cleanInt(s: string): number {
+	const cleaned = s.replace(new RegExp('[(){};]', 'g'), '');
+	return parseInt(cleaned, 10);
+}
+
 /**
  * Handle multiplication and division operations in parts array.
  *
@@ -513,9 +513,9 @@ function handleMultiplicationDivision(parts: string[]): void {
 	let i = 0;
 	while (i < parts.length) {
 		if (i > 0 && i < parts.length - 1 && (parts[i] === '*' || parts[i] === '/')) {
-			const left = parseInt(parts[i - 1], 10);
+			const left = cleanInt(parts[i - 1]);
 			const operator = parts[i];
-			const right = parseInt(parts[i + 1], 10);
+			const right = cleanInt(parts[i + 1]);
 			const result = performOperation(operator, left, right);
 			parts.splice(i - 1, 3, String(result));
 		} else {
@@ -531,11 +531,16 @@ function handleMultiplicationDivision(parts: string[]): void {
  * @returns result after all additions and subtractions
  */
 function handleAdditionSubtraction(parts: string[]): number {
-	let result = parseInt(parts[0], 10);
+	if (parts.length === 0) {
+		return 0;
+	}
+	let result = cleanInt(parts[0]);
 	for (let j = 1; j < parts.length; j += 2) {
 		const operator = parts[j];
-		const operand = parseInt(parts[j + 1], 10);
-		result = performOperation(operator, result, operand);
+		if (j + 1 < parts.length) {
+			const operand = cleanInt(parts[j + 1]);
+			result = performOperation(operator, result, operand);
+		}
 	}
 	return result;
 }
@@ -617,7 +622,7 @@ function evaluateExpression(expr: string): number {
 	const parts = trimmed.split(' ').filter((p: string): boolean => Boolean(p));
 
 	if (parts.length === 1) {
-		return parseInt(parts[0], 10);
+		return cleanInt(parts[0]);
 	}
 
 	// First pass: handle parentheses and braces
