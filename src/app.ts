@@ -19,8 +19,7 @@ export function run(source: string, stdIn?: string): number {
 	// Compile without stdin; provide `stdin` at execution time so reads can be
 	// implemented as runtime expressions (easier to test and more flexible).
 	const code = compile(source);
-	// Use the Function constructor to inject `stdin` at runtime.
-	// eslint-disable-next-line no-new-func
-	const fn = new Function('stdin', `return (${code});`);
-	return fn(stdIn ?? '0') as number;
+	// Inject stdin into the eval by wrapping code in an IIFE that accepts `stdin`.
+	// eslint-disable-next-line no-eval
+	return eval(`(function(stdin){ return (${code}); })(${JSON.stringify(stdIn ?? '0')})`) as number;
 }
