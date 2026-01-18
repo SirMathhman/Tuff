@@ -94,6 +94,16 @@ export function performOperation(operator: string, left: number, right: number):
 			return Math.floor(left / right);
 		case '%':
 			return left % right;
+		case '||':
+			if (left !== 0 || right !== 0) {
+				return 1;
+			}
+			return 0;
+		case '&&':
+			if (left !== 0 && right !== 0) {
+				return 1;
+			}
+			return 0;
 		default:
 			return left;
 	}

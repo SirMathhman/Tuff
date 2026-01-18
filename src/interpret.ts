@@ -327,7 +327,13 @@ function evaluateParenthesesSequential(
 		.filter((p: string): boolean => Boolean(p));
 
 	handleMultiplicationDivision(cleanParts);
-	return { result: handleAdditionSubtraction(cleanParts), readIndex };
+	handleAdditionSubtraction(cleanParts);
+	handleLogicalOperations(cleanParts);
+	let resultValue = 0;
+	if (cleanParts.length > 0) {
+		resultValue = cleanInt(cleanParts[0]);
+	}
+	return { result: resultValue, readIndex };
 }
 
 /**
@@ -384,14 +390,15 @@ function processParenthesesAndBraces(
 }
 
 /**
- * Handle multiplication and division operations in parts array.
+ * Handle specific binary operations in parts array in-place.
  *
  * @param parts - array of expression parts
+ * @param operators - array of operators to handle (e.g., ['*', '/'])
  */
-function handleMultiplicationDivision(parts: string[]): void {
+function handleOperatorsInPlace(parts: string[], operators: string[]): void {
 	let i = 0;
 	while (i < parts.length) {
-		if (i > 0 && i < parts.length - 1 && (parts[i] === '*' || parts[i] === '/')) {
+		if (i > 0 && i < parts.length - 1 && operators.includes(parts[i])) {
 			const left = cleanInt(parts[i - 1]);
 			const operator = parts[i];
 			const right = cleanInt(parts[i + 1]);
@@ -404,24 +411,31 @@ function handleMultiplicationDivision(parts: string[]): void {
 }
 
 /**
+ * Handle multiplication and division operations in parts array.
+ *
+ * @param parts - array of expression parts
+ */
+function handleMultiplicationDivision(parts: string[]): void {
+	handleOperatorsInPlace(parts, ['*', '/']);
+}
+
+/**
  * Handle addition and subtraction operations in parts array.
  *
  * @param parts - array of expression parts
- * @returns result after all additions and subtractions
  */
-function handleAdditionSubtraction(parts: string[]): number {
-	if (parts.length === 0) {
-		return 0;
-	}
-	let result = cleanInt(parts[0]);
-	for (let j = 1; j < parts.length; j += 2) {
-		const operator = parts[j];
-		if (j + 1 < parts.length) {
-			const operand = cleanInt(parts[j + 1]);
-			result = performOperation(operator, result, operand);
-		}
-	}
-	return result;
+function handleAdditionSubtraction(parts: string[]): void {
+	handleOperatorsInPlace(parts, ['+', '-', '%']);
+}
+
+/**
+ * Handle logical operations (&&, ||) in parts array.
+ *
+ * @param parts - array of expression parts
+ */
+function handleLogicalOperations(parts: string[]): void {
+	handleOperatorsInPlace(parts, ['&&']);
+	handleOperatorsInPlace(parts, ['||']);
 }
 
 /**
@@ -432,7 +446,12 @@ function handleAdditionSubtraction(parts: string[]): number {
  */
 function evaluateArithmeticParts(parts: string[]): number {
 	handleMultiplicationDivision(parts);
-	return handleAdditionSubtraction(parts);
+	handleAdditionSubtraction(parts);
+	handleLogicalOperations(parts);
+	if (parts.length === 0) {
+		return 0;
+	}
+	return cleanInt(parts[0]);
 }
 
 /**
@@ -511,7 +530,15 @@ function evaluateExpression(expr: string): number {
 	handleMultiplicationDivision(parts);
 
 	// Third pass: handle + and - (lower precedence)
-	return handleAdditionSubtraction(parts);
+	handleAdditionSubtraction(parts);
+
+	// Fourth pass: handle logical operators
+	handleLogicalOperations(parts);
+
+	if (parts.length > 0) {
+		return cleanInt(parts[0]);
+	}
+	return 0;
 }
 
 function parseStdIn(stdIn: string): number[] {
@@ -546,16 +573,19 @@ export function interpret(source: string, stdIn: string): Result<number, string>
 	}
 
 	const readExprs = findAllReadExpressions(source);
-	if (readExprs.length === 0) {
-		const numericPart = extractNumericPart(source);
-		return { ok: true, value: parseInt(numericPart, 10) };
-	}
-
 	const stdinValues = parseStdIn(stdIn);
 
-	if (source.includes('let ')) {
+	if (source.includes('let ') || source.includes('=')) {
 		const result = interpretWithLetBindings(source, stdinValues);
 		return { ok: true, value: result };
+	}
+
+	if (readExprs.length === 0) {
+		const trimmed = source.trim();
+		const numericPart = extractNumericPart(trimmed);
+		if (numericPart === trimmed) {
+			return { ok: true, value: cleanInt(numericPart) };
+		}
 	}
 
 	let evaluatedSource = source;

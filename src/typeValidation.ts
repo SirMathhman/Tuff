@@ -176,6 +176,12 @@ function getExpressionType(expr: string, variableTypes: Map<string, string>): st
 	let maxType = '';
 	let maxRank = -1;
 
+	// Check for boolean literals or logical operators which suggest Bool type
+	if (new RegExp('\\b(true|false)\\b').test(expr) || expr.includes('||') || expr.includes('&&')) {
+		maxRank = 1;
+		maxType = 'Bool';
+	}
+
 	for (const rt of readTypes) {
 		const rank = getTypeRank(rt);
 		if (rank > maxRank) {
