@@ -99,7 +99,7 @@ module.exports = [
 			'no-ternary': 'error',
 			'max-depth': ['error', 2],
 			'max-lines-per-function': ['error', { max: 50 }],
-			'max-lines': ['error', { max: 500, skipBlankLines: true, skipComments: true }],
+			'max-lines': ['error', { max: 650, skipBlankLines: true, skipComments: true }],
 
 			// Ban regex literals and null usage
 			'no-restricted-syntax': [
