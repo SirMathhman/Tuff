@@ -71,4 +71,5 @@ describe('interpret and compileAndExecute stubs', (): void => {
 		20,
 	);
 	testBothValid('let z : U8 = read<U8>(); z', '2', 2);
+	testBothValid('let z : U8 = read<U8>();', '2', 0);
 });

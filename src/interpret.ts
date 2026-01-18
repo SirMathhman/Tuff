@@ -182,6 +182,46 @@ function replaceReadsInExpression(
  * @param readIndex - current position in stdin values
  * @returns object with result and updated read index
  */
+/**
+ * Process a let-binding statement and store the binding.
+ *
+ * @param stmt - the let-binding statement
+ * @param stdinValues - stdin values array
+ * @param readIndex - current position in stdin values
+ * @param bindings - variable bindings map to update
+ * @returns updated readIndex after processing
+ */
+function processLetBinding(
+	stmt: string,
+	stdinValues: number[],
+	readIndex: number,
+	bindings: MutableVariableBindings,
+): number {
+	// eslint-disable-next-line no-restricted-syntax
+	const match = stmt.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*(.+)/);
+	if (!match) {
+		return readIndex;
+	}
+
+	const varName = match[1];
+	let expr = match[2];
+	const readResult = replaceReadsInExpression(expr, stdinValues, readIndex);
+	expr = readResult.expr;
+	const nextReadIdx = readResult.readIndex;
+
+	expr = replaceVariablesInExpression(expr, bindings);
+	bindings[varName] = evaluateExpression(expr);
+	return nextReadIdx;
+}
+
+/**
+ * Evaluate a block with let-bindings, handling sequential read<>() calls.
+ *
+ * @param blockContent - block content to evaluate
+ * @param stdinValues - stdin values array
+ * @param readIndex - current position in stdin values
+ * @returns object with result and updated readIndex
+ */
 function evaluateBlockWithReads(
 	blockContent: string,
 	stdinValues: number[],
@@ -201,24 +241,19 @@ function evaluateBlockWithReads(
 		if (!stmt.startsWith('let ')) {
 			continue;
 		}
-		// eslint-disable-next-line no-restricted-syntax
-		const match = stmt.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*(.+)/);
-		if (!match) {
-			continue;
-		}
-
-		const varName = match[1];
-		let expr = match[2];
-		const readResult = replaceReadsInExpression(expr, stdinValues, currentReadIdx);
-		expr = readResult.expr;
-		currentReadIdx = readResult.readIndex;
-
-		expr = replaceVariablesInExpression(expr, bindings);
-		bindings[varName] = evaluateExpression(expr);
+		currentReadIdx = processLetBinding(stmt, stdinValues, currentReadIdx, bindings);
 	}
 
 	// Evaluate the last statement
 	let lastStmt = statements[statements.length - 1];
+
+	// Check if the last statement is also a let-binding (no final expression)
+	if (lastStmt.startsWith('let ')) {
+		currentReadIdx = processLetBinding(lastStmt, stdinValues, currentReadIdx, bindings);
+		// No final expression, return 0 (default exit code)
+		return { result: 0, readIndex: currentReadIdx };
+	}
+
 	const lastReadResult = replaceReadsInExpression(lastStmt, stdinValues, currentReadIdx);
 	lastStmt = lastReadResult.expr;
 	currentReadIdx = lastReadResult.readIndex;
@@ -629,6 +664,16 @@ export function interpret(source: string, stdIn: string): Result<number, string>
 export const compile = (source: string): Result<string, string> => {
 	// DO NOT CALL INTERPRET
 
+	// Check if this is a top-level let-binding with no final expression
+	const trimmedSource = source.trim();
+	if (trimmedSource.startsWith('let ') && trimmedSource.endsWith(';')) {
+		// This is a let-binding with no final expression, should exit with 0
+		return {
+			ok: true,
+			value: 'process.exit(0);',
+		};
+	}
+
 	const readExprs = findAllReadExpressions(source);
 	if (readExprs.length === 0) {
 		// No read expression, compile as a numeric literal
@@ -641,7 +686,7 @@ export const compile = (source: string): Result<string, string> => {
 		const readExpr = readExprs[0];
 		const afterRead = source.substring(readExpr.endIndex).trim();
 
-		if (!afterRead) {
+		if (!afterRead || afterRead === ';') {
 			return { ok: true, value: generateSingleReadCode() };
 		}
 
