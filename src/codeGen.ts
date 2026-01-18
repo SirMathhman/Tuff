@@ -235,6 +235,89 @@ export function generateTokenProcessingCode(): string {
 }
 
 /**
+ * Result of extracting let binding information.
+ */
+interface LetBindingInfo {
+	binding: string;
+	finalExpr: string;
+}
+
+/**
+ * Information from parsing a let statement.
+ */
+interface ParsedLetBinding {
+	varName: string;
+	rest: string;
+}
+
+/**
+ * Extract binding and final expression from a top-level let statement.
+ *
+ * @param rest - the part after "let varName : type = "
+ * @returns object with binding expression and final expression
+ */
+function extractLetBinding(rest: string): LetBindingInfo {
+	const lastSemicolon = rest.lastIndexOf(';');
+	let bindingExpr = '';
+	let finalExpr = '';
+
+	if (lastSemicolon !== -1) {
+		bindingExpr = rest.substring(0, lastSemicolon).trim();
+		const afterSemi = rest.substring(lastSemicolon + 1).trim();
+		finalExpr = afterSemi;
+	} else {
+		bindingExpr = rest.trim();
+	}
+
+	return { binding: bindingExpr, finalExpr };
+}
+
+/**
+ * Check if source is a top-level let-binding and extract variable name and rest.
+ *
+ * @param source - the source code
+ * @returns match object with groups, or undefined if not a let-binding
+ */
+function parseLetBinding(source: string): ParsedLetBinding | undefined {
+	if (!source.startsWith('let ')) {
+		return undefined;
+	}
+
+	const afterLet = source.substring(4); // remove 'let '
+	const colonIdx = afterLet.indexOf(':');
+	if (colonIdx === -1) {
+		return undefined;
+	}
+
+	const equalsIdx = afterLet.indexOf('=');
+	if (equalsIdx === -1 || equalsIdx <= colonIdx) {
+		return undefined;
+	}
+
+	const varName = afterLet.substring(0, colonIdx).trim();
+	const rest = afterLet.substring(equalsIdx + 1).trim();
+
+	if (!varName || !rest) {
+		return undefined;
+	}
+
+	return { varName, rest };
+}
+
+/**
+ * Generate code to evaluate a Tuff expression.
+ *
+ * @param exprStr - expression string
+ * @param resultVar - variable name to store result
+ * @returns generated JavaScript code
+ */
+function generateEvalSnippet(exprStr: string, resultVar: string): string {
+	return `  const expr = '${exprStr}';
+  const tokens = expr.split(" ").filter(t => t);
+  const ${resultVar} = processAndEvaluate(tokens, values);`;
+}
+
+/**
  * Generate code for multiple read<>() calls.
  *
  * @param source - source with read<>() placeholders
@@ -242,6 +325,29 @@ export function generateTokenProcessingCode(): string {
  */
 export function generateMultiReadCode(source: string): string {
 	const processingCode = generateTokenProcessingCode();
+	const letInfo = parseLetBinding(source);
+	let evaluationCode = '';
+
+	if (letInfo) {
+		const { binding, finalExpr: exprName } = extractLetBinding(letInfo.rest);
+		const finalExprVal = exprName || letInfo.varName;
+		const bindingEval = generateEvalSnippet(binding, letInfo.varName);
+
+		evaluationCode = `${bindingEval}
+  const finalExpr = '${finalExprVal}';
+  const finalTokens = finalExpr.split(" ").filter(t => t);
+  let resultVal = ${letInfo.varName};
+  if (finalTokens.length > 1 || finalTokens[0] !== '${letInfo.varName}') {
+    for (let idx = 0; idx < finalTokens.length; idx++) {
+      if (finalTokens[idx] === '${letInfo.varName}') finalTokens[idx] = String(${letInfo.varName});
+    }
+    resultVal = processAndEvaluate(finalTokens, values);
+  }
+  const result = resultVal;`;
+	} else {
+		evaluationCode = generateEvalSnippet(source, 'result');
+	}
+
 	const parts = [
 		"const readline = require('readline');",
 		'const rl = readline.createInterface({',
@@ -254,10 +360,8 @@ export function generateMultiReadCode(source: string): string {
 		'});',
 		'rl.on("close", () => {',
 		'  const values = allInput.trim().split(" ").map(v => parseInt(v, 10));',
-		'  const expr = ' + `'${source}'` + ';',
-		'  const tokens = expr.split(" ").filter(t => t);',
 		processingCode,
-		'  const result = processAndEvaluate(tokens, values);',
+		evaluationCode,
 		'  process.exit(result);',
 		'});',
 	];
