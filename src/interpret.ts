@@ -1,3 +1,31 @@
+// Implementation dependencies
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { spawnSync, SpawnSyncReturns } from 'child_process';
+
+/**
+ * Extract the numeric part from source code by removing type suffixes.
+ *
+ * @param source - source code
+ * @returns numeric part as a string
+ */
+function extractNumericPart(source: string): string {
+	// Strip type suffix (e.g., 'U8', 'I32', etc.)
+	let endIndex = 0;
+	for (let i = 0; i < source.length; i++) {
+		const char = source.charCodeAt(i);
+		// Check if character is a digit or decimal point
+		if (!((char >= 48 && char <= 57) || char === 46)) {
+			// Found first non-digit, non-dot character
+			endIndex = i;
+			break;
+		}
+		endIndex = i + 1;
+	}
+	return source.substring(0, endIndex);
+}
+
 /**
  * Interpret the given source code with provided stdin.
  * This is a stub implementation that should return an exit code.
@@ -11,14 +39,9 @@ export function interpret(source: string, stdIn: string): number {
 
 	// Stub: not yet implemented
 	void stdIn;
-	return parseInt(source, 10);
+	const numericPart = extractNumericPart(source);
+	return parseInt(numericPart, 10);
 }
-
-// Implementation dependencies
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import { spawnSync, SpawnSyncReturns } from 'child_process';
 
 /**
  * Compile the given source to a target string.
@@ -29,8 +52,9 @@ import { spawnSync, SpawnSyncReturns } from 'child_process';
 export const compile = (source: string): string => {
 	// DO NOT CALL INTERPRET
 
+	const numericPart = extractNumericPart(source);
 	// Generate JavaScript that exits with the numeric value of source
-	return `process.exit(${parseInt(source, 10)});`;
+	return `process.exit(${parseInt(numericPart, 10)});`;
 };
 
 /**

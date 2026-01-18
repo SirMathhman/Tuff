@@ -28,4 +28,5 @@ describe('interpret and compileAndExecute stubs', (): void => {
 	}
 
 	testBoth('100', '', 100);
+	testBoth('100U8', '', 100);
 });
