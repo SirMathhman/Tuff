@@ -6,6 +6,18 @@ import { spawnSync, SpawnSyncReturns } from 'child_process';
 import { generateSingleReadCode, generateSingleReadWithOp, generateMultiReadCode } from './codeGen';
 
 // Type definitions
+export interface ResultOk<T> {
+	ok: true;
+	value: T;
+}
+
+export interface ResultError<E> {
+	ok: false;
+	error: E;
+}
+
+export type Result<T, E> = ResultOk<T> | ResultError<E>;
+
 interface EvalResult {
 	result: number;
 	readIndex: number;
@@ -557,14 +569,14 @@ function evaluateExpression(expr: string): number {
  * @param stdIn - input provided to the program
  * @returns exit code (number)
  */
-export function interpret(source: string, stdIn: string): number {
+export function interpret(source: string, stdIn: string): Result<number, string> {
 	// DO NOT CALL COMPILE
 
 	const readExprs = findAllReadExpressions(source);
 	if (readExprs.length === 0) {
 		// No read expression, parse as a numeric literal
 		const numericPart = extractNumericPart(source);
-		return parseInt(numericPart, 10);
+		return { ok: true, value: parseInt(numericPart, 10) };
 	}
 
 	// Parse all values from stdIn (space-separated)
@@ -575,7 +587,8 @@ export function interpret(source: string, stdIn: string): number {
 
 	// Check if source contains let-bindings
 	if (source.includes('let ')) {
-		return interpretWithLetBindings(source, stdinValues);
+		const result = interpretWithLetBindings(source, stdinValues);
+		return { ok: true, value: result };
 	}
 
 	// Replace each read<>() with its corresponding value
@@ -588,11 +601,11 @@ export function interpret(source: string, stdIn: string): number {
 	const numericPart = extractNumericPart(evaluatedSource);
 	if (numericPart === evaluatedSource.trim()) {
 		// It's just a number
-		return parseInt(numericPart, 10);
+		return { ok: true, value: parseInt(numericPart, 10) };
 	}
 
 	// It has operations - parse and evaluate
-	return evaluateExpressionSequential(evaluatedSource, stdinValues, 0).result;
+	return { ok: true, value: evaluateExpressionSequential(evaluatedSource, stdinValues, 0).result };
 }
 
 /**
@@ -601,14 +614,14 @@ export function interpret(source: string, stdIn: string): number {
  * @param source - source code to compile
  * @returns compiled target as a string
  */
-export const compile = (source: string): string => {
+export const compile = (source: string): Result<string, string> => {
 	// DO NOT CALL INTERPRET
 
 	const readExprs = findAllReadExpressions(source);
 	if (readExprs.length === 0) {
 		// No read expression, compile as a numeric literal
 		const numericPart = extractNumericPart(source);
-		return `process.exit(${parseInt(numericPart, 10)});`;
+		return { ok: true, value: `process.exit(${parseInt(numericPart, 10)});` };
 	}
 
 	if (readExprs.length === 1) {
@@ -617,14 +630,14 @@ export const compile = (source: string): string => {
 		const afterRead = source.substring(readExpr.endIndex).trim();
 
 		if (!afterRead) {
-			return generateSingleReadCode();
+			return { ok: true, value: generateSingleReadCode() };
 		}
 
 		// read<>() with single operation
 		const operatorMatch = afterRead.split(' ');
 		const operator = operatorMatch[0];
 		const operand = operatorMatch[1] || '0';
-		return generateSingleReadWithOp(operator, operand);
+		return { ok: true, value: generateSingleReadWithOp(operator, operand) };
 	}
 
 	// Multiple read<>() calls - replace them with array indices and evaluate
@@ -633,7 +646,7 @@ export const compile = (source: string): string => {
 		replacedSource = replacedSource.replace(readExprs[i].expression, `values[${i}]`);
 	}
 
-	return generateMultiReadCode(replacedSource);
+	return { ok: true, value: generateMultiReadCode(replacedSource) };
 };
 
 /**
@@ -687,8 +700,12 @@ export const execute = (target: string, stdIn: string): number => {
  * @param stdIn - input provided to the program
  * @returns exit code (number)
  */
-export function compileAndExecute(source: string, stdIn: string): number {
-	const target = compile(source);
+export function compileAndExecute(source: string, stdIn: string): Result<number, string> {
+	const compileResult = compile(source);
+	if (!compileResult.ok) {
+		return { ok: false, error: compileResult.error };
+	}
+	const target = compileResult.value;
 	const exitCode = execute(target, stdIn);
-	return exitCode;
+	return { ok: true, value: exitCode };
 }

@@ -1,31 +1,55 @@
 import * as interp from '../src/interpret';
 
-describe('interpret and compileAndExecute stubs', (): void => {
-	test('interpret should be a function and return a number', (): void => {
-		expect(typeof interp.interpret).toBe('function');
-		const exitCode = interp.interpret('some source', 'some stdin');
-		expect(typeof exitCode).toBe('number');
-	});
-
-	test('compileAndExecute should be a function and return a number', (): void => {
-		expect(typeof interp.compileAndExecute).toBe('function');
-		const exitCode = interp.compileAndExecute('some source', 'some stdin');
-		expect(typeof exitCode).toBe('number');
-	});
-
-	function testBoth(source: string, stdIn: string, expectedExitCode: number): void {
-		// test interpret
-		test(`interpret('${source}', '${stdIn}') should return ${expectedExitCode}`, (): void => {
-			const exitCode = interp.interpret(source, stdIn);
-			expect(exitCode).toBe(expectedExitCode);
-		});
-
-		// test compileAndExecute
-		test(`compileAndExecute('${source}', '${stdIn}') should return ${expectedExitCode}`, (): void => {
-			const exitCode = interp.compileAndExecute(source, stdIn);
-			expect(exitCode).toBe(expectedExitCode);
-		});
+function getInterpretValue(result: interp.Result<number, string>): number {
+	if (result.ok) {
+		return result.value;
 	}
+	return -1;
+}
+
+function testInterpretValue(source: string, stdIn: string, expectedExitCode: number): void {
+	test(`interpret('${source}', '${stdIn}') should return ${expectedExitCode}`, (): void => {
+		const result = interp.interpret(source, stdIn);
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			return;
+		}
+		expect(result.value).toBe(expectedExitCode);
+	});
+}
+
+function testCompileAndExecuteValue(source: string, stdIn: string, expectedExitCode: number): void {
+	test(`compileAndExecute('${source}', '${stdIn}') should return ${expectedExitCode}`, (): void => {
+		const result = interp.compileAndExecute(source, stdIn);
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			return;
+		}
+		expect(result.value).toBe(expectedExitCode);
+	});
+}
+
+function testBoth(source: string, stdIn: string, expectedExitCode: number): void {
+	testInterpretValue(source, stdIn, expectedExitCode);
+	testCompileAndExecuteValue(source, stdIn, expectedExitCode);
+}
+
+describe('interpret and compileAndExecute stubs', (): void => {
+	test('interpret should be a function and return a Result', (): void => {
+		expect(typeof interp.interpret).toBe('function');
+		const result = interp.interpret('some source', 'some stdin');
+		expect(result.ok).toBe(true);
+		const value = getInterpretValue(result);
+		expect(typeof value).toBe('number');
+	});
+
+	test('compileAndExecute should be a function and return a Result', (): void => {
+		expect(typeof interp.compileAndExecute).toBe('function');
+		const result = interp.compileAndExecute('some source', 'some stdin');
+		expect(result.ok).toBe(true);
+		const value = getInterpretValue(result);
+		expect(typeof value).toBe('number');
+	});
 
 	testBoth('100', '', 100);
 	testBoth('100U8', '', 100);
