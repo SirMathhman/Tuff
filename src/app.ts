@@ -14,7 +14,8 @@ function compile(source: string): Result<string, string> {
 	// Replace occurrences of `read U8` with a runtime expression that reads from
 	// the provided `stdin`. This allows expressions like `read U8 + 1` to work.
 	// We avoid RegExp and regex literals as they are banned by lint rules.
-	let replaced = source;
+	// Also replace { and } with ( and ) to handle custom grouping syntax.
+	let replaced = source.split('{').join('(').split('}').join(')');
 	const search = 'read U8';
 	const replacement = '(Number(stdin.shift()) & 0xff)';
 

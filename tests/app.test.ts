@@ -50,7 +50,9 @@ describe('The compiler - multi-reads', (): void => {
 			expect(result.value).toBe(3);
 		}
 	});
+});
 
+describe('The compiler - precedence and grouping', (): void => {
 	it('handles operator precedence with reads', (): void => {
 		const result = run('read U8 * read U8 + read U8', '4 3 2');
 		expect(result.success).toBe(true);
@@ -69,6 +71,14 @@ describe('The compiler - multi-reads', (): void => {
 
 	it('handles parentheses with reads', (): void => {
 		const result = run('(read U8 + read U8) * read U8', '4 3 2');
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.value).toBe(14);
+		}
+	});
+
+	it('handles curly braces as grouping', (): void => {
+		const result = run('(read U8 + { read U8 }) * read U8', '4 3 2');
 		expect(result.success).toBe(true);
 		if (result.success) {
 			expect(result.value).toBe(14);
