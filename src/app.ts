@@ -138,29 +138,136 @@ function handleLetBindings(source: string): string {
 	return replaced;
 }
 
-interface VariableInfo {
-	name: string;
-	type: string;
+function inferTypeFromExpression(expr: string): string | undefined {
+	// Infer the type from read operations
+	if (expr.includes('read U8')) {
+		return 'U8';
+	}
+	if (expr.includes('read U16')) {
+		return 'U16';
+	}
+	if (expr.includes('read U32')) {
+		return 'U32';
+	}
+	if (expr.includes('read I32')) {
+		return 'I32';
+	}
+	// For simple variable references or literals, we can't infer (needs symbol table)
+	return undefined;
 }
 
-function extractVariableType(source: string, letIndex: number): VariableInfo | undefined {
+interface VarExtractionInfo {
+	name: string;
+	type: string | undefined;
+	exprEnd: number;
+}
+
+interface VarNameAndType {
+	name: string;
+	type: string | undefined;
+}
+
+interface ProcessResult {
+	nextIndex: number;
+	error: string | undefined;
+}
+
+function getVariableNameAndType(
+	source: string,
+	letIndex: number,
+	eqIndex: number,
+): VarNameAndType | undefined {
 	const typeStartIndex = source.indexOf(':', letIndex);
-	if (typeStartIndex === -1 || typeStartIndex > letIndex + 20) {
-		return undefined;
+
+	if (typeStartIndex !== -1 && typeStartIndex < eqIndex) {
+		const varNameStart = letIndex + 4;
+		const varName = source.substring(varNameStart, typeStartIndex).trim();
+		const declaredType = source.substring(typeStartIndex + 1, eqIndex).trim();
+		return { name: varName, type: declaredType };
 	}
-	const typeEndIndex = source.indexOf('=', typeStartIndex);
-	if (typeEndIndex === -1) {
-		return undefined;
-	}
+
 	const varNameStart = letIndex + 4;
-	const varName = source.substring(varNameStart, typeStartIndex).trim();
-	const declaredType = source.substring(typeStartIndex + 1, typeEndIndex).trim();
-	return { name: varName, type: declaredType };
+	const varName = source.substring(varNameStart, eqIndex).trim();
+	return { name: varName, type: undefined };
+}
+
+function extractVariableTypeAndName(
+	source: string,
+	letIndex: number,
+): VarExtractionInfo | undefined {
+	const eqIndex = source.indexOf('=', letIndex);
+	if (eqIndex === -1) {
+		return undefined;
+	}
+
+	const varInfo = getVariableNameAndType(source, letIndex, eqIndex);
+	if (varInfo === undefined) {
+		return undefined;
+	}
+
+	const exprEndIndex = findSemicolonIndex(source, eqIndex + 1);
+	if (exprEndIndex === -1) {
+		return undefined;
+	}
+
+	const expr = source.substring(eqIndex + 1, exprEndIndex).trim();
+	let declaredType = varInfo.type;
+
+	// If no declared type, try to infer it
+	if (declaredType === undefined) {
+		declaredType = inferTypeFromExpression(expr);
+	}
+
+	return { name: varInfo.name, type: declaredType, exprEnd: exprEndIndex };
+}
+
+function validateLetBindingForType(
+	expr: string,
+	declaredType: string,
+	variableTypes: Map<string, string>,
+): Result<void, string> {
+	const readCheckResult = checkReadOperationTypes(expr, declaredType);
+	if (!readCheckResult.success) {
+		return readCheckResult;
+	}
+
+	const varCheckResult = checkVariableAssignmentType(expr, declaredType, variableTypes);
+	if (!varCheckResult.success) {
+		return varCheckResult;
+	}
+
+	return success(undefined);
+}
+
+function processLetBinding(
+	source: string,
+	letIndex: number,
+	variableTypes: Map<string, string>,
+): ProcessResult {
+	const varInfo = extractVariableTypeAndName(source, letIndex);
+	if (varInfo === undefined) {
+		return { nextIndex: letIndex + 4, error: undefined };
+	}
+
+	const eqIndex = source.indexOf('=', letIndex);
+	const expr = source.substring(eqIndex + 1, varInfo.exprEnd).trim();
+
+	if (varInfo.type !== undefined && varInfo.type.startsWith('U')) {
+		const result = validateLetBindingForType(expr, varInfo.type, variableTypes);
+		if (!result.success) {
+			return { nextIndex: varInfo.exprEnd + 1, error: result.error };
+		}
+		variableTypes.set(varInfo.name, varInfo.type);
+	} else if (varInfo.type !== undefined) {
+		variableTypes.set(varInfo.name, varInfo.type);
+	}
+
+	return { nextIndex: varInfo.exprEnd + 1, error: undefined };
 }
 
 function validateLetBindingTypes(source: string): Result<void, string> {
 	// Check for type mismatches in let bindings
-	// Pattern: let <name> : <type> = <expr>
+	// Pattern: let <name> : <type> = <expr> or let <name> = <expr>
 	// Also track variable types for validation
 	const variableTypes = new Map<string, string>();
 	let searchIndex = 0;
@@ -170,19 +277,12 @@ function validateLetBindingTypes(source: string): Result<void, string> {
 			break;
 		}
 
-		const result = checkLetBinding(source, letIndex, variableTypes);
-		if (!result.success) {
-			return result;
+		const processResult = processLetBinding(source, letIndex, variableTypes);
+		if (processResult.error !== undefined) {
+			return failure(processResult.error);
 		}
 
-		// Extract the variable name and type for future validation
-		const varInfo = extractVariableType(source, letIndex);
-		if (varInfo !== undefined) {
-			variableTypes.set(varInfo.name, varInfo.type);
-		}
-
-		const nextIndex = result.value;
-		searchIndex = nextIndex;
+		searchIndex = processResult.nextIndex;
 	}
 
 	return success(undefined);
@@ -208,42 +308,6 @@ function checkReadOperationTypes(expr: string, declaredType: string): Result<voi
 		}
 	}
 	return success(undefined);
-}
-
-function checkLetBinding(
-	source: string,
-	letIndex: number,
-	variableTypes: Map<string, string>,
-): Result<number, string> {
-	const typeStartIndex = source.indexOf(':', letIndex);
-	if (typeStartIndex === -1 || typeStartIndex > letIndex + 20) {
-		return success(letIndex + 4);
-	}
-
-	const typeEndIndex = source.indexOf('=', typeStartIndex);
-	if (typeEndIndex === -1) {
-		return success(letIndex + 4);
-	}
-
-	const declaredType = source.substring(typeStartIndex + 1, typeEndIndex).trim();
-	const exprEndIndex = findSemicolonIndex(source, typeEndIndex + 1);
-	if (exprEndIndex === -1) {
-		return success(letIndex + 4);
-	}
-
-	const expr = source.substring(typeEndIndex + 1, exprEndIndex).trim();
-
-	const readCheckResult = checkReadOperationTypes(expr, declaredType);
-	if (!readCheckResult.success) {
-		return readCheckResult;
-	}
-
-	const varCheckResult = checkVariableAssignmentType(expr, declaredType, variableTypes);
-	if (!varCheckResult.success) {
-		return varCheckResult;
-	}
-
-	return success(exprEndIndex + 1);
 }
 
 function checkVariableAssignmentType(
