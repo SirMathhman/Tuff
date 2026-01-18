@@ -37,8 +37,14 @@ function extractNumericPart(source: string): string {
 export function interpret(source: string, stdIn: string): number {
 	// DO NOT CALL COMPILE
 
-	// Stub: not yet implemented
-	void stdIn;
+	// Check if source is a read<TYPE>() call
+	if (source.includes('read<')) {
+		// Parse the value from stdIn
+		const value = parseInt(stdIn.trim(), 10);
+		return value;
+	}
+
+	// Otherwise parse as a numeric literal
 	const numericPart = extractNumericPart(source);
 	return parseInt(numericPart, 10);
 }
@@ -52,8 +58,25 @@ export function interpret(source: string, stdIn: string): number {
 export const compile = (source: string): string => {
 	// DO NOT CALL INTERPRET
 
+	// Check if source is a read<TYPE>() call
+	if (source.includes('read<')) {
+		// Generate JavaScript that reads from stdin and exits with that value
+		return `const readline = require('readline');
+		
+const rl = readline.createInterface({
+	input: process.stdin,
+	output: process.stdout
+});
+
+rl.on('line', (line) => {
+	const value = parseInt(line.trim(), 10);
+	rl.close();
+	process.exit(value);
+});`;
+	}
+
+	// Otherwise compile as a numeric literal
 	const numericPart = extractNumericPart(source);
-	// Generate JavaScript that exits with the numeric value of source
 	return `process.exit(${parseInt(numericPart, 10)});`;
 };
 
@@ -84,6 +107,7 @@ export const execute = (target: string, stdIn: string): number => {
 		result = spawnSync(process.execPath, [filePath], {
 			input: stdIn,
 			encoding: 'utf8',
+			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 	} finally {
 		try {
