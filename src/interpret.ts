@@ -7,13 +7,19 @@ import { generateSingleReadCode, generateSingleReadWithOp, generateMultiReadCode
 import { validateTopLevelLetBinding, splitStatements } from './typeValidation';
 import {
 	extractNumericPart,
-	findClosingAngle,
 	replaceVariablesInExpression,
 	removeDelimiters,
-	performOperation,
-	performUnaryOperation,
 	cleanInt,
-	findMatchingParen,
+	findAllReadExpressions,
+	parseStdIn,
+	handleMultiplicationDivision,
+	handleAdditionSubtraction,
+	handleLogicalOperations,
+	handleUnaryOperators,
+	evaluateArithmeticParts,
+	EvalResult,
+	processParenthesesAndBraces,
+	replaceReadsInExpression,
 } from './utils';
 
 // Type definitions
@@ -29,61 +35,6 @@ export interface ResultError<E> {
 
 export type Result<T, E> = ResultOk<T> | ResultError<E>;
 
-interface EvalResult {
-	result: number;
-	readIndex: number;
-}
-
-interface ReplaceReadResult {
-	expr: string;
-	readIndex: number;
-}
-
-interface ReadExpression {
-	startIndex: number;
-	endIndex: number;
-	expression: string;
-}
-
-/**
- * Find all read<TYPE>() expressions in source and return them.
- *
- * @param source - source code
- * @returns array of ReadExpression objects
- */
-function findAllReadExpressions(source: string): ReadExpression[] {
-	const results: ReadExpression[] = [];
-	let searchStart = 0;
-
-	while (searchStart < source.length) {
-		const readStart = source.indexOf('read<', searchStart);
-		if (readStart === -1) {
-			break;
-		}
-
-		const closeAngle = findClosingAngle(source, readStart + 5);
-		if (closeAngle === -1) {
-			searchStart = readStart + 1;
-			continue;
-		}
-
-		// Find the closing parenthesis
-		const parenStart = closeAngle + 1;
-		if (source[parenStart] !== '(' || source[parenStart + 1] !== ')') {
-			searchStart = readStart + 1;
-			continue;
-		}
-
-		const endIndex = parenStart + 2;
-		const expression = source.substring(readStart, endIndex);
-		results.push({ startIndex: readStart, endIndex, expression });
-
-		searchStart = endIndex;
-	}
-
-	return results;
-}
-
 /**
  * Parse and evaluate a block with let-bindings.
  * Format: let varName : Type = expr; ... lastExpr
@@ -93,31 +44,6 @@ function findAllReadExpressions(source: string): ReadExpression[] {
  * @param readIndex - current index into read expressions
  * @returns object with result and updated readIndex
  */
-/**
- * Replace read<>() calls in expression with values from stdin.
- *
- * @param expr - expression with read<>() calls
- * @param stdinValues - array of stdin values
- * @param startIndex - starting index in stdinValues
- * @returns object with modified expression and new read index
- */
-function replaceReadsInExpression(
-	expr: string,
-	stdinValues: number[],
-	startIndex: number,
-): ReplaceReadResult {
-	let result = expr;
-	let currentIdx = startIndex;
-	while (result.includes('read<') && currentIdx < stdinValues.length) {
-		const readStart = result.indexOf('read<');
-		const readEnd = result.indexOf('()', readStart) + 2;
-		result =
-			result.substring(0, readStart) + String(stdinValues[currentIdx]) + result.substring(readEnd);
-		currentIdx++;
-	}
-	return { expr: result, readIndex: currentIdx };
-}
-
 /**
  * Evaluate block with let-bindings.
  *
@@ -327,6 +253,7 @@ function evaluateParenthesesSequential(
 		.map((p: string): string => removeDelimiters(p))
 		.filter((p: string): boolean => Boolean(p));
 
+	handleUnaryOperators(cleanParts);
 	handleMultiplicationDivision(cleanParts);
 	handleAdditionSubtraction(cleanParts);
 	handleLogicalOperations(cleanParts);
@@ -335,176 +262,6 @@ function evaluateParenthesesSequential(
 		resultValue = cleanInt(cleanParts[0]);
 	}
 	return { result: resultValue, readIndex };
-}
-
-/**
- * Process a single segment with parentheses/braces using the evaluator.
- *
- * @param result - result from evaluator (number or EvalResult)
- * @returns result value if number, otherwise the result field
- */
-function extractEvalResultValue(result: number | EvalResult): number {
-	if (typeof result === 'number') {
-		return result;
-	}
-	return result.result;
-}
-
-/**
- * Update read index from evaluation result if applicable.
- *
- * @param result - result from evaluator
- * @returns updated read index or 0
- */
-function extractReadIndex(result: number | EvalResult): number {
-	if (typeof result === 'number') {
-		return 0;
-	}
-	return result.readIndex;
-}
-
-/**
- * Process parentheses and braces in expression parts with optional stdin tracking.
- *
- * @param parts - array of expression parts
- * @param evaluator - callback to evaluate inner parts, returns either number or EvalResult
- * @returns updated read index if evaluator returns EvalResult, otherwise 0
- */
-function processParenthesesAndBraces(
-	parts: string[],
-	evaluator: (innerParts: string[]) => number | EvalResult,
-): number {
-	let readIdx = 0;
-	let i = 0;
-	while (i < parts.length) {
-		if (!parts[i].includes('(') && !parts[i].includes('{')) {
-			i++;
-			continue;
-		}
-		const endIdx = findMatchingParen(parts, i);
-		const innerParts = parts.slice(i, endIdx + 1);
-		const result = evaluator(innerParts);
-		parts.splice(i, endIdx - i + 1, String(extractEvalResultValue(result)));
-		readIdx = extractReadIndex(result);
-	}
-	return readIdx;
-}
-
-/**
- * Handle attached unary operator ! (e.g., !1 or !!1).
- *
- * @param parts - expression parts
- * @param i - index of the part
- */
-function handleAttachedUnary(parts: string[], i: number): void {
-	const part = parts[i];
-	let opCount = 0;
-	while (opCount < part.length && part[opCount] === '!') {
-		opCount++;
-	}
-	let val = cleanInt(part.substring(opCount));
-	for (let j = 0; j < opCount; j++) {
-		val = performUnaryOperation('!', val);
-	}
-	parts[i] = String(val);
-}
-
-/**
- * Handle unary operations (!) in parts array.
- *
- * @param parts - array of expression parts
- */
-function handleUnaryOperators(parts: string[]): void {
-	// Process from right to left to handle multiple unary operators naturally
-	for (let i = parts.length - 1; i >= 0; i--) {
-		const part = parts[i];
-		if (part.startsWith('!') && part.length > 1) {
-			handleAttachedUnary(parts, i);
-		} else if (part === '!' && i < parts.length - 1) {
-			const operand = cleanInt(parts[i + 1]);
-			applySeparateUnary(parts, i, operand);
-		}
-	}
-}
-
-/**
- * Apply separate unary operator ! results.
- *
- * @param parts - parts
- * @param i - index
- * @param operand - value
- */
-function applySeparateUnary(parts: string[], i: number, operand: number): void {
-	if (!isNaN(operand)) {
-		const res = performUnaryOperation('!', operand);
-		parts.splice(i, 2, String(res));
-	}
-}
-
-/**
- * Handle specific binary operations in parts array in-place.
- *
- * @param parts - array of expression parts
- * @param operators - array of operators to handle (e.g., ['*', '/'])
- */
-function handleOperatorsInPlace(parts: string[], operators: string[]): void {
-	let i = 0;
-	while (i < parts.length) {
-		if (i > 0 && i < parts.length - 1 && operators.includes(parts[i])) {
-			const left = cleanInt(parts[i - 1]);
-			const operator = parts[i];
-			const right = cleanInt(parts[i + 1]);
-			const result = performOperation(operator, left, right);
-			parts.splice(i - 1, 3, String(result));
-		} else {
-			i++;
-		}
-	}
-}
-
-/**
- * Handle multiplication and division operations in parts array.
- *
- * @param parts - array of expression parts
- */
-function handleMultiplicationDivision(parts: string[]): void {
-	handleOperatorsInPlace(parts, ['*', '/']);
-}
-
-/**
- * Handle addition and subtraction operations in parts array.
- *
- * @param parts - array of expression parts
- */
-function handleAdditionSubtraction(parts: string[]): void {
-	handleOperatorsInPlace(parts, ['+', '-', '%']);
-}
-
-/**
- * Handle logical operations (&&, ||) in parts array.
- *
- * @param parts - array of expression parts
- */
-function handleLogicalOperations(parts: string[]): void {
-	handleOperatorsInPlace(parts, ['&&']);
-	handleOperatorsInPlace(parts, ['||']);
-}
-
-/**
- * Evaluate arithmetic expression from parts with proper precedence.
- *
- * @param parts - array of expression parts (tokens)
- * @returns result of the expression
- */
-function evaluateArithmeticParts(parts: string[]): number {
-	handleUnaryOperators(parts);
-	handleMultiplicationDivision(parts);
-	handleAdditionSubtraction(parts);
-	handleLogicalOperations(parts);
-	if (parts.length === 0) {
-		return 0;
-	}
-	return cleanInt(parts[0]);
 }
 
 /**
@@ -575,6 +332,7 @@ function evaluateExpression(expr: string): number {
 	if (
 		parts.length === 1 &&
 		!parts[0].startsWith('!') &&
+		!(parts[0].startsWith('-') && isNaN(Number(parts[0]))) &&
 		!parts[0].includes('(') &&
 		!parts[0].includes('{')
 	) {
@@ -604,22 +362,6 @@ function evaluateExpression(expr: string): number {
 		return cleanInt(parts[0]);
 	}
 	return 0;
-}
-
-function parseStdIn(stdIn: string): number[] {
-	return stdIn
-		.trim()
-		.split(new RegExp('\\s+'))
-		.filter((v: string): boolean => Boolean(v))
-		.map((v: string): number => {
-			if (v === 'true') {
-				return 1;
-			}
-			if (v === 'false') {
-				return 0;
-			}
-			return parseInt(v, 10);
-		});
 }
 
 /**
@@ -779,7 +521,8 @@ export const execute = (target: string, stdIn: string): number => {
 	}
 
 	if (typeof result.status === 'number') {
-		return result.status;
+		// Convert potential 32-bit unsigned return to signed 32-bit
+		return result.status | 0;
 	}
 	if (typeof result.signal === 'string') {
 		return 128;

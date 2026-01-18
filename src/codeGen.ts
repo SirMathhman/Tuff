@@ -87,17 +87,27 @@ function generateCleanIntHelper(): string[] {
 function generateHandleUnaryRuntime(): string[] {
 	return [
 		'  const handleUnary = (ts) => {',
+		'    const uOps = ["!", "-"];',
+		'    const allOps = ["!", "-", "+", "*", "/", "%", "&&", "||"];',
 		'    for (let i = ts.length - 1; i >= 0; i--) {',
-		'      if (ts[i].startsWith("!") && ts[i].length > 1) {',
-		'        let opCount = 0;',
-		'        while (opCount < ts[i].length && ts[i][opCount] === "!") opCount++;',
-		'        let val = cleanInt(ts[i].substring(opCount));',
-		'        for (let j = 0; j < opCount; j++) val = (val === 0 ? 1 : 0);',
+		'      const t = ts[i];',
+		'      if ((t.startsWith("!") || (t.startsWith("-") && isNaN(Number(t)))) && t.length > 1) {',
+		'        let idx = 0; const ops = [];',
+		'        while (idx < t.length && (t[idx] === "!" || t[idx] === "-")) { ops.push(t[idx]); idx++; }',
+		'        let val = cleanInt(t.substring(idx));',
+		'        for (let j = ops.length - 1; j >= 0; j--) {',
+		'          if (ops[j] === "!") val = (val === 0 ? 1 : 0);',
+		'          else if (ops[j] === "-") val = -val;',
+		'        }',
 		'        ts[i] = String(val);',
-		'      } else if (ts[i] === "!" && i < ts.length - 1) {',
-		'        const operand = cleanInt(ts[i+1]);',
-		'        if (!isNaN(operand)) {',
-		'          ts.splice(i, 2, String(operand === 0 ? 1 : 0));',
+		'      } else if (uOps.includes(t)) {',
+		'        const isU = i === 0 || allOps.includes(ts[i-1]);',
+		'        if (isU && i < ts.length - 1) {',
+		'          const operand = cleanInt(ts[i+1]);',
+		'          if (!isNaN(operand)) {',
+		'            let res = (t === "!" ? (operand === 0 ? 1 : 0) : -operand);',
+		'            ts.splice(i, 2, String(res));',
+		'          }',
 		'        }',
 		'      }',
 		'    }',
@@ -338,29 +348,12 @@ export function generateAddSubCode(): string {
 export function buildEvalFunction(): string {
 	const groupCode = generateGroupedExprCode();
 	const addSubCode = generateAddSubCode();
+	const unaryCode = generateHandleUnaryRuntime();
+	const cleanIntCode = generateCleanIntHelper();
+
 	return `function processAndEvaluate(input, values) {
-  const cleanInt = (s) => {
-    const c = String(s).replace(new RegExp("[(){};]", "g"), "");
-    if (c === "true") return 1;
-    if (c === "false") return 0;
-    return parseInt(c, 10);
-  };
-  const handleUnary = (ts) => {
-    for (let i = ts.length - 1; i >= 0; i--) {
-      if (ts[i].startsWith("!") && ts[i].length > 1) {
-        let opCount = 0;
-        while (opCount < ts[i].length && ts[i][opCount] === "!") opCount++;
-        let val = cleanInt(ts[i].substring(opCount));
-        for (let j = 0; j < opCount; j++) val = (val === 0 ? 1 : 0);
-        ts[i] = String(val);
-      } else if (ts[i] === "!" && i < ts.length - 1) {
-        const operand = cleanInt(ts[i+1]);
-        if (!isNaN(operand)) {
-          ts.splice(i, 2, String(operand === 0 ? 1 : 0));
-        }
-      }
-    }
-  };
+${cleanIntCode.join('\n')}
+${unaryCode.join('\n')}
   let tokens = Array.isArray(input) ? [...input] : input.split(new RegExp("\\\\s+")).filter(t => t);
   for (let idx = 0; idx < tokens.length; idx++) {
     const t = tokens[idx], start = t.indexOf("values["), end = start > -1 ? t.indexOf("]", start) : -1;
