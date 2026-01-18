@@ -82,6 +82,65 @@ export function extractNumericPart(source: string): string {
  * @param right - right operand
  * @returns result
  */
+/**
+ * Perform a comparison operation.
+ *
+ * @param operator - comparison operator
+ * @param left - left value
+ * @param right - right value
+ * @returns 1 if true, 0 if false
+ */
+function performComparison(operator: string, left: number, right: number): number {
+	switch (operator) {
+		case '<': {
+			if (left < right) {
+				return 1;
+			}
+			return 0;
+		}
+		case '>': {
+			if (left > right) {
+				return 1;
+			}
+			return 0;
+		}
+		case '<=': {
+			if (left <= right) {
+				return 1;
+			}
+			return 0;
+		}
+		case '>=': {
+			if (left >= right) {
+				return 1;
+			}
+			return 0;
+		}
+		case '==': {
+			if (left === right) {
+				return 1;
+			}
+			return 0;
+		}
+		case '!=': {
+			if (left !== right) {
+				return 1;
+			}
+			return 0;
+		}
+		default:
+			return 0;
+	}
+}
+
+/**
+ * Perform an arithmetic or logical operation.
+ *
+ * @param operator - operation symbol
+ * @param left - left operand
+ * @param right - right operand
+ * @returns result of the operation
+ */
 export function performOperation(operator: string, left: number, right: number): number {
 	switch (operator) {
 		case '+':
@@ -94,16 +153,25 @@ export function performOperation(operator: string, left: number, right: number):
 			return Math.floor(left / right);
 		case '%':
 			return left % right;
-		case '||':
+		case '<':
+		case '>':
+		case '<=':
+		case '>=':
+		case '==':
+		case '!=':
+			return performComparison(operator, left, right);
+		case '||': {
 			if (left !== 0 || right !== 0) {
 				return 1;
 			}
 			return 0;
-		case '&&':
+		}
+		case '&&': {
 			if (left !== 0 && right !== 0) {
 				return 1;
 			}
 			return 0;
+		}
 		default:
 			return left;
 	}
@@ -256,6 +324,15 @@ export function handleAdditionSubtraction(parts: string[]): void {
 }
 
 /**
+ * Handle comparison operations in parts array.
+ *
+ * @param parts - array of expression parts
+ */
+export function handleComparisons(parts: string[]): void {
+	handleOperatorsInPlace(parts, ['<=', '>=', '<', '>', '==', '!=']);
+}
+
+/**
  * Handle logical operations (&&, ||) in parts array.
  *
  * @param parts - array of expression parts
@@ -314,10 +391,17 @@ function handleSeparateUnary(parts: string[], i: number, operator: string): void
  */
 export function handleUnaryOperators(parts: string[]): void {
 	const unaryOps = ['!', '-'];
+	const binaryOpsStartingWithUnary = ['!=', '!==']; // Don't treat these as unary operators
 
 	// Process from right to left to handle multiple unary operators naturally
 	for (let i = parts.length - 1; i >= 0; i--) {
 		const part = parts[i];
+
+		// Skip binary operators that start with unary operator symbols
+		if (binaryOpsStartingWithUnary.includes(part)) {
+			continue;
+		}
+
 		const isAttached =
 			(part.startsWith('!') && part.length > 1) ||
 			(part.startsWith('-') && part.length > 1 && isNaN(Number(part)));
@@ -340,6 +424,7 @@ export function evaluateArithmeticParts(parts: string[]): number {
 	handleUnaryOperators(parts);
 	handleMultiplicationDivision(parts);
 	handleAdditionSubtraction(parts);
+	handleComparisons(parts);
 	handleLogicalOperations(parts);
 	if (parts.length === 0) {
 		return 0;

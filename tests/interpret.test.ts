@@ -118,9 +118,29 @@ describe('let-bindings and reassignment', (): void => {
 	testBothValid('let x : I32 = read<Bool>(); x', 'true', 1);
 	testBothInvalid('let x : Bool = read<I32>(); x', '100');
 	testBothValid('let x : U8  = read<U8>(); let y : U16 = x; y', '100', 100);
+});
+
+describe('let-bindings reassignment and errors', (): void => {
 	testBothValid('let mut x = 0; x = read<I32>(); x', '100', 100);
 	testBothInvalid('let x = 0; x = read<I32>(); x');
 	testBothInvalid('let x : U16  = read<U16>(); let y : U8 = x; y');
 	testBothInvalid('let x  = read<U16>(); let y : U8 = x; y');
 	testBothInvalid('let x = 0; let x = 0; x');
+});
+
+describe('comparison operators', (): void => {
+	testBothValid('read<I64>() < read<I64>()', '5 10', 1);
+	testBothValid('read<I64>() < read<I64>()', '10 5', 0);
+	testBothValid('read<I64>() > read<I64>()', '10 5', 1);
+	testBothValid('read<I64>() > read<I64>()', '5 10', 0);
+	testBothValid('read<I64>() <= read<I64>()', '5 5', 1);
+	testBothValid('read<I64>() <= read<I64>()', '10 5', 0);
+	testBothValid('read<I64>() >= read<I64>()', '5 5', 1);
+	testBothValid('read<I64>() >= read<I64>()', '5 10', 0);
+	testBothValid('read<I64>() == read<I64>()', '5 5', 1);
+	testBothValid('read<I64>() == read<I64>()', '5 10', 0);
+	testBothValid('read<I64>() != read<I64>()', '5 10', 1);
+	testBothValid('read<I64>() != read<I64>()', '5 5', 0);
+	testBothValid('let x = read<I32>() < read<I32>(); x', '3 7', 1);
+	testBothValid('let x = read<I32>() >= read<I32>(); x', '7 3', 1);
 });

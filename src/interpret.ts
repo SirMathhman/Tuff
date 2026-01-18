@@ -14,6 +14,7 @@ import {
 	parseStdIn,
 	handleMultiplicationDivision,
 	handleAdditionSubtraction,
+	handleComparisons,
 	handleLogicalOperations,
 	handleUnaryOperators,
 	evaluateArithmeticParts,
@@ -195,6 +196,35 @@ function interpretWithLetBindings(source: string, stdinValues: number[]): number
 }
 
 /**
+ * Normalize multi-character operators by adding spaces around them.
+ *
+ * Examples:
+ * - a<=b -> a <= b
+ * - a>=b -> a >= b
+ * - a==b -> a == b
+ * - a!=b -> a != b
+ *
+ * @param expr - expression string
+ * @returns normalized expression with spaces around multi-char operators
+ */
+function normalizeOperators(expr: string): string {
+	let result = expr;
+	const multiCharOps = ['<=', '>=', '==', '!='];
+	for (const op of multiCharOps) {
+		// Note: these operators (!, =, <, >) are not regex meta-characters, so no escaping needed
+		const regex = new RegExp(`(\\S)${op}(\\S)`, 'g');
+		result = result.replace(regex, `$1 ${op} $2`);
+	}
+	return result;
+}
+
+function normalizeAndSplit(expr: string): string[] {
+	const normalized = normalizeOperators(expr);
+	const trimmed = normalized.trim();
+	return trimmed.split(' ').filter((p: string): boolean => Boolean(p));
+}
+
+/**
  * Evaluate expression sequentially, handling read<>() calls in order.
  *
  * @param expr - expression to evaluate
@@ -207,8 +237,7 @@ function evaluateExpressionSequential(
 	stdinValues: number[],
 	readIndex: number,
 ): EvalResult {
-	const trimmed = expr.trim();
-	const parts = trimmed.split(' ').filter((p: string): boolean => Boolean(p));
+	const parts = normalizeAndSplit(expr);
 
 	if (parts.length === 1) {
 		return { result: cleanInt(parts[0]), readIndex };
@@ -256,6 +285,7 @@ function evaluateParenthesesSequential(
 	handleUnaryOperators(cleanParts);
 	handleMultiplicationDivision(cleanParts);
 	handleAdditionSubtraction(cleanParts);
+	handleComparisons(cleanParts);
 	handleLogicalOperations(cleanParts);
 	let resultValue = 0;
 	if (cleanParts.length > 0) {
@@ -325,9 +355,8 @@ function evaluateParentheses(innerParts: string[]): number {
  * @returns result of the expression
  */
 function evaluateExpression(expr: string): number {
-	// Parse expression with operator precedence and parentheses
-	const trimmed = expr.trim();
-	const parts = trimmed.split(' ').filter((p: string): boolean => Boolean(p));
+	// Normalize operators first (add spaces around multi-char operators)
+	const parts = normalizeAndSplit(expr);
 
 	if (
 		parts.length === 1 &&
@@ -355,7 +384,10 @@ function evaluateExpression(expr: string): number {
 	// Third pass: handle + and - (lower precedence)
 	handleAdditionSubtraction(parts);
 
-	// Fourth pass: handle logical operators
+	// Fourth pass: handle comparison operators
+	handleComparisons(parts);
+
+	// Fifth pass: handle logical operators
 	handleLogicalOperations(parts);
 
 	if (parts.length > 0) {
