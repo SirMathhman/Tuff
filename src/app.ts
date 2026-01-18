@@ -9,7 +9,7 @@ function compile(source: string): string {
 	// We avoid RegExp and regex literals as they are banned by lint rules.
 	let replaced = source;
 	const search = 'read u8';
-	const replacement = '(Number(stdin) & 0xff)';
+	const replacement = '(Number(stdin.shift()) & 0xff)';
 
 	let lower = replaced.toLowerCase();
 	let index = lower.indexOf(search);
@@ -33,6 +33,11 @@ export function run(source: string, stdIn: string): number {
 	// implemented as runtime expressions (easier to test and more flexible).
 	const code = compile(source);
 
+	const stdin = stdIn.split(' ').filter((s: string): boolean => {
+		return s !== '';
+	});
+	void stdin;
+
 	// eslint-disable-next-line no-eval
-	return eval(`(function(){ const stdin = \"${stdIn}\"; return (${code}); })()`) as number;
+	return eval(`(function(stdin){ return (${code}); })(stdin)`) as number;
 }
