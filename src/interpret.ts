@@ -197,14 +197,28 @@ function processLetBinding(
 	readIndex: number,
 	bindings: MutableVariableBindings,
 ): number {
-	// eslint-disable-next-line no-restricted-syntax
-	const match = stmt.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*(.+)/);
-	if (!match) {
+	// Parse let-binding: 'let varName : Type = expression'
+	if (!stmt.startsWith('let ')) {
 		return readIndex;
 	}
 
-	const varName = match[1];
-	let expr = match[2];
+	// Extract variable name
+	const afterLet = stmt.substring(4).trim();
+	const colonIdx = afterLet.indexOf(':');
+	if (colonIdx === -1) {
+		return readIndex;
+	}
+
+	const varName = afterLet.substring(0, colonIdx).trim();
+	const afterColon = afterLet.substring(colonIdx + 1);
+
+	// Find the equals sign (skip type annotation)
+	const equalsIdx = afterColon.indexOf('=');
+	if (equalsIdx === -1) {
+		return readIndex;
+	}
+
+	let expr = afterColon.substring(equalsIdx + 1).trim();
 	const readResult = replaceReadsInExpression(expr, stdinValues, readIndex);
 	expr = readResult.expr;
 	const nextReadIdx = readResult.readIndex;

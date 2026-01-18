@@ -95,7 +95,6 @@ module.exports = [
 			'prefer-template': 'error',
 			'object-shorthand': 'error',
 			'no-param-reassign': 'error',
-			'no-regex-literals': 'off', // We use no-restricted-syntax instead for more control
 			'no-nested-ternary': 'error',
 			'no-ternary': 'error',
 			'max-depth': ['error', 2],

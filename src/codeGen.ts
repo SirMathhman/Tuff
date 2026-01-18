@@ -118,7 +118,21 @@ function generateMinimalHelpers(): string {
  *
  * @returns JavaScript code string
  */
-// eslint-disable-next-line max-lines-per-function
+/**
+ * Helper function to evaluate block result with before/after expressions.
+ *
+ * @returns expression with block result
+ */
+function generateBlockEvalExpr(): string {
+	return `
+        const delimClean = (s) => s.split("(").join("").split(")").join("").trim();
+        const beforeClean = delimClean(beforeBrace);
+        const afterClean = delimClean(afterBrace);
+        const blockResult = evaluateBlock(braceContent, values, 0);
+        exprToEval = beforeClean ? (beforeClean + " " + blockResult) : String(blockResult);
+        if (afterClean) exprToEval = exprToEval + " " + afterClean;`;
+}
+
 export function generateGroupedExprCode(): string {
 	return `  let i = 0;
   while (i < tokens.length) {
@@ -138,34 +152,20 @@ export function generateGroupedExprCode(): string {
       const blockTokens = tokens.slice(sIdx, eIdx + 1);
       const blockStr = blockTokens.join(" ");
       
-      // Determine the expression to evaluate
       let exprToEval = "";
       if (blockStr.includes("{") && blockStr.includes("let ")) {
-        // Extract content inside braces
         const braceStart = blockStr.indexOf("{");
         const braceEnd = blockStr.lastIndexOf("}");
         const beforeBrace = blockStr.substring(0, braceStart).trim();
         const braceContent = blockStr.substring(braceStart + 1, braceEnd).trim();
         const afterBrace = blockStr.substring(braceEnd + 1).trim();
-        
-        // Remove delimiters from before/after brace
-        const delimClean = (s) => s.split("(").join("").split(")").join("").trim();
-        const beforeClean = delimClean(beforeBrace);
-        const afterClean = delimClean(afterBrace);
-        
-        // Evaluate the let-binding block
-        const blockResult = evaluateBlock(braceContent, values, 0);
-        
-        // Reconstruct and evaluate expression with block result
-        exprToEval = beforeClean ? (beforeClean + " " + blockResult) : String(blockResult);
-        if (afterClean) exprToEval = exprToEval + " " + afterClean;
+        ${generateBlockEvalExpr()}
       } else {
         let iTok = blockTokens.map(t => t.split("(").join("").split(")").join("").split("{").join("").split("}").join(""));
         iTok = iTok.filter(t => t);
         exprToEval = iTok.join(" ");
       }
       
-      // Evaluate and replace
       const result = evaluateExpr(exprToEval);
       tokens.splice(sIdx, eIdx - sIdx + 1, String(result));
     } else { i++; }
