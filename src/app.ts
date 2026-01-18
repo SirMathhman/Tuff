@@ -223,6 +223,7 @@ interface ProcessResult {
 interface VariableInfo {
 	type: string | undefined;
 	isMutable: boolean;
+	isInitialized: boolean;
 }
 
 function getVariableNameAndType(
@@ -344,8 +345,9 @@ function processLetBinding(
 	// Check if this is an uninitialized declaration (no = before the semicolon)
 	const isUninitialized = eqIndex === -1 || eqIndex > varInfo.exprEnd;
 
-	// For uninitialized declarations, make them mutable by default
-	const isMutable = isUninitialized || isVariableMutable(source, letIndex);
+	// For uninitialized declarations, they are NOT mutable (can only be assigned once)
+	// For initialized declarations, check if explicitly marked with 'mut'
+	const isMutable = !isUninitialized && isVariableMutable(source, letIndex);
 
 	if (!isUninitialized) {
 		const result = validateInitializedBinding(source, letIndex, eqIndex, varInfo, variables);
@@ -355,7 +357,8 @@ function processLetBinding(
 	}
 
 	// Always track the variable, regardless of type
-	variables.set(varInfo.name, { type: varInfo.type, isMutable });
+	// Uninitialized variables are tracked with isInitialized=false so they can only be assigned once
+	variables.set(varInfo.name, { type: varInfo.type, isMutable, isInitialized: !isUninitialized });
 
 	return { nextIndex: varInfo.exprEnd + 1, error: undefined };
 }
@@ -408,11 +411,24 @@ function isSimpleIdentifier(varPart: string): boolean {
 function checkVariableReassignment(
 	varName: string,
 	variables: Map<string, VariableInfo>,
+	isFirstAssignment: boolean,
 ): Result<void, string> {
 	if (variables.has(varName)) {
 		const varInfo = variables.get(varName);
-		if (varInfo && !varInfo.isMutable) {
+		if (varInfo === undefined) {
+			return success(undefined);
+		}
+
+		const isDisallowedAssignment =
+			(!varInfo.isInitialized && !isFirstAssignment) || (!varInfo.isMutable && varInfo.isInitialized);
+
+		if (isDisallowedAssignment) {
 			return failure(`Cannot assign to immutable variable '${varName}'`);
+		}
+
+		// Mark as initialized after first assignment
+		if (!varInfo.isInitialized) {
+			varInfo.isInitialized = true;
 		}
 	}
 	return success(undefined);
@@ -427,6 +443,9 @@ function checkReassignments(
 		.split(';')
 		.map((s: string): string => s.trim())
 		.filter((s: string): boolean => s.length > 0);
+
+	// Track which variables have been assigned in this statement list
+	const assignedVariables = new Set<string>();
 
 	for (const stmt of statements) {
 		// If statement doesn't start with 'let', it's a potential reassignment
@@ -448,10 +467,13 @@ function checkReassignments(
 		}
 
 		const varName = varPart;
-		const result = checkVariableReassignment(varName, variables);
+		const isFirstAssignment = !assignedVariables.has(varName);
+		const result = checkVariableReassignment(varName, variables, isFirstAssignment);
 		if (!result.success) {
 			return result;
 		}
+
+		assignedVariables.add(varName);
 	}
 
 	return success(undefined);

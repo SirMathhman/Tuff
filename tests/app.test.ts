@@ -112,6 +112,10 @@ describe('The compiler - error handling', (): void => {
 	it('fails on immutable variable reassignment', (): void => {
 		assertInvalid('let x = 0; x = read I32; x');
 	});
+
+	it('fails on immutable uninitialized variable reassignment', (): void => {
+		assertInvalid('let x : U8; x = read U8; x = 100; x');
+	});
 });
 
 describe('The compiler - wrapping', (): void => {
