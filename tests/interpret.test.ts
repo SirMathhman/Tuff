@@ -7,7 +7,7 @@ function getInterpretValue(result: interp.Result<number, string>): number {
 	return -1;
 }
 
-function testInterpretValue(source: string, stdIn: string, expectedExitCode: number): void {
+function testInterpretValid(source: string, stdIn: string, expectedExitCode: number): void {
 	test(`interpret('${source}', '${stdIn}') should return ${expectedExitCode}`, (): void => {
 		const result = interp.interpret(source, stdIn);
 		expect(result.ok).toBe(true);
@@ -18,7 +18,7 @@ function testInterpretValue(source: string, stdIn: string, expectedExitCode: num
 	});
 }
 
-function testCompileAndExecuteValue(source: string, stdIn: string, expectedExitCode: number): void {
+function testCompileAndExecuteValid(source: string, stdIn: string, expectedExitCode: number): void {
 	test(`compileAndExecute('${source}', '${stdIn}') should return ${expectedExitCode}`, (): void => {
 		const result = interp.compileAndExecute(source, stdIn);
 		expect(result.ok).toBe(true);
@@ -29,9 +29,9 @@ function testCompileAndExecuteValue(source: string, stdIn: string, expectedExitC
 	});
 }
 
-function testBoth(source: string, stdIn: string, expectedExitCode: number): void {
-	testInterpretValue(source, stdIn, expectedExitCode);
-	testCompileAndExecuteValue(source, stdIn, expectedExitCode);
+function testBothValid(source: string, stdIn: string, expectedExitCode: number): void {
+	testInterpretValid(source, stdIn, expectedExitCode);
+	testCompileAndExecuteValid(source, stdIn, expectedExitCode);
 }
 
 describe('interpret and compileAndExecute stubs', (): void => {
@@ -51,23 +51,24 @@ describe('interpret and compileAndExecute stubs', (): void => {
 		expect(typeof value).toBe('number');
 	});
 
-	testBoth('100', '', 100);
-	testBoth('100U8', '', 100);
-	testBoth('read<U8>()', '100', 100);
-	testBoth('read<U8>() + 1', '100', 101);
-	testBoth('read<U8>() + read<U8>()', '1 2', 3);
-	testBoth('read<U8>() + read<U8>() + read<U8>()', '1 2 3', 6);
-	testBoth('read<U8>() + read<U8>() - read<U8>()', '2 3 4', 1);
-	testBoth('read<U8>() * read<U8>() - read<U8>()', '2 3 4', 2);
-	testBoth('read<U8>() + read<U8>() * read<U8>()', '2 3 4', 14);
-	testBoth('(read<U8>() + read<U8>()) * read<U8>()', '2 3 4', 20);
-	testBoth('{ read<U8>() }', '2', 2);
-	testBoth('{ read<U8>() + read<U8>() }', '2 3', 5);
-	testBoth('(read<U8>() + { read<U8>() }) * read<U8>()', '2 3 4', 20);
-	testBoth('(read<U8>() + { let x : U8 = read<U8>(); x }) * read<U8>()', '2 3 4', 20);
-	testBoth(
+	testBothValid('100', '', 100);
+	testBothValid('100U8', '', 100);
+	testBothValid('read<U8>()', '100', 100);
+	testBothValid('read<U8>() + 1', '100', 101);
+	testBothValid('read<U8>() + read<U8>()', '1 2', 3);
+	testBothValid('read<U8>() + read<U8>() + read<U8>()', '1 2 3', 6);
+	testBothValid('read<U8>() + read<U8>() - read<U8>()', '2 3 4', 1);
+	testBothValid('read<U8>() * read<U8>() - read<U8>()', '2 3 4', 2);
+	testBothValid('read<U8>() + read<U8>() * read<U8>()', '2 3 4', 14);
+	testBothValid('(read<U8>() + read<U8>()) * read<U8>()', '2 3 4', 20);
+	testBothValid('{ read<U8>() }', '2', 2);
+	testBothValid('{ read<U8>() + read<U8>() }', '2 3', 5);
+	testBothValid('(read<U8>() + { read<U8>() }) * read<U8>()', '2 3 4', 20);
+	testBothValid('(read<U8>() + { let x : U8 = read<U8>(); x }) * read<U8>()', '2 3 4', 20);
+	testBothValid(
 		'(read<U8>() + { let x : U8 = read<U8>(); let y : U8 = x; y }) * read<U8>()',
 		'2 3 4',
 		20,
 	);
+	testBothValid('let z : U8 = read<U8>(); z', '2', 2);
 });

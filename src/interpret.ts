@@ -247,6 +247,18 @@ function interpretWithLetBindings(source: string, stdinValues: number[]): number
 		stdinIdx++;
 	}
 
+	// Check if result starts with a top-level let-binding (let ... = ...; expr)
+	// Only handle top-level let if the source starts with 'let' and is not inside braces
+	const trimmedResult = result.trim();
+	if (
+		trimmedResult.startsWith('let ') &&
+		trimmedResult.includes(';') &&
+		!trimmedResult.startsWith('{')
+	) {
+		// Use evaluateBlockWithReads to handle the let-bindings properly
+		return evaluateBlockWithReads(result, [], 0).result;
+	}
+
 	// Now evaluate the expression normally
 	const numericPart = extractNumericPart(result);
 	if (numericPart === result.trim()) {
