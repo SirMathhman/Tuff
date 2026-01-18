@@ -121,8 +121,45 @@ function wrapTopLevelLet(source: string): string {
 	return `(function() { ${source} })()`;
 }
 
+function normalizeUninitializedDeclarations(source: string): string {
+	// Replace "let x : U8;" with "let x = undefined;" so JavaScript won't complain
+	let result = source;
+	let i = 0;
+
+	while (i < result.length) {
+		const letIndex = result.indexOf('let ', i);
+		if (letIndex === -1) {
+			break;
+		}
+
+		const semiIndex = result.indexOf(';', letIndex);
+		if (semiIndex === -1) {
+			break;
+		}
+
+		const eqIndex = result.indexOf('=', letIndex);
+
+		// If there's an = sign before the semicolon, skip
+		if (eqIndex !== -1 && eqIndex < semiIndex) {
+			i = semiIndex + 1;
+			continue;
+		}
+
+		// Found uninitialized declaration: add "= 0"
+		const before = result.substring(0, semiIndex);
+		const after = result.substring(semiIndex);
+		result = `${before} = 0${after}`;
+		i = semiIndex + 4; // Move past the "= 0;"
+	}
+
+	return result;
+}
+
 function handleLetBindings(source: string): string {
 	let replaced = source;
+
+	// Replace uninitialized declarations with just semicolons
+	replaced = normalizeUninitializedDeclarations(replaced);
 
 	// First, wrap expressions in let assignments with & 0xff (for U8) or just parentheses (for U16)
 	replaced = wrapLetBindings(replaced);
@@ -191,18 +228,18 @@ interface VariableInfo {
 function getVariableNameAndType(
 	source: string,
 	letIndex: number,
-	eqIndex: number,
+	endIndex: number,
 ): VarNameAndType | undefined {
 	const typeStartIndex = source.indexOf(':', letIndex);
 	const varNameStart = letIndex + 4;
 
-	if (typeStartIndex !== -1 && typeStartIndex < eqIndex) {
+	if (typeStartIndex !== -1 && typeStartIndex < endIndex) {
 		const varName = source.substring(varNameStart, typeStartIndex).trim();
-		const declaredType = source.substring(typeStartIndex + 1, eqIndex).trim();
+		const declaredType = source.substring(typeStartIndex + 1, endIndex).trim();
 		return { name: varName, type: declaredType };
 	}
 
-	const varName = source.substring(varNameStart, eqIndex).trim();
+	const varName = source.substring(varNameStart, endIndex).trim();
 	return { name: varName, type: undefined };
 }
 
@@ -221,8 +258,20 @@ function extractVariableTypeAndName(
 	letIndex: number,
 ): VarExtractionInfo | undefined {
 	const eqIndex = source.indexOf('=', letIndex);
-	if (eqIndex === -1) {
+	const semiIndex = findSemicolonIndex(source, letIndex);
+
+	if (semiIndex === -1) {
 		return undefined;
+	}
+
+	// Handle case without initializer: let x : U8;
+	if (eqIndex === -1 || eqIndex > semiIndex) {
+		// No = sign before semicolon, it's an uninitialized declaration
+		const varInfo = getVariableNameAndType(source, letIndex, semiIndex);
+		if (varInfo === undefined) {
+			return undefined;
+		}
+		return { name: varInfo.name, type: varInfo.type, exprEnd: semiIndex };
 	}
 
 	const varInfo = getVariableNameAndType(source, letIndex, eqIndex);
@@ -267,6 +316,20 @@ function validateLetBindingForType(
 	return success(undefined);
 }
 
+function validateInitializedBinding(
+	source: string,
+	letIndex: number,
+	eqIndex: number,
+	varInfo: VarExtractionInfo,
+	variables: Map<string, VariableInfo>,
+): Result<void, string> {
+	const expr = source.substring(eqIndex + 1, varInfo.exprEnd).trim();
+	if (varInfo.type !== undefined && (varInfo.type.startsWith('U') || varInfo.type === 'I32')) {
+		return validateLetBindingForType(expr, varInfo.type, variables);
+	}
+	return success(undefined);
+}
+
 function processLetBinding(
 	source: string,
 	letIndex: number,
@@ -278,11 +341,14 @@ function processLetBinding(
 	}
 
 	const eqIndex = source.indexOf('=', letIndex);
-	const expr = source.substring(eqIndex + 1, varInfo.exprEnd).trim();
-	const isMutable = isVariableMutable(source, letIndex);
+	// Check if this is an uninitialized declaration (no = before the semicolon)
+	const isUninitialized = eqIndex === -1 || eqIndex > varInfo.exprEnd;
 
-	if (varInfo.type !== undefined && (varInfo.type.startsWith('U') || varInfo.type === 'I32')) {
-		const result = validateLetBindingForType(expr, varInfo.type, variables);
+	// For uninitialized declarations, make them mutable by default
+	const isMutable = isUninitialized || isVariableMutable(source, letIndex);
+
+	if (!isUninitialized) {
+		const result = validateInitializedBinding(source, letIndex, eqIndex, varInfo, variables);
 		if (!result.success) {
 			return { nextIndex: varInfo.exprEnd + 1, error: result.error };
 		}

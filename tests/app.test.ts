@@ -90,6 +90,10 @@ describe('The compiler - let bindings', (): void => {
 	it('handles mutable variable with reassignment', (): void => {
 		assertValid('let mut x = 0; x = read I32; x', '42', 42);
 	});
+
+	it('handles uninitialized variable declaration and reassignment', (): void => {
+		assertValid('let x : U8; x = read U8; x', '42', 42);
+	});
 });
 
 describe('The compiler - error handling', (): void => {
