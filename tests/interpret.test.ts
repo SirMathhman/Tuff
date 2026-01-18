@@ -92,4 +92,5 @@ describe('interpret and compileAndExecute stubs', (): void => {
 	testBothValid('let z : U8 = read<U8>(); z', '2', 2);
 	testBothValid('let z : U8 = read<U8>();', '2', 0);
 	testBothInvalid('let z : U8 = read<U16>();');
+	testBothInvalid('let z : U8 = read<U8>() + read<U16>();');
 });
