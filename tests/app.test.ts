@@ -82,10 +82,6 @@ describe('The compiler - let bindings', (): void => {
 });
 
 describe('The compiler - error handling', (): void => {
-	it('fails on lowercase read u8', (): void => {
-		assertInvalid('read u8');
-	});
-
 	it('fails on type mismatch: U8 = read U16', (): void => {
 		assertInvalid('let z : U8 = read U16; z');
 	});

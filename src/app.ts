@@ -178,11 +178,6 @@ export function compile(source: string): Result<string, string> {
 		return success('0');
 	}
 
-	// Case-sensitive check for lowercase usage as requested.
-	if (source.includes('read u8')) {
-		return failure('Unexpected lowercase "read u8". Use "read U8" instead.');
-	}
-
 	// Type checking: validate let bindings don't have type mismatches
 	const typeCheckResult = validateLetBindingTypes(source);
 	if (!typeCheckResult.success) {
