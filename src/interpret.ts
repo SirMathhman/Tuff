@@ -124,7 +124,7 @@ function performOperation(operator: string, left: number, right: number): number
  * @returns result of the expression
  */
 function evaluateExpression(expr: string): number {
-	// Simple left-to-right evaluation for now (handles single operator)
+	// Parse expression with operator precedence (* and / before + and -)
 	const trimmed = expr.trim();
 	const parts = trimmed.split(' ').filter((p: string): boolean => Boolean(p));
 
@@ -132,10 +132,25 @@ function evaluateExpression(expr: string): number {
 		return parseInt(parts[0], 10);
 	}
 
+	// First pass: handle * and / (higher precedence)
+	let i = 0;
+	while (i < parts.length) {
+		if (i > 0 && i < parts.length - 1 && (parts[i] === '*' || parts[i] === '/')) {
+			const left = parseInt(parts[i - 1], 10);
+			const operator = parts[i];
+			const right = parseInt(parts[i + 1], 10);
+			const result = performOperation(operator, left, right);
+			parts.splice(i - 1, 3, String(result));
+		} else {
+			i++;
+		}
+	}
+
+	// Second pass: handle + and - (lower precedence)
 	let result = parseInt(parts[0], 10);
-	for (let i = 1; i < parts.length; i += 2) {
-		const operator = parts[i];
-		const operand = parseInt(parts[i + 1], 10);
+	for (let j = 1; j < parts.length; j += 2) {
+		const operator = parts[j];
+		const operand = parseInt(parts[j + 1], 10);
 		result = performOperation(operator, result, operand);
 	}
 
@@ -237,12 +252,55 @@ function generateSingleReadWithOp(operator: string, operand: string): string {
 }
 
 /**
+ * Generate code for processing and evaluating tokens with operator precedence.
+ *
+ * @returns JavaScript code as string
+ */
+function generateTokenProcessingCode(): string {
+	return `
+  const processAndEvaluate = (tokens, values) => {
+    for (let idx = 0; idx < tokens.length; idx++) {
+      const t = tokens[idx];
+      if (t.startsWith("values[") && t.endsWith("]")) {
+        const valIdx = parseInt(t.substring(7, t.length - 1), 10);
+        tokens[idx] = values[valIdx].toString();
+      }
+    }
+    let i = 0;
+    while (i < tokens.length) {
+      const isMultDiv = i > 0 && i < tokens.length - 1 && (tokens[i] === "*" || tokens[i] === "/");
+      if (isMultDiv) {
+        const left = parseInt(tokens[i - 1], 10);
+        const operator = tokens[i];
+        const right = parseInt(tokens[i + 1], 10);
+        let res = operator === "*" ? left * right : Math.floor(left / right);
+        tokens.splice(i - 1, 3, res.toString());
+      } else {
+        i++;
+      }
+    }
+    let result = parseInt(tokens[0], 10);
+    for (let j = 1; j < tokens.length; j += 2) {
+      const operator = tokens[j];
+      const operand = parseInt(tokens[j + 1], 10);
+      switch (operator) {
+        case '+': result = result + operand; break;
+        case '-': result = result - operand; break;
+        case '%': result = result % operand; break;
+      }
+    }
+    return result;
+  };`;
+}
+
+/**
  * Generate code for multiple read<>() calls.
  *
  * @param source - source with read<>() placeholders
  * @returns generated JavaScript code
  */
 function generateMultiReadCode(source: string): string {
+	const processingCode = generateTokenProcessingCode();
 	const parts = [
 		"const readline = require('readline');",
 		'const rl = readline.createInterface({',
@@ -257,18 +315,8 @@ function generateMultiReadCode(source: string): string {
 		'  const values = allInput.trim().split(" ").map(v => parseInt(v, 10));',
 		'  const expr = ' + `'${source}'` + ';',
 		'  const tokens = expr.split(" ").filter(t => t);',
-		'  let result = eval(tokens[0]);',
-		'  for (let i = 1; i < tokens.length; i += 2) {',
-		'    const operator = tokens[i];',
-		'    const operand = eval(tokens[i + 1]);',
-		'    switch (operator) {',
-		"      case '+': result = result + operand; break;",
-		"      case '-': result = result - operand; break;",
-		"      case '*': result = result * operand; break;",
-		"      case '/': result = Math.floor(result / operand); break;",
-		"      case '%': result = result % operand; break;",
-		'    }',
-		'  }',
+		processingCode,
+		'  const result = processAndEvaluate(tokens, values);',
 		'  process.exit(result);',
 		'});',
 	];
