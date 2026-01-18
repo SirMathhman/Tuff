@@ -90,7 +90,6 @@ function findClosingAngle(source: string, openAngleIndex: number): number {
  * @param right - right operand
  * @returns result of the operation
  */
-/* eslint-disable indent */
 function performOperation(operator: string, left: number, right: number): number {
 	switch (operator) {
 		case '+':
@@ -107,7 +106,6 @@ function performOperation(operator: string, left: number, right: number): number
 			return left;
 	}
 }
-/* eslint-enable indent */
 
 /**
  * Evaluate a simple arithmetic expression with a given value.

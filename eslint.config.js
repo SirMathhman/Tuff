@@ -70,7 +70,7 @@ module.exports = [
 			semi: ['error', 'always'],
 			quotes: ['error', 'single', { avoidEscape: true }],
 			'no-multiple-empty-lines': ['error', { max: 1, maxEOF: 0 }],
-			indent: ['error', 'tab'],
+			indent: 'off', // Let Prettier handle indentation
 			'linebreak-style': 'off',
 			'no-trailing-spaces': 'error',
 			'no-irregular-whitespace': 'error',
