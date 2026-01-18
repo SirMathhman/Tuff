@@ -109,6 +109,10 @@ module.exports = [
 					message: 'Regex literals are banned. Use string methods instead.',
 				},
 				{
+					selector: 'NewExpression[callee.name="RegExp"], CallExpression[callee.name="RegExp"]',
+					message: 'RegExp constructor is banned. Use string methods instead.',
+				},
+				{
 					selector: 'Literal[value=null]',
 					message: 'null is banned. Use undefined instead.',
 				},

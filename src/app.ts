@@ -6,9 +6,20 @@ function compile(source: string): string {
 
 	// Replace occurrences of `read U8` with a runtime expression that reads from
 	// the provided `stdin`. This allows expressions like `read U8 + 1` to work.
-	// Use RegExp constructor (avoids regex literal rule) to catch multiple occurrences.
-	const re = new RegExp('read\\s+u8\\b', 'gi');
-	const replaced = source.replace(re, '(Number(stdin) & 0xff)');
+	// We avoid RegExp and regex literals as they are banned by lint rules.
+	let replaced = source;
+	const search = 'read u8';
+	const replacement = '(Number(stdin) & 0xff)';
+
+	let lower = replaced.toLowerCase();
+	let index = lower.indexOf(search);
+
+	while (index !== -1) {
+		replaced = replaced.substring(0, index) + replacement + replaced.substring(index + search.length);
+		lower = replaced.toLowerCase();
+		index = lower.indexOf(search);
+	}
+
 	if (replaced !== source) {
 		return replaced;
 	}
