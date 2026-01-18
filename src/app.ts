@@ -245,13 +245,25 @@ function getVariableNameAndType(
 }
 
 function isVariableMutable(source: string, letIndex: number): boolean {
-	// Check if there's a 'mut' keyword between 'let' and '='
+	// Check if there's a 'mut' keyword between 'let' and '=' (or the semicolon if no '=')
 	const eqIndex = source.indexOf('=', letIndex);
-	if (eqIndex === -1) {
-		return false;
+	const semiIndex = source.indexOf(';', letIndex);
+
+	let endIndex = source.length;
+
+	// Determine the end of the declaration
+	if (eqIndex === -1 || (semiIndex !== -1 && semiIndex < eqIndex)) {
+		// No = before semicolon (uninitialized), check up to semicolon
+		if (semiIndex !== -1) {
+			endIndex = semiIndex;
+		}
+	} else {
+		// Has = before semicolon (initialized), check up to =
+		endIndex = eqIndex;
 	}
-	const betweenLetAndEq = source.substring(letIndex + 4, eqIndex);
-	return betweenLetAndEq.includes('mut');
+
+	const betweenLetAndEnd = source.substring(letIndex + 4, endIndex);
+	return betweenLetAndEnd.includes('mut');
 }
 
 function extractVariableTypeAndName(
@@ -345,9 +357,13 @@ function processLetBinding(
 	// Check if this is an uninitialized declaration (no = before the semicolon)
 	const isUninitialized = eqIndex === -1 || eqIndex > varInfo.exprEnd;
 
-	// For uninitialized declarations, they are NOT mutable (can only be assigned once)
+	// Check if the variable is explicitly marked as mutable with 'mut' keyword
+	const hasMutKeyword = isVariableMutable(source, letIndex);
+
+	// For uninitialized declarations that are marked with 'mut', they are mutable
+	// For uninitialized declarations without 'mut', they are NOT mutable (can only be assigned once)
 	// For initialized declarations, check if explicitly marked with 'mut'
-	const isMutable = !isUninitialized && isVariableMutable(source, letIndex);
+	const isMutable = hasMutKeyword;
 
 	if (!isUninitialized) {
 		const result = validateInitializedBinding(source, letIndex, eqIndex, varInfo, variables);
@@ -357,7 +373,7 @@ function processLetBinding(
 	}
 
 	// Always track the variable, regardless of type
-	// Uninitialized variables are tracked with isInitialized=false so they can only be assigned once
+	// Uninitialized variables are tracked with isInitialized=false so they can only be assigned once (unless mut)
 	variables.set(varInfo.name, { type: varInfo.type, isMutable, isInitialized: !isUninitialized });
 
 	return { nextIndex: varInfo.exprEnd + 1, error: undefined };
