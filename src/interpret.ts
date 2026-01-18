@@ -3,6 +3,26 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawnSync, SpawnSyncReturns } from 'child_process';
+import { generateSingleReadCode, generateSingleReadWithOp, generateMultiReadCode } from './codeGen';
+
+// Type definitions
+interface EvalResult {
+	result: number;
+	readIndex: number;
+}
+
+interface ReplaceReadResult {
+	expr: string;
+	readIndex: number;
+}
+
+interface VariableBindings {
+	readonly [key: string]: number;
+}
+
+interface MutableVariableBindings {
+	[key: string]: number;
+}
 
 interface ReadExpression {
 	startIndex: number;
@@ -93,6 +113,203 @@ function findClosingAngle(source: string, openAngleIndex: number): number {
 }
 
 /**
+ * Parse and evaluate a block with let-bindings.
+ * Format: let varName : Type = expr; ... lastExpr
+ *
+ * @param blockContent - content between braces (without the braces)
+ * @param readExprs - read expressions found in the original source
+ * @param readIndex - current index into read expressions
+ * @returns object with result and updated readIndex
+ */
+/**
+ * Replace variable names in expression with their values.
+ *
+ * @param expr - expression string
+ * @param bindings - variable name to value mapping
+ * @returns expression with variables replaced
+ */
+function replaceVariablesInExpression(expr: string, bindings: VariableBindings): string {
+	let result = expr;
+	for (const [vName, vValue] of Object.entries(bindings)) {
+		const regex = new RegExp(`\\b${vName}\\b`, 'g');
+		result = result.replace(regex, String(vValue));
+	}
+	return result;
+}
+
+/**
+ * Replace read<>() calls in expression with values from stdin.
+ *
+ * @param expr - expression with read<>() calls
+ * @param stdinValues - array of stdin values
+ * @param startIndex - starting index in stdinValues
+ * @returns object with modified expression and new read index
+ */
+function replaceReadsInExpression(
+	expr: string,
+	stdinValues: number[],
+	startIndex: number,
+): ReplaceReadResult {
+	let result = expr;
+	let currentIdx = startIndex;
+	while (result.includes('read<') && currentIdx < stdinValues.length) {
+		const readStart = result.indexOf('read<');
+		const readEnd = result.indexOf('()', readStart) + 2;
+		result =
+			result.substring(0, readStart) + String(stdinValues[currentIdx]) + result.substring(readEnd);
+		currentIdx++;
+	}
+	return { expr: result, readIndex: currentIdx };
+}
+
+/**
+ * Evaluate block with let-bindings.
+ *
+ * @param blockContent - content of the block (let bindings and final expression)
+ * @param stdinValues - array of stdin values
+ * @param readIndex - current position in stdin values
+ * @returns object with result and updated read index
+ */
+function evaluateBlockWithReads(
+	blockContent: string,
+	stdinValues: number[],
+	readIndex: number,
+): EvalResult {
+	const bindings: MutableVariableBindings = {};
+	const statements = blockContent
+		.split(';')
+		.map((s: string): string => s.trim())
+		.filter((s: string): boolean => Boolean(s));
+
+	let currentReadIdx = readIndex;
+
+	// Process all but the last statement as let-bindings
+	for (let i = 0; i < statements.length - 1; i++) {
+		const stmt = statements[i];
+		if (!stmt.startsWith('let ')) {
+			continue;
+		}
+		// eslint-disable-next-line no-restricted-syntax
+		const match = stmt.match(/let\s+(\w+)\s*:\s*\w+\s*=\s*(.+)/);
+		if (!match) {
+			continue;
+		}
+
+		const varName = match[1];
+		let expr = match[2];
+		const readResult = replaceReadsInExpression(expr, stdinValues, currentReadIdx);
+		expr = readResult.expr;
+		currentReadIdx = readResult.readIndex;
+
+		expr = replaceVariablesInExpression(expr, bindings);
+		bindings[varName] = evaluateExpression(expr);
+	}
+
+	// Evaluate the last statement
+	let lastStmt = statements[statements.length - 1];
+	const lastReadResult = replaceReadsInExpression(lastStmt, stdinValues, currentReadIdx);
+	lastStmt = lastReadResult.expr;
+	currentReadIdx = lastReadResult.readIndex;
+
+	lastStmt = replaceVariablesInExpression(lastStmt, bindings);
+	return { result: evaluateExpression(lastStmt), readIndex: currentReadIdx };
+}
+
+/**
+ * Interpret source with let-bindings, handling sequential read<>() calls.
+ *
+ * @param source - source code with let-bindings
+ * @param stdinValues - parsed stdin values
+ * @returns exit code
+ */
+function interpretWithLetBindings(source: string, stdinValues: number[]): number {
+	// Replace all read<>() calls sequentially from left to right
+	let result = source;
+	let stdinIdx = 0;
+
+	while (result.includes('read<') && stdinIdx < stdinValues.length) {
+		const readStart = result.indexOf('read<');
+		const readEnd = result.indexOf('()', readStart) + 2;
+		result =
+			result.substring(0, readStart) + String(stdinValues[stdinIdx]) + result.substring(readEnd);
+		stdinIdx++;
+	}
+
+	// Now evaluate the expression normally
+	const numericPart = extractNumericPart(result);
+	if (numericPart === result.trim()) {
+		// It's just a number
+		return parseInt(numericPart, 10);
+	}
+
+	// It has operations - parse and evaluate
+	return evaluateExpression(result);
+}
+
+/**
+ * Evaluate expression sequentially, handling read<>() calls in order.
+ *
+ * @param expr - expression to evaluate
+ * @param stdinValues - stdin values array
+ * @param readIndex - current position in stdin values
+ * @returns object with result and updated readIndex
+ */
+function evaluateExpressionSequential(
+	expr: string,
+	stdinValues: number[],
+	readIndex: number,
+): EvalResult {
+	const trimmed = expr.trim();
+	const parts = trimmed.split(' ').filter((p: string): boolean => Boolean(p));
+
+	if (parts.length === 1) {
+		return { result: parseInt(parts[0], 10), readIndex };
+	}
+
+	// First pass: handle parentheses and braces
+	const currentReadIdx = processParenthesesAndBraces(
+		parts,
+		(innerParts): EvalResult => evaluateParenthesesSequential(innerParts, stdinValues, 0),
+	);
+
+	// Evaluate resulting expression with arithmetic precedence
+	return {
+		result: evaluateArithmeticParts(parts),
+		readIndex: currentReadIdx || readIndex,
+	};
+}
+
+/**
+ * Evaluate parentheses/braces sequentially with read<>() calls.
+ *
+ * @param innerParts - parts inside parentheses/braces
+ * @param stdinValues - stdin values
+ * @param readIndex - current read index
+ * @returns result and updated readIndex
+ */
+function evaluateParenthesesSequential(
+	innerParts: string[],
+	stdinValues: number[],
+	readIndex: number,
+): EvalResult {
+	const content = innerParts.join(' ').trim();
+
+	// Check if this is a let-binding block
+	if (content.includes('let ')) {
+		const cleanContent = content.split('{').join('').split('}').join('').trim();
+		return evaluateBlockWithReads(cleanContent, stdinValues, readIndex);
+	}
+
+	// Remove delimiters
+	const cleanParts = innerParts
+		.map((p: string): string => removeDelimiters(p))
+		.filter((p: string): boolean => Boolean(p));
+
+	handleMultiplicationDivision(cleanParts);
+	return { result: handleAdditionSubtraction(cleanParts), readIndex };
+}
+
+/**
  * Perform a binary operation.
  *
  * @param operator - the operator (+, -, *, /, %)
@@ -144,43 +361,166 @@ function findMatchingParen(parts: string[], startIdx: number): number {
 }
 
 /**
+ * Remove all parentheses and braces from a string.
+ *
+ * @param str - input string
+ * @returns string with all delimiters removed
+ */
+function removeDelimiters(str: string): string {
+	return str.split('(').join('').split(')').join('').split('{').join('').split('}').join('').trim();
+}
+
+/**
+ * Process a single segment with parentheses/braces using the evaluator.
+ *
+ * @param result - result from evaluator (number or EvalResult)
+ * @returns result value if number, otherwise the result field
+ */
+function extractEvalResultValue(result: number | EvalResult): number {
+	if (typeof result === 'number') {
+		return result;
+	}
+	return result.result;
+}
+
+/**
+ * Update read index from evaluation result if applicable.
+ *
+ * @param result - result from evaluator
+ * @returns updated read index or 0
+ */
+function extractReadIndex(result: number | EvalResult): number {
+	if (typeof result === 'number') {
+		return 0;
+	}
+	return result.readIndex;
+}
+
+/**
+ * Process parentheses and braces in expression parts with optional stdin tracking.
+ *
+ * @param parts - array of expression parts
+ * @param evaluator - callback to evaluate inner parts, returns either number or EvalResult
+ * @returns updated read index if evaluator returns EvalResult, otherwise 0
+ */
+function processParenthesesAndBraces(
+	parts: string[],
+	evaluator: (innerParts: string[]) => number | EvalResult,
+): number {
+	let readIdx = 0;
+	let i = 0;
+	while (i < parts.length) {
+		if (!parts[i].includes('(') && !parts[i].includes('{')) {
+			i++;
+			continue;
+		}
+		const endIdx = findMatchingParen(parts, i);
+		const innerParts = parts.slice(i, endIdx + 1);
+		const result = evaluator(innerParts);
+		parts.splice(i, endIdx - i + 1, String(extractEvalResultValue(result)));
+		readIdx = extractReadIndex(result);
+	}
+	return readIdx;
+}
+
+/**
+ * Handle multiplication and division operations in parts array.
+ *
+ * @param parts - array of expression parts
+ */
+function handleMultiplicationDivision(parts: string[]): void {
+	let i = 0;
+	while (i < parts.length) {
+		if (i > 0 && i < parts.length - 1 && (parts[i] === '*' || parts[i] === '/')) {
+			const left = parseInt(parts[i - 1], 10);
+			const operator = parts[i];
+			const right = parseInt(parts[i + 1], 10);
+			const result = performOperation(operator, left, right);
+			parts.splice(i - 1, 3, String(result));
+		} else {
+			i++;
+		}
+	}
+}
+
+/**
+ * Handle addition and subtraction operations in parts array.
+ *
+ * @param parts - array of expression parts
+ * @returns result after all additions and subtractions
+ */
+function handleAdditionSubtraction(parts: string[]): number {
+	let result = parseInt(parts[0], 10);
+	for (let j = 1; j < parts.length; j += 2) {
+		const operator = parts[j];
+		const operand = parseInt(parts[j + 1], 10);
+		result = performOperation(operator, result, operand);
+	}
+	return result;
+}
+
+/**
+ * Evaluate arithmetic expression from parts with proper precedence.
+ *
+ * @param parts - array of expression parts (tokens)
+ * @returns result of the expression
+ */
+function evaluateArithmeticParts(parts: string[]): number {
+	handleMultiplicationDivision(parts);
+	return handleAdditionSubtraction(parts);
+}
+
+/**
+ * Evaluate let-binding block within parenthesized expression.
+ *
+ * @param content - parenthesized expression content
+ * @returns evaluated result
+ */
+function evaluateParenthesesWithLetBinding(content: string): number {
+	const braceStart = content.indexOf('{');
+	const braceEnd = content.lastIndexOf('}');
+	let beforeBrace = content.substring(0, braceStart).trim();
+	const blockContent = content.substring(braceStart + 1, braceEnd).trim();
+	let afterBrace = content.substring(braceEnd + 1).trim();
+
+	beforeBrace = removeDelimiters(beforeBrace);
+	afterBrace = removeDelimiters(afterBrace);
+
+	const blockResult = evaluateBlockWithReads(blockContent, [], 0).result;
+
+	let finalExpr = '';
+	if (beforeBrace) {
+		finalExpr = `${beforeBrace} ${blockResult}`;
+	} else {
+		finalExpr = String(blockResult);
+	}
+	if (afterBrace) {
+		finalExpr = `${finalExpr} ${afterBrace}`;
+	}
+
+	const cleanParts = finalExpr.split(' ').filter((p: string): boolean => Boolean(p));
+	return evaluateArithmeticParts(cleanParts);
+}
+
+/**
  * Evaluate expression inside parentheses or braces (without outer delimiters).
  *
  * @param innerParts - parts inside parentheses/braces
  * @returns evaluated result
  */
 function evaluateParentheses(innerParts: string[]): number {
+	const content = innerParts.join(' ').trim();
+
+	// Check if this contains a let-binding block (in braces)
+	if (content.includes('{') && content.includes('let ')) {
+		return evaluateParenthesesWithLetBinding(content);
+	}
+
 	const cleanParts = innerParts
-		.map((p: string): string => {
-			let result = p;
-			result = result.split('(').join('');
-			result = result.split(')').join('');
-			result = result.split('{').join('');
-			result = result.split('}').join('');
-			return result;
-		})
+		.map((p: string): string => removeDelimiters(p))
 		.filter((p: string): boolean => Boolean(p));
-	// Handle * and /
-	let i = 0;
-	while (i < cleanParts.length) {
-		if (i > 0 && i < cleanParts.length - 1 && (cleanParts[i] === '*' || cleanParts[i] === '/')) {
-			const left = parseInt(cleanParts[i - 1], 10);
-			const operator = cleanParts[i];
-			const right = parseInt(cleanParts[i + 1], 10);
-			const result = performOperation(operator, left, right);
-			cleanParts.splice(i - 1, 3, String(result));
-		} else {
-			i++;
-		}
-	}
-	// Handle + and -
-	let result = parseInt(cleanParts[0], 10);
-	for (let j = 1; j < cleanParts.length; j += 2) {
-		const operator = cleanParts[j];
-		const operand = parseInt(cleanParts[j + 1], 10);
-		result = performOperation(operator, result, operand);
-	}
-	return result;
+
+	return evaluateArithmeticParts(cleanParts);
 }
 
 /**
@@ -200,41 +540,13 @@ function evaluateExpression(expr: string): number {
 	}
 
 	// First pass: handle parentheses and braces
-	let i = 0;
-	while (i < parts.length) {
-		if (parts[i].includes('(') || parts[i].includes('{')) {
-			const endIdx = findMatchingParen(parts, i);
-			const innerParts = parts.slice(i, endIdx + 1);
-			const result = evaluateParentheses(innerParts);
-			parts.splice(i, endIdx - i + 1, String(result));
-		} else {
-			i++;
-		}
-	}
+	processParenthesesAndBraces(parts, evaluateParentheses);
 
 	// Second pass: handle * and / (higher precedence)
-	i = 0;
-	while (i < parts.length) {
-		if (i > 0 && i < parts.length - 1 && (parts[i] === '*' || parts[i] === '/')) {
-			const left = parseInt(parts[i - 1], 10);
-			const operator = parts[i];
-			const right = parseInt(parts[i + 1], 10);
-			const result = performOperation(operator, left, right);
-			parts.splice(i - 1, 3, String(result));
-		} else {
-			i++;
-		}
-	}
+	handleMultiplicationDivision(parts);
 
 	// Third pass: handle + and - (lower precedence)
-	let result = parseInt(parts[0], 10);
-	for (let j = 1; j < parts.length; j += 2) {
-		const operator = parts[j];
-		const operand = parseInt(parts[j + 1], 10);
-		result = performOperation(operator, result, operand);
-	}
-
-	return result;
+	return handleAdditionSubtraction(parts);
 }
 
 /**
@@ -261,6 +573,11 @@ export function interpret(source: string, stdIn: string): number {
 		.split(' ')
 		.map((v: string): number => parseInt(v, 10));
 
+	// Check if source contains let-bindings
+	if (source.includes('let ')) {
+		return interpretWithLetBindings(source, stdinValues);
+	}
+
 	// Replace each read<>() with its corresponding value
 	let evaluatedSource = source;
 	for (let i = 0; i < readExprs.length; i++) {
@@ -275,207 +592,7 @@ export function interpret(source: string, stdIn: string): number {
 	}
 
 	// It has operations - parse and evaluate
-	return evaluateExpression(evaluatedSource);
-}
-
-/**
- * Generate code for single read<>() without operations.
- *
- * @returns generated JavaScript code
- */
-function generateSingleReadCode(): string {
-	const parts = [
-		"const readline = require('readline');",
-		'const rl = readline.createInterface({',
-		'  input: process.stdin,',
-		'  output: process.stdout',
-		'});',
-		"rl.on('line', (line) => {",
-		'  const value = parseInt(line.trim(), 10);',
-		'  rl.close();',
-		'  process.exit(value);',
-		'});',
-	];
-	return parts.join('\n');
-}
-
-/**
- * Generate code for single read<>() with an operation.
- *
- * @param operator - the operator (+, -, *, /, %)
- * @param operand - the operand value
- * @returns generated JavaScript code
- */
-function generateSingleReadWithOp(operator: string, operand: string): string {
-	const parts = [
-		"const readline = require('readline');",
-		'const rl = readline.createInterface({',
-		'  input: process.stdin,',
-		'  output: process.stdout',
-		'});',
-		"rl.on('line', (line) => {",
-		'  const value = parseInt(line.trim(), 10);',
-		'  let result;',
-		`  switch ('${operator}') {`,
-		`    case '+': result = value + ${operand}; break;`,
-		`    case '-': result = value - ${operand}; break;`,
-		`    case '*': result = value * ${operand}; break;`,
-		`    case '/': result = Math.floor(value / ${operand}); break;`,
-		`    case '%': result = value % ${operand}; break;`,
-		'    default: result = value;',
-		'  }',
-		'  rl.close();',
-		'  process.exit(result);',
-		'});',
-	];
-	return parts.join('\n');
-}
-
-/**
- * Generate helper function code for token processing.
- *
- * @returns JavaScript code for helper functions
- */
-function generateHelperFunctions(): string {
-	const lines = [
-		'const countChar = (s, c) => {',
-		'  let count = 0;',
-		'  for (let i = 0; i < s.length; i++) if (s[i] === c) count++;',
-		'  return count;',
-		'};',
-	];
-	return lines.join('\n');
-}
-
-/**
- * Generate code for handling grouped expressions (parentheses/braces).
- *
- * @returns JavaScript code string
- */
-function generateGroupedExprCode(): string {
-	return `  let i = 0;
-  while (i < tokens.length) {
-    if (tokens[i].includes("(") || tokens[i].includes("{")) {
-      let pCount = 0, sIdx = i, eIdx = i;
-      let delim = "(";
-      let close = ")";
-      if (tokens[i].includes("{")) {
-        delim = "{";
-        close = "}";
-      }
-      for (let j = i; j < tokens.length; j++) {
-        pCount += countChar(tokens[j], delim) - countChar(tokens[j], close);
-        if (pCount === 0) { eIdx = j; break; }
-      }
-      let iTok = tokens.slice(sIdx, eIdx + 1).map(t => t.split("(").join("").split(")").join("").split("{").join("").split("}").join(""));
-      iTok = iTok.filter(t => t);
-      let k = 0;
-      while (k < iTok.length) {
-        if (k > 0 && k < iTok.length - 1 && (iTok[k] === "*" || iTok[k] === "/")) {
-          const l = parseInt(iTok[k - 1], 10), r = parseInt(iTok[k + 1], 10);
-          iTok.splice(k - 1, 3, (iTok[k] === "*" ? l * r : Math.floor(l / r)).toString());
-        } else { k++; }
-      }
-      let res = parseInt(iTok[0], 10);
-      for (let m = 1; m < iTok.length; m += 2) {
-        const o = parseInt(iTok[m + 1], 10);
-        res = iTok[m] === "+" ? res + o : iTok[m] === "-" ? res - o : res % o;
-      }
-      tokens.splice(sIdx, eIdx - sIdx + 1, res.toString());
-    } else { i++; }
-  }`;
-}
-
-/**
- * Generate code for handling multiplication/division.
- *
- * @returns JavaScript code string
- */
-function generateMultDivCode(): string {
-	return `  i = 0;
-  while (i < tokens.length) {
-    if (i > 0 && i < tokens.length - 1 && (tokens[i] === "*" || tokens[i] === "/")) {
-      const l = parseInt(tokens[i - 1], 10), r = parseInt(tokens[i + 1], 10);
-      const res = tokens[i] === "*" ? l * r : Math.floor(l / r);
-      tokens.splice(i - 1, 3, res.toString());
-    } else { i++; }
-  }`;
-}
-
-/**
- * Generate code for handling addition/subtraction.
- *
- * @returns JavaScript code string
- */
-function generateAddSubCode(): string {
-	return `  let result = parseInt(tokens[0], 10);
-  for (let j = 1; j < tokens.length; j += 2) {
-    const o = parseInt(tokens[j + 1], 10);
-    result = tokens[j] === "+" ? result + o : tokens[j] === "-" ? result - o : result % o;
-  }
-  return result;`;
-}
-
-/**
- * Build the main evaluation function as code string.
- *
- * @returns string
- */
-function buildEvalFunction(): string {
-	const groupCode = generateGroupedExprCode();
-	const multDivCode = generateMultDivCode();
-	const addSubCode = generateAddSubCode();
-	return `const processAndEvaluate = (tokens, values) => {
-  for (let idx = 0; idx < tokens.length; idx++) {
-    const t = tokens[idx], start = t.indexOf("values["), end = start > -1 ? t.indexOf("]", start) : -1;
-    if (start > -1 && end > -1) {
-      const valIdx = parseInt(t.substring(start + 7, end), 10);
-      tokens[idx] = t.substring(0, start) + values[valIdx] + t.substring(end + 1);
-    }
-  }
-${groupCode}
-${multDivCode}
-${addSubCode}
-};`;
-}
-
-/**
- * Generate code for processing and evaluating tokens with operator precedence.
- *
- * @returns JavaScript code as string
- */
-function generateTokenProcessingCode(): string {
-	return `${generateHelperFunctions()}\n${buildEvalFunction()}`;
-}
-
-/**
- * Generate code for multiple read<>() calls.
- *
- * @param source - source with read<>() placeholders
- * @returns generated JavaScript code
- */
-function generateMultiReadCode(source: string): string {
-	const processingCode = generateTokenProcessingCode();
-	const parts = [
-		"const readline = require('readline');",
-		'const rl = readline.createInterface({',
-		'  input: process.stdin,',
-		'  output: process.stdout',
-		'});',
-		'let allInput = "";',
-		"rl.on('line', (line) => {",
-		'  allInput += line + " ";',
-		'});',
-		'rl.on("close", () => {',
-		'  const values = allInput.trim().split(" ").map(v => parseInt(v, 10));',
-		'  const expr = ' + `'${source}'` + ';',
-		'  const tokens = expr.split(" ").filter(t => t);',
-		processingCode,
-		'  const result = processAndEvaluate(tokens, values);',
-		'  process.exit(result);',
-		'});',
-	];
-	return parts.join('\n');
+	return evaluateExpressionSequential(evaluatedSource, stdinValues, 0).result;
 }
 
 /**
