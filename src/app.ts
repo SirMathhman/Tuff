@@ -1,5 +1,36 @@
 import { Result, success, failure } from './result';
 
+function handleLetBindings(source: string): string {
+	let replaced = source;
+	// Replace outer curly braces with IIFE wrapper
+	replaced = replaced.split('{').join('(() => { ');
+	replaced = replaced.split('}').join('})()');
+	// Remove type annotation
+	replaced = replaced.split(': U8').join('');
+
+	// Ensure the last identity expression in a block is returned.
+	if (!replaced.includes(';')) {
+		return replaced;
+	}
+
+	const blockEndIndex = replaced.lastIndexOf('})()');
+	if (blockEndIndex === -1) {
+		return replaced;
+	}
+
+	const beforeBlockEnd = replaced.substring(0, blockEndIndex);
+	const afterBlockEnd = replaced.substring(blockEndIndex);
+	const lastSemicolonIndex = beforeBlockEnd.lastIndexOf(';');
+
+	if (lastSemicolonIndex === -1) {
+		return replaced;
+	}
+
+	const segmentBeforeReturn = beforeBlockEnd.substring(0, lastSemicolonIndex + 1);
+	const segmentToReturn = beforeBlockEnd.substring(lastSemicolonIndex + 1).trim();
+	return `${segmentBeforeReturn} return ${segmentToReturn}; ${afterBlockEnd}`;
+}
+
 function compile(source: string): Result<string, string> {
 	// Minimal compiler for the tests: return JavaScript that evaluates to 0 for empty input.
 	if (source.trim() === '') {
@@ -12,25 +43,26 @@ function compile(source: string): Result<string, string> {
 	}
 
 	// Replace occurrences of `read U8` with a runtime expression that reads from
-	// the provided `stdin`. This allows expressions like `read U8 + 1` to work.
-	// We avoid RegExp and regex literals as they are banned by lint rules.
-	// Also replace { and } with ( and ) to handle custom grouping syntax.
-	let replaced = source.split('{').join('(').split('}').join(')');
+	// the provided `stdin`.
+	let replaced = source;
 	const search = 'read U8';
 	const replacement = '(Number(stdin.shift()) & 0xff)';
 
 	let index = replaced.indexOf(search);
-
 	while (index !== -1) {
 		replaced = replaced.substring(0, index) + replacement + replaced.substring(index + search.length);
 		index = replaced.indexOf(search);
 	}
 
-	if (replaced !== source) {
-		return success(replaced);
+	// Handle `let x : U8 = expr;` inside `{}` by transforming it to JS.
+	if (replaced.includes('let ')) {
+		replaced = handleLetBindings(replaced);
+	} else {
+		// Standard curly brace replacement for simple grouping
+		replaced = replaced.split('{').join('(').split('}').join(')');
 	}
 
-	return failure(`Unrecognized tokens in source: ${source}`);
+	return success(replaced);
 }
 
 export function run(source: string, stdIn: string): Result<number, string> {

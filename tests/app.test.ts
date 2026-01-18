@@ -84,6 +84,14 @@ describe('The compiler - precedence and grouping', (): void => {
 			expect(result.value).toBe(14);
 		}
 	});
+
+	it('handles let bindings in blocks', (): void => {
+		const result = run('(read U8 + { let x : U8 = read U8; x }) * read U8', '4 3 2');
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.value).toBe(14);
+		}
+	});
 });
 
 describe('The compiler - error handling', (): void => {
