@@ -146,64 +146,76 @@ export function validateReadTypesInExpression(expr: string, declaredType: string
 }
 
 /**
- * Information extracted from a let-binding.
+ * Information extracted from a let-binding statement.
  */
-interface LetInfo {
+interface ParsedLetStatement {
+	name: string;
 	declaredType: string;
 	expr: string;
 }
 
 /**
- * Extract declared type and expression from a let-binding source.
+ * Extract variable name, declared type and expression from a let-binding statement.
  *
- * @param trimmedSource - the trimmed source code
- * @returns object with declaredType and expr, or empty strings if not a valid let-binding
+ * @param stmt - the statement (e.g., "let x : U8 = 10")
+ * @returns object with name, type and expr, or undefined if not a valid let-binding
  */
-function extractLetInfo(trimmedSource: string): LetInfo {
-	const equalsIdx = trimmedSource.indexOf('=');
+function parseLetStatement(stmt: string): ParsedLetStatement | undefined {
+	const trimmed = stmt.trim();
+	if (!trimmed.startsWith('let ')) {
+		return undefined;
+	}
+
+	const afterLet = trimmed.substring(4).trim();
+	const equalsIdx = afterLet.indexOf('=');
 	if (equalsIdx === -1) {
-		return { declaredType: '', expr: '' };
+		return undefined;
 	}
 
-	const colonIdx = trimmedSource.indexOf(':');
-	if (colonIdx === -1 || colonIdx >= equalsIdx) {
-		let expr = trimmedSource.substring(equalsIdx + 1).trim();
-		if (expr.endsWith(';')) {
-			expr = expr.substring(0, expr.length - 1).trim();
-		}
-		return { declaredType: '', expr };
+	const beforeEquals = afterLet.substring(0, equalsIdx).trim();
+	const expr = afterLet.substring(equalsIdx + 1).trim();
+
+	const colonIdx = beforeEquals.indexOf(':');
+	if (colonIdx === -1) {
+		return { name: beforeEquals, declaredType: '', expr };
 	}
 
-	const declaredPart = trimmedSource.substring(colonIdx + 1, equalsIdx);
-	const declaredType = declaredPart.split(';')[0].trim();
+	const name = beforeEquals.substring(0, colonIdx).trim();
+	const declaredType = beforeEquals.substring(colonIdx + 1).trim();
 
-	let expr = trimmedSource.substring(equalsIdx + 1);
-	if (expr.endsWith(';')) {
-		expr = expr.substring(0, expr.length - 1);
-	}
-	expr = expr.trim();
-
-	return { declaredType, expr };
+	return { name, declaredType, expr };
 }
 
 /**
  * Validate type compatibility in a let-binding declaration at source level.
+ * Handles multiple statements and checks for duplicate declarations.
  *
  * @param source - the source code
- * @returns error message if type mismatch, empty string if valid or not a let-binding
+ * @returns error message if any error found, empty string if valid
  */
 export function validateTopLevelLetBinding(source: string): string {
-	const trimmedSource = source.trim();
-	if (!trimmedSource.startsWith('let ')) {
-		return '';
+	const statements = source
+		.split(';')
+		.map((s: string): string => s.trim())
+		.filter((s: string): string => s);
+	const seenVariables = new Set<string>();
+
+	for (const stmt of statements) {
+		const parsed = parseLetStatement(stmt);
+		if (!parsed) {
+			continue;
+		}
+
+		if (seenVariables.has(parsed.name)) {
+			return `Variable '${parsed.name}' is already declared`;
+		}
+		seenVariables.add(parsed.name);
+
+		const typeError = validateReadTypesInExpression(parsed.expr, parsed.declaredType);
+		if (typeError) {
+			return typeError;
+		}
 	}
 
-	const { declaredType, expr } = extractLetInfo(trimmedSource);
-	if (!declaredType || !expr) {
-		return '';
-	}
-
-	// Check for read type compatibility with declared type
-	const typeError = validateReadTypesInExpression(expr, declaredType);
-	return typeError || '';
+	return '';
 }

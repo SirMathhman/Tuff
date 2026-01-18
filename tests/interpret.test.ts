@@ -98,4 +98,5 @@ describe('interpret and compileAndExecute stubs', (): void => {
 	testBothValid('let x = read<U32>(); x', '100', 100);
 	testBothValid('let x = read<U32>(); let y = x; y', '100', 100);
 	testBothValid('let x = read<U32>(); let y = 1; x + y', '100', 101);
+	testBothInvalid('let x = 0; let x = 0; x');
 });
