@@ -5,6 +5,7 @@ import {
 	validateMutability,
 	validateNumericLiterals,
 } from './validation';
+import { validateFunctionReferences } from './function-validation';
 import { replaceBooleans, replaceYieldWithReturn, stripTypeSuffixes } from './transforms/basic';
 import { replaceFunctionDefinitions } from './transforms/functions';
 import { replaceForLoops } from './transforms/for-loops';
@@ -27,6 +28,11 @@ import { compileThisKeyword } from './transforms/this-keyword';
  * @returns A Result containing the compiled JavaScript code or an error
  */
 export function compile(input: string): Result<string> {
+	const functionValidation = validateFunctionReferences(input);
+	if (functionValidation.type === 'err') {
+		return err(functionValidation.error);
+	}
+
 	const mutValidation = validateMutability(input);
 	if (mutValidation.type === 'err') {
 		return err(mutValidation.error);

@@ -2,7 +2,7 @@ import { clearFunctionRegistry } from '../../src/interpreter/functions';
 import {
 	assertCompileValid,
 	assertInterpretAndCompileValid,
-	assertInterpretInvalid,
+	assertInterpretAndCompileInvalid,
 } from '../../src/testing/test-helpers';
 
 describe('function references (interpret + compile)', (): void => {
@@ -43,17 +43,17 @@ describe('function references (interpret + compile)', (): void => {
 	});
 });
 
-describe('function references (interpreter-only errors)', (): void => {
+describe('function references (errors: interpret + compile)', (): void => {
 	beforeEach((): void => {
 		clearFunctionRegistry();
 	});
 
 	it('undefined function error', (): void => {
-		assertInterpretInvalid('let r : () => I32 = undef; r()', 'not defined');
+		assertInterpretAndCompileInvalid('let r : () => I32 = undef; r()', 'not defined');
 	});
 
 	it('wrong arg count error', (): void => {
-		assertInterpretInvalid(
+		assertInterpretAndCompileInvalid(
 			'fn add(a : I32, b : I32) : I32 => a + b; let f : (I32, I32) => I32 = add; f(5)',
 			'expects 2 argument(s)',
 		);

@@ -274,6 +274,11 @@ let g : (I32, I32) => I32 = add;
 g(2, 3)                   // 5
 ```
 
+Both the interpreter and the compiler validate function references:
+
+- Referencing an undefined function is an error.
+- Calling a function (directly or through a reference) with the wrong number of arguments is an error.
+
 ---
 
 ## Closures
