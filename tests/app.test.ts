@@ -8,4 +8,8 @@ describe('The compiler', (): void => {
 	it('reads U8 from stdin', (): void => {
 		expect(run('read U8', '100')).toBe(100);
 	});
+
+	it('reads U8 in an expression', (): void => {
+		expect(run('read U8 + 1', '100')).toBe(101);
+	});
 });
