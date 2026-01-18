@@ -206,21 +206,26 @@ function processLetBinding(
 
 	// Extract variable name
 	const afterLet = stmt.substring(4).trim();
-	const colonIdx = afterLet.indexOf(':');
-	if (colonIdx === -1) {
-		return readIndex;
-	}
-
-	const varName = afterLet.substring(0, colonIdx).trim();
-	const afterColon = afterLet.substring(colonIdx + 1);
-
-	// Find the equals sign (skip type annotation)
-	const equalsIdx = afterColon.indexOf('=');
+	const equalsIdx = afterLet.indexOf('=');
 	if (equalsIdx === -1) {
 		return readIndex;
 	}
 
-	let expr = afterColon.substring(equalsIdx + 1).trim();
+	const colonIdx = afterLet.indexOf(':');
+	let varName: string;
+	let exprStartIdx: number;
+
+	if (colonIdx !== -1 && colonIdx < equalsIdx) {
+		// Explicit type: let varName : Type = expression
+		varName = afterLet.substring(0, colonIdx).trim();
+		exprStartIdx = equalsIdx + 1;
+	} else {
+		// Inferred type: let varName = expression
+		varName = afterLet.substring(0, equalsIdx).trim();
+		exprStartIdx = equalsIdx + 1;
+	}
+
+	let expr = afterLet.substring(exprStartIdx).trim();
 
 	const readResult = replaceReadsInExpression(expr, stdinValues, readIndex);
 	expr = readResult.expr;

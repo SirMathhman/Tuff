@@ -94,4 +94,6 @@ describe('interpret and compileAndExecute stubs', (): void => {
 	testBothInvalid('let z : U8 = read<U16>();');
 	testBothInvalid('let z : U8 = read<U8>() + read<U16>();');
 	testBothValid('let z : U16 = read<U8>() + read<U16>(); z', '50 50', 100);
+
+	testBothValid('let x = read<U32>(); x', '100', 100);
 });

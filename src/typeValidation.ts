@@ -118,7 +118,7 @@ function validateSingleReadType(readType: string, declaredType: string): string 
  * @returns error message if types are incompatible, empty string if valid
  */
 export function validateReadTypesInExpression(expr: string, declaredType: string): string {
-	if (!expr.includes('read<')) {
+	if (!expr.includes('read<') || !declaredType) {
 		return '';
 	}
 
@@ -167,7 +167,11 @@ function extractLetInfo(trimmedSource: string): LetInfo {
 
 	const colonIdx = trimmedSource.indexOf(':');
 	if (colonIdx === -1 || colonIdx >= equalsIdx) {
-		return { declaredType: '', expr: '' };
+		let expr = trimmedSource.substring(equalsIdx + 1).trim();
+		if (expr.endsWith(';')) {
+			expr = expr.substring(0, expr.length - 1).trim();
+		}
+		return { declaredType: '', expr };
 	}
 
 	const declaredPart = trimmedSource.substring(colonIdx + 1, equalsIdx);

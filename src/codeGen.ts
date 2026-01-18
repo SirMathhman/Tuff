@@ -57,14 +57,12 @@ export function generateSingleReadWithOp(operator: string, operand: string): str
 }
 
 /**
- * Generate minimal helper functions needed for expression evaluation.
- * Only includes helpers actually called by the generated code.
+ * Generate the evaluateExpr helper function.
  *
- * @returns JavaScript code for required helper functions
+ * @returns lines for evaluateExpr
  */
-function generateMinimalHelpers(): string {
-	const lines = [
-		'const countChar = (s, c) => { let count = 0; for (let i = 0; i < s.length; i++) if (s[i] === c) count++; return count; };',
+function generateEvaluateExprHelper(): string[] {
+	return [
 		'const evaluateExpr = (exprStr) => {',
 		'  const parts = exprStr.split(" ").filter(p => p);',
 		'  if (parts.length === 1) return parseInt(parts[0], 10);',
@@ -82,34 +80,79 @@ function generateMinimalHelpers(): string {
 		'  }',
 		'  return res;',
 		'};',
+	];
+}
+
+/**
+ * Generate code to evaluate let bindings within a block.
+ *
+ * @returns lines for let binding evaluation
+ */
+function generateBlockLetBindingHelper(): string[] {
+	return [
+		'      let varName, expr;',
+		'      const equalsIdx = stmt.indexOf("=");',
+		'      const colonIdx = stmt.indexOf(":");',
+		'      if (colonIdx !== -1 && colonIdx < equalsIdx) {',
+		'        varName = stmt.substring(4, colonIdx).trim();',
+		'        expr = stmt.substring(equalsIdx + 1).trim();',
+		'      } else if (equalsIdx !== -1) {',
+		'        varName = stmt.substring(4, equalsIdx).trim();',
+		'        expr = stmt.substring(equalsIdx + 1).trim();',
+		'      }',
+		'      if (varName && expr) {',
+		'        let exprEval = expr;',
+		'        for (const [vName, vValue] of Object.entries(bindings)) {',
+		'          const regex = new RegExp(`\\\\b\${vName}\\\\b`, "g");',
+		'          exprEval = exprEval.replace(regex, String(vValue));',
+		'        }',
+		'        bindings[varName] = evaluateExpr(exprEval);',
+		'      }',
+	];
+}
+
+/**
+ * Generate the evaluateBlock helper function.
+ *
+ * @returns lines for evaluateBlock
+ */
+function generateEvaluateBlockHelper(): string[] {
+	const letBindingCode = generateBlockLetBindingHelper();
+	return [
 		'const evaluateBlock = (blockContent, values, readIdx) => {',
 		'  const bindings = {};',
 		'  const statements = blockContent.split(";").map(s => s.trim()).filter(s => s);',
 		'  for (let i = 0; i < statements.length - 1; i++) {',
 		'    const stmt = statements[i];',
 		'    if (stmt.startsWith("let ")) {',
-		'      const match = stmt.match(/let\\s+(\\w+)\\s*:\\s*\\w+\\s*=\\s*(.+)/);',
-		'      if (match) {',
-		'        const varName = match[1];',
-		'        const expr = match[2];',
-		'        let exprEval = expr;',
-		'        for (const [vName, vValue] of Object.entries(bindings)) {',
-		'          const regex = new RegExp(`\\\\b${vName}\\\\b`, "g");',
-		'          exprEval = exprEval.replace(regex, String(vValue));',
-		'        }',
-		'        bindings[varName] = evaluateExpr(exprEval);',
-		'      }',
+		...letBindingCode,
 		'    }',
 		'  }',
 		'  const lastStmt = statements[statements.length - 1];',
 		'  let lastEval = lastStmt;',
 		'  for (const [vName, vValue] of Object.entries(bindings)) {',
-		'    const regex = new RegExp(`\\\\b${vName}\\\\b`, "g");',
+		'    const regex = new RegExp(`\\\\b\${vName}\\\\b`, "g");',
 		'    lastEval = lastEval.replace(regex, String(vValue));',
 		'  }',
 		'  return evaluateExpr(lastEval);',
 		'};',
 	];
+}
+
+/**
+ * Generate minimal helper functions needed for expression evaluation.
+ * Only includes helpers actually called by the generated code.
+ *
+ * @returns JavaScript code for required helper functions
+ */
+function generateMinimalHelpers(): string {
+	const countCharLines = [
+		'const countChar = (s, c) => { let count = 0; for (let i = 0; i < s.length; i++) if (s[i] === c) count++; return count; };',
+	];
+	const evaluateExprLines = generateEvaluateExprHelper();
+	const evaluateBlockLines = generateEvaluateBlockHelper();
+
+	const lines = [...countCharLines, ...evaluateExprLines, ...evaluateBlockLines];
 	return lines.join('\n');
 }
 
@@ -284,17 +327,19 @@ function parseLetBinding(source: string): ParsedLetBinding | undefined {
 	}
 
 	const afterLet = source.substring(4); // remove 'let '
-	const colonIdx = afterLet.indexOf(':');
-	if (colonIdx === -1) {
-		return undefined;
-	}
-
 	const equalsIdx = afterLet.indexOf('=');
-	if (equalsIdx === -1 || equalsIdx <= colonIdx) {
+	if (equalsIdx === -1) {
 		return undefined;
 	}
 
-	const varName = afterLet.substring(0, colonIdx).trim();
+	const colonIdx = afterLet.indexOf(':');
+	let varName: string;
+	if (colonIdx !== -1 && colonIdx < equalsIdx) {
+		varName = afterLet.substring(0, colonIdx).trim();
+	} else {
+		varName = afterLet.substring(0, equalsIdx).trim();
+	}
+
 	const rest = afterLet.substring(equalsIdx + 1).trim();
 
 	if (!varName || !rest) {
