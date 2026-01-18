@@ -270,7 +270,10 @@ function evaluateBlockWithReads(
 
 	// Check if the last statement is also a let-binding or reassignment (no final expression)
 	const trimmedLast = lastStmt.trim();
-	if (trimmedLast.startsWith('let ') || new RegExp('^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=').test(trimmedLast)) {
+	if (
+		trimmedLast.startsWith('let ') ||
+		new RegExp('^([a-zA-Z_][a-zA-Z0-9_]*)\\s*=').test(trimmedLast)
+	) {
 		currentReadIdx = processStatement(lastStmt, stdinValues, currentReadIdx, bindings);
 		// No final expression, return 0 (default exit code)
 		return { result: 0, readIndex: currentReadIdx };
