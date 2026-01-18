@@ -16,4 +16,8 @@ describe('The compiler', (): void => {
 	it('reads multiple U8 from stdin', (): void => {
 		expect(run('read U8 + read U8', '1 2')).toBe(3);
 	});
+
+	it('reads three U8 from stdin', (): void => {
+		expect(run('read U8 + read U8 + read U8', '1 2 3')).toBe(6);
+	});
 });
