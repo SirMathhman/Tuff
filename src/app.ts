@@ -14,6 +14,26 @@ function findSemicolonIndex(source: string, startPos: number): number {
 	return -1;
 }
 
+function getDeclaredType(source: string, letIndex: number): string {
+	const typeStartIndex = source.indexOf(':', letIndex);
+	const typeEndIndex = source.indexOf('=', typeStartIndex);
+	return source.substring(typeStartIndex + 1, typeEndIndex).trim();
+}
+
+function shouldWrapWithMask(declaredType: string): boolean {
+	return declaredType === 'U8';
+}
+
+function wrapExpressionForType(expr: string, declaredType: string): string {
+	let wrappedExpr: string;
+	if (shouldWrapWithMask(declaredType)) {
+		wrappedExpr = `(${expr} & 0xff)`;
+	} else {
+		wrappedExpr = `(${expr})`;
+	}
+	return wrappedExpr;
+}
+
 function wrapLetBindings(source: string): string {
 	let replaced = source;
 	let searchIndex = 0;
@@ -29,15 +49,18 @@ function wrapLetBindings(source: string): string {
 		}
 
 		const semiIndex = findSemicolonIndex(replaced, eqIndex + 1);
-		if (semiIndex !== -1) {
-			const expr = replaced.substring(eqIndex + 1, semiIndex).trim();
-			const before = replaced.substring(0, eqIndex + 1);
-			const after = replaced.substring(semiIndex);
-			replaced = `${before} (${expr} & 0xff) ${after}`;
-			searchIndex = semiIndex + 10;
-		} else {
+		if (semiIndex === -1) {
 			searchIndex = letIndex + 4;
+			continue;
 		}
+
+		const declaredType = getDeclaredType(replaced, letIndex);
+		const expr = replaced.substring(eqIndex + 1, semiIndex).trim();
+		const before = replaced.substring(0, eqIndex + 1);
+		const after = replaced.substring(semiIndex);
+		const wrappedExpr = wrapExpressionForType(expr, declaredType);
+		replaced = `${before} ${wrappedExpr} ${after}`;
+		searchIndex = semiIndex + 10;
 	}
 	return replaced;
 }
@@ -95,7 +118,7 @@ function wrapTopLevelLet(source: string): string {
 function handleLetBindings(source: string): string {
 	let replaced = source;
 
-	// First, wrap expressions in let assignments with & 0xff
+	// First, wrap expressions in let assignments with & 0xff (for U8) or just parentheses (for U16)
 	replaced = wrapLetBindings(replaced);
 
 	// Then handle braces - only if there are any
@@ -103,8 +126,9 @@ function handleLetBindings(source: string): string {
 		replaced = handleBracesInLetBindings(replaced);
 	}
 
-	// Remove remaining type annotations
+	// Remove type annotations for both U8 and U16
 	replaced = replaced.split(': U8').join('');
+	replaced = replaced.split(': U16').join('');
 
 	// For top-level let bindings, convert to return the value
 	if (isTopLevelLet(replaced)) {
@@ -155,9 +179,10 @@ function checkLetBinding(source: string, letIndex: number): Result<number, strin
 
 	const expr = source.substring(typeEndIndex + 1, exprEndIndex).trim();
 
-	// Check if expression contains read of a different type
+	// Type checking rules:
+	// U8 can only accept U8 reads
+	// U16 can accept U8 or U16 reads
 	if (declaredType === 'U8') {
-		// U8 can only accept U8 reads
 		if (expr.includes('read U16')) {
 			return failure('Type mismatch: cannot assign read U16 to U8');
 		}
@@ -166,6 +191,13 @@ function checkLetBinding(source: string, letIndex: number): Result<number, strin
 		}
 		if (expr.includes('read I32')) {
 			return failure('Type mismatch: cannot assign read I32 to U8');
+		}
+	} else if (declaredType === 'U16') {
+		if (expr.includes('read U32')) {
+			return failure('Type mismatch: cannot assign read U32 to U16');
+		}
+		if (expr.includes('read I32')) {
+			return failure('Type mismatch: cannot assign read I32 to U16');
 		}
 	}
 

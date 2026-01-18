@@ -79,6 +79,10 @@ describe('The compiler - let bindings', (): void => {
 	it('handles top-level let binding with read U8', (): void => {
 		assertValid('let z : U8 = read U8; z', '42', 42);
 	});
+
+	it('handles top-level let binding with U16 type', (): void => {
+		assertValid('let z : U16 = read U8; z', '42', 42);
+	});
 });
 
 describe('The compiler - error handling', (): void => {
