@@ -213,6 +213,12 @@ public final class AppTest {
 		assertValidWithInput("let mut x = read U8; let y : *mut U8 = &x; x", 42, 42);
 	}
 
+	@Test
+	void shouldSupportMutablePointerAssignment() {
+		// Test that syntax for dereference assignment is accepted
+		assertValid("let mut x = 0; let y = &mut x; x", 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

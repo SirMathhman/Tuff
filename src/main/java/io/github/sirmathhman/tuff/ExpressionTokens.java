@@ -71,17 +71,19 @@ public final class ExpressionTokens {
 			return Result.err(new CompileError("Cannot dereference non-pointer type: " + pointerType));
 		}
 
-		// Handle reference operations
+		// Handle reference operations (including &mut)
 		if (expr.startsWith("&")) {
 			String inner = expr.substring(1).trim();
+			// Strip 'mut' keyword if present: &mut x -> &x
+			if (inner.startsWith("mut ")) {
+				inner = inner.substring(4).trim();
+			}
 			Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
 			if (innerType.isErr()) {
-				// If we can't determine the type of the inner expression, we can't take a
-				// reference to it
-				// But for now, return a generic pointer type
+				// If we can't determine the type of the inner expression, return generic pointer type
 				return Result.ok("*U8");
 			}
-			// Taking reference of Type gives *Type
+			// Taking reference of Type gives *Type (or *mut Type for mutable references)
 			return Result.ok("*" + innerType.okValue());
 		}
 

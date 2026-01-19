@@ -453,15 +453,15 @@ public final class App {
 			}
 			return Result.ok(new ExpressionModel.ExpressionTerm(1, 0, false, false));
 		}
-
 		if (term.startsWith("&") || term.startsWith("*")) {
 			String inner = term.substring(1).trim();
+			if (inner.startsWith("mut ")) {
+				inner = inner.substring(4).trim();
+			}
 			return parseTerm(inner);
 		}
-
 		Result<Long, CompileError> literalResult = LiteralParser.parseLiteral(term);
 		if (literalResult.isErr()) {
-			// Identifiers are treated as having value 0 (for variable references in expressions)
 			if (!term.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
 				return Result.err(literalResult.errValue());
 			}

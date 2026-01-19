@@ -65,13 +65,11 @@ public final class LetBindingHandler {
 		String varName = decl.varName();
 		boolean isMutable = decl.isMutable();
 		String valueExpr = decl.valueExpr();
-
 		// Check if continuation starts with "let" (chained binding)
 		if (continuation.startsWith("let ")) {
 			return handleChainedLetBinding(varName, valueExpr, continuation, instructions,
 					variableAddresses, nextMemAddr);
 		}
-
 		// If continuation is just the variable name, evaluate the value expression
 		if (continuation.equals(varName)) {
 			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = App.parseExpressionWithRead(
@@ -81,48 +79,38 @@ public final class LetBindingHandler {
 			}
 			return App.generateInstructions(valueResult.okValue(), instructions);
 		}
-
 		// Check if continuation references a previously bound variable
 		if (variableAddresses.containsKey(continuation)) {
 			return handleVariableReference(valueExpr, continuation, instructions,
 					variableAddresses, nextMemAddr);
 		}
-
-		// Check if continuation contains assignment (for mutable variables)
 		if (continuation.contains("=") && continuation.contains(";")) {
-			if (!isMutable) {
+			// Check if this is a dereference assignment (*var = ...) or mutable variable assignment
+			boolean isDereferenceAssignment = continuation.trim().startsWith("*");
+			if (!isMutable && !isDereferenceAssignment) {
 				return Result.err(new CompileError(
 						"Cannot assign to immutable variable '" + varName + "'. Use 'let mut' to declare a mutable variable."));
 			}
 			return handleMutableVariableWithAssignment(varName, valueExpr, continuation, instructions);
 		}
-
-		// Check if variable is used multiple times in continuation
 		java.util.regex.Pattern varPattern = java.util.regex.Pattern.compile("\\b" + varName + "\\b");
 		java.util.regex.Matcher matcher = varPattern.matcher(continuation);
 		int occurrences = 0;
-		while (matcher.find()) {
-			occurrences++;
-		}
+		while (matcher.find()) occurrences++;
 		if (occurrences > 1) {
 			return handleMultipleVariableReferences(varName, valueExpr, continuation, occurrences, instructions);
 		}
-
-		// Single occurrence - simple substitution and validate types
 		String substitutedContinuation = continuation.replaceAll("\\b" + varName + "\\b",
 				"(" + valueExpr + ")");
 		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName, valueExpr);
 		if (typeCheckResult.isErr()) {
 			return typeCheckResult;
 		}
-
-		// Parse the substituted continuation expression
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App.parseExpressionWithRead(
 				substitutedContinuation);
 		if (contResult.isErr()) {
 			return Result.err(contResult.errValue());
 		}
-
 		return App.generateInstructions(contResult.okValue(), instructions);
 	}
 
@@ -406,13 +394,6 @@ public final class LetBindingHandler {
 	private static Result<Void, CompileError> validateUninitializedAssignment(
 			boolean isUninitialized,
 			String varName,
-			int assignmentCount) {
-		return validateUninitializedAssignment(isUninitialized, varName, assignmentCount, false);
-	}
-
-	private static Result<Void, CompileError> validateUninitializedAssignment(
-			boolean isUninitialized,
-			String varName,
 			int assignmentCount,
 			boolean isMutableUninitialized) {
 		if (isUninitialized && assignmentCount > 0 && !isMutableUninitialized) {
@@ -423,14 +404,18 @@ public final class LetBindingHandler {
 	}
 
 	private static Result<AssignmentParseResult, CompileError> parseAssignment(String varName, String remaining) {
-		// Check if there's an assignment: varName = expr
-		if (!remaining.startsWith(varName + " ") && !remaining.startsWith(varName + "=")) {
-			return Result.err(new CompileError("Not an assignment")); // Not an assignment
+		// Check if there's an assignment: varName = expr OR *varName = expr
+		String trimmed = remaining.trim();
+		boolean isDereference = trimmed.startsWith("*");
+		String assignTarget = isDereference ? ("*" + varName) : varName;
+		
+		if (!trimmed.startsWith(assignTarget + " ") && !trimmed.startsWith(assignTarget + "=")) {
+			return Result.err(new CompileError("Not an assignment"));
 		}
 
 		int assignEqIndex = remaining.indexOf('=');
-		if (assignEqIndex == -1 || !remaining.substring(0, assignEqIndex).trim().equals(varName)) {
-			return Result.err(new CompileError("Not an assignment")); // Not an assignment
+		if (assignEqIndex == -1 || !remaining.substring(0, assignEqIndex).trim().equals(assignTarget)) {
+			return Result.err(new CompileError("Not an assignment"));
 		}
 
 		// Find semicolon for this assignment
@@ -449,7 +434,7 @@ public final class LetBindingHandler {
 		}
 
 		if (assignSemiIndex == -1) {
-			return Result.err(new CompileError("Invalid assignment: missing ';'")); // Invalid format
+			return Result.err(new CompileError("Invalid assignment: missing ';'"));
 		}
 
 		// Extract assignment value expression
