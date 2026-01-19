@@ -62,6 +62,7 @@ public final class Vm {
 			case Load -> executeLoad(registers, memory, var, firstOperand, secondOperand);
 			case Store -> executeStore(registers, memory, var, firstOperand, secondOperand);
 			case Add -> executeAdd(registers, firstOperand, secondOperand);
+			case Sub -> executeSub(registers, firstOperand, secondOperand);
 			case BitsShiftLeft -> executeBitsShiftLeft(registers, firstOperand, secondOperand);
 			case BitsShiftRight -> executeBitsShiftRight(registers, firstOperand, secondOperand);
 			case BitsAnd -> executeBitsAnd(registers, firstOperand, secondOperand);
@@ -83,6 +84,11 @@ public final class Vm {
 
 	private static boolean executeAdd(long[] registers, long firstOperand, long secondOperand) {
 		registers[(int) firstOperand] += registers[(int) secondOperand];
+		return false;
+	}
+
+	private static boolean executeSub(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] -= registers[(int) secondOperand];
 		return false;
 	}
 

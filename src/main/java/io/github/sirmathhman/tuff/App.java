@@ -15,10 +15,12 @@ public final class App {
 	private static final class ExpressionResult {
 		final int readCount;
 		final long literalValue;
+		final List<ExpressionTerm> terms;
 
-		ExpressionResult(int readCount, long literalValue) {
+		ExpressionResult(int readCount, long literalValue, List<ExpressionTerm> terms) {
 			this.readCount = readCount;
 			this.literalValue = literalValue;
+			this.terms = terms;
 		}
 	}
 
@@ -51,19 +53,45 @@ public final class App {
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue));
 		} else {
 			// Load all reads into registers sequentially
-			for (int i = 0; i < expr.readCount; i++) {
-				instructions.add(new Instruction(Operation.In, Variant.Immediate, i, null));
+			int nextReg = 0;
+			for (ExpressionTerm term : expr.terms) {
+				if (term.readCount > 0) {
+					instructions.add(new Instruction(Operation.In, Variant.Immediate, nextReg, null));
+					nextReg++;
+				}
 			}
 
-			// Add all reads together into register 0
-			for (int i = 1; i < expr.readCount; i++) {
-				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) i));
+			// First term goes into register 0
+			int firstReadReg = 0;
+			for (ExpressionTerm term : expr.terms) {
+				if (term.readCount > 0) {
+					firstReadReg = 0;
+					break;
+				}
+			}
+
+			// Accumulate all reads with correct operations
+			int regIndex = 0;
+			boolean firstRead = true;
+			for (ExpressionTerm term : expr.terms) {
+				if (term.readCount > 0) {
+					if (!firstRead) {
+						if (term.isSubtracted) {
+							instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 0, (long) regIndex));
+						} else {
+							instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) regIndex));
+						}
+					}
+					firstRead = false;
+					regIndex++;
+				}
 			}
 
 			// Add the literal value if present
 			if (expr.literalValue != 0) {
-				instructions.add(new Instruction(Operation.Load, Variant.Immediate, expr.readCount, expr.literalValue));
-				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) expr.readCount));
+				int literalReg = regIndex;
+				instructions.add(new Instruction(Operation.Load, Variant.Immediate, literalReg, expr.literalValue));
+				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) literalReg));
 			}
 		}
 
@@ -71,33 +99,77 @@ public final class App {
 	}
 
 	private static Result<ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
-		// Parse all terms separated by +
-		String[] parts = expr.split("\\s*\\+\\s*");
-		
+		// Parse all terms separated by + or -, preserving the operators
+		List<ExpressionTerm> terms = new ArrayList<>();
 		int totalReads = 0;
 		long totalLiteral = 0;
 
-		for (String part : parts) {
-			Result<ExpressionTerm, CompileError> termResult = parseTerm(part);
+		// Split by + and -, keeping the operators
+		// Only treat +/- as operators if they're preceded by a digit, U, or 'e' (end of term)
+		String[] tokens = expr.split("(?<=[0-9UIe])\\s*[+-]\\s*");
+
+		// Track which operator preceded each token
+		List<Boolean> isSubtracted = new ArrayList<>();
+		isSubtracted.add(false); // First token is never subtracted
+		
+		// Find all + and - operators in the original expression
+		int lastIndex = 0;
+		for (String token : tokens) {
+			if (lastIndex == 0) {
+				lastIndex += token.length();
+				continue;
+			}
+			
+			int nextIndex = expr.indexOf(token, lastIndex);
+			if (nextIndex > 0) {
+				char operatorChar = expr.charAt(nextIndex - 1);
+				while (nextIndex > 0 && Character.isWhitespace(operatorChar)) {
+					nextIndex--;
+					if (nextIndex > 0) {
+						operatorChar = expr.charAt(nextIndex - 1);
+					}
+				}
+				isSubtracted.add(operatorChar == '-');
+				lastIndex = nextIndex + token.length();
+			}
+		}
+
+		for (int i = 0; i < tokens.length; i++) {
+			String token = tokens[i].trim();
+			if (token.isEmpty()) {
+				continue;
+			}
+
+			Result<ExpressionTerm, CompileError> termResult = parseTerm(token);
 			if (termResult.isErr()) {
 				return Result.err(termResult.errValue());
 			}
 
-			ExpressionTerm term = termResult.okValue();
+			ExpressionTerm baseTerm = termResult.okValue();
+			boolean subtracted = (i < isSubtracted.size()) ? isSubtracted.get(i) : false;
+			ExpressionTerm term = new ExpressionTerm(baseTerm.readCount, baseTerm.value, subtracted);
+			terms.add(term);
+
 			totalReads += term.readCount;
-			totalLiteral += term.value;
+			if (subtracted) {
+				totalLiteral -= term.value;
+			} else {
+				totalLiteral += term.value;
+			}
 		}
 
-		return Result.ok(new ExpressionResult(totalReads, totalLiteral));
+		return Result.ok(new ExpressionResult(totalReads, totalLiteral, terms));
 	}
 
 	private static final class ExpressionTerm {
 		final int readCount;
 		final long value;
+		final boolean isSubtracted;
 
-		ExpressionTerm(int readCount, long value) {
+		ExpressionTerm(int readCount, long value, boolean isSubtracted) {
 			this.readCount = readCount;
 			this.value = value;
+			this.isSubtracted = isSubtracted;
 		}
 	}
 
@@ -109,7 +181,7 @@ public final class App {
 			if (!typeSpec.matches("[UI]\\d+")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
-			return Result.ok(new ExpressionTerm(1, 0));
+			return Result.ok(new ExpressionTerm(1, 0, false));
 		}
 
 		Result<Long, CompileError> literalResult = parseLiteral(term);
@@ -117,7 +189,7 @@ public final class App {
 			return Result.err(literalResult.errValue());
 		}
 
-		return Result.ok(new ExpressionTerm(0, literalResult.okValue()));
+		return Result.ok(new ExpressionTerm(0, literalResult.okValue(), false));
 	}
 
 	private static Result<Long, CompileError> parseLiteral(String literal) {

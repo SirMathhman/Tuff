@@ -4,6 +4,7 @@ public enum Operation {
 	Load,
 	Store,
 	Add,
+	Sub,
 	BitsShiftLeft,
 	BitsShiftRight,
 	BitsAnd,
