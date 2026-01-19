@@ -93,6 +93,15 @@ public final class App {
 				continue;
 			}
 
+			// Check if this is a multiplicative term following a parenthesized group
+			if (term.isMultiplied && i > 0 && terms.get(i - 1).isParenthesizedGroupEnd && !firstAdditiveGroup) {
+				// Multiply the previous result by this term
+				instructions.add(new Instruction(Operation.Mul, Variant.Immediate, resultReg, (long) readRegIndex));
+				readRegIndex++;
+				i++;
+				continue;
+			}
+
 			// Collect this multiplicative/divisive group
 			List<Integer> groupRegs = new ArrayList<>();
 			List<Character> groupOps = new ArrayList<>();
@@ -102,8 +111,9 @@ public final class App {
 			readRegIndex++;
 
 			// Consume all multiplied/divided terms that follow
+			// But stop if the current term is a parenthesized group end
 			while (i + 1 < terms.size() && (terms.get(i + 1).isMultiplied || terms.get(i + 1).isDivided)
-					&& terms.get(i + 1).readCount > 0) {
+					&& terms.get(i + 1).readCount > 0 && !terms.get(i).isParenthesizedGroupEnd) {
 				i++;
 				ExpressionTerm nextTerm = terms.get(i);
 				groupRegs.add(readRegIndex);
@@ -167,6 +177,9 @@ public final class App {
 	}
 
 	private static Result<ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
+		// Normalize curly braces to parentheses for uniform grouping support
+		expr = expr.replace('{', '(').replace('}', ')');
+		
 		// Split by + and - to get additive-level tokens, but not inside parentheses
 		List<String> addTokens = splitAddOperators(expr);
 		List<Boolean> additiveOps = new ArrayList<>();
@@ -324,7 +337,8 @@ public final class App {
 			return Result.ok(value);
 		}
 		// Only perform literal operations when we know both values are literals
-		// If value is 0 and we're dividing, it could be a read operation (not a true division by zero)
+		// If value is 0 and we're dividing, it could be a read operation (not a true
+		// division by zero)
 		// So we don't error here; runtime will handle actual division by zero
 		if (operator == '/') {
 			if (value != 0) {
@@ -364,9 +378,11 @@ public final class App {
 
 		if (position == 0) {
 			// First term: expand the inner expression, keeping original isMultiplied states
-			for (ExpressionTerm innerTerm : innerExpr.terms) {
+			for (int i = 0; i < innerExpr.terms.size(); i++) {
+				ExpressionTerm innerTerm = innerExpr.terms.get(i);
+				boolean isLastOfGroup = (i == innerExpr.terms.size() - 1) && totalTokens > 1;
 				ExpressionTerm finalTerm = new ExpressionTerm(innerTerm.readCount, innerTerm.value,
-						isSubtracted, innerTerm.isMultiplied);
+						isSubtracted, innerTerm.isMultiplied, false, isLastOfGroup);
 				terms.add(finalTerm);
 			}
 			return Result.ok(new ParenthesizedTokenResult(terms, innerExpr.literalValue, innerExpr.terms.size()));
@@ -434,17 +450,24 @@ public final class App {
 		final boolean isSubtracted;
 		final boolean isMultiplied;
 		final boolean isDivided;
+		final boolean isParenthesizedGroupEnd;
 
 		ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied) {
-			this(readCount, value, isSubtracted, isMultiplied, false);
+			this(readCount, value, isSubtracted, isMultiplied, false, false);
 		}
 
 		ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided) {
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, false);
+		}
+
+		ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
+				boolean isParenthesizedGroupEnd) {
 			this.readCount = readCount;
 			this.value = value;
 			this.isSubtracted = isSubtracted;
 			this.isMultiplied = isMultiplied;
 			this.isDivided = isDivided;
+			this.isParenthesizedGroupEnd = isParenthesizedGroupEnd;
 		}
 	}
 

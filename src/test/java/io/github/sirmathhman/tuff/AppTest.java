@@ -106,6 +106,11 @@ public final class AppTest {
 		assertValidWithInput("read U8 / read U8", 2, 6, 3);
 	}
 
+	@Test
+	void shouldSupportCurlyBracesWithParenthesesInMultiplication() {
+		assertValidWithInput("(read U8 + { read U8 }) * read U8", 20, 2, 3, 4);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
