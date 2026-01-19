@@ -51,8 +51,21 @@ A stack-based virtual machine compiler with support for type-safe let bindings.
   ```
 
 - **Expression-Level Bindings**: Nest let bindings inside expressions
+
   ```
   let temp : U8 = (read U8 + { let x : U8 = read U8; let y : U8 = x; y }) * read U8; temp
+  ```
+
+- **Variable Reuse**: Use the same variable multiple times (reads once, uses multiple times)
+
+  ```
+  let x = read U8; x + x  // Reads once, adds to itself
+  ```
+
+- **Mutable Variables**: Declare variables with `mut` to allow reassignment
+
+  ```
+  let mut x = read U8; x = read U8; x  // Reads twice, returns second value
   ```
 
 ## Supported Types
