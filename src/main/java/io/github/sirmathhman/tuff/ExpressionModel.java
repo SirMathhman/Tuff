@@ -27,27 +27,36 @@ public final class ExpressionModel {
 		public final boolean isParenthesizedGroupEnd;
 		public final boolean isDereferenced;
 		public final boolean isLogicalOrBoundary;
+		public final boolean isLogicalAndBoundary;
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied) {
-			this(readCount, value, isSubtracted, isMultiplied, false, false, false, false);
+			this(readCount, value, isSubtracted, isMultiplied, false, false, false, false, false);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided) {
-			this(readCount, value, isSubtracted, isMultiplied, isDivided, false, false, false);
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, false, false, false, false);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd) {
-			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, false, false);
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, false, false, false);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd, boolean isDereferenced) {
-			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, isDereferenced, false);
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, isDereferenced, false,
+					false);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd, boolean isDereferenced, boolean isLogicalOrBoundary) {
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, isDereferenced,
+					isLogicalOrBoundary, false);
+		}
+
+		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
+				boolean isParenthesizedGroupEnd, boolean isDereferenced, boolean isLogicalOrBoundary,
+				boolean isLogicalAndBoundary) {
 			this.readCount = readCount;
 			this.value = value;
 			this.isSubtracted = isSubtracted;
@@ -56,6 +65,7 @@ public final class ExpressionModel {
 			this.isParenthesizedGroupEnd = isParenthesizedGroupEnd;
 			this.isDereferenced = isDereferenced;
 			this.isLogicalOrBoundary = isLogicalOrBoundary;
+			this.isLogicalAndBoundary = isLogicalAndBoundary;
 		}
 	}
 

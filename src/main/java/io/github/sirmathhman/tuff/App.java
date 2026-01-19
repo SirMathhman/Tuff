@@ -128,7 +128,14 @@ public final class App {
 			return LogicalOrHandler.parseLogicalOrExpression(orTokens);
 		}
 
-		// Parse additive expression (no logical OR)
+		// Split by && (logical AND) - higher precedence than OR
+		List<String> andTokens = LogicalAndHandler.splitByLogicalAnd(expr);
+		if (andTokens.size() > 1) {
+			// We have logical AND operations - parse each side and combine
+			return LogicalAndHandler.parseLogicalAndExpression(andTokens);
+		}
+
+		// Parse additive expression (no logical operators)
 		return AdditiveExpressionParser.parseAdditive(expr);
 	}
 

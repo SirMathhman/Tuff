@@ -52,6 +52,15 @@ public final class InstructionBuilder {
 			i = groupResult.nextIndex;
 			firstAdditiveGroup = false;
 
+			// Check for logical AND boundary (higher precedence than OR)
+			if (groupResult.hasLogicalAndBoundary) {
+				ProcessAndResult andResult = processLogicalAndBoundary(terms, i, readRegIndex, resultReg,
+						instructions);
+				resultReg = andResult.resultReg;
+				readRegIndex = andResult.readRegIndex;
+				i = andResult.nextIndex;
+			}
+
 			// Check for logical OR boundary
 			if (groupResult.hasLogicalOrBoundary) {
 				ProcessOrResult orResult = processLogicalOrBoundary(terms, i, readRegIndex, resultReg,
@@ -94,11 +103,24 @@ public final class InstructionBuilder {
 				instructions);
 
 		boolean hasLogicalOrBoundary = term.isLogicalOrBoundary;
-		return new ProcessGroupResult(resultReg, readRegIndex, i, hasLogicalOrBoundary);
+		boolean hasLogicalAndBoundary = term.isLogicalAndBoundary;
+		return new ProcessGroupResult(resultReg, readRegIndex, i, hasLogicalOrBoundary, hasLogicalAndBoundary);
 	}
 
 	private static ProcessOrResult processLogicalOrBoundary(List<ExpressionModel.ExpressionTerm> terms, int i,
 			int readRegIndex, int resultReg, List<Instruction> instructions) {
+		return processLogicalBoundary(terms, i, readRegIndex, resultReg, instructions, Operation.LogicalOr);
+	}
+
+	private static ProcessAndResult processLogicalAndBoundary(List<ExpressionModel.ExpressionTerm> terms, int i,
+			int readRegIndex, int resultReg, List<Instruction> instructions) {
+		ProcessOrResult result = processLogicalBoundary(terms, i, readRegIndex, resultReg, instructions,
+				Operation.LogicalAnd);
+		return new ProcessAndResult(result.resultReg, result.readRegIndex, result.nextIndex);
+	}
+
+	private static ProcessOrResult processLogicalBoundary(List<ExpressionModel.ExpressionTerm> terms, int i,
+			int readRegIndex, int resultReg, List<Instruction> instructions, Operation logicalOp) {
 		i++;
 		while (i < terms.size() && terms.get(i).readCount == 0) {
 			i++;
@@ -112,9 +134,8 @@ public final class InstructionBuilder {
 			readRegIndex = consumeAndEmitMultiplicativeTerms(terms, i, readRegIndex, nextGroupReg, instructions);
 			i = findLastMultiplicativeTermIndex(terms, i);
 
-			// Perform logical OR
-			instructions.add(new Instruction(Operation.LogicalOr, Variant.Immediate, resultReg,
-					(long) nextGroupReg));
+			// Perform logical operation (OR or AND)
+			instructions.add(new Instruction(logicalOp, Variant.Immediate, resultReg, (long) nextGroupReg));
 		}
 
 		return new ProcessOrResult(resultReg, readRegIndex, i);
@@ -145,10 +166,14 @@ public final class InstructionBuilder {
 		return i;
 	}
 
-	private record ProcessGroupResult(int resultReg, int readRegIndex, int nextIndex, boolean hasLogicalOrBoundary) {
+	private record ProcessGroupResult(int resultReg, int readRegIndex, int nextIndex, boolean hasLogicalOrBoundary,
+			boolean hasLogicalAndBoundary) {
 	}
 
 	private record ProcessOrResult(int resultReg, int readRegIndex, int nextIndex) {
+	}
+
+	private record ProcessAndResult(int resultReg, int readRegIndex, int nextIndex) {
 	}
 
 	private static int processAdditiveGroup(java.util.List<Integer> groupRegs, java.util.List<Character> groupOps,
