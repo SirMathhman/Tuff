@@ -80,6 +80,12 @@ A stack-based virtual machine compiler with support for type-safe let bindings.
   let x : I32; x = read I32; x  // Declare, assign, then use
   ```
 
+- **Single Assignment Rule**: Uninitialized variables can only be assigned once
+
+  ```
+  let x : U8; x = read U8; x = 100; x  // Error: multiple assignments (invalid)
+  ```
+
 ## Supported Types
 
 - `U8`, `U16`, `U32` - Unsigned integers (8, 16, 32 bits)
