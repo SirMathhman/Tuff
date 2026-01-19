@@ -31,14 +31,16 @@ public final class InstructionBuilder {
 		}
 
 		if (markerIdx != -1) {
-			// This is a binary comparison (equality, inequality, less-than, or
-			// greater-than)
+			// This is a binary comparison (equality, inequality, less-than,
+			// greater-than, or less-or-equal)
 			// marker.value == 0 means Equal, marker.value == 1 means NotEqual, marker.value
-			// == 2 means LessThan, marker.value == 3 means GreaterThan
+			// == 2 means LessThan, marker.value == 3 means GreaterThan, marker.value == 4
+			// means LessOrEqual
 			ExpressionModel.ExpressionTerm marker = terms.get(markerIdx);
 			boolean isInequality = marker.value == 1;
 			boolean isLessThan = marker.value == 2;
 			boolean isGreaterThan = marker.value == 3;
+			boolean isLessOrEqual = marker.value == 4;
 
 			List<ExpressionModel.ExpressionTerm> leftTerms = terms.subList(0, markerIdx);
 			List<ExpressionModel.ExpressionTerm> rightTerms = terms.subList(markerIdx + 1, terms.size());
@@ -71,28 +73,43 @@ public final class InstructionBuilder {
 			}
 
 			// Generate comparison operation
-			// If one side was a literal, we have a problem because totalLiteral is handled
-			// OUTSIDE this method.
-			// To keep it simple for now, we only support comparing reads.
 			if (leftResult != -1 && rightResult != -1) {
-				if (isLessThan) {
-					instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, leftResult, (long) rightResult));
-				} else if (isGreaterThan) {
-					instructions.add(new Instruction(Operation.GreaterThan, Variant.Immediate, leftResult, (long) rightResult));
-				} else {
-					instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
-
-					// If this is inequality, negate the result with LogicalNot
-					if (isInequality) {
-						instructions.add(new Instruction(Operation.LogicalNot, Variant.Immediate, leftResult, null));
-					}
-				}
-
+				generateComparisonOperation(isInequality, isLessThan, isGreaterThan, isLessOrEqual,
+						leftResult, rightResult, instructions);
 				return leftResult;
 			}
 		}
 
 		return buildSubExpressionResult(terms, 0, instructions);
+	}
+
+	private static void generateComparisonOperation(boolean isInequality, boolean isLessThan,
+			boolean isGreaterThan, boolean isLessOrEqual, int leftResult, int rightResult,
+			List<Instruction> instructions) {
+		if (isLessThan) {
+			instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, leftResult, (long) rightResult));
+		} else if (isGreaterThan) {
+			instructions.add(new Instruction(Operation.GreaterThan, Variant.Immediate, leftResult, (long) rightResult));
+		} else if (isLessOrEqual) {
+			// For <=: (a < b) OR (a == b)
+			// Strategy: save leftResult to memory[0], then do comparisons, then OR
+			int tempReg = rightResult + 1;
+			// Store leftResult to memory[0]
+			instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, leftResult, 0L));
+			// Compare (memory[0] < rightResult) -> store result in tempReg
+			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, tempReg, 0L));
+			instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, tempReg, (long) rightResult));
+			// Compare (leftResult == rightResult) -> leftResult
+			instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
+			// OR: leftResult = (memory[0] < rightResult) OR (leftResult == rightResult)
+			instructions.add(new Instruction(Operation.LogicalOr, Variant.Immediate, leftResult, (long) tempReg));
+		} else {
+			instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
+			// If this is inequality, negate the result with LogicalNot
+			if (isInequality) {
+				instructions.add(new Instruction(Operation.LogicalNot, Variant.Immediate, leftResult, null));
+			}
+		}
 	}
 
 	private static int buildSubExpressionResult(List<ExpressionModel.ExpressionTerm> terms, int startReg,

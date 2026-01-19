@@ -51,9 +51,10 @@ public final class DepthAwareSplitter {
 				// Skip second character of double delimiter
 				// For == and ||, second char equals first char
 				// For !=, second char is = but first is !
+				// For <=, second char is = but first is <
 				if (i + 1 < expr.length()) {
 					char nextChar = expr.charAt(i + 1);
-					if (nextChar == c || (c == '!' && nextChar == '=')) {
+					if (nextChar == c || (c == '!' && nextChar == '=') || (c == '<' && nextChar == '=')) {
 						i++;
 					}
 				}

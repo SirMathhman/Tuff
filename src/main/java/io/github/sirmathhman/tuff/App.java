@@ -8,6 +8,7 @@ import io.github.sirmathhman.tuff.compiler.GreaterThanOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
 import io.github.sirmathhman.tuff.compiler.InequalityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
+import io.github.sirmathhman.tuff.compiler.LessOrEqualOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LessThanOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LiteralParser;
 import io.github.sirmathhman.tuff.compiler.LogicalAndHandler;
@@ -158,22 +159,16 @@ public final class App {
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {
+		List<String> le = LessOrEqualOperatorHandler.splitByLessOrEqual(expr);
+		if (le.size() > 1) return LessOrEqualOperatorHandler.parseLessOrEqualExpression(le);
 		List<String> lt = LessThanOperatorHandler.splitByLessThan(expr);
-		if (lt.size() > 1) {
-			return LessThanOperatorHandler.parseLessThanExpression(lt);
-		}
+		if (lt.size() > 1) return LessThanOperatorHandler.parseLessThanExpression(lt);
 		List<String> gt = GreaterThanOperatorHandler.splitByGreaterThan(expr);
-		if (gt.size() > 1) {
-			return GreaterThanOperatorHandler.parseGreaterThanExpression(gt);
-		}
+		if (gt.size() > 1) return GreaterThanOperatorHandler.parseGreaterThanExpression(gt);
 		List<String> eq = EqualityOperatorHandler.splitByEquality(expr);
-		if (eq.size() > 1) {
-			return EqualityOperatorHandler.parseEqualityExpression(eq);
-		}
+		if (eq.size() > 1) return EqualityOperatorHandler.parseEqualityExpression(eq);
 		List<String> neq = InequalityOperatorHandler.splitByInequality(expr);
-		if (neq.size() > 1) {
-			return InequalityOperatorHandler.parseInequalityExpression(neq);
-		}
+		if (neq.size() > 1) return InequalityOperatorHandler.parseInequalityExpression(neq);
 		return Result.err(new CompileError("No comparison operator found"));
 	}
 
