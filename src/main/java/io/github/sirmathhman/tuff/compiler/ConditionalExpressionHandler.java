@@ -55,7 +55,8 @@ public final class ConditionalExpressionHandler {
 			return condResult;
 
 		// Validate that the condition is a Bool type
-		Result<String, CompileError> condTypeResult = ExpressionTokens.extractTypeFromExpression(condition, new java.util.HashMap<>());
+		Result<String, CompileError> condTypeResult = ExpressionTokens.extractTypeFromExpression(condition,
+				new java.util.HashMap<>());
 		if (condTypeResult.isOk()) {
 			String condType = condTypeResult.okValue();
 			if (!condType.equals("Bool")) {
