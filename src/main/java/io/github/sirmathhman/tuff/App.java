@@ -33,24 +33,23 @@ public final class App {
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
 		// Check if this is a let binding at statement level
 		if (stmt.startsWith("let ")) {
-			// For statement-level let bindings, we need to handle the full format:
-			// let varName : type = valueExpr; varName
-
-			// Find the first '=' to identify the binding declaration
+			// Peek ahead to see if this is a chained let binding
+			// Format: "let x = expr1; let y = expr2; z"
+			// vs single: "let x = expr; x"
+			
 			int equalsIndex = stmt.indexOf('=');
 			if (equalsIndex == -1) {
 				return Result.err(new CompileError("Invalid let binding: missing '='"));
 			}
 
-			// Find the semicolon that ends the binding
-			// This semicolon is at depth 0 (not inside parentheses)
+			// Find the first semicolon at depth 0
 			int semiIndex = -1;
 			int depth = 0;
 			for (int i = equalsIndex; i < stmt.length(); i++) {
 				char c = stmt.charAt(i);
-				if (c == '(') {
+				if (c == '(' || c == '{') {
 					depth++;
-				} else if (c == ')') {
+				} else if (c == ')' || c == '}') {
 					depth--;
 				} else if (c == ';' && depth == 0) {
 					semiIndex = i;
@@ -62,6 +61,20 @@ public final class App {
 				return Result.err(new CompileError("Invalid let binding: missing ';'"));
 			}
 
+			// Check what comes after the semicolon
+			String continuation = stmt.substring(semiIndex + 1).trim();
+			
+			// If continuation starts with "let", this is a chained binding
+			if (continuation.startsWith("let ")) {
+				Result<ExpressionModel.ExpressionResult, CompileError> chainResult = 
+					parseLetExpressionBinding(stmt);
+				if (chainResult.isErr()) {
+					return Result.err(chainResult.errValue());
+				}
+				return generateInstructions(chainResult.okValue(), instructions);
+			}
+
+			// Otherwise, treat as simple statement-level let binding
 			// Extract the value expression (between '=' and ';')
 			String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
 
@@ -189,34 +202,37 @@ public final class App {
 			return Result.err(new CompileError("Duplicate variable binding: '" + decl.varName() + "' is already bound"));
 		}
 
-		// Substitute any bound variables in the value expression
+		// Extract the type from the value expression BEFORE substitution
+		// This allows variable references to be resolved in the type context
+		Result<String, CompileError> typeResult = ExpressionTokens.extractTypeFromExpression(decl.valueExpr(), variableTypes);
+		
+		// Determine the actual type to use
+		String actualType;
+		if (decl.declaredType() == null) {
+			// Type inference: require successful type extraction
+			if (typeResult.isErr()) {
+				return Result.err(typeResult.errValue());
+			}
+			actualType = typeResult.okValue();
+		} else {
+			// If type is explicitly declared, try to extract type for validation
+			if (typeResult.isOk()) {
+				String inferredType = typeResult.okValue();
+				// Validate that the inferred type is compatible with the declared type
+				if (!ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
+					return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
+							"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
+				}
+			}
+			actualType = decl.declaredType();
+		}
+
+		// Now substitute any bound variables in the value expression for actual compilation
 		String valueExpr = decl.valueExpr();
 		for (String varName : boundVariables.keySet()) {
 			// Simple substitution - replace variable references with their bound
 			// expressions
 			valueExpr = valueExpr.replaceAll("\\b" + varName + "\\b", boundVariables.get(varName));
-		}
-
-		// Extract the type from the value expression
-		Result<String, CompileError> typeResult = ExpressionTokens.extractTypeFromExpression(valueExpr);
-		if (typeResult.isErr()) {
-			return Result.err(typeResult.errValue());
-		}
-
-		String inferredType = typeResult.okValue();
-
-		// Determine the actual type to use
-		String actualType;
-		if (decl.declaredType() == null) {
-			// Type inference: use the inferred type
-			actualType = inferredType;
-		} else {
-			// Validate that the inferred type is compatible with the declared type
-			if (!ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
-				return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
-						"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
-			}
-			actualType = decl.declaredType();
 		}
 
 		// Parse the value expression

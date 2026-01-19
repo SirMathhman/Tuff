@@ -147,6 +147,11 @@ public final class AppTest {
 		assertValidWithInput("let x = read U8; x", 100, 100);
 	}
 
+	@Test
+	void shouldRejectDowncastingInLetBinding() {
+		assertInvalid("let x = read U16; let y : U8 = x; y");
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

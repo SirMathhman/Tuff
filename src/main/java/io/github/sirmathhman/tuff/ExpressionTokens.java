@@ -24,7 +24,7 @@ public final class ExpressionTokens {
 		String decl = expr.substring(4, equalsIndex).trim(); // Skip "let "
 		String varName;
 		String declaredType;
-		
+
 		// Check if type annotation is present (contains ':')
 		if (decl.contains(":")) {
 			String[] parts = decl.split(":");
@@ -45,7 +45,17 @@ public final class ExpressionTokens {
 	}
 
 	public static Result<String, CompileError> extractTypeFromExpression(String expr) {
+		return extractTypeFromExpression(expr, new java.util.HashMap<>());
+	}
+
+	public static Result<String, CompileError> extractTypeFromExpression(String expr,
+			java.util.Map<String, String> variableTypes) {
 		expr = expr.trim();
+
+		// Handle variable references
+		if (variableTypes.containsKey(expr)) {
+			return Result.ok(variableTypes.get(expr));
+		}
 
 		// Handle read operations
 		if (expr.startsWith("read ")) {
