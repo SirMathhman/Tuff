@@ -100,10 +100,78 @@ A stack-based virtual machine compiler with support for type-safe let bindings.
   read Bool || read Bool  // Returns 1 if either input is non-zero, 0 otherwise
   ```
 
+- **Logical AND**: Combine boolean expressions with the `&&` operator (higher precedence than OR)
+
+  ```
+  read Bool && read Bool  // Returns 1 if both inputs are non-zero, 0 otherwise
+  ```
+
 - **Bool Type**: 8-bit integer with values 0 (false) or 1 (true)
 
   ```
   let x : Bool = read Bool; x  // Read a boolean value
+  ```
+
+### Comparison Operators
+
+All comparison operators return a boolean value (1 for true, 0 for false):
+
+- **Equality**: `==` - Tests if two values are equal
+
+  ```
+  read U32 == read U32  // Returns 1 if equal, 0 otherwise
+  ```
+
+- **Inequality**: `!=` - Tests if two values are not equal
+
+  ```
+  read U32 != read U32  // Returns 1 if not equal, 0 otherwise
+  ```
+
+- **Less Than**: `<` - Tests if left is less than right
+
+  ```
+  read U8 < read U8  // Returns 1 if left < right, 0 otherwise
+  ```
+
+- **Greater Than**: `>` - Tests if left is greater than right
+
+  ```
+  read U8 > read U8  // Returns 1 if left > right, 0 otherwise
+  ```
+
+- **Less or Equal**: `<=` - Tests if left is less than or equal to right
+
+  ```
+  read U32 <= read U32  // Returns 1 if left <= right, 0 otherwise
+  ```
+
+- **Greater or Equal**: `>=` - Tests if left is greater than or equal to right
+
+  ```
+  read U32 >= read U32  // Returns 1 if left >= right, 0 otherwise
+  ```
+
+### Conditional Expressions
+
+Execute one of two expressions based on a boolean condition:
+
+- **Basic If-Else**: Use `if (condition) trueBranch else falseBranch` syntax
+
+  ```
+  if (read Bool) 3 else 5  // Read boolean, return 3 if true, 5 if false
+  ```
+
+- **If-Else with Comparisons**: Combine conditionals with comparison operators
+
+  ```
+  if (read U8 > read U8) 100 else 50  // Return 100 if first > second, else 50
+  ```
+
+- **If-Else in Let Bindings**: Use conditionals within variable assignments
+
+  ```
+  let x = if (read Bool) 100 else 50; x  // Bind conditional result to variable
   ```
 
 ## Supported Types
@@ -118,14 +186,17 @@ Operators are evaluated in the following order (highest to lowest):
 
 1. Multiplicative operators: `*`, `/`
 2. Additive operators: `+`, `-`
-3. Logical OR operator: `||`
+3. Comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+4. Logical AND operator: `&&`
+5. Logical OR operator: `||`
 
 Examples:
 
 ```
-2 + 3 * 4        // = 14  (multiply first, then add)
-(2 + 3) * 4      // = 20  (parentheses override precedence)
-read Bool || 1   // Logical OR has lowest precedence
+2 + 3 * 4              // = 14  (multiply first, then add)
+(2 + 3) * 4            // = 20  (parentheses override precedence)
+read U8 > 5 && 1       // Comparison before AND
+if (read Bool) 3 else 5 // Conditionals at expression level
 ```
 
 ## Build & Test
