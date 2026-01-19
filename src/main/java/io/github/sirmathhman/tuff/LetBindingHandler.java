@@ -15,8 +15,14 @@ public final class LetBindingHandler {
 			int semiIndex,
 			String continuation,
 			List<Instruction> instructions) {
-		// Extract variable name and type from "let x : Type;"
+		// Extract variable name and type from "let [mut] x : Type;"
 		String declPart = stmt.substring(4, semiIndex).trim(); // Skip "let "
+
+		// Check for mut keyword
+		boolean isMutable = declPart.startsWith("mut ");
+		if (isMutable) {
+			declPart = declPart.substring(4).trim(); // Skip "mut "
+		}
 
 		if (!declPart.contains(":")) {
 			return Result.err(new CompileError(
@@ -33,7 +39,7 @@ public final class LetBindingHandler {
 		}
 
 		// Treat uninitialized variable as mutable and handle the assignment
-		return handleMutableVariableWithAssignment(varName, null, continuation, instructions);
+		return handleMutableVariableWithAssignment(varName, null, continuation, instructions, isMutable);
 	}
 
 	public static Result<Void, CompileError> handleLetBindingWithContinuation(
@@ -254,6 +260,15 @@ public final class LetBindingHandler {
 			String initialValueExpr,
 			String continuation,
 			List<Instruction> instructions) {
+		return handleMutableVariableWithAssignment(varName, initialValueExpr, continuation, instructions, false);
+	}
+
+	private static Result<Void, CompileError> handleMutableVariableWithAssignment(
+			String varName,
+			String initialValueExpr,
+			String continuation,
+			List<Instruction> instructions,
+			boolean isMutableUninitialized) {
 		int memAddr = 100;
 		boolean isUninitialized = initialValueExpr == null;
 
@@ -278,7 +293,7 @@ public final class LetBindingHandler {
 
 			// Validate assignment for uninitialized variables
 			Result<Void, CompileError> validationResult = validateUninitializedAssignment(isUninitialized,
-					varName, assignmentCount);
+					varName, assignmentCount, isMutableUninitialized);
 			if (validationResult.isErr()) {
 				return validationResult;
 			}
@@ -321,7 +336,15 @@ public final class LetBindingHandler {
 			boolean isUninitialized,
 			String varName,
 			int assignmentCount) {
-		if (isUninitialized && assignmentCount > 0) {
+		return validateUninitializedAssignment(isUninitialized, varName, assignmentCount, false);
+	}
+
+	private static Result<Void, CompileError> validateUninitializedAssignment(
+			boolean isUninitialized,
+			String varName,
+			int assignmentCount,
+			boolean isMutableUninitialized) {
+		if (isUninitialized && assignmentCount > 0 && !isMutableUninitialized) {
 			return Result.err(new CompileError(
 					"Uninitialized variable '" + varName + "' can only be assigned once"));
 		}

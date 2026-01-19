@@ -187,6 +187,11 @@ public final class AppTest {
 		assertInvalid("let x : U8; x = read U8; x = 100; x");
 	}
 
+	@Test
+	void shouldSupportMutableUninitializedVariableWithMultipleAssignments() {
+		assertValidWithInput("let mut x : U8; x = read U8; x = 100; x", 100, 50);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
