@@ -145,4 +145,21 @@ mvn verify
 
 - Maximum file length: 500 lines (Checkstyle)
 - Maximum method length: 50 lines (Checkstyle)
+- Maximum classes per package: 15 (Python pre-commit hook)
 - All tests must pass before commits (pre-commit hook)
+
+### Package Structure Enforcement
+
+The codebase enforces a maximum of 15 classes per package using a Python pre-commit hook. This ensures packages remain focused and maintainable.
+
+**Current package distribution:**
+
+- `io.github.sirmathhman.tuff`: 7 classes (Core types and error handling)
+- `io.github.sirmathhman.tuff.compiler`: 12 classes (Expression parsing and compilation)
+- `io.github.sirmathhman.tuff.vm`: 4 classes (Virtual machine and instructions)
+
+The checker runs automatically on commits and will fail if any package exceeds 15 classes. To test it manually:
+
+```bash
+python.exe check_package_class_limit.py
+```
