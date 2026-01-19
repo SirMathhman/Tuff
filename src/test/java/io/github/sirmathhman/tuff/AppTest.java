@@ -142,6 +142,11 @@ public final class AppTest {
 		assertValidWithInput("let x : U16 = read U8; x", 100, 100);
 	}
 
+	@Test
+	void shouldSupportTypeInferenceInLetBinding() {
+		assertValidWithInput("let x = read U8; x", 100, 100);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

@@ -205,10 +205,18 @@ public final class App {
 
 		String inferredType = typeResult.okValue();
 
-		// Validate that the inferred type is compatible with the declared type
-		if (!ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
-			return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
-					"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
+		// Determine the actual type to use
+		String actualType;
+		if (decl.declaredType() == null) {
+			// Type inference: use the inferred type
+			actualType = inferredType;
+		} else {
+			// Validate that the inferred type is compatible with the declared type
+			if (!ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
+				return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
+						"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
+			}
+			actualType = decl.declaredType();
 		}
 
 		// Parse the value expression
@@ -231,7 +239,7 @@ public final class App {
 			java.util.Map<String, String> newVariables = new java.util.HashMap<>(boundVariables);
 			newVariables.put(decl.varName(), decl.valueExpr());
 			java.util.Map<String, String> newTypes = new java.util.HashMap<>(variableTypes);
-			newTypes.put(decl.varName(), decl.declaredType());
+			newTypes.put(decl.varName(), actualType);
 			return parseLetExpressionBindingWithContext(continuation, newVariables, newTypes);
 		}
 

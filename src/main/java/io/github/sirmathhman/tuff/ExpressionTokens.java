@@ -22,13 +22,23 @@ public final class ExpressionTokens {
 		}
 
 		String decl = expr.substring(4, equalsIndex).trim(); // Skip "let "
-		String[] parts = decl.split(":");
-		if (parts.length != 2) {
-			return Result.err(new CompileError("Invalid let binding: expected 'varName : type'"));
+		String varName;
+		String declaredType;
+		
+		// Check if type annotation is present (contains ':')
+		if (decl.contains(":")) {
+			String[] parts = decl.split(":");
+			if (parts.length != 2) {
+				return Result.err(new CompileError("Invalid let binding: expected 'varName : type'"));
+			}
+			varName = parts[0].trim();
+			declaredType = parts[1].trim();
+		} else {
+			// No type annotation - will be inferred
+			varName = decl.trim();
+			declaredType = null;
 		}
 
-		String varName = parts[0].trim();
-		String declaredType = parts[1].trim();
 		String valueExpr = expr.substring(equalsIndex + 1, semiIndex).trim();
 
 		return Result.ok(new LetBindingDecl(varName, declaredType, valueExpr));
