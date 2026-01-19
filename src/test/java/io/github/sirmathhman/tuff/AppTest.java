@@ -530,6 +530,11 @@ public final class AppTest {
 		assertValidWithInput("let x : U8 = if (read Bool) 3 else 5; x", 3, 1);
 	}
 
+	@Test
+	void shouldRejectIfElseWithNonBoolCondition() {
+		assertInvalid("if (read U8) 3 else 5");
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
