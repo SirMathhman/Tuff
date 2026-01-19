@@ -52,47 +52,109 @@ public final class App {
 			// No reads, just load the literal
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue));
 		} else {
-			// Load all reads into registers sequentially
-			int nextReg = 0;
-			for (ExpressionTerm term : expr.terms) {
-				if (term.readCount > 0) {
-					instructions.add(new Instruction(Operation.In, Variant.Immediate, nextReg, null));
-					nextReg++;
-				}
-			}
+			// Load all reads into registers
+			loadAllReads(expr.terms, instructions);
 
-			// Process terms with multiplication handling
-			int regIndex = 0;
-			boolean firstTerm = true;
+			// Build result respecting precedence
+			int resultReg = buildResultWithPrecedence(expr.terms, instructions);
 
-			for (ExpressionTerm term : expr.terms) {
-				if (term.readCount > 0) {
-					if (firstTerm) {
-						// First read goes to register 0
-						firstTerm = false;
-					} else if (term.isMultiplied) {
-						// Multiply: reg0 *= regIndex
-						instructions.add(new Instruction(Operation.Mul, Variant.Immediate, 0, (long) regIndex));
-					} else if (term.isSubtracted) {
-						// Subtract: reg0 -= regIndex
-						instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 0, (long) regIndex));
-					} else {
-						// Add: reg0 += regIndex
-						instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) regIndex));
-					}
-					regIndex++;
-				}
-			}
-
-			// Add the literal value if present
+			// Add literal if present
 			if (expr.literalValue != 0) {
-				int literalReg = regIndex;
-				instructions.add(new Instruction(Operation.Load, Variant.Immediate, literalReg, expr.literalValue));
-				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) literalReg));
+				addLiteralToResult(resultReg, expr.literalValue, expr.terms.size(), instructions);
 			}
 		}
 
 		return Result.ok(null);
+	}
+
+	private static void loadAllReads(List<ExpressionTerm> terms, List<Instruction> instructions) {
+		int nextReg = 0;
+		for (ExpressionTerm term : terms) {
+			if (term.readCount > 0) {
+				instructions.add(new Instruction(Operation.In, Variant.Immediate, nextReg, null));
+				nextReg++;
+			}
+		}
+	}
+
+	private static int buildResultWithPrecedence(List<ExpressionTerm> terms, List<Instruction> instructions) {
+		int readRegIndex = 0;
+		int resultReg = 0;
+		boolean firstAdditiveGroup = true;
+
+		int i = 0;
+		while (i < terms.size()) {
+			ExpressionTerm term = terms.get(i);
+			if (term.readCount == 0) {
+				i++;
+				continue;
+			}
+
+			// Collect this additive group
+			List<Integer> groupRegs = new ArrayList<>();
+			groupRegs.add(readRegIndex);
+			boolean isSubtracted = term.isSubtracted;
+			readRegIndex++;
+
+			// Consume all multiplied terms that follow
+			while (i + 1 < terms.size() && terms.get(i + 1).isMultiplied && terms.get(i + 1).readCount > 0) {
+				i++;
+				groupRegs.add(readRegIndex);
+				readRegIndex++;
+			}
+
+			// Generate instructions for this group
+			resultReg = processAdditiveGroup(groupRegs, isSubtracted, firstAdditiveGroup, resultReg,
+					instructions);
+			firstAdditiveGroup = false;
+
+			i++;
+		}
+
+		return resultReg;
+	}
+
+	private static int processAdditiveGroup(List<Integer> groupRegs, boolean isSubtracted,
+			boolean firstAdditiveGroup, int resultReg, List<Instruction> instructions) {
+		if (groupRegs.size() == 1) {
+			// Single read in this group
+			if (firstAdditiveGroup) {
+				return groupRegs.get(0);
+			} else {
+				// Add or subtract to result
+				Operation op = isSubtracted ? Operation.Sub : Operation.Add;
+				instructions.add(new Instruction(op, Variant.Immediate, resultReg, (long) groupRegs.get(0)));
+				return resultReg;
+			}
+		} else {
+			// Multiple reads: perform multiplications
+			int groupResultReg = groupRegs.get(0);
+			for (int j = 1; j < groupRegs.size(); j++) {
+				instructions.add(new Instruction(Operation.Mul, Variant.Immediate, groupResultReg, (long) groupRegs.get(j)));
+			}
+
+			// Add/subtract this group's result to overall result
+			if (firstAdditiveGroup) {
+				return groupResultReg;
+			} else {
+				Operation op = isSubtracted ? Operation.Sub : Operation.Add;
+				instructions.add(new Instruction(op, Variant.Immediate, resultReg, (long) groupResultReg));
+				return resultReg;
+			}
+		}
+	}
+
+	private static void addLiteralToResult(int resultReg, long literalValue, int termCount,
+			List<Instruction> instructions) {
+		// Count how many reads we have to determine next register
+		int literalReg = 0;
+		for (Instruction inst : instructions) {
+			if (inst.operation() == Operation.In) {
+				literalReg++;
+			}
+		}
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, literalReg, literalValue));
+		instructions.add(new Instruction(Operation.Add, Variant.Immediate, resultReg, (long) literalReg));
 	}
 
 	private static Result<ExpressionResult, CompileError> parseExpressionWithRead(String expr) {

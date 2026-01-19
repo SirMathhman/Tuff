@@ -93,6 +93,11 @@ public final class AppTest {
 		assertValidWithInput("read U8 * read U8 + read U8", 10, 2, 3, 4);
 	}
 
+	@Test
+	void shouldRespectPrecedenceAddBeforeMultiply() {
+		assertValidWithInput("read U8 + read U8 * read U8", 14, 2, 3, 4);
+	}
+
 	private void assertInvalid(String source) {
 		Assertions.assertTrue(App.compile(source).isErr());
 	}
