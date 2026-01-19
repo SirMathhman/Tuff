@@ -25,23 +25,30 @@ public final class ExpressionModel {
 		public final boolean isMultiplied;
 		public final boolean isDivided;
 		public final boolean isParenthesizedGroupEnd;
+		public final boolean isDereferenced;
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied) {
-			this(readCount, value, isSubtracted, isMultiplied, false, false);
+			this(readCount, value, isSubtracted, isMultiplied, false, false, false);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided) {
-			this(readCount, value, isSubtracted, isMultiplied, isDivided, false);
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, false, false);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd) {
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, false);
+		}
+
+		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
+				boolean isParenthesizedGroupEnd, boolean isDereferenced) {
 			this.readCount = readCount;
 			this.value = value;
 			this.isSubtracted = isSubtracted;
 			this.isMultiplied = isMultiplied;
 			this.isDivided = isDivided;
 			this.isParenthesizedGroupEnd = isParenthesizedGroupEnd;
+			this.isDereferenced = isDereferenced;
 		}
 	}
 

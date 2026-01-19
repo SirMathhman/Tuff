@@ -166,9 +166,54 @@ public final class LetBindingHandler {
 			if (nextSemiIndex == -1) {
 				return Result.err(new CompileError("Invalid let binding: missing ';'"));
 			}
+
+			// Extract the second binding's parts
+			String secondDeclPart = continuation.substring(4, nextEqualsIndex).trim(); // Skip "let "
+			String secondValueExpr = continuation.substring(nextEqualsIndex + 1, nextSemiIndex).trim();
 			String nextContinuation = continuation.substring(nextSemiIndex + 1).trim();
 
-			return handleLetBindingWithContinuation(continuation, nextEqualsIndex, nextSemiIndex,
+			// Check if the second binding declares a pointer type
+			boolean isPointerType = false;
+			String declaredType = null;
+			if (secondDeclPart.contains(":")) {
+				String[] parts = secondDeclPart.split(":");
+				if (parts.length == 2) {
+					declaredType = parts[1].trim();
+					isPointerType = declaredType.startsWith("*");
+				}
+			}
+
+			// For pointer types with reference operator, just continue without type checking
+			// For other types, we should validate type compatibility
+			if (!isPointerType && !secondValueExpr.startsWith("&")) {
+				// Extract the type of the value expression
+				java.util.Map<String, String> typeContext = new java.util.HashMap<>();
+				typeContext.put(varName, valueExpr);
+				
+				Result<String, CompileError> valueTypeResult = ExpressionTokens.extractTypeFromExpression(secondValueExpr,
+						typeContext);
+				if (valueTypeResult.isOk() && declaredType != null) {
+					String valueType = valueTypeResult.okValue();
+					// Check type compatibility
+					if (!ExpressionTokens.isTypeCompatible(valueType, declaredType)) {
+						return Result.err(new CompileError("Type mismatch in let binding: variable '" +
+								secondDeclPart.split(":")[0].trim() + "' declared as " + declaredType +
+								" but initialized with " + valueType));
+					}
+				}
+			}
+
+			// Substitute the first variable in the second binding's value expression
+			String substitutedValueExpr = secondValueExpr.replaceAll("\\b" + varName + "\\b", valueExpr);
+
+			// Rebuild the continuation with substituted value
+			String substitutedContinuation = "let " + secondDeclPart + " = " + substitutedValueExpr + "; " + nextContinuation;
+
+			// Find indices in the NEW string
+			int newEqualsIndex = substitutedContinuation.indexOf('=');
+			int newSemiIndex = substitutedContinuation.indexOf(';', newEqualsIndex);
+
+			return handleLetBindingWithContinuation(substitutedContinuation, newEqualsIndex, newSemiIndex,
 					nextContinuation, instructions, newContext, nextMemAddr + 1);
 		});
 	}

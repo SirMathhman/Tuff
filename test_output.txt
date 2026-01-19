@@ -28,140 +28,15 @@ WARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release
 [INFO]  T E S T S
 [INFO] -------------------------------------------------------
 [INFO] Running io.github.sirmathhman.tuff.AppTest
-[ERROR] Tests run: 14, Failures: 7, Errors: 0, Skipped: 0, Time elapsed: 0.072 s <<< FAILURE! -- in io.github.sirmathhman.tuff.AppTest
-[ERROR] io.github.sirmathhman.tuff.AppTest.shouldReadAndAddWithLiteral -- Time elapsed: 0.005 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: expected: <150> but was: <10050>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:145)
-	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:531)
-	at io.github.sirmathhman.tuff.AppTest.assertValidResult(AppTest.java:32)
-	at io.github.sirmathhman.tuff.AppTest.lambda$0(AppTest.java:20)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1095)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:619)
-	at java.base/java.lang.Thread.run(Thread.java:1447)
-
-[ERROR] io.github.sirmathhman.tuff.AppTest.shouldAddThreeReadValues -- Time elapsed: 0.001 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: expected: <9> but was: <7>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:145)
-	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:531)
-	at io.github.sirmathhman.tuff.AppTest.assertValidResult(AppTest.java:32)
-	at io.github.sirmathhman.tuff.AppTest.lambda$0(AppTest.java:20)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1095)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:619)
-	at java.base/java.lang.Thread.run(Thread.java:1447)
-
-[ERROR] io.github.sirmathhman.tuff.AppTest.shouldAddTwoReadValues -- Time elapsed: 0.001 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: expected: <150> but was: <10001>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:145)
-	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:531)
-	at io.github.sirmathhman.tuff.AppTest.assertValidResult(AppTest.java:32)
-	at io.github.sirmathhman.tuff.AppTest.lambda$0(AppTest.java:20)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1095)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:619)
-	at java.base/java.lang.Thread.run(Thread.java:1447)
-
-[ERROR] io.github.sirmathhman.tuff.AppTest.shouldRespectPrecedenceAddBeforeMultiply -- Time elapsed: 0.001 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: expected: <14> but was: <5>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:145)
-	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:531)
-	at io.github.sirmathhman.tuff.AppTest.assertValidResult(AppTest.java:32)
-	at io.github.sirmathhman.tuff.AppTest.lambda$0(AppTest.java:20)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1095)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:619)
-	at java.base/java.lang.Thread.run(Thread.java:1447)
-
-[ERROR] io.github.sirmathhman.tuff.AppTest.shouldReadInputValue -- Time elapsed: 0.001 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: expected: <100> but was: <10000>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:145)
-	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:531)
-	at io.github.sirmathhman.tuff.AppTest.assertValidResult(AppTest.java:32)
-	at io.github.sirmathhman.tuff.AppTest.lambda$0(AppTest.java:20)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1095)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:619)
-	at java.base/java.lang.Thread.run(Thread.java:1447)
-
-[ERROR] io.github.sirmathhman.tuff.AppTest.shouldMultiplyReadValues -- Time elapsed: 0.001 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: expected: <10> but was: <28>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:145)
-	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:531)
-	at io.github.sirmathhman.tuff.AppTest.assertValidResult(AppTest.java:32)
-	at io.github.sirmathhman.tuff.AppTest.lambda$0(AppTest.java:20)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1095)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:619)
-	at java.base/java.lang.Thread.run(Thread.java:1447)
-
-[ERROR] io.github.sirmathhman.tuff.AppTest.shouldSubtractReadValue -- Time elapsed: 0.001 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: expected: <1> but was: <3>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:145)
-	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:531)
-	at io.github.sirmathhman.tuff.AppTest.assertValidResult(AppTest.java:32)
-	at io.github.sirmathhman.tuff.AppTest.lambda$0(AppTest.java:20)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1095)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:619)
-	at java.base/java.lang.Thread.run(Thread.java:1447)
-
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.046 s -- in io.github.sirmathhman.tuff.AppTest
 [INFO] 
 [INFO] Results:
 [INFO] 
-[ERROR] Failures: 
-[ERROR]   AppTest.lambda$0:20->assertValidResult:32 expected: <9> but was: <7>
-[ERROR]   AppTest.lambda$0:20->assertValidResult:32 expected: <150> but was: <10001>
-[ERROR]   AppTest.lambda$0:20->assertValidResult:32 expected: <10> but was: <28>
-[ERROR]   AppTest.lambda$0:20->assertValidResult:32 expected: <150> but was: <10050>
-[ERROR]   AppTest.lambda$0:20->assertValidResult:32 expected: <100> but was: <10000>
-[ERROR]   AppTest.lambda$0:20->assertValidResult:32 expected: <14> but was: <5>
-[ERROR]   AppTest.lambda$0:20->assertValidResult:32 expected: <1> but was: <3>
-[INFO] 
-[ERROR] Tests run: 14, Failures: 7, Errors: 0, Skipped: 0
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
 [INFO] 
 [INFO] ------------------------------------------------------------------------
-[INFO] BUILD FAILURE
+[INFO] BUILD SUCCESS
 [INFO] ------------------------------------------------------------------------
-[INFO] Total time:  1.204 s
-[INFO] Finished at: 2026-01-19T01:19:58-05:00
+[INFO] Total time:  1.163 s
+[INFO] Finished at: 2026-01-19T03:57:15-05:00
 [INFO] ------------------------------------------------------------------------
-[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.2:test (default-test) on project tuff: There are test failures.
-[ERROR] 
-[ERROR] See C:\Users\mathm\IdeaProjects\Tuff\target\surefire-reports for the individual test results.
-[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
-[ERROR] -> [Help 1]
-[ERROR] 
-[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
-[ERROR] Re-run Maven using the -X switch to enable full debug logging.
-[ERROR] 
-[ERROR] For more information about the errors and possible solutions, please read the following articles:
-[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

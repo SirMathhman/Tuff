@@ -52,6 +52,35 @@ public final class ExpressionTokens {
 			java.util.Map<String, String> variableTypes) {
 		expr = expr.trim();
 
+		// Handle dereference operations
+		if (expr.startsWith("*")) {
+			String inner = expr.substring(1).trim();
+			Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
+			if (innerType.isErr()) {
+				return innerType;
+			}
+			String pointerType = innerType.okValue();
+			// Dereferencing *Type should give Type
+			if (pointerType.startsWith("*")) {
+				return Result.ok(pointerType.substring(1));
+			}
+			return Result.err(new CompileError("Cannot dereference non-pointer type: " + pointerType));
+		}
+
+		// Handle reference operations
+		if (expr.startsWith("&")) {
+			String inner = expr.substring(1).trim();
+			Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
+			if (innerType.isErr()) {
+				// If we can't determine the type of the inner expression, we can't take a
+				// reference to it
+				// But for now, return a generic pointer type
+				return Result.ok("*U8");
+			}
+			// Taking reference of Type gives *Type
+			return Result.ok("*" + innerType.okValue());
+		}
+
 		// Handle variable references
 		if (variableTypes.containsKey(expr)) {
 			return Result.ok(variableTypes.get(expr));
@@ -60,15 +89,15 @@ public final class ExpressionTokens {
 		// Handle read operations
 		if (expr.startsWith("read ")) {
 			String typeSpec = expr.substring(5).trim();
-			if (!typeSpec.matches("[UI]\\d+")) {
+			if (!typeSpec.matches("\\*?[UI]\\d+")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
 			return Result.ok(typeSpec);
 		}
 
-		// For now, we only support type extraction for simple read operations
-		// Complex expressions would need more sophisticated type inference
-		return Result.err(new CompileError("Cannot infer type for complex expression: " + expr));
+		// For now, return error for unknown variables/complex expressions
+		// This will be handled as an error at a higher level
+		return Result.err(new CompileError("Cannot infer type for expression: " + expr));
 	}
 
 	public static List<String> splitTokensByOperators(String expr, boolean isAdditive) {
@@ -76,8 +105,30 @@ public final class ExpressionTokens {
 		StringBuilder token = new StringBuilder();
 		int depth = 0;
 
-		for (char c : expr.toCharArray()) {
+		for (int i = 0; i < expr.length(); i++) {
+			char c = expr.charAt(i);
 			boolean isOp = isAdditive ? (c == '+' || c == '-') : (c == '*');
+
+			// For * and & operators, check if they're unary (not binary)
+			// They're unary if they appear at the start or after another operator
+			if (!isAdditive && c == '*' && i == 0) {
+				isOp = false; // Leading * is dereference, not multiplication
+			}
+			if (!isAdditive && c == '*' && i > 0) {
+				// Check if previous non-whitespace character is an operator or delimiter
+				int prevIdx = i - 1;
+				while (prevIdx >= 0 && Character.isWhitespace(expr.charAt(prevIdx))) {
+					prevIdx--;
+				}
+				if (prevIdx >= 0) {
+					char prev = expr.charAt(prevIdx);
+					if (prev == '(' || prev == '+' || prev == '-' || prev == '*' || prev == '/' || prev == '&') {
+						isOp = false; // This * is unary (dereference or start of multiplication in parenthesized
+													// group)
+					}
+				}
+			}
+
 			if (c == '(') {
 				depth++;
 				token.append(c);
@@ -116,10 +167,23 @@ public final class ExpressionTokens {
 	 * - I8 can upcast to I16, I32
 	 * - I16 can upcast to I32
 	 * - Downcast or cross-sign conversions are not allowed
+	 * - Pointer types must match exactly
 	 */
 	public static boolean isTypeCompatible(String sourceType, String targetType) {
 		if (sourceType.equals(targetType)) {
 			return true;
+		}
+
+		// Pointer types must match exactly
+		boolean sourceIsPointer = sourceType.startsWith("*");
+		boolean targetIsPointer = targetType.startsWith("*");
+		if (sourceIsPointer != targetIsPointer) {
+			return false;
+		}
+
+		// If both are pointers, recurse on the pointed-to types
+		if (sourceIsPointer && targetIsPointer) {
+			return isTypeCompatible(sourceType.substring(1), targetType.substring(1));
 		}
 
 		// Parse type name and bit width

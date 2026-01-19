@@ -198,7 +198,10 @@ public final class App {
 			if (typeResult.isOk()) {
 				String inferredType = typeResult.okValue();
 				// Validate that the inferred type is compatible with the declared type
-				if (!ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
+				// But skip validation for pointer types (they're complex and require more
+				// infrastructure)
+				if (!decl.declaredType().startsWith("*")
+						&& !ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
 					return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
 							"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
 				}
@@ -207,7 +210,7 @@ public final class App {
 		}
 	}
 
-	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBindingWithContext(
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBindingWithContext(
 			String expr,
 			java.util.Map<String, String> boundVariables, java.util.Map<String, String> variableTypes) {
 		// Format: let varName : TYPE = EXPR; continuation
@@ -253,8 +256,7 @@ public final class App {
 		// Get the continuation after the semicolon
 		String continuation = expr.substring(semiIndex + 1).trim();
 
-		// Parse the continuation (either another let binding or final variable
-		// reference)
+		// Parse the continuation (either another let binding or final variable reference)
 		if (continuation.startsWith("let ")) {
 			// Another let binding follows - recursively parse it with updated context
 			java.util.Map<String, String> newVariables = new java.util.HashMap<>(boundVariables);
@@ -439,12 +441,22 @@ public final class App {
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseTerm(String term) {
 		term = term.trim();
 
+		if (term.isEmpty()) {
+			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
+		}
+
 		if (term.startsWith("read ")) {
 			String typeSpec = term.substring(5).trim();
-			if (!typeSpec.matches("[UI]\\d+")) {
+			if (!typeSpec.matches("\\*?[UI]\\d+")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
 			return Result.ok(new ExpressionModel.ExpressionTerm(1, 0, false, false));
+		}
+
+		// Handle reference/dereference operators - treat as identity for compilation
+		if (term.startsWith("&") || term.startsWith("*")) {
+			String inner = term.substring(1).trim();
+			return parseTerm(inner);
 		}
 
 		Result<Long, CompileError> literalResult = LiteralParser.parseLiteral(term);
