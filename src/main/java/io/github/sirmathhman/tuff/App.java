@@ -73,17 +73,9 @@ public final class App {
 				return generateInstructions(chainResult.okValue(), instructions);
 			}
 
-			// Otherwise, treat as simple statement-level let binding
-			// Extract the value expression (between '=' and ';')
-			String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
-
-			// Parse the value expression
-			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
-			if (valueResult.isErr()) {
-				return Result.err(valueResult.errValue());
-			}
-
-			return generateInstructions(valueResult.okValue(), instructions);
+			// Otherwise, we have a let binding with a continuation expression
+			return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
+					instructions);
 		}
 
 		// Parse as expression (which may contain "read")
@@ -95,7 +87,9 @@ public final class App {
 		return generateInstructions(exprResult.okValue(), instructions);
 	}
 
-	private static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
+
+
+	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
 			List<Instruction> instructions) {
 		if (expr.readCount == 0) {
 			// No reads, just load the literal
@@ -116,7 +110,7 @@ public final class App {
 		return Result.ok(null);
 	}
 
-	private static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
 		expr = expr.trim();
 
 		// Check if this is a let binding

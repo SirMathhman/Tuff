@@ -152,6 +152,11 @@ public final class AppTest {
 		assertInvalid("let x = read U16; let y : U8 = x; y");
 	}
 
+	@Test
+	void shouldSupportVariableReferenceInExpression() {
+		assertValidWithInput("let x = read U8; x + x", 4, 2, 3);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
