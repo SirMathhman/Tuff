@@ -239,6 +239,26 @@ public final class AppTest {
 		assertValidWithInput("let x : Bool = read Bool; x", 1, 1);
 	}
 
+	@Test
+	void shouldSupportLogicalOrWithBools() {
+		assertValidWithInput("read Bool || read Bool", 0, 0, 0);
+	}
+
+	@Test
+	void shouldSupportLogicalOrWithBoolsFirstTrue() {
+		assertValidWithInput("read Bool || read Bool", 1, 1, 0);
+	}
+
+	@Test
+	void shouldSupportLogicalOrWithBoolsSecondTrue() {
+		assertValidWithInput("read Bool || read Bool", 1, 0, 1);
+	}
+
+	@Test
+	void shouldSupportLogicalOrWithBoolsBothTrue() {
+		assertValidWithInput("read Bool || read Bool", 1, 1, 1);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

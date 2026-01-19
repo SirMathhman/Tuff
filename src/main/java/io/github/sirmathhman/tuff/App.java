@@ -121,57 +121,15 @@ public final class App {
 		// Normalize curly braces to parentheses for uniform grouping support
 		expr = expr.replace('{', '(').replace('}', ')');
 
-		// Split by + and - to get additive-level tokens, but not inside parentheses
-		List<String> addTokens = ExpressionTokens.splitAddOperators(expr);
-		List<Boolean> additiveOps = new ArrayList<>();
-		additiveOps.add(false);
-
-		// Track which operator preceded each additive token
-		int tokensFound = 0;
-		int lastIndex = 0;
-		for (String token : addTokens) {
-			if (tokensFound == 0) {
-				tokensFound++;
-				lastIndex += token.length();
-				continue;
-			}
-			int nextIndex = expr.indexOf(token, lastIndex);
-			if (nextIndex > 0) {
-				char op = expr.charAt(nextIndex - 1);
-				while (nextIndex > 0 && Character.isWhitespace(op)) {
-					nextIndex--;
-					op = expr.charAt(nextIndex - 1);
-				}
-				additiveOps.add(op == '-');
-			}
-			lastIndex = nextIndex + token.length();
-			tokensFound++;
+		// Split by || (logical OR) first - lowest precedence
+		List<String> orTokens = LogicalOrHandler.splitByLogicalOr(expr);
+		if (orTokens.size() > 1) {
+			// We have logical OR operations - parse each side and combine
+			return LogicalOrHandler.parseLogicalOrExpression(orTokens);
 		}
 
-		// Process each additive token for multiplicative operators
-		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>();
-		int totalReads = 0;
-		long totalLiteral = 0;
-
-		for (int i = 0; i < addTokens.size(); i++) {
-			boolean isSubtracted = additiveOps.get(i);
-			Result<ExpressionModel.ParsedMult, CompileError> multResult = parseMultiplicative(addTokens.get(i).trim(),
-					isSubtracted);
-			if (multResult.isErr()) {
-				return Result.err(multResult.errValue());
-			}
-
-			ExpressionModel.ParsedMult mult = multResult.okValue();
-			allTerms.addAll(mult.terms);
-			totalReads += mult.readCount;
-			if (isSubtracted) {
-				totalLiteral -= mult.literalValue;
-			} else {
-				totalLiteral += mult.literalValue;
-			}
-		}
-
-		return Result.ok(new ExpressionModel.ExpressionResult(totalReads, totalLiteral, allTerms));
+		// Parse additive expression (no logical OR)
+		return AdditiveExpressionParser.parseAdditive(expr);
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
@@ -278,7 +236,7 @@ public final class App {
 		return Result.ok(valueResult.okValue());
 	}
 
-	private static Result<ExpressionModel.ParsedMult, CompileError> parseMultiplicative(String expr,
+	public static Result<ExpressionModel.ParsedMult, CompileError> parseMultiplicative(String expr,
 			boolean isSubtracted) {
 		List<ExpressionModel.MultOperatorToken> multTokens = splitByMultOperators(expr);
 		List<ExpressionModel.ExpressionTerm> multTerms = new ArrayList<>();

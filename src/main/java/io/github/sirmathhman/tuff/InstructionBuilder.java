@@ -34,42 +34,121 @@ public final class InstructionBuilder {
 			}
 
 			// Check if this is a multiplicative term following a parenthesized group
-			if (term.isMultiplied && i > 0 && terms.get(i - 1).isParenthesizedGroupEnd && !firstAdditiveGroup) {
+			if (term.isMultiplied && i > 0 && terms.get(i - 1).isParenthesizedGroupEnd
+					&& !firstAdditiveGroup) {
 				// Multiply the previous result by this term
-				instructions.add(new Instruction(Operation.Mul, Variant.Immediate, resultReg, (long) readRegIndex));
+				instructions.add(
+						new Instruction(Operation.Mul, Variant.Immediate, resultReg, (long) readRegIndex));
 				readRegIndex++;
 				i++;
 				continue;
 			}
 
-			// Collect this multiplicative/divisive group
-			java.util.List<Integer> groupRegs = new java.util.ArrayList<>();
-			java.util.List<Character> groupOps = new java.util.ArrayList<>();
-			groupRegs.add(readRegIndex);
-			groupOps.add('\0'); // No operator for first term
-			boolean isSubtracted = term.isSubtracted;
-			readRegIndex++;
-
-			// Consume all multiplied/divided terms that follow
-			// But stop if the current term is a parenthesized group end
-			while (i + 1 < terms.size() && (terms.get(i + 1).isMultiplied || terms.get(i + 1).isDivided)
-					&& terms.get(i + 1).readCount > 0 && !terms.get(i).isParenthesizedGroupEnd) {
-				i++;
-				ExpressionModel.ExpressionTerm nextTerm = terms.get(i);
-				groupRegs.add(readRegIndex);
-				groupOps.add(nextTerm.isDivided ? '/' : '*');
-				readRegIndex++;
-			}
-
-			// Generate instructions for this group
-			resultReg = processAdditiveGroup(groupRegs, groupOps, isSubtracted, firstAdditiveGroup, resultReg,
-					instructions);
+			// Process the current additive/multiplicative group
+			ProcessGroupResult groupResult = processMultiplicativeGroup(terms, i, readRegIndex, firstAdditiveGroup,
+					resultReg, instructions);
+			resultReg = groupResult.resultReg;
+			readRegIndex = groupResult.readRegIndex;
+			i = groupResult.nextIndex;
 			firstAdditiveGroup = false;
+
+			// Check for logical OR boundary
+			if (groupResult.hasLogicalOrBoundary) {
+				ProcessOrResult orResult = processLogicalOrBoundary(terms, i, readRegIndex, resultReg,
+						instructions);
+				resultReg = orResult.resultReg;
+				readRegIndex = orResult.readRegIndex;
+				i = orResult.nextIndex;
+			}
 
 			i++;
 		}
 
 		return resultReg;
+	}
+
+	private static ProcessGroupResult processMultiplicativeGroup(List<ExpressionModel.ExpressionTerm> terms, int i,
+			int readRegIndex, boolean firstAdditiveGroup, int resultReg, List<Instruction> instructions) {
+		ExpressionModel.ExpressionTerm term = terms.get(i);
+
+		// Collect this multiplicative/divisive group
+		java.util.List<Integer> groupRegs = new java.util.ArrayList<>();
+		java.util.List<Character> groupOps = new java.util.ArrayList<>();
+		groupRegs.add(readRegIndex);
+		groupOps.add('\0'); // No operator for first term
+		boolean isSubtracted = term.isSubtracted;
+		readRegIndex++;
+
+		// Consume all multiplied/divided terms that follow
+		while (i + 1 < terms.size() && (terms.get(i + 1).isMultiplied || terms.get(i + 1).isDivided)
+				&& terms.get(i + 1).readCount > 0 && !terms.get(i).isParenthesizedGroupEnd) {
+			i++;
+			ExpressionModel.ExpressionTerm nextTerm = terms.get(i);
+			groupRegs.add(readRegIndex);
+			groupOps.add(nextTerm.isDivided ? '/' : '*');
+			readRegIndex++;
+		}
+
+		// Generate instructions for this group
+		resultReg = processAdditiveGroup(groupRegs, groupOps, isSubtracted, firstAdditiveGroup, resultReg,
+				instructions);
+
+		boolean hasLogicalOrBoundary = term.isLogicalOrBoundary;
+		return new ProcessGroupResult(resultReg, readRegIndex, i, hasLogicalOrBoundary);
+	}
+
+	private static ProcessOrResult processLogicalOrBoundary(List<ExpressionModel.ExpressionTerm> terms, int i,
+			int readRegIndex, int resultReg, List<Instruction> instructions) {
+		i++;
+		while (i < terms.size() && terms.get(i).readCount == 0) {
+			i++;
+		}
+
+		if (i < terms.size()) {
+			int nextGroupReg = readRegIndex;
+			readRegIndex++;
+
+			// Consume multiplicative/divisive terms and generate instructions
+			readRegIndex = consumeAndEmitMultiplicativeTerms(terms, i, readRegIndex, nextGroupReg, instructions);
+			i = findLastMultiplicativeTermIndex(terms, i);
+
+			// Perform logical OR
+			instructions.add(new Instruction(Operation.LogicalOr, Variant.Immediate, resultReg,
+					(long) nextGroupReg));
+		}
+
+		return new ProcessOrResult(resultReg, readRegIndex, i);
+	}
+
+	private static boolean isMultiplicativeNext(List<ExpressionModel.ExpressionTerm> terms, int i) {
+		return i + 1 < terms.size() && (terms.get(i + 1).isMultiplied || terms.get(i + 1).isDivided)
+				&& terms.get(i + 1).readCount > 0;
+	}
+
+	private static int consumeAndEmitMultiplicativeTerms(List<ExpressionModel.ExpressionTerm> terms, int i,
+			int readRegIndex, int destReg, List<Instruction> instructions) {
+		while (isMultiplicativeNext(terms, i)) {
+			i++;
+			ExpressionModel.ExpressionTerm multTerm = terms.get(i);
+			instructions.add(new Instruction(
+					multTerm.isDivided ? Operation.Div : Operation.Mul, Variant.Immediate, destReg,
+					(long) readRegIndex));
+			readRegIndex++;
+		}
+		return readRegIndex;
+	}
+
+	private static int findLastMultiplicativeTermIndex(List<ExpressionModel.ExpressionTerm> terms, int i) {
+		while (isMultiplicativeNext(terms, i)) {
+			i++;
+		}
+		return i;
+	}
+
+	private record ProcessGroupResult(int resultReg, int readRegIndex, int nextIndex, boolean hasLogicalOrBoundary) {
+	}
+
+	private record ProcessOrResult(int resultReg, int readRegIndex, int nextIndex) {
 	}
 
 	private static int processAdditiveGroup(java.util.List<Integer> groupRegs, java.util.List<Character> groupOps,
