@@ -78,6 +78,11 @@ public final class AppTest {
 		assertValidWithInput("read U8 + read U8", 150, 100, 50);
 	}
 
+	@Test
+	void shouldAddThreeReadValues() {
+		assertValidWithInput("read U8 + read U8 + read U8", 9, 2, 3, 4);
+	}
+
 	private void assertInvalid(String source) {
 		Assertions.assertTrue(App.compile(source).isErr());
 	}

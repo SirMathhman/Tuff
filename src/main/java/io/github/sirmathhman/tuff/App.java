@@ -49,64 +49,46 @@ public final class App {
 		if (expr.readCount == 0) {
 			// No reads, just load the literal
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue));
-		} else if (expr.readCount == 1) {
-			// One read
-			instructions.add(new Instruction(Operation.In, Variant.Immediate, 0, null));
-
-			if (expr.literalValue != 0) {
-				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, expr.literalValue));
-				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
-			}
-		} else if (expr.readCount == 2) {
-			// Two reads
-			instructions.add(new Instruction(Operation.In, Variant.Immediate, 0, null));
-			instructions.add(new Instruction(Operation.In, Variant.Immediate, 1, null));
-			instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
-
-			if (expr.literalValue != 0) {
-				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, expr.literalValue));
-				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 2L));
-			}
 		} else {
-			return Result.err(new CompileError("More than 2 reads in expression not supported"));
+			// Load all reads into registers sequentially
+			for (int i = 0; i < expr.readCount; i++) {
+				instructions.add(new Instruction(Operation.In, Variant.Immediate, i, null));
+			}
+
+			// Add all reads together into register 0
+			for (int i = 1; i < expr.readCount; i++) {
+				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) i));
+			}
+
+			// Add the literal value if present
+			if (expr.literalValue != 0) {
+				instructions.add(new Instruction(Operation.Load, Variant.Immediate, expr.readCount, expr.literalValue));
+				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) expr.readCount));
+			}
 		}
 
 		return Result.ok(null);
 	}
 
 	private static Result<ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
-		// Try to parse as binary expression (e.g., "read U8 + 50U8" or "1U8 + 2U8")
+		// Parse all terms separated by +
 		String[] parts = expr.split("\\s*\\+\\s*");
-		if (parts.length == 2) {
-			Result<ExpressionTerm, CompileError> left = parseTerm(parts[0]);
-			if (left.isErr()) {
-				return Result.err(left.errValue());
+		
+		int totalReads = 0;
+		long totalLiteral = 0;
+
+		for (String part : parts) {
+			Result<ExpressionTerm, CompileError> termResult = parseTerm(part);
+			if (termResult.isErr()) {
+				return Result.err(termResult.errValue());
 			}
-			Result<ExpressionTerm, CompileError> right = parseTerm(parts[1]);
-			if (right.isErr()) {
-				return Result.err(right.errValue());
-			}
 
-			ExpressionTerm leftTerm = left.okValue();
-			ExpressionTerm rightTerm = right.okValue();
-
-			int totalReads = leftTerm.readCount + rightTerm.readCount;
-			long totalLiteral = leftTerm.value + rightTerm.value;
-
-			return Result.ok(new ExpressionResult(totalReads, totalLiteral));
-		}
-		if (parts.length > 2) {
-			return Result.err(new CompileError("Multiple + operators not supported"));
+			ExpressionTerm term = termResult.okValue();
+			totalReads += term.readCount;
+			totalLiteral += term.value;
 		}
 
-		// Otherwise parse as single term
-		Result<ExpressionTerm, CompileError> termResult = parseTerm(expr);
-		if (termResult.isErr()) {
-			return Result.err(termResult.errValue());
-		}
-
-		ExpressionTerm term = termResult.okValue();
-		return Result.ok(new ExpressionResult(term.readCount, term.value));
+		return Result.ok(new ExpressionResult(totalReads, totalLiteral));
 	}
 
 	private static final class ExpressionTerm {
