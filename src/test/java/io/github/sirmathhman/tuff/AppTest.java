@@ -215,8 +215,8 @@ public final class AppTest {
 
 	@Test
 	void shouldSupportMutablePointerAssignment() {
-		// Test that syntax for dereference assignment is accepted
-		assertValid("let mut x = 0; let y = &mut x; x", 0);
+		// Test that dereference assignment through mutable pointer works
+		assertValidWithInput("let mut x = 0; let y = &mut x; *y = read I32; x", 42, 42);
 	}
 
 	private void assertInvalid(String source) {

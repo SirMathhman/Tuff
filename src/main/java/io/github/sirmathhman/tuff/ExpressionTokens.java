@@ -80,7 +80,8 @@ public final class ExpressionTokens {
 			}
 			Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
 			if (innerType.isErr()) {
-				// If we can't determine the type of the inner expression, return generic pointer type
+				// If we can't determine the type of the inner expression, return generic
+				// pointer type
 				return Result.ok("*U8");
 			}
 			// Taking reference of Type gives *Type (or *mut Type for mutable references)

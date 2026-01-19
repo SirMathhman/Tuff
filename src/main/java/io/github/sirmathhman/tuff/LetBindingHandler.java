@@ -39,7 +39,8 @@ public final class LetBindingHandler {
 		}
 
 		// Treat uninitialized variable as mutable and handle the assignment
-		return handleMutableVariableWithAssignment(varName, null, continuation, instructions, isMutable);
+		return handleMutableVariableWithAssignment(varName, null, continuation, instructions, isMutable,
+				new java.util.HashMap<>(), 100);
 	}
 
 	public static Result<Void, CompileError> handleLetBindingWithContinuation(
@@ -60,58 +61,56 @@ public final class LetBindingHandler {
 			List<Instruction> instructions,
 			java.util.Map<String, Integer> variableAddresses,
 			int nextMemAddr) {
-		// Parse variable declaration
 		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
 		String varName = decl.varName();
-		boolean isMutable = decl.isMutable();
-		String valueExpr = decl.valueExpr();
 		// Check if continuation starts with "let" (chained binding)
 		if (continuation.startsWith("let ")) {
-			return handleChainedLetBinding(varName, valueExpr, continuation, instructions,
+			return handleChainedLetBinding(varName, decl.valueExpr(), continuation, instructions,
 					variableAddresses, nextMemAddr);
 		}
 		// If continuation is just the variable name, evaluate the value expression
 		if (continuation.equals(varName)) {
 			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = App.parseExpressionWithRead(
-					valueExpr);
-			if (valueResult.isErr()) {
-				return Result.err(valueResult.errValue());
-			}
-			return App.generateInstructions(valueResult.okValue(), instructions);
+					decl.valueExpr());
+			return valueResult.isErr() ? Result.err(valueResult.errValue())
+					: App.generateInstructions(valueResult.okValue(), instructions);
 		}
 		// Check if continuation references a previously bound variable
 		if (variableAddresses.containsKey(continuation)) {
-			return handleVariableReference(valueExpr, continuation, instructions,
+			return handleVariableReference(decl.valueExpr(), continuation, instructions,
 					variableAddresses, nextMemAddr);
 		}
 		if (continuation.contains("=") && continuation.contains(";")) {
-			// Check if this is a dereference assignment (*var = ...) or mutable variable assignment
-			boolean isDereferenceAssignment = continuation.trim().startsWith("*");
-			if (!isMutable && !isDereferenceAssignment) {
+			// Check if this is a dereference assignment (*var = ...)
+			if (continuation.trim().startsWith("*")) {
+				// For dereference assignments, delegate to specialized handler
+				return DereferenceAssignmentHandler.handle(varName, decl.valueExpr(), continuation, instructions,
+						variableAddresses);
+			}
+			// Regular mutable variable assignment
+			if (!decl.isMutable()) {
 				return Result.err(new CompileError(
 						"Cannot assign to immutable variable '" + varName + "'. Use 'let mut' to declare a mutable variable."));
 			}
-			return handleMutableVariableWithAssignment(varName, valueExpr, continuation, instructions);
+			return handleMutableVariableWithAssignment(varName, decl.valueExpr(), continuation, instructions, false,
+					variableAddresses, nextMemAddr);
 		}
 		java.util.regex.Pattern varPattern = java.util.regex.Pattern.compile("\\b" + varName + "\\b");
-		java.util.regex.Matcher matcher = varPattern.matcher(continuation);
 		int occurrences = 0;
-		while (matcher.find()) occurrences++;
+		for (java.util.regex.Matcher m = varPattern.matcher(continuation); m.find(); occurrences++);
 		if (occurrences > 1) {
-			return handleMultipleVariableReferences(varName, valueExpr, continuation, occurrences, instructions);
+			return handleMultipleVariableReferences(varName, decl.valueExpr(), continuation, occurrences, instructions);
 		}
 		String substitutedContinuation = continuation.replaceAll("\\b" + varName + "\\b",
-				"(" + valueExpr + ")");
-		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName, valueExpr);
+				"(" + decl.valueExpr() + ")");
+		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName, decl.valueExpr());
 		if (typeCheckResult.isErr()) {
 			return typeCheckResult;
 		}
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App.parseExpressionWithRead(
 				substitutedContinuation);
-		if (contResult.isErr()) {
-			return Result.err(contResult.errValue());
-		}
-		return App.generateInstructions(contResult.okValue(), instructions);
+		return contResult.isErr() ? Result.err(contResult.errValue())
+				: App.generateInstructions(contResult.okValue(), instructions);
 	}
 
 	private static Result<Void, CompileError> validateContinuationTypes(String continuation, String varName,
@@ -218,7 +217,12 @@ public final class LetBindingHandler {
 			}
 
 			// Substitute the first variable in the second binding's value expression
-			String substitutedValueExpr = secondValueExpr.replaceAll("\\b" + varName + "\\b", valueExpr);
+			// BUT: Skip substitution for reference expressions since they should refer to
+			// variable names, not values
+			String substitutedValueExpr = secondValueExpr;
+			if (!secondValueExpr.trim().startsWith("&")) {
+				substitutedValueExpr = secondValueExpr.replaceAll("\\b" + varName + "\\b", valueExpr);
+			}
 
 			// Rebuild the continuation with substituted value
 			String substitutedContinuation = "let " + secondDeclPart + " = " + substitutedValueExpr + "; " + nextContinuation;
@@ -241,8 +245,7 @@ public final class LetBindingHandler {
 		return storeAndThen(valueExpr, instructions, nextMemAddr, () -> {
 			// Load the referenced variable from memory
 			int refAddr = variableAddresses.get(continuation);
-			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) refAddr));
-			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
+			ParsingUtils.addLoadAndHalt(instructions, (long) refAddr);
 			return Result.ok(null);
 		});
 	}
@@ -318,25 +321,18 @@ public final class LetBindingHandler {
 			String varName,
 			String initialValueExpr,
 			String continuation,
-			List<Instruction> instructions) {
-		return handleMutableVariableWithAssignment(varName, initialValueExpr, continuation, instructions, false);
-	}
-
-	private static Result<Void, CompileError> handleMutableVariableWithAssignment(
-			String varName,
-			String initialValueExpr,
-			String continuation,
 			List<Instruction> instructions,
-			boolean isMutableUninitialized) {
-		int memAddr = 100;
+			boolean isMutableUninitialized,
+			java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr) {
 		boolean isUninitialized = initialValueExpr == null;
+		java.util.Map<String, Integer> addresses = new java.util.HashMap<>(variableAddresses);
+		addresses.put(varName, nextMemAddr);
 
 		// Parse and evaluate initial value if provided, store in memory
 		if (initialValueExpr != null) {
 			Result<Void, CompileError> storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
-			if (storeResult.isErr()) {
-				return Result.err(storeResult.errValue());
-			}
+			if (storeResult.isErr()) return storeResult;
 		}
 
 		// Parse continuation which may have multiple assignments and references
@@ -344,49 +340,44 @@ public final class LetBindingHandler {
 		int assignmentCount = 0;
 		while (true) {
 			Result<AssignmentParseResult, CompileError> assignResult = parseAssignment(varName, remaining);
-			if (assignResult.isErr()) {
-				break; // No more assignments
-			}
+			if (assignResult.isErr()) break; // No more assignments
 
 			AssignmentParseResult parsed = assignResult.okValue();
-
-			// Validate assignment for uninitialized variables
 			Result<Void, CompileError> validationResult = validateUninitializedAssignment(isUninitialized,
 					varName, assignmentCount, isMutableUninitialized);
-			if (validationResult.isErr()) {
-				return validationResult;
-			}
+			if (validationResult.isErr()) return validationResult;
 			assignmentCount++;
 
 			// Parse and evaluate assignment value
 			Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(
 					parsed.valueExpr());
-			if (exprResult.isErr()) {
-				return Result.err(exprResult.errValue());
-			}
+			if (exprResult.isErr()) return Result.err(exprResult.errValue());
 
 			// Generate instructions for assignment value
 			Result<Void, CompileError> assignGenResult = App.generateInstructions(exprResult.okValue(),
 					instructions);
-			if (assignGenResult.isErr()) {
-				return Result.err(assignGenResult.errValue());
+			if (assignGenResult.isErr()) return assignGenResult;
+
+			// Store the value appropriately
+			if (parsed.isDereference()) {
+				if (!addresses.containsKey(varName)) {
+					return Result.err(new CompileError("Cannot dereference undefined variable '" + varName + "'"));
+				}
+				int pointerAddr = addresses.get(varName);
+				instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) pointerAddr));
+				instructions.add(new Instruction(Operation.Store, Variant.IndirectAddress, 0, 1L));
+			} else {
+				instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
 			}
-
-			// Store new value in memory
-			instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
-
-			// Continue with rest of continuation
 			remaining = parsed.remaining();
 		}
 
 		// Final part should be variable reference or expression using the variable
 		if (remaining.equals(varName)) {
-			// Load value from memory into register 0
-			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) memAddr));
+			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 			return Result.ok(null);
 		}
-
 		return Result.err(new CompileError(
 				"Mutable variable continuation must end with variable reference or expression"));
 	}
@@ -408,7 +399,7 @@ public final class LetBindingHandler {
 		String trimmed = remaining.trim();
 		boolean isDereference = trimmed.startsWith("*");
 		String assignTarget = isDereference ? ("*" + varName) : varName;
-		
+
 		if (!trimmed.startsWith(assignTarget + " ") && !trimmed.startsWith(assignTarget + "=")) {
 			return Result.err(new CompileError("Not an assignment"));
 		}
@@ -419,20 +410,7 @@ public final class LetBindingHandler {
 		}
 
 		// Find semicolon for this assignment
-		int depth = 0;
-		int assignSemiIndex = -1;
-		for (int i = assignEqIndex; i < remaining.length(); i++) {
-			char c = remaining.charAt(i);
-			if (c == '(' || c == '{') {
-				depth++;
-			} else if (c == ')' || c == '}') {
-				depth--;
-			} else if (c == ';' && depth == 0) {
-				assignSemiIndex = i;
-				break;
-			}
-		}
-
+		int assignSemiIndex = ParsingUtils.findSemicolonAtDepthZero(remaining, assignEqIndex);
 		if (assignSemiIndex == -1) {
 			return Result.err(new CompileError("Invalid assignment: missing ';'"));
 		}
@@ -441,9 +419,9 @@ public final class LetBindingHandler {
 		String assignValueExpr = remaining.substring(assignEqIndex + 1, assignSemiIndex).trim();
 		String nextRemaining = remaining.substring(assignSemiIndex + 1).trim();
 
-		return Result.ok(new AssignmentParseResult(assignValueExpr, nextRemaining));
+		return Result.ok(new AssignmentParseResult(assignValueExpr, nextRemaining, isDereference));
 	}
 
-	private record AssignmentParseResult(String valueExpr, String remaining) {
+	private record AssignmentParseResult(String valueExpr, String remaining, boolean isDereference) {
 	}
 }
