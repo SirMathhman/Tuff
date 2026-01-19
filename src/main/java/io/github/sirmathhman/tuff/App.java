@@ -15,7 +15,8 @@ public final class App {
 	private static Instruction[] compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
 
-		// If source is not empty, try to parse it as a number (with optional type suffix) 
+		// If source is not empty, try to parse it as a number (with optional type
+		// suffix)
 		// and load it into register 0
 		if (!source.isEmpty()) {
 			try {
@@ -25,7 +26,7 @@ public final class App {
 				if (source.matches(".*[UI]\\d+$")) {
 					numericPart = source.replaceAll("[UI]\\d+$", "");
 				}
-				
+
 				int value = Integer.parseInt(numericPart);
 				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, (long) value));
 			} catch (NumberFormatException e) {
