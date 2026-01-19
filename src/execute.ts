@@ -65,7 +65,7 @@ export function execute(
   let memory: number[] = new Array(1024).fill(0);
   loadInstructionsIntoMemory(source, memory);
 
-  while (programCounter < source.length) {
+  while (true) {
     const encodedInstruction = memory[programCounter];
     const operation = (encodedInstruction >> 56) & 0xff;
     const variant = (encodedInstruction >> 48) & 0xff;
@@ -175,9 +175,12 @@ export function execute(
 			case Operation.BitsNot:
 				registers[firstOperand] = -registers[firstOperand];
 				break;
-			
     }
+
     programCounter++;
+		if (programCounter >= memory.length) {
+			// We deliberately require a halt instruction.
+			programCounter = 0;
+		}
   }
-  return registers[0]; // or some other value depending on your VM design
 }
