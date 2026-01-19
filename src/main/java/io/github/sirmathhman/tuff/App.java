@@ -36,51 +36,51 @@ public final class App {
 			// Peek ahead to see if this is a chained let binding
 			// Format: "let x = expr1; let y = expr2; z"
 			// vs single: "let x = expr; x"
-		// vs uninitialized: "let x : Type; x = expr; x"
+			// vs uninitialized: "let x : Type; x = expr; x"
 
-		int equalsIndex = stmt.indexOf('=');
-		
-		// First, find the first semicolon to check for uninitialized declarations
-		int firstSemiIndex = stmt.indexOf(';');
-		if (firstSemiIndex == -1) {
-			return Result.err(new CompileError("Invalid let binding: missing ';'"));
-		}
+			int equalsIndex = stmt.indexOf('=');
 
-		// If semicolon comes before equals, this is an uninitialized declaration
-		if (equalsIndex == -1 || firstSemiIndex < equalsIndex) {
-			String continuation = stmt.substring(firstSemiIndex + 1).trim();
-			return LetBindingHandler.handleUninitializedVariable(stmt, firstSemiIndex, continuation, instructions);
-		}
-
-		// Find the first semicolon at depth 0 after the equals
-		int semiIndex = -1;
-		int depth = 0;
-		for (int i = equalsIndex; i < stmt.length(); i++) {
-			char c = stmt.charAt(i);
-			if (c == '(' || c == '{') {
-				depth++;
-			} else if (c == ')' || c == '}') {
-				depth--;
-			} else if (c == ';' && depth == 0) {
-				semiIndex = i;
-				break;
+			// First, find the first semicolon to check for uninitialized declarations
+			int firstSemiIndex = stmt.indexOf(';');
+			if (firstSemiIndex == -1) {
+				return Result.err(new CompileError("Invalid let binding: missing ';'"));
 			}
+
+			// If semicolon comes before equals, this is an uninitialized declaration
+			if (equalsIndex == -1 || firstSemiIndex < equalsIndex) {
+				String continuation = stmt.substring(firstSemiIndex + 1).trim();
+				return LetBindingHandler.handleUninitializedVariable(stmt, firstSemiIndex, continuation, instructions);
+			}
+
+			// Find the first semicolon at depth 0 after the equals
+			int semiIndex = -1;
+			int depth = 0;
+			for (int i = equalsIndex; i < stmt.length(); i++) {
+				char c = stmt.charAt(i);
+				if (c == '(' || c == '{') {
+					depth++;
+				} else if (c == ')' || c == '}') {
+					depth--;
+				} else if (c == ';' && depth == 0) {
+					semiIndex = i;
+					break;
+				}
+			}
+
+			if (semiIndex == -1) {
+				return Result.err(new CompileError("Invalid let binding: missing ';'"));
+			}
+
+			// Check what comes after the semicolon
+			String continuation = stmt.substring(semiIndex + 1).trim();
+
+			// Use LetBindingHandler for all statement-level let bindings
+			// (both single and chained)
+			return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
+					instructions);
 		}
 
-		if (semiIndex == -1) {
-			return Result.err(new CompileError("Invalid let binding: missing ';'"));
-		}
-
-		// Check what comes after the semicolon
-		String continuation = stmt.substring(semiIndex + 1).trim();
-
-		// Use LetBindingHandler for all statement-level let bindings
-		// (both single and chained)
-		return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
-				instructions);
-	}
-
-	// Parse as expression (which may contain "read")
+		// Parse as expression (which may contain "read")
 		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = parseExpressionWithRead(stmt);
 		if (exprResult.isErr()) {
 			return Result.err(exprResult.errValue());

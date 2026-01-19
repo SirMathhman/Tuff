@@ -17,21 +17,21 @@ public final class LetBindingHandler {
 			List<Instruction> instructions) {
 		// Extract variable name and type from "let x : Type;"
 		String declPart = stmt.substring(4, semiIndex).trim(); // Skip "let "
-		
+
 		if (!declPart.contains(":")) {
 			return Result.err(new CompileError(
 					"Uninitialized variable must have explicit type annotation"));
 		}
-		
+
 		String[] parts = declPart.split(":");
 		String varName = parts[0].trim();
-		
+
 		// Check if continuation has assignment pattern
 		if (!continuation.contains("=") || !continuation.contains(";")) {
 			return Result.err(new CompileError(
 					"Uninitialized variable '" + varName + "' must be assigned before use"));
 		}
-		
+
 		// Treat uninitialized variable as mutable and handle the assignment
 		return handleMutableVariableWithAssignment(varName, null, continuation, instructions);
 	}
@@ -255,7 +255,7 @@ public final class LetBindingHandler {
 			String continuation,
 			List<Instruction> instructions) {
 		int memAddr = 100;
-		
+
 		// Parse and evaluate initial value if provided, store in memory
 		if (initialValueExpr != null) {
 			Result<Void, CompileError> storeResult = parseAndStoreInMemory(initialValueExpr, instructions);

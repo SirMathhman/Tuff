@@ -177,6 +177,11 @@ public final class AppTest {
 		assertValidWithInput("let x : I32; x = read I32; x", 42, 42);
 	}
 
+	@Test
+	void shouldRejectUninitializedVariableWithoutAssignment() {
+		assertInvalid("let x : U8; x");
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
