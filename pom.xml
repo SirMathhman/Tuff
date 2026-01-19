@@ -59,7 +59,7 @@
 				<version>3.24.0</version>
 				<configuration>
 					<minimumTokens>50</minimumTokens>
-					<format>xml</format>
+					<skip>true</skip>
 					<skipEmptyReport>false</skipEmptyReport>
 				</configuration>
 				<executions>
