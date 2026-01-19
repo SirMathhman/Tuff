@@ -255,6 +255,7 @@ public final class LetBindingHandler {
 			String continuation,
 			List<Instruction> instructions) {
 		int memAddr = 100;
+		boolean isUninitialized = initialValueExpr == null;
 
 		// Parse and evaluate initial value if provided, store in memory
 		if (initialValueExpr != null) {
@@ -266,6 +267,7 @@ public final class LetBindingHandler {
 
 		// Parse continuation which may have multiple assignments and references
 		String remaining = continuation;
+		int assignmentCount = 0;
 		while (true) {
 			Result<AssignmentParseResult, CompileError> assignResult = parseAssignment(varName, remaining);
 			if (assignResult.isErr()) {
@@ -273,6 +275,14 @@ public final class LetBindingHandler {
 			}
 
 			AssignmentParseResult parsed = assignResult.okValue();
+
+			// Validate assignment for uninitialized variables
+			Result<Void, CompileError> validationResult = validateUninitializedAssignment(isUninitialized,
+					varName, assignmentCount);
+			if (validationResult.isErr()) {
+				return validationResult;
+			}
+			assignmentCount++;
 
 			// Parse and evaluate assignment value
 			Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(
@@ -305,6 +315,17 @@ public final class LetBindingHandler {
 
 		return Result.err(new CompileError(
 				"Mutable variable continuation must end with variable reference or expression"));
+	}
+
+	private static Result<Void, CompileError> validateUninitializedAssignment(
+			boolean isUninitialized,
+			String varName,
+			int assignmentCount) {
+		if (isUninitialized && assignmentCount > 0) {
+			return Result.err(new CompileError(
+					"Uninitialized variable '" + varName + "' can only be assigned once"));
+		}
+		return Result.ok(null);
 	}
 
 	private static Result<AssignmentParseResult, CompileError> parseAssignment(String varName, String remaining) {

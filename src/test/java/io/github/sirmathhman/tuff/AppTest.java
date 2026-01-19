@@ -182,6 +182,11 @@ public final class AppTest {
 		assertInvalid("let x : U8; x");
 	}
 
+	@Test
+	void shouldRejectMultipleAssignmentsToUninitializedVariable() {
+		assertInvalid("let x : U8; x = read U8; x = 100; x");
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
