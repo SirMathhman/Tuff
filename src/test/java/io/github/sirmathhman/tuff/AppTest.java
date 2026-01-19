@@ -314,6 +314,41 @@ public final class AppTest {
 		assertValidWithInput("let x = read U32 == read U32; x", 1, 100, 100);
 	}
 
+	@Test
+	void shouldSupportInequalityOperatorWithU32Same() {
+		assertValidWithInput("read U32 != read U32", 0, 429496729, 429496729);
+	}
+
+	@Test
+	void shouldSupportInequalityOperatorWithU32Different() {
+		assertValidWithInput("read U32 != read U32", 1, 429496729, 100);
+	}
+
+	@Test
+	void shouldSupportInequalityWithBoolsFalseNotEqualsFalse() {
+		assertValidWithInput("read Bool != read Bool", 0, 0, 0);
+	}
+
+	@Test
+	void shouldSupportInequalityWithBoolsTrueNotEqualsTrue() {
+		assertValidWithInput("read Bool != read Bool", 0, 1, 1);
+	}
+
+	@Test
+	void shouldSupportInequalityWithBoolsFalseNotEqualsTrue() {
+		assertValidWithInput("read Bool != read Bool", 1, 0, 1);
+	}
+
+	@Test
+	void shouldSupportInequalityWithBoolsTrueNotEqualsFalse() {
+		assertValidWithInput("read Bool != read Bool", 1, 1, 0);
+	}
+
+	@Test
+	void shouldSupportInequalityInLetBinding() {
+		assertValidWithInput("let x = read U32 != read U32; x", 0, 100, 100);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

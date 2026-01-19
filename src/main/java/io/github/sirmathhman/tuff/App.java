@@ -5,6 +5,7 @@ import io.github.sirmathhman.tuff.compiler.EqualityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
 import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
+import io.github.sirmathhman.tuff.compiler.InequalityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.LiteralParser;
 import io.github.sirmathhman.tuff.compiler.LogicalAndHandler;
@@ -149,6 +150,13 @@ public final class App {
 		if (eqTokens.size() > 1) {
 			// We have equality operations - parse each side and combine
 			return EqualityOperatorHandler.parseEqualityExpression(eqTokens);
+		}
+
+		// Split by != (inequality comparison) - same precedence as ==
+		List<String> neqTokens = InequalityOperatorHandler.splitByInequality(expr);
+		if (neqTokens.size() > 1) {
+			// We have inequality operations - parse each side and combine
+			return InequalityOperatorHandler.parseInequalityExpression(neqTokens);
 		}
 
 		// Parse additive expression (no logical operators or comparisons)

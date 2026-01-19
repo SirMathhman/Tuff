@@ -31,7 +31,11 @@ public final class InstructionBuilder {
 		}
 
 		if (markerIdx != -1) {
-			// This is a binary equality comparison
+			// This is a binary comparison (equality or inequality)
+			// marker.value == 0 means Equal, marker.value == 1 means NotEqual
+			ExpressionModel.ExpressionTerm marker = terms.get(markerIdx);
+			boolean isInequality = marker.value == 1;
+
 			List<ExpressionModel.ExpressionTerm> leftTerms = terms.subList(0, markerIdx);
 			List<ExpressionModel.ExpressionTerm> rightTerms = terms.subList(markerIdx + 1, terms.size());
 
@@ -68,6 +72,12 @@ public final class InstructionBuilder {
 			// To keep it simple for now, we only support comparing reads.
 			if (leftResult != -1 && rightResult != -1) {
 				instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
+
+				// If this is inequality, negate the result with LogicalNot
+				if (isInequality) {
+					instructions.add(new Instruction(Operation.LogicalNot, Variant.Immediate, leftResult, null));
+				}
+
 				return leftResult;
 			}
 		}

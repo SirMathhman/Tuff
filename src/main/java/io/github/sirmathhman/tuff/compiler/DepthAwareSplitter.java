@@ -48,9 +48,14 @@ public final class DepthAwareSplitter {
 			} else if (checker.isDelimiter(c, i) && depth == 0) {
 				result.add(token.toString().trim());
 				token = new StringBuilder();
-				// Skip second character of double delimiter (if it exists)
-				if (i + 1 < expr.length() && expr.charAt(i + 1) == c) {
-					i++;
+				// Skip second character of double delimiter
+				// For == and ||, second char equals first char
+				// For !=, second char is = but first is !
+				if (i + 1 < expr.length()) {
+					char nextChar = expr.charAt(i + 1);
+					if (nextChar == c || (c == '!' && nextChar == '=')) {
+						i++;
+					}
 				}
 			} else {
 				token.append(c);

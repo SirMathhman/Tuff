@@ -12,21 +12,32 @@ public final class ComparisonOperatorHandler {
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseEqualityExpression(
 			List<String> eqTokens) {
-		// For now, only support binary equality (exactly 2 operands)
-		if (eqTokens.size() != 2) {
-			return Result.err(new CompileError("Equality operator requires exactly 2 operands"));
+		return parseComparisonExpression(eqTokens, 0);
+	}
+
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseInequalityExpression(
+			List<String> neqTokens) {
+		return parseComparisonExpression(neqTokens, 1);
+	}
+
+	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonExpression(
+			List<String> tokens, int markerValue) {
+		// For now, only support binary comparison (exactly 2 operands)
+		if (tokens.size() != 2) {
+			String opName = markerValue == 0 ? "Equality" : "Inequality";
+			return Result.err(new CompileError(opName + " operator requires exactly 2 operands"));
 		}
 
 		// Parse left operand
 		Result<ExpressionModel.ExpressionResult, CompileError> leftResult = AdditiveExpressionParser
-				.parseAdditive(eqTokens.get(0));
+				.parseAdditive(tokens.get(0));
 		if (leftResult.isErr()) {
 			return leftResult;
 		}
 
 		// Parse right operand
 		Result<ExpressionModel.ExpressionResult, CompileError> rightResult = AdditiveExpressionParser
-				.parseAdditive(eqTokens.get(1));
+				.parseAdditive(tokens.get(1));
 		if (rightResult.isErr()) {
 			return rightResult;
 		}
@@ -34,9 +45,10 @@ public final class ComparisonOperatorHandler {
 		ExpressionModel.ExpressionResult left = leftResult.okValue();
 		ExpressionModel.ExpressionResult right = rightResult.okValue();
 
-		// Create marker term: readCount=-1 indicates "equality comparison marker"
+		// Create marker term: readCount=-1 indicates comparison marker
+		// marker.value=0 means Equal, marker.value=1 means NotEqual
 		ExpressionModel.ExpressionTerm marker = new ExpressionModel.ExpressionTerm(
-				-1, 0, false, false, false, false, false, false, false);
+				-1, markerValue, false, false, false, false, false, false, false);
 
 		// Combine: left terms + marker + right terms
 		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(left.terms);
