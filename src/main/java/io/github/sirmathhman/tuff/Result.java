@@ -3,14 +3,14 @@ package io.github.sirmathhman.tuff;
 /**
  * A generic Result type that represents either a success (Ok) or a failure
  * (Err).
- * 
+ *
  * @param <T> The type of the success value
  * @param <X> The type of the error value
  */
 public sealed interface Result<T, X> {
 	/**
 	 * Creates a Result containing a success value.
-	 * 
+	 *
 	 * @param <T>   The type of the success value
 	 * @param <X>   The type of the error value
 	 * @param value The success value
@@ -22,7 +22,7 @@ public sealed interface Result<T, X> {
 
 	/**
 	 * Creates a Result containing an error value.
-	 * 
+	 *
 	 * @param <T>   The type of the success value
 	 * @param <X>   The type of the error value
 	 * @param error The error value
@@ -34,7 +34,7 @@ public sealed interface Result<T, X> {
 
 	/**
 	 * Applies a function to the success value if present.
-	 * 
+	 *
 	 * @param <U> The return type of the mapping function
 	 * @param f   The function to apply
 	 * @return A new Result with the mapped value, or the error
@@ -43,7 +43,7 @@ public sealed interface Result<T, X> {
 
 	/**
 	 * Applies a function to the error value if present.
-	 * 
+	 *
 	 * @param <Y> The return type of the mapping function
 	 * @param f   The function to apply
 	 * @return A new Result with the mapped error, or the success value
@@ -52,28 +52,28 @@ public sealed interface Result<T, X> {
 
 	/**
 	 * Gets the success value, or null if this is an error.
-	 * 
+	 *
 	 * @return The success value or null
 	 */
 	T okValue();
 
 	/**
 	 * Gets the error value, or null if this is a success.
-	 * 
+	 *
 	 * @return The error value or null
 	 */
 	X errValue();
 
 	/**
 	 * Checks if this Result is a success.
-	 * 
+	 *
 	 * @return true if this is a success, false otherwise
 	 */
 	boolean isOk();
 
 	/**
 	 * Checks if this Result is an error.
-	 * 
+	 *
 	 * @return true if this is an error, false otherwise
 	 */
 	boolean isErr();

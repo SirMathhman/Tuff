@@ -35,7 +35,7 @@ public final class App {
 				if (typeSuffix != null) {
 					boolean isUnsigned = typeSuffix.startsWith("U");
 					int bits = Integer.parseInt(typeSuffix.substring(1));
-					
+
 					// Check bounds based on type
 					if (isUnsigned) {
 						if (value < 0) {
@@ -43,13 +43,15 @@ public final class App {
 						}
 						long maxValue = (1L << bits) - 1;
 						if (value > maxValue) {
-							return Result.err(new CompileError("Value " + value + " exceeds maximum for " + typeSuffix + " (" + maxValue + "): " + source));
+							return Result.err(new CompileError(
+									"Value " + value + " exceeds maximum for " + typeSuffix + " (" + maxValue + "): " + source));
 						}
 					} else {
 						long minValue = -(1L << (bits - 1));
 						long maxValue = (1L << (bits - 1)) - 1;
 						if (value < minValue || value > maxValue) {
-							return Result.err(new CompileError("Value " + value + " out of range for " + typeSuffix + " (" + minValue + " to " + maxValue + "): " + source));
+							return Result.err(new CompileError("Value " + value + " out of range for " + typeSuffix + " (" + minValue
+									+ " to " + maxValue + "): " + source));
 						}
 					}
 				}
