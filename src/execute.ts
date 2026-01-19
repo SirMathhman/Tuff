@@ -34,6 +34,14 @@ export interface Instruction {
   secondOperand?: number;
 }
 
+export interface ExecuteOptions {
+  /**
+   * Maximum number of VM instructions to execute before aborting.
+   * This prevents non-halting programs from running forever (e.g. bad compilation).
+   */
+  maxSteps?: number;
+}
+
 function encodeInstructionTo64Bits(instruction: Instruction): number {
   let encoded = 0;
   encoded |= (instruction.operation & 0xff) << 56;
@@ -58,15 +66,25 @@ export function execute(
   source: Instruction[],
   read: () => number,
   write: (output: number) => void,
+  options: ExecuteOptions = {},
 ): number {
-
   let programCounter = 0;
   let registers: number[] = new Array(8).fill(0);
 
   let memory: number[] = new Array(1024).fill(0);
   loadInstructionsIntoMemory(source, memory);
 
+  const maxSteps = options.maxSteps ?? 1_000_000;
+  let steps = 0;
+
   while (true) {
+    steps++;
+    if (steps > maxSteps) {
+      throw new Error(
+        `Program did not halt within ${maxSteps} steps (possible infinite loop).`,
+      );
+    }
+
     const encodedInstruction = memory[programCounter];
     const operation = (encodedInstruction >> 56) & 0xff;
     const variant = (encodedInstruction >> 48) & 0xff;
