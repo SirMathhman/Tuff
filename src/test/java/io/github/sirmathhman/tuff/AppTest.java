@@ -167,6 +167,11 @@ public final class AppTest {
 		assertValidWithInput("let x = read U8; let y = read U8; x", 2, 2, 3);
 	}
 
+	@Test
+	void shouldRejectAssignmentToImmutableVariable() {
+		assertInvalid("let x = read U8; x = read U8; x");
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

@@ -64,8 +64,8 @@ public final class App {
 			// Check what comes after the semicolon
 			String continuation = stmt.substring(semiIndex + 1).trim();
 
-		// Use LetBindingHandler for all statement-level let bindings
-		// (both single and chained)
+			// Use LetBindingHandler for all statement-level let bindings
+			// (both single and chained)
 			return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
 					instructions);
 		}

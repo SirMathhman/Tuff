@@ -57,7 +57,11 @@ public final class LetBindingHandler {
 		}
 
 		// Check if continuation contains assignment (for mutable variables)
-		if (isMutable && continuation.contains("=") && continuation.contains(";")) {
+		if (continuation.contains("=") && continuation.contains(";")) {
+			if (!isMutable) {
+				return Result.err(new CompileError(
+						"Cannot assign to immutable variable '" + varName + "'. Use 'let mut' to declare a mutable variable."));
+			}
 			return handleMutableVariableWithAssignment(varName, valueExpr, continuation, instructions);
 		}
 
