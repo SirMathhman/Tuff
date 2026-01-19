@@ -131,6 +131,11 @@ public final class AppTest {
 		assertInvalid("(read U8 + { let x : U8 = read U16; x }) * read U8");
 	}
 
+	@Test
+	void shouldSupportLetBindingAtStatementLevel() {
+		assertValidWithInput("let temp : U8 = (read U8 + { let x : U8 = read U8; let y : U8 = x; y }) * read U8; temp", 20, 2, 3, 4);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

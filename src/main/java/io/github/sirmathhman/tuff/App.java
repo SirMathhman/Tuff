@@ -33,13 +33,37 @@ public final class App {
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
 		// Check if this is a let binding at statement level
 		if (stmt.startsWith("let ")) {
-			Result<ExpressionTokens.LetBindingDecl, CompileError> declResult = parseLetDeclaration(stmt);
-			if (declResult.isErr()) {
-				return Result.err(declResult.errValue());
+			// For statement-level let bindings, we need to handle the full format:
+			// let varName : type = valueExpr; varName
+			
+			// Find the first '=' to identify the binding declaration
+			int equalsIndex = stmt.indexOf('=');
+			if (equalsIndex == -1) {
+				return Result.err(new CompileError("Invalid let binding: missing '='"));
 			}
 
-			ExpressionTokens.LetBindingDecl decl = declResult.okValue();
-			String valueExpr = decl.valueExpr();
+			// Find the semicolon that ends the binding
+			// This semicolon is at depth 0 (not inside parentheses)
+			int semiIndex = -1;
+			int depth = 0;
+			for (int i = equalsIndex; i < stmt.length(); i++) {
+				char c = stmt.charAt(i);
+				if (c == '(') {
+					depth++;
+				} else if (c == ')') {
+					depth--;
+				} else if (c == ';' && depth == 0) {
+					semiIndex = i;
+					break;
+				}
+			}
+
+			if (semiIndex == -1) {
+				return Result.err(new CompileError("Invalid let binding: missing ';'"));
+			}
+
+			// Extract the value expression (between '=' and ';')
+			String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
 
 			// Parse the value expression
 			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
