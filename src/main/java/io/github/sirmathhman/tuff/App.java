@@ -13,12 +13,12 @@ public final class App {
 	}
 
 	private static final class ExpressionResult {
-		final boolean needsRead;
-		final long value;
+		final int readCount;
+		final long literalValue;
 
-		ExpressionResult(boolean needsRead, long value) {
-			this.needsRead = needsRead;
-			this.value = value;
+		ExpressionResult(int readCount, long literalValue) {
+			this.readCount = readCount;
+			this.literalValue = literalValue;
 		}
 	}
 
@@ -46,15 +46,29 @@ public final class App {
 		ExpressionResult expr = exprResult.okValue();
 
 		// Generate instructions based on expression structure
-		if (expr.needsRead) {
+		if (expr.readCount == 0) {
+			// No reads, just load the literal
+			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue));
+		} else if (expr.readCount == 1) {
+			// One read
 			instructions.add(new Instruction(Operation.In, Variant.Immediate, 0, null));
 
-			if (expr.value != 0) {
-				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, expr.value));
+			if (expr.literalValue != 0) {
+				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, expr.literalValue));
 				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
 			}
+		} else if (expr.readCount == 2) {
+			// Two reads
+			instructions.add(new Instruction(Operation.In, Variant.Immediate, 0, null));
+			instructions.add(new Instruction(Operation.In, Variant.Immediate, 1, null));
+			instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
+
+			if (expr.literalValue != 0) {
+				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, expr.literalValue));
+				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 2L));
+			}
 		} else {
-			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.value));
+			return Result.err(new CompileError("More than 2 reads in expression not supported"));
 		}
 
 		return Result.ok(null);
@@ -76,19 +90,10 @@ public final class App {
 			ExpressionTerm leftTerm = left.okValue();
 			ExpressionTerm rightTerm = right.okValue();
 
-			// At most one side can be "read"
-			if (leftTerm.needsRead && rightTerm.needsRead) {
-				return Result.err(new CompileError("Cannot have read on both sides of addition"));
-			}
+			int totalReads = leftTerm.readCount + rightTerm.readCount;
+			long totalLiteral = leftTerm.value + rightTerm.value;
 
-			if (leftTerm.needsRead) {
-				return Result.ok(new ExpressionResult(true, rightTerm.value));
-			}
-			if (rightTerm.needsRead) {
-				return Result.ok(new ExpressionResult(true, leftTerm.value));
-			}
-
-			return Result.ok(new ExpressionResult(false, leftTerm.value + rightTerm.value));
+			return Result.ok(new ExpressionResult(totalReads, totalLiteral));
 		}
 		if (parts.length > 2) {
 			return Result.err(new CompileError("Multiple + operators not supported"));
@@ -101,15 +106,15 @@ public final class App {
 		}
 
 		ExpressionTerm term = termResult.okValue();
-		return Result.ok(new ExpressionResult(term.needsRead, term.value));
+		return Result.ok(new ExpressionResult(term.readCount, term.value));
 	}
 
 	private static final class ExpressionTerm {
-		final boolean needsRead;
+		final int readCount;
 		final long value;
 
-		ExpressionTerm(boolean needsRead, long value) {
-			this.needsRead = needsRead;
+		ExpressionTerm(int readCount, long value) {
+			this.readCount = readCount;
 			this.value = value;
 		}
 	}
@@ -122,7 +127,7 @@ public final class App {
 			if (!typeSpec.matches("[UI]\\d+")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
-			return Result.ok(new ExpressionTerm(true, 0));
+			return Result.ok(new ExpressionTerm(1, 0));
 		}
 
 		Result<Long, CompileError> literalResult = parseLiteral(term);
@@ -130,7 +135,7 @@ public final class App {
 			return Result.err(literalResult.errValue());
 		}
 
-		return Result.ok(new ExpressionTerm(false, literalResult.okValue()));
+		return Result.ok(new ExpressionTerm(0, literalResult.okValue()));
 	}
 
 	private static Result<Long, CompileError> parseLiteral(String literal) {

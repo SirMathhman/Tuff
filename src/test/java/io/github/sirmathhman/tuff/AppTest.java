@@ -73,6 +73,11 @@ public final class AppTest {
 		assertValidWithInput("read U8 + 50U8", 150, 100);
 	}
 
+	@Test
+	void shouldAddTwoReadValues() {
+		assertValidWithInput("read U8 + read U8", 150, 100, 50);
+	}
+
 	private void assertInvalid(String source) {
 		Assertions.assertTrue(App.compile(source).isErr());
 	}
