@@ -10,6 +10,32 @@ public final class LetBindingHandler {
 	private LetBindingHandler() {
 	}
 
+	public static Result<Void, CompileError> handleUninitializedVariable(
+			String stmt,
+			int semiIndex,
+			String continuation,
+			List<Instruction> instructions) {
+		// Extract variable name and type from "let x : Type;"
+		String declPart = stmt.substring(4, semiIndex).trim(); // Skip "let "
+		
+		if (!declPart.contains(":")) {
+			return Result.err(new CompileError(
+					"Uninitialized variable must have explicit type annotation"));
+		}
+		
+		String[] parts = declPart.split(":");
+		String varName = parts[0].trim();
+		
+		// Check if continuation has assignment pattern
+		if (!continuation.contains("=") || !continuation.contains(";")) {
+			return Result.err(new CompileError(
+					"Uninitialized variable '" + varName + "' must be assigned before use"));
+		}
+		
+		// Treat uninitialized variable as mutable and handle the assignment
+		return handleMutableVariableWithAssignment(varName, null, continuation, instructions);
+	}
+
 	public static Result<Void, CompileError> handleLetBindingWithContinuation(
 			String stmt,
 			int equalsIndex,
@@ -228,13 +254,15 @@ public final class LetBindingHandler {
 			String initialValueExpr,
 			String continuation,
 			List<Instruction> instructions) {
-		// Parse and evaluate initial value, store in memory
-		Result<Void, CompileError> storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
-		if (storeResult.isErr()) {
-			return Result.err(storeResult.errValue());
-		}
-
 		int memAddr = 100;
+		
+		// Parse and evaluate initial value if provided, store in memory
+		if (initialValueExpr != null) {
+			Result<Void, CompileError> storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
+			if (storeResult.isErr()) {
+				return Result.err(storeResult.errValue());
+			}
+		}
 
 		// Parse continuation which may have multiple assignments and references
 		String remaining = continuation;
