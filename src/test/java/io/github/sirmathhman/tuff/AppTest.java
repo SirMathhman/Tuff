@@ -17,8 +17,8 @@ public final class AppTest {
 	private void assertSimple(String source, int exitCode) {
 		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
 			Result<RunResult, CompileError> result = App.run(source, new int[] {});
-			result.
 			assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue() : ""));
+
 			RunResult runResult = result.okValue();
 			assertEquals(exitCode, runResult.returnValue());
 			assertTrue(runResult.output().isEmpty());
@@ -38,5 +38,14 @@ public final class AppTest {
 	@Test
 	void shouldRunWith100U8() {
 		assertSimple("100U8", 100);
+	}
+
+	@Test
+	void shouldRejectNegativeUnsignedLiteral() {
+		Ap
+		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
+			Result<RunResult, CompileError> result = App.run("-100U8", new int[] {});
+			assertTrue(result.isErr(), "Expected compilation error for negative unsigned literal");
+		});
 	}
 }

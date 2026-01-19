@@ -22,12 +22,20 @@ public final class App {
 			try {
 				// Parse optional type suffix (e.g., "100U8", "42I32")
 				String numericPart = source;
+				String typeSuffix = null;
 				// Remove type suffix if present (U8, U16, U32, U64, I8, I16, I32, I64, etc.)
 				if (source.matches(".*[UI]\\d+$")) {
+					typeSuffix = source.replaceAll("^.*([UI]\\d+)$", "$1");
 					numericPart = source.replaceAll("[UI]\\d+$", "");
 				}
 
 				int value = Integer.parseInt(numericPart);
+				
+				// Validate that unsigned types don't have negative values
+				if (typeSuffix != null && typeSuffix.startsWith("U") && value < 0) {
+					return Result.err(new CompileError("Negative value not allowed for unsigned type: " + source));
+				}
+				
 				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, (long) value));
 			} catch (NumberFormatException e) {
 				return Result.err(new CompileError("Failed to parse numeric value: " + source));
