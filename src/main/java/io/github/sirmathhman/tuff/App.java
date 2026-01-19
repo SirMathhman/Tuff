@@ -30,12 +30,12 @@ public final class App {
 				}
 
 				int value = Integer.parseInt(numericPart);
-				
+
 				// Validate that unsigned types don't have negative values
 				if (typeSuffix != null && typeSuffix.startsWith("U") && value < 0) {
 					return Result.err(new CompileError("Negative value not allowed for unsigned type: " + source));
 				}
-				
+
 				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, (long) value));
 			} catch (NumberFormatException e) {
 				return Result.err(new CompileError("Failed to parse numeric value: " + source));
