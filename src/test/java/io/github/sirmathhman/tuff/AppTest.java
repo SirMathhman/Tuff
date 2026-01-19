@@ -126,6 +126,11 @@ public final class AppTest {
 		assertInvalid("(read U8 + { let x : U8 = read U8; let x : U8 = 100; x }) * read U8");
 	}
 
+	@Test
+	void shouldRejectTypeMismatchInLetBinding() {
+		assertInvalid("(read U8 + { let x : U8 = read U16; x }) * read U8");
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

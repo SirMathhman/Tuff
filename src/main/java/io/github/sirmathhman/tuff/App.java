@@ -41,7 +41,7 @@ public final class App {
 		return Result.ok(instructions.toArray(new Instruction[0]));
 	}
 
-	private record LetBindingDecl(String varName, String valueExpr) {
+	private record LetBindingDecl(String varName, String declaredType, String valueExpr) {
 	}
 
 	private static Result<LetBindingDecl, CompileError> parseLetDeclaration(String expr) {
@@ -62,9 +62,10 @@ public final class App {
 		}
 
 		String varName = parts[0].trim();
+		String declaredType = parts[1].trim();
 		String valueExpr = expr.substring(equalsIndex + 1, semiIndex).trim();
 
-		return Result.ok(new LetBindingDecl(varName, valueExpr));
+		return Result.ok(new LetBindingDecl(varName, declaredType, valueExpr));
 	}
 
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
@@ -287,11 +288,11 @@ public final class App {
 	}
 
 	private static Result<ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
-		return parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>());
+		return parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>(), new java.util.HashMap<>());
 	}
 
 	private static Result<ExpressionResult, CompileError> parseLetExpressionBindingWithContext(String expr,
-			java.util.Map<String, String> boundVariables) {
+			java.util.Map<String, String> boundVariables, java.util.Map<String, String> variableTypes) {
 		// Format: let varName : TYPE = EXPR; continuation
 		// where continuation is either another let binding or a variable reference
 		Result<LetBindingDecl, CompileError> declResult = parseLetDeclaration(expr);
@@ -314,6 +315,20 @@ public final class App {
 			valueExpr = valueExpr.replaceAll("\\b" + varName + "\\b", boundVariables.get(varName));
 		}
 
+		// Extract the type from the value expression
+		Result<String, CompileError> typeResult = extractTypeFromExpression(valueExpr);
+		if (typeResult.isErr()) {
+			return Result.err(typeResult.errValue());
+		}
+
+		String inferredType = typeResult.okValue();
+
+		// Validate that the inferred type matches the declared type
+		if (!inferredType.equals(decl.declaredType)) {
+			return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName +
+					"' declared as " + decl.declaredType + " but initialized with " + inferredType));
+		}
+
 		// Parse the value expression
 		Result<ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
 		if (valueResult.isErr()) {
@@ -331,9 +346,11 @@ public final class App {
 		// reference)
 		if (continuation.startsWith("let ")) {
 			// Another let binding follows - recursively parse it with updated context
-			java.util.Map<String, String> newContext = new java.util.HashMap<>(boundVariables);
-			newContext.put(decl.varName, decl.valueExpr);
-			return parseLetExpressionBindingWithContext(continuation, newContext);
+			java.util.Map<String, String> newVariables = new java.util.HashMap<>(boundVariables);
+			newVariables.put(decl.varName, decl.valueExpr);
+			java.util.Map<String, String> newTypes = new java.util.HashMap<>(variableTypes);
+			newTypes.put(decl.varName, decl.declaredType);
+			return parseLetExpressionBindingWithContext(continuation, newVariables, newTypes);
 		}
 
 		// Should be a variable reference - validate it matches the declared variable
@@ -345,6 +362,23 @@ public final class App {
 		// Return the value expression result (the variable evaluates to its bound
 		// value)
 		return Result.ok(valueResult.okValue());
+	}
+
+	private static Result<String, CompileError> extractTypeFromExpression(String expr) {
+		expr = expr.trim();
+		
+		// Handle read operations
+		if (expr.startsWith("read ")) {
+			String typeSpec = expr.substring(5).trim();
+			if (!typeSpec.matches("[UI]\\d+")) {
+				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
+			}
+			return Result.ok(typeSpec);
+		}
+		
+		// For now, we only support type extraction for simple read operations
+		// Complex expressions would need more sophisticated type inference
+		return Result.err(new CompileError("Cannot infer type for complex expression: " + expr));
 	}
 
 	private static List<String> splitTokensByOperators(String expr, boolean isAdditive) {
