@@ -60,6 +60,10 @@ public final class ExpressionTokens {
 				return innerType;
 			}
 			String pointerType = innerType.okValue();
+			// Strip 'mut' keyword if present: *mut Type -> *Type
+			if (pointerType.startsWith("*mut ")) {
+				pointerType = "*" + pointerType.substring(5);
+			}
 			// Dereferencing *Type should give Type
 			if (pointerType.startsWith("*")) {
 				return Result.ok(pointerType.substring(1));
@@ -174,16 +178,23 @@ public final class ExpressionTokens {
 			return true;
 		}
 
+		// Strip 'mut' keyword for comparison: *mut Type -> *Type
+		String sourceNorm = sourceType.replaceAll("\\*mut\\s+", "*");
+		String targetNorm = targetType.replaceAll("\\*mut\\s+", "*");
+		if (sourceNorm.equals(targetNorm)) {
+			return true;
+		}
+
 		// Pointer types must match exactly
-		boolean sourceIsPointer = sourceType.startsWith("*");
-		boolean targetIsPointer = targetType.startsWith("*");
+		boolean sourceIsPointer = sourceNorm.startsWith("*");
+		boolean targetIsPointer = targetNorm.startsWith("*");
 		if (sourceIsPointer != targetIsPointer) {
 			return false;
 		}
 
 		// If both are pointers, recurse on the pointed-to types
 		if (sourceIsPointer && targetIsPointer) {
-			return isTypeCompatible(sourceType.substring(1), targetType.substring(1));
+			return isTypeCompatible(sourceNorm.substring(1), targetNorm.substring(1));
 		}
 
 		// Parse type name and bit width

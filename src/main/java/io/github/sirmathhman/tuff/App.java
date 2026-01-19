@@ -454,7 +454,6 @@ public final class App {
 			return Result.ok(new ExpressionModel.ExpressionTerm(1, 0, false, false));
 		}
 
-		// Handle reference/dereference operators - treat as identity for compilation
 		if (term.startsWith("&") || term.startsWith("*")) {
 			String inner = term.substring(1).trim();
 			return parseTerm(inner);
@@ -462,25 +461,23 @@ public final class App {
 
 		Result<Long, CompileError> literalResult = LiteralParser.parseLiteral(term);
 		if (literalResult.isErr()) {
-			return Result.err(literalResult.errValue());
+			// Identifiers are treated as having value 0 (for variable references in expressions)
+			if (!term.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+				return Result.err(literalResult.errValue());
+			}
+			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
 		}
-
 		return Result.ok(new ExpressionModel.ExpressionTerm(0, literalResult.okValue(), false, false));
 	}
 
 	public static Result<RunResult, ApplicationError> run(String source, int[] input) {
 		Result<Instruction[], CompileError> compileResult = compile(source);
-
 		if (compileResult.isErr()) {
-			// Propagate the compilation error
 			return Result.err(new ApplicationError(compileResult.errValue()));
 		}
-
 		Instruction[] instructions = compileResult.okValue();
-
 		final int[] inputPointer = { 0 };
 		List<Integer> output = new ArrayList<>();
-
 		try {
 			int returnValue = Vm.execute(
 					instructions,

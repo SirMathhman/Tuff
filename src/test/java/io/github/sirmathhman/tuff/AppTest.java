@@ -207,6 +207,12 @@ public final class AppTest {
 		assertInvalid("let x = read U8; *x");
 	}
 
+	@Test
+	void shouldSupportMutablePointers() {
+		// Test that *mut pointer type annotation is accepted
+		assertValidWithInput("let mut x = read U8; let y : *mut U8 = &x; x", 42, 42);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
