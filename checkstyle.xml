@@ -5,6 +5,11 @@
 	<property name="charset" value="UTF-8" />
 	<property name="fileExtensions" value="java" />
 
+	<!-- Enforce maximum file length of 500 lines -->
+	<module name="FileLength">
+		<property name="max" value="500" />
+	</module>
+
 	<module name="TreeWalker">
 		<!-- Enforce maximum method length of 50 lines -->
 		<module name="MethodLength">

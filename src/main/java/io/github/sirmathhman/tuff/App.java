@@ -12,21 +12,6 @@ public final class App {
 	private App() {
 	}
 
-	private static final class ExpressionResult {
-		final int readCount;
-		final long literalValue;
-		final List<ExpressionTerm> terms;
-
-		ExpressionResult(int readCount, long literalValue, List<ExpressionTerm> terms) {
-			this.readCount = readCount;
-			this.literalValue = literalValue;
-			this.terms = terms;
-		}
-	}
-
-	private record ParenthesizedTokenResult(List<ExpressionTerm> terms, long literalValue, int expandedSize) {
-	}
-
 	public static Result<Instruction[], CompileError> compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
 
@@ -41,46 +26,23 @@ public final class App {
 		return Result.ok(instructions.toArray(new Instruction[0]));
 	}
 
-	private record LetBindingDecl(String varName, String declaredType, String valueExpr) {
-	}
-
-	private static Result<LetBindingDecl, CompileError> parseLetDeclaration(String expr) {
-		int equalsIndex = expr.indexOf('=');
-		if (equalsIndex == -1) {
-			return Result.err(new CompileError("Invalid let binding: missing '='"));
-		}
-
-		int semiIndex = expr.indexOf(';', equalsIndex);
-		if (semiIndex == -1) {
-			return Result.err(new CompileError("Invalid let binding: missing ';'"));
-		}
-
-		String decl = expr.substring(4, equalsIndex).trim(); // Skip "let "
-		String[] parts = decl.split(":");
-		if (parts.length != 2) {
-			return Result.err(new CompileError("Invalid let binding: expected 'varName : type'"));
-		}
-
-		String varName = parts[0].trim();
-		String declaredType = parts[1].trim();
-		String valueExpr = expr.substring(equalsIndex + 1, semiIndex).trim();
-
-		return Result.ok(new LetBindingDecl(varName, declaredType, valueExpr));
+	private static Result<ExpressionTokens.LetBindingDecl, CompileError> parseLetDeclaration(String expr) {
+		return ExpressionTokens.parseLetDeclaration(expr);
 	}
 
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
 		// Check if this is a let binding at statement level
 		if (stmt.startsWith("let ")) {
-			Result<LetBindingDecl, CompileError> declResult = parseLetDeclaration(stmt);
+			Result<ExpressionTokens.LetBindingDecl, CompileError> declResult = parseLetDeclaration(stmt);
 			if (declResult.isErr()) {
 				return Result.err(declResult.errValue());
 			}
 
-			LetBindingDecl decl = declResult.okValue();
-			String valueExpr = decl.valueExpr;
+			ExpressionTokens.LetBindingDecl decl = declResult.okValue();
+			String valueExpr = decl.valueExpr();
 
 			// Parse the value expression
-			Result<ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
+			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
 			if (valueResult.isErr()) {
 				return Result.err(valueResult.errValue());
 			}
@@ -89,7 +51,7 @@ public final class App {
 		}
 
 		// Parse as expression (which may contain "read")
-		Result<ExpressionResult, CompileError> exprResult = parseExpressionWithRead(stmt);
+		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = parseExpressionWithRead(stmt);
 		if (exprResult.isErr()) {
 			return Result.err(exprResult.errValue());
 		}
@@ -97,134 +59,28 @@ public final class App {
 		return generateInstructions(exprResult.okValue(), instructions);
 	}
 
-	private static Result<Void, CompileError> generateInstructions(ExpressionResult expr,
+	private static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
 			List<Instruction> instructions) {
 		if (expr.readCount == 0) {
 			// No reads, just load the literal
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue));
 		} else {
 			// Load all reads into registers
-			loadAllReads(expr.terms, instructions);
+			InstructionBuilder.loadAllReads(expr.terms, instructions);
 
 			// Build result respecting precedence
-			int resultReg = buildResultWithPrecedence(expr.terms, instructions);
+			int resultReg = InstructionBuilder.buildResultWithPrecedence(expr.terms, instructions);
 
 			// Add literal if present
 			if (expr.literalValue != 0) {
-				addLiteralToResult(resultReg, expr.literalValue, expr.terms.size(), instructions);
+				InstructionBuilder.addLiteralToResult(resultReg, expr.literalValue, expr.terms.size(), instructions);
 			}
 		}
 
 		return Result.ok(null);
 	}
 
-	private static void loadAllReads(List<ExpressionTerm> terms, List<Instruction> instructions) {
-		int nextReg = 0;
-		for (ExpressionTerm term : terms) {
-			if (term.readCount > 0) {
-				instructions.add(new Instruction(Operation.In, Variant.Immediate, nextReg, null));
-				nextReg++;
-			}
-		}
-	}
-
-	private static int buildResultWithPrecedence(List<ExpressionTerm> terms, List<Instruction> instructions) {
-		int readRegIndex = 0;
-		int resultReg = 0;
-		boolean firstAdditiveGroup = true;
-
-		int i = 0;
-		while (i < terms.size()) {
-			ExpressionTerm term = terms.get(i);
-			if (term.readCount == 0) {
-				i++;
-				continue;
-			}
-
-			// Check if this is a multiplicative term following a parenthesized group
-			if (term.isMultiplied && i > 0 && terms.get(i - 1).isParenthesizedGroupEnd && !firstAdditiveGroup) {
-				// Multiply the previous result by this term
-				instructions.add(new Instruction(Operation.Mul, Variant.Immediate, resultReg, (long) readRegIndex));
-				readRegIndex++;
-				i++;
-				continue;
-			}
-
-			// Collect this multiplicative/divisive group
-			List<Integer> groupRegs = new ArrayList<>();
-			List<Character> groupOps = new ArrayList<>();
-			groupRegs.add(readRegIndex);
-			groupOps.add('\0'); // No operator for first term
-			boolean isSubtracted = term.isSubtracted;
-			readRegIndex++;
-
-			// Consume all multiplied/divided terms that follow
-			// But stop if the current term is a parenthesized group end
-			while (i + 1 < terms.size() && (terms.get(i + 1).isMultiplied || terms.get(i + 1).isDivided)
-					&& terms.get(i + 1).readCount > 0 && !terms.get(i).isParenthesizedGroupEnd) {
-				i++;
-				ExpressionTerm nextTerm = terms.get(i);
-				groupRegs.add(readRegIndex);
-				groupOps.add(nextTerm.isDivided ? '/' : '*');
-				readRegIndex++;
-			}
-
-			// Generate instructions for this group
-			resultReg = processAdditiveGroup(groupRegs, groupOps, isSubtracted, firstAdditiveGroup, resultReg,
-					instructions);
-			firstAdditiveGroup = false;
-
-			i++;
-		}
-
-		return resultReg;
-	}
-
-	private static int processAdditiveGroup(List<Integer> groupRegs, List<Character> groupOps, boolean isSubtracted,
-			boolean firstAdditiveGroup, int resultReg, List<Instruction> instructions) {
-		if (groupRegs.size() == 1) {
-			// Single read in this group
-			if (firstAdditiveGroup) {
-				return groupRegs.get(0);
-			} else {
-				// Add or subtract to result
-				Operation op = isSubtracted ? Operation.Sub : Operation.Add;
-				instructions.add(new Instruction(op, Variant.Immediate, resultReg, (long) groupRegs.get(0)));
-				return resultReg;
-			}
-		} else {
-			// Multiple reads: perform multiplications and divisions
-			int groupResultReg = groupRegs.get(0);
-			for (int j = 1; j < groupRegs.size(); j++) {
-				Operation op = groupOps.get(j) == '/' ? Operation.Div : Operation.Mul;
-				instructions.add(new Instruction(op, Variant.Immediate, groupResultReg, (long) groupRegs.get(j)));
-			}
-
-			// Add/subtract this group's result to overall result
-			if (firstAdditiveGroup) {
-				return groupResultReg;
-			} else {
-				Operation op = isSubtracted ? Operation.Sub : Operation.Add;
-				instructions.add(new Instruction(op, Variant.Immediate, resultReg, (long) groupResultReg));
-				return resultReg;
-			}
-		}
-	}
-
-	private static void addLiteralToResult(int resultReg, long literalValue, int termCount,
-			List<Instruction> instructions) {
-		// Count how many reads we have to determine next register
-		int literalReg = 0;
-		for (Instruction inst : instructions) {
-			if (inst.operation() == Operation.In) {
-				literalReg++;
-			}
-		}
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, literalReg, literalValue));
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, resultReg, (long) literalReg));
-	}
-
-	private static Result<ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
+	private static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
 		expr = expr.trim();
 
 		// Check if this is a let binding
@@ -236,7 +92,7 @@ public final class App {
 		expr = expr.replace('{', '(').replace('}', ')');
 
 		// Split by + and - to get additive-level tokens, but not inside parentheses
-		List<String> addTokens = splitAddOperators(expr);
+		List<String> addTokens = ExpressionTokens.splitAddOperators(expr);
 		List<Boolean> additiveOps = new ArrayList<>();
 		additiveOps.add(false);
 
@@ -263,18 +119,19 @@ public final class App {
 		}
 
 		// Process each additive token for multiplicative operators
-		List<ExpressionTerm> allTerms = new ArrayList<>();
+		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>();
 		int totalReads = 0;
 		long totalLiteral = 0;
 
 		for (int i = 0; i < addTokens.size(); i++) {
 			boolean isSubtracted = additiveOps.get(i);
-			Result<ParsedMult, CompileError> multResult = parseMultiplicative(addTokens.get(i).trim(), isSubtracted);
+			Result<ExpressionModel.ParsedMult, CompileError> multResult = parseMultiplicative(addTokens.get(i).trim(),
+					isSubtracted);
 			if (multResult.isErr()) {
 				return Result.err(multResult.errValue());
 			}
 
-			ParsedMult mult = multResult.okValue();
+			ExpressionModel.ParsedMult mult = multResult.okValue();
 			allTerms.addAll(mult.terms);
 			totalReads += mult.readCount;
 			if (isSubtracted) {
@@ -284,31 +141,32 @@ public final class App {
 			}
 		}
 
-		return Result.ok(new ExpressionResult(totalReads, totalLiteral, allTerms));
+		return Result.ok(new ExpressionModel.ExpressionResult(totalReads, totalLiteral, allTerms));
 	}
 
-	private static Result<ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
+	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
 		return parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>(), new java.util.HashMap<>());
 	}
 
-	private static Result<ExpressionResult, CompileError> parseLetExpressionBindingWithContext(String expr,
+	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBindingWithContext(
+			String expr,
 			java.util.Map<String, String> boundVariables, java.util.Map<String, String> variableTypes) {
 		// Format: let varName : TYPE = EXPR; continuation
 		// where continuation is either another let binding or a variable reference
-		Result<LetBindingDecl, CompileError> declResult = parseLetDeclaration(expr);
+		Result<ExpressionTokens.LetBindingDecl, CompileError> declResult = parseLetDeclaration(expr);
 		if (declResult.isErr()) {
 			return Result.err(declResult.errValue());
 		}
 
-		LetBindingDecl decl = declResult.okValue();
+		ExpressionTokens.LetBindingDecl decl = declResult.okValue();
 
 		// Check for duplicate variable binding
-		if (boundVariables.containsKey(decl.varName)) {
-			return Result.err(new CompileError("Duplicate variable binding: '" + decl.varName + "' is already bound"));
+		if (boundVariables.containsKey(decl.varName())) {
+			return Result.err(new CompileError("Duplicate variable binding: '" + decl.varName() + "' is already bound"));
 		}
 
 		// Substitute any bound variables in the value expression
-		String valueExpr = decl.valueExpr;
+		String valueExpr = decl.valueExpr();
 		for (String varName : boundVariables.keySet()) {
 			// Simple substitution - replace variable references with their bound
 			// expressions
@@ -316,7 +174,7 @@ public final class App {
 		}
 
 		// Extract the type from the value expression
-		Result<String, CompileError> typeResult = extractTypeFromExpression(valueExpr);
+		Result<String, CompileError> typeResult = ExpressionTokens.extractTypeFromExpression(valueExpr);
 		if (typeResult.isErr()) {
 			return Result.err(typeResult.errValue());
 		}
@@ -324,13 +182,13 @@ public final class App {
 		String inferredType = typeResult.okValue();
 
 		// Validate that the inferred type matches the declared type
-		if (!inferredType.equals(decl.declaredType)) {
-			return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName +
-					"' declared as " + decl.declaredType + " but initialized with " + inferredType));
+		if (!inferredType.equals(decl.declaredType())) {
+			return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
+					"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
 		}
 
 		// Parse the value expression
-		Result<ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
+		Result<ExpressionModel.ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
 		if (valueResult.isErr()) {
 			return Result.err(valueResult.errValue());
 		}
@@ -347,16 +205,16 @@ public final class App {
 		if (continuation.startsWith("let ")) {
 			// Another let binding follows - recursively parse it with updated context
 			java.util.Map<String, String> newVariables = new java.util.HashMap<>(boundVariables);
-			newVariables.put(decl.varName, decl.valueExpr);
+			newVariables.put(decl.varName(), decl.valueExpr());
 			java.util.Map<String, String> newTypes = new java.util.HashMap<>(variableTypes);
-			newTypes.put(decl.varName, decl.declaredType);
+			newTypes.put(decl.varName(), decl.declaredType());
 			return parseLetExpressionBindingWithContext(continuation, newVariables, newTypes);
 		}
 
 		// Should be a variable reference - validate it matches the declared variable
-		if (!continuation.equals(decl.varName)) {
+		if (!continuation.equals(decl.varName())) {
 			return Result.err(new CompileError("Invalid let binding: expected reference to variable '" +
-					decl.varName + "' but got '" + continuation + "'"));
+					decl.varName() + "' but got '" + continuation + "'"));
 		}
 
 		// Return the value expression result (the variable evaluates to its bound
@@ -364,105 +222,43 @@ public final class App {
 		return Result.ok(valueResult.okValue());
 	}
 
-	private static Result<String, CompileError> extractTypeFromExpression(String expr) {
-		expr = expr.trim();
-		
-		// Handle read operations
-		if (expr.startsWith("read ")) {
-			String typeSpec = expr.substring(5).trim();
-			if (!typeSpec.matches("[UI]\\d+")) {
-				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
-			}
-			return Result.ok(typeSpec);
-		}
-		
-		// For now, we only support type extraction for simple read operations
-		// Complex expressions would need more sophisticated type inference
-		return Result.err(new CompileError("Cannot infer type for complex expression: " + expr));
-	}
-
-	private static List<String> splitTokensByOperators(String expr, boolean isAdditive) {
-		List<String> result = new ArrayList<>();
-		StringBuilder token = new StringBuilder();
-		int depth = 0;
-
-		for (char c : expr.toCharArray()) {
-			boolean isOp = isAdditive ? (c == '+' || c == '-') : (c == '*');
-			if (c == '(') {
-				depth++;
-				token.append(c);
-			} else if (c == ')') {
-				depth--;
-				token.append(c);
-			} else if (isOp && depth == 0 && (!isAdditive || token.length() > 0)) {
-				String t = token.toString().trim();
-				if (!t.isEmpty() || !isAdditive) {
-					result.add(t);
-				}
-				token = new StringBuilder();
-			} else {
-				token.append(c);
-			}
-		}
-
-		String t = token.toString().trim();
-		if (!t.isEmpty() || !isAdditive) {
-			result.add(t);
-		}
-		return result;
-	}
-
-	private static List<String> splitAddOperators(String expr) {
-		return splitTokensByOperators(expr, true);
-	}
-
-	private static final class ParsedMult {
-		final int readCount;
-		final long literalValue;
-		final List<ExpressionTerm> terms;
-
-		ParsedMult(int readCount, long literalValue, List<ExpressionTerm> terms) {
-			this.readCount = readCount;
-			this.literalValue = literalValue;
-			this.terms = terms;
-		}
-	}
-
-	private static Result<ParsedMult, CompileError> parseMultiplicative(String expr, boolean isSubtracted) {
-		List<MultOperatorToken> multTokens = splitByMultOperators(expr);
-		List<ExpressionTerm> multTerms = new ArrayList<>();
+	private static Result<ExpressionModel.ParsedMult, CompileError> parseMultiplicative(String expr,
+			boolean isSubtracted) {
+		List<ExpressionModel.MultOperatorToken> multTokens = splitByMultOperators(expr);
+		List<ExpressionModel.ExpressionTerm> multTerms = new ArrayList<>();
 		long multLiteral = 1;
 		int lastExpandedParensSize = 0;
 
 		for (int j = 0; j < multTokens.size(); j++) {
-			MultOperatorToken opToken = multTokens.get(j);
+			ExpressionModel.MultOperatorToken opToken = multTokens.get(j);
 			String multToken = opToken.token.trim();
 			char operator = opToken.operator;
 
 			if (multToken.startsWith("(") && multToken.endsWith(")")) {
-				Result<ParenthesizedTokenResult, CompileError> pResult = processParenthesizedToken(multToken, j,
+				Result<ExpressionModel.ParenthesizedTokenResult, CompileError> pResult = processParenthesizedToken(multToken, j,
 						isSubtracted, multTokens.size());
 				if (pResult.isErr()) {
 					return Result.err(pResult.errValue());
 				}
-				ParenthesizedTokenResult pData = pResult.okValue();
-				multTerms.addAll(pData.terms);
-				Result<Long, CompileError> litResult = updateLiteral(multLiteral, pData.literalValue, j == 0, operator);
+				ExpressionModel.ParenthesizedTokenResult pData = pResult.okValue();
+				multTerms.addAll(pData.terms());
+				Result<Long, CompileError> litResult = updateLiteral(multLiteral, pData.literalValue(), j == 0, operator);
 				if (litResult.isErr()) {
 					return Result.err(litResult.errValue());
 				}
 				multLiteral = litResult.okValue();
-				lastExpandedParensSize = pData.expandedSize;
+				lastExpandedParensSize = pData.expandedSize();
 			} else {
-				Result<ExpressionTerm, CompileError> termResult = parseTerm(multToken);
+				Result<ExpressionModel.ExpressionTerm, CompileError> termResult = parseTerm(multToken);
 				if (termResult.isErr()) {
 					return Result.err(termResult.errValue());
 				}
 
-				ExpressionTerm baseTerm = termResult.okValue();
+				ExpressionModel.ExpressionTerm baseTerm = termResult.okValue();
 				boolean isMultiplied = (j > 0 && operator == '*');
 				boolean isDivided = (j > 0 && operator == '/');
-				ExpressionTerm finalTerm = new ExpressionTerm(baseTerm.readCount, baseTerm.value, isSubtracted, isMultiplied,
+				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(baseTerm.readCount,
+						baseTerm.value, isSubtracted, isMultiplied,
 						isDivided);
 				multTerms.add(finalTerm);
 
@@ -478,7 +274,7 @@ public final class App {
 		fixGroupingBoundaries(multTerms, lastExpandedParensSize, multTokens.size());
 
 		int totalReads = multTerms.stream().mapToInt(t -> t.readCount).sum();
-		return Result.ok(new ParsedMult(totalReads, multLiteral, multTerms));
+		return Result.ok(new ExpressionModel.ParsedMult(totalReads, multLiteral, multTerms));
 	}
 
 	private static Result<Long, CompileError> updateLiteral(long current, long value, boolean isFirst, char operator) {
@@ -499,42 +295,45 @@ public final class App {
 		return Result.ok(current * value);
 	}
 
-	private static void fixGroupingBoundaries(List<ExpressionTerm> multTerms, int lastExpandedParensSize,
+	private static void fixGroupingBoundaries(List<ExpressionModel.ExpressionTerm> multTerms, int lastExpandedParensSize,
 			int multTokensSize) {
 		if (lastExpandedParensSize > 1 && multTokensSize > 1) {
 			int lastJ0Index = lastExpandedParensSize - 1;
 			if (lastJ0Index + 1 < multTerms.size()) {
-				ExpressionTerm nextTerm = multTerms.get(lastJ0Index + 1);
+				ExpressionModel.ExpressionTerm nextTerm = multTerms.get(lastJ0Index + 1);
 				if (nextTerm.isMultiplied || nextTerm.isDivided) {
-					ExpressionTerm termToMark = multTerms.get(lastJ0Index);
-					multTerms.set(lastJ0Index, new ExpressionTerm(termToMark.readCount, termToMark.value,
+					ExpressionModel.ExpressionTerm termToMark = multTerms.get(lastJ0Index);
+					multTerms.set(lastJ0Index, new ExpressionModel.ExpressionTerm(termToMark.readCount, termToMark.value,
 							termToMark.isSubtracted, true));
 				}
 			}
 		}
 	}
 
-	private static Result<ParenthesizedTokenResult, CompileError> processParenthesizedToken(String multToken,
+	private static Result<ExpressionModel.ParenthesizedTokenResult, CompileError> processParenthesizedToken(
+			String multToken,
 			int position, boolean isSubtracted, int totalTokens) {
 		String inner = multToken.substring(1, multToken.length() - 1);
-		Result<ExpressionResult, CompileError> innerResult = parseExpressionWithRead(inner);
+		Result<ExpressionModel.ExpressionResult, CompileError> innerResult = parseExpressionWithRead(inner);
 		if (innerResult.isErr()) {
 			return Result.err(innerResult.errValue());
 		}
 
-		ExpressionResult innerExpr = innerResult.okValue();
-		List<ExpressionTerm> terms = new ArrayList<>();
+		ExpressionModel.ExpressionResult innerExpr = innerResult.okValue();
+		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 
 		if (position == 0) {
 			// First term: expand the inner expression, keeping original isMultiplied states
 			for (int i = 0; i < innerExpr.terms.size(); i++) {
-				ExpressionTerm innerTerm = innerExpr.terms.get(i);
+				ExpressionModel.ExpressionTerm innerTerm = innerExpr.terms.get(i);
 				boolean isLastOfGroup = (i == innerExpr.terms.size() - 1) && totalTokens > 1;
-				ExpressionTerm finalTerm = new ExpressionTerm(innerTerm.readCount, innerTerm.value,
+				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(innerTerm.readCount,
+						innerTerm.value,
 						isSubtracted, innerTerm.isMultiplied, false, isLastOfGroup);
 				terms.add(finalTerm);
 			}
-			return Result.ok(new ParenthesizedTokenResult(terms, innerExpr.literalValue, innerExpr.terms.size()));
+			return Result
+					.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue, innerExpr.terms.size()));
 		} else {
 			// Multiplicative position: only support simple reads/literals
 			if (innerExpr.readCount > 1) {
@@ -544,29 +343,20 @@ public final class App {
 			}
 
 			for (int k = 0; k < innerExpr.terms.size(); k++) {
-				ExpressionTerm innerTerm = innerExpr.terms.get(k);
+				ExpressionModel.ExpressionTerm innerTerm = innerExpr.terms.get(k);
 				boolean isMultiplied = (k == 0) ? true : innerTerm.isMultiplied;
-				ExpressionTerm finalTerm = new ExpressionTerm(innerTerm.readCount, innerTerm.value,
+				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(innerTerm.readCount,
+						innerTerm.value,
 						isSubtracted, isMultiplied);
 				terms.add(finalTerm);
 			}
-			return Result.ok(new ParenthesizedTokenResult(terms, innerExpr.literalValue, 0));
+			return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue, 0));
 		}
 	}
 
-	private static class MultOperatorToken {
-		final String token;
-		final char operator;
-
-		MultOperatorToken(String token, char operator) {
-			this.token = token;
-			this.operator = operator;
-		}
-	}
-
-	private static List<MultOperatorToken> splitByMultOperators(String expr) {
+	private static List<ExpressionModel.MultOperatorToken> splitByMultOperators(String expr) {
 		// Split by * or / while respecting parentheses, tracking which operator
-		List<MultOperatorToken> result = new ArrayList<>();
+		List<ExpressionModel.MultOperatorToken> result = new ArrayList<>();
 		StringBuilder token = new StringBuilder();
 		char lastOp = '\0';
 		int depth = 0;
@@ -581,7 +371,7 @@ public final class App {
 				depth--;
 				token.append(c);
 			} else if ((c == '*' || c == '/') && depth == 0) {
-				result.add(new MultOperatorToken(token.toString(), lastOp));
+				result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
 				token = new StringBuilder();
 				lastOp = c;
 			} else {
@@ -589,38 +379,11 @@ public final class App {
 			}
 		}
 
-		result.add(new MultOperatorToken(token.toString(), lastOp));
+		result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
 		return result;
 	}
 
-	private static final class ExpressionTerm {
-		final int readCount;
-		final long value;
-		final boolean isSubtracted;
-		final boolean isMultiplied;
-		final boolean isDivided;
-		final boolean isParenthesizedGroupEnd;
-
-		ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied) {
-			this(readCount, value, isSubtracted, isMultiplied, false, false);
-		}
-
-		ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided) {
-			this(readCount, value, isSubtracted, isMultiplied, isDivided, false);
-		}
-
-		ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
-				boolean isParenthesizedGroupEnd) {
-			this.readCount = readCount;
-			this.value = value;
-			this.isSubtracted = isSubtracted;
-			this.isMultiplied = isMultiplied;
-			this.isDivided = isDivided;
-			this.isParenthesizedGroupEnd = isParenthesizedGroupEnd;
-		}
-	}
-
-	private static Result<ExpressionTerm, CompileError> parseTerm(String term) {
+	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseTerm(String term) {
 		term = term.trim();
 
 		if (term.startsWith("read ")) {
@@ -628,56 +391,15 @@ public final class App {
 			if (!typeSpec.matches("[UI]\\d+")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
-			return Result.ok(new ExpressionTerm(1, 0, false, false));
+			return Result.ok(new ExpressionModel.ExpressionTerm(1, 0, false, false));
 		}
 
-		Result<Long, CompileError> literalResult = parseLiteral(term);
+		Result<Long, CompileError> literalResult = LiteralParser.parseLiteral(term);
 		if (literalResult.isErr()) {
 			return Result.err(literalResult.errValue());
 		}
 
-		return Result.ok(new ExpressionTerm(0, literalResult.okValue(), false, false));
-	}
-
-	private static Result<Long, CompileError> parseLiteral(String literal) {
-		try {
-			String numericPart = literal;
-			String typeSuffix = null;
-
-			if (literal.matches(".*[UI]\\d+$")) {
-				typeSuffix = literal.replaceAll("^.*([UI]\\d+)$", "$1");
-				numericPart = literal.replaceAll("[UI]\\d+$", "");
-			}
-
-			long value = Long.parseLong(numericPart);
-
-			if (typeSuffix != null) {
-				boolean isUnsigned = typeSuffix.startsWith("U");
-				int bits = Integer.parseInt(typeSuffix.substring(1));
-
-				if (isUnsigned) {
-					if (value < 0) {
-						return Result.err(new CompileError("Negative value not allowed for unsigned type: " + literal));
-					}
-					long maxValue = (1L << bits) - 1;
-					if (value > maxValue) {
-						return Result.err(new CompileError(
-								"Value " + value + " exceeds maximum for " + typeSuffix + " (" + maxValue + "): " + literal));
-					}
-				} else {
-					long minValue = -(1L << (bits - 1));
-					long maxValue = (1L << (bits - 1)) - 1;
-					if (value < minValue || value > maxValue) {
-						return Result.err(new CompileError("Value " + value + " out of range for " + typeSuffix + " (" + minValue
-								+ " to " + maxValue + "): " + literal));
-					}
-				}
-			}
-
-			return Result.ok(value);
-		} catch (NumberFormatException e) {
-			return Result.err(new CompileError("Failed to parse numeric value: " + literal));
-		}
+		return Result.ok(new ExpressionModel.ExpressionTerm(0, literalResult.okValue(), false, false));
 	}
 
 	public static Result<RunResult, ApplicationError> run(String source, int[] input) {
