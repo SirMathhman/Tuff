@@ -157,6 +157,11 @@ public final class AppTest {
 		assertValidWithInput("let x = read U8; x + x", 4, 2, 3);
 	}
 
+	@Test
+	void shouldSupportMutableVariableAssignment() {
+		assertValidWithInput("let mut x = read U8; x = read U8; x", 2, 1, 2);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

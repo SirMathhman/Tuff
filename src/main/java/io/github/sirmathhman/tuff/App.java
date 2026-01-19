@@ -87,8 +87,6 @@ public final class App {
 		return generateInstructions(exprResult.okValue(), instructions);
 	}
 
-
-
 	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
 			List<Instruction> instructions) {
 		if (expr.readCount == 0) {
