@@ -14,7 +14,7 @@ public final class ParsingUtils {
 	 * Find the index of a semicolon at depth 0 in the given string,
 	 * accounting for nested parentheses and braces.
 	 *
-	 * @param text   the text to search
+	 * @param text       the text to search
 	 * @param startIndex the index to start searching from
 	 * @return the index of the semicolon, or -1 if not found
 	 */

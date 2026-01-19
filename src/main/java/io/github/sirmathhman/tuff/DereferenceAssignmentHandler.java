@@ -18,7 +18,8 @@ public final class DereferenceAssignmentHandler {
 			String continuation,
 			List<Instruction> instructions,
 			Map<String, Integer> variableAddresses) {
-		// For dereference assignments, the initialValueExpr should be a reference like &mut x
+		// For dereference assignments, the initialValueExpr should be a reference like
+		// &mut x
 		String refTarget = extractReferenceTarget(initialValueExpr);
 		if (refTarget == null) {
 			return Result.err(new CompileError("Invalid reference expression: " + initialValueExpr));
@@ -32,7 +33,8 @@ public final class DereferenceAssignmentHandler {
 			return Result.err(new CompileError("Cannot reference undefined variable '" + refTarget + "'"));
 		}
 
-		// Map this variable name to the referenced address (it's a pointer to that address)
+		// Map this variable name to the referenced address (it's a pointer to that
+		// address)
 		Map<String, Integer> addresses = new HashMap<>(variableAddresses);
 		addresses.put(varName, referencedAddr);
 

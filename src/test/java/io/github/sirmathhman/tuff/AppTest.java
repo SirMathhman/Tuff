@@ -219,6 +219,16 @@ public final class AppTest {
 		assertValidWithInput("let mut x = 0; let y = &mut x; *y = read I32; x", 42, 42);
 	}
 
+	@Test
+	void shouldReadBoolZero() {
+		assertValidWithInput("read Bool", 0, 0);
+	}
+
+	@Test
+	void shouldReadBoolOne() {
+		assertValidWithInput("read Bool", 1, 1);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

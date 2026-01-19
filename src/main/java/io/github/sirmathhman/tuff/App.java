@@ -448,7 +448,7 @@ public final class App {
 
 		if (term.startsWith("read ")) {
 			String typeSpec = term.substring(5).trim();
-			if (!typeSpec.matches("\\*?[UI]\\d+")) {
+			if (!typeSpec.matches("\\*?([UI]\\d+|Bool)")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
 			return Result.ok(new ExpressionModel.ExpressionTerm(1, 0, false, false));

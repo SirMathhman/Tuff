@@ -97,7 +97,8 @@ public final class LetBindingHandler {
 		}
 		java.util.regex.Pattern varPattern = java.util.regex.Pattern.compile("\\b" + varName + "\\b");
 		int occurrences = 0;
-		for (java.util.regex.Matcher m = varPattern.matcher(continuation); m.find(); occurrences++);
+		for (java.util.regex.Matcher m = varPattern.matcher(continuation); m.find(); occurrences++)
+			;
 		if (occurrences > 1) {
 			return handleMultipleVariableReferences(varName, decl.valueExpr(), continuation, occurrences, instructions);
 		}
@@ -332,7 +333,8 @@ public final class LetBindingHandler {
 		// Parse and evaluate initial value if provided, store in memory
 		if (initialValueExpr != null) {
 			Result<Void, CompileError> storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
-			if (storeResult.isErr()) return storeResult;
+			if (storeResult.isErr())
+				return storeResult;
 		}
 
 		// Parse continuation which may have multiple assignments and references
@@ -340,23 +342,27 @@ public final class LetBindingHandler {
 		int assignmentCount = 0;
 		while (true) {
 			Result<AssignmentParseResult, CompileError> assignResult = parseAssignment(varName, remaining);
-			if (assignResult.isErr()) break; // No more assignments
+			if (assignResult.isErr())
+				break; // No more assignments
 
 			AssignmentParseResult parsed = assignResult.okValue();
 			Result<Void, CompileError> validationResult = validateUninitializedAssignment(isUninitialized,
 					varName, assignmentCount, isMutableUninitialized);
-			if (validationResult.isErr()) return validationResult;
+			if (validationResult.isErr())
+				return validationResult;
 			assignmentCount++;
 
 			// Parse and evaluate assignment value
 			Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(
 					parsed.valueExpr());
-			if (exprResult.isErr()) return Result.err(exprResult.errValue());
+			if (exprResult.isErr())
+				return Result.err(exprResult.errValue());
 
 			// Generate instructions for assignment value
 			Result<Void, CompileError> assignGenResult = App.generateInstructions(exprResult.okValue(),
 					instructions);
-			if (assignGenResult.isErr()) return assignGenResult;
+			if (assignGenResult.isErr())
+				return assignGenResult;
 
 			// Store the value appropriately
 			if (parsed.isDereference()) {
