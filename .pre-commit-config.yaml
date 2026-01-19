@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: check-package-class-limit
+        name: Check package class limit
+        entry: python.exe check_package_class_limit.py
+        language: system
+        stages: [commit]
+        always_run: true
