@@ -34,7 +34,7 @@ public final class InstructionBuilder {
 			}
 
 			// Check if this is a multiplicative term following a parenthesized group
-			if (term.isMultiplied && i > 0 && terms.get(i - 1).isParenthesizedGroupEnd
+			if (term.isMultiplied() && i > 0 && terms.get(i - 1).isParenthesizedGroupEnd()
 					&& !firstAdditiveGroup) {
 				// Multiply the previous result by this term
 				instructions.add(
@@ -85,16 +85,15 @@ public final class InstructionBuilder {
 		java.util.List<Character> groupOps = new java.util.ArrayList<>();
 		groupRegs.add(readRegIndex);
 		groupOps.add('\0'); // No operator for first term
-		boolean isSubtracted = term.isSubtracted;
+		boolean isSubtracted = term.isSubtracted();
 		readRegIndex++;
 
 		// Consume all multiplied/divided terms that follow
-		while (i + 1 < terms.size() && (terms.get(i + 1).isMultiplied || terms.get(i + 1).isDivided)
-				&& terms.get(i + 1).readCount > 0 && !terms.get(i).isParenthesizedGroupEnd) {
+		while (isMultiplicativeNext(terms, i) && !terms.get(i).isParenthesizedGroupEnd()) {
 			i++;
 			ExpressionModel.ExpressionTerm nextTerm = terms.get(i);
 			groupRegs.add(readRegIndex);
-			groupOps.add(nextTerm.isDivided ? '/' : '*');
+			groupOps.add(nextTerm.isDivided() ? '/' : '*');
 			readRegIndex++;
 		}
 
@@ -102,8 +101,8 @@ public final class InstructionBuilder {
 		resultReg = processAdditiveGroup(groupRegs, groupOps, isSubtracted, firstAdditiveGroup, resultReg,
 				instructions);
 
-		boolean hasLogicalOrBoundary = term.isLogicalOrBoundary;
-		boolean hasLogicalAndBoundary = term.isLogicalAndBoundary;
+		boolean hasLogicalOrBoundary = term.isLogicalOrBoundary();
+		boolean hasLogicalAndBoundary = term.isLogicalAndBoundary();
 		return new ProcessGroupResult(resultReg, readRegIndex, i, hasLogicalOrBoundary, hasLogicalAndBoundary);
 	}
 
@@ -142,7 +141,7 @@ public final class InstructionBuilder {
 	}
 
 	private static boolean isMultiplicativeNext(List<ExpressionModel.ExpressionTerm> terms, int i) {
-		return i + 1 < terms.size() && (terms.get(i + 1).isMultiplied || terms.get(i + 1).isDivided)
+		return i + 1 < terms.size() && (terms.get(i + 1).isMultiplied() || terms.get(i + 1).isDivided())
 				&& terms.get(i + 1).readCount > 0;
 	}
 
@@ -152,7 +151,7 @@ public final class InstructionBuilder {
 			i++;
 			ExpressionModel.ExpressionTerm multTerm = terms.get(i);
 			instructions.add(new Instruction(
-					multTerm.isDivided ? Operation.Div : Operation.Mul, Variant.Immediate, destReg,
+					multTerm.isDivided() ? Operation.Div : Operation.Mul, Variant.Immediate, destReg,
 					(long) readRegIndex));
 			readRegIndex++;
 		}

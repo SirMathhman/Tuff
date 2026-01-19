@@ -17,5 +17,10 @@
 			<property name="countEmpty" value="false" />
 			<property name="tokens" value="METHOD_DEF,COMPACT_CTOR_DEF" />
 		</module>
+
+		<!-- Enforce maximum boolean fields of 3 per class -->
+		<module name="io.github.sirmathhman.tuff.checkstyle.BooleanFieldCountCheck">
+			<property name="max" value="3" />
+		</module>
 	</module>
 </module>

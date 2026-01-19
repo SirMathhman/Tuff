@@ -21,13 +21,11 @@ public final class ExpressionModel {
 	public static final class ExpressionTerm {
 		public final int readCount;
 		public final long value;
-		public final boolean isSubtracted;
-		public final boolean isMultiplied;
-		public final boolean isDivided;
-		public final boolean isParenthesizedGroupEnd;
-		public final boolean isDereferenced;
-		public final boolean isLogicalOrBoundary;
-		public final boolean isLogicalAndBoundary;
+		private final AdditiveOp additiveOp;
+		private final MultiplicativeOp multiplicativeOp;
+		private final GroupEnd groupEnd;
+		private final Dereference dereference;
+		private final LogicalBoundary logicalBoundary;
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied) {
 			this(readCount, value, isSubtracted, isMultiplied, false, false, false, false, false);
@@ -59,13 +57,115 @@ public final class ExpressionModel {
 				boolean isLogicalAndBoundary) {
 			this.readCount = readCount;
 			this.value = value;
-			this.isSubtracted = isSubtracted;
-			this.isMultiplied = isMultiplied;
-			this.isDivided = isDivided;
-			this.isParenthesizedGroupEnd = isParenthesizedGroupEnd;
-			this.isDereferenced = isDereferenced;
-			this.isLogicalOrBoundary = isLogicalOrBoundary;
-			this.isLogicalAndBoundary = isLogicalAndBoundary;
+			this.additiveOp = AdditiveOp.from(isSubtracted);
+			this.multiplicativeOp = MultiplicativeOp.from(isMultiplied, isDivided);
+			this.groupEnd = GroupEnd.from(isParenthesizedGroupEnd);
+			this.dereference = Dereference.from(isDereferenced);
+			this.logicalBoundary = LogicalBoundary.from(isLogicalOrBoundary, isLogicalAndBoundary);
+		}
+
+		public boolean isSubtracted() {
+			return additiveOp == AdditiveOp.Subtract;
+		}
+
+		public boolean isMultiplied() {
+			return multiplicativeOp == MultiplicativeOp.Multiply;
+		}
+
+		public boolean isDivided() {
+			return multiplicativeOp == MultiplicativeOp.Divide;
+		}
+
+		public boolean isParenthesizedGroupEnd() {
+			return groupEnd == GroupEnd.ParenthesizedGroupEnd;
+		}
+
+		public boolean isDereferenced() {
+			return dereference == Dereference.Dereferenced;
+		}
+
+		public boolean isLogicalOrBoundary() {
+			return logicalBoundary.hasOr;
+		}
+
+		public boolean isLogicalAndBoundary() {
+			return logicalBoundary.hasAnd;
+		}
+
+		public ExpressionTerm withLogicalBoundary(boolean hasOrBoundary, boolean hasAndBoundary) {
+			return new ExpressionTerm(readCount, value, isSubtracted(),
+					isMultiplied(), isDivided(), isParenthesizedGroupEnd(), isDereferenced(), hasOrBoundary, hasAndBoundary);
+		}
+	}
+
+	public enum AdditiveOp {
+		Add,
+		Subtract;
+
+		private static AdditiveOp from(boolean isSubtracted) {
+			return isSubtracted ? Subtract : Add;
+		}
+	}
+
+	public enum MultiplicativeOp {
+		None,
+		Multiply,
+		Divide;
+
+		private static MultiplicativeOp from(boolean isMultiplied, boolean isDivided) {
+			if (isDivided) {
+				return Divide;
+			}
+			if (isMultiplied) {
+				return Multiply;
+			}
+			return None;
+		}
+	}
+
+	public enum GroupEnd {
+		None,
+		ParenthesizedGroupEnd;
+
+		private static GroupEnd from(boolean isParenthesizedGroupEnd) {
+			return isParenthesizedGroupEnd ? ParenthesizedGroupEnd : None;
+		}
+	}
+
+	public enum Dereference {
+		Direct,
+		Dereferenced;
+
+		private static Dereference from(boolean isDereferenced) {
+			return isDereferenced ? Dereferenced : Direct;
+		}
+	}
+
+	public enum LogicalBoundary {
+		None(false, false),
+		Or(true, false),
+		And(false, true),
+		OrAnd(true, true);
+
+		private final boolean hasOr;
+		private final boolean hasAnd;
+
+		LogicalBoundary(boolean hasOr, boolean hasAnd) {
+			this.hasOr = hasOr;
+			this.hasAnd = hasAnd;
+		}
+
+		private static LogicalBoundary from(boolean hasOr, boolean hasAnd) {
+			if (hasOr && hasAnd) {
+				return OrAnd;
+			}
+			if (hasOr) {
+				return Or;
+			}
+			if (hasAnd) {
+				return And;
+			}
+			return None;
 		}
 	}
 

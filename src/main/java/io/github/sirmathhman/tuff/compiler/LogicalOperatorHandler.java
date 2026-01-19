@@ -28,12 +28,9 @@ public final class LogicalOperatorHandler {
 			// Mark the last term of each operand (except the last) with logical boundary
 			if (i < tokens.size() - 1 && operand.terms.size() > 0) {
 				ExpressionModel.ExpressionTerm lastTerm = operand.terms.get(operand.terms.size() - 1);
-				boolean newOrBoundary = isAndOperator ? lastTerm.isLogicalOrBoundary : true;
-				boolean newAndBoundary = isAndOperator ? true : lastTerm.isLogicalAndBoundary;
-				operand.terms.set(operand.terms.size() - 1,
-						new ExpressionModel.ExpressionTerm(lastTerm.readCount, lastTerm.value, lastTerm.isSubtracted,
-								lastTerm.isMultiplied, lastTerm.isDivided, lastTerm.isParenthesizedGroupEnd,
-								lastTerm.isDereferenced, newOrBoundary, newAndBoundary));
+				boolean newOrBoundary = isAndOperator ? lastTerm.isLogicalOrBoundary() : true;
+				boolean newAndBoundary = isAndOperator ? true : lastTerm.isLogicalAndBoundary();
+				operand.terms.set(operand.terms.size() - 1, lastTerm.withLogicalBoundary(newOrBoundary, newAndBoundary));
 			}
 
 			allTerms.addAll(operand.terms);

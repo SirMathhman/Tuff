@@ -330,10 +330,10 @@ public final class App {
 			int lastJ0Index = lastExpandedParensSize - 1;
 			if (lastJ0Index + 1 < multTerms.size()) {
 				ExpressionModel.ExpressionTerm nextTerm = multTerms.get(lastJ0Index + 1);
-				if (nextTerm.isMultiplied || nextTerm.isDivided) {
+				if (nextTerm.isMultiplied() || nextTerm.isDivided()) {
 					ExpressionModel.ExpressionTerm termToMark = multTerms.get(lastJ0Index);
 					multTerms.set(lastJ0Index, new ExpressionModel.ExpressionTerm(termToMark.readCount, termToMark.value,
-							termToMark.isSubtracted, true));
+							termToMark.isSubtracted(), true));
 				}
 			}
 		}
@@ -358,7 +358,7 @@ public final class App {
 				boolean isLastOfGroup = (i == innerExpr.terms.size() - 1) && totalTokens > 1;
 				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(innerTerm.readCount,
 						innerTerm.value,
-						isSubtracted, innerTerm.isMultiplied, false, isLastOfGroup);
+						isSubtracted, innerTerm.isMultiplied(), false, isLastOfGroup);
 				terms.add(finalTerm);
 			}
 			return Result
@@ -373,7 +373,7 @@ public final class App {
 
 			for (int k = 0; k < innerExpr.terms.size(); k++) {
 				ExpressionModel.ExpressionTerm innerTerm = innerExpr.terms.get(k);
-				boolean isMultiplied = (k == 0) ? true : innerTerm.isMultiplied;
+				boolean isMultiplied = (k == 0) ? true : innerTerm.isMultiplied();
 				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(innerTerm.readCount,
 						innerTerm.value,
 						isSubtracted, isMultiplied);
