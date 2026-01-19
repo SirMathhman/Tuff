@@ -299,6 +299,21 @@ public final class AppTest {
 		assertValidWithInput("read Bool == read Bool", 0, 1, 0);
 	}
 
+	@Test
+	void shouldSupportEqualityOperatorWithU32() {
+		assertValidWithInput("read U32 == read U32", 1, 429496729, 429496729);
+	}
+
+	@Test
+	void shouldSupportEqualityOperatorWithU32NotEqual() {
+		assertValidWithInput("read U32 == read U32", 0, 429496729, 100);
+	}
+
+	@Test
+	void shouldSupportEqualityInLetBinding() {
+		assertValidWithInput("let x = read U32 == read U32; x", 1, 100, 100);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

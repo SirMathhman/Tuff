@@ -22,19 +22,63 @@ public final class InstructionBuilder {
 	public static int buildResultWithPrecedence(List<ExpressionModel.ExpressionTerm> terms,
 			List<Instruction> instructions) {
 		// Check for equality comparison marker (readCount == -1)
-		boolean hasEqualityMarker = terms.stream().anyMatch(t -> t.readCount == -1);
-
-		if (hasEqualityMarker && terms.size() == 3) {
-			// This is a binary equality comparison
-			// loadAllReads already emitted: In 0, In 1
-			// So register 0 has left operand, register 1 has right operand
-			// Generate comparison: result = (reg0 == reg1) ? 1 : 0
-			instructions.add(new Instruction(Operation.Equal, Variant.Immediate, 0, 1L));
-			return 0;
+		int markerIdx = -1;
+		for (int j = 0; j < terms.size(); j++) {
+			if (terms.get(j).readCount == -1) {
+				markerIdx = j;
+				break;
+			}
 		}
 
-		int readRegIndex = 0;
-		int resultReg = 0;
+		if (markerIdx != -1) {
+			// This is a binary equality comparison
+			List<ExpressionModel.ExpressionTerm> leftTerms = terms.subList(0, markerIdx);
+			List<ExpressionModel.ExpressionTerm> rightTerms = terms.subList(markerIdx + 1, terms.size());
+
+			int leftResult;
+			int rightResult;
+
+			if (leftTerms.isEmpty()) {
+				// Left side is just a literal, but it will be handled by totalLiteral at the
+				// very end
+				// of generateInstructions. This is a bit awkward with comparison operators.
+				// However, if we assume literal 0 for now (the other literal will be added
+				// later)
+				// we might get away with it if only ONE side has a literal.
+				// But that's not robust.
+				leftResult = -1; // Marker for "will use literal later"
+			} else {
+				// We need a way to process a sublist of terms.
+				// Since registries were assigned sequentially based on the WHOLE list,
+				// we need to know the starting register for each side.
+				int leftStartingReg = 0;
+				leftResult = buildSubExpressionResult(leftTerms, leftStartingReg, instructions);
+			}
+
+			if (rightTerms.isEmpty()) {
+				rightResult = -1;
+			} else {
+				int rightStartingReg = (int) leftTerms.stream().filter(t -> t.readCount > 0).count();
+				rightResult = buildSubExpressionResult(rightTerms, rightStartingReg, instructions);
+			}
+
+			// Generate equality comparison
+			// If one side was a literal, we have a problem because totalLiteral is handled
+			// OUTSIDE this method.
+			// To keep it simple for now, we only support comparing reads.
+			if (leftResult != -1 && rightResult != -1) {
+				instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
+				return leftResult;
+			}
+		}
+
+		return buildSubExpressionResult(terms, 0, instructions);
+	}
+
+	private static int buildSubExpressionResult(List<ExpressionModel.ExpressionTerm> terms, int startReg,
+			List<Instruction> instructions) {
+		int readRegIndex = startReg;
+		int resultReg = startReg;
 		boolean firstAdditiveGroup = true;
 
 		int i = 0;
