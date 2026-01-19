@@ -61,28 +61,25 @@ public final class App {
 				}
 			}
 
-			// First term goes into register 0
-			int firstReadReg = 0;
-			for (ExpressionTerm term : expr.terms) {
-				if (term.readCount > 0) {
-					firstReadReg = 0;
-					break;
-				}
-			}
-
-			// Accumulate all reads with correct operations
+			// Process terms with multiplication handling
 			int regIndex = 0;
-			boolean firstRead = true;
+			boolean firstTerm = true;
+
 			for (ExpressionTerm term : expr.terms) {
 				if (term.readCount > 0) {
-					if (!firstRead) {
-						if (term.isSubtracted) {
-							instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 0, (long) regIndex));
-						} else {
-							instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) regIndex));
-						}
+					if (firstTerm) {
+						// First read goes to register 0
+						firstTerm = false;
+					} else if (term.isMultiplied) {
+						// Multiply: reg0 *= regIndex
+						instructions.add(new Instruction(Operation.Mul, Variant.Immediate, 0, (long) regIndex));
+					} else if (term.isSubtracted) {
+						// Subtract: reg0 -= regIndex
+						instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 0, (long) regIndex));
+					} else {
+						// Add: reg0 += regIndex
+						instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) regIndex));
 					}
-					firstRead = false;
 					regIndex++;
 				}
 			}
@@ -99,77 +96,106 @@ public final class App {
 	}
 
 	private static Result<ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
-		// Parse all terms separated by + or -, preserving the operators
-		List<ExpressionTerm> terms = new ArrayList<>();
-		int totalReads = 0;
-		long totalLiteral = 0;
+		// Split by + and - to get additive-level tokens
+		String[] addTokens = expr.split("(?<=[0-9UIe])\\s*[+-]\\s*");
+		List<Boolean> additiveOps = new ArrayList<>();
+		additiveOps.add(false);
 
-		// Split by + and -, keeping the operators
-		// Only treat +/- as operators if they're preceded by a digit, U, or 'e' (end of term)
-		String[] tokens = expr.split("(?<=[0-9UIe])\\s*[+-]\\s*");
-
-		// Track which operator preceded each token
-		List<Boolean> isSubtracted = new ArrayList<>();
-		isSubtracted.add(false); // First token is never subtracted
-		
-		// Find all + and - operators in the original expression
+		// Track which operator preceded each additive token
 		int lastIndex = 0;
-		for (String token : tokens) {
+		for (String token : addTokens) {
 			if (lastIndex == 0) {
 				lastIndex += token.length();
 				continue;
 			}
-			
 			int nextIndex = expr.indexOf(token, lastIndex);
 			if (nextIndex > 0) {
-				char operatorChar = expr.charAt(nextIndex - 1);
-				while (nextIndex > 0 && Character.isWhitespace(operatorChar)) {
+				char op = expr.charAt(nextIndex - 1);
+				while (nextIndex > 0 && Character.isWhitespace(op)) {
 					nextIndex--;
-					if (nextIndex > 0) {
-						operatorChar = expr.charAt(nextIndex - 1);
-					}
+					op = expr.charAt(nextIndex - 1);
 				}
-				isSubtracted.add(operatorChar == '-');
-				lastIndex = nextIndex + token.length();
+				additiveOps.add(op == '-');
+			}
+			lastIndex = nextIndex + token.length();
+		}
+
+		// Process each additive token for multiplicative operators
+		List<ExpressionTerm> allTerms = new ArrayList<>();
+		int totalReads = 0;
+		long totalLiteral = 0;
+
+		for (int i = 0; i < addTokens.length; i++) {
+			boolean isSubtracted = additiveOps.get(i);
+			Result<ParsedMult, CompileError> multResult = parseMultiplicative(addTokens[i].trim(), isSubtracted);
+			if (multResult.isErr()) {
+				return Result.err(multResult.errValue());
+			}
+
+			ParsedMult mult = multResult.okValue();
+			allTerms.addAll(mult.terms);
+			totalReads += mult.readCount;
+			if (isSubtracted) {
+				totalLiteral -= mult.literalValue;
+			} else {
+				totalLiteral += mult.literalValue;
 			}
 		}
 
-		for (int i = 0; i < tokens.length; i++) {
-			String token = tokens[i].trim();
-			if (token.isEmpty()) {
-				continue;
-			}
+		return Result.ok(new ExpressionResult(totalReads, totalLiteral, allTerms));
+	}
 
-			Result<ExpressionTerm, CompileError> termResult = parseTerm(token);
+	private static final class ParsedMult {
+		final int readCount;
+		final long literalValue;
+		final List<ExpressionTerm> terms;
+
+		ParsedMult(int readCount, long literalValue, List<ExpressionTerm> terms) {
+			this.readCount = readCount;
+			this.literalValue = literalValue;
+			this.terms = terms;
+		}
+	}
+
+	private static Result<ParsedMult, CompileError> parseMultiplicative(String expr, boolean isSubtracted) {
+		String[] multTokens = expr.split("(?<=[0-9UIe])\\s*[*]\\s*");
+		List<ExpressionTerm> multTerms = new ArrayList<>();
+		long multLiteral = 1;
+
+		for (int j = 0; j < multTokens.length; j++) {
+			String multToken = multTokens[j].trim();
+			Result<ExpressionTerm, CompileError> termResult = parseTerm(multToken);
 			if (termResult.isErr()) {
 				return Result.err(termResult.errValue());
 			}
 
 			ExpressionTerm baseTerm = termResult.okValue();
-			boolean subtracted = (i < isSubtracted.size()) ? isSubtracted.get(i) : false;
-			ExpressionTerm term = new ExpressionTerm(baseTerm.readCount, baseTerm.value, subtracted);
-			terms.add(term);
+			boolean isMultiplied = (j > 0);
+			ExpressionTerm finalTerm = new ExpressionTerm(baseTerm.readCount, baseTerm.value, isSubtracted, isMultiplied);
+			multTerms.add(finalTerm);
 
-			totalReads += term.readCount;
-			if (subtracted) {
-				totalLiteral -= term.value;
+			if (j == 0) {
+				multLiteral = baseTerm.value;
 			} else {
-				totalLiteral += term.value;
+				multLiteral *= baseTerm.value;
 			}
 		}
 
-		return Result.ok(new ExpressionResult(totalReads, totalLiteral, terms));
+		int totalReads = multTerms.stream().mapToInt(t -> t.readCount).sum();
+		return Result.ok(new ParsedMult(totalReads, multLiteral, multTerms));
 	}
 
 	private static final class ExpressionTerm {
 		final int readCount;
 		final long value;
 		final boolean isSubtracted;
+		final boolean isMultiplied;
 
-		ExpressionTerm(int readCount, long value, boolean isSubtracted) {
+		ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied) {
 			this.readCount = readCount;
 			this.value = value;
 			this.isSubtracted = isSubtracted;
+			this.isMultiplied = isMultiplied;
 		}
 	}
 
@@ -181,7 +207,7 @@ public final class App {
 			if (!typeSpec.matches("[UI]\\d+")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
-			return Result.ok(new ExpressionTerm(1, 0, false));
+			return Result.ok(new ExpressionTerm(1, 0, false, false));
 		}
 
 		Result<Long, CompileError> literalResult = parseLiteral(term);
@@ -189,7 +215,7 @@ public final class App {
 			return Result.err(literalResult.errValue());
 		}
 
-		return Result.ok(new ExpressionTerm(0, literalResult.okValue(), false));
+		return Result.ok(new ExpressionTerm(0, literalResult.okValue(), false, false));
 	}
 
 	private static Result<Long, CompileError> parseLiteral(String literal) {
