@@ -53,25 +53,6 @@
 					</execution>
 				</executions>
 			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-pmd-plugin</artifactId>
-				<version>3.24.0</version>
-				<configuration>
-					<minimumTokens>50</minimumTokens>
-					<skip>true</skip>
-					<skipEmptyReport>false</skipEmptyReport>
-				</configuration>
-				<executions>
-					<execution>
-						<id>cpd</id>
-						<phase>verify</phase>
-						<goals>
-							<goal>cpd-check</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
 		</plugins>
 	</build>
 </project>

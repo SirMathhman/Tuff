@@ -1,1 +1,1 @@
-mvn test --quiet && mvn verify
+mvn test --quiet && mvn verify && pmd cpd --dir src --language java --minimum-tokens 50

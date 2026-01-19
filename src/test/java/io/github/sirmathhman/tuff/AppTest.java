@@ -17,23 +17,20 @@ public final class AppTest {
 	private void assertValidWithInput(String source, int exitCode, int... input) {
 		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
 			Result<RunResult, CompileError> result = App.run(source, input);
-			assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue() : ""));
-
-			RunResult runResult = result.okValue();
-			assertEquals(exitCode, runResult.returnValue());
-			assertTrue(runResult.output().isEmpty());
+			assertValidResult(result, exitCode);
 		});
 	}
 
 	private void assertValid(String source, int exitCode) {
-		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
-			Result<RunResult, CompileError> result = App.run(source, new int[] {});
-			assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue() : ""));
+		assertValidWithInput(source, exitCode);
+	}
 
-			RunResult runResult = result.okValue();
-			assertEquals(exitCode, runResult.returnValue());
-			assertTrue(runResult.output().isEmpty());
-		});
+	private void assertValidResult(Result<RunResult, CompileError> result, int exitCode) {
+		assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue() : ""));
+
+		RunResult runResult = result.okValue();
+		assertEquals(exitCode, runResult.returnValue());
+		assertTrue(runResult.output().isEmpty());
 	}
 
 	@Test
