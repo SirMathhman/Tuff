@@ -66,6 +66,12 @@ public final class LetBindingHandler {
 			int nextMemAddr) {
 		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
 		String varName = decl.varName();
+
+		// Check if continuation is a scoped block { ... }
+		if (continuation.trim().startsWith("{")) {
+			return handleScopedBlock(varName, decl.valueExpr(), continuation, instructions, variableAddresses, nextMemAddr);
+		}
+
 		// Check if continuation starts with "let" (chained binding)
 		if (continuation.startsWith("let ")) {
 			return handleChainedLetBinding(varName, decl.valueExpr(), continuation, instructions,
@@ -159,6 +165,57 @@ public final class LetBindingHandler {
 	}
 
 	private record VariableDecl(String varName, boolean isMutable, String valueExpr) {
+	}
+
+	private static Result<Void, CompileError> handleScopedBlock(
+			String varName,
+			String initialValueExpr,
+			String continuation,
+			List<Instruction> instructions,
+			java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr) {
+		continuation = continuation.trim();
+		if (!continuation.startsWith("{"))
+			return Result.err(new CompileError("Expected '{' for scoped block"));
+		int closingBrace = findMatchingBrace(continuation, 0);
+		if (closingBrace == -1)
+			return Result.err(new CompileError("Unmatched '{' in scoped block"));
+		String blockContent = continuation.substring(1, closingBrace).trim();
+		if (initialValueExpr != null) {
+			Result<Void, CompileError> storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
+			if (storeResult.isErr())
+				return storeResult;
+		}
+		String remaining = blockContent;
+		while (true) {
+			Result<AssignmentParseResult, CompileError> assignResult = parseAssignment(varName, remaining);
+			if (assignResult.isErr())
+				break;
+			AssignmentParseResult parsed = assignResult.okValue();
+			Result<Void, CompileError> processResult = processAssignmentValue(parsed.valueExpr(), instructions, nextMemAddr);
+			if (processResult.isErr())
+				return processResult;
+			remaining = parsed.remaining();
+		}
+		if (!remaining.equals(varName)) {
+			return Result.err(new CompileError("Scoped block must end with variable reference, but got: " + remaining));
+		}
+		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
+		return Result.ok(null);
+	}
+
+	private static int findMatchingBrace(String str, int openBraceIndex) {
+		int count = 1;
+		for (int i = openBraceIndex + 1; i < str.length(); i++) {
+			if (str.charAt(i) == '{')
+				count++;
+			else if (str.charAt(i) == '}') {
+				count--;
+				if (count == 0)
+					return i;
+			}
+		}
+		return -1;
 	}
 
 	private static Result<Void, CompileError> handleChainedLetBinding(
@@ -355,28 +412,20 @@ public final class LetBindingHandler {
 				return validationResult;
 			assignmentCount++;
 
-			// Parse and evaluate assignment value
-			Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(
-					parsed.valueExpr());
-			if (exprResult.isErr())
-				return Result.err(exprResult.errValue());
-
-			// Generate instructions for assignment value
-			Result<Void, CompileError> assignGenResult = App.generateInstructions(exprResult.okValue(),
-					instructions);
-			if (assignGenResult.isErr())
-				return assignGenResult;
-
-			// Store the value appropriately
 			if (parsed.isDereference()) {
-				if (!addresses.containsKey(varName)) {
+				Result<Void, CompileError> parseResult = parseAndStoreAssignment(parsed.valueExpr(), instructions);
+				if (parseResult.isErr())
+					return parseResult;
+				if (!addresses.containsKey(varName))
 					return Result.err(new CompileError("Cannot dereference undefined variable '" + varName + "'"));
-				}
 				int pointerAddr = addresses.get(varName);
 				instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) pointerAddr));
 				instructions.add(new Instruction(Operation.Store, Variant.IndirectAddress, 0, 1L));
 			} else {
-				instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
+				Result<Void, CompileError> processResult = processAssignmentValue(parsed.valueExpr(), instructions,
+						nextMemAddr);
+				if (processResult.isErr())
+					return processResult;
 			}
 			remaining = parsed.remaining();
 		}
@@ -403,6 +452,21 @@ public final class LetBindingHandler {
 		return Result.ok(null);
 	}
 
+	private static Result<Void, CompileError> processAssignmentValue(String valueExpr, List<Instruction> instructions,
+			int nextMemAddr) {
+		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(valueExpr);
+		if (exprResult.isErr())
+			return Result.err(exprResult.errValue());
+		Result<Void, CompileError> assignGenResult = App.generateInstructions(exprResult.okValue(), instructions);
+		if (assignGenResult.isErr())
+			return assignGenResult;
+		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
+		return Result.ok(null);
+	}
+	private static Result<Void, CompileError> parseAndStoreAssignment(String valueExpr, List<Instruction> instructions) {
+		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(valueExpr);
+		return exprResult.isErr() ? Result.err(exprResult.errValue()) : App.generateInstructions(exprResult.okValue(), instructions);
+	}
 	private static Result<AssignmentParseResult, CompileError> parseAssignment(String varName, String remaining) {
 		// Check if there's an assignment: varName = expr OR *varName = expr
 		String trimmed = remaining.trim();

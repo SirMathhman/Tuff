@@ -220,6 +220,11 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportScopedBlockWithMutableVariableAssignment() {
+		assertValidWithInput("let mut x = 0; { x = read I32; x }", 42, 42);
+	}
+
+	@Test
 	void shouldReadBoolZero() {
 		assertValidWithInput("read Bool", 0, 0);
 	}
