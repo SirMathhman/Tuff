@@ -12,4 +12,21 @@ public record Instruction(
 	public long secondOperandOrZero() {
 		return secondOperand == null ? 0L : secondOperand;
 	}
+	
+	public String display() {
+		// Pretty-print the instruction
+		if (secondOperand == null) {
+			return String.format("%s %s %d", operation, variant, firstOperand);
+		} else {
+			return String.format("%s %s %d %d", operation, variant, firstOperand, secondOperand);
+		}
+	}
+
+	public static String displayAll(Instruction[] instructions) {
+		StringBuilder sb = new StringBuilder().append("[\r\n");
+		for (int i = 0; i < instructions.length; i++) {
+			sb.append(String.format("\t%04d: %s,%n", i, instructions[i].display()));
+		}
+		return sb.append("]").toString();
+	}
 }

@@ -8,6 +8,8 @@ import java.time.Duration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import io.github.sirmathhman.tuff.vm.Instruction;
+
 public final class AppTest {
 	@Test
 	void shouldRunTheSimplestProgramPossible() {
@@ -16,7 +18,7 @@ public final class AppTest {
 
 	private void assertValidWithInput(String source, int exitCode, int... input) {
 		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
-			Result<RunResult, CompileError> result = App.run(source, input);
+			Result<RunResult, ApplicationError> result = App.run(source, input);
 			assertValidResult(result, exitCode);
 		});
 	}
@@ -25,11 +27,12 @@ public final class AppTest {
 		assertValidWithInput(source, exitCode);
 	}
 
-	private void assertValidResult(Result<RunResult, CompileError> result, int exitCode) {
-		assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue() : ""));
+	private void assertValidResult(Result<RunResult, ApplicationError> result, int exitCode) {
+		assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue().display() : ""));
 
 		RunResult runResult = result.okValue();
-		assertEquals(exitCode, runResult.returnValue());
+		assertEquals(exitCode, runResult.returnValue(), "Unexpected exit code, instructions compiled are: " +
+				Instruction.displayAll(runResult.executedInstructions()));
 		assertTrue(runResult.output().isEmpty());
 	}
 
@@ -99,6 +102,10 @@ public final class AppTest {
 	}
 
 	private void assertInvalid(String source) {
-		Assertions.assertTrue(App.compile(source).isErr());
+		Result<Instruction[], CompileError> result = App.compile(source);
+		if (result.isOk()) {
+			Assertions.fail("Expected compilation to fail, but it succeeded and produced instructions: "
+					+ Instruction.displayAll(result.okValue()));
+		}
 	}
 }

@@ -3,7 +3,7 @@ package io.github.sirmathhman.tuff;
 /**
  * Represents a compilation error.
  */
-public record CompileError(String message) {
+public record CompileError(String message) implements Error {
 	public CompileError {
 		if (message == null) {
 			throw new IllegalArgumentException("Compile error message cannot be null");
@@ -11,7 +11,7 @@ public record CompileError(String message) {
 	}
 
 	@Override
-	public String toString() {
-		return "CompileError: " + message;
+	public String display() {
+		return message;
 	}
 }

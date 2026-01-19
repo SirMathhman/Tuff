@@ -24,6 +24,9 @@ public final class App {
 		}
 	}
 
+	private record ParenthesizedTokenResult(List<ExpressionTerm> terms, long literalValue, int expandedSize) {
+	}
+
 	public static Result<Instruction[], CompileError> compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
 
@@ -158,15 +161,17 @@ public final class App {
 	}
 
 	private static Result<ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
-		// Split by + and - to get additive-level tokens
-		String[] addTokens = expr.split("(?<=[0-9UIe])\\s*[+-]\\s*");
+		// Split by + and - to get additive-level tokens, but not inside parentheses
+		List<String> addTokens = splitAddOperators(expr);
 		List<Boolean> additiveOps = new ArrayList<>();
 		additiveOps.add(false);
 
 		// Track which operator preceded each additive token
+		int tokensFound = 0;
 		int lastIndex = 0;
 		for (String token : addTokens) {
-			if (lastIndex == 0) {
+			if (tokensFound == 0) {
+				tokensFound++;
 				lastIndex += token.length();
 				continue;
 			}
@@ -180,6 +185,7 @@ public final class App {
 				additiveOps.add(op == '-');
 			}
 			lastIndex = nextIndex + token.length();
+			tokensFound++;
 		}
 
 		// Process each additive token for multiplicative operators
@@ -187,9 +193,9 @@ public final class App {
 		int totalReads = 0;
 		long totalLiteral = 0;
 
-		for (int i = 0; i < addTokens.length; i++) {
+		for (int i = 0; i < addTokens.size(); i++) {
 			boolean isSubtracted = additiveOps.get(i);
-			Result<ParsedMult, CompileError> multResult = parseMultiplicative(addTokens[i].trim(), isSubtracted);
+			Result<ParsedMult, CompileError> multResult = parseMultiplicative(addTokens.get(i).trim(), isSubtracted);
 			if (multResult.isErr()) {
 				return Result.err(multResult.errValue());
 			}
@@ -207,6 +213,41 @@ public final class App {
 		return Result.ok(new ExpressionResult(totalReads, totalLiteral, allTerms));
 	}
 
+	private static List<String> splitTokensByOperators(String expr, boolean isAdditive) {
+		List<String> result = new ArrayList<>();
+		StringBuilder token = new StringBuilder();
+		int depth = 0;
+
+		for (char c : expr.toCharArray()) {
+			boolean isOp = isAdditive ? (c == '+' || c == '-') : (c == '*');
+			if (c == '(') {
+				depth++;
+				token.append(c);
+			} else if (c == ')') {
+				depth--;
+				token.append(c);
+			} else if (isOp && depth == 0 && (!isAdditive || token.length() > 0)) {
+				String t = token.toString().trim();
+				if (!t.isEmpty() || !isAdditive) {
+					result.add(t);
+				}
+				token = new StringBuilder();
+			} else {
+				token.append(c);
+			}
+		}
+
+		String t = token.toString().trim();
+		if (!t.isEmpty() || !isAdditive) {
+			result.add(t);
+		}
+		return result;
+	}
+
+	private static List<String> splitAddOperators(String expr) {
+		return splitTokensByOperators(expr, true);
+	}
+
 	private static final class ParsedMult {
 		final int readCount;
 		final long literalValue;
@@ -220,31 +261,120 @@ public final class App {
 	}
 
 	private static Result<ParsedMult, CompileError> parseMultiplicative(String expr, boolean isSubtracted) {
-		String[] multTokens = expr.split("(?<=[0-9UIe])\\s*[*]\\s*");
+		List<String> multTokens = splitByOperator(expr, '*');
 		List<ExpressionTerm> multTerms = new ArrayList<>();
 		long multLiteral = 1;
+		int lastExpandedParensSize = 0;
 
-		for (int j = 0; j < multTokens.length; j++) {
-			String multToken = multTokens[j].trim();
-			Result<ExpressionTerm, CompileError> termResult = parseTerm(multToken);
-			if (termResult.isErr()) {
-				return Result.err(termResult.errValue());
-			}
+		for (int j = 0; j < multTokens.size(); j++) {
+			String multToken = multTokens.get(j).trim();
 
-			ExpressionTerm baseTerm = termResult.okValue();
-			boolean isMultiplied = (j > 0);
-			ExpressionTerm finalTerm = new ExpressionTerm(baseTerm.readCount, baseTerm.value, isSubtracted, isMultiplied);
-			multTerms.add(finalTerm);
-
-			if (j == 0) {
-				multLiteral = baseTerm.value;
+			if (multToken.startsWith("(") && multToken.endsWith(")")) {
+				Result<ParenthesizedTokenResult, CompileError> pResult = processParenthesizedToken(multToken, j,
+						isSubtracted, multTokens.size());
+				if (pResult.isErr()) {
+					return Result.err(pResult.errValue());
+				}
+				ParenthesizedTokenResult pData = pResult.okValue();
+				multTerms.addAll(pData.terms);
+				multLiteral = (j == 0) ? pData.literalValue : multLiteral * pData.literalValue;
+				lastExpandedParensSize = pData.expandedSize;
 			} else {
-				multLiteral *= baseTerm.value;
+				// Regular term
+				Result<ExpressionTerm, CompileError> termResult = parseTerm(multToken);
+				if (termResult.isErr()) {
+					return Result.err(termResult.errValue());
+				}
+
+				ExpressionTerm baseTerm = termResult.okValue();
+				boolean isMultiplied = (j > 0);
+				ExpressionTerm finalTerm = new ExpressionTerm(baseTerm.readCount, baseTerm.value, isSubtracted, isMultiplied);
+				multTerms.add(finalTerm);
+
+				if (j == 0) {
+					multLiteral = baseTerm.value;
+				} else {
+					multLiteral *= baseTerm.value;
+				}
+				lastExpandedParensSize = 0;
+			}
+		}
+
+		// Fix grouping boundaries for expanded parenthesized expressions at j=0
+		if (lastExpandedParensSize > 1 && multTokens.size() > 1) {
+			int lastJ0Index = lastExpandedParensSize - 1;
+			if (lastJ0Index + 1 < multTerms.size() && multTerms.get(lastJ0Index + 1).isMultiplied) {
+				ExpressionTerm termToMark = multTerms.get(lastJ0Index);
+				multTerms.set(lastJ0Index, new ExpressionTerm(termToMark.readCount, termToMark.value,
+						termToMark.isSubtracted, true));
 			}
 		}
 
 		int totalReads = multTerms.stream().mapToInt(t -> t.readCount).sum();
 		return Result.ok(new ParsedMult(totalReads, multLiteral, multTerms));
+	}
+
+	private static Result<ParenthesizedTokenResult, CompileError> processParenthesizedToken(String multToken,
+			int position, boolean isSubtracted, int totalTokens) {
+		String inner = multToken.substring(1, multToken.length() - 1);
+		Result<ExpressionResult, CompileError> innerResult = parseExpressionWithRead(inner);
+		if (innerResult.isErr()) {
+			return Result.err(innerResult.errValue());
+		}
+
+		ExpressionResult innerExpr = innerResult.okValue();
+		List<ExpressionTerm> terms = new ArrayList<>();
+
+		if (position == 0) {
+			// First term: expand the inner expression, keeping original isMultiplied states
+			for (ExpressionTerm innerTerm : innerExpr.terms) {
+				ExpressionTerm finalTerm = new ExpressionTerm(innerTerm.readCount, innerTerm.value,
+						isSubtracted, innerTerm.isMultiplied);
+				terms.add(finalTerm);
+			}
+			return Result.ok(new ParenthesizedTokenResult(terms, innerExpr.literalValue, innerExpr.terms.size()));
+		} else {
+			// Multiplicative position: only support simple reads/literals
+			if (innerExpr.readCount > 1) {
+				return Result.err(new CompileError(
+						"Parenthesized expressions with multiple reads in multiplicative position not yet supported: "
+								+ multToken));
+			}
+
+			for (int k = 0; k < innerExpr.terms.size(); k++) {
+				ExpressionTerm innerTerm = innerExpr.terms.get(k);
+				boolean isMultiplied = (k == 0) ? true : innerTerm.isMultiplied;
+				ExpressionTerm finalTerm = new ExpressionTerm(innerTerm.readCount, innerTerm.value,
+						isSubtracted, isMultiplied);
+				terms.add(finalTerm);
+			}
+			return Result.ok(new ParenthesizedTokenResult(terms, innerExpr.literalValue, 0));
+		}
+	}
+
+	private static List<String> splitByOperator(String expr, char operator) {
+		// For single operator splitting (non-additive case)
+		List<String> result = new ArrayList<>();
+		StringBuilder token = new StringBuilder();
+		int depth = 0;
+
+		for (char c : expr.toCharArray()) {
+			if (c == '(') {
+				depth++;
+				token.append(c);
+			} else if (c == ')') {
+				depth--;
+				token.append(c);
+			} else if (c == operator && depth == 0) {
+				result.add(token.toString());
+				token = new StringBuilder();
+			} else {
+				token.append(c);
+			}
+		}
+
+		result.add(token.toString());
+		return result;
 	}
 
 	private static final class ExpressionTerm {
@@ -321,12 +451,12 @@ public final class App {
 		}
 	}
 
-	public static Result<RunResult, CompileError> run(String source, int[] input) {
+	public static Result<RunResult, ApplicationError> run(String source, int[] input) {
 		Result<Instruction[], CompileError> compileResult = compile(source);
 
 		if (compileResult.isErr()) {
 			// Propagate the compilation error
-			return Result.err(compileResult.errValue());
+			return Result.err(new ApplicationError(compileResult.errValue()));
 		}
 
 		Instruction[] instructions = compileResult.okValue();
@@ -334,16 +464,20 @@ public final class App {
 		final int[] inputPointer = { 0 };
 		List<Integer> output = new ArrayList<>();
 
-		int returnValue = Vm.execute(
-				instructions,
-				() -> {
-					if (inputPointer[0] >= input.length) {
-						return 0;
-					}
-					return input[inputPointer[0]++];
-				},
-				output::add);
+		try {
+			int returnValue = Vm.execute(
+					instructions,
+					() -> {
+						if (inputPointer[0] >= input.length) {
+							return 0;
+						}
+						return input[inputPointer[0]++];
+					},
+					output::add);
 
-		return Result.ok(new RunResult(output, returnValue));
+			return Result.ok(new RunResult(output, returnValue, instructions));
+		} catch (Exception e) {
+			return Result.err(new ApplicationError(new ExecutionError(instructions)));
+		}
 	}
 }
