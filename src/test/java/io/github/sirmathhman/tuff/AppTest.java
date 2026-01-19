@@ -229,6 +229,16 @@ public final class AppTest {
 		assertValidWithInput("read Bool", 1, 1);
 	}
 
+	@Test
+	void shouldSupportBoolInLetBinding() {
+		assertValidWithInput("let x : Bool = read Bool; x", 0, 0);
+	}
+
+	@Test
+	void shouldSupportBoolInLetBindingWithOne() {
+		assertValidWithInput("let x : Bool = read Bool; x", 1, 1);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
