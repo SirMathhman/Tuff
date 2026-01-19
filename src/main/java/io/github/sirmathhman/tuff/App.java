@@ -41,16 +41,68 @@ public final class App {
 		return Result.ok(instructions.toArray(new Instruction[0]));
 	}
 
+	private record LetBindingDecl(String varName, String valueExpr) {
+	}
+
+	private static Result<LetBindingDecl, CompileError> parseLetDeclaration(String expr) {
+		int equalsIndex = expr.indexOf('=');
+		if (equalsIndex == -1) {
+			return Result.err(new CompileError("Invalid let binding: missing '='"));
+		}
+
+		int semiIndex = expr.indexOf(';', equalsIndex);
+		if (semiIndex == -1) {
+			return Result.err(new CompileError("Invalid let binding: missing ';'"));
+		}
+
+		String decl = expr.substring(4, equalsIndex).trim(); // Skip "let "
+		String[] parts = decl.split(":");
+		if (parts.length != 2) {
+			return Result.err(new CompileError("Invalid let binding: expected 'varName : type'"));
+		}
+
+		String varName = parts[0].trim();
+		String valueExpr = expr.substring(equalsIndex + 1, semiIndex).trim();
+		String varRef = expr.substring(semiIndex + 1).trim();
+
+		if (!varRef.equals(varName)) {
+			return Result.err(new CompileError("Invalid let binding: variable reference mismatch"));
+		}
+
+		return Result.ok(new LetBindingDecl(varName, valueExpr));
+	}
+
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
+		// Check if this is a let binding at statement level
+		if (stmt.startsWith("let ")) {
+			Result<LetBindingDecl, CompileError> declResult = parseLetDeclaration(stmt);
+			if (declResult.isErr()) {
+				return Result.err(declResult.errValue());
+			}
+
+			LetBindingDecl decl = declResult.okValue();
+			String valueExpr = decl.valueExpr;
+
+			// Parse the value expression
+			Result<ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
+			if (valueResult.isErr()) {
+				return Result.err(valueResult.errValue());
+			}
+
+			return generateInstructions(valueResult.okValue(), instructions);
+		}
+
 		// Parse as expression (which may contain "read")
 		Result<ExpressionResult, CompileError> exprResult = parseExpressionWithRead(stmt);
 		if (exprResult.isErr()) {
 			return Result.err(exprResult.errValue());
 		}
 
-		ExpressionResult expr = exprResult.okValue();
+		return generateInstructions(exprResult.okValue(), instructions);
+	}
 
-		// Generate instructions based on expression structure
+	private static Result<Void, CompileError> generateInstructions(ExpressionResult expr,
+			List<Instruction> instructions) {
 		if (expr.readCount == 0) {
 			// No reads, just load the literal
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue));
@@ -177,9 +229,16 @@ public final class App {
 	}
 
 	private static Result<ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
+		expr = expr.trim();
+
+		// Check if this is a let binding
+		if (expr.startsWith("let ")) {
+			return parseLetExpressionBinding(expr);
+		}
+
 		// Normalize curly braces to parentheses for uniform grouping support
 		expr = expr.replace('{', '(').replace('}', ')');
-		
+
 		// Split by + and - to get additive-level tokens, but not inside parentheses
 		List<String> addTokens = splitAddOperators(expr);
 		List<Boolean> additiveOps = new ArrayList<>();
@@ -230,6 +289,24 @@ public final class App {
 		}
 
 		return Result.ok(new ExpressionResult(totalReads, totalLiteral, allTerms));
+	}
+
+	private static Result<ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
+		// Format: let varName : TYPE = EXPR; varName
+		Result<LetBindingDecl, CompileError> declResult = parseLetDeclaration(expr);
+		if (declResult.isErr()) {
+			return Result.err(declResult.errValue());
+		}
+
+		// Parse the value expression
+		String valueExpr = declResult.okValue().valueExpr;
+		Result<ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
+		if (valueResult.isErr()) {
+			return Result.err(valueResult.errValue());
+		}
+
+		// For let expression bindings, just return the value expression result
+		return Result.ok(valueResult.okValue());
 	}
 
 	private static List<String> splitTokensByOperators(String expr, boolean isAdditive) {
