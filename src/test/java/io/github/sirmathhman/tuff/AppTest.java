@@ -11,10 +11,10 @@ import org.junit.jupiter.api.Test;
 public final class AppTest {
 	@Test
 	void shouldRunTheSimplestProgramPossible() {
-		assertSimple("", 0);
+		assertValid("", 0);
 	}
 
-	private void assertSimple(String source, int exitCode) {
+	private void assertValid(String source, int exitCode) {
 		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
 			Result<RunResult, CompileError> result = App.run(source, new int[] {});
 			assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue() : ""));
@@ -27,21 +27,30 @@ public final class AppTest {
 
 	@Test
 	void shouldRunWithAnInt() {
-		assertSimple("0", 0);
+		assertValid("0", 0);
 	}
 
 	@Test
 	void shouldRunWith100() {
-		assertSimple("100", 100);
+		assertValid("100", 100);
 	}
 
 	@Test
 	void shouldRunWith100U8() {
-		assertSimple("100U8", 100);
+		assertValid("100U8", 100);
 	}
 
 	@Test
 	void shouldRejectNegativeUnsignedLiteral() {
-		Assertions.assertTrue(App.compile("-100U8").isErr());
+		assertInvalid("-100U8");
+	}
+
+	@Test
+	void shouldRejectValueOutOfRange() {
+		assertInvalid("256U8");
+	}
+
+	private void assertInvalid(String source) {
+		Assertions.assertTrue(App.compile(source).isErr());
 	}
 }

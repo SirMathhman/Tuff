@@ -29,14 +29,32 @@ public final class App {
 					numericPart = source.replaceAll("[UI]\\d+$", "");
 				}
 
-				int value = Integer.parseInt(numericPart);
+				long value = Long.parseLong(numericPart);
 
-				// Validate that unsigned types don't have negative values
-				if (typeSuffix != null && typeSuffix.startsWith("U") && value < 0) {
-					return Result.err(new CompileError("Negative value not allowed for unsigned type: " + source));
+				// Validate type bounds if type suffix is present
+				if (typeSuffix != null) {
+					boolean isUnsigned = typeSuffix.startsWith("U");
+					int bits = Integer.parseInt(typeSuffix.substring(1));
+					
+					// Check bounds based on type
+					if (isUnsigned) {
+						if (value < 0) {
+							return Result.err(new CompileError("Negative value not allowed for unsigned type: " + source));
+						}
+						long maxValue = (1L << bits) - 1;
+						if (value > maxValue) {
+							return Result.err(new CompileError("Value " + value + " exceeds maximum for " + typeSuffix + " (" + maxValue + "): " + source));
+						}
+					} else {
+						long minValue = -(1L << (bits - 1));
+						long maxValue = (1L << (bits - 1)) - 1;
+						if (value < minValue || value > maxValue) {
+							return Result.err(new CompileError("Value " + value + " out of range for " + typeSuffix + " (" + minValue + " to " + maxValue + "): " + source));
+						}
+					}
 				}
 
-				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, (long) value));
+				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, value));
 			} catch (NumberFormatException e) {
 				return Result.err(new CompileError("Failed to parse numeric value: " + source));
 			}
