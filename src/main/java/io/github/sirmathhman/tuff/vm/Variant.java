@@ -1,7 +1,7 @@
 package io.github.sirmathhman.tuff.vm;
 
 public enum Variant {
-	Constant,
+	Immediate,
 	DirectAddress,
 	IndirectAddress,
 }

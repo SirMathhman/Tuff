@@ -1,5 +1,6 @@
 io\github\sirmathhman\tuff\RunResult.class
 io\github\sirmathhman\tuff\vm\Vm$1.class
+io\github\sirmathhman\tuff\App.class
 io\github\sirmathhman\tuff\vm\Vm.class
 io\github\sirmathhman\tuff\vm\Operation.class
 io\github\sirmathhman\tuff\vm\Instruction.class

@@ -28,15 +28,15 @@ public final class Vm {
 			long encodedInstruction = memory[programCounter];
 			int operation = (int) ((encodedInstruction >>> 56) & 0xff);
 			int variant = (int) ((encodedInstruction >>> 48) & 0xff);
-		long firstOperand = encodedInstruction & 0xFFFFFFL;
-		long secondOperand = (encodedInstruction >>> 24) & 0xFFFFFFL;
+			long firstOperand = encodedInstruction & 0xFFFFFFL;
+			long secondOperand = (encodedInstruction >>> 24) & 0xFFFFFFL;
 
 			Operation op = Operation.values()[operation];
 			Variant var = Variant.values()[variant];
 
 			switch (op) {
 				case Load -> {
-					if (var == Variant.Constant) {
+					if (var == Variant.Immediate) {
 						registers[(int) firstOperand] = secondOperand;
 					} else if (var == Variant.DirectAddress) {
 						registers[(int) firstOperand] = memory[(int) secondOperand];
@@ -97,7 +97,7 @@ public final class Vm {
 
 	private static int resolveJumpTarget(Variant variant, long[] memory, int operand) {
 		return switch (variant) {
-			case Constant -> operand;
+			case Immediate -> operand;
 			case DirectAddress -> (int) memory[operand];
 			case IndirectAddress -> {
 				int address = (int) memory[operand];

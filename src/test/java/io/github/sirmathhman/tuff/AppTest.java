@@ -31,4 +31,9 @@ public final class AppTest {
 	void shouldRunWith100() {
 		assertSimple("100", 100);
 	}
+
+	@Test
+	void shouldRunWith100U8() {
+		assertSimple("100U8", 100);
+	}
 }
