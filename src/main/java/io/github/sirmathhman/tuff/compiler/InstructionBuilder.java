@@ -32,15 +32,16 @@ public final class InstructionBuilder {
 
 		if (markerIdx != -1) {
 			// This is a binary comparison (equality, inequality, less-than,
-			// greater-than, or less-or-equal)
+			// greater-than, less-or-equal, or greater-or-equal)
 			// marker.value == 0 means Equal, marker.value == 1 means NotEqual, marker.value
 			// == 2 means LessThan, marker.value == 3 means GreaterThan, marker.value == 4
-			// means LessOrEqual
+			// means LessOrEqual, marker.value == 5 means GreaterOrEqual
 			ExpressionModel.ExpressionTerm marker = terms.get(markerIdx);
 			boolean isInequality = marker.value == 1;
 			boolean isLessThan = marker.value == 2;
 			boolean isGreaterThan = marker.value == 3;
 			boolean isLessOrEqual = marker.value == 4;
+			boolean isGreaterOrEqual = marker.value == 5;
 
 			List<ExpressionModel.ExpressionTerm> leftTerms = terms.subList(0, markerIdx);
 			List<ExpressionModel.ExpressionTerm> rightTerms = terms.subList(markerIdx + 1, terms.size());
@@ -75,7 +76,7 @@ public final class InstructionBuilder {
 			// Generate comparison operation
 			if (leftResult != -1 && rightResult != -1) {
 				generateComparisonOperation(isInequality, isLessThan, isGreaterThan, isLessOrEqual,
-						leftResult, rightResult, instructions);
+						isGreaterOrEqual, leftResult, rightResult, instructions);
 				return leftResult;
 			}
 		}
@@ -84,25 +85,16 @@ public final class InstructionBuilder {
 	}
 
 	private static void generateComparisonOperation(boolean isInequality, boolean isLessThan,
-			boolean isGreaterThan, boolean isLessOrEqual, int leftResult, int rightResult,
-			List<Instruction> instructions) {
+			boolean isGreaterThan, boolean isLessOrEqual, boolean isGreaterOrEqual, int leftResult,
+			int rightResult, List<Instruction> instructions) {
 		if (isLessThan) {
 			instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, leftResult, (long) rightResult));
 		} else if (isGreaterThan) {
 			instructions.add(new Instruction(Operation.GreaterThan, Variant.Immediate, leftResult, (long) rightResult));
 		} else if (isLessOrEqual) {
-			// For <=: (a < b) OR (a == b)
-			// Strategy: save leftResult to memory[0], then do comparisons, then OR
-			int tempReg = rightResult + 1;
-			// Store leftResult to memory[0]
-			instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, leftResult, 0L));
-			// Compare (memory[0] < rightResult) -> store result in tempReg
-			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, tempReg, 0L));
-			instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, tempReg, (long) rightResult));
-			// Compare (leftResult == rightResult) -> leftResult
-			instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
-			// OR: leftResult = (memory[0] < rightResult) OR (leftResult == rightResult)
-			instructions.add(new Instruction(Operation.LogicalOr, Variant.Immediate, leftResult, (long) tempReg));
+			generateCompoundComparison(leftResult, rightResult, Operation.LessThan, instructions);
+		} else if (isGreaterOrEqual) {
+			generateCompoundComparison(leftResult, rightResult, Operation.GreaterThan, instructions);
 		} else {
 			instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
 			// If this is inequality, negate the result with LogicalNot
@@ -110,6 +102,17 @@ public final class InstructionBuilder {
 				instructions.add(new Instruction(Operation.LogicalNot, Variant.Immediate, leftResult, null));
 			}
 		}
+	}
+
+	private static void generateCompoundComparison(int leftResult, int rightResult, Operation comparisonOp,
+			List<Instruction> instructions) {
+		// For compound comparisons: (a op b) OR (a == b)
+		int tempReg = rightResult + 1;
+		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, leftResult, 0L));
+		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, tempReg, 0L));
+		instructions.add(new Instruction(comparisonOp, Variant.Immediate, tempReg, (long) rightResult));
+		instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
+		instructions.add(new Instruction(Operation.LogicalOr, Variant.Immediate, leftResult, (long) tempReg));
 	}
 
 	private static int buildSubExpressionResult(List<ExpressionModel.ExpressionTerm> terms, int startReg,

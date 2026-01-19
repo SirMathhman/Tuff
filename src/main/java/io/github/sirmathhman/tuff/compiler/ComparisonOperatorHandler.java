@@ -35,6 +35,11 @@ public final class ComparisonOperatorHandler {
 		return parseComparisonExpression(leTokens, 4);
 	}
 
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseGreaterOrEqualExpression(
+			List<String> geTokens) {
+		return parseComparisonExpression(geTokens, 5);
+	}
+
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonExpression(
 			List<String> tokens, int markerValue) {
 		// For now, only support binary comparison (exactly 2 operands)
@@ -42,7 +47,8 @@ public final class ComparisonOperatorHandler {
 			String opName = markerValue == 0 ? "Equality"
 					: (markerValue == 1 ? "Inequality"
 							: (markerValue == 2 ? "LessThan"
-									: (markerValue == 3 ? "GreaterThan" : "LessOrEqual")));
+									: (markerValue == 3 ? "GreaterThan"
+											: (markerValue == 4 ? "LessOrEqual" : "GreaterOrEqual"))));
 			return Result.err(new CompileError(opName + " operator requires exactly 2 operands"));
 		}
 
@@ -66,7 +72,7 @@ public final class ComparisonOperatorHandler {
 		// Create marker term: readCount=-1 indicates comparison marker
 		// marker.value=0 means Equal, marker.value=1 means NotEqual, marker.value=2
 		// means LessThan, marker.value=3 means GreaterThan, marker.value=4 means
-		// LessOrEqual
+		// LessOrEqual, marker.value=5 means GreaterOrEqual
 		ExpressionModel.ExpressionTerm marker = new ExpressionModel.ExpressionTerm(
 				-1, markerValue, false, false, false, false, false, false, false);
 

@@ -4,6 +4,7 @@ import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
 import io.github.sirmathhman.tuff.compiler.EqualityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
+import io.github.sirmathhman.tuff.compiler.GreaterOrEqualOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.GreaterThanOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
 import io.github.sirmathhman.tuff.compiler.InequalityOperatorHandler;
@@ -159,15 +160,17 @@ public final class App {
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {
-		List<String> le = LessOrEqualOperatorHandler.splitByLessOrEqual(expr);
+		var le = LessOrEqualOperatorHandler.splitByLessOrEqual(expr);
 		if (le.size() > 1) return LessOrEqualOperatorHandler.parseLessOrEqualExpression(le);
-		List<String> lt = LessThanOperatorHandler.splitByLessThan(expr);
+		var ge = GreaterOrEqualOperatorHandler.splitByGreaterOrEqual(expr);
+		if (ge.size() > 1) return GreaterOrEqualOperatorHandler.parseGreaterOrEqualExpression(ge);
+		var lt = LessThanOperatorHandler.splitByLessThan(expr);
 		if (lt.size() > 1) return LessThanOperatorHandler.parseLessThanExpression(lt);
-		List<String> gt = GreaterThanOperatorHandler.splitByGreaterThan(expr);
+		var gt = GreaterThanOperatorHandler.splitByGreaterThan(expr);
 		if (gt.size() > 1) return GreaterThanOperatorHandler.parseGreaterThanExpression(gt);
-		List<String> eq = EqualityOperatorHandler.splitByEquality(expr);
+		var eq = EqualityOperatorHandler.splitByEquality(expr);
 		if (eq.size() > 1) return EqualityOperatorHandler.parseEqualityExpression(eq);
-		List<String> neq = InequalityOperatorHandler.splitByInequality(expr);
+		var neq = InequalityOperatorHandler.splitByInequality(expr);
 		if (neq.size() > 1) return InequalityOperatorHandler.parseInequalityExpression(neq);
 		return Result.err(new CompileError("No comparison operator found"));
 	}
