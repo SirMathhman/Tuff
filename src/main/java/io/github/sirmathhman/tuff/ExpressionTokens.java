@@ -85,4 +85,39 @@ public final class ExpressionTokens {
 	public static List<String> splitAddOperators(String expr) {
 		return splitTokensByOperators(expr, true);
 	}
+
+	/**
+	 * Check if sourceType can be implicitly upcast to targetType.
+	 * 
+	 * Upcasting rules:
+	 * - Same type: always compatible
+	 * - U8 can upcast to U16, U32
+	 * - U16 can upcast to U32
+	 * - I8 can upcast to I16, I32
+	 * - I16 can upcast to I32
+	 * - Downcast or cross-sign conversions are not allowed
+	 */
+	public static boolean isTypeCompatible(String sourceType, String targetType) {
+		if (sourceType.equals(targetType)) {
+			return true;
+		}
+
+		// Parse type name and bit width
+		if (!sourceType.matches("[UI]\\d+") || !targetType.matches("[UI]\\d+")) {
+			return false;
+		}
+
+		char sourceSign = sourceType.charAt(0);
+		char targetSign = targetType.charAt(0);
+		int sourceWidth = Integer.parseInt(sourceType.substring(1));
+		int targetWidth = Integer.parseInt(targetType.substring(1));
+
+		// Cross-sign conversion not allowed (U -> I or I -> U)
+		if (sourceSign != targetSign) {
+			return false;
+		}
+
+		// Can only upcast to same sign with larger or equal width
+		return targetWidth >= sourceWidth;
+	}
 }

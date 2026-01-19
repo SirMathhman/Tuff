@@ -35,7 +35,7 @@ public final class App {
 		if (stmt.startsWith("let ")) {
 			// For statement-level let bindings, we need to handle the full format:
 			// let varName : type = valueExpr; varName
-			
+
 			// Find the first '=' to identify the binding declaration
 			int equalsIndex = stmt.indexOf('=');
 			if (equalsIndex == -1) {
@@ -205,8 +205,8 @@ public final class App {
 
 		String inferredType = typeResult.okValue();
 
-		// Validate that the inferred type matches the declared type
-		if (!inferredType.equals(decl.declaredType())) {
+		// Validate that the inferred type is compatible with the declared type
+		if (!ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
 			return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
 					"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
 		}
