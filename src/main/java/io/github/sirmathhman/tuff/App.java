@@ -40,12 +40,12 @@ public final class App {
 		return Result.ok(instructions.toArray(new Instruction[0]));
 	}
 
-	public static RunResult run(String source, int[] input) {
+	public static Result<RunResult, CompileError> run(String source, int[] input) {
 		Result<Instruction[], CompileError> compileResult = compile(source);
-		
+
 		if (compileResult.isErr()) {
-			// If compilation failed, return error exit code 1
-			return new RunResult(new ArrayList<>(), 1);
+			// Propagate the compilation error
+			return Result.err(compileResult.errValue());
 		}
 
 		Instruction[] instructions = compileResult.okValue();
@@ -63,6 +63,6 @@ public final class App {
 				},
 				output::add);
 
-		return new RunResult(output, returnValue);
+		return Result.ok(new RunResult(output, returnValue));
 	}
 }

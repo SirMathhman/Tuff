@@ -16,9 +16,12 @@ public final class AppTest {
 
 	private void assertSimple(String source, int exitCode) {
 		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
-			RunResult result = App.run(source, new int[] {});
-			assertEquals(exitCode, result.returnValue());
-			assertTrue(result.output().isEmpty());
+			Result<RunResult, CompileError> result = App.run(source, new int[] {});
+			result.
+			assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue() : ""));
+			RunResult runResult = result.okValue();
+			assertEquals(exitCode, runResult.returnValue());
+			assertTrue(runResult.output().isEmpty());
 		});
 	}
 
