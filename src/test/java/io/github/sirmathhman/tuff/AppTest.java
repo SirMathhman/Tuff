@@ -26,4 +26,9 @@ public final class AppTest {
 	void shouldRunWithAnInt() {
 		assertSimple("0", 0);
 	}
+
+	@Test
+	void shouldRunWith100() {
+		assertSimple("100", 100);
+	}
 }

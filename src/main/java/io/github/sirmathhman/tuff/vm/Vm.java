@@ -28,8 +28,8 @@ public final class Vm {
 			long encodedInstruction = memory[programCounter];
 			int operation = (int) ((encodedInstruction >>> 56) & 0xff);
 			int variant = (int) ((encodedInstruction >>> 48) & 0xff);
-			long firstOperand = encodedInstruction & 0x0000_FFFF_FFFF_FFFFL;
-			long secondOperand = (encodedInstruction >>> 24) & 0x0000_FFFF_FFFF_FFFFL;
+		long firstOperand = encodedInstruction & 0xFFFFFFL;
+		long secondOperand = (encodedInstruction >>> 24) & 0xFFFFFFL;
 
 			Operation op = Operation.values()[operation];
 			Variant var = Variant.values()[variant];

@@ -13,11 +13,23 @@ public final class App {
 	}
 
 	private static Instruction[] compile(String source) {
-		// TODO: real implementation
-		// For now, always return a program that halts immediately.
-		return new Instruction[] {
-				new Instruction(Operation.Halt, Variant.Constant, 0, null)
-		};
+		List<Instruction> instructions = new ArrayList<>();
+
+		// If source is not empty, try to parse it as a number and load it into register
+		// 0
+		if (!source.isEmpty()) {
+			try {
+				int value = Integer.parseInt(source);
+				instructions.add(new Instruction(Operation.Load, Variant.Constant, 0, (long) value));
+			} catch (NumberFormatException e) {
+				// If parsing fails, just halt
+			}
+		}
+
+		// Always end with a halt instruction
+		instructions.add(new Instruction(Operation.Halt, Variant.Constant, 0, null));
+
+		return instructions.toArray(new Instruction[0]);
 	}
 
 	public static RunResult run(String source, int[] input) {
