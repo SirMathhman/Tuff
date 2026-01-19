@@ -202,6 +202,11 @@ public final class AppTest {
 		assertValidWithInput("let x = read U8; let y : *U8 = &x; x", 42, 42);
 	}
 
+	@Test
+	void shouldRejectDereferencingNonPointerType() {
+		assertInvalid("let x = read U8; *x");
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

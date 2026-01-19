@@ -104,14 +104,17 @@ public final class LetBindingHandler {
 		while (matcher.find()) {
 			occurrences++;
 		}
-
 		if (occurrences > 1) {
 			return handleMultipleVariableReferences(varName, valueExpr, continuation, occurrences, instructions);
 		}
 
-		// Single occurrence - simple substitution
+		// Single occurrence - simple substitution and validate types
 		String substitutedContinuation = continuation.replaceAll("\\b" + varName + "\\b",
 				"(" + valueExpr + ")");
+		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName, valueExpr);
+		if (typeCheckResult.isErr()) {
+			return typeCheckResult;
+		}
 
 		// Parse the substituted continuation expression
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App.parseExpressionWithRead(
@@ -121,6 +124,28 @@ public final class LetBindingHandler {
 		}
 
 		return App.generateInstructions(contResult.okValue(), instructions);
+	}
+
+	private static Result<Void, CompileError> validateContinuationTypes(String continuation, String varName,
+			String valueExpr) {
+		if (!continuation.contains("*")) {
+			return Result.ok(null);
+		}
+
+		// Build type context with the bound variable
+		java.util.Map<String, String> typeContext = new java.util.HashMap<>();
+		Result<String, CompileError> boundVarTypeResult = ExpressionTokens.extractTypeFromExpression(valueExpr,
+				typeContext);
+		if (boundVarTypeResult.isOk()) {
+			typeContext.put(varName, boundVarTypeResult.okValue());
+			// Check if the continuation expression has valid types
+			Result<String, CompileError> contTypeResult = ExpressionTokens.extractTypeFromExpression(continuation,
+					typeContext);
+			if (contTypeResult.isErr()) {
+				return Result.err(contTypeResult.errValue());
+			}
+		}
+		return Result.ok(null);
 	}
 
 	private static VariableDecl parseVariableDecl(String stmt, int equalsIndex, int semiIndex) {
@@ -183,13 +208,14 @@ public final class LetBindingHandler {
 				}
 			}
 
-			// For pointer types with reference operator, just continue without type checking
+			// For pointer types with reference operator, just continue without type
+			// checking
 			// For other types, we should validate type compatibility
 			if (!isPointerType && !secondValueExpr.startsWith("&")) {
 				// Extract the type of the value expression
 				java.util.Map<String, String> typeContext = new java.util.HashMap<>();
 				typeContext.put(varName, valueExpr);
-				
+
 				Result<String, CompileError> valueTypeResult = ExpressionTokens.extractTypeFromExpression(secondValueExpr,
 						typeContext);
 				if (valueTypeResult.isOk() && declaredType != null) {

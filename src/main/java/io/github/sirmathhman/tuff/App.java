@@ -256,7 +256,8 @@ public final class App {
 		// Get the continuation after the semicolon
 		String continuation = expr.substring(semiIndex + 1).trim();
 
-		// Parse the continuation (either another let binding or final variable reference)
+		// Parse the continuation (either another let binding or final variable
+		// reference)
 		if (continuation.startsWith("let ")) {
 			// Another let binding follows - recursively parse it with updated context
 			java.util.Map<String, String> newVariables = new java.util.HashMap<>(boundVariables);
