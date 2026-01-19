@@ -1,9 +1,0 @@
-# Enforce LF line endings for files that are linted with `linebreak-style: unix`.
-# This prevents CRLF churn on Windows.
-
-*.ts text eol=lf
-*.js text eol=lf
-*.json text eol=lf
-*.md text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
