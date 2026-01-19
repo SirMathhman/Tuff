@@ -15,57 +15,79 @@ public final class App {
 	public static Result<Instruction[], CompileError> compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
 
-		// If source is not empty, try to parse it as a number (with optional type
-		// suffix)
-		// and load it into register 0
 		if (!source.isEmpty()) {
-			try {
-				// Parse optional type suffix (e.g., "100U8", "42I32")
-				String numericPart = source;
-				String typeSuffix = null;
-				// Remove type suffix if present (U8, U16, U32, U64, I8, I16, I32, I64, etc.)
-				if (source.matches(".*[UI]\\d+$")) {
-					typeSuffix = source.replaceAll("^.*([UI]\\d+)$", "$1");
-					numericPart = source.replaceAll("[UI]\\d+$", "");
-				}
-
-				long value = Long.parseLong(numericPart);
-
-				// Validate type bounds if type suffix is present
-				if (typeSuffix != null) {
-					boolean isUnsigned = typeSuffix.startsWith("U");
-					int bits = Integer.parseInt(typeSuffix.substring(1));
-
-					// Check bounds based on type
-					if (isUnsigned) {
-						if (value < 0) {
-							return Result.err(new CompileError("Negative value not allowed for unsigned type: " + source));
-						}
-						long maxValue = (1L << bits) - 1;
-						if (value > maxValue) {
-							return Result.err(new CompileError(
-									"Value " + value + " exceeds maximum for " + typeSuffix + " (" + maxValue + "): " + source));
-						}
-					} else {
-						long minValue = -(1L << (bits - 1));
-						long maxValue = (1L << (bits - 1)) - 1;
-						if (value < minValue || value > maxValue) {
-							return Result.err(new CompileError("Value " + value + " out of range for " + typeSuffix + " (" + minValue
-									+ " to " + maxValue + "): " + source));
-						}
-					}
-				}
-
-				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, value));
-			} catch (NumberFormatException e) {
-				return Result.err(new CompileError("Failed to parse numeric value: " + source));
+			Result<Long, CompileError> result = parseExpression(source.trim());
+			if (result.isErr()) {
+				return Result.err(result.errValue());
 			}
+			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, result.okValue()));
 		}
 
-		// Always end with a halt instruction
 		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
-
 		return Result.ok(instructions.toArray(new Instruction[0]));
+	}
+
+	private static Result<Long, CompileError> parseExpression(String expr) {
+		// Try to parse as binary expression (e.g., "1U8 + 2U8")
+		String[] parts = expr.split("\\s*\\+\\s*");
+		if (parts.length == 2) {
+			Result<Long, CompileError> left = parseLiteral(parts[0]);
+			if (left.isErr()) {
+				return left;
+			}
+			Result<Long, CompileError> right = parseLiteral(parts[1]);
+			if (right.isErr()) {
+				return right;
+			}
+			return Result.ok(left.okValue() + right.okValue());
+		}
+		if (parts.length > 2) {
+			return Result.err(new CompileError("Multiple + operators not supported"));
+		}
+
+		// Otherwise parse as single literal
+		return parseLiteral(expr);
+	}
+
+	private static Result<Long, CompileError> parseLiteral(String literal) {
+		try {
+			String numericPart = literal;
+			String typeSuffix = null;
+
+			if (literal.matches(".*[UI]\\d+$")) {
+				typeSuffix = literal.replaceAll("^.*([UI]\\d+)$", "$1");
+				numericPart = literal.replaceAll("[UI]\\d+$", "");
+			}
+
+			long value = Long.parseLong(numericPart);
+
+			if (typeSuffix != null) {
+				boolean isUnsigned = typeSuffix.startsWith("U");
+				int bits = Integer.parseInt(typeSuffix.substring(1));
+
+				if (isUnsigned) {
+					if (value < 0) {
+						return Result.err(new CompileError("Negative value not allowed for unsigned type: " + literal));
+					}
+					long maxValue = (1L << bits) - 1;
+					if (value > maxValue) {
+						return Result.err(new CompileError(
+								"Value " + value + " exceeds maximum for " + typeSuffix + " (" + maxValue + "): " + literal));
+					}
+				} else {
+					long minValue = -(1L << (bits - 1));
+					long maxValue = (1L << (bits - 1)) - 1;
+					if (value < minValue || value > maxValue) {
+						return Result.err(new CompileError("Value " + value + " out of range for " + typeSuffix + " (" + minValue
+								+ " to " + maxValue + "): " + literal));
+					}
+				}
+			}
+
+			return Result.ok(value);
+		} catch (NumberFormatException e) {
+			return Result.err(new CompileError("Failed to parse numeric value: " + literal));
+		}
 	}
 
 	public static Result<RunResult, CompileError> run(String source, int[] input) {

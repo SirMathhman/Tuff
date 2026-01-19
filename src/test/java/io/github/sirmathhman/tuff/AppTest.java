@@ -50,6 +50,11 @@ public final class AppTest {
 		assertInvalid("256U8");
 	}
 
+	@Test
+	void shouldAddTwoTypedLiterals() {
+		assertValid("1U8 + 2U8", 3);
+	}
+
 	private void assertInvalid(String source) {
 		Assertions.assertTrue(App.compile(source).isErr());
 	}
