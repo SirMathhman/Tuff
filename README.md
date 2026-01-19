@@ -92,10 +92,41 @@ A stack-based virtual machine compiler with support for type-safe let bindings.
   let mut x : U8; x = read U8; x = 100; x  // Reads input, assigns 100, returns 100 (valid)
   ```
 
+### Logical Operators
+
+- **Logical OR**: Combine boolean expressions with the `||` operator (lowest precedence)
+
+  ```
+  read Bool || read Bool  // Returns 1 if either input is non-zero, 0 otherwise
+  ```
+
+- **Bool Type**: 8-bit integer with values 0 (false) or 1 (true)
+
+  ```
+  let x : Bool = read Bool; x  // Read a boolean value
+  ```
+
 ## Supported Types
 
 - `U8`, `U16`, `U32` - Unsigned integers (8, 16, 32 bits)
 - `I8`, `I16`, `I32` - Signed integers (8, 16, 32 bits)
+- `Bool` - Boolean type (0 or 1)
+
+## Operator Precedence
+
+Operators are evaluated in the following order (highest to lowest):
+
+1. Multiplicative operators: `*`, `/`
+2. Additive operators: `+`, `-`
+3. Logical OR operator: `||`
+
+Examples:
+
+```
+2 + 3 * 4        // = 14  (multiply first, then add)
+(2 + 3) * 4      // = 20  (parentheses override precedence)
+read Bool || 1   // Logical OR has lowest precedence
+```
 
 ## Build & Test
 
