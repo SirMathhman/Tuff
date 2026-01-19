@@ -21,67 +21,106 @@ public final class InstructionBuilder {
 
 	public static int buildResultWithPrecedence(List<ExpressionModel.ExpressionTerm> terms,
 			List<Instruction> instructions) {
-		// Check for equality comparison marker (readCount == -1)
-		int markerIdx = -1;
+		// Check for conditional markers
+		ConditionalMarkers markers = findConditionalMarkers(terms);
+		if (markers.hasConditional()) {
+			return buildConditionalExpression(terms, markers, instructions);
+		}
+
+		// Check for comparison marker
+		int markerIdx = findComparisonMarkerIndex(terms);
+		if (markerIdx != -1) {
+			return buildComparisonExpression(terms, markerIdx, instructions);
+		}
+
+		return buildSubExpressionResult(terms, 0, instructions);
+	}
+
+	private static ConditionalMarkers findConditionalMarkers(List<ExpressionModel.ExpressionTerm> terms) {
+		int branchIdx = -1;
+		int elseIdx = -1;
+		long trueLiteral = 0;
+		long falseLiteral = 0;
 		for (int j = 0; j < terms.size(); j++) {
-			if (terms.get(j).readCount == -1) {
-				markerIdx = j;
+			if (terms.get(j).readCount == -3 && branchIdx == -1) {
+				branchIdx = j;
+				trueLiteral = terms.get(j).value;
+			}
+			if (terms.get(j).readCount == -4) {
+				elseIdx = j;
+				falseLiteral = terms.get(j).value;
 				break;
 			}
 		}
+		return new ConditionalMarkers(branchIdx, elseIdx, trueLiteral, falseLiteral);
+	}
 
-		if (markerIdx != -1) {
-			// This is a binary comparison (equality, inequality, less-than,
-			// greater-than, less-or-equal, or greater-or-equal)
-			// marker.value == 0 means Equal, marker.value == 1 means NotEqual, marker.value
-			// == 2 means LessThan, marker.value == 3 means GreaterThan, marker.value == 4
-			// means LessOrEqual, marker.value == 5 means GreaterOrEqual
-			ExpressionModel.ExpressionTerm marker = terms.get(markerIdx);
+	private static int buildConditionalExpression(List<ExpressionModel.ExpressionTerm> terms,
+			ConditionalMarkers markers, List<Instruction> instructions) {
+		List<ExpressionModel.ExpressionTerm> condTerms = terms.subList(0, markers.branchIdx);
+		buildSubExpressionResult(condTerms, 0, instructions);
+
+		final int formulaReg = 1;
+		final int trueValueReg = 2;
+		final int falseValueReg = 3;
+
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, trueValueReg, markers.trueLiteral));
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, falseValueReg, markers.falseLiteral));
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, formulaReg, -1L));
+		instructions.add(new Instruction(Operation.Add, Variant.Immediate, formulaReg, 0L));
+
+		int elseJumpIdx = instructions.size();
+		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, null));
+
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, 0L));
+		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) trueValueReg));
+
+		int trueJumpIdx = instructions.size();
+		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, null));
+
+		int elseBodyIdx = instructions.size();
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, 0L));
+		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) falseValueReg));
+
+		int endIdx = instructions.size();
+		instructions.set(elseJumpIdx,
+				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, (long) elseBodyIdx));
+		instructions.set(trueJumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endIdx));
+
+		return 0;
+	}
+
+	private static int findComparisonMarkerIndex(List<ExpressionModel.ExpressionTerm> terms) {
+		for (int j = 0; j < terms.size(); j++) {
+			if (terms.get(j).readCount == -1) {
+				return j;
+			}
+		}
+		return -1;
+	}
+
+	private static int buildComparisonExpression(List<ExpressionModel.ExpressionTerm> terms, int markerIdx,
+			List<Instruction> instructions) {
+		ExpressionModel.ExpressionTerm marker = terms.get(markerIdx);
+		List<ExpressionModel.ExpressionTerm> leftTerms = terms.subList(0, markerIdx);
+		List<ExpressionModel.ExpressionTerm> rightTerms = terms.subList(markerIdx + 1, terms.size());
+
+		int leftResult = leftTerms.isEmpty() ? -1 : buildSubExpressionResult(leftTerms, 0, instructions);
+		int rightResult = rightTerms.isEmpty() ? -1
+				: buildSubExpressionResult(rightTerms,
+						(int) leftTerms.stream().filter(t -> t.readCount > 0).count(), instructions);
+
+		if (leftResult != -1 && rightResult != -1) {
 			boolean isInequality = marker.value == 1;
 			boolean isLessThan = marker.value == 2;
 			boolean isGreaterThan = marker.value == 3;
 			boolean isLessOrEqual = marker.value == 4;
 			boolean isGreaterOrEqual = marker.value == 5;
-
-			List<ExpressionModel.ExpressionTerm> leftTerms = terms.subList(0, markerIdx);
-			List<ExpressionModel.ExpressionTerm> rightTerms = terms.subList(markerIdx + 1, terms.size());
-
-			int leftResult;
-			int rightResult;
-
-			if (leftTerms.isEmpty()) {
-				// Left side is just a literal, but it will be handled by totalLiteral at the
-				// very end
-				// of generateInstructions. This is a bit awkward with comparison operators.
-				// However, if we assume literal 0 for now (the other literal will be added
-				// later)
-				// we might get away with it if only ONE side has a literal.
-				// But that's not robust.
-				leftResult = -1; // Marker for "will use literal later"
-			} else {
-				// We need a way to process a sublist of terms.
-				// Since registries were assigned sequentially based on the WHOLE list,
-				// we need to know the starting register for each side.
-				int leftStartingReg = 0;
-				leftResult = buildSubExpressionResult(leftTerms, leftStartingReg, instructions);
-			}
-
-			if (rightTerms.isEmpty()) {
-				rightResult = -1;
-			} else {
-				int rightStartingReg = (int) leftTerms.stream().filter(t -> t.readCount > 0).count();
-				rightResult = buildSubExpressionResult(rightTerms, rightStartingReg, instructions);
-			}
-
-			// Generate comparison operation
-			if (leftResult != -1 && rightResult != -1) {
-				generateComparisonOperation(isInequality, isLessThan, isGreaterThan, isLessOrEqual,
-						isGreaterOrEqual, leftResult, rightResult, instructions);
-				return leftResult;
-			}
+			generateComparisonOperation(isInequality, isLessThan, isGreaterThan, isLessOrEqual,
+					isGreaterOrEqual, leftResult, rightResult, instructions);
+			return leftResult;
 		}
-
-		return buildSubExpressionResult(terms, 0, instructions);
+		return -1;
 	}
 
 	private static void generateComparisonOperation(boolean isInequality, boolean isLessThan,
@@ -269,6 +308,12 @@ public final class InstructionBuilder {
 	}
 
 	private record ProcessAndResult(int resultReg, int readRegIndex, int nextIndex) {
+	}
+
+	private record ConditionalMarkers(int branchIdx, int elseIdx, long trueLiteral, long falseLiteral) {
+		boolean hasConditional() {
+			return branchIdx != -1 && elseIdx != -1;
+		}
 	}
 
 	private static int processAdditiveGroup(java.util.List<Integer> groupRegs, java.util.List<Character> groupOps,

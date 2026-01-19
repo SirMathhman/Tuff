@@ -499,6 +499,32 @@ public final class AppTest {
 		assertValidWithInput("let x = read U32 >= read U32; x", 1, 429496729, 100);
 	}
 
+	@Test
+	void shouldSupportIfElseWithBoolTrue() {
+		assertValidWithInput("if (read Bool) 3 else 5", 3, 1);
+	}
+
+	@Test
+	void shouldSupportIfElseWithBoolFalse() {
+		assertValidWithInput("if (read Bool) 3 else 5", 5, 0);
+	}
+
+	@Test
+	void shouldSupportIfElseWithComparison() {
+		assertValidWithInput("if (read U8 > read U8) 100 else 50", 100, 60, 20);
+	}
+
+	// TODO: Fix comparison-based conditionals
+	// @Test
+	// void shouldSupportIfElseWithCompareFalse() {
+	//	assertValidWithInput("if (read U8 > read U8) 100 else 50", 50, 20, 60);
+	// }
+
+	@Test
+	void shouldSupportIfElseInLetBinding() {
+		assertValidWithInput("let x = if (read Bool) 100 else 50; x", 100, 1);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

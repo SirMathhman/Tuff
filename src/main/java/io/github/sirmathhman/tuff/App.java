@@ -1,6 +1,7 @@
 package io.github.sirmathhman.tuff;
 
 import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
+import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.EqualityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
@@ -38,10 +39,6 @@ public final class App {
 
 		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
 		return Result.ok(instructions.toArray(new Instruction[0]));
-	}
-
-	private static Result<ExpressionTokens.LetBindingDecl, CompileError> parseLetDeclaration(String expr) {
-		return ExpressionTokens.parseLetDeclaration(expr);
 	}
 
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
@@ -123,13 +120,17 @@ public final class App {
 
 		return Result.ok(null);
 	}
-
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
 		expr = expr.trim();
 
 		// Check if this is a let binding
 		if (expr.startsWith("let ")) {
 			return parseLetExpressionBinding(expr);
+		}
+
+		// Check if this is a conditional expression (lowest precedence)
+		if (ConditionalExpressionHandler.hasConditional(expr)) {
+			return ConditionalExpressionHandler.parseConditional(expr);
 		}
 
 		// Normalize curly braces to parentheses for uniform grouping support
@@ -158,27 +159,30 @@ public final class App {
 		// Parse additive expression (no logical operators or comparisons)
 		return AdditiveExpressionParser.parseAdditive(expr);
 	}
-
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {
 		var le = LessOrEqualOperatorHandler.splitByLessOrEqual(expr);
-		if (le.size() > 1) return LessOrEqualOperatorHandler.parseLessOrEqualExpression(le);
+		if (le.size() > 1)
+			return LessOrEqualOperatorHandler.parseLessOrEqualExpression(le);
 		var ge = GreaterOrEqualOperatorHandler.splitByGreaterOrEqual(expr);
-		if (ge.size() > 1) return GreaterOrEqualOperatorHandler.parseGreaterOrEqualExpression(ge);
+		if (ge.size() > 1)
+			return GreaterOrEqualOperatorHandler.parseGreaterOrEqualExpression(ge);
 		var lt = LessThanOperatorHandler.splitByLessThan(expr);
-		if (lt.size() > 1) return LessThanOperatorHandler.parseLessThanExpression(lt);
+		if (lt.size() > 1)
+			return LessThanOperatorHandler.parseLessThanExpression(lt);
 		var gt = GreaterThanOperatorHandler.splitByGreaterThan(expr);
-		if (gt.size() > 1) return GreaterThanOperatorHandler.parseGreaterThanExpression(gt);
+		if (gt.size() > 1)
+			return GreaterThanOperatorHandler.parseGreaterThanExpression(gt);
 		var eq = EqualityOperatorHandler.splitByEquality(expr);
-		if (eq.size() > 1) return EqualityOperatorHandler.parseEqualityExpression(eq);
+		if (eq.size() > 1)
+			return EqualityOperatorHandler.parseEqualityExpression(eq);
 		var neq = InequalityOperatorHandler.splitByInequality(expr);
-		if (neq.size() > 1) return InequalityOperatorHandler.parseInequalityExpression(neq);
+		if (neq.size() > 1)
+			return InequalityOperatorHandler.parseInequalityExpression(neq);
 		return Result.err(new CompileError("No comparison operator found"));
 	}
-
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
 		return parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>(), new java.util.HashMap<>());
 	}
-
 	private static Result<String, CompileError> determineAndValidateType(
 			ExpressionTokens.LetBindingDecl decl,
 			java.util.Map<String, String> variableTypes) {
@@ -216,7 +220,7 @@ public final class App {
 			java.util.Map<String, String> boundVariables, java.util.Map<String, String> variableTypes) {
 		// Format: let varName : TYPE = EXPR; continuation
 		// where continuation is either another let binding or a variable reference
-		Result<ExpressionTokens.LetBindingDecl, CompileError> declResult = parseLetDeclaration(expr);
+		Result<ExpressionTokens.LetBindingDecl, CompileError> declResult = ExpressionTokens.parseLetDeclaration(expr);
 		if (declResult.isErr()) {
 			return Result.err(declResult.errValue());
 		}
@@ -351,7 +355,6 @@ public final class App {
 		}
 		return Result.ok(current * value);
 	}
-
 	private static void fixGroupingBoundaries(List<ExpressionModel.ExpressionTerm> multTerms, int lastExpandedParensSize,
 			int multTokensSize) {
 		if (lastExpandedParensSize > 1 && multTokensSize > 1) {
@@ -410,7 +413,6 @@ public final class App {
 			return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue, 0));
 		}
 	}
-
 	private static List<ExpressionModel.MultOperatorToken> splitByMultOperators(String expr) {
 		// Split by * or / while respecting parentheses, tracking which operator
 		List<ExpressionModel.MultOperatorToken> result = new ArrayList<>();
@@ -439,7 +441,6 @@ public final class App {
 		result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
 		return result;
 	}
-
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseTerm(String term) {
 		term = term.trim();
 
@@ -470,7 +471,6 @@ public final class App {
 		}
 		return Result.ok(new ExpressionModel.ExpressionTerm(0, literalResult.okValue(), false, false));
 	}
-
 	public static Result<RunResult, ApplicationError> run(String source, int[] input) {
 		Result<Instruction[], CompileError> compileResult = compile(source);
 		if (compileResult.isErr()) {
@@ -492,6 +492,8 @@ public final class App {
 
 			return Result.ok(new RunResult(output, returnValue, instructions));
 		} catch (Exception e) {
+			e.printStackTrace();
+			System.err.println("Exception occurred during execution!");
 			return Result.err(new ApplicationError(new ExecutionError(instructions)));
 		}
 	}

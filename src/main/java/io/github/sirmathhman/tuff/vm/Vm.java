@@ -8,6 +8,14 @@ public final class Vm {
 	private Vm() {
 	}
 
+	private static long sign_extend_24bit(long value) {
+		// If bit 23 is set, sign-extend with 1s (make it negative)
+		if ((value & 0x800000L) != 0) {
+			value |= 0xFFFFFFFFFF000000L;  // Set all higher bits to 1
+		}
+		return value;
+	}
+
 	public static int execute(
 			Instruction[] source,
 			IntSupplier read,
@@ -30,8 +38,8 @@ public final class Vm {
 			long encodedInstruction = memory[programCounter];
 			int operation = (int) ((encodedInstruction >>> 56) & 0xff);
 			int variant = (int) ((encodedInstruction >>> 48) & 0xff);
-			long firstOperand = encodedInstruction & 0xFFFFFFL;
-			long secondOperand = (encodedInstruction >>> 24) & 0xFFFFFFL;
+			long firstOperand = sign_extend_24bit(encodedInstruction & 0xFFFFFFL);
+			long secondOperand = sign_extend_24bit((encodedInstruction >>> 24) & 0xFFFFFFL);
 
 			Operation op = Operation.values()[operation];
 			Variant var = Variant.values()[variant];
@@ -218,11 +226,11 @@ public final class Vm {
 		long encoded = 0;
 		encoded |= ((long) instruction.operation().ordinal() & 0xffL) << 56;
 		encoded |= ((long) instruction.variant().ordinal() & 0xffL) << 48;
-		encoded |= instruction.firstOperand() & 0x0000_FFFF_FFFF_FFFFL;
+		encoded |= instruction.firstOperand() & 0xFFFFFFL;
 
 		Long secondOperand = instruction.secondOperand();
 		if (secondOperand != null) {
-			encoded |= (secondOperand & 0x0000_FFFF_FFFF_FFFFL) << 24;
+			encoded |= (secondOperand & 0xFFFFFFL) << 24;
 		}
 
 		return encoded;
