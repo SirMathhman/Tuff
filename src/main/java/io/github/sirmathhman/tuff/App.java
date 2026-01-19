@@ -63,11 +63,6 @@ public final class App {
 
 		String varName = parts[0].trim();
 		String valueExpr = expr.substring(equalsIndex + 1, semiIndex).trim();
-		String varRef = expr.substring(semiIndex + 1).trim();
-
-		if (!varRef.equals(varName)) {
-			return Result.err(new CompileError("Invalid let binding: variable reference mismatch"));
-		}
 
 		return Result.ok(new LetBindingDecl(varName, valueExpr));
 	}
@@ -292,20 +287,58 @@ public final class App {
 	}
 
 	private static Result<ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
-		// Format: let varName : TYPE = EXPR; varName
+		return parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>());
+	}
+
+	private static Result<ExpressionResult, CompileError> parseLetExpressionBindingWithContext(String expr,
+			java.util.Map<String, String> boundVariables) {
+		// Format: let varName : TYPE = EXPR; continuation
+		// where continuation is either another let binding or a variable reference
 		Result<LetBindingDecl, CompileError> declResult = parseLetDeclaration(expr);
 		if (declResult.isErr()) {
 			return Result.err(declResult.errValue());
 		}
 
+		LetBindingDecl decl = declResult.okValue();
+
+		// Substitute any bound variables in the value expression
+		String valueExpr = decl.valueExpr;
+		for (String varName : boundVariables.keySet()) {
+			// Simple substitution - replace variable references with their bound
+			// expressions
+			valueExpr = valueExpr.replaceAll("\\b" + varName + "\\b", boundVariables.get(varName));
+		}
+
 		// Parse the value expression
-		String valueExpr = declResult.okValue().valueExpr;
 		Result<ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
 		if (valueResult.isErr()) {
 			return Result.err(valueResult.errValue());
 		}
 
-		// For let expression bindings, just return the value expression result
+		// Find where the first binding ends (after its semicolon)
+		int equalsIndex = expr.indexOf('=');
+		int semiIndex = expr.indexOf(';', equalsIndex);
+
+		// Get the continuation after the semicolon
+		String continuation = expr.substring(semiIndex + 1).trim();
+
+		// Parse the continuation (either another let binding or final variable
+		// reference)
+		if (continuation.startsWith("let ")) {
+			// Another let binding follows - recursively parse it with updated context
+			java.util.Map<String, String> newContext = new java.util.HashMap<>(boundVariables);
+			newContext.put(decl.varName, decl.valueExpr);
+			return parseLetExpressionBindingWithContext(continuation, newContext);
+		}
+
+		// Should be a variable reference - validate it matches the declared variable
+		if (!continuation.equals(decl.varName)) {
+			return Result.err(new CompileError("Invalid let binding: expected reference to variable '" +
+					decl.varName + "' but got '" + continuation + "'"));
+		}
+
+		// Return the value expression result (the variable evaluates to its bound
+		// value)
 		return Result.ok(valueResult.okValue());
 	}
 
