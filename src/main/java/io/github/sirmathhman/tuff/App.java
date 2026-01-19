@@ -64,16 +64,8 @@ public final class App {
 			// Check what comes after the semicolon
 			String continuation = stmt.substring(semiIndex + 1).trim();
 
-			// If continuation starts with "let", this is a chained binding
-			if (continuation.startsWith("let ")) {
-				Result<ExpressionModel.ExpressionResult, CompileError> chainResult = parseLetExpressionBinding(stmt);
-				if (chainResult.isErr()) {
-					return Result.err(chainResult.errValue());
-				}
-				return generateInstructions(chainResult.okValue(), instructions);
-			}
-
-			// Otherwise, we have a let binding with a continuation expression
+		// Use LetBindingHandler for all statement-level let bindings
+		// (both single and chained)
 			return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
 					instructions);
 		}

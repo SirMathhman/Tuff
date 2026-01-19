@@ -16,21 +16,29 @@ public final class LetBindingHandler {
 			int semiIndex,
 			String continuation,
 			List<Instruction> instructions) {
-		// Extract variable name and value expression
-		String declPart = stmt.substring(4, equalsIndex).trim(); // Skip "let "
-		boolean isMutable = false;
-		if (declPart.startsWith("mut ")) {
-			isMutable = true;
-			declPart = declPart.substring(4).trim(); // Skip "mut "
+		return handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation, instructions,
+				new java.util.HashMap<>(), 100);
+	}
+
+	private static Result<Void, CompileError> handleLetBindingWithContinuation(
+			String stmt,
+			int equalsIndex,
+			int semiIndex,
+			String continuation,
+			List<Instruction> instructions,
+			java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr) {
+		// Parse variable declaration
+		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
+		String varName = decl.varName();
+		boolean isMutable = decl.isMutable();
+		String valueExpr = decl.valueExpr();
+
+		// Check if continuation starts with "let" (chained binding)
+		if (continuation.startsWith("let ")) {
+			return handleChainedLetBinding(varName, valueExpr, continuation, instructions,
+					variableAddresses, nextMemAddr);
 		}
-		String varName;
-		if (declPart.contains(":")) {
-			String[] parts = declPart.split(":");
-			varName = parts[0].trim();
-		} else {
-			varName = declPart.trim();
-		}
-		String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
 
 		// If continuation is just the variable name, evaluate the value expression
 		if (continuation.equals(varName)) {
@@ -40,6 +48,12 @@ public final class LetBindingHandler {
 				return Result.err(valueResult.errValue());
 			}
 			return App.generateInstructions(valueResult.okValue(), instructions);
+		}
+
+		// Check if continuation references a previously bound variable
+		if (variableAddresses.containsKey(continuation)) {
+			return handleVariableReference(valueExpr, continuation, instructions,
+					variableAddresses, nextMemAddr);
 		}
 
 		// Check if continuation contains assignment (for mutable variables)
@@ -71,6 +85,71 @@ public final class LetBindingHandler {
 		}
 
 		return App.generateInstructions(contResult.okValue(), instructions);
+	}
+
+	private static VariableDecl parseVariableDecl(String stmt, int equalsIndex, int semiIndex) {
+		// Extract variable name and value expression
+		String declPart = stmt.substring(4, equalsIndex).trim(); // Skip "let "
+		boolean isMutable = false;
+		if (declPart.startsWith("mut ")) {
+			isMutable = true;
+			declPart = declPart.substring(4).trim(); // Skip "mut "
+		}
+		String varName;
+		if (declPart.contains(":")) {
+			String[] parts = declPart.split(":");
+			varName = parts[0].trim();
+		} else {
+			varName = declPart.trim();
+		}
+		String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
+		return new VariableDecl(varName, isMutable, valueExpr);
+	}
+
+	private record VariableDecl(String varName, boolean isMutable, String valueExpr) {
+	}
+
+	private static Result<Void, CompileError> handleChainedLetBinding(
+			String varName,
+			String valueExpr,
+			String continuation,
+			List<Instruction> instructions,
+			java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr) {
+		return storeAndThen(valueExpr, instructions, nextMemAddr, () -> {
+			// Add this variable to the context
+			java.util.Map<String, Integer> newContext = new java.util.HashMap<>(variableAddresses);
+			newContext.put(varName, nextMemAddr);
+
+			// Parse the chained let binding
+			int nextEqualsIndex = continuation.indexOf('=');
+			if (nextEqualsIndex == -1) {
+				return Result.err(new CompileError("Invalid let binding: missing '='"));
+			}
+			int nextSemiIndex = continuation.indexOf(';', nextEqualsIndex);
+			if (nextSemiIndex == -1) {
+				return Result.err(new CompileError("Invalid let binding: missing ';'"));
+			}
+			String nextContinuation = continuation.substring(nextSemiIndex + 1).trim();
+
+			return handleLetBindingWithContinuation(continuation, nextEqualsIndex, nextSemiIndex,
+					nextContinuation, instructions, newContext, nextMemAddr + 1);
+		});
+	}
+
+	private static Result<Void, CompileError> handleVariableReference(
+			String valueExpr,
+			String continuation,
+			List<Instruction> instructions,
+			java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr) {
+		return storeAndThen(valueExpr, instructions, nextMemAddr, () -> {
+			// Load the referenced variable from memory
+			int refAddr = variableAddresses.get(continuation);
+			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) refAddr));
+			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
+			return Result.ok(null);
+		});
 	}
 
 	private static Result<Void, CompileError> handleMultipleVariableReferences(
@@ -106,6 +185,23 @@ public final class LetBindingHandler {
 
 	private static Result<Void, CompileError> parseAndStoreInMemory(String valueExpr,
 			List<Instruction> instructions) {
+		return storeVariableInMemory(valueExpr, instructions, 100);
+	}
+
+	private static Result<Void, CompileError> storeAndThen(
+			String valueExpr,
+			List<Instruction> instructions,
+			int memAddr,
+			java.util.function.Supplier<Result<Void, CompileError>> continuation) {
+		Result<Void, CompileError> storeResult = storeVariableInMemory(valueExpr, instructions, memAddr);
+		if (storeResult.isErr()) {
+			return storeResult;
+		}
+		return continuation.get();
+	}
+
+	private static Result<Void, CompileError> storeVariableInMemory(String valueExpr,
+			List<Instruction> instructions, int memAddr) {
 		// Parse and evaluate value expression
 		Result<ExpressionModel.ExpressionResult, CompileError> valueResult = App.parseExpressionWithRead(valueExpr);
 		if (valueResult.isErr()) {
@@ -118,8 +214,7 @@ public final class LetBindingHandler {
 			return Result.err(genResult.errValue());
 		}
 
-		// Store result (in register 0) to a memory location (use address 100)
-		int memAddr = 100;
+		// Store result (in register 0) to a memory location
 		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
 		return Result.ok(null);
 	}

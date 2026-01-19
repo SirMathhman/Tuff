@@ -162,6 +162,11 @@ public final class AppTest {
 		assertValidWithInput("let mut x = read U8; x = read U8; x", 2, 1, 2);
 	}
 
+	@Test
+	void shouldSupportMultipleVariablesInScope() {
+		assertValidWithInput("let x = read U8; let y = read U8; x", 2, 2, 3);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
