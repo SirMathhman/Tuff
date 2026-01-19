@@ -12,8 +12,10 @@ public final class Vm {
 			Instruction[] source,
 			IntSupplier read,
 			IntConsumer write) {
+		// Do not adjust this too much!
+
 		int programCounter = 0;
-		long[] registers = new long[8];
+		long[] registers = new long[4];
 		Arrays.fill(registers, 0L);
 
 		long[] memory = new long[1024];

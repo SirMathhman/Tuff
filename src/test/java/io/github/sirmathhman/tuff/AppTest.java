@@ -384,6 +384,41 @@ public final class AppTest {
 		assertValidWithInput("let x = read U32 < read U32; x", 1, 100, 429496729);
 	}
 
+	@Test
+	void shouldSupportGreaterThanOperatorWithU32Greater() {
+		assertValidWithInput("read U32 > read U32", 1, 429496729, 100);
+	}
+
+	@Test
+	void shouldSupportGreaterThanOperatorWithU32NotGreater() {
+		assertValidWithInput("read U32 > read U32", 0, 100, 429496729);
+	}
+
+	@Test
+	void shouldSupportGreaterThanOperatorWithU32Equal() {
+		assertValidWithInput("read U32 > read U32", 0, 429496729, 429496729);
+	}
+
+	@Test
+	void shouldSupportGreaterThanWithBoolsFalse() {
+		assertValidWithInput("read Bool > read Bool", 0, 0, 0);
+	}
+
+	@Test
+	void shouldSupportGreaterThanWithBoolsTrue() {
+		assertValidWithInput("read Bool > read Bool", 0, 1, 1);
+	}
+
+	@Test
+	void shouldSupportGreaterThanWithBoolsMixed() {
+		assertValidWithInput("read Bool > read Bool", 1, 1, 0);
+	}
+
+	@Test
+	void shouldSupportGreaterThanInLetBinding() {
+		assertValidWithInput("let x = read U32 > read U32; x", 1, 429496729, 100);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

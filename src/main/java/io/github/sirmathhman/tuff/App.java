@@ -4,6 +4,7 @@ import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
 import io.github.sirmathhman.tuff.compiler.EqualityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
+import io.github.sirmathhman.tuff.compiler.GreaterThanOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
 import io.github.sirmathhman.tuff.compiler.InequalityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
@@ -146,29 +147,34 @@ public final class App {
 			return LogicalAndHandler.parseLogicalAndExpression(andTokens);
 		}
 
-		// Split by < (less-than comparison) - higher precedence than logical ops
-		List<String> ltTokens = LessThanOperatorHandler.splitByLessThan(expr);
-		if (ltTokens.size() > 1) {
-			// We have less-than operations - parse each side and combine
-			return LessThanOperatorHandler.parseLessThanExpression(ltTokens);
-		}
-
-		// Split by == (equality comparison) - same precedence as <
-		List<String> eqTokens = EqualityOperatorHandler.splitByEquality(expr);
-		if (eqTokens.size() > 1) {
-			// We have equality operations - parse each side and combine
-			return EqualityOperatorHandler.parseEqualityExpression(eqTokens);
-		}
-
-		// Split by != (inequality comparison) - same precedence as ==
-		List<String> neqTokens = InequalityOperatorHandler.splitByInequality(expr);
-		if (neqTokens.size() > 1) {
-			// We have inequality operations - parse each side and combine
-			return InequalityOperatorHandler.parseInequalityExpression(neqTokens);
+		// Try comparison operators (all at same precedence level)
+		Result<ExpressionModel.ExpressionResult, CompileError> comparisonResult = parseComparisonOperators(expr);
+		if (comparisonResult.isOk()) {
+			return comparisonResult;
 		}
 
 		// Parse additive expression (no logical operators or comparisons)
 		return AdditiveExpressionParser.parseAdditive(expr);
+	}
+
+	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {
+		List<String> lt = LessThanOperatorHandler.splitByLessThan(expr);
+		if (lt.size() > 1) {
+			return LessThanOperatorHandler.parseLessThanExpression(lt);
+		}
+		List<String> gt = GreaterThanOperatorHandler.splitByGreaterThan(expr);
+		if (gt.size() > 1) {
+			return GreaterThanOperatorHandler.parseGreaterThanExpression(gt);
+		}
+		List<String> eq = EqualityOperatorHandler.splitByEquality(expr);
+		if (eq.size() > 1) {
+			return EqualityOperatorHandler.parseEqualityExpression(eq);
+		}
+		List<String> neq = InequalityOperatorHandler.splitByInequality(expr);
+		if (neq.size() > 1) {
+			return InequalityOperatorHandler.parseInequalityExpression(neq);
+		}
+		return Result.err(new CompileError("No comparison operator found"));
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
