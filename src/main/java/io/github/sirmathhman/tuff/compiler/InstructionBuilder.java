@@ -31,10 +31,11 @@ public final class InstructionBuilder {
 		}
 
 		if (markerIdx != -1) {
-			// This is a binary comparison (equality or inequality)
-			// marker.value == 0 means Equal, marker.value == 1 means NotEqual
+			// This is a binary comparison (equality, inequality, or less-than)
+			// marker.value == 0 means Equal, marker.value == 1 means NotEqual, marker.value == 2 means LessThan
 			ExpressionModel.ExpressionTerm marker = terms.get(markerIdx);
 			boolean isInequality = marker.value == 1;
+			boolean isLessThan = marker.value == 2;
 
 			List<ExpressionModel.ExpressionTerm> leftTerms = terms.subList(0, markerIdx);
 			List<ExpressionModel.ExpressionTerm> rightTerms = terms.subList(markerIdx + 1, terms.size());
@@ -66,16 +67,20 @@ public final class InstructionBuilder {
 				rightResult = buildSubExpressionResult(rightTerms, rightStartingReg, instructions);
 			}
 
-			// Generate equality comparison
+			// Generate comparison operation
 			// If one side was a literal, we have a problem because totalLiteral is handled
 			// OUTSIDE this method.
 			// To keep it simple for now, we only support comparing reads.
 			if (leftResult != -1 && rightResult != -1) {
-				instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
-
-				// If this is inequality, negate the result with LogicalNot
-				if (isInequality) {
-					instructions.add(new Instruction(Operation.LogicalNot, Variant.Immediate, leftResult, null));
+				if (isLessThan) {
+					instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, leftResult, (long) rightResult));
+				} else {
+					instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
+					
+					// If this is inequality, negate the result with LogicalNot
+					if (isInequality) {
+						instructions.add(new Instruction(Operation.LogicalNot, Variant.Immediate, leftResult, null));
+					}
 				}
 
 				return leftResult;

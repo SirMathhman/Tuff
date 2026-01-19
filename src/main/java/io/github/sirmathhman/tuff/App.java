@@ -7,6 +7,7 @@ import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
 import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
 import io.github.sirmathhman.tuff.compiler.InequalityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
+import io.github.sirmathhman.tuff.compiler.LessThanOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LiteralParser;
 import io.github.sirmathhman.tuff.compiler.LogicalAndHandler;
 import io.github.sirmathhman.tuff.compiler.LogicalOrHandler;
@@ -145,7 +146,14 @@ public final class App {
 			return LogicalAndHandler.parseLogicalAndExpression(andTokens);
 		}
 
-		// Split by == (equality comparison) - higher precedence than logical ops
+		// Split by < (less-than comparison) - higher precedence than logical ops
+		List<String> ltTokens = LessThanOperatorHandler.splitByLessThan(expr);
+		if (ltTokens.size() > 1) {
+			// We have less-than operations - parse each side and combine
+			return LessThanOperatorHandler.parseLessThanExpression(ltTokens);
+		}
+
+		// Split by == (equality comparison) - same precedence as <
 		List<String> eqTokens = EqualityOperatorHandler.splitByEquality(expr);
 		if (eqTokens.size() > 1) {
 			// We have equality operations - parse each side and combine
