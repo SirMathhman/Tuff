@@ -301,6 +301,11 @@ public final class App {
 
 		LetBindingDecl decl = declResult.okValue();
 
+		// Check for duplicate variable binding
+		if (boundVariables.containsKey(decl.varName)) {
+			return Result.err(new CompileError("Duplicate variable binding: '" + decl.varName + "' is already bound"));
+		}
+
 		// Substitute any bound variables in the value expression
 		String valueExpr = decl.valueExpr;
 		for (String varName : boundVariables.keySet()) {

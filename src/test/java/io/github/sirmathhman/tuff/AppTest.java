@@ -121,6 +121,11 @@ public final class AppTest {
 		assertValidWithInput("(read U8 + { let x : U8 = read U8; let y : U8 = x; y }) * read U8", 20, 2, 3, 4);
 	}
 
+	@Test
+	void shouldRejectDuplicateVariableBinding() {
+		assertInvalid("(read U8 + { let x : U8 = read U8; let x : U8 = 100; x }) * read U8");
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
