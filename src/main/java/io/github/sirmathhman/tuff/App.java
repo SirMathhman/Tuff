@@ -36,7 +36,7 @@ public final class App {
 			// Peek ahead to see if this is a chained let binding
 			// Format: "let x = expr1; let y = expr2; z"
 			// vs single: "let x = expr; x"
-			
+
 			int equalsIndex = stmt.indexOf('=');
 			if (equalsIndex == -1) {
 				return Result.err(new CompileError("Invalid let binding: missing '='"));
@@ -63,11 +63,10 @@ public final class App {
 
 			// Check what comes after the semicolon
 			String continuation = stmt.substring(semiIndex + 1).trim();
-			
+
 			// If continuation starts with "let", this is a chained binding
 			if (continuation.startsWith("let ")) {
-				Result<ExpressionModel.ExpressionResult, CompileError> chainResult = 
-					parseLetExpressionBinding(stmt);
+				Result<ExpressionModel.ExpressionResult, CompileError> chainResult = parseLetExpressionBinding(stmt);
 				if (chainResult.isErr()) {
 					return Result.err(chainResult.errValue());
 				}
@@ -185,6 +184,35 @@ public final class App {
 		return parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>(), new java.util.HashMap<>());
 	}
 
+	private static Result<String, CompileError> determineAndValidateType(
+			ExpressionTokens.LetBindingDecl decl,
+			java.util.Map<String, String> variableTypes) {
+		// Extract the type from the value expression BEFORE substitution
+		// This allows variable references to be resolved in the type context
+		Result<String, CompileError> typeResult = ExpressionTokens.extractTypeFromExpression(decl.valueExpr(),
+				variableTypes);
+
+		// Determine the actual type to use
+		if (decl.declaredType() == null) {
+			// Type inference: require successful type extraction
+			if (typeResult.isErr()) {
+				return Result.err(typeResult.errValue());
+			}
+			return Result.ok(typeResult.okValue());
+		} else {
+			// If type is explicitly declared, try to extract type for validation
+			if (typeResult.isOk()) {
+				String inferredType = typeResult.okValue();
+				// Validate that the inferred type is compatible with the declared type
+				if (!ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
+					return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
+							"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
+				}
+			}
+			return Result.ok(decl.declaredType());
+		}
+	}
+
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBindingWithContext(
 			String expr,
 			java.util.Map<String, String> boundVariables, java.util.Map<String, String> variableTypes) {
@@ -202,32 +230,15 @@ public final class App {
 			return Result.err(new CompileError("Duplicate variable binding: '" + decl.varName() + "' is already bound"));
 		}
 
-		// Extract the type from the value expression BEFORE substitution
-		// This allows variable references to be resolved in the type context
-		Result<String, CompileError> typeResult = ExpressionTokens.extractTypeFromExpression(decl.valueExpr(), variableTypes);
-		
-		// Determine the actual type to use
-		String actualType;
-		if (decl.declaredType() == null) {
-			// Type inference: require successful type extraction
-			if (typeResult.isErr()) {
-				return Result.err(typeResult.errValue());
-			}
-			actualType = typeResult.okValue();
-		} else {
-			// If type is explicitly declared, try to extract type for validation
-			if (typeResult.isOk()) {
-				String inferredType = typeResult.okValue();
-				// Validate that the inferred type is compatible with the declared type
-				if (!ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
-					return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
-							"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
-				}
-			}
-			actualType = decl.declaredType();
+		// Extract and validate the type
+		Result<String, CompileError> actualTypeResult = determineAndValidateType(decl, variableTypes);
+		if (actualTypeResult.isErr()) {
+			return Result.err(actualTypeResult.errValue());
 		}
+		String actualType = actualTypeResult.okValue();
 
-		// Now substitute any bound variables in the value expression for actual compilation
+		// Now substitute any bound variables in the value expression for actual
+		// compilation
 		String valueExpr = decl.valueExpr();
 		for (String varName : boundVariables.keySet()) {
 			// Simple substitution - replace variable references with their bound
