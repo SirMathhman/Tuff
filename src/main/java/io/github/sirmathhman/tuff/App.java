@@ -12,7 +12,7 @@ public final class App {
 	private App() {
 	}
 
-	private static Instruction[] compile(String source) {
+	private static Result<Instruction[], CompileError> compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
 
 		// If source is not empty, try to parse it as a number (with optional type
@@ -30,18 +30,25 @@ public final class App {
 				int value = Integer.parseInt(numericPart);
 				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, (long) value));
 			} catch (NumberFormatException e) {
-				// If parsing fails, just halt
+				return Result.err(new CompileError("Failed to parse numeric value: " + source));
 			}
 		}
 
 		// Always end with a halt instruction
 		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
 
-		return instructions.toArray(new Instruction[0]);
+		return Result.ok(instructions.toArray(new Instruction[0]));
 	}
 
 	public static RunResult run(String source, int[] input) {
-		Instruction[] instructions = compile(source);
+		Result<Instruction[], CompileError> compileResult = compile(source);
+		
+		if (compileResult.isErr()) {
+			// If compilation failed, return error exit code 1
+			return new RunResult(new ArrayList<>(), 1);
+		}
+
+		Instruction[] instructions = compileResult.okValue();
 
 		final int[] inputPointer = { 0 };
 		List<Integer> output = new ArrayList<>();
