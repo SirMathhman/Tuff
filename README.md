@@ -74,6 +74,12 @@ A stack-based virtual machine compiler with support for type-safe let bindings.
   let mut x = read U8; x = read U8; x  // Reads twice, returns second value
   ```
 
+- **Uninitialized Variables**: Declare with type annotation, assign later
+
+  ```
+  let x : I32; x = read I32; x  // Declare, assign, then use
+  ```
+
 ## Supported Types
 
 - `U8`, `U16`, `U32` - Unsigned integers (8, 16, 32 bits)
