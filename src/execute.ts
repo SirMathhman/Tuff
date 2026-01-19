@@ -54,18 +54,24 @@ function loadInstructionsIntoMemory(source: Instruction[], memory: number[]) {
   }
 }
 
-export function execute(
+export async function execute(
   source: Instruction[],
   read: () => number,
   write: (output: number) => void,
-): number {
+): Promise<number> {
   let programCounter = 0;
   let registers: number[] = new Array(8).fill(0);
 
   let memory: number[] = new Array(1024).fill(0);
   loadInstructionsIntoMemory(source, memory);
 
+  let instructionCount = 0;
   while (true) {
+    // Yield every 1000 instructions to allow Jest timeout to work
+    if (instructionCount++ % 1000 === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
     const encodedInstruction = memory[programCounter];
     const operation = (encodedInstruction >> 56) & 0xff;
     const variant = (encodedInstruction >> 48) & 0xff;
@@ -161,26 +167,24 @@ export function execute(
         break;
       case Operation.Halt:
         return registers[0];
-			case Operation.BitsAnd:
-				registers[firstOperand] &=
-					registers[secondOperand!];
-				break;
-			case Operation.BitsOr:
-				registers[firstOperand] |=
-					registers[secondOperand!];
-				break;
-			case Operation.BitsNot:
-				registers[firstOperand] = ~registers[firstOperand];
-				break;
-			case Operation.BitsNot:
-				registers[firstOperand] = -registers[firstOperand];
-				break;
+      case Operation.BitsAnd:
+        registers[firstOperand] &= registers[secondOperand!];
+        break;
+      case Operation.BitsOr:
+        registers[firstOperand] |= registers[secondOperand!];
+        break;
+      case Operation.BitsNot:
+        registers[firstOperand] = ~registers[firstOperand];
+        break;
+      case Operation.BitsNot:
+        registers[firstOperand] = -registers[firstOperand];
+        break;
     }
 
     programCounter++;
-		if (programCounter >= memory.length) {
-			// We deliberately require a halt instruction.
-			programCounter = 0;
-		}
+    if (programCounter >= memory.length) {
+      // We deliberately require a halt instruction.
+      programCounter = 0;
+    }
   }
 }

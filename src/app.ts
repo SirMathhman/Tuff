@@ -15,11 +15,14 @@ function compile(source: string): Instruction[] {
   return [];
 }
 
-export function run(source: string, input: number[]): [number[], number] {
+export async function run(
+  source: string,
+  input: number[],
+): Promise<[number[], number]> {
   const instructions = compile(source);
   let inputPointer = 0;
   let output: number[] = [];
-  let returnValue = execute(
+  let returnValue = await execute(
     instructions,
     () => {
       const value = input[inputPointer];

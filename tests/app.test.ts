@@ -1,7 +1,12 @@
 import { run } from "../src/app";
 
 describe("The application", () => {
-  test("should run the simplest program possible", () => {
-    expect(run("", [])).toStrictEqual([[], 0]);
-  });
+  testSimplest("should run the simplest program possible", "", 0);
+  testSimplest("should run with an int", "0", 0);
 });
+
+function testSimplest(message: string, source: string, exitCode: number) {
+  test(message, async () => {
+    expect(await run(source, [])).toStrictEqual([[], exitCode]);
+  });
+}
