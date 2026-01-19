@@ -34,65 +34,153 @@ public final class Vm {
 			Operation op = Operation.values()[operation];
 			Variant var = Variant.values()[variant];
 
-			switch (op) {
-				case Load -> {
-					if (var == Variant.Immediate) {
-						registers[(int) firstOperand] = secondOperand;
-					} else if (var == Variant.DirectAddress) {
-						registers[(int) firstOperand] = memory[(int) secondOperand];
-					} else if (var == Variant.IndirectAddress) {
-						int address = (int) memory[(int) secondOperand];
-						registers[(int) firstOperand] = memory[address];
-					}
-				}
-				case Store -> {
-					if (var == Variant.DirectAddress) {
-						memory[(int) secondOperand] = registers[(int) firstOperand];
-					} else if (var == Variant.IndirectAddress) {
-						int address = (int) memory[(int) secondOperand];
-						memory[address] = registers[(int) firstOperand];
-					}
-				}
-				case Add -> registers[(int) firstOperand] += registers[(int) secondOperand];
-				case BitsShiftLeft -> registers[(int) firstOperand] <<= registers[(int) secondOperand];
-				case BitsShiftRight -> registers[(int) firstOperand] >>= registers[(int) secondOperand];
-				case BitsAnd -> registers[(int) firstOperand] &= registers[(int) secondOperand];
-				case BitsOr -> registers[(int) firstOperand] |= registers[(int) secondOperand];
-				case BitsNot -> registers[(int) firstOperand] = ~registers[(int) firstOperand];
-				case In -> registers[(int) firstOperand] = read.getAsInt();
-				case Out -> write.accept((int) registers[(int) firstOperand]);
-				case Jump -> {
-					programCounter = resolveJumpTarget(var, memory, (int) secondOperand);
-					continue;
-				}
-				case JumpIfLessThanZero -> {
-					if (registers[(int) firstOperand] < 0) {
-						programCounter = resolveJumpTarget(var, memory, (int) secondOperand);
-						continue;
-					}
-				}
-				case Equal ->
-					registers[(int) firstOperand] = (registers[(int) firstOperand] == registers[(int) secondOperand]) ? 1 : 0;
-				case LessThan ->
-					registers[(int) firstOperand] = (registers[(int) firstOperand] < registers[(int) secondOperand]) ? 1 : 0;
-				case GreaterThan ->
-					registers[(int) firstOperand] = (registers[(int) firstOperand] > registers[(int) secondOperand]) ? 1 : 0;
-				case LogicalAnd ->
-					registers[(int) firstOperand] = (registers[(int) firstOperand] != 0 && registers[(int) secondOperand] != 0)
-							? 1
-							: 0;
-				case LogicalOr ->
-					registers[(int) firstOperand] = (registers[(int) firstOperand] != 0 || registers[(int) secondOperand] != 0)
-							? 1
-							: 0;
-				case LogicalNot -> registers[(int) firstOperand] = (registers[(int) firstOperand] == 0) ? 1 : 0;
-				case Halt -> {
-					return (int) registers[0];
-				}
+			boolean shouldJump = executeInstruction(
+					registers, memory, op, var, firstOperand, secondOperand, read, write);
+
+			if (op == Operation.Halt) {
+				return (int) registers[0];
 			}
 
-			programCounter++;
+			if (shouldJump) {
+				programCounter = resolveJumpTarget(var, memory, (int) secondOperand);
+			} else {
+				programCounter++;
+			}
 		}
+	}
+
+	private static boolean executeInstruction(
+			long[] registers,
+			long[] memory,
+			Operation op,
+			Variant var,
+			long firstOperand,
+			long secondOperand,
+			IntSupplier read,
+			IntConsumer write) {
+		return switch (op) {
+			case Load -> executeLoad(registers, memory, var, firstOperand, secondOperand);
+			case Store -> executeStore(registers, memory, var, firstOperand, secondOperand);
+			case Add -> executeAdd(registers, firstOperand, secondOperand);
+			case BitsShiftLeft -> executeBitsShiftLeft(registers, firstOperand, secondOperand);
+			case BitsShiftRight -> executeBitsShiftRight(registers, firstOperand, secondOperand);
+			case BitsAnd -> executeBitsAnd(registers, firstOperand, secondOperand);
+			case BitsOr -> executeBitsOr(registers, firstOperand, secondOperand);
+			case BitsNot -> executeBitsNot(registers, firstOperand);
+			case In -> executeIn(registers, firstOperand, read);
+			case Out -> executeOut(registers, firstOperand, write);
+			case Jump -> true;
+			case JumpIfLessThanZero -> registers[(int) firstOperand] < 0;
+			case Equal -> executeEqual(registers, firstOperand, secondOperand);
+			case LessThan -> executeLessThan(registers, firstOperand, secondOperand);
+			case GreaterThan -> executeGreaterThan(registers, firstOperand, secondOperand);
+			case LogicalAnd -> executeLogicalAnd(registers, firstOperand, secondOperand);
+			case LogicalOr -> executeLogicalOr(registers, firstOperand, secondOperand);
+			case LogicalNot -> executeLogicalNot(registers, firstOperand);
+			case Halt -> false;
+		};
+	}
+
+	private static boolean executeAdd(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] += registers[(int) secondOperand];
+		return false;
+	}
+
+	private static boolean executeBitsShiftLeft(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] <<= registers[(int) secondOperand];
+		return false;
+	}
+
+	private static boolean executeBitsShiftRight(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] >>= registers[(int) secondOperand];
+		return false;
+	}
+
+	private static boolean executeBitsAnd(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] &= registers[(int) secondOperand];
+		return false;
+	}
+
+	private static boolean executeBitsOr(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] |= registers[(int) secondOperand];
+		return false;
+	}
+
+	private static boolean executeBitsNot(long[] registers, long firstOperand) {
+		registers[(int) firstOperand] = ~registers[(int) firstOperand];
+		return false;
+	}
+
+	private static boolean executeIn(long[] registers, long firstOperand, IntSupplier read) {
+		registers[(int) firstOperand] = read.getAsInt();
+		return false;
+	}
+
+	private static boolean executeOut(long[] registers, long firstOperand, IntConsumer write) {
+		write.accept((int) registers[(int) firstOperand]);
+		return false;
+	}
+
+	private static boolean executeEqual(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] = (registers[(int) firstOperand] == registers[(int) secondOperand]) ? 1 : 0;
+		return false;
+	}
+
+	private static boolean executeLessThan(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] = (registers[(int) firstOperand] < registers[(int) secondOperand]) ? 1 : 0;
+		return false;
+	}
+
+	private static boolean executeGreaterThan(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] = (registers[(int) firstOperand] > registers[(int) secondOperand]) ? 1 : 0;
+		return false;
+	}
+
+	private static boolean executeLogicalAnd(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] = (registers[(int) firstOperand] != 0 && registers[(int) secondOperand] != 0) ? 1 : 0;
+		return false;
+	}
+
+	private static boolean executeLogicalOr(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] = (registers[(int) firstOperand] != 0 || registers[(int) secondOperand] != 0) ? 1 : 0;
+		return false;
+	}
+
+	private static boolean executeLogicalNot(long[] registers, long firstOperand) {
+		registers[(int) firstOperand] = (registers[(int) firstOperand] == 0) ? 1 : 0;
+		return false;
+	}
+
+	private static boolean executeLoad(
+			long[] registers,
+			long[] memory,
+			Variant var,
+			long firstOperand,
+			long secondOperand) {
+		if (var == Variant.Immediate) {
+			registers[(int) firstOperand] = secondOperand;
+		} else if (var == Variant.DirectAddress) {
+			registers[(int) firstOperand] = memory[(int) secondOperand];
+		} else if (var == Variant.IndirectAddress) {
+			int address = (int) memory[(int) secondOperand];
+			registers[(int) firstOperand] = memory[address];
+		}
+		return false;
+	}
+
+	private static boolean executeStore(
+			long[] registers,
+			long[] memory,
+			Variant var,
+			long firstOperand,
+			long secondOperand) {
+		if (var == Variant.DirectAddress) {
+			memory[(int) secondOperand] = registers[(int) firstOperand];
+		} else if (var == Variant.IndirectAddress) {
+			int address = (int) memory[(int) secondOperand];
+			memory[address] = registers[(int) firstOperand];
+		}
+		return false;
 	}
 
 	private static int resolveJumpTarget(Variant variant, long[] memory, int operand) {
