@@ -12,7 +12,7 @@ public final class App {
 	private App() {
 	}
 
-	private static Result<Instruction[], CompileError> compile(String source) {
+	public static Result<Instruction[], CompileError> compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
 
 		// If source is not empty, try to parse it as a number (with optional type

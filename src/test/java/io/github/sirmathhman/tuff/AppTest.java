@@ -42,10 +42,6 @@ public final class AppTest {
 
 	@Test
 	void shouldRejectNegativeUnsignedLiteral() {
-		Ap
-		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
-			Result<RunResult, CompileError> result = App.run("-100U8", new int[] {});
-			assertTrue(result.isErr(), "Expected compilation error for negative unsigned literal");
-		});
+		Assertions.assertTrue(App.compile("-100U8").isErr());
 	}
 }
