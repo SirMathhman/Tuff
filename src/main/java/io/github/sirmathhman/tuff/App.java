@@ -1,5 +1,13 @@
 package io.github.sirmathhman.tuff;
 
+import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
+import io.github.sirmathhman.tuff.compiler.ExpressionModel;
+import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
+import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
+import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
+import io.github.sirmathhman.tuff.compiler.LiteralParser;
+import io.github.sirmathhman.tuff.compiler.LogicalAndHandler;
+import io.github.sirmathhman.tuff.compiler.LogicalOrHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;

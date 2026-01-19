@@ -1,4 +1,4 @@
-package io.github.sirmathhman.tuff;
+package io.github.sirmathhman.tuff.compiler;
 
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;

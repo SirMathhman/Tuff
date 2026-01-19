@@ -1,4 +1,4 @@
-package io.github.sirmathhman.tuff;
+package io.github.sirmathhman.tuff.compiler;
 
 public final class DepthAwareSplitter {
 	private DepthAwareSplitter() {

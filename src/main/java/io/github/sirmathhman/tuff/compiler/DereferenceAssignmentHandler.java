@@ -1,9 +1,12 @@
-package io.github.sirmathhman.tuff;
+package io.github.sirmathhman.tuff.compiler;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.github.sirmathhman.tuff.App;
+import io.github.sirmathhman.tuff.CompileError;
+import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;

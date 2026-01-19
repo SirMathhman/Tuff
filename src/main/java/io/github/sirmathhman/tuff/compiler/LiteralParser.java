@@ -1,4 +1,7 @@
-package io.github.sirmathhman.tuff;
+package io.github.sirmathhman.tuff.compiler;
+
+import io.github.sirmathhman.tuff.CompileError;
+import io.github.sirmathhman.tuff.Result;
 
 public final class LiteralParser {
 	private LiteralParser() {
