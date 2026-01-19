@@ -50,6 +50,12 @@ A stack-based virtual machine compiler with support for type-safe let bindings.
   let x = read U16; let y : U8 = read U8; y
   ```
 
+- **Multiple Variables in Scope**: Reference any previously bound variable
+
+  ```
+  let x = read U8; let y = read U8; x  // Reads 2 and 3, returns 2
+  ```
+
 - **Expression-Level Bindings**: Nest let bindings inside expressions
 
   ```
