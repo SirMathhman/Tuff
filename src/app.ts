@@ -2,27 +2,22 @@ import { execute, Instruction, Operation, Variant } from "./execute";
 
 function compile(source: string): Instruction[] {
   // TODO: real implementation
-  // For empty programs, add a halt instruction
-  if (!source || source.trim() === "") {
-    return [
-      {
-        operation: Operation.Halt,
-        variant: Variant.Constant,
-        firstOperand: 0,
-      },
-    ];
-  }
-  return [];
+  // For now, always return a program that halts immediately.
+  // This keeps the VM from running forever while the compiler is unimplemented.
+  return [
+    {
+      operation: Operation.Halt,
+      variant: Variant.Constant,
+      firstOperand: 0,
+    },
+  ];
 }
 
-export async function run(
-  source: string,
-  input: number[],
-): Promise<[number[], number]> {
+export function run(source: string, input: number[]): [number[], number] {
   const instructions = compile(source);
   let inputPointer = 0;
   let output: number[] = [];
-  let returnValue = await execute(
+  let returnValue = execute(
     instructions,
     () => {
       const value = input[inputPointer];

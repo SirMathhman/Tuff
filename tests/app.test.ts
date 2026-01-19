@@ -6,7 +6,7 @@ describe("The application", () => {
 });
 
 function testSimplest(message: string, source: string, exitCode: number) {
-  test(message, async () => {
-    expect(await run(source, [])).toStrictEqual([[], exitCode]);
+  test(message, () => {
+    expect(run(source, [])).toStrictEqual([[], exitCode]);
   });
 }
