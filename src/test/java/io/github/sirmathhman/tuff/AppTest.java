@@ -14,6 +14,17 @@ public final class AppTest {
 		assertValid("", 0);
 	}
 
+	private void assertValidWithInput(String source, int exitCode, int... input) {
+		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
+			Result<RunResult, CompileError> result = App.run(source, input);
+			assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue() : ""));
+
+			RunResult runResult = result.okValue();
+			assertEquals(exitCode, runResult.returnValue());
+			assertTrue(runResult.output().isEmpty());
+		});
+	}
+
 	private void assertValid(String source, int exitCode) {
 		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
 			Result<RunResult, CompileError> result = App.run(source, new int[] {});
@@ -53,6 +64,11 @@ public final class AppTest {
 	@Test
 	void shouldAddTwoTypedLiterals() {
 		assertValid("1U8 + 2U8", 3);
+	}
+
+	@Test
+	void shouldReadInputValue() {
+		assertValidWithInput("read U8", 100, 100);
 	}
 
 	private void assertInvalid(String source) {

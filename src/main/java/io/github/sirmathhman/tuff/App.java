@@ -16,15 +16,34 @@ public final class App {
 		List<Instruction> instructions = new ArrayList<>();
 
 		if (!source.isEmpty()) {
-			Result<Long, CompileError> result = parseExpression(source.trim());
+			Result<Void, CompileError> result = parseStatement(source.trim(), instructions);
 			if (result.isErr()) {
 				return Result.err(result.errValue());
 			}
-			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, result.okValue()));
 		}
 
 		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
 		return Result.ok(instructions.toArray(new Instruction[0]));
+	}
+
+	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
+		if (stmt.startsWith("read ")) {
+			String typeSpec = stmt.substring(5).trim();
+			// For now, just validate the type exists and add an In instruction
+			if (!typeSpec.matches("[UI]\\d+")) {
+				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
+			}
+			instructions.add(new Instruction(Operation.In, Variant.Immediate, 0, null));
+			return Result.ok(null);
+		}
+
+		// Otherwise parse as expression and load into register 0
+		Result<Long, CompileError> exprResult = parseExpression(stmt);
+		if (exprResult.isErr()) {
+			return Result.err(exprResult.errValue());
+		}
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, exprResult.okValue()));
+		return Result.ok(null);
 	}
 
 	private static Result<Long, CompileError> parseExpression(String expr) {
