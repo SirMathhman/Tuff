@@ -6,6 +6,7 @@ public enum Operation {
 	Add,
 	Sub,
 	Mul,
+	Div,
 	BitsShiftLeft,
 	BitsShiftRight,
 	BitsAnd,

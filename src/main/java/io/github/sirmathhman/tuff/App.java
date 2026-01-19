@@ -93,21 +93,26 @@ public final class App {
 				continue;
 			}
 
-			// Collect this additive group
+			// Collect this multiplicative/divisive group
 			List<Integer> groupRegs = new ArrayList<>();
+			List<Character> groupOps = new ArrayList<>();
 			groupRegs.add(readRegIndex);
+			groupOps.add('\0'); // No operator for first term
 			boolean isSubtracted = term.isSubtracted;
 			readRegIndex++;
 
-			// Consume all multiplied terms that follow
-			while (i + 1 < terms.size() && terms.get(i + 1).isMultiplied && terms.get(i + 1).readCount > 0) {
+			// Consume all multiplied/divided terms that follow
+			while (i + 1 < terms.size() && (terms.get(i + 1).isMultiplied || terms.get(i + 1).isDivided)
+					&& terms.get(i + 1).readCount > 0) {
 				i++;
+				ExpressionTerm nextTerm = terms.get(i);
 				groupRegs.add(readRegIndex);
+				groupOps.add(nextTerm.isDivided ? '/' : '*');
 				readRegIndex++;
 			}
 
 			// Generate instructions for this group
-			resultReg = processAdditiveGroup(groupRegs, isSubtracted, firstAdditiveGroup, resultReg,
+			resultReg = processAdditiveGroup(groupRegs, groupOps, isSubtracted, firstAdditiveGroup, resultReg,
 					instructions);
 			firstAdditiveGroup = false;
 
@@ -117,7 +122,7 @@ public final class App {
 		return resultReg;
 	}
 
-	private static int processAdditiveGroup(List<Integer> groupRegs, boolean isSubtracted,
+	private static int processAdditiveGroup(List<Integer> groupRegs, List<Character> groupOps, boolean isSubtracted,
 			boolean firstAdditiveGroup, int resultReg, List<Instruction> instructions) {
 		if (groupRegs.size() == 1) {
 			// Single read in this group
@@ -130,10 +135,11 @@ public final class App {
 				return resultReg;
 			}
 		} else {
-			// Multiple reads: perform multiplications
+			// Multiple reads: perform multiplications and divisions
 			int groupResultReg = groupRegs.get(0);
 			for (int j = 1; j < groupRegs.size(); j++) {
-				instructions.add(new Instruction(Operation.Mul, Variant.Immediate, groupResultReg, (long) groupRegs.get(j)));
+				Operation op = groupOps.get(j) == '/' ? Operation.Div : Operation.Mul;
+				instructions.add(new Instruction(op, Variant.Immediate, groupResultReg, (long) groupRegs.get(j)));
 			}
 
 			// Add/subtract this group's result to overall result
@@ -261,13 +267,15 @@ public final class App {
 	}
 
 	private static Result<ParsedMult, CompileError> parseMultiplicative(String expr, boolean isSubtracted) {
-		List<String> multTokens = splitByOperator(expr, '*');
+		List<MultOperatorToken> multTokens = splitByMultOperators(expr);
 		List<ExpressionTerm> multTerms = new ArrayList<>();
 		long multLiteral = 1;
 		int lastExpandedParensSize = 0;
 
 		for (int j = 0; j < multTokens.size(); j++) {
-			String multToken = multTokens.get(j).trim();
+			MultOperatorToken opToken = multTokens.get(j);
+			String multToken = opToken.token.trim();
+			char operator = opToken.operator;
 
 			if (multToken.startsWith("(") && multToken.endsWith(")")) {
 				Result<ParenthesizedTokenResult, CompileError> pResult = processParenthesizedToken(multToken, j,
@@ -277,41 +285,70 @@ public final class App {
 				}
 				ParenthesizedTokenResult pData = pResult.okValue();
 				multTerms.addAll(pData.terms);
-				multLiteral = (j == 0) ? pData.literalValue : multLiteral * pData.literalValue;
+				Result<Long, CompileError> litResult = updateLiteral(multLiteral, pData.literalValue, j == 0, operator);
+				if (litResult.isErr()) {
+					return Result.err(litResult.errValue());
+				}
+				multLiteral = litResult.okValue();
 				lastExpandedParensSize = pData.expandedSize;
 			} else {
-				// Regular term
 				Result<ExpressionTerm, CompileError> termResult = parseTerm(multToken);
 				if (termResult.isErr()) {
 					return Result.err(termResult.errValue());
 				}
 
 				ExpressionTerm baseTerm = termResult.okValue();
-				boolean isMultiplied = (j > 0);
-				ExpressionTerm finalTerm = new ExpressionTerm(baseTerm.readCount, baseTerm.value, isSubtracted, isMultiplied);
+				boolean isMultiplied = (j > 0 && operator == '*');
+				boolean isDivided = (j > 0 && operator == '/');
+				ExpressionTerm finalTerm = new ExpressionTerm(baseTerm.readCount, baseTerm.value, isSubtracted, isMultiplied,
+						isDivided);
 				multTerms.add(finalTerm);
 
-				if (j == 0) {
-					multLiteral = baseTerm.value;
-				} else {
-					multLiteral *= baseTerm.value;
+				Result<Long, CompileError> litResult = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
+				if (litResult.isErr()) {
+					return Result.err(litResult.errValue());
 				}
+				multLiteral = litResult.okValue();
 				lastExpandedParensSize = 0;
 			}
 		}
 
-		// Fix grouping boundaries for expanded parenthesized expressions at j=0
-		if (lastExpandedParensSize > 1 && multTokens.size() > 1) {
-			int lastJ0Index = lastExpandedParensSize - 1;
-			if (lastJ0Index + 1 < multTerms.size() && multTerms.get(lastJ0Index + 1).isMultiplied) {
-				ExpressionTerm termToMark = multTerms.get(lastJ0Index);
-				multTerms.set(lastJ0Index, new ExpressionTerm(termToMark.readCount, termToMark.value,
-						termToMark.isSubtracted, true));
-			}
-		}
+		fixGroupingBoundaries(multTerms, lastExpandedParensSize, multTokens.size());
 
 		int totalReads = multTerms.stream().mapToInt(t -> t.readCount).sum();
 		return Result.ok(new ParsedMult(totalReads, multLiteral, multTerms));
+	}
+
+	private static Result<Long, CompileError> updateLiteral(long current, long value, boolean isFirst, char operator) {
+		if (isFirst) {
+			return Result.ok(value);
+		}
+		// Only perform literal operations when we know both values are literals
+		// If value is 0 and we're dividing, it could be a read operation (not a true division by zero)
+		// So we don't error here; runtime will handle actual division by zero
+		if (operator == '/') {
+			if (value != 0) {
+				return Result.ok(current / value);
+			}
+			// If dividing by zero at parse time, assume it's a read and keep current
+			return Result.ok(current);
+		}
+		return Result.ok(current * value);
+	}
+
+	private static void fixGroupingBoundaries(List<ExpressionTerm> multTerms, int lastExpandedParensSize,
+			int multTokensSize) {
+		if (lastExpandedParensSize > 1 && multTokensSize > 1) {
+			int lastJ0Index = lastExpandedParensSize - 1;
+			if (lastJ0Index + 1 < multTerms.size()) {
+				ExpressionTerm nextTerm = multTerms.get(lastJ0Index + 1);
+				if (nextTerm.isMultiplied || nextTerm.isDivided) {
+					ExpressionTerm termToMark = multTerms.get(lastJ0Index);
+					multTerms.set(lastJ0Index, new ExpressionTerm(termToMark.readCount, termToMark.value,
+							termToMark.isSubtracted, true));
+				}
+			}
+		}
 	}
 
 	private static Result<ParenthesizedTokenResult, CompileError> processParenthesizedToken(String multToken,
@@ -352,28 +389,42 @@ public final class App {
 		}
 	}
 
-	private static List<String> splitByOperator(String expr, char operator) {
-		// For single operator splitting (non-additive case)
-		List<String> result = new ArrayList<>();
+	private static class MultOperatorToken {
+		final String token;
+		final char operator;
+
+		MultOperatorToken(String token, char operator) {
+			this.token = token;
+			this.operator = operator;
+		}
+	}
+
+	private static List<MultOperatorToken> splitByMultOperators(String expr) {
+		// Split by * or / while respecting parentheses, tracking which operator
+		List<MultOperatorToken> result = new ArrayList<>();
 		StringBuilder token = new StringBuilder();
+		char lastOp = '\0';
 		int depth = 0;
 
-		for (char c : expr.toCharArray()) {
+		for (int i = 0; i < expr.length(); i++) {
+			char c = expr.charAt(i);
+
 			if (c == '(') {
 				depth++;
 				token.append(c);
 			} else if (c == ')') {
 				depth--;
 				token.append(c);
-			} else if (c == operator && depth == 0) {
-				result.add(token.toString());
+			} else if ((c == '*' || c == '/') && depth == 0) {
+				result.add(new MultOperatorToken(token.toString(), lastOp));
 				token = new StringBuilder();
+				lastOp = c;
 			} else {
 				token.append(c);
 			}
 		}
 
-		result.add(token.toString());
+		result.add(new MultOperatorToken(token.toString(), lastOp));
 		return result;
 	}
 
@@ -382,12 +433,18 @@ public final class App {
 		final long value;
 		final boolean isSubtracted;
 		final boolean isMultiplied;
+		final boolean isDivided;
 
 		ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied) {
+			this(readCount, value, isSubtracted, isMultiplied, false);
+		}
+
+		ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided) {
 			this.readCount = readCount;
 			this.value = value;
 			this.isSubtracted = isSubtracted;
 			this.isMultiplied = isMultiplied;
+			this.isDivided = isDivided;
 		}
 	}
 

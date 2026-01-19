@@ -101,6 +101,11 @@ public final class AppTest {
 		assertValidWithInput("read U8 + read U8 * read U8", 14, 2, 3, 4);
 	}
 
+	@Test
+	void shouldDivideTwoReadValues() {
+		assertValidWithInput("read U8 / read U8", 2, 6, 3);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

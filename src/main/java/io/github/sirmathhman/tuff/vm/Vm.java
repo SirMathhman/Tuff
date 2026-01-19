@@ -64,6 +64,7 @@ public final class Vm {
 			case Add -> executeAdd(registers, firstOperand, secondOperand);
 			case Sub -> executeSub(registers, firstOperand, secondOperand);
 			case Mul -> executeMul(registers, firstOperand, secondOperand);
+			case Div -> executeDiv(registers, firstOperand, secondOperand);
 			case BitsShiftLeft -> executeBitsShiftLeft(registers, firstOperand, secondOperand);
 			case BitsShiftRight -> executeBitsShiftRight(registers, firstOperand, secondOperand);
 			case BitsAnd -> executeBitsAnd(registers, firstOperand, secondOperand);
@@ -95,6 +96,11 @@ public final class Vm {
 
 	private static boolean executeMul(long[] registers, long firstOperand, long secondOperand) {
 		registers[(int) firstOperand] *= registers[(int) secondOperand];
+		return false;
+	}
+
+	private static boolean executeDiv(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] /= registers[(int) secondOperand];
 		return false;
 	}
 
