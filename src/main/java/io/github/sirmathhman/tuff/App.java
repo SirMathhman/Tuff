@@ -12,6 +12,16 @@ public final class App {
 	private App() {
 	}
 
+	private static final class ExpressionResult {
+		final boolean needsRead;
+		final long value;
+
+		ExpressionResult(boolean needsRead, long value) {
+			this.needsRead = needsRead;
+			this.value = value;
+		}
+	}
+
 	public static Result<Instruction[], CompileError> compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
 
@@ -27,45 +37,100 @@ public final class App {
 	}
 
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
-		if (stmt.startsWith("read ")) {
-			String typeSpec = stmt.substring(5).trim();
-			// For now, just validate the type exists and add an In instruction
-			if (!typeSpec.matches("[UI]\\d+")) {
-				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
-			}
-			instructions.add(new Instruction(Operation.In, Variant.Immediate, 0, null));
-			return Result.ok(null);
-		}
-
-		// Otherwise parse as expression and load into register 0
-		Result<Long, CompileError> exprResult = parseExpression(stmt);
+		// Parse as expression (which may contain "read")
+		Result<ExpressionResult, CompileError> exprResult = parseExpressionWithRead(stmt);
 		if (exprResult.isErr()) {
 			return Result.err(exprResult.errValue());
 		}
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, exprResult.okValue()));
+
+		ExpressionResult expr = exprResult.okValue();
+
+		// Generate instructions based on expression structure
+		if (expr.needsRead) {
+			instructions.add(new Instruction(Operation.In, Variant.Immediate, 0, null));
+
+			if (expr.value != 0) {
+				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, expr.value));
+				instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
+			}
+		} else {
+			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.value));
+		}
+
 		return Result.ok(null);
 	}
 
-	private static Result<Long, CompileError> parseExpression(String expr) {
-		// Try to parse as binary expression (e.g., "1U8 + 2U8")
+	private static Result<ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
+		// Try to parse as binary expression (e.g., "read U8 + 50U8" or "1U8 + 2U8")
 		String[] parts = expr.split("\\s*\\+\\s*");
 		if (parts.length == 2) {
-			Result<Long, CompileError> left = parseLiteral(parts[0]);
+			Result<ExpressionTerm, CompileError> left = parseTerm(parts[0]);
 			if (left.isErr()) {
-				return left;
+				return Result.err(left.errValue());
 			}
-			Result<Long, CompileError> right = parseLiteral(parts[1]);
+			Result<ExpressionTerm, CompileError> right = parseTerm(parts[1]);
 			if (right.isErr()) {
-				return right;
+				return Result.err(right.errValue());
 			}
-			return Result.ok(left.okValue() + right.okValue());
+
+			ExpressionTerm leftTerm = left.okValue();
+			ExpressionTerm rightTerm = right.okValue();
+
+			// At most one side can be "read"
+			if (leftTerm.needsRead && rightTerm.needsRead) {
+				return Result.err(new CompileError("Cannot have read on both sides of addition"));
+			}
+
+			if (leftTerm.needsRead) {
+				return Result.ok(new ExpressionResult(true, rightTerm.value));
+			}
+			if (rightTerm.needsRead) {
+				return Result.ok(new ExpressionResult(true, leftTerm.value));
+			}
+
+			return Result.ok(new ExpressionResult(false, leftTerm.value + rightTerm.value));
 		}
 		if (parts.length > 2) {
 			return Result.err(new CompileError("Multiple + operators not supported"));
 		}
 
-		// Otherwise parse as single literal
-		return parseLiteral(expr);
+		// Otherwise parse as single term
+		Result<ExpressionTerm, CompileError> termResult = parseTerm(expr);
+		if (termResult.isErr()) {
+			return Result.err(termResult.errValue());
+		}
+
+		ExpressionTerm term = termResult.okValue();
+		return Result.ok(new ExpressionResult(term.needsRead, term.value));
+	}
+
+	private static final class ExpressionTerm {
+		final boolean needsRead;
+		final long value;
+
+		ExpressionTerm(boolean needsRead, long value) {
+			this.needsRead = needsRead;
+			this.value = value;
+		}
+	}
+
+	private static Result<ExpressionTerm, CompileError> parseTerm(String term) {
+		term = term.trim();
+
+		if (term.startsWith("read ")) {
+			String typeSpec = term.substring(5).trim();
+			if (!typeSpec.matches("[UI]\\d+")) {
+				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
+			}
+			return Result.ok(new ExpressionTerm(true, 0));
+		}
+
+		Result<Long, CompileError> literalResult = parseLiteral(term);
+		if (literalResult.isErr()) {
+			return Result.err(literalResult.errValue());
+		}
+
+		return Result.ok(new ExpressionTerm(false, literalResult.okValue()));
 	}
 
 	private static Result<Long, CompileError> parseLiteral(String literal) {

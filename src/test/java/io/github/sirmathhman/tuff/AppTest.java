@@ -71,6 +71,11 @@ public final class AppTest {
 		assertValidWithInput("read U8", 100, 100);
 	}
 
+	@Test
+	void shouldReadAndAddWithLiteral() {
+		assertValidWithInput("read U8 + 50U8", 150, 100);
+	}
+
 	private void assertInvalid(String source) {
 		Assertions.assertTrue(App.compile(source).isErr());
 	}
