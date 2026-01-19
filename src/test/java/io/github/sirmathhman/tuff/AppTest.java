@@ -279,6 +279,26 @@ public final class AppTest {
 		assertValidWithInput("read Bool && read Bool", 1, 1, 1);
 	}
 
+	@Test
+	void shouldSupportEqualityOperatorWithBoolsFalseEqualsFalse() {
+		assertValidWithInput("read Bool == read Bool", 1, 0, 0);
+	}
+
+	@Test
+	void shouldSupportEqualityOperatorWithBoolsTrueEqualsTrue() {
+		assertValidWithInput("read Bool == read Bool", 1, 1, 1);
+	}
+
+	@Test
+	void shouldSupportEqualityOperatorWithBoolsFalseNotEqualsTrue() {
+		assertValidWithInput("read Bool == read Bool", 0, 0, 1);
+	}
+
+	@Test
+	void shouldSupportEqualityOperatorWithBoolsTrueNotEqualsFalse() {
+		assertValidWithInput("read Bool == read Bool", 0, 1, 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

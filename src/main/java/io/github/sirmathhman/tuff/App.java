@@ -1,6 +1,7 @@
 package io.github.sirmathhman.tuff;
 
 import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
+import io.github.sirmathhman.tuff.compiler.EqualityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
 import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
@@ -143,7 +144,14 @@ public final class App {
 			return LogicalAndHandler.parseLogicalAndExpression(andTokens);
 		}
 
-		// Parse additive expression (no logical operators)
+		// Split by == (equality comparison) - higher precedence than logical ops
+		List<String> eqTokens = EqualityOperatorHandler.splitByEquality(expr);
+		if (eqTokens.size() > 1) {
+			// We have equality operations - parse each side and combine
+			return EqualityOperatorHandler.parseEqualityExpression(eqTokens);
+		}
+
+		// Parse additive expression (no logical operators or comparisons)
 		return AdditiveExpressionParser.parseAdditive(expr);
 	}
 

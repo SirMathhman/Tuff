@@ -48,8 +48,8 @@ public final class DepthAwareSplitter {
 			} else if (checker.isDelimiter(c, i) && depth == 0) {
 				result.add(token.toString().trim());
 				token = new StringBuilder();
-				// Skip second character if double delimiter
-				if (c == '|' && i + 1 < expr.length() && expr.charAt(i + 1) == '|') {
+				// Skip second character of double delimiter (if it exists)
+				if (i + 1 < expr.length() && expr.charAt(i + 1) == c) {
 					i++;
 				}
 			} else {

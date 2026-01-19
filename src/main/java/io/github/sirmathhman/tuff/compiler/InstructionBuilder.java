@@ -21,6 +21,18 @@ public final class InstructionBuilder {
 
 	public static int buildResultWithPrecedence(List<ExpressionModel.ExpressionTerm> terms,
 			List<Instruction> instructions) {
+		// Check for equality comparison marker (readCount == -1)
+		boolean hasEqualityMarker = terms.stream().anyMatch(t -> t.readCount == -1);
+
+		if (hasEqualityMarker && terms.size() == 3) {
+			// This is a binary equality comparison
+			// loadAllReads already emitted: In 0, In 1
+			// So register 0 has left operand, register 1 has right operand
+			// Generate comparison: result = (reg0 == reg1) ? 1 : 0
+			instructions.add(new Instruction(Operation.Equal, Variant.Immediate, 0, 1L));
+			return 0;
+		}
+
 		int readRegIndex = 0;
 		int resultReg = 0;
 		boolean firstAdditiveGroup = true;
@@ -28,7 +40,7 @@ public final class InstructionBuilder {
 		int i = 0;
 		while (i < terms.size()) {
 			ExpressionModel.ExpressionTerm term = terms.get(i);
-			if (term.readCount == 0) {
+			if (term.readCount == 0 || term.readCount == -1) {
 				i++;
 				continue;
 			}
