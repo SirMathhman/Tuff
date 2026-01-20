@@ -5,8 +5,10 @@ import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public final class StructHandler {
@@ -18,12 +20,12 @@ public final class StructHandler {
 	}
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseStruct(String expr) {
-		return parseStructWithRegistry(expr, new HashSet<>())
+		return parseStructWithRegistry(expr, new HashSet<>(), new HashMap<>())
 				.map(result -> result.expressionResult());
 	}
 
 	public static Result<StructParseResult, CompileError> parseStructWithRegistry(String expr,
-			Set<String> definedStructs) {
+			Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
 		// Find the struct name
 		int nameStart = 7; // Skip "struct "
 		int nameEnd = nameStart;
@@ -70,8 +72,13 @@ public final class StructHandler {
 			fields = ((Result.Ok<List<StructField>, CompileError>) fieldsResult).value();
 		}
 
+		// Store the full struct definition
+		StructDefinition definition = new StructDefinition(structName, fields);
+		structRegistry.put(structName, definition);
+
 		// For now, structs always compile to 0 regardless of fields
-		// TODO: Use fields for struct instantiation and field access in future iterations
+		// TODO: Use fields for struct instantiation and field access in future
+		// iterations
 		@SuppressWarnings("unused")
 		List<StructField> _fields = fields;
 		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();

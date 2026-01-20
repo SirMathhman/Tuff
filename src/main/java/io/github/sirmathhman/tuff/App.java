@@ -13,12 +13,19 @@ import io.github.sirmathhman.tuff.compiler.MultiplicativeExpressionBuilder;
 import io.github.sirmathhman.tuff.compiler.WhileLoopHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.MatchExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.StructHandler;
+import io.github.sirmathhman.tuff.compiler.letbinding.StructDefinition;
+import io.github.sirmathhman.tuff.compiler.letbinding.StructInstantiationHandler;
+import io.github.sirmathhman.tuff.compiler.letbinding.FieldAccessHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
 import io.github.sirmathhman.tuff.vm.Vm;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -45,14 +52,14 @@ public final class App {
 	}
 
 	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
-		return parseStatement(stmt, instructions, new HashSet<>());
+		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>());
 	}
 
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions,
-			Set<String> definedStructs) {
+			Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
 		// Check if this is a struct definition at statement level
 		if (stmt.startsWith("struct ")) {
-			return StructHandler.parseStructWithRegistry(stmt, definedStructs)
+			return StructHandler.parseStructWithRegistry(stmt, definedStructs, structRegistry)
 					.flatMap(structResult -> {
 						// Generate instructions for the struct
 						Result<Void, CompileError> instructionsResult = generateInstructions(
@@ -62,7 +69,7 @@ public final class App {
 							if (structResult.remaining().isEmpty()) {
 								return Result.ok(null);
 							}
-							return parseStatement(structResult.remaining(), instructions, definedStructs);
+							return parseStatement(structResult.remaining(), instructions, definedStructs, structRegistry);
 						});
 					});
 		}
@@ -74,56 +81,104 @@ public final class App {
 
 		// Check if this is a let binding at statement level
 		if (stmt.startsWith("let ")) {
-			// Peek ahead to see if this is a chained let binding
-			// Format: "let x = expr1; let y = expr2; z"
-			// vs single: "let x = expr; x"
-			// vs uninitialized: "let x : Type; x = expr; x"
+			return handleLetBindingStatement(stmt, instructions);
+		}
 
-			int equalsIndex = stmt.indexOf('=');
-
-			// First, find the first semicolon to check for uninitialized declarations
-			int firstSemiIndex = stmt.indexOf(';');
-			if (firstSemiIndex == -1) {
-				return Result.err(new CompileError("Invalid let binding: missing ';'"));
-			}
-
-			// If semicolon comes before equals, this is an uninitialized declaration
-			if (equalsIndex == -1 || firstSemiIndex < equalsIndex) {
-				String continuation = stmt.substring(firstSemiIndex + 1).trim();
-				return LetBindingHandler.handleUninitializedVariable(stmt, firstSemiIndex, continuation, instructions);
-			}
-
-			// Find the first semicolon at depth 0 after the equals
-			int semiIndex = -1;
-			int depth = 0;
-			for (int i = equalsIndex; i < stmt.length(); i++) {
-				char c = stmt.charAt(i);
-				if (c == '(' || c == '{') {
-					depth++;
-				} else if (c == ')' || c == '}') {
-					depth--;
-				} else if (c == ';' && depth == 0) {
-					semiIndex = i;
-					break;
-				}
-			}
-
-			if (semiIndex == -1) {
-				return Result.err(new CompileError("Invalid let binding: missing ';'"));
-			}
-
-			// Check what comes after the semicolon
-			String continuation = stmt.substring(semiIndex + 1).trim();
-
-			// Use LetBindingHandler for all statement-level let bindings
-			// (both single and chained)
-			return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
-					instructions);
+		// Check if this is a struct instantiation at statement level
+		if (StructInstantiationHandler.isStructInstantiation(stmt, structRegistry)) {
+			return handleStructInstantiationStatement(stmt, instructions, definedStructs, structRegistry);
 		}
 
 		// Parse as expression (which may contain "read")
 		return parseExpressionWithRead(stmt)
 				.flatMap(expr -> generateInstructions(expr, instructions));
+	}
+
+	private static Result<Void, CompileError> handleLetBindingStatement(String stmt, List<Instruction> instructions) {
+		// Peek ahead to see if this is a chained let binding
+		// Format: "let x = expr1; let y = expr2; z"
+		// vs single: "let x = expr; x"
+		// vs uninitialized: "let x : Type; x = expr; x"
+
+		int equalsIndex = stmt.indexOf('=');
+
+		// First, find the first semicolon to check for uninitialized declarations
+		int firstSemiIndex = stmt.indexOf(';');
+		if (firstSemiIndex == -1) {
+			return Result.err(new CompileError("Invalid let binding: missing ';'"));
+		}
+
+		// If semicolon comes before equals, this is an uninitialized declaration
+		if (equalsIndex == -1 || firstSemiIndex < equalsIndex) {
+			String continuation = stmt.substring(firstSemiIndex + 1).trim();
+			return LetBindingHandler.handleUninitializedVariable(stmt, firstSemiIndex, continuation, instructions);
+		}
+
+		// Find the first semicolon at depth 0 after the equals
+		int semiIndex = -1;
+		int depth = 0;
+		for (int i = equalsIndex; i < stmt.length(); i++) {
+			char c = stmt.charAt(i);
+			if (c == '(' || c == '{') {
+				depth++;
+			} else if (c == ')' || c == '}') {
+				depth--;
+			} else if (c == ';' && depth == 0) {
+				semiIndex = i;
+				break;
+			}
+		}
+
+		if (semiIndex == -1) {
+			return Result.err(new CompileError("Invalid let binding: missing ';'"));
+		}
+
+		// Check what comes after the semicolon
+		String continuation = stmt.substring(semiIndex + 1).trim();
+
+		// Use LetBindingHandler for all statement-level let bindings
+		// (both single and chained)
+		return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
+				instructions);
+	}
+
+	private static Result<Void, CompileError> handleStructInstantiationStatement(String stmt,
+			List<Instruction> instructions, Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
+		return StructInstantiationHandler.parseStructInstantiation(stmt, structRegistry)
+				.flatMap(instResult -> {
+					// First generate instructions for the instantiation
+					Result<Void, CompileError> instInstructions = generateInstructions(
+							instResult.expressionResult(), instructions);
+					return instInstructions.flatMap(ignored -> {
+						// Then handle field access if present
+						String remaining = instResult.remaining();
+						if (remaining.isEmpty()) {
+							return Result.ok(null);
+						}
+						// If there's field access or more code, parse it
+						if (FieldAccessHandler.hasFieldAccess(remaining)) {
+							return handleFieldAccessStatement(remaining, instructions, definedStructs, structRegistry);
+						}
+						return parseStatement(remaining, instructions, definedStructs, structRegistry);
+					});
+				});
+	}
+
+	private static Result<Void, CompileError> handleFieldAccessStatement(String stmt,
+			List<Instruction> instructions, Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
+		return FieldAccessHandler.parseFieldAccess(stmt, structRegistry)
+				.flatMap(fieldResult -> {
+					// For now, just return 0 for field access
+					List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+					ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
+					Result<Void, CompileError> fieldInstructions = generateInstructions(result, instructions);
+					return fieldInstructions.flatMap(ignored -> {
+						if (fieldResult.remaining().isEmpty()) {
+							return Result.ok(null);
+						}
+						return parseStatement(fieldResult.remaining(), instructions, definedStructs, structRegistry);
+					});
+				});
 	}
 
 	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,

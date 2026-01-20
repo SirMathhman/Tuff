@@ -785,6 +785,11 @@ public final class AppTest {
 		assertValid("struct Point { x : U64, y : I64 }", 0);
 	}
 
+	@Test
+	void shouldParseStructInstantiationAndFieldAccess() {
+		assertValid("struct Wrapper { value : I32 } Wrapper { value : read I32 }.value", 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
