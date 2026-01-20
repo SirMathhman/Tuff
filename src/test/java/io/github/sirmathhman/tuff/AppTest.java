@@ -780,6 +780,11 @@ public final class AppTest {
 		assertValid("struct Wrapper { value : U64 }", 0);
 	}
 
+	@Test
+	void shouldParseStructWithMultipleFields() {
+		assertValid("struct Point { x : U64, y : I64 }", 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
