@@ -26,7 +26,8 @@ public final class ForLoopProcessor {
 			Map<String, Integer> variableAddresses,
 			int nextMemAddr) {
 		// Store the initial value at the correct memory address
-		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(initialValueExpr, instructions, nextMemAddr);
+		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(initialValueExpr, instructions,
+				nextMemAddr);
 		if (storeResult.isErr())
 			return storeResult;
 
