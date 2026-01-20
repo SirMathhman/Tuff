@@ -809,6 +809,59 @@ public final class AppTest {
 				80, 35, 45);
 	}
 
+	@Test
+	void shouldDefineAndCallSimpleFunction() {
+		assertValidWithInput("fn get() : I32 => read I32; get()", 42, 42);
+	}
+
+	@Test
+	void shouldDefineAndCallFunctionWithParameter() {
+		assertValidWithInput("fn getAndAdd(offset : I32) : I32 => read I32 + offset; getAndAdd(50)", 92, 42);
+	}
+
+	@Test
+	void shouldCallFunctionWithMultipleParameters() {
+		assertValidWithInput("fn add(a : I32, b : I32) : I32 => a + b; add(30, 12)", 42);
+	}
+
+	@Test
+	void shouldCallFunctionWithComplexExpression() {
+		assertValidWithInput("fn multiply(a : I32, b : I32) : I32 => a * b; multiply(6, 7)", 42);
+	}
+
+	@Test
+	void shouldCallFunctionWithExpressionArguments() {
+		assertValidWithInput("fn add(x : I32, y : I32) : I32 => x + y; add(read I32, read I32)", 92, 42, 50);
+	}
+
+	@Test
+	void shouldDefineAndCallFunctionWithoutReturnType() {
+		assertValidWithInput("fn get() => read U8; get()", 42, 42);
+	}
+
+	@Test
+	void shouldCallFunctionWithoutReturnTypeAndParameters() {
+		assertValidWithInput("fn add() => read I32 + read I32; add()", 92, 42, 50);
+	}
+
+	@Test
+	void shouldCombineStructsAndFunctionsWithFieldAccess() {
+		assertValidWithInput(
+				"struct Point { x : I32, y : I32 } fn createPoint() => Point { x : read I32, y : read I32 }; let point = createPoint(); point.x + point.y",
+				92, 42, 50);
+	}
+
+	@Test
+	void shouldCallFunctionInLetBinding() {
+		assertValidWithInput("fn get() => read I32; let x = get(); x", 42, 42);
+	}
+
+	@Test
+	void shouldTestFunctionDefining() {
+		// Just to test that function definition and body are correct
+		assertValidWithInput("fn createPoint() => Point { x : read I32, y : read I32 }; read I32", 42, 42);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

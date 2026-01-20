@@ -7,6 +7,7 @@ import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.letbinding.CompilerHelpers;
 import io.github.sirmathhman.tuff.compiler.letbinding.ForLoopProcessor;
+import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.StructDefinition;
 import io.github.sirmathhman.tuff.vm.Instruction;
@@ -58,29 +59,41 @@ public final class LetBindingHandler {
 				new java.util.HashMap<>(), 100, structRegistry);
 	}
 
-	private static Result<Void, CompileError> handleLetBindingWithContinuation(
+	public static Result<Void, CompileError> handleLetBindingWithContinuation(
 			String stmt,
 			int equalsIndex,
 			int semiIndex,
 			String continuation,
 			List<Instruction> instructions,
-			java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr) {
-		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, instructions,
-				variableAddresses, nextMemAddr, new java.util.HashMap<>());
+			java.util.Map<String, StructDefinition> structRegistry,
+			java.util.Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		return handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation, instructions,
+				new java.util.HashMap<>(), 100, structRegistry, functionRegistry);
 	}
 
 	private static Result<Void, CompileError> handleLetBindingWithContinuation(
-			String stmt,
-			int equalsIndex,
-			int semiIndex,
-			String continuation,
-			List<Instruction> instructions,
-			java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr,
-			java.util.Map<String, StructDefinition> structRegistry) {
+			String stmt, int equalsIndex, int semiIndex, String continuation,
+			List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr) {
+		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, instructions,
+				variableAddresses, nextMemAddr);
+	}
+
+	private static Result<Void, CompileError> handleLetBindingWithContinuation(
+			String stmt, int equalsIndex, int semiIndex, String continuation,
+			List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr, java.util.Map<String, StructDefinition> structRegistry) {
 		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, instructions,
 				variableAddresses, nextMemAddr, structRegistry);
+	}
+
+	private static Result<Void, CompileError> handleLetBindingWithContinuation(
+			String stmt, int equalsIndex, int semiIndex, String continuation,
+			List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr, java.util.Map<String, StructDefinition> structRegistry,
+			java.util.Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, instructions,
+				variableAddresses, nextMemAddr, structRegistry, functionRegistry);
 	}
 
 	public static Result<Void, CompileError> handleScopedBlock(

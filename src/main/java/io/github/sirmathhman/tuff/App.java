@@ -1,11 +1,11 @@
 package io.github.sirmathhman.tuff;
 
 import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
-import io.github.sirmathhman.tuff.compiler.BitwiseNotParser;
 import io.github.sirmathhman.tuff.compiler.ComparisonOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
+import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
 import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.LogicalOperatorHandler;
@@ -26,8 +26,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public final class App {
@@ -38,7 +36,8 @@ public final class App {
 		List<Instruction> instructions = new ArrayList<>();
 
 		if (!source.isEmpty()) {
-			Result<Void, CompileError> result = parseStatement(source.trim(), instructions);
+			Result<Void, CompileError> result = parseStatement(source.trim(), instructions, new HashSet<>(),
+					new HashMap<>(), new HashMap<>());
 			return result.match(
 					ignored -> {
 						instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
@@ -52,50 +51,56 @@ public final class App {
 	}
 
 	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
-		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>());
+		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>(), new HashMap<>());
 	}
 
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions,
-			Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
+			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		if (FunctionHandler.isFunctionDefinition(stmt)) {
+			return FunctionHandler.parseFunctionDefinition(stmt).flatMap(parsedFunc -> {
+				functionRegistry.put(parsedFunc.functionDef().name(), parsedFunc.functionDef());
+				if (parsedFunc.remaining().isEmpty()) {
+					return Result.ok(null);
+				}
+				return parseStatement(parsedFunc.remaining(), instructions, definedStructs, structRegistry,
+						functionRegistry);
+			});
+		}
+
 		// Check if this is a struct definition at statement level
 		if (stmt.startsWith("struct ")) {
 			return StructHandler.parseStructWithRegistry(stmt, definedStructs, structRegistry)
 					.flatMap(structResult -> {
-						// Generate instructions for the struct
 						Result<Void, CompileError> instructionsResult = generateInstructions(
 								structResult.expressionResult(), instructions);
 						return instructionsResult.flatMap(ignored -> {
-							// If there's more code after the struct, parse it
 							if (structResult.remaining().isEmpty()) {
 								return Result.ok(null);
 							}
-							return parseStatement(structResult.remaining(), instructions, definedStructs, structRegistry);
+							return parseStatement(structResult.remaining(), instructions, definedStructs, structRegistry,
+									functionRegistry);
 						});
 					});
 		}
-
-		// Check if this is a while loop at statement level
 		if (stmt.startsWith("while (")) {
 			return handleTopLevelWhileLoop(stmt, instructions);
 		}
-
-		// Check if this is a let binding at statement level
 		if (stmt.startsWith("let ")) {
-			return handleLetBindingStatement(stmt, instructions, definedStructs, structRegistry);
+			return handleLetBindingStatement(stmt, instructions, definedStructs, structRegistry, functionRegistry);
 		}
-
-		// Check if this is a struct instantiation at statement level
 		if (StructInstantiationHandler.isStructInstantiation(stmt, structRegistry)) {
 			return handleStructInstantiationStatement(stmt, instructions, definedStructs, structRegistry);
 		}
 
 		// Parse as expression (which may contain "read")
-		return parseExpressionWithRead(stmt)
+		return parseExpressionWithRead(stmt, functionRegistry)
 				.flatMap(expr -> generateInstructions(expr, instructions));
 	}
 
 	private static Result<Void, CompileError> handleLetBindingStatement(String stmt, List<Instruction> instructions,
-			Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
+			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		// Peek ahead to see if this is a chained let binding
 		// Format: "let x = expr1; let y = expr2; z"
 		// vs single: "let x = expr; x"
@@ -140,7 +145,7 @@ public final class App {
 		// Use LetBindingHandler for all statement-level let bindings
 		// (both single and chained)
 		return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
-				instructions, structRegistry);
+				instructions, structRegistry, functionRegistry);
 	}
 
 	private static Result<Void, CompileError> handleStructInstantiationStatement(String stmt,
@@ -195,7 +200,7 @@ public final class App {
 						return handleFieldAccessStatement(remaining, instResult.definition(), instructions,
 								definedStructs, structRegistry);
 					}
-					return parseStatement(remaining, instructions, definedStructs, structRegistry);
+					return parseStatement(remaining, instructions, definedStructs, structRegistry, new HashMap<>());
 				});
 	}
 
@@ -210,7 +215,7 @@ public final class App {
 					if (fieldResult.remaining().isEmpty()) {
 						return Result.ok(null);
 					}
-					return parseStatement(fieldResult.remaining(), instructions, definedStructs, structRegistry);
+					return parseStatement(fieldResult.remaining(), instructions, definedStructs, structRegistry, new HashMap<>());
 				});
 	}
 
@@ -300,6 +305,20 @@ public final class App {
 		return comparisonResult.match(
 				Result::ok,
 				err -> AdditiveExpressionParser.parseAdditive(normalizedExpr));
+	}
+
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		expr = expr.trim();
+
+		// Check if this is a function call
+		if (FunctionHandler.isFunctionCall(expr, functionRegistry)) {
+			return FunctionHandler.parseFunctionCall(expr, functionRegistry)
+					.flatMap(App::parseExpressionWithRead);
+		}
+
+		// Otherwise use the standard parsing without function registry
+		return parseExpressionWithRead(expr);
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {

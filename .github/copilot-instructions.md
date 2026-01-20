@@ -141,7 +141,7 @@ Return value from register[0]
 When structs are defined, they must be tracked and available during field access parsing. The `Map<String, StructDefinition> structRegistry` is threaded through:
 
 ```
-App.parseStatement() 
+App.parseStatement()
   → LetBindingHandler.handleLetBindingStatement(structRegistry)
     → LetBindingProcessor.process(..., structRegistry)
       → StructInstantiationHandler.parseStructInstantiation(..., structRegistry)
