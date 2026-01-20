@@ -96,46 +96,6 @@ public sealed interface Result<T, X> {
 	void consume(Function<T, Void> okFn, Function<X, Void> errFn);
 
 	/**
-	 * Gets the success value, or null if this is an error.
-	 *
-	 * @return The success value or null
-	 * @deprecated Use {@link #match(Function, Function)} or
-	 *             {@link #consume(Function, Function)} instead
-	 */
-	@Deprecated
-	T okValue();
-
-	/**
-	 * Gets the error value, or null if this is a success.
-	 *
-	 * @return The error value or null
-	 * @deprecated Use {@link #match(Function, Function)} or
-	 *             {@link #consume(Function, Function)} instead
-	 */
-	@Deprecated
-	X errValue();
-
-	/**
-	 * Checks if this Result is a success.
-	 *
-	 * @return true if this is a success, false otherwise
-	 * @deprecated Use {@link #match(Function, Function)} or
-	 *             {@link #consume(Function, Function)} instead
-	 */
-	@Deprecated
-	boolean isOk();
-
-	/**
-	 * Checks if this Result is an error.
-	 *
-	 * @return true if this is an error, false otherwise
-	 * @deprecated Use {@link #match(Function, Function)} or
-	 *             {@link #consume(Function, Function)} instead
-	 */
-	@Deprecated
-	boolean isErr();
-
-	/**
 	 * Success variant of Result.
 	 */
 	record Ok<T, X>(T value) implements Result<T, X> {
@@ -171,30 +131,6 @@ public sealed interface Result<T, X> {
 		public void consume(Function<T, Void> okFn, Function<X, Void> errFn) {
 			okFn.apply(value);
 		}
-
-		@Override
-		@Deprecated
-		public T okValue() {
-			return value;
-		}
-
-		@Override
-		@Deprecated
-		public X errValue() {
-			return null;
-		}
-
-		@Override
-		@Deprecated
-		public boolean isOk() {
-			return true;
-		}
-
-		@Override
-		@Deprecated
-		public boolean isErr() {
-			return false;
-		}
 	}
 
 	/**
@@ -229,30 +165,6 @@ public sealed interface Result<T, X> {
 		@Override
 		public void consume(Function<T, Void> okFn, Function<X, Void> errFn) {
 			errFn.apply(error);
-		}
-
-		@Override
-		@Deprecated
-		public T okValue() {
-			return null;
-		}
-
-		@Override
-		@Deprecated
-		public X errValue() {
-			return error;
-		}
-
-		@Override
-		@Deprecated
-		public boolean isOk() {
-			return false;
-		}
-
-		@Override
-		@Deprecated
-		public boolean isErr() {
-			return true;
 		}
 	}
 

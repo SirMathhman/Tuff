@@ -21,48 +21,34 @@ public final class MultiplicativeExpressionBuilder {
 		List<ExpressionModel.ExpressionTerm> multTerms = new ArrayList<>();
 		long multLiteral = 1;
 		int lastExpandedParensSize = 0;
-
 		for (int j = 0; j < multTokens.size(); j++) {
 			ExpressionModel.MultOperatorToken opToken = multTokens.get(j);
 			String multToken = opToken.token.trim();
 			char operator = opToken.operator;
-			long valueForLiteral;
-			int expandedParensSize;
-
 			if (multToken.startsWith("(") && multToken.endsWith(")")) {
 				Result<ExpressionModel.ParenthesizedTokenResult, CompileError> pResult = processParenthesizedToken(multToken, j,
 						isSubtracted, multTokens.size(), parser);
-				if (pResult instanceof Result.Err<ExpressionModel.ParenthesizedTokenResult, CompileError> err) {
+				if (pResult instanceof Result.Err<ExpressionModel.ParenthesizedTokenResult, CompileError> err)
 					return Result.err(err.error());
-				}
 				ExpressionModel.ParenthesizedTokenResult pData = ((Result.Ok<ExpressionModel.ParenthesizedTokenResult, CompileError>) pResult).value();
 				multTerms.addAll(pData.terms());
-				valueForLiteral = pData.literalValue();
-				expandedParensSize = pData.expandedSize();
+				Result<Long, CompileError> lit1 = updateLiteral(multLiteral, pData.literalValue(), j == 0, operator);
+				if (lit1 instanceof Result.Err<Long, CompileError> err) return Result.err(err.error());
+				multLiteral = ((Result.Ok<Long, CompileError>) lit1).value();
+				lastExpandedParensSize = pData.expandedSize();
 			} else {
 				Result<ExpressionModel.ExpressionTerm, CompileError> termResult = BitwiseNotParser.parseTermWithNot(multToken);
-				if (termResult instanceof Result.Err<ExpressionModel.ExpressionTerm, CompileError> termErr) {
-					return Result.err(termErr.error());
-				}
+				if (termResult instanceof Result.Err<ExpressionModel.ExpressionTerm, CompileError> err)
+					return Result.err(err.error());
 				ExpressionModel.ExpressionTerm baseTerm = ((Result.Ok<ExpressionModel.ExpressionTerm, CompileError>) termResult).value();
-				boolean isMultiplied = (j > 0 && operator == '*');
-				boolean isDivided = (j > 0 && operator == '/');
-				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(baseTerm.readCount,
-						baseTerm.value, isSubtracted, isMultiplied,
-						isDivided, false, false, false, false, baseTerm.isBitwiseNotted(), baseTerm.isLogicalNotted(),
-						(j > 0) ? operator : '\0',
-						baseTerm.readTypeSpec);
-				multTerms.add(finalTerm);
-				valueForLiteral = baseTerm.value;
-				expandedParensSize = 0;
+				multTerms.add(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value, isSubtracted,
+						j > 0 && operator == '*', j > 0 && operator == '/', false, false, false, false,
+						baseTerm.isBitwiseNotted(), baseTerm.isLogicalNotted(), (j > 0) ? operator : '\0', baseTerm.readTypeSpec));
+				Result<Long, CompileError> lit2 = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
+				if (lit2 instanceof Result.Err<Long, CompileError> err) return Result.err(err.error());
+				multLiteral = ((Result.Ok<Long, CompileError>) lit2).value();
+				lastExpandedParensSize = 0;
 			}
-
-			Result<Long, CompileError> litResult = updateLiteral(multLiteral, valueForLiteral, j == 0, operator);
-			if (litResult instanceof Result.Err<Long, CompileError> litErr) {
-				return Result.err(litErr.error());
-			}
-			multLiteral = ((Result.Ok<Long, CompileError>) litResult).value();
-			lastExpandedParensSize = expandedParensSize;
 		}
 		fixGroupingBoundaries(multTerms, lastExpandedParensSize, multTokens.size());
 		int totalReads = multTerms.stream().mapToInt(t -> t.readCount).sum();
