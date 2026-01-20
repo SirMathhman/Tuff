@@ -4,117 +4,139 @@
 
 **Tuff** is a stack-based virtual machine compiler for a type-safe language with let bindings. The architecture is divided into three layers:
 
-1. **Compiler** (`App.java`): Parses source code into instructions
+1. **Compiler** ([App.java](src/main/java/io/github/sirmathhman/tuff/App.java)): Parses source code into instructions
 2. **Instruction Pipeline**: Converts expressions to typed, precedence-aware instructions
-3. **Virtual Machine** (`Vm.java`): Executes 64-bit encoded instructions with 8 registers
+3. **Virtual Machine** ([Vm.java](src/main/java/io/github/sirmathhman/tuff/vm/Vm.java)): Executes 64-bit encoded instructions with 4 registers
 
 ## Architecture
 
 ### Core Workflow: Source → Instructions → Execution
 
 ```
-Source Code
+Source Code (string)
     ↓
-parseStatement() or parseExpressionWithRead()
+parseStatement() — checks for "let " binding, otherwise parseExpressionWithRead()
     ↓
-Expression parsing (handles +, -, *, /, parentheses, let bindings)
+Precedence-aware parsing: Additive → Multiplicative → Bitwise NOT → Terms
     ↓
-generateInstructions() — builds the instruction list
+ExpressionModel.ExpressionResult — terms list + read count + literal value
     ↓
-InstructionBuilder — converts terms to VM operations with precedence
+generateInstructions() — creates instruction list, handles operator precedence
     ↓
-Vm.execute() — runs instructions on 8 registers + 1024-word memory
+InstructionBuilder.buildResultWithPrecedence() — sequences & allocates registers
+    ↓
+Vm.execute() — runs instructions on 4 registers + 1024-word memory
     ↓
 Return value from register[0]
 ```
 
+### Why This Design
+
+- **Precedence-respecting parsing**: Expression terms preserve operator metadata (additive ops, multiplicative ops, boundaries). This allows instruction building to respect precedence without re-parsing.
+- **Term-based intermediate**: `ExpressionTerm` encodes operator context (`readCount`, `additiveOp`, `multiplicativeOp`, markers) so building instructions doesn't require backtracking.
+- **Marker-driven special handling**: Comparison operators, logical operators, conditionals are encoded as special `readCount` values (`-1`, `-2`, `-3`, `-4`) to signal conditional jumps and branches.
+
 ### Key Components
 
-#### 1. Result<T, X> Type
+#### 1. Result<T, X> Type (Rust-style error handling)
 
-- **Location**: [Result.java](../src/main/java/io/github/sirmathhman/tuff/Result.java)
-- **Pattern**: Sealed interface with `Ok` and `Err` variants (Rust-style)
-- **Usage**: All parsing/compilation functions return `Result<T, CompileError>` or `Result<T, ApplicationError>`
-- **Critical**: Always check `.isOk()` / `.isErr()` before accessing values
+- Sealed interface with `Ok` and `Err` variants
+- **Pattern**: `Result<T, CompileError> result = App.compile(source); if (result.isErr()) { ... } T value = result.okValue();`
+- **Critical**: All parser/compiler methods return `Result`. Always check `.isOk()` before accessing values with `.okValue()`
+- **Chaining**: Use `.map()` and `.mapErr()` for composable transformations; propagate errors with `Result.err()`
 
-#### 2. Expression Model & Parsing
+#### 2. Expression Parsing Layers (Precedence-aware)
 
-- **Location**: [ExpressionModel.java](../src/main/java/io/github/sirmathhman/tuff/ExpressionModel.java), [ExpressionTokens.java](../src/main/java/io/github/sirmathhman/tuff/ExpressionTokens.java)
-- **Flow**: Additive operators (±) → Multiplicative operators (\*/) → Terms (read, literals, variables)
-- **Operator Precedence**: Multiplicative operators bind tighter than additive (standard math precedence)
-- **Parentheses Support**: Curly braces `{}` are normalized to parentheses `()` for uniform grouping
+**Parsing flow** (lowest to highest precedence):
 
-#### 3. Let Binding Handler
+- `parseAdditive()` — splits by `+` / `-` at depth 0 (calls parseMultiplicative for each token)
+- `parseMultiplicative()` — splits by `*` / `/` at depth 0 (calls BitwiseNotParser for each token)
+- `BitwiseNotParser.parseTermWithNot()` — handles `~` unary operator (calls parseTerm)
+- `parseTerm()` — literals, variables, `read TYPE`, parenthesized expressions, dereferences
 
-- **Location**: [LetBindingHandler.java](../src/main/java/io/github/sirmathhman/tuff/LetBindingHandler.java)
-- **Handles**: Type-safe variable bindings with optional type inference
-- **Features**:
-  - Explicit type annotations: `let x : U8 = read U8`
-  - Type inference: `let x = read U16`
-  - Mutable variables: `let mut x = value`
-  - Uninitialized variables: `let x : I32; x = expr`
-  - Chained bindings: `let x = expr1; let y = expr2; y`
-- **Type Checking**: Validates type compatibility; prevents unsafe upcasting (U16→U8) and sign mismatches (signed↔unsigned)
+**Why this matters**: The term list preserves operator metadata. `ExpressionTerm` stores:
 
-#### 4. Instruction Builder
+- `additiveOp` — was this term subtracted? (allows reordering during building)
+- `multiplicativeOp` — was this term multiplied/divided?
+- Special `readCount` markers: `-1` (comparison), `-2` (logical), `-3` (if branch), `-4` (else)
 
-- **Location**: [InstructionBuilder.java](../src/main/java/io/github/sirmathhman/tuff/InstructionBuilder.java)
-- **Role**: Converts parsed expressions into VM operations respecting operator precedence
-- **Register Allocation**: Sequentially assigns registers to `read` operations
+#### 3. Let Binding Handler (Type-safe variable management)
 
-#### 5. Virtual Machine (VM)
+**Entry points**:
 
-- **Location**: [Vm.java](../src/main/java/io/github/sirmathhman/tuff/vm/Vm.java)
-- **Architecture**:
-  - 8 registers: `long[8]`
-  - 1024-word memory: `long[1024]`
-  - Program counter-driven execution with instruction encoding
-- **Instruction Encoding** (64-bit):
-  - Bits 56–63: Operation (8 bits)
-  - Bits 48–55: Variant (8 bits)
-  - Bits 0–23: First operand (24 bits)
-  - Bits 24–47: Second operand (24 bits)
-- **Variants**: `Immediate`, `DirectAddress`, `IndirectAddress` (see [Variant.java](../src/main/java/io/github/sirmathhman/tuff/vm/Variant.java))
-- **Operations**: Load, Store, Add, Sub, Mul, Div, bitwise ops, jumps, logical ops, In/Out (I/O)
+- `handleLetBindingWithContinuation()` — `let x : U8 = expr; ...`
+- `handleUninitializedVariable()` — `let x : I32; x = expr; ...` (requires subsequent assignment)
+- Handles: type annotations, type inference, mutability, chained bindings, scoped blocks
+
+**Type validation**:
+
+- Implicit upcasting: `U8 → U16 → U32` allowed; `I8 → I16 → I32` allowed
+- **Blocks downcasting** and **sign mismatches** (U8 → I8 rejected)
+- Variables stored in `Map<String, Integer>` with memory addresses; types in `Map<String, String>`
+
+#### 4. Instruction Builder (Precedence-respecting code generation)
+
+**Role**: Converts term list to VM instructions while respecting precedence and handling special markers
+
+**Key methods**:
+
+- `buildResultWithPrecedence()` — routes to conditional/comparison/arithmetic based on markers
+- `buildConditionalExpression()` — if-else via jump instructions (loads true/false branches, uses register[0])
+- `buildComparisonExpression()` — comparison operators become Load + comparison op + conditional jumps
+- `loadAllReads()` — first pass: issues `In` (input) instructions to registers in order
+
+**Register allocation**:
+
+- Registers: 0 (result), 1–3 (scratch/branches), rest for temporary operands
+- `read` operations assigned sequentially: `read U8` → reg[0], next `read` → reg[1], etc.
+
+#### 5. Virtual Machine (4 registers, 1024-word memory)
+
+**Execution model**:
+
+- 4 registers: `long[4]` (0=result, 1–3=scratch)
+- 1024-word memory: `long[1024]` (variable storage + instruction space)
+- Program counter increments each cycle (unless Jump instruction sets it)
+
+**64-bit instruction encoding**:
+
+- Bits 56–63: `Operation` enum (8 bits)
+- Bits 48–55: `Variant` enum (8 bits)
+- Bits 0–23: First operand (24 bits, sign-extended)
+- Bits 24–47: Second operand (24 bits, sign-extended)
+
+**Operations** (see `Operation.java`): Load, Store, Add, Sub, Mul, Div, BitsShiftLeft/Right, BitsAnd/Or/Xor, BitsNot, In, Out, Jump, JumpIfLessThanZero, Equal, LessThan, GreaterThan, LogicalAnd, LogicalOr, LogicalNot, Halt
 
 ## Language Features
 
 ### Type System
 
-- **Integer Types**: `U8`, `U16`, `U32`, `I8`, `I16`, `I32`
-- **Implicit Upcasting**: `U8 → U16 → U32` allowed; downcasting forbidden
-- **Sign Safety**: No automatic conversion between signed/unsigned
-- **Pointer Types**: `*U8`, `*mut Type` (references and mutable references)
+- **Integer Types**: `U8`, `U16`, `U32`, `I8`, `I16`, `I32`, `Bool`
+- **Implicit Upcasting Only**: `U8 → U16 → U32` and `I8 → I16 → I32` allowed; **no downcasting, no sign mixing**
+- **Type Inference**: `let x = read U16;` infers type `U16`
+- **Pointer Types**: `*U8`, `*mut Type` (memory references with mutable variant)
 
-### Expression Examples
+### Operator Precedence (lowest to highest)
 
-```
-100U8                          // Literal U8
-read U16                       // Read from input
-2 * 3 + 4                      // Operators: *, /, +, - (standard precedence)
-(read U8 + 100) * read U16     // Parenthesized subexpressions
-let x : U8 = read U8; x + 50   // Let binding with type annotation
-let y = read U16; let z = y * 2; z  // Chained let bindings
-```
+1. Logical OR: `||` (lowest precedence, short-circuit jumps)
+2. Logical AND: `&&` (short-circuit jumps)
+3. Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
+4. Bitwise: `|`, `^`, `&`
+5. Shift: `<<`, `>>`
+6. Additive: `+`, `-`
+7. Multiplicative: `*`, `/` (highest precedence)
+8. Unary: `~`, `*` (dereference)
 
-## Build & Test Commands
+### Conditional Expressions
 
-```bash
-mvn test                    # Run all unit tests (AppTest.java)
-mvn checkstyle:check       # Lint code (see checkstyle.xml)
-mvn verify                 # Full build: compile + test + checkstyle
-```
-
-## Code Quality Constraints
-
-- **File length**: Max 500 lines (Checkstyle)
-- **Method length**: Max 50 lines (Checkstyle)
-- **Testing**: All tests must pass before commits (see [AppTest.java](../src/test/java/io/github/sirmathhman/tuff/AppTest.java))
-- **Test Structure**: Tests use `assertValid()` for success cases, `assertInvalid()` for error cases with timeout protection (100ms)
+- **Syntax**: `if (condition) trueBranch else falseBranch`
+- **Condition** must be `Bool` type (comparison result or explicit `read Bool`)
+- **Branches** are expressions (can be nested, literals, or let bindings)
+- **Compilation**: Branches generate jump instructions; condition sets register[0] to control flow
 
 ## Common Patterns & Conventions
 
-### Error Handling
+### Error Handling Pattern
 
 ```java
 Result<T, CompileError> result = App.compile(source);
@@ -124,35 +146,52 @@ if (result.isErr()) {
 T value = result.okValue();  // Use success value
 ```
 
-### Adding New Operations
-
-1. Add operation enum to [Operation.java](../src/main/java/io/github/sirmathhman/tuff/vm/Operation.java)
-2. Add case in `executeInstruction()` switch in [Vm.java](../src/main/java/io/github/sirmathhman/tuff/vm/Vm.java)
-3. Implement execution logic in a private `execute{OpName}()` method
-
 ### Parsing New Expression Types
 
-- Entry point: `App.parseExpressionWithRead()` or `App.parseStatement()`
-- For top-level statements: check `stmt.startsWith("let ")` first (let bindings take precedence)
-- For subexpressions: integrate into `parseMultiplicative()` or `parseTerm()`
-- Always return `Result<T, CompileError>` for composability
+1. **For operators**: Add case to one of the splitting methods (`splitAddOperators()`, `splitMultOperators()`, etc. in ExpressionTokens)
+2. **For handler classes**: Each operator gets a dedicated `*Handler.java` (e.g., `EqualityOperatorHandler`, `LogicalAndHandler`)
+3. **Handler pattern**: Static method that takes expression string, returns `Result<ExpressionModel.ExpressionResult, CompileError>`
+4. **Integration**: Call handler from appropriate parsing layer before returning to caller
 
-### Adding Variables
+### Adding New Operations to VM
 
-- Store in `java.util.Map<String, String>` for types (`ExpressionTokens.extractTypeFromExpression()`)
-- Store in `java.util.Map<String, Integer>` for memory addresses (LetBindingHandler)
-- Type validation happens in `App.determineAndValidateType()`
+1. Add operation enum to `Operation.java`
+2. Add case in `executeInstruction()` switch in `Vm.java`
+3. Implement as private `execute{OpName}()` method returning boolean (true = jump, false = increment PC)
+4. For arithmetic: operate on registers in-place (e.g., `registers[op1] += registers[op2]`)
+5. For jumps: return true to signal PC update
+
+### Package Structure (Max 15 classes per package)
+
+- `io.github.sirmathhman.tuff` (7 classes) — Core types: `App`, `Result`, `Error` types
+- `io.github.sirmathhman.tuff.compiler` (12 classes) — Parsing: `ExpressionModel`, handlers, builders
+- `io.github.sirmathhman.tuff.vm` (4 classes) — VM: `Vm`, `Instruction`, `Operation`, `Variant`
+
+Enforced by pre-commit hook (`check_package_class_limit.py`). If adding a class: verify `python check_package_class_limit.py` passes.
+
+## Build & Test
+
+```bash
+mvn test                    # Run all unit tests (~1.5s)
+mvn checkstyle:check       # Lint code (500 line file max, 50 line method max)
+mvn verify                 # Full build: compile → test → checkstyle
+python check_package_class_limit.py  # Manual package check
+```
+
+**Pre-commit Hooks**: Tests + checkstyle + package limit must pass before commits. Use `mvn verify` locally before pushing.
 
 ## Testing Guidelines
 
-- **Location**: [AppTest.java](../src/test/java/io/github/sirmathhman/tuff/AppTest.java)
-- **Test Pattern**: Use helper methods `assertValid()`, `assertValidWithInput()`, `assertInvalid()`
-- **Timeout**: All tests wrapped with 100ms duration limit to catch infinite loops
-- **Coverage**: Test both compile-time errors (type mismatches) and runtime behavior
+- **Location**: `AppTest.java`
+- **Helpers**: `assertValid(source, exitCode)`, `assertValidWithInput(source, exitCode, inputs...)`, `assertInvalid(source)`
+- **Timeout**: 100ms per test to catch infinite loops (wrapped with `Assertions.assertTimeoutPreemptively`)
+- **Coverage**: Both compile-time errors (type mismatches) and runtime behavior
+- **Instruction debugging**: On test failure, instruction list is displayed for inspection
 
 ## Debugging Tips
 
-1. **Check instruction output**: `AppTest.assertValidResult()` displays compiled instructions on mismatch
-2. **VM state inspection**: Add logging in [Vm.java](../src/main/java/io/github/sirmathhman/tuff/vm/Vm.java) `executeInstruction()` to trace register/memory changes
-3. **Parser errors**: Look at `CompileError.display()` and propagate with context string
-4. **Type conflicts**: Review `ExpressionTokens.isTypeCompatible()` for type compatibility rules
+1. **Instruction inspection**: Run failing test; error message includes full compiled instruction list
+2. **Type system**: Review `ExpressionTokens.isTypeCompatible()` for upcasting/downcasting rules
+3. **Parser tracing**: Check `CompileError.display()` output; add error context with `new CompileError("prefix: " + existing)`
+4. **VM execution**: Add println in `executeInstruction()` to trace register/memory state across cycles
+5. **Scoped blocks**: Let bindings with `{ expr }` syntax create local variable scope; verify variable shadowing doesn't leak

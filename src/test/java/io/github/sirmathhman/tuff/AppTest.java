@@ -645,6 +645,31 @@ public final class AppTest {
 		assertValidWithInput("20U8 >> 2U8", 5);
 	}
 
+	@Test
+	void shouldSupportLogicalNotWithReadBool() {
+		assertValidWithInput("!read Bool", 1, 0);
+	}
+
+	@Test
+	void shouldSupportLogicalNotWithReadBoolTrue() {
+		assertValidWithInput("!read Bool", 0, 1);
+	}
+
+	@Test
+	void shouldSupportLogicalNotWithLiteralBool() {
+		assertValid("!0Bool", 1);
+	}
+
+	@Test
+	void shouldSupportLogicalNotWithLiteralBoolTrue() {
+		assertValid("!1Bool", 0);
+	}
+
+	@Test
+	void shouldSupportLogicalNotInLetBinding() {
+		assertValidWithInput("let x = !read Bool; x", 1, 0);
+	}
+
 	// TODO: Support if/else with assignments in branches
 	// Should support: let x : U8; if (read Bool) x = 2; else x = 3; x
 	// This requires proper jump instruction generation for conditional branches

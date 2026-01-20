@@ -17,6 +17,9 @@ public final class InstructionBuilder {
 				if (term.isBitwiseNotted()) {
 					instructions.add(new Instruction(Operation.BitsNot, Variant.Immediate, nextReg, null));
 				}
+				if (term.isLogicalNotted()) {
+					instructions.add(new Instruction(Operation.LogicalNot, Variant.Immediate, nextReg, null));
+				}
 				nextReg++;
 			}
 		}

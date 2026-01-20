@@ -26,53 +26,61 @@ public final class ExpressionModel {
 		private final GroupEnd groupEnd;
 		private final Dereference dereference;
 		private final BitwiseNot bitwiseNot;
+		private final LogicalNot logicalNot;
 		private final LogicalBoundary logicalBoundary;
 		public final char multiplicativeOperator;
 		public final String readTypeSpec;
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied) {
-			this(readCount, value, isSubtracted, isMultiplied, false, false, false, false, false, false, '\0', null);
+			this(readCount, value, isSubtracted, isMultiplied, false, false, false, false, false, false, false, '\0', null);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided) {
-			this(readCount, value, isSubtracted, isMultiplied, isDivided, false, false, false, false, false, '\0', null);
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, false, false, false, false, false, false, '\0', null);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd) {
-			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, false, false, false, false,
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, false, false, false, false, false,
 					'\0', null);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd, boolean isDereferenced) {
 			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, isDereferenced, false,
-					false, false, '\0', null);
+					false, false, false, '\0', null);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd, boolean isDereferenced, boolean isLogicalOrBoundary) {
 			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, isDereferenced,
-					isLogicalOrBoundary, false, false, '\0', null);
+					isLogicalOrBoundary, false, false, false, '\0', null);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd, boolean isDereferenced, boolean isLogicalOrBoundary,
 				boolean isLogicalAndBoundary) {
 			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, isDereferenced,
-					isLogicalOrBoundary, isLogicalAndBoundary, false, '\0', null);
+					isLogicalOrBoundary, isLogicalAndBoundary, false, false, '\0', null);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd, boolean isDereferenced, boolean isLogicalOrBoundary,
 				boolean isLogicalAndBoundary, char multiplicativeOperator) {
 			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, isDereferenced,
-					isLogicalOrBoundary, isLogicalAndBoundary, false, multiplicativeOperator, null);
+					isLogicalOrBoundary, isLogicalAndBoundary, false, false, multiplicativeOperator, null);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd, boolean isDereferenced, boolean isLogicalOrBoundary,
 				boolean isLogicalAndBoundary, boolean isBitwiseNotted, char multiplicativeOperator, String readTypeSpec) {
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, isDereferenced,
+					isLogicalOrBoundary, isLogicalAndBoundary, isBitwiseNotted, false, multiplicativeOperator, readTypeSpec);
+		}
+
+		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
+				boolean isParenthesizedGroupEnd, boolean isDereferenced, boolean isLogicalOrBoundary,
+				boolean isLogicalAndBoundary, boolean isBitwiseNotted, boolean isLogicalNotted, char multiplicativeOperator, String readTypeSpec) {
 			this.readCount = readCount;
 			this.value = value;
 			this.additiveOp = AdditiveOp.from(isSubtracted);
@@ -80,6 +88,7 @@ public final class ExpressionModel {
 			this.groupEnd = GroupEnd.from(isParenthesizedGroupEnd);
 			this.dereference = Dereference.from(isDereferenced);
 			this.bitwiseNot = BitwiseNot.from(isBitwiseNotted);
+			this.logicalNot = LogicalNot.from(isLogicalNotted);
 			this.logicalBoundary = LogicalBoundary.from(isLogicalOrBoundary, isLogicalAndBoundary);
 			this.multiplicativeOperator = multiplicativeOperator;
 			this.readTypeSpec = readTypeSpec;
@@ -113,6 +122,10 @@ public final class ExpressionModel {
 			return bitwiseNot == BitwiseNot.Notted;
 		}
 
+		public boolean isLogicalNotted() {
+			return logicalNot == LogicalNot.Notted;
+		}
+
 		public boolean isLogicalOrBoundary() {
 			return logicalBoundary.hasOr;
 		}
@@ -124,7 +137,7 @@ public final class ExpressionModel {
 		public ExpressionTerm withLogicalBoundary(boolean hasOrBoundary, boolean hasAndBoundary) {
 			return new ExpressionTerm(readCount, value, isSubtracted(),
 					isMultiplied(), isDivided(), isParenthesizedGroupEnd(), isDereferenced(), hasOrBoundary, hasAndBoundary,
-					isBitwiseNotted(), multiplicativeOperator, readTypeSpec);
+					isBitwiseNotted(), isLogicalNotted(), multiplicativeOperator, readTypeSpec);
 		}
 	}
 
@@ -189,6 +202,15 @@ public final class ExpressionModel {
 
 		private static BitwiseNot from(boolean isBitwiseNotted) {
 			return isBitwiseNotted ? Notted : None;
+		}
+	}
+
+	public enum LogicalNot {
+		None,
+		Notted;
+
+		private static LogicalNot from(boolean isLogicalNotted) {
+			return isLogicalNotted ? Notted : None;
 		}
 	}
 

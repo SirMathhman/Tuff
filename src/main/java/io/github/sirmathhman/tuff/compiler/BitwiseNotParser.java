@@ -14,6 +14,13 @@ public final class BitwiseNotParser {
 			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
 		}
 
+		// Handle logical NOT (!)
+		boolean isLogicalNotted = false;
+		if (term.startsWith("!")) {
+			isLogicalNotted = true;
+			term = term.substring(1).trim();
+		}
+
 		// Handle bitwise NOT (~)
 		boolean isBitwiseNotted = false;
 		if (term.startsWith("~")) {
@@ -24,6 +31,11 @@ public final class BitwiseNotParser {
 		Result<ExpressionModel.ExpressionTerm, CompileError> baseResult = parseBaseTerm(term);
 		if (baseResult.isErr()) {
 			return baseResult;
+		}
+
+		if (isLogicalNotted) {
+			ExpressionModel.ExpressionTerm baseTerm = baseResult.okValue();
+			return applyLogicalNot(baseTerm, term);
 		}
 
 		if (!isBitwiseNotted) {
@@ -76,8 +88,7 @@ public final class BitwiseNotParser {
 			ExpressionModel.ExpressionTerm baseTerm, String originalTerm) {
 		// For read operations, set the isBitwiseNotted flag
 		if (baseTerm.readCount > 0) {
-			return Result.ok(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value, false, false,
-					false, false, false, false, false, true, '\0', baseTerm.readTypeSpec));
+			return applyUnaryOperator(baseTerm, true, false);
 		}
 
 		// For literals, compute the NOT directly
@@ -93,5 +104,24 @@ public final class BitwiseNotParser {
 		}
 		litValue = ~litValue & mask;
 		return Result.ok(new ExpressionModel.ExpressionTerm(0, litValue, false, false));
+	}
+
+	private static Result<ExpressionModel.ExpressionTerm, CompileError> applyLogicalNot(
+			ExpressionModel.ExpressionTerm baseTerm, String originalTerm) {
+		// For read operations, set the isLogicalNotted flag
+		if (baseTerm.readCount > 0) {
+			return applyUnaryOperator(baseTerm, false, true);
+		}
+
+		// For literals, compute the NOT directly (0 -> 1, nonzero -> 0)
+		long litValue = baseTerm.value;
+		litValue = litValue == 0 ? 1 : 0;
+		return Result.ok(new ExpressionModel.ExpressionTerm(0, litValue, false, false));
+	}
+
+	private static Result<ExpressionModel.ExpressionTerm, CompileError> applyUnaryOperator(
+			ExpressionModel.ExpressionTerm baseTerm, boolean isBitwiseNotted, boolean isLogicalNotted) {
+		return Result.ok(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value, false, false,
+				false, false, false, false, false, isBitwiseNotted, isLogicalNotted, '\0', baseTerm.readTypeSpec));
 	}
 }

@@ -52,7 +52,7 @@ public final class MultiplicativeExpressionBuilder {
 				boolean isDivided = (j > 0 && operator == '/');
 				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(baseTerm.readCount,
 						baseTerm.value, isSubtracted, isMultiplied,
-						isDivided, false, false, false, false, baseTerm.isBitwiseNotted(), (j > 0) ? operator : '\0',
+					isDivided, false, false, false, false, baseTerm.isBitwiseNotted(), baseTerm.isLogicalNotted(), (j > 0) ? operator : '\0',
 						baseTerm.readTypeSpec);
 				multTerms.add(finalTerm);
 
