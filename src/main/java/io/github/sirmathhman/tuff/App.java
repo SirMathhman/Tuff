@@ -12,6 +12,7 @@ import io.github.sirmathhman.tuff.compiler.LogicalOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.MultiplicativeExpressionBuilder;
 import io.github.sirmathhman.tuff.compiler.WhileLoopHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.MatchExpressionHandler;
+import io.github.sirmathhman.tuff.compiler.letbinding.StructHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
@@ -42,6 +43,12 @@ public final class App {
 	}
 
 	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
+		// Check if this is a struct definition at statement level
+		if (stmt.startsWith("struct ")) {
+			return StructHandler.parseStruct(stmt)
+					.flatMap(expr -> generateInstructions(expr, instructions));
+		}
+
 		// Check if this is a while loop at statement level
 		if (stmt.startsWith("while (")) {
 			return handleTopLevelWhileLoop(stmt, instructions);
