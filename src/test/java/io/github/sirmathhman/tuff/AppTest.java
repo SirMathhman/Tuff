@@ -775,6 +775,11 @@ public final class AppTest {
 		assertInvalid("struct Empty {} struct Empty {}");
 	}
 
+	@Test
+	void shouldParseStructWithFields() {
+		assertValid("struct Wrapper { value : U64 }", 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

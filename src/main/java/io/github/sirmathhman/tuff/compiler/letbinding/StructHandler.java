@@ -60,17 +60,74 @@ public final class StructHandler {
 		// Register the struct
 		definedStructs.add(structName);
 
-		// For empty struct, return 0
-		if (body.isEmpty()) {
-			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
-			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
-			return Result.ok(new StructParseResult(result, afterStruct));
+		// Parse struct fields
+		List<StructField> fields = new ArrayList<>();
+		if (!body.isEmpty()) {
+			Result<List<StructField>, CompileError> fieldsResult = parseFields(body);
+			if (fieldsResult instanceof Result.Err<List<StructField>, CompileError>) {
+				return Result.err(((Result.Err<List<StructField>, CompileError>) fieldsResult).error());
+			}
+			fields = ((Result.Ok<List<StructField>, CompileError>) fieldsResult).value();
 		}
 
-		// TODO: Handle struct fields in future iterations
-		return Result.err(new CompileError("Struct fields not yet supported"));
+		// For now, structs always compile to 0 regardless of fields
+		// TODO: Use fields for struct instantiation and field access in future iterations
+		@SuppressWarnings("unused")
+		List<StructField> _fields = fields;
+		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
+		return Result.ok(new StructParseResult(result, afterStruct));
 	}
 
 	public record StructParseResult(ExpressionModel.ExpressionResult expressionResult, String remaining) {
+	}
+
+	public record StructField(String name, String type) {
+	}
+
+	private static Result<List<StructField>, CompileError> parseFields(String body) {
+		List<StructField> fields = new ArrayList<>();
+		String remaining = body;
+
+		while (!remaining.isEmpty()) {
+			remaining = remaining.trim();
+			if (remaining.isEmpty()) {
+				break;
+			}
+
+			// Parse field name
+			int colonPos = remaining.indexOf(':');
+			if (colonPos == -1) {
+				return Result.err(new CompileError("Field must have a type annotation (use ':')"));
+			}
+
+			String fieldName = remaining.substring(0, colonPos).trim();
+			if (fieldName.isEmpty() || !Character.isJavaIdentifierStart(fieldName.charAt(0))) {
+				return Result.err(new CompileError("Invalid field name: " + fieldName));
+			}
+
+			// Find the end of the type (before semicolon or comma)
+			int typeStart = colonPos + 1;
+			int typeEnd = typeStart;
+			while (typeEnd < remaining.length() && remaining.charAt(typeEnd) != ';' && remaining.charAt(typeEnd) != ',') {
+				typeEnd++;
+			}
+
+			String fieldType = remaining.substring(typeStart, typeEnd).trim();
+			if (fieldType.isEmpty()) {
+				return Result.err(new CompileError("Field must have a type"));
+			}
+
+			fields.add(new StructField(fieldName, fieldType));
+
+			// Move past the field (including separator if present)
+			if (typeEnd < remaining.length() && (remaining.charAt(typeEnd) == ';' || remaining.charAt(typeEnd) == ',')) {
+				remaining = remaining.substring(typeEnd + 1);
+			} else {
+				remaining = remaining.substring(typeEnd);
+			}
+		}
+
+		return Result.ok(fields);
 	}
 }
