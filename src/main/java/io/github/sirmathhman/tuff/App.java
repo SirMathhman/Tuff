@@ -363,6 +363,8 @@ public final class App {
 			case '&' -> Result.ok(current & value);
 			case '|' -> Result.ok(current | value);
 			case '^' -> Result.ok(current ^ value);
+			case '<' -> Result.ok(current << value);
+			case '>' -> Result.ok(current >> value);
 			default -> Result.ok(current * value);
 		};
 	}
@@ -425,9 +427,7 @@ public final class App {
 			return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue, 0));
 		}
 	}
-
 	private static List<ExpressionModel.MultOperatorToken> splitByMultOperators(String expr) {
-		// Split by *, /, &, | (but not && or ||) while respecting parentheses
 		List<ExpressionModel.MultOperatorToken> result = new ArrayList<>();
 		StringBuilder token = new StringBuilder();
 		char lastOp = '\0';
@@ -443,13 +443,21 @@ public final class App {
 				depth--;
 				token.append(c);
 			} else if ((c == '*' || c == '/' || c == '&' || c == '|' || c == '^') && depth == 0) {
-				// For & and |, check they're not part of && or ||
 				if ((c == '&' || c == '|') && i + 1 < expr.length() && expr.charAt(i + 1) == c) {
 					token.append(c);
 				} else {
 					result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
 					token = new StringBuilder();
 					lastOp = c;
+				}
+			} else if ((c == '<' || c == '>') && depth == 0) {
+				if (i + 1 < expr.length() && expr.charAt(i + 1) == c) {
+					result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
+					token = new StringBuilder();
+					lastOp = c;
+					i++;
+				} else {
+					token.append(c);
 				}
 			} else {
 				token.append(c);
@@ -463,7 +471,6 @@ public final class App {
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseTerm(String term) {
 		return BitwiseNotParser.parseTermWithNot(term);
 	}
-
 	public static Result<RunResult, ApplicationError> run(String source, int[] input) {
 		Result<Instruction[], CompileError> compileResult = compile(source);
 		if (compileResult.isErr()) {

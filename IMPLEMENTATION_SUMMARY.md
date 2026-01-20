@@ -40,7 +40,7 @@ Successfully implemented the bitwise XOR (`^`) operator for unsigned integer typ
 
 #### Operator Precedence
 
-XOR is treated as a multiplicative operator (same precedence as *, /, &, |):
+XOR is treated as a multiplicative operator (same precedence as \*, /, &, |):
 
 1. Logical OR (`||`)
 2. Logical AND (`&&`)
@@ -172,6 +172,7 @@ This matches the existing AND (&) and OR (|) operator implementations exactly.
 The bitwise XOR operator implementation extends the Tuff language's bitwise capabilities following established patterns. The implementation is complete, well-tested, and maintains code quality standards. XOR joins AND and OR as core bitwise operations, providing users with a complete set of fundamental bit manipulation tools.
 
 **Completed Features**:
+
 - ✓ Bitwise AND (`&`)
 - ✓ Bitwise OR (`|`)
 - ✓ Bitwise XOR (`^`)
@@ -183,6 +184,7 @@ The bitwise XOR operator implementation extends the Tuff language's bitwise capa
 - ✓ Mutable variables and dereferencing
 
 **Next High-Priority Features**:
+
 1. Shift operators (`<<`, `>>`) - Low effort, completes bitwise set
 2. Logical NOT (`!`) - Low effort, complements boolean logic
 3. Function definitions and calls - High priority for code reuse

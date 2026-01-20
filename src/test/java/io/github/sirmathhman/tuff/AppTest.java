@@ -620,6 +620,31 @@ public final class AppTest {
 		assertValidWithInput("~read U8 + read U8", 246, 10, 1);
 	}
 
+	@Test
+	void shouldSupportBitwiseLeftShiftWithTwoReads() {
+		assertValidWithInput("read U8 << read U8", 20, 10, 1);
+	}
+
+	@Test
+	void shouldSupportBitwiseLeftShiftWithLiterals() {
+		assertValidWithInput("5U8 << 2U8", 20);
+	}
+
+	@Test
+	void shouldSupportBitwiseLeftShiftInLetBinding() {
+		assertValidWithInput("let x = read U8 << read U8; x", 20, 10, 1);
+	}
+
+	@Test
+	void shouldSupportBitwiseRightShiftWithTwoReads() {
+		assertValidWithInput("read U8 >> read U8", 5, 20, 2);
+	}
+
+	@Test
+	void shouldSupportBitwiseRightShiftWithLiterals() {
+		assertValidWithInput("20U8 >> 2U8", 5);
+	}
+
 	// TODO: Support if/else with assignments in branches
 	// Should support: let x : U8; if (read Bool) x = 2; else x = 3; x
 	// This requires proper jump instruction generation for conditional branches

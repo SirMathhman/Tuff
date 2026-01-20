@@ -45,19 +45,27 @@ public final class DepthAwareSplitter {
 			} else if (c == ')' || c == '}') {
 				depth--;
 				token.append(c);
-			} else if (checker.isDelimiter(c, i) && depth == 0) {
-				result.add(token.toString().trim());
-				token = new StringBuilder();
-				// Skip second character of double delimiter
-				// For == and ||, second char equals first char
-				// For !=, second char is = but first is !
-				// For <= and >=, second char is = but first is < or >
-				if (i + 1 < expr.length()) {
-					char nextChar = expr.charAt(i + 1);
+			} else if (depth == 0 && i + 1 < expr.length()) {
+				// Check for shift operators and other two-character operators first
+				char nextChar = expr.charAt(i + 1);
+				if ((c == '<' && nextChar == '<') || (c == '>' && nextChar == '>')) {
+					// Shift operators - don't split on them, add to token
+					token.append(c);
+					i++;
+					token.append(expr.charAt(i));
+				} else if (checker.isDelimiter(c, i)) {
+					result.add(token.toString().trim());
+					token = new StringBuilder();
+					// Skip second character of double delimiter
+					// For == and ||, second char equals first char
+					// For !=, second char is = but first is !
+					// For <=, >=, second char is = but first is < or >
 					if (nextChar == c || (c == '!' && nextChar == '=') || (c == '<' && nextChar == '=')
 							|| (c == '>' && nextChar == '=')) {
 						i++;
 					}
+				} else {
+					token.append(c);
 				}
 			} else {
 				token.append(c);
