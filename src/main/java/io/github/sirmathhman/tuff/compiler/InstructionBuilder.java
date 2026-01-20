@@ -63,6 +63,16 @@ public final class InstructionBuilder {
 
 	private static int buildConditionalExpression(List<ExpressionModel.ExpressionTerm> terms,
 			ConditionalMarkers markers, List<Instruction> instructions) {
+		// Check if this has nested conditionals (multiple -3 markers)
+		int nestedConditionalCount = 0;
+		for (ExpressionModel.ExpressionTerm t : terms) {
+			if (t.readCount == -3) nestedConditionalCount++;
+		}
+		
+		if (nestedConditionalCount > 1) {
+			return buildConditionalExpression(terms, markers, instructions);
+		}
+
 		List<ExpressionModel.ExpressionTerm> condTerms = terms.subList(0, markers.branchIdx);
 		buildSubExpressionResult(condTerms, 0, instructions);
 

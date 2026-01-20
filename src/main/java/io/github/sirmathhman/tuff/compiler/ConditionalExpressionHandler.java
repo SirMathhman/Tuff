@@ -97,6 +97,10 @@ public final class ConditionalExpressionHandler {
 		// or additive if no comparison
 		expr = expr.trim();
 
+		// Handle nested conditionals
+		if (expr.startsWith("if ("))
+			return parseConditional(expr);
+
 		// Try comparison operators
 		var le = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '<', '=');
 		if (le.size() > 1)

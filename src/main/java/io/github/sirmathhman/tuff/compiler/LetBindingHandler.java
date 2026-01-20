@@ -7,9 +7,7 @@ import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
-import io.github.sirmathhman.tuff.vm.Variant;
-
-public final class LetBindingHandler {
+import io.github.sirmathhman.tuff.vm.Variant;public final class LetBindingHandler {
 	private LetBindingHandler() {
 	}
 
@@ -59,8 +57,10 @@ public final class LetBindingHandler {
 			return handleChainedLetBinding(varName, decl.valueExpr(), continuation, instructions, variableAddresses,
 					nextMemAddr);
 		if (continuation.equals(varName)) {
-			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = App
-					.parseExpressionWithRead(decl.valueExpr());
+			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = 
+					ConditionalExpressionHandler.hasConditional(decl.valueExpr())
+					? ConditionalExpressionHandler.parseConditional(decl.valueExpr())
+					: App.parseExpressionWithRead(decl.valueExpr());
 			return valueResult.isErr() ? Result.err(valueResult.errValue())
 					: App.generateInstructions(valueResult.okValue(), instructions);
 		}
@@ -449,49 +449,43 @@ public final class LetBindingHandler {
 		int cEnd = ConditionalExpressionHandler.findConditionEnd(s);
 		if (cEnd == -1) return Result.err(new CompileError("Malformed"));
 		String cond = s.substring(4, cEnd), r = s.substring(cEnd + 1).trim();
-		if (!r.startsWith(varName + " =") && !r.startsWith(varName + "=")) return Result.err(new CompileError("Expected assign"));
+		if (!r.startsWith(varName + " =") && !r.startsWith(varName + "="))
+			return Result.err(new CompileError("Expected assign"));
 		int eqIdx = r.indexOf('='), sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(r, eqIdx);
 		if (sIdx == -1) return Result.err(new CompileError("Missing ';'"));
 		String trueVal = r.substring(eqIdx + 1, sIdx).trim(), r2 = r.substring(sIdx + 1).trim();
 		if (!r2.startsWith("else ")) return Result.err(new CompileError("Expected 'else'"));
 		Result<String, CompileError> typeRes = ExpressionTokens.extractTypeFromExpression(cond, new java.util.HashMap<>());
-		if (typeRes.isOk() && !typeRes.okValue().equals("Bool")) return Result.err(new CompileError("Expect Bool"));
+		if (typeRes.isOk() && !typeRes.okValue().equals("Bool"))
+			return Result.err(new CompileError("Expect Bool"));
 		r2 = r2.substring(5).trim();
 		Result<ExpressionModel.ExpressionResult, CompileError> condRes = App.parseExpressionWithRead(cond);
 		if (condRes.isErr()) return Result.err(condRes.errValue());
 		if (App.generateInstructions(condRes.okValue(), instructions).isErr())
 			return Result.err(new CompileError("Bad cond"));
-		final int memAddr = 100;
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, -1L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 1, 0L));
-		int jumpElseIdx = instructions.size();
+		int jumpElseIdx = instructions.size(), jumpEndIdx = -1;
 		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, 0L));
 		Result<ExpressionModel.ExpressionResult, CompileError> trueRes = App.parseExpressionWithRead(trueVal);
 		if (trueRes.isErr() || App.generateInstructions(trueRes.okValue(), instructions).isErr())
 			return Result.err(trueRes.isErr() ? trueRes.errValue() : new CompileError("Bad true"));
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
-		int jumpEndIdx = instructions.size();
+		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
+		jumpEndIdx = instructions.size();
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
 		instructions.set(jumpElseIdx, new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, (long) instructions.size()));
-		if (r2.startsWith("if (")) {
-			if (buildConditionalAssignmentChain(varName, r2, instructions, false).isErr())
-				return Result.err(new CompileError("Bad else-if"));
-		} else if (r2.startsWith(varName + " =") || r2.startsWith(varName + "=")) {
-			eqIdx = r2.indexOf('=');
-			sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(r2, eqIdx);
+		if (r2.startsWith("if (")) { if (buildConditionalAssignmentChain(varName, r2, instructions, false).isErr()) return Result.err(new CompileError("Bad else-if")); }
+		else if (r2.startsWith(varName + " =") || r2.startsWith(varName + "=")) {
+			eqIdx = r2.indexOf('='); sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(r2, eqIdx);
 			if (sIdx == -1) return Result.err(new CompileError("Missing ';'"));
 			String falseVal = r2.substring(eqIdx + 1, sIdx).trim();
 			if (!r2.substring(sIdx + 1).trim().equals(varName)) return Result.err(new CompileError("Bad var"));
 			Result<ExpressionModel.ExpressionResult, CompileError> falseRes = App.parseExpressionWithRead(falseVal);
-			if (falseRes.isErr() || App.generateInstructions(falseRes.okValue(), instructions).isErr())
-				return Result.err(falseRes.isErr() ? falseRes.errValue() : new CompileError("Bad else"));
-			instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
+			if (falseRes.isErr() || App.generateInstructions(falseRes.okValue(), instructions).isErr()) return Result.err(falseRes.isErr() ? falseRes.errValue() : new CompileError("Bad else"));
+			instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
 		} else return Result.err(new CompileError("Bad else"));
 		instructions.set(jumpEndIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) instructions.size()));
-		if (isFirst) {
-			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) memAddr));
-			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
-		}
+		if (isFirst) { instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, 100L)); instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L)); }
 		return Result.ok(null);
 	}
 }

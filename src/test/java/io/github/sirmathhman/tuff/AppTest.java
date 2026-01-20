@@ -720,6 +720,21 @@ public final class AppTest {
 		assertValidWithInput("let x : I32; if (read Bool) x = 1; else if (read Bool) x = 2; else x = 3; x", 3, 0, 0);
 	}
 
+	@Test
+	void shouldSupportConditionalExpressionInLetBinding() {
+		assertValidWithInput("let x : I32 = if (read Bool) 1 else 2; x", 1, 1);
+	}
+
+	@Test
+	void shouldSupportConditionalExpressionInLetBindingElseBranch() {
+		assertValidWithInput("let x : I32 = if (read Bool) 1 else 2; x", 2, 0);
+	}
+
+	@Test
+	void shouldSupportConditionalExpressionInLetBindingWithArithmetic() {
+		assertValidWithInput("let x : I32 = if (read Bool) 10 else 20; x", 10, 1);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
