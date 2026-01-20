@@ -282,7 +282,7 @@ public final class InstructionBuilder {
 	}
 
 	private static boolean isMultiplicativeNext(List<ExpressionModel.ExpressionTerm> terms, int i) {
-		return i + 1 < terms.size() && (terms.get(i + 1).isMultiplied() || terms.get(i + 1).isDivided() || terms.get(i + 1).multiplicativeOperator == '&')
+		return i + 1 < terms.size() && (terms.get(i + 1).isMultiplied() || terms.get(i + 1).isDivided() || terms.get(i + 1).multiplicativeOperator == '&' || terms.get(i + 1).multiplicativeOperator == '|')
 				&& terms.get(i + 1).readCount > 0;
 	}
 
@@ -342,6 +342,7 @@ public final class InstructionBuilder {
 				Operation op = switch (groupOps.get(j)) {
 					case '/' -> Operation.Div;
 					case '&' -> Operation.BitsAnd;
+					case '|' -> Operation.BitsOr;
 					default -> Operation.Mul;
 				};
 				instructions.add(new Instruction(op, Variant.Immediate, groupResultReg, (long) groupRegs.get(j)));

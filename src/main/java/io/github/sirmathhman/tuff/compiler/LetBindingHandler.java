@@ -54,7 +54,6 @@ public final class LetBindingHandler {
 		return handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation, instructions,
 				new java.util.HashMap<>(), 100);
 	}
-
 	private static Result<Void, CompileError> handleLetBindingWithContinuation(
 			String stmt,
 			int equalsIndex,
@@ -162,9 +161,9 @@ public final class LetBindingHandler {
 		String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
 		return new VariableDecl(varName, isMutable, valueExpr);
 	}
+
 	private record VariableDecl(String varName, boolean isMutable, String valueExpr) {
 	}
-
 	private static Result<Void, CompileError> handleScopedBlock(
 			String varName,
 			String initialValueExpr,
@@ -220,6 +219,7 @@ public final class LetBindingHandler {
 		}
 		return -1;
 	}
+
 	private static Result<Void, CompileError> handleChainedLetBinding(
 			String varName,
 			String valueExpr,

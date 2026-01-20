@@ -107,7 +107,8 @@ public final class ExpressionModel {
 
 		public ExpressionTerm withLogicalBoundary(boolean hasOrBoundary, boolean hasAndBoundary) {
 			return new ExpressionTerm(readCount, value, isSubtracted(),
-					isMultiplied(), isDivided(), isParenthesizedGroupEnd(), isDereferenced(), hasOrBoundary, hasAndBoundary, multiplicativeOperator);
+					isMultiplied(), isDivided(), isParenthesizedGroupEnd(), isDereferenced(), hasOrBoundary, hasAndBoundary,
+					multiplicativeOperator);
 		}
 	}
 
@@ -124,7 +125,8 @@ public final class ExpressionModel {
 		None,
 		Multiply,
 		Divide,
-		BitwiseAnd;
+		BitwiseAnd,
+		BitwiseOr;
 
 		private static MultiplicativeOp from(boolean isMultiplied, boolean isDivided) {
 			if (isDivided) {
@@ -141,6 +143,7 @@ public final class ExpressionModel {
 				case '*' -> Multiply;
 				case '/' -> Divide;
 				case '&' -> BitwiseAnd;
+				case '|' -> BitwiseOr;
 				default -> None;
 			};
 		}

@@ -122,7 +122,6 @@ public final class App {
 	}
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
 		expr = expr.trim();
-
 		// Check if this is a let binding
 		if (expr.startsWith("let ")) {
 			return parseLetExpressionBinding(expr);
@@ -132,10 +131,8 @@ public final class App {
 		if (ConditionalExpressionHandler.hasConditional(expr)) {
 			return ConditionalExpressionHandler.parseConditional(expr);
 		}
-
 		// Normalize curly braces to parentheses for uniform grouping support
 		expr = expr.replace('{', '(').replace('}', ')');
-
 		// Split by || (logical OR) first - lowest precedence
 		List<String> orTokens = LogicalOrHandler.splitByLogicalOr(expr);
 		if (orTokens.size() > 1) {
@@ -159,6 +156,7 @@ public final class App {
 		// Parse additive expression (no logical operators or comparisons)
 		return AdditiveExpressionParser.parseAdditive(expr);
 	}
+
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {
 		var le = LessOrEqualOperatorHandler.splitByLessOrEqual(expr);
 		if (le.size() > 1)
@@ -180,9 +178,11 @@ public final class App {
 			return InequalityOperatorHandler.parseInequalityExpression(neq);
 		return Result.err(new CompileError("No comparison operator found"));
 	}
+
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
 		return parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>(), new java.util.HashMap<>());
 	}
+
 	private static Result<String, CompileError> determineAndValidateType(
 			ExpressionTokens.LetBindingDecl decl,
 			java.util.Map<String, String> variableTypes) {
@@ -343,6 +343,7 @@ public final class App {
 		return switch (operator) {
 			case '/' -> Result.ok(value != 0 ? current / value : current);
 			case '&' -> Result.ok(current & value);
+			case '|' -> Result.ok(current | value);
 			default -> Result.ok(current * value);
 		};
 	}
@@ -404,8 +405,9 @@ public final class App {
 			return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue, 0));
 		}
 	}
+
 	private static List<ExpressionModel.MultOperatorToken> splitByMultOperators(String expr) {
-		// Split by *, /, & (but not &&) while respecting parentheses
+		// Split by *, /, &, | (but not && or ||) while respecting parentheses
 		List<ExpressionModel.MultOperatorToken> result = new ArrayList<>();
 		StringBuilder token = new StringBuilder();
 		char lastOp = '\0';
@@ -420,9 +422,9 @@ public final class App {
 			} else if (c == ')') {
 				depth--;
 				token.append(c);
-			} else if ((c == '*' || c == '/' || c == '&') && depth == 0) {
-				// For &, check it's not part of &&
-				if (c == '&' && i + 1 < expr.length() && expr.charAt(i + 1) == '&') {
+			} else if ((c == '*' || c == '/' || c == '&' || c == '|') && depth == 0) {
+				// For & and |, check they're not part of && or ||
+				if ((c == '&' || c == '|') && i + 1 < expr.length() && expr.charAt(i + 1) == c) {
 					token.append(c);
 				} else {
 					result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
@@ -437,6 +439,7 @@ public final class App {
 		result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
 		return result;
 	}
+
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseTerm(String term) {
 		term = term.trim();
 
@@ -467,6 +470,7 @@ public final class App {
 		}
 		return Result.ok(new ExpressionModel.ExpressionTerm(0, literalResult.okValue(), false, false));
 	}
+
 	public static Result<RunResult, ApplicationError> run(String source, int[] input) {
 		Result<Instruction[], CompileError> compileResult = compile(source);
 		if (compileResult.isErr()) {
