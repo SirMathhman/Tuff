@@ -320,7 +320,7 @@ public final class App {
 				boolean isDivided = (j > 0 && operator == '/');
 				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(baseTerm.readCount,
 						baseTerm.value, isSubtracted, isMultiplied,
-						isDivided);
+						isDivided, false, false, false, false, (j > 0) ? operator : '\0');
 				multTerms.add(finalTerm);
 
 				Result<Long, CompileError> litResult = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
@@ -331,9 +331,7 @@ public final class App {
 				lastExpandedParensSize = 0;
 			}
 		}
-
 		fixGroupingBoundaries(multTerms, lastExpandedParensSize, multTokens.size());
-
 		int totalReads = multTerms.stream().mapToInt(t -> t.readCount).sum();
 		return Result.ok(new ExpressionModel.ParsedMult(totalReads, multLiteral, multTerms));
 	}
@@ -342,18 +340,11 @@ public final class App {
 		if (isFirst) {
 			return Result.ok(value);
 		}
-		// Only perform literal operations when we know both values are literals
-		// If value is 0 and we're dividing, it could be a read operation (not a true
-		// division by zero)
-		// So we don't error here; runtime will handle actual division by zero
-		if (operator == '/') {
-			if (value != 0) {
-				return Result.ok(current / value);
-			}
-			// If dividing by zero at parse time, assume it's a read and keep current
-			return Result.ok(current);
-		}
-		return Result.ok(current * value);
+		return switch (operator) {
+			case '/' -> Result.ok(value != 0 ? current / value : current);
+			case '&' -> Result.ok(current & value);
+			default -> Result.ok(current * value);
+		};
 	}
 	private static void fixGroupingBoundaries(List<ExpressionModel.ExpressionTerm> multTerms, int lastExpandedParensSize,
 			int multTokensSize) {
@@ -414,7 +405,7 @@ public final class App {
 		}
 	}
 	private static List<ExpressionModel.MultOperatorToken> splitByMultOperators(String expr) {
-		// Split by * or / while respecting parentheses, tracking which operator
+		// Split by *, /, & (but not &&) while respecting parentheses
 		List<ExpressionModel.MultOperatorToken> result = new ArrayList<>();
 		StringBuilder token = new StringBuilder();
 		char lastOp = '\0';
@@ -429,10 +420,15 @@ public final class App {
 			} else if (c == ')') {
 				depth--;
 				token.append(c);
-			} else if ((c == '*' || c == '/') && depth == 0) {
-				result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
-				token = new StringBuilder();
-				lastOp = c;
+			} else if ((c == '*' || c == '/' || c == '&') && depth == 0) {
+				// For &, check it's not part of &&
+				if (c == '&' && i + 1 < expr.length() && expr.charAt(i + 1) == '&') {
+					token.append(c);
+				} else {
+					result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
+					token = new StringBuilder();
+					lastOp = c;
+				}
 			} else {
 				token.append(c);
 			}

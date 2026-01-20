@@ -12,7 +12,6 @@ import io.github.sirmathhman.tuff.vm.Variant;
 public final class LetBindingHandler {
 	private LetBindingHandler() {
 	}
-
 	public static Result<Void, CompileError> handleUninitializedVariable(
 			String stmt,
 			int semiIndex,
@@ -163,7 +162,6 @@ public final class LetBindingHandler {
 		String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
 		return new VariableDecl(varName, isMutable, valueExpr);
 	}
-
 	private record VariableDecl(String varName, boolean isMutable, String valueExpr) {
 	}
 
@@ -181,6 +179,7 @@ public final class LetBindingHandler {
 		if (closingBrace == -1)
 			return Result.err(new CompileError("Unmatched '{' in scoped block"));
 		String blockContent = continuation.substring(1, closingBrace).trim();
+		String afterBrace = continuation.substring(closingBrace + 1).trim();
 		if (initialValueExpr != null) {
 			Result<Void, CompileError> storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
 			if (storeResult.isErr())
@@ -197,10 +196,14 @@ public final class LetBindingHandler {
 				return processResult;
 			remaining = parsed.remaining();
 		}
-		if (!remaining.equals(varName)) {
+		if (!remaining.isEmpty() && !remaining.equals(varName))
 			return Result.err(new CompileError("Scoped block must end with variable reference, but got: " + remaining));
-		}
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
+		if (!afterBrace.isEmpty() && !afterBrace.equals(varName)) {
+			java.util.Map<String, Integer> contextWithVar = new java.util.HashMap<>(variableAddresses);
+			contextWithVar.put(varName, nextMemAddr);
+			return handleVariableReference(varName, afterBrace, instructions, contextWithVar, nextMemAddr);
+		}
 		return Result.ok(null);
 	}
 
@@ -217,7 +220,6 @@ public final class LetBindingHandler {
 		}
 		return -1;
 	}
-
 	private static Result<Void, CompileError> handleChainedLetBinding(
 			String varName,
 			String valueExpr,
@@ -229,7 +231,6 @@ public final class LetBindingHandler {
 			// Add this variable to the context
 			java.util.Map<String, Integer> newContext = new java.util.HashMap<>(variableAddresses);
 			newContext.put(varName, nextMemAddr);
-
 			// Parse the chained let binding
 			int nextEqualsIndex = continuation.indexOf('=');
 			if (nextEqualsIndex == -1) {
@@ -239,12 +240,10 @@ public final class LetBindingHandler {
 			if (nextSemiIndex == -1) {
 				return Result.err(new CompileError("Invalid let binding: missing ';'"));
 			}
-
 			// Extract the second binding's parts
 			String secondDeclPart = continuation.substring(4, nextEqualsIndex).trim(); // Skip "let "
 			String secondValueExpr = continuation.substring(nextEqualsIndex + 1, nextSemiIndex).trim();
 			String nextContinuation = continuation.substring(nextSemiIndex + 1).trim();
-
 			// Check if the second binding declares a pointer type
 			boolean isPointerType = false;
 			String declaredType = null;
@@ -255,7 +254,6 @@ public final class LetBindingHandler {
 					isPointerType = declaredType.startsWith("*");
 				}
 			}
-
 			// For pointer types with reference operator, just continue without type
 			// checking
 			// For other types, we should validate type compatibility
@@ -284,7 +282,6 @@ public final class LetBindingHandler {
 			if (!secondValueExpr.trim().startsWith("&")) {
 				substitutedValueExpr = secondValueExpr.replaceAll("\\b" + varName + "\\b", valueExpr);
 			}
-
 			// Rebuild the continuation with substituted value
 			String substitutedContinuation = "let " + secondDeclPart + " = " + substitutedValueExpr + "; " + nextContinuation;
 
@@ -463,10 +460,13 @@ public final class LetBindingHandler {
 		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
 		return Result.ok(null);
 	}
+
 	private static Result<Void, CompileError> parseAndStoreAssignment(String valueExpr, List<Instruction> instructions) {
 		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(valueExpr);
-		return exprResult.isErr() ? Result.err(exprResult.errValue()) : App.generateInstructions(exprResult.okValue(), instructions);
+		return exprResult.isErr() ? Result.err(exprResult.errValue())
+				: App.generateInstructions(exprResult.okValue(), instructions);
 	}
+
 	private static Result<AssignmentParseResult, CompileError> parseAssignment(String varName, String remaining) {
 		// Check if there's an assignment: varName = expr OR *varName = expr
 		String trimmed = remaining.trim();

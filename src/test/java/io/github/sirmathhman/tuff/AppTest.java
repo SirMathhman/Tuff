@@ -225,6 +225,11 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportScopedBlockWithMutableVariableAssignmentAndOuterReturn() {
+		assertValidWithInput("let mut x = 0; { x = read I32; } x", 42, 42);
+	}
+
+	@Test
 	void shouldReadBoolZero() {
 		assertValidWithInput("read Bool", 0, 0);
 	}
@@ -538,6 +543,26 @@ public final class AppTest {
 	@Test
 	void shouldRejectIfElseWithNonBoolCondition() {
 		assertInvalid("if (read U8) 3 else 5");
+	}
+
+	@Test
+	void shouldSupportBitwiseAndWithTwoReads() {
+		assertValidWithInput("read U8 & read U8", 8, 0b1010, 0b1100);
+	}
+
+	@Test
+	void shouldSupportBitwiseAndWithLiterals() {
+		assertValidWithInput("240U8 & 170U8", 160);
+	}
+
+	@Test
+	void shouldSupportBitwiseAndInLetBinding() {
+		assertValidWithInput("let x = read U8 & read U8; x", 8, 0b1010, 0b1100);
+	}
+
+	@Test
+	void shouldSupportBitwiseAndWithMultipleReads() {
+		assertValidWithInput("read U8 & read U8 & read U8", 8, 0b1111, 0b1100, 0b1010);
 	}
 
 	// TODO: Support if/else with assignments in branches

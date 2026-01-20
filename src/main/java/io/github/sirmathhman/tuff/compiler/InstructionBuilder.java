@@ -215,7 +215,7 @@ public final class InstructionBuilder {
 			int readRegIndex, boolean firstAdditiveGroup, int resultReg, List<Instruction> instructions) {
 		ExpressionModel.ExpressionTerm term = terms.get(i);
 
-		// Collect this multiplicative/divisive group
+		// Collect this multiplicative/divisive/bitwise group
 		java.util.List<Integer> groupRegs = new java.util.ArrayList<>();
 		java.util.List<Character> groupOps = new java.util.ArrayList<>();
 		groupRegs.add(readRegIndex);
@@ -223,12 +223,18 @@ public final class InstructionBuilder {
 		boolean isSubtracted = term.isSubtracted();
 		readRegIndex++;
 
-		// Consume all multiplied/divided terms that follow
+		// Consume all multiplied/divided/bitwise-anded terms that follow
 		while (isMultiplicativeNext(terms, i) && !terms.get(i).isParenthesizedGroupEnd()) {
 			i++;
 			ExpressionModel.ExpressionTerm nextTerm = terms.get(i);
 			groupRegs.add(readRegIndex);
-			groupOps.add(nextTerm.isDivided() ? '/' : '*');
+			// Use the actual operator char stored in the term
+			char op = nextTerm.multiplicativeOperator;
+			if (op == '\0') {
+				// No operator stored - infer from flags (backward compatibility)
+				op = nextTerm.isDivided() ? '/' : '*';
+			}
+			groupOps.add(op);
 			readRegIndex++;
 		}
 
@@ -276,7 +282,7 @@ public final class InstructionBuilder {
 	}
 
 	private static boolean isMultiplicativeNext(List<ExpressionModel.ExpressionTerm> terms, int i) {
-		return i + 1 < terms.size() && (terms.get(i + 1).isMultiplied() || terms.get(i + 1).isDivided())
+		return i + 1 < terms.size() && (terms.get(i + 1).isMultiplied() || terms.get(i + 1).isDivided() || terms.get(i + 1).multiplicativeOperator == '&')
 				&& terms.get(i + 1).readCount > 0;
 	}
 
@@ -330,10 +336,14 @@ public final class InstructionBuilder {
 				return resultReg;
 			}
 		} else {
-			// Multiple reads: perform multiplications and divisions
+			// Multiple reads: perform multiplications, divisions, and bitwise operations
 			int groupResultReg = groupRegs.get(0);
 			for (int j = 1; j < groupRegs.size(); j++) {
-				Operation op = groupOps.get(j) == '/' ? Operation.Div : Operation.Mul;
+				Operation op = switch (groupOps.get(j)) {
+					case '/' -> Operation.Div;
+					case '&' -> Operation.BitsAnd;
+					default -> Operation.Mul;
+				};
 				instructions.add(new Instruction(op, Variant.Immediate, groupResultReg, (long) groupRegs.get(j)));
 			}
 
