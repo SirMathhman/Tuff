@@ -75,7 +75,7 @@ public final class InstructionBuilder {
 		}
 
 		List<ExpressionModel.ExpressionTerm> condTerms = terms.subList(0, markers.branchIdx);
-		buildSubExpressionResult(condTerms, 0, instructions);
+		buildResultWithPrecedence(condTerms, instructions);
 
 		final int formulaReg = 1;
 		final int trueValueReg = 2;

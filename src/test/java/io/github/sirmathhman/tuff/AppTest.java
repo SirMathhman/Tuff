@@ -524,11 +524,10 @@ public final class AppTest {
 		assertValidWithInput("if (read U8 > read U8) 100 else 50", 100, 60, 20);
 	}
 
-	// TODO: Fix comparison-based conditionals
-	// @Test
-	// void shouldSupportIfElseWithCompareFalse() {
-	// assertValidWithInput("if (read U8 > read U8) 100 else 50", 50, 20, 60);
-	// }
+	@Test
+	void shouldSupportIfElseWithCompareFalse() {
+		assertValidWithInput("if (read U8 > read U8) 100 else 50", 50, 20, 60);
+	}
 
 	@Test
 	void shouldSupportIfElseInLetBinding() {
