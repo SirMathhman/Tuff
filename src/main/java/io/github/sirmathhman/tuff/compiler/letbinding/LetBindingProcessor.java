@@ -30,14 +30,16 @@ public final class LetBindingProcessor {
 			declPart = declPart.substring(4).trim();
 		}
 		String varName;
+		String declaredType = null;
 		if (declPart.contains(":")) {
 			String[] parts = declPart.split(":");
 			varName = parts[0].trim();
+			declaredType = parts[1].trim();
 		} else {
 			varName = declPart.trim();
 		}
 		String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
-		return new VariableDecl(varName, isMutable, valueExpr);
+		return new VariableDecl(varName, isMutable, valueExpr, declaredType);
 	}
 
 	public static Result<Void, CompileError> process(
@@ -48,6 +50,19 @@ public final class LetBindingProcessor {
 			List<Instruction> instructions,
 			Map<String, Integer> variableAddresses,
 			int nextMemAddr) {
+		return process(stmt, equalsIndex, semiIndex, continuation, instructions, variableAddresses, nextMemAddr,
+				new java.util.HashMap<>());
+	}
+
+	public static Result<Void, CompileError> process(
+			String stmt,
+			int equalsIndex,
+			int semiIndex,
+			String continuation,
+			List<Instruction> instructions,
+			Map<String, Integer> variableAddresses,
+			int nextMemAddr,
+			Map<String, StructDefinition> structRegistry) {
 		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
 		String varName = decl.varName();
 
@@ -56,6 +71,35 @@ public final class LetBindingProcessor {
 				variableAddresses, nextMemAddr);
 		if (earlyResult != null) {
 			return earlyResult;
+		}
+
+		// Handle struct field access on declared struct variables (e.g., temp.value)
+		if (decl.declaredType() != null && continuation.startsWith(varName + ".")) {
+			// Try to parse the struct value expression directly using struct instantiation
+			// handler
+			Result<StructInstantiationHandler.StructInstantiationResult, CompileError> structResult = StructInstantiationHandler
+					.parseStructInstantiation(decl.valueExpr(), structRegistry);
+			if (structResult instanceof Result.Ok<StructInstantiationHandler.StructInstantiationResult, CompileError> ok) {
+				StructInstantiationHandler.StructInstantiationResult instResult = ok.value();
+				// Generate instructions for the first field value
+				if (!instResult.fieldValues().isEmpty()) {
+					// For now, just evaluate to the first field value directly
+					// The struct instantiation already handled this in our simplified model
+					Result<ExpressionModel.ExpressionResult, CompileError> fieldResult = App
+							.parseExpressionWithRead(instResult.fieldValues().values().iterator().next());
+					if (fieldResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
+						return Result.err(((Result.Err<ExpressionModel.ExpressionResult, CompileError>) fieldResult).error());
+					}
+					ExpressionModel.ExpressionResult fieldExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) fieldResult)
+							.value();
+					Result<Void, CompileError> genResult = App.generateInstructions(fieldExpr, instructions);
+					if (genResult instanceof Result.Err<Void, CompileError>) {
+						return genResult;
+					}
+				}
+				return Result.ok(null);
+			}
+			// If struct parsing fails, fall through to normal path
 		}
 
 		// Handle variable substitution cases

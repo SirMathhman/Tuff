@@ -81,7 +81,7 @@ public final class App {
 
 		// Check if this is a let binding at statement level
 		if (stmt.startsWith("let ")) {
-			return handleLetBindingStatement(stmt, instructions);
+			return handleLetBindingStatement(stmt, instructions, definedStructs, structRegistry);
 		}
 
 		// Check if this is a struct instantiation at statement level
@@ -94,7 +94,8 @@ public final class App {
 				.flatMap(expr -> generateInstructions(expr, instructions));
 	}
 
-	private static Result<Void, CompileError> handleLetBindingStatement(String stmt, List<Instruction> instructions) {
+	private static Result<Void, CompileError> handleLetBindingStatement(String stmt, List<Instruction> instructions,
+			Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
 		// Peek ahead to see if this is a chained let binding
 		// Format: "let x = expr1; let y = expr2; z"
 		// vs single: "let x = expr; x"
@@ -139,7 +140,7 @@ public final class App {
 		// Use LetBindingHandler for all statement-level let bindings
 		// (both single and chained)
 		return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
-				instructions);
+				instructions, structRegistry);
 	}
 
 	private static Result<Void, CompileError> handleStructInstantiationStatement(String stmt,
@@ -266,6 +267,17 @@ public final class App {
 		if (ConditionalExpressionHandler.hasConditional(expr)) {
 			return ConditionalExpressionHandler.parseConditional(expr);
 		}
+
+		// Check if this is a struct instantiation (before normalizing braces!)
+		if (StructInstantiationHandler.isStructInstantiation(expr, new java.util.HashMap<>())) {
+			Result<StructInstantiationHandler.StructInstantiationResult, CompileError> structResult = StructInstantiationHandler
+					.parseStructInstantiation(expr, new java.util.HashMap<>());
+			if (structResult instanceof Result.Ok<StructInstantiationHandler.StructInstantiationResult, CompileError> ok) {
+				// Return the struct instantiation result directly
+				return Result.ok(ok.value().expressionResult());
+			}
+		}
+
 		// Normalize curly braces to parentheses for uniform grouping support
 		expr = expr.replace('{', '(').replace('}', ')');
 		// Split by || (logical OR) first - lowest precedence

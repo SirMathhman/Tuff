@@ -9,24 +9,42 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class StructInstantiationHandler {
+public final class StructInstantiationHandler {	private static record ParsedStructData(String body, String afterInstantiation) {
+	}
 	private StructInstantiationHandler() {
 	}
 
 	public static boolean isStructInstantiation(String expr, Map<String, StructDefinition> structRegistry) {
 		// Check if expression starts with a struct name followed by {
+		// If registry is empty, just check the syntactic pattern
 		int spacePos = expr.indexOf(' ');
 		if (spacePos == -1) {
 			return false;
 		}
 
 		String potentialName = expr.substring(0, spacePos);
-		return structRegistry.containsKey(potentialName)
-				&& expr.trim().substring(potentialName.length()).trim().startsWith("{");
+		String rest = expr.trim().substring(potentialName.length()).trim();
+		if (!rest.startsWith("{")) {
+			return false;
+		}
+
+		// If registry is provided and non-empty, check if name is registered
+		if (!structRegistry.isEmpty()) {
+			return structRegistry.containsKey(potentialName);
+		}
+
+		// If registry is empty, accept the syntactic pattern (assume struct is defined
+		// elsewhere)
+		return true;
 	}
 
 	public static Result<StructInstantiationResult, CompileError> parseStructInstantiation(String expr,
 			Map<String, StructDefinition> structRegistry) {
+		// For empty registry, parse syntactically without validation
+		if (structRegistry.isEmpty()) {
+			return parseStructInstantiationWithoutRegistry(expr);
+		}
+
 		// Extract struct name
 		int spacePos = expr.indexOf(' ');
 		if (spacePos == -1) {
@@ -39,7 +57,69 @@ public final class StructInstantiationHandler {
 			return Result.err(new CompileError("Undefined struct: " + structName));
 		}
 
-		String remaining = expr.substring(spacePos).trim();
+		return parseAndProcessStruct(expr.substring(spacePos).trim(), structName, definition, true);
+	}
+
+	private static Result<StructInstantiationResult, CompileError> parseStructInstantiationWithoutRegistry(String expr) {
+		// Parse without a registry - just extract the structure
+		int spacePos = expr.indexOf(' ');
+		if (spacePos == -1) {
+			return Result.err(new CompileError("Invalid struct instantiation"));
+		}
+
+		String structName = expr.substring(0, spacePos);
+		return parseAndProcessStruct(expr.substring(spacePos).trim(), structName, null, false);
+	}
+
+	private static Result<StructInstantiationResult, CompileError> parseAndProcessStruct(String remaining,
+			String structName, StructDefinition definition, boolean withRegistry) {
+		// Parse the struct syntax
+		Result<ParsedStructData, CompileError> parseResult = parseStructSyntax(remaining);
+		if (parseResult instanceof Result.Err<ParsedStructData, CompileError>) {
+			return Result.err(((Result.Err<ParsedStructData, CompileError>) parseResult).error());
+		}
+		ParsedStructData parsed = ((Result.Ok<ParsedStructData, CompileError>) parseResult).value();
+
+		if (withRegistry) {
+			return processStructWithRegistry(structName, parsed, definition);
+		} else {
+			return processStructWithoutRegistry(structName, parsed);
+		}
+	}
+
+	private static Result<StructInstantiationResult, CompileError> processStructWithRegistry(String structName,
+			ParsedStructData parsed, StructDefinition definition) {
+		// Parse field assignments
+		Result<Map<String, String>, CompileError> fieldsResult = parseFieldAssignments(parsed.body(), definition);
+		if (fieldsResult instanceof Result.Err<Map<String, String>, CompileError>) {
+			return Result.err(((Result.Err<Map<String, String>, CompileError>) fieldsResult).error());
+		}
+
+		// For now, return a literal 0 with metadata about the struct
+		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
+		Map<String, String> fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldsResult).value();
+		return Result.ok(
+				new StructInstantiationResult(result, parsed.afterInstantiation(), structName, fieldValues, definition));
+	}
+
+	private static Result<StructInstantiationResult, CompileError> processStructWithoutRegistry(String structName,
+			ParsedStructData parsed) {
+		// Use extractFieldValuesFromBody helper to parse field assignments
+		Result<Map<String, String>, CompileError> fieldResult = extractFieldValuesFromBody(parsed.body());
+		if (fieldResult instanceof Result.Err<Map<String, String>, CompileError>) {
+			return Result.err(((Result.Err<Map<String, String>, CompileError>) fieldResult).error());
+		}
+
+		Map<String, String> fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldResult).value();
+
+		// Return result without a definition (since we don't have a registry)
+		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
+		return Result.ok(new StructInstantiationResult(result, parsed.afterInstantiation(), structName, fieldValues, null));
+	}
+
+	private static Result<ParsedStructData, CompileError> parseStructSyntax(String remaining) {
 		if (!remaining.startsWith("{")) {
 			return Result.err(new CompileError("Struct instantiation must have opening brace"));
 		}
@@ -51,19 +131,53 @@ public final class StructInstantiationHandler {
 
 		String body = remaining.substring(1, closingBrace).trim();
 		String afterInstantiation = remaining.substring(closingBrace + 1).trim();
+		return Result.ok(new ParsedStructData(body, afterInstantiation));
+	}
 
-		// Parse field assignments
-		Result<Map<String, String>, CompileError> fieldsResult = parseFieldAssignments(body, definition);
-		if (fieldsResult instanceof Result.Err<Map<String, String>, CompileError>) {
-			return Result.err(((Result.Err<Map<String, String>, CompileError>) fieldsResult).error());
+	private static Result<Map<String, String>, CompileError> extractFieldValuesFromBody(String body) {
+		Map<String, String> fieldValues = new HashMap<>();
+		String fieldRemaining = body;
+
+		while (!fieldRemaining.isEmpty()) {
+			fieldRemaining = fieldRemaining.trim();
+			if (fieldRemaining.isEmpty()) {
+				break;
+			}
+
+			int colonIdx = fieldRemaining.indexOf(':');
+			if (colonIdx == -1) {
+				return Result.err(new CompileError("Field assignment must have colon"));
+			}
+
+			String fieldName = fieldRemaining.substring(0, colonIdx).trim();
+			String afterColon = fieldRemaining.substring(colonIdx + 1).trim();
+
+			// Find the end of this field value (comma or end of string)
+			int depth = 0;
+			int valueEnd = afterColon.length();
+			for (int i = 0; i < afterColon.length(); i++) {
+				char c = afterColon.charAt(i);
+				if (c == '(' || c == '{') {
+					depth++;
+				} else if (c == ')' || c == '}') {
+					depth--;
+				} else if (c == ',' && depth == 0) {
+					valueEnd = i;
+					break;
+				}
+			}
+
+			String fieldValue = afterColon.substring(0, valueEnd).trim();
+			fieldValues.put(fieldName, fieldValue);
+
+			// Move to next field
+			fieldRemaining = afterColon.substring(valueEnd).trim();
+			if (fieldRemaining.startsWith(",")) {
+				fieldRemaining = fieldRemaining.substring(1).trim();
+			}
 		}
 
-		// For now, return a literal 0 with metadata about the struct
-		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
-		ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
-		Map<String, String> fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldsResult).value();
-		return Result.ok(
-				new StructInstantiationResult(result, afterInstantiation, structName, fieldValues, definition));
+		return Result.ok(fieldValues);
 	}
 
 	private static Result<Map<String, String>, CompileError> parseFieldAssignments(String body,
