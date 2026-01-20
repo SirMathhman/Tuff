@@ -11,6 +11,26 @@ public final class LogicalOperatorHandler {
 	private LogicalOperatorHandler() {
 	}
 
+	// Splitting methods (consolidated from individual handlers)
+	public static List<String> splitByLogicalAnd(String expr) {
+		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '&', '&');
+	}
+
+	public static List<String> splitByLogicalOr(String expr) {
+		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '|', '|');
+	}
+
+	// Parsing methods
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLogicalAndExpression(
+			List<String> andTokens) {
+		return parseLogicalExpression(andTokens, true);
+	}
+
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLogicalOrExpression(
+			List<String> orTokens) {
+		return parseLogicalExpression(orTokens, false);
+	}
+
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLogicalExpression(
 			List<String> tokens, boolean isAndOperator) {
 		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>();

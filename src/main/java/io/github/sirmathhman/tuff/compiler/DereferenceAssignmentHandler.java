@@ -74,7 +74,7 @@ public final class DereferenceAssignmentHandler {
 
 		// If remaining is a variable reference, load it
 		if (addresses.containsKey(remaining)) {
-			ParsingUtils.addLoadAndHalt(instructions, addresses.get(remaining));
+			DepthAwareSplitter.addLoadAndHalt(instructions, addresses.get(remaining));
 			return Result.ok(null);
 		}
 
@@ -97,7 +97,7 @@ public final class DereferenceAssignmentHandler {
 		}
 
 		// Find semicolon with depth tracking for nested structures
-		int assignSemiIndex = ParsingUtils.findSemicolonAtDepthZero(continuation, assignEqIndex);
+		int assignSemiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(continuation, assignEqIndex);
 		if (assignSemiIndex == -1) {
 			return Result.err(new CompileError("Invalid dereference assignment: missing ';'"));
 		}

@@ -2,19 +2,13 @@ package io.github.sirmathhman.tuff;
 
 import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
 import io.github.sirmathhman.tuff.compiler.BitwiseNotParser;
+import io.github.sirmathhman.tuff.compiler.ComparisonOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
-import io.github.sirmathhman.tuff.compiler.EqualityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
-import io.github.sirmathhman.tuff.compiler.GreaterOrEqualOperatorHandler;
-import io.github.sirmathhman.tuff.compiler.GreaterThanOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
-import io.github.sirmathhman.tuff.compiler.InequalityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
-import io.github.sirmathhman.tuff.compiler.LessOrEqualOperatorHandler;
-import io.github.sirmathhman.tuff.compiler.LessThanOperatorHandler;
-import io.github.sirmathhman.tuff.compiler.LogicalAndHandler;
-import io.github.sirmathhman.tuff.compiler.LogicalOrHandler;
+import io.github.sirmathhman.tuff.compiler.LogicalOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.MultiplicativeExpressionBuilder;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
@@ -152,17 +146,17 @@ public final class App {
 		// Normalize curly braces to parentheses for uniform grouping support
 		expr = expr.replace('{', '(').replace('}', ')');
 		// Split by || (logical OR) first - lowest precedence
-		List<String> orTokens = LogicalOrHandler.splitByLogicalOr(expr);
+		List<String> orTokens = LogicalOperatorHandler.splitByLogicalOr(expr);
 		if (orTokens.size() > 1) {
 			// We have logical OR operations - parse each side and combine
-			return LogicalOrHandler.parseLogicalOrExpression(orTokens);
+			return LogicalOperatorHandler.parseLogicalOrExpression(orTokens);
 		}
 
 		// Split by && (logical AND) - higher precedence than OR
-		List<String> andTokens = LogicalAndHandler.splitByLogicalAnd(expr);
+		List<String> andTokens = LogicalOperatorHandler.splitByLogicalAnd(expr);
 		if (andTokens.size() > 1) {
 			// We have logical AND operations - parse each side and combine
-			return LogicalAndHandler.parseLogicalAndExpression(andTokens);
+			return LogicalOperatorHandler.parseLogicalAndExpression(andTokens);
 		}
 
 		// Try comparison operators (all at same precedence level)
@@ -176,24 +170,24 @@ public final class App {
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {
-		var le = LessOrEqualOperatorHandler.splitByLessOrEqual(expr);
+		var le = ComparisonOperatorHandler.splitByLessOrEqual(expr);
 		if (le.size() > 1)
-			return LessOrEqualOperatorHandler.parseLessOrEqualExpression(le);
-		var ge = GreaterOrEqualOperatorHandler.splitByGreaterOrEqual(expr);
+			return ComparisonOperatorHandler.parseLessOrEqualExpression(le);
+		var ge = ComparisonOperatorHandler.splitByGreaterOrEqual(expr);
 		if (ge.size() > 1)
-			return GreaterOrEqualOperatorHandler.parseGreaterOrEqualExpression(ge);
-		var lt = LessThanOperatorHandler.splitByLessThan(expr);
+			return ComparisonOperatorHandler.parseGreaterOrEqualExpression(ge);
+		var lt = ComparisonOperatorHandler.splitByLessThan(expr);
 		if (lt.size() > 1)
-			return LessThanOperatorHandler.parseLessThanExpression(lt);
-		var gt = GreaterThanOperatorHandler.splitByGreaterThan(expr);
+			return ComparisonOperatorHandler.parseLessThanExpression(lt);
+		var gt = ComparisonOperatorHandler.splitByGreaterThan(expr);
 		if (gt.size() > 1)
-			return GreaterThanOperatorHandler.parseGreaterThanExpression(gt);
-		var eq = EqualityOperatorHandler.splitByEquality(expr);
+			return ComparisonOperatorHandler.parseGreaterThanExpression(gt);
+		var eq = ComparisonOperatorHandler.splitByEquality(expr);
 		if (eq.size() > 1)
-			return EqualityOperatorHandler.parseEqualityExpression(eq);
-		var neq = InequalityOperatorHandler.splitByInequality(expr);
+			return ComparisonOperatorHandler.parseEqualityExpression(eq);
+		var neq = ComparisonOperatorHandler.splitByInequality(expr);
 		if (neq.size() > 1)
-			return InequalityOperatorHandler.parseInequalityExpression(neq);
+			return ComparisonOperatorHandler.parseInequalityExpression(neq);
 		return Result.err(new CompileError("No comparison operator found"));
 	}
 

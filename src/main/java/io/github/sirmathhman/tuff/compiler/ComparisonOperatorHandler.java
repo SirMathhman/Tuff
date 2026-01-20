@@ -10,6 +10,32 @@ public final class ComparisonOperatorHandler {
 	private ComparisonOperatorHandler() {
 	}
 
+	// Splitting methods (consolidated from individual handlers)
+	public static List<String> splitByEquality(String expr) {
+		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '=', '=');
+	}
+
+	public static List<String> splitByInequality(String expr) {
+		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '!', '=');
+	}
+
+	public static List<String> splitByLessThan(String expr) {
+		return DepthAwareSplitter.splitByDelimiterAtDepthZero(expr, '<');
+	}
+
+	public static List<String> splitByGreaterThan(String expr) {
+		return DepthAwareSplitter.splitByDelimiterAtDepthZero(expr, '>');
+	}
+
+	public static List<String> splitByLessOrEqual(String expr) {
+		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '<', '=');
+	}
+
+	public static List<String> splitByGreaterOrEqual(String expr) {
+		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '>', '=');
+	}
+
+	// Parsing methods
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseEqualityExpression(
 			List<String> eqTokens) {
 		return parseComparisonExpression(eqTokens, 0);

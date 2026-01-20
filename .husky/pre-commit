@@ -1,1 +1,1 @@
-mvn test --quiet && mvn verify && pmd cpd --dir src --language java --minimum-tokens 50 --format markdown
+mvn test --quiet && mvn verify && pmd cpd --dir src --language java --minimum-tokens 50 --format markdown && python check_package_class_limit.py

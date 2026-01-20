@@ -306,7 +306,7 @@ public final class LetBindingHandler {
 		return storeAndThen(valueExpr, instructions, nextMemAddr, () -> {
 			// Load the referenced variable from memory
 			int refAddr = variableAddresses.get(continuation);
-			ParsingUtils.addLoadAndHalt(instructions, (long) refAddr);
+				DepthAwareSplitter.addLoadAndHalt(instructions, (long) refAddr);
 			return Result.ok(null);
 		});
 	}
@@ -410,7 +410,7 @@ public final class LetBindingHandler {
 			int eqIndex = remaining.indexOf('=');
 			if (eqIndex == -1)
 				break;
-			int semiIndex = ParsingUtils.findSemicolonAtDepthZero(remaining, eqIndex);
+			int semiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(remaining, eqIndex);
 			if (semiIndex == -1)
 				break;
 			remaining = remaining.substring(semiIndex + 1).trim();
@@ -463,7 +463,7 @@ public final class LetBindingHandler {
 		} else {
 			return Result.err(new CompileError("Not an assignment"));
 		}
-		int assignSemiIndex = ParsingUtils.findSemicolonAtDepthZero(remaining, assignEqIndex);
+		int assignSemiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(remaining, assignEqIndex);
 		if (assignSemiIndex == -1) {
 			return Result.err(new CompileError("Invalid assignment: missing ';'"));
 		}
