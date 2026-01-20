@@ -695,9 +695,15 @@ public final class AppTest {
 		assertValidWithInput("let mut x = read I32; x += read I32; x *= read I32; x", 35, 3, 4, 5);
 	}
 
-	// TODO: Support if/else with assignments in branches
-	// Should support: let x : U8; if (read Bool) x = 2; else x = 3; x
-	// This requires proper jump instruction generation for conditional branches
+	@Test
+	void shouldSupportConditionalAssignmentToUninitializedVariable() {
+		assertValidWithInput("let x : I32; if (read Bool) x = 1; else x = 2; x", 1, 1);
+	}
+
+	@Test
+	void shouldSupportConditionalAssignmentToUninitializedVariableElseBranch() {
+		assertValidWithInput("let x : I32; if (read Bool) x = 1; else x = 2; x", 2, 0);
+	}
 
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
