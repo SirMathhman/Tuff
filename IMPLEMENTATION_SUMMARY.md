@@ -1,12 +1,21 @@
-# Bitwise XOR Operator Implementation - Summary
+# Bitwise Operators Implementation - Summary
 
 ## Implementation Complete ✓
 
-Successfully implemented the bitwise XOR (`^`) operator for unsigned integer types in the Tuff compiler with full test coverage and code quality compliance.
+Successfully implemented bitwise shift operators (`<<`, `>>`), completing the full bitwise operator set for the Tuff compiler with full test coverage and code quality compliance.
 
 ### Commits Made
 
-1. **cd2cf95a** - Implement bitwise XOR (^) operator support
+1. **1a54a564** - Implement bitwise shift operators (<< and >>)
+   - Added left and right shift operator recognition at multiplicative precedence
+   - Fixed critical parser precedence bug preventing shift operators from being parsed correctly
+   - Updated DepthAwareSplitter to treat << and >> as complete two-character tokens
+   - Added compile-time shift evaluation for literal operations
+   - Added shift cases to InstructionBuilder for runtime instruction generation
+   - Added 5 comprehensive test cases covering multiple scenarios
+   - All tests passing (120/120) with 0 checkstyle violations
+
+2. **cd2cf95a** - Implement bitwise XOR (^) operator support
    - Added BitsXor operation to VM Operation enum
    - Implemented executeBitsXor in Vm.java with XOR bit operation
    - Updated expression parsing to recognize ^ operator at multiplicative precedence
@@ -23,84 +32,113 @@ Successfully implemented the bitwise XOR (`^`) operator for unsigned integer typ
 
 ### Test Results
 
-- **All tests passing**: 115/115 ✓
+- **All tests passing**: 120/120 ✓
 - **Checkstyle compliance**: 0 violations ✓
 - **Build status**: SUCCESS ✓
-- **New tests**: 4 XOR test cases added
+- **New tests**: 5 shift operator test cases added
 
 ### Key Implementation Details
 
 #### Files Modified
 
-- `Operation.java` - Added BitsXor enum between BitsOr and BitsNot
-- `Vm.java` - Added case statement and executeBitsXor method for XOR execution
-- `App.java` - Updated splitByMultOperators to recognize ^ operator; added ^ case to updateLiteral
-- `InstructionBuilder.java` - Added ^ to isMultiplicativeNext check; added ^ case to operation switch
-- `AppTest.java` - Added 4 new XOR test cases
+- `Operation.java` - BitsShiftLeft and BitsShiftRight already existed ✓
+- `Vm.java` - executeBitsShiftLeft and executeBitsShiftRight already existed ✓
+- `App.java` - Updated splitByMultOperators to recognize << and >> as two-character operators; added shift cases to updateLiteral
+- `InstructionBuilder.java` - Added << and >> to isMultiplicativeNext check; added shift cases to operation switch
+- `DepthAwareSplitter.java` - CRITICAL FIX: Added pre-check for two-character shift operators before delimiter detection to prevent comparison operator handlers from splitting them incorrectly
+- `AppTest.java` - Added 5 new shift operator test cases
 
 #### Operator Precedence
 
-XOR is treated as a multiplicative operator (same precedence as \*, /, &, |):
+Shift operators are treated as multiplicative operators (same precedence as \*, /, &, |, ^):
 
 1. Logical OR (`||`)
 2. Logical AND (`&&`)
 3. Comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`)
 4. Additive operators (`+`, `-`)
-5. **Multiplicative operators (`*`, `/`, `&`, `|`, `^`)** ← XOR here
+5. **Multiplicative operators (`*`, `/`, `&`, `|`, `^`, `<<`, `>>`)** ← Shift operators here
 6. Unary NOT (`~`, `!`)
 
 #### Test Coverage
 
-1. **Two-operand XOR**: `read U8 ^ read U8` with inputs (0b1010, 0b1100) → 6
-2. **Literal XOR**: `240U8 ^ 170U8` → 90
-3. **Let binding**: `let x = read U8 ^ read U8; x` → 6
-4. **Chained XOR**: `read U8 ^ read U8 ^ read U8` with inputs (0b1010, 0b1100, 0b1111) → 9
+**Left Shift Tests**:
+1. **Two-operand left shift**: `read U8 << read U8` with inputs (10, 1) → 20
+2. **Literal left shift**: `5U8 << 2U8` → 20
+3. **Let binding with left shift**: `let x = read U8 << read U8; x` → 20
+
+**Right Shift Tests**:
+4. **Two-operand right shift**: `read U8 >> read U8` with inputs (20, 2) → 5
+5. **Literal right shift**: `20U8 >> 2U8` → 5
 
 #### Mathematical Verification
 
-- 0b1010 (10) ^ 0b1100 (12) = 0b0110 (6) ✓
-- 240 ^ 170 = 90 ✓
-- 0b1010 ^ 0b1100 ^ 0b1111 = 0b1001 (9) ✓
+- 10 << 1 = 20 (bit shift left by 1 position) ✓
+- 5 << 2 = 20 (bit shift left by 2 positions) ✓
+- 20 >> 2 = 5 (bit shift right by 2 positions) ✓
+
+#### Critical Bug Fixed
+
+**The Bug**: Comparison operators (< and >) were consuming the first character of shift operators (<< and >>), causing the parser to incorrectly treat `read U8 << read U8` as `read U8 < (read U8 << ...)` with a precedence violation.
+
+**Root Cause**: LessThanOperatorHandler and GreaterThanOperatorHandler were splitting expressions in DepthAwareSplitter before multiplicative operators were processed.
+
+**The Fix**: Modified DepthAwareSplitter.splitWithDelimiterChecker to detect two-character operators (<<, >>) BEFORE treating the first character as a delimiter:
+
+```java
+if ((c == '<' && nextChar == '<') || (c == '>' && nextChar == '>')) {
+    // Both characters belong to shift operator
+    token.append(c);
+    i++;  // Skip next character since we're appending it
+    token.append(expr.charAt(i));
+} else if (checker.isDelimiter(c, i) && depth == 0) {
+    // Normal delimiter handling
+    result.add(token.toString().trim());
+    // ...
+}
+```
+
+This ensures shift operators are parsed correctly and not split by comparison operator handlers.
 
 ### Architecture Alignment
 
-The XOR implementation follows the established bitwise operator pattern:
+The shift operator implementation follows the established bitwise operator pattern:
 
-1. **Expression Recognition**: Splits expressions at ^ character (depth 0)
-2. **Compile-time Evaluation**: XOR of literals computed during compilation
-3. **Runtime Execution**: XOR register operations via executeBitsXor in VM
-4. **Instruction Generation**: InstructionBuilder emits BitsXor operations
+1. **Expression Recognition**: Splits expressions at << and >> characters (recognizing them as complete two-character tokens)
+2. **Compile-time Evaluation**: Shifts of literals computed during compilation
+3. **Runtime Execution**: Shift register operations via executeBitsShiftLeft/executeBitsShiftRight in VM
+4. **Instruction Generation**: InstructionBuilder emits BitsShiftLeft/BitsShiftRight operations
+5. **Parser Precedence Fix**: Critical fix in DepthAwareSplitter ensures shift operators aren't consumed by comparison operator handlers
 
-This matches the existing AND (&) and OR (|) operator implementations exactly.
+This matches the existing AND (&), OR (|), and XOR (^) operator implementations exactly, with the added complexity of handling multi-character operator tokens.
 
 ---
 
 ## Feature Recommendations (Aligned with Roadmap)
 
-### 1. **Remaining Bitwise Operators (`<<`, `>>`)**
-
-- **Priority**: Medium
-- **Effort**: Low (1-2 hours)
-- **Why**: Completes bitwise operation set; useful for bit manipulation
-- **Implementation**: Add shift operators at multiplicative precedence, similar to AND/OR/XOR
-- **Tests**: 4+ test cases for left/right shifts with various values
-
-### 2. **Type-Aware Bitwise Operations**
-
-- **Priority**: Medium
-- **Effort**: Low (1-2 hours)
-- **Why**: Ensure consistency across all unsigned integer types (U8, U16, U32)
-- **Current**: Works for all types; could add masking for type-safe operations
-- **Implementation**: Already working; consider adding I8/I16/I32 support if needed
-- **Tests**: Cross-type XOR (e.g., `read U8 ^ read U16` with implicit upcasting)
-
-### 3. **Logical NOT Operator (`!`)**
+### 1. **Logical NOT Operator (`!`)**
 
 - **Priority**: High
 - **Effort**: Low (1-2 hours)
 - **Why**: Complements logical AND/OR; essential for boolean logic
 - **Implementation**: Add ! parsing as unary operator, similar to ~
 - **Tests**: 4+ test cases for logical NOT on boolean expressions
+
+### 2. **Type-Aware Bitwise Operations for Signed Integers**
+
+- **Priority**: Medium
+- **Effort**: Low-Medium (2-3 hours)
+- **Why**: Current implementation works for unsigned; extend to I8/I16/I32
+- **Current**: Works for U8, U16, U32; consider signed integer support
+- **Implementation**: Add type checking to ensure shift operations work correctly with signed types
+- **Tests**: Cross-type shift tests (e.g., `read I32 << read I8`)
+
+### 3. **Increment/Decrement Operators (`++`, `--`)**
+
+- **Priority**: Medium
+- **Effort**: Medium (3-4 hours)
+- **Why**: Useful for loop control and counter management
+- **Implementation**: Add ++ and -- as unary operators or suffix operators on variables
+- **Tests**: Pre/post increment/decrement test cases for various types
 
 ---
 
@@ -177,6 +215,8 @@ The bitwise XOR operator implementation extends the Tuff language's bitwise capa
 - ✓ Bitwise OR (`|`)
 - ✓ Bitwise XOR (`^`)
 - ✓ Bitwise NOT (`~`)
+- ✓ Bitwise LEFT SHIFT (`<<`)
+- ✓ Bitwise RIGHT SHIFT (`>>`)
 - ✓ Comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`)
 - ✓ Logical operators (`&&`, `||`)
 - ✓ Conditional expressions (`if-else`)
@@ -185,9 +225,9 @@ The bitwise XOR operator implementation extends the Tuff language's bitwise capa
 
 **Next High-Priority Features**:
 
-1. Shift operators (`<<`, `>>`) - Low effort, completes bitwise set
-2. Logical NOT (`!`) - Low effort, complements boolean logic
+1. Logical NOT (`!`) - Low effort, complements boolean logic
+2. Signed integer support for shifts - Low effort, extends bitwise capabilities
 3. Function definitions and calls - High priority for code reuse
 4. Loop constructs (`while`, `for`) - Essential for iteration
 
-**Next Steps**: Recommend implementing shift operators as the next feature to complete the bitwise operator set, followed by logical NOT to complete boolean operations.
+**Next Steps**: Recommend implementing logical NOT operator as the next feature to complete boolean operations, followed by extending shift operators to signed integer types.
