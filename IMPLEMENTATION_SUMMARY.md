@@ -24,7 +24,7 @@ Successfully implemented bitwise shift operators (`<<`, `>>`), completing the fu
    - Added 4 comprehensive test cases covering multiple scenarios
    - All tests passing with 0 checkstyle violations
 
-2. **51eaa3b6** - Implement bitwise NOT (~) operator support
+3. **51eaa3b6** - Implement bitwise NOT (~) operator support
    - Created BitwiseNotParser utility class
    - Added readTypeSpec field to track type information
    - Added NOT operation parsing and instruction generation
@@ -62,13 +62,12 @@ Shift operators are treated as multiplicative operators (same precedence as \*, 
 #### Test Coverage
 
 **Left Shift Tests**:
+
 1. **Two-operand left shift**: `read U8 << read U8` with inputs (10, 1) → 20
 2. **Literal left shift**: `5U8 << 2U8` → 20
 3. **Let binding with left shift**: `let x = read U8 << read U8; x` → 20
 
-**Right Shift Tests**:
-4. **Two-operand right shift**: `read U8 >> read U8` with inputs (20, 2) → 5
-5. **Literal right shift**: `20U8 >> 2U8` → 5
+**Right Shift Tests**: 4. **Two-operand right shift**: `read U8 >> read U8` with inputs (20, 2) → 5 5. **Literal right shift**: `20U8 >> 2U8` → 5
 
 #### Mathematical Verification
 
