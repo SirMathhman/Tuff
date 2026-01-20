@@ -11,6 +11,7 @@ public enum Operation {
 	BitsShiftRight,
 	BitsAnd,
 	BitsOr,
+	BitsXor,
 	BitsNot,
 	In,
 	Out,

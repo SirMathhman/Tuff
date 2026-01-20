@@ -586,6 +586,26 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportBitwiseXorWithTwoReads() {
+		assertValidWithInput("read U8 ^ read U8", 6, 0b1010, 0b1100);
+	}
+
+	@Test
+	void shouldSupportBitwiseXorWithLiterals() {
+		assertValidWithInput("240U8 ^ 170U8", 90);
+	}
+
+	@Test
+	void shouldSupportBitwiseXorInLetBinding() {
+		assertValidWithInput("let x = read U8 ^ read U8; x", 6, 0b1010, 0b1100);
+	}
+
+	@Test
+	void shouldSupportBitwiseXorWithMultipleReads() {
+		assertValidWithInput("read U8 ^ read U8 ^ read U8", 9, 0b1010, 0b1100, 0b1111);
+	}
+
+	@Test
 	void shouldSupportBitwiseNotWithLiteral() {
 		assertValidWithInput("~10U8", 245);
 	}

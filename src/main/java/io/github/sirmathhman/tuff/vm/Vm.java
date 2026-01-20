@@ -79,6 +79,7 @@ public final class Vm {
 			case BitsShiftRight -> executeBitsShiftRight(registers, firstOperand, secondOperand);
 			case BitsAnd -> executeBitsAnd(registers, firstOperand, secondOperand);
 			case BitsOr -> executeBitsOr(registers, firstOperand, secondOperand);
+			case BitsXor -> executeBitsXor(registers, firstOperand, secondOperand);
 			case BitsNot -> executeBitsNot(registers, firstOperand);
 			case In -> executeIn(registers, firstOperand, read);
 			case Out -> executeOut(registers, firstOperand, write);
@@ -131,6 +132,11 @@ public final class Vm {
 
 	private static boolean executeBitsOr(long[] registers, long firstOperand, long secondOperand) {
 		registers[(int) firstOperand] |= registers[(int) secondOperand];
+		return false;
+	}
+
+	private static boolean executeBitsXor(long[] registers, long firstOperand, long secondOperand) {
+		registers[(int) firstOperand] ^= registers[(int) secondOperand];
 		return false;
 	}
 

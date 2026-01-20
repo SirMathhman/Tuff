@@ -362,6 +362,7 @@ public final class App {
 			case '/' -> Result.ok(value != 0 ? current / value : current);
 			case '&' -> Result.ok(current & value);
 			case '|' -> Result.ok(current | value);
+			case '^' -> Result.ok(current ^ value);
 			default -> Result.ok(current * value);
 		};
 	}
@@ -441,7 +442,7 @@ public final class App {
 			} else if (c == ')') {
 				depth--;
 				token.append(c);
-			} else if ((c == '*' || c == '/' || c == '&' || c == '|') && depth == 0) {
+			} else if ((c == '*' || c == '/' || c == '&' || c == '|' || c == '^') && depth == 0) {
 				// For & and |, check they're not part of && or ||
 				if ((c == '&' || c == '|') && i + 1 < expr.length() && expr.charAt(i + 1) == c) {
 					token.append(c);
