@@ -74,6 +74,28 @@ public sealed interface Result<T, X> {
 	<U> Result<Tuple<T, U>, X> and(Supplier<Result<U, X>> other);
 
 	/**
+	 * Matches on this Result and applies the appropriate function.
+	 * If this is Ok, applies the ok function to the success value.
+	 * If this is Err, applies the err function to the error value.
+	 *
+	 * @param <R>   The return type of both functions
+	 * @param okFn  The function to apply if this is Ok
+	 * @param errFn The function to apply if this is Err
+	 * @return The result of applying the appropriate function
+	 */
+	<R> R match(Function<T, R> okFn, Function<X, R> errFn);
+
+	/**
+	 * Consumes this Result by applying the appropriate function.
+	 * If this is Ok, applies the ok consumer to the success value.
+	 * If this is Err, applies the err consumer to the error value.
+	 *
+	 * @param okFn  The function to apply if this is Ok
+	 * @param errFn The function to apply if this is Err
+	 */
+	void consume(Function<T, Void> okFn, Function<X, Void> errFn);
+
+	/**
 	 * Gets the success value, or null if this is an error.
 	 *
 	 * @return The success value or null
@@ -130,6 +152,16 @@ public sealed interface Result<T, X> {
 		}
 
 		@Override
+		public <R> R match(Function<T, R> okFn, Function<X, R> errFn) {
+			return okFn.apply(value);
+		}
+
+		@Override
+		public void consume(Function<T, Void> okFn, Function<X, Void> errFn) {
+			okFn.apply(value);
+		}
+
+		@Override
 		public T okValue() {
 			return value;
 		}
@@ -172,6 +204,16 @@ public sealed interface Result<T, X> {
 		@Override
 		public <U> Result<Tuple<T, U>, X> and(Supplier<Result<U, X>> other) {
 			return Result.err(error);
+		}
+
+		@Override
+		public <R> R match(Function<T, R> okFn, Function<X, R> errFn) {
+			return errFn.apply(error);
+		}
+
+		@Override
+		public void consume(Function<T, Void> okFn, Function<X, Void> errFn) {
+			errFn.apply(error);
 		}
 
 		@Override
