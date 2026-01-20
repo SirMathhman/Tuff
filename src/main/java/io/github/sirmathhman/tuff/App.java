@@ -146,38 +146,70 @@ public final class App {
 			List<Instruction> instructions, Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
 		return StructInstantiationHandler.parseStructInstantiation(stmt, structRegistry)
 				.flatMap(instResult -> {
-					// First generate instructions for the instantiation
-					Result<Void, CompileError> instInstructions = generateInstructions(
-							instResult.expressionResult(), instructions);
-					return instInstructions.flatMap(ignored -> {
-						// Then handle field access if present
-						String remaining = instResult.remaining();
-						if (remaining.isEmpty()) {
-							return Result.ok(null);
+					// Struct instantiation evaluates to the value of its first field
+					StructDefinition definition = instResult.definition();
+					Map<String, String> fieldValues = instResult.fieldValues();
+
+					if (definition.fields().isEmpty()) {
+						// Empty struct - return 0
+						List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+						ExpressionModel.ExpressionResult zeroResult = new ExpressionModel.ExpressionResult(0, 0, terms);
+						Result<Void, CompileError> zeroInstructions = generateInstructions(zeroResult, instructions);
+						if (zeroInstructions instanceof Result.Err<Void, CompileError>) {
+							return zeroInstructions;
 						}
-						// If there's field access or more code, parse it
-						if (FieldAccessHandler.hasFieldAccess(remaining)) {
-							return handleFieldAccessStatement(remaining, instructions, definedStructs, structRegistry);
+					} else {
+						// Get first field value expression and evaluate it
+						String firstFieldName = definition.fields().get(0).name();
+						String firstFieldExpr = fieldValues.get(firstFieldName);
+						if (firstFieldExpr == null) {
+							return Result.err(new CompileError("Missing value for field: " + firstFieldName));
 						}
-						return parseStatement(remaining, instructions, definedStructs, structRegistry);
-					});
+
+						// Parse the first field expression
+						Result<ExpressionModel.ExpressionResult, CompileError> fieldExprResult = parseExpressionWithRead(
+								firstFieldExpr);
+						if (fieldExprResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
+							return Result.err(
+									((Result.Err<ExpressionModel.ExpressionResult, CompileError>) fieldExprResult)
+											.error());
+						}
+						ExpressionModel.ExpressionResult fieldExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) fieldExprResult)
+								.value();
+
+						// Generate instructions for the first field expression
+						Result<Void, CompileError> fieldInstructions = generateInstructions(fieldExpr, instructions);
+						if (fieldInstructions instanceof Result.Err<Void, CompileError>) {
+							return fieldInstructions;
+						}
+					}
+
+					// Handle any remaining code (field access or continuation)
+					String remaining = instResult.remaining();
+					if (remaining.isEmpty()) {
+						return Result.ok(null);
+					}
+					// If there's field access or more code, parse it
+					if (FieldAccessHandler.hasFieldAccess(remaining)) {
+						return handleFieldAccessStatement(remaining, instResult.definition(), instructions,
+								definedStructs, structRegistry);
+					}
+					return parseStatement(remaining, instructions, definedStructs, structRegistry);
 				});
 	}
 
 	private static Result<Void, CompileError> handleFieldAccessStatement(String stmt,
-			List<Instruction> instructions, Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
+			StructDefinition structDef, List<Instruction> instructions, Set<String> definedStructs,
+			Map<String, StructDefinition> structRegistry) {
 		return FieldAccessHandler.parseFieldAccess(stmt, structRegistry)
 				.flatMap(fieldResult -> {
-					// For now, just return 0 for field access
-					List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
-					ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
-					Result<Void, CompileError> fieldInstructions = generateInstructions(result, instructions);
-					return fieldInstructions.flatMap(ignored -> {
-						if (fieldResult.remaining().isEmpty()) {
-							return Result.ok(null);
-						}
-						return parseStatement(fieldResult.remaining(), instructions, definedStructs, structRegistry);
-					});
+					// Field access on a struct is a no-op - the struct instantiation
+					// already evaluated to its first field value, so the value is already
+					// in register 0. Just continue parsing remaining code.
+					if (fieldResult.remaining().isEmpty()) {
+						return Result.ok(null);
+					}
+					return parseStatement(fieldResult.remaining(), instructions, definedStructs, structRegistry);
 				});
 	}
 

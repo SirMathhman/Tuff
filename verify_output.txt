@@ -1,0 +1,54 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::staticFieldBase has been called by com.google.inject.internal.aop.HiddenClassDefiner (file:/C:/ProgramData/chocolatey/lib/maven/apache-maven-3.9.11/lib/guice-5.1.0-classes.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.inject.internal.aop.HiddenClassDefiner
+WARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< io.github.sirmathhman:tuff >---------------------
+[INFO] Building Tuff 1.0.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ tuff ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ tuff ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ tuff ---
+[INFO] Copying 2 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ tuff ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ tuff ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running io.github.sirmathhman.tuff.AppTest
+[INFO] Tests run: 151, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.215 s -- in io.github.sirmathhman.tuff.AppTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 151, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.1:jar (default-jar) @ tuff ---
+[INFO] Building jar: C:\Users\mathm\IdeaProjects\Tuff\target\tuff-1.0.0-SNAPSHOT.jar
+[INFO] 
+[INFO] --- install:3.1.4:install (install-for-checkstyle) @ tuff ---
+[INFO] Installing C:\Users\mathm\IdeaProjects\Tuff\pom.xml to C:\Users\mathm\.m2\repository\io\github\sirmathhman\tuff\1.0.0-SNAPSHOT\tuff-1.0.0-SNAPSHOT.pom
+[INFO] Installing C:\Users\mathm\IdeaProjects\Tuff\target\tuff-1.0.0-SNAPSHOT.jar to C:\Users\mathm\.m2\repository\io\github\sirmathhman\tuff\1.0.0-SNAPSHOT\tuff-1.0.0-SNAPSHOT.jar
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (checkstyle) @ tuff ---
+[INFO] Starting audit...
+Audit done.
+[INFO] You have 0 Checkstyle violations.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  3.327 s
+[INFO] Finished at: 2026-01-20T17:54:41-05:00
+[INFO] ------------------------------------------------------------------------

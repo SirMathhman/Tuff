@@ -21,7 +21,8 @@ public final class StructInstantiationHandler {
 		}
 
 		String potentialName = expr.substring(0, spacePos);
-		return structRegistry.containsKey(potentialName) && expr.trim().substring(potentialName.length()).trim().startsWith("{");
+		return structRegistry.containsKey(potentialName)
+				&& expr.trim().substring(potentialName.length()).trim().startsWith("{");
 	}
 
 	public static Result<StructInstantiationResult, CompileError> parseStructInstantiation(String expr,
@@ -61,7 +62,8 @@ public final class StructInstantiationHandler {
 		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 		ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
 		Map<String, String> fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldsResult).value();
-		return Result.ok(new StructInstantiationResult(result, afterInstantiation, structName, fieldValues));
+		return Result.ok(
+				new StructInstantiationResult(result, afterInstantiation, structName, fieldValues, definition));
 	}
 
 	private static Result<Map<String, String>, CompileError> parseFieldAssignments(String body,
@@ -85,7 +87,8 @@ public final class StructInstantiationHandler {
 
 			// Validate field exists
 			if (definition.getField(assignment.fieldName()) == null) {
-				return Result.err(new CompileError("Struct '" + definition.name() + "' has no field '" + assignment.fieldName() + "'"));
+				return Result
+						.err(new CompileError("Struct '" + definition.name() + "' has no field '" + assignment.fieldName() + "'"));
 			}
 
 			fieldValues.put(assignment.fieldName(), assignment.fieldValue());
@@ -151,7 +154,7 @@ public final class StructInstantiationHandler {
 	}
 
 	public record StructInstantiationResult(ExpressionModel.ExpressionResult expressionResult, String remaining,
-			String structName, Map<String, String> fieldValues) {
+			String structName, Map<String, String> fieldValues, StructDefinition definition) {
 	}
 
 	private record FieldAssignment(String fieldName, String fieldValue, String remaining) {

@@ -790,6 +790,11 @@ public final class AppTest {
 		assertValid("struct Wrapper { value : I32 } Wrapper { value : read I32 }.value", 0);
 	}
 
+	@Test
+	void shouldReturnStructFieldValueAsExitCode() {
+		assertValidWithInput("struct Wrapper { value : I32 } Wrapper { value : read I32 }.value", 42, 42);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
