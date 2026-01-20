@@ -36,12 +36,14 @@ public final class ExpressionModel {
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided) {
-			this(readCount, value, isSubtracted, isMultiplied, isDivided, false, false, false, false, false, false, '\0', null);
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, false, false, false, false, false, false, '\0',
+					null);
 		}
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd) {
-			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, false, false, false, false, false,
+			this(readCount, value, isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd, false, false, false, false,
+					false,
 					'\0', null);
 		}
 
@@ -80,7 +82,8 @@ public final class ExpressionModel {
 
 		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
 				boolean isParenthesizedGroupEnd, boolean isDereferenced, boolean isLogicalOrBoundary,
-				boolean isLogicalAndBoundary, boolean isBitwiseNotted, boolean isLogicalNotted, char multiplicativeOperator, String readTypeSpec) {
+				boolean isLogicalAndBoundary, boolean isBitwiseNotted, boolean isLogicalNotted, char multiplicativeOperator,
+				String readTypeSpec) {
 			this.readCount = readCount;
 			this.value = value;
 			this.additiveOp = AdditiveOp.from(isSubtracted);

@@ -12,6 +12,7 @@ import io.github.sirmathhman.tuff.vm.Variant;
 public final class LetBindingHandler {
 	private LetBindingHandler() {
 	}
+
 	public static Result<Void, CompileError> handleUninitializedVariable(
 			String stmt,
 			int semiIndex,
@@ -54,6 +55,7 @@ public final class LetBindingHandler {
 		return handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation, instructions,
 				new java.util.HashMap<>(), 100);
 	}
+
 	private static Result<Void, CompileError> handleLetBindingWithContinuation(
 			String stmt,
 			int equalsIndex,
@@ -164,6 +166,7 @@ public final class LetBindingHandler {
 
 	private record VariableDecl(String varName, boolean isMutable, String valueExpr) {
 	}
+
 	private static Result<Void, CompileError> handleScopedBlock(
 			String varName,
 			String initialValueExpr,
@@ -394,40 +397,25 @@ public final class LetBindingHandler {
 				return storeResult;
 		}
 
-		// Parse continuation which may have multiple assignments and references
+		// Use MutableAssignmentHandler to process assignments
+		Result<Void, CompileError> assignmentResult = MutableAssignmentHandler.handleAssignment(
+				varName, continuation, instructions, nextMemAddr, isUninitialized, isMutableUninitialized);
+		if (assignmentResult.isErr())
+			return assignmentResult;
+
+		// Final part should be variable reference
 		String remaining = continuation;
-		int assignmentCount = 0;
+		// Find final remaining after all assignments
 		while (true) {
-			Result<AssignmentParseResult, CompileError> assignResult = parseAssignment(varName, remaining);
-			if (assignResult.isErr())
-				break; // No more assignments
-
-			AssignmentParseResult parsed = assignResult.okValue();
-			Result<Void, CompileError> validationResult = validateUninitializedAssignment(isUninitialized,
-					varName, assignmentCount, isMutableUninitialized);
-			if (validationResult.isErr())
-				return validationResult;
-			assignmentCount++;
-
-			if (parsed.isDereference()) {
-				Result<Void, CompileError> parseResult = parseAndStoreAssignment(parsed.valueExpr(), instructions);
-				if (parseResult.isErr())
-					return parseResult;
-				if (!addresses.containsKey(varName))
-					return Result.err(new CompileError("Cannot dereference undefined variable '" + varName + "'"));
-				int pointerAddr = addresses.get(varName);
-				instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) pointerAddr));
-				instructions.add(new Instruction(Operation.Store, Variant.IndirectAddress, 0, 1L));
-			} else {
-				Result<Void, CompileError> processResult = processAssignmentValue(parsed.valueExpr(), instructions,
-						nextMemAddr);
-				if (processResult.isErr())
-					return processResult;
-			}
-			remaining = parsed.remaining();
+			int eqIndex = remaining.indexOf('=');
+			if (eqIndex == -1)
+				break;
+			int semiIndex = ParsingUtils.findSemicolonAtDepthZero(remaining, eqIndex);
+			if (semiIndex == -1)
+				break;
+			remaining = remaining.substring(semiIndex + 1).trim();
 		}
 
-		// Final part should be variable reference or expression using the variable
 		if (remaining.equals(varName)) {
 			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
@@ -435,18 +423,6 @@ public final class LetBindingHandler {
 		}
 		return Result.err(new CompileError(
 				"Mutable variable continuation must end with variable reference or expression"));
-	}
-
-	private static Result<Void, CompileError> validateUninitializedAssignment(
-			boolean isUninitialized,
-			String varName,
-			int assignmentCount,
-			boolean isMutableUninitialized) {
-		if (isUninitialized && assignmentCount > 0 && !isMutableUninitialized) {
-			return Result.err(new CompileError(
-					"Uninitialized variable '" + varName + "' can only be assigned once"));
-		}
-		return Result.ok(null);
 	}
 
 	private static Result<Void, CompileError> processAssignmentValue(String valueExpr, List<Instruction> instructions,
@@ -461,40 +437,42 @@ public final class LetBindingHandler {
 		return Result.ok(null);
 	}
 
-	private static Result<Void, CompileError> parseAndStoreAssignment(String valueExpr, List<Instruction> instructions) {
-		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(valueExpr);
-		return exprResult.isErr() ? Result.err(exprResult.errValue())
-				: App.generateInstructions(exprResult.okValue(), instructions);
-	}
-
 	private static Result<AssignmentParseResult, CompileError> parseAssignment(String varName, String remaining) {
-		// Check if there's an assignment: varName = expr OR *varName = expr
 		String trimmed = remaining.trim();
 		boolean isDereference = trimmed.startsWith("*");
 		String assignTarget = isDereference ? ("*" + varName) : varName;
-
 		if (!trimmed.startsWith(assignTarget + " ") && !trimmed.startsWith(assignTarget + "=")) {
 			return Result.err(new CompileError("Not an assignment"));
 		}
-
 		int assignEqIndex = remaining.indexOf('=');
-		if (assignEqIndex == -1 || !remaining.substring(0, assignEqIndex).trim().equals(assignTarget)) {
+		if (assignEqIndex == -1) {
 			return Result.err(new CompileError("Not an assignment"));
 		}
-
-		// Find semicolon for this assignment
+		String beforeEq = remaining.substring(0, assignEqIndex).trim();
+		String compoundOp = null;
+		if (beforeEq.equals(assignTarget)) {
+			// Simple assignment
+		} else if (beforeEq.length() > assignTarget.length()) {
+			String potential = beforeEq.substring(assignTarget.length()).trim();
+			if (potential.length() == 1 && (potential.equals("+") || potential.equals("-")
+					|| potential.equals("*") || potential.equals("/"))) {
+				compoundOp = potential;
+			} else {
+				return Result.err(new CompileError("Not an assignment"));
+			}
+		} else {
+			return Result.err(new CompileError("Not an assignment"));
+		}
 		int assignSemiIndex = ParsingUtils.findSemicolonAtDepthZero(remaining, assignEqIndex);
 		if (assignSemiIndex == -1) {
 			return Result.err(new CompileError("Invalid assignment: missing ';'"));
 		}
-
-		// Extract assignment value expression
 		String assignValueExpr = remaining.substring(assignEqIndex + 1, assignSemiIndex).trim();
 		String nextRemaining = remaining.substring(assignSemiIndex + 1).trim();
-
-		return Result.ok(new AssignmentParseResult(assignValueExpr, nextRemaining, isDereference));
+		return Result.ok(new AssignmentParseResult(assignValueExpr, nextRemaining, isDereference, compoundOp));
 	}
 
-	private record AssignmentParseResult(String valueExpr, String remaining, boolean isDereference) {
+	private record AssignmentParseResult(String valueExpr, String remaining, boolean isDereference, String compoundOp) {
 	}
 }
+

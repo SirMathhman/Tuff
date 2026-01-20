@@ -670,6 +670,31 @@ public final class AppTest {
 		assertValidWithInput("let x = !read Bool; x", 1, 0);
 	}
 
+	@Test
+	void shouldSupportCompoundAdditionAssignment() {
+		assertValidWithInput("let mut x = read I32; x += read I32; x", 7, 3, 4);
+	}
+
+	@Test
+	void shouldSupportCompoundSubtractionAssignment() {
+		assertValidWithInput("let mut x = read I32; x -= read I32; x", -1, 3, 4);
+	}
+
+	@Test
+	void shouldSupportCompoundMultiplicationAssignment() {
+		assertValidWithInput("let mut x = read I32; x *= read I32; x", 12, 3, 4);
+	}
+
+	@Test
+	void shouldSupportCompoundDivisionAssignment() {
+		assertValidWithInput("let mut x = read I32; x /= read I32; x", 2, 8, 4);
+	}
+
+	@Test
+	void shouldSupportMultipleCompoundAssignments() {
+		assertValidWithInput("let mut x = read I32; x += read I32; x *= read I32; x", 35, 3, 4, 5);
+	}
+
 	// TODO: Support if/else with assignments in branches
 	// Should support: let x : U8; if (read Bool) x = 2; else x = 3; x
 	// This requires proper jump instruction generation for conditional branches
