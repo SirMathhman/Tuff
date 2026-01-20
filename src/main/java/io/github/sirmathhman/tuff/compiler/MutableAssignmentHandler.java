@@ -26,11 +26,12 @@ public final class MutableAssignmentHandler {
 		String remaining = continuation;
 		int assignmentCount = 0;
 		while (true) {
-			Result<AssignmentParseResult, CompileError> assignResult = parseAssignment(varName, remaining);
+			Result<LetBindingHandler.AssignmentParseResult, CompileError> assignResult = LetBindingHandler
+					.parseAssignment(varName, remaining);
 			if (assignResult.isErr())
 				break; // No more assignments
 
-			AssignmentParseResult parsed = assignResult.okValue();
+			LetBindingHandler.AssignmentParseResult parsed = assignResult.okValue();
 			Result<Void, CompileError> validationResult = validateUninitializedAssignment(isUninitialized,
 					varName, assignmentCount, isMutableUninitialized);
 			if (validationResult.isErr())
@@ -38,12 +39,9 @@ public final class MutableAssignmentHandler {
 			assignmentCount++;
 
 			if (parsed.isDereference()) {
-				Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(parsed.valueExpr());
-				if (exprResult.isErr())
-					return Result.err(exprResult.errValue());
-				Result<Void, CompileError> genResult = App.generateInstructions(exprResult.okValue(), instructions);
-				if (genResult.isErr())
-					return genResult;
+				Result<Void, CompileError> parseResult = parseAndEvaluateExpression(parsed.valueExpr(), instructions);
+				if (parseResult.isErr())
+					return parseResult;
 				instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) nextMemAddr));
 				instructions.add(new Instruction(Operation.Store, Variant.IndirectAddress, 0, 1L));
 			} else {
@@ -52,7 +50,7 @@ public final class MutableAssignmentHandler {
 					processResult = CompoundAssignmentHandler.handle(
 							parsed.valueExpr(), parsed.compoundOp(), nextMemAddr, instructions);
 				} else {
-					processResult = processAssignmentValue(parsed.valueExpr(), instructions, nextMemAddr);
+					processResult = LetBindingHandler.processAssignmentValue(parsed.valueExpr(), instructions, nextMemAddr);
 				}
 				if (processResult.isErr())
 					return processResult;
@@ -74,66 +72,10 @@ public final class MutableAssignmentHandler {
 		return Result.ok(null);
 	}
 
-	private static Result<Void, CompileError> processAssignmentValue(
-			String valueExpr,
-			List<Instruction> instructions,
-			int nextMemAddr) {
+	static Result<Void, CompileError> parseAndEvaluateExpression(String valueExpr, List<Instruction> instructions) {
 		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(valueExpr);
 		if (exprResult.isErr())
 			return Result.err(exprResult.errValue());
-		Result<Void, CompileError> assignGenResult = App.generateInstructions(exprResult.okValue(), instructions);
-		if (assignGenResult.isErr())
-			return assignGenResult;
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
-		return Result.ok(null);
-	}
-
-	private static Result<AssignmentParseResult, CompileError> parseAssignment(String varName, String remaining) {
-		String trimmed = remaining.trim();
-		boolean isDereference = trimmed.startsWith("*");
-		String assignTarget = isDereference ? ("*" + varName) : varName;
-
-		if (!trimmed.startsWith(assignTarget + " ") && !trimmed.startsWith(assignTarget + "=")) {
-			return Result.err(new CompileError("Not an assignment"));
-		}
-
-		int assignEqIndex = remaining.indexOf('=');
-		if (assignEqIndex == -1) {
-			return Result.err(new CompileError("Not an assignment"));
-		}
-
-		String beforeEq = remaining.substring(0, assignEqIndex).trim();
-
-		// Check if it's a simple assignment (beforeEq equals assignTarget)
-		// or a compound assignment (beforeEq equals assignTarget + operator)
-		String compoundOp = null;
-		if (beforeEq.equals(assignTarget)) {
-			// Simple assignment: x = expr
-		} else if (beforeEq.length() > assignTarget.length()) {
-			// Check for compound operator
-			String potential = beforeEq.substring(assignTarget.length()).trim();
-			if (potential.length() == 1 && (potential.equals("+") || potential.equals("-")
-					|| potential.equals("*") || potential.equals("/"))) {
-				compoundOp = potential;
-			} else {
-				return Result.err(new CompileError("Not an assignment"));
-			}
-		} else {
-			return Result.err(new CompileError("Not an assignment"));
-		}
-
-		int assignSemiIndex = ParsingUtils.findSemicolonAtDepthZero(remaining, assignEqIndex);
-		if (assignSemiIndex == -1) {
-			return Result.err(new CompileError("Invalid assignment: missing ';'"));
-		}
-
-		String assignValueExpr = remaining.substring(assignEqIndex + 1, assignSemiIndex).trim();
-		String nextRemaining = remaining.substring(assignSemiIndex + 1).trim();
-
-		return Result.ok(new AssignmentParseResult(assignValueExpr, nextRemaining, isDereference, compoundOp));
-	}
-
-	private record AssignmentParseResult(String valueExpr, String remaining, boolean isDereference,
-			String compoundOp) {
+		return App.generateInstructions(exprResult.okValue(), instructions);
 	}
 }

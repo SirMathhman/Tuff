@@ -1,7 +1,6 @@
 package io.github.sirmathhman.tuff.compiler;
 
 import java.util.List;
-import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.vm.Instruction;
@@ -15,10 +14,10 @@ public final class CompoundAssignmentHandler {
 	/**
 	 * Process a compound assignment like x += expr.
 	 * 
-	 * @param valueExpr      the right-hand side expression
-	 * @param operator       the compound operator (+, -, *, /)
-	 * @param nextMemAddr    the memory address of the variable
-	 * @param instructions   the instruction list to add to
+	 * @param valueExpr    the right-hand side expression
+	 * @param operator     the compound operator (+, -, *, /)
+	 * @param nextMemAddr  the memory address of the variable
+	 * @param instructions the instruction list to add to
 	 * @return Result.ok if successful, Result.err otherwise
 	 */
 	public static Result<Void, CompileError> handle(
@@ -29,12 +28,7 @@ public final class CompoundAssignmentHandler {
 		// 1. Load current value of x from memory into register 0
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 		// 2. Parse and evaluate the expression
-		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(valueExpr);
-		if (exprResult.isErr())
-			return Result.err(exprResult.errValue());
-
-		// Generate instructions for the expression
-		Result<Void, CompileError> genResult = App.generateInstructions(exprResult.okValue(), instructions);
+		Result<Void, CompileError> genResult = MutableAssignmentHandler.parseAndEvaluateExpression(valueExpr, instructions);
 		if (genResult.isErr())
 			return genResult;
 

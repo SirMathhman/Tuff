@@ -425,7 +425,7 @@ public final class LetBindingHandler {
 				"Mutable variable continuation must end with variable reference or expression"));
 	}
 
-	private static Result<Void, CompileError> processAssignmentValue(String valueExpr, List<Instruction> instructions,
+	static Result<Void, CompileError> processAssignmentValue(String valueExpr, List<Instruction> instructions,
 			int nextMemAddr) {
 		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(valueExpr);
 		if (exprResult.isErr())
@@ -437,7 +437,7 @@ public final class LetBindingHandler {
 		return Result.ok(null);
 	}
 
-	private static Result<AssignmentParseResult, CompileError> parseAssignment(String varName, String remaining) {
+	static Result<AssignmentParseResult, CompileError> parseAssignment(String varName, String remaining) {
 		String trimmed = remaining.trim();
 		boolean isDereference = trimmed.startsWith("*");
 		String assignTarget = isDereference ? ("*" + varName) : varName;
@@ -472,7 +472,6 @@ public final class LetBindingHandler {
 		return Result.ok(new AssignmentParseResult(assignValueExpr, nextRemaining, isDereference, compoundOp));
 	}
 
-	private record AssignmentParseResult(String valueExpr, String remaining, boolean isDereference, String compoundOp) {
+	static record AssignmentParseResult(String valueExpr, String remaining, boolean isDereference, String compoundOp) {
 	}
 }
-
