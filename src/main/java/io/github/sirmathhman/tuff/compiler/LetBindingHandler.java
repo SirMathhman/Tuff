@@ -1,13 +1,16 @@
 package io.github.sirmathhman.tuff.compiler;
 
 import java.util.List;
+import java.util.Map;
 
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
-import io.github.sirmathhman.tuff.vm.Variant;public final class LetBindingHandler {
+import io.github.sirmathhman.tuff.vm.Variant;
+
+public final class LetBindingHandler {
 	private LetBindingHandler() {
 	}
 
@@ -56,11 +59,14 @@ import io.github.sirmathhman.tuff.vm.Variant;public final class LetBindingHandle
 		if (continuation.startsWith("let "))
 			return handleChainedLetBinding(varName, decl.valueExpr(), continuation, instructions, variableAddresses,
 					nextMemAddr);
+		if (continuation.startsWith("while (") && decl.isMutable())
+			return handleWhileLoopAfterLet(varName, decl.valueExpr(), continuation, instructions, variableAddresses,
+					nextMemAddr);
 		if (continuation.equals(varName)) {
-			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = 
-					ConditionalExpressionHandler.hasConditional(decl.valueExpr())
-					? ConditionalExpressionHandler.parseConditional(decl.valueExpr())
-					: App.parseExpressionWithRead(decl.valueExpr());
+			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = ConditionalExpressionHandler
+					.hasConditional(decl.valueExpr())
+							? ConditionalExpressionHandler.parseConditional(decl.valueExpr())
+							: App.parseExpressionWithRead(decl.valueExpr());
 			return valueResult.isErr() ? Result.err(valueResult.errValue())
 					: App.generateInstructions(valueResult.okValue(), instructions);
 		}
@@ -140,7 +146,7 @@ import io.github.sirmathhman.tuff.vm.Variant;public final class LetBindingHandle
 		continuation = continuation.trim();
 		if (!continuation.startsWith("{"))
 			return Result.err(new CompileError("Expected '{' for scoped block"));
-		int closingBrace = findMatchingBrace(continuation, 0);
+		int closingBrace = DepthAwareSplitter.findMatchingBrace(continuation, 0);
 		if (closingBrace == -1)
 			return Result.err(new CompileError("Unmatched '{' in scoped block"));
 		String blockContent = continuation.substring(1, closingBrace).trim();
@@ -172,18 +178,20 @@ import io.github.sirmathhman.tuff.vm.Variant;public final class LetBindingHandle
 		return Result.ok(null);
 	}
 
-	private static int findMatchingBrace(String str, int openBraceIndex) {
-		int count = 1;
-		for (int i = openBraceIndex + 1; i < str.length(); i++) {
-			if (str.charAt(i) == '{')
-				count++;
-			else if (str.charAt(i) == '}') {
-				count--;
-				if (count == 0)
-					return i;
-			}
-		}
-		return -1;
+	private static Result<Void, CompileError> handleWhileLoopAfterLet(String varName, String initialValueExpr,
+			String continuation, List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr) {
+		// Store the initial value at the correct memory address
+		Result<Void, CompileError> storeResult = storeVariableInMemory(initialValueExpr, instructions, nextMemAddr);
+		if (storeResult.isErr())
+			return storeResult;
+
+		// Add variable to context
+		java.util.Map<String, Integer> context = new java.util.HashMap<>(variableAddresses);
+		context.put(varName, nextMemAddr);
+
+		// Delegate to WhileLoopHandler with the context containing the variable
+		return WhileLoopHandler.handleWhileLoop(continuation, "", instructions, context);
 	}
 
 	private static Result<Void, CompileError> handleChainedLetBinding(
@@ -384,6 +392,12 @@ import io.github.sirmathhman.tuff.vm.Variant;public final class LetBindingHandle
 			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 			return Result.ok(null);
 		}
+
+		// Check if remaining is a while loop
+		if (remaining.startsWith("while (")) {
+			return WhileLoopHandler.handleWhileLoop(remaining, "", instructions, addresses);
+		}
+
 		return Result.err(new CompileError(
 				"Mutable variable continuation must end with variable reference or expression"));
 	}
@@ -440,52 +454,7 @@ import io.github.sirmathhman.tuff.vm.Variant;public final class LetBindingHandle
 
 	private static Result<Void, CompileError> handleConditionalAssignmentToUninitializedVariable(String varName, String s,
 			List<Instruction> instructions) {
-		return buildConditionalAssignmentChain(varName, s, instructions, true);
+		return ConditionalExpressionHandler.buildConditionalAssignmentChain(varName, s, instructions, true);
 	}
 
-	private static Result<Void, CompileError> buildConditionalAssignmentChain(String varName, String s,
-			List<Instruction> instructions, boolean isFirst) {
-		if (!s.startsWith("if (")) return Result.err(new CompileError("Expected 'if'"));
-		int cEnd = ConditionalExpressionHandler.findConditionEnd(s);
-		if (cEnd == -1) return Result.err(new CompileError("Malformed"));
-		String cond = s.substring(4, cEnd), r = s.substring(cEnd + 1).trim();
-		if (!r.startsWith(varName + " =") && !r.startsWith(varName + "="))
-			return Result.err(new CompileError("Expected assign"));
-		int eqIdx = r.indexOf('='), sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(r, eqIdx);
-		if (sIdx == -1) return Result.err(new CompileError("Missing ';'"));
-		String trueVal = r.substring(eqIdx + 1, sIdx).trim(), r2 = r.substring(sIdx + 1).trim();
-		if (!r2.startsWith("else ")) return Result.err(new CompileError("Expected 'else'"));
-		Result<String, CompileError> typeRes = ExpressionTokens.extractTypeFromExpression(cond, new java.util.HashMap<>());
-		if (typeRes.isOk() && !typeRes.okValue().equals("Bool"))
-			return Result.err(new CompileError("Expect Bool"));
-		r2 = r2.substring(5).trim();
-		Result<ExpressionModel.ExpressionResult, CompileError> condRes = App.parseExpressionWithRead(cond);
-		if (condRes.isErr()) return Result.err(condRes.errValue());
-		if (App.generateInstructions(condRes.okValue(), instructions).isErr())
-			return Result.err(new CompileError("Bad cond"));
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, -1L));
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 1, 0L));
-		int jumpElseIdx = instructions.size(), jumpEndIdx = -1;
-		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, 0L));
-		Result<ExpressionModel.ExpressionResult, CompileError> trueRes = App.parseExpressionWithRead(trueVal);
-		if (trueRes.isErr() || App.generateInstructions(trueRes.okValue(), instructions).isErr())
-			return Result.err(trueRes.isErr() ? trueRes.errValue() : new CompileError("Bad true"));
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
-		jumpEndIdx = instructions.size();
-		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
-		instructions.set(jumpElseIdx, new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, (long) instructions.size()));
-		if (r2.startsWith("if (")) { if (buildConditionalAssignmentChain(varName, r2, instructions, false).isErr()) return Result.err(new CompileError("Bad else-if")); }
-		else if (r2.startsWith(varName + " =") || r2.startsWith(varName + "=")) {
-			eqIdx = r2.indexOf('='); sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(r2, eqIdx);
-			if (sIdx == -1) return Result.err(new CompileError("Missing ';'"));
-			String falseVal = r2.substring(eqIdx + 1, sIdx).trim();
-			if (!r2.substring(sIdx + 1).trim().equals(varName)) return Result.err(new CompileError("Bad var"));
-			Result<ExpressionModel.ExpressionResult, CompileError> falseRes = App.parseExpressionWithRead(falseVal);
-			if (falseRes.isErr() || App.generateInstructions(falseRes.okValue(), instructions).isErr()) return Result.err(falseRes.isErr() ? falseRes.errValue() : new CompileError("Bad else"));
-			instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
-		} else return Result.err(new CompileError("Bad else"));
-		instructions.set(jumpEndIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) instructions.size()));
-		if (isFirst) { instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, 100L)); instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L)); }
-		return Result.ok(null);
-	}
 }

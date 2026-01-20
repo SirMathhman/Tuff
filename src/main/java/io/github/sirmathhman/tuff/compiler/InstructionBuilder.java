@@ -66,9 +66,10 @@ public final class InstructionBuilder {
 		// Check if this has nested conditionals (multiple -3 markers)
 		int nestedConditionalCount = 0;
 		for (ExpressionModel.ExpressionTerm t : terms) {
-			if (t.readCount == -3) nestedConditionalCount++;
+			if (t.readCount == -3)
+				nestedConditionalCount++;
 		}
-		
+
 		if (nestedConditionalCount > 1) {
 			return buildConditionalExpression(terms, markers, instructions);
 		}

@@ -74,7 +74,7 @@ public final class BitwiseNotParser {
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseLiteralTerm(String term) {
-		Result<Long, CompileError> literalResult = io.github.sirmathhman.tuff.compiler.LiteralParser.parseLiteral(term);
+		Result<Long, CompileError> literalResult = ExpressionTokens.parseLiteral(term);
 		if (literalResult.isErr()) {
 			if (!term.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
 				return Result.err(literalResult.errValue());

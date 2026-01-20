@@ -45,6 +45,27 @@ public final class DepthAwareSplitter {
 	}
 
 	/**
+	 * Find the matching closing brace for an opening brace.
+	 *
+	 * @param str          the string containing the braces
+	 * @param openBraceIdx the index of the opening brace
+	 * @return the index of the matching closing brace, or -1 if not found
+	 */
+	public static int findMatchingBrace(String str, int openBraceIdx) {
+		int count = 1;
+		for (int i = openBraceIdx + 1; i < str.length(); i++) {
+			if (str.charAt(i) == '{')
+				count++;
+			else if (str.charAt(i) == '}') {
+				count--;
+				if (count == 0)
+					return i;
+			}
+		}
+		return -1;
+	}
+
+	/**
 	 * Split an expression by a delimiter while respecting parenthesis depth.
 	 *
 	 * @param expr      The expression to split

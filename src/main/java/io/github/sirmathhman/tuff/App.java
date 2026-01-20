@@ -10,6 +10,7 @@ import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.LogicalOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.MultiplicativeExpressionBuilder;
+import io.github.sirmathhman.tuff.compiler.WhileLoopHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
@@ -36,7 +37,12 @@ public final class App {
 		return Result.ok(instructions.toArray(new Instruction[0]));
 	}
 
-	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
+	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
+		// Check if this is a while loop at statement level
+		if (stmt.startsWith("while (")) {
+			return handleTopLevelWhileLoop(stmt, instructions);
+		}
+
 		// Check if this is a let binding at statement level
 		if (stmt.startsWith("let ")) {
 			// Peek ahead to see if this is a chained let binding
@@ -325,5 +331,24 @@ public final class App {
 			System.err.println("Exception occurred during execution!");
 			return Result.err(new ApplicationError(new ExecutionError(instructions)));
 		}
+	}
+
+	private static Result<Void, CompileError> handleTopLevelWhileLoop(String stmt, List<Instruction> instructions) {
+		int condEnd = -1, depth = 1;
+		for (int i = 7; i < stmt.length() && depth > 0; i++) {
+			if (stmt.charAt(i) == '(')
+				depth++;
+			else if (stmt.charAt(i) == ')')
+				depth--;
+			if (depth == 0) {
+				condEnd = i;
+				break;
+			}
+		}
+		if (condEnd == -1)
+			return Result.err(new CompileError("Malformed while loop: missing closing paren"));
+
+		String remaining = stmt.substring(condEnd + 1).trim();
+		return WhileLoopHandler.handleWhileLoop(stmt, remaining, instructions, new java.util.HashMap<>());
 	}
 }

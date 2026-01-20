@@ -735,6 +735,26 @@ public final class AppTest {
 		assertValidWithInput("let x : I32 = if (read Bool) 10 else 20; x", 10, 1);
 	}
 
+	@Test
+	void shouldSupportSimpleWhileLoop() {
+		assertValidWithInput("let mut x = 0; while (x < 5) x = x + 1; x", 5);
+	}
+
+	@Test
+	void shouldSupportWhileLoopWithReadValue() {
+		assertValidWithInput("let count = read U8; let mut x = 0; while (x < count) x = x + 1; x", 5, 5);
+	}
+
+	@Test
+	void shouldSupportWhileLoopNeverExecutes() {
+		assertValidWithInput("let mut x = 10; while (x < 5) x = x + 1; x", 10);
+	}
+
+	@Test
+	void shouldSupportWhileLoopMultipleIncrements() {
+		assertValidWithInput("let mut x = 0; while (x < 3) x = x + 2; x", 4);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
