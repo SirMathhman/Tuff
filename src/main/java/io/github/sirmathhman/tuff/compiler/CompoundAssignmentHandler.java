@@ -29,7 +29,7 @@ public final class CompoundAssignmentHandler {
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 		// 2. Parse and evaluate the expression
 		Result<Void, CompileError> genResult = MutableAssignmentHandler.parseAndEvaluateExpression(valueExpr, instructions);
-		if (genResult.isErr())
+		if (genResult instanceof Result.Err<Void, CompileError>)
 			return genResult;
 
 		// The expression result is in register 0, store it temporarily

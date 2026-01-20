@@ -40,11 +40,14 @@ public final class LogicalOperatorHandler {
 		for (int i = 0; i < tokens.size(); i++) {
 			Result<ExpressionModel.ExpressionResult, CompileError> operandResult = App
 					.parseExpressionWithRead(tokens.get(i));
-			if (operandResult.isErr()) {
+			if (operandResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
 				return operandResult;
 			}
+			if (!(operandResult instanceof Result.Ok<ExpressionModel.ExpressionResult, CompileError> ok)) {
+				return Result.err(new CompileError("Internal error: expected Ok or Err in logical operand"));
+			}
 
-			ExpressionModel.ExpressionResult operand = operandResult.okValue();
+			ExpressionModel.ExpressionResult operand = ok.value();
 			// Mark the last term of each operand (except the last) with logical boundary
 			if (i < tokens.size() - 1 && operand.terms.size() > 0) {
 				ExpressionModel.ExpressionTerm lastTerm = operand.terms.get(operand.terms.size() - 1);

@@ -99,28 +99,40 @@ public sealed interface Result<T, X> {
 	 * Gets the success value, or null if this is an error.
 	 *
 	 * @return The success value or null
+	 * @deprecated Use {@link #match(Function, Function)} or
+	 *             {@link #consume(Function, Function)} instead
 	 */
+	@Deprecated
 	T okValue();
 
 	/**
 	 * Gets the error value, or null if this is a success.
 	 *
 	 * @return The error value or null
+	 * @deprecated Use {@link #match(Function, Function)} or
+	 *             {@link #consume(Function, Function)} instead
 	 */
+	@Deprecated
 	X errValue();
 
 	/**
 	 * Checks if this Result is a success.
 	 *
 	 * @return true if this is a success, false otherwise
+	 * @deprecated Use {@link #match(Function, Function)} or
+	 *             {@link #consume(Function, Function)} instead
 	 */
+	@Deprecated
 	boolean isOk();
 
 	/**
 	 * Checks if this Result is an error.
 	 *
 	 * @return true if this is an error, false otherwise
+	 * @deprecated Use {@link #match(Function, Function)} or
+	 *             {@link #consume(Function, Function)} instead
 	 */
+	@Deprecated
 	boolean isErr();
 
 	/**
@@ -145,10 +157,9 @@ public sealed interface Result<T, X> {
 		@Override
 		public <U> Result<Tuple<T, U>, X> and(Supplier<Result<U, X>> other) {
 			Result<U, X> otherResult = other.get();
-			if (otherResult.isErr()) {
-				return Result.err(otherResult.errValue());
-			}
-			return Result.ok(new Tuple<>(value, otherResult.okValue()));
+			return otherResult.match(
+					otherValue -> Result.ok(new Tuple<>(value, otherValue)),
+					Result::err);
 		}
 
 		@Override
@@ -162,21 +173,25 @@ public sealed interface Result<T, X> {
 		}
 
 		@Override
+		@Deprecated
 		public T okValue() {
 			return value;
 		}
 
 		@Override
+		@Deprecated
 		public X errValue() {
 			return null;
 		}
 
 		@Override
+		@Deprecated
 		public boolean isOk() {
 			return true;
 		}
 
 		@Override
+		@Deprecated
 		public boolean isErr() {
 			return false;
 		}
@@ -217,21 +232,25 @@ public sealed interface Result<T, X> {
 		}
 
 		@Override
+		@Deprecated
 		public T okValue() {
 			return null;
 		}
 
 		@Override
+		@Deprecated
 		public X errValue() {
 			return error;
 		}
 
 		@Override
+		@Deprecated
 		public boolean isOk() {
 			return false;
 		}
 
 		@Override
+		@Deprecated
 		public boolean isErr() {
 			return true;
 		}

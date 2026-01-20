@@ -81,19 +81,25 @@ public final class ComparisonOperatorHandler {
 		// Parse left operand
 		Result<ExpressionModel.ExpressionResult, CompileError> leftResult = AdditiveExpressionParser
 				.parseAdditive(tokens.get(0));
-		if (leftResult.isErr()) {
+		if (leftResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
 			return leftResult;
+		}
+		if (!(leftResult instanceof Result.Ok<ExpressionModel.ExpressionResult, CompileError> leftOk)) {
+			return Result.err(new CompileError("Internal error: expected Ok or Err in left operand"));
 		}
 
 		// Parse right operand
 		Result<ExpressionModel.ExpressionResult, CompileError> rightResult = AdditiveExpressionParser
 				.parseAdditive(tokens.get(1));
-		if (rightResult.isErr()) {
+		if (rightResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
 			return rightResult;
 		}
+		if (!(rightResult instanceof Result.Ok<ExpressionModel.ExpressionResult, CompileError> rightOk)) {
+			return Result.err(new CompileError("Internal error: expected Ok or Err in right operand"));
+		}
 
-		ExpressionModel.ExpressionResult left = leftResult.okValue();
-		ExpressionModel.ExpressionResult right = rightResult.okValue();
+		ExpressionModel.ExpressionResult left = leftOk.value();
+		ExpressionModel.ExpressionResult right = rightOk.value();
 
 		// Create marker term: readCount=-1 indicates comparison marker
 		// marker.value=0 means Equal, marker.value=1 means NotEqual, marker.value=2

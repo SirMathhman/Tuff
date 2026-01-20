@@ -28,9 +28,10 @@ public final class AppTest {
 	}
 
 	private void assertValidResult(Result<RunResult, ApplicationError> result, int exitCode) {
-		assertTrue(result.isOk(), "Compilation failed: " + (result.isErr() ? result.errValue().display() : ""));
-
-		RunResult runResult = result.okValue();
+		RunResult runResult = result.match(ok -> ok, err -> {
+			Assertions.fail("Compilation failed: " + err.display());
+			return null;
+		});
 		assertEquals(exitCode, runResult.returnValue(), "Unexpected exit code, instructions compiled are: " +
 				Instruction.displayAll(runResult.executedInstructions()));
 		assertTrue(runResult.output().isEmpty());
@@ -761,9 +762,9 @@ public final class AppTest {
 
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
-		if (result.isOk()) {
+		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
 			Assertions.fail("Expected compilation to fail, but it succeeded and produced instructions: "
-					+ Instruction.displayAll(result.okValue()));
+					+ Instruction.displayAll(ok.value()));
 		}
 	}
 }

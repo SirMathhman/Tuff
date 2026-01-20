@@ -28,19 +28,20 @@ public final class MutableAssignmentHandler {
 		while (true) {
 			Result<LetBindingHandler.AssignmentParseResult, CompileError> assignResult = LetBindingHandler
 					.parseAssignment(varName, remaining);
-			if (assignResult.isErr())
+			if (!(assignResult instanceof Result.Ok<LetBindingHandler.AssignmentParseResult, CompileError> assignOk)) {
 				break; // No more assignments
+			}
 
-			LetBindingHandler.AssignmentParseResult parsed = assignResult.okValue();
+			LetBindingHandler.AssignmentParseResult parsed = assignOk.value();
 			Result<Void, CompileError> validationResult = validateUninitializedAssignment(isUninitialized,
 					varName, assignmentCount, isMutableUninitialized);
-			if (validationResult.isErr())
+			if (validationResult instanceof Result.Err<Void, CompileError>)
 				return validationResult;
 			assignmentCount++;
 
 			if (parsed.isDereference()) {
 				Result<Void, CompileError> parseResult = parseAndEvaluateExpression(parsed.valueExpr(), instructions);
-				if (parseResult.isErr())
+				if (parseResult instanceof Result.Err<Void, CompileError>)
 					return parseResult;
 				instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) nextMemAddr));
 				instructions.add(new Instruction(Operation.Store, Variant.IndirectAddress, 0, 1L));
@@ -52,7 +53,7 @@ public final class MutableAssignmentHandler {
 				} else {
 					processResult = LetBindingHandler.processAssignmentValue(parsed.valueExpr(), instructions, nextMemAddr);
 				}
-				if (processResult.isErr())
+				if (processResult instanceof Result.Err<Void, CompileError>)
 					return processResult;
 			}
 			remaining = parsed.remaining();
@@ -73,9 +74,7 @@ public final class MutableAssignmentHandler {
 	}
 
 	static Result<Void, CompileError> parseAndEvaluateExpression(String valueExpr, List<Instruction> instructions) {
-		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(valueExpr);
-		if (exprResult.isErr())
-			return Result.err(exprResult.errValue());
-		return App.generateInstructions(exprResult.okValue(), instructions);
+		return App.parseExpressionWithRead(valueExpr)
+				.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 	}
 }

@@ -28,9 +28,12 @@ public final class App {
 
 		if (!source.isEmpty()) {
 			Result<Void, CompileError> result = parseStatement(source.trim(), instructions);
-			if (result.isErr()) {
-				return Result.err(result.errValue());
-			}
+			return result.match(
+					ignored -> {
+						instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
+						return Result.ok(instructions.toArray(new Instruction[0]));
+					},
+					Result::err);
 		}
 
 		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
@@ -93,12 +96,8 @@ public final class App {
 		}
 
 		// Parse as expression (which may contain "read")
-		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = parseExpressionWithRead(stmt);
-		if (exprResult.isErr()) {
-			return Result.err(exprResult.errValue());
-		}
-
-		return generateInstructions(exprResult.okValue(), instructions);
+		return parseExpressionWithRead(stmt)
+				.flatMap(expr -> generateInstructions(expr, instructions));
 	}
 
 	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
@@ -165,14 +164,12 @@ public final class App {
 			return LogicalOperatorHandler.parseLogicalAndExpression(andTokens);
 		}
 
+		final String normalizedExpr = expr;
 		// Try comparison operators (all at same precedence level)
-		Result<ExpressionModel.ExpressionResult, CompileError> comparisonResult = parseComparisonOperators(expr);
-		if (comparisonResult.isOk()) {
-			return comparisonResult;
-		}
-
-		// Parse additive expression (no logical operators or comparisons)
-		return AdditiveExpressionParser.parseAdditive(expr);
+		Result<ExpressionModel.ExpressionResult, CompileError> comparisonResult = parseComparisonOperators(normalizedExpr);
+		return comparisonResult.match(
+				Result::ok,
+				err -> AdditiveExpressionParser.parseAdditive(normalizedExpr));
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {
@@ -212,24 +209,22 @@ public final class App {
 		// Determine the actual type to use
 		if (decl.declaredType() == null) {
 			// Type inference: require successful type extraction
-			if (typeResult.isErr()) {
-				return Result.err(typeResult.errValue());
-			}
-			return Result.ok(typeResult.okValue());
+			return typeResult.match(Result::ok, Result::err);
 		} else {
 			// If type is explicitly declared, try to extract type for validation
-			if (typeResult.isOk()) {
-				String inferredType = typeResult.okValue();
-				// Validate that the inferred type is compatible with the declared type
-				// But skip validation for pointer types (they're complex and require more
-				// infrastructure)
-				if (!decl.declaredType().startsWith("*")
-						&& !ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
-					return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
-							"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
-				}
-			}
-			return Result.ok(decl.declaredType());
+			return typeResult.match(
+					inferredType -> {
+						// Validate that the inferred type is compatible with the declared type
+						// But skip validation for pointer types (they're complex and require more
+						// infrastructure)
+						if (!decl.declaredType().startsWith("*")
+								&& !ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
+							return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
+									"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
+						}
+						return Result.ok(decl.declaredType());
+					},
+					err -> Result.ok(decl.declaredType()));
 		}
 	}
 
@@ -239,66 +234,69 @@ public final class App {
 		// Format: let varName : TYPE = EXPR; continuation
 		// where continuation is either another let binding or a variable reference
 		Result<ExpressionTokens.LetBindingDecl, CompileError> declResult = ExpressionTokens.parseLetDeclaration(expr);
-		if (declResult.isErr()) {
-			return Result.err(declResult.errValue());
-		}
+		return declResult.match(
+				decl -> {
 
-		ExpressionTokens.LetBindingDecl decl = declResult.okValue();
+					// Check for duplicate variable binding
+					if (boundVariables.containsKey(decl.varName())) {
+						return Result.err(new CompileError(
+								"Duplicate variable binding: '" + decl.varName() + "' is already bound"));
+					}
 
-		// Check for duplicate variable binding
-		if (boundVariables.containsKey(decl.varName())) {
-			return Result.err(new CompileError("Duplicate variable binding: '" + decl.varName() + "' is already bound"));
-		}
+					// Extract and validate the type
+					Result<String, CompileError> actualTypeResult = determineAndValidateType(decl, variableTypes);
+					return actualTypeResult.match(
+							actualType -> {
 
-		// Extract and validate the type
-		Result<String, CompileError> actualTypeResult = determineAndValidateType(decl, variableTypes);
-		if (actualTypeResult.isErr()) {
-			return Result.err(actualTypeResult.errValue());
-		}
-		String actualType = actualTypeResult.okValue();
+								// Now substitute any bound variables in the value expression for actual
+								// compilation
+								String valueExpr = decl.valueExpr();
+								for (String varName : boundVariables.keySet()) {
+									// Simple substitution - replace variable references with their bound
+									// expressions
+									valueExpr = valueExpr.replaceAll("\\b" + varName + "\\b",
+											boundVariables.get(varName));
+								}
 
-		// Now substitute any bound variables in the value expression for actual
-		// compilation
-		String valueExpr = decl.valueExpr();
-		for (String varName : boundVariables.keySet()) {
-			// Simple substitution - replace variable references with their bound
-			// expressions
-			valueExpr = valueExpr.replaceAll("\\b" + varName + "\\b", boundVariables.get(varName));
-		}
+								// Parse the value expression
+								Result<ExpressionModel.ExpressionResult, CompileError> valueResult = parseExpressionWithRead(
+										valueExpr);
+								return valueResult.match(
+										valueExprResult -> {
 
-		// Parse the value expression
-		Result<ExpressionModel.ExpressionResult, CompileError> valueResult = parseExpressionWithRead(valueExpr);
-		if (valueResult.isErr()) {
-			return Result.err(valueResult.errValue());
-		}
+											// Find where the first binding ends (after its semicolon)
+											int equalsIndex = expr.indexOf('=');
+											int semiIndex = expr.indexOf(';', equalsIndex);
 
-		// Find where the first binding ends (after its semicolon)
-		int equalsIndex = expr.indexOf('=');
-		int semiIndex = expr.indexOf(';', equalsIndex);
+											// Get the continuation after the semicolon
+											String continuation = expr.substring(semiIndex + 1).trim();
 
-		// Get the continuation after the semicolon
-		String continuation = expr.substring(semiIndex + 1).trim();
+											// Parse the continuation (either another let binding or final variable
+											// reference)
+											if (continuation.startsWith("let ")) {
+												// Another let binding follows - recursively parse it with updated context
+												java.util.Map<String, String> newVariables = new java.util.HashMap<>(boundVariables);
+												newVariables.put(decl.varName(), decl.valueExpr());
+												java.util.Map<String, String> newTypes = new java.util.HashMap<>(variableTypes);
+												newTypes.put(decl.varName(), actualType);
+												return parseLetExpressionBindingWithContext(continuation, newVariables, newTypes);
+											}
 
-		// Parse the continuation (either another let binding or final variable
-		// reference)
-		if (continuation.startsWith("let ")) {
-			// Another let binding follows - recursively parse it with updated context
-			java.util.Map<String, String> newVariables = new java.util.HashMap<>(boundVariables);
-			newVariables.put(decl.varName(), decl.valueExpr());
-			java.util.Map<String, String> newTypes = new java.util.HashMap<>(variableTypes);
-			newTypes.put(decl.varName(), actualType);
-			return parseLetExpressionBindingWithContext(continuation, newVariables, newTypes);
-		}
+											// Should be a variable reference - validate it matches the declared variable
+											if (!continuation.equals(decl.varName())) {
+												return Result.err(new CompileError("Invalid let binding: expected reference to variable '" +
+														decl.varName() + "' but got '" + continuation + "'"));
+											}
 
-		// Should be a variable reference - validate it matches the declared variable
-		if (!continuation.equals(decl.varName())) {
-			return Result.err(new CompileError("Invalid let binding: expected reference to variable '" +
-					decl.varName() + "' but got '" + continuation + "'"));
-		}
-
-		// Return the value expression result (the variable evaluates to its bound
-		// value)
-		return Result.ok(valueResult.okValue());
+											// Return the value expression result (the variable evaluates to its bound
+											// value)
+											return Result.ok(valueExprResult);
+										},
+										err -> Result.err(err));
+							},
+							err -> Result.err(err));
+				},
+				err -> Result.err(err));
 	}
 
 	public static Result<ExpressionModel.ParsedMult, CompileError> parseMultiplicative(String expr,
@@ -307,30 +305,29 @@ public final class App {
 	}
 
 	public static Result<RunResult, ApplicationError> run(String source, int[] input) {
-		Result<Instruction[], CompileError> compileResult = compile(source);
-		if (compileResult.isErr()) {
-			return Result.err(new ApplicationError(compileResult.errValue()));
-		}
-		Instruction[] instructions = compileResult.okValue();
-		final int[] inputPointer = { 0 };
-		List<Integer> output = new ArrayList<>();
-		try {
-			int returnValue = Vm.execute(
-					instructions,
-					() -> {
-						if (inputPointer[0] >= input.length) {
-							return 0;
-						}
-						return input[inputPointer[0]++];
-					},
-					output::add);
+		return compile(source).match(
+				instructions -> {
+					final int[] inputPointer = { 0 };
+					List<Integer> output = new ArrayList<>();
+					try {
+						int returnValue = Vm.execute(
+								instructions,
+								() -> {
+									if (inputPointer[0] >= input.length) {
+										return 0;
+									}
+									return input[inputPointer[0]++];
+								},
+								output::add);
 
-			return Result.ok(new RunResult(output, returnValue, instructions));
-		} catch (Exception e) {
-			e.printStackTrace();
-			System.err.println("Exception occurred during execution!");
-			return Result.err(new ApplicationError(new ExecutionError(instructions)));
-		}
+						return Result.ok(new RunResult(output, returnValue, instructions));
+					} catch (Exception e) {
+						e.printStackTrace();
+						System.err.println("Exception occurred during execution!");
+						return Result.err(new ApplicationError(new ExecutionError(instructions)));
+					}
+				},
+				err -> Result.err(new ApplicationError(err)));
 	}
 
 	private static Result<Void, CompileError> handleTopLevelWhileLoop(String stmt, List<Instruction> instructions) {

@@ -59,10 +59,13 @@ public final class ExpressionTokens {
 		if (expr.startsWith("*")) {
 			String inner = expr.substring(1).trim();
 			Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
-			if (innerType.isErr()) {
+			if (innerType instanceof Result.Err<String, CompileError>) {
 				return innerType;
 			}
-			String pointerType = innerType.okValue();
+			if (!(innerType instanceof Result.Ok<String, CompileError> ok)) {
+				return Result.err(new CompileError("Internal error: expected Ok or Err in inner dereference type"));
+			}
+			String pointerType = ok.value();
 			// Strip 'mut' keyword if present: *mut Type -> *Type
 			if (pointerType.startsWith("*mut ")) {
 				pointerType = "*" + pointerType.substring(5);
@@ -82,13 +85,13 @@ public final class ExpressionTokens {
 				inner = inner.substring(4).trim();
 			}
 			Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
-			if (innerType.isErr()) {
-				// If we can't determine the type of the inner expression, return generic
-				// pointer type
-				return Result.ok("*U8");
+			if (innerType instanceof Result.Ok<String, CompileError> ok) {
+				// Taking reference of Type gives *Type (or *mut Type for mutable references)
+				return Result.ok("*" + ok.value());
 			}
-			// Taking reference of Type gives *Type (or *mut Type for mutable references)
-			return Result.ok("*" + innerType.okValue());
+			// If we can't determine the type of the inner expression, return generic
+			// pointer type
+			return Result.ok("*U8");
 		}
 
 		// Handle variable references

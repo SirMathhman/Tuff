@@ -29,11 +29,10 @@ public final class ForLoopHandler {
 		String remaining = stmt.substring(conditionEnd + 1).trim();
 
 		Result<ForLoopCondition, CompileError> parseResult = parseForLoopCondition(condition);
-		if (parseResult.isErr()) {
-			return Result.err(parseResult.errValue());
+		if (parseResult instanceof Result.Err<ForLoopCondition, CompileError> parseErr) {
+			return Result.err(parseErr.error());
 		}
-
-		ForLoopCondition loopCond = parseResult.okValue();
+		ForLoopCondition loopCond = ((Result.Ok<ForLoopCondition, CompileError>) parseResult).value();
 
 		if (remaining.isEmpty()) {
 			return Result.err(new CompileError("For loop requires body"));
@@ -41,11 +40,10 @@ public final class ForLoopHandler {
 
 		Result<Integer, CompileError> setupResult = setupLoopVariables(loopCond.startExpr(), loopCond.endExpr(),
 				instructions, externalVariables, loopCond.iterVarName());
-		if (setupResult.isErr()) {
-			return Result.err(setupResult.errValue());
+		if (setupResult instanceof Result.Err<Integer, CompileError> setupErr) {
+			return Result.err(setupErr.error());
 		}
-
-		Integer iterVarAddr = setupResult.okValue();
+		Integer iterVarAddr = ((Result.Ok<Integer, CompileError>) setupResult).value();
 		int loopConditionIdx = instructions.size();
 
 		// Load and compare loop condition
@@ -58,7 +56,7 @@ public final class ForLoopHandler {
 		// Parse body
 		Result<Void, CompileError> bodyResult = parseForLoopBody(remaining, iterVarAddr, loopCond.iterVarName(),
 				instructions, externalVariables);
-		if (bodyResult.isErr()) {
+		if (bodyResult instanceof Result.Err<Void, CompileError>) {
 			return bodyResult;
 		}
 
@@ -114,12 +112,14 @@ public final class ForLoopHandler {
 			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) startVarAddr));
 		} else {
 			Result<ExpressionModel.ExpressionResult, CompileError> startResult = App.parseExpressionWithRead(startExpr);
-			if (startResult.isErr()) {
-				return Result.err(startResult.errValue());
+			if (startResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> startErr) {
+				return Result.err(startErr.error());
 			}
-			Result<Void, CompileError> genStart = App.generateInstructions(startResult.okValue(), instructions);
-			if (genStart.isErr()) {
-				return Result.err(genStart.errValue());
+			ExpressionModel.ExpressionResult startOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) startResult)
+					.value();
+			Result<Void, CompileError> genStart = App.generateInstructions(startOk, instructions);
+			if (genStart instanceof Result.Err<Void, CompileError> genStartErr) {
+				return Result.err(genStartErr.error());
 			}
 		}
 
@@ -131,12 +131,14 @@ public final class ForLoopHandler {
 			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) endVarAddr));
 		} else {
 			Result<ExpressionModel.ExpressionResult, CompileError> endResult = App.parseExpressionWithRead(endExpr);
-			if (endResult.isErr()) {
-				return Result.err(endResult.errValue());
+			if (endResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> endErr) {
+				return Result.err(endErr.error());
 			}
-			Result<Void, CompileError> genEnd = App.generateInstructions(endResult.okValue(), instructions);
-			if (genEnd.isErr()) {
-				return Result.err(genEnd.errValue());
+			ExpressionModel.ExpressionResult endOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) endResult)
+					.value();
+			Result<Void, CompileError> genEnd = App.generateInstructions(endOk, instructions);
+			if (genEnd instanceof Result.Err<Void, CompileError> genEndErr) {
+				return Result.err(genEndErr.error());
 			}
 		}
 
@@ -203,11 +205,12 @@ public final class ForLoopHandler {
 
 		// For now, just execute as expression
 		Result<ExpressionModel.ExpressionResult, CompileError> bodyResult = App.parseExpressionWithRead(bodyStmt);
-		if (bodyResult.isErr()) {
-			return Result.err(bodyResult.errValue());
+		if (bodyResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> bodyErr) {
+			return Result.err(bodyErr.error());
 		}
-
-		return App.generateInstructions(bodyResult.okValue(), instructions);
+		ExpressionModel.ExpressionResult bodyOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) bodyResult)
+				.value();
+		return App.generateInstructions(bodyOk, instructions);
 	}
 
 	private static Result<Void, CompileError> handleCompoundAssignmentInForLoop(String stmt, Integer iterVarAddr,
@@ -250,7 +253,7 @@ public final class ForLoopHandler {
 			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 3, (long) iterVarAddr));
 		} else {
 			Result<Void, CompileError> genResult = CompilerHelpers.parseAndGenerateExpression(exprStr, instructions);
-			if (genResult.isErr()) {
+			if (genResult instanceof Result.Err<Void, CompileError>) {
 				return genResult;
 			}
 		}

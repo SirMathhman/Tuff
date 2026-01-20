@@ -28,7 +28,7 @@ public final class ForLoopProcessor {
 		// Store the initial value at the correct memory address
 		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(initialValueExpr, instructions,
 				nextMemAddr);
-		if (storeResult.isErr())
+		if (storeResult instanceof Result.Err<Void, CompileError>)
 			return storeResult;
 
 		// Add variable to context
@@ -47,7 +47,7 @@ public final class ForLoopProcessor {
 
 		// Delegate to ForLoopHandler
 		Result<Void, CompileError> forLoopResult = ForLoopHandler.handleForLoop(forLoopPart, instructions, context);
-		if (forLoopResult.isErr()) {
+		if (forLoopResult instanceof Result.Err<Void, CompileError>) {
 			return forLoopResult;
 		}
 

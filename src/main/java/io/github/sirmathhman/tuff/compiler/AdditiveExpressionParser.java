@@ -48,11 +48,13 @@ public final class AdditiveExpressionParser {
 			boolean isSubtracted = additiveOps.get(i);
 			Result<ExpressionModel.ParsedMult, CompileError> multResult = App.parseMultiplicative(
 					addTokens.get(i).trim(), isSubtracted);
-			if (multResult.isErr()) {
-				return Result.err(multResult.errValue());
+			if (multResult instanceof Result.Err<ExpressionModel.ParsedMult, CompileError> err) {
+				return Result.err(err.error());
 			}
-
-			ExpressionModel.ParsedMult mult = multResult.okValue();
+			if (!(multResult instanceof Result.Ok<ExpressionModel.ParsedMult, CompileError> ok)) {
+				return Result.err(new CompileError("Internal error: expected Ok or Err in parseMultiplicative"));
+			}
+			ExpressionModel.ParsedMult mult = ok.value();
 			allTerms.addAll(mult.terms);
 			totalReads += mult.readCount;
 			if (isSubtracted) {

@@ -29,12 +29,15 @@ public final class BitwiseNotParser {
 		}
 
 		Result<ExpressionModel.ExpressionTerm, CompileError> baseResult = parseBaseTerm(term);
-		if (baseResult.isErr()) {
+		if (baseResult instanceof Result.Err<ExpressionModel.ExpressionTerm, CompileError>) {
 			return baseResult;
 		}
+		if (!(baseResult instanceof Result.Ok<ExpressionModel.ExpressionTerm, CompileError> ok)) {
+			return Result.err(new CompileError("Internal error: expected Ok or Err in parseBaseTerm"));
+		}
+		ExpressionModel.ExpressionTerm baseTerm = ok.value();
 
 		if (isLogicalNotted) {
-			ExpressionModel.ExpressionTerm baseTerm = baseResult.okValue();
 			return applyLogicalNot(baseTerm, term);
 		}
 
@@ -42,7 +45,6 @@ public final class BitwiseNotParser {
 			return baseResult;
 		}
 
-		ExpressionModel.ExpressionTerm baseTerm = baseResult.okValue();
 		return applyBitwiseNot(baseTerm, term);
 	}
 
@@ -75,13 +77,16 @@ public final class BitwiseNotParser {
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseLiteralTerm(String term) {
 		Result<Long, CompileError> literalResult = ExpressionTokens.parseLiteral(term);
-		if (literalResult.isErr()) {
+		if (literalResult instanceof Result.Err<Long, CompileError> err) {
 			if (!term.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-				return Result.err(literalResult.errValue());
+				return Result.err(err.error());
 			}
 			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
 		}
-		return Result.ok(new ExpressionModel.ExpressionTerm(0, literalResult.okValue(), false, false));
+		if (!(literalResult instanceof Result.Ok<Long, CompileError> ok)) {
+			return Result.err(new CompileError("Internal error: expected Ok or Err in parseLiteral"));
+		}
+		return Result.ok(new ExpressionModel.ExpressionTerm(0, ok.value(), false, false));
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> applyBitwiseNot(

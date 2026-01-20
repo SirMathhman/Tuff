@@ -32,7 +32,7 @@ public final class WhileLoopHandler {
 		int loopStartIdx = instructions.size();
 
 		Result<Void, CompileError> condResult = evaluateLoopCondition(condition, variableAddresses, instructions);
-		if (condResult.isErr()) {
+		if (condResult instanceof Result.Err<Void, CompileError>) {
 			return condResult;
 		}
 
@@ -47,7 +47,7 @@ public final class WhileLoopHandler {
 		}
 
 		Result<Void, CompileError> bodyResult = parseLoopBody(loopParts.body, instructions, variableAddresses);
-		if (bodyResult.isErr()) {
+		if (bodyResult instanceof Result.Err<Void, CompileError>) {
 			return bodyResult;
 		}
 
@@ -135,12 +135,15 @@ public final class WhileLoopHandler {
 	private static Result<Void, CompileError> parseAndGenerateExpression(String expr, List<Instruction> instructions,
 			Integer storeAddr) {
 		Result<ExpressionModel.ExpressionResult, CompileError> rhsResult = App.parseExpressionWithRead(expr);
-		if (rhsResult.isErr()) {
-			return Result.err(rhsResult.errValue());
+		if (rhsResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> err) {
+			return Result.err(err.error());
+		}
+		if (!(rhsResult instanceof Result.Ok<ExpressionModel.ExpressionResult, CompileError> ok)) {
+			return Result.err(new CompileError("Internal error: expected Ok or Err parsing RHS"));
 		}
 
-		Result<Void, CompileError> genResult = App.generateInstructions(rhsResult.okValue(), instructions);
-		if (genResult.isErr()) {
+		Result<Void, CompileError> genResult = App.generateInstructions(ok.value(), instructions);
+		if (genResult instanceof Result.Err<Void, CompileError>) {
 			return genResult;
 		}
 
@@ -172,7 +175,7 @@ public final class WhileLoopHandler {
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) varAddr));
 
 		Result<Void, CompileError> parseResult = parseAndGenerateExpression(rhs, instructions, null);
-		if (parseResult.isErr()) {
+		if (parseResult instanceof Result.Err<Void, CompileError>) {
 			return parseResult;
 		}
 
@@ -213,7 +216,7 @@ public final class WhileLoopHandler {
 			instructions.add(new Instruction(op, Variant.Immediate, 0, 1L));
 		} catch (NumberFormatException e) {
 			Result<Void, CompileError> complexResult = handleComplexRhsExpression(opChar, expr, instructions);
-			if (complexResult.isErr()) {
+			if (complexResult instanceof Result.Err<Void, CompileError>) {
 				return complexResult;
 			}
 		}
@@ -224,16 +227,11 @@ public final class WhileLoopHandler {
 
 	private static Result<Void, CompileError> handleComplexRhsExpression(char opChar, String expr,
 			List<Instruction> instructions) {
-		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(expr);
-		if (exprResult.isErr()) {
-			return Result.err(exprResult.errValue());
-		}
-
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, 0L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 1, 0L));
-
-		Result<Void, CompileError> genResult = App.generateInstructions(exprResult.okValue(), instructions);
-		if (genResult.isErr()) {
+		Result<Void, CompileError> genResult = App.parseExpressionWithRead(expr)
+				.match(parsed -> App.generateInstructions(parsed, instructions), Result::err);
+		if (genResult instanceof Result.Err<Void, CompileError>) {
 			return genResult;
 		}
 

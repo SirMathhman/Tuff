@@ -5,7 +5,6 @@ import java.util.List;
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
-import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
@@ -34,21 +33,13 @@ public final class CompilerHelpers {
 	 */
 	public static Result<Void, CompileError> parseAndStoreInMemory(String valueExpr,
 			List<Instruction> instructions, int memAddr) {
-		// Parse and evaluate value expression
-		Result<ExpressionModel.ExpressionResult, CompileError> valueResult = App.parseExpressionWithRead(valueExpr);
-		if (valueResult.isErr()) {
-			return Result.err(valueResult.errValue());
-		}
-
-		// Generate instructions for the value expression
-		Result<Void, CompileError> genResult = App.generateInstructions(valueResult.okValue(), instructions);
-		if (genResult.isErr()) {
-			return Result.err(genResult.errValue());
-		}
-
-		// Store result (in register 0) to a memory location
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
-		return Result.ok(null);
+		return App.parseExpressionWithRead(valueExpr)
+				.flatMap(expr -> App.generateInstructions(expr, instructions))
+				.map(ignored -> {
+					// Store result (in register 0) to a memory location
+					instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
+					return null;
+				});
 	}
 
 	/**
@@ -58,17 +49,8 @@ public final class CompilerHelpers {
 	 */
 	public static Result<Void, CompileError> parseAndGenerateExpression(String expr,
 			List<Instruction> instructions) {
-		Result<ExpressionModel.ExpressionResult, CompileError> parseResult = App.parseExpressionWithRead(expr);
-		if (parseResult.isErr()) {
-			return Result.err(parseResult.errValue());
-		}
-
-		Result<Void, CompileError> genResult = App.generateInstructions(parseResult.okValue(), instructions);
-		if (genResult.isErr()) {
-			return Result.err(genResult.errValue());
-		}
-
-		return Result.ok(null);
+		return App.parseExpressionWithRead(expr)
+				.flatMap(parsed -> App.generateInstructions(parsed, instructions));
 	}
 
 	/**

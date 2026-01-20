@@ -71,13 +71,12 @@ public final class LetBindingProcessor {
 				"(" + decl.valueExpr() + ")");
 		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName,
 				decl.valueExpr());
-		if (typeCheckResult.isErr()) {
+		if (typeCheckResult instanceof Result.Err<Void, CompileError>) {
 			return typeCheckResult;
 		}
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App
 				.parseExpressionWithRead(substitutedContinuation);
-		return contResult.isErr() ? Result.err(contResult.errValue())
-				: App.generateInstructions(contResult.okValue(), instructions);
+		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 	}
 
 	private static Result<Void, CompileError> tryEarlyReturns(String varName, VariableDecl decl,
@@ -112,8 +111,7 @@ public final class LetBindingProcessor {
 					.hasConditional(decl.valueExpr())
 							? ConditionalExpressionHandler.parseConditional(decl.valueExpr())
 							: App.parseExpressionWithRead(decl.valueExpr());
-			return valueResult.isErr() ? Result.err(valueResult.errValue())
-					: App.generateInstructions(valueResult.okValue(), instructions);
+			return valueResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 		}
 		if (variableAddresses.containsKey(continuation)) {
 			return LetBindingHandler.handleVariableReference(decl.valueExpr(), continuation, instructions,
@@ -141,14 +139,14 @@ public final class LetBindingProcessor {
 		java.util.Map<String, String> typeContext = new java.util.HashMap<>();
 		Result<String, CompileError> boundVarTypeResult = ExpressionTokens.extractTypeFromExpression(valueExpr,
 				typeContext);
-		if (boundVarTypeResult.isOk()) {
-			typeContext.put(varName, boundVarTypeResult.okValue());
+		return boundVarTypeResult.match(boundVarType -> {
+			typeContext.put(varName, boundVarType);
 			Result<String, CompileError> contTypeResult = ExpressionTokens.extractTypeFromExpression(continuation,
 					typeContext);
-			if (contTypeResult.isErr()) {
-				return Result.err(contTypeResult.errValue());
+			if (contTypeResult instanceof Result.Err<String, CompileError> contTypeErr) {
+				return Result.err(contTypeErr.error());
 			}
-		}
-		return Result.ok(null);
+			return Result.ok(null);
+		}, err -> Result.ok(null));
 	}
 }

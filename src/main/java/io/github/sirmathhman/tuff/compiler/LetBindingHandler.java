@@ -75,17 +75,17 @@ public final class LetBindingHandler {
 		String afterBrace = continuation.substring(closingBrace + 1).trim();
 		if (initialValueExpr != null) {
 			Result<Void, CompileError> storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
-			if (storeResult.isErr())
+			if (storeResult instanceof Result.Err<Void, CompileError>)
 				return storeResult;
 		}
 		String remaining = blockContent;
 		while (true) {
 			Result<AssignmentParseResult, CompileError> assignResult = parseAssignment(varName, remaining);
-			if (assignResult.isErr())
+			if (!(assignResult instanceof Result.Ok<AssignmentParseResult, CompileError> assignOk))
 				break;
-			AssignmentParseResult parsed = assignResult.okValue();
+			AssignmentParseResult parsed = assignOk.value();
 			Result<Void, CompileError> processResult = processAssignmentValue(parsed.valueExpr(), instructions, nextMemAddr);
-			if (processResult.isErr())
+			if (processResult instanceof Result.Err<Void, CompileError>)
 				return processResult;
 			remaining = parsed.remaining();
 		}
@@ -128,7 +128,7 @@ public final class LetBindingHandler {
 				stmt = stmt.trim();
 				if (!stmt.isEmpty()) {
 					Result<Void, CompileError> stmtResult = App.parseStatement(stmt, instructions);
-					if (stmtResult.isErr())
+					if (stmtResult instanceof Result.Err<Void, CompileError>)
 						return stmtResult;
 				}
 			}
@@ -136,12 +136,14 @@ public final class LetBindingHandler {
 
 		// Evaluate yield expression
 		Result<ExpressionModel.ExpressionResult, CompileError> yieldResult = App.parseExpressionWithRead(afterYield);
-		if (yieldResult.isErr())
-			return Result.err(yieldResult.errValue());
+		if (yieldResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> yieldErr)
+			return Result.err(yieldErr.error());
+		ExpressionModel.ExpressionResult yieldOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) yieldResult)
+				.value();
 
 		// Generate instructions for the yield expression
-		Result<Void, CompileError> genResult = App.generateInstructions(yieldResult.okValue(), instructions);
-		if (genResult.isErr())
+		Result<Void, CompileError> genResult = App.generateInstructions(yieldOk, instructions);
+		if (genResult instanceof Result.Err<Void, CompileError>)
 			return genResult;
 
 		// Store result to memory address
@@ -164,7 +166,7 @@ public final class LetBindingHandler {
 		// Store the initial value at the correct memory address
 		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(initialValueExpr, instructions,
 				nextMemAddr);
-		if (storeResult.isErr())
+		if (storeResult instanceof Result.Err<Void, CompileError>)
 			return storeResult;
 
 		// Add variable to context
@@ -226,8 +228,8 @@ public final class LetBindingHandler {
 
 				Result<String, CompileError> valueTypeResult = ExpressionTokens.extractTypeFromExpression(secondValueExpr,
 						typeContext);
-				if (valueTypeResult.isOk() && declaredType != null) {
-					String valueType = valueTypeResult.okValue();
+				if (declaredType != null && valueTypeResult instanceof Result.Ok<String, CompileError> valueTypeOk) {
+					String valueType = valueTypeOk.value();
 					// Check type compatibility
 					if (!ExpressionTokens.isTypeCompatible(valueType, declaredType)) {
 						return Result.err(new CompileError("Type mismatch in let binding: variable '" +
@@ -278,8 +280,8 @@ public final class LetBindingHandler {
 			List<Instruction> instructions) {
 		// Variable used multiple times - need to cache value in memory
 		Result<Void, CompileError> storeResult = parseAndStoreInMemory(valueExpr, instructions);
-		if (storeResult.isErr()) {
-			return Result.err(storeResult.errValue());
+		if (storeResult instanceof Result.Err<Void, CompileError> storeErr) {
+			return Result.err(storeErr.error());
 		}
 
 		int memAddr = 100;
@@ -312,7 +314,7 @@ public final class LetBindingHandler {
 			int memAddr,
 			java.util.function.Supplier<Result<Void, CompileError>> continuation) {
 		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(valueExpr, instructions, memAddr);
-		if (storeResult.isErr()) {
+		if (storeResult instanceof Result.Err<Void, CompileError>) {
 			return storeResult;
 		}
 		return continuation.get();
@@ -333,14 +335,14 @@ public final class LetBindingHandler {
 		// Parse and evaluate initial value if provided, store in memory
 		if (initialValueExpr != null) {
 			Result<Void, CompileError> storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
-			if (storeResult.isErr())
+			if (storeResult instanceof Result.Err<Void, CompileError>)
 				return storeResult;
 		}
 
 		// Use MutableAssignmentHandler to process assignments
 		Result<Void, CompileError> assignmentResult = MutableAssignmentHandler.handleAssignment(
 				varName, continuation, instructions, nextMemAddr, isUninitialized, isMutableUninitialized);
-		if (assignmentResult.isErr())
+		if (assignmentResult instanceof Result.Err<Void, CompileError>)
 			return assignmentResult;
 
 		// Final part should be variable reference
@@ -373,10 +375,12 @@ public final class LetBindingHandler {
 	static Result<Void, CompileError> processAssignmentValue(String valueExpr, List<Instruction> instructions,
 			int nextMemAddr) {
 		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(valueExpr);
-		if (exprResult.isErr())
-			return Result.err(exprResult.errValue());
-		Result<Void, CompileError> assignGenResult = App.generateInstructions(exprResult.okValue(), instructions);
-		if (assignGenResult.isErr())
+		if (exprResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> exprErr)
+			return Result.err(exprErr.error());
+		ExpressionModel.ExpressionResult exprOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) exprResult)
+				.value();
+		Result<Void, CompileError> assignGenResult = App.generateInstructions(exprOk, instructions);
+		if (assignGenResult instanceof Result.Err<Void, CompileError>)
 			return assignGenResult;
 		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
 		return Result.ok(null);

@@ -43,22 +43,27 @@ public final class DereferenceAssignmentHandler {
 
 		// Parse the dereference assignment
 		Result<DereferenceAssignmentParseResult, CompileError> parseResult = parse(varName, continuation);
-		if (parseResult.isErr()) {
-			return Result.err(parseResult.errValue());
+		if (parseResult instanceof Result.Err<DereferenceAssignmentParseResult, CompileError> err) {
+			return Result.err(err.error());
 		}
-
-		DereferenceAssignmentParseResult parsed = parseResult.okValue();
+		if (!(parseResult instanceof Result.Ok<DereferenceAssignmentParseResult, CompileError> ok)) {
+			return Result.err(new CompileError("Internal error: expected Ok or Err parsing dereference assignment"));
+		}
+		DereferenceAssignmentParseResult parsed = ok.value();
 
 		// Parse and evaluate assignment value
 		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(
 				parsed.valueExpr());
-		if (exprResult.isErr()) {
-			return Result.err(exprResult.errValue());
+		if (exprResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> exprErr) {
+			return Result.err(exprErr.error());
+		}
+		if (!(exprResult instanceof Result.Ok<ExpressionModel.ExpressionResult, CompileError> exprOk)) {
+			return Result.err(new CompileError("Internal error: expected Ok or Err parsing assignment expression"));
 		}
 
 		// Generate instructions for assignment value
-		Result<Void, CompileError> assignGenResult = App.generateInstructions(exprResult.okValue(), instructions);
-		if (assignGenResult.isErr()) {
+		Result<Void, CompileError> assignGenResult = App.generateInstructions(exprOk.value(), instructions);
+		if (assignGenResult instanceof Result.Err<Void, CompileError>) {
 			return assignGenResult;
 		}
 

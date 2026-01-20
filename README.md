@@ -205,8 +205,16 @@ if (read Bool) 3 else 5 // Conditionals at expression level
 # Run tests
 mvn test
 
-# Run Checkstyle
-mvn checkstyle:check
+# Run Checkstyle (recommended)
+#
+# Note: the Checkstyle configuration uses custom checks defined in this project.
+# Running `mvn verify` will build and install the project artifact into your local
+# Maven repository before executing Checkstyle.
+mvn verify
+
+# (Optional) If you want to run Checkstyle as a standalone goal:
+# mvn -DskipTests install
+# mvn checkstyle:check
 
 # Full build with verification
 mvn verify
