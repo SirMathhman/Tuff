@@ -14,6 +14,9 @@ public final class InstructionBuilder {
 		for (ExpressionModel.ExpressionTerm term : terms) {
 			if (term.readCount > 0) {
 				instructions.add(new Instruction(Operation.In, Variant.Immediate, nextReg, null));
+				if (term.isBitwiseNotted()) {
+					instructions.add(new Instruction(Operation.BitsNot, Variant.Immediate, nextReg, null));
+				}
 				nextReg++;
 			}
 		}
@@ -282,7 +285,9 @@ public final class InstructionBuilder {
 	}
 
 	private static boolean isMultiplicativeNext(List<ExpressionModel.ExpressionTerm> terms, int i) {
-		return i + 1 < terms.size() && (terms.get(i + 1).isMultiplied() || terms.get(i + 1).isDivided() || terms.get(i + 1).multiplicativeOperator == '&' || terms.get(i + 1).multiplicativeOperator == '|')
+		return i + 1 < terms.size()
+				&& (terms.get(i + 1).isMultiplied() || terms.get(i + 1).isDivided()
+						|| terms.get(i + 1).multiplicativeOperator == '&' || terms.get(i + 1).multiplicativeOperator == '|')
 				&& terms.get(i + 1).readCount > 0;
 	}
 

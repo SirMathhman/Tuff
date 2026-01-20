@@ -585,6 +585,21 @@ public final class AppTest {
 		assertValidWithInput("read U8 | read U8 | read U8", 15, 0b1010, 0b1100, 0b0001);
 	}
 
+	@Test
+	void shouldSupportBitwiseNotWithLiteral() {
+		assertValidWithInput("~10U8", 245);
+	}
+
+	@Test
+	void shouldSupportBitwiseNotWithRead() {
+		assertValidWithInput("~read U8", 245, 10);
+	}
+
+	@Test
+	void shouldSupportBitwiseNotWithOperation() {
+		assertValidWithInput("~read U8 + read U8", 246, 10, 1);
+	}
+
 	// TODO: Support if/else with assignments in branches
 	// Should support: let x : U8; if (read Bool) x = 2; else x = 3; x
 	// This requires proper jump instruction generation for conditional branches

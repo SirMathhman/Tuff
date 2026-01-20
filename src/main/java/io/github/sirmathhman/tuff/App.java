@@ -1,6 +1,7 @@
 package io.github.sirmathhman.tuff;
 
 import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
+import io.github.sirmathhman.tuff.compiler.BitwiseNotParser;
 import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.EqualityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
@@ -12,7 +13,6 @@ import io.github.sirmathhman.tuff.compiler.InequalityOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.LessOrEqualOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.LessThanOperatorHandler;
-import io.github.sirmathhman.tuff.compiler.LiteralParser;
 import io.github.sirmathhman.tuff.compiler.LogicalAndHandler;
 import io.github.sirmathhman.tuff.compiler.LogicalOrHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
@@ -109,6 +109,22 @@ public final class App {
 			// Load all reads into registers
 			InstructionBuilder.loadAllReads(expr.terms, instructions);
 
+			// Apply masking for bitwise-notted unsigned types
+			int readReg = 0;
+			for (ExpressionModel.ExpressionTerm term : expr.terms) {
+				if (term.readCount > 0) {
+					if (term.isBitwiseNotted() && term.readTypeSpec != null && term.readTypeSpec.matches("[UI]\\d+")) {
+						int bits = Integer.parseInt(term.readTypeSpec.substring(1));
+						long mask = (1L << bits) - 1;
+						// Use a temporary register for the mask value
+						int tempReg = expr.terms.size() + 1; // Use a register beyond all reads
+						instructions.add(new Instruction(Operation.Load, Variant.Immediate, tempReg, mask));
+						instructions.add(new Instruction(Operation.BitsAnd, Variant.Immediate, readReg, (long) tempReg));
+					}
+					readReg++;
+				}
+			}
+
 			// Build result respecting precedence
 			int resultReg = InstructionBuilder.buildResultWithPrecedence(expr.terms, instructions);
 
@@ -120,6 +136,7 @@ public final class App {
 
 		return Result.ok(null);
 	}
+
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
 		expr = expr.trim();
 		// Check if this is a let binding
@@ -320,7 +337,8 @@ public final class App {
 				boolean isDivided = (j > 0 && operator == '/');
 				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(baseTerm.readCount,
 						baseTerm.value, isSubtracted, isMultiplied,
-						isDivided, false, false, false, false, (j > 0) ? operator : '\0');
+						isDivided, false, false, false, false, baseTerm.isBitwiseNotted(), (j > 0) ? operator : '\0',
+						baseTerm.readTypeSpec);
 				multTerms.add(finalTerm);
 
 				Result<Long, CompileError> litResult = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
@@ -347,6 +365,7 @@ public final class App {
 			default -> Result.ok(current * value);
 		};
 	}
+
 	private static void fixGroupingBoundaries(List<ExpressionModel.ExpressionTerm> multTerms, int lastExpandedParensSize,
 			int multTokensSize) {
 		if (lastExpandedParensSize > 1 && multTokensSize > 1) {
@@ -441,34 +460,7 @@ public final class App {
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseTerm(String term) {
-		term = term.trim();
-
-		if (term.isEmpty()) {
-			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
-		}
-
-		if (term.startsWith("read ")) {
-			String typeSpec = term.substring(5).trim();
-			if (!typeSpec.matches("\\*?([UI]\\d+|Bool)")) {
-				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
-			}
-			return Result.ok(new ExpressionModel.ExpressionTerm(1, 0, false, false));
-		}
-		if (term.startsWith("&") || term.startsWith("*")) {
-			String inner = term.substring(1).trim();
-			if (inner.startsWith("mut ")) {
-				inner = inner.substring(4).trim();
-			}
-			return parseTerm(inner);
-		}
-		Result<Long, CompileError> literalResult = LiteralParser.parseLiteral(term);
-		if (literalResult.isErr()) {
-			if (!term.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-				return Result.err(literalResult.errValue());
-			}
-			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
-		}
-		return Result.ok(new ExpressionModel.ExpressionTerm(0, literalResult.okValue(), false, false));
+		return BitwiseNotParser.parseTermWithNot(term);
 	}
 
 	public static Result<RunResult, ApplicationError> run(String source, int[] input) {
