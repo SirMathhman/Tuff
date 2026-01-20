@@ -705,6 +705,21 @@ public final class AppTest {
 		assertValidWithInput("let x : I32; if (read Bool) x = 1; else x = 2; x", 2, 0);
 	}
 
+	@Test
+	void shouldSupportNestedElseIfConditionalAssignment() {
+		assertValidWithInput("let x : I32; if (read Bool) x = 1; else if (read Bool) x = 2; else x = 3; x", 1, 1, 0);
+	}
+
+	@Test
+	void shouldSupportNestedElseIfSecondBranch() {
+		assertValidWithInput("let x : I32; if (read Bool) x = 1; else if (read Bool) x = 2; else x = 3; x", 2, 0, 1);
+	}
+
+	@Test
+	void shouldSupportNestedElseIfElseBranch() {
+		assertValidWithInput("let x : I32; if (read Bool) x = 1; else if (read Bool) x = 2; else x = 3; x", 3, 0, 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {
