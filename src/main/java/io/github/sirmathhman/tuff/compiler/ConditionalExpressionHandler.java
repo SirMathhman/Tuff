@@ -35,7 +35,7 @@ public final class ConditionalExpressionHandler {
 		return parseConditionAndBranches(condition, remaining, elseIndex);
 	}
 
-	static int findConditionEnd(String expr) {
+	public static int findConditionEnd(String expr) {
 		int parenDepth = 1;
 		for (int i = 4; i < expr.length(); i++) {
 			char c = expr.charAt(i);

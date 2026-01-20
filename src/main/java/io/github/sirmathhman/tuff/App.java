@@ -11,6 +11,7 @@ import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.LogicalOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.MultiplicativeExpressionBuilder;
 import io.github.sirmathhman.tuff.compiler.WhileLoopHandler;
+import io.github.sirmathhman.tuff.compiler.letbinding.MatchExpressionHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
@@ -142,6 +143,11 @@ public final class App {
 		// Check if this is a let binding
 		if (expr.startsWith("let ")) {
 			return parseLetExpressionBinding(expr);
+		}
+
+		// Check if this is a match expression
+		if (MatchExpressionHandler.hasMatch(expr)) {
+			return MatchExpressionHandler.parseMatch(expr);
 		}
 
 		// Check if this is a conditional expression (lowest precedence)

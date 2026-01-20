@@ -760,6 +760,11 @@ public final class AppTest {
 		assertValidWithInput("let x : U8 = { yield read U8; }; x", 42, 42);
 	}
 
+	@Test
+	void shouldSupportIfElseWithEqualityComparisonRead() {
+		assertValidWithInput("if (read U8 == read U8) 100 else 50", 100, 60, 60);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
