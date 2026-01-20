@@ -5,6 +5,8 @@ import java.util.List;
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
+import io.github.sirmathhman.tuff.compiler.letbinding.CompilerHelpers;
+import io.github.sirmathhman.tuff.compiler.letbinding.ForLoopProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
@@ -160,7 +162,7 @@ public final class LetBindingHandler {
 			String continuation, List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
 			int nextMemAddr) {
 		// Store the initial value at the correct memory address
-		Result<Void, CompileError> storeResult = storeVariableInMemory(initialValueExpr, instructions, nextMemAddr);
+		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(initialValueExpr, instructions, nextMemAddr);
 		if (storeResult.isErr())
 			return storeResult;
 
@@ -170,6 +172,13 @@ public final class LetBindingHandler {
 
 		// Delegate to WhileLoopHandler with the context containing the variable
 		return WhileLoopHandler.handleWhileLoop(continuation, "", instructions, context);
+	}
+
+	public static Result<Void, CompileError> handleForLoopAfterLet(String varName, String initialValueExpr,
+			String continuation, List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
+			int nextMemAddr) {
+		return ForLoopProcessor.handleForLoopAfterLet(varName, initialValueExpr, continuation, instructions,
+				variableAddresses, nextMemAddr);
 	}
 
 	public static Result<Void, CompileError> handleChainedLetBinding(
@@ -293,7 +302,7 @@ public final class LetBindingHandler {
 
 	private static Result<Void, CompileError> parseAndStoreInMemory(String valueExpr,
 			List<Instruction> instructions) {
-		return storeVariableInMemory(valueExpr, instructions, 100);
+		return CompilerHelpers.parseAndStoreInMemory(valueExpr, instructions, 100);
 	}
 
 	private static Result<Void, CompileError> storeAndThen(
@@ -301,30 +310,11 @@ public final class LetBindingHandler {
 			List<Instruction> instructions,
 			int memAddr,
 			java.util.function.Supplier<Result<Void, CompileError>> continuation) {
-		Result<Void, CompileError> storeResult = storeVariableInMemory(valueExpr, instructions, memAddr);
+		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(valueExpr, instructions, memAddr);
 		if (storeResult.isErr()) {
 			return storeResult;
 		}
 		return continuation.get();
-	}
-
-	private static Result<Void, CompileError> storeVariableInMemory(String valueExpr,
-			List<Instruction> instructions, int memAddr) {
-		// Parse and evaluate value expression
-		Result<ExpressionModel.ExpressionResult, CompileError> valueResult = App.parseExpressionWithRead(valueExpr);
-		if (valueResult.isErr()) {
-			return Result.err(valueResult.errValue());
-		}
-
-		// Generate instructions for the value expression
-		Result<Void, CompileError> genResult = App.generateInstructions(valueResult.okValue(), instructions);
-		if (genResult.isErr()) {
-			return Result.err(genResult.errValue());
-		}
-
-		// Store result (in register 0) to a memory location
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
-		return Result.ok(null);
 	}
 
 	public static Result<Void, CompileError> handleMutableVariableWithAssignment(
@@ -366,8 +356,7 @@ public final class LetBindingHandler {
 		}
 
 		if (remaining.equals(varName)) {
-			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
-			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
+			CompilerHelpers.loadVariableAndHalt(instructions, (long) nextMemAddr);
 			return Result.ok(null);
 		}
 

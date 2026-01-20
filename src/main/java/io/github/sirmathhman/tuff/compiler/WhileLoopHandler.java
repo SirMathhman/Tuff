@@ -2,6 +2,7 @@ package io.github.sirmathhman.tuff.compiler;
 
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
+import io.github.sirmathhman.tuff.compiler.letbinding.CompilerHelpers;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
@@ -19,7 +20,7 @@ public final class WhileLoopHandler {
 
 	public static Result<Void, CompileError> handleWhileLoop(String stmt, String continuation,
 			List<Instruction> instructions, Map<String, Integer> variableAddresses) {
-		int conditionEnd = findConditionEnd(stmt);
+		int conditionEnd = CompilerHelpers.findConditionEnd(stmt, 7);
 		if (conditionEnd == -1) {
 			return Result.err(new CompileError("Malformed while loop: missing closing paren for condition"));
 		}
@@ -256,19 +257,6 @@ public final class WhileLoopHandler {
 			case '/' -> Operation.Div;
 			default -> throw new IllegalArgumentException();
 		};
-	}
-
-	private static int findConditionEnd(String expr) {
-		int parenDepth = 1;
-		for (int i = 7; i < expr.length(); i++) {
-			if (expr.charAt(i) == '(')
-				parenDepth++;
-			else if (expr.charAt(i) == ')')
-				parenDepth--;
-			if (parenDepth == 0)
-				return i;
-		}
-		return -1;
 	}
 
 	private static int findSemicolonAtDepth(String str) {
