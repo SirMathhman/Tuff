@@ -51,6 +51,29 @@ public sealed interface Result<T, X> {
 	<Y> Result<T, Y> mapErr(Function<X, Y> f);
 
 	/**
+	 * Applies a function that returns a Result to the success value if present.
+	 * If this Result is an error, the error is propagated.
+	 *
+	 * @param <U> The type of the success value in the returned Result
+	 * @param f   The function to apply
+	 * @return A new Result from applying f to the success value, or the error
+	 */
+	<U> Result<U, X> flatMap(Function<T, Result<U, X>> f);
+
+	/**
+	 * Combines this Result with another Result using a Supplier.
+	 * If this Result is Ok and the other is Ok, returns Ok containing a Tuple of
+	 * both values.
+	 * If either Result is an error, returns the error (preferring this Result's
+	 * error if both are errors).
+	 *
+	 * @param <U>   The type of the success value in the other Result
+	 * @param other The supplier that provides the other Result
+	 * @return A Result containing a Tuple of both success values, or an error
+	 */
+	<U> Result<Tuple<T, U>, X> and(Supplier<Result<U, X>> other);
+
+	/**
 	 * Gets the success value, or null if this is an error.
 	 *
 	 * @return The success value or null
@@ -93,6 +116,20 @@ public sealed interface Result<T, X> {
 		}
 
 		@Override
+		public <U> Result<U, X> flatMap(Function<T, Result<U, X>> f) {
+			return f.apply(value);
+		}
+
+		@Override
+		public <U> Result<Tuple<T, U>, X> and(Supplier<Result<U, X>> other) {
+			Result<U, X> otherResult = other.get();
+			if (otherResult.isErr()) {
+				return Result.err(otherResult.errValue());
+			}
+			return Result.ok(new Tuple<>(value, otherResult.okValue()));
+		}
+
+		@Override
 		public T okValue() {
 			return value;
 		}
@@ -128,6 +165,16 @@ public sealed interface Result<T, X> {
 		}
 
 		@Override
+		public <U> Result<U, X> flatMap(Function<T, Result<U, X>> f) {
+			return Result.err(error);
+		}
+
+		@Override
+		public <U> Result<Tuple<T, U>, X> and(Supplier<Result<U, X>> other) {
+			return Result.err(error);
+		}
+
+		@Override
 		public T okValue() {
 			return null;
 		}
@@ -154,5 +201,13 @@ public sealed interface Result<T, X> {
 	@FunctionalInterface
 	interface Function<A, B> {
 		B apply(A a);
+	}
+
+	/**
+	 * Functional interface for providing values.
+	 */
+	@FunctionalInterface
+	interface Supplier<A> {
+		A get();
 	}
 }
