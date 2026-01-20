@@ -42,6 +42,50 @@ public final class LetBindingProcessor {
 		return new VariableDecl(varName, isMutable, valueExpr, declaredType);
 	}
 
+	private static Result<Void, CompileError> handleStructFieldAccess(String varName, VariableDecl decl,
+			String continuation, List<Instruction> instructions, Map<String, StructDefinition> structRegistry) {
+		// Try to parse the struct value expression directly using struct instantiation
+		// handler
+		Result<StructInstantiationHandler.StructInstantiationResult, CompileError> structResult = StructInstantiationHandler
+				.parseStructInstantiation(decl.valueExpr(), structRegistry);
+		if (structResult instanceof Result.Ok<StructInstantiationHandler.StructInstantiationResult, CompileError> ok) {
+			StructInstantiationHandler.StructInstantiationResult instResult = ok.value();
+
+			// Replace all field accesses in continuation (e.g., point.x -> (fieldX),
+			// point.y -> (fieldY))
+			String result = continuation;
+			java.util.Set<String> usedFields = new java.util.HashSet<>();
+			java.util.regex.Pattern fieldPattern = java.util.regex.Pattern
+					.compile("\\b" + varName + "\\.([a-zA-Z_][a-zA-Z0-9_]*)\\b");
+			java.util.regex.Matcher matcher = fieldPattern.matcher(continuation);
+
+			while (matcher.find()) {
+				String fieldName = matcher.group(1);
+				usedFields.add(fieldName);
+			}
+
+			// Verify all fields exist before replacement
+			for (String field : usedFields) {
+				if (!instResult.fieldValues().containsKey(field)) {
+					return Result.err(
+							new CompileError("Field '" + field + "' not found in struct '" + decl.declaredType() + "'"));
+				}
+			}
+
+			// Replace field accesses with their values
+			for (String field : usedFields) {
+				String fieldValue = instResult.fieldValues().get(field);
+				result = result.replaceAll("\\b" + varName + "\\." + field + "\\b", "(" + fieldValue + ")");
+			}
+
+			// Parse the substituted continuation
+			Result<ExpressionModel.ExpressionResult, CompileError> contResult = App.parseExpressionWithRead(result);
+			return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+		}
+		// If struct parsing fails, return null to fall through
+		return null;
+	}
+
 	public static Result<Void, CompileError> process(
 			String stmt,
 			int equalsIndex,
@@ -73,31 +117,13 @@ public final class LetBindingProcessor {
 			return earlyResult;
 		}
 
-		// Handle struct field access on declared struct variables (e.g., temp.value)
-		if (decl.declaredType() != null && continuation.startsWith(varName + ".")) {
-			// Try to parse the struct value expression directly using struct instantiation
-			// handler
-			Result<StructInstantiationHandler.StructInstantiationResult, CompileError> structResult = StructInstantiationHandler
-					.parseStructInstantiation(decl.valueExpr(), structRegistry);
-			if (structResult instanceof Result.Ok<StructInstantiationHandler.StructInstantiationResult, CompileError> ok) {
-				StructInstantiationHandler.StructInstantiationResult instResult = ok.value();
-				// Generate instructions for the first field value
-				if (!instResult.fieldValues().isEmpty()) {
-					// For now, just evaluate to the first field value directly
-					// The struct instantiation already handled this in our simplified model
-					Result<ExpressionModel.ExpressionResult, CompileError> fieldResult = App
-							.parseExpressionWithRead(instResult.fieldValues().values().iterator().next());
-					if (fieldResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
-						return Result.err(((Result.Err<ExpressionModel.ExpressionResult, CompileError>) fieldResult).error());
-					}
-					ExpressionModel.ExpressionResult fieldExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) fieldResult)
-							.value();
-					Result<Void, CompileError> genResult = App.generateInstructions(fieldExpr, instructions);
-					if (genResult instanceof Result.Err<Void, CompileError>) {
-						return genResult;
-					}
-				}
-				return Result.ok(null);
+		// Handle struct field access on declared struct variables (e.g., point.x +
+		// point.y)
+		if (decl.declaredType() != null && continuation.contains(varName + ".")) {
+			Result<Void, CompileError> structAccessResult = handleStructFieldAccess(varName, decl, continuation,
+					instructions, structRegistry);
+			if (structAccessResult != null) {
+				return structAccessResult;
 			}
 			// If struct parsing fails, fall through to normal path
 		}

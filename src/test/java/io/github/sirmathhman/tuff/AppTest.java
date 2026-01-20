@@ -802,6 +802,13 @@ public final class AppTest {
 				42, 42);
 	}
 
+	@Test
+	void shouldAccessMultipleFieldsOfStruct() {
+		assertValidWithInput(
+				"struct Point { x : U8, y : U8 } let point : Point = Point { x : read U8, y : read U8 }; point.x + point.y",
+				80, 35, 45);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

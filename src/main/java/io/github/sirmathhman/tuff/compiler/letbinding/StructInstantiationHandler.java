@@ -9,8 +9,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class StructInstantiationHandler {	private static record ParsedStructData(String body, String afterInstantiation) {
+public final class StructInstantiationHandler {
+	private static record ParsedStructData(String body, String afterInstantiation) {
 	}
+
 	private StructInstantiationHandler() {
 	}
 
