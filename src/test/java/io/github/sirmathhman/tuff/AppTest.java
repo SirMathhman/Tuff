@@ -755,6 +755,11 @@ public final class AppTest {
 		assertValidWithInput("let mut x = 0; while (x < 3) x = x + 2; x", 4);
 	}
 
+	@Test
+	void shouldSupportYieldInScopedBlock() {
+		assertValidWithInput("let x : U8 = { yield read U8; }; x", 42, 42);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result.isOk()) {

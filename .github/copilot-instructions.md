@@ -4,9 +4,9 @@
 
 **Tuff** is a stack-based virtual machine compiler for a type-safe language with let bindings. The architecture is divided into three layers:
 
-1. **Compiler** ([App.java](src/main/java/io/github/sirmathhman/tuff/App.java)): Parses source code into instructions
+1. **Compiler** (`App.java`): Parses source code into instructions
 2. **Instruction Pipeline**: Converts expressions to typed, precedence-aware instructions
-3. **Virtual Machine** ([Vm.java](src/main/java/io/github/sirmathhman/tuff/vm/Vm.java)): Executes 64-bit encoded instructions with 4 registers
+3. **Virtual Machine** (`Vm.java`): Executes 64-bit encoded instructions with 4 registers
 
 ## Architecture
 
@@ -133,6 +133,63 @@ Return value from register[0]
 - **Condition** must be `Bool` type (comparison result or explicit `read Bool`)
 - **Branches** are expressions (can be nested, literals, or let bindings)
 - **Compilation**: Branches generate jump instructions; condition sets register[0] to control flow
+
+## Refactoring & Code Organization Patterns
+
+### Processor Pattern (For Large Handlers)
+
+When a handler class exceeds ~400 lines or contains methods approaching 50-line limits, extract processing logic into a dedicated `*Processor` class in a subpackage:
+
+```java
+// LetBindingHandler.java (now ~300 lines, cleaner)
+public static Result<Void, CompileError> handleLetBindingWithContinuation(...) {
+    return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, ...);
+}
+
+// letbinding/LetBindingProcessor.java (new, ~150 lines)
+public static Result<Void, CompileError> process(...) {
+    // Complex logic extracted here
+}
+```
+
+**Benefits**: Spreads responsibility, keeps file sizes <500 lines, methods <50 lines, maintains cohesion.
+
+### Supporting Record Types
+
+Use small record types (in same package as processor) to encapsulate parsing results:
+
+```java
+// letbinding/VariableDecl.java
+public record VariableDecl(String varName, boolean isMutable, String valueExpr) { }
+
+// Usage in LetBindingProcessor.java
+VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
+String varName = decl.varName();  // Access via record getter
+```
+
+## Recently Implemented Features (Reference)
+
+### Compound Assignment Operators (+=, -=, \*=, /=)
+
+- **Handler**: `CompoundAssignmentHandler` + `MutableAssignmentHandler` (orchestrator)
+- **Pattern**: Mutable variable + compound operator → Load var, Eval expr, Apply op, Store result
+- **Key Detail**: `AssignmentParseResult` record includes `compoundOp` field (null for simple assign)
+- **Files**: `LetBindingHandler.handleMutableVariableWithAssignment()`, `CompoundAssignmentHandler`, `MutableAssignmentHandler`
+
+### While Loops
+
+- **Handler**: `WhileLoopHandler` (dedicated, ~375 lines)
+- **Pattern**: Parses `while (cond) { body }`, generates condition evaluation → conditional jump → body loop → jump back
+- **Key Detail**: Condition stored in variable, loop uses memory-based variable state
+- **Limitation**: Body requires assignment (e.g., `x = x + 1`); only supports mutable variable updates
+- **File**: `WhileLoopHandler.java`
+
+### Yield Expressions in Scoped Blocks
+
+- **Pattern**: `{ stmt1; stmt2; yield expr; }` syntax for block-level return value
+- **Handler**: `LetBindingHandler.handleYieldBlock()`
+- **Semantics**: Executes statements before yield, then yields final expression as block result
+- **File**: `LetBindingHandler.java`
 
 ## Common Patterns & Conventions
 

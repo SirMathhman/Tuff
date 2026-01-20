@@ -1,11 +1,11 @@
 package io.github.sirmathhman.tuff.compiler;
 
 import java.util.List;
-import java.util.Map;
 
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
+import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
@@ -52,91 +52,11 @@ public final class LetBindingHandler {
 			List<Instruction> instructions,
 			java.util.Map<String, Integer> variableAddresses,
 			int nextMemAddr) {
-		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
-		String varName = decl.varName();
-		if (continuation.trim().startsWith("{"))
-			return handleScopedBlock(varName, decl.valueExpr(), continuation, instructions, variableAddresses, nextMemAddr);
-		if (continuation.startsWith("let "))
-			return handleChainedLetBinding(varName, decl.valueExpr(), continuation, instructions, variableAddresses,
-					nextMemAddr);
-		if (continuation.startsWith("while (") && decl.isMutable())
-			return handleWhileLoopAfterLet(varName, decl.valueExpr(), continuation, instructions, variableAddresses,
-					nextMemAddr);
-		if (continuation.equals(varName)) {
-			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = ConditionalExpressionHandler
-					.hasConditional(decl.valueExpr())
-							? ConditionalExpressionHandler.parseConditional(decl.valueExpr())
-							: App.parseExpressionWithRead(decl.valueExpr());
-			return valueResult.isErr() ? Result.err(valueResult.errValue())
-					: App.generateInstructions(valueResult.okValue(), instructions);
-		}
-		if (variableAddresses.containsKey(continuation))
-			return handleVariableReference(decl.valueExpr(), continuation, instructions, variableAddresses, nextMemAddr);
-		if (continuation.contains("=") && continuation.contains(";")) {
-			if (continuation.trim().startsWith("*"))
-				return DereferenceAssignmentHandler.handle(varName, decl.valueExpr(), continuation, instructions,
-						variableAddresses);
-			if (!decl.isMutable())
-				return Result.err(new CompileError("Cannot assign to immutable variable '" + varName + "'. Use 'let mut'."));
-			return handleMutableVariableWithAssignment(varName, decl.valueExpr(), continuation, instructions, false,
-					variableAddresses, nextMemAddr);
-		}
-		java.util.regex.Pattern varPattern = java.util.regex.Pattern.compile("\\b" + varName + "\\b");
-		int occurrences = 0;
-		for (java.util.regex.Matcher m = varPattern.matcher(continuation); m.find(); occurrences++)
-			;
-		if (occurrences > 1)
-			return handleMultipleVariableReferences(varName, decl.valueExpr(), continuation, occurrences, instructions);
-		String substitutedContinuation = continuation.replaceAll("\\b" + varName + "\\b", "(" + decl.valueExpr() + ")");
-		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName, decl.valueExpr());
-		if (typeCheckResult.isErr())
-			return typeCheckResult;
-		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App
-				.parseExpressionWithRead(substitutedContinuation);
-		return contResult.isErr() ? Result.err(contResult.errValue())
-				: App.generateInstructions(contResult.okValue(), instructions);
+		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, instructions,
+				variableAddresses, nextMemAddr);
 	}
 
-	private static Result<Void, CompileError> validateContinuationTypes(String continuation, String varName,
-			String valueExpr) {
-		if (!continuation.contains("*"))
-			return Result.ok(null);
-		java.util.Map<String, String> typeContext = new java.util.HashMap<>();
-		Result<String, CompileError> boundVarTypeResult = ExpressionTokens.extractTypeFromExpression(valueExpr,
-				typeContext);
-		if (boundVarTypeResult.isOk()) {
-			typeContext.put(varName, boundVarTypeResult.okValue());
-			Result<String, CompileError> contTypeResult = ExpressionTokens.extractTypeFromExpression(continuation,
-					typeContext);
-			if (contTypeResult.isErr())
-				return Result.err(contTypeResult.errValue());
-		}
-		return Result.ok(null);
-	}
-
-	private static VariableDecl parseVariableDecl(String stmt, int equalsIndex, int semiIndex) {
-		// Extract variable name and value expression
-		String declPart = stmt.substring(4, equalsIndex).trim(); // Skip "let "
-		boolean isMutable = false;
-		if (declPart.startsWith("mut ")) {
-			isMutable = true;
-			declPart = declPart.substring(4).trim(); // Skip "mut "
-		}
-		String varName;
-		if (declPart.contains(":")) {
-			String[] parts = declPart.split(":");
-			varName = parts[0].trim();
-		} else {
-			varName = declPart.trim();
-		}
-		String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
-		return new VariableDecl(varName, isMutable, valueExpr);
-	}
-
-	private record VariableDecl(String varName, boolean isMutable, String valueExpr) {
-	}
-
-	private static Result<Void, CompileError> handleScopedBlock(
+	public static Result<Void, CompileError> handleScopedBlock(
 			String varName,
 			String initialValueExpr,
 			String continuation,
@@ -178,7 +98,65 @@ public final class LetBindingHandler {
 		return Result.ok(null);
 	}
 
-	private static Result<Void, CompileError> handleWhileLoopAfterLet(String varName, String initialValueExpr,
+	public static Result<Void, CompileError> handleYieldBlock(
+			String varName,
+			String blockContent,
+			String continuation,
+			List<Instruction> instructions,
+			int storeAddr) {
+		// Find yield keyword
+		int yieldIdx = blockContent.indexOf("yield");
+		if (yieldIdx == -1)
+			return Result.err(new CompileError("Expected 'yield' in block"));
+
+		// Get content before yield (statements to execute)
+		String beforeYield = blockContent.substring(0, yieldIdx).trim();
+
+		// Get yield expression (after 'yield' keyword)
+		String afterYield = blockContent.substring(yieldIdx + 5).trim();
+
+		// Remove trailing semicolon from afterYield if present
+		if (afterYield.endsWith(";"))
+			afterYield = afterYield.substring(0, afterYield.length() - 1).trim();
+
+		// Execute statements before yield
+		if (!beforeYield.isEmpty()) {
+			String[] statements = beforeYield.split(";");
+			for (String stmt : statements) {
+				stmt = stmt.trim();
+				if (!stmt.isEmpty()) {
+					Result<Void, CompileError> stmtResult = App.parseStatement(stmt, instructions);
+					if (stmtResult.isErr())
+						return stmtResult;
+				}
+			}
+		}
+
+		// Evaluate yield expression
+		Result<ExpressionModel.ExpressionResult, CompileError> yieldResult = App.parseExpressionWithRead(afterYield);
+		if (yieldResult.isErr())
+			return Result.err(yieldResult.errValue());
+
+		// Generate instructions for the yield expression
+		Result<Void, CompileError> genResult = App.generateInstructions(yieldResult.okValue(), instructions);
+		if (genResult.isErr())
+			return genResult;
+
+		// Store result to memory address
+		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) storeAddr));
+
+		// Load result back to register 0
+		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) storeAddr));
+
+		// Handle continuation if not empty
+		if (!continuation.isEmpty() && !continuation.equals(varName)) {
+			return App.parseStatement(continuation, instructions);
+		}
+
+		return Result.ok(null);
+	}
+
+	public static Result<Void, CompileError> handleWhileLoopAfterLet(String varName, String initialValueExpr,
 			String continuation, List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
 			int nextMemAddr) {
 		// Store the initial value at the correct memory address
@@ -194,7 +172,7 @@ public final class LetBindingHandler {
 		return WhileLoopHandler.handleWhileLoop(continuation, "", instructions, context);
 	}
 
-	private static Result<Void, CompileError> handleChainedLetBinding(
+	public static Result<Void, CompileError> handleChainedLetBinding(
 			String varName,
 			String valueExpr,
 			String continuation,
@@ -268,7 +246,7 @@ public final class LetBindingHandler {
 		});
 	}
 
-	private static Result<Void, CompileError> handleVariableReference(
+	public static Result<Void, CompileError> handleVariableReference(
 			String valueExpr,
 			String continuation,
 			List<Instruction> instructions,
@@ -282,7 +260,7 @@ public final class LetBindingHandler {
 		});
 	}
 
-	private static Result<Void, CompileError> handleMultipleVariableReferences(
+	public static Result<Void, CompileError> handleMultipleVariableReferences(
 			String varName,
 			String valueExpr,
 			String continuation,
@@ -349,7 +327,7 @@ public final class LetBindingHandler {
 		return Result.ok(null);
 	}
 
-	private static Result<Void, CompileError> handleMutableVariableWithAssignment(
+	public static Result<Void, CompileError> handleMutableVariableWithAssignment(
 			String varName,
 			String initialValueExpr,
 			String continuation,
