@@ -136,6 +136,33 @@ Return value from register[0]
 
 ## Refactoring & Code Organization Patterns
 
+### Registry Threading Pattern (Struct Definitions)
+
+When structs are defined, they must be tracked and available during field access parsing. The `Map<String, StructDefinition> structRegistry` is threaded through:
+
+```
+App.parseStatement() 
+  → LetBindingHandler.handleLetBindingStatement(structRegistry)
+    → LetBindingProcessor.process(..., structRegistry)
+      → StructInstantiationHandler.parseStructInstantiation(..., structRegistry)
+      → LetBindingProcessor.handleStructFieldAccess(..., structRegistry)
+```
+
+**Pattern**: Optional parameter throughout chain (default empty map if not available). Registry enables validation of struct names and field existence at compile time.
+
+### Multi-Field Struct Access Pattern
+
+When struct variables are used in expressions with multiple field accesses (e.g., `point.x + point.y`), the entire continuation must be substituted before parsing:
+
+1. **Extract all field names** using regex: `Pattern.compile("\\b" + varName + "\\.([a-zA-Z_][a-zA-Z0-9_]*)\\b")`
+2. **Validate field existence** against `StructInstantiationResult.fieldValues()`
+3. **Replace all occurrences** with parenthesized values: `point.x` → `(read U8)`, `point.y` → `(read U8)`
+4. **Parse substituted expression** as a single unit: `(read U8) + (read U8)`
+
+This ensures operators between field accesses are parsed correctly with proper precedence.
+
+**File**: `letbinding/LetBindingProcessor.handleStructFieldAccess()`
+
 ### Processor Pattern (For Large Handlers)
 
 When a handler class exceeds ~400 lines or contains methods approaching 50-line limits, extract processing logic into a dedicated `*Processor` class in a subpackage:
@@ -168,6 +195,41 @@ String varName = decl.varName();  // Access via record getter
 ```
 
 ## Recently Implemented Features (Reference)
+
+### Struct Definitions with Field Support
+
+- **Handler**: `StructHandler` + `StructDefinition` record
+- **Pattern**: `struct Point { x : U8, y : U8 }` defines a named struct with typed fields
+- **Registration**: Struct definitions stored in `Map<String, StructDefinition>` and threaded through parsing chain
+- **Key Classes**: `StructDefinition`, `StructHandler.StructField`, `StructInstantiationHandler`
+- **Files**: `letbinding/StructHandler.java`, `letbinding/StructDefinition.java`, `letbinding/StructInstantiationHandler.java`
+
+### Struct Variable Binding and Field Access
+
+- **Handler**: `StructInstantiationHandler` with registry-aware parsing
+- **Pattern**: `let point : Point = Point { x : read U8, y : read U8 }; point.x + point.y`
+- **Type Annotation**: Variables parse type declarations: `let name : Type = expr`
+- **Field Access**: Multi-field support via regex replacement of all field occurrences
+- **Implementation**: `LetBindingProcessor.handleStructFieldAccess()` replaces all `varName.fieldName` with field values, then parses substituted expression
+- **Files**: `letbinding/LetBindingProcessor.java`, `letbinding/VariableDecl.java`
+
+### Match Expressions (Pattern Matching)
+
+- **Handler**: `MatchExpressionHandler`
+- **Pattern**: `match (scrutinee) { case pattern => value; ... case _ => default; }`
+- **Conversion**: Transforms match to nested if-else conditionals automatically
+- **Supported Patterns**: Literal values and wildcard (`_`) for default case
+- **Implementation**: Converts case arms to conditional branches with equality comparisons
+- **File**: `letbinding/MatchExpressionHandler.java`
+
+### For Loops (Range-based Iteration)
+
+- **Handler**: `ForLoopHandler` + `ForLoopProcessor`
+- **Pattern**: `for (i = start; i < end; i = i + 1) { body }`
+- **Implementation**: Sets up loop counter variable, generates condition comparison, manages loop jump-back
+- **Semantics**: Loop variable automatically incremented; body can reference and use counter
+- **Limitations**: Condition must be `<` comparison; increment pattern must match exactly
+- **Files**: `letbinding/ForLoopHandler.java`, `letbinding/ForLoopProcessor.java`
 
 ### Compound Assignment Operators (+=, -=, \*=, /=)
 
