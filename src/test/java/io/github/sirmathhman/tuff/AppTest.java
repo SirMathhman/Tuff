@@ -770,6 +770,11 @@ public final class AppTest {
 		assertValid("struct Empty {}", 0);
 	}
 
+	@Test
+	void shouldRejectDuplicateStructDefinition() {
+		assertInvalid("struct Empty {} struct Empty {}");
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

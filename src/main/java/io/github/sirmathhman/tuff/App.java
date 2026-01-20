@@ -19,7 +19,9 @@ import io.github.sirmathhman.tuff.vm.Variant;
 import io.github.sirmathhman.tuff.vm.Vm;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class App {
 	private App() {
@@ -43,10 +45,26 @@ public final class App {
 	}
 
 	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
+		return parseStatement(stmt, instructions, new HashSet<>());
+	}
+
+	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions,
+			Set<String> definedStructs) {
 		// Check if this is a struct definition at statement level
 		if (stmt.startsWith("struct ")) {
-			return StructHandler.parseStruct(stmt)
-					.flatMap(expr -> generateInstructions(expr, instructions));
+			return StructHandler.parseStructWithRegistry(stmt, definedStructs)
+					.flatMap(structResult -> {
+						// Generate instructions for the struct
+						Result<Void, CompileError> instructionsResult = generateInstructions(
+								structResult.expressionResult(), instructions);
+						return instructionsResult.flatMap(ignored -> {
+							// If there's more code after the struct, parse it
+							if (structResult.remaining().isEmpty()) {
+								return Result.ok(null);
+							}
+							return parseStatement(structResult.remaining(), instructions, definedStructs);
+						});
+					});
 		}
 
 		// Check if this is a while loop at statement level
