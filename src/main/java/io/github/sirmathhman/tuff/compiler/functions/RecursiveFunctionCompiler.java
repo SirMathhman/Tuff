@@ -9,6 +9,8 @@ import io.github.sirmathhman.tuff.vm.Variant;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -49,7 +51,16 @@ public final class RecursiveFunctionCompiler {
 		}
 		// Check if the function is recursive
 		if (!isRecursive(funcName, funcDef.body())) {
-			return null; // Not recursive, use normal path
+			// Try to detect a mutually-recursive cycle like: a() -> b() -> c() -> a()
+			Result<ParsedPattern, CompileError> mutual = tryParseMutualReadSumCycle(funcName, functionRegistry);
+			if (mutual == null) {
+				return null; // Not recursive, use normal path
+			}
+			if (mutual instanceof Result.Err<ParsedPattern, CompileError> err) {
+				return Result.err(err.error());
+			}
+			ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) mutual).value();
+			return compileReadSumLoop(pattern.baseValue(), instructions);
 		}
 		// Compile using recursive function compiler
 		return compileRecursiveFunction(funcDef, instructions);
@@ -76,9 +87,12 @@ public final class RecursiveFunctionCompiler {
 			return Result.err(err.error());
 		}
 		ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) patternResult).value();
+		return compileReadSumLoop(pattern.baseValue(), instructions);
+	}
 
-		// Generate iterative code:
-		// 1. reg[0] = 0 (accumulator)
+	private static Result<Void, CompileError> compileReadSumLoop(long baseValue, List<Instruction> instructions) {
+		// Iterative code:
+		// 1. reg[0] = BASE (accumulator)
 		// 2. Loop start:
 		// 3. reg[1] = read input
 		// 4. save n to reg[3]
@@ -87,55 +101,34 @@ public final class RecursiveFunctionCompiler {
 		// 7. jump to loop start
 		// 8. End: reg[0] has result
 
-		// Initialize accumulator to 0
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, 0L));
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, baseValue));
 
-		// Loop start
 		int loopStart = instructions.size();
-
-		// Read input into reg[1]
 		instructions.add(new Instruction(Operation.In, Variant.Immediate, 1, 0L));
 
-		// Save n to reg[3] before we modify reg[1]
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 3, 0L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 3, 1L));
 
-		// Check if n <= 0
-		// Load 1 into reg[2], compare n < 1
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
 		instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, 1, 2L));
-		// reg[1] = 1 if n <= 0, 0 if n > 0
-
-		// To exit when n <= 0: negate and subtract
-		// LogicalNot: reg[1] becomes 0 if n <= 0, 1 if n > 0
 		instructions.add(new Instruction(Operation.LogicalNot, Variant.Immediate, 1, 0L));
-
-		// Subtract 1: reg[1] becomes -1 if n <= 0, 0 if n > 0
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
 		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 1, 2L));
 
-		// JumpIfLessThanZero to END when reg[1] < 0 (n <= 0)
 		int jumpToEndIdx = instructions.size();
 		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1, 0L));
 
-		// Accumulate: reg[0] += reg[3] (saved n)
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 3L));
-
-		// Jump back to loop start
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopStart));
 
-		// End of loop
 		int loopEnd = instructions.size();
-
-		// Patch jump to end
 		instructions.set(jumpToEndIdx, new Instruction(
 				Operation.JumpIfLessThanZero, Variant.Immediate, 1, (long) loopEnd));
 
-		// Result is in reg[0]
 		return Result.ok(null);
 	}
 
-	private record ParsedPattern(String varName, long baseValue, String op) {
+	private record ParsedPattern(String varName, long baseValue, String op, String calleeName) {
 	}
 
 	private static Result<ParsedPattern, CompileError> parsePattern(String body, String funcName) {
@@ -148,16 +141,83 @@ public final class RecursiveFunctionCompiler {
 		}
 		body = body.trim();
 
-		// Match: let VAR = read TYPE; if (VAR <= 0) BASE else VAR OP funcName()
+		Result<ParsedPattern, CompileError> parsed = parseReadSumPattern(body);
+		if (parsed instanceof Result.Err<ParsedPattern, CompileError>) {
+			return parsed;
+		}
+		ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) parsed).value();
+		if (!pattern.calleeName().equals(funcName)) {
+			return Result.err(new CompileError("Function body doesn't match recursive pattern: " + body));
+		}
+		return Result.ok(pattern);
+	}
+
+	private static Result<ParsedPattern, CompileError> tryParseMutualReadSumCycle(
+			String startFuncName,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		Set<String> visited = new HashSet<>();
+		String current = startFuncName;
+		ParsedPattern first = null;
+
+		while (true) {
+			if (!visited.add(current)) {
+				return null;
+			}
+			FunctionHandler.FunctionDef def = functionRegistry.get(current);
+			if (def == null) {
+				return null;
+			}
+			Result<ParsedPattern, CompileError> parsed = parseReadSumPattern(stripOuterBraces(def.body().trim()));
+			if (parsed instanceof Result.Err<ParsedPattern, CompileError>) {
+				return null;
+			}
+			ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) parsed).value();
+			if (!"+".equals(pattern.op())) {
+				return null;
+			}
+			if (first == null) {
+				first = pattern;
+			} else if (first.baseValue() != pattern.baseValue()) {
+				return null;
+			}
+
+			String next = pattern.calleeName();
+			if (next.equals(startFuncName)) {
+				// Require a true cycle (length > 1)
+				if (visited.size() < 2) {
+					return null;
+				}
+				return Result.ok(first);
+			}
+			current = next;
+
+			if (visited.size() > functionRegistry.size()) {
+				return null;
+			}
+		}
+	}
+
+	private static String stripOuterBraces(String body) {
+		String result = body.trim();
+		if (result.startsWith("{")) {
+			result = result.substring(1);
+		}
+		if (result.endsWith("}")) {
+			result = result.substring(0, result.length() - 1);
+		}
+		return result.trim();
+	}
+
+	private static Result<ParsedPattern, CompileError> parseReadSumPattern(String body) {
+		// Match: let VAR = read TYPE; if (VAR <= 0) BASE else VAR + callee()
 		Pattern p = Pattern.compile(
 				"let\\s+(\\w+)\\s*(?::\\s*\\w+)?\\s*=\\s*read\\s+\\w+\\s*;\\s*"
 						+ "if\\s*\\(\\s*\\1\\s*<=\\s*0\\s*\\)\\s*(\\d+)\\s+else\\s+\\1\\s*([+\\-*/])\\s*"
-						+ Pattern.quote(funcName) + "\\s*\\(\\s*\\)");
+						+ "(\\w+)\\s*\\(\\s*\\)");
 		Matcher m = p.matcher(body);
 		if (!m.find()) {
 			return Result.err(new CompileError("Function body doesn't match recursive pattern: " + body));
 		}
-
-		return Result.ok(new ParsedPattern(m.group(1), Long.parseLong(m.group(2)), m.group(3)));
+		return Result.ok(new ParsedPattern(m.group(1), Long.parseLong(m.group(2)), m.group(3), m.group(4)));
 	}
 }

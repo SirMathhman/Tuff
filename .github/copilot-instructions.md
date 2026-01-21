@@ -264,6 +264,16 @@ String varName = decl.varName();  // Access via record getter
 - **Benefits**: Avoids runtime call stack; VM unchanged
 - **File**: `functions/RecursiveFunctionCompiler.java`
 
+### Mutual Recursion Cycles (A → B → C → A)
+
+- **Handler**: `RecursiveFunctionCompiler` in `functions` subpackage
+- **Pattern**: A cycle of *no-arg* functions where each function matches:
+    - `fn a() => { let n = read TYPE; if (n <= 0) 0 else n + b() }`
+    - `fn b() => { let n = read TYPE; if (n <= 0) 0 else n + c() }`
+    - `fn c() => { let n = read TYPE; if (n <= 0) 0 else n + a() }`
+- **Behavior**: Compiles the whole cycle into the same terminating loop as self-recursion; stops when an input $\le 0$ is read.
+- **Notes**: Currently only supports the `+` operator and requires a true cycle (length > 1).
+
 ### Higher-Order Functions (Returning Functions)
 
 - **Handler**: `ChainedFunctionCallHandler` in `functions` subpackage

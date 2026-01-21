@@ -997,6 +997,17 @@ public final class AppTest {
 		assertValid("let func = () => 100; func()", 100);
 	}
 
+	@Test
+	void shouldSupportMutualRecursiveFunctionCycleWithReadInput() {
+		assertValidWithInput(
+				"fn a() => { let n = read I32; if (n <= 0) 0 else n + b() }; "
+						+ "fn b() => { let n = read I32; if (n <= 0) 0 else n + c() }; "
+						+ "fn c() => { let n = read I32; if (n <= 0) 0 else n + a() }; "
+						+ "a()",
+				6,
+				3, 2, 1, 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
