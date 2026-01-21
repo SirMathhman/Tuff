@@ -402,8 +402,9 @@ public final class ExpressionTokens {
 		String initCountStr = parts.get(1).trim();
 		String totalCountStr = parts.get(2).trim();
 
-		// Validate element type
-		if (!elementType.matches("[UI]\\d+|Bool")) {
+		// Validate element type - can be primitive OR nested array
+		boolean isValidElementType = isValidArrayElementType(elementType);
+		if (!isValidElementType) {
 			return Result.err(new CompileError("Invalid array element type: " + elementType));
 		}
 
@@ -422,5 +423,19 @@ public final class ExpressionTokens {
 		}
 
 		return Result.ok(expr);
+	}
+
+	private static boolean isValidArrayElementType(String type) {
+		type = type.trim();
+		// Primitive types
+		if (type.matches("[UI]\\d+|Bool")) {
+			return true;
+		}
+		// Nested array type
+		if (type.startsWith("[") && type.endsWith("]")) {
+			Result<String, CompileError> nestedResult = tryParseArrayType(type);
+			return nestedResult instanceof Result.Ok<String, CompileError>;
+		}
+		return false;
 	}
 }

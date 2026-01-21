@@ -86,7 +86,7 @@ public final class BitwiseNotParser {
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseLiteralTerm(String term) {
 		// Handle tuple indexing: ((expr1, expr2, ...))[index]
-		java.util.regex.Pattern tupleIndexPattern = java.util.regex.Pattern.compile("^\\(\\((.+)\\)\\)\\[(\\d+)\\]$");
+		java.util.regex.Pattern tupleIndexPattern = java.util.regex.Pattern.compile("^\\(\\((.+?)\\)\\)\\[(\\d+)\\]$");
 		java.util.regex.Matcher tupleIndexMatcher = tupleIndexPattern.matcher(term);
 		if (tupleIndexMatcher.matches()) {
 			String tupleExpr = tupleIndexMatcher.group(1);
@@ -103,21 +103,24 @@ public final class BitwiseNotParser {
 			}
 		}
 
-		// Handle array indexing: ([[elem1, elem2, ...]))[index]
-		java.util.regex.Pattern arrayIndexPattern = java.util.regex.Pattern.compile("^\\(\\[\\[(.+)\\]\\]\\)\\[(\\d+)\\]$");
+		// Handle array indexing with single or chained indices: ([[elem1, elem2, ...]))[index][index]...
+		// Use non-greedy matching to handle nested arrays correctly
+		java.util.regex.Pattern arrayIndexPattern = java.util.regex.Pattern.compile("^\\(\\[\\[(.+?)\\]\\]\\)((?:\\[\\d+\\])+)$");
 		java.util.regex.Matcher arrayIndexMatcher = arrayIndexPattern.matcher(term);
 		if (arrayIndexMatcher.matches()) {
 			String arrayExpr = arrayIndexMatcher.group(1);
-			int index = Integer.parseInt(arrayIndexMatcher.group(2));
+			String indexChain = arrayIndexMatcher.group(2);
+			return applyIndices(arrayExpr, indexChain);
+		}
 
-			// Split the array expression by comma at depth 0
-			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(arrayExpr, ',');
-			if (index >= 0 && index < elements.size()) {
-				String element = elements.get(index).trim();
-				// Recursively parse the element
-				return parseTermWithNot(element);
-			} else {
-				return Result.err(new CompileError("Array index " + index + " out of bounds"));
+		// Handle parenthesized array without indices: ([...])
+		// This occurs when an intermediate array result is wrapped for parsing
+		if (term.startsWith("(") && term.endsWith(")")) {
+			String inner = term.substring(1, term.length() - 1);
+			if (inner.startsWith("[") && inner.endsWith("]")) {
+				// This is a parenthesized array literal - treat it as an array element
+				// Recursively parse the contents
+				return parseTermWithNot(inner);
 			}
 		}
 
@@ -144,6 +147,73 @@ public final class BitwiseNotParser {
 			return Result.err(new CompileError("Internal error: expected Ok or Err in parseLiteral"));
 		}
 		return Result.ok(new ExpressionModel.ExpressionTerm(0, ok.value(), false, false));
+	}
+
+	private static Result<ExpressionModel.ExpressionTerm, CompileError> applyIndices(String arrayExpr,
+			String indexChain) {
+		// Extract all indices from the chain
+		java.util.regex.Pattern indexPattern = java.util.regex.Pattern.compile("\\[(\\d+)\\]");
+		java.util.regex.Matcher indexMatcher = indexPattern.matcher(indexChain);
+		java.util.List<Integer> indices = new java.util.ArrayList<>();
+		while (indexMatcher.find()) {
+			indices.add(Integer.parseInt(indexMatcher.group(1)));
+		}
+
+		String current = arrayExpr;
+		boolean isFirstIteration = true;
+		
+		for (int i = 0; i < indices.size(); i++) {
+			int index = indices.get(i);
+
+			String toSplit = current;
+			
+			// On first iteration, we have the raw array content (already unwrapped by regex)
+			// On subsequent iterations, we need to strip the wrapping we added
+			if (!isFirstIteration && current.startsWith("[") && current.endsWith("]")) {
+				// Check if first [ matches last ] at top level
+				int depth = 0;
+				boolean isTopLevelPair = true;
+				for (int j = 0; j < current.length(); j++) {
+					if (current.charAt(j) == '[') depth++;
+					else if (current.charAt(j) == ']') {
+						depth--;
+						if (depth == 0 && j < current.length() - 1) {
+							// Reached closing bracket before end of string
+							isTopLevelPair = false;
+							break;
+						}
+					}
+				}
+				if (isTopLevelPair && depth == 0) {
+					toSplit = current.substring(1, current.length() - 1).trim();
+				}
+			}
+
+			// Split by comma at depth 0
+			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(toSplit, ',');
+
+			if (index >= 0 && index < elements.size()) {
+				current = elements.get(index).trim();
+			} else {
+				return Result.err(new CompileError("Array index " + index + " out of bounds (array size " + elements.size() + ")"));
+			}
+			
+			isFirstIteration = false;
+		}
+
+		// If final result is an array expression, return zero (same as direct array parsing)
+		if (current.startsWith("[") && current.endsWith("]")) {
+			// Check if it's a valid array expression (has elements, no semicolons)
+			String inner = current.substring(1, current.length() - 1);
+			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
+			if (elements.size() >= 1 && !inner.contains(";")) {
+				// Valid array expression - return zero result (matches App.parseExpressionWithRead behavior)
+				return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
+			}
+		}
+
+		// Otherwise recursively parse the final element
+		return parseTermWithNot(current);
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> applyBitwiseNot(

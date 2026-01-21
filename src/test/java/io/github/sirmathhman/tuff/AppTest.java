@@ -1172,6 +1172,23 @@ public final class AppTest {
 				6);
 	}
 
+	@Test
+	void shouldSupportMultiDimensionalArrays() {
+		// Multi-dimensional arrays: [[ElementType; rows; rows]; cols; cols]
+		// Nested array indexing: array[row][col]
+		assertValid(
+				"let array : [[U8; 2; 2]; 2; 2] = [[1, 2], [3, 4]]; array[1][0]",
+				3);
+	}
+
+	@Test
+	void shouldSupportMultiDimensionalArraysFull() {
+		// Full multi-dimensional array test
+		assertValid(
+				"let array : [[U8; 2; 2]; 2; 2] = [[1, 2], [3, 4]]; array[0][0] + array[0][1] + array[1][0] + array[1][1]",
+				10);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

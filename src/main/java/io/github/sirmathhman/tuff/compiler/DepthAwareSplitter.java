@@ -96,6 +96,7 @@ public final class DepthAwareSplitter {
 		java.util.List<String> result = new java.util.ArrayList<>();
 		StringBuilder token = new StringBuilder();
 		int depth = 0;
+		int bracketDepth = 0;
 
 		for (int i = 0; i < expr.length(); i++) {
 			char c = expr.charAt(i);
@@ -106,7 +107,13 @@ public final class DepthAwareSplitter {
 			} else if (c == ')' || c == '}') {
 				depth--;
 				token.append(c);
-			} else if (depth == 0 && i + 1 < expr.length()) {
+			} else if (c == '[') {
+				bracketDepth++;
+				token.append(c);
+			} else if (c == ']') {
+				bracketDepth--;
+				token.append(c);
+			} else if (depth == 0 && bracketDepth == 0 && i + 1 < expr.length()) {
 				// Check for shift operators and other two-character operators first
 				char nextChar = expr.charAt(i + 1);
 				if ((c == '<' && nextChar == '<') || (c == '>' && nextChar == '>')) {

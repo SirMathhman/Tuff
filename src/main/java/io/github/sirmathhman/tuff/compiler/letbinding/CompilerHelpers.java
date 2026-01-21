@@ -124,11 +124,12 @@ public final class CompilerHelpers {
 
 	/**
 	 * Wrap a value for substitution based on its declared type.
-	 * Arrays are double-wrapped for indexing support; other types are unchanged.
+	 * Simple arrays are wrapped with extra brackets; nested arrays are not wrapped.
 	 */
 	public static String wrapValueForSubstitution(String value, String declaredType) {
 		if (declaredType != null && declaredType.startsWith("[") && declaredType.endsWith("]")) {
 			if (value.startsWith("[") && value.endsWith("]")) {
+				// All arrays get wrapped for indexing, including nested arrays
 				return "[" + value + "]";
 			}
 		}
