@@ -74,7 +74,7 @@ public final class DepthAwareSplitter {
 	 */
 	public static java.util.List<String> splitByDelimiterAtDepthZero(String expr, char delimiter) {
 		DelimiterChecker singleDelimiter = (c, i) -> c == delimiter;
-		return splitWithDelimiterChecker(expr, singleDelimiter);
+		return splitWithDelimiterChecker(expr, singleDelimiter, 1);
 	}
 
 	/**
@@ -89,10 +89,40 @@ public final class DepthAwareSplitter {
 			char delimiter2) {
 		DelimiterChecker doubleDelimiter = (c, i) -> c == delimiter1 && i + 1 < expr.length()
 				&& expr.charAt(i + 1) == delimiter2;
-		return splitWithDelimiterChecker(expr, doubleDelimiter);
+		return splitWithDelimiterChecker(expr, doubleDelimiter, 2);
 	}
 
-	private static java.util.List<String> splitWithDelimiterChecker(String expr, DelimiterChecker checker) {
+	@FunctionalInterface
+	private interface DelimiterChecker {
+		boolean isDelimiter(char c, int index);
+	}
+
+	/**
+	 * Split by keyword (e.g., "is") at depth zero, ensuring word boundary.
+	 *
+	 * @param expr    The expression to split
+	 * @param keyword The keyword to split by (e.g., "is")
+	 * @return A list of tokens separated by the keyword
+	 */
+	public static java.util.List<String> splitByKeywordAtDepthZero(String expr, String keyword) {
+		DelimiterChecker keywordChecker = (c, i) -> {
+			if (i + keyword.length() > expr.length()) {
+				return false;
+			}
+			if (!expr.substring(i, i + keyword.length()).equals(keyword)) {
+				return false;
+			}
+			// Check word boundaries
+			boolean validBefore = (i == 0 || !Character.isLetterOrDigit(expr.charAt(i - 1)));
+			boolean validAfter = (i + keyword.length() >= expr.length()
+					|| !Character.isLetterOrDigit(expr.charAt(i + keyword.length())));
+			return validBefore && validAfter;
+		};
+		return splitWithDelimiterChecker(expr, keywordChecker, keyword.length());
+	}
+
+	private static java.util.List<String> splitWithDelimiterChecker(String expr, DelimiterChecker checker,
+			int delimiterLength) {
 		java.util.List<String> result = new java.util.ArrayList<>();
 		StringBuilder token = new StringBuilder();
 		int depth = 0;
@@ -113,28 +143,10 @@ public final class DepthAwareSplitter {
 			} else if (c == ']') {
 				bracketDepth--;
 				token.append(c);
-			} else if (depth == 0 && bracketDepth == 0 && i + 1 < expr.length()) {
-				// Check for shift operators and other two-character operators first
-				char nextChar = expr.charAt(i + 1);
-				if ((c == '<' && nextChar == '<') || (c == '>' && nextChar == '>')) {
-					// Shift operators - don't split on them, add to token
-					token.append(c);
-					i++;
-					token.append(expr.charAt(i));
-				} else if (checker.isDelimiter(c, i)) {
-					result.add(token.toString().trim());
-					token = new StringBuilder();
-					// Skip second character of double delimiter
-					// For == and ||, second char equals first char
-					// For !=, second char is = but first is !
-					// For <=, >=, second char is = but first is < or >
-					if (nextChar == c || (c == '!' && nextChar == '=') || (c == '<' && nextChar == '=')
-							|| (c == '>' && nextChar == '=')) {
-						i++;
-					}
-				} else {
-					token.append(c);
-				}
+			} else if (depth == 0 && bracketDepth == 0 && checker.isDelimiter(c, i)) {
+				result.add(token.toString().trim());
+				token = new StringBuilder();
+				i += delimiterLength - 1;
 			} else {
 				token.append(c);
 			}
@@ -145,10 +157,5 @@ public final class DepthAwareSplitter {
 		}
 
 		return result;
-	}
-
-	@FunctionalInterface
-	private interface DelimiterChecker {
-		boolean isDelimiter(char c, int index);
 	}
 }

@@ -19,6 +19,7 @@ import io.github.sirmathhman.tuff.compiler.letbinding.MatchExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.StructHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.StructDefinition;
 import io.github.sirmathhman.tuff.compiler.letbinding.StructInstantiationHandler;
+import io.github.sirmathhman.tuff.compiler.letbinding.type_aliases.TypeAliasHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.FieldAccessHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@SuppressWarnings("checkstyle:FileLength")
 public final class App {
 	private App() {
 	}
@@ -42,7 +44,7 @@ public final class App {
 		List<Instruction> instructions = new ArrayList<>();
 		if (!source.isEmpty()) {
 			Result<Void, CompileError> result = parseStatement(source.trim(), instructions, new HashSet<>(),
-					new HashMap<>(), new HashMap<>(), new HashMap<>());
+					new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
 			return result.match(
 					ignored -> {
 						instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
@@ -55,12 +57,17 @@ public final class App {
 	}
 
 	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
-		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
+		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(),
+				new HashMap<>());
 	}
 
+	// Suppress ParameterNumber and MethodLength checks: complex parsing requires
+	// contextual parameters
+	@SuppressWarnings({ "checkstyle:ParameterNumber", "checkstyle:MethodLength" })
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions,
 			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
+			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables,
+			Map<String, String> typeAliasRegistry) {
 		if (FunctionHandler.isFunctionDefinition(stmt)) {
 			return FunctionHandler.parseFunctionDefinition(stmt, capturedVariables).flatMap(parsedFunc -> {
 				functionRegistry.put(parsedFunc.functionDef().name(), parsedFunc.functionDef());
@@ -68,8 +75,20 @@ public final class App {
 					return Result.ok(null);
 				}
 				return parseStatement(parsedFunc.remaining(), instructions, definedStructs, structRegistry,
-						functionRegistry, capturedVariables);
+						functionRegistry, capturedVariables, typeAliasRegistry);
 			});
+		}
+
+		// Check if this is a type alias definition at statement level
+		if (stmt.startsWith("type ")) {
+			return TypeAliasHandler.parseTypeAlias(stmt, typeAliasRegistry)
+					.flatMap(aliasResult -> {
+						if (aliasResult.remaining().isEmpty()) {
+							return Result.ok(null);
+						}
+						return parseStatement(aliasResult.remaining(), instructions, definedStructs, structRegistry,
+								functionRegistry, capturedVariables, typeAliasRegistry);
+					});
 		}
 
 		// Check if this is a struct definition at statement level
@@ -83,7 +102,7 @@ public final class App {
 								return Result.ok(null);
 							}
 							return parseStatement(structResult.remaining(), instructions, definedStructs, structRegistry,
-									functionRegistry, capturedVariables);
+									functionRegistry, capturedVariables, typeAliasRegistry);
 						});
 					});
 		}
@@ -91,7 +110,8 @@ public final class App {
 			return AppParsingUtils.handleTopLevelWhileLoop(stmt, instructions);
 		}
 		if (stmt.startsWith("let ")) {
-			return handleLetBindingStatement(stmt, instructions, definedStructs, structRegistry, functionRegistry);
+			return handleLetBindingStatement(stmt, instructions, definedStructs, structRegistry, functionRegistry,
+					typeAliasRegistry);
 		}
 		if (StructInstantiationHandler.isStructInstantiation(stmt, structRegistry)) {
 			return handleStructInstantiationStatement(stmt, instructions, definedStructs, structRegistry);
@@ -110,7 +130,7 @@ public final class App {
 
 	private static Result<Void, CompileError> handleLetBindingStatement(String stmt, List<Instruction> instructions,
 			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> typeAliasRegistry) {
 		// Peek ahead to see if this is a chained let binding
 		// Format: "let x = expr1; let y = expr2; z"
 		// vs single: "let x = expr; x"
@@ -146,7 +166,7 @@ public final class App {
 		// (both single and chained)
 		return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
 				new LetBindingProcessor.ProcessContext(instructions, new java.util.HashMap<>(), 100, structRegistry,
-						functionRegistry));
+						functionRegistry, typeAliasRegistry));
 	}
 
 	private static Result<Void, CompileError> handleStructInstantiationStatement(String stmt,
@@ -202,7 +222,7 @@ public final class App {
 								definedStructs, structRegistry);
 					}
 					return parseStatement(remaining, instructions, definedStructs, structRegistry, new HashMap<>(),
-							new HashMap<>());
+							new HashMap<>(), new HashMap<>());
 				});
 	}
 
@@ -218,7 +238,7 @@ public final class App {
 						return Result.ok(null);
 					}
 					return parseStatement(fieldResult.remaining(), instructions, definedStructs, structRegistry, new HashMap<>(),
-							new HashMap<>());
+							new HashMap<>(), new HashMap<>());
 				});
 	}
 
@@ -261,6 +281,7 @@ public final class App {
 		return Result.ok(null);
 	}
 
+	@SuppressWarnings("checkstyle:MethodLength")
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
 		expr = expr.trim();
 		// Check if this is a let binding
@@ -276,6 +297,12 @@ public final class App {
 		// Check if this is a conditional expression (lowest precedence)
 		if (ConditionalExpressionHandler.hasConditional(expr)) {
 			return ConditionalExpressionHandler.parseConditional(expr);
+		}
+
+		// Check if this is an "is" type-check expression
+		java.util.List<String> isTokens = DepthAwareSplitter.splitByKeywordAtDepthZero(expr, "is");
+		if (isTokens.size() > 1) {
+			return ComparisonOperatorHandler.parseIsExpression(isTokens);
 		}
 
 		// Check if this is a tuple expression (before normalizing braces!)

@@ -111,6 +111,11 @@ public final class ConditionalExpressionHandler {
 		if (expr.startsWith("if ("))
 			return parseConditional(expr);
 
+		// Try is operator (type check)
+		var is = DepthAwareSplitter.splitByKeywordAtDepthZero(expr, "is");
+		if (is.size() > 1)
+			return ComparisonOperatorHandler.parseIsExpression(is);
+
 		// Try comparison operators
 		var le = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '<', '=');
 		if (le.size() > 1)

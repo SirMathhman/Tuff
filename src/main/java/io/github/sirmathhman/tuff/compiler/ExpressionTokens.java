@@ -132,7 +132,7 @@ public final class ExpressionTokens {
 		// Handle read operations
 		if (expr.startsWith("read ")) {
 			String typeSpec = expr.substring(5).trim();
-			if (!typeSpec.matches("\\*?([UI]\\d+|Bool|Char)")) {
+			if (!typeSpec.matches("\\*?([a-zA-Z_][a-zA-Z0-9_]*|[UI]\\d+|Bool|Char)")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
 			return Result.ok(typeSpec);

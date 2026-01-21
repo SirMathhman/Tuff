@@ -47,7 +47,7 @@ public final class LetBindingHandler {
 			List<Instruction> instructions) {
 		LetBindingProcessor.ProcessContext ctx = new LetBindingProcessor.ProcessContext(
 				instructions, new java.util.HashMap<>(), 100, new java.util.HashMap<>(),
-				new java.util.HashMap<>());
+				new java.util.HashMap<>(), new java.util.HashMap<>());
 		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, ctx);
 	}
 
@@ -216,7 +216,7 @@ public final class LetBindingHandler {
 		int newSemiIndex = substitutedContinuation.indexOf(';', newEqualsIndex);
 		LetBindingProcessor.ProcessContext processCtx = new LetBindingProcessor.ProcessContext(
 				instructions, newContext, ctx.nextMemAddr() + 1, new java.util.HashMap<>(),
-				new java.util.HashMap<>());
+				new java.util.HashMap<>(), new java.util.HashMap<>());
 		return handleLetBindingWithContinuation(substitutedContinuation, newEqualsIndex, newSemiIndex,
 				parts.continuation(), processCtx);
 	}

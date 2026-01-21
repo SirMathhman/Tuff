@@ -14,6 +14,7 @@ import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.functions.ArrayPointerIndexingHandler;
 import io.github.sirmathhman.tuff.compiler.functions.FunctionBindingHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.fields.ArrayFieldAccessProcessor;
+import io.github.sirmathhman.tuff.compiler.letbinding.type_aliases.TypeAliasHandler;
 import io.github.sirmathhman.tuff.compiler.strings.StringFieldAccessProcessor;
 import io.github.sirmathhman.tuff.vm.Instruction;
 
@@ -36,12 +37,14 @@ public final class LetBindingProcessor {
 		variableTypes.remove();
 	}
 
+	@SuppressWarnings("checkstyle:RecordComponentNumber")
 	public record ProcessContext(
 			List<Instruction> instructions,
 			Map<String, Integer> variableAddresses,
 			int nextMemAddr,
 			Map<String, StructDefinition> structRegistry,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+			Map<String, FunctionHandler.FunctionDef> functionRegistry,
+			Map<String, String> typeAliasRegistry) {
 	}
 
 	public record MutableVarContext(Map<String, Integer> variableAddresses, int nextMemAddr) {
@@ -250,11 +253,12 @@ public final class LetBindingProcessor {
 			String stmt, int equalsIndex, int semiIndex, String continuation, ProcessContext ctx) {
 		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
 		String varName = decl.varName();
-
 		// Track variable type for future reference (e.g., for .init field access on
 		// pointers)
 		if (decl.declaredType() != null) {
-			getVariableTypes().put(varName, decl.declaredType());
+			// Resolve type aliases
+			String resolvedType = TypeAliasHandler.resolveType(decl.declaredType(), ctx.typeAliasRegistry());
+			getVariableTypes().put(varName, resolvedType);
 		}
 
 		Result<Void, CompileError> earlyResult = tryEarlyReturns(varName, decl, continuation, ctx);

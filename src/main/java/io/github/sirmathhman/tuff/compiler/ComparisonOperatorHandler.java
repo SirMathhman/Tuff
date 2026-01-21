@@ -1,5 +1,6 @@
 package io.github.sirmathhman.tuff.compiler;
 
+import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 
@@ -35,6 +36,10 @@ public final class ComparisonOperatorHandler {
 		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '>', '=');
 	}
 
+	public static List<String> splitByIsOperator(String expr) {
+		return DepthAwareSplitter.splitByKeywordAtDepthZero(expr, "is");
+	}
+
 	// Parsing methods
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseEqualityExpression(
 			List<String> eqTokens) {
@@ -64,6 +69,40 @@ public final class ComparisonOperatorHandler {
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseGreaterOrEqualExpression(
 			List<String> geTokens) {
 		return parseComparisonExpression(geTokens, 5);
+	}
+
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseIsExpression(
+			List<String> isTokens) {
+		// For now, only support binary is operator (exactly 2 operands)
+		if (isTokens.size() != 2) {
+			return Result.err(new CompileError("Is operator requires exactly 2 operands"));
+		}
+
+		String valueExpr = isTokens.get(0).trim();
+		String typeSpec = isTokens.get(1).trim();
+
+		// Validate type specification
+		if (!typeSpec.matches("\\*?([a-zA-Z_][a-zA-Z0-9_]*|[UI]\\d+|Bool|Char)")) {
+			return Result.err(new CompileError("Invalid type specification for is operator: " + typeSpec));
+		}
+
+		// Parse the value expression
+		Result<ExpressionModel.ExpressionResult, CompileError> valueResult = App.parseExpressionWithRead(
+				valueExpr);
+		if (valueResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
+			return valueResult;
+		}
+
+		ExpressionModel.ExpressionResult valueExprResult = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) valueResult)
+				.value();
+
+		// Create a term with marker -5 to indicate type check operation
+		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(valueExprResult.terms);
+		ExpressionModel.ExpressionTerm typeCheckTerm = new ExpressionModel.ExpressionTerm(-5, 0,
+				new ExpressionModel.ExpressionTermFlags(0L, '\0', typeSpec));
+		allTerms.add(typeCheckTerm);
+
+		return Result.ok(new ExpressionModel.ExpressionResult(valueExprResult.readCount, 0, allTerms));
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonExpression(

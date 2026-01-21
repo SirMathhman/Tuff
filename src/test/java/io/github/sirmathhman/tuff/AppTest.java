@@ -1367,6 +1367,41 @@ public final class AppTest {
 		assertValidWithInput("read Char + read Char", 97 + 98, 97, 98);
 	}
 
+	@Test
+	void shouldSupportTypeAlias() {
+		assertValid("type Temp = I32; let x : Temp = 100; x", 100);
+	}
+
+	@Test
+	void shouldSupportTypeAliasWithRead() {
+		assertValidWithInput("type Count = U32; let x : Count = read Count; x", 42, 42);
+	}
+
+	@Test
+	void shouldRejectDuplicateTypeAlias() {
+		assertInvalid("type Num = I32; type Num = U32;");
+	}
+
+	@Test
+	void shouldSupportIsOperatorWithLiteral() {
+		assertValid("100 is I32", 1);
+	}
+
+	@Test
+	void shouldSupportIsOperatorWithVariable() {
+		assertValid("let x : I32 = 100; x is I32", 1);
+	}
+
+	@Test
+	void shouldSupportIsOperatorWithTypeAlias() {
+		assertValid("type Temp = I32; let x : Temp = 100; x is I32", 1);
+	}
+
+	@Test
+	void shouldSupportIsOperatorWithRead() {
+		assertValidWithInput("let x = read I32; x is I32", 1, 42);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

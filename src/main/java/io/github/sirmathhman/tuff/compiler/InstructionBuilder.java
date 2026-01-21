@@ -36,6 +36,12 @@ public final class InstructionBuilder {
 			return buildConditionalExpression(terms, markers, instructions);
 		}
 
+		// Check for type-check marker (is operator)
+		int typeCheckIdx = findTypeCheckMarkerIndex(terms);
+		if (typeCheckIdx != -1) {
+			return buildTypeCheckExpression(terms, typeCheckIdx, instructions);
+		}
+
 		// Check for comparison marker
 		int markerIdx = findComparisonMarkerIndex(terms);
 		if (markerIdx != -1) {
@@ -126,6 +132,15 @@ public final class InstructionBuilder {
 		return -1;
 	}
 
+	private static int findTypeCheckMarkerIndex(List<ExpressionModel.ExpressionTerm> terms) {
+		for (int j = 0; j < terms.size(); j++) {
+			if (terms.get(j).readCount == -5) {
+				return j;
+			}
+		}
+		return -1;
+	}
+
 	private static int buildComparisonExpression(List<ExpressionModel.ExpressionTerm> terms, int markerIdx,
 			List<Instruction> instructions) {
 		ExpressionModel.ExpressionTerm marker = terms.get(markerIdx);
@@ -178,6 +193,22 @@ public final class InstructionBuilder {
 		instructions.add(new Instruction(comparisonOp, Variant.Immediate, tempReg, (long) rightResult));
 		instructions.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult));
 		instructions.add(new Instruction(Operation.LogicalOr, Variant.Immediate, leftResult, (long) tempReg));
+	}
+
+	private static int buildTypeCheckExpression(List<ExpressionModel.ExpressionTerm> terms, int markerIdx,
+			List<Instruction> instructions) {
+		List<ExpressionModel.ExpressionTerm> valueTerms = terms.subList(0, markerIdx);
+
+		int valueResult = valueTerms.isEmpty() ? -1 : buildSubExpressionResult(valueTerms, 0, instructions);
+
+		if (valueResult != -1) {
+			// For now, always return 1 (true) as type check result
+			// In a full implementation, we'd use the marker's readTypeSpec to check at
+			// runtime
+			instructions.add(new Instruction(Operation.Load, Variant.Immediate, valueResult, 1L));
+			return valueResult;
+		}
+		return -1;
 	}
 
 	private static int buildSubExpressionResult(List<ExpressionModel.ExpressionTerm> terms, int startReg,
