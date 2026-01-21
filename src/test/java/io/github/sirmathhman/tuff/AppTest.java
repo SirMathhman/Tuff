@@ -969,6 +969,13 @@ public final class AppTest {
 		assertValidWithInput("fn sum() => { let n = read I32; if (n <= 0) 0 else n + sum() }; sum()", 6, 3, 2, 1, 0);
 	}
 
+	@Test
+	void shouldSupportReturningFunctionFromFunction() {
+		// outer() returns inner, then inner() is called
+		// inner reads a U8 value
+		assertValidWithInput("fn outer() => { fn inner() => read U8; inner }; outer()()", 42, 42);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

@@ -4,6 +4,7 @@ import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
 import io.github.sirmathhman.tuff.compiler.ComparisonOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
+import io.github.sirmathhman.tuff.compiler.functions.ChainedFunctionCallHandler;
 import io.github.sirmathhman.tuff.compiler.functions.RecursiveFunctionCompiler;
 import io.github.sirmathhman.tuff.compiler.letbinding.FunctionCallSubstituter;
 import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
@@ -335,6 +336,14 @@ public final class App {
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		expr = expr.trim();
+
+		// Check for chained function call pattern: outer()()
+		// This handles higher-order functions that return function references
+		Result<ExpressionModel.ExpressionResult, CompileError> chainedResult = ChainedFunctionCallHandler.tryParse(expr,
+				functionRegistry, capturedVariables);
+		if (chainedResult != null) {
+			return chainedResult;
+		}
 
 		// Normalize ALL occurrences of this.functionName() to functionName() using
 		// regex
