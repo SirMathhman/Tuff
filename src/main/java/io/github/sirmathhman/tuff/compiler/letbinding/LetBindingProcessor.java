@@ -278,10 +278,19 @@ public final class LetBindingProcessor {
 			return LetBindingHandler.handleChainedLetBinding(varName, decl.valueExpr(), continuation, ctx.instructions(),
 					varCtx);
 		}
+		if (continuation.startsWith("fn ")) {
+			// Function definition in continuation - pass to completeVariableSubstitution
+			return null;
+		}
 		if (continuation.startsWith("while (") && decl.isMutable()) {
 			return LetBindingHandler.handleWhileLoopAfterLet(varName, decl.valueExpr(), continuation, ctx.instructions(),
 					varCtx);
 		}
+		return handleSimpleContinuationCases(varName, decl, continuation, ctx, varCtx);
+	}
+
+	private static Result<Void, CompileError> handleSimpleContinuationCases(String varName, VariableDecl decl,
+			String continuation, ProcessContext ctx, MutableVarContext varCtx) {
 		if (continuation.equals(varName)) {
 			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = ConditionalExpressionHandler
 					.hasConditional(decl.valueExpr())
@@ -347,8 +356,17 @@ public final class LetBindingProcessor {
 		if (typeCheckResult instanceof Result.Err<Void, CompileError>) {
 			return typeCheckResult;
 		}
+
+		// Build captured variables map for function definitions in continuation
+		java.util.Map<String, String> capturedVariables = new java.util.HashMap<>();
+		Result<String, CompileError> varTypeResult = ExpressionTokens.extractTypeFromExpression(decl.valueExpr(),
+				new java.util.HashMap<>());
+		if (varTypeResult instanceof Result.Ok<String, CompileError> ok) {
+			capturedVariables.put(varName, ok.value());
+		}
+
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App
-				.parseExpressionWithRead(substitutedContinuation, functionRegistry);
+				.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
 		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 	}
 

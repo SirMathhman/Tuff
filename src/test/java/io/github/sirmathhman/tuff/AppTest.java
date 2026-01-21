@@ -867,6 +867,11 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportFunctionCapturingPreviouslyboundVariable() {
+		assertValidWithInput("let x = read U8; fn get() => x; get()", 42, 42);
+	}
+
+	@Test
 	void shouldSupportYieldInsideFunctionBodyBlock() {
 		assertValid("fn get() => { if (true) yield 100; 50 } + 5; get()", 105);
 	}

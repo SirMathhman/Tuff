@@ -36,7 +36,7 @@ public final class App {
 		List<Instruction> instructions = new ArrayList<>();
 		if (!source.isEmpty()) {
 			Result<Void, CompileError> result = parseStatement(source.trim(), instructions, new HashSet<>(),
-					new HashMap<>(), new HashMap<>());
+					new HashMap<>(), new HashMap<>(), new HashMap<>());
 			return result.match(
 					ignored -> {
 						instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
@@ -50,20 +50,20 @@ public final class App {
 	}
 
 	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
-		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>(), new HashMap<>());
+		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
 	}
 
 	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions,
 			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		if (FunctionHandler.isFunctionDefinition(stmt)) {
-			return FunctionHandler.parseFunctionDefinition(stmt).flatMap(parsedFunc -> {
+			return FunctionHandler.parseFunctionDefinition(stmt, capturedVariables).flatMap(parsedFunc -> {
 				functionRegistry.put(parsedFunc.functionDef().name(), parsedFunc.functionDef());
 				if (parsedFunc.remaining().isEmpty()) {
 					return Result.ok(null);
 				}
 				return parseStatement(parsedFunc.remaining(), instructions, definedStructs, structRegistry,
-						functionRegistry);
+						functionRegistry, capturedVariables);
 			});
 		}
 
@@ -78,7 +78,7 @@ public final class App {
 								return Result.ok(null);
 							}
 							return parseStatement(structResult.remaining(), instructions, definedStructs, structRegistry,
-									functionRegistry);
+									functionRegistry, capturedVariables);
 						});
 					});
 		}
@@ -200,9 +200,11 @@ public final class App {
 						return handleFieldAccessStatement(remaining, instResult.definition(), instructions,
 								definedStructs, structRegistry);
 					}
-					return parseStatement(remaining, instructions, definedStructs, structRegistry, new HashMap<>());
+					return parseStatement(remaining, instructions, definedStructs, structRegistry, new HashMap<>(),
+							new HashMap<>());
 				});
 	}
+
 	private static Result<Void, CompileError> handleFieldAccessStatement(String stmt,
 			StructDefinition structDef, List<Instruction> instructions, Set<String> definedStructs,
 			Map<String, StructDefinition> structRegistry) {
@@ -214,9 +216,11 @@ public final class App {
 					if (fieldResult.remaining().isEmpty()) {
 						return Result.ok(null);
 					}
-					return parseStatement(fieldResult.remaining(), instructions, definedStructs, structRegistry, new HashMap<>());
+					return parseStatement(fieldResult.remaining(), instructions, definedStructs, structRegistry, new HashMap<>(),
+							new HashMap<>());
 				});
 	}
+
 	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
 			List<Instruction> instructions) {
 		boolean hasControlMarkers = expr.terms.stream().anyMatch(t -> t.readCount < 0);
@@ -309,7 +313,29 @@ public final class App {
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		return parseExpressionWithRead(expr, functionRegistry, new HashMap<>());
+	}
+
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		expr = expr.trim();
+
+		// Check if this is a function definition
+		if (FunctionHandler.isFunctionDefinition(expr)) {
+			return FunctionHandler.parseFunctionDefinition(expr, capturedVariables).flatMap(parsedFunc -> {
+				// Register the function
+				functionRegistry.put(parsedFunc.functionDef().name(), parsedFunc.functionDef());
+				// If there's remaining code, parse it
+				if (parsedFunc.remaining().isEmpty()) {
+					// Just the function definition with no call
+					List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+					ExpressionModel.ExpressionResult zeroResult = new ExpressionModel.ExpressionResult(0, 0, terms);
+					return Result.ok(zeroResult);
+				}
+				// Parse remaining expression (should be function call or another definition)
+				return parseExpressionWithRead(parsedFunc.remaining(), functionRegistry, capturedVariables);
+			});
+		}
 
 		// Check if this is a function call
 		if (FunctionHandler.isFunctionCall(expr, functionRegistry)) {

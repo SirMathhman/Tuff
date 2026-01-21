@@ -26,9 +26,15 @@ public final class FunctionHandler {
 	}
 
 	/**
-	 * Record for a parsed function definition with parameters
+	 * Record for a parsed function definition with parameters and captured
+	 * variables
 	 */
-	public record FunctionDef(String name, List<FunctionParam> params, String returnType, String body) {
+	public record FunctionDef(
+			String name, List<FunctionParam> params, String returnType, String body,
+			Map<String, String> capturedVariables) {
+		public FunctionDef(String name, List<FunctionParam> params, String returnType, String body) {
+			this(name, params, returnType, body, new java.util.HashMap<>());
+		}
 	}
 
 	/**
@@ -44,6 +50,14 @@ public final class FunctionHandler {
 	 * Parameters format: (param1 : Type1, param2 : Type2, ...)
 	 */
 	public static Result<ParsedFunction, CompileError> parseFunctionDefinition(String stmt) {
+		return parseFunctionDefinition(stmt, new java.util.HashMap<>());
+	}
+
+	/**
+	 * Parse a function definition with captured variable context
+	 */
+	public static Result<ParsedFunction, CompileError> parseFunctionDefinition(
+			String stmt, Map<String, String> capturedVariables) {
 		stmt = stmt.trim();
 
 		Result<FunctionDefParts, CompileError> partsResult = splitFunctionDefinition(stmt);
@@ -79,7 +93,8 @@ public final class FunctionHandler {
 			}
 		}
 
-		return Result.ok(new ParsedFunction(new FunctionDef(name, params, returnType, body), remaining));
+		return Result.ok(new ParsedFunction(
+				new FunctionDef(name, params, returnType, body, capturedVariables), remaining));
 	}
 
 	private record FunctionDefParts(String name, String params, String returnType, String body, String remaining) {
@@ -363,8 +378,16 @@ public final class FunctionHandler {
 							args.size()));
 		}
 
-		// Substitute parameters with arguments in the body
+		// Substitute captured variables first (outer scope bindings)
 		String result = functionDef.body();
+		for (Map.Entry<String, String> captured : functionDef.capturedVariables().entrySet()) {
+			String varName = captured.getKey();
+			String varExpr = captured.getValue();
+			// Replace variable references with their captured expressions
+			result = result.replaceAll("\\b" + varName + "\\b", "(" + varExpr + ")");
+		}
+
+		// Then substitute parameters with arguments in the body
 		for (int i = 0; i < functionDef.params().size(); i++) {
 			String paramName = functionDef.params().get(i).name();
 			String argValue = args.get(i);
