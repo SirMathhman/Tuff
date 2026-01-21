@@ -978,9 +978,17 @@ public final class AppTest {
 
 	@Test
 	void shouldSupportCallingReturnedThisMemberFunction() {
-		// outer() defines an inner function, returns `this`, then we call the member function.
-		// NOTE: this is intentionally written without a ';' after the function definition.
+		// outer() defines an inner function, returns `this`, then we call the member
+		// function.
+		// NOTE: this is intentionally written without a ';' after the function
+		// definition.
 		assertValidWithInput("fn outer() => { fn inner() => read U8; this } outer().inner()", 42, 42);
+	}
+
+	@Test
+	void shouldSupportBindingFunctionToVariable() {
+		// Bind a function to a variable, then call it
+		assertValid("let func = fn get() => 100; func()", 100);
 	}
 
 	private void assertInvalid(String source) {

@@ -279,6 +279,15 @@ String varName = decl.varName();  // Access via record getter
 - **Behavior**: Outer function returns `this` and exposes `inner` as a callable member
 - **Notes**: Block-bodied function definitions may omit the trailing `;` when followed by an expression
 
+### Function Binding to Variables
+
+- **Pattern**: `let func = fn get() => 100; func()`
+- **Behavior**: Function definitions can be bound to variables and called through the variable name
+- **Implementation**: Parses function definition, registers it under variable name in function registry, continuation can call it
+- **Handler**: `LetBindingProcessor.handleFunctionDefinitionBinding()`
+- **Flexibility**: Function definition doesn't require trailing `;` when used as value expression
+- **File**: `letbinding/LetBindingProcessor.java`, `letbinding/FunctionDefinitionProcessor.java`
+
 ## Common Patterns & Conventions
 
 ### Error Handling Pattern

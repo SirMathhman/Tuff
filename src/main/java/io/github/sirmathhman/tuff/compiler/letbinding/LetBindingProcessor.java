@@ -376,6 +376,11 @@ public final class LetBindingProcessor {
 		}
 
 		String valueExpr = decl.valueExpr().trim();
+		
+		// Check if we're binding a function definition to a variable
+		if (FunctionHandler.isFunctionDefinition(valueExpr)) {
+			return handleFunctionDefinitionBinding(varName, valueExpr, normalizedContinuation, instructions, functionRegistry);
+		}
 		boolean isFunctionReferenceBinding = decl.declaredType() != null
 				&& decl.declaredType().contains("=>")
 				&& functionRegistry.containsKey(valueExpr);
@@ -414,6 +419,26 @@ public final class LetBindingProcessor {
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App
 				.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
 		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+	}
+
+	private static Result<Void, CompileError> handleFunctionDefinitionBinding(String varName, String funcDefStmt,
+			String continuation, List<Instruction> instructions,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		// Parse the function definition
+		Result<FunctionHandler.ParsedFunction, CompileError> parseResult = FunctionHandler.parseFunctionDefinition(funcDefStmt);
+		if (parseResult instanceof Result.Err<FunctionHandler.ParsedFunction, CompileError> err) {
+			return Result.err(err.error());
+		}
+		FunctionHandler.ParsedFunction parsed = ((Result.Ok<FunctionHandler.ParsedFunction, CompileError>) parseResult).value();
+		
+		// Create a new function registry with the bound function registered under the variable name
+		Map<String, FunctionHandler.FunctionDef> updatedRegistry = new java.util.HashMap<>(functionRegistry);
+		updatedRegistry.put(varName, parsed.functionDef());
+		
+		// Parse the continuation with the updated function registry
+		Result<ExpressionModel.ExpressionResult, CompileError> contResult = io.github.sirmathhman.tuff.App
+				.parseExpressionWithRead(continuation, updatedRegistry);
+		return contResult.match(expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions), Result::err);
 	}
 
 	private static Result<Void, CompileError> validateContinuationTypes(String continuation, String varName,

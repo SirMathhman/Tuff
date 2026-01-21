@@ -94,7 +94,10 @@ public final class FunctionDefinitionProcessor {
 			return Result.ok(new BodyAndRemaining(body, remaining));
 		}
 
-		return Result.err(new CompileError("Invalid function definition: missing ';' terminator"));
+		// If there's no semicolon and no block, treat the entire rest as body with empty remaining
+		// This supports: let func = fn get() => 100; func()
+		String body = s.substring(bodyStart).trim();
+		return Result.ok(new BodyAndRemaining(body, ""));
 	}
 
 	static int findMatchingParen(String s, int openIdx) {
