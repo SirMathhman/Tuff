@@ -7,9 +7,8 @@ import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.letbinding.CompilerHelpers;
 import io.github.sirmathhman.tuff.compiler.letbinding.ForLoopProcessor;
-import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
-import io.github.sirmathhman.tuff.compiler.letbinding.StructDefinition;
+import io.github.sirmathhman.tuff.compiler.letbinding.MutableVarContext;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
@@ -34,8 +33,9 @@ public final class LetBindingHandler {
 			return handleConditionalAssignmentToUninitializedVariable(varName, continuation, instructions);
 		if (!continuation.contains("=") || !continuation.contains(";"))
 			return Result.err(new CompileError("Uninitialized variable '" + varName + "' must be assigned before use"));
-		return handleMutableVariableWithAssignment(varName, null, continuation, instructions, isMutable,
-				new java.util.HashMap<>(), 100);
+		MutableVarContext ctx = new MutableVarContext(new java.util.HashMap<>(), 100);
+		return handleMutableVariableWithAssignment(varName, null, continuation, isMutable,
+				new MutableVarAssignmentContext(instructions, ctx));
 	}
 
 	public static Result<Void, CompileError> handleLetBindingWithContinuation(
@@ -51,29 +51,6 @@ public final class LetBindingHandler {
 	}
 
 	public static Result<Void, CompileError> handleLetBindingWithContinuation(
-			String stmt,
-			int equalsIndex,
-			int semiIndex,
-			String continuation,
-			List<Instruction> instructions,
-			java.util.Map<String, StructDefinition> structRegistry,
-			java.util.Map<String, FunctionHandler.FunctionDef> functionRegistry) {
-		LetBindingProcessor.ProcessContext ctx = new LetBindingProcessor.ProcessContext(
-				instructions, new java.util.HashMap<>(), 100, structRegistry, functionRegistry);
-		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, ctx);
-	}
-
-	private static Result<Void, CompileError> handleLetBindingWithContinuation(
-			String stmt, int equalsIndex, int semiIndex, String continuation,
-			List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr) {
-		LetBindingProcessor.ProcessContext ctx = new LetBindingProcessor.ProcessContext(
-				instructions, variableAddresses, nextMemAddr, new java.util.HashMap<>(),
-				new java.util.HashMap<>());
-		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, ctx);
-	}
-
-	private static Result<Void, CompileError> handleLetBindingWithContinuation(
 			String stmt, int equalsIndex, int semiIndex, String continuation,
 			LetBindingProcessor.ProcessContext ctx) {
 		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, ctx);
@@ -84,8 +61,9 @@ public final class LetBindingHandler {
 			String initialValueExpr,
 			String continuation,
 			List<Instruction> instructions,
-			java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr) {
+			MutableVarContext ctx) {
+		java.util.Map<String, Integer> variableAddresses = ctx.variableAddresses();
+		int nextMemAddr = ctx.nextMemAddr();
 		continuation = continuation.trim();
 		if (!continuation.startsWith("{"))
 			return Result.err(new CompileError("Expected '{' for scoped block"));
@@ -182,8 +160,9 @@ public final class LetBindingHandler {
 	}
 
 	public static Result<Void, CompileError> handleWhileLoopAfterLet(String varName, String initialValueExpr,
-			String continuation, List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr) {
+			String continuation, List<Instruction> instructions, MutableVarContext ctx) {
+		java.util.Map<String, Integer> variableAddresses = ctx.variableAddresses();
+		int nextMemAddr = ctx.nextMemAddr();
 		// Store the initial value at the correct memory address
 		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(initialValueExpr, instructions,
 				nextMemAddr);
@@ -199,10 +178,8 @@ public final class LetBindingHandler {
 	}
 
 	public static Result<Void, CompileError> handleForLoopAfterLet(String varName, String initialValueExpr,
-			String continuation, List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr) {
-		return ForLoopProcessor.handleForLoopAfterLet(varName, initialValueExpr, continuation, instructions,
-				variableAddresses, nextMemAddr);
+			String continuation, List<Instruction> instructions, MutableVarContext ctx) {
+		return ForLoopProcessor.handleForLoopAfterLet(varName, initialValueExpr, continuation, instructions, ctx);
 	}
 
 	public static Result<Void, CompileError> handleChainedLetBinding(
@@ -210,73 +187,88 @@ public final class LetBindingHandler {
 			String valueExpr,
 			String continuation,
 			List<Instruction> instructions,
-			java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr) {
-		return storeAndThen(valueExpr, instructions, nextMemAddr, () -> {
-			// Add this variable to the context
-			java.util.Map<String, Integer> newContext = new java.util.HashMap<>(variableAddresses);
-			newContext.put(varName, nextMemAddr);
-			// Parse the chained let binding
-			int nextEqualsIndex = continuation.indexOf('=');
-			if (nextEqualsIndex == -1) {
-				return Result.err(new CompileError("Invalid let binding: missing '='"));
-			}
-			int nextSemiIndex = continuation.indexOf(';', nextEqualsIndex);
-			if (nextSemiIndex == -1) {
-				return Result.err(new CompileError("Invalid let binding: missing ';'"));
-			}
-			// Extract the second binding's parts
-			String secondDeclPart = continuation.substring(4, nextEqualsIndex).trim(); // Skip "let "
-			String secondValueExpr = continuation.substring(nextEqualsIndex + 1, nextSemiIndex).trim();
-			String nextContinuation = continuation.substring(nextSemiIndex + 1).trim();
-			// Check if the second binding declares a pointer type
-			boolean isPointerType = false;
-			String declaredType = null;
-			if (secondDeclPart.contains(":")) {
-				String[] parts = secondDeclPart.split(":");
-				if (parts.length == 2) {
-					declaredType = parts[1].trim();
-					isPointerType = declaredType.startsWith("*");
-				}
-			}
-			// For pointer types with reference operator, just continue without type
-			// checking
-			// For other types, we should validate type compatibility
-			if (!isPointerType && !secondValueExpr.startsWith("&")) {
-				// Extract the type of the value expression
-				java.util.Map<String, String> typeContext = new java.util.HashMap<>();
-				typeContext.put(varName, valueExpr);
+			MutableVarContext ctx) {
+		int nextMemAddr = ctx.nextMemAddr();
+		return storeAndThen(valueExpr, instructions, nextMemAddr,
+				() -> continueChainedLetBinding(varName, valueExpr, continuation, instructions, ctx));
+	}
 
-				Result<String, CompileError> valueTypeResult = ExpressionTokens.extractTypeFromExpression(secondValueExpr,
-						typeContext);
-				if (declaredType != null && valueTypeResult instanceof Result.Ok<String, CompileError> valueTypeOk) {
-					String valueType = valueTypeOk.value();
-					// Check type compatibility
-					if (!ExpressionTokens.isTypeCompatible(valueType, declaredType)) {
-						return Result.err(new CompileError("Type mismatch in let binding: variable '" +
-								secondDeclPart.split(":")[0].trim() + "' declared as " + declaredType +
-								" but initialized with " + valueType));
-					}
-				}
+	private record ChainedLetParts(String declPart, String valueExpr, String continuation) {
+	}
+
+	private static Result<ChainedLetParts, CompileError> parseChainedLetParts(String continuation) {
+		int nextEqualsIndex = continuation.indexOf('=');
+		if (nextEqualsIndex == -1) {
+			return Result.err(new CompileError("Invalid let binding: missing '='"));
+		}
+		int nextSemiIndex = continuation.indexOf(';', nextEqualsIndex);
+		if (nextSemiIndex == -1) {
+			return Result.err(new CompileError("Invalid let binding: missing ';'"));
+		}
+		String secondDeclPart = continuation.substring(4, nextEqualsIndex).trim();
+		String secondValueExpr = continuation.substring(nextEqualsIndex + 1, nextSemiIndex).trim();
+		String nextContinuation = continuation.substring(nextSemiIndex + 1).trim();
+		return Result.ok(new ChainedLetParts(secondDeclPart, secondValueExpr, nextContinuation));
+	}
+
+	private static Result<Void, CompileError> validateChainedLetType(String varName, String valueExpr,
+			ChainedLetParts parts) {
+		String secondDeclPart = parts.declPart();
+		String secondValueExpr = parts.valueExpr();
+		boolean isPointerType = false;
+		String declaredType = null;
+		if (secondDeclPart.contains(":")) {
+			String[] declParts = secondDeclPart.split(":");
+			if (declParts.length == 2) {
+				declaredType = declParts[1].trim();
+				isPointerType = declaredType.startsWith("*");
 			}
+		}
+		if (isPointerType || secondValueExpr.startsWith("&") || declaredType == null) {
+			return Result.ok(null);
+		}
+		java.util.Map<String, String> typeContext = new java.util.HashMap<>();
+		typeContext.put(varName, valueExpr);
+		Result<String, CompileError> valueTypeResult = ExpressionTokens.extractTypeFromExpression(secondValueExpr,
+				typeContext);
+		if (valueTypeResult instanceof Result.Err<String, CompileError>) {
+			return Result.ok(null);
+		}
+		String valueType = ((Result.Ok<String, CompileError>) valueTypeResult).value();
+		if (ExpressionTokens.isTypeCompatible(valueType, declaredType)) {
+			return Result.ok(null);
+		}
+		String variableName = secondDeclPart.split(":")[0].trim();
+		return Result.err(new CompileError("Type mismatch in let binding: variable '" + variableName +
+				"' declared as " + declaredType + " but initialized with " + valueType));
+	}
 
-			// Substitute the first variable in the second binding's value expression
-			// BUT: Skip substitution for reference expressions since they should refer to
-			// variable names, not values
-			String substitutedValueExpr = secondValueExpr;
-			if (!secondValueExpr.trim().startsWith("&")) {
-				substitutedValueExpr = secondValueExpr.replaceAll("\\b" + varName + "\\b", valueExpr);
-			}
-			// Rebuild the continuation with substituted value
-			String substitutedContinuation = "let " + secondDeclPart + " = " + substitutedValueExpr + "; " + nextContinuation;
-
-			// Find indices in the NEW string
-			int newEqualsIndex = substitutedContinuation.indexOf('=');
-			int newSemiIndex = substitutedContinuation.indexOf(';', newEqualsIndex);
-
-			return handleLetBindingWithContinuation(substitutedContinuation, newEqualsIndex, newSemiIndex,
-					nextContinuation, instructions, newContext, nextMemAddr + 1);
-		});
+	private static Result<Void, CompileError> continueChainedLetBinding(String varName, String valueExpr,
+			String continuation, List<Instruction> instructions, MutableVarContext ctx) {
+		java.util.Map<String, Integer> newContext = new java.util.HashMap<>(ctx.variableAddresses());
+		newContext.put(varName, ctx.nextMemAddr());
+		Result<ChainedLetParts, CompileError> partsResult = parseChainedLetParts(continuation);
+		if (partsResult instanceof Result.Err<ChainedLetParts, CompileError> partsErr) {
+			return Result.err(partsErr.error());
+		}
+		ChainedLetParts parts = ((Result.Ok<ChainedLetParts, CompileError>) partsResult).value();
+		Result<Void, CompileError> typeResult = validateChainedLetType(varName, valueExpr, parts);
+		if (typeResult instanceof Result.Err<Void, CompileError>) {
+			return typeResult;
+		}
+		String substitutedValueExpr = parts.valueExpr();
+		if (!substitutedValueExpr.trim().startsWith("&")) {
+			substitutedValueExpr = substitutedValueExpr.replaceAll("\\b" + varName + "\\b", valueExpr);
+		}
+		String substitutedContinuation = "let " + parts.declPart() + " = " + substitutedValueExpr + "; "
+				+ parts.continuation();
+		int newEqualsIndex = substitutedContinuation.indexOf('=');
+		int newSemiIndex = substitutedContinuation.indexOf(';', newEqualsIndex);
+		LetBindingProcessor.ProcessContext processCtx = new LetBindingProcessor.ProcessContext(
+				instructions, newContext, ctx.nextMemAddr() + 1, new java.util.HashMap<>(),
+				new java.util.HashMap<>());
+		return handleLetBindingWithContinuation(substitutedContinuation, newEqualsIndex, newSemiIndex,
+				parts.continuation(), processCtx);
 	}
 
 	public static Result<Void, CompileError> handleVariableReference(
@@ -341,14 +333,18 @@ public final class LetBindingHandler {
 		return continuation.get();
 	}
 
+	public record MutableVarAssignmentContext(List<Instruction> instructions, MutableVarContext varCtx) {
+	}
+
 	public static Result<Void, CompileError> handleMutableVariableWithAssignment(
 			String varName,
 			String initialValueExpr,
 			String continuation,
-			List<Instruction> instructions,
 			boolean isMutableUninitialized,
-			java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr) {
+			MutableVarAssignmentContext ctx) {
+		List<Instruction> instructions = ctx.instructions();
+		int nextMemAddr = ctx.varCtx().nextMemAddr();
+		java.util.Map<String, Integer> variableAddresses = ctx.varCtx().variableAddresses();
 		boolean isUninitialized = initialValueExpr == null;
 		java.util.Map<String, Integer> addresses = new java.util.HashMap<>(variableAddresses);
 		addresses.put(varName, nextMemAddr);
@@ -361,8 +357,9 @@ public final class LetBindingHandler {
 		}
 
 		// Use MutableAssignmentHandler to process assignments
-		Result<Void, CompileError> assignmentResult = MutableAssignmentHandler.handleAssignment(
-				varName, continuation, instructions, nextMemAddr, isUninitialized, isMutableUninitialized);
+		Result<Void, CompileError> assignmentResult = MutableAssignmentHandler.handleAssignment(varName, continuation,
+				isUninitialized, isMutableUninitialized,
+				new MutableAssignmentHandler.AssignmentContext(instructions, nextMemAddr));
 		if (assignmentResult instanceof Result.Err<Void, CompileError>)
 			return assignmentResult;
 

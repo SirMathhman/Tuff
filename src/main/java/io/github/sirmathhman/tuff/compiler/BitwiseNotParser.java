@@ -64,8 +64,7 @@ public final class BitwiseNotParser {
 			return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 		}
 		return Result.ok(new ExpressionModel.ExpressionTerm(1, 0,
-				new ExpressionModel.ExpressionTermFlags(false, false, false, false, false, false, false, false,
-						false, '\0', typeSpec)));
+				new ExpressionModel.ExpressionTermFlags(0L, '\0', typeSpec)));
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parsePointerTerm(String term) {
@@ -127,8 +126,11 @@ public final class BitwiseNotParser {
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> applyUnaryOperator(
 			ExpressionModel.ExpressionTerm baseTerm, boolean isBitwiseNotted, boolean isLogicalNotted) {
+		ExpressionModel.ExpressionTermFlags flags = ExpressionModel.ExpressionTermFlags.empty()
+				.withBitwiseNotted(isBitwiseNotted)
+				.withLogicalNotted(isLogicalNotted)
+				.withReadTypeSpec(baseTerm.readTypeSpec);
 		return Result.ok(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value,
-				new ExpressionModel.ExpressionTermFlags(false, false, false, false, false, false, false, isBitwiseNotted,
-						isLogicalNotted, '\0', baseTerm.readTypeSpec)));
+				flags));
 	}
 }

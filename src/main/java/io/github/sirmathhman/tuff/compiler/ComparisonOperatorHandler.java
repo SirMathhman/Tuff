@@ -106,8 +106,7 @@ public final class ComparisonOperatorHandler {
 		// means LessThan, marker.value=3 means GreaterThan, marker.value=4 means
 		// LessOrEqual, marker.value=5 means GreaterOrEqual
 		ExpressionModel.ExpressionTerm marker = new ExpressionModel.ExpressionTerm(-1, markerValue,
-				new ExpressionModel.ExpressionTermFlags(false, false, false, false, false, false, false, false, false,
-						'\0', null));
+				new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
 
 		// Combine: left terms + marker + right terms
 		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(left.terms);

@@ -12,7 +12,6 @@ import io.github.sirmathhman.tuff.compiler.DereferenceAssignmentHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
-import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 
 /**
@@ -52,9 +51,10 @@ public final class LetBindingProcessor {
 	}
 
 	private static Result<Void, CompileError> handleStructFieldAccessOnFunctionCallResult(String varName,
-			VariableDecl decl, String continuation, List<Instruction> instructions,
-			Map<String, StructDefinition> structRegistry,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+			VariableDecl decl, String continuation, ProcessContext ctx) {
+		List<Instruction> instructions = ctx.instructions();
+		Map<String, StructDefinition> structRegistry = ctx.structRegistry();
+		Map<String, FunctionHandler.FunctionDef> functionRegistry = ctx.functionRegistry();
 		// Check if valueExpr is a function call
 		String valueExpr = decl.valueExpr().trim();
 		if (!FunctionHandler.isFunctionCall(valueExpr, functionRegistry)) {
@@ -242,40 +242,20 @@ public final class LetBindingProcessor {
 	}
 
 	public static Result<Void, CompileError> process(
-			String stmt, int equalsIndex, int semiIndex, String continuation,
-			List<Instruction> instructions, Map<String, Integer> variableAddresses,
-			int nextMemAddr) {
-		ProcessContext ctx = new ProcessContext(instructions, variableAddresses, nextMemAddr,
-				new java.util.HashMap<>(), new java.util.HashMap<>());
-		return process(stmt, equalsIndex, semiIndex, continuation, ctx);
-	}
-
-	public static Result<Void, CompileError> process(
 			String stmt, int equalsIndex, int semiIndex, String continuation, ProcessContext ctx) {
 		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
 		String varName = decl.varName();
-		Result<Void, CompileError> earlyResult = tryEarlyReturns(varName, decl, continuation, ctx.instructions(),
-				ctx.variableAddresses(), ctx.nextMemAddr(), ctx.functionRegistry());
+		Result<Void, CompileError> earlyResult = tryEarlyReturns(varName, decl, continuation, ctx);
 		if (earlyResult != null)
 			return earlyResult;
-		Result<Void, CompileError> structAccessResult = handleAllStructFieldAccess(varName, decl, continuation,
-				ctx.instructions(), ctx.structRegistry(), ctx.functionRegistry());
+		Result<Void, CompileError> structAccessResult = handleAllStructFieldAccess(varName, decl, continuation, ctx);
 		if (structAccessResult != null)
 			return structAccessResult;
 		return completeVariableSubstitution(varName, decl, continuation, ctx.instructions(), ctx.functionRegistry());
 	}
 
 	private static Result<Void, CompileError> tryEarlyReturns(String varName, VariableDecl decl,
-			String continuation, List<Instruction> instructions,
-			Map<String, Integer> variableAddresses, int nextMemAddr) {
-		return tryEarlyReturns(varName, decl, continuation, instructions, variableAddresses, nextMemAddr,
-				new java.util.HashMap<>());
-	}
-
-	private static Result<Void, CompileError> tryEarlyReturns(String varName, VariableDecl decl,
-			String continuation, List<Instruction> instructions,
-			Map<String, Integer> variableAddresses, int nextMemAddr,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+			String continuation, ProcessContext ctx) {
 		// Handle yield blocks
 		if (decl.valueExpr().trim().startsWith("{")) {
 			String blockContent = decl.valueExpr().trim();
@@ -283,55 +263,56 @@ public final class LetBindingProcessor {
 			if (closingBrace != -1) {
 				String inner = blockContent.substring(1, closingBrace).trim();
 				if (inner.contains("yield")) {
-					return LetBindingHandler.handleYieldBlock(varName, inner, continuation, instructions, nextMemAddr);
+					return LetBindingHandler.handleYieldBlock(varName, inner, continuation, ctx.instructions(),
+							ctx.nextMemAddr());
 				}
 			}
 		}
+		MutableVarContext varCtx = new MutableVarContext(ctx.variableAddresses(), ctx.nextMemAddr());
 
 		if (continuation.trim().startsWith("{")) {
-			return LetBindingHandler.handleScopedBlock(varName, decl.valueExpr(), continuation, instructions,
-					variableAddresses, nextMemAddr);
+			return LetBindingHandler.handleScopedBlock(varName, decl.valueExpr(), continuation, ctx.instructions(),
+					varCtx);
 		}
 		if (continuation.startsWith("let ")) {
-			return LetBindingHandler.handleChainedLetBinding(varName, decl.valueExpr(), continuation, instructions,
-					variableAddresses, nextMemAddr);
+			return LetBindingHandler.handleChainedLetBinding(varName, decl.valueExpr(), continuation, ctx.instructions(),
+					varCtx);
 		}
 		if (continuation.startsWith("while (") && decl.isMutable()) {
-			return LetBindingHandler.handleWhileLoopAfterLet(varName, decl.valueExpr(), continuation, instructions,
-					variableAddresses, nextMemAddr);
+			return LetBindingHandler.handleWhileLoopAfterLet(varName, decl.valueExpr(), continuation, ctx.instructions(),
+					varCtx);
 		}
 		if (continuation.equals(varName)) {
 			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = ConditionalExpressionHandler
 					.hasConditional(decl.valueExpr())
 							? ConditionalExpressionHandler.parseConditional(decl.valueExpr())
-							: App.parseExpressionWithRead(decl.valueExpr(), functionRegistry);
-			return valueResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+							: App.parseExpressionWithRead(decl.valueExpr(), ctx.functionRegistry());
+			return valueResult.match(expr -> App.generateInstructions(expr, ctx.instructions()), Result::err);
 		}
-		if (variableAddresses.containsKey(continuation)) {
-			return LetBindingHandler.handleVariableReference(decl.valueExpr(), continuation, instructions,
-					variableAddresses, nextMemAddr);
+		if (ctx.variableAddresses().containsKey(continuation)) {
+			return LetBindingHandler.handleVariableReference(decl.valueExpr(), continuation, ctx.instructions(),
+					ctx.variableAddresses(), ctx.nextMemAddr());
 		}
 		if (continuation.contains("=") && continuation.contains(";")) {
 			if (continuation.trim().startsWith("*")) {
-				return DereferenceAssignmentHandler.handle(varName, decl.valueExpr(), continuation, instructions,
-						variableAddresses);
+				return DereferenceAssignmentHandler.handle(varName, decl.valueExpr(), continuation, ctx.instructions(),
+						ctx.variableAddresses());
 			}
 			if (!decl.isMutable()) {
 				return Result.err(new CompileError("Cannot assign to immutable variable '" + varName + "'. Use 'let mut'."));
 			}
-			return LetBindingHandler.handleMutableVariableWithAssignment(varName, decl.valueExpr(), continuation,
-					instructions, false, variableAddresses, nextMemAddr);
+			return LetBindingHandler.handleMutableVariableWithAssignment(varName, decl.valueExpr(), continuation, false,
+					new LetBindingHandler.MutableVarAssignmentContext(ctx.instructions(), varCtx));
 		}
 		return null;
 	}
 
 	private static Result<Void, CompileError> handleAllStructFieldAccess(String varName, VariableDecl decl,
-			String continuation, List<Instruction> instructions, Map<String, StructDefinition> structRegistry,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+			String continuation, ProcessContext ctx) {
 		// Handle struct field access on declared struct variables
 		if (decl.declaredType() != null && continuation.contains(varName + ".")) {
 			Result<Void, CompileError> structAccessResult = handleStructFieldAccess(varName, decl, continuation,
-					instructions, structRegistry);
+					ctx.instructions(), ctx.structRegistry());
 			if (structAccessResult != null) {
 				return structAccessResult;
 			}
@@ -340,7 +321,7 @@ public final class LetBindingProcessor {
 		// Handle struct field access on function call results
 		if (decl.declaredType() == null && continuation.contains(varName + ".")) {
 			Result<Void, CompileError> functionCallStructAccessResult = handleStructFieldAccessOnFunctionCallResult(
-					varName, decl, continuation, instructions, structRegistry, functionRegistry);
+					varName, decl, continuation, ctx);
 			if (functionCallStructAccessResult != null) {
 				return functionCallStructAccessResult;
 			}

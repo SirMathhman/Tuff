@@ -9,6 +9,9 @@ public final class InstructionBuilder {
 	private InstructionBuilder() {
 	}
 
+	private record BuildContext(List<ExpressionModel.ExpressionTerm> terms, List<Instruction> instructions) {
+	}
+
 	public static void loadAllReads(List<ExpressionModel.ExpressionTerm> terms, List<Instruction> instructions) {
 		int nextReg = 0;
 		for (ExpressionModel.ExpressionTerm term : terms) {
@@ -172,6 +175,7 @@ public final class InstructionBuilder {
 
 	private static int buildSubExpressionResult(List<ExpressionModel.ExpressionTerm> terms, int startReg,
 			List<Instruction> instructions) {
+		BuildContext ctx = new BuildContext(terms, instructions);
 		int readRegIndex = startReg;
 		int resultReg = startReg;
 		boolean firstAdditiveGroup = true;
@@ -196,8 +200,8 @@ public final class InstructionBuilder {
 			}
 
 			// Process the current additive/multiplicative group
-			ProcessGroupResult groupResult = processMultiplicativeGroup(terms, i, readRegIndex, firstAdditiveGroup,
-					resultReg, instructions);
+			ProcessGroupResult groupResult = processMultiplicativeGroup(ctx, i, readRegIndex, firstAdditiveGroup,
+					resultReg);
 			resultReg = groupResult.resultReg;
 			readRegIndex = groupResult.readRegIndex;
 			i = groupResult.nextIndex;
@@ -205,8 +209,7 @@ public final class InstructionBuilder {
 
 			// Check for logical AND boundary (higher precedence than OR)
 			if (groupResult.hasLogicalAndBoundary) {
-				ProcessAndResult andResult = processLogicalAndBoundary(terms, i, readRegIndex, resultReg,
-						instructions);
+				ProcessAndResult andResult = processLogicalAndBoundary(ctx, i, readRegIndex, resultReg);
 				resultReg = andResult.resultReg;
 				readRegIndex = andResult.readRegIndex;
 				i = andResult.nextIndex;
@@ -214,8 +217,7 @@ public final class InstructionBuilder {
 
 			// Check for logical OR boundary
 			if (groupResult.hasLogicalOrBoundary) {
-				ProcessOrResult orResult = processLogicalOrBoundary(terms, i, readRegIndex, resultReg,
-						instructions);
+				ProcessOrResult orResult = processLogicalOrBoundary(ctx, i, readRegIndex, resultReg);
 				resultReg = orResult.resultReg;
 				readRegIndex = orResult.readRegIndex;
 				i = orResult.nextIndex;
@@ -227,8 +229,10 @@ public final class InstructionBuilder {
 		return resultReg;
 	}
 
-	private static ProcessGroupResult processMultiplicativeGroup(List<ExpressionModel.ExpressionTerm> terms, int i,
-			int readRegIndex, boolean firstAdditiveGroup, int resultReg, List<Instruction> instructions) {
+	private static ProcessGroupResult processMultiplicativeGroup(BuildContext ctx, int i,
+			int readRegIndex, boolean firstAdditiveGroup, int resultReg) {
+		List<ExpressionModel.ExpressionTerm> terms = ctx.terms();
+		List<Instruction> instructions = ctx.instructions();
 		ExpressionModel.ExpressionTerm term = terms.get(i);
 
 		// Collect this multiplicative/divisive/bitwise group
@@ -255,28 +259,29 @@ public final class InstructionBuilder {
 		}
 
 		// Generate instructions for this group
-		resultReg = processAdditiveGroup(groupRegs, groupOps, isSubtracted, firstAdditiveGroup, resultReg,
-				instructions);
+		resultReg = processAdditiveGroup(groupRegs, groupOps, isSubtracted,
+				new AdditiveGroupState(firstAdditiveGroup, resultReg, instructions));
 
 		boolean hasLogicalOrBoundary = term.isLogicalOrBoundary();
 		boolean hasLogicalAndBoundary = term.isLogicalAndBoundary();
 		return new ProcessGroupResult(resultReg, readRegIndex, i, hasLogicalOrBoundary, hasLogicalAndBoundary);
 	}
 
-	private static ProcessOrResult processLogicalOrBoundary(List<ExpressionModel.ExpressionTerm> terms, int i,
-			int readRegIndex, int resultReg, List<Instruction> instructions) {
-		return processLogicalBoundary(terms, i, readRegIndex, resultReg, instructions, Operation.LogicalOr);
+	private static ProcessOrResult processLogicalOrBoundary(BuildContext ctx, int i,
+			int readRegIndex, int resultReg) {
+		return processLogicalBoundary(ctx, i, readRegIndex, resultReg, Operation.LogicalOr);
 	}
 
-	private static ProcessAndResult processLogicalAndBoundary(List<ExpressionModel.ExpressionTerm> terms, int i,
-			int readRegIndex, int resultReg, List<Instruction> instructions) {
-		ProcessOrResult result = processLogicalBoundary(terms, i, readRegIndex, resultReg, instructions,
-				Operation.LogicalAnd);
+	private static ProcessAndResult processLogicalAndBoundary(BuildContext ctx, int i,
+			int readRegIndex, int resultReg) {
+		ProcessOrResult result = processLogicalBoundary(ctx, i, readRegIndex, resultReg, Operation.LogicalAnd);
 		return new ProcessAndResult(result.resultReg, result.readRegIndex, result.nextIndex);
 	}
 
-	private static ProcessOrResult processLogicalBoundary(List<ExpressionModel.ExpressionTerm> terms, int i,
-			int readRegIndex, int resultReg, List<Instruction> instructions, Operation logicalOp) {
+	private static ProcessOrResult processLogicalBoundary(BuildContext ctx, int i,
+			int readRegIndex, int resultReg, Operation logicalOp) {
+		List<ExpressionModel.ExpressionTerm> terms = ctx.terms();
+		List<Instruction> instructions = ctx.instructions();
 		i++;
 		while (i < terms.size() && terms.get(i).readCount == 0) {
 			i++;
@@ -342,9 +347,14 @@ public final class InstructionBuilder {
 		}
 	}
 
+	private record AdditiveGroupState(boolean firstAdditiveGroup, int resultReg, List<Instruction> instructions) {
+	}
+
 	private static int processAdditiveGroup(java.util.List<Integer> groupRegs, java.util.List<Character> groupOps,
-			boolean isSubtracted,
-			boolean firstAdditiveGroup, int resultReg, List<Instruction> instructions) {
+			boolean isSubtracted, AdditiveGroupState state) {
+		boolean firstAdditiveGroup = state.firstAdditiveGroup();
+		int resultReg = state.resultReg();
+		List<Instruction> instructions = state.instructions();
 		if (groupRegs.size() == 1) {
 			// Single read in this group
 			if (firstAdditiveGroup) {

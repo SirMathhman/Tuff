@@ -224,6 +224,8 @@ mvn verify
 
 - Maximum file length: 500 lines (Checkstyle)
 - Maximum method length: 50 lines (Checkstyle)
+- Maximum parameters per method/constructor: 5 (Checkstyle)
+- Maximum record components: 5 (Checkstyle)
 - Maximum classes per package: 15 (Python pre-commit hook)
 - All tests must pass before commits (pre-commit hook)
 

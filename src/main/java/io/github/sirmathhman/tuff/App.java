@@ -11,6 +11,7 @@ import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.LogicalOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.MultiplicativeExpressionBuilder;
 import io.github.sirmathhman.tuff.compiler.WhileLoopHandler;
+import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.MatchExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.StructHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.StructDefinition;
@@ -20,7 +21,6 @@ import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
 import io.github.sirmathhman.tuff.vm.Vm;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -34,7 +34,6 @@ public final class App {
 
 	public static Result<Instruction[], CompileError> compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
-
 		if (!source.isEmpty()) {
 			Result<Void, CompileError> result = parseStatement(source.trim(), instructions, new HashSet<>(),
 					new HashMap<>(), new HashMap<>());
@@ -145,7 +144,8 @@ public final class App {
 		// Use LetBindingHandler for all statement-level let bindings
 		// (both single and chained)
 		return LetBindingHandler.handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation,
-				instructions, structRegistry, functionRegistry);
+				new LetBindingProcessor.ProcessContext(instructions, new java.util.HashMap<>(), 100, structRegistry,
+						functionRegistry));
 	}
 
 	private static Result<Void, CompileError> handleStructInstantiationStatement(String stmt,

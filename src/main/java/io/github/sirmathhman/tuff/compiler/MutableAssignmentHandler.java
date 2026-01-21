@@ -16,13 +16,17 @@ public final class MutableAssignmentHandler {
 	private MutableAssignmentHandler() {
 	}
 
+	public record AssignmentContext(List<Instruction> instructions, int nextMemAddr) {
+	}
+
 	public static Result<Void, CompileError> handleAssignment(
 			String varName,
 			String continuation,
-			List<Instruction> instructions,
-			int nextMemAddr,
 			boolean isUninitialized,
-			boolean isMutableUninitialized) {
+			boolean isMutableUninitialized,
+			AssignmentContext ctx) {
+		List<Instruction> instructions = ctx.instructions();
+		int nextMemAddr = ctx.nextMemAddr();
 		String remaining = continuation;
 		int assignmentCount = 0;
 		while (true) {

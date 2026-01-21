@@ -44,10 +44,15 @@ public final class MultiplicativeExpressionBuilder {
 					return Result.err(err.error());
 				ExpressionModel.ExpressionTerm baseTerm = ((Result.Ok<ExpressionModel.ExpressionTerm, CompileError>) termResult)
 						.value();
-				multTerms.add(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value,
-						new ExpressionModel.ExpressionTermFlags(isSubtracted, j > 0 && operator == '*', j > 0 && operator == '/',
-								false, false, false, false, baseTerm.isBitwiseNotted(), baseTerm.isLogicalNotted(),
-								(j > 0) ? operator : '\0', baseTerm.readTypeSpec)));
+				ExpressionModel.ExpressionTermFlags flags = ExpressionModel.ExpressionTermFlags.empty()
+						.withSubtracted(isSubtracted)
+						.withMultiplied(j > 0 && operator == '*')
+						.withDivided(j > 0 && operator == '/')
+						.withBitwiseNotted(baseTerm.isBitwiseNotted())
+						.withLogicalNotted(baseTerm.isLogicalNotted())
+						.withMultiplicativeOperator((j > 0) ? operator : '\0')
+						.withReadTypeSpec(baseTerm.readTypeSpec);
+				multTerms.add(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value, flags));
 				Result<Long, CompileError> lit2 = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
 				if (lit2 instanceof Result.Err<Long, CompileError> err)
 					return Result.err(err.error());
@@ -111,9 +116,17 @@ public final class MultiplicativeExpressionBuilder {
 			for (int i = 0; i < innerExpr.terms.size(); i++) {
 				ExpressionModel.ExpressionTerm innerTerm = innerExpr.terms.get(i);
 				boolean isLastOfGroup = (i == innerExpr.terms.size() - 1) && totalTokens > 1;
+				ExpressionModel.ExpressionTermFlags flags = ExpressionModel.ExpressionTermFlags.empty()
+						.withSubtracted(isSubtracted)
+						.withMultiplied(innerTerm.isMultiplied())
+						.withDivided(innerTerm.isDivided())
+						.withParenthesizedGroupEnd(isLastOfGroup)
+						.withBitwiseNotted(innerTerm.isBitwiseNotted())
+						.withLogicalNotted(innerTerm.isLogicalNotted())
+						.withMultiplicativeOperator(innerTerm.multiplicativeOperator)
+						.withReadTypeSpec(innerTerm.readTypeSpec);
 				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(innerTerm.readCount,
-						innerTerm.value,
-						isSubtracted, innerTerm.isMultiplied(), false, isLastOfGroup);
+						innerTerm.value, flags);
 				terms.add(finalTerm);
 			}
 			return Result

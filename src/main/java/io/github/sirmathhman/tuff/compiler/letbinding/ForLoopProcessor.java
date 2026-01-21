@@ -23,8 +23,9 @@ public final class ForLoopProcessor {
 			String initialValueExpr,
 			String continuation,
 			List<Instruction> instructions,
-			Map<String, Integer> variableAddresses,
-			int nextMemAddr) {
+			MutableVarContext ctx) {
+		Map<String, Integer> variableAddresses = ctx.variableAddresses();
+		int nextMemAddr = ctx.nextMemAddr();
 		// Store the initial value at the correct memory address
 		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(initialValueExpr, instructions,
 				nextMemAddr);
