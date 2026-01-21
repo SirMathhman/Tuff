@@ -8,6 +8,10 @@ public final class Vm {
 	private Vm() {
 	}
 
+	private record InstructionContext(long[] registers, long[] memory, Operation op, Variant var,
+			long firstOperand, long secondOperand) {
+	}
+
 	private static long sign_extend_24bit(long value) {
 		// If bit 23 is set, sign-extend with 1s (make it negative)
 		if ((value & 0x800000L) != 0) {
@@ -44,8 +48,9 @@ public final class Vm {
 			Operation op = Operation.values()[operation];
 			Variant var = Variant.values()[variant];
 
-			boolean shouldJump = executeInstruction(
-					registers, memory, op, var, firstOperand, secondOperand, read, write);
+			InstructionContext ctx = new InstructionContext(registers, memory, op, var, firstOperand,
+					secondOperand);
+			boolean shouldJump = executeInstruction(ctx, read, write);
 
 			if (op == Operation.Halt) {
 				return (int) registers[0];
@@ -59,38 +64,31 @@ public final class Vm {
 		}
 	}
 
-	private static boolean executeInstruction(
-			long[] registers,
-			long[] memory,
-			Operation op,
-			Variant var,
-			long firstOperand,
-			long secondOperand,
-			IntSupplier read,
+	private static boolean executeInstruction(InstructionContext ctx, IntSupplier read,
 			IntConsumer write) {
-		return switch (op) {
-			case Load -> executeLoad(registers, memory, var, firstOperand, secondOperand);
-			case Store -> executeStore(registers, memory, var, firstOperand, secondOperand);
-			case Add -> executeAdd(registers, firstOperand, secondOperand);
-			case Sub -> executeSub(registers, firstOperand, secondOperand);
-			case Mul -> executeMul(registers, firstOperand, secondOperand);
-			case Div -> executeDiv(registers, firstOperand, secondOperand);
-			case BitsShiftLeft -> executeBitsShiftLeft(registers, firstOperand, secondOperand);
-			case BitsShiftRight -> executeBitsShiftRight(registers, firstOperand, secondOperand);
-			case BitsAnd -> executeBitsAnd(registers, firstOperand, secondOperand);
-			case BitsOr -> executeBitsOr(registers, firstOperand, secondOperand);
-			case BitsXor -> executeBitsXor(registers, firstOperand, secondOperand);
-			case BitsNot -> executeBitsNot(registers, firstOperand);
-			case In -> executeIn(registers, firstOperand, read);
-			case Out -> executeOut(registers, firstOperand, write);
+		return switch (ctx.op) {
+			case Load -> executeLoad(ctx.registers, ctx.memory, ctx.var, ctx.firstOperand, ctx.secondOperand);
+			case Store -> executeStore(ctx.registers, ctx.memory, ctx.var, ctx.firstOperand, ctx.secondOperand);
+			case Add -> executeAdd(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case Sub -> executeSub(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case Mul -> executeMul(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case Div -> executeDiv(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case BitsShiftLeft -> executeBitsShiftLeft(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case BitsShiftRight -> executeBitsShiftRight(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case BitsAnd -> executeBitsAnd(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case BitsOr -> executeBitsOr(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case BitsXor -> executeBitsXor(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case BitsNot -> executeBitsNot(ctx.registers, ctx.firstOperand);
+			case In -> executeIn(ctx.registers, ctx.firstOperand, read);
+			case Out -> executeOut(ctx.registers, ctx.firstOperand, write);
 			case Jump -> true;
-			case JumpIfLessThanZero -> registers[(int) firstOperand] < 0;
-			case Equal -> executeEqual(registers, firstOperand, secondOperand);
-			case LessThan -> executeLessThan(registers, firstOperand, secondOperand);
-			case GreaterThan -> executeGreaterThan(registers, firstOperand, secondOperand);
-			case LogicalAnd -> executeLogicalAnd(registers, firstOperand, secondOperand);
-			case LogicalOr -> executeLogicalOr(registers, firstOperand, secondOperand);
-			case LogicalNot -> executeLogicalNot(registers, firstOperand);
+			case JumpIfLessThanZero -> ctx.registers[(int) ctx.firstOperand] < 0;
+			case Equal -> executeEqual(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case LessThan -> executeLessThan(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case GreaterThan -> executeGreaterThan(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case LogicalAnd -> executeLogicalAnd(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case LogicalOr -> executeLogicalOr(ctx.registers, ctx.firstOperand, ctx.secondOperand);
+			case LogicalNot -> executeLogicalNot(ctx.registers, ctx.firstOperand);
 			case Halt -> false;
 		};
 	}

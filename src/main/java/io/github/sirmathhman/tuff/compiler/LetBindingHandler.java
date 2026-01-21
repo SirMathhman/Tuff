@@ -44,8 +44,10 @@ public final class LetBindingHandler {
 			int semiIndex,
 			String continuation,
 			List<Instruction> instructions) {
-		return handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation, instructions,
-				new java.util.HashMap<>(), 100);
+		LetBindingProcessor.ProcessContext ctx = new LetBindingProcessor.ProcessContext(
+				instructions, new java.util.HashMap<>(), 100, new java.util.HashMap<>(),
+				new java.util.HashMap<>());
+		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, ctx);
 	}
 
 	public static Result<Void, CompileError> handleLetBindingWithContinuation(
@@ -65,16 +67,10 @@ public final class LetBindingHandler {
 			String stmt, int equalsIndex, int semiIndex, String continuation,
 			List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
 			int nextMemAddr) {
-		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, instructions,
-				variableAddresses, nextMemAddr);
-	}
-
-	private static Result<Void, CompileError> handleLetBindingWithContinuation(
-			String stmt, int equalsIndex, int semiIndex, String continuation,
-			List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr, java.util.Map<String, StructDefinition> structRegistry) {
-		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, instructions,
-				variableAddresses, nextMemAddr, structRegistry);
+		LetBindingProcessor.ProcessContext ctx = new LetBindingProcessor.ProcessContext(
+				instructions, variableAddresses, nextMemAddr, new java.util.HashMap<>(),
+				new java.util.HashMap<>());
+		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, ctx);
 	}
 
 	private static Result<Void, CompileError> handleLetBindingWithContinuation(

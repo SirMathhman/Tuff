@@ -128,21 +128,20 @@ public final class InstructionBuilder {
 						(int) leftTerms.stream().filter(t -> t.readCount > 0).count(), instructions);
 
 		if (leftResult != -1 && rightResult != -1) {
-			boolean isInequality = marker.value == 1;
-			boolean isLessThan = marker.value == 2;
-			boolean isGreaterThan = marker.value == 3;
-			boolean isLessOrEqual = marker.value == 4;
-			boolean isGreaterOrEqual = marker.value == 5;
-			generateComparisonOperation(isInequality, isLessThan, isGreaterThan, isLessOrEqual,
-					isGreaterOrEqual, leftResult, rightResult, instructions);
+			generateComparisonOperation(marker.value, leftResult, rightResult, instructions);
 			return leftResult;
 		}
 		return -1;
 	}
 
-	private static void generateComparisonOperation(boolean isInequality, boolean isLessThan,
-			boolean isGreaterThan, boolean isLessOrEqual, boolean isGreaterOrEqual, int leftResult,
+	private static void generateComparisonOperation(long markerValue, int leftResult,
 			int rightResult, List<Instruction> instructions) {
+		boolean isInequality = markerValue == 1;
+		boolean isLessThan = markerValue == 2;
+		boolean isGreaterThan = markerValue == 3;
+		boolean isLessOrEqual = markerValue == 4;
+		boolean isGreaterOrEqual = markerValue == 5;
+
 		if (isLessThan) {
 			instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, leftResult, (long) rightResult));
 		} else if (isGreaterThan) {

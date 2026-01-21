@@ -251,15 +251,6 @@ public final class LetBindingProcessor {
 	}
 
 	public static Result<Void, CompileError> process(
-			String stmt, int equalsIndex, int semiIndex, String continuation,
-			List<Instruction> instructions, Map<String, Integer> variableAddresses,
-			int nextMemAddr, Map<String, StructDefinition> structRegistry) {
-		ProcessContext ctx = new ProcessContext(instructions, variableAddresses, nextMemAddr, structRegistry,
-				new java.util.HashMap<>());
-		return process(stmt, equalsIndex, semiIndex, continuation, ctx);
-	}
-
-	public static Result<Void, CompileError> process(
 			String stmt, int equalsIndex, int semiIndex, String continuation, ProcessContext ctx) {
 		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
 		String varName = decl.varName();
