@@ -2,6 +2,7 @@ package io.github.sirmathhman.tuff.compiler;
 
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
+import java.util.List;
 
 public final class BitwiseNotParser {
 	private BitwiseNotParser() {
@@ -49,6 +50,10 @@ public final class BitwiseNotParser {
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseBaseTerm(String term) {
+		// Reject tuple expressions - they should not reach the term parser
+		if (ExpressionTokens.isTupleExpression(term)) {
+			return Result.err(new CompileError("Tuple expressions cannot be parsed as terms"));
+		}
 		if (term.startsWith("read ")) {
 			return parseReadTerm(term);
 		}
@@ -60,6 +65,10 @@ public final class BitwiseNotParser {
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseReadTerm(String term) {
 		String typeSpec = term.substring(5).trim();
+		// Reject type specs containing commas (indicative of malformed tuple parsing)
+		if (typeSpec.contains(",")) {
+			return Result.err(new CompileError("Invalid tuple expression in term position: " + term));
+		}
 		if (!typeSpec.matches("\\*?([UI]\\d+|Bool)")) {
 			return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 		}
@@ -76,6 +85,24 @@ public final class BitwiseNotParser {
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseLiteralTerm(String term) {
+		// Handle tuple indexing: ((expr1, expr2, ...))[index]
+		java.util.regex.Pattern tupleIndexPattern = java.util.regex.Pattern.compile("^\\(\\((.+)\\)\\)\\[(\\d+)\\]$");
+		java.util.regex.Matcher tupleIndexMatcher = tupleIndexPattern.matcher(term);
+		if (tupleIndexMatcher.matches()) {
+			String tupleExpr = tupleIndexMatcher.group(1);
+			int index = Integer.parseInt(tupleIndexMatcher.group(2));
+			
+			// Split the tuple expression by comma at depth 0
+			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(tupleExpr, ',');
+			if (index >= 0 && index < elements.size()) {
+				String element = elements.get(index).trim();
+				// Recursively parse the element
+				return parseTermWithNot(element);
+			} else {
+				return Result.err(new CompileError("Tuple index " + index + " out of bounds"));
+			}
+		}
+		
 		// Handle this.x or this.functionName() syntax - normalize and treat as
 		// variable/function reference
 		if (term.startsWith("this.")) {

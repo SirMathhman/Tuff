@@ -81,6 +81,28 @@ public final class ExpressionTokens {
 			return Result.ok("Bool");
 		}
 
+		// Handle tuple expressions: (expr1, expr2, ...)
+		if (expr.startsWith("(") && expr.endsWith(")")) {
+			String inner = expr.substring(1, expr.length() - 1).trim();
+			
+			// Check if there are commas at depth 0 (indicating a tuple)
+			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
+			if (elements.size() > 1) {
+				// It's a tuple - extract types of all elements
+				java.util.List<String> elementTypes = new java.util.ArrayList<>();
+				for (String element : elements) {
+					Result<String, CompileError> elemTypeResult = extractTypeFromExpression(element.trim(),
+							variableTypes);
+					if (elemTypeResult instanceof Result.Err<String, CompileError>) {
+						return elemTypeResult;
+					}
+					elementTypes.add(((Result.Ok<String, CompileError>) elemTypeResult).value());
+				}
+				// Return tuple type as (Type1, Type2, ...)
+				return Result.ok("(" + String.join(", ", elementTypes) + ")");
+			}
+		}
+
 		// Handle function types: () => ReturnType or (ParamType, ...) => ReturnType
 		if (expr.contains("=>")) {
 			return Result.ok(expr);
@@ -229,6 +251,12 @@ public final class ExpressionTokens {
 			return true;
 		}
 
+		// Handle tuple types - must match exactly
+		if (sourceType.startsWith("(") && sourceType.endsWith(")") ||
+			targetType.startsWith("(") && targetType.endsWith(")")) {
+			return sourceType.equals(targetType);
+		}
+
 		// Handle function types - must match exactly
 		if (sourceType.contains("=>") || targetType.contains("=>")) {
 			return sourceType.equals(targetType);
@@ -332,5 +360,18 @@ public final class ExpressionTokens {
 		} catch (NumberFormatException e) {
 			return Result.err(new CompileError("Failed to parse numeric value: " + literal));
 		}
+	}
+
+	/**
+	 * Check if an expression is a tuple expression.
+	 * A tuple expression starts with ( and ends with ), and contains at least one comma at depth 0.
+	 */
+	public static boolean isTupleExpression(String expr) {
+		if (!expr.startsWith("(") || !expr.endsWith(")")) {
+			return false;
+		}
+		String inner = expr.substring(1, expr.length() - 1);
+		List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
+		return elements.size() > 1;
 	}
 }

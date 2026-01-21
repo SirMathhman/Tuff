@@ -1,6 +1,8 @@
 package io.github.sirmathhman.tuff.compiler.letbinding;
 
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
@@ -68,5 +70,55 @@ public final class CompilerHelpers {
 				return i;
 		}
 		return -1;
+	}
+
+	/**
+	 * Count variable occurrences, treating indexed accesses like x[0] and x[1]
+	 * as single occurrences for each unique index pattern.
+	 * Used for tuple variable substitution logic.
+	 */
+	public static int countVariableOccurrences(String varName, String continuation) {
+		Pattern varPattern = Pattern.compile("\\b" + varName + "\\b");
+		int occurrences = 0;
+		for (Matcher m = varPattern.matcher(continuation); m.find(); occurrences++) {
+			// Check if this occurrence is part of an indexed access like x[...]
+			int pos = m.start();
+			if (pos + varName.length() < continuation.length()
+					&& continuation.charAt(pos + varName.length()) == '[') {
+				// This is an indexed access - skip to after the closing bracket
+				int depth = 0;
+				for (int i = pos + varName.length(); i < continuation.length(); i++) {
+					char c = continuation.charAt(i);
+					if (c == '[') {
+						depth++;
+					} else if (c == ']') {
+						depth--;
+						if (depth == 0) {
+							break;
+						}
+					}
+				}
+			}
+		}
+		return occurrences;
+	}
+
+	/**
+	 * Check if all variable accesses are indexed (e.g., x[0], x[1]).
+	 * Returns true if the variable is only used with brackets.
+	 * Used for tuple variable substitution logic.
+	 */
+	public static boolean allAccessesAreIndexed(String varName, String continuation) {
+		Pattern varPattern = Pattern.compile("\\b" + varName + "\\b");
+		for (Matcher m = varPattern.matcher(continuation); m.find();) {
+			int pos = m.start();
+			// Check if this is followed by a bracket
+			if (pos + varName.length() >= continuation.length()
+					|| continuation.charAt(pos + varName.length()) != '[') {
+				// Found a non-indexed access
+				return false;
+			}
+		}
+		return true;
 	}
 }

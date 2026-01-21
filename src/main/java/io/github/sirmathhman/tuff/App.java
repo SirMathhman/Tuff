@@ -287,6 +287,15 @@ public final class App {
 			return ConditionalExpressionHandler.parseConditional(expr);
 		}
 
+		// Check if this is a tuple expression (before normalizing braces!)
+		if (ExpressionTokens.isTupleExpression(expr)) {
+			// Parse tuple expression - for now returns zero result
+			// Tuple elements are handled via substitution and indexing
+			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
+			return Result.ok(result);
+		}
+
 		// Check if this is a function definition (before normalizing braces!)
 		if (FunctionHandler.isFunctionDefinition(expr)) {
 			Map<String, FunctionHandler.FunctionDef> functionRegistry = new HashMap<>();

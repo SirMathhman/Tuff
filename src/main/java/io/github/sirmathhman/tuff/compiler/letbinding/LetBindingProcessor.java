@@ -366,11 +366,16 @@ public final class LetBindingProcessor {
 		// This ensures "let x = 100; this.x" is treated as a single reference to x
 		String normalizedContinuation = continuation.replaceAll("\\bthis\\." + varName + "\\b", varName);
 
-		java.util.regex.Pattern varPattern = java.util.regex.Pattern.compile("\\b" + varName + "\\b");
-		int occurrences = 0;
-		for (java.util.regex.Matcher m = varPattern.matcher(normalizedContinuation); m.find(); occurrences++)
-			;
-		if (occurrences > 1) {
+		// Count occurrences, treating x[...] patterns as single occurrences (for tuples)
+		int occurrences = CompilerHelpers.countVariableOccurrences(varName, normalizedContinuation);
+		
+		// For tuple types, allow multiple indexed accesses (e.g., x[0], x[1])
+		boolean isTupleType = decl.declaredType() != null && decl.declaredType().startsWith("(")
+				&& decl.declaredType().endsWith(")");
+		boolean isIndexedOnlyAccess = isTupleType
+				&& CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation);
+		
+		if (occurrences > 1 && !isIndexedOnlyAccess) {
 			return LetBindingHandler.handleMultipleVariableReferences(varName, decl.valueExpr(),
 					normalizedContinuation, occurrences, instructions);
 		}
@@ -490,3 +495,4 @@ public final class LetBindingProcessor {
 		}, err -> Result.ok(null));
 	}
 }
+

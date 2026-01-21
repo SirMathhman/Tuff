@@ -1151,6 +1151,16 @@ public final class AppTest {
 			101);
 	}
 
+	@Test
+	void shouldSupportTuples() {
+		// Tuple type annotation and indexing
+		assertValidWithInput(
+			"let x : (U8, U8) = (read U8, read U8); x[0] + x[1]",
+			15,
+			10,
+			5);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
