@@ -1,7 +1,7 @@
 package io.github.sirmathhman.tuff.compiler;
 
 import java.util.HashMap;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 
 import io.github.sirmathhman.tuff.App;
@@ -19,7 +19,7 @@ public final class DereferenceAssignmentHandler {
 			String varName,
 			String initialValueExpr,
 			String continuation,
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			Map<String, Integer> variableAddresses) {
 		// For dereference assignments, the initialValueExpr should be a reference like
 		// &mut x

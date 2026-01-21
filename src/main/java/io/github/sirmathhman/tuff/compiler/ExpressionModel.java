@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 public final class ExpressionModel {
 	private ExpressionModel() {
@@ -113,7 +113,7 @@ public final class ExpressionModel {
 		}
 	}
 
-	public record ExpressionResult(int readCount, long literalValue, List<ExpressionTerm> terms) {
+	public record ExpressionResult(int readCount, long literalValue, ArrayList<ExpressionTerm> terms) {
 	}
 
 	public static final class ExpressionTerm {
@@ -329,10 +329,10 @@ public final class ExpressionModel {
 		}
 	}
 
-	public record ParenthesizedTokenResult(List<ExpressionTerm> terms, long literalValue, int expandedSize) {
+	public record ParenthesizedTokenResult(ArrayList<ExpressionTerm> terms, long literalValue, int expandedSize) {
 	}
 
-	public record ParsedMult(int readCount, long literalValue, List<ExpressionTerm> terms) {
+	public record ParsedMult(int readCount, long literalValue, ArrayList<ExpressionTerm> terms) {
 	}
 
 	public record MultOperatorToken(String token, char operator) {

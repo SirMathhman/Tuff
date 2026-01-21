@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler.letbinding.fields;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 import java.util.function.BiFunction;
 
@@ -8,7 +8,6 @@ import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
-import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.VariableDecl;
@@ -26,10 +25,10 @@ public final class ArrayFieldAccessBase {
 		public final String varName;
 		public final VariableDecl decl;
 		public final String continuation;
-		public final List<Instruction> instructions;
+		public final ArrayList<Instruction> instructions;
 		public final Map<String, FunctionHandler.FunctionDef> functionRegistry;
 		public final String fieldName;
-		public final BiFunction<List<String>, String, String> extractor;
+		public final BiFunction<ArrayList<String>, String, String> extractor;
 
 		private Context(Builder builder) {
 			this.varName = builder.varName;
@@ -45,10 +44,10 @@ public final class ArrayFieldAccessBase {
 			private String varName;
 			private VariableDecl decl;
 			private String continuation;
-			private List<Instruction> instructions;
+			private ArrayList<Instruction> instructions;
 			private Map<String, FunctionHandler.FunctionDef> functionRegistry;
 			private String fieldName;
-			private BiFunction<List<String>, String, String> extractor;
+			private BiFunction<ArrayList<String>, String, String> extractor;
 
 			public Builder varName(String varName) {
 				this.varName = varName;
@@ -65,7 +64,7 @@ public final class ArrayFieldAccessBase {
 				return this;
 			}
 
-			public Builder instructions(List<Instruction> instructions) {
+			public Builder instructions(ArrayList<Instruction> instructions) {
 				this.instructions = instructions;
 				return this;
 			}
@@ -80,7 +79,7 @@ public final class ArrayFieldAccessBase {
 				return this;
 			}
 
-			public Builder extractor(BiFunction<List<String>, String, String> extractor) {
+			public Builder extractor(BiFunction<ArrayList<String>, String, String> extractor) {
 				this.extractor = extractor;
 				return this;
 			}

@@ -7,7 +7,7 @@ import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
 import io.github.sirmathhman.tuff.App;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 
 public final class WhileLoopHandler {
@@ -19,7 +19,7 @@ public final class WhileLoopHandler {
 	}
 
 	public static Result<Void, CompileError> handleWhileLoop(String stmt, String continuation,
-			List<Instruction> instructions, Map<String, Integer> variableAddresses) {
+																													 ArrayList<Instruction> instructions, Map<String, Integer> variableAddresses) {
 		var conditionEnd = CompilerHelpers.findConditionEnd(stmt, 7);
 		if (conditionEnd == -1) {
 			return Result.err(new CompileError("Malformed while loop: missing closing paren for condition"));
@@ -89,7 +89,7 @@ public final class WhileLoopHandler {
 	}
 
 	private static Result<Void, CompileError> handleAfterLoop(String afterLoop, Map<String, Integer> variableAddresses,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		if (afterLoop.isEmpty()) {
 			return Result.ok(null);
 		}
@@ -104,7 +104,7 @@ public final class WhileLoopHandler {
 		return App.parseStatement(afterLoop, instructions);
 	}
 
-	private static Result<Void, CompileError> parseLoopBody(String body, List<Instruction> instructions,
+	private static Result<Void, CompileError> parseLoopBody(String body, ArrayList<Instruction> instructions,
 			Map<String, Integer> variableAddresses) {
 		var parts = body.split("=", 2);
 		if (parts.length != 2) {
@@ -132,7 +132,7 @@ public final class WhileLoopHandler {
 		return parseAndGenerateExpression(rhs, instructions, varAddr);
 	}
 
-	private static Result<Void, CompileError> parseAndGenerateExpression(String expr, List<Instruction> instructions,
+	private static Result<Void, CompileError> parseAndGenerateExpression(String expr, ArrayList<Instruction> instructions,
 			Integer storeAddr) {
 		var rhsResult = App.parseExpressionWithRead(expr);
 		if (rhsResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> err) {
@@ -166,7 +166,7 @@ public final class WhileLoopHandler {
 	}
 
 	private static Result<Void, CompileError> handleCompoundOp(String varName, String rhs, String operator,
-			List<Instruction> instructions, Map<String, Integer> variableAddresses) {
+																														 ArrayList<Instruction> instructions, Map<String, Integer> variableAddresses) {
 		var varAddr = variableAddresses.get(varName);
 		if (varAddr == null) {
 			return Result.err(new CompileError("Undefined variable: " + varName));
@@ -193,7 +193,7 @@ public final class WhileLoopHandler {
 	}
 
 	private static Result<Void, CompileError> handleSelfReferentialAssignment(String varName, int varAddr,
-			String rhsAfterVar, List<Instruction> instructions) {
+			String rhsAfterVar, ArrayList<Instruction> instructions) {
 		if (rhsAfterVar.isEmpty()) {
 			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) varAddr));
 			instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) varAddr));
@@ -226,7 +226,7 @@ public final class WhileLoopHandler {
 	}
 
 	private static Result<Void, CompileError> handleComplexRhsExpression(char opChar, String expr,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, 0L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 1, 0L));
 		Result<Void, CompileError> genResult = App.parseExpressionWithRead(expr)
@@ -272,7 +272,7 @@ public final class WhileLoopHandler {
 	}
 
 	private static Result<Void, CompileError> evaluateLoopCondition(String condition,
-			Map<String, Integer> variableAddresses, List<Instruction> instructions) {
+			Map<String, Integer> variableAddresses, ArrayList<Instruction> instructions) {
 		var parts = findComparisonParts(condition);
 		var operator = findComparisonOperator(condition);
 
@@ -337,7 +337,7 @@ public final class WhileLoopHandler {
 		return null;
 	}
 
-	private static Result<Void, CompileError> applyComparisonOp(String operator, List<Instruction> instructions) {
+	private static Result<Void, CompileError> applyComparisonOp(String operator, ArrayList<Instruction> instructions) {
 		switch (operator) {
 			case "==" -> instructions.add(new Instruction(Operation.Equal, Variant.Immediate, 0, 1L));
 			case "!=" -> {

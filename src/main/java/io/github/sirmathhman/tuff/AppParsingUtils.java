@@ -3,13 +3,13 @@ package io.github.sirmathhman.tuff;
 import io.github.sirmathhman.tuff.compiler.WhileLoopHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 final class AppParsingUtils {
 	private AppParsingUtils() {
 	}
 
-	static Result<Void, CompileError> handleTopLevelWhileLoop(String stmt, List<Instruction> instructions) {
+	static Result<Void, CompileError> handleTopLevelWhileLoop(String stmt, ArrayList<Instruction> instructions) {
 		var condEnd = -1;
 		var depth = 1;
 		for (var i = 7; i < stmt.length() && depth > 0; i++) {

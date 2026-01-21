@@ -3,8 +3,7 @@ package io.github.sirmathhman.tuff.compiler;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 public final class MultiplicativeExpressionBuilder {
 	private MultiplicativeExpressionBuilder() {
@@ -18,7 +17,7 @@ public final class MultiplicativeExpressionBuilder {
 	public static Result<ExpressionModel.ParsedMult, CompileError> parseMultiplicative(String expr,
 			boolean isSubtracted, ExpressionParser parser) {
 		var multTokens = splitByMultOperators(expr);
-		List<ExpressionModel.ExpressionTerm> multTerms = new ArrayList<>();
+		ArrayList<ExpressionModel.ExpressionTerm> multTerms = new ArrayList<>();
 		long multLiteral = 1;
 		var lastExpandedParensSize = 0;
 		for (var j = 0; j < multTokens.size(); j++) {
@@ -92,8 +91,8 @@ public final class MultiplicativeExpressionBuilder {
 		};
 	}
 
-	private static void fixGroupingBoundaries(List<ExpressionModel.ExpressionTerm> multTerms, int lastExpandedParensSize,
-			int multTokensSize) {
+	private static void fixGroupingBoundaries(ArrayList<ExpressionModel.ExpressionTerm> multTerms, int lastExpandedParensSize,
+																						int multTokensSize) {
 		if (lastExpandedParensSize > 1 && multTokensSize > 1) {
 			var lastJ0Index = lastExpandedParensSize - 1;
 			if (lastJ0Index + 1 < multTerms.size()) {
@@ -129,7 +128,7 @@ public final class MultiplicativeExpressionBuilder {
 
 	private static Result<ExpressionModel.ParenthesizedTokenResult, CompileError> processFirstPositionParentheses(
 			ExpressionModel.ExpressionResult innerExpr, boolean isSubtracted, int totalTokens) {
-		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 		for (var i = 0; i < innerExpr.terms().size(); i++) {
 			var innerTerm = innerExpr.terms().get(i);
 			var isLastOfGroup = (i == innerExpr.terms().size() - 1) && totalTokens > 1;
@@ -152,7 +151,7 @@ public final class MultiplicativeExpressionBuilder {
 					"Parenthesized expressions with multiple reads in multiplicative position not yet supported: "
 							+ multToken));
 		}
-		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 		for (var k = 0; k < innerExpr.terms().size(); k++) {
 			var innerTerm = innerExpr.terms().get(k);
 			boolean isMultiplied = (k == 0);
@@ -162,8 +161,8 @@ public final class MultiplicativeExpressionBuilder {
 		return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue(), 0));
 	}
 
-	private static List<ExpressionModel.MultOperatorToken> splitByMultOperators(String expr) {
-		List<ExpressionModel.MultOperatorToken> result = new ArrayList<>();
+	private static ArrayList<ExpressionModel.MultOperatorToken> splitByMultOperators(String expr) {
+		ArrayList<ExpressionModel.MultOperatorToken> result = new ArrayList<>();
 		var token = new StringBuilder();
 		var lastOp = '\0';
 		var depth = 0;

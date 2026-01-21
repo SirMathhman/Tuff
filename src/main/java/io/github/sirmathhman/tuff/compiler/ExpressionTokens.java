@@ -3,8 +3,7 @@ package io.github.sirmathhman.tuff.compiler;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 public final class ExpressionTokens {
 	private ExpressionTokens() {
@@ -95,7 +94,7 @@ public final class ExpressionTokens {
 			var elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
 			if (elements.size() > 1) {
 				// It's a tuple - extract types of all elements
-				java.util.List<String> elementTypes = new java.util.ArrayList<>();
+				ArrayList<String> elementTypes = new ArrayList<>();
 				for (var element : elements) {
 					var elemTypeResult = extractTypeFromExpression(element.trim(),
 							variableTypes);
@@ -182,8 +181,8 @@ public final class ExpressionTokens {
 		return Result.ok("*U8");
 	}
 
-	public static List<String> splitTokensByOperators(String expr, boolean isAdditive) {
-		List<String> result = new ArrayList<>();
+	public static ArrayList<String> splitTokensByOperators(String expr, boolean isAdditive) {
+		ArrayList<String> result = new ArrayList<>();
 		var token = new StringBuilder();
 		var depth = 0;
 
@@ -239,7 +238,7 @@ public final class ExpressionTokens {
 		return result;
 	}
 
-	public static List<String> splitAddOperators(String expr) {
+	public static ArrayList<String> splitAddOperators(String expr) {
 		return splitTokensByOperators(expr, true);
 	}
 

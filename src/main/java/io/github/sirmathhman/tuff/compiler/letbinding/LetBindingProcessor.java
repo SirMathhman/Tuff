@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler.letbinding;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
@@ -39,7 +39,7 @@ public final class LetBindingProcessor {
 
 	@SuppressWarnings("checkstyle:RecordComponentNumber")
 	public record ProcessContext(
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			Map<String, Integer> variableAddresses,
 			int nextMemAddr,
 			Map<String, StructDefinition> structRegistry,
@@ -177,7 +177,7 @@ public final class LetBindingProcessor {
 		java.util.Map<String, String> fieldValues = new java.util.HashMap<>();
 		// Parse field: value pairs
 		// Split by comma at depth 0
-		java.util.List<String> assignments = new java.util.ArrayList<>();
+		ArrayList<String> assignments = new ArrayList<>();
 		var current = new StringBuilder();
 		var depth = 0;
 		for (var i = 0; i < structInit.length(); i++) {
@@ -213,7 +213,7 @@ public final class LetBindingProcessor {
 	}
 
 	private static Result<Void, CompileError> handleStructFieldAccess(String varName, VariableDecl decl,
-			String continuation, List<Instruction> instructions, Map<String, StructDefinition> structRegistry) {
+																																		String continuation, ArrayList<Instruction> instructions, Map<String, StructDefinition> structRegistry) {
 		// Try to parse the struct value expression directly using struct instantiation
 		// handler
 		var structResult = StructInstantiationHandler
@@ -370,7 +370,7 @@ public final class LetBindingProcessor {
 	}
 
 	private static Result<Void, CompileError> completeVariableSubstitution(String varName, VariableDecl decl,
-			String continuation, List<Instruction> instructions,
+			String continuation, ArrayList<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
 		var normalizedContinuation = continuation.replaceAll("\\bthis\\." + varName + "\\b", varName);
 		normalizedContinuation = StringFieldAccessProcessor.handleStringFieldAccess(varName, decl.valueExpr().trim(),
@@ -400,7 +400,7 @@ public final class LetBindingProcessor {
 	}
 
 	private static Result<Void, CompileError> handleSpecialContinuationCases(String varName, VariableDecl decl,
-			String normalizedContinuation, List<Instruction> instructions,
+			String normalizedContinuation, ArrayList<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
 		var occurrences = CompilerHelpers.countVariableOccurrences(varName, normalizedContinuation);
 		var isIndexedOnly = isIndexedOnlyAccess(decl, varName, normalizedContinuation);
@@ -458,7 +458,7 @@ public final class LetBindingProcessor {
 	}
 
 	private static Result<Void, CompileError> handleArrayPointerIndexing(String varName, VariableDecl decl,
-			String continuation, List<Instruction> instructions,
+			String continuation, ArrayList<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
 		// Handle: ref : *[I32] = &array; ref[0]
 		// When a pointer to an array is indexed, we replace ref[index] with memory load

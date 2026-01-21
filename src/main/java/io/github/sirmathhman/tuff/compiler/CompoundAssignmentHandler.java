@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.vm.Instruction;
@@ -24,7 +24,7 @@ public final class CompoundAssignmentHandler {
 			String valueExpr,
 			String operator,
 			int nextMemAddr,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		// 1. Load current value of x from memory into register 0
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 		// 2. Parse and evaluate the expression

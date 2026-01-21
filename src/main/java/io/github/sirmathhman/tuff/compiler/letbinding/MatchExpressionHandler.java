@@ -5,8 +5,7 @@ import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 public final class MatchExpressionHandler {
 	private MatchExpressionHandler() {
@@ -50,15 +49,15 @@ public final class MatchExpressionHandler {
 
 		var caseBlock = remaining.substring(1, closingBrace).trim();
 		var casesResult = parseCases(caseBlock);
-		if (casesResult instanceof Result.Err<List<MatchCase>, CompileError> caseErr) {
+		if (casesResult instanceof Result.Err<ArrayList<MatchCase>, CompileError> caseErr) {
 			return Result.err(caseErr.error());
 		}
 
-		var cases = ((Result.Ok<List<MatchCase>, CompileError>) casesResult).value();
+		var cases = ((Result.Ok<ArrayList<MatchCase>, CompileError>) casesResult).value();
 
 		// Find default case
 		MatchCase defaultCase = null;
-		List<MatchCase> regularCases = new ArrayList<>();
+		ArrayList<MatchCase> regularCases = new ArrayList<>();
 
 		for (var c : cases) {
 			if ("_".equals(c.pattern())) {
@@ -94,8 +93,8 @@ public final class MatchExpressionHandler {
 		return ConditionalExpressionHandler.findConditionEnd(expr);
 	}
 
-	private static Result<List<MatchCase>, CompileError> parseCases(String caseBlock) {
-		List<MatchCase> cases = new ArrayList<>();
+	private static Result<ArrayList<MatchCase>, CompileError> parseCases(String caseBlock) {
+		ArrayList<MatchCase> cases = new ArrayList<>();
 		var remaining = caseBlock;
 
 		while (!remaining.isEmpty()) {

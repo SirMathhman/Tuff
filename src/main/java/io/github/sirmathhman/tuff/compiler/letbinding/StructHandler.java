@@ -4,10 +4,10 @@ import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
-import java.util.ArrayList;
+
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 import java.util.Set;
 
@@ -63,13 +63,13 @@ public final class StructHandler {
 		definedStructs.add(structName);
 
 		// Parse struct fields
-		List<StructField> fields = new ArrayList<>();
+		ArrayList<StructField> fields = new ArrayList<>();
 		if (!body.isEmpty()) {
 			var fieldsResult = parseFields(body);
-			if (fieldsResult instanceof Result.Err<List<StructField>, CompileError>) {
-				return Result.err(((Result.Err<List<StructField>, CompileError>) fieldsResult).error());
+			if (fieldsResult instanceof Result.Err<ArrayList<StructField>, CompileError>) {
+				return Result.err(((Result.Err<ArrayList<StructField>, CompileError>) fieldsResult).error());
 			}
-			fields = ((Result.Ok<List<StructField>, CompileError>) fieldsResult).value();
+			fields = ((Result.Ok<ArrayList<StructField>, CompileError>) fieldsResult).value();
 		}
 
 		// Store the full struct definition
@@ -81,7 +81,7 @@ public final class StructHandler {
 		// iterations
 		@SuppressWarnings("unused")
 		var _fields = fields;
-		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 		var result = new ExpressionModel.ExpressionResult(0, 0, terms);
 		return Result.ok(new StructParseResult(result, afterStruct));
 	}
@@ -92,8 +92,8 @@ public final class StructHandler {
 	public record StructField(String name, String type) {
 	}
 
-	private static Result<List<StructField>, CompileError> parseFields(String body) {
-		List<StructField> fields = new ArrayList<>();
+	private static Result<ArrayList<StructField>, CompileError> parseFields(String body) {
+		ArrayList<StructField> fields = new ArrayList<>();
 		var remaining = body;
 
 		while (!remaining.isEmpty()) {

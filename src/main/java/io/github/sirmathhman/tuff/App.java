@@ -24,11 +24,10 @@ import io.github.sirmathhman.tuff.compiler.letbinding.FieldAccessHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
-import io.github.sirmathhman.tuff.vm.Vm;
-import java.util.ArrayList;
+
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,7 +40,7 @@ public final class App {
 		// Reset variable types for new compilation
 		io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor.resetVariableTypes();
 
-		List<Instruction> instructions = new ArrayList<>();
+		ArrayList<Instruction> instructions = new ArrayList<>();
 		if (!source.isEmpty()) {
 			Result<Void, CompileError> result = parseStatement(source.trim(), instructions, new HashSet<>(),
 					new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
@@ -56,7 +55,7 @@ public final class App {
 		return Result.ok(instructions.toArray(new Instruction[0]));
 	}
 
-	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
+	public static Result<Void, CompileError> parseStatement(String stmt, ArrayList<Instruction> instructions) {
 		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>(), new HashMap<>(), new HashMap<>(),
 				new HashMap<>());
 	}
@@ -64,7 +63,7 @@ public final class App {
 	// Suppress ParameterNumber and MethodLength checks: complex parsing requires
 	// contextual parameters
 	@SuppressWarnings({ "checkstyle:ParameterNumber", "checkstyle:MethodLength" })
-	private static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions,
+	private static Result<Void, CompileError> parseStatement(String stmt, ArrayList<Instruction> instructions,
 			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables,
 			Map<String, String> typeAliasRegistry) {
@@ -111,7 +110,7 @@ public final class App {
 				.flatMap(expr -> generateInstructions(expr, instructions));
 	}
 
-	private static Result<Void, CompileError> continueParseStatement(String remaining, List<Instruction> instructions,
+	private static Result<Void, CompileError> continueParseStatement(String remaining, ArrayList<Instruction> instructions,
 			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables,
 			Map<String, String> typeAliasRegistry) {
@@ -122,7 +121,7 @@ public final class App {
 				capturedVariables, typeAliasRegistry);
 	}
 
-	private static Result<Void, CompileError> handleLetBindingStatement(String stmt, List<Instruction> instructions,
+	private static Result<Void, CompileError> handleLetBindingStatement(String stmt, ArrayList<Instruction> instructions,
 			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> typeAliasRegistry) {
 		// Peek ahead to see if this is a chained let binding
@@ -164,7 +163,7 @@ public final class App {
 	}
 
 	private static Result<Void, CompileError> handleStructInstantiationStatement(String stmt,
-			List<Instruction> instructions, Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
+																																							 ArrayList<Instruction> instructions, Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
 		return StructInstantiationHandler.parseStructInstantiation(stmt, structRegistry)
 				.flatMap(instResult -> {
 					// Struct instantiation evaluates to the value of its first field
@@ -173,7 +172,7 @@ public final class App {
 
 					if (definition.fields().isEmpty()) {
 						// Empty struct - return 0
-						List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+						ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 						ExpressionModel.ExpressionResult zeroResult = new ExpressionModel.ExpressionResult(0, 0, terms);
 						Result<Void, CompileError> zeroInstructions = generateInstructions(zeroResult, instructions);
 						if (zeroInstructions instanceof Result.Err<Void, CompileError>) {
@@ -221,8 +220,8 @@ public final class App {
 	}
 
 	private static Result<Void, CompileError> handleFieldAccessStatement(String stmt,
-			StructDefinition structDef, List<Instruction> instructions, Set<String> definedStructs,
-			Map<String, StructDefinition> structRegistry) {
+																																			 StructDefinition structDef, ArrayList<Instruction> instructions, Set<String> definedStructs,
+																																			 Map<String, StructDefinition> structRegistry) {
 		return FieldAccessHandler.parseFieldAccess(stmt, structRegistry)
 				.flatMap(fieldResult -> {
 					// Field access on a struct is a no-op - the struct instantiation
@@ -237,7 +236,7 @@ public final class App {
 	}
 
 	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		boolean hasControlMarkers = expr.terms().stream().anyMatch(t -> t.readCount < 0);
 		boolean hasReads = expr.terms().stream().anyMatch(t -> t.readCount > 0);
 		if (!hasReads && !hasControlMarkers) {
@@ -291,7 +290,7 @@ public final class App {
 			return ConditionalExpressionHandler.parseConditional(expr);
 		}
 
-		java.util.List<String> isTokens = DepthAwareSplitter.splitByKeywordAtDepthZero(expr, "is");
+		ArrayList<String> isTokens = DepthAwareSplitter.splitByKeywordAtDepthZero(expr, "is");
 		if (isTokens.size() > 1) {
 			return ComparisonOperatorHandler.parseIsExpression(isTokens);
 		}
@@ -302,13 +301,13 @@ public final class App {
 		}
 
 		expr = expr.replace('{', '(').replace('}', ')');
-		List<String> orTokens = LogicalOperatorHandler.splitByLogicalOr(expr);
+		ArrayList<String> orTokens = LogicalOperatorHandler.splitByLogicalOr(expr);
 		if (orTokens.size() > 1) {
 			return LogicalOperatorHandler.parseLogicalOrExpression(orTokens);
 		}
 
 		// Split by && (logical AND) - higher precedence than OR
-		List<String> andTokens = LogicalOperatorHandler.splitByLogicalAnd(expr);
+		ArrayList<String> andTokens = LogicalOperatorHandler.splitByLogicalAnd(expr);
 		if (andTokens.size() > 1) {
 			// We have logical AND operations - parse each side and combine
 			return LogicalOperatorHandler.parseLogicalAndExpression(andTokens);
@@ -384,7 +383,7 @@ public final class App {
 				// If there's remaining code, parse it
 				if (parsedFunc.remaining().isEmpty()) {
 					// Just the function definition with no call
-					List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+					ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 					ExpressionModel.ExpressionResult zeroResult = new ExpressionModel.ExpressionResult(0, 0, terms);
 					return Result.ok(zeroResult);
 				}
@@ -412,7 +411,7 @@ public final class App {
 		if (functionRegistry.containsKey(substitutedExpr)) {
 			// Return a zero result for function references - they don't produce a value
 			// themselves
-			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+			ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 			ExpressionModel.ExpressionResult zeroResult = new ExpressionModel.ExpressionResult(0, 0, terms);
 			return Result.ok(zeroResult);
 		}
@@ -470,13 +469,13 @@ public final class App {
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> tryParseSpecialExpressions(String expr) {
 		if (ExpressionTokens.isTupleExpression(expr)) {
-			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+			ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
 			return Result.ok(result);
 		}
 
 		if (AppParsingUtils.isArrayExpression(expr)) {
-			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+			ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
 			return Result.ok(result);
 		}

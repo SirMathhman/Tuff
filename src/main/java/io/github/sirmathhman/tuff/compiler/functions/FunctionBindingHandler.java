@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler.functions;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 
 import io.github.sirmathhman.tuff.CompileError;
@@ -34,7 +34,7 @@ public final class FunctionBindingHandler {
 	}
 
 	public static Result<Void, CompileError> handleFunctionDefinitionBinding(String varName, String funcDefStmt,
-			String continuation, List<Instruction> instructions,
+			String continuation, ArrayList<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		// Parse the function definition
 		var parseResult = FunctionHandler

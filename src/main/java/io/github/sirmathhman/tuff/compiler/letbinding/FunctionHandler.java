@@ -5,8 +5,7 @@ import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -29,9 +28,9 @@ public final class FunctionHandler {
 	 * variables
 	 */
 	public record FunctionDef(
-			String name, List<FunctionParam> params, String returnType, String body,
+			String name, ArrayList<FunctionParam> params, String returnType, String body,
 			Map<String, String> capturedVariables) {
-		public FunctionDef(String name, List<FunctionParam> params, String returnType, String body) {
+		public FunctionDef(String name, ArrayList<FunctionParam> params, String returnType, String body) {
 			this(name, params, returnType, body, new java.util.HashMap<>());
 		}
 	}
@@ -73,10 +72,10 @@ public final class FunctionHandler {
 		// Parse parameters
 		var paramsResult = FunctionDefinitionProcessor
 				.parseParameters(paramString);
-		if (paramsResult instanceof Result.Err<List<FunctionParam>, CompileError>) {
-			return Result.err(((Result.Err<List<FunctionParam>, CompileError>) paramsResult).error());
+		if (paramsResult instanceof Result.Err<ArrayList<FunctionParam>, CompileError>) {
+			return Result.err(((Result.Err<ArrayList<FunctionParam>, CompileError>) paramsResult).error());
 		}
-		var params = ((Result.Ok<List<FunctionParam>, CompileError>) paramsResult).value();
+		var params = ((Result.Ok<ArrayList<FunctionParam>, CompileError>) paramsResult).value();
 
 		// If return type not specified, try to infer it from the body
 		if (returnType == null) {
@@ -238,10 +237,10 @@ public final class FunctionHandler {
 		// Parse arguments
 		var argsResult = FunctionDefinitionProcessor
 				.parseAndExtractArguments(argsString);
-		if (argsResult instanceof Result.Err<List<String>, CompileError> err) {
+		if (argsResult instanceof Result.Err<ArrayList<String>, CompileError> err) {
 			return Result.err(err.error());
 		}
-		var args = ((Result.Ok<List<String>, CompileError>) argsResult).value();
+		var args = ((Result.Ok<ArrayList<String>, CompileError>) argsResult).value();
 
 		// Check argument count matches parameter count
 		if (args.size() != functionDef.params().size()) {
@@ -351,8 +350,8 @@ public final class FunctionHandler {
 		return null;
 	}
 
-	private static List<String> parseFunctionArgumentsList(String argsString) {
-		List<String> args = new ArrayList<>();
+	private static ArrayList<String> parseFunctionArgumentsList(String argsString) {
+		ArrayList<String> args = new ArrayList<>();
 		if (argsString == null || argsString.trim().isEmpty()) {
 			return args;
 		}
@@ -419,10 +418,10 @@ public final class FunctionHandler {
 
 		// Parse the arguments
 		var argsResult = FunctionDefinitionProcessor.splitByCommaAtDepthZero(argsString);
-		if (argsResult instanceof Result.Err<List<String>, CompileError> err) {
+		if (argsResult instanceof Result.Err<ArrayList<String>, CompileError> err) {
 			return Result.err(err.error());
 		}
-		var args = ((Result.Ok<List<String>, CompileError>) argsResult).value();
+		var args = ((Result.Ok<ArrayList<String>, CompileError>) argsResult).value();
 
 		// Check argument count: params.size() - 1 (for 'this') should match args.size()
 		var expectedArgCount = functionDef.params().size() - 1;

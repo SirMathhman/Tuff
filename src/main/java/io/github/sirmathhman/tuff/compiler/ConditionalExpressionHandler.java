@@ -6,8 +6,7 @@ import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 public final class ConditionalExpressionHandler {
 	private ConditionalExpressionHandler() {
@@ -91,7 +90,7 @@ public final class ConditionalExpressionHandler {
 		var elseMarker = new ExpressionModel.ExpressionTerm(-4, (int) falseVal.literalValue(),
 																												new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
 
-		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(cond.terms());
+		ArrayList<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(cond.terms());
 		allTerms.add(branchMarker);
 		allTerms.addAll(trueVal.terms());
 		allTerms.add(elseMarker);
@@ -160,7 +159,7 @@ public final class ConditionalExpressionHandler {
 	}
 
 	public static Result<Void, CompileError> buildConditionalAssignmentChain(String varName, String s,
-			List<Instruction> instructions, boolean isFirst) {
+																																					 ArrayList<Instruction> instructions, boolean isFirst) {
 		if (!s.startsWith("if ("))
 			return Result.err(new CompileError("Expected 'if'"));
 		var cEnd = findConditionEnd(s);
@@ -223,7 +222,7 @@ public final class ConditionalExpressionHandler {
 		}, err -> Result.ok(null));
 	}
 
-	private static Result<Integer, CompileError> processTrueBranch(String trueVal, List<Instruction> instructions) {
+	private static Result<Integer, CompileError> processTrueBranch(String trueVal, ArrayList<Instruction> instructions) {
 		var trueRes = App.parseExpressionWithRead(trueVal);
 		if (trueRes instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> trueErr) {
 			return Result.err(trueErr.error());
@@ -241,7 +240,7 @@ public final class ConditionalExpressionHandler {
 	}
 
 	private static Result<Void, CompileError> processFalseBranch(String varName, String r2,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		if (r2.startsWith("if (")) {
 			return buildConditionalAssignmentChain(varName, r2, instructions, false);
 		} else if (r2.startsWith(varName + " =") || r2.startsWith(varName + "=")) {

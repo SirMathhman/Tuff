@@ -1,12 +1,11 @@
 package io.github.sirmathhman.tuff.compiler.functions;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
-import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
@@ -17,8 +16,8 @@ public final class ArrayPointerIndexingHandler {
 	}
 
 	public static Result<Void, CompileError> handleMemoryArrayPointerIndexing(String varName, String arrayVarName,
-			String continuation, List<Instruction> instructions, Map<String, Integer> variableAddresses,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+																																						String continuation, ArrayList<Instruction> instructions, Map<String, Integer> variableAddresses,
+																																						Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		// Handle case where we're indexing an array that's stored in memory via a
 		// pointer
 		// e.g., let array = [...]; let ref : *[I32] = &array; ref[0] + ref[1]
@@ -67,7 +66,7 @@ public final class ArrayPointerIndexingHandler {
 	}
 
 	private static Result<Void, CompileError> generateAdditionInstructions(String substitutedCont,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		var regRefPattern = java.util.regex.Pattern.compile("__REG_(\\d+)__");
 		var regMatcher = regRefPattern.matcher(substitutedCont);
 

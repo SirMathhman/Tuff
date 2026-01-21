@@ -3,8 +3,7 @@ package io.github.sirmathhman.tuff;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Vm;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 /**
  * Utility class for executing VM instructions with common error handling.
@@ -33,7 +32,7 @@ public final class VmExecutor {
 			Instruction[] instructions,
 			int[] input) {
 		final var inputPointer = new int[]{0};
-		List<Integer> output = new ArrayList<>();
+		ArrayList<Integer> output = new ArrayList<>();
 		try {
 			var returnValue = Vm.execute(
 					instructions,
@@ -61,7 +60,7 @@ public final class VmExecutor {
 			int[] input,
 			Vm.TraceConfig traceConfig,
 			Vm.TraceSink traceSink) {
-		List<Integer> output = new ArrayList<>();
+		ArrayList<Integer> output = new ArrayList<>();
 		try {
 			var returnValue = Vm.execute(
 					instructions,

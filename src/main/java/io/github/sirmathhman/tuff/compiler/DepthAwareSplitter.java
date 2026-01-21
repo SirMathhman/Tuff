@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
@@ -39,7 +39,7 @@ public final class DepthAwareSplitter {
 	 * @param instructions the instruction list to add to
 	 * @param refAddr      the address to load from
 	 */
-	public static void addLoadAndHalt(List<Instruction> instructions, long refAddr) {
+	public static void addLoadAndHalt(ArrayList<Instruction> instructions, long refAddr) {
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, refAddr));
 		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 	}
@@ -72,7 +72,7 @@ public final class DepthAwareSplitter {
 	 * @param delimiter The character to split on
 	 * @return A list of tokens separated by the delimiter
 	 */
-	public static java.util.List<String> splitByDelimiterAtDepthZero(String expr, char delimiter) {
+	public static ArrayList<String> splitByDelimiterAtDepthZero(String expr, char delimiter) {
 		DelimiterChecker singleDelimiter = (c, i) -> c == delimiter;
 		return splitWithDelimiterChecker(expr, singleDelimiter, 1);
 	}
@@ -85,7 +85,7 @@ public final class DepthAwareSplitter {
 	 * @param delimiter2 Second character of the delimiter
 	 * @return A list of tokens separated by the two-character delimiter
 	 */
-	public static java.util.List<String> splitByDoubleDelimiterAtDepthZero(String expr, char delimiter1,
+	public static ArrayList<String> splitByDoubleDelimiterAtDepthZero(String expr, char delimiter1,
 			char delimiter2) {
 		DelimiterChecker doubleDelimiter = (c, i) -> c == delimiter1 && i + 1 < expr.length()
 				&& expr.charAt(i + 1) == delimiter2;
@@ -104,7 +104,7 @@ public final class DepthAwareSplitter {
 	 * @param keyword The keyword to split by (e.g., "is")
 	 * @return A list of tokens separated by the keyword
 	 */
-	public static java.util.List<String> splitByKeywordAtDepthZero(String expr, String keyword) {
+	public static ArrayList<String> splitByKeywordAtDepthZero(String expr, String keyword) {
 		DelimiterChecker keywordChecker = (c, i) -> {
 			if (i + keyword.length() > expr.length()) {
 				return false;
@@ -121,9 +121,9 @@ public final class DepthAwareSplitter {
 		return splitWithDelimiterChecker(expr, keywordChecker, keyword.length());
 	}
 
-	private static java.util.List<String> splitWithDelimiterChecker(String expr, DelimiterChecker checker,
+	private static ArrayList<String> splitWithDelimiterChecker(String expr, DelimiterChecker checker,
 			int delimiterLength) {
-		java.util.List<String> result = new java.util.ArrayList<>();
+		ArrayList<String> result = new ArrayList<>();
 		var token = new StringBuilder();
 		var depth = 0;
 		var bracketDepth = 0;

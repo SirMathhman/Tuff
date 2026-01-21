@@ -4,8 +4,7 @@ import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 public final class AdditiveExpressionParser {
 	private AdditiveExpressionParser() {
@@ -14,7 +13,7 @@ public final class AdditiveExpressionParser {
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseAdditive(String expr) {
 		// Split by + and - to get additive-level tokens, but not inside parentheses
 		var addTokens = ExpressionTokens.splitAddOperators(expr);
-		List<Boolean> additiveOps = new ArrayList<>();
+		ArrayList<Boolean> additiveOps = new ArrayList<>();
 		additiveOps.add(false);
 
 		// Track which operator preceded each additive token
@@ -40,7 +39,7 @@ public final class AdditiveExpressionParser {
 		}
 
 		// Process each additive token for multiplicative operators
-		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>();
+		ArrayList<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>();
 		var totalReads = 0;
 		long totalLiteral = 0;
 

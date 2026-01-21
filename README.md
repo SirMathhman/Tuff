@@ -22,6 +22,11 @@ mvn verify
 
 See `src/test/java/io/github/sirmathhman/tuff/AppTest.java` for many runnable examples.
 
+## Internal collections
+
+This codebase uses a lightweight wrapper `io.github.sirmathhman.tuff.lib.ArrayList` instead of `java.util.List` in most places.
+It is intended to behave like a regular Java list for the operations Tuff relies on (notably: `set(i, x)` **replaces** the element at `i`, it does not insert).
+
 ## Features
 
 ### Values, Types, and Literals

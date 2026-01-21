@@ -1,8 +1,8 @@
 package io.github.sirmathhman.tuff.compiler.letbinding;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
-public record StructDefinition(String name, List<StructHandler.StructField> fields) {
+public record StructDefinition(String name, ArrayList<StructHandler.StructField> fields) {
 	public StructHandler.StructField getField(String fieldName) {
 		for (var field : fields) {
 			if (field.name().equals(fieldName)) {

@@ -4,75 +4,74 @@ import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 public final class ComparisonOperatorHandler {
 	private ComparisonOperatorHandler() {
 	}
 
 	// Splitting methods (consolidated from individual handlers)
-	public static List<String> splitByEquality(String expr) {
+	public static ArrayList<String> splitByEquality(String expr) {
 		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '=', '=');
 	}
 
-	public static List<String> splitByInequality(String expr) {
+	public static ArrayList<String> splitByInequality(String expr) {
 		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '!', '=');
 	}
 
-	public static List<String> splitByLessThan(String expr) {
+	public static ArrayList<String> splitByLessThan(String expr) {
 		return DepthAwareSplitter.splitByDelimiterAtDepthZero(expr, '<');
 	}
 
-	public static List<String> splitByGreaterThan(String expr) {
+	public static ArrayList<String> splitByGreaterThan(String expr) {
 		return DepthAwareSplitter.splitByDelimiterAtDepthZero(expr, '>');
 	}
 
-	public static List<String> splitByLessOrEqual(String expr) {
+	public static ArrayList<String> splitByLessOrEqual(String expr) {
 		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '<', '=');
 	}
 
-	public static List<String> splitByGreaterOrEqual(String expr) {
+	public static ArrayList<String> splitByGreaterOrEqual(String expr) {
 		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '>', '=');
 	}
 
-	public static List<String> splitByIsOperator(String expr) {
+	public static ArrayList<String> splitByIsOperator(String expr) {
 		return DepthAwareSplitter.splitByKeywordAtDepthZero(expr, "is");
 	}
 
 	// Parsing methods
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseEqualityExpression(
-			List<String> eqTokens) {
+			ArrayList<String> eqTokens) {
 		return parseComparisonExpression(eqTokens, 0);
 	}
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseInequalityExpression(
-			List<String> neqTokens) {
+			ArrayList<String> neqTokens) {
 		return parseComparisonExpression(neqTokens, 1);
 	}
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLessThanExpression(
-			List<String> ltTokens) {
+			ArrayList<String> ltTokens) {
 		return parseComparisonExpression(ltTokens, 2);
 	}
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseGreaterThanExpression(
-			List<String> gtTokens) {
+			ArrayList<String> gtTokens) {
 		return parseComparisonExpression(gtTokens, 3);
 	}
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLessOrEqualExpression(
-			List<String> leTokens) {
+			ArrayList<String> leTokens) {
 		return parseComparisonExpression(leTokens, 4);
 	}
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseGreaterOrEqualExpression(
-			List<String> geTokens) {
+			ArrayList<String> geTokens) {
 		return parseComparisonExpression(geTokens, 5);
 	}
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseIsExpression(
-			List<String> isTokens) {
+			ArrayList<String> isTokens) {
 		// For now, only support binary is operator (exactly 2 operands)
 		if (isTokens.size() != 2) {
 			return Result.err(new CompileError("Is operator requires exactly 2 operands"));
@@ -97,7 +96,7 @@ public final class ComparisonOperatorHandler {
 				.value();
 
 		// Create a term with marker -5 to indicate type check operation
-		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(valueExprResult.terms());
+		ArrayList<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(valueExprResult.terms());
 		var typeCheckTerm = new ExpressionModel.ExpressionTerm(-5, 0,
 				new ExpressionModel.ExpressionTermFlags(0L, '\0', typeSpec));
 		allTerms.add(typeCheckTerm);
@@ -106,7 +105,7 @@ public final class ComparisonOperatorHandler {
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonExpression(
-			List<String> tokens, int markerValue) {
+			ArrayList<String> tokens, int markerValue) {
 		if (tokens.size() != 2) {
 			String opName = getComparisonOperatorName(markerValue);
 			return Result.err(new CompileError(opName + " operator requires exactly 2 operands"));
@@ -133,7 +132,7 @@ public final class ComparisonOperatorHandler {
 		var marker = new ExpressionModel.ExpressionTerm(-1, markerValue,
 				new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
 
-		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(left.terms());
+		ArrayList<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(left.terms());
 		allTerms.add(marker);
 		allTerms.addAll(right.terms());
 

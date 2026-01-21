@@ -1,7 +1,7 @@
 package io.github.sirmathhman.tuff.compiler.letbinding;
 
-import java.util.List;
-import java.util.regex.Matcher;
+import io.github.sirmathhman.tuff.lib.ArrayList;
+
 import java.util.regex.Pattern;
 
 import io.github.sirmathhman.tuff.App;
@@ -23,7 +23,7 @@ public final class CompilerHelpers {
 	 * Load a variable from memory and halt execution.
 	 * Used by continuation handlers to return variable values.
 	 */
-	public static void loadVariableAndHalt(List<Instruction> instructions, long memAddr) {
+	public static void loadVariableAndHalt(ArrayList<Instruction> instructions, long memAddr) {
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, memAddr));
 		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 	}
@@ -34,7 +34,7 @@ public final class CompilerHelpers {
 	 * Used by LetBindingHandler and ForLoopProcessor.
 	 */
 	public static Result<Void, CompileError> parseAndStoreInMemory(String valueExpr,
-			List<Instruction> instructions, int memAddr) {
+																																 ArrayList<Instruction> instructions, int memAddr) {
 		// Check if it's an array - if so, store each element separately
 		var trimmed = valueExpr.trim();
 		if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
@@ -79,7 +79,7 @@ public final class CompilerHelpers {
 	 * Used by ForLoopHandler and WhileLoopHandler for RHS expression evaluation.
 	 */
 	public static Result<Void, CompileError> parseAndGenerateExpression(String expr,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		return App.parseExpressionWithRead(expr)
 				.flatMap(parsed -> App.generateInstructions(parsed, instructions));
 	}

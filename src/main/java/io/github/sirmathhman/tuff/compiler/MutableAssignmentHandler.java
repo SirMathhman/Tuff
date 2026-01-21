@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
@@ -16,7 +16,7 @@ public final class MutableAssignmentHandler {
 	private MutableAssignmentHandler() {
 	}
 
-	public record AssignmentContext(List<Instruction> instructions, int nextMemAddr) {
+	public record AssignmentContext(ArrayList<Instruction> instructions, int nextMemAddr) {
 	}
 
 	public static Result<Void, CompileError> handleAssignment(
@@ -77,7 +77,7 @@ public final class MutableAssignmentHandler {
 		return Result.ok(null);
 	}
 
-	static Result<Void, CompileError> parseAndEvaluateExpression(String valueExpr, List<Instruction> instructions) {
+	static Result<Void, CompileError> parseAndEvaluateExpression(String valueExpr, ArrayList<Instruction> instructions) {
 		return App.parseExpressionWithRead(valueExpr)
 				.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 	}

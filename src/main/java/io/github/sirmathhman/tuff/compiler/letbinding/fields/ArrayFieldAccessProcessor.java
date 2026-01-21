@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler.letbinding.fields;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 
 import io.github.sirmathhman.tuff.CompileError;
@@ -18,7 +18,7 @@ public final class ArrayFieldAccessProcessor {
 	}
 
 	public static Result<Void, CompileError> handleArrayFieldAccess(String varName, VariableDecl decl,
-			String continuation, List<Instruction> instructions,
+			String continuation, ArrayList<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, StructDefinition> structRegistry) {
 		// Try .init field access
 		if (continuation.contains(varName + ".init")) {
@@ -40,7 +40,7 @@ public final class ArrayFieldAccessProcessor {
 	}
 
 	private static Result<Void, CompileError> tryHandleArrayField(String varName, VariableDecl decl,
-			String continuation, List<Instruction> instructions,
+			String continuation, ArrayList<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, String fieldName) {
 		// Check if declaredType is an array type or inferred from reference
 		var isExplicitArrayType = decl.declaredType() != null && decl.declaredType().startsWith("[");

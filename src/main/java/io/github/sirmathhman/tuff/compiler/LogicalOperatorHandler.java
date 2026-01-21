@@ -1,7 +1,6 @@
 package io.github.sirmathhman.tuff.compiler;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
@@ -12,28 +11,28 @@ public final class LogicalOperatorHandler {
 	}
 
 	// Splitting methods (consolidated from individual handlers)
-	public static List<String> splitByLogicalAnd(String expr) {
+	public static ArrayList<String> splitByLogicalAnd(String expr) {
 		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '&', '&');
 	}
 
-	public static List<String> splitByLogicalOr(String expr) {
+	public static ArrayList<String> splitByLogicalOr(String expr) {
 		return DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '|', '|');
 	}
 
 	// Parsing methods
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLogicalAndExpression(
-			List<String> andTokens) {
+			ArrayList<String> andTokens) {
 		return parseLogicalExpression(andTokens, true);
 	}
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLogicalOrExpression(
-			List<String> orTokens) {
+			ArrayList<String> orTokens) {
 		return parseLogicalExpression(orTokens, false);
 	}
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLogicalExpression(
-			List<String> tokens, boolean isAndOperator) {
-		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>();
+			ArrayList<String> tokens, boolean isAndOperator) {
+		ArrayList<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>();
 		var totalReads = 0;
 		long totalLiteral = 0;
 

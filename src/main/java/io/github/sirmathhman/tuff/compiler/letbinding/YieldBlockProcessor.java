@@ -9,8 +9,7 @@ import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
-import java.util.ArrayList;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 public final class YieldBlockProcessor {
 	private YieldBlockProcessor() {
@@ -20,7 +19,7 @@ public final class YieldBlockProcessor {
 			String varName,
 			String blockContent,
 			String continuation,
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			int storeAddr) {
 		var parts = splitSemicolonsAtDepthZero(blockContent);
 		var lastIdx = lastNonEmptyIndex(parts);
@@ -28,7 +27,7 @@ public final class YieldBlockProcessor {
 			return Result.err(new CompileError("Yield block is empty"));
 		}
 
-		List<Integer> endJumpPatchPoints = new ArrayList<>();
+		ArrayList<Integer> endJumpPatchPoints = new ArrayList<>();
 		for (var i = 0; i <= lastIdx; i++) {
 			var part = parts.get(i).trim();
 			if (part.isEmpty()) {
@@ -52,7 +51,7 @@ public final class YieldBlockProcessor {
 	}
 
 	private static Result<Void, CompileError> processYieldBlockPart(String part, boolean isLast,
-			List<Instruction> instructions, int storeAddr, List<Integer> endJumpPatchPoints) {
+																																	ArrayList<Instruction> instructions, int storeAddr, ArrayList<Integer> endJumpPatchPoints) {
 		var trimmed = part.trim();
 		if (trimmed.startsWith("yield")) {
 			var yieldResult = emitYieldToStore(trimmed.substring(5).trim(), instructions, storeAddr);
@@ -74,7 +73,7 @@ public final class YieldBlockProcessor {
 	}
 
 	private static Result<Void, CompileError> processConditionalYieldPart(String part, boolean isLast,
-			List<Instruction> instructions, int storeAddr, List<Integer> endJumpPatchPoints) {
+																																				ArrayList<Instruction> instructions, int storeAddr, ArrayList<Integer> endJumpPatchPoints) {
 		var conditionEnd = ConditionalExpressionHandler.findConditionEnd(part);
 		if (conditionEnd == -1) {
 			return Result.err(new CompileError("Malformed conditional in yield block: missing closing paren"));
@@ -116,7 +115,7 @@ public final class YieldBlockProcessor {
 		return Result.ok(null);
 	}
 
-	private static Result<Void, CompileError> generateExpression(String expr, List<Instruction> instructions) {
+	private static Result<Void, CompileError> generateExpression(String expr, ArrayList<Instruction> instructions) {
 		var result = App.parseExpressionWithRead(expr);
 		if (result instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> err) {
 			return Result.err(err.error());
@@ -125,21 +124,21 @@ public final class YieldBlockProcessor {
 				instructions);
 	}
 
-	private static void patchEndJumps(List<Integer> endJumpPatchPoints, List<Instruction> instructions) {
+	private static void patchEndJumps(ArrayList<Integer> endJumpPatchPoints, ArrayList<Instruction> instructions) {
 		var endAddr = instructions.size();
 		for (int jumpIdx : endJumpPatchPoints) {
 			instructions.set(jumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endAddr));
 		}
 	}
 
-	private static int addJumpPlaceholder(List<Instruction> instructions) {
+	private static int addJumpPlaceholder(ArrayList<Instruction> instructions) {
 		var idx = instructions.size();
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
 		return idx;
 	}
 
 	private static Result<Void, CompileError> emitYieldToStore(String yieldExpr,
-			List<Instruction> instructions, int storeAddr) {
+																														 ArrayList<Instruction> instructions, int storeAddr) {
 		var expr = yieldExpr.trim();
 		if (expr.endsWith(";")) {
 			expr = expr.substring(0, expr.length() - 1).trim();
@@ -165,8 +164,8 @@ public final class YieldBlockProcessor {
 		}, err -> Result.ok(null));
 	}
 
-	private static List<String> splitSemicolonsAtDepthZero(String blockContent) {
-		List<String> parts = new ArrayList<>();
+	private static ArrayList<String> splitSemicolonsAtDepthZero(String blockContent) {
+		ArrayList<String> parts = new ArrayList<>();
 		var depth = 0;
 		var start = 0;
 		for (var i = 0; i < blockContent.length(); i++) {
@@ -186,7 +185,7 @@ public final class YieldBlockProcessor {
 		return parts;
 	}
 
-	private static int lastNonEmptyIndex(List<String> parts) {
+	private static int lastNonEmptyIndex(ArrayList<String> parts) {
 		for (var i = parts.size() - 1; i >= 0; i--) {
 			if (!parts.get(i).trim().isEmpty()) {
 				return i;

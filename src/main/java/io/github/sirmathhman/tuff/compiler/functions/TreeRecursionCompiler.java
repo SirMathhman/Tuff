@@ -7,9 +7,8 @@ import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Matcher;
+import io.github.sirmathhman.tuff.lib.ArrayList;
+
 import java.util.regex.Pattern;
 
 /**
@@ -49,7 +48,7 @@ public final class TreeRecursionCompiler {
 	private record Spec(long initialArg, long threshold, long baseValue, long firstOff, long secondOff, String operator) {}
 
 	private static final class CompileState {
-		private final List<Instruction> code = new ArrayList<>();
+		private final ArrayList<Instruction> code = new ArrayList<>();
 		private int endAddrPatch;
 		private int baseCasePatch;
 		private int afterFirstPatch;
@@ -72,7 +71,7 @@ public final class TreeRecursionCompiler {
 	public static Result<Void, CompileError> tryCompileTreeRecursion(
 			FunctionHandler.FunctionDef funcDef,
 			String callArgs,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 
 		if (funcDef.params().size() != 1) {
 			return null;
@@ -114,7 +113,7 @@ public final class TreeRecursionCompiler {
 		return compile(spec, instructions);
 	}
 
-	private static Result<Void, CompileError> compile(Spec spec, List<Instruction> instructions) {
+	private static Result<Void, CompileError> compile(Spec spec, ArrayList<Instruction> instructions) {
 		var st = new CompileState();
 		emitInit(st, spec);
 		emitFuncStartAndFirstCall(st, spec);
@@ -220,14 +219,14 @@ public final class TreeRecursionCompiler {
 		st.code.set(st.afterSecondPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.afterSecond));
 	}
 
-	private static void addDecrementSP(List<Instruction> code) {
+	private static void addDecrementSP(ArrayList<Instruction> code) {
 		code.add(insn(Operation.Load, Variant.DirectAddress, 2, SP_ADDR));
 		code.add(insn(Operation.Load, Variant.Immediate, 3, 1L));
 		code.add(insn(Operation.Sub, Variant.Immediate, 2, 3L));
 		code.add(insn(Operation.Store, Variant.DirectAddress, 2, SP_ADDR));
 	}
 
-	private static void addIncrementSP(List<Instruction> code) {
+	private static void addIncrementSP(ArrayList<Instruction> code) {
 		code.add(insn(Operation.Load, Variant.DirectAddress, 2, SP_ADDR));
 		code.add(insn(Operation.Load, Variant.Immediate, 3, 1L));
 		code.add(insn(Operation.Add, Variant.Immediate, 2, 3L));
@@ -238,7 +237,7 @@ public final class TreeRecursionCompiler {
 	 * Pushes a stack frame with: firstResult(0), n (reg[1]), and a return address.
 	 * The return address patch index is returned.
 	 */
-	private static int pushFrame(List<Instruction> code) {
+	private static int pushFrame(ArrayList<Instruction> code) {
 		addDecrementSP(code);
 		code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
 		code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
@@ -254,7 +253,7 @@ public final class TreeRecursionCompiler {
 	/**
 	 * Emits code to return to the address stored at [SP] without popping the current frame.
 	 */
-	private static void emitReturn(List<Instruction> code) {
+	private static void emitReturn(ArrayList<Instruction> code) {
 		code.add(insn(Operation.Load, Variant.IndirectAddress, 2, SP_ADDR));
 		code.add(insn(Operation.Store, Variant.DirectAddress, 2, JUMP_TEMP));
 		code.add(insn(Operation.Jump, Variant.DirectAddress, 0L, JUMP_TEMP));

@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler.letbinding;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 
 import io.github.sirmathhman.tuff.App;
@@ -16,7 +16,7 @@ public final class ForLoopHandler {
 	private ForLoopHandler() {
 	}
 
-	public static Result<Void, CompileError> handleForLoop(String stmt, List<Instruction> instructions,
+	public static Result<Void, CompileError> handleForLoop(String stmt, ArrayList<Instruction> instructions,
 			Map<String, Integer> externalVariables) {
 		stmt = stmt.trim();
 		var conditionEnd = CompilerHelpers.findConditionEnd(stmt, 5);
@@ -71,7 +71,7 @@ public final class ForLoopHandler {
 		return handleLoopContinuation(remaining, instructions);
 	}
 
-	private static void addLoopConditionComparison(List<Instruction> instructions, Integer iterVarAddr) {
+	private static void addLoopConditionComparison(ArrayList<Instruction> instructions, Integer iterVarAddr) {
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) iterVarAddr));
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, 201L));
 		instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, 0, 1L));
@@ -79,7 +79,7 @@ public final class ForLoopHandler {
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 2, 0L));
 	}
 
-	private static void addLoopIncrement(List<Instruction> instructions, Integer iterVarAddr, int loopConditionIdx) {
+	private static void addLoopIncrement(ArrayList<Instruction> instructions, Integer iterVarAddr, int loopConditionIdx) {
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) iterVarAddr));
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, 1L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
@@ -87,7 +87,7 @@ public final class ForLoopHandler {
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopConditionIdx));
 	}
 
-	private static Result<Void, CompileError> handleLoopContinuation(String remaining, List<Instruction> instructions) {
+	private static Result<Void, CompileError> handleLoopContinuation(String remaining, ArrayList<Instruction> instructions) {
 		var bodyEndSemiIdx = DepthAwareSplitter.findSemicolonAtDepthZero(remaining, 0);
 		if (bodyEndSemiIdx != -1 && bodyEndSemiIdx + 1 < remaining.length()) {
 			var afterLoop = remaining.substring(bodyEndSemiIdx + 1).trim();
@@ -101,7 +101,7 @@ public final class ForLoopHandler {
 	private static Result<Integer, CompileError> setupLoopVariables(
 			String startExpr,
 			String endExpr,
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			Map<String, Integer> externalVariables,
 			String iterVarName) {
 		var iterVarAddr = externalVariables.getOrDefault(iterVarName, 200);
@@ -186,7 +186,7 @@ public final class ForLoopHandler {
 	}
 
 	private static Result<Void, CompileError> parseForLoopBody(String body, Integer iterVarAddr, String iterVarName,
-			List<Instruction> instructions, Map<String, Integer> externalVariables) {
+																														 ArrayList<Instruction> instructions, Map<String, Integer> externalVariables) {
 		body = body.trim();
 
 		// Find the end of the body (first semicolon at depth 0)
@@ -214,7 +214,7 @@ public final class ForLoopHandler {
 	}
 
 	private static Result<Void, CompileError> handleCompoundAssignmentInForLoop(String stmt, Integer iterVarAddr,
-			String iterVarName, List<Instruction> instructions, Map<String, Integer> externalVariables) {
+																																							String iterVarName, ArrayList<Instruction> instructions, Map<String, Integer> externalVariables) {
 		// Format: "var += expr" or similar
 		var parts = stmt.split("\\+=|-=|\\*=|/=");
 		if (parts.length != 2) {

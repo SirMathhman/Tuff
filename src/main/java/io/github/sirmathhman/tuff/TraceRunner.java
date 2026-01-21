@@ -3,9 +3,6 @@ package io.github.sirmathhman.tuff;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Vm;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public final class TraceRunner {
 	private TraceRunner() {
 	}

@@ -4,9 +4,9 @@ import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
-import java.util.ArrayList;
+
 import java.util.HashMap;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 
 public final class StructInstantiationHandler {
@@ -98,7 +98,7 @@ public final class StructInstantiationHandler {
 		}
 
 		// For now, return a literal 0 with metadata about the struct
-		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 		var result = new ExpressionModel.ExpressionResult(0, 0, terms);
 		var fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldsResult).value();
 		return Result.ok(
@@ -116,7 +116,7 @@ public final class StructInstantiationHandler {
 		var fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldResult).value();
 
 		// Return result without a definition (since we don't have a registry)
-		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 		var result = new ExpressionModel.ExpressionResult(0, 0, terms);
 		return Result.ok(new StructInstantiationResult(result, parsed.afterInstantiation(), structName, fieldValues, null));
 	}

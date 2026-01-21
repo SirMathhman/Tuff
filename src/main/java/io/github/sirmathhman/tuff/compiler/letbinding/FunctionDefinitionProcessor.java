@@ -3,10 +3,8 @@ package io.github.sirmathhman.tuff.compiler.letbinding;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
+import io.github.sirmathhman.tuff.lib.ArrayList;
+
 import java.util.regex.Pattern;
 
 /**
@@ -117,8 +115,8 @@ public final class FunctionDefinitionProcessor {
 		return -1;
 	}
 
-	public static Result<List<String>, CompileError> splitByCommaAtDepthZero(String input) {
-		List<String> parts = new ArrayList<>();
+	public static Result<ArrayList<String>, CompileError> splitByCommaAtDepthZero(String input) {
+		ArrayList<String> parts = new ArrayList<>();
 
 		if (input.isEmpty()) {
 			return Result.ok(parts);
@@ -150,8 +148,8 @@ public final class FunctionDefinitionProcessor {
 		return Result.ok(parts);
 	}
 
-	public static Result<List<FunctionHandler.FunctionParam>, CompileError> parseParameters(String paramString) {
-		List<FunctionHandler.FunctionParam> params = new ArrayList<>();
+	public static Result<ArrayList<FunctionHandler.FunctionParam>, CompileError> parseParameters(String paramString) {
+		ArrayList<FunctionHandler.FunctionParam> params = new ArrayList<>();
 
 		if (paramString.isEmpty() || paramString.isBlank()) {
 			return Result.ok(params);
@@ -159,10 +157,10 @@ public final class FunctionDefinitionProcessor {
 
 		// Split by comma at depth 0
 		var splitResult = splitByCommaAtDepthZero(paramString);
-		if (splitResult instanceof Result.Err<List<String>, CompileError>) {
-			return Result.err(((Result.Err<List<String>, CompileError>) splitResult).error());
+		if (splitResult instanceof Result.Err<ArrayList<String>, CompileError>) {
+			return Result.err(((Result.Err<ArrayList<String>, CompileError>) splitResult).error());
 		}
-		var paramParts = ((Result.Ok<List<String>, CompileError>) splitResult).value();
+		var paramParts = ((Result.Ok<ArrayList<String>, CompileError>) splitResult).value();
 
 		// Parse each parameter
 		for (var paramPart : paramParts) {
@@ -268,12 +266,12 @@ public final class FunctionDefinitionProcessor {
 	 * Helper method to parse and extract arguments from a string, with error
 	 * handling
 	 */
-	public static Result<List<String>, CompileError> parseAndExtractArguments(String argsString) {
+	public static Result<ArrayList<String>, CompileError> parseAndExtractArguments(String argsString) {
 		var argsResult = splitByCommaAtDepthZero(argsString);
-		if (argsResult instanceof Result.Err<List<String>, CompileError>) {
-			return Result.err(((Result.Err<List<String>, CompileError>) argsResult).error());
+		if (argsResult instanceof Result.Err<ArrayList<String>, CompileError>) {
+			return Result.err(((Result.Err<ArrayList<String>, CompileError>) argsResult).error());
 		}
-		return Result.ok(((Result.Ok<List<String>, CompileError>) argsResult).value());
+		return Result.ok(((Result.Ok<ArrayList<String>, CompileError>) argsResult).value());
 	}
 
 	/**

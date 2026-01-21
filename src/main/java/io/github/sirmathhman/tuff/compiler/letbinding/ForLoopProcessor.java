@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler.letbinding;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 
 import io.github.sirmathhman.tuff.App;
@@ -22,7 +22,7 @@ public final class ForLoopProcessor {
 			String varName,
 			String initialValueExpr,
 			String continuation,
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			LetBindingProcessor.MutableVarContext ctx) {
 		var variableAddresses = ctx.variableAddresses();
 		var nextMemAddr = ctx.nextMemAddr();

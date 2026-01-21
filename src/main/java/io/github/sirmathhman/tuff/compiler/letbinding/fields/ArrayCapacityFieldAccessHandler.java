@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler.letbinding.fields;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 import java.util.function.BiFunction;
 
@@ -19,9 +19,9 @@ public final class ArrayCapacityFieldAccessHandler {
 	}
 
 	public static Result<Void, CompileError> handleArrayCapacityFieldAccess(String varName, VariableDecl decl,
-			String continuation, List<Instruction> instructions,
+			String continuation, ArrayList<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
-		BiFunction<List<String>, String, String> capacityExtractor = (parts, fieldName) -> {
+		BiFunction<ArrayList<String>, String, String> capacityExtractor = (parts, fieldName) -> {
 			var capacityCountStr = parts.get(2).trim();
 			try {
 				Long.parseLong(capacityCountStr);

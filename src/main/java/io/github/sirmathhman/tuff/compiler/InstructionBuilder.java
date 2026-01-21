@@ -3,16 +3,16 @@ package io.github.sirmathhman.tuff.compiler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 public final class InstructionBuilder {
 	private InstructionBuilder() {
 	}
 
-	private record BuildContext(List<ExpressionModel.ExpressionTerm> terms, List<Instruction> instructions) {
+	private record BuildContext(ArrayList<ExpressionModel.ExpressionTerm> terms, ArrayList<Instruction> instructions) {
 	}
 
-	public static void loadAllReads(List<ExpressionModel.ExpressionTerm> terms, List<Instruction> instructions) {
+	public static void loadAllReads(ArrayList<ExpressionModel.ExpressionTerm> terms, ArrayList<Instruction> instructions) {
 		var nextReg = 0;
 		for (var term : terms) {
 			if (term.readCount > 0) {
@@ -28,8 +28,8 @@ public final class InstructionBuilder {
 		}
 	}
 
-	public static int buildResultWithPrecedence(List<ExpressionModel.ExpressionTerm> terms,
-			List<Instruction> instructions) {
+	public static int buildResultWithPrecedence(ArrayList<ExpressionModel.ExpressionTerm> terms,
+																							ArrayList<Instruction> instructions) {
 		// Check for conditional markers
 		var markers = findConditionalMarkers(terms);
 		if (markers.hasConditional()) {
@@ -51,7 +51,7 @@ public final class InstructionBuilder {
 		return buildSubExpressionResult(terms, 0, instructions);
 	}
 
-	private static ConditionalMarkers findConditionalMarkers(List<ExpressionModel.ExpressionTerm> terms) {
+	private static ConditionalMarkers findConditionalMarkers(ArrayList<ExpressionModel.ExpressionTerm> terms) {
 		var branchIdx = -1;
 		var elseIdx = -1;
 		long trueLiteral = 0;
@@ -70,8 +70,8 @@ public final class InstructionBuilder {
 		return new ConditionalMarkers(branchIdx, elseIdx, trueLiteral, falseLiteral);
 	}
 
-	private static int buildConditionalExpression(List<ExpressionModel.ExpressionTerm> terms,
-			ConditionalMarkers markers, List<Instruction> instructions) {
+	private static int buildConditionalExpression(ArrayList<ExpressionModel.ExpressionTerm> terms,
+																								ConditionalMarkers markers, ArrayList<Instruction> instructions) {
 		// Check if this has nested conditionals (multiple -3 markers)
 		var nestedConditionalCount = 0;
 		for (var t : terms) {
@@ -123,7 +123,7 @@ public final class InstructionBuilder {
 		return 0;
 	}
 
-	private static int findComparisonMarkerIndex(List<ExpressionModel.ExpressionTerm> terms) {
+	private static int findComparisonMarkerIndex(ArrayList<ExpressionModel.ExpressionTerm> terms) {
 		for (var j = 0; j < terms.size(); j++) {
 			if (terms.get(j).readCount == -1) {
 				return j;
@@ -132,7 +132,7 @@ public final class InstructionBuilder {
 		return -1;
 	}
 
-	private static int findTypeCheckMarkerIndex(List<ExpressionModel.ExpressionTerm> terms) {
+	private static int findTypeCheckMarkerIndex(ArrayList<ExpressionModel.ExpressionTerm> terms) {
 		for (var j = 0; j < terms.size(); j++) {
 			if (terms.get(j).readCount == -5) {
 				return j;
@@ -141,8 +141,8 @@ public final class InstructionBuilder {
 		return -1;
 	}
 
-	private static int buildComparisonExpression(List<ExpressionModel.ExpressionTerm> terms, int markerIdx,
-			List<Instruction> instructions) {
+	private static int buildComparisonExpression(ArrayList<ExpressionModel.ExpressionTerm> terms, int markerIdx,
+																							 ArrayList<Instruction> instructions) {
 		var marker = terms.get(markerIdx);
 		var leftTerms = terms.subList(0, markerIdx);
 		var rightTerms = terms.subList(markerIdx + 1, terms.size());
@@ -168,7 +168,7 @@ public final class InstructionBuilder {
 	}
 
 	private static void generateComparisonOperation(long markerValue, int leftResult,
-			int rightResult, List<Instruction> instructions) {
+			int rightResult, ArrayList<Instruction> instructions) {
 		var isInequality = markerValue == 1;
 		var isLessThan = markerValue == 2;
 		var isGreaterThan = markerValue == 3;
@@ -193,7 +193,7 @@ public final class InstructionBuilder {
 	}
 
 	private static void generateCompoundComparison(int leftResult, int rightResult, Operation comparisonOp,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		// For compound comparisons: (a op b) OR (a == b)
 		var tempReg = rightResult + 1;
 		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, leftResult, 0L));
@@ -203,8 +203,8 @@ public final class InstructionBuilder {
 		instructions.add(new Instruction(Operation.LogicalOr, Variant.Immediate, leftResult, (long) tempReg));
 	}
 
-	private static int buildTypeCheckExpression(List<ExpressionModel.ExpressionTerm> terms, int markerIdx,
-			List<Instruction> instructions) {
+	private static int buildTypeCheckExpression(ArrayList<ExpressionModel.ExpressionTerm> terms, int markerIdx,
+																							ArrayList<Instruction> instructions) {
 		var valueTerms = terms.subList(0, markerIdx);
 
 		int valueResult;
@@ -223,8 +223,8 @@ public final class InstructionBuilder {
 		return -1;
 	}
 
-	private static int buildSubExpressionResult(List<ExpressionModel.ExpressionTerm> terms, int startReg,
-			List<Instruction> instructions) {
+	private static int buildSubExpressionResult(ArrayList<ExpressionModel.ExpressionTerm> terms, int startReg,
+																							ArrayList<Instruction> instructions) {
 		var ctx = new BuildContext(terms, instructions);
 		var readRegIndex = startReg;
 		var resultReg = startReg;
@@ -286,8 +286,8 @@ public final class InstructionBuilder {
 		var term = terms.get(i);
 
 		// Collect this multiplicative/divisive/bitwise group
-		java.util.List<Integer> groupRegs = new java.util.ArrayList<>();
-		java.util.List<Character> groupOps = new java.util.ArrayList<>();
+		ArrayList<Integer> groupRegs = new ArrayList<>();
+		ArrayList<Character> groupOps = new ArrayList<>();
 		groupRegs.add(readRegIndex);
 		groupOps.add('\0'); // No operator for first term
 		var isSubtracted = term.isSubtracted();
@@ -354,7 +354,7 @@ public final class InstructionBuilder {
 		return new ProcessOrResult(resultReg, readRegIndex, i);
 	}
 
-	private static boolean isMultiplicativeNext(List<ExpressionModel.ExpressionTerm> terms, int i) {
+	private static boolean isMultiplicativeNext(ArrayList<ExpressionModel.ExpressionTerm> terms, int i) {
 		return i + 1 < terms.size()
 				&& (terms.get(i + 1).isMultiplied() || terms.get(i + 1).isDivided()
 						|| terms.get(i + 1).multiplicativeOperator == '&' || terms.get(i + 1).multiplicativeOperator == '|'
@@ -363,8 +363,8 @@ public final class InstructionBuilder {
 				&& terms.get(i + 1).readCount > 0;
 	}
 
-	private static int consumeAndEmitMultiplicativeTerms(List<ExpressionModel.ExpressionTerm> terms, int i,
-			int readRegIndex, int destReg, List<Instruction> instructions) {
+	private static int consumeAndEmitMultiplicativeTerms(ArrayList<ExpressionModel.ExpressionTerm> terms, int i,
+																											 int readRegIndex, int destReg, ArrayList<Instruction> instructions) {
 		while (isMultiplicativeNext(terms, i)) {
 			i++;
 			var multTerm = terms.get(i);
@@ -377,7 +377,7 @@ public final class InstructionBuilder {
 		return readRegIndex;
 	}
 
-	private static int findLastMultiplicativeTermIndex(List<ExpressionModel.ExpressionTerm> terms, int i) {
+	private static int findLastMultiplicativeTermIndex(ArrayList<ExpressionModel.ExpressionTerm> terms, int i) {
 		while (isMultiplicativeNext(terms, i)) {
 			i++;
 		}
@@ -400,10 +400,10 @@ public final class InstructionBuilder {
 		}
 	}
 
-	private record AdditiveGroupState(boolean firstAdditiveGroup, int resultReg, List<Instruction> instructions) {
+	private record AdditiveGroupState(boolean firstAdditiveGroup, int resultReg, ArrayList<Instruction> instructions) {
 	}
 
-	private static int processAdditiveGroup(java.util.List<Integer> groupRegs, java.util.List<Character> groupOps,
+	private static int processAdditiveGroup(ArrayList<Integer> groupRegs, ArrayList<Character> groupOps,
 			boolean isSubtracted, AdditiveGroupState state) {
 		var firstAdditiveGroup = state.firstAdditiveGroup();
 		var resultReg = state.resultReg();
@@ -454,7 +454,7 @@ public final class InstructionBuilder {
 	}
 
 	public static void addLiteralToResult(int resultReg, long literalValue, int termCount,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		// Count how many reads we have to determine next register
 		var literalReg = 0;
 		for (var inst : instructions) {

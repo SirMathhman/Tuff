@@ -7,12 +7,10 @@ import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
-import java.util.ArrayList;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -37,7 +35,7 @@ public final class RecursiveFunctionCompiler {
 	 * Returns null if the statement is not a recursive function call.
 	 */
 	public static Result<Void, CompileError> tryCompileRecursiveCall(String stmt,
-			List<Instruction> instructions, Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+																																	 ArrayList<Instruction> instructions, Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		stmt = stmt.trim();
 		// Check if stmt is "funcName()" or "funcName(arg)"
 		var callPattern = Pattern.compile("^(\\w+)\\s*\\((.*)\\)$");
@@ -79,7 +77,7 @@ public final class RecursiveFunctionCompiler {
 	public static Result<Void, CompileError> compileRecursiveFunction(
 			FunctionHandler.FunctionDef funcDef,
 			String callArgs,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 
 		var funcName = funcDef.name();
 		var body = funcDef.body().trim();
@@ -110,7 +108,7 @@ public final class RecursiveFunctionCompiler {
 		return compileReadSumLoop(pattern, instructions);
 	}
 
-	private static Result<Void, CompileError> compileReadSumLoop(ParsedPattern pattern, List<Instruction> instructions) {
+	private static Result<Void, CompileError> compileReadSumLoop(ParsedPattern pattern, ArrayList<Instruction> instructions) {
 		// Check if this is a multi-read pattern by seeing if varName contains commas
 		if (pattern.varName().contains(",")) {
 			return compileMultiReadSumLoop(pattern, instructions);
@@ -119,7 +117,7 @@ public final class RecursiveFunctionCompiler {
 	}
 
 	private static Result<Void, CompileError> compileReadSumLoopSingleRead(long baseValue, String operator,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		// Iterative code for single-read pattern:
 		// 1. reg[0] = BASE (accumulator, e.g., 0 for +, 1 for *)
 		// 2. Loop start: reg[1] = read input
@@ -169,7 +167,7 @@ public final class RecursiveFunctionCompiler {
 	 * Order: read → accumulate → check condition
 	 */
 	private static Result<Void, CompileError> compileMultiReadSumLoop(ParsedPattern pattern,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		var readVars = pattern.varName().split(",");
 		if (readVars.length != 2) {
 			return Result.err(new CompileError("Currently only support 2-read recursion, got " + readVars.length));
@@ -222,7 +220,7 @@ public final class RecursiveFunctionCompiler {
 	private static Result<Void, CompileError> tryCompileParametricRecursion(
 			FunctionHandler.FunctionDef funcDef,
 			String callArgs,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 
 		if (funcDef.params().size() != 1) {
 			return null; // Only support single parameter for now
@@ -267,7 +265,7 @@ public final class RecursiveFunctionCompiler {
 			long baseValue,
 			String op,
 			String updateExpr,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 
 		// reg[0] = accumulator (result)
 		// reg[1] = parameter value
@@ -314,7 +312,7 @@ public final class RecursiveFunctionCompiler {
 		return Result.ok(null);
 	}
 
-	private static void finishLoopWithBackjump(List<Instruction> instructions, int loopStart, int jumpToEndIdx) {
+	private static void finishLoopWithBackjump(ArrayList<Instruction> instructions, int loopStart, int jumpToEndIdx) {
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopStart));
 
 		var loopEnd = instructions.size();
@@ -330,7 +328,7 @@ public final class RecursiveFunctionCompiler {
 	 * Returns the index of the JumpIfLessThanZero instruction to be patched with
 	 * the end label.
 	 */
-	private static int emitLessThanOrEqualZeroCheck(int regNum, List<Instruction> instructions) {
+	private static int emitLessThanOrEqualZeroCheck(int regNum, ArrayList<Instruction> instructions) {
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
 		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, regNum, 2L));
 		var jumpIdx = instructions.size();
@@ -446,7 +444,7 @@ public final class RecursiveFunctionCompiler {
 		var letPattern = Pattern.compile("let\\s+(\\w+)\\s*(?::\\s*\\w+)?\\s*=\\s*read\\s+\\w+\\s*;");
 		var letMatcher = letPattern.matcher(body);
 
-		List<String> readVars = new ArrayList<>();
+		ArrayList<String> readVars = new ArrayList<>();
 		var lastEnd = 0;
 		while (letMatcher.find()) {
 			readVars.add(letMatcher.group(1));

@@ -2,7 +2,8 @@ package io.github.sirmathhman.tuff.compiler;
 
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
-import java.util.List;
+
+import java.util.ArrayList;
 
 public final class BitwiseNotParser {
 	private BitwiseNotParser() {
@@ -156,7 +157,7 @@ public final class BitwiseNotParser {
 		// Extract all indices from the chain
 		var indexPattern = java.util.regex.Pattern.compile("\\[(\\d+)\\]");
 		var indexMatcher = indexPattern.matcher(indexChain);
-		java.util.List<Integer> indices = new java.util.ArrayList<>();
+		ArrayList<Integer> indices = new ArrayList<>();
 		while (indexMatcher.find()) {
 			indices.add(Integer.parseInt(indexMatcher.group(1)));
 		}

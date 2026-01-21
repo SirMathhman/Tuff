@@ -1,6 +1,6 @@
 package io.github.sirmathhman.tuff.compiler;
 
-import java.util.List;
+import io.github.sirmathhman.tuff.lib.ArrayList;
 
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
@@ -22,7 +22,7 @@ public final class LetBindingHandler {
 			String stmt,
 			int semiIndex,
 			String continuation,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		var declPart = stmt.substring(4, semiIndex).trim();
 		var isMutable = declPart.startsWith("mut ");
 		if (isMutable)
@@ -44,7 +44,7 @@ public final class LetBindingHandler {
 			int equalsIndex,
 			int semiIndex,
 			String continuation,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		var ctx = new LetBindingProcessor.ProcessContext(
 				instructions, new java.util.HashMap<>(), 100, new java.util.HashMap<>(),
 				new java.util.HashMap<>(), new java.util.HashMap<>());
@@ -61,7 +61,7 @@ public final class LetBindingHandler {
 			String varName,
 			String initialValueExpr,
 			String continuation,
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			MutableVarContext ctx) {
 		var variableAddresses = ctx.variableAddresses();
 		var nextMemAddr = ctx.nextMemAddr();
@@ -104,13 +104,13 @@ public final class LetBindingHandler {
 			String varName,
 			String blockContent,
 			String continuation,
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			int storeAddr) {
 		return YieldBlockProcessor.handleYieldBlock(varName, blockContent, continuation, instructions, storeAddr);
 	}
 
 	public static Result<Void, CompileError> handleWhileLoopAfterLet(String varName, String initialValueExpr,
-			String continuation, List<Instruction> instructions, MutableVarContext ctx) {
+																																	 String continuation, ArrayList<Instruction> instructions, MutableVarContext ctx) {
 		var variableAddresses = ctx.variableAddresses();
 		var nextMemAddr = ctx.nextMemAddr();
 		// Store the initial value at the correct memory address
@@ -128,7 +128,7 @@ public final class LetBindingHandler {
 	}
 
 	public static Result<Void, CompileError> handleForLoopAfterLet(String varName, String initialValueExpr,
-			String continuation, List<Instruction> instructions, MutableVarContext ctx) {
+																																 String continuation, ArrayList<Instruction> instructions, MutableVarContext ctx) {
 		return ForLoopProcessor.handleForLoopAfterLet(varName, initialValueExpr, continuation, instructions, ctx);
 	}
 
@@ -136,7 +136,7 @@ public final class LetBindingHandler {
 			String varName,
 			String valueExpr,
 			String continuation,
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			MutableVarContext ctx) {
 		var nextMemAddr = ctx.nextMemAddr();
 		return storeAndThen(valueExpr, instructions, nextMemAddr,
@@ -194,7 +194,7 @@ public final class LetBindingHandler {
 	}
 
 	private static Result<Void, CompileError> continueChainedLetBinding(String varName, String valueExpr,
-			String continuation, List<Instruction> instructions, MutableVarContext ctx) {
+																																			String continuation, ArrayList<Instruction> instructions, MutableVarContext ctx) {
 		java.util.Map<String, Integer> newContext = new java.util.HashMap<>(ctx.variableAddresses());
 		newContext.put(varName, ctx.nextMemAddr());
 		var partsResult = parseChainedLetParts(continuation);
@@ -224,7 +224,7 @@ public final class LetBindingHandler {
 	public static Result<Void, CompileError> handleVariableReference(
 			String valueExpr,
 			String continuation,
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			java.util.Map<String, Integer> variableAddresses,
 			int nextMemAddr) {
 		return storeAndThen(valueExpr, instructions, nextMemAddr, () -> {
@@ -240,7 +240,7 @@ public final class LetBindingHandler {
 			String valueExpr,
 			String continuation,
 			int occurrences,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		// Variable used multiple times - need to cache value in memory
 		var storeResult = parseAndStoreInMemory(valueExpr, instructions);
 		if (storeResult instanceof Result.Err<Void, CompileError> storeErr) {
@@ -267,13 +267,13 @@ public final class LetBindingHandler {
 	}
 
 	private static Result<Void, CompileError> parseAndStoreInMemory(String valueExpr,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		return CompilerHelpers.parseAndStoreInMemory(valueExpr, instructions, 100);
 	}
 
 	private static Result<Void, CompileError> storeAndThen(
 			String valueExpr,
-			List<Instruction> instructions,
+			ArrayList<Instruction> instructions,
 			int memAddr,
 			java.util.function.Supplier<Result<Void, CompileError>> continuation) {
 		var storeResult = CompilerHelpers.parseAndStoreInMemory(valueExpr, instructions, memAddr);
@@ -283,7 +283,7 @@ public final class LetBindingHandler {
 		return continuation.get();
 	}
 
-	public record MutableVarAssignmentContext(List<Instruction> instructions, MutableVarContext varCtx) {
+	public record MutableVarAssignmentContext(ArrayList<Instruction> instructions, MutableVarContext varCtx) {
 	}
 
 	public static Result<Void, CompileError> handleMutableVariableWithAssignment(
@@ -361,7 +361,7 @@ public final class LetBindingHandler {
 				"Mutable variable continuation must end with variable reference or expression"));
 	}
 
-	static Result<Void, CompileError> processAssignmentValue(String valueExpr, List<Instruction> instructions,
+	static Result<Void, CompileError> processAssignmentValue(String valueExpr, ArrayList<Instruction> instructions,
 			int nextMemAddr) {
 		var exprResult = App.parseExpressionWithRead(valueExpr);
 		if (exprResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> exprErr)
@@ -427,7 +427,7 @@ public final class LetBindingHandler {
 	}
 
 	private static Result<Void, CompileError> handleConditionalAssignmentToUninitializedVariable(String varName, String s,
-			List<Instruction> instructions) {
+			ArrayList<Instruction> instructions) {
 		return ConditionalExpressionHandler.buildConditionalAssignmentChain(varName, s, instructions, true);
 	}
 
