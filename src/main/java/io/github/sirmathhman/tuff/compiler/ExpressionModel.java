@@ -79,14 +79,6 @@ public final class ExpressionModel {
 					isDereferenced, isLogicalOrBoundary, isLogicalAndBoundary, false, false, multiplicativeOperator, null));
 		}
 
-		public ExpressionTerm(int readCount, long value, boolean isSubtracted, boolean isMultiplied, boolean isDivided,
-				boolean isParenthesizedGroupEnd, boolean isDereferenced, boolean isLogicalOrBoundary,
-				boolean isLogicalAndBoundary, boolean isBitwiseNotted, char multiplicativeOperator) {
-			this(readCount, value, new ExpressionTermFlags(isSubtracted, isMultiplied, isDivided, isParenthesizedGroupEnd,
-					isDereferenced, isLogicalOrBoundary, isLogicalAndBoundary, isBitwiseNotted, false, multiplicativeOperator,
-					null));
-		}
-
 		public ExpressionTerm(int readCount, long value, ExpressionTermFlags flags) {
 			this.readCount = readCount;
 			this.value = value;
