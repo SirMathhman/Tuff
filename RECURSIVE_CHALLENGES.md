@@ -53,17 +53,14 @@ fn product() => {
 }
 ```
 
-**Why it breaks (partially):**
+**Status**: ✅ IMPLEMENTED!
 
-- The regex _does_ capture the operator (`[+\\-*/]`), but the loop generation is **hardcoded to use `+=`**:
-  ```java
-  instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 3L));
-  ```
-- Multiplication would require:
-  - `reg[0] *= reg[3]` (which means a `Mul` instruction instead of `Add`)
-  - _Different base case:_ `1` instead of `0` (for multiplication identity)
-
-**Current state:** Partially detected but not compiled correctly.
+- Extended operator support to handle `*`, `-`, `/` in addition to `+`
+- Base case automatically inferred from operator: `1` for `*`, `0` for `+`
+- Limitation: Only **commutative and associative** operators work in the iterative loop pattern
+- Subtraction and division don't work correctly because they're not associative the same way in recursive form
+- Test case: `fn product() => { let n = read I32; if (n <= 0) 1 else n * product() }; product()` with inputs `4, 3, 2, 1, 0` evaluates to 24 ✅
+- Implementation: Added `mapOperatorToOperation()` helper to convert operators to VM instructions
 
 ---
 
