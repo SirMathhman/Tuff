@@ -1231,6 +1231,22 @@ public final class AppTest {
 				2);
 	}
 
+	@Test
+	void shouldAccessLengthFieldOnArray() {
+		// Test accessing .length field on an array to get total capacity
+		assertValid(
+				"let array : [I32; 3; 5] = [1, 2, 3]; array.length",
+				5);
+	}
+
+	@Test
+	void shouldAccessLengthFieldOnArrayPointer() {
+		// Test accessing .length field on an array pointer
+		assertValid(
+				"let array : [I32; 2; 4] = [10, 20]; let ref = &array; ref.length",
+				4);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

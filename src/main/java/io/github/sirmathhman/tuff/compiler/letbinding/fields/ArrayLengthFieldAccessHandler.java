@@ -11,21 +11,21 @@ import io.github.sirmathhman.tuff.compiler.letbinding.VariableDecl;
 import io.github.sirmathhman.tuff.vm.Instruction;
 
 /**
- * Handles .init field access on arrays and array pointers.
- * Extracts the initialized count from array type annotations.
+ * Handles .length field access on arrays and array pointers.
+ * Extracts the total capacity (length) from array type annotations.
  */
-public final class ArrayInitFieldAccessHandler {
-	private ArrayInitFieldAccessHandler() {
+public final class ArrayLengthFieldAccessHandler {
+	private ArrayLengthFieldAccessHandler() {
 	}
 
-	public static Result<Void, CompileError> handleArrayInitFieldAccess(String varName, VariableDecl decl,
+	public static Result<Void, CompileError> handleArrayLengthFieldAccess(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
-		BiFunction<List<String>, String, String> initExtractor = (parts, fieldName) -> {
-			String initCountStr = parts.get(1).trim();
+		BiFunction<List<String>, String, String> lengthExtractor = (parts, fieldName) -> {
+			String lengthCountStr = parts.get(2).trim();
 			try {
-				Long.parseLong(initCountStr);
-				return initCountStr;
+				Long.parseLong(lengthCountStr);
+				return lengthCountStr;
 			} catch (NumberFormatException e) {
 				return null;
 			}
@@ -37,8 +37,8 @@ public final class ArrayInitFieldAccessHandler {
 				.continuation(continuation)
 				.instructions(instructions)
 				.functionRegistry(functionRegistry)
-				.fieldName("init")
-				.extractor(initExtractor)
+				.fieldName("length")
+				.extractor(lengthExtractor)
 				.build();
 		return ArrayFieldAccessBase.handleArrayFieldAccess(ctx);
 	}

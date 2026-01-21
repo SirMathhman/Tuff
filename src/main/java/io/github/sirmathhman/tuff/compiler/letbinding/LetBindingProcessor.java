@@ -1,4 +1,5 @@
 package io.github.sirmathhman.tuff.compiler.letbinding;
+
 import java.util.List;
 import java.util.Map;
 import io.github.sirmathhman.tuff.App;
@@ -12,8 +13,9 @@ import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.functions.ArrayPointerIndexingHandler;
 import io.github.sirmathhman.tuff.compiler.functions.FunctionBindingHandler;
-import io.github.sirmathhman.tuff.compiler.letbinding.fields.ArrayInitFieldAccessHandler;
+import io.github.sirmathhman.tuff.compiler.letbinding.fields.ArrayFieldAccessProcessor;
 import io.github.sirmathhman.tuff.vm.Instruction;
+
 /**
  * Processes let binding continuations. Extracted from LetBindingHandler to keep
  * method lengths under the checkstyle limit.
@@ -21,15 +23,18 @@ import io.github.sirmathhman.tuff.vm.Instruction;
 public final class LetBindingProcessor {
 	private LetBindingProcessor() {
 	}
+
 	// ThreadLocal to track variable types across let bindings
-	private static final ThreadLocal<Map<String, String>> variableTypes = 
-		ThreadLocal.withInitial(java.util.HashMap::new);
+	private static final ThreadLocal<Map<String, String>> variableTypes = ThreadLocal.withInitial(java.util.HashMap::new);
+
 	public static Map<String, String> getVariableTypes() {
 		return variableTypes.get();
 	}
+
 	public static void resetVariableTypes() {
 		variableTypes.remove();
 	}
+
 	public record ProcessContext(
 			List<Instruction> instructions,
 			Map<String, Integer> variableAddresses,
@@ -37,8 +42,10 @@ public final class LetBindingProcessor {
 			Map<String, StructDefinition> structRegistry,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 	}
+
 	public record MutableVarContext(Map<String, Integer> variableAddresses, int nextMemAddr) {
 	}
+
 	private static VariableDecl parseVariableDecl(String stmt, int equalsIndex, int semiIndex) {
 		String declPart = stmt.substring(4, equalsIndex).trim();
 		boolean isMutable = false;
@@ -65,6 +72,7 @@ public final class LetBindingProcessor {
 		String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
 		return new VariableDecl(varName, isMutable, valueExpr, declaredType);
 	}
+
 	private static Result<Void, CompileError> handleStructFieldAccessOnFunctionCallResult(String varName,
 			VariableDecl decl, String continuation, ProcessContext ctx) {
 		List<Instruction> instructions = ctx.instructions();
@@ -107,6 +115,7 @@ public final class LetBindingProcessor {
 				.parseExpressionWithRead(substitutedContinuation, functionRegistry);
 		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 	}
+
 	private static FunctionHandler.FunctionDef getFunctionDef(String valueExpr,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		int parenIndex = valueExpr.indexOf('(');
@@ -116,6 +125,7 @@ public final class LetBindingProcessor {
 		String functionName = valueExpr.substring(0, parenIndex).trim();
 		return functionRegistry.get(functionName);
 	}
+
 	private static java.util.Set<String> extractUsedFields(String varName, String continuation) {
 		java.util.Set<String> usedFields = new java.util.HashSet<>();
 		java.util.regex.Pattern fieldAccessPattern = java.util.regex.Pattern
@@ -126,6 +136,7 @@ public final class LetBindingProcessor {
 		}
 		return usedFields;
 	}
+
 	private static boolean verifyFields(java.util.Set<String> usedFields,
 			java.util.Map<String, String> fieldValues, StructDefinition structDef, String structName) {
 		for (String field : usedFields) {
@@ -137,6 +148,7 @@ public final class LetBindingProcessor {
 		}
 		return true;
 	}
+
 	private static String replaceFieldAccesses(String varName, String continuation,
 			java.util.Set<String> usedFields, java.util.Map<String, String> fieldValues) {
 		String result = continuation;
@@ -147,6 +159,7 @@ public final class LetBindingProcessor {
 		}
 		return result;
 	}
+
 	private static java.util.Map<String, String> extractFieldValuesFromFunctionBody(String body) {
 		// Try to extract struct initialization from body
 		// Body format: Point { x : read I32, y : read I32 }
@@ -192,6 +205,7 @@ public final class LetBindingProcessor {
 		}
 		return fieldValues.isEmpty() ? null : fieldValues;
 	}
+
 	private static Result<Void, CompileError> handleStructFieldAccess(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions, Map<String, StructDefinition> structRegistry) {
 		// Try to parse the struct value expression directly using struct instantiation
@@ -230,16 +244,18 @@ public final class LetBindingProcessor {
 		// If struct parsing fails, return null to fall through
 		return null;
 	}
+
 	public static Result<Void, CompileError> process(
 			String stmt, int equalsIndex, int semiIndex, String continuation, ProcessContext ctx) {
 		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
 		String varName = decl.varName();
-		
-		// Track variable type for future reference (e.g., for .init field access on pointers)
+
+		// Track variable type for future reference (e.g., for .init field access on
+		// pointers)
 		if (decl.declaredType() != null) {
 			getVariableTypes().put(varName, decl.declaredType());
 		}
-		
+
 		Result<Void, CompileError> earlyResult = tryEarlyReturns(varName, decl, continuation, ctx);
 		if (earlyResult != null)
 			return earlyResult;
@@ -249,6 +265,7 @@ public final class LetBindingProcessor {
 		return completeVariableSubstitution(varName, decl, continuation, ctx.instructions(),
 				ctx.functionRegistry(), ctx.variableAddresses());
 	}
+
 	private static Result<Void, CompileError> tryEarlyReturns(String varName, VariableDecl decl,
 			String continuation, ProcessContext ctx) {
 		// Handle yield blocks
@@ -282,6 +299,7 @@ public final class LetBindingProcessor {
 		}
 		return handleSimpleContinuationCases(varName, decl, continuation, ctx, varCtx);
 	}
+
 	private static Result<Void, CompileError> handleSimpleContinuationCases(String varName, VariableDecl decl,
 			String continuation, ProcessContext ctx, MutableVarContext varCtx) {
 		if (continuation.equals(varName)) {
@@ -316,24 +334,16 @@ public final class LetBindingProcessor {
 		}
 		return null;
 	}
+
 	private static Result<Void, CompileError> handleAllStructFieldAccess(String varName, VariableDecl decl,
 			String continuation, ProcessContext ctx) {
-		// Handle array .init field access (both explicit and inferred types)
-		if (continuation.contains(varName + ".init")) {
-			// Check if declaredType is an array type
-			boolean isExplicitArrayType = decl.declaredType() != null && decl.declaredType().startsWith("[");
-			// Check if this could be an inferred pointer to array
-			boolean couldBeInferredArrayPointer = decl.declaredType() == null && decl.valueExpr().trim().startsWith("&");
-			
-			if (isExplicitArrayType || couldBeInferredArrayPointer) {
-				Result<Void, CompileError> arrayInitResult = ArrayInitFieldAccessHandler.handleArrayInitFieldAccess(
-						varName, decl, continuation, ctx.instructions(), ctx.functionRegistry());
-				if (arrayInitResult != null) {
-					return arrayInitResult;
-				}
-			}
+		// Handle array field access (.init and .length)
+		Result<Void, CompileError> arrayFieldResult = ArrayFieldAccessProcessor.handleArrayFieldAccess(varName, decl,
+				continuation, ctx.instructions(), ctx.functionRegistry(), ctx.structRegistry());
+		if (arrayFieldResult != null) {
+			return arrayFieldResult;
 		}
-		
+
 		// Handle struct field access on declared struct variables
 		if (decl.declaredType() != null && continuation.contains(varName + ".")) {
 			Result<Void, CompileError> structAccessResult = handleStructFieldAccess(varName, decl, continuation,
@@ -352,6 +362,7 @@ public final class LetBindingProcessor {
 		}
 		return null;
 	}
+
 	private static Result<Void, CompileError> completeVariableSubstitution(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
@@ -401,6 +412,7 @@ public final class LetBindingProcessor {
 				.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
 		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 	}
+
 	private static java.util.Map<String, String> buildCapturedVariablesMap(String varName, String valueExpr,
 			boolean isFunctionReferenceBinding) {
 		java.util.Map<String, String> capturedVariables = new java.util.HashMap<>();
@@ -415,6 +427,7 @@ public final class LetBindingProcessor {
 		}
 		return capturedVariables;
 	}
+
 	private static Result<Void, CompileError> handleArrayPointerIndexing(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
@@ -455,6 +468,7 @@ public final class LetBindingProcessor {
 		return contResult.match(expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions),
 				Result::err);
 	}
+
 	private static Result<Void, CompileError> validateContinuationTypes(String continuation, String varName,
 			String valueExpr) {
 		if (!continuation.contains("*")) {
@@ -474,4 +488,3 @@ public final class LetBindingProcessor {
 		}, err -> Result.ok(null));
 	}
 }
-

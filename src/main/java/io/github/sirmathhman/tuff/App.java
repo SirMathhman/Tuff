@@ -38,7 +38,7 @@ public final class App {
 	public static Result<Instruction[], CompileError> compile(String source) {
 		// Reset variable types for new compilation
 		io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor.resetVariableTypes();
-		
+
 		List<Instruction> instructions = new ArrayList<>();
 		if (!source.isEmpty()) {
 			Result<Void, CompileError> result = parseStatement(source.trim(), instructions, new HashSet<>(),
