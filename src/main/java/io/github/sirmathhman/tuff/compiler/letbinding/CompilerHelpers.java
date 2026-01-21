@@ -35,6 +35,35 @@ public final class CompilerHelpers {
 	 */
 	public static Result<Void, CompileError> parseAndStoreInMemory(String valueExpr,
 			List<Instruction> instructions, int memAddr) {
+		// Check if it's an array - if so, store each element separately
+		String trimmed = valueExpr.trim();
+		if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+			String inner = trimmed.substring(1, trimmed.length() - 1);
+			java.util.List<String> elements = io.github.sirmathhman.tuff.compiler.DepthAwareSplitter
+					.splitByDelimiterAtDepthZero(inner, ',');
+
+			// Generate instructions to evaluate and store each element
+			for (int i = 0; i < elements.size(); i++) {
+				String element = elements.get(i).trim();
+				Result<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, io.github.sirmathhman.tuff.CompileError> elemResult = App
+						.parseExpressionWithRead(element);
+				if (elemResult instanceof Result.Err<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, io.github.sirmathhman.tuff.CompileError> err) {
+					return Result.err(err.error());
+				}
+				Result<Void, io.github.sirmathhman.tuff.CompileError> genResult = App.generateInstructions(
+						((Result.Ok<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, io.github.sirmathhman.tuff.CompileError>) elemResult)
+								.value(),
+						instructions);
+				if (genResult instanceof Result.Err<Void, io.github.sirmathhman.tuff.CompileError> err) {
+					return Result.err(err.error());
+				}
+
+				// Store result to memory[memAddr + i]
+				instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) (memAddr + i)));
+			}
+			return Result.ok(null);
+		}
+
 		return App.parseExpressionWithRead(valueExpr)
 				.flatMap(expr -> App.generateInstructions(expr, instructions))
 				.map(ignored -> {
@@ -124,14 +153,16 @@ public final class CompilerHelpers {
 
 	/**
 	 * Wrap a value for substitution based on its declared type.
-	 * Simple arrays are wrapped with extra brackets; nested arrays are not wrapped.
+	 * Arrays and pointers-to-arrays are wrapped with extra brackets for indexing.
 	 */
 	public static String wrapValueForSubstitution(String value, String declaredType) {
-		if (declaredType != null && declaredType.startsWith("[") && declaredType.endsWith("]")) {
-			if (value.startsWith("[") && value.endsWith("]")) {
-				// All arrays get wrapped for indexing, including nested arrays
-				return "[" + value + "]";
-			}
+		boolean isArrayType = declaredType != null && declaredType.startsWith("[") && declaredType.endsWith("]");
+		boolean isArrayPointerType = declaredType != null &&
+				(declaredType.startsWith("*[") || declaredType.startsWith("*mut ["));
+
+		if ((isArrayType || isArrayPointerType) && value.startsWith("[") && value.endsWith("]")) {
+			// All arrays and pointer-to-arrays get wrapped for indexing
+			return "[" + value + "]";
 		}
 		return value;
 	}

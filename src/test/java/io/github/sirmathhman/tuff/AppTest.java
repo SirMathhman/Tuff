@@ -1189,6 +1189,32 @@ public final class AppTest {
 				10);
 	}
 
+	@Test
+	void shouldSupportArrayReferences() {
+		// Array reference: create array, take reference to it, and index through
+		// reference
+		assertValidWithInput(
+				"let array = [read I32, read I32, read I32]; let ref : *[I32] = &array; ref[0] + ref[1] + ref[2]",
+				3 + 5 + 7,
+				3, 5, 7);
+	}
+
+	@Test
+	void shouldSupportArrayReferenceSingleElement() {
+		// Simpler test: just check that array pointer type is accepted
+		assertValidWithInput("let array = [read I32]; let ref : *[I32] = &array; ref[0]",
+				10,
+				10);
+	}
+
+	@Test
+	void shouldSupportArrayReferenceWithLiteral() {
+		// Test array reference with literal array (inline)
+		assertValidWithInput("let ref : *[I32] = &[read I32, read I32]; ref[0] + ref[1]",
+				10 + 20,
+				10, 20);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

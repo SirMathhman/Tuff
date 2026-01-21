@@ -1,0 +1,21 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::staticFieldBase has been called by com.google.inject.internal.aop.HiddenClassDefiner (file:/C:/ProgramData/chocolatey/lib/maven/apache-maven-3.9.11/lib/guice-5.1.0-classes.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.inject.internal.aop.HiddenClassDefiner
+WARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release
+[DEBUG] Handling array pointer indexing. varName=ref, variableAddresses={array=100}
+[DEBUG handleArrayPointerIndexing] valueExpr=&array, referencedValue=array
+[DEBUG handleArrayPointerIndexing] variableAddresses.containsKey(referencedValue)=true
+[DEBUG handleMemoryArrayPointerIndexing] varName=ref, arrayVarName=array, arrayMemAddr=100, continuation=ref[0] + ref[1] + ref[2]
+[DEBUG handleMemoryArrayPointerIndexing] Added load instruction for index=0 at address=100 to reg=1
+[DEBUG handleMemoryArrayPointerIndexing] Added load instruction for index=1 at address=101 to reg=2
+[DEBUG handleMemoryArrayPointerIndexing] Added load instruction for index=2 at address=102 to reg=3
+[DEBUG handleMemoryArrayPointerIndexing] substitutedContinuation=__REG_0__ + __REG_1__ + __REG_2__
+[DEBUG] Handling array pointer indexing. varName=ref, variableAddresses={array=100}
+[DEBUG handleArrayPointerIndexing] valueExpr=&array, referencedValue=array
+[DEBUG handleArrayPointerIndexing] variableAddresses.containsKey(referencedValue)=true
+[DEBUG handleMemoryArrayPointerIndexing] varName=ref, arrayVarName=array, arrayMemAddr=100, continuation=ref[0]
+[DEBUG handleMemoryArrayPointerIndexing] Added load instruction for index=0 at address=100 to reg=1
+[DEBUG handleMemoryArrayPointerIndexing] substitutedContinuation=__REG_0__
+[DEBUG] Handling array pointer indexing. varName=ref, variableAddresses={}
+[DEBUG handleArrayPointerIndexing] valueExpr=&[read I32, read I32], referencedValue=[read I32, read I32]
+[DEBUG handleArrayPointerIndexing] variableAddresses.containsKey(referencedValue)=false

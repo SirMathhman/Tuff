@@ -208,6 +208,7 @@ x[0] + x[1] + x[2]  // Returns 6
 ```
 
 Array type format: `[ElementType; InitializedCount; TotalCount]`
+
 - `ElementType`: Type of array elements (e.g., `I32`, `U8`)
 - `InitializedCount`: Number of initial values provided
 - `TotalCount`: Total size of the array (must be ≥ InitializedCount)

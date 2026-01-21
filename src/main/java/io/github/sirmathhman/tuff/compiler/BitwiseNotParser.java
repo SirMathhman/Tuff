@@ -85,57 +85,60 @@ public final class BitwiseNotParser {
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseLiteralTerm(String term) {
-		// Handle tuple indexing: ((expr1, expr2, ...))[index]
-		java.util.regex.Pattern tupleIndexPattern = java.util.regex.Pattern.compile("^\\(\\((.+?)\\)\\)\\[(\\d+)\\]$");
-		java.util.regex.Matcher tupleIndexMatcher = tupleIndexPattern.matcher(term);
-		if (tupleIndexMatcher.matches()) {
-			String tupleExpr = tupleIndexMatcher.group(1);
-			int index = Integer.parseInt(tupleIndexMatcher.group(2));
+		java.util.regex.Matcher parenMatcher = java.util.regex.Pattern
+				.compile("^\\(([a-zA-Z_][a-zA-Z0-9_]*)\\)((?:\\[\\d+\\])+)$")
+				.matcher(term);
+		if (parenMatcher.matches()) {
+			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
+		}
 
-			// Split the tuple expression by comma at depth 0
+		java.util.regex.Matcher pointerMatcher = java.util.regex.Pattern
+				.compile("^\\((&(?:mut\\s+)?[a-zA-Z_][a-zA-Z0-9_]*)\\)((?:\\[\\d+\\])+)$")
+				.matcher(term);
+		if (pointerMatcher.matches()) {
+			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
+		}
+
+		java.util.regex.Matcher tupleMatcher = java.util.regex.Pattern
+				.compile("^\\(\\((.+?)\\)\\)\\[(\\d+)\\]$")
+				.matcher(term);
+		if (tupleMatcher.matches()) {
+			String tupleExpr = tupleMatcher.group(1);
+			int index = Integer.parseInt(tupleMatcher.group(2));
 			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(tupleExpr, ',');
 			if (index >= 0 && index < elements.size()) {
-				String element = elements.get(index).trim();
-				// Recursively parse the element
-				return parseTermWithNot(element);
+				return parseTermWithNot(elements.get(index).trim());
 			} else {
 				return Result.err(new CompileError("Tuple index " + index + " out of bounds"));
 			}
 		}
 
-		// Handle array indexing with single or chained indices: ([[elem1, elem2, ...]))[index][index]...
-		// Use non-greedy matching to handle nested arrays correctly
-		java.util.regex.Pattern arrayIndexPattern = java.util.regex.Pattern.compile("^\\(\\[\\[(.+?)\\]\\]\\)((?:\\[\\d+\\])+)$");
-		java.util.regex.Matcher arrayIndexMatcher = arrayIndexPattern.matcher(term);
-		if (arrayIndexMatcher.matches()) {
-			String arrayExpr = arrayIndexMatcher.group(1);
-			String indexChain = arrayIndexMatcher.group(2);
-			return applyIndices(arrayExpr, indexChain);
+		java.util.regex.Matcher arrayMatcher = java.util.regex.Pattern
+				.compile("^\\(\\[\\[(.+?)\\]\\]\\)((?:\\[\\d+\\])+)$")
+				.matcher(term);
+		if (arrayMatcher.matches()) {
+			return applyIndices(arrayMatcher.group(1), arrayMatcher.group(2));
 		}
 
-		// Handle parenthesized array without indices: ([...])
-		// This occurs when an intermediate array result is wrapped for parsing
 		if (term.startsWith("(") && term.endsWith(")")) {
 			String inner = term.substring(1, term.length() - 1);
 			if (inner.startsWith("[") && inner.endsWith("]")) {
-				// This is a parenthesized array literal - treat it as an array element
-				// Recursively parse the contents
 				return parseTermWithNot(inner);
 			}
 		}
 
-		// Handle this.x or this.functionName() syntax - normalize and treat as
-		// variable/function reference
 		if (term.startsWith("this.")) {
 			String fieldName = term.substring(5).trim();
-			// Allow function call syntax with parentheses
 			if (!fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*") && !fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*\\s*\\(.*\\)")) {
 				return Result.err(new CompileError("Invalid field name after 'this': " + fieldName));
 			}
-			// Normalize this.x or this.get() to just x or get()
 			term = fieldName;
 		}
 
+		return parseLiteralValue(term);
+	}
+
+	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseLiteralValue(String term) {
 		Result<Long, CompileError> literalResult = ExpressionTokens.parseLiteral(term);
 		if (literalResult instanceof Result.Err<Long, CompileError> err) {
 			if (!term.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
@@ -143,9 +146,7 @@ public final class BitwiseNotParser {
 			}
 			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
 		}
-		if (!(literalResult instanceof Result.Ok<Long, CompileError> ok)) {
-			return Result.err(new CompileError("Internal error: expected Ok or Err in parseLiteral"));
-		}
+		Result.Ok<Long, CompileError> ok = (Result.Ok<Long, CompileError>) literalResult;
 		return Result.ok(new ExpressionModel.ExpressionTerm(0, ok.value(), false, false));
 	}
 
@@ -161,20 +162,22 @@ public final class BitwiseNotParser {
 
 		String current = arrayExpr;
 		boolean isFirstIteration = true;
-		
+
 		for (int i = 0; i < indices.size(); i++) {
 			int index = indices.get(i);
 
 			String toSplit = current;
-			
-			// On first iteration, we have the raw array content (already unwrapped by regex)
+
+			// On first iteration, we have the raw array content (already unwrapped by
+			// regex)
 			// On subsequent iterations, we need to strip the wrapping we added
 			if (!isFirstIteration && current.startsWith("[") && current.endsWith("]")) {
 				// Check if first [ matches last ] at top level
 				int depth = 0;
 				boolean isTopLevelPair = true;
 				for (int j = 0; j < current.length(); j++) {
-					if (current.charAt(j) == '[') depth++;
+					if (current.charAt(j) == '[')
+						depth++;
 					else if (current.charAt(j) == ']') {
 						depth--;
 						if (depth == 0 && j < current.length() - 1) {
@@ -195,19 +198,22 @@ public final class BitwiseNotParser {
 			if (index >= 0 && index < elements.size()) {
 				current = elements.get(index).trim();
 			} else {
-				return Result.err(new CompileError("Array index " + index + " out of bounds (array size " + elements.size() + ")"));
+				return Result
+						.err(new CompileError("Array index " + index + " out of bounds (array size " + elements.size() + ")"));
 			}
-			
+
 			isFirstIteration = false;
 		}
 
-		// If final result is an array expression, return zero (same as direct array parsing)
+		// If final result is an array expression, return zero (same as direct array
+		// parsing)
 		if (current.startsWith("[") && current.endsWith("]")) {
 			// Check if it's a valid array expression (has elements, no semicolons)
 			String inner = current.substring(1, current.length() - 1);
 			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
 			if (elements.size() >= 1 && !inner.contains(";")) {
-				// Valid array expression - return zero result (matches App.parseExpressionWithRead behavior)
+				// Valid array expression - return zero result (matches
+				// App.parseExpressionWithRead behavior)
 				return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
 			}
 		}

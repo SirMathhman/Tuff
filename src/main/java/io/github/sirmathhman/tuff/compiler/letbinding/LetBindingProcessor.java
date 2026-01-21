@@ -2,7 +2,6 @@ package io.github.sirmathhman.tuff.compiler.letbinding;
 
 import java.util.List;
 import java.util.Map;
-
 import io.github.sirmathhman.tuff.App;
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
@@ -12,6 +11,8 @@ import io.github.sirmathhman.tuff.compiler.DereferenceAssignmentHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
+import io.github.sirmathhman.tuff.compiler.functions.ArrayPointerIndexingHandler;
+import io.github.sirmathhman.tuff.compiler.functions.FunctionBindingHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 
 /**
@@ -263,7 +264,7 @@ public final class LetBindingProcessor {
 			return structAccessResult;
 
 		return completeVariableSubstitution(varName, decl, continuation, ctx.instructions(),
-				ctx.functionRegistry());
+				ctx.functionRegistry(), ctx.variableAddresses());
 	}
 
 	private static Result<Void, CompileError> tryEarlyReturns(String varName, VariableDecl decl,
@@ -360,14 +361,16 @@ public final class LetBindingProcessor {
 
 	private static Result<Void, CompileError> completeVariableSubstitution(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
 		String normalizedContinuation = continuation.replaceAll("\\bthis\\." + varName + "\\b", varName);
 		int occurrences = CompilerHelpers.countVariableOccurrences(varName, normalizedContinuation);
 		boolean isTupleType = decl.declaredType() != null && decl.declaredType().startsWith("(")
 				&& decl.declaredType().endsWith(")");
 		boolean isArrayType = decl.declaredType() != null && decl.declaredType().startsWith("[")
 				&& decl.declaredType().endsWith("]");
-		boolean isIndexedOnlyAccess = (isTupleType || isArrayType)
+		boolean isArrayPointerType = decl.declaredType() != null
+				&& (decl.declaredType().startsWith("*[") || decl.declaredType().startsWith("*mut ["));
+		boolean isIndexedOnlyAccess = (isTupleType || isArrayType || isArrayPointerType)
 				&& CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation);
 
 		if (occurrences > 1 && !isIndexedOnlyAccess) {
@@ -375,26 +378,29 @@ public final class LetBindingProcessor {
 					normalizedContinuation, occurrences, instructions);
 		}
 
+		if (isArrayPointerType && CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation)) {
+			return handleArrayPointerIndexing(varName, decl, normalizedContinuation, instructions, functionRegistry,
+					variableAddresses);
+		}
+
 		String valueExpr = decl.valueExpr().trim();
-		if (isAnonymousFunction(valueExpr)) {
-			String namedFunction = convertAnonymousFunctionToNamed(varName, valueExpr);
-			return handleFunctionDefinitionBinding(varName, namedFunction, normalizedContinuation, instructions,
-					functionRegistry);
+		if (FunctionBindingHandler.isAnonymousFunction(valueExpr)) {
+			String namedFunction = FunctionBindingHandler.convertAnonymousFunctionToNamed(varName, valueExpr);
+			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, namedFunction, normalizedContinuation,
+					instructions, functionRegistry);
 		}
 
 		if (FunctionHandler.isFunctionDefinition(valueExpr)) {
-			return handleFunctionDefinitionBinding(varName, valueExpr, normalizedContinuation, instructions,
-					functionRegistry);
+			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, valueExpr, normalizedContinuation,
+					instructions, functionRegistry);
 		}
 
 		boolean isFunctionReferenceBinding = decl.declaredType() != null
 				&& decl.declaredType().contains("=>")
 				&& functionRegistry.containsKey(valueExpr);
-		String wrappedValue = isFunctionReferenceBinding
-				? decl.valueExpr()
+		String wrappedValue = isFunctionReferenceBinding ? decl.valueExpr()
 				: CompilerHelpers.wrapValueForSubstitution(decl.valueExpr(), decl.declaredType());
-		String substitutedContinuation = isFunctionReferenceBinding
-				? normalizedContinuation
+		String substitutedContinuation = isFunctionReferenceBinding ? normalizedContinuation
 				: normalizedContinuation.replaceAll("\\b" + varName + "\\b", "(" + wrappedValue + ")");
 
 		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName,
@@ -425,44 +431,50 @@ public final class LetBindingProcessor {
 		return capturedVariables;
 	}
 
-	private static boolean isAnonymousFunction(String expr) {
-		// Detect lambda pattern: () => body or (params) => body
-		expr = expr.trim();
-		return expr.matches("^\\(.*?\\)\\s*=>.*");
-	}
-
-	private static String convertAnonymousFunctionToNamed(String varName, String lambdaExpr) {
-		// Convert: () => 100 to: fn varName() => 100
-		lambdaExpr = lambdaExpr.trim();
-		int arrowIndex = lambdaExpr.indexOf("=>");
-		if (arrowIndex == -1) {
-			return lambdaExpr;
-		}
-		String params = lambdaExpr.substring(0, arrowIndex).trim();
-		String body = lambdaExpr.substring(arrowIndex + 2).trim();
-		return "fn " + varName + params + " => " + body;
-	}
-
-	private static Result<Void, CompileError> handleFunctionDefinitionBinding(String varName, String funcDefStmt,
+	private static Result<Void, CompileError> handleArrayPointerIndexing(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
-		// Parse the function definition
-		Result<FunctionHandler.ParsedFunction, CompileError> parseResult = FunctionHandler
-				.parseFunctionDefinition(funcDefStmt);
-		if (parseResult instanceof Result.Err<FunctionHandler.ParsedFunction, CompileError> err) {
-			return Result.err(err.error());
+			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
+		// Handle: ref : *[I32] = &array; ref[0]
+		// When a pointer to an array is indexed, we replace ref[index] with memory load
+		// operations
+
+		String valueExpr = decl.valueExpr().trim();
+
+		// If it's &array or &mut array, extract what's being referenced
+		String referencedValue = valueExpr;
+		if (valueExpr.startsWith("&mut ")) {
+			referencedValue = valueExpr.substring(5).trim();
+		} else if (valueExpr.startsWith("&")) {
+			referencedValue = valueExpr.substring(1).trim();
 		}
-		FunctionHandler.ParsedFunction parsed = ((Result.Ok<FunctionHandler.ParsedFunction, CompileError>) parseResult)
-				.value();
 
-		// Create a new function registry with the bound function registered under the
-		// variable name
-		Map<String, FunctionHandler.FunctionDef> updatedRegistry = new java.util.HashMap<>(functionRegistry);
-		updatedRegistry.put(varName, parsed.functionDef());
+		// Check if the referenced value is a variable name that's in scope
+		if (variableAddresses.containsKey(referencedValue)) {
+			// The referenced value is a variable in memory
+			// We need to generate instructions to load from memory at that address
+			return ArrayPointerIndexingHandler.handleMemoryArrayPointerIndexing(varName, referencedValue,
+					continuation, instructions, variableAddresses, functionRegistry);
+		}
 
-		// Parse the continuation with the updated function registry
+		// Otherwise, treat it as an inline array (e.g., [1, 2, 3])
+		// Extract elements and substitute them directly
+		if (!referencedValue.startsWith("[") || !referencedValue.endsWith("]")) {
+			// Not an array, can't index
+			return Result.err(new CompileError("Cannot index non-array value: " + referencedValue));
+		}
+
+		String inner = referencedValue.substring(1, referencedValue.length() - 1).trim();
+		java.util.List<String> arrayElements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
+
+		// Replace all ref[index] with the corresponding array element
+		String substitutedContinuation = continuation;
+		for (int i = 0; i < arrayElements.size(); i++) {
+			String pattern = "\\b" + java.util.regex.Pattern.quote(varName) + "\\[" + i + "\\]";
+			substitutedContinuation = substitutedContinuation.replaceAll(pattern, "(" + arrayElements.get(i).trim() + ")");
+		}
+
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = io.github.sirmathhman.tuff.App
-				.parseExpressionWithRead(continuation, updatedRegistry);
+				.parseExpressionWithRead(substitutedContinuation, functionRegistry);
 		return contResult.match(expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions),
 				Result::err);
 	}
@@ -485,10 +497,4 @@ public final class LetBindingProcessor {
 			return Result.ok(null);
 		}, err -> Result.ok(null));
 	}
-
-	/**
-	 * Wrap a value for substitution based on its type.
-	 * For arrays, double-wrap to enable indexing: [1, 2, 3] -> [[1, 2, 3]]
-	 * For other types, return as-is.
-	 */
 }
