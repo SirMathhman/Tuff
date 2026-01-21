@@ -55,6 +55,11 @@ public final class ExpressionTokens {
 			java.util.Map<String, String> variableTypes) {
 		expr = expr.trim();
 
+		// Handle boolean keywords
+		if ("true".equals(expr) || "false".equals(expr)) {
+			return Result.ok("Bool");
+		}
+
 		// Handle dereference operations
 		if (expr.startsWith("*")) {
 			String inner = expr.substring(1).trim();
@@ -227,6 +232,13 @@ public final class ExpressionTokens {
 
 	public static Result<Long, CompileError> parseLiteral(String literal) {
 		try {
+			if ("true".equals(literal)) {
+				return Result.ok(1L);
+			}
+			if ("false".equals(literal)) {
+				return Result.ok(0L);
+			}
+
 			String numericPart = literal;
 			String typeSuffix = null;
 

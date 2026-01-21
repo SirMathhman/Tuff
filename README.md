@@ -106,6 +106,17 @@ You can also conditionally `yield` early; if no `yield` runs, the final expressi
 let x = { if (read Bool) yield 100; 200 }; x
 ```
 
+### Functions
+
+Define functions as `fn name(params...) => expr;` and call them with `name(args...)`.
+
+Inside a function body block, `yield` sets the block value (and evaluation continues), while `return` short-circuits the function body:
+
+```
+fn get() => { if (true) yield 100; 50 } + 5; get()   // 105
+fn get() => { if (true) return 100; 50 } + 5; get()  // 100
+```
+
 ### Logical Operators
 
 - **Logical OR**: Combine boolean expressions with the `||` operator (lowest precedence)
@@ -124,6 +135,12 @@ let x = { if (read Bool) yield 100; 200 }; x
 
   ```
   let x : Bool = read Bool; x  // Read a boolean value
+  ```
+
+- **Boolean literals**: `true` and `false`
+
+  ```
+  if (true) 1 else 2
   ```
 
 ### Comparison Operators

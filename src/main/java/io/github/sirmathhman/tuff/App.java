@@ -203,7 +203,6 @@ public final class App {
 					return parseStatement(remaining, instructions, definedStructs, structRegistry, new HashMap<>());
 				});
 	}
-
 	private static Result<Void, CompileError> handleFieldAccessStatement(String stmt,
 			StructDefinition structDef, List<Instruction> instructions, Set<String> definedStructs,
 			Map<String, StructDefinition> structRegistry) {
@@ -218,11 +217,12 @@ public final class App {
 					return parseStatement(fieldResult.remaining(), instructions, definedStructs, structRegistry, new HashMap<>());
 				});
 	}
-
 	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
 			List<Instruction> instructions) {
-		if (expr.readCount == 0) {
-			// No reads, just load the literal
+		boolean hasControlMarkers = expr.terms.stream().anyMatch(t -> t.readCount < 0);
+		boolean hasReads = expr.terms.stream().anyMatch(t -> t.readCount > 0);
+		if (!hasReads && !hasControlMarkers) {
+			// Constant expression: always overwrite result (avoid `result += literal`).
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue));
 		} else {
 			// Load all reads into registers

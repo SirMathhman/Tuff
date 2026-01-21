@@ -867,6 +867,16 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportYieldInsideFunctionBodyBlock() {
+		assertValid("fn get() => { if (true) yield 100; 50 } + 5; get()", 105);
+	}
+
+	@Test
+	void shouldSupportReturnInsideFunctionBodyBlock() {
+		assertValid("fn get() => { if (true) return 100; 50 } + 5; get()", 100);
+	}
+
+	@Test
 	void shouldTestFunctionDefining() {
 		// Just to test that function definition and body are correct
 		assertValidWithInput("fn createPoint() => Point { x : read I32, y : read I32 }; read I32", 42, 42);

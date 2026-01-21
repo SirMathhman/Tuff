@@ -78,7 +78,14 @@ public final class InstructionBuilder {
 		}
 
 		List<ExpressionModel.ExpressionTerm> condTerms = terms.subList(0, markers.branchIdx);
-		buildResultWithPrecedence(condTerms, instructions);
+		// If the condition is a literal-only value (e.g., true/false), load it
+		// directly.
+		if (!(condTerms.size() == 1 && condTerms.get(0).readCount == 0
+				&& !condTerms.get(0).isMultiplied() && !condTerms.get(0).isDivided())) {
+			buildResultWithPrecedence(condTerms, instructions);
+		} else {
+			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, condTerms.get(0).value));
+		}
 
 		final int formulaReg = 1;
 		final int trueValueReg = 2;
@@ -399,6 +406,16 @@ public final class InstructionBuilder {
 		for (Instruction inst : instructions) {
 			if (inst.operation() == Operation.In) {
 				literalReg++;
+			}
+		}
+		// VM has only 4 registers; also avoid clobbering resultReg.
+		literalReg = literalReg & 3;
+		if (literalReg == resultReg) {
+			for (int candidate = 0; candidate < 4; candidate++) {
+				if (candidate != resultReg) {
+					literalReg = candidate;
+					break;
+				}
 			}
 		}
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, literalReg, literalValue));

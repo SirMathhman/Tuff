@@ -2,6 +2,8 @@ package io.github.sirmathhman.tuff.compiler.letbinding;
 
 import io.github.sirmathhman.tuff.CompileError;
 import io.github.sirmathhman.tuff.Result;
+import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
+import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,23 +46,16 @@ public final class FunctionHandler {
 	public static Result<ParsedFunction, CompileError> parseFunctionDefinition(String stmt) {
 		stmt = stmt.trim();
 
-		// Match: fn name(...) [: ReturnType] => body;
-		// Return type is optional
-		Pattern pattern = Pattern.compile(
-				"^fn\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(([^)]*)\\)(?:\\s*:\\s*([A-Za-z_*][A-Za-z0-9_*]*))?\\s*=>\\s*(.+?)\\s*;(.*)$",
-				Pattern.DOTALL);
-		Matcher matcher = pattern.matcher(stmt);
-
-		if (!matcher.matches()) {
-			return Result.err(new CompileError(
-					"Invalid function definition. Expected: fn name(params) [: ReturnType] => body;"));
+		Result<FunctionDefParts, CompileError> partsResult = splitFunctionDefinition(stmt);
+		if (partsResult instanceof Result.Err<FunctionDefParts, CompileError> err) {
+			return Result.err(err.error());
 		}
-
-		String name = matcher.group(1);
-		String paramString = matcher.group(2).trim();
-		String returnType = matcher.group(3); // Can be null if not specified
-		String body = matcher.group(4).trim();
-		String remaining = matcher.group(5).trim();
+		FunctionDefParts parts = ((Result.Ok<FunctionDefParts, CompileError>) partsResult).value();
+		String name = parts.name();
+		String paramString = parts.params();
+		String returnType = parts.returnType();
+		String body = preprocessFunctionBody(parts.body());
+		String remaining = parts.remaining();
 
 		// Parse parameters
 		Result<List<FunctionParam>, CompileError> paramsResult = parseParameters(paramString);
@@ -85,6 +80,133 @@ public final class FunctionHandler {
 		}
 
 		return Result.ok(new ParsedFunction(new FunctionDef(name, params, returnType, body), remaining));
+	}
+
+	private record FunctionDefParts(String name, String params, String returnType, String body, String remaining) {
+	}
+
+	private static Result<FunctionDefParts, CompileError> splitFunctionDefinition(String stmt) {
+		// Format: fn name(params) [: ReturnType] => body; remaining
+		String s = stmt.trim();
+		if (!s.startsWith("fn ")) {
+			return Result.err(new CompileError("Invalid function definition. Expected: fn name(params) => body;"));
+		}
+
+		int nameStart = 3;
+		int parenOpen = s.indexOf('(', nameStart);
+		if (parenOpen == -1) {
+			return Result.err(new CompileError("Invalid function definition: missing '(' after function name"));
+		}
+		String name = s.substring(nameStart, parenOpen).trim();
+		if (!name.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+			return Result.err(new CompileError("Invalid function name: " + name));
+		}
+
+		int parenClose = findMatchingParen(s, parenOpen);
+		if (parenClose == -1) {
+			return Result.err(new CompileError("Invalid function definition: unmatched ')' in parameter list"));
+		}
+		String params = s.substring(parenOpen + 1, parenClose).trim();
+
+		int arrowIndex = s.indexOf("=>", parenClose + 1);
+		if (arrowIndex == -1) {
+			return Result.err(new CompileError("Invalid function definition: missing '=>'"));
+		}
+
+		String between = s.substring(parenClose + 1, arrowIndex).trim();
+		String returnType = null;
+		if (!between.isEmpty()) {
+			if (!between.startsWith(":")) {
+				return Result.err(new CompileError(
+						"Invalid function definition. Expected ': ReturnType' before '=>'"));
+			}
+			returnType = between.substring(1).trim();
+			if (returnType.isEmpty()) {
+				return Result.err(new CompileError("Invalid function definition: missing return type after ':'"));
+			}
+		}
+
+		int bodyStart = arrowIndex + 2;
+		while (bodyStart < s.length() && Character.isWhitespace(s.charAt(bodyStart))) {
+			bodyStart++;
+		}
+		int semiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(s, bodyStart);
+		if (semiIndex == -1) {
+			return Result.err(new CompileError("Invalid function definition: missing ';' terminator"));
+		}
+		String body = s.substring(bodyStart, semiIndex).trim();
+		String remaining = s.substring(semiIndex + 1).trim();
+		return Result.ok(new FunctionDefParts(name, params, returnType, body, remaining));
+	}
+
+	private static int findMatchingParen(String s, int openIdx) {
+		int depth = 1;
+		for (int i = openIdx + 1; i < s.length(); i++) {
+			char c = s.charAt(i);
+			if (c == '(') {
+				depth++;
+			} else if (c == ')') {
+				depth--;
+				if (depth == 0) {
+					return i;
+				}
+			}
+		}
+		return -1;
+	}
+
+	private static String preprocessFunctionBody(String body) {
+		return desugarLeadingReturnOrYieldBlock(body.trim());
+	}
+
+	private static String desugarLeadingReturnOrYieldBlock(String body) {
+		if (!body.startsWith("{")) {
+			return body;
+		}
+		int closingBrace = DepthAwareSplitter.findMatchingBrace(body, 0);
+		if (closingBrace == -1) {
+			return body;
+		}
+
+		String inner = body.substring(1, closingBrace).trim();
+		String suffix = body.substring(closingBrace + 1).trim();
+
+		int semiIdx = DepthAwareSplitter.findSemicolonAtDepthZero(inner, 0);
+		if (semiIdx == -1) {
+			return body;
+		}
+
+		String firstStmt = inner.substring(0, semiIdx).trim();
+		String fallback = inner.substring(semiIdx + 1).trim();
+		if (!firstStmt.startsWith("if (") || fallback.isEmpty()) {
+			return body;
+		}
+
+		int condEnd = ConditionalExpressionHandler.findConditionEnd(firstStmt);
+		if (condEnd == -1) {
+			return body;
+		}
+		String condition = firstStmt.substring(4, condEnd).trim();
+		String afterCond = firstStmt.substring(condEnd + 1).trim();
+
+		boolean isYield = afterCond.startsWith("yield");
+		boolean isReturn = afterCond.startsWith("return");
+		if (!isYield && !isReturn) {
+			return body;
+		}
+		String valueExpr = afterCond.substring(isYield ? 5 : 6).trim();
+		if (valueExpr.isEmpty()) {
+			return body;
+		}
+
+		String suffixPart = suffix.isEmpty() ? "" : (" " + suffix);
+		if (isYield) {
+			String blockValue = "if (" + condition + ") " + valueExpr + " else " + fallback;
+			return "(" + blockValue + ")" + suffixPart;
+		}
+		// return: short-circuit the rest of the function body
+		String elseExpr = suffix.isEmpty() ? fallback : (fallback + suffixPart);
+		return "if (" + condition + ") " + valueExpr + " else (" + elseExpr + ")";
 	}
 
 	private static Result<List<FunctionParam>, CompileError> parseParameters(String paramString) {
