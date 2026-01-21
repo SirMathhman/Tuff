@@ -332,6 +332,34 @@ public final class App {
 		return parseExpressionWithRead(expr, functionRegistry, new HashMap<>());
 	}
 
+	private static Result<ExpressionModel.ExpressionResult, CompileError> tryParseFunctionCalls(
+			String expr, Map<String, FunctionHandler.FunctionDef> functionRegistry,
+			Map<String, String> capturedVariables) {
+		// Check for method-style call (e.g., 100.addOnce())
+		Result<String, CompileError> methodCallTransform = FunctionHandler.transformMethodCall(
+				expr, functionRegistry, capturedVariables);
+		if (methodCallTransform instanceof Result.Ok<String, CompileError>) {
+			String transformedExpr = ((Result.Ok<String, CompileError>) methodCallTransform).value();
+			return FunctionHandler.parseFunctionCall(transformedExpr, functionRegistry, capturedVariables)
+					.flatMap(body -> parseExpressionWithRead(body, functionRegistry, capturedVariables));
+		}
+
+		// Check if this is a function call with field access (e.g., get(100).value)
+		Result<ExpressionModel.ExpressionResult, CompileError> fieldAccessResult = FunctionHandler
+				.tryParseFunctionCallWithFieldAccess(expr, functionRegistry, capturedVariables);
+		if (fieldAccessResult != null) {
+			return fieldAccessResult;
+		}
+
+		// Check if this is a function call
+		if (FunctionHandler.isFunctionCall(expr, functionRegistry, capturedVariables)) {
+			return FunctionHandler.parseFunctionCall(expr, functionRegistry, capturedVariables)
+					.flatMap(body -> parseExpressionWithRead(body, functionRegistry, capturedVariables));
+		}
+
+		return null;
+	}
+
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		expr = expr.trim();
@@ -370,17 +398,11 @@ public final class App {
 			});
 		}
 
-		// Check if this is a function call with field access (e.g., get(100).value)
-		Result<ExpressionModel.ExpressionResult, CompileError> fieldAccessResult = FunctionHandler
-				.tryParseFunctionCallWithFieldAccess(expr, functionRegistry, capturedVariables);
-		if (fieldAccessResult != null) {
-			return fieldAccessResult;
-		}
-
-		// Check if this is a function call
-		if (FunctionHandler.isFunctionCall(expr, functionRegistry, capturedVariables)) {
-			return FunctionHandler.parseFunctionCall(expr, functionRegistry, capturedVariables)
-					.flatMap(body -> parseExpressionWithRead(body, functionRegistry, capturedVariables));
+		// Try method-style call, field access, or standard function call
+		Result<ExpressionModel.ExpressionResult, CompileError> callResult = tryParseFunctionCalls(
+				expr, functionRegistry, capturedVariables);
+		if (callResult != null) {
+			return callResult;
 		}
 
 		// Substitute all function calls in the expression before parsing

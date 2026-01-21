@@ -1142,6 +1142,15 @@ public final class AppTest {
 			28);
 	}
 
+	@Test
+	void shouldSupportMethodStyleFunctionCall() {
+		// Function called with method syntax: value.function()
+		// The parameter named 'this' receives the value the function is called on
+		assertValid(
+			"fn addOnce(this : I32) => this + 1; 100.addOnce()",
+			101);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

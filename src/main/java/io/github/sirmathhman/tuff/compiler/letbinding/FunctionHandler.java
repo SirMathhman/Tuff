@@ -219,9 +219,10 @@ public final class FunctionHandler {
 		}
 
 		// Parse arguments
-		Result<List<String>, CompileError> argsResult = parseArguments(argsString);
-		if (argsResult instanceof Result.Err<List<String>, CompileError>) {
-			return Result.err(((Result.Err<List<String>, CompileError>) argsResult).error());
+		Result<List<String>, CompileError> argsResult = FunctionDefinitionProcessor
+				.parseAndExtractArguments(argsString);
+		if (argsResult instanceof Result.Err<List<String>, CompileError> err) {
+			return Result.err(err.error());
 		}
 		List<String> args = ((Result.Ok<List<String>, CompileError>) argsResult).value();
 
@@ -250,10 +251,6 @@ public final class FunctionHandler {
 		}
 
 		return Result.ok(result);
-	}
-
-	private static Result<List<String>, CompileError> parseArguments(String argsString) {
-		return FunctionDefinitionProcessor.splitByCommaAtDepthZero(argsString);
 	}
 
 	private static FunctionCallMatch parseFunctionCallPattern(String expr) {
@@ -361,6 +358,142 @@ public final class FunctionHandler {
 		return args;
 	}
 
+	/**
+	 * Transform method-style call to standard function call
+	 * Example: "100.addOnce()" → "addOnce(100)"
+	 * Validates that the function has "this" as first parameter
+	 */
+	public static Result<String, CompileError> transformMethodCall(
+			String expr, Map<String, FunctionDef> functionRegistry,
+			Map<String, String> capturedVariables) {
+		MethodCallMatch match = parseMethodCallPattern(expr);
+		if (match == null) {
+			return Result.err(new CompileError("Not a method-style call"));
+		}
+
+		String receiver = match.receiver;
+		String functionName = match.functionName;
+		String argsString = match.argsString;
+
+		// Check if function exists
+		FunctionDef functionDef = functionRegistry.get(functionName);
+		if (functionDef == null && !capturedVariables.containsKey(functionName)) {
+			return Result.err(new CompileError("Function '" + functionName + "' is not defined"));
+		}
+
+		// If it's a captured function reference, resolve it
+		if (functionDef == null) {
+			String actualFunctionName = capturedVariables.get(functionName);
+			functionDef = functionRegistry.get(actualFunctionName);
+			if (functionDef == null) {
+				return Result.err(new CompileError("Function '" + functionName + "' is not defined"));
+			}
+		}
+
+		// Check that first parameter is "this"
+		if (functionDef.params().isEmpty() || !functionDef.params().get(0).name().equals("this")) {
+			return Result.err(new CompileError(
+					"Method '" + functionName + "' must have 'this' as its first parameter"));
+		}
+
+		// Parse the arguments
+		Result<List<String>, CompileError> argsResult = FunctionDefinitionProcessor.splitByCommaAtDepthZero(argsString);
+		if (argsResult instanceof Result.Err<List<String>, CompileError> err) {
+			return Result.err(err.error());
+		}
+		List<String> args = ((Result.Ok<List<String>, CompileError>) argsResult).value();
+
+		// Check argument count: params.size() - 1 (for 'this') should match args.size()
+		int expectedArgCount = functionDef.params().size() - 1;
+		if (args.size() != expectedArgCount) {
+			return Result.err(new CompileError(
+					"Function '" + functionName + "' expects " + expectedArgCount + " arguments (plus 'this'), but got " +
+							args.size()));
+		}
+
+		// Build transformed call: functionName(receiver, arg1, arg2, ...)
+		StringBuilder transformedCall = new StringBuilder();
+		transformedCall.append(functionName).append("(").append(receiver);
+		for (String arg : args) {
+			transformedCall.append(", ").append(arg);
+		}
+		transformedCall.append(")");
+
+		return Result.ok(transformedCall.toString());
+	}
+
+	/**
+	 * Try to parse a method-style call: receiver.functionName(args)
+	 * Example: 100.addOnce() or x.increment()
+	 * Returns a MethodCallMatch if it matches, or null otherwise
+	 */
+	private static MethodCallMatch parseMethodCallPattern(String expr) {
+		expr = expr.trim();
+
+		// Pattern: receiver.functionName(args)
+		// Receiver can be: literal (100), identifier (x), or simple expression
+		// We need to find the last dot followed by a function call
+		int lastDotIndex = findLastDotBeforeFunctionCall(expr);
+		if (lastDotIndex == -1) {
+			return null;
+		}
+
+		String receiver = expr.substring(0, lastDotIndex).trim();
+		String afterDot = expr.substring(lastDotIndex + 1).trim();
+
+		// Check if after the dot we have functionName(args)
+		Pattern funcPattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
+		Matcher funcMatcher = funcPattern.matcher(afterDot);
+		if (!funcMatcher.find()) {
+			return null;
+		}
+
+		String functionName = funcMatcher.group(1);
+		int openParen = funcMatcher.end() - 1;
+
+		// Find matching closing parenthesis
+		int closeParen = FunctionDefinitionProcessor.findMatchingParen(afterDot, openParen);
+		if (closeParen == -1) {
+			return null;
+		}
+
+		// Verify nothing after the closing parenthesis
+		String afterParen = afterDot.substring(closeParen + 1).trim();
+		if (!afterParen.isEmpty()) {
+			return null;
+		}
+
+		String argsString = afterDot.substring(openParen + 1, closeParen).trim();
+		return new MethodCallMatch(receiver, functionName, argsString);
+	}
+
+	/**
+	 * Find the last dot that precedes a function call pattern
+	 * Avoid dots inside parentheses or nested expressions
+	 */
+	private static int findLastDotBeforeFunctionCall(String expr) {
+		int depth = 0;
+		for (int i = expr.length() - 1; i >= 0; i--) {
+			char c = expr.charAt(i);
+			if (c == ')' || c == '}') {
+				depth++;
+			} else if (c == '(' || c == '{') {
+				depth--;
+			} else if (c == '.' && depth == 0) {
+				// Check if after this dot is a valid function pattern
+				String afterDot = expr.substring(i + 1).trim();
+				Pattern funcPattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
+				if (funcPattern.matcher(afterDot).find()) {
+					return i;
+				}
+			}
+		}
+		return -1;
+	}
+
 	private static record FunctionCallMatch(String functionName, String argsString) {
+	}
+
+	private static record MethodCallMatch(String receiver, String functionName, String argsString) {
 	}
 }

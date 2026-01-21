@@ -263,4 +263,25 @@ public final class FunctionDefinitionProcessor {
 	 */
 	public record ParsedFunctionStatement(FunctionHandler.FunctionDef functionDef, String remaining) {
 	}
+
+	/**
+	 * Helper method to parse and extract arguments from a string, with error handling
+	 */
+	public static Result<List<String>, CompileError> parseAndExtractArguments(String argsString) {
+		Result<List<String>, CompileError> argsResult = splitByCommaAtDepthZero(argsString);
+		if (argsResult instanceof Result.Err<List<String>, CompileError>) {
+			return Result.err(((Result.Err<List<String>, CompileError>) argsResult).error());
+		}
+		return Result.ok(((Result.Ok<List<String>, CompileError>) argsResult).value());
+	}
+
+	/**
+	 * Helper to unwrap Result<T, CompileError> to either return ok value or error
+	 */
+	public static <T> Result<T, CompileError> unwrapResultInline(Result<T, CompileError> result) {
+		if (result instanceof Result.Err<T, CompileError> err) {
+			return Result.err(err.error());
+		}
+		return Result.ok(((Result.Ok<T, CompileError>) result).value());
+	}
 }
