@@ -54,21 +54,11 @@ public final class LetBindingHandler {
 			int semiIndex,
 			String continuation,
 			List<Instruction> instructions,
-			java.util.Map<String, StructDefinition> structRegistry) {
-		return handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation, instructions,
-				new java.util.HashMap<>(), 100, structRegistry);
-	}
-
-	public static Result<Void, CompileError> handleLetBindingWithContinuation(
-			String stmt,
-			int equalsIndex,
-			int semiIndex,
-			String continuation,
-			List<Instruction> instructions,
 			java.util.Map<String, StructDefinition> structRegistry,
 			java.util.Map<String, FunctionHandler.FunctionDef> functionRegistry) {
-		return handleLetBindingWithContinuation(stmt, equalsIndex, semiIndex, continuation, instructions,
-				new java.util.HashMap<>(), 100, structRegistry, functionRegistry);
+		LetBindingProcessor.ProcessContext ctx = new LetBindingProcessor.ProcessContext(
+				instructions, new java.util.HashMap<>(), 100, structRegistry, functionRegistry);
+		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, ctx);
 	}
 
 	private static Result<Void, CompileError> handleLetBindingWithContinuation(
@@ -89,11 +79,8 @@ public final class LetBindingHandler {
 
 	private static Result<Void, CompileError> handleLetBindingWithContinuation(
 			String stmt, int equalsIndex, int semiIndex, String continuation,
-			List<Instruction> instructions, java.util.Map<String, Integer> variableAddresses,
-			int nextMemAddr, java.util.Map<String, StructDefinition> structRegistry,
-			java.util.Map<String, FunctionHandler.FunctionDef> functionRegistry) {
-		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, instructions,
-				variableAddresses, nextMemAddr, structRegistry, functionRegistry);
+			LetBindingProcessor.ProcessContext ctx) {
+		return LetBindingProcessor.process(stmt, equalsIndex, semiIndex, continuation, ctx);
 	}
 
 	public static Result<Void, CompileError> handleScopedBlock(

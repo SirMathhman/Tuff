@@ -11,15 +11,17 @@ WARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release
 [INFO] 
 [INFO] --- checkstyle:3.6.0:check (default-cli) @ tuff ---
 [INFO] Starting audit...
-[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\ExpressionModel.java:75:24: More than 9 parameters (found 10). [ParameterNumber]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\ExpressionModel.java:68:24: More than 8 parameters (found 9). [ParameterNumber]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\letbinding\LetBindingProcessor.java:251:50: More than 8 parameters (found 9). [ParameterNumber]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\LetBindingHandler.java:90:51: More than 8 parameters (found 9). [ParameterNumber]
 Audit done.
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD FAILURE
 [INFO] ------------------------------------------------------------------------
-[INFO] Total time:  2.214 s
-[INFO] Finished at: 2026-01-20T19:10:29-05:00
+[INFO] Total time:  2.267 s
+[INFO] Finished at: 2026-01-20T19:11:41-05:00
 [INFO] ------------------------------------------------------------------------
-[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (default-cli) on project tuff: Failed during checkstyle execution: There is 1 error reported by Checkstyle 9.3 with checkstyle.xml ruleset. -> [Help 1]
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (default-cli) on project tuff: Failed during checkstyle execution: There are 3 errors reported by Checkstyle 9.3 with checkstyle.xml ruleset. -> [Help 1]
 [ERROR] 
 [ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
 [ERROR] Re-run Maven using the -X switch to enable full debug logging.

@@ -12,6 +12,7 @@ import io.github.sirmathhman.tuff.compiler.DereferenceAssignmentHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
+import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
 import io.github.sirmathhman.tuff.vm.Instruction;
 
 /**
@@ -20,6 +21,14 @@ import io.github.sirmathhman.tuff.vm.Instruction;
  */
 public final class LetBindingProcessor {
 	private LetBindingProcessor() {
+	}
+
+	public record ProcessContext(
+			List<Instruction> instructions,
+			Map<String, Integer> variableAddresses,
+			int nextMemAddr,
+			Map<String, StructDefinition> structRegistry,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 	}
 
 	private static VariableDecl parseVariableDecl(String stmt, int equalsIndex, int semiIndex) {
@@ -236,34 +245,33 @@ public final class LetBindingProcessor {
 			String stmt, int equalsIndex, int semiIndex, String continuation,
 			List<Instruction> instructions, Map<String, Integer> variableAddresses,
 			int nextMemAddr) {
-		return process(stmt, equalsIndex, semiIndex, continuation, instructions, variableAddresses, nextMemAddr,
+		ProcessContext ctx = new ProcessContext(instructions, variableAddresses, nextMemAddr,
 				new java.util.HashMap<>(), new java.util.HashMap<>());
+		return process(stmt, equalsIndex, semiIndex, continuation, ctx);
 	}
 
 	public static Result<Void, CompileError> process(
 			String stmt, int equalsIndex, int semiIndex, String continuation,
 			List<Instruction> instructions, Map<String, Integer> variableAddresses,
 			int nextMemAddr, Map<String, StructDefinition> structRegistry) {
-		return process(stmt, equalsIndex, semiIndex, continuation, instructions, variableAddresses, nextMemAddr,
-				structRegistry, new java.util.HashMap<>());
+		ProcessContext ctx = new ProcessContext(instructions, variableAddresses, nextMemAddr, structRegistry,
+				new java.util.HashMap<>());
+		return process(stmt, equalsIndex, semiIndex, continuation, ctx);
 	}
 
 	public static Result<Void, CompileError> process(
-			String stmt, int equalsIndex, int semiIndex, String continuation,
-			List<Instruction> instructions, Map<String, Integer> variableAddresses,
-			int nextMemAddr, Map<String, StructDefinition> structRegistry,
-			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+			String stmt, int equalsIndex, int semiIndex, String continuation, ProcessContext ctx) {
 		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
 		String varName = decl.varName();
-		Result<Void, CompileError> earlyResult = tryEarlyReturns(varName, decl, continuation, instructions,
-				variableAddresses, nextMemAddr, functionRegistry);
+		Result<Void, CompileError> earlyResult = tryEarlyReturns(varName, decl, continuation, ctx.instructions(),
+				ctx.variableAddresses(), ctx.nextMemAddr(), ctx.functionRegistry());
 		if (earlyResult != null)
 			return earlyResult;
 		Result<Void, CompileError> structAccessResult = handleAllStructFieldAccess(varName, decl, continuation,
-				instructions, structRegistry, functionRegistry);
+				ctx.instructions(), ctx.structRegistry(), ctx.functionRegistry());
 		if (structAccessResult != null)
 			return structAccessResult;
-		return completeVariableSubstitution(varName, decl, continuation, instructions, functionRegistry);
+		return completeVariableSubstitution(varName, decl, continuation, ctx.instructions(), ctx.functionRegistry());
 	}
 
 	private static Result<Void, CompileError> tryEarlyReturns(String varName, VariableDecl decl,

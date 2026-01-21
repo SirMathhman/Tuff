@@ -86,10 +86,12 @@ public final class ConditionalExpressionHandler {
 		ExpressionModel.ExpressionResult falseVal = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) falseResult)
 				.value();
 
-		ExpressionModel.ExpressionTerm branchMarker = new ExpressionModel.ExpressionTerm(
-				-3, (int) trueVal.literalValue, false, false, false, false, false, false, false);
-		ExpressionModel.ExpressionTerm elseMarker = new ExpressionModel.ExpressionTerm(
-				-4, (int) falseVal.literalValue, false, false, false, false, false, false, false);
+		ExpressionModel.ExpressionTerm branchMarker = new ExpressionModel.ExpressionTerm(-3, (int) trueVal.literalValue,
+				new ExpressionModel.ExpressionTermFlags(false, false, false, false, false, false, false, false, false,
+						'\0', null));
+		ExpressionModel.ExpressionTerm elseMarker = new ExpressionModel.ExpressionTerm(-4, (int) falseVal.literalValue,
+				new ExpressionModel.ExpressionTermFlags(false, false, false, false, false, false, false, false, false,
+						'\0', null));
 
 		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(cond.terms);
 		allTerms.add(branchMarker);
