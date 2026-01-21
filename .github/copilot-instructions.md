@@ -253,6 +253,17 @@ String varName = decl.varName();  // Access via record getter
 - **Semantics**: Executes statements before yield, then yields final expression as block result
 - **File**: `LetBindingHandler.java`
 
+### Tail-Additive Recursive Functions
+
+- **Handler**: `RecursiveFunctionCompiler` in `functions` subpackage
+- **Pattern**: `fn name() => { let var = read TYPE; if (var <= 0) 0 else var + name() }`
+- **Transformation**: Compile-time transformation to iterative accumulator loop
+- **Implementation**: Detects recursive calls, validates function matches supported pattern, generates loop code:
+  - `result=0; loop { n=read; if n<=0 break; result+=n }; return result`
+- **Limitations**: Only supports tail-additive pattern (accumulator + recursive call in else branch)
+- **Benefits**: Avoids runtime call stack; VM unchanged
+- **File**: `functions/RecursiveFunctionCompiler.java`
+
 ## Common Patterns & Conventions
 
 ### Error Handling Pattern
@@ -283,7 +294,9 @@ T value = result.okValue();  // Use success value
 ### Package Structure (Max 15 classes per package)
 
 - `io.github.sirmathhman.tuff` (7 classes) — Core types: `App`, `Result`, `Error` types
-- `io.github.sirmathhman.tuff.compiler` (12 classes) — Parsing: `ExpressionModel`, handlers, builders
+- `io.github.sirmathhman.tuff.compiler` (15 classes) — Parsing: `ExpressionModel`, handlers, builders
+- `io.github.sirmathhman.tuff.compiler.letbinding` (15 classes) — Let binding processing, functions, structs
+- `io.github.sirmathhman.tuff.compiler.functions` (1 class) — Function compilation: `RecursiveFunctionCompiler`
 - `io.github.sirmathhman.tuff.vm` (4 classes) — VM: `Vm`, `Instruction`, `Operation`, `Variant`
 
 Enforced by pre-commit hook (`check_package_class_limit.py`). If adding a class: verify `python check_package_class_limit.py` passes.
