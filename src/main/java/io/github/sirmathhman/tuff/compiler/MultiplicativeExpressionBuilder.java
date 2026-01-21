@@ -30,23 +30,27 @@ public final class MultiplicativeExpressionBuilder {
 						isSubtracted, multTokens.size(), parser);
 				if (pResult instanceof Result.Err<ExpressionModel.ParenthesizedTokenResult, CompileError> err)
 					return Result.err(err.error());
-				ExpressionModel.ParenthesizedTokenResult pData = ((Result.Ok<ExpressionModel.ParenthesizedTokenResult, CompileError>) pResult).value();
+				ExpressionModel.ParenthesizedTokenResult pData = ((Result.Ok<ExpressionModel.ParenthesizedTokenResult, CompileError>) pResult)
+						.value();
 				multTerms.addAll(pData.terms());
 				Result<Long, CompileError> lit1 = updateLiteral(multLiteral, pData.literalValue(), j == 0, operator);
-				if (lit1 instanceof Result.Err<Long, CompileError> err) return Result.err(err.error());
+				if (lit1 instanceof Result.Err<Long, CompileError> err)
+					return Result.err(err.error());
 				multLiteral = ((Result.Ok<Long, CompileError>) lit1).value();
 				lastExpandedParensSize = pData.expandedSize();
 			} else {
 				Result<ExpressionModel.ExpressionTerm, CompileError> termResult = BitwiseNotParser.parseTermWithNot(multToken);
 				if (termResult instanceof Result.Err<ExpressionModel.ExpressionTerm, CompileError> err)
 					return Result.err(err.error());
-				ExpressionModel.ExpressionTerm baseTerm = ((Result.Ok<ExpressionModel.ExpressionTerm, CompileError>) termResult).value();
+				ExpressionModel.ExpressionTerm baseTerm = ((Result.Ok<ExpressionModel.ExpressionTerm, CompileError>) termResult)
+						.value();
 				multTerms.add(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value,
 						new ExpressionModel.ExpressionTermFlags(isSubtracted, j > 0 && operator == '*', j > 0 && operator == '/',
-							false, false, false, false, baseTerm.isBitwiseNotted(), baseTerm.isLogicalNotted(),
-							(j > 0) ? operator : '\0', baseTerm.readTypeSpec)));
+								false, false, false, false, baseTerm.isBitwiseNotted(), baseTerm.isLogicalNotted(),
+								(j > 0) ? operator : '\0', baseTerm.readTypeSpec)));
 				Result<Long, CompileError> lit2 = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
-				if (lit2 instanceof Result.Err<Long, CompileError> err) return Result.err(err.error());
+				if (lit2 instanceof Result.Err<Long, CompileError> err)
+					return Result.err(err.error());
 				multLiteral = ((Result.Ok<Long, CompileError>) lit2).value();
 				lastExpandedParensSize = 0;
 			}

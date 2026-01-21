@@ -23,9 +23,9 @@
 			<property name="max" value="3" />
 		</module>
 
-		<!-- Enforce maximum parameters of 12 per method -->
+		<!-- Enforce maximum parameters of 11 per method -->
 		<module name="ParameterNumber">
-			<property name="max" value="12" />
+			<property name="max" value="11" />
 		</module>
 	</module>
 </module>
