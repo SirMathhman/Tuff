@@ -346,6 +346,13 @@ public final class App {
 			});
 		}
 
+		// Check if this is a function call with field access (e.g., get(100).value)
+		Result<ExpressionModel.ExpressionResult, CompileError> fieldAccessResult = FunctionHandler
+				.tryParseFunctionCallWithFieldAccess(expr, functionRegistry, capturedVariables);
+		if (fieldAccessResult != null) {
+			return fieldAccessResult;
+		}
+
 		// Check if this is a function call
 		if (FunctionHandler.isFunctionCall(expr, functionRegistry)) {
 			return FunctionHandler.parseFunctionCall(expr, functionRegistry)

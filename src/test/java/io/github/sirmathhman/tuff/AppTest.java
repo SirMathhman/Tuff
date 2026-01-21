@@ -882,6 +882,21 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportFunctionReturningThisWithFieldAccess() {
+		assertValidWithInput("fn get(value : I32) => this; get(100).value", 100);
+	}
+
+	@Test
+	void shouldSupportFunctionReturningThisWithMultipleParams() {
+		assertValidWithInput("fn make(x : I32, y : I32) => this; make(10, 20).y", 20);
+	}
+
+	@Test
+	void shouldSupportFunctionReturningThisWithReadInput() {
+		assertValidWithInput("fn create(data : I32) => this; create(read I32).data", 42, 42);
+	}
+
+	@Test
 	void shouldSupportFunctionCapturingPreviouslyboundVariable() {
 		assertValidWithInput("let x = read U8; fn get() => x; get()", 42, 42);
 	}

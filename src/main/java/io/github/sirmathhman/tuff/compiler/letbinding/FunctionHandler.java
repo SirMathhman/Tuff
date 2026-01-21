@@ -441,6 +441,81 @@ public final class FunctionHandler {
 		return new FunctionCallMatch(matcher.group(1), matcher.group(2).trim());
 	}
 
+	/**
+	 * Try to parse a function call with field access (e.g., get(100).value)
+	 * Returns null if not a match, otherwise parses and returns the field value
+	 */
+	public static io.github.sirmathhman.tuff.Result<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, 
+			io.github.sirmathhman.tuff.CompileError> tryParseFunctionCallWithFieldAccess(
+			String expr, Map<String, FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
+		java.util.regex.Pattern pattern = java.util.regex.Pattern
+				.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(([^)]*)\\)\\.([a-zA-Z_][a-zA-Z0-9_]*)(.*)$");
+		java.util.regex.Matcher matcher = pattern.matcher(expr);
+		if (!matcher.matches()) {
+			return null;
+		}
+
+		String funcName = matcher.group(1);
+		String funcArgs = matcher.group(2);
+		String fieldName = matcher.group(3);
+		String remaining = matcher.group(4);
+
+		// Check if the function exists and returns 'this'
+		if (!functionRegistry.containsKey(funcName)) {
+			return null;
+		}
+
+		FunctionDef funcDef = functionRegistry.get(funcName);
+		String funcBody = funcDef.body().trim();
+
+		// If function body is 'this', parameters become accessible as fields
+		if (!funcBody.equals("this")) {
+			return null;
+		}
+
+		// Find the parameter with the matching name
+		for (FunctionParam param : funcDef.params()) {
+			if (param.name().equals(fieldName)) {
+				List<String> args = parseFunctionArgumentsList(funcArgs);
+				int paramIndex = funcDef.params().indexOf(param);
+				if (paramIndex >= 0 && paramIndex < args.size()) {
+					String argValue = args.get(paramIndex);
+					String fullExpr = remaining.isEmpty() ? argValue : argValue + remaining;
+					return io.github.sirmathhman.tuff.App.parseExpressionWithRead(fullExpr, functionRegistry, capturedVariables);
+				}
+			}
+		}
+		return null;
+	}
+
+	private static List<String> parseFunctionArgumentsList(String argsString) {
+		List<String> args = new ArrayList<>();
+		if (argsString == null || argsString.trim().isEmpty()) {
+			return args;
+		}
+		
+		StringBuilder current = new StringBuilder();
+		int depth = 0;
+		for (char c : argsString.toCharArray()) {
+			if (c == '(' || c == '{' || c == '<') {
+				depth++;
+				current.append(c);
+			} else if (c == ')' || c == '}' || c == '>') {
+				depth--;
+				current.append(c);
+			} else if (c == ',' && depth == 0) {
+				args.add(current.toString().trim());
+				current = new StringBuilder();
+			} else {
+				current.append(c);
+			}
+		}
+		if (current.length() > 0) {
+			args.add(current.toString().trim());
+		}
+		return args;
+	}
+
 	private static record FunctionCallMatch(String functionName, String argsString) {
 	}
 }
