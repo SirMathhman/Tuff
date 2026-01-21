@@ -341,15 +341,20 @@ public final class LetBindingProcessor {
 	private static Result<Void, CompileError> completeVariableSubstitution(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		// First, normalize this.varName to varName for occurrence counting and
+		// substitution
+		// This ensures "let x = 100; this.x" is treated as a single reference to x
+		String normalizedContinuation = continuation.replaceAll("\\bthis\\." + varName + "\\b", varName);
+
 		java.util.regex.Pattern varPattern = java.util.regex.Pattern.compile("\\b" + varName + "\\b");
 		int occurrences = 0;
-		for (java.util.regex.Matcher m = varPattern.matcher(continuation); m.find(); occurrences++)
+		for (java.util.regex.Matcher m = varPattern.matcher(normalizedContinuation); m.find(); occurrences++)
 			;
 		if (occurrences > 1) {
-			return LetBindingHandler.handleMultipleVariableReferences(varName, decl.valueExpr(), continuation,
+			return LetBindingHandler.handleMultipleVariableReferences(varName, decl.valueExpr(), normalizedContinuation,
 					occurrences, instructions);
 		}
-		String substitutedContinuation = continuation.replaceAll("\\b" + varName + "\\b",
+		String substitutedContinuation = normalizedContinuation.replaceAll("\\b" + varName + "\\b",
 				"(" + decl.valueExpr() + ")");
 		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName,
 				decl.valueExpr());

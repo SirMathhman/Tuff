@@ -887,6 +887,26 @@ public final class AppTest {
 		assertValidWithInput("fn createPoint() => Point { x : read I32, y : read I32 }; read I32", 42, 42);
 	}
 
+	@Test
+	void shouldSupportThisXSyntaxForVariableAccess() {
+		assertValid("let x = 100; this.x", 100);
+	}
+
+	@Test
+	void shouldSupportThisXWithDifferentTypes() {
+		assertValidWithInput("let x : U8 = read U8; this.x", 42, 42);
+	}
+
+	@Test
+	void shouldSupportThisXInArithmetic() {
+		assertValid("let x = 50; this.x + 50", 100);
+	}
+
+	@Test
+	void shouldSupportThisXInFunctionCapture() {
+		assertValidWithInput("let x = 100; fn get() => this.x; get()", 100, 42);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
