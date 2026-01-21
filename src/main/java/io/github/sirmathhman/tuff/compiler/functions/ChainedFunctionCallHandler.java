@@ -25,42 +25,42 @@ public final class ChainedFunctionCallHandler {
 	 */
 	public static Result<ExpressionModel.ExpressionResult, CompileError> tryParse(String expr,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
-		Result<ExpressionModel.ExpressionResult, CompileError> memberCall = tryParseMemberCall(expr, functionRegistry,
-				capturedVariables);
+		var memberCall = tryParseMemberCall(expr, functionRegistry,
+																				capturedVariables);
 		if (memberCall != null) {
 			return memberCall;
 		}
 
 		// Pattern: identifier()() - two sets of parentheses
-		Pattern pattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(\\s*\\)\\s*\\(\\s*\\)$");
-		Matcher matcher = pattern.matcher(expr.trim());
+		var pattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(\\s*\\)\\s*\\(\\s*\\)$");
+		var matcher = pattern.matcher(expr.trim());
 		if (!matcher.matches()) {
 			return null;
 		}
 
-		String outerFuncName = matcher.group(1);
-		FunctionHandler.FunctionDef outerFunc = functionRegistry.get(outerFuncName);
+		var outerFuncName = matcher.group(1);
+		var outerFunc = functionRegistry.get(outerFuncName);
 		if (outerFunc == null) {
 			return null;
 		}
 
 		// Get the body of outer function - it should return a function reference
-		String body = outerFunc.body().trim();
+		var body = outerFunc.body().trim();
 
 		// The body might be a block: { fn inner() => ...; inner }
 		if (body.startsWith("{") && body.endsWith("}")) {
-			String blockContent = body.substring(1, body.length() - 1).trim();
+			var blockContent = body.substring(1, body.length() - 1).trim();
 
 			// Check if block contains a nested function definition
 			if (blockContent.startsWith("fn ")) {
 				return FunctionHandler.parseFunctionDefinition(blockContent, capturedVariables).match(
 						parsed -> {
 							// Register the inner function temporarily
-							String innerFuncName = parsed.functionDef().name();
+							var innerFuncName = parsed.functionDef().name();
 							functionRegistry.put(innerFuncName, parsed.functionDef());
 
 							// The remaining part should be the function reference (e.g., "inner")
-							String remaining = parsed.remaining().trim();
+							var remaining = parsed.remaining().trim();
 							if (!remaining.equals(innerFuncName)) {
 								return null;
 							}
@@ -79,25 +79,25 @@ public final class ChainedFunctionCallHandler {
 	private static Result<ExpressionModel.ExpressionResult, CompileError> tryParseMemberCall(String expr,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		// Pattern: identifier().member()
-		Pattern p = Pattern.compile(
+		var p = Pattern.compile(
 				"^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(\\s*\\)\\s*\\.\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(\\s*\\)$");
-		Matcher m = p.matcher(expr.trim());
+		var m = p.matcher(expr.trim());
 		if (!m.matches()) {
 			return null;
 		}
 
-		String outerFuncName = m.group(1);
-		String memberName = m.group(2);
-		FunctionHandler.FunctionDef outerFunc = functionRegistry.get(outerFuncName);
+		var outerFuncName = m.group(1);
+		var memberName = m.group(2);
+		var outerFunc = functionRegistry.get(outerFuncName);
 		if (outerFunc == null) {
 			return null;
 		}
 
-		String body = outerFunc.body().trim();
+		var body = outerFunc.body().trim();
 		if (!body.startsWith("{") || !body.endsWith("}")) {
 			return null;
 		}
-		String blockContent = body.substring(1, body.length() - 1).trim();
+		var blockContent = body.substring(1, body.length() - 1).trim();
 		if (!blockContent.startsWith("fn ")) {
 			return null;
 		}
@@ -111,7 +111,7 @@ public final class ChainedFunctionCallHandler {
 						return null;
 					}
 
-					FunctionHandler.FunctionDef previous = functionRegistry.get(memberName);
+					var previous = functionRegistry.get(memberName);
 					functionRegistry.put(memberName, parsed.functionDef());
 					try {
 						return FunctionHandler.parseFunctionCall(memberName + "()", functionRegistry, capturedVariables)

@@ -72,92 +72,143 @@ public final class Vm {
 		return execute(source, read, write, TRACE_DISABLED, null);
 	}
 
-	public static int execute(
-			Instruction[] source,
-			IntSupplier read,
-			IntConsumer write,
-			TraceConfig traceConfig,
+	public static int execute(Instruction[] source, IntSupplier read, IntConsumer write, TraceConfig traceConfig,
 			TraceSink traceSink) {
-		// Do not adjust this too much!
-
-		TraceConfig cfg = (traceConfig == null) ? TRACE_DISABLED : traceConfig;
-		int programCounter = 0;
-		long cycle = 0;
-		long[] registers = new long[4];
+		var cfg = traceConfig != null ? traceConfig : TRACE_DISABLED;
+		var registers = new long[4];
+		var memory = new long[1024];
 		Arrays.fill(registers, 0L);
-
-		long[] memory = new long[1024];
 		Arrays.fill(memory, 0L);
 		loadInstructionsIntoMemory(source, memory);
 
+		var execCtx = new ExecutionContext(read, write, registers, memory, traceConfig, traceSink);
 		while (true) {
-			if (cfg.maxCycles > 0 && cycle >= cfg.maxCycles) {
-				throw new IllegalStateException(
-						"Cycle limit exceeded: " + cfg.maxCycles + " at PC " + programCounter);
-			}
-			if (programCounter < 0 || programCounter >= memory.length) {
-				throw new IllegalStateException("Program did not halt before reaching end of memory.");
-			}
-
-			long encodedInstruction = memory[programCounter];
-			int operation = (int) ((encodedInstruction >>> 56) & 0xff);
-			int variant = (int) ((encodedInstruction >>> 48) & 0xff);
-			long firstOperand = sign_extend_24bit(encodedInstruction & 0xFFFFFFL);
-			long secondOperand = sign_extend_24bit((encodedInstruction >>> 24) & 0xFFFFFFL);
-
-			Operation op = Operation.values()[operation];
-			Variant var = Variant.values()[variant];
-
-			InstructionContext ctx = new InstructionContext(registers, memory, op, var,
-					new Operands(firstOperand, secondOperand));
-			boolean shouldJump = executeInstruction(ctx, read, write);
-
-			int nextProgramCounter;
-			if (op == Operation.Halt) {
-				nextProgramCounter = programCounter;
-			} else if (shouldJump) {
-				nextProgramCounter = resolveJumpTarget(var, memory, (int) secondOperand);
-			} else {
-				nextProgramCounter = programCounter + 1;
-			}
-
-			if (traceSink != null) {
-				TraceInstruction instruction = new TraceInstruction(encodedInstruction, op, var, firstOperand,
-						secondOperand);
-				TraceMachine machine = createMachineSnapshot(registers, memory, cfg);
-				TraceFlow flow = new TraceFlow(shouldJump, nextProgramCounter);
-				TraceCycle cycleSnapshot = new TraceCycle(cycle, programCounter, instruction, machine, flow);
-				traceSink.onCycle(cycleSnapshot, cfg);
-			}
-
-			cycle++;
-
-			if (op == Operation.Halt) {
+			executeCycleBoundaryChecks(cfg, execCtx.cycle, execCtx.programCounter, memory.length);
+			var result = executeSingleCycle(source, execCtx);
+			if (result.isHalt()) {
 				return (int) registers[0];
 			}
-
-			programCounter = nextProgramCounter;
+			execCtx.cycle++;
+			execCtx.programCounter = result.nextPC();
 		}
 	}
 
+	private static class ExecutionContext {
+		final IntSupplier read;
+		final IntConsumer write;
+		int programCounter;
+		long cycle;
+		final long[] registers;
+		final long[] memory;
+		final TraceConfig traceConfig;
+		final TraceSink traceSink;
+
+		ExecutionContext(IntSupplier r, IntConsumer w, long[] reg, long[] mem, TraceConfig tc, TraceSink ts) {
+			this.read = r;
+			this.write = w;
+			this.programCounter = 0;
+			this.cycle = 0;
+			this.registers = reg;
+			this.memory = mem;
+			this.traceConfig = tc;
+			this.traceSink = ts;
+		}
+	}
+
+	private static void executeCycleBoundaryChecks(TraceConfig cfg, long cycle, int programCounter, int memoryLength) {
+		if (cfg.maxCycles > 0 && cycle >= cfg.maxCycles) {
+			throw new IllegalStateException("Cycle limit exceeded: " + cfg.maxCycles + " at PC " + programCounter);
+		}
+		if (programCounter < 0 || programCounter >= memoryLength) {
+			throw new IllegalStateException("Program did not halt before reaching end of memory.");
+		}
+	}
+
+	private static class CycleResult {
+		int nextPC;
+		boolean halt;
+
+		CycleResult(int nextPC, boolean halt) {
+			this.nextPC = nextPC;
+			this.halt = halt;
+		}
+
+		int nextPC() {
+			return nextPC;
+		}
+
+		boolean isHalt() {
+			return halt;
+		}
+	}
+
+	private static CycleResult executeSingleCycle(Instruction[] source, ExecutionContext ctx) {
+		var encodedInstruction = ctx.memory[ctx.programCounter];
+		var operation = (int) ((encodedInstruction >>> 56) & 0xff);
+		var variant = (int) ((encodedInstruction >>> 48) & 0xff);
+		var firstOperand = sign_extend_24bit(encodedInstruction & 0xFFFFFFL);
+		var secondOperand = sign_extend_24bit((encodedInstruction >>> 24) & 0xFFFFFFL);
+		var op = Operation.values()[operation];
+		var var = Variant.values()[variant];
+		var inctx = new InstructionContext(ctx.registers, ctx.memory, op, var, new Operands(firstOperand, secondOperand));
+		var shouldJump = executeInstruction(inctx, ctx.read, ctx.write);
+		var nextPC = op == Operation.Halt ? ctx.programCounter
+				: (shouldJump ? resolveJumpTarget(var, ctx.memory, (int) secondOperand) : ctx.programCounter + 1);
+		if (ctx.traceSink != null) {
+			var decoded = new DecodedInstruction(op, var, firstOperand, secondOperand);
+			var cycleInfo = new CycleInfo(ctx.cycle, ctx.programCounter, shouldJump, nextPC);
+			var traceData = new TraceData(encodedInstruction, decoded, cycleInfo, ctx.registers, ctx.memory);
+			recordTrace(ctx.traceSink, ctx.traceConfig, traceData);
+		}
+		return new CycleResult(nextPC, op == Operation.Halt);
+	}
+
+	private static record DecodedInstruction(Operation op, Variant var, long firstOperand, long secondOperand) {
+	}
+
+	private static record CycleInfo(long cycle, int programCounter, boolean shouldJump, int nextPC) {
+	}
+
+	private static record TraceData(long encodedInstruction, DecodedInstruction decoded, CycleInfo cycleInfo,
+			long[] registers, long[] memory) {
+	}
+
+	private static void recordTrace(TraceSink traceSink, TraceConfig traceConfig, TraceData data) {
+		var instruction = new TraceInstruction(data.encodedInstruction(), data.decoded().op(), data.decoded().var(),
+				data.decoded().firstOperand(), data.decoded().secondOperand());
+		var machine = createMachineSnapshot(data.registers(), data.memory(),
+				traceConfig != null ? traceConfig : TRACE_DISABLED);
+		var flow = new TraceFlow(data.cycleInfo().shouldJump(), data.cycleInfo().nextPC());
+		var cycleSnapshot = new TraceCycle(data.cycleInfo().cycle(), data.cycleInfo().programCounter(), instruction,
+				machine, flow);
+		traceSink.onCycle(cycleSnapshot, traceConfig != null ? traceConfig : TRACE_DISABLED);
+	}
+
 	private static TraceMachine createMachineSnapshot(long[] registers, long[] memory, TraceConfig cfg) {
-		long[] regSnapshot = Arrays.copyOf(registers, registers.length);
-		int spValue = -1;
-		long[] stackValues = new long[0];
+		var regSnapshot = Arrays.copyOf(registers, registers.length);
+		var spValue = -1;
+		var stackValues = new long[0];
 		if (cfg.spAddress >= 0 && cfg.spAddress < memory.length) {
 			spValue = (int) memory[cfg.spAddress];
 			stackValues = readMemoryWindow(memory, spValue, cfg.stackWindowSize);
 		}
-		int[] watchAddresses = (cfg.watchAddresses == null) ? new int[0] : cfg.watchAddresses;
-		long[] watchValues = readWatchedMemory(memory, watchAddresses);
+		int[] watchAddresses;
+		if (cfg.watchAddresses == null)
+			watchAddresses = new int[0];
+		else
+			watchAddresses = cfg.watchAddresses;
+		var watchValues = readWatchedMemory(memory, watchAddresses);
 		return new TraceMachine(regSnapshot, spValue, stackValues, watchValues);
 	}
 
 	private static long[] readWatchedMemory(long[] memory, int[] addresses) {
-		long[] values = new long[addresses.length];
-		for (int i = 0; i < addresses.length; i++) {
-			int addr = addresses[i];
-			values[i] = (addr >= 0 && addr < memory.length) ? memory[addr] : 0L;
+		var values = new long[addresses.length];
+		for (var i = 0; i < addresses.length; i++) {
+			var addr = addresses[i];
+			if (addr >= 0 && addr < memory.length)
+				values[i] = memory[addr];
+			else
+				values[i] = 0L;
 		}
 		return values;
 	}
@@ -166,11 +217,9 @@ public final class Vm {
 		if (size <= 0 || startAddress < 0 || startAddress >= memory.length) {
 			return new long[0];
 		}
-		int safeSize = Math.min(size, memory.length - startAddress);
-		long[] values = new long[safeSize];
-		for (int i = 0; i < safeSize; i++) {
-			values[i] = memory[startAddress + i];
-		}
+		var safeSize = Math.min(size, memory.length - startAddress);
+		var values = new long[safeSize];
+		System.arraycopy(memory, startAddress, values, 0, safeSize);
 		return values;
 	}
 
@@ -268,32 +317,50 @@ public final class Vm {
 	}
 
 	private static boolean executeEqual(long[] registers, long firstOperand, long secondOperand) {
-		registers[(int) firstOperand] = (registers[(int) firstOperand] == registers[(int) secondOperand]) ? 1 : 0;
+		if (registers[(int) firstOperand] == registers[(int) secondOperand])
+			registers[(int) firstOperand] = 1;
+		else
+			registers[(int) firstOperand] = 0;
 		return false;
 	}
 
 	private static boolean executeLessThan(long[] registers, long firstOperand, long secondOperand) {
-		registers[(int) firstOperand] = (registers[(int) firstOperand] < registers[(int) secondOperand]) ? 1 : 0;
+		if (registers[(int) firstOperand] < registers[(int) secondOperand])
+			registers[(int) firstOperand] = 1;
+		else
+			registers[(int) firstOperand] = 0;
 		return false;
 	}
 
 	private static boolean executeGreaterThan(long[] registers, long firstOperand, long secondOperand) {
-		registers[(int) firstOperand] = (registers[(int) firstOperand] > registers[(int) secondOperand]) ? 1 : 0;
+		if (registers[(int) firstOperand] > registers[(int) secondOperand])
+			registers[(int) firstOperand] = 1;
+		else
+			registers[(int) firstOperand] = 0;
 		return false;
 	}
 
 	private static boolean executeLogicalAnd(long[] registers, long firstOperand, long secondOperand) {
-		registers[(int) firstOperand] = (registers[(int) firstOperand] != 0 && registers[(int) secondOperand] != 0) ? 1 : 0;
+		if (registers[(int) firstOperand] != 0 && registers[(int) secondOperand] != 0)
+			registers[(int) firstOperand] = 1;
+		else
+			registers[(int) firstOperand] = 0;
 		return false;
 	}
 
 	private static boolean executeLogicalOr(long[] registers, long firstOperand, long secondOperand) {
-		registers[(int) firstOperand] = (registers[(int) firstOperand] != 0 || registers[(int) secondOperand] != 0) ? 1 : 0;
+		if (registers[(int) firstOperand] != 0 || registers[(int) secondOperand] != 0)
+			registers[(int) firstOperand] = 1;
+		else
+			registers[(int) firstOperand] = 0;
 		return false;
 	}
 
 	private static boolean executeLogicalNot(long[] registers, long firstOperand) {
-		registers[(int) firstOperand] = (registers[(int) firstOperand] == 0) ? 1 : 0;
+		if (registers[(int) firstOperand] == 0)
+			registers[(int) firstOperand] = 1;
+		else
+			registers[(int) firstOperand] = 0;
 		return false;
 	}
 
@@ -308,7 +375,7 @@ public final class Vm {
 		} else if (var == Variant.DirectAddress) {
 			registers[(int) firstOperand] = memory[(int) secondOperand];
 		} else if (var == Variant.IndirectAddress) {
-			int address = (int) memory[(int) secondOperand];
+			var address = (int) memory[(int) secondOperand];
 			registers[(int) firstOperand] = memory[address];
 		}
 		return false;
@@ -323,7 +390,7 @@ public final class Vm {
 		if (var == Variant.DirectAddress) {
 			memory[(int) secondOperand] = registers[(int) firstOperand];
 		} else if (var == Variant.IndirectAddress) {
-			int address = (int) memory[(int) secondOperand];
+			var address = (int) memory[(int) secondOperand];
 			memory[address] = registers[(int) firstOperand];
 		}
 		return false;
@@ -334,7 +401,7 @@ public final class Vm {
 			case Immediate -> operand;
 			case DirectAddress -> (int) memory[operand];
 			case IndirectAddress -> {
-				int address = (int) memory[operand];
+				var address = (int) memory[operand];
 				yield (int) memory[address];
 			}
 		};
@@ -346,7 +413,7 @@ public final class Vm {
 		encoded |= ((long) instruction.variant().ordinal() & 0xffL) << 48;
 		encoded |= instruction.firstOperand() & 0xFFFFFFL;
 
-		Long secondOperand = instruction.secondOperand();
+		var secondOperand = instruction.secondOperand();
 		if (secondOperand != null) {
 			encoded |= (secondOperand & 0xFFFFFFL) << 24;
 		}
@@ -355,7 +422,7 @@ public final class Vm {
 	}
 
 	private static void loadInstructionsIntoMemory(Instruction[] source, long[] memory) {
-		for (int i = 0; i < source.length; i++) {
+		for (var i = 0; i < source.length; i++) {
 			memory[i] = encodeInstructionTo64Bits(source[i]);
 		}
 	}

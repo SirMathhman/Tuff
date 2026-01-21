@@ -51,8 +51,8 @@ public final class LetBindingProcessor {
 	}
 
 	private static VariableDecl parseVariableDecl(String stmt, int equalsIndex, int semiIndex) {
-		String declPart = stmt.substring(4, equalsIndex).trim();
-		boolean isMutable = false;
+		var declPart = stmt.substring(4, equalsIndex).trim();
+		var isMutable = false;
 		if (declPart.startsWith("mut ")) {
 			isMutable = true;
 			declPart = declPart.substring(4).trim();
@@ -60,10 +60,10 @@ public final class LetBindingProcessor {
 		String varName;
 		String declaredType = null;
 		if (declPart.contains(":")) {
-			int colonIndex = ExpressionTokens.findFirstColonAtDepthZero(declPart);
+			var colonIndex = ExpressionTokens.findFirstColonAtDepthZero(declPart);
 			if (colonIndex == -1) {
 				// Fallback to split if depth-aware search fails
-				String[] parts = declPart.split(":");
+				var parts = declPart.split(":");
 				varName = parts[0].trim();
 				declaredType = parts[1].trim();
 			} else {
@@ -73,68 +73,68 @@ public final class LetBindingProcessor {
 		} else {
 			varName = declPart.trim();
 		}
-		String valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
+		var valueExpr = stmt.substring(equalsIndex + 1, semiIndex).trim();
 		return new VariableDecl(varName, isMutable, valueExpr, declaredType);
 	}
 
 	private static Result<Void, CompileError> handleStructFieldAccessOnFunctionCallResult(String varName,
 			VariableDecl decl, String continuation, ProcessContext ctx) {
-		List<Instruction> instructions = ctx.instructions();
-		Map<String, StructDefinition> structRegistry = ctx.structRegistry();
-		Map<String, FunctionHandler.FunctionDef> functionRegistry = ctx.functionRegistry();
+		var instructions = ctx.instructions();
+		var structRegistry = ctx.structRegistry();
+		var functionRegistry = ctx.functionRegistry();
 		// Check if valueExpr is a function call
-		String valueExpr = decl.valueExpr().trim();
+		var valueExpr = decl.valueExpr().trim();
 		if (!FunctionHandler.isFunctionCall(valueExpr, functionRegistry)) {
 			return null;
 		}
 		// Get the function definition and return type
-		FunctionHandler.FunctionDef funcDef = getFunctionDef(valueExpr,
+		var funcDef = getFunctionDef(valueExpr,
 				functionRegistry);
 		if (funcDef == null) {
 			return null;
 		}
-		String returnType = funcDef.returnType();
+		var returnType = funcDef.returnType();
 		if (returnType == null || !structRegistry.containsKey(returnType)) {
 			return null;
 		}
 		// Extract used fields from continuation
-		java.util.Set<String> usedFields = extractUsedFields(varName, continuation);
+		var usedFields = extractUsedFields(varName, continuation);
 		if (usedFields.isEmpty()) {
 			return null;
 		}
 		// Extract field values from function body
-		java.util.Map<String, String> fieldValues = extractFieldValuesFromFunctionBody(funcDef.body().trim());
+		var fieldValues = extractFieldValuesFromFunctionBody(funcDef.body().trim());
 		if (fieldValues == null || fieldValues.isEmpty()) {
 			return null;
 		}
 		// Verify all fields exist
-		StructDefinition structDef = structRegistry.get(returnType);
+		var structDef = structRegistry.get(returnType);
 		if (!verifyFields(usedFields, fieldValues, structDef, returnType)) {
 			return Result.err(new CompileError("Field verification failed for struct '" + returnType + "'"));
 		}
 		// Replace field accesses with their values
-		String substitutedContinuation = replaceFieldAccesses(varName, continuation, usedFields, fieldValues);
+		var substitutedContinuation = replaceFieldAccesses(varName, continuation, usedFields, fieldValues);
 		// Parse the substituted continuation
-		Result<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, CompileError> contResult = App
+		var contResult = App
 				.parseExpressionWithRead(substitutedContinuation, functionRegistry);
 		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 	}
 
 	private static FunctionHandler.FunctionDef getFunctionDef(String valueExpr,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
-		int parenIndex = valueExpr.indexOf('(');
+		var parenIndex = valueExpr.indexOf('(');
 		if (parenIndex <= 0) {
 			return null;
 		}
-		String functionName = valueExpr.substring(0, parenIndex).trim();
+		var functionName = valueExpr.substring(0, parenIndex).trim();
 		return functionRegistry.get(functionName);
 	}
 
 	private static java.util.Set<String> extractUsedFields(String varName, String continuation) {
 		java.util.Set<String> usedFields = new java.util.HashSet<>();
-		java.util.regex.Pattern fieldAccessPattern = java.util.regex.Pattern
+		var fieldAccessPattern = java.util.regex.Pattern
 				.compile("\\b" + java.util.regex.Pattern.quote(varName) + "\\.([a-zA-Z_][a-zA-Z0-9_]*)\\b");
-		java.util.regex.Matcher matcher = fieldAccessPattern.matcher(continuation);
+		var matcher = fieldAccessPattern.matcher(continuation);
 		while (matcher.find()) {
 			usedFields.add(matcher.group(1));
 		}
@@ -143,8 +143,8 @@ public final class LetBindingProcessor {
 
 	private static boolean verifyFields(java.util.Set<String> usedFields,
 			java.util.Map<String, String> fieldValues, StructDefinition structDef, String structName) {
-		for (String field : usedFields) {
-			boolean fieldExists = structDef.fields().stream()
+		for (var field : usedFields) {
+			var fieldExists = structDef.fields().stream()
 					.anyMatch(f -> f.name().equals(field));
 			if (!fieldExists || !fieldValues.containsKey(field)) {
 				return false;
@@ -155,9 +155,9 @@ public final class LetBindingProcessor {
 
 	private static String replaceFieldAccesses(String varName, String continuation,
 			java.util.Set<String> usedFields, java.util.Map<String, String> fieldValues) {
-		String result = continuation;
-		for (String field : usedFields) {
-			String fieldValue = fieldValues.get(field);
+		var result = continuation;
+		for (var field : usedFields) {
+			var fieldValue = fieldValues.get(field);
 			result = result.replaceAll("\\b" + java.util.regex.Pattern.quote(varName) + "\\." + field + "\\b",
 					"(" + fieldValue + ")");
 		}
@@ -168,20 +168,20 @@ public final class LetBindingProcessor {
 		// Try to extract struct initialization from body
 		// Body format: Point { x : read I32, y : read I32 }
 		// We need to find { ... } and extract field: value pairs
-		int openBrace = body.indexOf('{');
-		int closeBrace = body.lastIndexOf('}');
+		var openBrace = body.indexOf('{');
+		var closeBrace = body.lastIndexOf('}');
 		if (openBrace == -1 || closeBrace == -1 || closeBrace <= openBrace) {
 			return null;
 		}
-		String structInit = body.substring(openBrace + 1, closeBrace);
+		var structInit = body.substring(openBrace + 1, closeBrace);
 		java.util.Map<String, String> fieldValues = new java.util.HashMap<>();
 		// Parse field: value pairs
 		// Split by comma at depth 0
 		java.util.List<String> assignments = new java.util.ArrayList<>();
-		StringBuilder current = new StringBuilder();
-		int depth = 0;
-		for (int i = 0; i < structInit.length(); i++) {
-			char c = structInit.charAt(i);
+		var current = new StringBuilder();
+		var depth = 0;
+		for (var i = 0; i < structInit.length(); i++) {
+			var c = structInit.charAt(i);
 			if (c == '(' || c == '{') {
 				depth++;
 			} else if (c == ')' || c == '}') {
@@ -199,50 +199,52 @@ public final class LetBindingProcessor {
 			assignments.add(current.toString().trim());
 		}
 		// Parse each assignment
-		for (String assignment : assignments) {
-			int colonIndex = assignment.indexOf(':');
+		for (var assignment : assignments) {
+			var colonIndex = assignment.indexOf(':');
 			if (colonIndex > 0) {
-				String fieldName = assignment.substring(0, colonIndex).trim();
-				String fieldValue = assignment.substring(colonIndex + 1).trim();
+				var fieldName = assignment.substring(0, colonIndex).trim();
+				var fieldValue = assignment.substring(colonIndex + 1).trim();
 				fieldValues.put(fieldName, fieldValue);
 			}
 		}
-		return fieldValues.isEmpty() ? null : fieldValues;
+		if (fieldValues.isEmpty())
+			return null;
+		return fieldValues;
 	}
 
 	private static Result<Void, CompileError> handleStructFieldAccess(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions, Map<String, StructDefinition> structRegistry) {
 		// Try to parse the struct value expression directly using struct instantiation
 		// handler
-		Result<StructInstantiationHandler.StructInstantiationResult, CompileError> structResult = StructInstantiationHandler
+		var structResult = StructInstantiationHandler
 				.parseStructInstantiation(decl.valueExpr(), structRegistry);
 		if (structResult instanceof Result.Ok<StructInstantiationHandler.StructInstantiationResult, CompileError> ok) {
-			StructInstantiationHandler.StructInstantiationResult instResult = ok.value();
+			var instResult = ok.value();
 			// Replace all field accesses in continuation (e.g., point.x -> (fieldX),
 			// point.y -> (fieldY))
-			String result = continuation;
+			var result = continuation;
 			java.util.Set<String> usedFields = new java.util.HashSet<>();
-			java.util.regex.Pattern fieldPattern = java.util.regex.Pattern
+			var fieldPattern = java.util.regex.Pattern
 					.compile("\\b" + varName + "\\.([a-zA-Z_][a-zA-Z0-9_]*)\\b");
-			java.util.regex.Matcher matcher = fieldPattern.matcher(continuation);
+			var matcher = fieldPattern.matcher(continuation);
 			while (matcher.find()) {
-				String fieldName = matcher.group(1);
+				var fieldName = matcher.group(1);
 				usedFields.add(fieldName);
 			}
 			// Verify all fields exist before replacement
-			for (String field : usedFields) {
+			for (var field : usedFields) {
 				if (!instResult.fieldValues().containsKey(field)) {
 					return Result.err(
 							new CompileError("Field '" + field + "' not found in struct '" + decl.declaredType() + "'"));
 				}
 			}
 			// Replace field accesses with their values
-			for (String field : usedFields) {
-				String fieldValue = instResult.fieldValues().get(field);
+			for (var field : usedFields) {
+				var fieldValue = instResult.fieldValues().get(field);
 				result = result.replaceAll("\\b" + varName + "\\." + field + "\\b", "(" + fieldValue + ")");
 			}
 			// Parse the substituted continuation
-			Result<ExpressionModel.ExpressionResult, CompileError> contResult = App.parseExpressionWithRead(result);
+			var contResult = App.parseExpressionWithRead(result);
 			return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 		}
 		// If struct parsing fails, return null to fall through
@@ -251,20 +253,20 @@ public final class LetBindingProcessor {
 
 	public static Result<Void, CompileError> process(
 			String stmt, int equalsIndex, int semiIndex, String continuation, ProcessContext ctx) {
-		VariableDecl decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
-		String varName = decl.varName();
+		var decl = parseVariableDecl(stmt, equalsIndex, semiIndex);
+		var varName = decl.varName();
 		// Track variable type for future reference (e.g., for .init field access on
 		// pointers)
 		if (decl.declaredType() != null) {
 			// Resolve type aliases
-			String resolvedType = TypeAliasHandler.resolveType(decl.declaredType(), ctx.typeAliasRegistry());
+			var resolvedType = TypeAliasHandler.resolveType(decl.declaredType(), ctx.typeAliasRegistry());
 			getVariableTypes().put(varName, resolvedType);
 		}
 
-		Result<Void, CompileError> earlyResult = tryEarlyReturns(varName, decl, continuation, ctx);
+		var earlyResult = tryEarlyReturns(varName, decl, continuation, ctx);
 		if (earlyResult != null)
 			return earlyResult;
-		Result<Void, CompileError> structAccessResult = handleAllStructFieldAccess(varName, decl, continuation, ctx);
+		var structAccessResult = handleAllStructFieldAccess(varName, decl, continuation, ctx);
 		if (structAccessResult != null)
 			return structAccessResult;
 		return completeVariableSubstitution(varName, decl, continuation, ctx.instructions(),
@@ -275,17 +277,17 @@ public final class LetBindingProcessor {
 			String continuation, ProcessContext ctx) {
 		// Handle yield blocks
 		if (decl.valueExpr().trim().startsWith("{")) {
-			String blockContent = decl.valueExpr().trim();
-			int closingBrace = DepthAwareSplitter.findMatchingBrace(blockContent, 0);
+			var blockContent = decl.valueExpr().trim();
+			var closingBrace = DepthAwareSplitter.findMatchingBrace(blockContent, 0);
 			if (closingBrace != -1) {
-				String inner = blockContent.substring(1, closingBrace).trim();
+				var inner = blockContent.substring(1, closingBrace).trim();
 				if (inner.contains("yield")) {
 					return LetBindingHandler.handleYieldBlock(varName, inner, continuation, ctx.instructions(),
 							ctx.nextMemAddr());
 				}
 			}
 		}
-		MutableVarContext varCtx = new MutableVarContext(ctx.variableAddresses(), ctx.nextMemAddr());
+		var varCtx = new MutableVarContext(ctx.variableAddresses(), ctx.nextMemAddr());
 		if (continuation.trim().startsWith("{")) {
 			return LetBindingHandler.handleScopedBlock(varName, decl.valueExpr(), continuation, ctx.instructions(),
 					varCtx);
@@ -308,15 +310,16 @@ public final class LetBindingProcessor {
 	private static Result<Void, CompileError> handleSimpleContinuationCases(String varName, VariableDecl decl,
 			String continuation, ProcessContext ctx, MutableVarContext varCtx) {
 		if (continuation.equals(varName)) {
-			Result<ExpressionModel.ExpressionResult, CompileError> valueResult = ConditionalExpressionHandler
-					.hasConditional(decl.valueExpr())
-							? ConditionalExpressionHandler.parseConditional(decl.valueExpr())
-							: App.parseExpressionWithRead(decl.valueExpr(), ctx.functionRegistry());
+			Result<ExpressionModel.ExpressionResult, CompileError> valueResult;
+			if (ConditionalExpressionHandler.hasConditional(decl.valueExpr()))
+				valueResult = ConditionalExpressionHandler.parseConditional(decl.valueExpr());
+			else
+				valueResult = App.parseExpressionWithRead(decl.valueExpr(), ctx.functionRegistry());
 			return valueResult.match(expr -> App.generateInstructions(expr, ctx.instructions()), Result::err);
 		}
 		// Handle this.varName syntax - treat as reference to variable
 		if (continuation.startsWith("this.")) {
-			String fieldName = continuation.substring(5).trim();
+			var fieldName = continuation.substring(5).trim();
 			if (fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
 				// Parse it as if it's just the variable name
 				continuation = fieldName;
@@ -343,7 +346,7 @@ public final class LetBindingProcessor {
 	private static Result<Void, CompileError> handleAllStructFieldAccess(String varName, VariableDecl decl,
 			String continuation, ProcessContext ctx) {
 		// Handle array field access (.init and .length)
-		Result<Void, CompileError> arrayFieldResult = ArrayFieldAccessProcessor.handleArrayFieldAccess(varName, decl,
+		var arrayFieldResult = ArrayFieldAccessProcessor.handleArrayFieldAccess(varName, decl,
 				continuation, ctx.instructions(), ctx.functionRegistry(), ctx.structRegistry());
 		if (arrayFieldResult != null) {
 			return arrayFieldResult;
@@ -351,7 +354,7 @@ public final class LetBindingProcessor {
 
 		// Handle struct field access on declared struct variables
 		if (decl.declaredType() != null && continuation.contains(varName + ".")) {
-			Result<Void, CompileError> structAccessResult = handleStructFieldAccess(varName, decl, continuation,
+			var structAccessResult = handleStructFieldAccess(varName, decl, continuation,
 					ctx.instructions(), ctx.structRegistry());
 			if (structAccessResult != null) {
 				return structAccessResult;
@@ -359,11 +362,9 @@ public final class LetBindingProcessor {
 		}
 		// Handle struct field access on function call results
 		if (decl.declaredType() == null && continuation.contains(varName + ".")) {
-			Result<Void, CompileError> functionCallStructAccessResult = handleStructFieldAccessOnFunctionCallResult(
+			var functionCallStructAccessResult = handleStructFieldAccessOnFunctionCallResult(
 					varName, decl, continuation, ctx);
-			if (functionCallStructAccessResult != null) {
-				return functionCallStructAccessResult;
-			}
+			return functionCallStructAccessResult;
 		}
 		return null;
 	}
@@ -371,56 +372,74 @@ public final class LetBindingProcessor {
 	private static Result<Void, CompileError> completeVariableSubstitution(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
-		String normalizedContinuation = continuation.replaceAll("\\bthis\\." + varName + "\\b", varName);
-
-		// Handle string literals with .length field access
+		var normalizedContinuation = continuation.replaceAll("\\bthis\\." + varName + "\\b", varName);
 		normalizedContinuation = StringFieldAccessProcessor.handleStringFieldAccess(varName, decl.valueExpr().trim(),
 				normalizedContinuation);
 
-		int occurrences = CompilerHelpers.countVariableOccurrences(varName, normalizedContinuation);
-		boolean isTupleType = decl.declaredType() != null && decl.declaredType().startsWith("(")
-				&& decl.declaredType().endsWith(")");
-		boolean isArrayType = decl.declaredType() != null && decl.declaredType().startsWith("[")
-				&& decl.declaredType().endsWith("]");
-		boolean isArrayPointerType = decl.declaredType() != null
-				&& (decl.declaredType().startsWith("*[") || decl.declaredType().startsWith("*mut ["));
-		boolean isIndexedOnlyAccess = (isTupleType || isArrayType || isArrayPointerType)
-				&& CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation);
-		if (occurrences > 1 && !isIndexedOnlyAccess) {
+		var typeCheckResult = handleSpecialContinuationCases(varName, decl, normalizedContinuation, instructions,
+				functionRegistry, variableAddresses);
+		if (typeCheckResult != null) {
+			return typeCheckResult;
+		}
+
+		var isFunctionRef = decl.declaredType() != null && decl.declaredType().contains("=>")
+				&& functionRegistry.containsKey(decl.valueExpr().trim());
+		var wrappedValue = isFunctionRef ? decl.valueExpr()
+				: CompilerHelpers.wrapValueForSubstitution(decl.valueExpr(), decl.declaredType());
+		var substitutedContinuation = isFunctionRef ? normalizedContinuation
+				: normalizedContinuation.replaceAll("\\b" + varName + "\\b", "(" + wrappedValue + ")");
+
+		var valTypeCheck = validateContinuationTypes(continuation, varName, decl.valueExpr());
+		if (valTypeCheck instanceof Result.Err<Void, CompileError>) {
+			return valTypeCheck;
+		}
+
+		var capturedVariables = buildCapturedVariablesMap(varName, decl.valueExpr().trim(), isFunctionRef);
+		var contResult = App.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
+		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+	}
+
+	private static Result<Void, CompileError> handleSpecialContinuationCases(String varName, VariableDecl decl,
+			String normalizedContinuation, List<Instruction> instructions,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
+		var occurrences = CompilerHelpers.countVariableOccurrences(varName, normalizedContinuation);
+		var isIndexedOnly = isIndexedOnlyAccess(decl, varName, normalizedContinuation);
+		if (occurrences > 1 && !isIndexedOnly) {
 			return LetBindingHandler.handleMultipleVariableReferences(varName, decl.valueExpr(),
 					normalizedContinuation, occurrences, instructions);
 		}
-		if (isArrayPointerType && CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation)) {
+		if (isArrayPointerIndexed(decl, varName, normalizedContinuation)) {
 			return handleArrayPointerIndexing(varName, decl, normalizedContinuation, instructions, functionRegistry,
 					variableAddresses);
 		}
 		if (FunctionBindingHandler.isAnonymousFunction(decl.valueExpr().trim())) {
-			String namedFunction = FunctionBindingHandler.convertAnonymousFunctionToNamed(varName, decl.valueExpr().trim());
-			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, namedFunction, normalizedContinuation,
-					instructions, functionRegistry);
+			var namedFunction = FunctionBindingHandler.convertAnonymousFunctionToNamed(varName,
+					decl.valueExpr().trim());
+			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, namedFunction,
+					normalizedContinuation, instructions, functionRegistry);
 		}
 		if (FunctionHandler.isFunctionDefinition(decl.valueExpr().trim())) {
 			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, decl.valueExpr().trim(),
-					normalizedContinuation,
-					instructions, functionRegistry);
+					normalizedContinuation, instructions, functionRegistry);
 		}
-		boolean isFunctionReferenceBinding = decl.declaredType() != null
-				&& decl.declaredType().contains("=>")
-				&& functionRegistry.containsKey(decl.valueExpr().trim());
-		String wrappedValue = isFunctionReferenceBinding ? decl.valueExpr()
-				: CompilerHelpers.wrapValueForSubstitution(decl.valueExpr(), decl.declaredType());
-		String substitutedContinuation = isFunctionReferenceBinding ? normalizedContinuation
-				: normalizedContinuation.replaceAll("\\b" + varName + "\\b", "(" + wrappedValue + ")");
-		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName,
-				decl.valueExpr());
-		if (typeCheckResult instanceof Result.Err<Void, CompileError>) {
-			return typeCheckResult;
-		}
-		java.util.Map<String, String> capturedVariables = buildCapturedVariablesMap(varName, decl.valueExpr().trim(),
-				isFunctionReferenceBinding);
-		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App
-				.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
-		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+		return null;
+	}
+
+	private static boolean isIndexedOnlyAccess(VariableDecl decl, String varName, String normalizedContinuation) {
+		var isTupleType = decl.declaredType() != null && decl.declaredType().startsWith("(")
+				&& decl.declaredType().endsWith(")");
+		var isArrayType = decl.declaredType() != null && decl.declaredType().startsWith("[")
+				&& decl.declaredType().endsWith("]");
+		var isArrayPointerType = decl.declaredType() != null
+				&& (decl.declaredType().startsWith("*[") || decl.declaredType().startsWith("*mut ["));
+		return (isTupleType || isArrayType || isArrayPointerType)
+				&& CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation);
+	}
+
+	private static boolean isArrayPointerIndexed(VariableDecl decl, String varName, String normalizedContinuation) {
+		var isArrayPointerType = decl.declaredType() != null
+				&& (decl.declaredType().startsWith("*[") || decl.declaredType().startsWith("*mut ["));
+		return isArrayPointerType && CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation);
 	}
 
 	private static java.util.Map<String, String> buildCapturedVariablesMap(String varName, String valueExpr,
@@ -429,7 +448,7 @@ public final class LetBindingProcessor {
 		if (isFunctionReferenceBinding) {
 			capturedVariables.put(varName, valueExpr);
 		} else {
-			Result<String, CompileError> varTypeResult = ExpressionTokens.extractTypeFromExpression(valueExpr,
+			var varTypeResult = ExpressionTokens.extractTypeFromExpression(valueExpr,
 					new java.util.HashMap<>());
 			if (varTypeResult instanceof Result.Ok<String, CompileError> ok) {
 				capturedVariables.put(varName, ok.value());
@@ -444,9 +463,9 @@ public final class LetBindingProcessor {
 		// Handle: ref : *[I32] = &array; ref[0]
 		// When a pointer to an array is indexed, we replace ref[index] with memory load
 		// operations
-		String valueExpr = decl.valueExpr().trim();
+		var valueExpr = decl.valueExpr().trim();
 		// If it's &array or &mut array, extract what's being referenced
-		String referencedValue = valueExpr;
+		var referencedValue = valueExpr;
 		if (valueExpr.startsWith("&mut ")) {
 			referencedValue = valueExpr.substring(5).trim();
 		} else if (valueExpr.startsWith("&")) {
@@ -465,15 +484,15 @@ public final class LetBindingProcessor {
 			// Not an array, can't index
 			return Result.err(new CompileError("Cannot index non-array value: " + referencedValue));
 		}
-		String inner = referencedValue.substring(1, referencedValue.length() - 1).trim();
-		java.util.List<String> arrayElements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
+		var inner = referencedValue.substring(1, referencedValue.length() - 1).trim();
+		var arrayElements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
 		// Replace all ref[index] with the corresponding array element
-		String substitutedContinuation = continuation;
-		for (int i = 0; i < arrayElements.size(); i++) {
-			String pattern = "\\b" + java.util.regex.Pattern.quote(varName) + "\\[" + i + "\\]";
+		var substitutedContinuation = continuation;
+		for (var i = 0; i < arrayElements.size(); i++) {
+			var pattern = "\\b" + java.util.regex.Pattern.quote(varName) + "\\[" + i + "\\]";
 			substitutedContinuation = substitutedContinuation.replaceAll(pattern, "(" + arrayElements.get(i).trim() + ")");
 		}
-		Result<ExpressionModel.ExpressionResult, CompileError> contResult = io.github.sirmathhman.tuff.App
+		var contResult = io.github.sirmathhman.tuff.App
 				.parseExpressionWithRead(substitutedContinuation, functionRegistry);
 		return contResult.match(expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions),
 				Result::err);
@@ -485,11 +504,11 @@ public final class LetBindingProcessor {
 			return Result.ok(null);
 		}
 		java.util.Map<String, String> typeContext = new java.util.HashMap<>();
-		Result<String, CompileError> boundVarTypeResult = ExpressionTokens.extractTypeFromExpression(valueExpr,
+		var boundVarTypeResult = ExpressionTokens.extractTypeFromExpression(valueExpr,
 				typeContext);
 		return boundVarTypeResult.match(boundVarType -> {
 			typeContext.put(varName, boundVarType);
-			Result<String, CompileError> contTypeResult = ExpressionTokens.extractTypeFromExpression(continuation,
+			var contTypeResult = ExpressionTokens.extractTypeFromExpression(continuation,
 					typeContext);
 			if (contTypeResult instanceof Result.Err<String, CompileError> contTypeErr) {
 				return Result.err(contTypeErr.error());

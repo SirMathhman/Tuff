@@ -15,27 +15,27 @@ import java.util.regex.Pattern;
 /**
  * Compiles tree-recursive functions (like Fibonacci) using memory as a call
  * stack.
- * 
+ * <p>
  * Memory layout:
  * - Addresses 0-499: Instructions
  * - Address 500: Stack pointer value (SP)
  * - Address 501: Temp for indirect jumps (JUMP_TEMP)
  * - Addresses 600-999: Stack (grows downward from 999)
- * 
+ * <p>
  * Stack frame layout (3 words, grows downward):
  * - [frame]: Return address (lower address)
  * - [frame+1]: Saved n
  * - [frame+2]: First recursive result (higher address)
- * 
+ * <p>
  * Push: decrement SP, then store (SP points to last used slot)
  * Pop: read from [SP], then increment SP
- * 
+ * <p>
  * Registers:
  * - reg[0]: Return value / temp
  * - reg[1]: Current parameter n
  * - reg[2]: Temp for arithmetic
  * - reg[3]: Scratch
- * 
+ * <p>
  * IMPORTANT: VM IndirectAddress uses memory[memory[addr]], not
  * memory[register].
  * So we store SP at address 500 and use 500 as the indirect address.
@@ -46,23 +46,7 @@ public final class TreeRecursionCompiler {
 	private static final long SP_ADDR = 500L;
 	private static final long JUMP_TEMP = 501L;
 
-	private static final class Spec {
-		private final long initialArg;
-		private final long threshold;
-		private final long baseValue;
-		private final long firstOff;
-		private final long secondOff;
-		private final String operator;
-
-		private Spec(long initialArg, long threshold, long baseValue, long firstOff, long secondOff, String operator) {
-			this.initialArg = initialArg;
-			this.threshold = threshold;
-			this.baseValue = baseValue;
-			this.firstOff = firstOff;
-			this.secondOff = secondOff;
-			this.operator = operator;
-		}
-	}
+	private record Spec(long initialArg, long threshold, long baseValue, long firstOff, long secondOff, String operator) {}
 
 	private static final class CompileState {
 		private final List<Instruction> code = new ArrayList<>();
@@ -94,12 +78,12 @@ public final class TreeRecursionCompiler {
 			return null;
 		}
 
-		String paramName = funcDef.params().get(0).name();
-		String funcName = funcDef.name();
-		String body = funcDef.body().trim();
+		var paramName = funcDef.params().get(0).name();
+		var funcName = funcDef.name();
+		var body = funcDef.body().trim();
 
 		// Pattern: if (n <= THRESHOLD) BASE else funcName(n - A) OP funcName(n - B)
-		Pattern p = Pattern.compile(
+		var p = Pattern.compile(
 				"if\\s*\\(\\s*" + Pattern.quote(paramName) + "\\s*<=\\s*(\\d+)\\s*\\)\\s*"
 						+ "(\\d+)\\s+else\\s+"
 						+ Pattern.quote(funcName) + "\\s*\\(\\s*" + Pattern.quote(paramName)
@@ -108,16 +92,16 @@ public final class TreeRecursionCompiler {
 						+ Pattern.quote(funcName) + "\\s*\\(\\s*" + Pattern.quote(paramName)
 						+ "\\s*-\\s*(\\d+)\\s*\\)");
 
-		Matcher m = p.matcher(body);
+		var m = p.matcher(body);
 		if (!m.find()) {
 			return null;
 		}
 
-		long threshold = Long.parseLong(m.group(1));
-		long baseValue = Long.parseLong(m.group(2));
-		long firstOffset = Long.parseLong(m.group(3));
-		String operator = m.group(4);
-		long secondOffset = Long.parseLong(m.group(5));
+		var threshold = Long.parseLong(m.group(1));
+		var baseValue = Long.parseLong(m.group(2));
+		var firstOffset = Long.parseLong(m.group(3));
+		var operator = m.group(4);
+		var secondOffset = Long.parseLong(m.group(5));
 
 		long initialArg;
 		try {
@@ -126,12 +110,12 @@ public final class TreeRecursionCompiler {
 			return Result.err(new CompileError("Tree recursion arg must be literal: " + callArgs));
 		}
 
-		Spec spec = new Spec(initialArg, threshold, baseValue, firstOffset, secondOffset, operator);
+		var spec = new Spec(initialArg, threshold, baseValue, firstOffset, secondOffset, operator);
 		return compile(spec, instructions);
 	}
 
 	private static Result<Void, CompileError> compile(Spec spec, List<Instruction> instructions) {
-		CompileState st = new CompileState();
+		var st = new CompileState();
 		emitInit(st, spec);
 		emitFuncStartAndFirstCall(st, spec);
 		emitAfterFirstAndSecondCall(st, spec);
@@ -211,7 +195,7 @@ public final class TreeRecursionCompiler {
 		addDecrementSP(st.code);
 		addDecrementSP(st.code);
 
-		Operation combineOp = mapOp(spec.operator);
+		var combineOp = mapOp(spec.operator);
 		st.code.add(insn(combineOp, Variant.Immediate, 0, 2L));
 
 		// Return to ret addr at [SP] without popping current frame (caller will pop)
@@ -261,7 +245,7 @@ public final class TreeRecursionCompiler {
 		addDecrementSP(code);
 		code.add(insn(Operation.Store, Variant.IndirectAddress, 1, SP_ADDR));
 		addDecrementSP(code);
-		int patchIndex = code.size();
+		var patchIndex = code.size();
 		code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
 		code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
 		return patchIndex;

@@ -96,20 +96,20 @@ public final class ArrayFieldAccessBase {
 	 * which part of the array type to extract (init=1, length=2).
 	 */
 	public static Result<Void, CompileError> handleArrayFieldAccess(Context ctx) {
-		String declaredType = ctx.decl.declaredType();
+		var declaredType = ctx.decl.declaredType();
 
 		// If no explicit type, try to infer from value expression
 		if (declaredType == null) {
-			String valueExpr = ctx.decl.valueExpr().trim();
+			var valueExpr = ctx.decl.valueExpr().trim();
 			if (valueExpr.startsWith("&")) {
 				// It's a reference - extract the referenced variable
-				String refName = valueExpr.substring(1).trim();
+				var refName = valueExpr.substring(1).trim();
 				if (refName.startsWith("mut ")) {
 					refName = refName.substring(4).trim();
 				}
 				// Look up the type of the referenced variable
-				Map<String, String> knownTypes = LetBindingProcessor.getVariableTypes();
-				String refType = knownTypes.get(refName);
+				var knownTypes = LetBindingProcessor.getVariableTypes();
+				var refType = knownTypes.get(refName);
 				if (refType != null) {
 					// Reference type is *<original type>
 					declaredType = "*" + refType;
@@ -123,7 +123,7 @@ public final class ArrayFieldAccessBase {
 
 		// Handle both direct array types [Type; InitCount; TotalCount] and pointer
 		// types
-		String arrayTypeStr = declaredType;
+		var arrayTypeStr = declaredType;
 		if (declaredType.startsWith("*")) {
 			arrayTypeStr = declaredType.substring(1).trim();
 			if (arrayTypeStr.startsWith("mut ")) {
@@ -136,14 +136,14 @@ public final class ArrayFieldAccessBase {
 		}
 
 		// Extract the array type format: [Type; InitCount; TotalCount]
-		String inner = arrayTypeStr.substring(1, arrayTypeStr.length() - 1).trim();
-		List<String> parts = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ';');
+		var inner = arrayTypeStr.substring(1, arrayTypeStr.length() - 1).trim();
+		var parts = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ';');
 		if (parts.size() != 3) {
 			return null;
 		}
 
 		// Extract the value using the provided function
-		String fieldValue = ctx.extractor.apply(parts, ctx.fieldName);
+		var fieldValue = ctx.extractor.apply(parts, ctx.fieldName);
 		if (fieldValue == null) {
 			return Result.err(new CompileError("Invalid array " + ctx.fieldName + ": could not extract"));
 		}
@@ -152,13 +152,13 @@ public final class ArrayFieldAccessBase {
 		LetBindingProcessor.getVariableTypes().put(ctx.varName, declaredType);
 
 		// Replace all occurrences of varName.fieldName with the field value
-		String result = ctx.continuation.replaceAll(
+		var result = ctx.continuation.replaceAll(
 				"\\b" + java.util.regex.Pattern.quote(ctx.varName) + "\\." + ctx.fieldName + "\\b",
 				fieldValue);
 
 		// Parse the substituted continuation
-		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App.parseExpressionWithRead(result,
-				ctx.functionRegistry);
+		var contResult = App.parseExpressionWithRead(result,
+																								 ctx.functionRegistry);
 		return contResult.match(expr -> App.generateInstructions(expr, ctx.instructions), Result::err);
 	}
 }

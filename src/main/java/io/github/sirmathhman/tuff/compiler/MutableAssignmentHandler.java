@@ -25,26 +25,26 @@ public final class MutableAssignmentHandler {
 			boolean isUninitialized,
 			boolean isMutableUninitialized,
 			AssignmentContext ctx) {
-		List<Instruction> instructions = ctx.instructions();
-		int nextMemAddr = ctx.nextMemAddr();
-		String remaining = continuation;
-		int assignmentCount = 0;
+		var instructions = ctx.instructions();
+		var nextMemAddr = ctx.nextMemAddr();
+		var remaining = continuation;
+		var assignmentCount = 0;
 		while (true) {
-			Result<LetBindingHandler.AssignmentParseResult, CompileError> assignResult = LetBindingHandler
+			var assignResult = LetBindingHandler
 					.parseAssignment(varName, remaining);
 			if (!(assignResult instanceof Result.Ok<LetBindingHandler.AssignmentParseResult, CompileError> assignOk)) {
 				break; // No more assignments
 			}
 
-			LetBindingHandler.AssignmentParseResult parsed = assignOk.value();
-			Result<Void, CompileError> validationResult = validateUninitializedAssignment(isUninitialized,
-					varName, assignmentCount, isMutableUninitialized);
+			var parsed = assignOk.value();
+			var validationResult = validateUninitializedAssignment(isUninitialized,
+																														 varName, assignmentCount, isMutableUninitialized);
 			if (validationResult instanceof Result.Err<Void, CompileError>)
 				return validationResult;
 			assignmentCount++;
 
 			if (parsed.isDereference()) {
-				Result<Void, CompileError> parseResult = parseAndEvaluateExpression(parsed.valueExpr(), instructions);
+				var parseResult = parseAndEvaluateExpression(parsed.valueExpr(), instructions);
 				if (parseResult instanceof Result.Err<Void, CompileError>)
 					return parseResult;
 				instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) nextMemAddr));

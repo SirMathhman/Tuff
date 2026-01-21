@@ -11,9 +11,9 @@
 	</module>
 
 	<module name="TreeWalker">
-		<!-- Enforce maximum method length of 55 lines (increased for complex parsing methods) -->
+		<!-- Enforce maximum method length of 50 lines -->
 		<module name="MethodLength">
-			<property name="max" value="55" />
+			<property name="max" value="50" />
 			<property name="countEmpty" value="false" />
 			<property name="tokens" value="METHOD_DEF,COMPACT_CTOR_DEF" />
 		</module>

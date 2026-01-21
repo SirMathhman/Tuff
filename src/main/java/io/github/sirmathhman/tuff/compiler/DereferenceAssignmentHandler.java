@@ -23,7 +23,7 @@ public final class DereferenceAssignmentHandler {
 			Map<String, Integer> variableAddresses) {
 		// For dereference assignments, the initialValueExpr should be a reference like
 		// &mut x
-		String refTarget = extractReferenceTarget(initialValueExpr);
+		var refTarget = extractReferenceTarget(initialValueExpr);
 		if (refTarget == null) {
 			return Result.err(new CompileError("Invalid reference expression: " + initialValueExpr));
 		}
@@ -42,17 +42,17 @@ public final class DereferenceAssignmentHandler {
 		addresses.put(varName, referencedAddr);
 
 		// Parse the dereference assignment
-		Result<DereferenceAssignmentParseResult, CompileError> parseResult = parse(varName, continuation);
+		var parseResult = parse(varName, continuation);
 		if (parseResult instanceof Result.Err<DereferenceAssignmentParseResult, CompileError> err) {
 			return Result.err(err.error());
 		}
 		if (!(parseResult instanceof Result.Ok<DereferenceAssignmentParseResult, CompileError> ok)) {
 			return Result.err(new CompileError("Internal error: expected Ok or Err parsing dereference assignment"));
 		}
-		DereferenceAssignmentParseResult parsed = ok.value();
+		var parsed = ok.value();
 
 		// Parse and evaluate assignment value
-		Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(
+		var exprResult = App.parseExpressionWithRead(
 				parsed.valueExpr());
 		if (exprResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> exprErr) {
 			return Result.err(exprErr.error());
@@ -62,7 +62,7 @@ public final class DereferenceAssignmentHandler {
 		}
 
 		// Generate instructions for assignment value
-		Result<Void, CompileError> assignGenResult = App.generateInstructions(exprOk.value(), instructions);
+		var assignGenResult = App.generateInstructions(exprOk.value(), instructions);
 		if (assignGenResult instanceof Result.Err<Void, CompileError>) {
 			return assignGenResult;
 		}
@@ -71,7 +71,7 @@ public final class DereferenceAssignmentHandler {
 		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) referencedAddr));
 
 		// Handle the remaining continuation
-		String remaining = parsed.remaining();
+		var remaining = parsed.remaining();
 		if (remaining.isEmpty()) {
 			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 			return Result.ok(null);
@@ -89,44 +89,47 @@ public final class DereferenceAssignmentHandler {
 	private static Result<DereferenceAssignmentParseResult, CompileError> parse(String varName,
 			String continuation) {
 		// Pattern: *varName = value; remaining
-		String trimmed = continuation.trim();
-		String assignTarget = "*" + varName;
+		var trimmed = continuation.trim();
+		var assignTarget = "*" + varName;
 
 		if (!trimmed.startsWith(assignTarget + " ") && !trimmed.startsWith(assignTarget + "=")) {
 			return Result.err(new CompileError("Invalid dereference assignment"));
 		}
 
-		int assignEqIndex = continuation.indexOf('=');
+		var assignEqIndex = continuation.indexOf('=');
 		if (assignEqIndex == -1 || !continuation.substring(0, assignEqIndex).trim().equals(assignTarget)) {
 			return Result.err(new CompileError("Invalid dereference assignment"));
 		}
 
 		// Find semicolon with depth tracking for nested structures
-		int assignSemiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(continuation, assignEqIndex);
+		var assignSemiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(continuation, assignEqIndex);
 		if (assignSemiIndex == -1) {
 			return Result.err(new CompileError("Invalid dereference assignment: missing ';'"));
 		}
 
 		// Extract assignment value expression and remaining continuation
-		String valueExpr = continuation.substring(assignEqIndex + 1, assignSemiIndex).trim();
-		String remaining = continuation.substring(assignSemiIndex + 1).trim();
+		var valueExpr = continuation.substring(assignEqIndex + 1, assignSemiIndex).trim();
+		var remaining = continuation.substring(assignSemiIndex + 1).trim();
 
 		return Result.ok(new DereferenceAssignmentParseResult(valueExpr, remaining));
 	}
 
 	public static String extractReferenceTarget(String refExpr) {
 		// Extract variable name from expressions like "&x", "&mut x"
-		String trimmed = refExpr.trim();
+		var trimmed = refExpr.trim();
 		if (!trimmed.startsWith("&")) {
 			return null;
 		}
-		String afterAmp = trimmed.substring(1).trim();
+		var afterAmp = trimmed.substring(1).trim();
 		if (afterAmp.startsWith("mut ")) {
 			afterAmp = afterAmp.substring(4).trim();
 		}
 		// Extract the variable name (first word)
-		int spaceIndex = afterAmp.indexOf(' ');
-		return spaceIndex > 0 ? afterAmp.substring(0, spaceIndex) : (afterAmp.isEmpty() ? null : afterAmp);
+		var spaceIndex = afterAmp.indexOf(' ');
+		if (spaceIndex > 0) {return afterAmp.substring(0, spaceIndex);} else {
+			if (afterAmp.isEmpty()) return null;
+			return afterAmp;
+		}
 	}
 
 	private record DereferenceAssignmentParseResult(String valueExpr, String remaining) {

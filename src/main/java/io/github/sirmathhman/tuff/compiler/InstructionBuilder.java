@@ -13,8 +13,8 @@ public final class InstructionBuilder {
 	}
 
 	public static void loadAllReads(List<ExpressionModel.ExpressionTerm> terms, List<Instruction> instructions) {
-		int nextReg = 0;
-		for (ExpressionModel.ExpressionTerm term : terms) {
+		var nextReg = 0;
+		for (var term : terms) {
 			if (term.readCount > 0) {
 				instructions.add(new Instruction(Operation.In, Variant.Immediate, nextReg, null));
 				if (term.isBitwiseNotted()) {
@@ -31,19 +31,19 @@ public final class InstructionBuilder {
 	public static int buildResultWithPrecedence(List<ExpressionModel.ExpressionTerm> terms,
 			List<Instruction> instructions) {
 		// Check for conditional markers
-		ConditionalMarkers markers = findConditionalMarkers(terms);
+		var markers = findConditionalMarkers(terms);
 		if (markers.hasConditional()) {
 			return buildConditionalExpression(terms, markers, instructions);
 		}
 
 		// Check for type-check marker (is operator)
-		int typeCheckIdx = findTypeCheckMarkerIndex(terms);
+		var typeCheckIdx = findTypeCheckMarkerIndex(terms);
 		if (typeCheckIdx != -1) {
 			return buildTypeCheckExpression(terms, typeCheckIdx, instructions);
 		}
 
 		// Check for comparison marker
-		int markerIdx = findComparisonMarkerIndex(terms);
+		var markerIdx = findComparisonMarkerIndex(terms);
 		if (markerIdx != -1) {
 			return buildComparisonExpression(terms, markerIdx, instructions);
 		}
@@ -52,11 +52,11 @@ public final class InstructionBuilder {
 	}
 
 	private static ConditionalMarkers findConditionalMarkers(List<ExpressionModel.ExpressionTerm> terms) {
-		int branchIdx = -1;
-		int elseIdx = -1;
+		var branchIdx = -1;
+		var elseIdx = -1;
 		long trueLiteral = 0;
 		long falseLiteral = 0;
-		for (int j = 0; j < terms.size(); j++) {
+		for (var j = 0; j < terms.size(); j++) {
 			if (terms.get(j).readCount == -3 && branchIdx == -1) {
 				branchIdx = j;
 				trueLiteral = terms.get(j).value;
@@ -73,8 +73,8 @@ public final class InstructionBuilder {
 	private static int buildConditionalExpression(List<ExpressionModel.ExpressionTerm> terms,
 			ConditionalMarkers markers, List<Instruction> instructions) {
 		// Check if this has nested conditionals (multiple -3 markers)
-		int nestedConditionalCount = 0;
-		for (ExpressionModel.ExpressionTerm t : terms) {
+		var nestedConditionalCount = 0;
+		for (var t : terms) {
 			if (t.readCount == -3)
 				nestedConditionalCount++;
 		}
@@ -83,7 +83,7 @@ public final class InstructionBuilder {
 			return buildConditionalExpression(terms, markers, instructions);
 		}
 
-		List<ExpressionModel.ExpressionTerm> condTerms = terms.subList(0, markers.branchIdx);
+		var condTerms = terms.subList(0, markers.branchIdx);
 		// If the condition is a literal-only value (e.g., true/false), load it
 		// directly.
 		if (!(condTerms.size() == 1 && condTerms.get(0).readCount == 0
@@ -93,29 +93,29 @@ public final class InstructionBuilder {
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, condTerms.get(0).value));
 		}
 
-		final int formulaReg = 1;
-		final int trueValueReg = 2;
-		final int falseValueReg = 3;
+		final var formulaReg = 1;
+		final var trueValueReg = 2;
+		final var falseValueReg = 3;
 
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, trueValueReg, markers.trueLiteral));
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, falseValueReg, markers.falseLiteral));
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, formulaReg, -1L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, formulaReg, 0L));
 
-		int elseJumpIdx = instructions.size();
+		var elseJumpIdx = instructions.size();
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, null));
 
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, 0L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) trueValueReg));
 
-		int trueJumpIdx = instructions.size();
+		var trueJumpIdx = instructions.size();
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, null));
 
-		int elseBodyIdx = instructions.size();
+		var elseBodyIdx = instructions.size();
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, 0L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) falseValueReg));
 
-		int endIdx = instructions.size();
+		var endIdx = instructions.size();
 		instructions.set(elseJumpIdx,
 				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, (long) elseBodyIdx));
 		instructions.set(trueJumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endIdx));
@@ -124,7 +124,7 @@ public final class InstructionBuilder {
 	}
 
 	private static int findComparisonMarkerIndex(List<ExpressionModel.ExpressionTerm> terms) {
-		for (int j = 0; j < terms.size(); j++) {
+		for (var j = 0; j < terms.size(); j++) {
 			if (terms.get(j).readCount == -1) {
 				return j;
 			}
@@ -133,7 +133,7 @@ public final class InstructionBuilder {
 	}
 
 	private static int findTypeCheckMarkerIndex(List<ExpressionModel.ExpressionTerm> terms) {
-		for (int j = 0; j < terms.size(); j++) {
+		for (var j = 0; j < terms.size(); j++) {
 			if (terms.get(j).readCount == -5) {
 				return j;
 			}
@@ -143,14 +143,22 @@ public final class InstructionBuilder {
 
 	private static int buildComparisonExpression(List<ExpressionModel.ExpressionTerm> terms, int markerIdx,
 			List<Instruction> instructions) {
-		ExpressionModel.ExpressionTerm marker = terms.get(markerIdx);
-		List<ExpressionModel.ExpressionTerm> leftTerms = terms.subList(0, markerIdx);
-		List<ExpressionModel.ExpressionTerm> rightTerms = terms.subList(markerIdx + 1, terms.size());
+		var marker = terms.get(markerIdx);
+		var leftTerms = terms.subList(0, markerIdx);
+		var rightTerms = terms.subList(markerIdx + 1, terms.size());
 
-		int leftResult = leftTerms.isEmpty() ? -1 : buildSubExpressionResult(leftTerms, 0, instructions);
-		int rightResult = rightTerms.isEmpty() ? -1
-				: buildSubExpressionResult(rightTerms,
-						(int) leftTerms.stream().filter(t -> t.readCount > 0).count(), instructions);
+		int leftResult;
+		if (leftTerms.isEmpty())
+			leftResult = -1;
+		else
+			leftResult = buildSubExpressionResult(leftTerms, 0, instructions);
+		int rightResult;
+		if (rightTerms.isEmpty())
+			rightResult = -1;
+		else
+			rightResult = buildSubExpressionResult(rightTerms,
+					(int) leftTerms.stream().filter(t -> t.readCount > 0).count(),
+					instructions);
 
 		if (leftResult != -1 && rightResult != -1) {
 			generateComparisonOperation(marker.value, leftResult, rightResult, instructions);
@@ -161,11 +169,11 @@ public final class InstructionBuilder {
 
 	private static void generateComparisonOperation(long markerValue, int leftResult,
 			int rightResult, List<Instruction> instructions) {
-		boolean isInequality = markerValue == 1;
-		boolean isLessThan = markerValue == 2;
-		boolean isGreaterThan = markerValue == 3;
-		boolean isLessOrEqual = markerValue == 4;
-		boolean isGreaterOrEqual = markerValue == 5;
+		var isInequality = markerValue == 1;
+		var isLessThan = markerValue == 2;
+		var isGreaterThan = markerValue == 3;
+		var isLessOrEqual = markerValue == 4;
+		var isGreaterOrEqual = markerValue == 5;
 
 		if (isLessThan) {
 			instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, leftResult, (long) rightResult));
@@ -187,7 +195,7 @@ public final class InstructionBuilder {
 	private static void generateCompoundComparison(int leftResult, int rightResult, Operation comparisonOp,
 			List<Instruction> instructions) {
 		// For compound comparisons: (a op b) OR (a == b)
-		int tempReg = rightResult + 1;
+		var tempReg = rightResult + 1;
 		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, leftResult, 0L));
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, tempReg, 0L));
 		instructions.add(new Instruction(comparisonOp, Variant.Immediate, tempReg, (long) rightResult));
@@ -197,9 +205,13 @@ public final class InstructionBuilder {
 
 	private static int buildTypeCheckExpression(List<ExpressionModel.ExpressionTerm> terms, int markerIdx,
 			List<Instruction> instructions) {
-		List<ExpressionModel.ExpressionTerm> valueTerms = terms.subList(0, markerIdx);
+		var valueTerms = terms.subList(0, markerIdx);
 
-		int valueResult = valueTerms.isEmpty() ? -1 : buildSubExpressionResult(valueTerms, 0, instructions);
+		int valueResult;
+		if (valueTerms.isEmpty())
+			valueResult = -1;
+		else
+			valueResult = buildSubExpressionResult(valueTerms, 0, instructions);
 
 		if (valueResult != -1) {
 			// For now, always return 1 (true) as type check result
@@ -213,14 +225,14 @@ public final class InstructionBuilder {
 
 	private static int buildSubExpressionResult(List<ExpressionModel.ExpressionTerm> terms, int startReg,
 			List<Instruction> instructions) {
-		BuildContext ctx = new BuildContext(terms, instructions);
-		int readRegIndex = startReg;
-		int resultReg = startReg;
-		boolean firstAdditiveGroup = true;
+		var ctx = new BuildContext(terms, instructions);
+		var readRegIndex = startReg;
+		var resultReg = startReg;
+		var firstAdditiveGroup = true;
 
-		int i = 0;
+		var i = 0;
 		while (i < terms.size()) {
-			ExpressionModel.ExpressionTerm term = terms.get(i);
+			var term = terms.get(i);
 			if (term.readCount == 0 || term.readCount == -1) {
 				i++;
 				continue;
@@ -238,7 +250,7 @@ public final class InstructionBuilder {
 			}
 
 			// Process the current additive/multiplicative group
-			ProcessGroupResult groupResult = processMultiplicativeGroup(ctx, i, readRegIndex, firstAdditiveGroup,
+			var groupResult = processMultiplicativeGroup(ctx, i, readRegIndex, firstAdditiveGroup,
 					resultReg);
 			resultReg = groupResult.resultReg;
 			readRegIndex = groupResult.readRegIndex;
@@ -247,7 +259,7 @@ public final class InstructionBuilder {
 
 			// Check for logical AND boundary (higher precedence than OR)
 			if (groupResult.hasLogicalAndBoundary) {
-				ProcessAndResult andResult = processLogicalAndBoundary(ctx, i, readRegIndex, resultReg);
+				var andResult = processLogicalAndBoundary(ctx, i, readRegIndex, resultReg);
 				resultReg = andResult.resultReg;
 				readRegIndex = andResult.readRegIndex;
 				i = andResult.nextIndex;
@@ -255,7 +267,7 @@ public final class InstructionBuilder {
 
 			// Check for logical OR boundary
 			if (groupResult.hasLogicalOrBoundary) {
-				ProcessOrResult orResult = processLogicalOrBoundary(ctx, i, readRegIndex, resultReg);
+				var orResult = processLogicalOrBoundary(ctx, i, readRegIndex, resultReg);
 				resultReg = orResult.resultReg;
 				readRegIndex = orResult.readRegIndex;
 				i = orResult.nextIndex;
@@ -269,28 +281,31 @@ public final class InstructionBuilder {
 
 	private static ProcessGroupResult processMultiplicativeGroup(BuildContext ctx, int i,
 			int readRegIndex, boolean firstAdditiveGroup, int resultReg) {
-		List<ExpressionModel.ExpressionTerm> terms = ctx.terms();
-		List<Instruction> instructions = ctx.instructions();
-		ExpressionModel.ExpressionTerm term = terms.get(i);
+		var terms = ctx.terms();
+		var instructions = ctx.instructions();
+		var term = terms.get(i);
 
 		// Collect this multiplicative/divisive/bitwise group
 		java.util.List<Integer> groupRegs = new java.util.ArrayList<>();
 		java.util.List<Character> groupOps = new java.util.ArrayList<>();
 		groupRegs.add(readRegIndex);
 		groupOps.add('\0'); // No operator for first term
-		boolean isSubtracted = term.isSubtracted();
+		var isSubtracted = term.isSubtracted();
 		readRegIndex++;
 
 		// Consume all multiplied/divided/bitwise-anded terms that follow
 		while (isMultiplicativeNext(terms, i) && !terms.get(i).isParenthesizedGroupEnd()) {
 			i++;
-			ExpressionModel.ExpressionTerm nextTerm = terms.get(i);
+			var nextTerm = terms.get(i);
 			groupRegs.add(readRegIndex);
 			// Use the actual operator char stored in the term
-			char op = nextTerm.multiplicativeOperator;
+			var op = nextTerm.multiplicativeOperator;
 			if (op == '\0') {
 				// No operator stored - infer from flags (backward compatibility)
-				op = nextTerm.isDivided() ? '/' : '*';
+				if (nextTerm.isDivided())
+					op = '/';
+				else
+					op = '*';
 			}
 			groupOps.add(op);
 			readRegIndex++;
@@ -300,8 +315,8 @@ public final class InstructionBuilder {
 		resultReg = processAdditiveGroup(groupRegs, groupOps, isSubtracted,
 				new AdditiveGroupState(firstAdditiveGroup, resultReg, instructions));
 
-		boolean hasLogicalOrBoundary = term.isLogicalOrBoundary();
-		boolean hasLogicalAndBoundary = term.isLogicalAndBoundary();
+		var hasLogicalOrBoundary = term.isLogicalOrBoundary();
+		var hasLogicalAndBoundary = term.isLogicalAndBoundary();
 		return new ProcessGroupResult(resultReg, readRegIndex, i, hasLogicalOrBoundary, hasLogicalAndBoundary);
 	}
 
@@ -312,21 +327,20 @@ public final class InstructionBuilder {
 
 	private static ProcessAndResult processLogicalAndBoundary(BuildContext ctx, int i,
 			int readRegIndex, int resultReg) {
-		ProcessOrResult result = processLogicalBoundary(ctx, i, readRegIndex, resultReg, Operation.LogicalAnd);
+		var result = processLogicalBoundary(ctx, i, readRegIndex, resultReg, Operation.LogicalAnd);
 		return new ProcessAndResult(result.resultReg, result.readRegIndex, result.nextIndex);
 	}
 
 	private static ProcessOrResult processLogicalBoundary(BuildContext ctx, int i,
 			int readRegIndex, int resultReg, Operation logicalOp) {
-		List<ExpressionModel.ExpressionTerm> terms = ctx.terms();
-		List<Instruction> instructions = ctx.instructions();
-		i++;
-		while (i < terms.size() && terms.get(i).readCount == 0) {
+		var terms = ctx.terms();
+		var instructions = ctx.instructions();
+		do {
 			i++;
-		}
+		} while (i < terms.size() && terms.get(i).readCount == 0);
 
 		if (i < terms.size()) {
-			int nextGroupReg = readRegIndex;
+			var nextGroupReg = readRegIndex;
 			readRegIndex++;
 
 			// Consume multiplicative/divisive terms and generate instructions
@@ -353,10 +367,11 @@ public final class InstructionBuilder {
 			int readRegIndex, int destReg, List<Instruction> instructions) {
 		while (isMultiplicativeNext(terms, i)) {
 			i++;
-			ExpressionModel.ExpressionTerm multTerm = terms.get(i);
-			instructions.add(new Instruction(
-					multTerm.isDivided() ? Operation.Div : Operation.Mul, Variant.Immediate, destReg,
-					(long) readRegIndex));
+			var multTerm = terms.get(i);
+			if (multTerm.isDivided())
+				instructions.add(new Instruction(Operation.Div, Variant.Immediate, destReg, (long) readRegIndex));
+			else
+				instructions.add(new Instruction(Operation.Mul, Variant.Immediate, destReg, (long) readRegIndex));
 			readRegIndex++;
 		}
 		return readRegIndex;
@@ -390,16 +405,20 @@ public final class InstructionBuilder {
 
 	private static int processAdditiveGroup(java.util.List<Integer> groupRegs, java.util.List<Character> groupOps,
 			boolean isSubtracted, AdditiveGroupState state) {
-		boolean firstAdditiveGroup = state.firstAdditiveGroup();
-		int resultReg = state.resultReg();
-		List<Instruction> instructions = state.instructions();
+		var firstAdditiveGroup = state.firstAdditiveGroup();
+		var resultReg = state.resultReg();
+		var instructions = state.instructions();
 		if (groupRegs.size() == 1) {
 			// Single read in this group
 			if (firstAdditiveGroup) {
 				return groupRegs.get(0);
 			} else {
 				// Add or subtract to result
-				Operation op = isSubtracted ? Operation.Sub : Operation.Add;
+				Operation op;
+				if (isSubtracted)
+					op = Operation.Sub;
+				else
+					op = Operation.Add;
 				instructions.add(new Instruction(op, Variant.Immediate, resultReg, (long) groupRegs.get(0)));
 				return resultReg;
 			}
@@ -407,7 +426,7 @@ public final class InstructionBuilder {
 			// Multiple reads: perform multiplications, divisions, and bitwise operations
 			int groupResultReg = groupRegs.get(0);
 			for (int j = 1; j < groupRegs.size(); j++) {
-				Operation op = switch (groupOps.get(j)) {
+				var op = switch (groupOps.get(j)) {
 					case '/' -> Operation.Div;
 					case '&' -> Operation.BitsAnd;
 					case '|' -> Operation.BitsOr;
@@ -423,7 +442,11 @@ public final class InstructionBuilder {
 			if (firstAdditiveGroup) {
 				return groupResultReg;
 			} else {
-				Operation op = isSubtracted ? Operation.Sub : Operation.Add;
+				Operation op;
+				if (isSubtracted)
+					op = Operation.Sub;
+				else
+					op = Operation.Add;
 				instructions.add(new Instruction(op, Variant.Immediate, resultReg, (long) groupResultReg));
 				return resultReg;
 			}
@@ -433,8 +456,8 @@ public final class InstructionBuilder {
 	public static void addLiteralToResult(int resultReg, long literalValue, int termCount,
 			List<Instruction> instructions) {
 		// Count how many reads we have to determine next register
-		int literalReg = 0;
-		for (Instruction inst : instructions) {
+		var literalReg = 0;
+		for (var inst : instructions) {
 			if (inst.operation() == Operation.In) {
 				literalReg++;
 			}
@@ -442,7 +465,7 @@ public final class InstructionBuilder {
 		// VM has only 4 registers; also avoid clobbering resultReg.
 		literalReg = literalReg & 3;
 		if (literalReg == resultReg) {
-			for (int candidate = 0; candidate < 4; candidate++) {
+			for (var candidate = 0; candidate < 4; candidate++) {
 				if (candidate != resultReg) {
 					literalReg = candidate;
 					break;

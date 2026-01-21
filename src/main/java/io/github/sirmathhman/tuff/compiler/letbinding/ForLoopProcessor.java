@@ -24,11 +24,11 @@ public final class ForLoopProcessor {
 			String continuation,
 			List<Instruction> instructions,
 			LetBindingProcessor.MutableVarContext ctx) {
-		Map<String, Integer> variableAddresses = ctx.variableAddresses();
-		int nextMemAddr = ctx.nextMemAddr();
+		var variableAddresses = ctx.variableAddresses();
+		var nextMemAddr = ctx.nextMemAddr();
 		// Store the initial value at the correct memory address
-		Result<Void, CompileError> storeResult = CompilerHelpers.parseAndStoreInMemory(initialValueExpr, instructions,
-				nextMemAddr);
+		var storeResult = CompilerHelpers.parseAndStoreInMemory(initialValueExpr, instructions,
+																														nextMemAddr);
 		if (storeResult instanceof Result.Err<Void, CompileError>)
 			return storeResult;
 
@@ -38,16 +38,16 @@ public final class ForLoopProcessor {
 
 		// Extract just the for loop part (from "for" to the first semicolon after the
 		// loop body closes)
-		int forLoopEnd = findForLoopEnd(continuation);
+		var forLoopEnd = findForLoopEnd(continuation);
 		if (forLoopEnd == -1) {
 			return Result.err(new CompileError("Malformed for loop"));
 		}
 
-		String forLoopPart = continuation.substring(0, forLoopEnd).trim();
-		String afterForLoop = continuation.substring(forLoopEnd).trim();
+		var forLoopPart = continuation.substring(0, forLoopEnd).trim();
+		var afterForLoop = continuation.substring(forLoopEnd).trim();
 
 		// Delegate to ForLoopHandler
-		Result<Void, CompileError> forLoopResult = ForLoopHandler.handleForLoop(forLoopPart, instructions, context);
+		var forLoopResult = ForLoopHandler.handleForLoop(forLoopPart, instructions, context);
 		if (forLoopResult instanceof Result.Err<Void, CompileError>) {
 			return forLoopResult;
 		}
@@ -79,13 +79,13 @@ public final class ForLoopProcessor {
 			return -1;
 		}
 
-		int parenStart = str.indexOf('(');
+		var parenStart = str.indexOf('(');
 		if (parenStart == -1)
 			return -1;
 
-		int parenDepth = 1;
-		int parenEnd = -1;
-		for (int i = parenStart + 1; i < str.length(); i++) {
+		var parenDepth = 1;
+		var parenEnd = -1;
+		for (var i = parenStart + 1; i < str.length(); i++) {
 			if (str.charAt(i) == '(')
 				parenDepth++;
 			else if (str.charAt(i) == ')')
@@ -100,7 +100,7 @@ public final class ForLoopProcessor {
 			return -1;
 
 		// Find the semicolon after the closing paren
-		int semiIdx = DepthAwareSplitter.findSemicolonAtDepthZero(str, parenEnd + 1);
+		var semiIdx = DepthAwareSplitter.findSemicolonAtDepthZero(str, parenEnd + 1);
 		if (semiIdx == -1)
 			return -1;
 

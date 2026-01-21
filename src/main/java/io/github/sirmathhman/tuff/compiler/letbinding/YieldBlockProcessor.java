@@ -22,21 +22,21 @@ public final class YieldBlockProcessor {
 			String continuation,
 			List<Instruction> instructions,
 			int storeAddr) {
-		List<String> parts = splitSemicolonsAtDepthZero(blockContent);
-		int lastIdx = lastNonEmptyIndex(parts);
+		var parts = splitSemicolonsAtDepthZero(blockContent);
+		var lastIdx = lastNonEmptyIndex(parts);
 		if (lastIdx == -1) {
 			return Result.err(new CompileError("Yield block is empty"));
 		}
 
 		List<Integer> endJumpPatchPoints = new ArrayList<>();
-		for (int i = 0; i <= lastIdx; i++) {
-			String part = parts.get(i).trim();
+		for (var i = 0; i <= lastIdx; i++) {
+			var part = parts.get(i).trim();
 			if (part.isEmpty()) {
 				continue;
 			}
-			boolean isLast = i == lastIdx;
-			Result<Void, CompileError> partResult = processYieldBlockPart(part, isLast, instructions, storeAddr,
-					endJumpPatchPoints);
+			var isLast = i == lastIdx;
+			var partResult = processYieldBlockPart(part, isLast, instructions, storeAddr,
+																						 endJumpPatchPoints);
 			if (partResult instanceof Result.Err<Void, CompileError>) {
 				return partResult;
 			}
@@ -53,9 +53,9 @@ public final class YieldBlockProcessor {
 
 	private static Result<Void, CompileError> processYieldBlockPart(String part, boolean isLast,
 			List<Instruction> instructions, int storeAddr, List<Integer> endJumpPatchPoints) {
-		String trimmed = part.trim();
+		var trimmed = part.trim();
 		if (trimmed.startsWith("yield")) {
-			Result<Void, CompileError> yieldResult = emitYieldToStore(trimmed.substring(5).trim(), instructions, storeAddr);
+			var yieldResult = emitYieldToStore(trimmed.substring(5).trim(), instructions, storeAddr);
 			if (yieldResult instanceof Result.Err<Void, CompileError>) {
 				return yieldResult;
 			}
@@ -75,34 +75,34 @@ public final class YieldBlockProcessor {
 
 	private static Result<Void, CompileError> processConditionalYieldPart(String part, boolean isLast,
 			List<Instruction> instructions, int storeAddr, List<Integer> endJumpPatchPoints) {
-		int conditionEnd = ConditionalExpressionHandler.findConditionEnd(part);
+		var conditionEnd = ConditionalExpressionHandler.findConditionEnd(part);
 		if (conditionEnd == -1) {
 			return Result.err(new CompileError("Malformed conditional in yield block: missing closing paren"));
 		}
-		String condition = part.substring(4, conditionEnd).trim();
-		String remaining = part.substring(conditionEnd + 1).trim();
+		var condition = part.substring(4, conditionEnd).trim();
+		var remaining = part.substring(conditionEnd + 1).trim();
 		if (!remaining.startsWith("yield")) {
 			return Result.err(new CompileError("Expected 'yield' after if condition in yield block"));
 		}
-		String yieldExpr = remaining.substring(5).trim();
+		var yieldExpr = remaining.substring(5).trim();
 
-		Result<Void, CompileError> condTypeResult = validateBoolCondition(condition);
+		var condTypeResult = validateBoolCondition(condition);
 		if (condTypeResult instanceof Result.Err<Void, CompileError>) {
 			return condTypeResult;
 		}
 
-		Result<Void, CompileError> genCond = generateExpression(condition, instructions);
+		var genCond = generateExpression(condition, instructions);
 		if (genCond instanceof Result.Err<Void, CompileError>) {
 			return genCond;
 		}
 
-		final int formulaReg = 1;
+		final var formulaReg = 1;
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, formulaReg, -1L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, formulaReg, 0L));
-		int skipYieldJumpIdx = instructions.size();
+		var skipYieldJumpIdx = instructions.size();
 		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, 0L));
 
-		Result<Void, CompileError> yieldResult = emitYieldToStore(yieldExpr, instructions, storeAddr);
+		var yieldResult = emitYieldToStore(yieldExpr, instructions, storeAddr);
 		if (yieldResult instanceof Result.Err<Void, CompileError>) {
 			return yieldResult;
 		}
@@ -110,14 +110,14 @@ public final class YieldBlockProcessor {
 			endJumpPatchPoints.add(addJumpPlaceholder(instructions));
 		}
 
-		int afterYieldAddr = instructions.size();
+		var afterYieldAddr = instructions.size();
 		instructions.set(skipYieldJumpIdx,
 				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, (long) afterYieldAddr));
 		return Result.ok(null);
 	}
 
 	private static Result<Void, CompileError> generateExpression(String expr, List<Instruction> instructions) {
-		Result<ExpressionModel.ExpressionResult, CompileError> result = App.parseExpressionWithRead(expr);
+		var result = App.parseExpressionWithRead(expr);
 		if (result instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> err) {
 			return Result.err(err.error());
 		}
@@ -126,26 +126,26 @@ public final class YieldBlockProcessor {
 	}
 
 	private static void patchEndJumps(List<Integer> endJumpPatchPoints, List<Instruction> instructions) {
-		int endAddr = instructions.size();
+		var endAddr = instructions.size();
 		for (int jumpIdx : endJumpPatchPoints) {
 			instructions.set(jumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endAddr));
 		}
 	}
 
 	private static int addJumpPlaceholder(List<Instruction> instructions) {
-		int idx = instructions.size();
+		var idx = instructions.size();
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
 		return idx;
 	}
 
 	private static Result<Void, CompileError> emitYieldToStore(String yieldExpr,
 			List<Instruction> instructions, int storeAddr) {
-		String expr = yieldExpr.trim();
+		var expr = yieldExpr.trim();
 		if (expr.endsWith(";")) {
 			expr = expr.substring(0, expr.length() - 1).trim();
 		}
 
-		Result<Void, CompileError> genResult = generateExpression(expr, instructions);
+		var genResult = generateExpression(expr, instructions);
 		if (genResult instanceof Result.Err<Void, CompileError>) {
 			return genResult;
 		}
@@ -154,8 +154,8 @@ public final class YieldBlockProcessor {
 	}
 
 	private static Result<Void, CompileError> validateBoolCondition(String condition) {
-		Result<String, CompileError> typeResult = ExpressionTokens.extractTypeFromExpression(condition,
-				new java.util.HashMap<>());
+		var typeResult = ExpressionTokens.extractTypeFromExpression(condition,
+																																new java.util.HashMap<>());
 		return typeResult.match(condType -> {
 			if (!condType.equals("Bool")) {
 				return Result.err(new CompileError(
@@ -167,10 +167,10 @@ public final class YieldBlockProcessor {
 
 	private static List<String> splitSemicolonsAtDepthZero(String blockContent) {
 		List<String> parts = new ArrayList<>();
-		int depth = 0;
-		int start = 0;
-		for (int i = 0; i < blockContent.length(); i++) {
-			char c = blockContent.charAt(i);
+		var depth = 0;
+		var start = 0;
+		for (var i = 0; i < blockContent.length(); i++) {
+			var c = blockContent.charAt(i);
 			if (c == '(' || c == '{') {
 				depth++;
 			} else if (c == ')' || c == '}') {
@@ -187,7 +187,7 @@ public final class YieldBlockProcessor {
 	}
 
 	private static int lastNonEmptyIndex(List<String> parts) {
-		for (int i = parts.size() - 1; i >= 0; i--) {
+		for (var i = parts.size() - 1; i >= 0; i--) {
 			if (!parts.get(i).trim().isEmpty()) {
 				return i;
 			}

@@ -71,41 +71,24 @@ public final class App {
 		if (FunctionHandler.isFunctionDefinition(stmt)) {
 			return FunctionHandler.parseFunctionDefinition(stmt, capturedVariables).flatMap(parsedFunc -> {
 				functionRegistry.put(parsedFunc.functionDef().name(), parsedFunc.functionDef());
-				if (parsedFunc.remaining().isEmpty()) {
-					return Result.ok(null);
-				}
-				return parseStatement(parsedFunc.remaining(), instructions, definedStructs, structRegistry,
+				return continueParseStatement(parsedFunc.remaining(), instructions, definedStructs, structRegistry,
 						functionRegistry, capturedVariables, typeAliasRegistry);
 			});
 		}
 
-		// Check if this is a type alias definition at statement level
 		if (stmt.startsWith("type ")) {
 			return TypeAliasHandler.parseTypeAlias(stmt, typeAliasRegistry)
-					.flatMap(aliasResult -> {
-						if (aliasResult.remaining().isEmpty()) {
-							return Result.ok(null);
-						}
-						return parseStatement(aliasResult.remaining(), instructions, definedStructs, structRegistry,
-								functionRegistry, capturedVariables, typeAliasRegistry);
-					});
+					.flatMap(aliasResult -> continueParseStatement(aliasResult.remaining(), instructions, definedStructs,
+							structRegistry, functionRegistry, capturedVariables, typeAliasRegistry));
 		}
 
-		// Check if this is a struct definition at statement level
 		if (stmt.startsWith("struct ")) {
 			return StructHandler.parseStructWithRegistry(stmt, definedStructs, structRegistry)
-					.flatMap(structResult -> {
-						Result<Void, CompileError> instructionsResult = generateInstructions(
-								structResult.expressionResult(), instructions);
-						return instructionsResult.flatMap(ignored -> {
-							if (structResult.remaining().isEmpty()) {
-								return Result.ok(null);
-							}
-							return parseStatement(structResult.remaining(), instructions, definedStructs, structRegistry,
-									functionRegistry, capturedVariables, typeAliasRegistry);
-						});
-					});
+					.flatMap(structResult -> generateInstructions(structResult.expressionResult(), instructions)
+							.flatMap(ignored -> continueParseStatement(structResult.remaining(), instructions,
+									definedStructs, structRegistry, functionRegistry, capturedVariables, typeAliasRegistry)));
 		}
+
 		if (stmt.startsWith("while (")) {
 			return AppParsingUtils.handleTopLevelWhileLoop(stmt, instructions);
 		}
@@ -126,6 +109,17 @@ public final class App {
 		// Parse as expression (which may contain "read")
 		return parseExpressionWithRead(stmt, functionRegistry)
 				.flatMap(expr -> generateInstructions(expr, instructions));
+	}
+
+	private static Result<Void, CompileError> continueParseStatement(String remaining, List<Instruction> instructions,
+			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables,
+			Map<String, String> typeAliasRegistry) {
+		if (remaining.isEmpty()) {
+			return Result.ok(null);
+		}
+		return parseStatement(remaining, instructions, definedStructs, structRegistry, functionRegistry,
+				capturedVariables, typeAliasRegistry);
 	}
 
 	private static Result<Void, CompileError> handleLetBindingStatement(String stmt, List<Instruction> instructions,
@@ -244,24 +238,24 @@ public final class App {
 
 	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
 			List<Instruction> instructions) {
-		boolean hasControlMarkers = expr.terms.stream().anyMatch(t -> t.readCount < 0);
-		boolean hasReads = expr.terms.stream().anyMatch(t -> t.readCount > 0);
+		boolean hasControlMarkers = expr.terms().stream().anyMatch(t -> t.readCount < 0);
+		boolean hasReads = expr.terms().stream().anyMatch(t -> t.readCount > 0);
 		if (!hasReads && !hasControlMarkers) {
 			// Constant expression: always overwrite result (avoid `result += literal`).
-			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue));
+			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue()));
 		} else {
 			// Load all reads into registers
-			InstructionBuilder.loadAllReads(expr.terms, instructions);
+			InstructionBuilder.loadAllReads(expr.terms(), instructions);
 
 			// Apply masking for bitwise-notted unsigned types
 			int readReg = 0;
-			for (ExpressionModel.ExpressionTerm term : expr.terms) {
+			for (ExpressionModel.ExpressionTerm term : expr.terms()) {
 				if (term.readCount > 0) {
 					if (term.isBitwiseNotted() && term.readTypeSpec != null && term.readTypeSpec.matches("[UI]\\d+")) {
 						int bits = Integer.parseInt(term.readTypeSpec.substring(1));
 						long mask = (1L << bits) - 1;
 						// Use a temporary register for the mask value
-						int tempReg = expr.terms.size() + 1; // Use a register beyond all reads
+						int tempReg = expr.terms().size() + 1; // Use a register beyond all reads
 						instructions.add(new Instruction(Operation.Load, Variant.Immediate, tempReg, mask));
 						instructions.add(new Instruction(Operation.BitsAnd, Variant.Immediate, readReg, (long) tempReg));
 					}
@@ -270,11 +264,11 @@ public final class App {
 			}
 
 			// Build result respecting precedence
-			int resultReg = InstructionBuilder.buildResultWithPrecedence(expr.terms, instructions);
+			int resultReg = InstructionBuilder.buildResultWithPrecedence(expr.terms(), instructions);
 
 			// Add literal if present
-			if (expr.literalValue != 0) {
-				InstructionBuilder.addLiteralToResult(resultReg, expr.literalValue, expr.terms.size(), instructions);
+			if (expr.literalValue() != 0) {
+				InstructionBuilder.addLiteralToResult(resultReg, expr.literalValue(), expr.terms().size(), instructions);
 			}
 		}
 
@@ -284,67 +278,32 @@ public final class App {
 	@SuppressWarnings("checkstyle:MethodLength")
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
 		expr = expr.trim();
-		// Check if this is a let binding
+
 		if (expr.startsWith("let ")) {
 			return parseLetExpressionBinding(expr, new HashMap<>());
 		}
 
-		// Check if this is a match expression
 		if (MatchExpressionHandler.hasMatch(expr)) {
 			return MatchExpressionHandler.parseMatch(expr);
 		}
 
-		// Check if this is a conditional expression (lowest precedence)
 		if (ConditionalExpressionHandler.hasConditional(expr)) {
 			return ConditionalExpressionHandler.parseConditional(expr);
 		}
 
-		// Check if this is an "is" type-check expression
 		java.util.List<String> isTokens = DepthAwareSplitter.splitByKeywordAtDepthZero(expr, "is");
 		if (isTokens.size() > 1) {
 			return ComparisonOperatorHandler.parseIsExpression(isTokens);
 		}
 
-		// Check if this is a tuple expression (before normalizing braces!)
-		if (ExpressionTokens.isTupleExpression(expr)) {
-			// Parse tuple expression - for now returns zero result
-			// Tuple elements are handled via substitution and indexing
-			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
-			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
-			return Result.ok(result);
+		var specialResult = tryParseSpecialExpressions(expr);
+		if (specialResult != null) {
+			return specialResult;
 		}
 
-		// Check if this is an array expression (before normalizing braces!)
-		if (AppParsingUtils.isArrayExpression(expr)) {
-			// Parse array expression - for now returns zero result
-			// Array elements are handled via substitution and indexing
-			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
-			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
-			return Result.ok(result);
-		}
-
-		// Check if this is a function definition (before normalizing braces!)
-		if (FunctionHandler.isFunctionDefinition(expr)) {
-			Map<String, FunctionHandler.FunctionDef> functionRegistry = new HashMap<>();
-			return parseExpressionWithRead(expr, functionRegistry, new HashMap<>());
-		}
-
-		// Check if this is a struct instantiation (before normalizing braces!)
-		if (StructInstantiationHandler.isStructInstantiation(expr, new java.util.HashMap<>())) {
-			Result<StructInstantiationHandler.StructInstantiationResult, CompileError> structResult = StructInstantiationHandler
-					.parseStructInstantiation(expr, new java.util.HashMap<>());
-			if (structResult instanceof Result.Ok<StructInstantiationHandler.StructInstantiationResult, CompileError> ok) {
-				// Return the struct instantiation result directly
-				return Result.ok(ok.value().expressionResult());
-			}
-		}
-
-		// Normalize curly braces to parentheses for uniform grouping support
 		expr = expr.replace('{', '(').replace('}', ')');
-		// Split by || (logical OR) first - lowest precedence
 		List<String> orTokens = LogicalOperatorHandler.splitByLogicalOr(expr);
 		if (orTokens.size() > 1) {
-			// We have logical OR operations - parse each side and combine
 			return LogicalOperatorHandler.parseLogicalOrExpression(orTokens);
 		}
 
@@ -507,6 +466,35 @@ public final class App {
 	public static Result<ExpressionModel.ParsedMult, CompileError> parseMultiplicative(String expr,
 			boolean isSubtracted) {
 		return MultiplicativeExpressionBuilder.parseMultiplicative(expr, isSubtracted, App::parseExpressionWithRead);
+	}
+
+	private static Result<ExpressionModel.ExpressionResult, CompileError> tryParseSpecialExpressions(String expr) {
+		if (ExpressionTokens.isTupleExpression(expr)) {
+			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
+			return Result.ok(result);
+		}
+
+		if (AppParsingUtils.isArrayExpression(expr)) {
+			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
+			return Result.ok(result);
+		}
+
+		if (FunctionHandler.isFunctionDefinition(expr)) {
+			Map<String, FunctionHandler.FunctionDef> functionRegistry = new HashMap<>();
+			return parseExpressionWithRead(expr, functionRegistry, new HashMap<>());
+		}
+
+		if (StructInstantiationHandler.isStructInstantiation(expr, new java.util.HashMap<>())) {
+			Result<StructInstantiationHandler.StructInstantiationResult, CompileError> structResult = StructInstantiationHandler
+					.parseStructInstantiation(expr, new java.util.HashMap<>());
+			if (structResult instanceof Result.Ok<StructInstantiationHandler.StructInstantiationResult, CompileError> ok) {
+				return Result.ok(ok.value().expressionResult());
+			}
+		}
+
+		return null;
 	}
 
 	public static Result<RunResult, ApplicationError> run(String source, int[] input) {

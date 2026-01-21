@@ -78,8 +78,8 @@ public final class ComparisonOperatorHandler {
 			return Result.err(new CompileError("Is operator requires exactly 2 operands"));
 		}
 
-		String valueExpr = isTokens.get(0).trim();
-		String typeSpec = isTokens.get(1).trim();
+		var valueExpr = isTokens.get(0).trim();
+		var typeSpec = isTokens.get(1).trim();
 
 		// Validate type specification
 		if (!typeSpec.matches("\\*?([a-zA-Z_][a-zA-Z0-9_]*|[UI]\\d+|Bool|Char)")) {
@@ -87,39 +87,32 @@ public final class ComparisonOperatorHandler {
 		}
 
 		// Parse the value expression
-		Result<ExpressionModel.ExpressionResult, CompileError> valueResult = App.parseExpressionWithRead(
+		var valueResult = App.parseExpressionWithRead(
 				valueExpr);
 		if (valueResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
 			return valueResult;
 		}
 
-		ExpressionModel.ExpressionResult valueExprResult = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) valueResult)
+		var valueExprResult = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) valueResult)
 				.value();
 
 		// Create a term with marker -5 to indicate type check operation
-		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(valueExprResult.terms);
-		ExpressionModel.ExpressionTerm typeCheckTerm = new ExpressionModel.ExpressionTerm(-5, 0,
+		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(valueExprResult.terms());
+		var typeCheckTerm = new ExpressionModel.ExpressionTerm(-5, 0,
 				new ExpressionModel.ExpressionTermFlags(0L, '\0', typeSpec));
 		allTerms.add(typeCheckTerm);
 
-		return Result.ok(new ExpressionModel.ExpressionResult(valueExprResult.readCount, 0, allTerms));
+		return Result.ok(new ExpressionModel.ExpressionResult(valueExprResult.readCount(), 0, allTerms));
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonExpression(
 			List<String> tokens, int markerValue) {
-		// For now, only support binary comparison (exactly 2 operands)
 		if (tokens.size() != 2) {
-			String opName = markerValue == 0 ? "Equality"
-					: (markerValue == 1 ? "Inequality"
-							: (markerValue == 2 ? "LessThan"
-									: (markerValue == 3 ? "GreaterThan"
-											: (markerValue == 4 ? "LessOrEqual" : "GreaterOrEqual"))));
+			String opName = getComparisonOperatorName(markerValue);
 			return Result.err(new CompileError(opName + " operator requires exactly 2 operands"));
 		}
 
-		// Parse left operand
-		Result<ExpressionModel.ExpressionResult, CompileError> leftResult = AdditiveExpressionParser
-				.parseAdditive(tokens.get(0));
+		var leftResult = AdditiveExpressionParser.parseAdditive(tokens.get(0));
 		if (leftResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
 			return leftResult;
 		}
@@ -127,9 +120,7 @@ public final class ComparisonOperatorHandler {
 			return Result.err(new CompileError("Internal error: expected Ok or Err in left operand"));
 		}
 
-		// Parse right operand
-		Result<ExpressionModel.ExpressionResult, CompileError> rightResult = AdditiveExpressionParser
-				.parseAdditive(tokens.get(1));
+		var rightResult = AdditiveExpressionParser.parseAdditive(tokens.get(1));
 		if (rightResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
 			return rightResult;
 		}
@@ -137,25 +128,30 @@ public final class ComparisonOperatorHandler {
 			return Result.err(new CompileError("Internal error: expected Ok or Err in right operand"));
 		}
 
-		ExpressionModel.ExpressionResult left = leftOk.value();
-		ExpressionModel.ExpressionResult right = rightOk.value();
-
-		// Create marker term: readCount=-1 indicates comparison marker
-		// marker.value=0 means Equal, marker.value=1 means NotEqual, marker.value=2
-		// means LessThan, marker.value=3 means GreaterThan, marker.value=4 means
-		// LessOrEqual, marker.value=5 means GreaterOrEqual
-		ExpressionModel.ExpressionTerm marker = new ExpressionModel.ExpressionTerm(-1, markerValue,
+		var left = leftOk.value();
+		var right = rightOk.value();
+		var marker = new ExpressionModel.ExpressionTerm(-1, markerValue,
 				new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
 
-		// Combine: left terms + marker + right terms
-		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(left.terms);
+		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(left.terms());
 		allTerms.add(marker);
-		allTerms.addAll(right.terms);
+		allTerms.addAll(right.terms());
 
-		int totalReads = left.readCount + right.readCount;
-		long totalLiteral = left.literalValue + right.literalValue;
+		var totalReads = left.readCount() + right.readCount();
+		var totalLiteral = left.literalValue() + right.literalValue();
 
 		return Result.ok(new ExpressionModel.ExpressionResult(totalReads, totalLiteral, allTerms));
+	}
+
+	private static String getComparisonOperatorName(int markerValue) {
+		return switch (markerValue) {
+			case 0 -> "Equality";
+			case 1 -> "Inequality";
+			case 2 -> "LessThan";
+			case 3 -> "GreaterThan";
+			case 4 -> "LessOrEqual";
+			default -> "GreaterOrEqual";
+		};
 	}
 
 	/**

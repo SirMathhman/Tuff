@@ -18,7 +18,7 @@ public final class AppTest {
 
 	private void assertValidWithInput(String source, int exitCode, int... input) {
 		Assertions.assertTimeoutPreemptively(Duration.ofMillis(100), () -> {
-			Result<RunResult, ApplicationError> result = App.run(source, input);
+			var result = App.run(source, input);
 			assertValidResult(result, exitCode);
 		});
 	}
@@ -28,7 +28,7 @@ public final class AppTest {
 	}
 
 	private void assertValidResult(Result<RunResult, ApplicationError> result, int exitCode) {
-		RunResult runResult = result.match(ok -> ok, err -> {
+		var runResult = result.match(ok -> ok, err -> {
 			Assertions.fail("Compilation failed: " + err.display());
 			return null;
 		});
@@ -1403,7 +1403,7 @@ public final class AppTest {
 	}
 
 	private void assertInvalid(String source) {
-		Result<Instruction[], CompileError> result = App.compile(source);
+		var result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
 			Assertions.fail("Expected compilation to fail, but it succeeded and produced instructions: "
 					+ Instruction.displayAll(ok.value()));

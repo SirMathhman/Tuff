@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 
 /**
  * Compiles recursive functions by transforming them to iterative form.
- * 
+ * <p>
  * Supports pattern: fn name() =&gt; { let var = read TYPE; if (var &lt;= 0) 0
  * else var + name() }
  * This pattern sums all positive inputs, which can be done iteratively.
@@ -40,28 +40,28 @@ public final class RecursiveFunctionCompiler {
 			List<Instruction> instructions, Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		stmt = stmt.trim();
 		// Check if stmt is "funcName()" or "funcName(arg)"
-		Pattern callPattern = Pattern.compile("^(\\w+)\\s*\\((.*)\\)$");
-		Matcher m = callPattern.matcher(stmt);
+		var callPattern = Pattern.compile("^(\\w+)\\s*\\((.*)\\)$");
+		var m = callPattern.matcher(stmt);
 		if (!m.matches()) {
 			return null; // Not a function call
 		}
-		String funcName = m.group(1);
-		String args = m.group(2).trim();
-		FunctionHandler.FunctionDef funcDef = functionRegistry.get(funcName);
+		var funcName = m.group(1);
+		var args = m.group(2).trim();
+		var funcDef = functionRegistry.get(funcName);
 		if (funcDef == null) {
 			return null; // Function not defined
 		}
 		// Check if the function is recursive
 		if (!isRecursive(funcName, funcDef.body())) {
 			// Try to detect a mutually-recursive cycle like: a() -> b() -> c() -> a()
-			Result<ParsedPattern, CompileError> mutual = tryParseMutualReadSumCycle(funcName, functionRegistry);
+			var mutual = tryParseMutualReadSumCycle(funcName, functionRegistry);
 			if (mutual == null) {
 				return null; // Not recursive, use normal path
 			}
 			if (mutual instanceof Result.Err<ParsedPattern, CompileError> err) {
 				return Result.err(err.error());
 			}
-			ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) mutual).value();
+			var pattern = ((Result.Ok<ParsedPattern, CompileError>) mutual).value();
 			return compileReadSumLoop(pattern, instructions);
 		}
 		// Compile using recursive function compiler
@@ -70,7 +70,7 @@ public final class RecursiveFunctionCompiler {
 
 	/**
 	 * Compile a tail-additive recursive function to iterative form.
-	 * 
+	 * <p>
 	 * Pattern: fn name(n : Type) => if (n <= 0) 0 else n + name(n - 1)
 	 * Or: fn name() => { let n = read TYPE; if (n <= 0) 0 else n + name() }
 	 * Becomes: result=0; loop { n=eval_arg; if n<=0 break; result+=n }; return
@@ -81,12 +81,12 @@ public final class RecursiveFunctionCompiler {
 			String callArgs,
 			List<Instruction> instructions) {
 
-		String funcName = funcDef.name();
-		String body = funcDef.body().trim();
+		var funcName = funcDef.name();
+		var body = funcDef.body().trim();
 
 		// Try tree recursion first (e.g., Fibonacci with two recursive calls)
 		if (!funcDef.params().isEmpty() && !callArgs.trim().isEmpty()) {
-			Result<Void, CompileError> treeResult = TreeRecursionCompiler.tryCompileTreeRecursion(
+			var treeResult = TreeRecursionCompiler.tryCompileTreeRecursion(
 					funcDef, callArgs, instructions);
 			if (treeResult != null) {
 				return treeResult;
@@ -95,18 +95,18 @@ public final class RecursiveFunctionCompiler {
 
 		// Try parametric recursion (fn name(n : Type) => ...)
 		if (!funcDef.params().isEmpty() && !callArgs.trim().isEmpty()) {
-			Result<Void, CompileError> result = tryCompileParametricRecursion(funcDef, callArgs, instructions);
+			var result = tryCompileParametricRecursion(funcDef, callArgs, instructions);
 			if (result != null) {
 				return result;
 			}
 		}
 
 		// Fall back to pattern-based recursion (fn name() => { let n = read ... })
-		Result<ParsedPattern, CompileError> patternResult = parsePattern(body, funcName);
+		var patternResult = parsePattern(body, funcName);
 		if (patternResult instanceof Result.Err<ParsedPattern, CompileError> err) {
 			return Result.err(err.error());
 		}
-		ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) patternResult).value();
+		var pattern = ((Result.Ok<ParsedPattern, CompileError>) patternResult).value();
 		return compileReadSumLoop(pattern, instructions);
 	}
 
@@ -130,16 +130,16 @@ public final class RecursiveFunctionCompiler {
 
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, baseValue));
 
-		int loopStart = instructions.size();
+		var loopStart = instructions.size();
 		instructions.add(new Instruction(Operation.In, Variant.Immediate, 1, 0L));
 
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 3, 0L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 3, 1L));
 
-		int jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instructions);
+		var jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instructions);
 
 		// Emit the appropriate operator instruction
-		Operation accumulateOp = mapOperatorToOperation(operator);
+		var accumulateOp = mapOperatorToOperation(operator);
 		instructions.add(new Instruction(accumulateOp, Variant.Immediate, 0, 3L));
 
 		finishLoopWithBackjump(instructions, loopStart, jumpToEndIdx);
@@ -159,18 +159,18 @@ public final class RecursiveFunctionCompiler {
 	/**
 	 * Compile multi-read recursion: fn sumPairs() => { let x = read I32; let y =
 	 * read I32; if (x <= 0) 0 else x + y + sumPairs() }
-	 * 
+	 * <p>
 	 * Multi-read strategy uses all 4 registers efficiently:
 	 * - reg[0] = accumulator (result)
 	 * - reg[1] = first read value (used in accumulation, then destroyed in check)
 	 * - reg[2] = second read value (used in accumulation, preserved)
 	 * - reg[3] = temp for subtract during condition check
-	 * 
+	 * <p>
 	 * Order: read → accumulate → check condition
 	 */
 	private static Result<Void, CompileError> compileMultiReadSumLoop(ParsedPattern pattern,
 			List<Instruction> instructions) {
-		String[] readVars = pattern.varName().split(",");
+		var readVars = pattern.varName().split(",");
 		if (readVars.length != 2) {
 			return Result.err(new CompileError("Currently only support 2-read recursion, got " + readVars.length));
 		}
@@ -181,7 +181,7 @@ public final class RecursiveFunctionCompiler {
 
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, pattern.baseValue()));
 
-		int loopStart = instructions.size();
+		var loopStart = instructions.size();
 		// Read both values
 		instructions.add(new Instruction(Operation.In, Variant.Immediate, 1, 0L));
 		instructions.add(new Instruction(Operation.In, Variant.Immediate, 2, 0L));
@@ -196,14 +196,14 @@ public final class RecursiveFunctionCompiler {
 		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 1, 3L)); // reg[1] -= reg[3], so reg[1] = reg[1]
 																																								// - 1
 
-		int jumpToEndIdx = instructions.size();
+		var jumpToEndIdx = instructions.size();
 		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1, 0L));
 
 		// Jump back to loop start (secondOperand is jump target for Jump instruction)
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0L, (long) loopStart));
 
 		// Update jump target to current position (end of loop)
-		Instruction jumpInstr = instructions.get(jumpToEndIdx);
+		var jumpInstr = instructions.get(jumpToEndIdx);
 		instructions.set(jumpToEndIdx,
 				new Instruction(jumpInstr.operation(), jumpInstr.variant(), jumpInstr.firstOperand(),
 						(long) instructions.size()));
@@ -216,7 +216,7 @@ public final class RecursiveFunctionCompiler {
 	/**
 	 * Try to compile parametric recursion:
 	 * fn sum(n : I32) => if (n <= 0) 0 else n + sum(n - 1)
-	 * 
+	 * <p>
 	 * Returns null if the body doesn't match the expected pattern.
 	 */
 	private static Result<Void, CompileError> tryCompileParametricRecursion(
@@ -228,30 +228,30 @@ public final class RecursiveFunctionCompiler {
 			return null; // Only support single parameter for now
 		}
 
-		String paramName = funcDef.params().get(0).name();
-		String body = funcDef.body().trim();
+		var paramName = funcDef.params().get(0).name();
+		var body = funcDef.body().trim();
 
 		// Parse the parametric recursion pattern:
 		// if (PARAM <= 0) BASE else PARAM OP funcName(PARAM UPDATE)
 		// E.g.: if (n <= 0) 0 else n + sum(n - 1)
-		Pattern p = Pattern.compile(
+		var p = Pattern.compile(
 				"if\\s*\\(\\s*" + Pattern.quote(paramName) + "\\s*<=\\s*0\\s*\\)\\s*"
 						+ "(\\d+)\\s+else\\s+"
 						+ Pattern.quote(paramName) + "\\s*([+\\-*/])\\s*"
 						+ funcDef.name() + "\\s*\\(\\s*(" + Pattern.quote(paramName)
 						+ "\\s*(?:[+\\-]\\s*\\d+|[*\\/]\\s*\\d+))\\s*\\)");
 
-		Matcher m = p.matcher(body);
+		var m = p.matcher(body);
 		if (!m.find()) {
 			return null; // Doesn't match parametric pattern
 		}
 
-		long baseValue = Long.parseLong(m.group(1));
-		String op = m.group(2);
-		String updateExpr = m.group(3).trim();
+		var baseValue = Long.parseLong(m.group(1));
+		var op = m.group(2);
+		var updateExpr = m.group(3).trim();
 
 		// Parse the call argument to get initial value
-		String initialValue = callArgs.trim();
+		var initialValue = callArgs.trim();
 
 		return compileParametricLoop(paramName, initialValue, baseValue, op, updateExpr, instructions);
 	}
@@ -277,19 +277,19 @@ public final class RecursiveFunctionCompiler {
 
 		// For now, assume initialValue is a literal number like "5"
 		try {
-			long initialVal = Long.parseLong(initialValue);
+			var initialVal = Long.parseLong(initialValue);
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, initialVal));
 		} catch (NumberFormatException e) {
 			return Result
 					.err(new CompileError("Parametric recursion argument must be a literal number, got: " + initialValue));
 		}
 
-		int loopStart = instructions.size();
+		var loopStart = instructions.size();
 
-		int jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instructions);
+		var jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instructions);
 
 		// Accumulate: result OP= param
-		Operation accOp = switch (op) {
+		var accOp = switch (op) {
 			case "+" -> Operation.Add;
 			case "-" -> Operation.Sub;
 			case "*" -> Operation.Mul;
@@ -317,7 +317,7 @@ public final class RecursiveFunctionCompiler {
 	private static void finishLoopWithBackjump(List<Instruction> instructions, int loopStart, int jumpToEndIdx) {
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopStart));
 
-		int loopEnd = instructions.size();
+		var loopEnd = instructions.size();
 		instructions.set(jumpToEndIdx, new Instruction(
 				Operation.JumpIfLessThanZero, Variant.Immediate, 1, (long) loopEnd));
 	}
@@ -333,7 +333,7 @@ public final class RecursiveFunctionCompiler {
 	private static int emitLessThanOrEqualZeroCheck(int regNum, List<Instruction> instructions) {
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
 		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, regNum, 2L));
-		int jumpIdx = instructions.size();
+		var jumpIdx = instructions.size();
 		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, regNum, 0L));
 		// Restore register: reg = (reg - 1) + 1 = reg
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
@@ -351,11 +351,11 @@ public final class RecursiveFunctionCompiler {
 		}
 		body = body.trim();
 
-		Result<ParsedPattern, CompileError> parsed = parseReadSumPattern(body);
+		var parsed = parseReadSumPattern(body);
 		if (parsed instanceof Result.Err<ParsedPattern, CompileError>) {
 			return parsed;
 		}
-		ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) parsed).value();
+		var pattern = ((Result.Ok<ParsedPattern, CompileError>) parsed).value();
 		if (!pattern.calleeName().equals(funcName)) {
 			return Result.err(new CompileError("Function body doesn't match recursive pattern: " + body));
 		}
@@ -366,22 +366,22 @@ public final class RecursiveFunctionCompiler {
 			String startFuncName,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		Set<String> visited = new HashSet<>();
-		String current = startFuncName;
+		var current = startFuncName;
 		ParsedPattern first = null;
 
 		while (true) {
 			if (!visited.add(current)) {
 				return null;
 			}
-			FunctionHandler.FunctionDef def = functionRegistry.get(current);
+			var def = functionRegistry.get(current);
 			if (def == null) {
 				return null;
 			}
-			Result<ParsedPattern, CompileError> parsed = parseReadSumPattern(stripOuterBraces(def.body().trim()));
+			var parsed = parseReadSumPattern(stripOuterBraces(def.body().trim()));
 			if (parsed instanceof Result.Err<ParsedPattern, CompileError>) {
 				return null;
 			}
-			ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) parsed).value();
+			var pattern = ((Result.Ok<ParsedPattern, CompileError>) parsed).value();
 			if (!"+".equals(pattern.op())) {
 				return null;
 			}
@@ -391,7 +391,7 @@ public final class RecursiveFunctionCompiler {
 				return null;
 			}
 
-			String next = pattern.calleeName();
+			var next = pattern.calleeName();
 			if (next.equals(startFuncName)) {
 				// Require a true cycle (length > 1)
 				if (visited.size() < 2) {
@@ -408,7 +408,7 @@ public final class RecursiveFunctionCompiler {
 	}
 
 	private static String stripOuterBraces(String body) {
-		String result = body.trim();
+		var result = body.trim();
 		if (result.startsWith("{")) {
 			result = result.substring(1);
 		}
@@ -422,18 +422,18 @@ public final class RecursiveFunctionCompiler {
 		// Match: let VAR = read TYPE; ... if (VAR <= 0) BASE else EXPR + callee()
 		// Where EXPR can reference multiple read variables
 		// First, try the simpler single-read pattern
-		Pattern singleReadPattern = Pattern.compile(
+		var singleReadPattern = Pattern.compile(
 				"let\\s+(\\w+)\\s*(?::\\s*\\w+)?\\s*=\\s*read\\s+\\w+\\s*;\\s*"
 						+ "if\\s*\\(\\s*\\1\\s*<=\\s*0\\s*\\)\\s*(\\d+)\\s+else\\s+\\1\\s*([+\\-*/])\\s*"
 						+ "(\\w+)\\s*\\(\\s*\\)");
-		Matcher m = singleReadPattern.matcher(body);
+		var m = singleReadPattern.matcher(body);
 		if (m.find()) {
 			return Result.ok(new ParsedPattern(m.group(1), Long.parseLong(m.group(2)), m.group(3), m.group(4)));
 		}
 
 		// Try multi-read pattern: let x = read I32; let y = read I32; if (x <= 0) 0
 		// else x + y + funcName()
-		Result<ParsedPattern, CompileError> multiReadResult = tryParseMultiReadSumPattern(body);
+		var multiReadResult = tryParseMultiReadSumPattern(body);
 		if (multiReadResult != null) {
 			return multiReadResult;
 		}
@@ -443,11 +443,11 @@ public final class RecursiveFunctionCompiler {
 
 	private static Result<ParsedPattern, CompileError> tryParseMultiReadSumPattern(String body) {
 		// Extract all let statements: let x = read I32; let y = read I32; ...
-		Pattern letPattern = Pattern.compile("let\\s+(\\w+)\\s*(?::\\s*\\w+)?\\s*=\\s*read\\s+\\w+\\s*;");
-		Matcher letMatcher = letPattern.matcher(body);
+		var letPattern = Pattern.compile("let\\s+(\\w+)\\s*(?::\\s*\\w+)?\\s*=\\s*read\\s+\\w+\\s*;");
+		var letMatcher = letPattern.matcher(body);
 
 		List<String> readVars = new ArrayList<>();
-		int lastEnd = 0;
+		var lastEnd = 0;
 		while (letMatcher.find()) {
 			readVars.add(letMatcher.group(1));
 			lastEnd = letMatcher.end();
@@ -457,28 +457,28 @@ public final class RecursiveFunctionCompiler {
 			return null; // Not a multi-read pattern
 		}
 
-		String firstVar = readVars.get(0);
-		String afterReads = body.substring(lastEnd).trim();
+		var firstVar = readVars.get(0);
+		var afterReads = body.substring(lastEnd).trim();
 
 		// Match: if (FIRST_VAR <= 0) BASE else EXPR + funcName()
 		// The EXPR should reference the read variables
-		Pattern ifPattern = Pattern.compile(
+		var ifPattern = Pattern.compile(
 				"if\\s*\\(\\s*" + Pattern.quote(firstVar) + "\\s*<=\\s*0\\s*\\)\\s*(\\d+)\\s+else\\s+"
 						+ "(.+?)\\s*([+\\-*/])\\s*(\\w+)\\s*\\(\\s*\\)");
-		Matcher ifMatcher = ifPattern.matcher(afterReads);
+		var ifMatcher = ifPattern.matcher(afterReads);
 
 		if (!ifMatcher.find()) {
 			return null;
 		}
 
-		String baseValueStr = ifMatcher.group(1);
-		String operator = ifMatcher.group(3);
-		String funcName = ifMatcher.group(4);
+		var baseValueStr = ifMatcher.group(1);
+		var operator = ifMatcher.group(3);
+		var funcName = ifMatcher.group(4);
 
 		try {
-			long baseValue = Long.parseLong(baseValueStr);
+			var baseValue = Long.parseLong(baseValueStr);
 			// For multi-read, we pack the variable names into the varName field
-			String packedVars = String.join(",", readVars);
+			var packedVars = String.join(",", readVars);
 			return Result.ok(new ParsedPattern(packedVars, baseValue, operator, funcName));
 		} catch (NumberFormatException e) {
 			return null;

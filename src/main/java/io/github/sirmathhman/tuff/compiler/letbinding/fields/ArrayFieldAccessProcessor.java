@@ -22,8 +22,8 @@ public final class ArrayFieldAccessProcessor {
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, StructDefinition> structRegistry) {
 		// Try .init field access
 		if (continuation.contains(varName + ".init")) {
-			Result<Void, CompileError> result = tryHandleArrayField(varName, decl, continuation, instructions,
-					functionRegistry, "init");
+			var result = tryHandleArrayField(varName, decl, continuation, instructions,
+																			 functionRegistry, "init");
 			if (result != null) {
 				return result;
 			}
@@ -31,11 +31,9 @@ public final class ArrayFieldAccessProcessor {
 
 		// Try .capacity field access
 		if (continuation.contains(varName + ".capacity")) {
-			Result<Void, CompileError> result = tryHandleArrayField(varName, decl, continuation, instructions,
-					functionRegistry, "capacity");
-			if (result != null) {
-				return result;
-			}
+			var result = tryHandleArrayField(varName, decl, continuation, instructions,
+																			 functionRegistry, "capacity");
+			return result;
 		}
 
 		return null;
@@ -45,8 +43,8 @@ public final class ArrayFieldAccessProcessor {
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, String fieldName) {
 		// Check if declaredType is an array type or inferred from reference
-		boolean isExplicitArrayType = decl.declaredType() != null && decl.declaredType().startsWith("[");
-		boolean couldBeInferredArrayPointer = decl.declaredType() == null && decl.valueExpr().trim().startsWith("&");
+		var isExplicitArrayType = decl.declaredType() != null && decl.declaredType().startsWith("[");
+		var couldBeInferredArrayPointer = decl.declaredType() == null && decl.valueExpr().trim().startsWith("&");
 
 		if (!isExplicitArrayType && !couldBeInferredArrayPointer) {
 			return null;

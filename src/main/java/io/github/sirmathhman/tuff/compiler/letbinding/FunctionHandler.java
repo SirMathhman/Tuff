@@ -8,7 +8,6 @@ import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -59,31 +58,29 @@ public final class FunctionHandler {
 	public static Result<ParsedFunction, CompileError> parseFunctionDefinition(
 			String stmt, Map<String, String> capturedVariables) {
 		stmt = stmt.trim();
-
-		Result<FunctionDefinitionProcessor.FunctionDefParts, CompileError> partsResult = FunctionDefinitionProcessor
-				.splitFunctionDefinition(stmt);
+		var partsResult = FunctionDefinitionProcessor.splitFunctionDefinition(stmt);
 		if (partsResult instanceof Result.Err<FunctionDefinitionProcessor.FunctionDefParts, CompileError> err) {
 			return Result.err(err.error());
 		}
-		FunctionDefinitionProcessor.FunctionDefParts parts = ((Result.Ok<FunctionDefinitionProcessor.FunctionDefParts, CompileError>) partsResult)
+		var parts = ((Result.Ok<FunctionDefinitionProcessor.FunctionDefParts, CompileError>) partsResult)
 				.value();
-		String name = parts.name();
-		String paramString = parts.params();
-		String returnType = parts.returnType();
-		String body = preprocessFunctionBody(parts.body());
-		String remaining = parts.remaining();
+		var name = parts.name();
+		var paramString = parts.params();
+		var returnType = parts.returnType();
+		var body = preprocessFunctionBody(parts.body());
+		var remaining = parts.remaining();
 
 		// Parse parameters
-		Result<List<FunctionParam>, CompileError> paramsResult = FunctionDefinitionProcessor
+		var paramsResult = FunctionDefinitionProcessor
 				.parseParameters(paramString);
 		if (paramsResult instanceof Result.Err<List<FunctionParam>, CompileError>) {
 			return Result.err(((Result.Err<List<FunctionParam>, CompileError>) paramsResult).error());
 		}
-		List<FunctionParam> params = ((Result.Ok<List<FunctionParam>, CompileError>) paramsResult).value();
+		var params = ((Result.Ok<List<FunctionParam>, CompileError>) paramsResult).value();
 
 		// If return type not specified, try to infer it from the body
 		if (returnType == null) {
-			Result<String, CompileError> inferredType = FunctionDefinitionProcessor.inferReturnType(body);
+			var inferredType = FunctionDefinitionProcessor.inferReturnType(body);
 			if (inferredType instanceof Result.Err<String, CompileError>) {
 				return Result.err(((Result.Err<String, CompileError>) inferredType).error());
 			}
@@ -109,50 +106,70 @@ public final class FunctionHandler {
 		if (!body.startsWith("{")) {
 			return body;
 		}
-		int closingBrace = DepthAwareSplitter.findMatchingBrace(body, 0);
-		if (closingBrace == -1) {
+		var closingBrace = DepthAwareSplitter.findMatchingBrace(body, 0);
+		if (closingBrace == -1 || closingBrace <= 1) {
 			return body;
 		}
-
-		String inner = body.substring(1, closingBrace).trim();
-		String suffix = body.substring(closingBrace + 1).trim();
-
-		int semiIdx = DepthAwareSplitter.findSemicolonAtDepthZero(inner, 0);
+		var inner = body.substring(1, closingBrace).trim();
+		var suffix = body.substring(closingBrace + 1).trim();
+		var semiIdx = DepthAwareSplitter.findSemicolonAtDepthZero(inner, 0);
 		if (semiIdx == -1) {
 			return body;
 		}
-
-		String firstStmt = inner.substring(0, semiIdx).trim();
-		String fallback = inner.substring(semiIdx + 1).trim();
-		if (!firstStmt.startsWith("if (") || fallback.isEmpty()) {
+		var firstStmt = inner.substring(0, semiIdx).trim();
+		if (!firstStmt.startsWith("if (")) {
 			return body;
 		}
-
-		int condEnd = ConditionalExpressionHandler.findConditionEnd(firstStmt);
+		var condEnd = ConditionalExpressionHandler.findConditionEnd(firstStmt);
 		if (condEnd == -1) {
 			return body;
 		}
-		String condition = firstStmt.substring(4, condEnd).trim();
-		String afterCond = firstStmt.substring(condEnd + 1).trim();
+		var result = extractReturnOrYieldContent(firstStmt, condEnd);
+		if (result == null) {
+			return body;
+		}
+		var fallback = inner.substring(semiIdx + 1).trim();
+		if (fallback.isEmpty()) {
+			return body;
+		}
+		return buildDesugaredExpression(result, fallback, suffix);
+	}
 
-		boolean isYield = afterCond.startsWith("yield");
-		boolean isReturn = afterCond.startsWith("return");
+	private static class ReturnYieldResult {
+		final String condition;
+		final String valueExpr;
+		final boolean isYield;
+
+		ReturnYieldResult(String condition, String valueExpr, boolean isYield) {
+			this.condition = condition;
+			this.valueExpr = valueExpr;
+			this.isYield = isYield;
+		}
+	}
+
+	private static ReturnYieldResult extractReturnOrYieldContent(String firstStmt, int condEnd) {
+		var condition = firstStmt.substring(4, condEnd).trim();
+		var afterCond = firstStmt.substring(condEnd + 1).trim();
+		var isYield = afterCond.startsWith("yield");
+		var isReturn = afterCond.startsWith("return");
 		if (!isYield && !isReturn) {
-			return body;
+			return null;
 		}
-		String valueExpr = afterCond.substring(isYield ? 5 : 6).trim();
+		var valueExpr = isYield ? afterCond.substring(5).trim() : afterCond.substring(6).trim();
 		if (valueExpr.isEmpty()) {
-			return body;
+			return null;
 		}
+		return new ReturnYieldResult(condition, valueExpr, isYield);
+	}
 
-		String suffixPart = suffix.isEmpty() ? "" : (" " + suffix);
-		if (isYield) {
-			String blockValue = "if (" + condition + ") " + valueExpr + " else " + fallback;
+	private static String buildDesugaredExpression(ReturnYieldResult result, String fallback, String suffix) {
+		var suffixPart = suffix.isEmpty() ? "" : " " + suffix;
+		if (result.isYield) {
+			var blockValue = "if (" + result.condition + ") " + result.valueExpr + " else " + fallback;
 			return "(" + blockValue + ")" + suffixPart;
 		}
-		// return: short-circuit the rest of the function body
-		String elseExpr = suffix.isEmpty() ? fallback : (fallback + suffixPart);
-		return "if (" + condition + ") " + valueExpr + " else (" + elseExpr + ")";
+		var elseExpr = suffix.isEmpty() ? fallback : fallback + suffixPart;
+		return "if (" + result.condition + ") " + result.valueExpr + " else (" + elseExpr + ")";
 	}
 
 	/**
@@ -166,7 +183,7 @@ public final class FunctionHandler {
 	 */
 	public static boolean isFunctionCall(String expr, Map<String, FunctionDef> functionRegistry) {
 		expr = expr.trim();
-		FunctionCallMatch match = parseFunctionCallPattern(expr);
+		var match = parseFunctionCallPattern(expr);
 		return match != null && functionRegistry.containsKey(match.functionName);
 	}
 
@@ -176,7 +193,7 @@ public final class FunctionHandler {
 			return true;
 		}
 		expr = expr.trim();
-		FunctionCallMatch match = parseFunctionCallPattern(expr);
+		var match = parseFunctionCallPattern(expr);
 		// Check if function name is a bound function reference
 		return match != null && capturedVariables.containsKey(match.functionName);
 	}
@@ -193,38 +210,38 @@ public final class FunctionHandler {
 	public static Result<String, CompileError> parseFunctionCall(String expr,
 			Map<String, FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		expr = expr.trim();
-		FunctionCallMatch match = parseFunctionCallPattern(expr);
+		var match = parseFunctionCallPattern(expr);
 
 		if (match == null) {
 			return Result.err(new CompileError("Invalid function call syntax"));
 		}
 
-		String functionName = match.functionName;
-		String argsString = match.argsString;
+		var functionName = match.functionName;
+		var argsString = match.argsString;
 
 		// Check if this is a bound function reference
 		if (capturedVariables.containsKey(functionName)) {
 			// Get the actual function name from captured variables
-			String actualFunctionName = capturedVariables.get(functionName);
+			var actualFunctionName = capturedVariables.get(functionName);
 			// Reconstruct the function call with the actual function name
-			String substitutedExpr = actualFunctionName + "(" + argsString + ")";
+			var substitutedExpr = actualFunctionName + "(" + argsString + ")";
 			// Now parse the substituted expression
 			return parseFunctionCall(substitutedExpr, functionRegistry, capturedVariables);
 		}
 
-		FunctionDef functionDef = functionRegistry.get(functionName);
+		var functionDef = functionRegistry.get(functionName);
 		if (functionDef == null) {
 			return Result.err(
 					new CompileError("Function '" + functionName + "' is not defined"));
 		}
 
 		// Parse arguments
-		Result<List<String>, CompileError> argsResult = FunctionDefinitionProcessor
+		var argsResult = FunctionDefinitionProcessor
 				.parseAndExtractArguments(argsString);
 		if (argsResult instanceof Result.Err<List<String>, CompileError> err) {
 			return Result.err(err.error());
 		}
-		List<String> args = ((Result.Ok<List<String>, CompileError>) argsResult).value();
+		var args = ((Result.Ok<List<String>, CompileError>) argsResult).value();
 
 		// Check argument count matches parameter count
 		if (args.size() != functionDef.params().size()) {
@@ -234,18 +251,18 @@ public final class FunctionHandler {
 		}
 
 		// Substitute captured variables first (outer scope bindings)
-		String result = functionDef.body();
-		for (Map.Entry<String, String> captured : functionDef.capturedVariables().entrySet()) {
-			String varName = captured.getKey();
-			String varExpr = captured.getValue();
+		var result = functionDef.body();
+		for (var captured : functionDef.capturedVariables().entrySet()) {
+			var varName = captured.getKey();
+			var varExpr = captured.getValue();
 			// Replace variable references with their captured expressions
 			result = result.replaceAll("\\b" + varName + "\\b", "(" + varExpr + ")");
 		}
 
 		// Then substitute parameters with arguments in the body
-		for (int i = 0; i < functionDef.params().size(); i++) {
-			String paramName = functionDef.params().get(i).name();
-			String argValue = args.get(i);
+		for (var i = 0; i < functionDef.params().size(); i++) {
+			var paramName = functionDef.params().get(i).name();
+			var argValue = args.get(i);
 			// Replace parameter references with argument values, using word boundaries
 			result = result.replaceAll("\\b" + paramName + "\\b", "(" + argValue + ")");
 		}
@@ -259,28 +276,28 @@ public final class FunctionHandler {
 		expr = expr.trim();
 
 		// Check if it matches function call pattern: name(...)
-		Pattern namePattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
-		Matcher nameMatcher = namePattern.matcher(expr);
+		var namePattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
+		var nameMatcher = namePattern.matcher(expr);
 		if (!nameMatcher.find()) {
 			return null;
 		}
 
-		String functionName = nameMatcher.group(1);
-		int openParen = nameMatcher.end() - 1;
+		var functionName = nameMatcher.group(1);
+		var openParen = nameMatcher.end() - 1;
 
 		// Find matching closing parenthesis using depth-aware parsing
-		int closeParen = FunctionDefinitionProcessor.findMatchingParen(expr, openParen);
+		var closeParen = FunctionDefinitionProcessor.findMatchingParen(expr, openParen);
 		if (closeParen == -1) {
 			return null; // Unmatched parentheses
 		}
 
 		// Verify there's nothing after the closing parenthesis (except whitespace)
-		String afterParen = expr.substring(closeParen + 1).trim();
+		var afterParen = expr.substring(closeParen + 1).trim();
 		if (!afterParen.isEmpty()) {
 			return null; // Not a simple function call
 		}
 
-		String argsString = expr.substring(openParen + 1, closeParen).trim();
+		var argsString = expr.substring(openParen + 1, closeParen).trim();
 		return new FunctionCallMatch(functionName, argsString);
 	}
 
@@ -290,25 +307,25 @@ public final class FunctionHandler {
 	 */
 	public static io.github.sirmathhman.tuff.Result<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, io.github.sirmathhman.tuff.CompileError> tryParseFunctionCallWithFieldAccess(
 			String expr, Map<String, FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
-		java.util.regex.Pattern pattern = java.util.regex.Pattern
+		var pattern = java.util.regex.Pattern
 				.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(([^)]*)\\)\\.([a-zA-Z_][a-zA-Z0-9_]*)(.*)$");
-		java.util.regex.Matcher matcher = pattern.matcher(expr);
+		var matcher = pattern.matcher(expr);
 		if (!matcher.matches()) {
 			return null;
 		}
 
-		String funcName = matcher.group(1);
-		String funcArgs = matcher.group(2);
-		String fieldName = matcher.group(3);
-		String remaining = matcher.group(4);
+		var funcName = matcher.group(1);
+		var funcArgs = matcher.group(2);
+		var fieldName = matcher.group(3);
+		var remaining = matcher.group(4);
 
 		// Check if the function exists and returns 'this'
 		if (!functionRegistry.containsKey(funcName)) {
 			return null;
 		}
 
-		FunctionDef funcDef = functionRegistry.get(funcName);
-		String funcBody = funcDef.body().trim();
+		var funcDef = functionRegistry.get(funcName);
+		var funcBody = funcDef.body().trim();
 
 		// If function body is 'this', parameters become accessible as fields
 		if (!funcBody.equals("this")) {
@@ -316,13 +333,17 @@ public final class FunctionHandler {
 		}
 
 		// Find the parameter with the matching name
-		for (FunctionParam param : funcDef.params()) {
+		for (var param : funcDef.params()) {
 			if (param.name().equals(fieldName)) {
-				List<String> args = parseFunctionArgumentsList(funcArgs);
-				int paramIndex = funcDef.params().indexOf(param);
+				var args = parseFunctionArgumentsList(funcArgs);
+				var paramIndex = funcDef.params().indexOf(param);
 				if (paramIndex >= 0 && paramIndex < args.size()) {
-					String argValue = args.get(paramIndex);
-					String fullExpr = remaining.isEmpty() ? argValue : argValue + remaining;
+					var argValue = args.get(paramIndex);
+					String fullExpr;
+					if (remaining.isEmpty())
+						fullExpr = argValue;
+					else
+						fullExpr = argValue + remaining;
 					return io.github.sirmathhman.tuff.App.parseExpressionWithRead(fullExpr, functionRegistry, capturedVariables);
 				}
 			}
@@ -336,9 +357,9 @@ public final class FunctionHandler {
 			return args;
 		}
 
-		StringBuilder current = new StringBuilder();
-		int depth = 0;
-		for (char c : argsString.toCharArray()) {
+		var current = new StringBuilder();
+		var depth = 0;
+		for (var c : argsString.toCharArray()) {
 			if (c == '(' || c == '{' || c == '<') {
 				depth++;
 				current.append(c);
@@ -366,24 +387,24 @@ public final class FunctionHandler {
 	public static Result<String, CompileError> transformMethodCall(
 			String expr, Map<String, FunctionDef> functionRegistry,
 			Map<String, String> capturedVariables) {
-		MethodCallMatch match = parseMethodCallPattern(expr);
+		var match = parseMethodCallPattern(expr);
 		if (match == null) {
 			return Result.err(new CompileError("Not a method-style call"));
 		}
 
-		String receiver = match.receiver;
-		String functionName = match.functionName;
-		String argsString = match.argsString;
+		var receiver = match.receiver;
+		var functionName = match.functionName;
+		var argsString = match.argsString;
 
 		// Check if function exists
-		FunctionDef functionDef = functionRegistry.get(functionName);
+		var functionDef = functionRegistry.get(functionName);
 		if (functionDef == null && !capturedVariables.containsKey(functionName)) {
 			return Result.err(new CompileError("Function '" + functionName + "' is not defined"));
 		}
 
 		// If it's a captured function reference, resolve it
 		if (functionDef == null) {
-			String actualFunctionName = capturedVariables.get(functionName);
+			var actualFunctionName = capturedVariables.get(functionName);
 			functionDef = functionRegistry.get(actualFunctionName);
 			if (functionDef == null) {
 				return Result.err(new CompileError("Function '" + functionName + "' is not defined"));
@@ -397,14 +418,14 @@ public final class FunctionHandler {
 		}
 
 		// Parse the arguments
-		Result<List<String>, CompileError> argsResult = FunctionDefinitionProcessor.splitByCommaAtDepthZero(argsString);
+		var argsResult = FunctionDefinitionProcessor.splitByCommaAtDepthZero(argsString);
 		if (argsResult instanceof Result.Err<List<String>, CompileError> err) {
 			return Result.err(err.error());
 		}
-		List<String> args = ((Result.Ok<List<String>, CompileError>) argsResult).value();
+		var args = ((Result.Ok<List<String>, CompileError>) argsResult).value();
 
 		// Check argument count: params.size() - 1 (for 'this') should match args.size()
-		int expectedArgCount = functionDef.params().size() - 1;
+		var expectedArgCount = functionDef.params().size() - 1;
 		if (args.size() != expectedArgCount) {
 			return Result.err(new CompileError(
 					"Function '" + functionName + "' expects " + expectedArgCount + " arguments (plus 'this'), but got " +
@@ -412,9 +433,9 @@ public final class FunctionHandler {
 		}
 
 		// Build transformed call: functionName(receiver, arg1, arg2, ...)
-		StringBuilder transformedCall = new StringBuilder();
+		var transformedCall = new StringBuilder();
 		transformedCall.append(functionName).append("(").append(receiver);
-		for (String arg : args) {
+		for (var arg : args) {
 			transformedCall.append(", ").append(arg);
 		}
 		transformedCall.append(")");
@@ -433,37 +454,37 @@ public final class FunctionHandler {
 		// Pattern: receiver.functionName(args)
 		// Receiver can be: literal (100), identifier (x), or simple expression
 		// We need to find the last dot followed by a function call
-		int lastDotIndex = findLastDotBeforeFunctionCall(expr);
+		var lastDotIndex = findLastDotBeforeFunctionCall(expr);
 		if (lastDotIndex == -1) {
 			return null;
 		}
 
-		String receiver = expr.substring(0, lastDotIndex).trim();
-		String afterDot = expr.substring(lastDotIndex + 1).trim();
+		var receiver = expr.substring(0, lastDotIndex).trim();
+		var afterDot = expr.substring(lastDotIndex + 1).trim();
 
 		// Check if after the dot we have functionName(args)
-		Pattern funcPattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
-		Matcher funcMatcher = funcPattern.matcher(afterDot);
+		var funcPattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
+		var funcMatcher = funcPattern.matcher(afterDot);
 		if (!funcMatcher.find()) {
 			return null;
 		}
 
-		String functionName = funcMatcher.group(1);
-		int openParen = funcMatcher.end() - 1;
+		var functionName = funcMatcher.group(1);
+		var openParen = funcMatcher.end() - 1;
 
 		// Find matching closing parenthesis
-		int closeParen = FunctionDefinitionProcessor.findMatchingParen(afterDot, openParen);
+		var closeParen = FunctionDefinitionProcessor.findMatchingParen(afterDot, openParen);
 		if (closeParen == -1) {
 			return null;
 		}
 
 		// Verify nothing after the closing parenthesis
-		String afterParen = afterDot.substring(closeParen + 1).trim();
+		var afterParen = afterDot.substring(closeParen + 1).trim();
 		if (!afterParen.isEmpty()) {
 			return null;
 		}
 
-		String argsString = afterDot.substring(openParen + 1, closeParen).trim();
+		var argsString = afterDot.substring(openParen + 1, closeParen).trim();
 		return new MethodCallMatch(receiver, functionName, argsString);
 	}
 
@@ -472,17 +493,17 @@ public final class FunctionHandler {
 	 * Avoid dots inside parentheses or nested expressions
 	 */
 	private static int findLastDotBeforeFunctionCall(String expr) {
-		int depth = 0;
-		for (int i = expr.length() - 1; i >= 0; i--) {
-			char c = expr.charAt(i);
+		var depth = 0;
+		for (var i = expr.length() - 1; i >= 0; i--) {
+			var c = expr.charAt(i);
 			if (c == ')' || c == '}') {
 				depth++;
 			} else if (c == '(' || c == '{') {
 				depth--;
 			} else if (c == '.' && depth == 0) {
 				// Check if after this dot is a valid function pattern
-				String afterDot = expr.substring(i + 1).trim();
-				Pattern funcPattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
+				var afterDot = expr.substring(i + 1).trim();
+				var funcPattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
 				if (funcPattern.matcher(afterDot).find()) {
 					return i;
 				}

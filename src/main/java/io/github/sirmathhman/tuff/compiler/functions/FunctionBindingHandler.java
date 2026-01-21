@@ -24,12 +24,12 @@ public final class FunctionBindingHandler {
 	public static String convertAnonymousFunctionToNamed(String varName, String lambdaExpr) {
 		// Convert: () => 100 to: fn varName() => 100
 		lambdaExpr = lambdaExpr.trim();
-		int arrowIndex = lambdaExpr.indexOf("=>");
+		var arrowIndex = lambdaExpr.indexOf("=>");
 		if (arrowIndex == -1) {
 			return lambdaExpr;
 		}
-		String params = lambdaExpr.substring(0, arrowIndex).trim();
-		String body = lambdaExpr.substring(arrowIndex + 2).trim();
+		var params = lambdaExpr.substring(0, arrowIndex).trim();
+		var body = lambdaExpr.substring(arrowIndex + 2).trim();
 		return "fn " + varName + params + " => " + body;
 	}
 
@@ -37,19 +37,19 @@ public final class FunctionBindingHandler {
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		// Parse the function definition
-		Result<FunctionHandler.ParsedFunction, CompileError> parseResult = FunctionHandler
+		var parseResult = FunctionHandler
 				.parseFunctionDefinition(funcDefStmt);
 		if (parseResult instanceof Result.Err<FunctionHandler.ParsedFunction, CompileError> err) {
 			return Result.err(err.error());
 		}
 
-		FunctionHandler.ParsedFunction parsed = ((Result.Ok<FunctionHandler.ParsedFunction, CompileError>) parseResult)
+		var parsed = ((Result.Ok<FunctionHandler.ParsedFunction, CompileError>) parseResult)
 				.value();
 		Map<String, FunctionHandler.FunctionDef> updatedRegistry = new java.util.HashMap<>(functionRegistry);
 		updatedRegistry.put(varName, parsed.functionDef());
 
 		// Continue with the rest of the statement
-		Result<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, CompileError> contResult = io.github.sirmathhman.tuff.App
+		var contResult = io.github.sirmathhman.tuff.App
 				.parseExpressionWithRead(continuation, updatedRegistry);
 		return contResult.match(expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions),
 				Result::err);

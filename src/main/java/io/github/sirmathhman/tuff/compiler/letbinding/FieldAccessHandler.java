@@ -15,7 +15,7 @@ public final class FieldAccessHandler {
 	public static Result<FieldAccessResult, CompileError> parseFieldAccess(String expr,
 			Map<String, StructDefinition> structRegistry) {
 		// expr should start with . or contain a dot for field access
-		int dotPos = expr.indexOf('.');
+		var dotPos = expr.indexOf('.');
 
 		if (dotPos < 0) {
 			return Result.err(new CompileError("Invalid field access: no dot found"));
@@ -26,19 +26,19 @@ public final class FieldAccessHandler {
 		}
 
 		// Extract field name after dot
-		String afterDot = expr.substring(dotPos + 1);
-		int fieldNameEnd = 0;
+		var afterDot = expr.substring(dotPos + 1);
+		var fieldNameEnd = 0;
 
 		while (fieldNameEnd < afterDot.length() && Character.isJavaIdentifierPart(afterDot.charAt(fieldNameEnd))) {
 			fieldNameEnd++;
 		}
 
-		String fieldName = afterDot.substring(0, fieldNameEnd);
+		var fieldName = afterDot.substring(0, fieldNameEnd);
 		if (fieldName.isEmpty()) {
 			return Result.err(new CompileError("Invalid field name"));
 		}
 
-		String remaining = afterDot.substring(fieldNameEnd).trim();
+		var remaining = afterDot.substring(fieldNameEnd).trim();
 
 		return Result.ok(new FieldAccessResult(fieldName, expr.substring(0, dotPos).trim(), remaining));
 	}

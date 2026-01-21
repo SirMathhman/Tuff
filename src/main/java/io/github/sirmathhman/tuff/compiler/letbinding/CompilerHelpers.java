@@ -36,21 +36,21 @@ public final class CompilerHelpers {
 	public static Result<Void, CompileError> parseAndStoreInMemory(String valueExpr,
 			List<Instruction> instructions, int memAddr) {
 		// Check if it's an array - if so, store each element separately
-		String trimmed = valueExpr.trim();
+		var trimmed = valueExpr.trim();
 		if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-			String inner = trimmed.substring(1, trimmed.length() - 1);
-			java.util.List<String> elements = io.github.sirmathhman.tuff.compiler.DepthAwareSplitter
+			var inner = trimmed.substring(1, trimmed.length() - 1);
+			var elements = io.github.sirmathhman.tuff.compiler.DepthAwareSplitter
 					.splitByDelimiterAtDepthZero(inner, ',');
 
 			// Generate instructions to evaluate and store each element
-			for (int i = 0; i < elements.size(); i++) {
-				String element = elements.get(i).trim();
-				Result<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, io.github.sirmathhman.tuff.CompileError> elemResult = App
+			for (var i = 0; i < elements.size(); i++) {
+				var element = elements.get(i).trim();
+				var elemResult = App
 						.parseExpressionWithRead(element);
 				if (elemResult instanceof Result.Err<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, io.github.sirmathhman.tuff.CompileError> err) {
 					return Result.err(err.error());
 				}
-				Result<Void, io.github.sirmathhman.tuff.CompileError> genResult = App.generateInstructions(
+				var genResult = App.generateInstructions(
 						((Result.Ok<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, io.github.sirmathhman.tuff.CompileError>) elemResult)
 								.value(),
 						instructions);
@@ -89,8 +89,8 @@ public final class CompilerHelpers {
 	 * Used by ForLoopHandler and WhileLoopHandler.
 	 */
 	public static int findConditionEnd(String expr, int startOffset) {
-		int parenDepth = 1; // We start inside the opening paren so depth is 1
-		for (int i = startOffset; i < expr.length(); i++) {
+		var parenDepth = 1; // We start inside the opening paren so depth is 1
+		for (var i = startOffset; i < expr.length(); i++) {
 			if (expr.charAt(i) == '(')
 				parenDepth++;
 			else if (expr.charAt(i) == ')')
@@ -107,17 +107,17 @@ public final class CompilerHelpers {
 	 * Used for tuple variable substitution logic.
 	 */
 	public static int countVariableOccurrences(String varName, String continuation) {
-		Pattern varPattern = Pattern.compile("\\b" + varName + "\\b");
-		int occurrences = 0;
-		for (Matcher m = varPattern.matcher(continuation); m.find(); occurrences++) {
+		var varPattern = Pattern.compile("\\b" + varName + "\\b");
+		var occurrences = 0;
+		for (var m = varPattern.matcher(continuation); m.find(); occurrences++) {
 			// Check if this occurrence is part of an indexed access like x[...]
-			int pos = m.start();
+			var pos = m.start();
 			if (pos + varName.length() < continuation.length()
 					&& continuation.charAt(pos + varName.length()) == '[') {
 				// This is an indexed access - skip to after the closing bracket
-				int depth = 0;
-				for (int i = pos + varName.length(); i < continuation.length(); i++) {
-					char c = continuation.charAt(i);
+				var depth = 0;
+				for (var i = pos + varName.length(); i < continuation.length(); i++) {
+					var c = continuation.charAt(i);
 					if (c == '[') {
 						depth++;
 					} else if (c == ']') {
@@ -138,9 +138,9 @@ public final class CompilerHelpers {
 	 * Used for tuple variable substitution logic.
 	 */
 	public static boolean allAccessesAreIndexed(String varName, String continuation) {
-		Pattern varPattern = Pattern.compile("\\b" + varName + "\\b");
-		for (Matcher m = varPattern.matcher(continuation); m.find();) {
-			int pos = m.start();
+		var varPattern = Pattern.compile("\\b" + varName + "\\b");
+		for (var m = varPattern.matcher(continuation); m.find();) {
+			var pos = m.start();
 			// Check if this is followed by a bracket
 			if (pos + varName.length() >= continuation.length()
 					|| continuation.charAt(pos + varName.length()) != '[') {
@@ -156,9 +156,9 @@ public final class CompilerHelpers {
 	 * Arrays and pointers-to-arrays are wrapped with extra brackets for indexing.
 	 */
 	public static String wrapValueForSubstitution(String value, String declaredType) {
-		boolean isArrayType = declaredType != null && declaredType.startsWith("[") && declaredType.endsWith("]");
-		boolean isArrayPointerType = declaredType != null &&
-				(declaredType.startsWith("*[") || declaredType.startsWith("*mut ["));
+		var isArrayType = declaredType != null && declaredType.startsWith("[") && declaredType.endsWith("]");
+		var isArrayPointerType = declaredType != null &&
+														 (declaredType.startsWith("*[") || declaredType.startsWith("*mut ["));
 
 		if ((isArrayType || isArrayPointerType) && value.startsWith("[") && value.endsWith("]")) {
 			// All arrays and pointer-to-arrays get wrapped for indexing

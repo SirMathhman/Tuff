@@ -14,24 +14,24 @@ public final class ExpressionTokens {
 	}
 
 	public static Result<LetBindingDecl, CompileError> parseLetDeclaration(String expr) {
-		int equalsIndex = expr.indexOf('=');
+		var equalsIndex = expr.indexOf('=');
 		if (equalsIndex == -1) {
 			return Result.err(new CompileError("Invalid let binding: missing '='"));
 		}
 
-		int semiIndex = expr.indexOf(';', equalsIndex);
+		var semiIndex = expr.indexOf(';', equalsIndex);
 		if (semiIndex == -1) {
 			return Result.err(new CompileError("Invalid let binding: missing ';'"));
 		}
 
-		String decl = expr.substring(4, equalsIndex).trim(); // Skip "let "
+		var decl = expr.substring(4, equalsIndex).trim(); // Skip "let "
 		String varName;
 		String declaredType;
 
 		// Check if type annotation is present (contains ':')
 		if (decl.contains(":")) {
 			// Find the first ':' at depth 0 (not inside parentheses)
-			int colonIndex = findFirstColonAtDepthZero(decl);
+			var colonIndex = findFirstColonAtDepthZero(decl);
 			if (colonIndex == -1) {
 				return Result.err(new CompileError("Invalid let binding: expected 'varName : type'"));
 			}
@@ -43,15 +43,15 @@ public final class ExpressionTokens {
 			declaredType = null;
 		}
 
-		String valueExpr = expr.substring(equalsIndex + 1, semiIndex).trim();
+		var valueExpr = expr.substring(equalsIndex + 1, semiIndex).trim();
 
 		return Result.ok(new LetBindingDecl(varName, declaredType, valueExpr));
 	}
 
 	public static int findFirstColonAtDepthZero(String s) {
-		int depth = 0;
-		for (int i = 0; i < s.length(); i++) {
-			char c = s.charAt(i);
+		var depth = 0;
+		for (var i = 0; i < s.length(); i++) {
+			var c = s.charAt(i);
 			if (c == '(' || c == '{') {
 				depth++;
 			} else if (c == ')' || c == '}') {
@@ -82,22 +82,22 @@ public final class ExpressionTokens {
 		}
 
 		// Handle array types: [Type; InitCount; TotalCount]
-		Result<String, CompileError> arrayResult = tryParseArrayType(expr);
+		var arrayResult = tryParseArrayType(expr);
 		if (arrayResult instanceof Result.Ok<String, CompileError>) {
 			return arrayResult;
 		}
 
 		// Handle tuple expressions: (expr1, expr2, ...)
 		if (expr.startsWith("(") && expr.endsWith(")")) {
-			String inner = expr.substring(1, expr.length() - 1).trim();
+			var inner = expr.substring(1, expr.length() - 1).trim();
 
 			// Check if there are commas at depth 0 (indicating a tuple)
-			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
+			var elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
 			if (elements.size() > 1) {
 				// It's a tuple - extract types of all elements
 				java.util.List<String> elementTypes = new java.util.ArrayList<>();
-				for (String element : elements) {
-					Result<String, CompileError> elemTypeResult = extractTypeFromExpression(element.trim(),
+				for (var element : elements) {
+					var elemTypeResult = extractTypeFromExpression(element.trim(),
 							variableTypes);
 					if (elemTypeResult instanceof Result.Err<String, CompileError>) {
 						return elemTypeResult;
@@ -131,7 +131,7 @@ public final class ExpressionTokens {
 
 		// Handle read operations
 		if (expr.startsWith("read ")) {
-			String typeSpec = expr.substring(5).trim();
+			var typeSpec = expr.substring(5).trim();
 			if (!typeSpec.matches("\\*?([a-zA-Z_][a-zA-Z0-9_]*|[UI]\\d+|Bool|Char)")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
@@ -145,15 +145,15 @@ public final class ExpressionTokens {
 
 	private static Result<String, CompileError> extractDereferenceType(String expr,
 			java.util.Map<String, String> variableTypes) {
-		String inner = expr.substring(1).trim();
-		Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
+		var inner = expr.substring(1).trim();
+		var innerType = extractTypeFromExpression(inner, variableTypes);
 		if (innerType instanceof Result.Err<String, CompileError>) {
 			return innerType;
 		}
 		if (!(innerType instanceof Result.Ok<String, CompileError> ok)) {
 			return Result.err(new CompileError("Internal error: expected Ok or Err in inner dereference type"));
 		}
-		String pointerType = ok.value();
+		var pointerType = ok.value();
 		// Strip 'mut' keyword if present: *mut Type -> *Type
 		if (pointerType.startsWith("*mut ")) {
 			pointerType = "*" + pointerType.substring(5);
@@ -167,12 +167,12 @@ public final class ExpressionTokens {
 
 	private static Result<String, CompileError> extractReferenceType(String expr,
 			java.util.Map<String, String> variableTypes) {
-		String inner = expr.substring(1).trim();
+		var inner = expr.substring(1).trim();
 		// Strip 'mut' keyword if present: &mut x -> &x
 		if (inner.startsWith("mut ")) {
 			inner = inner.substring(4).trim();
 		}
-		Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
+		var innerType = extractTypeFromExpression(inner, variableTypes);
 		if (innerType instanceof Result.Ok<String, CompileError> ok) {
 			// Taking reference of Type gives *Type (or *mut Type for mutable references)
 			return Result.ok("*" + ok.value());
@@ -184,12 +184,16 @@ public final class ExpressionTokens {
 
 	public static List<String> splitTokensByOperators(String expr, boolean isAdditive) {
 		List<String> result = new ArrayList<>();
-		StringBuilder token = new StringBuilder();
-		int depth = 0;
+		var token = new StringBuilder();
+		var depth = 0;
 
-		for (int i = 0; i < expr.length(); i++) {
-			char c = expr.charAt(i);
-			boolean isOp = isAdditive ? (c == '+' || c == '-') : (c == '*');
+		for (var i = 0; i < expr.length(); i++) {
+			var c = expr.charAt(i);
+			boolean isOp;
+			if (isAdditive)
+				isOp = c == '+' || c == '-';
+			else
+				isOp = c == '*';
 
 			// For * and & operators, check if they're unary (not binary)
 			// They're unary if they appear at the start or after another operator
@@ -198,12 +202,12 @@ public final class ExpressionTokens {
 			}
 			if (!isAdditive && c == '*' && i > 0) {
 				// Check if previous non-whitespace character is an operator or delimiter
-				int prevIdx = i - 1;
+				var prevIdx = i - 1;
 				while (prevIdx >= 0 && Character.isWhitespace(expr.charAt(prevIdx))) {
 					prevIdx--;
 				}
 				if (prevIdx >= 0) {
-					char prev = expr.charAt(prevIdx);
+					var prev = expr.charAt(prevIdx);
 					if (prev == '(' || prev == '+' || prev == '-' || prev == '*' || prev == '/' || prev == '&') {
 						isOp = false; // This * is unary (dereference or start of multiplication in parenthesized
 													// group)
@@ -218,7 +222,7 @@ public final class ExpressionTokens {
 				depth--;
 				token.append(c);
 			} else if (isOp && depth == 0 && (!isAdditive || token.length() > 0)) {
-				String t = token.toString().trim();
+				var t = token.toString().trim();
 				if (!t.isEmpty() || !isAdditive) {
 					result.add(t);
 				}
@@ -228,7 +232,7 @@ public final class ExpressionTokens {
 			}
 		}
 
-		String t = token.toString().trim();
+		var t = token.toString().trim();
 		if (!t.isEmpty() || !isAdditive) {
 			result.add(t);
 		}
@@ -241,7 +245,7 @@ public final class ExpressionTokens {
 
 	/**
 	 * Check if sourceType can be implicitly upcast to targetType.
-	 * 
+	 * <p>
 	 * Upcasting rules:
 	 * - Same type: always compatible
 	 * - U8 can upcast to U16, U32
@@ -260,35 +264,35 @@ public final class ExpressionTokens {
 		// Handle tuple types - must match exactly
 		if (sourceType.startsWith("(") && sourceType.endsWith(")") ||
 				targetType.startsWith("(") && targetType.endsWith(")")) {
-			return sourceType.equals(targetType);
+			return false;
 		}
 
 		// Handle function types - must match exactly
 		if (sourceType.contains("=>") || targetType.contains("=>")) {
-			return sourceType.equals(targetType);
+			return false;
 		}
 
 		// Handle This type - must match exactly
 		if ("This".equals(sourceType) || "This".equals(targetType)) {
-			return sourceType.equals(targetType);
+			return false;
 		}
 
 		// Strip 'mut' keyword for comparison: *mut Type -> *Type
-		String sourceNorm = sourceType.replaceAll("\\*mut\\s+", "*");
-		String targetNorm = targetType.replaceAll("\\*mut\\s+", "*");
+		var sourceNorm = sourceType.replaceAll("\\*mut\\s+", "*");
+		var targetNorm = targetType.replaceAll("\\*mut\\s+", "*");
 		if (sourceNorm.equals(targetNorm)) {
 			return true;
 		}
 
 		// Pointer types must match exactly
-		boolean sourceIsPointer = sourceNorm.startsWith("*");
-		boolean targetIsPointer = targetNorm.startsWith("*");
+		var sourceIsPointer = sourceNorm.startsWith("*");
+		var targetIsPointer = targetNorm.startsWith("*");
 		if (sourceIsPointer != targetIsPointer) {
 			return false;
 		}
 
 		// If both are pointers, recurse on the pointed-to types
-		if (sourceIsPointer && targetIsPointer) {
+		if (sourceIsPointer) {
 			return isTypeCompatible(sourceNorm.substring(1), targetNorm.substring(1));
 		}
 
@@ -297,10 +301,10 @@ public final class ExpressionTokens {
 			return false;
 		}
 
-		char sourceSign = sourceType.charAt(0);
-		char targetSign = targetType.charAt(0);
-		int sourceWidth = Integer.parseInt(sourceType.substring(1));
-		int targetWidth = Integer.parseInt(targetType.substring(1));
+		var sourceSign = sourceType.charAt(0);
+		var targetSign = targetType.charAt(0);
+		var sourceWidth = Integer.parseInt(sourceType.substring(1));
+		var targetWidth = Integer.parseInt(targetType.substring(1));
 
 		// Cross-sign conversion not allowed (U -> I or I -> U)
 		if (sourceSign != targetSign) {
@@ -322,7 +326,7 @@ public final class ExpressionTokens {
 
 			// Handle string indexing: "string"[index]
 			if (literal.contains("\"") && literal.contains("[")) {
-				Result<Long, CompileError> stringIndexResult = io.github.sirmathhman.tuff.compiler.strings.StringIndexingHandler
+				var stringIndexResult = io.github.sirmathhman.tuff.compiler.strings.StringIndexingHandler
 						.parseStringIndexing(literal);
 				if (stringIndexResult instanceof Result.Ok<Long, CompileError>) {
 					return stringIndexResult;
@@ -335,7 +339,7 @@ public final class ExpressionTokens {
 				return parseCharLiteral(literal);
 			}
 
-			String numericPart = literal;
+			var numericPart = literal;
 			String typeSuffix = null;
 
 			if (literal.matches(".*Bool$")) {
@@ -346,10 +350,10 @@ public final class ExpressionTokens {
 				numericPart = literal.replaceAll("[UI]\\d+$", "");
 			}
 
-			long value = Long.parseLong(numericPart);
+			var value = Long.parseLong(numericPart);
 
 			if (typeSuffix != null) {
-				Result<Void, CompileError> typeCheck = validateTypeSuffix(typeSuffix, value, literal);
+				var typeCheck = validateTypeSuffix(typeSuffix, value, literal);
 				if (typeCheck instanceof Result.Err<Void, CompileError> err) {
 					return Result.err(err.error());
 				}
@@ -367,21 +371,21 @@ public final class ExpressionTokens {
 				return Result.err(new CompileError("Bool literal must be 0 or 1, got: " + literal));
 			}
 		} else {
-			boolean isUnsigned = typeSuffix.startsWith("U");
-			int bits = Integer.parseInt(typeSuffix.substring(1));
+			var isUnsigned = typeSuffix.startsWith("U");
+			var bits = Integer.parseInt(typeSuffix.substring(1));
 
 			if (isUnsigned) {
 				if (value < 0) {
 					return Result.err(new CompileError("Negative value not allowed for unsigned type: " + literal));
 				}
-				long maxValue = (1L << bits) - 1;
+				var maxValue = (1L << bits) - 1;
 				if (value > maxValue) {
 					return Result.err(new CompileError(
 							"Value " + value + " exceeds maximum for " + typeSuffix + " (" + maxValue + "): " + literal));
 				}
 			} else {
-				long minValue = -(1L << (bits - 1));
-				long maxValue = (1L << (bits - 1)) - 1;
+				var minValue = -(1L << (bits - 1));
+				var maxValue = (1L << (bits - 1)) - 1;
 				if (value < minValue || value > maxValue) {
 					return Result.err(new CompileError("Value " + value + " out of range for " + typeSuffix + " (" + minValue
 							+ " to " + maxValue + "): " + literal));
@@ -395,12 +399,12 @@ public final class ExpressionTokens {
 		if (literal.length() < 3) {
 			return Result.err(new CompileError("Invalid char literal: too short: " + literal));
 		}
-		String inner = literal.substring(1, literal.length() - 1);
+		var inner = literal.substring(1, literal.length() - 1);
 		if (inner.startsWith("\\")) {
 			if (inner.length() == 1) {
 				return Result.err(new CompileError("Invalid escape sequence in char literal: " + literal));
 			}
-			char escapeChar = inner.charAt(1);
+			var escapeChar = inner.charAt(1);
 			long code = switch (escapeChar) {
 				case '0' -> 0;
 				case 'n' -> 10;
@@ -417,7 +421,7 @@ public final class ExpressionTokens {
 			return Result.ok(code);
 		}
 		if (inner.length() == 1) {
-			char c = inner.charAt(0);
+			var c = inner.charAt(0);
 			return Result.ok((long) c);
 		}
 		return Result
@@ -433,8 +437,8 @@ public final class ExpressionTokens {
 		if (!expr.startsWith("(") || !expr.endsWith(")")) {
 			return false;
 		}
-		String inner = expr.substring(1, expr.length() - 1);
-		List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
+		var inner = expr.substring(1, expr.length() - 1);
+		var elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
 		return elements.size() > 1;
 	}
 
@@ -447,24 +451,24 @@ public final class ExpressionTokens {
 			return Result.err(new CompileError("Invalid array type: must start with [ and end with ]"));
 		}
 
-		String inner = expr.substring(1, expr.length() - 1).trim();
-		List<String> parts = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ';');
+		var inner = expr.substring(1, expr.length() - 1).trim();
+		var parts = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ';');
 		if (parts.size() != 3) {
 			return Result.err(new CompileError("Invalid array type: expected [Type; InitCount; TotalCount], got " + expr));
 		}
 
-		String elementType = parts.get(0).trim();
-		String initCountStr = parts.get(1).trim();
-		String totalCountStr = parts.get(2).trim();
+		var elementType = parts.get(0).trim();
+		var initCountStr = parts.get(1).trim();
+		var totalCountStr = parts.get(2).trim();
 
-		boolean isValidElementType = isValidArrayElementType(elementType);
+		var isValidElementType = isValidArrayElementType(elementType);
 		if (!isValidElementType) {
 			return Result.err(new CompileError("Invalid array element type: " + elementType));
 		}
 
 		try {
-			int initCount = Integer.parseInt(initCountStr);
-			int totalCount = Integer.parseInt(totalCountStr);
+			var initCount = Integer.parseInt(initCountStr);
+			var totalCount = Integer.parseInt(totalCountStr);
 			if (initCount < 0 || totalCount < 0) {
 				return Result.err(new CompileError("Array counts must be non-negative"));
 			}
@@ -485,7 +489,7 @@ public final class ExpressionTokens {
 		}
 		// Nested array type
 		if (type.startsWith("[") && type.endsWith("]")) {
-			Result<String, CompileError> nestedResult = tryParseArrayType(type);
+			var nestedResult = tryParseArrayType(type);
 			return nestedResult instanceof Result.Ok<String, CompileError>;
 		}
 		return false;

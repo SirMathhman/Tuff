@@ -26,14 +26,14 @@ public final class ArrayPointerIndexingHandler {
 		int arrayMemAddr = variableAddresses.get(arrayVarName);
 
 		// Generate load instructions for all indexed accesses
-		java.util.regex.Pattern indexPattern = java.util.regex.Pattern
+		var indexPattern = java.util.regex.Pattern
 				.compile("\\b" + java.util.regex.Pattern.quote(varName) + "\\[(\\d+)\\]");
-		java.util.regex.Matcher matcher = indexPattern.matcher(continuation);
+		var matcher = indexPattern.matcher(continuation);
 
 		java.util.Map<Integer, Integer> indexToReg = new java.util.LinkedHashMap<>();
-		int nextReg = 0;
+		var nextReg = 0;
 		while (matcher.find()) {
-			int index = Integer.parseInt(matcher.group(1));
+			var index = Integer.parseInt(matcher.group(1));
 			if (!indexToReg.containsKey(index) && nextReg < 4) {
 				instructions.add(new Instruction(
 						Operation.Load,
@@ -46,11 +46,11 @@ public final class ArrayPointerIndexingHandler {
 		}
 
 		// Replace indexed references with register placeholders
-		String substitutedCont = continuation.trim();
-		for (java.util.Map.Entry<Integer, Integer> entry : indexToReg.entrySet()) {
+		var substitutedCont = continuation.trim();
+		for (var entry : indexToReg.entrySet()) {
 			int index = entry.getKey();
 			int reg = entry.getValue();
-			String pattern = "\\b" + java.util.regex.Pattern.quote(varName) + "\\[" + index + "\\]";
+			var pattern = "\\b" + java.util.regex.Pattern.quote(varName) + "\\[" + index + "\\]";
 			substitutedCont = substitutedCont.replaceAll(pattern, "__REG_" + reg + "__");
 		}
 
@@ -60,7 +60,7 @@ public final class ArrayPointerIndexingHandler {
 		}
 
 		// Fall back to parsing for non-pure-addition expressions
-		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App
+		var contResult = App
 				.parseExpressionWithRead(substitutedCont, functionRegistry);
 		return contResult.match(expr -> App.generateInstructions(expr, instructions),
 				Result::err);
@@ -68,13 +68,13 @@ public final class ArrayPointerIndexingHandler {
 
 	private static Result<Void, CompileError> generateAdditionInstructions(String substitutedCont,
 			List<Instruction> instructions) {
-		java.util.regex.Pattern regRefPattern = java.util.regex.Pattern.compile("__REG_(\\d+)__");
-		java.util.regex.Matcher regMatcher = regRefPattern.matcher(substitutedCont);
+		var regRefPattern = java.util.regex.Pattern.compile("__REG_(\\d+)__");
+		var regMatcher = regRefPattern.matcher(substitutedCont);
 
-		int resultReg = 0;
-		boolean first = true;
+		var resultReg = 0;
+		var first = true;
 		while (regMatcher.find()) {
-			int srcReg = Integer.parseInt(regMatcher.group(1));
+			var srcReg = Integer.parseInt(regMatcher.group(1));
 			if (first) {
 				if (srcReg != resultReg) {
 					// Zero out reg 0 and add srcReg: reg0 = 0 + srcReg

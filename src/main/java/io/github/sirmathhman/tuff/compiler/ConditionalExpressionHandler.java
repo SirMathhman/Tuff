@@ -19,15 +19,15 @@ public final class ConditionalExpressionHandler {
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseConditional(String expr) {
 		// Format: if (condition) trueValue else falseValue
-		int conditionEnd = findConditionEnd(expr);
+		var conditionEnd = findConditionEnd(expr);
 		if (conditionEnd == -1) {
 			return Result.err(new CompileError("Malformed conditional: missing closing paren for condition"));
 		}
 
-		String condition = expr.substring(4, conditionEnd);
-		String remaining = expr.substring(conditionEnd + 1).trim();
+		var condition = expr.substring(4, conditionEnd);
+		var remaining = expr.substring(conditionEnd + 1).trim();
 
-		int elseIndex = findElseKeyword(remaining);
+		var elseIndex = findElseKeyword(remaining);
 		if (elseIndex == -1) {
 			return Result.err(new CompileError("Malformed conditional: missing 'else' clause"));
 		}
@@ -36,9 +36,9 @@ public final class ConditionalExpressionHandler {
 	}
 
 	public static int findConditionEnd(String expr) {
-		int parenDepth = 1;
-		for (int i = 4; i < expr.length(); i++) {
-			char c = expr.charAt(i);
+		var parenDepth = 1;
+		for (var i = 4; i < expr.length(); i++) {
+			var c = expr.charAt(i);
 			if (c == '(')
 				parenDepth++;
 			else if (c == ')')
@@ -51,16 +51,16 @@ public final class ConditionalExpressionHandler {
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseConditionAndBranches(
 			String condition, String remaining, int elseIndex) {
-		String trueExpr = remaining.substring(0, elseIndex).trim();
-		String falseExpr = remaining.substring(elseIndex + 4).trim();
+		var trueExpr = remaining.substring(0, elseIndex).trim();
+		var falseExpr = remaining.substring(elseIndex + 4).trim();
 
-		Result<ExpressionModel.ExpressionResult, CompileError> condResult = parseExpressionForConditional(condition);
+		var condResult = parseExpressionForConditional(condition);
 		if (condResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>)
 			return condResult;
 
 		// Validate that the condition is a Bool type
-		Result<String, CompileError> condTypeResult = ExpressionTokens.extractTypeFromExpression(condition,
-				new java.util.HashMap<>());
+		var condTypeResult = ExpressionTokens.extractTypeFromExpression(condition,
+																																		new java.util.HashMap<>());
 		Result<Void, CompileError> typeValidation = condTypeResult.match(condType -> {
 			if (!condType.equals("Bool")) {
 				return Result.err(new CompileError("Conditional expression requires Bool type, but got " + condType));
@@ -71,33 +71,33 @@ public final class ConditionalExpressionHandler {
 			return Result.err(typeErr.error());
 		}
 
-		Result<ExpressionModel.ExpressionResult, CompileError> trueResult = parseExpressionForConditional(trueExpr);
+		var trueResult = parseExpressionForConditional(trueExpr);
 		if (trueResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>)
 			return trueResult;
 
-		Result<ExpressionModel.ExpressionResult, CompileError> falseResult = parseExpressionForConditional(falseExpr);
+		var falseResult = parseExpressionForConditional(falseExpr);
 		if (falseResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>)
 			return falseResult;
 
-		ExpressionModel.ExpressionResult cond = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) condResult)
+		var cond = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) condResult)
 				.value();
-		ExpressionModel.ExpressionResult trueVal = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) trueResult)
+		var trueVal = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) trueResult)
 				.value();
-		ExpressionModel.ExpressionResult falseVal = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) falseResult)
+		var falseVal = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) falseResult)
 				.value();
 
-		ExpressionModel.ExpressionTerm branchMarker = new ExpressionModel.ExpressionTerm(-3, (int) trueVal.literalValue,
-				new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
-		ExpressionModel.ExpressionTerm elseMarker = new ExpressionModel.ExpressionTerm(-4, (int) falseVal.literalValue,
-				new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
+		var branchMarker = new ExpressionModel.ExpressionTerm(-3, (int) trueVal.literalValue(),
+																													new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
+		var elseMarker = new ExpressionModel.ExpressionTerm(-4, (int) falseVal.literalValue(),
+																												new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
 
-		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(cond.terms);
+		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(cond.terms());
 		allTerms.add(branchMarker);
-		allTerms.addAll(trueVal.terms);
+		allTerms.addAll(trueVal.terms());
 		allTerms.add(elseMarker);
-		allTerms.addAll(falseVal.terms);
+		allTerms.addAll(falseVal.terms());
 
-		int totalReads = cond.readCount + trueVal.readCount + falseVal.readCount;
+		var totalReads = cond.readCount() + trueVal.readCount() + falseVal.readCount();
 		return Result.ok(new ExpressionModel.ExpressionResult(totalReads, 0, allTerms));
 	}
 
@@ -141,9 +141,9 @@ public final class ConditionalExpressionHandler {
 	}
 
 	private static int findElseKeyword(String expr) {
-		int depth = 0;
-		for (int i = 0; i < expr.length() - 3; i++) {
-			char c = expr.charAt(i);
+		var depth = 0;
+		for (var i = 0; i < expr.length() - 3; i++) {
+			var c = expr.charAt(i);
 			if (c == '(' || c == '{')
 				depth++;
 			else if (c == ')' || c == '}')
@@ -163,7 +163,7 @@ public final class ConditionalExpressionHandler {
 			List<Instruction> instructions, boolean isFirst) {
 		if (!s.startsWith("if ("))
 			return Result.err(new CompileError("Expected 'if'"));
-		int cEnd = findConditionEnd(s);
+		var cEnd = findConditionEnd(s);
 		if (cEnd == -1)
 			return Result.err(new CompileError("Malformed"));
 		String cond = s.substring(4, cEnd), r = s.substring(cEnd + 1).trim();
@@ -176,32 +176,32 @@ public final class ConditionalExpressionHandler {
 		if (!r2.startsWith("else "))
 			return Result.err(new CompileError("Expected 'else'"));
 
-		Result<Void, CompileError> condCheckResult = validateCondition(cond);
+		var condCheckResult = validateCondition(cond);
 		if (condCheckResult instanceof Result.Err<Void, CompileError>)
 			return condCheckResult;
 
 		r2 = r2.substring(5).trim();
-		Result<ExpressionModel.ExpressionResult, CompileError> condRes = App.parseExpressionWithRead(cond);
+		var condRes = App.parseExpressionWithRead(cond);
 		if (condRes instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> condErr)
 			return Result.err(condErr.error());
-		ExpressionModel.ExpressionResult condExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) condRes)
+		var condExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) condRes)
 				.value();
-		Result<Void, CompileError> genCond = App.generateInstructions(condExpr, instructions);
+		var genCond = App.generateInstructions(condExpr, instructions);
 		if (genCond instanceof Result.Err<Void, CompileError>)
 			return Result.err(new CompileError("Bad cond"));
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, -1L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 1, 0L));
-		int jumpElseIdx = instructions.size();
+		var jumpElseIdx = instructions.size();
 		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, 0L));
 
-		Result<Integer, CompileError> trueResult = processTrueBranch(trueVal, instructions);
+		var trueResult = processTrueBranch(trueVal, instructions);
 		if (trueResult instanceof Result.Err<Integer, CompileError> trueErr)
 			return Result.err(trueErr.error());
 		int jumpEndIdx = ((Result.Ok<Integer, CompileError>) trueResult).value();
 
 		instructions.set(jumpElseIdx,
 				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, (long) instructions.size()));
-		Result<Void, CompileError> falseResult = processFalseBranch(varName, r2, instructions);
+		var falseResult = processFalseBranch(varName, r2, instructions);
 		if (falseResult instanceof Result.Err<Void, CompileError>)
 			return falseResult;
 
@@ -214,7 +214,7 @@ public final class ConditionalExpressionHandler {
 	}
 
 	private static Result<Void, CompileError> validateCondition(String cond) {
-		Result<String, CompileError> typeRes = ExpressionTokens.extractTypeFromExpression(cond, new java.util.HashMap<>());
+		var typeRes = ExpressionTokens.extractTypeFromExpression(cond, new java.util.HashMap<>());
 		return typeRes.match(type -> {
 			if (!type.equals("Bool")) {
 				return Result.err(new CompileError("Expect Bool"));
@@ -224,18 +224,18 @@ public final class ConditionalExpressionHandler {
 	}
 
 	private static Result<Integer, CompileError> processTrueBranch(String trueVal, List<Instruction> instructions) {
-		Result<ExpressionModel.ExpressionResult, CompileError> trueRes = App.parseExpressionWithRead(trueVal);
+		var trueRes = App.parseExpressionWithRead(trueVal);
 		if (trueRes instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> trueErr) {
 			return Result.err(trueErr.error());
 		}
-		ExpressionModel.ExpressionResult trueExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) trueRes)
+		var trueExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) trueRes)
 				.value();
-		Result<Void, CompileError> genTrue = App.generateInstructions(trueExpr, instructions);
+		var genTrue = App.generateInstructions(trueExpr, instructions);
 		if (genTrue instanceof Result.Err<Void, CompileError>) {
 			return Result.err(new CompileError("Bad true"));
 		}
 		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
-		int jumpEndIdx = instructions.size();
+		var jumpEndIdx = instructions.size();
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
 		return Result.ok(jumpEndIdx);
 	}
@@ -245,20 +245,20 @@ public final class ConditionalExpressionHandler {
 		if (r2.startsWith("if (")) {
 			return buildConditionalAssignmentChain(varName, r2, instructions, false);
 		} else if (r2.startsWith(varName + " =") || r2.startsWith(varName + "=")) {
-			int eqIdx = r2.indexOf('=');
-			int sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(r2, eqIdx);
+			var eqIdx = r2.indexOf('=');
+			var sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(r2, eqIdx);
 			if (sIdx == -1)
 				return Result.err(new CompileError("Missing ';'"));
-			String falseVal = r2.substring(eqIdx + 1, sIdx).trim();
+			var falseVal = r2.substring(eqIdx + 1, sIdx).trim();
 			if (!r2.substring(sIdx + 1).trim().equals(varName))
 				return Result.err(new CompileError("Bad var"));
-			Result<ExpressionModel.ExpressionResult, CompileError> falseRes = App.parseExpressionWithRead(falseVal);
+			var falseRes = App.parseExpressionWithRead(falseVal);
 			if (falseRes instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> falseErr) {
 				return Result.err(falseErr.error());
 			}
-			ExpressionModel.ExpressionResult falseExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) falseRes)
+			var falseExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) falseRes)
 					.value();
-			Result<Void, CompileError> genFalse = App.generateInstructions(falseExpr, instructions);
+			var genFalse = App.generateInstructions(falseExpr, instructions);
 			if (genFalse instanceof Result.Err<Void, CompileError>) {
 				return Result.err(new CompileError("Bad else"));
 			}

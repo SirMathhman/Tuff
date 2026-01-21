@@ -26,33 +26,33 @@ public final class FunctionDefinitionProcessor {
 
 	public static Result<FunctionDefParts, CompileError> splitFunctionDefinition(String stmt) {
 		// Format: fn name(params) [: ReturnType] => body; remaining
-		String s = stmt.trim();
+		var s = stmt.trim();
 		if (!s.startsWith("fn ")) {
 			return Result.err(new CompileError("Invalid function definition. Expected: fn name(params) => body;"));
 		}
 
-		int nameStart = 3;
-		int parenOpen = s.indexOf('(', nameStart);
+		var nameStart = 3;
+		var parenOpen = s.indexOf('(', nameStart);
 		if (parenOpen == -1) {
 			return Result.err(new CompileError("Invalid function definition: missing '(' after function name"));
 		}
-		String name = s.substring(nameStart, parenOpen).trim();
+		var name = s.substring(nameStart, parenOpen).trim();
 		if (!name.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
 			return Result.err(new CompileError("Invalid function name: " + name));
 		}
 
-		int parenClose = findMatchingParen(s, parenOpen);
+		var parenClose = findMatchingParen(s, parenOpen);
 		if (parenClose == -1) {
 			return Result.err(new CompileError("Invalid function definition: unmatched ')' in parameter list"));
 		}
-		String params = s.substring(parenOpen + 1, parenClose).trim();
+		var params = s.substring(parenOpen + 1, parenClose).trim();
 
-		int arrowIndex = s.indexOf("=>", parenClose + 1);
+		var arrowIndex = s.indexOf("=>", parenClose + 1);
 		if (arrowIndex == -1) {
 			return Result.err(new CompileError("Invalid function definition: missing '=>'"));
 		}
 
-		String between = s.substring(parenClose + 1, arrowIndex).trim();
+		var between = s.substring(parenClose + 1, arrowIndex).trim();
 		String returnType = null;
 		if (!between.isEmpty()) {
 			if (!between.startsWith(":")) {
@@ -65,46 +65,46 @@ public final class FunctionDefinitionProcessor {
 			}
 		}
 
-		int bodyStart = arrowIndex + 2;
+		var bodyStart = arrowIndex + 2;
 		while (bodyStart < s.length() && Character.isWhitespace(s.charAt(bodyStart))) {
 			bodyStart++;
 		}
 
-		String resolvedReturnType = returnType;
-		Result<BodyAndRemaining, CompileError> bodyResult = parseBodyAndRemaining(s, bodyStart);
+		var resolvedReturnType = returnType;
+		var bodyResult = parseBodyAndRemaining(s, bodyStart);
 		return bodyResult.map(br -> new FunctionDefParts(name, params, resolvedReturnType, br.body(), br.remaining()));
 	}
 
 	private static Result<BodyAndRemaining, CompileError> parseBodyAndRemaining(String s, int bodyStart) {
-		int semiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(s, bodyStart);
+		var semiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(s, bodyStart);
 		if (semiIndex != -1) {
-			String body = s.substring(bodyStart, semiIndex).trim();
-			String remaining = s.substring(semiIndex + 1).trim();
+			var body = s.substring(bodyStart, semiIndex).trim();
+			var remaining = s.substring(semiIndex + 1).trim();
 			return Result.ok(new BodyAndRemaining(body, remaining));
 		}
 
 		// Allow omitting ';' terminator for block bodies: fn f() => { ... } nextExpr
 		if (bodyStart < s.length() && s.charAt(bodyStart) == '{') {
-			int closeBrace = DepthAwareSplitter.findMatchingBrace(s, bodyStart);
+			var closeBrace = DepthAwareSplitter.findMatchingBrace(s, bodyStart);
 			if (closeBrace == -1) {
 				return Result.err(new CompileError("Invalid function definition: unmatched '}' in body"));
 			}
-			String body = s.substring(bodyStart, closeBrace + 1).trim();
-			String remaining = s.substring(closeBrace + 1).trim();
+			var body = s.substring(bodyStart, closeBrace + 1).trim();
+			var remaining = s.substring(closeBrace + 1).trim();
 			return Result.ok(new BodyAndRemaining(body, remaining));
 		}
 
 		// If there's no semicolon and no block, treat the entire rest as body with
 		// empty remaining
 		// This supports: let func = fn get() => 100; func()
-		String body = s.substring(bodyStart).trim();
+		var body = s.substring(bodyStart).trim();
 		return Result.ok(new BodyAndRemaining(body, ""));
 	}
 
 	static int findMatchingParen(String s, int openIdx) {
-		int depth = 1;
-		for (int i = openIdx + 1; i < s.length(); i++) {
-			char c = s.charAt(i);
+		var depth = 1;
+		for (var i = openIdx + 1; i < s.length(); i++) {
+			var c = s.charAt(i);
 			if (c == '(') {
 				depth++;
 			} else if (c == ')') {
@@ -125,10 +125,10 @@ public final class FunctionDefinitionProcessor {
 		}
 
 		// Split by comma at depth 0, handling nested parentheses and angle brackets
-		StringBuilder current = new StringBuilder();
-		int depth = 0;
+		var current = new StringBuilder();
+		var depth = 0;
 
-		for (char c : input.toCharArray()) {
+		for (var c : input.toCharArray()) {
 			if (c == '<' || c == '(' || c == '{') {
 				depth++;
 				current.append(c);
@@ -158,22 +158,22 @@ public final class FunctionDefinitionProcessor {
 		}
 
 		// Split by comma at depth 0
-		Result<List<String>, CompileError> splitResult = splitByCommaAtDepthZero(paramString);
+		var splitResult = splitByCommaAtDepthZero(paramString);
 		if (splitResult instanceof Result.Err<List<String>, CompileError>) {
 			return Result.err(((Result.Err<List<String>, CompileError>) splitResult).error());
 		}
-		List<String> paramParts = ((Result.Ok<List<String>, CompileError>) splitResult).value();
+		var paramParts = ((Result.Ok<List<String>, CompileError>) splitResult).value();
 
 		// Parse each parameter
-		for (String paramPart : paramParts) {
-			String[] parts = paramPart.split(":");
+		for (var paramPart : paramParts) {
+			var parts = paramPart.split(":");
 			if (parts.length != 2) {
 				return Result.err(new CompileError("Invalid parameter syntax: expected 'name : type' but got '" + paramPart
 						+ "'. All parameters must be explicitly typed."));
 			}
 
-			String paramName = parts[0].trim();
-			String paramType = parts[1].trim();
+			var paramName = parts[0].trim();
+			var paramType = parts[1].trim();
 
 			if (!paramName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
 				return Result
@@ -204,19 +204,19 @@ public final class FunctionDefinitionProcessor {
 
 		// First, check if the body starts with a struct instantiation
 		// (e.g., Point { ... })
-		Pattern structPattern = Pattern.compile("^([A-Z][a-zA-Z0-9_]*)\\s*\\{");
-		Matcher structMatcher = structPattern.matcher(body);
+		var structPattern = Pattern.compile("^([A-Z][a-zA-Z0-9_]*)\\s*\\{");
+		var structMatcher = structPattern.matcher(body);
 		if (structMatcher.find()) {
-			String structType = structMatcher.group(1);
+			var structType = structMatcher.group(1);
 			return Result.ok(structType);
 		}
 
 		if (body.contains("read")) {
 			// Try to extract type from read operation
-			Pattern pattern = Pattern.compile("\\bread\\s+([A-Za-z_*][A-Za-z0-9_*]*)");
-			Matcher matcher = pattern.matcher(body);
+			var pattern = Pattern.compile("\\bread\\s+([A-Za-z_*][A-Za-z0-9_*]*)");
+			var matcher = pattern.matcher(body);
 			if (matcher.find()) {
-				String type = matcher.group(1);
+				var type = matcher.group(1);
 				if (isValidReturnType(type)) {
 					return Result.ok(type);
 				}
@@ -224,14 +224,12 @@ public final class FunctionDefinitionProcessor {
 		}
 		// Check for typed literals (e.g., 42U8, 100U16)
 		if (body.matches(".*\\d+[UI]\\d+.*")) {
-			Pattern pattern = Pattern.compile("\\d+([UI]\\d+)");
-			Matcher matcher = pattern.matcher(body);
+			var pattern = Pattern.compile("\\d+([UI]\\d+)");
+			var matcher = pattern.matcher(body);
 			if (matcher.find()) {
-				String typeCode = matcher.group(1);
 				// Convert U8 to U8, U16 to U16, etc.
-				String fullType = typeCode;
-				if (isValidReturnType(fullType)) {
-					return Result.ok(fullType);
+				if (isValidReturnType(matcher.group(1))) {
+					return Result.ok(matcher.group(1));
 				}
 			}
 		}
@@ -271,7 +269,7 @@ public final class FunctionDefinitionProcessor {
 	 * handling
 	 */
 	public static Result<List<String>, CompileError> parseAndExtractArguments(String argsString) {
-		Result<List<String>, CompileError> argsResult = splitByCommaAtDepthZero(argsString);
+		var argsResult = splitByCommaAtDepthZero(argsString);
 		if (argsResult instanceof Result.Err<List<String>, CompileError>) {
 			return Result.err(((Result.Err<List<String>, CompileError>) argsResult).error());
 		}

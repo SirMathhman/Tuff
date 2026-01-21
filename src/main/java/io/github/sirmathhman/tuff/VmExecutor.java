@@ -17,7 +17,7 @@ public final class VmExecutor {
 	 * Creates an input supplier from an input array.
 	 */
 	private static java.util.function.IntSupplier createInputSupplier(int[] input) {
-		final int[] inputPointer = { 0 };
+		final var inputPointer = new int[]{0};
 		return () -> {
 			if (inputPointer[0] >= input.length) {
 				return 0;
@@ -32,10 +32,10 @@ public final class VmExecutor {
 	public static Result<RunResult, ApplicationError> executeWithIO(
 			Instruction[] instructions,
 			int[] input) {
-		final int[] inputPointer = { 0 };
+		final var inputPointer = new int[]{0};
 		List<Integer> output = new ArrayList<>();
 		try {
-			int returnValue = Vm.execute(
+			var returnValue = Vm.execute(
 					instructions,
 					() -> {
 						if (inputPointer[0] >= input.length) {
@@ -63,7 +63,7 @@ public final class VmExecutor {
 			Vm.TraceSink traceSink) {
 		List<Integer> output = new ArrayList<>();
 		try {
-			int returnValue = Vm.execute(
+			var returnValue = Vm.execute(
 					instructions,
 					createInputSupplier(input),
 					output::add,

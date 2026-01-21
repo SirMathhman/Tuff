@@ -17,43 +17,33 @@ public final class MultiplicativeExpressionBuilder {
 
 	public static Result<ExpressionModel.ParsedMult, CompileError> parseMultiplicative(String expr,
 			boolean isSubtracted, ExpressionParser parser) {
-		List<ExpressionModel.MultOperatorToken> multTokens = splitByMultOperators(expr);
+		var multTokens = splitByMultOperators(expr);
 		List<ExpressionModel.ExpressionTerm> multTerms = new ArrayList<>();
 		long multLiteral = 1;
-		int lastExpandedParensSize = 0;
-		for (int j = 0; j < multTokens.size(); j++) {
-			ExpressionModel.MultOperatorToken opToken = multTokens.get(j);
-			String multToken = opToken.token.trim();
-			char operator = opToken.operator;
+		var lastExpandedParensSize = 0;
+		for (var j = 0; j < multTokens.size(); j++) {
+			var opToken = multTokens.get(j);
+			var multToken = opToken.token().trim();
+			var operator = opToken.operator();
 			if (multToken.startsWith("(") && multToken.endsWith(")")) {
-				Result<ExpressionModel.ParenthesizedTokenResult, CompileError> pResult = processParenthesizedToken(multToken, j,
-						isSubtracted, multTokens.size(), parser);
+				var pResult = processParenthesizedToken(multToken, j, isSubtracted, multTokens.size(), parser);
 				if (pResult instanceof Result.Err<ExpressionModel.ParenthesizedTokenResult, CompileError> err)
 					return Result.err(err.error());
-				ExpressionModel.ParenthesizedTokenResult pData = ((Result.Ok<ExpressionModel.ParenthesizedTokenResult, CompileError>) pResult)
-						.value();
+				var pData = ((Result.Ok<ExpressionModel.ParenthesizedTokenResult, CompileError>) pResult).value();
 				multTerms.addAll(pData.terms());
-				Result<Long, CompileError> lit1 = updateLiteral(multLiteral, pData.literalValue(), j == 0, operator);
+				var lit1 = updateLiteral(multLiteral, pData.literalValue(), j == 0, operator);
 				if (lit1 instanceof Result.Err<Long, CompileError> err)
 					return Result.err(err.error());
 				multLiteral = ((Result.Ok<Long, CompileError>) lit1).value();
 				lastExpandedParensSize = pData.expandedSize();
 			} else {
-				Result<ExpressionModel.ExpressionTerm, CompileError> termResult = BitwiseNotParser.parseTermWithNot(multToken);
-				if (termResult instanceof Result.Err<ExpressionModel.ExpressionTerm, CompileError> err)
+				var termResult = processNonParenthesizedToken(multToken, isSubtracted, j, operator);
+				if (termResult instanceof Result.Err<Object, CompileError> err)
 					return Result.err(err.error());
-				ExpressionModel.ExpressionTerm baseTerm = ((Result.Ok<ExpressionModel.ExpressionTerm, CompileError>) termResult)
-						.value();
-				ExpressionModel.ExpressionTermFlags flags = ExpressionModel.ExpressionTermFlags.empty()
-						.withSubtracted(isSubtracted)
-						.withMultiplied(j > 0 && operator == '*')
-						.withDivided(j > 0 && operator == '/')
-						.withBitwiseNotted(baseTerm.isBitwiseNotted())
-						.withLogicalNotted(baseTerm.isLogicalNotted())
-						.withMultiplicativeOperator((j > 0) ? operator : '\0')
-						.withReadTypeSpec(baseTerm.readTypeSpec);
-				multTerms.add(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value, flags));
-				Result<Long, CompileError> lit2 = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
+				var data = ((Result.Ok<Object, CompileError>) termResult).value();
+				var baseTerm = (ExpressionModel.ExpressionTerm) data;
+				multTerms.add(baseTerm);
+				var lit2 = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
 				if (lit2 instanceof Result.Err<Long, CompileError> err)
 					return Result.err(err.error());
 				multLiteral = ((Result.Ok<Long, CompileError>) lit2).value();
@@ -61,8 +51,26 @@ public final class MultiplicativeExpressionBuilder {
 			}
 		}
 		fixGroupingBoundaries(multTerms, lastExpandedParensSize, multTokens.size());
-		int totalReads = multTerms.stream().mapToInt(t -> t.readCount).sum();
+		var totalReads = multTerms.stream().mapToInt(t -> t.readCount).sum();
 		return Result.ok(new ExpressionModel.ParsedMult(totalReads, multLiteral, multTerms));
+	}
+
+	private static Result<Object, CompileError> processNonParenthesizedToken(String multToken, boolean isSubtracted,
+			int position, char operator) {
+		var termResult = BitwiseNotParser.parseTermWithNot(multToken);
+		if (termResult instanceof Result.Err<ExpressionModel.ExpressionTerm, CompileError> err)
+			return Result.err(err.error());
+		var baseTerm = ((Result.Ok<ExpressionModel.ExpressionTerm, CompileError>) termResult).value();
+		var flags = buildMultiplicativeFlags(baseTerm, isSubtracted, position, operator);
+		return Result.ok(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value, flags));
+	}
+
+	private static ExpressionModel.ExpressionTermFlags buildMultiplicativeFlags(ExpressionModel.ExpressionTerm baseTerm,
+			boolean isSubtracted, int position, char operator) {
+		return ExpressionModel.ExpressionTermFlags.empty().withSubtracted(isSubtracted)
+				.withMultiplied(position > 0 && operator == '*').withDivided(position > 0 && operator == '/')
+				.withBitwiseNotted(baseTerm.isBitwiseNotted()).withLogicalNotted(baseTerm.isLogicalNotted())
+				.withMultiplicativeOperator(position > 0 ? operator : '\0').withReadTypeSpec(baseTerm.readTypeSpec);
 	}
 
 	private static Result<Long, CompileError> updateLiteral(long current, long value, boolean isFirst, char operator) {
@@ -70,7 +78,11 @@ public final class MultiplicativeExpressionBuilder {
 			return Result.ok(value);
 		}
 		return switch (operator) {
-			case '/' -> Result.ok(value != 0 ? current / value : current);
+			case '/' -> {
+				if (value != 0)
+					yield Result.ok(current / value);
+				yield Result.ok(current);
+			}
 			case '&' -> Result.ok(current & value);
 			case '|' -> Result.ok(current | value);
 			case '^' -> Result.ok(current ^ value);
@@ -83,11 +95,11 @@ public final class MultiplicativeExpressionBuilder {
 	private static void fixGroupingBoundaries(List<ExpressionModel.ExpressionTerm> multTerms, int lastExpandedParensSize,
 			int multTokensSize) {
 		if (lastExpandedParensSize > 1 && multTokensSize > 1) {
-			int lastJ0Index = lastExpandedParensSize - 1;
+			var lastJ0Index = lastExpandedParensSize - 1;
 			if (lastJ0Index + 1 < multTerms.size()) {
-				ExpressionModel.ExpressionTerm nextTerm = multTerms.get(lastJ0Index + 1);
+				var nextTerm = multTerms.get(lastJ0Index + 1);
 				if (nextTerm.isMultiplied() || nextTerm.isDivided()) {
-					ExpressionModel.ExpressionTerm termToMark = multTerms.get(lastJ0Index);
+					var termToMark = multTerms.get(lastJ0Index);
 					multTerms.set(lastJ0Index, new ExpressionModel.ExpressionTerm(termToMark.readCount, termToMark.value,
 							termToMark.isSubtracted(), true));
 				}
@@ -96,11 +108,10 @@ public final class MultiplicativeExpressionBuilder {
 	}
 
 	private static Result<ExpressionModel.ParenthesizedTokenResult, CompileError> processParenthesizedToken(
-			String multToken,
-			int position, boolean isSubtracted, int totalTokens,
+			String multToken, int position, boolean isSubtracted, int totalTokens,
 			ExpressionParser expressionParser) {
-		String inner = multToken.substring(1, multToken.length() - 1);
-		Result<ExpressionModel.ExpressionResult, CompileError> innerResult = expressionParser.parse(inner);
+		var inner = multToken.substring(1, multToken.length() - 1);
+		var innerResult = expressionParser.parse(inner);
 		if (innerResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> err) {
 			return Result.err(err.error());
 		}
@@ -108,57 +119,57 @@ public final class MultiplicativeExpressionBuilder {
 			return Result.err(new CompileError("Internal error: expected Ok or Err parsing parenthesized expression"));
 		}
 
-		ExpressionModel.ExpressionResult innerExpr = ok.value();
-		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
-
+		var innerExpr = ok.value();
 		if (position == 0) {
-			// First term: expand the inner expression, keeping original isMultiplied states
-			for (int i = 0; i < innerExpr.terms.size(); i++) {
-				ExpressionModel.ExpressionTerm innerTerm = innerExpr.terms.get(i);
-				boolean isLastOfGroup = (i == innerExpr.terms.size() - 1) && totalTokens > 1;
-				ExpressionModel.ExpressionTermFlags flags = ExpressionModel.ExpressionTermFlags.empty()
-						.withSubtracted(isSubtracted)
-						.withMultiplied(innerTerm.isMultiplied())
-						.withDivided(innerTerm.isDivided())
-						.withParenthesizedGroupEnd(isLastOfGroup)
-						.withBitwiseNotted(innerTerm.isBitwiseNotted())
-						.withLogicalNotted(innerTerm.isLogicalNotted())
-						.withMultiplicativeOperator(innerTerm.multiplicativeOperator)
-						.withReadTypeSpec(innerTerm.readTypeSpec);
-				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(innerTerm.readCount,
-						innerTerm.value, flags);
-				terms.add(finalTerm);
-			}
-			return Result
-					.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue, innerExpr.terms.size()));
+			return processFirstPositionParentheses(innerExpr, isSubtracted, totalTokens);
 		} else {
-			// Multiplicative position: only support simple reads/literals
-			if (innerExpr.readCount > 1) {
-				return Result.err(new CompileError(
-						"Parenthesized expressions with multiple reads in multiplicative position not yet supported: "
-								+ multToken));
-			}
-
-			for (int k = 0; k < innerExpr.terms.size(); k++) {
-				ExpressionModel.ExpressionTerm innerTerm = innerExpr.terms.get(k);
-				boolean isMultiplied = (k == 0) ? true : innerTerm.isMultiplied();
-				ExpressionModel.ExpressionTerm finalTerm = new ExpressionModel.ExpressionTerm(innerTerm.readCount,
-						innerTerm.value,
-						isSubtracted, isMultiplied);
-				terms.add(finalTerm);
-			}
-			return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue, 0));
+			return processMultiplicativePositionParentheses(innerExpr, isSubtracted, multToken);
 		}
+	}
+
+	private static Result<ExpressionModel.ParenthesizedTokenResult, CompileError> processFirstPositionParentheses(
+			ExpressionModel.ExpressionResult innerExpr, boolean isSubtracted, int totalTokens) {
+		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		for (var i = 0; i < innerExpr.terms().size(); i++) {
+			var innerTerm = innerExpr.terms().get(i);
+			var isLastOfGroup = (i == innerExpr.terms().size() - 1) && totalTokens > 1;
+			var flags = ExpressionModel.ExpressionTermFlags.empty().withSubtracted(isSubtracted)
+					.withMultiplied(innerTerm.isMultiplied()).withDivided(innerTerm.isDivided())
+					.withParenthesizedGroupEnd(isLastOfGroup).withBitwiseNotted(innerTerm.isBitwiseNotted())
+					.withLogicalNotted(innerTerm.isLogicalNotted())
+					.withMultiplicativeOperator(innerTerm.multiplicativeOperator)
+					.withReadTypeSpec(innerTerm.readTypeSpec);
+			terms.add(new ExpressionModel.ExpressionTerm(innerTerm.readCount, innerTerm.value, flags));
+		}
+		return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue(),
+				innerExpr.terms().size()));
+	}
+
+	private static Result<ExpressionModel.ParenthesizedTokenResult, CompileError> processMultiplicativePositionParentheses(
+			ExpressionModel.ExpressionResult innerExpr, boolean isSubtracted, String multToken) {
+		if (innerExpr.readCount() > 1) {
+			return Result.err(new CompileError(
+					"Parenthesized expressions with multiple reads in multiplicative position not yet supported: "
+							+ multToken));
+		}
+		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+		for (var k = 0; k < innerExpr.terms().size(); k++) {
+			var innerTerm = innerExpr.terms().get(k);
+			boolean isMultiplied = (k == 0);
+			terms.add(new ExpressionModel.ExpressionTerm(innerTerm.readCount, innerTerm.value, isSubtracted,
+					isMultiplied));
+		}
+		return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue(), 0));
 	}
 
 	private static List<ExpressionModel.MultOperatorToken> splitByMultOperators(String expr) {
 		List<ExpressionModel.MultOperatorToken> result = new ArrayList<>();
-		StringBuilder token = new StringBuilder();
-		char lastOp = '\0';
-		int depth = 0;
+		var token = new StringBuilder();
+		var lastOp = '\0';
+		var depth = 0;
 
-		for (int i = 0; i < expr.length(); i++) {
-			char c = expr.charAt(i);
+		for (var i = 0; i < expr.length(); i++) {
+			var c = expr.charAt(i);
 
 			if (c == '(') {
 				depth++;

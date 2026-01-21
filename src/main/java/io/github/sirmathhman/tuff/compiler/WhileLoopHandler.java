@@ -20,18 +20,18 @@ public final class WhileLoopHandler {
 
 	public static Result<Void, CompileError> handleWhileLoop(String stmt, String continuation,
 			List<Instruction> instructions, Map<String, Integer> variableAddresses) {
-		int conditionEnd = CompilerHelpers.findConditionEnd(stmt, 7);
+		var conditionEnd = CompilerHelpers.findConditionEnd(stmt, 7);
 		if (conditionEnd == -1) {
 			return Result.err(new CompileError("Malformed while loop: missing closing paren for condition"));
 		}
 
-		String condition = stmt.substring(7, conditionEnd);
-		String remaining = stmt.substring(conditionEnd + 1).trim();
-		LoopParts loopParts = parseLoopParts(remaining, continuation);
+		var condition = stmt.substring(7, conditionEnd);
+		var remaining = stmt.substring(conditionEnd + 1).trim();
+		var loopParts = parseLoopParts(remaining, continuation);
 
-		int loopStartIdx = instructions.size();
+		var loopStartIdx = instructions.size();
 
-		Result<Void, CompileError> condResult = evaluateLoopCondition(condition, variableAddresses, instructions);
+		var condResult = evaluateLoopCondition(condition, variableAddresses, instructions);
 		if (condResult instanceof Result.Err<Void, CompileError>) {
 			return condResult;
 		}
@@ -39,28 +39,28 @@ public final class WhileLoopHandler {
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, -1L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 2, 0L));
 
-		int exitJumpIdx = instructions.size();
+		var exitJumpIdx = instructions.size();
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, null));
 
 		if (!loopParts.body.contains("=")) {
 			return Result.err(new CompileError("While loop body must contain assignment"));
 		}
 
-		Result<Void, CompileError> bodyResult = parseLoopBody(loopParts.body, instructions, variableAddresses);
+		var bodyResult = parseLoopBody(loopParts.body, instructions, variableAddresses);
 		if (bodyResult instanceof Result.Err<Void, CompileError>) {
 			return bodyResult;
 		}
 
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopStartIdx));
-		int exitIdx = instructions.size();
+		var exitIdx = instructions.size();
 		instructions.set(exitJumpIdx, new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 2L, (long) exitIdx));
 
 		return handleAfterLoop(loopParts.afterLoop, variableAddresses, instructions);
 	}
 
 	private static class LoopParts {
-		String body;
-		String afterLoop;
+		final String body;
+		final String afterLoop;
 
 		LoopParts(String body, String afterLoop) {
 			this.body = body;
@@ -70,21 +70,21 @@ public final class WhileLoopHandler {
 
 	private static LoopParts parseLoopParts(String remaining, String continuation) {
 		if (remaining.startsWith("{")) {
-			int closeIdx = DepthAwareSplitter.findMatchingBrace(remaining, 0);
+			var closeIdx = DepthAwareSplitter.findMatchingBrace(remaining, 0);
 			if (closeIdx != -1) {
-				String body = remaining.substring(1, closeIdx).trim();
-				String afterLoop = remaining.substring(closeIdx + 1).trim();
+				var body = remaining.substring(1, closeIdx).trim();
+				var afterLoop = remaining.substring(closeIdx + 1).trim();
 				return new LoopParts(body, afterLoop);
 			}
 		}
 
-		int semiIdx = findSemicolonAtDepth(remaining);
+		var semiIdx = findSemicolonAtDepth(remaining);
 		if (semiIdx == -1) {
 			return new LoopParts(remaining, continuation);
 		}
 
-		String body = remaining.substring(0, semiIdx).trim();
-		String afterLoop = remaining.substring(semiIdx + 1).trim();
+		var body = remaining.substring(0, semiIdx).trim();
+		var afterLoop = remaining.substring(semiIdx + 1).trim();
 		return new LoopParts(body, afterLoop);
 	}
 
@@ -106,21 +106,21 @@ public final class WhileLoopHandler {
 
 	private static Result<Void, CompileError> parseLoopBody(String body, List<Instruction> instructions,
 			Map<String, Integer> variableAddresses) {
-		String[] parts = body.split("=", 2);
+		var parts = body.split("=", 2);
 		if (parts.length != 2) {
 			return Result.err(new CompileError("Invalid loop body: expected assignment"));
 		}
 
-		String lhs = parts[0].trim();
-		String rhs = parts[1].trim();
-		String operator = extractCompoundOp(lhs);
+		var lhs = parts[0].trim();
+		var rhs = parts[1].trim();
+		var operator = extractCompoundOp(lhs);
 
 		if (operator != null) {
 			return handleCompoundOp(lhs.substring(0, lhs.length() - 1).trim(), rhs, operator, instructions,
 					variableAddresses);
 		}
 
-		Integer varAddr = variableAddresses.get(lhs);
+		var varAddr = variableAddresses.get(lhs);
 		if (varAddr == null) {
 			return Result.err(new CompileError("Undefined variable: " + lhs));
 		}
@@ -134,7 +134,7 @@ public final class WhileLoopHandler {
 
 	private static Result<Void, CompileError> parseAndGenerateExpression(String expr, List<Instruction> instructions,
 			Integer storeAddr) {
-		Result<ExpressionModel.ExpressionResult, CompileError> rhsResult = App.parseExpressionWithRead(expr);
+		var rhsResult = App.parseExpressionWithRead(expr);
 		if (rhsResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> err) {
 			return Result.err(err.error());
 		}
@@ -142,7 +142,7 @@ public final class WhileLoopHandler {
 			return Result.err(new CompileError("Internal error: expected Ok or Err parsing RHS"));
 		}
 
-		Result<Void, CompileError> genResult = App.generateInstructions(ok.value(), instructions);
+		var genResult = App.generateInstructions(ok.value(), instructions);
 		if (genResult instanceof Result.Err<Void, CompileError>) {
 			return genResult;
 		}
@@ -167,19 +167,19 @@ public final class WhileLoopHandler {
 
 	private static Result<Void, CompileError> handleCompoundOp(String varName, String rhs, String operator,
 			List<Instruction> instructions, Map<String, Integer> variableAddresses) {
-		Integer varAddr = variableAddresses.get(varName);
+		var varAddr = variableAddresses.get(varName);
 		if (varAddr == null) {
 			return Result.err(new CompileError("Undefined variable: " + varName));
 		}
 
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) varAddr));
 
-		Result<Void, CompileError> parseResult = parseAndGenerateExpression(rhs, instructions, null);
+		var parseResult = parseAndGenerateExpression(rhs, instructions, null);
 		if (parseResult instanceof Result.Err<Void, CompileError>) {
 			return parseResult;
 		}
 
-		Operation op = switch (operator) {
+		var op = switch (operator) {
 			case "+=" -> Operation.Add;
 			case "-=" -> Operation.Sub;
 			case "*=" -> Operation.Mul;
@@ -200,22 +200,22 @@ public final class WhileLoopHandler {
 			return Result.ok(null);
 		}
 
-		if (rhsAfterVar.length() == 0 || "-+*/".indexOf(rhsAfterVar.substring(0, 1)) == -1) {
+		if ("-+*/".indexOf(rhsAfterVar.substring(0, 1)) == -1) {
 			return Result.err(new CompileError("Invalid operator in assignment: " + rhsAfterVar));
 		}
 
-		char opChar = rhsAfterVar.charAt(0);
-		String expr = rhsAfterVar.substring(1).trim();
+		var opChar = rhsAfterVar.charAt(0);
+		var expr = rhsAfterVar.substring(1).trim();
 
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) varAddr));
 
 		try {
-			long literalValue = Long.parseLong(expr);
+			var literalValue = Long.parseLong(expr);
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, literalValue));
-			Operation op = getOperationFromChar(opChar);
+			var op = getOperationFromChar(opChar);
 			instructions.add(new Instruction(op, Variant.Immediate, 0, 1L));
 		} catch (NumberFormatException e) {
-			Result<Void, CompileError> complexResult = handleComplexRhsExpression(opChar, expr, instructions);
+			var complexResult = handleComplexRhsExpression(opChar, expr, instructions);
 			if (complexResult instanceof Result.Err<Void, CompileError>) {
 				return complexResult;
 			}
@@ -240,7 +240,7 @@ public final class WhileLoopHandler {
 			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, 0L));
 			instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
 		} else {
-			Operation op = getOperationFromChar(opChar);
+			var op = getOperationFromChar(opChar);
 			instructions.add(new Instruction(op, Variant.Immediate, 0, 1L));
 		}
 
@@ -258,9 +258,9 @@ public final class WhileLoopHandler {
 	}
 
 	private static int findSemicolonAtDepth(String str) {
-		int depth = 0;
-		for (int i = 0; i < str.length(); i++) {
-			char c = str.charAt(i);
+		var depth = 0;
+		for (var i = 0; i < str.length(); i++) {
+			var c = str.charAt(i);
 			if (c == '(' || c == '{')
 				depth++;
 			else if (c == ')' || c == '}')
@@ -273,29 +273,29 @@ public final class WhileLoopHandler {
 
 	private static Result<Void, CompileError> evaluateLoopCondition(String condition,
 			Map<String, Integer> variableAddresses, List<Instruction> instructions) {
-		String[] parts = findComparisonParts(condition);
-		String operator = findComparisonOperator(condition);
+		var parts = findComparisonParts(condition);
+		var operator = findComparisonOperator(condition);
 
 		if (parts == null || parts.length != 2) {
 			return Result.err(new CompileError("Invalid condition: " + condition));
 		}
 
-		String lhs = parts[0].trim();
-		String rhs = parts[1].trim();
+		var lhs = parts[0].trim();
+		var rhs = parts[1].trim();
 
-		Integer lhsAddr = variableAddresses.get(lhs);
+		var lhsAddr = variableAddresses.get(lhs);
 		if (lhsAddr == null) {
 			return Result.err(new CompileError("Undefined variable in condition: " + lhs));
 		}
 
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) lhsAddr));
 
-		Integer rhsAddr = variableAddresses.get(rhs);
+		var rhsAddr = variableAddresses.get(rhs);
 		if (rhsAddr != null) {
 			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) rhsAddr));
 		} else {
 			try {
-				long rhsValue = Long.parseLong(rhs);
+				var rhsValue = Long.parseLong(rhs);
 				instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, rhsValue));
 			} catch (NumberFormatException e) {
 				return Result.err(new CompileError("Invalid RHS in condition: " + rhs));

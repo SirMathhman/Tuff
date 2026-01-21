@@ -10,7 +10,8 @@ public record Instruction(
 		long firstOperand,
 		Long secondOperand) {
 	public long secondOperandOrZero() {
-		return secondOperand == null ? 0L : secondOperand;
+		if (secondOperand == null) return 0L;
+		return secondOperand;
 	}
 	
 	public String display() {
@@ -23,8 +24,8 @@ public record Instruction(
 	}
 
 	public static String displayAll(Instruction[] instructions) {
-		StringBuilder sb = new StringBuilder().append("[\r\n");
-		for (int i = 0; i < instructions.length; i++) {
+		var sb = new StringBuilder().append("[\r\n");
+		for (var i = 0; i < instructions.length; i++) {
 			sb.append(String.format("\t%04d: %s,%n", i, instructions[i].display()));
 		}
 		return sb.append("]").toString();

@@ -19,13 +19,13 @@ public final class StructInstantiationHandler {
 	public static boolean isStructInstantiation(String expr, Map<String, StructDefinition> structRegistry) {
 		// Check if expression starts with a struct name followed by {
 		// If registry is empty, just check the syntactic pattern
-		int spacePos = expr.indexOf(' ');
+		var spacePos = expr.indexOf(' ');
 		if (spacePos == -1) {
 			return false;
 		}
 
-		String potentialName = expr.substring(0, spacePos);
-		String rest = expr.trim().substring(potentialName.length()).trim();
+		var potentialName = expr.substring(0, spacePos);
+		var rest = expr.trim().substring(potentialName.length()).trim();
 		if (!rest.startsWith("{")) {
 			return false;
 		}
@@ -48,13 +48,13 @@ public final class StructInstantiationHandler {
 		}
 
 		// Extract struct name
-		int spacePos = expr.indexOf(' ');
+		var spacePos = expr.indexOf(' ');
 		if (spacePos == -1) {
 			return Result.err(new CompileError("Invalid struct instantiation"));
 		}
 
-		String structName = expr.substring(0, spacePos);
-		StructDefinition definition = structRegistry.get(structName);
+		var structName = expr.substring(0, spacePos);
+		var definition = structRegistry.get(structName);
 		if (definition == null) {
 			return Result.err(new CompileError("Undefined struct: " + structName));
 		}
@@ -64,23 +64,23 @@ public final class StructInstantiationHandler {
 
 	private static Result<StructInstantiationResult, CompileError> parseStructInstantiationWithoutRegistry(String expr) {
 		// Parse without a registry - just extract the structure
-		int spacePos = expr.indexOf(' ');
+		var spacePos = expr.indexOf(' ');
 		if (spacePos == -1) {
 			return Result.err(new CompileError("Invalid struct instantiation"));
 		}
 
-		String structName = expr.substring(0, spacePos);
+		var structName = expr.substring(0, spacePos);
 		return parseAndProcessStruct(expr.substring(spacePos).trim(), structName, null, false);
 	}
 
 	private static Result<StructInstantiationResult, CompileError> parseAndProcessStruct(String remaining,
 			String structName, StructDefinition definition, boolean withRegistry) {
 		// Parse the struct syntax
-		Result<ParsedStructData, CompileError> parseResult = parseStructSyntax(remaining);
+		var parseResult = parseStructSyntax(remaining);
 		if (parseResult instanceof Result.Err<ParsedStructData, CompileError>) {
 			return Result.err(((Result.Err<ParsedStructData, CompileError>) parseResult).error());
 		}
-		ParsedStructData parsed = ((Result.Ok<ParsedStructData, CompileError>) parseResult).value();
+		var parsed = ((Result.Ok<ParsedStructData, CompileError>) parseResult).value();
 
 		if (withRegistry) {
 			return processStructWithRegistry(structName, parsed, definition);
@@ -92,15 +92,15 @@ public final class StructInstantiationHandler {
 	private static Result<StructInstantiationResult, CompileError> processStructWithRegistry(String structName,
 			ParsedStructData parsed, StructDefinition definition) {
 		// Parse field assignments
-		Result<Map<String, String>, CompileError> fieldsResult = parseFieldAssignments(parsed.body(), definition);
+		var fieldsResult = parseFieldAssignments(parsed.body(), definition);
 		if (fieldsResult instanceof Result.Err<Map<String, String>, CompileError>) {
 			return Result.err(((Result.Err<Map<String, String>, CompileError>) fieldsResult).error());
 		}
 
 		// For now, return a literal 0 with metadata about the struct
 		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
-		ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
-		Map<String, String> fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldsResult).value();
+		var result = new ExpressionModel.ExpressionResult(0, 0, terms);
+		var fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldsResult).value();
 		return Result.ok(
 				new StructInstantiationResult(result, parsed.afterInstantiation(), structName, fieldValues, definition));
 	}
@@ -108,16 +108,16 @@ public final class StructInstantiationHandler {
 	private static Result<StructInstantiationResult, CompileError> processStructWithoutRegistry(String structName,
 			ParsedStructData parsed) {
 		// Use extractFieldValuesFromBody helper to parse field assignments
-		Result<Map<String, String>, CompileError> fieldResult = extractFieldValuesFromBody(parsed.body());
+		var fieldResult = extractFieldValuesFromBody(parsed.body());
 		if (fieldResult instanceof Result.Err<Map<String, String>, CompileError>) {
 			return Result.err(((Result.Err<Map<String, String>, CompileError>) fieldResult).error());
 		}
 
-		Map<String, String> fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldResult).value();
+		var fieldValues = ((Result.Ok<Map<String, String>, CompileError>) fieldResult).value();
 
 		// Return result without a definition (since we don't have a registry)
 		List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
-		ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
+		var result = new ExpressionModel.ExpressionResult(0, 0, terms);
 		return Result.ok(new StructInstantiationResult(result, parsed.afterInstantiation(), structName, fieldValues, null));
 	}
 
@@ -126,19 +126,19 @@ public final class StructInstantiationHandler {
 			return Result.err(new CompileError("Struct instantiation must have opening brace"));
 		}
 
-		int closingBrace = DepthAwareSplitter.findMatchingBrace(remaining, 0);
+		var closingBrace = DepthAwareSplitter.findMatchingBrace(remaining, 0);
 		if (closingBrace == -1) {
 			return Result.err(new CompileError("Struct instantiation must have closing brace"));
 		}
 
-		String body = remaining.substring(1, closingBrace).trim();
-		String afterInstantiation = remaining.substring(closingBrace + 1).trim();
+		var body = remaining.substring(1, closingBrace).trim();
+		var afterInstantiation = remaining.substring(closingBrace + 1).trim();
 		return Result.ok(new ParsedStructData(body, afterInstantiation));
 	}
 
 	private static Result<Map<String, String>, CompileError> extractFieldValuesFromBody(String body) {
 		Map<String, String> fieldValues = new HashMap<>();
-		String fieldRemaining = body;
+		var fieldRemaining = body;
 
 		while (!fieldRemaining.isEmpty()) {
 			fieldRemaining = fieldRemaining.trim();
@@ -146,19 +146,19 @@ public final class StructInstantiationHandler {
 				break;
 			}
 
-			int colonIdx = fieldRemaining.indexOf(':');
+			var colonIdx = fieldRemaining.indexOf(':');
 			if (colonIdx == -1) {
 				return Result.err(new CompileError("Field assignment must have colon"));
 			}
 
-			String fieldName = fieldRemaining.substring(0, colonIdx).trim();
-			String afterColon = fieldRemaining.substring(colonIdx + 1).trim();
+			var fieldName = fieldRemaining.substring(0, colonIdx).trim();
+			var afterColon = fieldRemaining.substring(colonIdx + 1).trim();
 
 			// Find the end of this field value (comma or end of string)
-			int depth = 0;
-			int valueEnd = afterColon.length();
-			for (int i = 0; i < afterColon.length(); i++) {
-				char c = afterColon.charAt(i);
+			var depth = 0;
+			var valueEnd = afterColon.length();
+			for (var i = 0; i < afterColon.length(); i++) {
+				var c = afterColon.charAt(i);
 				if (c == '(' || c == '{') {
 					depth++;
 				} else if (c == ')' || c == '}') {
@@ -169,7 +169,7 @@ public final class StructInstantiationHandler {
 				}
 			}
 
-			String fieldValue = afterColon.substring(0, valueEnd).trim();
+			var fieldValue = afterColon.substring(0, valueEnd).trim();
 			fieldValues.put(fieldName, fieldValue);
 
 			// Move to next field
@@ -185,7 +185,7 @@ public final class StructInstantiationHandler {
 	private static Result<Map<String, String>, CompileError> parseFieldAssignments(String body,
 			StructDefinition definition) {
 		Map<String, String> fieldValues = new HashMap<>();
-		String fieldRemaining = body;
+		var fieldRemaining = body;
 
 		while (!fieldRemaining.isEmpty()) {
 			fieldRemaining = fieldRemaining.trim();
@@ -194,12 +194,12 @@ public final class StructInstantiationHandler {
 			}
 
 			// Parse one field assignment
-			Result<FieldAssignment, CompileError> result = parseOneFieldAssignment(fieldRemaining);
+			var result = parseOneFieldAssignment(fieldRemaining);
 			if (result instanceof Result.Err<FieldAssignment, CompileError>) {
 				return Result.err(((Result.Err<FieldAssignment, CompileError>) result).error());
 			}
 
-			FieldAssignment assignment = ((Result.Ok<FieldAssignment, CompileError>) result).value();
+			var assignment = ((Result.Ok<FieldAssignment, CompileError>) result).value();
 
 			// Validate field exists
 			if (definition.getField(assignment.fieldName()) == null) {
@@ -212,7 +212,7 @@ public final class StructInstantiationHandler {
 		}
 
 		// Verify all fields are assigned
-		for (StructHandler.StructField field : definition.fields()) {
+		for (var field : definition.fields()) {
 			if (!fieldValues.containsKey(field.name())) {
 				return Result.err(new CompileError("Struct field '" + field.name() + "' not assigned"));
 			}
@@ -223,22 +223,22 @@ public final class StructInstantiationHandler {
 
 	private static Result<FieldAssignment, CompileError> parseOneFieldAssignment(String text) {
 		// Find field name
-		int colonPos = text.indexOf(':');
+		var colonPos = text.indexOf(':');
 		if (colonPos == -1) {
 			return Result.err(new CompileError("Field assignment must have colon"));
 		}
 
-		String fieldName = text.substring(0, colonPos).trim();
+		var fieldName = text.substring(0, colonPos).trim();
 		if (!isValidFieldName(fieldName)) {
 			return Result.err(new CompileError("Invalid field name: " + fieldName));
 		}
 
 		// Find the end of the value (before comma or end)
-		int valueStart = colonPos + 1;
-		int valueEnd = valueStart;
-		int depth = 0;
+		var valueStart = colonPos + 1;
+		var valueEnd = valueStart;
+		var depth = 0;
 		while (valueEnd < text.length()) {
-			char c = text.charAt(valueEnd);
+			var c = text.charAt(valueEnd);
 			if (c == '(' || c == '{') {
 				depth++;
 			} else if (c == ')' || c == '}') {
@@ -249,13 +249,13 @@ public final class StructInstantiationHandler {
 			valueEnd++;
 		}
 
-		String fieldValue = text.substring(valueStart, valueEnd).trim();
+		var fieldValue = text.substring(valueStart, valueEnd).trim();
 		if (fieldValue.isEmpty()) {
 			return Result.err(new CompileError("Field value cannot be empty"));
 		}
 
 		// Determine remaining text
-		String remaining = "";
+		var remaining = "";
 		if (valueEnd < text.length() && text.charAt(valueEnd) == ',') {
 			remaining = text.substring(valueEnd + 1);
 		} else if (valueEnd < text.length()) {

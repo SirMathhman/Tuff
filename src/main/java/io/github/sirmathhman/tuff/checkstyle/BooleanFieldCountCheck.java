@@ -18,7 +18,7 @@ public final class BooleanFieldCountCheck extends AbstractCheck {
 
 	@Override
 	public int[] getDefaultTokens() {
-		return getAcceptableTokens();
+		return this.getAcceptableTokens();
 	}
 
 	@Override
@@ -38,33 +38,37 @@ public final class BooleanFieldCountCheck extends AbstractCheck {
 
 	@Override
 	public void visitToken(DetailAST ast) {
-		DetailAST objBlock = ast.findFirstToken(TokenTypes.OBJBLOCK);
+		var objBlock = ast.findFirstToken(TokenTypes.OBJBLOCK);
 		if (objBlock == null) {
 			return;
 		}
 
-		int booleanFieldCount = 0;
+		var booleanFieldCount = 0;
 
-		for (DetailAST child = objBlock.getFirstChild(); child != null; child = child.getNextSibling()) {
+		for (var child = objBlock.getFirstChild(); child != null; child = child.getNextSibling()) {
 			if (child.getType() != TokenTypes.VARIABLE_DEF) {
 				continue;
 			}
 
-			DetailAST type = child.findFirstToken(TokenTypes.TYPE);
+			var type = child.findFirstToken(TokenTypes.TYPE);
 			if (type != null && isBooleanType(type)) {
 				booleanFieldCount++;
 			}
 		}
 
 		if (booleanFieldCount > max) {
-			DetailAST ident = ast.findFirstToken(TokenTypes.IDENT);
-			int line = ident != null ? ident.getLineNo() : ast.getLineNo();
+			var ident = ast.findFirstToken(TokenTypes.IDENT);
+			int line;
+			if (ident != null)
+				line = ident.getLineNo();
+			else
+				line = ast.getLineNo();
 			log(line, MSG_KEY, booleanFieldCount, max);
 		}
 	}
 
 	private static boolean isBooleanType(DetailAST typeAst) {
-		DetailAST first = typeAst.getFirstChild();
+		var first = typeAst.getFirstChild();
 		if (first == null) {
 			return false;
 		}

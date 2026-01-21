@@ -23,8 +23,8 @@ public final class StringLiteralManager {
 		}
 
 		// Calculate next available address
-		int nextAddress = STRING_BASE_ADDRESS;
-		for (StringAllocation alloc : allocations.values()) {
+		var nextAddress = STRING_BASE_ADDRESS;
+		for (var alloc : allocations.values()) {
 			nextAddress = Math.max(nextAddress, alloc.address() + alloc.length() + 1);
 		}
 
@@ -33,7 +33,7 @@ public final class StringLiteralManager {
 			return Result.err(new CompileError("String pool exhausted"));
 		}
 
-		StringAllocation allocation = new StringAllocation(nextAddress, content);
+		var allocation = new StringAllocation(nextAddress, content);
 		allocations.put(content, allocation);
 
 		return Result.ok(allocation);

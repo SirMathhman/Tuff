@@ -20,8 +20,8 @@ public final class LetExpressionProcessor {
 			Map<String, String> variableTypes) {
 		// Extract the type from the value expression BEFORE substitution
 		// This allows variable references to be resolved in the type context
-		Result<String, CompileError> typeResult = ExpressionTokens.extractTypeFromExpression(decl.valueExpr(),
-				variableTypes);
+		var typeResult = ExpressionTokens.extractTypeFromExpression(decl.valueExpr(),
+																																variableTypes);
 
 		// Determine the actual type to use
 		if (decl.declaredType() == null) {
@@ -51,7 +51,7 @@ public final class LetExpressionProcessor {
 			Function<String, Result<ExpressionModel.ExpressionResult, CompileError>> exprParser) {
 		// Format: let varName : TYPE = EXPR; continuation
 		// where continuation is either another let binding or a variable reference
-		Result<ExpressionTokens.LetBindingDecl, CompileError> declResult = ExpressionTokens.parseLetDeclaration(expr);
+		var declResult = ExpressionTokens.parseLetDeclaration(expr);
 		return declResult.match(
 				decl -> {
 
@@ -62,34 +62,34 @@ public final class LetExpressionProcessor {
 					}
 
 					// Extract and validate the type
-					Result<String, CompileError> actualTypeResult = determineAndValidateType(decl, variableTypes);
+					var actualTypeResult = determineAndValidateType(decl, variableTypes);
 					return actualTypeResult.match(
 							actualType -> {
 
 								// Now substitute any bound variables in the value expression for actual
 								// compilation
-								String valueExpr = decl.valueExpr();
-								for (String varName : boundVariables.keySet()) {
+								var valueExpr = decl.valueExpr();
+								for (var varName : boundVariables.keySet()) {
 									// Simple substitution - replace variable references with their bound
 									// expressions
 									valueExpr = valueExpr.replaceAll("\\b" + varName + "\\b",
 											boundVariables.get(varName));
 								}
 
-								final String boundValueExpr = "(" + valueExpr + ")";
+								final var boundValueExpr = "(" + valueExpr + ")";
 
 								// Parse the value expression using provided parser
-								Result<ExpressionModel.ExpressionResult, CompileError> valueResult = exprParser
+								var valueResult = exprParser
 										.apply(valueExpr);
 								return valueResult.match(
 										valueExprResult -> {
 
 											// Find where the first binding ends (after its semicolon)
-											int equalsIndex = expr.indexOf('=');
-											int semiIndex = expr.indexOf(';', equalsIndex);
+											var equalsIndex = expr.indexOf('=');
+											var semiIndex = expr.indexOf(';', equalsIndex);
 
 											// Get the continuation after the semicolon
-											String continuation = expr.substring(semiIndex + 1).trim();
+											var continuation = expr.substring(semiIndex + 1).trim();
 
 											// Parse the continuation (either another let binding or a final expression)
 											if (continuation.startsWith("let ")) {
@@ -106,17 +106,14 @@ public final class LetExpressionProcessor {
 											// let-binding context (substitute all bound variables, then parse).
 											Map<String, String> newVariables = new HashMap<>(boundVariables);
 											newVariables.put(decl.varName(), boundValueExpr);
-											String continuationExpr = continuation;
-											for (String varName : newVariables.keySet()) {
+											var continuationExpr = continuation;
+											for (var varName : newVariables.keySet()) {
 												continuationExpr = continuationExpr.replaceAll("\\b" + varName + "\\b",
 														newVariables.get(varName));
 											}
 											return exprParser.apply(continuationExpr);
-										},
-										err -> Result.err(err));
-							},
-							err -> Result.err(err));
-				},
-				err -> Result.err(err));
+										}, Result::err);
+							}, Result::err);
+				}, Result::err);
 	}
 }

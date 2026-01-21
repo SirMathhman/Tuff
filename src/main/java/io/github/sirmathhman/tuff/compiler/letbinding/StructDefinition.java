@@ -4,7 +4,7 @@ import java.util.List;
 
 public record StructDefinition(String name, List<StructHandler.StructField> fields) {
 	public StructHandler.StructField getField(String fieldName) {
-		for (StructHandler.StructField field : fields) {
+		for (var field : fields) {
 			if (field.name().equals(fieldName)) {
 				return field;
 			}
@@ -13,7 +13,7 @@ public record StructDefinition(String name, List<StructHandler.StructField> fiel
 	}
 
 	public int getFieldIndex(String fieldName) {
-		for (int i = 0; i < fields.size(); i++) {
+		for (var i = 0; i < fields.size(); i++) {
 			if (fields.get(i).name().equals(fieldName)) {
 				return i;
 			}

@@ -22,7 +22,7 @@ public final class ArrayInitFieldAccessHandler {
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		BiFunction<List<String>, String, String> initExtractor = (parts, fieldName) -> {
-			String initCountStr = parts.get(1).trim();
+			var initCountStr = parts.get(1).trim();
 			try {
 				Long.parseLong(initCountStr);
 				return initCountStr;
@@ -31,7 +31,7 @@ public final class ArrayInitFieldAccessHandler {
 			}
 		};
 
-		ArrayFieldAccessBase.Context ctx = new ArrayFieldAccessBase.Context.Builder()
+		var ctx = new ArrayFieldAccessBase.Context.Builder()
 				.varName(varName)
 				.decl(decl)
 				.continuation(continuation)

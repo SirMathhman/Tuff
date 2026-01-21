@@ -22,7 +22,7 @@ public final class ArrayCapacityFieldAccessHandler {
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		BiFunction<List<String>, String, String> capacityExtractor = (parts, fieldName) -> {
-			String capacityCountStr = parts.get(2).trim();
+			var capacityCountStr = parts.get(2).trim();
 			try {
 				Long.parseLong(capacityCountStr);
 				return capacityCountStr;
@@ -31,7 +31,7 @@ public final class ArrayCapacityFieldAccessHandler {
 			}
 		};
 
-		ArrayFieldAccessBase.Context ctx = new ArrayFieldAccessBase.Context.Builder()
+		var ctx = new ArrayFieldAccessBase.Context.Builder()
 				.varName(varName)
 				.decl(decl)
 				.continuation(continuation)

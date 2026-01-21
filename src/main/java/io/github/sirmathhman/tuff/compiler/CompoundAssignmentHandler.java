@@ -28,7 +28,7 @@ public final class CompoundAssignmentHandler {
 		// 1. Load current value of x from memory into register 0
 		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 		// 2. Parse and evaluate the expression
-		Result<Void, CompileError> genResult = MutableAssignmentHandler.parseAndEvaluateExpression(valueExpr, instructions);
+		var genResult = MutableAssignmentHandler.parseAndEvaluateExpression(valueExpr, instructions);
 		if (genResult instanceof Result.Err<Void, CompileError>)
 			return genResult;
 

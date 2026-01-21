@@ -18,14 +18,14 @@ public final class StringIndexingHandler {
 	public static Result<Long, CompileError> parseStringIndexing(String literal) {
 		// Pattern: "string"[index]
 		// Find the closing quote of the string
-		int quoteStart = literal.indexOf('"');
+		var quoteStart = literal.indexOf('"');
 		if (quoteStart == -1) {
 			return Result.err(new CompileError("No opening quote found in string indexing"));
 		}
 
-		int quoteEnd = -1;
-		boolean escaped = false;
-		for (int i = quoteStart + 1; i < literal.length(); i++) {
+		var quoteEnd = -1;
+		var escaped = false;
+		for (var i = quoteStart + 1; i < literal.length(); i++) {
 			if (escaped) {
 				escaped = false;
 				continue;
@@ -45,13 +45,13 @@ public final class StringIndexingHandler {
 		}
 
 		// Check for [index] pattern after the closing quote
-		String afterQuote = literal.substring(quoteEnd + 1).trim();
+		var afterQuote = literal.substring(quoteEnd + 1).trim();
 		if (!afterQuote.startsWith("[") || !afterQuote.endsWith("]")) {
 			return Result.err(new CompileError("Expected [index] after string literal"));
 		}
 
 		// Extract the index
-		String indexStr = afterQuote.substring(1, afterQuote.length() - 1).trim();
+		var indexStr = afterQuote.substring(1, afterQuote.length() - 1).trim();
 		int index;
 		try {
 			index = Integer.parseInt(indexStr);
@@ -60,8 +60,8 @@ public final class StringIndexingHandler {
 		}
 
 		// Extract and unescape the string content
-		String stringContent = literal.substring(quoteStart + 1, quoteEnd);
-		String unescaped = StringEscapeUtils.unescape(stringContent);
+		var stringContent = literal.substring(quoteStart + 1, quoteEnd);
+		var unescaped = StringEscapeUtils.unescape(stringContent);
 
 		if (unescaped == null) {
 			return Result.err(new CompileError("Invalid escape sequence in string: " + literal));
@@ -74,7 +74,7 @@ public final class StringIndexingHandler {
 		}
 
 		// Return the character code at the index
-		char ch = unescaped.charAt(index);
+		var ch = unescaped.charAt(index);
 		return Result.ok((long) ch);
 	}
 }

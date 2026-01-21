@@ -19,9 +19,9 @@ public final class DepthAwareSplitter {
 	 * @return the index of the semicolon, or -1 if not found
 	 */
 	public static int findSemicolonAtDepthZero(String text, int startIndex) {
-		int depth = 0;
-		for (int i = startIndex; i < text.length(); i++) {
-			char c = text.charAt(i);
+		var depth = 0;
+		for (var i = startIndex; i < text.length(); i++) {
+			var c = text.charAt(i);
 			if (c == '(' || c == '{') {
 				depth++;
 			} else if (c == ')' || c == '}') {
@@ -52,8 +52,8 @@ public final class DepthAwareSplitter {
 	 * @return the index of the matching closing brace, or -1 if not found
 	 */
 	public static int findMatchingBrace(String str, int openBraceIdx) {
-		int count = 1;
-		for (int i = openBraceIdx + 1; i < str.length(); i++) {
+		var count = 1;
+		for (var i = openBraceIdx + 1; i < str.length(); i++) {
 			if (str.charAt(i) == '{')
 				count++;
 			else if (str.charAt(i) == '}') {
@@ -113,9 +113,9 @@ public final class DepthAwareSplitter {
 				return false;
 			}
 			// Check word boundaries
-			boolean validBefore = (i == 0 || !Character.isLetterOrDigit(expr.charAt(i - 1)));
-			boolean validAfter = (i + keyword.length() >= expr.length()
-					|| !Character.isLetterOrDigit(expr.charAt(i + keyword.length())));
+			var validBefore = (i == 0 || !Character.isLetterOrDigit(expr.charAt(i - 1)));
+			var validAfter = (i + keyword.length() >= expr.length()
+												|| !Character.isLetterOrDigit(expr.charAt(i + keyword.length())));
 			return validBefore && validAfter;
 		};
 		return splitWithDelimiterChecker(expr, keywordChecker, keyword.length());
@@ -124,12 +124,12 @@ public final class DepthAwareSplitter {
 	private static java.util.List<String> splitWithDelimiterChecker(String expr, DelimiterChecker checker,
 			int delimiterLength) {
 		java.util.List<String> result = new java.util.ArrayList<>();
-		StringBuilder token = new StringBuilder();
-		int depth = 0;
-		int bracketDepth = 0;
+		var token = new StringBuilder();
+		var depth = 0;
+		var bracketDepth = 0;
 
-		for (int i = 0; i < expr.length(); i++) {
-			char c = expr.charAt(i);
+		for (var i = 0; i < expr.length(); i++) {
+			var c = expr.charAt(i);
 
 			if (c == '(' || c == '{') {
 				depth++;

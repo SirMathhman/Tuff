@@ -7,7 +7,7 @@ public final class ExpressionModel {
 	}
 
 	public record ExpressionTermFlags(long markerValue, char multiplicativeOperator, String readTypeSpec) {
-		private static final long SUBTRACTED = 1L << 0;
+		private static final long SUBTRACTED = 1L;
 		private static final long MULTIPLIED = 1L << 1;
 		private static final long DIVIDED = 1L << 2;
 		private static final long PAREN_GROUP_END = 1L << 3;
@@ -18,7 +18,9 @@ public final class ExpressionModel {
 		private static final long LOGICAL_NOTTED = 1L << 8;
 
 		static long setBit(long markerValue, long bit, boolean enabled) {
-			return enabled ? (markerValue | bit) : (markerValue & ~bit);
+			if (enabled)
+				return markerValue | bit;
+			return markerValue & ~bit;
 		}
 
 		public boolean isSubtracted() {
@@ -111,16 +113,7 @@ public final class ExpressionModel {
 		}
 	}
 
-	public static final class ExpressionResult {
-		public final int readCount;
-		public final long literalValue;
-		public final List<ExpressionTerm> terms;
-
-		public ExpressionResult(int readCount, long literalValue, List<ExpressionTerm> terms) {
-			this.readCount = readCount;
-			this.literalValue = literalValue;
-			this.terms = terms;
-		}
+	public record ExpressionResult(int readCount, long literalValue, List<ExpressionTerm> terms) {
 	}
 
 	public static final class ExpressionTerm {
@@ -230,7 +223,9 @@ public final class ExpressionModel {
 		Subtract;
 
 		private static AdditiveOp from(boolean isSubtracted) {
-			return isSubtracted ? Subtract : Add;
+			if (isSubtracted)
+				return Subtract;
+			return Add;
 		}
 	}
 
@@ -267,7 +262,9 @@ public final class ExpressionModel {
 		ParenthesizedGroupEnd;
 
 		private static GroupEnd from(boolean isParenthesizedGroupEnd) {
-			return isParenthesizedGroupEnd ? ParenthesizedGroupEnd : None;
+			if (isParenthesizedGroupEnd)
+				return ParenthesizedGroupEnd;
+			return None;
 		}
 	}
 
@@ -276,7 +273,9 @@ public final class ExpressionModel {
 		Dereferenced;
 
 		private static Dereference from(boolean isDereferenced) {
-			return isDereferenced ? Dereferenced : Direct;
+			if (isDereferenced)
+				return Dereferenced;
+			return Direct;
 		}
 	}
 
@@ -285,7 +284,9 @@ public final class ExpressionModel {
 		Notted;
 
 		private static BitwiseNot from(boolean isBitwiseNotted) {
-			return isBitwiseNotted ? Notted : None;
+			if (isBitwiseNotted)
+				return Notted;
+			return None;
 		}
 	}
 
@@ -294,7 +295,9 @@ public final class ExpressionModel {
 		Notted;
 
 		private static LogicalNot from(boolean isLogicalNotted) {
-			return isLogicalNotted ? Notted : None;
+			if (isLogicalNotted)
+				return Notted;
+			return None;
 		}
 	}
 
@@ -329,25 +332,9 @@ public final class ExpressionModel {
 	public record ParenthesizedTokenResult(List<ExpressionTerm> terms, long literalValue, int expandedSize) {
 	}
 
-	public static final class ParsedMult {
-		public final int readCount;
-		public final long literalValue;
-		public final List<ExpressionTerm> terms;
-
-		public ParsedMult(int readCount, long literalValue, List<ExpressionTerm> terms) {
-			this.readCount = readCount;
-			this.literalValue = literalValue;
-			this.terms = terms;
-		}
+	public record ParsedMult(int readCount, long literalValue, List<ExpressionTerm> terms) {
 	}
 
-	public static final class MultOperatorToken {
-		public final String token;
-		public final char operator;
-
-		public MultOperatorToken(String token, char operator) {
-			this.token = token;
-			this.operator = operator;
-		}
+	public record MultOperatorToken(String token, char operator) {
 	}
 }

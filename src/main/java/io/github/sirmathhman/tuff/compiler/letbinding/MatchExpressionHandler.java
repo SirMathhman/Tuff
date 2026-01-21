@@ -18,12 +18,12 @@ public final class MatchExpressionHandler {
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseMatch(String expr) {
 		// Convert match to conditional and parse the result
-		Result<String, CompileError> conversionResult = convertToConditional(expr);
+		var conversionResult = convertToConditional(expr);
 		if (conversionResult instanceof Result.Err<String, CompileError>) {
 			return Result.err(((Result.Err<String, CompileError>) conversionResult).error());
 		}
 
-		String conditionalExpr = ((Result.Ok<String, CompileError>) conversionResult).value();
+		var conditionalExpr = ((Result.Ok<String, CompileError>) conversionResult).value();
 		// Parse the generated conditional expression
 		return ConditionalExpressionHandler.parseConditional(conditionalExpr);
 	}
@@ -31,36 +31,36 @@ public final class MatchExpressionHandler {
 	private static Result<String, CompileError> convertToConditional(String expr) {
 		// Format: match (scrutinee) { case pattern => value; ... case _ =>
 		// defaultValue; }
-		int scrutineeEnd = findScrutineeEnd(expr);
+		var scrutineeEnd = findScrutineeEnd(expr);
 		if (scrutineeEnd == -1) {
 			return Result.err(new CompileError("Malformed match: missing closing paren for scrutinee"));
 		}
 
-		String scrutinee = expr.substring(7, scrutineeEnd); // Skip "match ("
-		String remaining = expr.substring(scrutineeEnd + 1).trim();
+		var scrutinee = expr.substring(7, scrutineeEnd); // Skip "match ("
+		var remaining = expr.substring(scrutineeEnd + 1).trim();
 
 		if (!remaining.startsWith("{")) {
 			return Result.err(new CompileError("Malformed match: expected '{' after scrutinee"));
 		}
 
-		int closingBrace = DepthAwareSplitter.findMatchingBrace(remaining, 0);
+		var closingBrace = DepthAwareSplitter.findMatchingBrace(remaining, 0);
 		if (closingBrace == -1) {
 			return Result.err(new CompileError("Malformed match: missing closing '}'"));
 		}
 
-		String caseBlock = remaining.substring(1, closingBrace).trim();
-		Result<List<MatchCase>, CompileError> casesResult = parseCases(caseBlock);
+		var caseBlock = remaining.substring(1, closingBrace).trim();
+		var casesResult = parseCases(caseBlock);
 		if (casesResult instanceof Result.Err<List<MatchCase>, CompileError> caseErr) {
 			return Result.err(caseErr.error());
 		}
 
-		List<MatchCase> cases = ((Result.Ok<List<MatchCase>, CompileError>) casesResult).value();
+		var cases = ((Result.Ok<List<MatchCase>, CompileError>) casesResult).value();
 
 		// Find default case
 		MatchCase defaultCase = null;
 		List<MatchCase> regularCases = new ArrayList<>();
 
-		for (MatchCase c : cases) {
+		for (var c : cases) {
 			if ("_".equals(c.pattern())) {
 				if (defaultCase != null) {
 					return Result.err(new CompileError("Multiple default cases (_) not allowed"));
@@ -77,10 +77,10 @@ public final class MatchExpressionHandler {
 
 		// Convert match to nested if-else conditionals
 		// Start from the innermost (rightmost) case and work backwards
-		StringBuilder result = new StringBuilder(defaultCase.value());
+		var result = new StringBuilder(defaultCase.value());
 
-		for (int i = regularCases.size() - 1; i >= 0; i--) {
-			MatchCase c = regularCases.get(i);
+		for (var i = regularCases.size() - 1; i >= 0; i--) {
+			var c = regularCases.get(i);
 			// Build: if (scrutinee == pattern) caseValue else previousResult
 			result = new StringBuilder("if (").append(scrutinee).append(" == ").append(c.pattern()).append(") ")
 					.append(c.value()).append(" else ").append(result);
@@ -96,7 +96,7 @@ public final class MatchExpressionHandler {
 
 	private static Result<List<MatchCase>, CompileError> parseCases(String caseBlock) {
 		List<MatchCase> cases = new ArrayList<>();
-		String remaining = caseBlock;
+		var remaining = caseBlock;
 
 		while (!remaining.isEmpty()) {
 			remaining = remaining.trim();
@@ -107,21 +107,21 @@ public final class MatchExpressionHandler {
 			remaining = remaining.substring(5).trim(); // Skip "case "
 
 			// Find the arrow =>
-			int arrowIndex = remaining.indexOf("=>");
+			var arrowIndex = remaining.indexOf("=>");
 			if (arrowIndex == -1) {
 				return Result.err(new CompileError("Expected '=>' in case"));
 			}
 
-			String pattern = remaining.substring(0, arrowIndex).trim();
+			var pattern = remaining.substring(0, arrowIndex).trim();
 			remaining = remaining.substring(arrowIndex + 2).trim(); // Skip "=>"
 
 			// Find the semicolon that ends this case
-			int semiIndex = findCaseSemicolon(remaining);
+			var semiIndex = findCaseSemicolon(remaining);
 			if (semiIndex == -1) {
 				return Result.err(new CompileError("Expected ';' after case value"));
 			}
 
-			String value = remaining.substring(0, semiIndex).trim();
+			var value = remaining.substring(0, semiIndex).trim();
 			remaining = remaining.substring(semiIndex + 1).trim(); // Skip ";"
 
 			cases.add(new MatchCase(pattern, value));
@@ -135,9 +135,9 @@ public final class MatchExpressionHandler {
 	}
 
 	private static int findCaseSemicolon(String str) {
-		int depth = 0;
-		for (int i = 0; i < str.length(); i++) {
-			char c = str.charAt(i);
+		var depth = 0;
+		for (var i = 0; i < str.length(); i++) {
+			var c = str.charAt(i);
 			if (c == '(' || c == '{' || c == '[') {
 				depth++;
 			} else if (c == ')' || c == '}' || c == ']') {

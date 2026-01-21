@@ -34,11 +34,11 @@ public final class LogicalOperatorHandler {
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLogicalExpression(
 			List<String> tokens, boolean isAndOperator) {
 		List<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>();
-		int totalReads = 0;
+		var totalReads = 0;
 		long totalLiteral = 0;
 
-		for (int i = 0; i < tokens.size(); i++) {
-			Result<ExpressionModel.ExpressionResult, CompileError> operandResult = App
+		for (var i = 0; i < tokens.size(); i++) {
+			var operandResult = App
 					.parseExpressionWithRead(tokens.get(i));
 			if (operandResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError>) {
 				return operandResult;
@@ -47,18 +47,26 @@ public final class LogicalOperatorHandler {
 				return Result.err(new CompileError("Internal error: expected Ok or Err in logical operand"));
 			}
 
-			ExpressionModel.ExpressionResult operand = ok.value();
+			var operand = ok.value();
 			// Mark the last term of each operand (except the last) with logical boundary
-			if (i < tokens.size() - 1 && operand.terms.size() > 0) {
-				ExpressionModel.ExpressionTerm lastTerm = operand.terms.get(operand.terms.size() - 1);
-				boolean newOrBoundary = isAndOperator ? lastTerm.isLogicalOrBoundary() : true;
-				boolean newAndBoundary = isAndOperator ? true : lastTerm.isLogicalAndBoundary();
-				operand.terms.set(operand.terms.size() - 1, lastTerm.withLogicalBoundary(newOrBoundary, newAndBoundary));
+			if (i < tokens.size() - 1 && operand.terms().size() > 0) {
+				var lastTerm = operand.terms().get(operand.terms().size() - 1);
+				boolean newOrBoundary;
+				if (isAndOperator)
+					newOrBoundary = lastTerm.isLogicalOrBoundary();
+				else
+					newOrBoundary = true;
+				boolean newAndBoundary;
+				if (isAndOperator)
+					newAndBoundary = true;
+				else
+					newAndBoundary = lastTerm.isLogicalAndBoundary();
+				operand.terms().set(operand.terms().size() - 1, lastTerm.withLogicalBoundary(newOrBoundary, newAndBoundary));
 			}
 
-			allTerms.addAll(operand.terms);
-			totalReads += operand.readCount;
-			totalLiteral += operand.literalValue;
+			allTerms.addAll(operand.terms());
+			totalReads += operand.readCount();
+			totalLiteral += operand.literalValue();
 		}
 
 		return Result.ok(new ExpressionModel.ExpressionResult(totalReads, totalLiteral, allTerms));

@@ -16,31 +16,31 @@ public class TypeAliasHandler {
 
 	public static Result<TypeAliasParseResult, CompileError> parseTypeAlias(String stmt,
 			Map<String, String> typeAliasRegistry) {
-		String trimmed = stmt.trim();
+		var trimmed = stmt.trim();
 
 		if (!trimmed.startsWith("type ")) {
 			return Result.err(new CompileError("Expected type alias definition"));
 		}
 
-		String afterType = trimmed.substring(5).trim();
+		var afterType = trimmed.substring(5).trim();
 
 		// Find the '=' sign
-		int equalsIndex = afterType.indexOf('=');
+		var equalsIndex = afterType.indexOf('=');
 		if (equalsIndex == -1) {
 			return Result.err(new CompileError("Type alias missing '=' sign"));
 		}
 
-		String aliasNamePart = afterType.substring(0, equalsIndex).trim();
-		String targetTypePart = afterType.substring(equalsIndex + 1).trim();
+		var aliasNamePart = afterType.substring(0, equalsIndex).trim();
+		var targetTypePart = afterType.substring(equalsIndex + 1).trim();
 
 		// Find the semicolon that terminates the alias
-		int semiIndex = targetTypePart.indexOf(';');
+		var semiIndex = targetTypePart.indexOf(';');
 		if (semiIndex == -1) {
 			return Result.err(new CompileError("Type alias missing terminating semicolon"));
 		}
 
-		String targetType = targetTypePart.substring(0, semiIndex).trim();
-		String remaining = targetTypePart.substring(semiIndex + 1).trim();
+		var targetType = targetTypePart.substring(0, semiIndex).trim();
+		var remaining = targetTypePart.substring(semiIndex + 1).trim();
 
 		// Validate alias name
 		if (!isValidIdentifier(aliasNamePart)) {
@@ -65,7 +65,7 @@ public class TypeAliasHandler {
 
 	public static String resolveType(String typeName, Map<String, String> typeAliasRegistry) {
 		if (typeAliasRegistry.containsKey(typeName)) {
-			String resolved = typeAliasRegistry.get(typeName);
+			var resolved = typeAliasRegistry.get(typeName);
 			// Recursively resolve in case of chained aliases
 			return resolveType(resolved, typeAliasRegistry);
 		}
@@ -79,8 +79,8 @@ public class TypeAliasHandler {
 		if (!Character.isLetter(name.charAt(0)) && name.charAt(0) != '_') {
 			return false;
 		}
-		for (int i = 1; i < name.length(); i++) {
-			char c = name.charAt(i);
+		for (var i = 1; i < name.length(); i++) {
+			var c = name.charAt(i);
 			if (!Character.isLetterOrDigit(c) && c != '_') {
 				return false;
 			}
@@ -96,7 +96,7 @@ public class TypeAliasHandler {
 
 		// Check for pointer types
 		if (type.startsWith("*")) {
-			String baseType = type.substring(1);
+			var baseType = type.substring(1);
 			if (baseType.startsWith("mut ")) {
 				baseType = baseType.substring(4);
 			}
@@ -104,11 +104,6 @@ public class TypeAliasHandler {
 		}
 
 		// Check for array types or tuple types
-		if ((type.startsWith("[") && type.endsWith("]")) ||
-				(type.startsWith("(") && type.endsWith(")"))) {
-			return true;
-		}
-
-		return false;
+		return (type.startsWith("[") && type.endsWith("]")) || (type.startsWith("(") && type.endsWith(")"));
 	}
 }

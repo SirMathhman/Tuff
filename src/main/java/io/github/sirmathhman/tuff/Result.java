@@ -116,7 +116,7 @@ public sealed interface Result<T, X> {
 
 		@Override
 		public <U> Result<Tuple<T, U>, X> and(Supplier<Result<U, X>> other) {
-			Result<U, X> otherResult = other.get();
+			var otherResult = other.get();
 			return otherResult.match(
 					otherValue -> Result.ok(new Tuple<>(value, otherValue)),
 					Result::err);

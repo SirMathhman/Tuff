@@ -24,12 +24,12 @@ public final class StringFieldAccessProcessor {
 	 * @return the continuation with field accesses substituted
 	 */
 	public static String handleStringFieldAccess(String varName, String valueExpr, String continuation) {
-		if (!StringLiteralHandler.isStringLiteral(valueExpr) || !continuation.contains(varName + ".length")) {
+		if (StringLiteralHandler.isStringLiteral(valueExpr) || !continuation.contains(varName + ".length")) {
 			return continuation;
 		}
 		var stringResult = StringLiteralHandler.handleStringLiteral(valueExpr, new HashMap<>());
 		if (stringResult instanceof Result.Ok<?, ?> ok) {
-			StringLiteralHandler.StringAllocationResult strAlloc = (StringLiteralHandler.StringAllocationResult) ok.value();
+			var strAlloc = (StringLiteralHandler.StringAllocationResult) ok.value();
 			return continuation.replace(varName + ".length", String.valueOf(strAlloc.length()));
 		}
 		return continuation;

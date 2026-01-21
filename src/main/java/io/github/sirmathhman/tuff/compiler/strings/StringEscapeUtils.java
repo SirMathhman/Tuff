@@ -12,11 +12,11 @@ public final class StringEscapeUtils {
 	 * Returns null if an invalid escape sequence is found.
 	 */
 	public static String unescape(String escaped) {
-		StringBuilder sb = new StringBuilder();
-		for (int i = 0; i < escaped.length(); i++) {
-			char c = escaped.charAt(i);
+		var sb = new StringBuilder();
+		for (var i = 0; i < escaped.length(); i++) {
+			var c = escaped.charAt(i);
 			if (c == '\\' && i + 1 < escaped.length()) {
-				char next = escaped.charAt(i + 1);
+				var next = escaped.charAt(i + 1);
 				switch (next) {
 					case '0' -> sb.append('\0');
 					case 'n' -> sb.append('\n');
