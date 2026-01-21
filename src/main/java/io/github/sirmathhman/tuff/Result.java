@@ -1,5 +1,7 @@
 package io.github.sirmathhman.tuff;
 
+import com.google.errorprone.annotations.CheckReturnValue;
+
 /**
  * A generic Result type that represents either a success (Ok) or a failure
  * (Err).
@@ -7,6 +9,7 @@ package io.github.sirmathhman.tuff;
  * @param <T> The type of the success value
  * @param <X> The type of the error value
  */
+@CheckReturnValue
 public sealed interface Result<T, X> {
 	/**
 	 * Creates a Result containing a success value.

@@ -1,1 +1,0 @@
-idea64.exe inspect . .idea\inspectionProfiles\Project_Default.xml .\InspectionResults -d src\main\java -v2

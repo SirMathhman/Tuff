@@ -13,9 +13,15 @@
 		<maven.compiler.release>17</maven.compiler.release>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<junit.jupiter.version>5.11.4</junit.jupiter.version>
+		<errorprone.version>2.36.0</errorprone.version>
 	</properties>
 
 	<dependencies>
+		<dependency>
+			<groupId>com.google.errorprone</groupId>
+			<artifactId>error_prone_annotations</artifactId>
+			<version>${errorprone.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter</artifactId>
@@ -37,8 +43,17 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.13.0</version>
 				<configuration>
+					<annotationProcessorPaths>
+						<path>
+							<groupId>com.google.errorprone</groupId>
+							<artifactId>error_prone_core</artifactId>
+							<version>${errorprone.version}</version>
+						</path>
+					</annotationProcessorPaths>
 					<compilerArgs>
 						<arg>-deprecation</arg>
+						<arg>-Xplugin:ErrorProne</arg>
+						<arg>-Xep:ReturnValueIgnored:ERROR</arg>
 					</compilerArgs>
 				</configuration>
 			</plugin>
