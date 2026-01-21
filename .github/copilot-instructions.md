@@ -264,6 +264,15 @@ String varName = decl.varName();  // Access via record getter
 - **Benefits**: Avoids runtime call stack; VM unchanged
 - **File**: `functions/RecursiveFunctionCompiler.java`
 
+### Higher-Order Functions (Returning Functions)
+
+- **Handler**: `ChainedFunctionCallHandler` in `functions` subpackage
+- **Pattern**: `fn outer() => { fn inner() => expr; inner }; outer()()`
+- **Behavior**: Outer function returns a function reference, which is immediately invoked
+- **Implementation**: Detects `identifier()()` pattern, parses nested function definition, registers it, then calls it
+- **Use Case**: Factory functions, currying patterns, deferred execution
+- **File**: `functions/ChainedFunctionCallHandler.java`
+
 ## Common Patterns & Conventions
 
 ### Error Handling Pattern
@@ -296,7 +305,7 @@ T value = result.okValue();  // Use success value
 - `io.github.sirmathhman.tuff` (7 classes) — Core types: `App`, `Result`, `Error` types
 - `io.github.sirmathhman.tuff.compiler` (15 classes) — Parsing: `ExpressionModel`, handlers, builders
 - `io.github.sirmathhman.tuff.compiler.letbinding` (15 classes) — Let binding processing, functions, structs
-- `io.github.sirmathhman.tuff.compiler.functions` (1 class) — Function compilation: `RecursiveFunctionCompiler`
+- `io.github.sirmathhman.tuff.compiler.functions` (2 classes) — Function compilation: `RecursiveFunctionCompiler`, `ChainedFunctionCallHandler`
 - `io.github.sirmathhman.tuff.vm` (4 classes) — VM: `Vm`, `Instruction`, `Operation`, `Variant`
 
 Enforced by pre-commit hook (`check_package_class_limit.py`). If adding a class: verify `python check_package_class_limit.py` passes.
