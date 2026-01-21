@@ -328,7 +328,7 @@ public final class LetBindingHandler {
 
 		// Normalize this.varName to varName
 		String normalizedRemaining = remaining.replaceAll("\\bthis\\." + varName + "\\b", varName);
-		
+
 		if (normalizedRemaining.equals(varName)) {
 			CompilerHelpers.loadVariableAndHalt(instructions, (long) nextMemAddr);
 			return Result.ok(null);

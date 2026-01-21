@@ -251,7 +251,9 @@ public final class LetBindingProcessor {
 		Result<Void, CompileError> structAccessResult = handleAllStructFieldAccess(varName, decl, continuation, ctx);
 		if (structAccessResult != null)
 			return structAccessResult;
-		return completeVariableSubstitution(varName, decl, continuation, ctx.instructions(), ctx.functionRegistry());
+
+		return completeVariableSubstitution(varName, decl, continuation, ctx.instructions(),
+				ctx.functionRegistry());
 	}
 
 	private static Result<Void, CompileError> tryEarlyReturns(String varName, VariableDecl decl,
@@ -297,6 +299,14 @@ public final class LetBindingProcessor {
 							? ConditionalExpressionHandler.parseConditional(decl.valueExpr())
 							: App.parseExpressionWithRead(decl.valueExpr(), ctx.functionRegistry());
 			return valueResult.match(expr -> App.generateInstructions(expr, ctx.instructions()), Result::err);
+		}
+		// Handle this.varName syntax - treat as reference to variable
+		if (continuation.startsWith("this.")) {
+			String fieldName = continuation.substring(5).trim();
+			if (fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+				// Parse it as if it's just the variable name
+				continuation = fieldName;
+			}
 		}
 		if (ctx.variableAddresses().containsKey(continuation)) {
 			return LetBindingHandler.handleVariableReference(decl.valueExpr(), continuation, ctx.instructions(),
@@ -351,8 +361,8 @@ public final class LetBindingProcessor {
 		for (java.util.regex.Matcher m = varPattern.matcher(normalizedContinuation); m.find(); occurrences++)
 			;
 		if (occurrences > 1) {
-			return LetBindingHandler.handleMultipleVariableReferences(varName, decl.valueExpr(), normalizedContinuation,
-					occurrences, instructions);
+			return LetBindingHandler.handleMultipleVariableReferences(varName, decl.valueExpr(),
+					normalizedContinuation, occurrences, instructions);
 		}
 		String substitutedContinuation = normalizedContinuation.replaceAll("\\b" + varName + "\\b",
 				"(" + decl.valueExpr() + ")");

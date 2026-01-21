@@ -55,6 +55,11 @@ public final class ExpressionTokens {
 			java.util.Map<String, String> variableTypes) {
 		expr = expr.trim();
 
+		// Handle this keyword - captures current scope as This type
+		if ("this".equals(expr)) {
+			return Result.ok("This");
+		}
+
 		// Handle boolean keywords
 		if ("true".equals(expr) || "false".equals(expr)) {
 			return Result.ok("Bool");
@@ -186,10 +191,16 @@ public final class ExpressionTokens {
 	 * - I16 can upcast to I32
 	 * - Downcast or cross-sign conversions are not allowed
 	 * - Pointer types must match exactly
+	 * - This type matches only This
 	 */
 	public static boolean isTypeCompatible(String sourceType, String targetType) {
 		if (sourceType.equals(targetType)) {
 			return true;
+		}
+
+		// Handle This type - must match exactly
+		if ("This".equals(sourceType) || "This".equals(targetType)) {
+			return sourceType.equals(targetType);
 		}
 
 		// Strip 'mut' keyword for comparison: *mut Type -> *Type
