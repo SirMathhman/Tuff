@@ -14,6 +14,7 @@ import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.functions.ArrayPointerIndexingHandler;
 import io.github.sirmathhman.tuff.compiler.functions.FunctionBindingHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.fields.ArrayFieldAccessProcessor;
+import io.github.sirmathhman.tuff.compiler.strings.StringFieldAccessProcessor;
 import io.github.sirmathhman.tuff.vm.Instruction;
 
 /**
@@ -367,6 +368,11 @@ public final class LetBindingProcessor {
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
 		String normalizedContinuation = continuation.replaceAll("\\bthis\\." + varName + "\\b", varName);
+
+		// Handle string literals with .length field access
+		normalizedContinuation = StringFieldAccessProcessor.handleStringFieldAccess(varName, decl.valueExpr().trim(),
+				normalizedContinuation);
+
 		int occurrences = CompilerHelpers.countVariableOccurrences(varName, normalizedContinuation);
 		boolean isTupleType = decl.declaredType() != null && decl.declaredType().startsWith("(")
 				&& decl.declaredType().endsWith(")");
@@ -384,19 +390,18 @@ public final class LetBindingProcessor {
 			return handleArrayPointerIndexing(varName, decl, normalizedContinuation, instructions, functionRegistry,
 					variableAddresses);
 		}
-		String valueExpr = decl.valueExpr().trim();
-		if (FunctionBindingHandler.isAnonymousFunction(valueExpr)) {
-			String namedFunction = FunctionBindingHandler.convertAnonymousFunctionToNamed(varName, valueExpr);
+		if (FunctionBindingHandler.isAnonymousFunction(decl.valueExpr().trim())) {
+			String namedFunction = FunctionBindingHandler.convertAnonymousFunctionToNamed(varName, decl.valueExpr().trim());
 			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, namedFunction, normalizedContinuation,
 					instructions, functionRegistry);
 		}
-		if (FunctionHandler.isFunctionDefinition(valueExpr)) {
-			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, valueExpr, normalizedContinuation,
+		if (FunctionHandler.isFunctionDefinition(decl.valueExpr().trim())) {
+			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, decl.valueExpr().trim(), normalizedContinuation,
 					instructions, functionRegistry);
 		}
 		boolean isFunctionReferenceBinding = decl.declaredType() != null
 				&& decl.declaredType().contains("=>")
-				&& functionRegistry.containsKey(valueExpr);
+				&& functionRegistry.containsKey(decl.valueExpr().trim());
 		String wrappedValue = isFunctionReferenceBinding ? decl.valueExpr()
 				: CompilerHelpers.wrapValueForSubstitution(decl.valueExpr(), decl.declaredType());
 		String substitutedContinuation = isFunctionReferenceBinding ? normalizedContinuation
@@ -406,7 +411,7 @@ public final class LetBindingProcessor {
 		if (typeCheckResult instanceof Result.Err<Void, CompileError>) {
 			return typeCheckResult;
 		}
-		java.util.Map<String, String> capturedVariables = buildCapturedVariablesMap(varName, valueExpr,
+		java.util.Map<String, String> capturedVariables = buildCapturedVariablesMap(varName, decl.valueExpr().trim(),
 				isFunctionReferenceBinding);
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App
 				.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
@@ -487,4 +492,5 @@ public final class LetBindingProcessor {
 			return Result.ok(null);
 		}, err -> Result.ok(null));
 	}
+
 }

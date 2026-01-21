@@ -1248,6 +1248,36 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldCreateStringLiteral() {
+		// "test" has length 4
+		assertValid("let x : *Str = \"test\"; x.length", 4);
+	}
+
+	@Test
+	void shouldCreateEmptyString() {
+		// Empty string has length 0
+		assertValid("let x : *Str = \"\"; x.length", 0);
+	}
+
+	@Test
+	void shouldCreateStringWithSpaces() {
+		// "a b c" has length 5
+		assertValid("let x : *Str = \"a b c\"; x.length", 5);
+	}
+
+	@Test
+	void shouldCreateStringWithNumbers() {
+		// "12345" has length 5
+		assertValid("let x : *Str = \"12345\"; x.length", 5);
+	}
+
+	@Test
+	void shouldCreateStringWithEscapes() {
+		// "a\\nb" (escaped backslash + n) has length 4
+		assertValid("let x : *Str = \"a\\\\nb\"; x.length", 4);
+	}
+
+	@Test
 	void shouldParseCharLiteral() {
 		// 'a' is UTF-8 code 97
 		assertValid("'a'", 97);

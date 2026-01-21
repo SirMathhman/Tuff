@@ -30,6 +30,7 @@ Tuff runs on 64-bit VM registers, but the language tracks types at compile time.
 
 - **Integers**: `U8`, `U16`, `U32`, `U64`, `I8`, `I16`, `I32`, `I64` (and other `U<bits>` / `I<bits>` forms).
 - **Char**: `Char` (UTF-8 code point as 64-bit integer; literals written as `'a'`, `'\n'`, etc.).
+- **Str**: `*Str` (pointer to string; literals written as `"hello"`, `"world"`, etc.).
 - **Bool**: `Bool` (values are `0`/`1`; keywords `true` and `false` are supported).
 - **Pointers**: `*T` and `*mut T`.
 - **Tuples**: `(T1, T2, ...)` with indexing `expr[index]`.
@@ -305,6 +306,48 @@ Char represents a single UTF-8 character, stored as its Unicode code point (0–
   if (true) 1 else 2
   ```
 
+### String Type
+
+Strings represent sequences of characters, stored as pointers (`*Str`) in VM memory:
+
+- **String Literals**: Use double quotes with optional escape sequences
+
+  ```
+  "hello"              // Basic string
+  ""                   // Empty string
+  "hello world"        // String with spaces
+  "a1b2c3"             // String with mixed characters
+  ```
+
+- **Escape Sequences**: Common escapes are supported
+
+  ```
+  "\0"                 // Null character
+  "\n"                 // Newline
+  "\t"                 // Tab
+  "\r"                 // Carriage return
+  "\\"                 // Backslash
+  "\'"                 // Single quote
+  "\""                 // Double quote
+  ```
+
+- **Type Annotation and Inference**
+
+  ```
+  let msg : *Str = "hello"; msg       // Explicit type annotation
+  let x = "world"; x                  // Inferred type: *Str
+  ```
+
+- **String Length**: Access the length of a string with the `.length` field
+
+  ```
+  let msg : *Str = "hello"; msg.length  // Returns 5
+  let empty : *Str = ""; empty.length   // Returns 0
+  let spaced : *Str = "a b"; spaced.length  // Returns 3
+  ```
+
+- **Storage**: Strings are stored in VM memory starting at address 1000, with layout `[length, char1, char2, ...]`
+
 ### Comparison Operators
 
 All comparison operators return a boolean value (1 for true, 0 for false):
@@ -402,6 +445,7 @@ sum
 - Unsigned integers: `U8`, `U16`, `U32`, `U64`
 - Signed integers: `I8`, `I16`, `I32`, `I64`
 - `Char` (UTF-8 character code)
+- `Str` (string type, accessed as pointer `*Str`)
 - `Bool` (0 or 1)
 - Pointers: `*T`, `*mut T`
 - Tuples: `(T1, T2, ...)`

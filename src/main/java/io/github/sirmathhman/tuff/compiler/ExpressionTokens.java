@@ -396,13 +396,13 @@ public final class ExpressionTokens {
 			}
 			char escapeChar = inner.charAt(1);
 			long code = switch (escapeChar) {
-				case '0' -> 0;   // null
-				case 'n' -> 10;  // newline
-				case 't' -> 9;   // tab
-				case 'r' -> 13;  // carriage return
+				case '0' -> 0; // null
+				case 'n' -> 10; // newline
+				case 't' -> 9; // tab
+				case 'r' -> 13; // carriage return
 				case '\\' -> 92; // backslash
 				case '\'' -> 39; // single quote
-				case '"' -> 34;  // double quote
+				case '"' -> 34; // double quote
 				default -> {
 					if (inner.length() == 2) {
 						yield -1; // Signal error for invalid escape
@@ -423,7 +423,8 @@ public final class ExpressionTokens {
 			return Result.ok((long) c);
 		}
 
-		return Result.err(new CompileError("Invalid char literal: must be single character or escape sequence: " + literal));
+		return Result
+				.err(new CompileError("Invalid char literal: must be single character or escape sequence: " + literal));
 	}
 
 	/**

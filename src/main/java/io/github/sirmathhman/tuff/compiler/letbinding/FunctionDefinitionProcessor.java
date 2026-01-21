@@ -192,7 +192,7 @@ public final class FunctionDefinitionProcessor {
 	}
 
 	private static boolean isValidParameterType(String type) {
-		return type.matches("([UI]\\d+|I32|Bool|Char|\\*[a-zA-Z_][a-zA-Z0-9_]*|\\*mut\\s+[a-zA-Z_][a-zA-Z0-9_]*)");
+		return type.matches("([UI]\\d+|I32|Bool|Char|Str|\\*Str|\\*[a-zA-Z_][a-zA-Z0-9_]*|\\*mut\\s+[a-zA-Z_][a-zA-Z0-9_]*)");
 	}
 
 	public static Result<String, CompileError> inferReturnType(String body) {
@@ -240,7 +240,8 @@ public final class FunctionDefinitionProcessor {
 
 	private static boolean isValidReturnType(String type) {
 		return type
-				.matches("([UI]\\d+|I32|Bool|Char|[A-Z][a-zA-Z0-9_]*|\\*[a-zA-Z_][a-zA-Z0-9_]*|\\*mut\\s+[a-zA-Z_][a-zA-Z0-9_]*)");
+				.matches(
+					"([UI]\\d+|I32|Bool|Char|Str|\\*Str|[A-Z][a-zA-Z0-9_]*|\\*[a-zA-Z_][a-zA-Z0-9_]*|\\*mut\\s+[a-zA-Z_][a-zA-Z0-9_]*)");
 	}
 
 	/**
@@ -265,7 +266,8 @@ public final class FunctionDefinitionProcessor {
 	}
 
 	/**
-	 * Helper method to parse and extract arguments from a string, with error handling
+	 * Helper method to parse and extract arguments from a string, with error
+	 * handling
 	 */
 	public static Result<List<String>, CompileError> parseAndExtractArguments(String argsString) {
 		Result<List<String>, CompileError> argsResult = splitByCommaAtDepthZero(argsString);
