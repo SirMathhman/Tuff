@@ -126,7 +126,8 @@ public final class BitwiseNotParser {
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> applyUnaryOperator(
 			ExpressionModel.ExpressionTerm baseTerm, boolean isBitwiseNotted, boolean isLogicalNotted) {
-		return Result.ok(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value, false, false,
-				false, false, false, false, false, isBitwiseNotted, isLogicalNotted, '\0', baseTerm.readTypeSpec));
+		return Result.ok(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value,
+				new ExpressionModel.ExpressionTermFlags(false, false, false, false, false, false, false, isBitwiseNotted,
+					isLogicalNotted, '\0', baseTerm.readTypeSpec)));
 	}
 }

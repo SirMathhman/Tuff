@@ -41,9 +41,10 @@ public final class MultiplicativeExpressionBuilder {
 				if (termResult instanceof Result.Err<ExpressionModel.ExpressionTerm, CompileError> err)
 					return Result.err(err.error());
 				ExpressionModel.ExpressionTerm baseTerm = ((Result.Ok<ExpressionModel.ExpressionTerm, CompileError>) termResult).value();
-				multTerms.add(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value, isSubtracted,
-						j > 0 && operator == '*', j > 0 && operator == '/', false, false, false, false,
-						baseTerm.isBitwiseNotted(), baseTerm.isLogicalNotted(), (j > 0) ? operator : '\0', baseTerm.readTypeSpec));
+				multTerms.add(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value,
+						new ExpressionModel.ExpressionTermFlags(isSubtracted, j > 0 && operator == '*', j > 0 && operator == '/',
+							false, false, false, false, baseTerm.isBitwiseNotted(), baseTerm.isLogicalNotted(),
+							(j > 0) ? operator : '\0', baseTerm.readTypeSpec)));
 				Result<Long, CompileError> lit2 = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
 				if (lit2 instanceof Result.Err<Long, CompileError> err) return Result.err(err.error());
 				multLiteral = ((Result.Ok<Long, CompileError>) lit2).value();
