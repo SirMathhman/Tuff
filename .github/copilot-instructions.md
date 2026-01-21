@@ -288,6 +288,15 @@ String varName = decl.varName();  // Access via record getter
 - **Flexibility**: Function definition doesn't require trailing `;` when used as value expression
 - **File**: `letbinding/LetBindingProcessor.java`, `letbinding/FunctionDefinitionProcessor.java`
 
+### Anonymous Functions (Lambdas)
+
+- **Pattern**: `let func = () => 100; func()`
+- **Behavior**: Anonymous functions (lambdas) can be bound to variables without the `fn` keyword
+- **Implementation**: Detects lambda pattern `(params) => body`, converts to named function `fn varName(params) => body`
+- **Handler**: `LetBindingProcessor.isAnonymousFunction()`, `LetBindingProcessor.convertAnonymousFunctionToNamed()`
+- **Syntax**: Supports parameter lists: `()`, `(x : I32)`, `(x : I32, y : I32)` followed by `=>` and body
+- **File**: `letbinding/LetBindingProcessor.java`
+
 ## Common Patterns & Conventions
 
 ### Error Handling Pattern

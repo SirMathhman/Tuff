@@ -94,7 +94,8 @@ public final class FunctionDefinitionProcessor {
 			return Result.ok(new BodyAndRemaining(body, remaining));
 		}
 
-		// If there's no semicolon and no block, treat the entire rest as body with empty remaining
+		// If there's no semicolon and no block, treat the entire rest as body with
+		// empty remaining
 		// This supports: let func = fn get() => 100; func()
 		String body = s.substring(bodyStart).trim();
 		return Result.ok(new BodyAndRemaining(body, ""));

@@ -991,6 +991,12 @@ public final class AppTest {
 		assertValid("let func = fn get() => 100; func()", 100);
 	}
 
+	@Test
+	void shouldSupportAnonymousFunctionBinding() {
+		// Bind an anonymous function (lambda) to a variable, then call it
+		assertValid("let func = () => 100; func()", 100);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

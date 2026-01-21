@@ -376,10 +376,18 @@ public final class LetBindingProcessor {
 		}
 
 		String valueExpr = decl.valueExpr().trim();
-		
+
+		// Check if we're binding an anonymous function (lambda) to a variable
+		if (isAnonymousFunction(valueExpr)) {
+			String namedFunction = convertAnonymousFunctionToNamed(varName, valueExpr);
+			return handleFunctionDefinitionBinding(varName, namedFunction, normalizedContinuation, instructions,
+					functionRegistry);
+		}
+
 		// Check if we're binding a function definition to a variable
 		if (FunctionHandler.isFunctionDefinition(valueExpr)) {
-			return handleFunctionDefinitionBinding(varName, valueExpr, normalizedContinuation, instructions, functionRegistry);
+			return handleFunctionDefinitionBinding(varName, valueExpr, normalizedContinuation, instructions,
+					functionRegistry);
 		}
 		boolean isFunctionReferenceBinding = decl.declaredType() != null
 				&& decl.declaredType().contains("=>")
@@ -421,24 +429,46 @@ public final class LetBindingProcessor {
 		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
 	}
 
+	private static boolean isAnonymousFunction(String expr) {
+		// Detect lambda pattern: () => body or (params) => body
+		expr = expr.trim();
+		return expr.matches("^\\(.*?\\)\\s*=>.*");
+	}
+
+	private static String convertAnonymousFunctionToNamed(String varName, String lambdaExpr) {
+		// Convert: () => 100 to: fn varName() => 100
+		lambdaExpr = lambdaExpr.trim();
+		int arrowIndex = lambdaExpr.indexOf("=>");
+		if (arrowIndex == -1) {
+			return lambdaExpr;
+		}
+		String params = lambdaExpr.substring(0, arrowIndex).trim();
+		String body = lambdaExpr.substring(arrowIndex + 2).trim();
+		return "fn " + varName + params + " => " + body;
+	}
+
 	private static Result<Void, CompileError> handleFunctionDefinitionBinding(String varName, String funcDefStmt,
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		// Parse the function definition
-		Result<FunctionHandler.ParsedFunction, CompileError> parseResult = FunctionHandler.parseFunctionDefinition(funcDefStmt);
+		Result<FunctionHandler.ParsedFunction, CompileError> parseResult = FunctionHandler
+				.parseFunctionDefinition(funcDefStmt);
 		if (parseResult instanceof Result.Err<FunctionHandler.ParsedFunction, CompileError> err) {
 			return Result.err(err.error());
 		}
-		FunctionHandler.ParsedFunction parsed = ((Result.Ok<FunctionHandler.ParsedFunction, CompileError>) parseResult).value();
-		
-		// Create a new function registry with the bound function registered under the variable name
+		FunctionHandler.ParsedFunction parsed = ((Result.Ok<FunctionHandler.ParsedFunction, CompileError>) parseResult)
+				.value();
+
+		// Create a new function registry with the bound function registered under the
+		// variable name
 		Map<String, FunctionHandler.FunctionDef> updatedRegistry = new java.util.HashMap<>(functionRegistry);
 		updatedRegistry.put(varName, parsed.functionDef());
-		
+
 		// Parse the continuation with the updated function registry
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = io.github.sirmathhman.tuff.App
 				.parseExpressionWithRead(continuation, updatedRegistry);
-		return contResult.match(expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions), Result::err);
+		return contResult.match(expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions),
+				Result::err);
 	}
 
 	private static Result<Void, CompileError> validateContinuationTypes(String continuation, String varName,
