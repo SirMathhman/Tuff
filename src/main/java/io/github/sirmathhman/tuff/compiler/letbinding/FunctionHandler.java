@@ -60,11 +60,13 @@ public final class FunctionHandler {
 			String stmt, Map<String, String> capturedVariables) {
 		stmt = stmt.trim();
 
-		Result<FunctionDefParts, CompileError> partsResult = splitFunctionDefinition(stmt);
-		if (partsResult instanceof Result.Err<FunctionDefParts, CompileError> err) {
+		Result<FunctionDefinitionProcessor.FunctionDefParts, CompileError> partsResult = FunctionDefinitionProcessor
+				.splitFunctionDefinition(stmt);
+		if (partsResult instanceof Result.Err<FunctionDefinitionProcessor.FunctionDefParts, CompileError> err) {
 			return Result.err(err.error());
 		}
-		FunctionDefParts parts = ((Result.Ok<FunctionDefParts, CompileError>) partsResult).value();
+		FunctionDefinitionProcessor.FunctionDefParts parts = ((Result.Ok<FunctionDefinitionProcessor.FunctionDefParts, CompileError>) partsResult)
+				.value();
 		String name = parts.name();
 		String paramString = parts.params();
 		String returnType = parts.returnType();
@@ -72,7 +74,8 @@ public final class FunctionHandler {
 		String remaining = parts.remaining();
 
 		// Parse parameters
-		Result<List<FunctionParam>, CompileError> paramsResult = parseParameters(paramString);
+		Result<List<FunctionParam>, CompileError> paramsResult = FunctionDefinitionProcessor
+				.parseParameters(paramString);
 		if (paramsResult instanceof Result.Err<List<FunctionParam>, CompileError>) {
 			return Result.err(((Result.Err<List<FunctionParam>, CompileError>) paramsResult).error());
 		}
@@ -80,94 +83,22 @@ public final class FunctionHandler {
 
 		// If return type not specified, try to infer it from the body
 		if (returnType == null) {
-			Result<String, CompileError> inferredType = inferReturnType(body);
+			Result<String, CompileError> inferredType = FunctionDefinitionProcessor.inferReturnType(body);
 			if (inferredType instanceof Result.Err<String, CompileError>) {
 				return Result.err(((Result.Err<String, CompileError>) inferredType).error());
 			}
 			returnType = ((Result.Ok<String, CompileError>) inferredType).value();
 		} else {
-			// Validate return type
-			if (!isValidReturnType(returnType)) {
+			// Validate return type - check against valid types
+			if (!returnType.matches(
+					"([UI]\\d+|I32|Bool|[A-Z][a-zA-Z0-9_]*|\\*[a-zA-Z_][a-zA-Z0-9_]*|\\*mut\\s+[a-zA-Z_][a-zA-Z0-9_]*)")) {
 				return Result.err(new CompileError(
-						"Invalid return type: " + returnType + ". Expected a valid type (I32, U8, U16, U32, I8, I16, Bool)"));
+						"Invalid return type: " + returnType + ". Expected a valid type"));
 			}
 		}
 
 		return Result.ok(new ParsedFunction(
 				new FunctionDef(name, params, returnType, body, capturedVariables), remaining));
-	}
-
-	private record FunctionDefParts(String name, String params, String returnType, String body, String remaining) {
-	}
-
-	private static Result<FunctionDefParts, CompileError> splitFunctionDefinition(String stmt) {
-		// Format: fn name(params) [: ReturnType] => body; remaining
-		String s = stmt.trim();
-		if (!s.startsWith("fn ")) {
-			return Result.err(new CompileError("Invalid function definition. Expected: fn name(params) => body;"));
-		}
-
-		int nameStart = 3;
-		int parenOpen = s.indexOf('(', nameStart);
-		if (parenOpen == -1) {
-			return Result.err(new CompileError("Invalid function definition: missing '(' after function name"));
-		}
-		String name = s.substring(nameStart, parenOpen).trim();
-		if (!name.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-			return Result.err(new CompileError("Invalid function name: " + name));
-		}
-
-		int parenClose = findMatchingParen(s, parenOpen);
-		if (parenClose == -1) {
-			return Result.err(new CompileError("Invalid function definition: unmatched ')' in parameter list"));
-		}
-		String params = s.substring(parenOpen + 1, parenClose).trim();
-
-		int arrowIndex = s.indexOf("=>", parenClose + 1);
-		if (arrowIndex == -1) {
-			return Result.err(new CompileError("Invalid function definition: missing '=>'"));
-		}
-
-		String between = s.substring(parenClose + 1, arrowIndex).trim();
-		String returnType = null;
-		if (!between.isEmpty()) {
-			if (!between.startsWith(":")) {
-				return Result.err(new CompileError(
-						"Invalid function definition. Expected ': ReturnType' before '=>'"));
-			}
-			returnType = between.substring(1).trim();
-			if (returnType.isEmpty()) {
-				return Result.err(new CompileError("Invalid function definition: missing return type after ':'"));
-			}
-		}
-
-		int bodyStart = arrowIndex + 2;
-		while (bodyStart < s.length() && Character.isWhitespace(s.charAt(bodyStart))) {
-			bodyStart++;
-		}
-		int semiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(s, bodyStart);
-		if (semiIndex == -1) {
-			return Result.err(new CompileError("Invalid function definition: missing ';' terminator"));
-		}
-		String body = s.substring(bodyStart, semiIndex).trim();
-		String remaining = s.substring(semiIndex + 1).trim();
-		return Result.ok(new FunctionDefParts(name, params, returnType, body, remaining));
-	}
-
-	static int findMatchingParen(String s, int openIdx) {
-		int depth = 1;
-		for (int i = openIdx + 1; i < s.length(); i++) {
-			char c = s.charAt(i);
-			if (c == '(') {
-				depth++;
-			} else if (c == ')') {
-				depth--;
-				if (depth == 0) {
-					return i;
-				}
-			}
-		}
-		return -1;
 	}
 
 	private static String preprocessFunctionBody(String body) {
@@ -222,109 +153,6 @@ public final class FunctionHandler {
 		// return: short-circuit the rest of the function body
 		String elseExpr = suffix.isEmpty() ? fallback : (fallback + suffixPart);
 		return "if (" + condition + ") " + valueExpr + " else (" + elseExpr + ")";
-	}
-
-	private static Result<List<FunctionParam>, CompileError> parseParameters(String paramString) {
-		List<FunctionParam> params = new ArrayList<>();
-
-		if (paramString.isEmpty()) {
-			return Result.ok(params);
-		}
-
-		// Split by comma at depth 0
-		List<String> paramParts = new ArrayList<>();
-		StringBuilder current = new StringBuilder();
-		int depth = 0;
-
-		for (char c : paramString.toCharArray()) {
-			if (c == '<' || c == '(') {
-				depth++;
-				current.append(c);
-			} else if (c == '>' || c == ')') {
-				depth--;
-				current.append(c);
-			} else if (c == ',' && depth == 0) {
-				paramParts.add(current.toString().trim());
-				current = new StringBuilder();
-			} else {
-				current.append(c);
-			}
-		}
-
-		if (current.length() > 0) {
-			paramParts.add(current.toString().trim());
-		}
-
-		// Parse each parameter: name : Type
-		for (String part : paramParts) {
-			Pattern pattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*:\\s*([A-Za-z_*][A-Za-z0-9_*]*)$");
-			Matcher matcher = pattern.matcher(part);
-
-			if (!matcher.matches()) {
-				return Result.err(
-						new CompileError("Invalid parameter syntax: '" + part + "'. Expected: paramName : Type"));
-			}
-
-			String paramName = matcher.group(1);
-			String paramType = matcher.group(2);
-
-			// Validate parameter type
-			if (!isValidReturnType(paramType)) {
-				return Result.err(new CompileError(
-						"Invalid parameter type: " + paramType + ". Expected a valid type (I32, U8, U16, U32, I8, I16, Bool)"));
-			}
-
-			params.add(new FunctionParam(paramName, paramType));
-		}
-
-		return Result.ok(params);
-	}
-
-	private static boolean isValidReturnType(String type) {
-		return type.matches("^(U8|U16|U32|I8|I16|I32|Bool)$");
-	}
-
-	private static Result<String, CompileError> inferReturnType(String body) {
-		body = body.trim();
-		// Try to infer the return type from the body expression
-		// This is a simplified inference that looks for type literals or read
-		// operations
-
-		// First, check if the body starts with a struct instantiation
-		// (e.g., Point { ... })
-		Pattern structPattern = Pattern.compile("^([A-Z][a-zA-Z0-9_]*)\\s*\\{");
-		Matcher structMatcher = structPattern.matcher(body);
-		if (structMatcher.find()) {
-			String structType = structMatcher.group(1);
-			return Result.ok(structType);
-		}
-
-		if (body.contains("read")) {
-			// Try to extract type from read operation
-			Pattern pattern = Pattern.compile("\\bread\\s+([A-Za-z_*][A-Za-z0-9_*]*)");
-			Matcher matcher = pattern.matcher(body);
-			if (matcher.find()) {
-				String type = matcher.group(1);
-				if (isValidReturnType(type)) {
-					return Result.ok(type);
-				}
-			}
-		}
-		// Check for typed literals (e.g., 42U8, 100U16)
-		if (body.matches(".*\\d+[UI]\\d+.*")) {
-			Pattern pattern = Pattern.compile("\\d+([UI]\\d+)");
-			Matcher matcher = pattern.matcher(body);
-			if (matcher.find()) {
-				String typeCode = matcher.group(1);
-				// Convert U8 to U8, U16 to U16, etc.
-				String fullType = typeCode;
-				if (isValidReturnType(fullType)) {
-					return Result.ok(fullType);
-				}
-			}
-		}
-		// Default to I32 if no type can be inferred
-		return Result.ok("I32");
 	}
 
 	/**
@@ -399,37 +227,7 @@ public final class FunctionHandler {
 	}
 
 	private static Result<List<String>, CompileError> parseArguments(String argsString) {
-		List<String> args = new ArrayList<>();
-
-		if (argsString.isEmpty()) {
-			return Result.ok(args);
-		}
-
-		// Split by comma at depth 0, handling nested parentheses and angle brackets
-		List<String> argParts = new ArrayList<>();
-		StringBuilder current = new StringBuilder();
-		int depth = 0;
-
-		for (char c : argsString.toCharArray()) {
-			if (c == '<' || c == '(' || c == '{') {
-				depth++;
-				current.append(c);
-			} else if (c == '>' || c == ')' || c == '}') {
-				depth--;
-				current.append(c);
-			} else if (c == ',' && depth == 0) {
-				argParts.add(current.toString().trim());
-				current = new StringBuilder();
-			} else {
-				current.append(c);
-			}
-		}
-
-		if (current.length() > 0) {
-			argParts.add(current.toString().trim());
-		}
-
-		return Result.ok(argParts);
+		return FunctionDefinitionProcessor.splitByCommaAtDepthZero(argsString);
 	}
 
 	private static FunctionCallMatch parseFunctionCallPattern(String expr) {
@@ -448,7 +246,7 @@ public final class FunctionHandler {
 		int openParen = nameMatcher.end() - 1;
 
 		// Find matching closing parenthesis using depth-aware parsing
-		int closeParen = findMatchingParen(expr, openParen);
+		int closeParen = FunctionDefinitionProcessor.findMatchingParen(expr, openParen);
 		if (closeParen == -1) {
 			return null; // Unmatched parentheses
 		}

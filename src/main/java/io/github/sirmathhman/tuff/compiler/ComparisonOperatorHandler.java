@@ -118,4 +118,29 @@ public final class ComparisonOperatorHandler {
 
 		return Result.ok(new ExpressionModel.ExpressionResult(totalReads, totalLiteral, allTerms));
 	}
+
+	/**
+	 * Try to parse all comparison operators in order of precedence
+	 */
+	public static Result<ExpressionModel.ExpressionResult, CompileError> parseAllComparisons(String expr) {
+		var le = splitByLessOrEqual(expr);
+		if (le.size() > 1)
+			return parseLessOrEqualExpression(le);
+		var ge = splitByGreaterOrEqual(expr);
+		if (ge.size() > 1)
+			return parseGreaterOrEqualExpression(ge);
+		var lt = splitByLessThan(expr);
+		if (lt.size() > 1)
+			return parseLessThanExpression(lt);
+		var gt = splitByGreaterThan(expr);
+		if (gt.size() > 1)
+			return parseGreaterThanExpression(gt);
+		var eq = splitByEquality(expr);
+		if (eq.size() > 1)
+			return parseEqualityExpression(eq);
+		var neq = splitByInequality(expr);
+		if (neq.size() > 1)
+			return parseInequalityExpression(neq);
+		return Result.err(new CompileError("No comparison operator found"));
+	}
 }

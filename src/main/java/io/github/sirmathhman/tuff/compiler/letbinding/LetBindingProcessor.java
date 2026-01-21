@@ -30,6 +30,9 @@ public final class LetBindingProcessor {
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 	}
 
+	public record MutableVarContext(Map<String, Integer> variableAddresses, int nextMemAddr) {
+	}
+
 	private static VariableDecl parseVariableDecl(String stmt, int equalsIndex, int semiIndex) {
 		String declPart = stmt.substring(4, equalsIndex).trim();
 		boolean isMutable = false;

@@ -41,7 +41,7 @@ public final class FunctionCallSubstituter {
 			}
 
 			// Find matching closing parenthesis using depth-aware parsing
-			int closeParen = FunctionHandler.findMatchingParen(expr, openParen);
+			int closeParen = FunctionDefinitionProcessor.findMatchingParen(expr, openParen);
 			if (closeParen == -1) {
 				return Result.err(new CompileError("Unmatched parentheses in function call"));
 			}

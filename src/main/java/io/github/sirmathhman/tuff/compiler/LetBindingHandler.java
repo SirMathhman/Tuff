@@ -8,7 +8,7 @@ import io.github.sirmathhman.tuff.Result;
 import io.github.sirmathhman.tuff.compiler.letbinding.CompilerHelpers;
 import io.github.sirmathhman.tuff.compiler.letbinding.ForLoopProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
-import io.github.sirmathhman.tuff.compiler.letbinding.MutableVarContext;
+import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor.MutableVarContext;
 import io.github.sirmathhman.tuff.compiler.letbinding.YieldBlockProcessor;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;

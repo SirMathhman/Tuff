@@ -13,6 +13,7 @@ import io.github.sirmathhman.tuff.compiler.LogicalOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.MultiplicativeExpressionBuilder;
 import io.github.sirmathhman.tuff.compiler.WhileLoopHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
+import io.github.sirmathhman.tuff.compiler.letbinding.LetExpressionProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.MatchExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.StructHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.StructDefinition;
@@ -32,6 +33,7 @@ import java.util.Set;
 public final class App {
 	private App() {
 	}
+
 	public static Result<Instruction[], CompileError> compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
 		if (!source.isEmpty()) {
@@ -47,6 +49,7 @@ public final class App {
 		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
 		return Result.ok(instructions.toArray(new Instruction[0]));
 	}
+
 	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
 		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
 	}
@@ -372,130 +375,12 @@ public final class App {
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {
-		var le = ComparisonOperatorHandler.splitByLessOrEqual(expr);
-		if (le.size() > 1)
-			return ComparisonOperatorHandler.parseLessOrEqualExpression(le);
-		var ge = ComparisonOperatorHandler.splitByGreaterOrEqual(expr);
-		if (ge.size() > 1)
-			return ComparisonOperatorHandler.parseGreaterOrEqualExpression(ge);
-		var lt = ComparisonOperatorHandler.splitByLessThan(expr);
-		if (lt.size() > 1)
-			return ComparisonOperatorHandler.parseLessThanExpression(lt);
-		var gt = ComparisonOperatorHandler.splitByGreaterThan(expr);
-		if (gt.size() > 1)
-			return ComparisonOperatorHandler.parseGreaterThanExpression(gt);
-		var eq = ComparisonOperatorHandler.splitByEquality(expr);
-		if (eq.size() > 1)
-			return ComparisonOperatorHandler.parseEqualityExpression(eq);
-		var neq = ComparisonOperatorHandler.splitByInequality(expr);
-		if (neq.size() > 1)
-			return ComparisonOperatorHandler.parseInequalityExpression(neq);
-		return Result.err(new CompileError("No comparison operator found"));
+		return ComparisonOperatorHandler.parseAllComparisons(expr);
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBinding(String expr) {
-		return parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>(), new java.util.HashMap<>());
-	}
-
-	private static Result<String, CompileError> determineAndValidateType(
-			ExpressionTokens.LetBindingDecl decl,
-			java.util.Map<String, String> variableTypes) {
-		// Extract the type from the value expression BEFORE substitution
-		// This allows variable references to be resolved in the type context
-		Result<String, CompileError> typeResult = ExpressionTokens.extractTypeFromExpression(decl.valueExpr(),
-				variableTypes);
-
-		// Determine the actual type to use
-		if (decl.declaredType() == null) {
-			// Type inference: require successful type extraction
-			return typeResult.match(Result::ok, Result::err);
-		} else {
-			// If type is explicitly declared, try to extract type for validation
-			return typeResult.match(
-					inferredType -> {
-						// Validate that the inferred type is compatible with the declared type
-						// But skip validation for pointer types (they're complex and require more
-						// infrastructure)
-						if (!decl.declaredType().startsWith("*")
-								&& !ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
-							return Result.err(new CompileError("Type mismatch in let binding: variable '" + decl.varName() +
-									"' declared as " + decl.declaredType() + " but initialized with " + inferredType));
-						}
-						return Result.ok(decl.declaredType());
-					},
-					err -> Result.ok(decl.declaredType()));
-		}
-	}
-
-	public static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBindingWithContext(
-			String expr,
-			java.util.Map<String, String> boundVariables, java.util.Map<String, String> variableTypes) {
-		// Format: let varName : TYPE = EXPR; continuation
-		// where continuation is either another let binding or a variable reference
-		Result<ExpressionTokens.LetBindingDecl, CompileError> declResult = ExpressionTokens.parseLetDeclaration(expr);
-		return declResult.match(
-				decl -> {
-
-					// Check for duplicate variable binding
-					if (boundVariables.containsKey(decl.varName())) {
-						return Result.err(new CompileError(
-								"Duplicate variable binding: '" + decl.varName() + "' is already bound"));
-					}
-
-					// Extract and validate the type
-					Result<String, CompileError> actualTypeResult = determineAndValidateType(decl, variableTypes);
-					return actualTypeResult.match(
-							actualType -> {
-
-								// Now substitute any bound variables in the value expression for actual
-								// compilation
-								String valueExpr = decl.valueExpr();
-								for (String varName : boundVariables.keySet()) {
-									// Simple substitution - replace variable references with their bound
-									// expressions
-									valueExpr = valueExpr.replaceAll("\\b" + varName + "\\b",
-											boundVariables.get(varName));
-								}
-
-								// Parse the value expression
-								Result<ExpressionModel.ExpressionResult, CompileError> valueResult = parseExpressionWithRead(
-										valueExpr);
-								return valueResult.match(
-										valueExprResult -> {
-
-											// Find where the first binding ends (after its semicolon)
-											int equalsIndex = expr.indexOf('=');
-											int semiIndex = expr.indexOf(';', equalsIndex);
-
-											// Get the continuation after the semicolon
-											String continuation = expr.substring(semiIndex + 1).trim();
-
-											// Parse the continuation (either another let binding or final variable
-											// reference)
-											if (continuation.startsWith("let ")) {
-												// Another let binding follows - recursively parse it with updated context
-												java.util.Map<String, String> newVariables = new java.util.HashMap<>(boundVariables);
-												newVariables.put(decl.varName(), decl.valueExpr());
-												java.util.Map<String, String> newTypes = new java.util.HashMap<>(variableTypes);
-												newTypes.put(decl.varName(), actualType);
-												return parseLetExpressionBindingWithContext(continuation, newVariables, newTypes);
-											}
-
-											// Should be a variable reference - validate it matches the declared variable
-											if (!continuation.equals(decl.varName())) {
-												return Result.err(new CompileError("Invalid let binding: expected reference to variable '" +
-														decl.varName() + "' but got '" + continuation + "'"));
-											}
-
-											// Return the value expression result (the variable evaluates to its bound
-											// value)
-											return Result.ok(valueExprResult);
-										},
-										err -> Result.err(err));
-							},
-							err -> Result.err(err));
-				},
-				err -> Result.err(err));
+		return LetExpressionProcessor.parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>(),
+				new java.util.HashMap<>(), App::parseExpressionWithRead);
 	}
 
 	public static Result<ExpressionModel.ParsedMult, CompileError> parseMultiplicative(String expr,

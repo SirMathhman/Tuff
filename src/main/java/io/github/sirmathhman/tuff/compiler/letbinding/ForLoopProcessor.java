@@ -23,7 +23,7 @@ public final class ForLoopProcessor {
 			String initialValueExpr,
 			String continuation,
 			List<Instruction> instructions,
-			MutableVarContext ctx) {
+			LetBindingProcessor.MutableVarContext ctx) {
 		Map<String, Integer> variableAddresses = ctx.variableAddresses();
 		int nextMemAddr = ctx.nextMemAddr();
 		// Store the initial value at the correct memory address
