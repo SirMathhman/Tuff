@@ -947,6 +947,28 @@ public final class AppTest {
 		assertValidWithInput("fn createPoint() => Point { x : read I32, y : read I32 }; read I32", 42, 42);
 	}
 
+	@Test
+	void shouldBindFunctionValueAndCall() {
+		// Test: Bind function to variable but call direct (testing binding storage
+		// only)
+		assertValid("fn get() => 100; let func : () => I32 = get; get()", 100);
+	}
+
+	@Test
+	void shouldCallBoundFunction() {
+		// Test: Call through bound function reference
+		assertValid("fn get() => 100; let func : () => I32 = get; func()", 100);
+	}
+
+	@Test
+	void shouldSupportRecursiveFunctionWithReadInput() {
+		// Recursive function: sum numbers from n down to 1
+		// sum(3) with inputs [3, 2, 1] should compute 3 + 2 + 1 = 6
+		// The function reads n, then if n <= 0 returns 0, else returns n + sum()
+		// Each recursive call reads the next input value
+		assertValidWithInput("fn sum() => { let n = read I32; if (n <= 0) 0 else n + sum() }; sum()", 6, 3, 2, 1, 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

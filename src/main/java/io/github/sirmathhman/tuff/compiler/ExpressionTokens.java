@@ -30,12 +30,13 @@ public final class ExpressionTokens {
 
 		// Check if type annotation is present (contains ':')
 		if (decl.contains(":")) {
-			String[] parts = decl.split(":");
-			if (parts.length != 2) {
+			// Find the first ':' at depth 0 (not inside parentheses)
+			int colonIndex = findFirstColonAtDepthZero(decl);
+			if (colonIndex == -1) {
 				return Result.err(new CompileError("Invalid let binding: expected 'varName : type'"));
 			}
-			varName = parts[0].trim();
-			declaredType = parts[1].trim();
+			varName = decl.substring(0, colonIndex).trim();
+			declaredType = decl.substring(colonIndex + 1).trim();
 		} else {
 			// No type annotation - will be inferred
 			varName = decl.trim();
@@ -45,6 +46,21 @@ public final class ExpressionTokens {
 		String valueExpr = expr.substring(equalsIndex + 1, semiIndex).trim();
 
 		return Result.ok(new LetBindingDecl(varName, declaredType, valueExpr));
+	}
+
+	public static int findFirstColonAtDepthZero(String s) {
+		int depth = 0;
+		for (int i = 0; i < s.length(); i++) {
+			char c = s.charAt(i);
+			if (c == '(' || c == '{') {
+				depth++;
+			} else if (c == ')' || c == '}') {
+				depth--;
+			} else if (c == ':' && depth == 0) {
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	public static Result<String, CompileError> extractTypeFromExpression(String expr) {
@@ -65,43 +81,19 @@ public final class ExpressionTokens {
 			return Result.ok("Bool");
 		}
 
+		// Handle function types: () => ReturnType or (ParamType, ...) => ReturnType
+		if (expr.contains("=>")) {
+			return Result.ok(expr);
+		}
+
 		// Handle dereference operations
 		if (expr.startsWith("*")) {
-			String inner = expr.substring(1).trim();
-			Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
-			if (innerType instanceof Result.Err<String, CompileError>) {
-				return innerType;
-			}
-			if (!(innerType instanceof Result.Ok<String, CompileError> ok)) {
-				return Result.err(new CompileError("Internal error: expected Ok or Err in inner dereference type"));
-			}
-			String pointerType = ok.value();
-			// Strip 'mut' keyword if present: *mut Type -> *Type
-			if (pointerType.startsWith("*mut ")) {
-				pointerType = "*" + pointerType.substring(5);
-			}
-			// Dereferencing *Type should give Type
-			if (pointerType.startsWith("*")) {
-				return Result.ok(pointerType.substring(1));
-			}
-			return Result.err(new CompileError("Cannot dereference non-pointer type: " + pointerType));
+			return extractDereferenceType(expr, variableTypes);
 		}
 
 		// Handle reference operations (including &mut)
 		if (expr.startsWith("&")) {
-			String inner = expr.substring(1).trim();
-			// Strip 'mut' keyword if present: &mut x -> &x
-			if (inner.startsWith("mut ")) {
-				inner = inner.substring(4).trim();
-			}
-			Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
-			if (innerType instanceof Result.Ok<String, CompileError> ok) {
-				// Taking reference of Type gives *Type (or *mut Type for mutable references)
-				return Result.ok("*" + ok.value());
-			}
-			// If we can't determine the type of the inner expression, return generic
-			// pointer type
-			return Result.ok("*U8");
+			return extractReferenceType(expr, variableTypes);
 		}
 
 		// Handle variable references
@@ -121,6 +113,45 @@ public final class ExpressionTokens {
 		// For now, return error for unknown variables/complex expressions
 		// This will be handled as an error at a higher level
 		return Result.err(new CompileError("Cannot infer type for expression: " + expr));
+	}
+
+	private static Result<String, CompileError> extractDereferenceType(String expr,
+			java.util.Map<String, String> variableTypes) {
+		String inner = expr.substring(1).trim();
+		Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
+		if (innerType instanceof Result.Err<String, CompileError>) {
+			return innerType;
+		}
+		if (!(innerType instanceof Result.Ok<String, CompileError> ok)) {
+			return Result.err(new CompileError("Internal error: expected Ok or Err in inner dereference type"));
+		}
+		String pointerType = ok.value();
+		// Strip 'mut' keyword if present: *mut Type -> *Type
+		if (pointerType.startsWith("*mut ")) {
+			pointerType = "*" + pointerType.substring(5);
+		}
+		// Dereferencing *Type should give Type
+		if (pointerType.startsWith("*")) {
+			return Result.ok(pointerType.substring(1));
+		}
+		return Result.err(new CompileError("Cannot dereference non-pointer type: " + pointerType));
+	}
+
+	private static Result<String, CompileError> extractReferenceType(String expr,
+			java.util.Map<String, String> variableTypes) {
+		String inner = expr.substring(1).trim();
+		// Strip 'mut' keyword if present: &mut x -> &x
+		if (inner.startsWith("mut ")) {
+			inner = inner.substring(4).trim();
+		}
+		Result<String, CompileError> innerType = extractTypeFromExpression(inner, variableTypes);
+		if (innerType instanceof Result.Ok<String, CompileError> ok) {
+			// Taking reference of Type gives *Type (or *mut Type for mutable references)
+			return Result.ok("*" + ok.value());
+		}
+		// If we can't determine the type of the inner expression, return generic
+		// pointer type
+		return Result.ok("*U8");
 	}
 
 	public static List<String> splitTokensByOperators(String expr, boolean isAdditive) {
@@ -196,6 +227,11 @@ public final class ExpressionTokens {
 	public static boolean isTypeCompatible(String sourceType, String targetType) {
 		if (sourceType.equals(targetType)) {
 			return true;
+		}
+
+		// Handle function types - must match exactly
+		if (sourceType.contains("=>") || targetType.contains("=>")) {
+			return sourceType.equals(targetType);
 		}
 
 		// Handle This type - must match exactly

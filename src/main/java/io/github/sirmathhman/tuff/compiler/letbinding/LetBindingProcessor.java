@@ -43,9 +43,16 @@ public final class LetBindingProcessor {
 		String varName;
 		String declaredType = null;
 		if (declPart.contains(":")) {
-			String[] parts = declPart.split(":");
-			varName = parts[0].trim();
-			declaredType = parts[1].trim();
+			int colonIndex = ExpressionTokens.findFirstColonAtDepthZero(declPart);
+			if (colonIndex == -1) {
+				// Fallback to split if depth-aware search fails
+				String[] parts = declPart.split(":");
+				varName = parts[0].trim();
+				declaredType = parts[1].trim();
+			} else {
+				varName = declPart.substring(0, colonIndex).trim();
+				declaredType = declPart.substring(colonIndex + 1).trim();
+			}
 		} else {
 			varName = declPart.trim();
 		}
@@ -367,8 +374,20 @@ public final class LetBindingProcessor {
 			return LetBindingHandler.handleMultipleVariableReferences(varName, decl.valueExpr(),
 					normalizedContinuation, occurrences, instructions);
 		}
-		String substitutedContinuation = normalizedContinuation.replaceAll("\\b" + varName + "\\b",
-				"(" + decl.valueExpr() + ")");
+
+		String valueExpr = decl.valueExpr().trim();
+		boolean isFunctionReferenceBinding = decl.declaredType() != null
+				&& decl.declaredType().contains("=>")
+				&& functionRegistry.containsKey(valueExpr);
+
+		// IMPORTANT: If we're binding a function reference (e.g., `let f : () => I32 =
+		// get;`),
+		// do NOT inline-substitute `f` into the continuation, because it breaks the
+		// call syntax (turning `f()` into `(get)()`). Instead, keep `f()` intact and
+		// let the function-call parser resolve it via capturedVariables.
+		String substitutedContinuation = isFunctionReferenceBinding
+				? normalizedContinuation
+				: normalizedContinuation.replaceAll("\\b" + varName + "\\b", "(" + decl.valueExpr() + ")");
 		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName,
 				decl.valueExpr());
 		if (typeCheckResult instanceof Result.Err<Void, CompileError>) {
@@ -377,10 +396,19 @@ public final class LetBindingProcessor {
 
 		// Build captured variables map for function definitions in continuation
 		java.util.Map<String, String> capturedVariables = new java.util.HashMap<>();
-		Result<String, CompileError> varTypeResult = ExpressionTokens.extractTypeFromExpression(decl.valueExpr(),
-				new java.util.HashMap<>());
-		if (varTypeResult instanceof Result.Ok<String, CompileError> ok) {
-			capturedVariables.put(varName, ok.value());
+		// Check if the value is a function reference (bare function name)
+		// If it is and the declared type is a function type, store the binding
+		if (isFunctionReferenceBinding) {
+			// Store the function binding (not the type) so it can be resolved in function
+			// calls
+			capturedVariables.put(varName, valueExpr);
+		} else {
+			// For non-function values, store the type
+			Result<String, CompileError> varTypeResult = ExpressionTokens.extractTypeFromExpression(valueExpr,
+					new java.util.HashMap<>());
+			if (varTypeResult instanceof Result.Ok<String, CompileError> ok) {
+				capturedVariables.put(varName, ok.value());
+			}
 		}
 
 		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App

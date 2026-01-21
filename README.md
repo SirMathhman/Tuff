@@ -117,6 +117,14 @@ fn get() => { if (true) yield 100; 50 } + 5; get()   // 105
 fn get() => { if (true) return 100; 50 } + 5; get()  // 100
 ```
 
+You can also bind a function reference to a variable (using a function type annotation) and call it through the binding:
+
+```
+fn get() => 100;
+let func : () => I32 = get;
+func()  // 100
+```
+
 ### Logical Operators
 
 - **Logical OR**: Combine boolean expressions with the `||` operator (lowest precedence)

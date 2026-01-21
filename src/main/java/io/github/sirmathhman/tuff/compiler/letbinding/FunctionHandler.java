@@ -170,12 +170,28 @@ public final class FunctionHandler {
 		return match != null && functionRegistry.containsKey(match.functionName);
 	}
 
+	public static boolean isFunctionCall(String expr, Map<String, FunctionDef> functionRegistry,
+			Map<String, String> capturedVariables) {
+		if (isFunctionCall(expr, functionRegistry)) {
+			return true;
+		}
+		expr = expr.trim();
+		FunctionCallMatch match = parseFunctionCallPattern(expr);
+		// Check if function name is a bound function reference
+		return match != null && capturedVariables.containsKey(match.functionName);
+	}
+
 	/**
 	 * Parse a function call and return the body expression with arguments
 	 * substituted
 	 */
 	public static Result<String, CompileError> parseFunctionCall(String expr,
 			Map<String, FunctionDef> functionRegistry) {
+		return parseFunctionCall(expr, functionRegistry, java.util.Collections.emptyMap());
+	}
+
+	public static Result<String, CompileError> parseFunctionCall(String expr,
+			Map<String, FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		expr = expr.trim();
 		FunctionCallMatch match = parseFunctionCallPattern(expr);
 
@@ -185,6 +201,16 @@ public final class FunctionHandler {
 
 		String functionName = match.functionName;
 		String argsString = match.argsString;
+
+		// Check if this is a bound function reference
+		if (capturedVariables.containsKey(functionName)) {
+			// Get the actual function name from captured variables
+			String actualFunctionName = capturedVariables.get(functionName);
+			// Reconstruct the function call with the actual function name
+			String substitutedExpr = actualFunctionName + "(" + argsString + ")";
+			// Now parse the substituted expression
+			return parseFunctionCall(substitutedExpr, functionRegistry, capturedVariables);
+		}
 
 		FunctionDef functionDef = functionRegistry.get(functionName);
 		if (functionDef == null) {
