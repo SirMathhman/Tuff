@@ -445,8 +445,7 @@ public final class FunctionHandler {
 	 * Try to parse a function call with field access (e.g., get(100).value)
 	 * Returns null if not a match, otherwise parses and returns the field value
 	 */
-	public static io.github.sirmathhman.tuff.Result<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, 
-			io.github.sirmathhman.tuff.CompileError> tryParseFunctionCallWithFieldAccess(
+	public static io.github.sirmathhman.tuff.Result<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, io.github.sirmathhman.tuff.CompileError> tryParseFunctionCallWithFieldAccess(
 			String expr, Map<String, FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		java.util.regex.Pattern pattern = java.util.regex.Pattern
 				.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(([^)]*)\\)\\.([a-zA-Z_][a-zA-Z0-9_]*)(.*)$");
@@ -493,7 +492,7 @@ public final class FunctionHandler {
 		if (argsString == null || argsString.trim().isEmpty()) {
 			return args;
 		}
-		
+
 		StringBuilder current = new StringBuilder();
 		int depth = 0;
 		for (char c : argsString.toCharArray()) {

@@ -912,6 +912,21 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportNestedFunctionDefinitions() {
+		assertValid("fn outer() => { fn inner() => 100; inner() }; outer()", 100);
+	}
+
+	@Test
+	void shouldSupportNestedFunctionWithParameter() {
+		assertValid("fn outer() => { fn inner(x : I32) => x + 10; inner(5) }; outer()", 15);
+	}
+
+	@Test
+	void shouldSupportNestedFunctionCapturingOuterParam() {
+		assertValid("fn outer(x : I32) => { fn inner() => x; inner() }; outer(42)", 42);
+	}
+
+	@Test
 	void shouldTestFunctionDefining() {
 		// Just to test that function definition and body are correct
 		assertValidWithInput("fn createPoint() => Point { x : read I32, y : read I32 }; read I32", 42, 42);

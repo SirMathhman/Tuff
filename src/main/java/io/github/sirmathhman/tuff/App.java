@@ -277,6 +277,12 @@ public final class App {
 			return ConditionalExpressionHandler.parseConditional(expr);
 		}
 
+		// Check if this is a function definition (before normalizing braces!)
+		if (FunctionHandler.isFunctionDefinition(expr)) {
+			Map<String, FunctionHandler.FunctionDef> functionRegistry = new HashMap<>();
+			return parseExpressionWithRead(expr, functionRegistry, new HashMap<>());
+		}
+
 		// Check if this is a struct instantiation (before normalizing braces!)
 		if (StructInstantiationHandler.isStructInstantiation(expr, new java.util.HashMap<>())) {
 			Result<StructInstantiationHandler.StructInstantiationResult, CompileError> structResult = StructInstantiationHandler
