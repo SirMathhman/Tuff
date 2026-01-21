@@ -1008,6 +1008,13 @@ public final class AppTest {
 				3, 2, 1, 0);
 	}
 
+	@Test
+	void shouldSupportParametricRecursion() {
+		assertValidWithInput(
+				"fn sum(n : I32) => if (n <= 0) 0 else n + sum(n - 1); sum(5)",
+				15); // 5 + 4 + 3 + 2 + 1 = 15
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

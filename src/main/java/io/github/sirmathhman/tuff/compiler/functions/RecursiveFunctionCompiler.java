@@ -38,13 +38,14 @@ public final class RecursiveFunctionCompiler {
 	public static Result<Void, CompileError> tryCompileRecursiveCall(String stmt,
 			List<Instruction> instructions, Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		stmt = stmt.trim();
-		// Check if stmt is just "funcName()"
-		Pattern callPattern = Pattern.compile("^(\\w+)\\s*\\(\\s*\\)$");
+		// Check if stmt is "funcName()" or "funcName(arg)"
+		Pattern callPattern = Pattern.compile("^(\\w+)\\s*\\((.*)\\)$");
 		Matcher m = callPattern.matcher(stmt);
 		if (!m.matches()) {
-			return null; // Not a simple function call
+			return null; // Not a function call
 		}
 		String funcName = m.group(1);
+		String args = m.group(2).trim();
 		FunctionHandler.FunctionDef funcDef = functionRegistry.get(funcName);
 		if (funcDef == null) {
 			return null; // Function not defined
@@ -63,25 +64,34 @@ public final class RecursiveFunctionCompiler {
 			return compileReadSumLoop(pattern.baseValue(), instructions);
 		}
 		// Compile using recursive function compiler
-		return compileRecursiveFunction(funcDef, instructions);
+		return compileRecursiveFunction(funcDef, args, instructions);
 	}
 
 	/**
 	 * Compile a tail-additive recursive function to iterative form.
 	 * 
-	 * Pattern: fn name() =&gt; { let n = read TYPE; if (n &lt;= 0) 0 else n +
-	 * name() }
-	 * Becomes: result=0; loop { n=read; if n&lt;=0 break; result+=n }; return
+	 * Pattern: fn name(n : Type) => if (n <= 0) 0 else n + name(n - 1)
+	 * Or: fn name() => { let n = read TYPE; if (n <= 0) 0 else n + name() }
+	 * Becomes: result=0; loop { n=eval_arg; if n<=0 break; result+=n }; return
 	 * result
 	 */
 	public static Result<Void, CompileError> compileRecursiveFunction(
 			FunctionHandler.FunctionDef funcDef,
+			String callArgs,
 			List<Instruction> instructions) {
 
 		String funcName = funcDef.name();
 		String body = funcDef.body().trim();
 
-		// Parse the function body pattern
+		// Try parametric recursion first (fn name(n : Type) => ...)
+		if (!funcDef.params().isEmpty() && !callArgs.trim().isEmpty()) {
+			Result<Void, CompileError> result = tryCompileParametricRecursion(funcDef, callArgs, instructions);
+			if (result != null) {
+				return result;
+			}
+		}
+
+		// Fall back to pattern-based recursion (fn name() => { let n = read ... })
 		Result<ParsedPattern, CompileError> patternResult = parsePattern(body, funcName);
 		if (patternResult instanceof Result.Err<ParsedPattern, CompileError> err) {
 			return Result.err(err.error());
@@ -109,26 +119,141 @@ public final class RecursiveFunctionCompiler {
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 3, 0L));
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 3, 1L));
 
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-		instructions.add(new Instruction(Operation.LessThan, Variant.Immediate, 1, 2L));
-		instructions.add(new Instruction(Operation.LogicalNot, Variant.Immediate, 1, 0L));
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 1, 2L));
-
-		int jumpToEndIdx = instructions.size();
-		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1, 0L));
+		int jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instructions);
 
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 3L));
+
+		finishLoopWithBackjump(instructions, loopStart, jumpToEndIdx);
+		return Result.ok(null);
+	}
+
+	private record ParsedPattern(String varName, long baseValue, String op, String calleeName) {
+	}
+
+	/**
+	 * Try to compile parametric recursion:
+	 * fn sum(n : I32) => if (n <= 0) 0 else n + sum(n - 1)
+	 * 
+	 * Returns null if the body doesn't match the expected pattern.
+	 */
+	private static Result<Void, CompileError> tryCompileParametricRecursion(
+			FunctionHandler.FunctionDef funcDef,
+			String callArgs,
+			List<Instruction> instructions) {
+
+		if (funcDef.params().size() != 1) {
+			return null; // Only support single parameter for now
+		}
+
+		String paramName = funcDef.params().get(0).name();
+		String body = funcDef.body().trim();
+
+		// Parse the parametric recursion pattern:
+		// if (PARAM <= 0) BASE else PARAM OP funcName(PARAM UPDATE)
+		// E.g.: if (n <= 0) 0 else n + sum(n - 1)
+		Pattern p = Pattern.compile(
+				"if\\s*\\(\\s*" + Pattern.quote(paramName) + "\\s*<=\\s*0\\s*\\)\\s*"
+						+ "(\\d+)\\s+else\\s+"
+						+ Pattern.quote(paramName) + "\\s*([+\\-*/])\\s*"
+						+ funcDef.name() + "\\s*\\(\\s*(" + Pattern.quote(paramName)
+						+ "\\s*(?:[+\\-]\\s*\\d+|[*\\/]\\s*\\d+))\\s*\\)");
+
+		Matcher m = p.matcher(body);
+		if (!m.find()) {
+			return null; // Doesn't match parametric pattern
+		}
+
+		long baseValue = Long.parseLong(m.group(1));
+		String op = m.group(2);
+		String updateExpr = m.group(3).trim();
+
+		// Parse the call argument to get initial value
+		String initialValue = callArgs.trim();
+
+		return compileParametricLoop(paramName, initialValue, baseValue, op, updateExpr, instructions);
+	}
+
+	/**
+	 * Compile parametric recursion to a loop:
+	 * For fn sum(n : I32) => if (n <= 0) 0 else n + sum(n - 1); sum(5)
+	 * Generate: result=0; n=5; loop { if n<=0 break; result+=n; n=n-1 }
+	 */
+	private static Result<Void, CompileError> compileParametricLoop(
+			String paramName,
+			String initialValue,
+			long baseValue,
+			String op,
+			String updateExpr,
+			List<Instruction> instructions) {
+
+		// reg[0] = accumulator (result)
+		// reg[1] = parameter value
+		// reg[2] = temp for comparison
+
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, baseValue));
+
+		// For now, assume initialValue is a literal number like "5"
+		try {
+			long initialVal = Long.parseLong(initialValue);
+			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, initialVal));
+		} catch (NumberFormatException e) {
+			return Result
+					.err(new CompileError("Parametric recursion argument must be a literal number, got: " + initialValue));
+		}
+
+		int loopStart = instructions.size();
+
+		int jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instructions);
+
+		// Accumulate: result OP= param
+		Operation accOp = switch (op) {
+			case "+" -> Operation.Add;
+			case "-" -> Operation.Sub;
+			case "*" -> Operation.Mul;
+			case "/" -> Operation.Div;
+			default -> throw new IllegalArgumentException("Unsupported operator: " + op);
+		};
+		instructions.add(new Instruction(accOp, Variant.Immediate, 0, 1L));
+
+		// Update parameter: param = param UPDATE
+		// For now, only support param - 1 or param + 1
+		if (updateExpr.matches(Pattern.quote(paramName) + "\\s*-\\s*1")) {
+			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+			instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 1, 2L));
+		} else if (updateExpr.matches(Pattern.quote(paramName) + "\\s*\\+\\s*1")) {
+			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+			instructions.add(new Instruction(Operation.Add, Variant.Immediate, 1, 2L));
+		} else {
+			return Result.err(new CompileError("Unsupported parameter update: " + updateExpr));
+		}
+
+		finishLoopWithBackjump(instructions, loopStart, jumpToEndIdx);
+		return Result.ok(null);
+	}
+
+	private static void finishLoopWithBackjump(List<Instruction> instructions, int loopStart, int jumpToEndIdx) {
 		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopStart));
 
 		int loopEnd = instructions.size();
 		instructions.set(jumpToEndIdx, new Instruction(
 				Operation.JumpIfLessThanZero, Variant.Immediate, 1, (long) loopEnd));
-
-		return Result.ok(null);
 	}
 
-	private record ParsedPattern(String varName, long baseValue, String op, String calleeName) {
+	/**
+	 * Emit the `<= 0` check for a register by computing (reg - 1) and checking if result < 0.
+	 * This is semantically equivalent to `if (reg <= 0)`.
+	 * Uses register 2 as temporary for the literal 1.
+	 * Returns the index of the JumpIfLessThanZero instruction to be patched with the end label.
+	 */
+	private static int emitLessThanOrEqualZeroCheck(int regNum, List<Instruction> instructions) {
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, regNum, 2L));
+		int jumpIdx = instructions.size();
+		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, regNum, 0L));
+		// Restore register: reg = (reg - 1) + 1 = reg
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+		instructions.add(new Instruction(Operation.Add, Variant.Immediate, regNum, 2L));
+		return jumpIdx;
 	}
 
 	private static Result<ParsedPattern, CompileError> parsePattern(String body, String funcName) {

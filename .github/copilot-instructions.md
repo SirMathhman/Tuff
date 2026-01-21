@@ -264,13 +264,24 @@ String varName = decl.varName();  // Access via record getter
 - **Benefits**: Avoids runtime call stack; VM unchanged
 - **File**: `functions/RecursiveFunctionCompiler.java`
 
+### Parametric Recursive Functions
+
+- **Handler**: `RecursiveFunctionCompiler.tryCompileParametricRecursion()`
+- **Pattern**: `fn sum(n : I32) => if (n <= 0) 0 else n + sum(n - 1)`
+- **Behavior**: Compiles to iterative loop with parameter decrement
+  - `result=0; n=start; loop { if n<=0 break; result+=n; n=n-1 }; return result`
+- **Supported Updates**: Parameter update must be `n - 1` or `n + 1` only
+- **Current Limitation**: Only supports single parameter and `+` operator
+- **Implementation**: Registers allocated: reg[0]=accumulator, reg[1]=parameter, reg[2]=temp, reg[3]=unused
+- **File**: `functions/RecursiveFunctionCompiler.java`
+
 ### Mutual Recursion Cycles (A → B → C → A)
 
 - **Handler**: `RecursiveFunctionCompiler` in `functions` subpackage
-- **Pattern**: A cycle of *no-arg* functions where each function matches:
-    - `fn a() => { let n = read TYPE; if (n <= 0) 0 else n + b() }`
-    - `fn b() => { let n = read TYPE; if (n <= 0) 0 else n + c() }`
-    - `fn c() => { let n = read TYPE; if (n <= 0) 0 else n + a() }`
+- **Pattern**: A cycle of _no-arg_ functions where each function matches:
+  - `fn a() => { let n = read TYPE; if (n <= 0) 0 else n + b() }`
+  - `fn b() => { let n = read TYPE; if (n <= 0) 0 else n + c() }`
+  - `fn c() => { let n = read TYPE; if (n <= 0) 0 else n + a() }`
 - **Behavior**: Compiles the whole cycle into the same terminating loop as self-recursion; stops when an input $\le 0$ is read.
 - **Notes**: Currently only supports the `+` operator and requires a true cycle (length > 1).
 
