@@ -76,13 +76,15 @@ public final class BitwiseNotParser {
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseLiteralTerm(String term) {
-		// Handle this.x syntax - normalize and treat as variable reference
+		// Handle this.x or this.functionName() syntax - normalize and treat as
+		// variable/function reference
 		if (term.startsWith("this.")) {
 			String fieldName = term.substring(5).trim();
-			if (!fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+			// Allow function call syntax with parentheses
+			if (!fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*") && !fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*\\s*\\(.*\\)")) {
 				return Result.err(new CompileError("Invalid field name after 'this': " + fieldName));
 			}
-			// Normalize this.x to just x for parsing
+			// Normalize this.x or this.get() to just x or get()
 			term = fieldName;
 		}
 

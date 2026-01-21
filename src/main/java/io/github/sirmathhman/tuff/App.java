@@ -320,6 +320,15 @@ public final class App {
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		expr = expr.trim();
 
+		// Normalize this.functionName() to functionName() for function call syntax
+		if (expr.startsWith("this.")) {
+			String afterThis = expr.substring(5).trim();
+			// Check if it looks like a function call
+			if (afterThis.matches("[a-zA-Z_][a-zA-Z0-9_]*\\s*\\(.*")) {
+				expr = afterThis;
+			}
+		}
+
 		// Check if this is a function definition
 		if (FunctionHandler.isFunctionDefinition(expr)) {
 			return FunctionHandler.parseFunctionDefinition(expr, capturedVariables).flatMap(parsedFunc -> {

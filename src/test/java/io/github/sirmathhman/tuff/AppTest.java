@@ -867,6 +867,21 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportThisFunctionCallSyntax() {
+		assertValidWithInput("fn get() => 100; this.get()", 100);
+	}
+
+	@Test
+	void shouldSupportThisFunctionCallWithParameters() {
+		assertValidWithInput("fn add(x : I32, y : I32) => x + y; this.add(10, 20)", 30);
+	}
+
+	@Test
+	void shouldSupportThisFunctionCallWithReadInput() {
+		assertValidWithInput("fn get() => read I32; this.get()", 42, 42);
+	}
+
+	@Test
 	void shouldSupportFunctionCapturingPreviouslyboundVariable() {
 		assertValidWithInput("let x = read U8; fn get() => x; get()", 42, 42);
 	}
