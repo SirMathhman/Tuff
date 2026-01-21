@@ -1,8 +1,38 @@
 # Tuff
 
-A stack-based virtual machine compiler with support for type-safe let bindings.
+A stack-based virtual machine compiler and tiny, type-aware expression language.
+
+Tuff compiles source strings into a compact instruction stream and executes them on a small VM (4 registers + memory).
+There is currently **no standalone CLI** in this repository; you typically use it as a library (or via tests).
+
+## Quickstart
+
+### Build & test
+
+```bash
+mvn test
+mvn verify
+```
+
+### Run as a library
+
+- Compile: `App.compile(source)` → `Instruction[]`
+- Compile + execute: `App.run(source, int[] input)` → `RunResult` (output list + exit code)
+- Execute with tracing: `TraceRunner.runWithTrace(...)`
+
+See `src/test/java/io/github/sirmathhman/tuff/AppTest.java` for many runnable examples.
 
 ## Features
+
+### Values, Types, and Literals
+
+Tuff runs on 64-bit VM registers, but the language tracks types at compile time.
+
+- **Integers**: `U8`, `U16`, `U32`, `U64`, `I8`, `I16`, `I32`, `I64` (and other `U<bits>` / `I<bits>` forms).
+- **Bool**: `Bool` (values are `0`/`1`; keywords `true` and `false` are supported).
+- **Pointers**: `*T` and `*mut T`.
+- **Tuples**: `(T1, T2, ...)` with indexing `expr[index]`.
+- **Structs**: user-defined named product types.
 
 ### Type System
 
@@ -125,6 +155,60 @@ let func : () => I32 = get;
 func()  // 100
 ```
 
+Function calls also support:
+
+- `this.functionName(...)` (equivalent to `functionName(...)`)
+- method-style calls like `value.functionName()` where the function’s first parameter is named `this`
+
+```
+fn addOnce(this : I32) => this + 1;
+100.addOnce()  // 101
+```
+
+### Structs
+
+Define a struct at statement-level:
+
+```
+struct Point { x : U8, y : U8 }
+```
+
+Instantiate and access fields:
+
+```
+struct Wrapper { value : I32 }
+let w : Wrapper = Wrapper { value : read I32 };
+w.value
+```
+
+Multiple field accesses in one expression are supported:
+
+```
+struct Point { x : U8, y : U8 }
+let p : Point = Point { x : read U8, y : read U8 };
+p.x + p.y
+```
+
+### Tuples
+
+Tuples can be constructed and indexed:
+
+```
+let t : (U8, U8) = (read U8, read U8);
+t[0] + t[1]
+```
+
+### Pointers, references, and dereference assignment
+
+Take references with `&` / `&mut` and assign through a pointer with `*ptr = expr`:
+
+```
+let mut x = 0;
+let p = &mut x;
+*p = read I32;
+x
+```
+
 ### Logical Operators
 
 - **Logical OR**: Combine boolean expressions with the `||` operator (lowest precedence)
@@ -213,21 +297,56 @@ Execute one of two expressions based on a boolean condition:
   let x = if (read Bool) 100 else 50; x  // Bind conditional result to variable
   ```
 
+### Match expressions
+
+Pattern matching is supported via `match` (compiled into nested conditionals):
+
+```
+match (read U8) {
+  case 0 => 10;
+  case 1 => 20;
+  case _ => 99;
+}
+```
+
+### While and for loops
+
+`while` is supported at statement-level:
+
+```
+let mut x = 0;
+while (x < 5) x = x + 1;
+x
+```
+
+`for` loops are supported with a range header:
+
+```
+let mut sum = 0;
+for (let mut i in 0..5) sum += i;
+sum
+```
+
 ## Supported Types
 
-- `U8`, `U16`, `U32` - Unsigned integers (8, 16, 32 bits)
-- `I8`, `I16`, `I32` - Signed integers (8, 16, 32 bits)
-- `Bool` - Boolean type (0 or 1)
+- Unsigned integers: `U8`, `U16`, `U32`, `U64`
+- Signed integers: `I8`, `I16`, `I32`, `I64`
+- `Bool` (0 or 1)
+- Pointers: `*T`, `*mut T`
+- Tuples: `(T1, T2, ...)`
 
 ## Operator Precedence
 
 Operators are evaluated in the following order (highest to lowest):
 
-1. Multiplicative operators: `*`, `/`
-2. Additive operators: `+`, `-`
-3. Comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
-4. Logical AND operator: `&&`
-5. Logical OR operator: `||`
+1. Unary: dereference `*`, bitwise NOT `~`, logical NOT `!`
+2. Multiplicative: `*`, `/`
+3. Additive: `+`, `-`
+4. Shifts: `<<`, `>>`
+5. Bitwise: `&`, `^`, `|`
+6. Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
+7. Logical AND: `&&`
+8. Logical OR: `||`
 
 Examples:
 
@@ -236,27 +355,6 @@ Examples:
 (2 + 3) * 4            // = 20  (parentheses override precedence)
 read U8 > 5 && 1       // Comparison before AND
 if (read Bool) 3 else 5 // Conditionals at expression level
-```
-
-## Build & Test
-
-```bash
-# Run tests
-mvn test
-
-# Run Checkstyle (recommended)
-#
-# Note: the Checkstyle configuration uses custom checks defined in this project.
-# Running `mvn verify` will build and install the project artifact into your local
-# Maven repository before executing Checkstyle.
-mvn verify
-
-# (Optional) If you want to run Checkstyle as a standalone goal:
-# mvn -DskipTests install
-# mvn checkstyle:check
-
-# Full build with verification
-mvn verify
 ```
 
 ## Code Quality
@@ -271,12 +369,6 @@ mvn verify
 ### Package Structure Enforcement
 
 The codebase enforces a maximum of 15 classes per package using a Python pre-commit hook. This ensures packages remain focused and maintainable.
-
-**Current package distribution:**
-
-- `io.github.sirmathhman.tuff`: 7 classes (Core types and error handling)
-- `io.github.sirmathhman.tuff.compiler`: 12 classes (Expression parsing and compilation)
-- `io.github.sirmathhman.tuff.vm`: 4 classes (Virtual machine and instructions)
 
 The checker runs automatically on commits and will fail if any package exceeds 15 classes. To test it manually:
 
