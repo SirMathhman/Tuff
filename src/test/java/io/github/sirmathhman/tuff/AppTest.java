@@ -1215,6 +1215,22 @@ public final class AppTest {
 				10, 20);
 	}
 
+	@Test
+	void shouldAccessInitFieldOnArray() {
+		// Test accessing .init field on an array to get initialized count
+		assertValid(
+				"let array : [I32; 3; 5] = [1, 2, 3]; array.init",
+				3);
+	}
+
+	@Test
+	void shouldAccessInitFieldOnArrayPointer() {
+		// Test accessing .init field on an array pointer
+		assertValid(
+				"let array : [I32; 2; 4] = [10, 20]; let ref = &array; ref.init",
+				2);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
