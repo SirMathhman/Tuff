@@ -11,13 +11,13 @@ WARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release
 [INFO] 
 [INFO] --- checkstyle:3.6.0:check (default-cli) @ tuff ---
 [INFO] Starting audit...
-[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\ExpressionModel.java:82:24: More than 10 parameters (found 11). [ParameterNumber]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\ExpressionModel.java:75:24: More than 9 parameters (found 10). [ParameterNumber]
 Audit done.
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD FAILURE
 [INFO] ------------------------------------------------------------------------
-[INFO] Total time:  1.038 s
-[INFO] Finished at: 2026-01-20T19:09:24-05:00
+[INFO] Total time:  2.214 s
+[INFO] Finished at: 2026-01-20T19:10:29-05:00
 [INFO] ------------------------------------------------------------------------
 [ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (default-cli) on project tuff: Failed during checkstyle execution: There is 1 error reported by Checkstyle 9.3 with checkstyle.xml ruleset. -> [Help 1]
 [ERROR] 
