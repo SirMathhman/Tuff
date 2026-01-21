@@ -976,6 +976,13 @@ public final class AppTest {
 		assertValidWithInput("fn outer() => { fn inner() => read U8; inner }; outer()()", 42, 42);
 	}
 
+	@Test
+	void shouldSupportCallingReturnedThisMemberFunction() {
+		// outer() defines an inner function, returns `this`, then we call the member function.
+		// NOTE: this is intentionally written without a ';' after the function definition.
+		assertValidWithInput("fn outer() => { fn inner() => read U8; this } outer().inner()", 42, 42);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

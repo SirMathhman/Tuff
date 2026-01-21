@@ -273,6 +273,12 @@ String varName = decl.varName();  // Access via record getter
 - **Use Case**: Factory functions, currying patterns, deferred execution
 - **File**: `functions/ChainedFunctionCallHandler.java`
 
+### Calling Members via Returned `this`
+
+- **Pattern**: `fn outer() => { fn inner() => expr; this } outer().inner()`
+- **Behavior**: Outer function returns `this` and exposes `inner` as a callable member
+- **Notes**: Block-bodied function definitions may omit the trailing `;` when followed by an expression
+
 ## Common Patterns & Conventions
 
 ### Error Handling Pattern

@@ -18,6 +18,9 @@ public final class FunctionDefinitionProcessor {
 	private FunctionDefinitionProcessor() {
 	}
 
+	private record BodyAndRemaining(String body, String remaining) {
+	}
+
 	public record FunctionDefParts(String name, String params, String returnType, String body, String remaining) {
 	}
 
@@ -66,13 +69,32 @@ public final class FunctionDefinitionProcessor {
 		while (bodyStart < s.length() && Character.isWhitespace(s.charAt(bodyStart))) {
 			bodyStart++;
 		}
+
+		String resolvedReturnType = returnType;
+		Result<BodyAndRemaining, CompileError> bodyResult = parseBodyAndRemaining(s, bodyStart);
+		return bodyResult.map(br -> new FunctionDefParts(name, params, resolvedReturnType, br.body(), br.remaining()));
+	}
+
+	private static Result<BodyAndRemaining, CompileError> parseBodyAndRemaining(String s, int bodyStart) {
 		int semiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(s, bodyStart);
-		if (semiIndex == -1) {
-			return Result.err(new CompileError("Invalid function definition: missing ';' terminator"));
+		if (semiIndex != -1) {
+			String body = s.substring(bodyStart, semiIndex).trim();
+			String remaining = s.substring(semiIndex + 1).trim();
+			return Result.ok(new BodyAndRemaining(body, remaining));
 		}
-		String body = s.substring(bodyStart, semiIndex).trim();
-		String remaining = s.substring(semiIndex + 1).trim();
-		return Result.ok(new FunctionDefParts(name, params, returnType, body, remaining));
+
+		// Allow omitting ';' terminator for block bodies: fn f() => { ... } nextExpr
+		if (bodyStart < s.length() && s.charAt(bodyStart) == '{') {
+			int closeBrace = DepthAwareSplitter.findMatchingBrace(s, bodyStart);
+			if (closeBrace == -1) {
+				return Result.err(new CompileError("Invalid function definition: unmatched '}' in body"));
+			}
+			String body = s.substring(bodyStart, closeBrace + 1).trim();
+			String remaining = s.substring(closeBrace + 1).trim();
+			return Result.ok(new BodyAndRemaining(body, remaining));
+		}
+
+		return Result.err(new CompileError("Invalid function definition: missing ';' terminator"));
 	}
 
 	static int findMatchingParen(String s, int openIdx) {
