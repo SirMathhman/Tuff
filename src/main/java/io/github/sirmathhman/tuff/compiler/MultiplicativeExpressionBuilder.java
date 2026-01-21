@@ -29,7 +29,7 @@ public final class MultiplicativeExpressionBuilder {
 				if (pResult instanceof Result.Err<ExpressionModel.ParenthesizedTokenResult, CompileError> err)
 					return Result.err(err.error());
 				var pData = ((Result.Ok<ExpressionModel.ParenthesizedTokenResult, CompileError>) pResult).value();
-				multTerms.addAll(pData.terms());
+				multTerms = multTerms.addAll(pData.terms());
 				var lit1 = updateLiteral(multLiteral, pData.literalValue(), j == 0, operator);
 				if (lit1 instanceof Result.Err<Long, CompileError> err)
 					return Result.err(err.error());
@@ -41,7 +41,7 @@ public final class MultiplicativeExpressionBuilder {
 					return Result.err(err.error());
 				var data = ((Result.Ok<Object, CompileError>) termResult).value();
 				var baseTerm = (ExpressionModel.ExpressionTerm) data;
-				multTerms.add(baseTerm);
+				multTerms = multTerms.add(baseTerm);
 				var lit2 = updateLiteral(multLiteral, baseTerm.value, j == 0, operator);
 				if (lit2 instanceof Result.Err<Long, CompileError> err)
 					return Result.err(err.error());
@@ -91,16 +91,19 @@ public final class MultiplicativeExpressionBuilder {
 		};
 	}
 
-	private static void fixGroupingBoundaries(ArrayList<ExpressionModel.ExpressionTerm> multTerms, int lastExpandedParensSize,
-																						int multTokensSize) {
+	private static void fixGroupingBoundaries(ArrayList<ExpressionModel.ExpressionTerm> multTerms,
+			int lastExpandedParensSize,
+			int multTokensSize) {
+		var terms = multTerms;
 		if (lastExpandedParensSize > 1 && multTokensSize > 1) {
 			var lastJ0Index = lastExpandedParensSize - 1;
-			if (lastJ0Index + 1 < multTerms.size()) {
-				var nextTerm = multTerms.get(lastJ0Index + 1);
+			if (lastJ0Index + 1 < terms.size()) {
+				var nextTerm = terms.get(lastJ0Index + 1);
 				if (nextTerm.isMultiplied() || nextTerm.isDivided()) {
-					var termToMark = multTerms.get(lastJ0Index);
-					multTerms.set(lastJ0Index, new ExpressionModel.ExpressionTerm(termToMark.readCount, termToMark.value,
-							termToMark.isSubtracted(), true));
+					var termToMark = terms.get(lastJ0Index);
+					terms = terms.set(lastJ0Index,
+							new ExpressionModel.ExpressionTerm(termToMark.readCount, termToMark.value,
+									termToMark.isSubtracted(), true));
 				}
 			}
 		}
@@ -138,7 +141,7 @@ public final class MultiplicativeExpressionBuilder {
 					.withLogicalNotted(innerTerm.isLogicalNotted())
 					.withMultiplicativeOperator(innerTerm.multiplicativeOperator)
 					.withReadTypeSpec(innerTerm.readTypeSpec);
-			terms.add(new ExpressionModel.ExpressionTerm(innerTerm.readCount, innerTerm.value, flags));
+			terms = terms.add(new ExpressionModel.ExpressionTerm(innerTerm.readCount, innerTerm.value, flags));
 		}
 		return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue(),
 				innerExpr.terms().size()));
@@ -155,7 +158,7 @@ public final class MultiplicativeExpressionBuilder {
 		for (var k = 0; k < innerExpr.terms().size(); k++) {
 			var innerTerm = innerExpr.terms().get(k);
 			boolean isMultiplied = (k == 0);
-			terms.add(new ExpressionModel.ExpressionTerm(innerTerm.readCount, innerTerm.value, isSubtracted,
+			terms = terms.add(new ExpressionModel.ExpressionTerm(innerTerm.readCount, innerTerm.value, isSubtracted,
 					isMultiplied));
 		}
 		return Result.ok(new ExpressionModel.ParenthesizedTokenResult(terms, innerExpr.literalValue(), 0));
@@ -180,13 +183,13 @@ public final class MultiplicativeExpressionBuilder {
 				if ((c == '&' || c == '|') && i + 1 < expr.length() && expr.charAt(i + 1) == c) {
 					token.append(c);
 				} else {
-					result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
+					result = result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
 					token = new StringBuilder();
 					lastOp = c;
 				}
 			} else if ((c == '<' || c == '>') && depth == 0) {
 				if (i + 1 < expr.length() && expr.charAt(i + 1) == c) {
-					result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
+					result = result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
 					token = new StringBuilder();
 					lastOp = c;
 					i++;
@@ -198,7 +201,7 @@ public final class MultiplicativeExpressionBuilder {
 			}
 		}
 
-		result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
+		result = result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
 		return result;
 	}
 }

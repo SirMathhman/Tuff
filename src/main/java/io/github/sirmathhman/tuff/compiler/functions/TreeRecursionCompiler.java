@@ -45,10 +45,11 @@ public final class TreeRecursionCompiler {
 	private static final long SP_ADDR = 500L;
 	private static final long JUMP_TEMP = 501L;
 
-	private record Spec(long initialArg, long threshold, long baseValue, long firstOff, long secondOff, String operator) {}
+	private record Spec(long initialArg, long threshold, long baseValue, long firstOff, long secondOff, String operator) {
+	}
 
 	private static final class CompileState {
-		private final ArrayList<Instruction> code = new ArrayList<>();
+		private ArrayList<Instruction> code = new ArrayList<>();
 		private int endAddrPatch;
 		private int baseCasePatch;
 		private int afterFirstPatch;
@@ -114,6 +115,7 @@ public final class TreeRecursionCompiler {
 	}
 
 	private static Result<Void, CompileError> compile(Spec spec, ArrayList<Instruction> instructions) {
+		var instr = instructions;
 		var st = new CompileState();
 		emitInit(st, spec);
 		emitFuncStartAndFirstCall(st, spec);
@@ -121,142 +123,157 @@ public final class TreeRecursionCompiler {
 		emitAfterSecond(st, spec);
 		emitBaseCase(st, spec);
 		emitEndAndPatch(st);
-		instructions.addAll(st.code);
+		instr = instr.addAll(st.code);
 		return Result.ok(null);
 	}
 
 	private static void emitInit(CompileState st, Spec spec) {
 		// Initialize SP at memory[SP_ADDR] = STACK_BASE + 1 (nothing on stack yet)
-		st.code.add(insn(Operation.Load, Variant.Immediate, 0, STACK_BASE + 1));
-		st.code.add(insn(Operation.Store, Variant.DirectAddress, 0, SP_ADDR));
+		st.code = st.code.add(insn(Operation.Load, Variant.Immediate, 0, STACK_BASE + 1));
+		st.code = st.code.add(insn(Operation.Store, Variant.DirectAddress, 0, SP_ADDR));
 		// reg[1] = n = initialArg
-		st.code.add(insn(Operation.Load, Variant.Immediate, 1, spec.initialArg));
+		st.code = st.code.add(insn(Operation.Load, Variant.Immediate, 1, spec.initialArg));
 
 		// Push initial frame: firstResult(0), n, ret
-		st.endAddrPatch = pushFrame(st.code);
+		var initResult = pushFrame(st.code);
+		st.code = initResult.code();
+		st.endAddrPatch = initResult.patchIndex();
 	}
 
 	private static void emitFuncStartAndFirstCall(CompileState st, Spec spec) {
 		st.funcStart = st.code.size();
 
-		st.code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
-		st.code.add(insn(Operation.Add, Variant.Immediate, 0, 1L));
-		st.code.add(insn(Operation.Load, Variant.Immediate, 2, spec.threshold + 1));
-		st.code.add(insn(Operation.Sub, Variant.Immediate, 0, 2L));
+		st.code = st.code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
+		st.code = st.code.add(insn(Operation.Add, Variant.Immediate, 0, 1L));
+		st.code = st.code.add(insn(Operation.Load, Variant.Immediate, 2, spec.threshold + 1));
+		st.code = st.code.add(insn(Operation.Sub, Variant.Immediate, 0, 2L));
 		st.baseCasePatch = st.code.size();
-		st.code.add(insn(Operation.JumpIfLessThanZero, Variant.Immediate, 0, 0L));
+		st.code = st.code.add(insn(Operation.JumpIfLessThanZero, Variant.Immediate, 0, 0L));
 
 		// Push child frame: firstResult(0), n, ret=AFTER_FIRST
-		st.afterFirstPatch = pushFrame(st.code);
-		st.code.add(insn(Operation.Load, Variant.Immediate, 2, spec.firstOff));
-		st.code.add(insn(Operation.Sub, Variant.Immediate, 1, 2L));
-		st.code.add(insn(Operation.Jump, Variant.Immediate, 0L, (long) st.funcStart));
+		var afterFirstResult = pushFrame(st.code);
+		st.code = afterFirstResult.code();
+		st.afterFirstPatch = afterFirstResult.patchIndex();
+		st.code = st.code.add(insn(Operation.Load, Variant.Immediate, 2, spec.firstOff))
+				.add(insn(Operation.Sub, Variant.Immediate, 1, 2L))
+				.add(insn(Operation.Jump, Variant.Immediate, 0L, (long) st.funcStart));
+	}
+
+	/** Pop child frame: increment SP 3 times (for ret, n, firstResult slots). */
+	private static ArrayList<Instruction> popChildFrame(ArrayList<Instruction> code) {
+		var c = addIncrementSP(code);
+		c = addIncrementSP(c);
+		return addIncrementSP(c);
+	}
+
+	/** Access firstResult slot at SP+2: increment 2, execute op, decrement 2. */
+	private static ArrayList<Instruction> accessFirstResultSlot(
+			ArrayList<Instruction> code, Operation op, int reg) {
+		var c = addIncrementSP(code);
+		c = addIncrementSP(c);
+		c = c.add(insn(op, Variant.IndirectAddress, reg, SP_ADDR));
+		c = addDecrementSP(c);
+		return addDecrementSP(c);
 	}
 
 	private static void emitAfterFirstAndSecondCall(CompileState st, Spec spec) {
 		st.afterFirst = st.code.size();
-		// We returned with SP pointing at child's ret. Pop child frame (ret, n,
-		// firstResult)
-		addIncrementSP(st.code);
-		addIncrementSP(st.code);
-		addIncrementSP(st.code);
+		// Pop child frame (ret, n, firstResult)
+		st.code = popChildFrame(st.code);
 
 		// Store first recursive result into current frame's firstResult slot (SP+2)
-		addIncrementSP(st.code);
-		addIncrementSP(st.code);
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
-		addDecrementSP(st.code);
-		addDecrementSP(st.code);
+		st.code = accessFirstResultSlot(st.code, Operation.Store, 0);
 
 		// Restore n from current frame (SP+1)
-		addIncrementSP(st.code);
-		st.code.add(insn(Operation.Load, Variant.IndirectAddress, 1, SP_ADDR));
-		addDecrementSP(st.code);
+		st.code = addIncrementSP(st.code);
+		st.code = st.code.add(insn(Operation.Load, Variant.IndirectAddress, 1, SP_ADDR));
+		st.code = addDecrementSP(st.code);
 
 		// Push child2 frame: firstResult(0), n, ret=AFTER_SECOND
-		st.afterSecondPatch = pushFrame(st.code);
-		st.code.add(insn(Operation.Load, Variant.Immediate, 2, spec.secondOff));
-		st.code.add(insn(Operation.Sub, Variant.Immediate, 1, 2L));
-		st.code.add(insn(Operation.Jump, Variant.Immediate, 0L, (long) st.funcStart));
+		var afterSecondResult = pushFrame(st.code);
+		st.code = afterSecondResult.code();
+		st.afterSecondPatch = afterSecondResult.patchIndex();
+		st.code = st.code.add(insn(Operation.Load, Variant.Immediate, 2, spec.secondOff))
+				.add(insn(Operation.Sub, Variant.Immediate, 1, 2L))
+				.add(insn(Operation.Jump, Variant.Immediate, 0L, (long) st.funcStart));
 	}
 
 	private static void emitAfterSecond(CompileState st, Spec spec) {
 		st.afterSecond = st.code.size();
 		// Pop child2 frame (ret, n, firstResult)
-		addIncrementSP(st.code);
-		addIncrementSP(st.code);
-		addIncrementSP(st.code);
+		st.code = popChildFrame(st.code);
 
 		// Load first recursive result from current frame's firstResult slot (SP+2)
-		addIncrementSP(st.code);
-		addIncrementSP(st.code);
-		st.code.add(insn(Operation.Load, Variant.IndirectAddress, 2, SP_ADDR));
-		addDecrementSP(st.code);
-		addDecrementSP(st.code);
+		st.code = accessFirstResultSlot(st.code, Operation.Load, 2);
 
 		var combineOp = mapOp(spec.operator);
-		st.code.add(insn(combineOp, Variant.Immediate, 0, 2L));
+		st.code = st.code.add(insn(combineOp, Variant.Immediate, 0, 2L));
 
 		// Return to ret addr at [SP] without popping current frame (caller will pop)
-		emitReturn(st.code);
+		st.code = emitReturn(st.code);
 	}
 
 	private static void emitBaseCase(CompileState st, Spec spec) {
 		st.baseCase = st.code.size();
-		st.code.add(insn(Operation.Load, Variant.Immediate, 0, spec.baseValue));
+		st.code = st.code.add(insn(Operation.Load, Variant.Immediate, 0, spec.baseValue));
 		// Return to ret addr at [SP] without popping current frame (caller will pop)
-		emitReturn(st.code);
+		st.code = emitReturn(st.code);
 	}
 
 	private static void emitEndAndPatch(CompileState st) {
 		st.endAddr = st.code.size();
-		st.code.add(insn(Operation.Halt, Variant.Immediate, 0, 0L));
+		st.code = st.code.add(insn(Operation.Halt, Variant.Immediate, 0, 0L));
 
-		st.code.set(st.endAddrPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.endAddr));
-		st.code.set(st.baseCasePatch,
+		st.code = st.code.set(st.endAddrPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.endAddr));
+		st.code = st.code.set(st.baseCasePatch,
 				insn(Operation.JumpIfLessThanZero, Variant.Immediate, 0, (long) st.baseCase));
-		st.code.set(st.afterFirstPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.afterFirst));
-		st.code.set(st.afterSecondPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.afterSecond));
+		st.code = st.code.set(st.afterFirstPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.afterFirst));
+		st.code = st.code.set(st.afterSecondPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.afterSecond));
 	}
 
-	private static void addDecrementSP(ArrayList<Instruction> code) {
-		code.add(insn(Operation.Load, Variant.DirectAddress, 2, SP_ADDR));
-		code.add(insn(Operation.Load, Variant.Immediate, 3, 1L));
-		code.add(insn(Operation.Sub, Variant.Immediate, 2, 3L));
-		code.add(insn(Operation.Store, Variant.DirectAddress, 2, SP_ADDR));
+	private static ArrayList<Instruction> addDecrementSP(ArrayList<Instruction> code) {
+		return code.add(insn(Operation.Load, Variant.DirectAddress, 2, SP_ADDR))
+				.add(insn(Operation.Load, Variant.Immediate, 3, 1L))
+				.add(insn(Operation.Sub, Variant.Immediate, 2, 3L))
+				.add(insn(Operation.Store, Variant.DirectAddress, 2, SP_ADDR));
 	}
 
-	private static void addIncrementSP(ArrayList<Instruction> code) {
-		code.add(insn(Operation.Load, Variant.DirectAddress, 2, SP_ADDR));
-		code.add(insn(Operation.Load, Variant.Immediate, 3, 1L));
-		code.add(insn(Operation.Add, Variant.Immediate, 2, 3L));
-		code.add(insn(Operation.Store, Variant.DirectAddress, 2, SP_ADDR));
+	private static ArrayList<Instruction> addIncrementSP(ArrayList<Instruction> code) {
+		return code.add(insn(Operation.Load, Variant.DirectAddress, 2, SP_ADDR))
+				.add(insn(Operation.Load, Variant.Immediate, 3, 1L))
+				.add(insn(Operation.Add, Variant.Immediate, 2, 3L))
+				.add(insn(Operation.Store, Variant.DirectAddress, 2, SP_ADDR));
+	}
+
+	private record PushFrameResult(ArrayList<Instruction> code, int patchIndex) {
 	}
 
 	/**
 	 * Pushes a stack frame with: firstResult(0), n (reg[1]), and a return address.
-	 * The return address patch index is returned.
+	 * Returns the updated code and the patch index for the return address.
 	 */
-	private static int pushFrame(ArrayList<Instruction> code) {
-		addDecrementSP(code);
-		code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
-		code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
-		addDecrementSP(code);
-		code.add(insn(Operation.Store, Variant.IndirectAddress, 1, SP_ADDR));
-		addDecrementSP(code);
-		var patchIndex = code.size();
-		code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
-		code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
-		return patchIndex;
+	private static PushFrameResult pushFrame(ArrayList<Instruction> code) {
+		var c = code;
+		c = addDecrementSP(c);
+		c = c.add(insn(Operation.Load, Variant.Immediate, 0, 0L))
+				.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
+		c = addDecrementSP(c);
+		c = c.add(insn(Operation.Store, Variant.IndirectAddress, 1, SP_ADDR));
+		c = addDecrementSP(c);
+		var patchIndex = c.size();
+		c = c.add(insn(Operation.Load, Variant.Immediate, 0, 0L))
+				.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
+		return new PushFrameResult(c, patchIndex);
 	}
 
 	/**
-	 * Emits code to return to the address stored at [SP] without popping the current frame.
+	 * Emits code to return to the address stored at [SP] without popping the
+	 * current frame.
 	 */
-	private static void emitReturn(ArrayList<Instruction> code) {
-		code.add(insn(Operation.Load, Variant.IndirectAddress, 2, SP_ADDR));
-		code.add(insn(Operation.Store, Variant.DirectAddress, 2, JUMP_TEMP));
-		code.add(insn(Operation.Jump, Variant.DirectAddress, 0L, JUMP_TEMP));
+	private static ArrayList<Instruction> emitReturn(ArrayList<Instruction> code) {
+		return code.add(insn(Operation.Load, Variant.IndirectAddress, 2, SP_ADDR))
+				.add(insn(Operation.Store, Variant.DirectAddress, 2, JUMP_TEMP))
+				.add(insn(Operation.Jump, Variant.DirectAddress, 0L, JUMP_TEMP));
 	}
 
 	private static Instruction insn(Operation op, Variant var, long first, long second) {

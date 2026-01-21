@@ -17,19 +17,19 @@ public final class FunctionBindingHandler {
 
 	public static boolean isAnonymousFunction(String expr) {
 		// Detect lambda pattern: () => body or (params) => body
-		expr = expr.trim();
-		return expr.matches("^\\(.*?\\)\\s*=>.*");
+		var e = expr.trim();
+		return e.matches("^\\(.*?\\)\\s*=>.*");
 	}
 
 	public static String convertAnonymousFunctionToNamed(String varName, String lambdaExpr) {
 		// Convert: () => 100 to: fn varName() => 100
-		lambdaExpr = lambdaExpr.trim();
-		var arrowIndex = lambdaExpr.indexOf("=>");
+		var e = lambdaExpr.trim();
+		var arrowIndex = e.indexOf("=>");
 		if (arrowIndex == -1) {
-			return lambdaExpr;
+			return e;
 		}
-		var params = lambdaExpr.substring(0, arrowIndex).trim();
-		var body = lambdaExpr.substring(arrowIndex + 2).trim();
+		var params = e.substring(0, arrowIndex).trim();
+		var body = e.substring(arrowIndex + 2).trim();
 		return "fn " + varName + params + " => " + body;
 	}
 

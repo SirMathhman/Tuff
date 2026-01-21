@@ -21,6 +21,7 @@ public final class DereferenceAssignmentHandler {
 			String continuation,
 			ArrayList<Instruction> instructions,
 			Map<String, Integer> variableAddresses) {
+		var instr = instructions;
 		// For dereference assignments, the initialValueExpr should be a reference like
 		// &mut x
 		var refTarget = extractReferenceTarget(initialValueExpr);
@@ -62,24 +63,24 @@ public final class DereferenceAssignmentHandler {
 		}
 
 		// Generate instructions for assignment value
-		var assignGenResult = App.generateInstructions(exprOk.value(), instructions);
+		var assignGenResult = App.generateInstructions(exprOk.value(), instr);
 		if (assignGenResult instanceof Result.Err<Void, CompileError>) {
 			return assignGenResult;
 		}
 
 		// Store the computed value to the dereferenced address
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) referencedAddr));
+		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) referencedAddr));
 
 		// Handle the remaining continuation
 		var remaining = parsed.remaining();
 		if (remaining.isEmpty()) {
-			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
+			instr = instr.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 			return Result.ok(null);
 		}
 
 		// If remaining is a variable reference, load it
 		if (addresses.containsKey(remaining)) {
-			DepthAwareSplitter.addLoadAndHalt(instructions, addresses.get(remaining));
+			DepthAwareSplitter.addLoadAndHalt(instr, addresses.get(remaining));
 			return Result.ok(null);
 		}
 
@@ -126,8 +127,11 @@ public final class DereferenceAssignmentHandler {
 		}
 		// Extract the variable name (first word)
 		var spaceIndex = afterAmp.indexOf(' ');
-		if (spaceIndex > 0) {return afterAmp.substring(0, spaceIndex);} else {
-			if (afterAmp.isEmpty()) return null;
+		if (spaceIndex > 0) {
+			return afterAmp.substring(0, spaceIndex);
+		} else {
+			if (afterAmp.isEmpty())
+				return null;
 			return afterAmp;
 		}
 	}

@@ -60,10 +60,12 @@ public final class LogicalOperatorHandler {
 					newAndBoundary = true;
 				else
 					newAndBoundary = lastTerm.isLogicalAndBoundary();
-				operand.terms().set(operand.terms().size() - 1, lastTerm.withLogicalBoundary(newOrBoundary, newAndBoundary));
+				var updatedTerms = operand.terms().set(operand.terms().size() - 1,
+						lastTerm.withLogicalBoundary(newOrBoundary, newAndBoundary));
+				allTerms = allTerms.addAll(updatedTerms);
+			} else {
+				allTerms = allTerms.addAll(operand.terms());
 			}
-
-			allTerms.addAll(operand.terms());
 			totalReads += operand.readCount();
 			totalLiteral += operand.literalValue();
 		}

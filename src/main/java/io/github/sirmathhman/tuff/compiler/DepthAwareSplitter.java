@@ -40,8 +40,9 @@ public final class DepthAwareSplitter {
 	 * @param refAddr      the address to load from
 	 */
 	public static void addLoadAndHalt(ArrayList<Instruction> instructions, long refAddr) {
-		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, refAddr));
-		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
+		var instr = instructions;
+		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, refAddr))
+				.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 	}
 
 	/**
@@ -115,7 +116,7 @@ public final class DepthAwareSplitter {
 			// Check word boundaries
 			var validBefore = (i == 0 || !Character.isLetterOrDigit(expr.charAt(i - 1)));
 			var validAfter = (i + keyword.length() >= expr.length()
-												|| !Character.isLetterOrDigit(expr.charAt(i + keyword.length())));
+					|| !Character.isLetterOrDigit(expr.charAt(i + keyword.length())));
 			return validBefore && validAfter;
 		};
 		return splitWithDelimiterChecker(expr, keywordChecker, keyword.length());
@@ -144,7 +145,7 @@ public final class DepthAwareSplitter {
 				bracketDepth--;
 				token.append(c);
 			} else if (depth == 0 && bracketDepth == 0 && checker.isDelimiter(c, i)) {
-				result.add(token.toString().trim());
+				result = result.add(token.toString().trim());
 				token = new StringBuilder();
 				i += delimiterLength - 1;
 			} else {
@@ -153,7 +154,7 @@ public final class DepthAwareSplitter {
 		}
 
 		if (token.length() > 0) {
-			result.add(token.toString().trim());
+			result = result.add(token.toString().trim());
 		}
 
 		return result;

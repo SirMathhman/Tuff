@@ -65,16 +65,17 @@ public final class LetBindingHandler {
 			MutableVarContext ctx) {
 		var variableAddresses = ctx.variableAddresses();
 		var nextMemAddr = ctx.nextMemAddr();
-		continuation = continuation.trim();
-		if (!continuation.startsWith("{"))
+		var instr = instructions;
+		var cont = continuation.trim();
+		if (!cont.startsWith("{"))
 			return Result.err(new CompileError("Expected '{' for scoped block"));
-		var closingBrace = DepthAwareSplitter.findMatchingBrace(continuation, 0);
+		var closingBrace = DepthAwareSplitter.findMatchingBrace(cont, 0);
 		if (closingBrace == -1)
 			return Result.err(new CompileError("Unmatched '{' in scoped block"));
-		var blockContent = continuation.substring(1, closingBrace).trim();
-		var afterBrace = continuation.substring(closingBrace + 1).trim();
+		var blockContent = cont.substring(1, closingBrace).trim();
+		var afterBrace = cont.substring(closingBrace + 1).trim();
 		if (initialValueExpr != null) {
-			var storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
+			var storeResult = parseAndStoreInMemory(initialValueExpr, instr);
 			if (storeResult instanceof Result.Err<Void, CompileError>)
 				return storeResult;
 		}
@@ -84,18 +85,18 @@ public final class LetBindingHandler {
 			if (!(assignResult instanceof Result.Ok<AssignmentParseResult, CompileError> assignOk))
 				break;
 			var parsed = assignOk.value();
-			var processResult = processAssignmentValue(parsed.valueExpr(), instructions, nextMemAddr);
+			var processResult = processAssignmentValue(parsed.valueExpr(), instr, nextMemAddr);
 			if (processResult instanceof Result.Err<Void, CompileError>)
 				return processResult;
 			remaining = parsed.remaining();
 		}
 		if (!remaining.isEmpty() && !remaining.equals(varName))
 			return Result.err(new CompileError("Scoped block must end with variable reference, but got: " + remaining));
-		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
+		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 		if (!afterBrace.isEmpty() && !afterBrace.equals(varName)) {
 			java.util.Map<String, Integer> contextWithVar = new java.util.HashMap<>(variableAddresses);
 			contextWithVar.put(varName, nextMemAddr);
-			return handleVariableReference(varName, afterBrace, instructions, contextWithVar, nextMemAddr);
+			return handleVariableReference(varName, afterBrace, instr, contextWithVar, nextMemAddr);
 		}
 		return Result.ok(null);
 	}
@@ -110,7 +111,7 @@ public final class LetBindingHandler {
 	}
 
 	public static Result<Void, CompileError> handleWhileLoopAfterLet(String varName, String initialValueExpr,
-																																	 String continuation, ArrayList<Instruction> instructions, MutableVarContext ctx) {
+			String continuation, ArrayList<Instruction> instructions, MutableVarContext ctx) {
 		var variableAddresses = ctx.variableAddresses();
 		var nextMemAddr = ctx.nextMemAddr();
 		// Store the initial value at the correct memory address
@@ -128,7 +129,7 @@ public final class LetBindingHandler {
 	}
 
 	public static Result<Void, CompileError> handleForLoopAfterLet(String varName, String initialValueExpr,
-																																 String continuation, ArrayList<Instruction> instructions, MutableVarContext ctx) {
+			String continuation, ArrayList<Instruction> instructions, MutableVarContext ctx) {
 		return ForLoopProcessor.handleForLoopAfterLet(varName, initialValueExpr, continuation, instructions, ctx);
 	}
 
@@ -194,7 +195,7 @@ public final class LetBindingHandler {
 	}
 
 	private static Result<Void, CompileError> continueChainedLetBinding(String varName, String valueExpr,
-																																			String continuation, ArrayList<Instruction> instructions, MutableVarContext ctx) {
+			String continuation, ArrayList<Instruction> instructions, MutableVarContext ctx) {
 		java.util.Map<String, Integer> newContext = new java.util.HashMap<>(ctx.variableAddresses());
 		newContext.put(varName, ctx.nextMemAddr());
 		var partsResult = parseChainedLetParts(continuation);
@@ -241,8 +242,9 @@ public final class LetBindingHandler {
 			String continuation,
 			int occurrences,
 			ArrayList<Instruction> instructions) {
+		var instr = instructions;
 		// Variable used multiple times - need to cache value in memory
-		var storeResult = parseAndStoreInMemory(valueExpr, instructions);
+		var storeResult = parseAndStoreInMemory(valueExpr, instr);
 		if (storeResult instanceof Result.Err<Void, CompileError> storeErr) {
 			return Result.err(storeErr.error());
 		}
@@ -254,11 +256,11 @@ public final class LetBindingHandler {
 				+ java.util.regex.Pattern.quote(varName) + "\\s*$")) {
 			// Special case: x + x
 			// Load value from memory address into register 1
-			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) memAddr));
+			instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) memAddr));
 			// Add register 1 to register 0
-			instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
+			instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
 			// Result is in register 0, add Halt
-			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
+			instr = instr.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 			return Result.ok(null);
 		}
 
@@ -292,7 +294,7 @@ public final class LetBindingHandler {
 			String continuation,
 			boolean isMutableUninitialized,
 			MutableVarAssignmentContext ctx) {
-		var instructions = ctx.instructions();
+		var instr = ctx.instructions();
 		var nextMemAddr = ctx.varCtx().nextMemAddr();
 		var variableAddresses = ctx.varCtx().variableAddresses();
 		var isUninitialized = initialValueExpr == null;
@@ -301,7 +303,7 @@ public final class LetBindingHandler {
 
 		// Parse and evaluate initial value if provided, store in memory
 		if (initialValueExpr != null) {
-			var storeResult = parseAndStoreInMemory(initialValueExpr, instructions);
+			var storeResult = parseAndStoreInMemory(initialValueExpr, instr);
 			if (storeResult instanceof Result.Err<Void, CompileError>)
 				return storeResult;
 		}
@@ -309,7 +311,7 @@ public final class LetBindingHandler {
 		// Use MutableAssignmentHandler to process assignments
 		var assignmentResult = MutableAssignmentHandler.handleAssignment(varName, continuation,
 				isUninitialized, isMutableUninitialized,
-				new MutableAssignmentHandler.AssignmentContext(instructions, nextMemAddr));
+				new MutableAssignmentHandler.AssignmentContext(instr, nextMemAddr));
 		if (assignmentResult instanceof Result.Err<Void, CompileError>)
 			return assignmentResult;
 
@@ -330,7 +332,7 @@ public final class LetBindingHandler {
 		var normalizedRemaining = remaining.replaceAll("\\bthis\\." + varName + "\\b", varName);
 
 		if (normalizedRemaining.equals(varName)) {
-			CompilerHelpers.loadVariableAndHalt(instructions, (long) nextMemAddr);
+			CompilerHelpers.loadVariableAndHalt(instr, (long) nextMemAddr);
 			return Result.ok(null);
 		}
 
@@ -343,17 +345,17 @@ public final class LetBindingHandler {
 			if (exprResult instanceof Result.Ok<ExpressionModel.ExpressionResult, CompileError> ok) {
 				// Now we need to load the variable value and execute the expression
 				// First load the variable from memory into a register
-				instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) nextMemAddr));
+				instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) nextMemAddr));
 				// Then generate instructions for the expression
 				// But we need to substitute varName with a load instruction...
 				// This is complex. For now, let's just return the expression result
-				return App.generateInstructions(ok.value(), instructions);
+				return App.generateInstructions(ok.value(), instr);
 			}
 		}
 
 		// Check if remaining is a while loop
 		if (normalizedRemaining.startsWith("while (")) {
-			return WhileLoopHandler.handleWhileLoop(normalizedRemaining, "", instructions, addresses);
+			return WhileLoopHandler.handleWhileLoop(normalizedRemaining, "", instr, addresses);
 		}
 
 		return Result.err(new CompileError(
@@ -363,15 +365,16 @@ public final class LetBindingHandler {
 
 	static Result<Void, CompileError> processAssignmentValue(String valueExpr, ArrayList<Instruction> instructions,
 			int nextMemAddr) {
+		var instr = instructions;
 		var exprResult = App.parseExpressionWithRead(valueExpr);
 		if (exprResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> exprErr)
 			return Result.err(exprErr.error());
 		var exprOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) exprResult)
 				.value();
-		var assignGenResult = App.generateInstructions(exprOk, instructions);
+		var assignGenResult = App.generateInstructions(exprOk, instr);
 		if (assignGenResult instanceof Result.Err<Void, CompileError>)
 			return assignGenResult;
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
+		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
 		return Result.ok(null);
 	}
 

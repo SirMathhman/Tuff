@@ -38,7 +38,7 @@ public final class MutableAssignmentHandler {
 
 			var parsed = assignOk.value();
 			var validationResult = validateUninitializedAssignment(isUninitialized,
-																														 varName, assignmentCount, isMutableUninitialized);
+					varName, assignmentCount, isMutableUninitialized);
 			if (validationResult instanceof Result.Err<Void, CompileError>)
 				return validationResult;
 			assignmentCount++;
@@ -47,8 +47,8 @@ public final class MutableAssignmentHandler {
 				var parseResult = parseAndEvaluateExpression(parsed.valueExpr(), instructions);
 				if (parseResult instanceof Result.Err<Void, CompileError>)
 					return parseResult;
-				instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) nextMemAddr));
-				instructions.add(new Instruction(Operation.Store, Variant.IndirectAddress, 0, 1L));
+				instructions = instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) nextMemAddr));
+				instructions = instructions.add(new Instruction(Operation.Store, Variant.IndirectAddress, 0, 1L));
 			} else {
 				Result<Void, CompileError> processResult;
 				if (parsed.compoundOp() != null) {

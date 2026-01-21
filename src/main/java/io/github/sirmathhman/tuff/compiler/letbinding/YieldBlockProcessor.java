@@ -35,23 +35,24 @@ public final class YieldBlockProcessor {
 			}
 			var isLast = i == lastIdx;
 			var partResult = processYieldBlockPart(part, isLast, instructions, storeAddr,
-																						 endJumpPatchPoints);
+					endJumpPatchPoints);
 			if (partResult instanceof Result.Err<Void, CompileError>) {
 				return partResult;
 			}
 		}
 
 		patchEndJumps(endJumpPatchPoints, instructions);
-		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) storeAddr));
+		var instr = instructions;
+		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) storeAddr));
 
 		if (!continuation.isEmpty() && !continuation.equals(varName)) {
-			return App.parseStatement(continuation, instructions);
+			return App.parseStatement(continuation, instr);
 		}
 		return Result.ok(null);
 	}
 
 	private static Result<Void, CompileError> processYieldBlockPart(String part, boolean isLast,
-																																	ArrayList<Instruction> instructions, int storeAddr, ArrayList<Integer> endJumpPatchPoints) {
+			ArrayList<Instruction> instructions, int storeAddr, ArrayList<Integer> endJumpPatchPoints) {
 		var trimmed = part.trim();
 		if (trimmed.startsWith("yield")) {
 			var yieldResult = emitYieldToStore(trimmed.substring(5).trim(), instructions, storeAddr);
@@ -59,7 +60,8 @@ public final class YieldBlockProcessor {
 				return yieldResult;
 			}
 			if (!isLast) {
-				endJumpPatchPoints.add(addJumpPlaceholder(instructions));
+				var placeholder = addJumpPlaceholder(instructions);
+				var unused = endJumpPatchPoints.add(placeholder);
 			}
 			return Result.ok(null);
 		}
@@ -73,7 +75,7 @@ public final class YieldBlockProcessor {
 	}
 
 	private static Result<Void, CompileError> processConditionalYieldPart(String part, boolean isLast,
-																																				ArrayList<Instruction> instructions, int storeAddr, ArrayList<Integer> endJumpPatchPoints) {
+			ArrayList<Instruction> instructions, int storeAddr, ArrayList<Integer> endJumpPatchPoints) {
 		var conditionEnd = ConditionalExpressionHandler.findConditionEnd(part);
 		if (conditionEnd == -1) {
 			return Result.err(new CompileError("Malformed conditional in yield block: missing closing paren"));
@@ -96,21 +98,23 @@ public final class YieldBlockProcessor {
 		}
 
 		final var formulaReg = 1;
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, formulaReg, -1L));
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, formulaReg, 0L));
-		var skipYieldJumpIdx = instructions.size();
-		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, 0L));
+		var instr = instructions;
+		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, formulaReg, -1L))
+				.add(new Instruction(Operation.Add, Variant.Immediate, formulaReg, 0L));
+		var skipYieldJumpIdx = instr.size();
+		instr = instr.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, 0L));
 
-		var yieldResult = emitYieldToStore(yieldExpr, instructions, storeAddr);
+		var yieldResult = emitYieldToStore(yieldExpr, instr, storeAddr);
 		if (yieldResult instanceof Result.Err<Void, CompileError>) {
 			return yieldResult;
 		}
 		if (!isLast) {
-			endJumpPatchPoints.add(addJumpPlaceholder(instructions));
+			var placeholder = addJumpPlaceholder(instr);
+			var unused = endJumpPatchPoints.add(placeholder);
 		}
 
-		var afterYieldAddr = instructions.size();
-		instructions.set(skipYieldJumpIdx,
+		var afterYieldAddr = instr.size();
+		instr = instr.set(skipYieldJumpIdx,
 				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, (long) afterYieldAddr));
 		return Result.ok(null);
 	}
@@ -126,19 +130,21 @@ public final class YieldBlockProcessor {
 
 	private static void patchEndJumps(ArrayList<Integer> endJumpPatchPoints, ArrayList<Instruction> instructions) {
 		var endAddr = instructions.size();
+		var instr = instructions;
 		for (int jumpIdx : endJumpPatchPoints) {
-			instructions.set(jumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endAddr));
+			instr = instr.set(jumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endAddr));
 		}
 	}
 
 	private static int addJumpPlaceholder(ArrayList<Instruction> instructions) {
 		var idx = instructions.size();
-		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
+		var instr = instructions;
+		instr = instr.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
 		return idx;
 	}
 
 	private static Result<Void, CompileError> emitYieldToStore(String yieldExpr,
-																														 ArrayList<Instruction> instructions, int storeAddr) {
+			ArrayList<Instruction> instructions, int storeAddr) {
 		var expr = yieldExpr.trim();
 		if (expr.endsWith(";")) {
 			expr = expr.substring(0, expr.length() - 1).trim();
@@ -148,13 +154,14 @@ public final class YieldBlockProcessor {
 		if (genResult instanceof Result.Err<Void, CompileError>) {
 			return genResult;
 		}
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) storeAddr));
+		var instr = instructions;
+		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) storeAddr));
 		return Result.ok(null);
 	}
 
 	private static Result<Void, CompileError> validateBoolCondition(String condition) {
 		var typeResult = ExpressionTokens.extractTypeFromExpression(condition,
-																																new java.util.HashMap<>());
+				new java.util.HashMap<>());
 		return typeResult.match(condType -> {
 			if (!condType.equals("Bool")) {
 				return Result.err(new CompileError(
@@ -175,12 +182,12 @@ public final class YieldBlockProcessor {
 			} else if (c == ')' || c == '}') {
 				depth--;
 			} else if (c == ';' && depth == 0) {
-				parts.add(blockContent.substring(start, i).trim());
+				parts = parts.add(blockContent.substring(start, i).trim());
 				start = i + 1;
 			}
 		}
 		if (start <= blockContent.length()) {
-			parts.add(blockContent.substring(start).trim());
+			parts = parts.add(blockContent.substring(start).trim());
 		}
 		return parts;
 	}

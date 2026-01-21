@@ -35,11 +35,11 @@ public final class RecursiveFunctionCompiler {
 	 * Returns null if the statement is not a recursive function call.
 	 */
 	public static Result<Void, CompileError> tryCompileRecursiveCall(String stmt,
-																																	 ArrayList<Instruction> instructions, Map<String, FunctionHandler.FunctionDef> functionRegistry) {
-		stmt = stmt.trim();
+			ArrayList<Instruction> instructions, Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		var s = stmt.trim();
 		// Check if stmt is "funcName()" or "funcName(arg)"
 		var callPattern = Pattern.compile("^(\\w+)\\s*\\((.*)\\)$");
-		var m = callPattern.matcher(stmt);
+		var m = callPattern.matcher(s);
 		if (!m.matches()) {
 			return null; // Not a function call
 		}
@@ -108,7 +108,8 @@ public final class RecursiveFunctionCompiler {
 		return compileReadSumLoop(pattern, instructions);
 	}
 
-	private static Result<Void, CompileError> compileReadSumLoop(ParsedPattern pattern, ArrayList<Instruction> instructions) {
+	private static Result<Void, CompileError> compileReadSumLoop(ParsedPattern pattern,
+			ArrayList<Instruction> instructions) {
 		// Check if this is a multi-read pattern by seeing if varName contains commas
 		if (pattern.varName().contains(",")) {
 			return compileMultiReadSumLoop(pattern, instructions);
@@ -118,6 +119,7 @@ public final class RecursiveFunctionCompiler {
 
 	private static Result<Void, CompileError> compileReadSumLoopSingleRead(long baseValue, String operator,
 			ArrayList<Instruction> instructions) {
+		var instr = instructions;
 		// Iterative code for single-read pattern:
 		// 1. reg[0] = BASE (accumulator, e.g., 0 for +, 1 for *)
 		// 2. Loop start: reg[1] = read input
@@ -126,21 +128,21 @@ public final class RecursiveFunctionCompiler {
 		// 5. Jump back to loop start
 		// 6. End: reg[0] has result
 
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, baseValue));
+		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 0, baseValue));
 
-		var loopStart = instructions.size();
-		instructions.add(new Instruction(Operation.In, Variant.Immediate, 1, 0L));
+		var loopStart = instr.size();
+		instr = instr.add(new Instruction(Operation.In, Variant.Immediate, 1, 0L));
 
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 3, 0L));
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 3, 1L));
+		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 3, 0L));
+		instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, 3, 1L));
 
-		var jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instructions);
+		var jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instr);
 
 		// Emit the appropriate operator instruction
 		var accumulateOp = mapOperatorToOperation(operator);
-		instructions.add(new Instruction(accumulateOp, Variant.Immediate, 0, 3L));
+		instr = instr.add(new Instruction(accumulateOp, Variant.Immediate, 0, 3L));
 
-		finishLoopWithBackjump(instructions, loopStart, jumpToEndIdx);
+		finishLoopWithBackjump(instr, loopStart, jumpToEndIdx);
 		return Result.ok(null);
 	}
 
@@ -168,6 +170,7 @@ public final class RecursiveFunctionCompiler {
 	 */
 	private static Result<Void, CompileError> compileMultiReadSumLoop(ParsedPattern pattern,
 			ArrayList<Instruction> instructions) {
+		var instr = instructions;
 		var readVars = pattern.varName().split(",");
 		if (readVars.length != 2) {
 			return Result.err(new CompileError("Currently only support 2-read recursion, got " + readVars.length));
@@ -177,34 +180,35 @@ public final class RecursiveFunctionCompiler {
 					.err(new CompileError("Multi-read recursion currently only supports + operator, got " + pattern.op()));
 		}
 
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, pattern.baseValue()));
+		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 0, pattern.baseValue()));
 
-		var loopStart = instructions.size();
+		var loopStart = instr.size();
 		// Read both values
-		instructions.add(new Instruction(Operation.In, Variant.Immediate, 1, 0L));
-		instructions.add(new Instruction(Operation.In, Variant.Immediate, 2, 0L));
+		instr = instr.add(new Instruction(Operation.In, Variant.Immediate, 1, 0L));
+		instr = instr.add(new Instruction(Operation.In, Variant.Immediate, 2, 0L));
 
 		// Accumulate FIRST: reg[0] += reg[1] + reg[2]
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 2L));
+		instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
+		instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, 0, 2L));
 
 		// Then check condition: if (reg[1] <= 0) exit; else loop back
 		// Check: compute (reg[1] - 1) and jump if < 0 (meaning reg[1] <= 0)
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 3, 1L)); // reg[3] = 1
-		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 1, 3L)); // reg[1] -= reg[3], so reg[1] = reg[1]
-																																								// - 1
+		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 3, 1L)); // reg[3] = 1
+		instr = instr.add(new Instruction(Operation.Sub, Variant.Immediate, 1, 3L)); // reg[1] -= reg[3], so
+																																									// reg[1] = reg[1]
+		// - 1
 
-		var jumpToEndIdx = instructions.size();
-		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1, 0L));
+		var jumpToEndIdx = instr.size();
+		instr = instr.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1, 0L));
 
 		// Jump back to loop start (secondOperand is jump target for Jump instruction)
-		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0L, (long) loopStart));
+		instr = instr.add(new Instruction(Operation.Jump, Variant.Immediate, 0L, (long) loopStart));
 
 		// Update jump target to current position (end of loop)
-		var jumpInstr = instructions.get(jumpToEndIdx);
-		instructions.set(jumpToEndIdx,
+		var jumpInstr = instr.get(jumpToEndIdx);
+		instr = instr.set(jumpToEndIdx,
 				new Instruction(jumpInstr.operation(), jumpInstr.variant(), jumpInstr.firstOperand(),
-						(long) instructions.size()));
+						(long) instr.size()));
 		return Result.ok(null);
 	}
 
@@ -266,25 +270,26 @@ public final class RecursiveFunctionCompiler {
 			String op,
 			String updateExpr,
 			ArrayList<Instruction> instructions) {
+		var instr = instructions;
 
 		// reg[0] = accumulator (result)
 		// reg[1] = parameter value
 		// reg[2] = temp for comparison
 
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, baseValue));
+		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 0, baseValue));
 
 		// For now, assume initialValue is a literal number like "5"
 		try {
 			var initialVal = Long.parseLong(initialValue);
-			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, initialVal));
+			instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 1, initialVal));
 		} catch (NumberFormatException e) {
 			return Result
 					.err(new CompileError("Parametric recursion argument must be a literal number, got: " + initialValue));
 		}
 
-		var loopStart = instructions.size();
+		var loopStart = instr.size();
 
-		var jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instructions);
+		var jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instr);
 
 		// Accumulate: result OP= param
 		var accOp = switch (op) {
@@ -294,29 +299,30 @@ public final class RecursiveFunctionCompiler {
 			case "/" -> Operation.Div;
 			default -> throw new IllegalArgumentException("Unsupported operator: " + op);
 		};
-		instructions.add(new Instruction(accOp, Variant.Immediate, 0, 1L));
+		instr = instr.add(new Instruction(accOp, Variant.Immediate, 0, 1L));
 
 		// Update parameter: param = param UPDATE
 		// For now, only support param - 1 or param + 1
 		if (updateExpr.matches(Pattern.quote(paramName) + "\\s*-\\s*1")) {
-			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-			instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 1, 2L));
+			instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+			instr = instr.add(new Instruction(Operation.Sub, Variant.Immediate, 1, 2L));
 		} else if (updateExpr.matches(Pattern.quote(paramName) + "\\s*\\+\\s*1")) {
-			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-			instructions.add(new Instruction(Operation.Add, Variant.Immediate, 1, 2L));
+			instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+			instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, 1, 2L));
 		} else {
 			return Result.err(new CompileError("Unsupported parameter update: " + updateExpr));
 		}
 
-		finishLoopWithBackjump(instructions, loopStart, jumpToEndIdx);
+		finishLoopWithBackjump(instr, loopStart, jumpToEndIdx);
 		return Result.ok(null);
 	}
 
 	private static void finishLoopWithBackjump(ArrayList<Instruction> instructions, int loopStart, int jumpToEndIdx) {
-		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopStart));
+		var instr = instructions;
+		instr = instr.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopStart));
 
-		var loopEnd = instructions.size();
-		instructions.set(jumpToEndIdx, new Instruction(
+		var loopEnd = instr.size();
+		instr = instr.set(jumpToEndIdx, new Instruction(
 				Operation.JumpIfLessThanZero, Variant.Immediate, 1, (long) loopEnd));
 	}
 
@@ -329,27 +335,28 @@ public final class RecursiveFunctionCompiler {
 	 * the end label.
 	 */
 	private static int emitLessThanOrEqualZeroCheck(int regNum, ArrayList<Instruction> instructions) {
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, regNum, 2L));
-		var jumpIdx = instructions.size();
-		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, regNum, 0L));
+		var instr = instructions;
+		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+		instr = instr.add(new Instruction(Operation.Sub, Variant.Immediate, regNum, 2L));
+		var jumpIdx = instr.size();
+		instr = instr.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, regNum, 0L));
 		// Restore register: reg = (reg - 1) + 1 = reg
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, regNum, 2L));
+		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+		instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, regNum, 2L));
 		return jumpIdx;
 	}
 
 	private static Result<ParsedPattern, CompileError> parsePattern(String body, String funcName) {
-		body = body.trim();
-		if (body.startsWith("{")) {
-			body = body.substring(1);
+		var b = body.trim();
+		if (b.startsWith("{")) {
+			b = b.substring(1);
 		}
-		if (body.endsWith("}")) {
-			body = body.substring(0, body.length() - 1);
+		if (b.endsWith("}")) {
+			b = b.substring(0, b.length() - 1);
 		}
-		body = body.trim();
+		b = b.trim();
 
-		var parsed = parseReadSumPattern(body);
+		var parsed = parseReadSumPattern(b);
 		if (parsed instanceof Result.Err<ParsedPattern, CompileError>) {
 			return parsed;
 		}
@@ -447,7 +454,7 @@ public final class RecursiveFunctionCompiler {
 		ArrayList<String> readVars = new ArrayList<>();
 		var lastEnd = 0;
 		while (letMatcher.find()) {
-			readVars.add(letMatcher.group(1));
+			readVars = readVars.add(letMatcher.group(1));
 			lastEnd = letMatcher.end();
 		}
 

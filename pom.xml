@@ -13,7 +13,7 @@
 		<maven.compiler.release>17</maven.compiler.release>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<junit.jupiter.version>5.11.4</junit.jupiter.version>
-		<errorprone.version>2.36.0</errorprone.version>
+		<errorprone.version>2.46.0</errorprone.version>
 	</properties>
 
 	<dependencies>
@@ -43,6 +43,28 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.13.0</version>
 				<configuration>
+					<release>${maven.compiler.release}</release>
+					<encoding>UTF-8</encoding>
+					<compilerArgs>
+						<arg>-XDcompilePolicy=simple</arg>
+						<arg>--should-stop=ifError=FLOW</arg>
+						<arg>-Xplugin:ErrorProne</arg>
+						<!-- necessary only if building with JDK21:
+						https://github.com/google/error-prone/issues/5426 -->
+						<arg>-XDaddTypeAnnotationsToSymbol=true</arg>
+						<!-- Required on JDK 16+ (JEP 396). Since we fork javac, these must be passed as -J JVM
+						args. -->
+						<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+						<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
+						<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
+						<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED</arg>
+						<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED</arg>
+						<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+						<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+						<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+						<arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
+						<arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
+					</compilerArgs>
 					<annotationProcessorPaths>
 						<path>
 							<groupId>com.google.errorprone</groupId>
@@ -50,11 +72,8 @@
 							<version>${errorprone.version}</version>
 						</path>
 					</annotationProcessorPaths>
-					<compilerArgs>
-						<arg>-deprecation</arg>
-						<arg>-Xplugin:ErrorProne</arg>
-						<arg>-Xep:ReturnValueIgnored:ERROR</arg>
-					</compilerArgs>
+					<fork>true</fork>
+					<forceLegacyJavacApi>true</forceLegacyJavacApi>
 				</configuration>
 			</plugin>
 			<plugin>

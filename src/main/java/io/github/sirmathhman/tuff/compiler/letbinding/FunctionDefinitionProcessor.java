@@ -134,7 +134,7 @@ public final class FunctionDefinitionProcessor {
 				depth--;
 				current.append(c);
 			} else if (c == ',' && depth == 0) {
-				parts.add(current.toString().trim());
+				parts = parts.add(current.toString().trim());
 				current = new StringBuilder();
 			} else {
 				current.append(c);
@@ -142,7 +142,7 @@ public final class FunctionDefinitionProcessor {
 		}
 
 		if (current.length() > 0) {
-			parts.add(current.toString().trim());
+			parts = parts.add(current.toString().trim());
 		}
 
 		return Result.ok(parts);
@@ -183,7 +183,7 @@ public final class FunctionDefinitionProcessor {
 						new CompileError("Invalid parameter type: '" + paramType + "' is not a valid type"));
 			}
 
-			params.add(new FunctionHandler.FunctionParam(paramName, paramType));
+			params = params.add(new FunctionHandler.FunctionParam(paramName, paramType));
 		}
 
 		return Result.ok(params);
@@ -195,7 +195,7 @@ public final class FunctionDefinitionProcessor {
 	}
 
 	public static Result<String, CompileError> inferReturnType(String body) {
-		body = body.trim();
+		var b = body.trim();
 		// Try to infer the return type from the body expression
 		// This is a simplified inference that looks for type literals or read
 		// operations
@@ -203,16 +203,16 @@ public final class FunctionDefinitionProcessor {
 		// First, check if the body starts with a struct instantiation
 		// (e.g., Point { ... })
 		var structPattern = Pattern.compile("^([A-Z][a-zA-Z0-9_]*)\\s*\\{");
-		var structMatcher = structPattern.matcher(body);
+		var structMatcher = structPattern.matcher(b);
 		if (structMatcher.find()) {
 			var structType = structMatcher.group(1);
 			return Result.ok(structType);
 		}
 
-		if (body.contains("read")) {
+		if (b.contains("read")) {
 			// Try to extract type from read operation
 			var pattern = Pattern.compile("\\bread\\s+([A-Za-z_*][A-Za-z0-9_*]*)");
-			var matcher = pattern.matcher(body);
+			var matcher = pattern.matcher(b);
 			if (matcher.find()) {
 				var type = matcher.group(1);
 				if (isValidReturnType(type)) {
@@ -221,9 +221,9 @@ public final class FunctionDefinitionProcessor {
 			}
 		}
 		// Check for typed literals (e.g., 42U8, 100U16)
-		if (body.matches(".*\\d+[UI]\\d+.*")) {
+		if (b.matches(".*\\d+[UI]\\d+.*")) {
 			var pattern = Pattern.compile("\\d+([UI]\\d+)");
-			var matcher = pattern.matcher(body);
+			var matcher = pattern.matcher(b);
 			if (matcher.find()) {
 				// Convert U8 to U8, U16 to U16, etc.
 				if (isValidReturnType(matcher.group(1))) {

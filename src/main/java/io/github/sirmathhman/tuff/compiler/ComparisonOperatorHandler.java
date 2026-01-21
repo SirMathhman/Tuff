@@ -99,7 +99,7 @@ public final class ComparisonOperatorHandler {
 		ArrayList<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(valueExprResult.terms());
 		var typeCheckTerm = new ExpressionModel.ExpressionTerm(-5, 0,
 				new ExpressionModel.ExpressionTermFlags(0L, '\0', typeSpec));
-		allTerms.add(typeCheckTerm);
+		allTerms = allTerms.add(typeCheckTerm);
 
 		return Result.ok(new ExpressionModel.ExpressionResult(valueExprResult.readCount(), 0, allTerms));
 	}
@@ -133,8 +133,8 @@ public final class ComparisonOperatorHandler {
 				new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
 
 		ArrayList<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(left.terms());
-		allTerms.add(marker);
-		allTerms.addAll(right.terms());
+		allTerms = allTerms.add(marker);
+		allTerms = allTerms.addAll(right.terms());
 
 		var totalReads = left.readCount() + right.readCount();
 		var totalLiteral = left.literalValue() + right.literalValue();

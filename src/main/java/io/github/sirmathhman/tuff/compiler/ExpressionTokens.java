@@ -68,27 +68,27 @@ public final class ExpressionTokens {
 
 	public static Result<String, CompileError> extractTypeFromExpression(String expr,
 			java.util.Map<String, String> variableTypes) {
-		expr = expr.trim();
+		var e = expr.trim();
 
 		// Handle this keyword - captures current scope as This type
-		if ("this".equals(expr)) {
+		if ("this".equals(e)) {
 			return Result.ok("This");
 		}
 
 		// Handle boolean keywords
-		if ("true".equals(expr) || "false".equals(expr)) {
+		if ("true".equals(e) || "false".equals(e)) {
 			return Result.ok("Bool");
 		}
 
 		// Handle array types: [Type; InitCount; TotalCount]
-		var arrayResult = tryParseArrayType(expr);
+		var arrayResult = tryParseArrayType(e);
 		if (arrayResult instanceof Result.Ok<String, CompileError>) {
 			return arrayResult;
 		}
 
 		// Handle tuple expressions: (expr1, expr2, ...)
-		if (expr.startsWith("(") && expr.endsWith(")")) {
-			var inner = expr.substring(1, expr.length() - 1).trim();
+		if (e.startsWith("(") && e.endsWith(")")) {
+			var inner = e.substring(1, e.length() - 1).trim();
 
 			// Check if there are commas at depth 0 (indicating a tuple)
 			var elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
@@ -101,7 +101,7 @@ public final class ExpressionTokens {
 					if (elemTypeResult instanceof Result.Err<String, CompileError>) {
 						return elemTypeResult;
 					}
-					elementTypes.add(((Result.Ok<String, CompileError>) elemTypeResult).value());
+					elementTypes = elementTypes.add(((Result.Ok<String, CompileError>) elemTypeResult).value());
 				}
 				// Return tuple type as (Type1, Type2, ...)
 				return Result.ok("(" + String.join(", ", elementTypes) + ")");
@@ -109,28 +109,28 @@ public final class ExpressionTokens {
 		}
 
 		// Handle function types: () => ReturnType or (ParamType, ...) => ReturnType
-		if (expr.contains("=>")) {
-			return Result.ok(expr);
+		if (e.contains("=>")) {
+			return Result.ok(e);
 		}
 
 		// Handle dereference operations
-		if (expr.startsWith("*")) {
-			return extractDereferenceType(expr, variableTypes);
+		if (e.startsWith("*")) {
+			return extractDereferenceType(e, variableTypes);
 		}
 
 		// Handle reference operations (including &mut)
-		if (expr.startsWith("&")) {
-			return extractReferenceType(expr, variableTypes);
+		if (e.startsWith("&")) {
+			return extractReferenceType(e, variableTypes);
 		}
 
 		// Handle variable references
-		if (variableTypes.containsKey(expr)) {
-			return Result.ok(variableTypes.get(expr));
+		if (variableTypes.containsKey(e)) {
+			return Result.ok(variableTypes.get(e));
 		}
 
 		// Handle read operations
-		if (expr.startsWith("read ")) {
-			var typeSpec = expr.substring(5).trim();
+		if (e.startsWith("read ")) {
+			var typeSpec = e.substring(5).trim();
 			if (!typeSpec.matches("\\*?([a-zA-Z_][a-zA-Z0-9_]*|[UI]\\d+|Bool|Char)")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
@@ -139,7 +139,7 @@ public final class ExpressionTokens {
 
 		// For now, return error for unknown variables/complex expressions
 		// This will be handled as an error at a higher level
-		return Result.err(new CompileError("Cannot infer type for expression: " + expr));
+		return Result.err(new CompileError("Cannot infer type for expression: " + e));
 	}
 
 	private static Result<String, CompileError> extractDereferenceType(String expr,
@@ -223,7 +223,7 @@ public final class ExpressionTokens {
 			} else if (isOp && depth == 0 && (!isAdditive || token.length() > 0)) {
 				var t = token.toString().trim();
 				if (!t.isEmpty() || !isAdditive) {
-					result.add(t);
+					result = result.add(t);
 				}
 				token = new StringBuilder();
 			} else {
@@ -233,7 +233,7 @@ public final class ExpressionTokens {
 
 		var t = token.toString().trim();
 		if (!t.isEmpty() || !isAdditive) {
-			result.add(t);
+			result = result.add(t);
 		}
 		return result;
 	}
@@ -481,14 +481,14 @@ public final class ExpressionTokens {
 	}
 
 	private static boolean isValidArrayElementType(String type) {
-		type = type.trim();
+		var typ = type.trim();
 		// Primitive types
-		if (type.matches("[UI]\\d+|Bool|Char")) {
+		if (typ.matches("[UI]\\d+|Bool|Char")) {
 			return true;
 		}
 		// Nested array type
-		if (type.startsWith("[") && type.endsWith("]")) {
-			var nestedResult = tryParseArrayType(type);
+		if (typ.startsWith("[") && typ.endsWith("]")) {
+			var nestedResult = tryParseArrayType(typ);
 			return nestedResult instanceof Result.Ok<String, CompileError>;
 		}
 		return false;

@@ -33,5 +33,7 @@
 		<module name="RecordComponentNumber">
 			<property name="max" value="6" />
 		</module>
+
+		<module name="ParameterAssignment" />
 	</module>
 </module>

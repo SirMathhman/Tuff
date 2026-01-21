@@ -24,8 +24,9 @@ public final class CompilerHelpers {
 	 * Used by continuation handlers to return variable values.
 	 */
 	public static void loadVariableAndHalt(ArrayList<Instruction> instructions, long memAddr) {
-		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, memAddr));
-		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
+		var instr = instructions;
+		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, memAddr))
+				.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 	}
 
 	/**
@@ -34,7 +35,7 @@ public final class CompilerHelpers {
 	 * Used by LetBindingHandler and ForLoopProcessor.
 	 */
 	public static Result<Void, CompileError> parseAndStoreInMemory(String valueExpr,
-																																 ArrayList<Instruction> instructions, int memAddr) {
+			ArrayList<Instruction> instructions, int memAddr) {
 		// Check if it's an array - if so, store each element separately
 		var trimmed = valueExpr.trim();
 		if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
@@ -59,16 +60,20 @@ public final class CompilerHelpers {
 				}
 
 				// Store result to memory[memAddr + i]
-				instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) (memAddr + i)));
+				var instrRef = instructions;
+				instrRef = instrRef.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) (memAddr + i)));
 			}
 			return Result.ok(null);
 		}
 
+		@SuppressWarnings("unchecked")
+		ArrayList<Instruction>[] holder = (ArrayList<Instruction>[]) new ArrayList<?>[1];
+		holder[0] = instructions;
 		return App.parseExpressionWithRead(valueExpr)
-				.flatMap(expr -> App.generateInstructions(expr, instructions))
+				.flatMap(expr -> App.generateInstructions(expr, holder[0]))
 				.map(ignored -> {
 					// Store result (in register 0) to a memory location
-					instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
+					holder[0] = holder[0].add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
 					return null;
 				});
 	}
@@ -158,7 +163,7 @@ public final class CompilerHelpers {
 	public static String wrapValueForSubstitution(String value, String declaredType) {
 		var isArrayType = declaredType != null && declaredType.startsWith("[") && declaredType.endsWith("]");
 		var isArrayPointerType = declaredType != null &&
-														 (declaredType.startsWith("*[") || declaredType.startsWith("*mut ["));
+				(declaredType.startsWith("*[") || declaredType.startsWith("*mut ["));
 
 		if ((isArrayType || isArrayPointerType) && value.startsWith("[") && value.endsWith("]")) {
 			// All arrays and pointer-to-arrays get wrapped for indexing

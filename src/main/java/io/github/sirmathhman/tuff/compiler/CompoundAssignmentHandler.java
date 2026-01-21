@@ -26,31 +26,31 @@ public final class CompoundAssignmentHandler {
 			int nextMemAddr,
 			ArrayList<Instruction> instructions) {
 		// 1. Load current value of x from memory into register 0
-		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
+		var instr = instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 		// 2. Parse and evaluate the expression
-		var genResult = MutableAssignmentHandler.parseAndEvaluateExpression(valueExpr, instructions);
+		var genResult = MutableAssignmentHandler.parseAndEvaluateExpression(valueExpr, instr);
 		if (genResult instanceof Result.Err<Void, CompileError>)
 			return genResult;
 
 		// The expression result is in register 0, store it temporarily
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 999L));
+		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 999L));
 		// Reload x into register 0
-		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
+		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 		// Load expr result into register 1
-		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, 999L));
+		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, 999L));
 
 		// Apply the compound operator
 		if ("+".equals(operator)) {
-			instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
+			instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
 		} else if ("-".equals(operator)) {
-			instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 0, 1L));
+			instr = instr.add(new Instruction(Operation.Sub, Variant.Immediate, 0, 1L));
 		} else if ("*".equals(operator)) {
-			instructions.add(new Instruction(Operation.Mul, Variant.Immediate, 0, 1L));
+			instr = instr.add(new Instruction(Operation.Mul, Variant.Immediate, 0, 1L));
 		} else if ("/".equals(operator)) {
-			instructions.add(new Instruction(Operation.Div, Variant.Immediate, 0, 1L));
+			instr = instr.add(new Instruction(Operation.Div, Variant.Immediate, 0, 1L));
 		}
 		// Store result back to memory
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
+		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
 		return Result.ok(null);
 	}
 }

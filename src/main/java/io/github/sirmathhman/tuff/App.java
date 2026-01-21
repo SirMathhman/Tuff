@@ -46,13 +46,13 @@ public final class App {
 					new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
 			return result.match(
 					ignored -> {
-						instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
-						return Result.ok(instructions.toArray(new Instruction[0]));
+						var finalInstructions = instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
+						return Result.ok(finalInstructions.toArray(new Instruction[0]));
 					},
 					Result::err);
 		}
-		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
-		return Result.ok(instructions.toArray(new Instruction[0]));
+		var finalInstructions = instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
+		return Result.ok(finalInstructions.toArray(new Instruction[0]));
 	}
 
 	public static Result<Void, CompileError> parseStatement(String stmt, ArrayList<Instruction> instructions) {
@@ -110,7 +110,8 @@ public final class App {
 				.flatMap(expr -> generateInstructions(expr, instructions));
 	}
 
-	private static Result<Void, CompileError> continueParseStatement(String remaining, ArrayList<Instruction> instructions,
+	private static Result<Void, CompileError> continueParseStatement(String remaining,
+			ArrayList<Instruction> instructions,
 			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables,
 			Map<String, String> typeAliasRegistry) {
@@ -163,7 +164,7 @@ public final class App {
 	}
 
 	private static Result<Void, CompileError> handleStructInstantiationStatement(String stmt,
-																																							 ArrayList<Instruction> instructions, Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
+			ArrayList<Instruction> instructions, Set<String> definedStructs, Map<String, StructDefinition> structRegistry) {
 		return StructInstantiationHandler.parseStructInstantiation(stmt, structRegistry)
 				.flatMap(instResult -> {
 					// Struct instantiation evaluates to the value of its first field
@@ -220,8 +221,8 @@ public final class App {
 	}
 
 	private static Result<Void, CompileError> handleFieldAccessStatement(String stmt,
-																																			 StructDefinition structDef, ArrayList<Instruction> instructions, Set<String> definedStructs,
-																																			 Map<String, StructDefinition> structRegistry) {
+			StructDefinition structDef, ArrayList<Instruction> instructions, Set<String> definedStructs,
+			Map<String, StructDefinition> structRegistry) {
 		return FieldAccessHandler.parseFieldAccess(stmt, structRegistry)
 				.flatMap(fieldResult -> {
 					// Field access on a struct is a no-op - the struct instantiation
@@ -237,14 +238,15 @@ public final class App {
 
 	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
 			ArrayList<Instruction> instructions) {
+		var instr = instructions;
 		boolean hasControlMarkers = expr.terms().stream().anyMatch(t -> t.readCount < 0);
 		boolean hasReads = expr.terms().stream().anyMatch(t -> t.readCount > 0);
 		if (!hasReads && !hasControlMarkers) {
 			// Constant expression: always overwrite result (avoid `result += literal`).
-			instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue()));
+			instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue()));
 		} else {
 			// Load all reads into registers
-			InstructionBuilder.loadAllReads(expr.terms(), instructions);
+			InstructionBuilder.loadAllReads(expr.terms(), instr);
 
 			// Apply masking for bitwise-notted unsigned types
 			int readReg = 0;
@@ -255,19 +257,20 @@ public final class App {
 						long mask = (1L << bits) - 1;
 						// Use a temporary register for the mask value
 						int tempReg = expr.terms().size() + 1; // Use a register beyond all reads
-						instructions.add(new Instruction(Operation.Load, Variant.Immediate, tempReg, mask));
-						instructions.add(new Instruction(Operation.BitsAnd, Variant.Immediate, readReg, (long) tempReg));
+						instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, tempReg, mask));
+						instr = instr
+								.add(new Instruction(Operation.BitsAnd, Variant.Immediate, readReg, (long) tempReg));
 					}
 					readReg++;
 				}
 			}
 
 			// Build result respecting precedence
-			int resultReg = InstructionBuilder.buildResultWithPrecedence(expr.terms(), instructions);
+			int resultReg = InstructionBuilder.buildResultWithPrecedence(expr.terms(), instr);
 
 			// Add literal if present
 			if (expr.literalValue() != 0) {
-				InstructionBuilder.addLiteralToResult(resultReg, expr.literalValue(), expr.terms().size(), instructions);
+				InstructionBuilder.addLiteralToResult(resultReg, expr.literalValue(), expr.terms().size(), instr);
 			}
 		}
 
@@ -276,44 +279,44 @@ public final class App {
 
 	@SuppressWarnings("checkstyle:MethodLength")
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr) {
-		expr = expr.trim();
+		var e = expr.trim();
 
-		if (expr.startsWith("let ")) {
-			return parseLetExpressionBinding(expr, new HashMap<>());
+		if (e.startsWith("let ")) {
+			return parseLetExpressionBinding(e, new HashMap<>());
 		}
 
-		if (MatchExpressionHandler.hasMatch(expr)) {
-			return MatchExpressionHandler.parseMatch(expr);
+		if (MatchExpressionHandler.hasMatch(e)) {
+			return MatchExpressionHandler.parseMatch(e);
 		}
 
-		if (ConditionalExpressionHandler.hasConditional(expr)) {
-			return ConditionalExpressionHandler.parseConditional(expr);
+		if (ConditionalExpressionHandler.hasConditional(e)) {
+			return ConditionalExpressionHandler.parseConditional(e);
 		}
 
-		ArrayList<String> isTokens = DepthAwareSplitter.splitByKeywordAtDepthZero(expr, "is");
+		ArrayList<String> isTokens = DepthAwareSplitter.splitByKeywordAtDepthZero(e, "is");
 		if (isTokens.size() > 1) {
 			return ComparisonOperatorHandler.parseIsExpression(isTokens);
 		}
 
-		var specialResult = tryParseSpecialExpressions(expr);
+		var specialResult = tryParseSpecialExpressions(e);
 		if (specialResult != null) {
 			return specialResult;
 		}
 
-		expr = expr.replace('{', '(').replace('}', ')');
-		ArrayList<String> orTokens = LogicalOperatorHandler.splitByLogicalOr(expr);
+		e = e.replace('{', '(').replace('}', ')');
+		ArrayList<String> orTokens = LogicalOperatorHandler.splitByLogicalOr(e);
 		if (orTokens.size() > 1) {
 			return LogicalOperatorHandler.parseLogicalOrExpression(orTokens);
 		}
 
 		// Split by && (logical AND) - higher precedence than OR
-		ArrayList<String> andTokens = LogicalOperatorHandler.splitByLogicalAnd(expr);
+		ArrayList<String> andTokens = LogicalOperatorHandler.splitByLogicalAnd(e);
 		if (andTokens.size() > 1) {
 			// We have logical AND operations - parse each side and combine
 			return LogicalOperatorHandler.parseLogicalAndExpression(andTokens);
 		}
 
-		final String normalizedExpr = expr;
+		final String normalizedExpr = e;
 		// Try comparison operators (all at same precedence level)
 		Result<ExpressionModel.ExpressionResult, CompileError> comparisonResult = parseComparisonOperators(normalizedExpr);
 		return comparisonResult.match(
@@ -356,18 +359,18 @@ public final class App {
 
 	public static Result<ExpressionModel.ExpressionResult, CompileError> parseExpressionWithRead(String expr,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
-		expr = expr.trim();
+		var e = expr.trim();
 
 		// Normalize ALL occurrences of this.functionName() to functionName() using
 		// regex
 		// This handles cases like "this.a() + this.b()" in arithmetic expressions
-		expr = expr.replaceAll("\\bthis\\.([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(", "$1(");
+		e = e.replaceAll("\\bthis\\.([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(", "$1(");
 
 		// Check if this is a block expression containing let bindings
-		if (expr.startsWith("{")) {
-			int closingBrace = DepthAwareSplitter.findMatchingBrace(expr, 0);
-			if (closingBrace != -1 && closingBrace == expr.length() - 1) {
-				String inner = expr.substring(1, closingBrace).trim();
+		if (e.startsWith("{")) {
+			int closingBrace = DepthAwareSplitter.findMatchingBrace(e, 0);
+			if (closingBrace != -1 && closingBrace == e.length() - 1) {
+				String inner = e.substring(1, closingBrace).trim();
 				if (inner.startsWith("let ")) {
 					// Parse block with let binding using the function registry
 					return parseBlockWithLetBinding(inner, functionRegistry, capturedVariables);
@@ -376,8 +379,8 @@ public final class App {
 		}
 
 		// Check if this is a function definition
-		if (FunctionHandler.isFunctionDefinition(expr)) {
-			return FunctionHandler.parseFunctionDefinition(expr, capturedVariables).flatMap(parsedFunc -> {
+		if (FunctionHandler.isFunctionDefinition(e)) {
+			return FunctionHandler.parseFunctionDefinition(e, capturedVariables).flatMap(parsedFunc -> {
 				// Register the function
 				functionRegistry.put(parsedFunc.functionDef().name(), parsedFunc.functionDef());
 				// If there's remaining code, parse it
@@ -394,13 +397,13 @@ public final class App {
 
 		// Try method-style call, field access, or standard function call
 		Result<ExpressionModel.ExpressionResult, CompileError> callResult = tryParseFunctionCalls(
-				expr, functionRegistry, capturedVariables);
+				e, functionRegistry, capturedVariables);
 		if (callResult != null) {
 			return callResult;
 		}
 
 		// Substitute all function calls in the expression before parsing
-		Result<String, CompileError> substitutedResult = FunctionCallSubstituter.substituteAllFunctionCalls(expr,
+		Result<String, CompileError> substitutedResult = FunctionCallSubstituter.substituteAllFunctionCalls(e,
 				functionRegistry);
 		if (substitutedResult instanceof Result.Err<String, CompileError> err) {
 			return Result.err(err.error());

@@ -56,8 +56,8 @@ public final class FunctionHandler {
 	 */
 	public static Result<ParsedFunction, CompileError> parseFunctionDefinition(
 			String stmt, Map<String, String> capturedVariables) {
-		stmt = stmt.trim();
-		var partsResult = FunctionDefinitionProcessor.splitFunctionDefinition(stmt);
+		var s = stmt.trim();
+		var partsResult = FunctionDefinitionProcessor.splitFunctionDefinition(s);
 		if (partsResult instanceof Result.Err<FunctionDefinitionProcessor.FunctionDefParts, CompileError> err) {
 			return Result.err(err.error());
 		}
@@ -181,8 +181,8 @@ public final class FunctionHandler {
 	 * Check if a string is a function call: name(...args...)
 	 */
 	public static boolean isFunctionCall(String expr, Map<String, FunctionDef> functionRegistry) {
-		expr = expr.trim();
-		var match = parseFunctionCallPattern(expr);
+		var e = expr.trim();
+		var match = parseFunctionCallPattern(e);
 		return match != null && functionRegistry.containsKey(match.functionName);
 	}
 
@@ -191,8 +191,8 @@ public final class FunctionHandler {
 		if (isFunctionCall(expr, functionRegistry)) {
 			return true;
 		}
-		expr = expr.trim();
-		var match = parseFunctionCallPattern(expr);
+		var e = expr.trim();
+		var match = parseFunctionCallPattern(e);
 		// Check if function name is a bound function reference
 		return match != null && capturedVariables.containsKey(match.functionName);
 	}
@@ -208,8 +208,8 @@ public final class FunctionHandler {
 
 	public static Result<String, CompileError> parseFunctionCall(String expr,
 			Map<String, FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
-		expr = expr.trim();
-		var match = parseFunctionCallPattern(expr);
+		var e = expr.trim();
+		var match = parseFunctionCallPattern(e);
 
 		if (match == null) {
 			return Result.err(new CompileError("Invalid function call syntax"));
@@ -272,11 +272,11 @@ public final class FunctionHandler {
 	private static FunctionCallMatch parseFunctionCallPattern(String expr) {
 		// Use depth-aware parsing instead of greedy regex to handle expressions like
 		// "a() + b()"
-		expr = expr.trim();
+		var e = expr.trim();
 
 		// Check if it matches function call pattern: name(...)
 		var namePattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
-		var nameMatcher = namePattern.matcher(expr);
+		var nameMatcher = namePattern.matcher(e);
 		if (!nameMatcher.find()) {
 			return null;
 		}
@@ -285,18 +285,18 @@ public final class FunctionHandler {
 		var openParen = nameMatcher.end() - 1;
 
 		// Find matching closing parenthesis using depth-aware parsing
-		var closeParen = FunctionDefinitionProcessor.findMatchingParen(expr, openParen);
+		var closeParen = FunctionDefinitionProcessor.findMatchingParen(e, openParen);
 		if (closeParen == -1) {
 			return null; // Unmatched parentheses
 		}
 
 		// Verify there's nothing after the closing parenthesis (except whitespace)
-		var afterParen = expr.substring(closeParen + 1).trim();
+		var afterParen = e.substring(closeParen + 1).trim();
 		if (!afterParen.isEmpty()) {
 			return null; // Not a simple function call
 		}
 
-		var argsString = expr.substring(openParen + 1, closeParen).trim();
+		var argsString = e.substring(openParen + 1, closeParen).trim();
 		return new FunctionCallMatch(functionName, argsString);
 	}
 
@@ -366,14 +366,14 @@ public final class FunctionHandler {
 				depth--;
 				current.append(c);
 			} else if (c == ',' && depth == 0) {
-				args.add(current.toString().trim());
+				args = args.add(current.toString().trim());
 				current = new StringBuilder();
 			} else {
 				current.append(c);
 			}
 		}
 		if (current.length() > 0) {
-			args.add(current.toString().trim());
+			args = args.add(current.toString().trim());
 		}
 		return args;
 	}
@@ -448,18 +448,18 @@ public final class FunctionHandler {
 	 * Returns a MethodCallMatch if it matches, or null otherwise
 	 */
 	private static MethodCallMatch parseMethodCallPattern(String expr) {
-		expr = expr.trim();
+		var e = expr.trim();
 
 		// Pattern: receiver.functionName(args)
 		// Receiver can be: literal (100), identifier (x), or simple expression
 		// We need to find the last dot followed by a function call
-		var lastDotIndex = findLastDotBeforeFunctionCall(expr);
+		var lastDotIndex = findLastDotBeforeFunctionCall(e);
 		if (lastDotIndex == -1) {
 			return null;
 		}
 
-		var receiver = expr.substring(0, lastDotIndex).trim();
-		var afterDot = expr.substring(lastDotIndex + 1).trim();
+		var receiver = e.substring(0, lastDotIndex).trim();
+		var afterDot = e.substring(lastDotIndex + 1).trim();
 
 		// Check if after the dot we have functionName(args)
 		var funcPattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");

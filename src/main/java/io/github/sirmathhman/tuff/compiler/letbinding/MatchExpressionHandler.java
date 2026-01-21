@@ -66,7 +66,7 @@ public final class MatchExpressionHandler {
 				}
 				defaultCase = c;
 			} else {
-				regularCases.add(c);
+				regularCases = regularCases.add(c);
 			}
 		}
 
@@ -123,7 +123,7 @@ public final class MatchExpressionHandler {
 			var value = remaining.substring(0, semiIndex).trim();
 			remaining = remaining.substring(semiIndex + 1).trim(); // Skip ";"
 
-			cases.add(new MatchCase(pattern, value));
+			cases = cases.add(new MatchCase(pattern, value));
 		}
 
 		if (cases.isEmpty()) {

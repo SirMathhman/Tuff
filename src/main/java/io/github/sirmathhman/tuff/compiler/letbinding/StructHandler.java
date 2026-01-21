@@ -125,7 +125,7 @@ public final class StructHandler {
 				return Result.err(new CompileError("Field must have a type"));
 			}
 
-			fields.add(new StructField(fieldName, fieldType));
+			fields = fields.add(new StructField(fieldName, fieldType));
 
 			// Move past the field (including separator if present)
 			if (typeEnd < remaining.length() && (remaining.charAt(typeEnd) == ';' || remaining.charAt(typeEnd) == ',')) {

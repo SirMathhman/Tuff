@@ -58,11 +58,12 @@ public final class Vm {
 	}
 
 	private static long sign_extend_24bit(long value) {
+		var v = value;
 		// If bit 23 is set, sign-extend with 1s (make it negative)
-		if ((value & 0x800000L) != 0) {
-			value |= 0xFFFFFFFFFF000000L; // Set all higher bits to 1
+		if ((v & 0x800000L) != 0) {
+			v |= 0xFFFFFFFFFF000000L; // Set all higher bits to 1
 		}
-		return value;
+		return v;
 	}
 
 	public static int execute(

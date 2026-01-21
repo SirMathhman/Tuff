@@ -188,7 +188,7 @@ public final class LetBindingProcessor {
 				depth--;
 			} else if (c == ',' && depth == 0) {
 				if (current.length() > 0) {
-					assignments.add(current.toString().trim());
+					assignments = assignments.add(current.toString().trim());
 				}
 				current = new StringBuilder();
 				continue;
@@ -196,7 +196,7 @@ public final class LetBindingProcessor {
 			current.append(c);
 		}
 		if (current.length() > 0) {
-			assignments.add(current.toString().trim());
+			assignments = assignments.add(current.toString().trim());
 		}
 		// Parse each assignment
 		for (var assignment : assignments) {
@@ -213,7 +213,7 @@ public final class LetBindingProcessor {
 	}
 
 	private static Result<Void, CompileError> handleStructFieldAccess(String varName, VariableDecl decl,
-																																		String continuation, ArrayList<Instruction> instructions, Map<String, StructDefinition> structRegistry) {
+			String continuation, ArrayList<Instruction> instructions, Map<String, StructDefinition> structRegistry) {
 		// Try to parse the struct value expression directly using struct instantiation
 		// handler
 		var structResult = StructInstantiationHandler
@@ -309,7 +309,8 @@ public final class LetBindingProcessor {
 
 	private static Result<Void, CompileError> handleSimpleContinuationCases(String varName, VariableDecl decl,
 			String continuation, ProcessContext ctx, MutableVarContext varCtx) {
-		if (continuation.equals(varName)) {
+		var cont = continuation;
+		if (cont.equals(varName)) {
 			Result<ExpressionModel.ExpressionResult, CompileError> valueResult;
 			if (ConditionalExpressionHandler.hasConditional(decl.valueExpr()))
 				valueResult = ConditionalExpressionHandler.parseConditional(decl.valueExpr());
@@ -318,26 +319,21 @@ public final class LetBindingProcessor {
 			return valueResult.match(expr -> App.generateInstructions(expr, ctx.instructions()), Result::err);
 		}
 		// Handle this.varName syntax - treat as reference to variable
-		if (continuation.startsWith("this.")) {
-			var fieldName = continuation.substring(5).trim();
-			if (fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-				// Parse it as if it's just the variable name
-				continuation = fieldName;
-			}
-		}
-		if (ctx.variableAddresses().containsKey(continuation)) {
-			return LetBindingHandler.handleVariableReference(decl.valueExpr(), continuation, ctx.instructions(),
+		if (cont.startsWith("this.") && cont.substring(5).trim().matches("[a-zA-Z_][a-zA-Z0-9_]*"))
+			cont = cont.substring(5).trim();
+		if (ctx.variableAddresses().containsKey(cont)) {
+			return LetBindingHandler.handleVariableReference(decl.valueExpr(), cont, ctx.instructions(),
 					ctx.variableAddresses(), ctx.nextMemAddr());
 		}
-		if (continuation.contains("=") && continuation.contains(";")) {
-			if (continuation.trim().startsWith("*")) {
-				return DereferenceAssignmentHandler.handle(varName, decl.valueExpr(), continuation, ctx.instructions(),
+		if (cont.contains("=") && cont.contains(";")) {
+			if (cont.trim().startsWith("*")) {
+				return DereferenceAssignmentHandler.handle(varName, decl.valueExpr(), cont, ctx.instructions(),
 						ctx.variableAddresses());
 			}
 			if (!decl.isMutable()) {
 				return Result.err(new CompileError("Cannot assign to immutable variable '" + varName + "'. Use 'let mut'."));
 			}
-			return LetBindingHandler.handleMutableVariableWithAssignment(varName, decl.valueExpr(), continuation, false,
+			return LetBindingHandler.handleMutableVariableWithAssignment(varName, decl.valueExpr(), cont, false,
 					new LetBindingHandler.MutableVarAssignmentContext(ctx.instructions(), varCtx));
 		}
 		return null;

@@ -16,8 +16,9 @@ public final class ArrayPointerIndexingHandler {
 	}
 
 	public static Result<Void, CompileError> handleMemoryArrayPointerIndexing(String varName, String arrayVarName,
-																																						String continuation, ArrayList<Instruction> instructions, Map<String, Integer> variableAddresses,
-																																						Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+			String continuation, ArrayList<Instruction> instructions, Map<String, Integer> variableAddresses,
+			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
+		var instr = instructions;
 		// Handle case where we're indexing an array that's stored in memory via a
 		// pointer
 		// e.g., let array = [...]; let ref : *[I32] = &array; ref[0] + ref[1]
@@ -34,7 +35,7 @@ public final class ArrayPointerIndexingHandler {
 		while (matcher.find()) {
 			var index = Integer.parseInt(matcher.group(1));
 			if (!indexToReg.containsKey(index) && nextReg < 4) {
-				instructions.add(new Instruction(
+				instr = instr.add(new Instruction(
 						Operation.Load,
 						Variant.DirectAddress,
 						nextReg,
@@ -55,13 +56,14 @@ public final class ArrayPointerIndexingHandler {
 
 		// Try to handle as pure addition expression
 		if (substitutedCont.matches("(__REG_\\d+__)(\\s*\\+\\s*__REG_\\d+__)*")) {
-			return generateAdditionInstructions(substitutedCont, instructions);
+			return generateAdditionInstructions(substitutedCont, instr);
 		}
 
 		// Fall back to parsing for non-pure-addition expressions
 		var contResult = App
 				.parseExpressionWithRead(substitutedCont, functionRegistry);
-		return contResult.match(expr -> App.generateInstructions(expr, instructions),
+		final var finalInstructions = instr;
+		return contResult.match(expr -> App.generateInstructions(expr, finalInstructions),
 				Result::err);
 	}
 
@@ -72,17 +74,18 @@ public final class ArrayPointerIndexingHandler {
 
 		var resultReg = 0;
 		var first = true;
+		var instrs = instructions;
 		while (regMatcher.find()) {
 			var srcReg = Integer.parseInt(regMatcher.group(1));
 			if (first) {
 				if (srcReg != resultReg) {
 					// Zero out reg 0 and add srcReg: reg0 = 0 + srcReg
-					instructions.add(new Instruction(
+					instrs = instrs.add(new Instruction(
 							Operation.Load,
 							Variant.Immediate,
 							0L,
 							0L));
-					instructions.add(new Instruction(
+					instrs = instrs.add(new Instruction(
 							Operation.Add,
 							Variant.Immediate,
 							(long) resultReg,
@@ -91,7 +94,7 @@ public final class ArrayPointerIndexingHandler {
 				first = false;
 			} else {
 				// Add srcReg to resultReg
-				instructions.add(new Instruction(
+				instrs = instrs.add(new Instruction(
 						Operation.Add,
 						Variant.Immediate,
 						(long) resultReg,

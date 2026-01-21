@@ -1,11 +1,13 @@
 package io.github.sirmathhman.tuff.lib;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.github.sirmathhman.tuff.vm.Instruction;
 
 import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Stream;
 
+@CheckReturnValue
 public record ArrayList<T>(List<T> list) implements Iterable<T> {
 	public ArrayList() {
 		this(new java.util.ArrayList<>());
@@ -28,16 +30,19 @@ public record ArrayList<T>(List<T> list) implements Iterable<T> {
 		return list.iterator();
 	}
 
-	public void add(T element) {
+	public ArrayList<T> add(T element) {
 		list.add(element);
+		return this;
 	}
 
-	public void set(int index, T element) {
+	public ArrayList<T> set(int index, T element) {
 		list.set(index, element);
+		return this;
 	}
 
-	public void addAll(ArrayList<T> code) {
+	public ArrayList<T> addAll(ArrayList<T> code) {
 		list.addAll(code.list);
+		return this;
 	}
 
 	public int indexOf(T index) {

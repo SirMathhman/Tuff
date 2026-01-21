@@ -59,7 +59,7 @@ public final class ConditionalExpressionHandler {
 
 		// Validate that the condition is a Bool type
 		var condTypeResult = ExpressionTokens.extractTypeFromExpression(condition,
-																																		new java.util.HashMap<>());
+				new java.util.HashMap<>());
 		Result<Void, CompileError> typeValidation = condTypeResult.match(condType -> {
 			if (!condType.equals("Bool")) {
 				return Result.err(new CompileError("Conditional expression requires Bool type, but got " + condType));
@@ -86,15 +86,15 @@ public final class ConditionalExpressionHandler {
 				.value();
 
 		var branchMarker = new ExpressionModel.ExpressionTerm(-3, (int) trueVal.literalValue(),
-																													new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
+				new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
 		var elseMarker = new ExpressionModel.ExpressionTerm(-4, (int) falseVal.literalValue(),
-																												new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
+				new ExpressionModel.ExpressionTermFlags(0L, '\0', null));
 
 		ArrayList<ExpressionModel.ExpressionTerm> allTerms = new ArrayList<>(cond.terms());
-		allTerms.add(branchMarker);
-		allTerms.addAll(trueVal.terms());
-		allTerms.add(elseMarker);
-		allTerms.addAll(falseVal.terms());
+		allTerms = allTerms.add(branchMarker);
+		allTerms = allTerms.addAll(trueVal.terms());
+		allTerms = allTerms.add(elseMarker);
+		allTerms = allTerms.addAll(falseVal.terms());
 
 		var totalReads = cond.readCount() + trueVal.readCount() + falseVal.readCount();
 		return Result.ok(new ExpressionModel.ExpressionResult(totalReads, 0, allTerms));
@@ -104,39 +104,39 @@ public final class ConditionalExpressionHandler {
 			String expr) {
 		// Simplified parser that handles comparisons - delegate to comparison parsing
 		// or additive if no comparison
-		expr = expr.trim();
+		var e = expr.trim();
 
 		// Handle nested conditionals
-		if (expr.startsWith("if ("))
-			return parseConditional(expr);
+		if (e.startsWith("if ("))
+			return parseConditional(e);
 
 		// Try is operator (type check)
-		var is = DepthAwareSplitter.splitByKeywordAtDepthZero(expr, "is");
+		var is = DepthAwareSplitter.splitByKeywordAtDepthZero(e, "is");
 		if (is.size() > 1)
 			return ComparisonOperatorHandler.parseIsExpression(is);
 
 		// Try comparison operators
-		var le = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '<', '=');
+		var le = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(e, '<', '=');
 		if (le.size() > 1)
 			return ComparisonOperatorHandler.parseLessOrEqualExpression(le);
-		var ge = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '>', '=');
+		var ge = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(e, '>', '=');
 		if (ge.size() > 1)
 			return ComparisonOperatorHandler.parseGreaterOrEqualExpression(ge);
-		var lt = DepthAwareSplitter.splitByDelimiterAtDepthZero(expr, '<');
+		var lt = DepthAwareSplitter.splitByDelimiterAtDepthZero(e, '<');
 		if (lt.size() > 1)
 			return ComparisonOperatorHandler.parseLessThanExpression(lt);
-		var gt = DepthAwareSplitter.splitByDelimiterAtDepthZero(expr, '>');
+		var gt = DepthAwareSplitter.splitByDelimiterAtDepthZero(e, '>');
 		if (gt.size() > 1)
 			return ComparisonOperatorHandler.parseGreaterThanExpression(gt);
-		var eq = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '=', '=');
+		var eq = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(e, '=', '=');
 		if (eq.size() > 1)
 			return ComparisonOperatorHandler.parseEqualityExpression(eq);
-		var neq = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(expr, '!', '=');
+		var neq = DepthAwareSplitter.splitByDoubleDelimiterAtDepthZero(e, '!', '=');
 		if (neq.size() > 1)
 			return ComparisonOperatorHandler.parseInequalityExpression(neq);
 
 		// No comparison, parse as additive
-		return AdditiveExpressionParser.parseAdditive(expr);
+		return AdditiveExpressionParser.parseAdditive(e);
 	}
 
 	private static int findElseKeyword(String expr) {
@@ -159,7 +159,8 @@ public final class ConditionalExpressionHandler {
 	}
 
 	public static Result<Void, CompileError> buildConditionalAssignmentChain(String varName, String s,
-																																					 ArrayList<Instruction> instructions, boolean isFirst) {
+			ArrayList<Instruction> instructions, boolean isFirst) {
+		var instr = instructions;
 		if (!s.startsWith("if ("))
 			return Result.err(new CompileError("Expected 'if'"));
 		var cEnd = findConditionEnd(s);
@@ -185,29 +186,30 @@ public final class ConditionalExpressionHandler {
 			return Result.err(condErr.error());
 		var condExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) condRes)
 				.value();
-		var genCond = App.generateInstructions(condExpr, instructions);
+		var genCond = App.generateInstructions(condExpr, instr);
 		if (genCond instanceof Result.Err<Void, CompileError>)
 			return Result.err(new CompileError("Bad cond"));
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, -1L));
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 1, 0L));
-		var jumpElseIdx = instructions.size();
-		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, 0L));
+		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 1, -1L));
+		instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, 1, 0L));
+		var jumpElseIdx = instr.size();
+		instr = instr.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, 0L));
 
-		var trueResult = processTrueBranch(trueVal, instructions);
+		var trueResult = processTrueBranch(trueVal, instr);
 		if (trueResult instanceof Result.Err<Integer, CompileError> trueErr)
 			return Result.err(trueErr.error());
 		int jumpEndIdx = ((Result.Ok<Integer, CompileError>) trueResult).value();
 
-		instructions.set(jumpElseIdx,
-				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, (long) instructions.size()));
-		var falseResult = processFalseBranch(varName, r2, instructions);
+		instr = instr.set(jumpElseIdx,
+				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1L, (long) instr.size()));
+		var falseResult = processFalseBranch(varName, r2, instr);
 		if (falseResult instanceof Result.Err<Void, CompileError>)
 			return falseResult;
 
-		instructions.set(jumpEndIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) instructions.size()));
+		instr = instr.set(jumpEndIdx,
+				new Instruction(Operation.Jump, Variant.Immediate, 0, (long) instr.size()));
 		if (isFirst) {
-			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, 100L));
-			instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
+			instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, 100L));
+			instr = instr.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 		}
 		return Result.ok(null);
 	}
@@ -223,26 +225,28 @@ public final class ConditionalExpressionHandler {
 	}
 
 	private static Result<Integer, CompileError> processTrueBranch(String trueVal, ArrayList<Instruction> instructions) {
+		var instr = instructions;
 		var trueRes = App.parseExpressionWithRead(trueVal);
 		if (trueRes instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> trueErr) {
 			return Result.err(trueErr.error());
 		}
 		var trueExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) trueRes)
 				.value();
-		var genTrue = App.generateInstructions(trueExpr, instructions);
+		var genTrue = App.generateInstructions(trueExpr, instr);
 		if (genTrue instanceof Result.Err<Void, CompileError>) {
 			return Result.err(new CompileError("Bad true"));
 		}
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
-		var jumpEndIdx = instructions.size();
-		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
+		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
+		var jumpEndIdx = instr.size();
+		instr = instr.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
 		return Result.ok(jumpEndIdx);
 	}
 
 	private static Result<Void, CompileError> processFalseBranch(String varName, String r2,
 			ArrayList<Instruction> instructions) {
+		var instr = instructions;
 		if (r2.startsWith("if (")) {
-			return buildConditionalAssignmentChain(varName, r2, instructions, false);
+			return buildConditionalAssignmentChain(varName, r2, instr, false);
 		} else if (r2.startsWith(varName + " =") || r2.startsWith(varName + "=")) {
 			var eqIdx = r2.indexOf('=');
 			var sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(r2, eqIdx);
@@ -257,11 +261,11 @@ public final class ConditionalExpressionHandler {
 			}
 			var falseExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) falseRes)
 					.value();
-			var genFalse = App.generateInstructions(falseExpr, instructions);
+			var genFalse = App.generateInstructions(falseExpr, instr);
 			if (genFalse instanceof Result.Err<Void, CompileError>) {
 				return Result.err(new CompileError("Bad else"));
 			}
-			instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
+			instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
 			return Result.ok(null);
 		} else
 			return Result.err(new CompileError("Bad else"));

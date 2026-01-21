@@ -14,7 +14,7 @@ public final class AdditiveExpressionParser {
 		// Split by + and - to get additive-level tokens, but not inside parentheses
 		var addTokens = ExpressionTokens.splitAddOperators(expr);
 		ArrayList<Boolean> additiveOps = new ArrayList<>();
-		additiveOps.add(false);
+		additiveOps = additiveOps.add(false);
 
 		// Track which operator preceded each additive token
 		var tokensFound = 0;
@@ -32,7 +32,7 @@ public final class AdditiveExpressionParser {
 					nextIndex--;
 					op = expr.charAt(nextIndex - 1);
 				}
-				additiveOps.add(op == '-');
+				additiveOps = additiveOps.add(op == '-');
 			}
 			lastIndex = nextIndex + token.length();
 			tokensFound++;
@@ -54,7 +54,7 @@ public final class AdditiveExpressionParser {
 				return Result.err(new CompileError("Internal error: expected Ok or Err in parseMultiplicative"));
 			}
 			var mult = ok.value();
-			allTerms.addAll(mult.terms());
+			allTerms = allTerms.addAll(mult.terms());
 			totalReads += mult.readCount();
 			if (isSubtracted) {
 				totalLiteral -= mult.literalValue();

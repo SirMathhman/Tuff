@@ -10,27 +10,27 @@ public final class BitwiseNotParser {
 	}
 
 	public static Result<ExpressionModel.ExpressionTerm, CompileError> parseTermWithNot(String term) {
-		term = term.trim();
+		var t = term.trim();
 
-		if (term.isEmpty()) {
+		if (t.isEmpty()) {
 			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
 		}
 
 		// Handle logical NOT (!)
 		var isLogicalNotted = false;
-		if (term.startsWith("!")) {
+		if (t.startsWith("!")) {
 			isLogicalNotted = true;
-			term = term.substring(1).trim();
+			t = t.substring(1).trim();
 		}
 
 		// Handle bitwise NOT (~)
 		var isBitwiseNotted = false;
-		if (term.startsWith("~")) {
+		if (t.startsWith("~")) {
 			isBitwiseNotted = true;
-			term = term.substring(1).trim();
+			t = t.substring(1).trim();
 		}
 
-		var baseResult = parseBaseTerm(term);
+		var baseResult = parseBaseTerm(t);
 		if (baseResult instanceof Result.Err<ExpressionModel.ExpressionTerm, CompileError>) {
 			return baseResult;
 		}
@@ -40,14 +40,14 @@ public final class BitwiseNotParser {
 		var baseTerm = ok.value();
 
 		if (isLogicalNotted) {
-			return applyLogicalNot(baseTerm, term);
+			return applyLogicalNot(baseTerm, t);
 		}
 
 		if (!isBitwiseNotted) {
 			return baseResult;
 		}
 
-		return applyBitwiseNot(baseTerm, term);
+		return applyBitwiseNot(baseTerm, t);
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseBaseTerm(String term) {
@@ -87,23 +87,24 @@ public final class BitwiseNotParser {
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseLiteralTerm(String term) {
+		var t = term;
 		var parenMatcher = java.util.regex.Pattern
 				.compile("^\\(([a-zA-Z_][a-zA-Z0-9_]*)\\)((?:\\[\\d+\\])+)$")
-				.matcher(term);
+				.matcher(t);
 		if (parenMatcher.matches()) {
 			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
 		}
 
 		var pointerMatcher = java.util.regex.Pattern
 				.compile("^\\((&(?:mut\\s+)?[a-zA-Z_][a-zA-Z0-9_]*)\\)((?:\\[\\d+\\])+)$")
-				.matcher(term);
+				.matcher(t);
 		if (pointerMatcher.matches()) {
 			return Result.ok(new ExpressionModel.ExpressionTerm(0, 0L, false, false));
 		}
 
 		var tupleMatcher = java.util.regex.Pattern
 				.compile("^\\(\\((.+?)\\)\\)\\[(\\d+)\\]$")
-				.matcher(term);
+				.matcher(t);
 		if (tupleMatcher.matches()) {
 			var tupleExpr = tupleMatcher.group(1);
 			var index = Integer.parseInt(tupleMatcher.group(2));
@@ -117,27 +118,27 @@ public final class BitwiseNotParser {
 
 		var arrayMatcher = java.util.regex.Pattern
 				.compile("^\\(\\[\\[(.+?)\\]\\]\\)((?:\\[\\d+\\])+)$")
-				.matcher(term);
+				.matcher(t);
 		if (arrayMatcher.matches()) {
 			return applyIndices(arrayMatcher.group(1), arrayMatcher.group(2));
 		}
 
-		if (term.startsWith("(") && term.endsWith(")")) {
-			var inner = term.substring(1, term.length() - 1);
+		if (t.startsWith("(") && t.endsWith(")")) {
+			var inner = t.substring(1, t.length() - 1);
 			if (inner.startsWith("[") && inner.endsWith("]")) {
 				return parseTermWithNot(inner);
 			}
 		}
 
-		if (term.startsWith("this.")) {
-			var fieldName = term.substring(5).trim();
+		if (t.startsWith("this.")) {
+			var fieldName = t.substring(5).trim();
 			if (!fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*") && !fieldName.matches("[a-zA-Z_][a-zA-Z0-9_]*\\s*\\(.*\\)")) {
 				return Result.err(new CompileError("Invalid field name after 'this': " + fieldName));
 			}
-			term = fieldName;
+			t = fieldName;
 		}
 
-		return parseLiteralValue(term);
+		return parseLiteralValue(t);
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> parseLiteralValue(String term) {
@@ -255,17 +256,19 @@ public final class BitwiseNotParser {
 
 		// For literals, compute the NOT directly (0 -> 1, nonzero -> 0)
 		var litValue = baseTerm.value;
-		if (litValue == 0) litValue = 1;
-		else litValue = 0;
+		if (litValue == 0)
+			litValue = 1;
+		else
+			litValue = 0;
 		return Result.ok(new ExpressionModel.ExpressionTerm(0, litValue, false, false));
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> applyUnaryOperator(
 			ExpressionModel.ExpressionTerm baseTerm, boolean isBitwiseNotted, boolean isLogicalNotted) {
 		var flags = ExpressionModel.ExpressionTermFlags.empty()
-																									 .withBitwiseNotted(isBitwiseNotted)
-																									 .withLogicalNotted(isLogicalNotted)
-																									 .withReadTypeSpec(baseTerm.readTypeSpec);
+				.withBitwiseNotted(isBitwiseNotted)
+				.withLogicalNotted(isLogicalNotted)
+				.withReadTypeSpec(baseTerm.readTypeSpec);
 		return Result.ok(new ExpressionModel.ExpressionTerm(baseTerm.readCount, baseTerm.value,
 				flags));
 	}
