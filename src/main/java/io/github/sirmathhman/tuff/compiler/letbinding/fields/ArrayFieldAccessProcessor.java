@@ -29,10 +29,10 @@ public final class ArrayFieldAccessProcessor {
 			}
 		}
 
-		// Try .length field access
-		if (continuation.contains(varName + ".length")) {
+		// Try .capacity field access
+		if (continuation.contains(varName + ".capacity")) {
 			Result<Void, CompileError> result = tryHandleArrayField(varName, decl, continuation, instructions,
-					functionRegistry, "length");
+					functionRegistry, "capacity");
 			if (result != null) {
 				return result;
 			}
@@ -56,8 +56,8 @@ public final class ArrayFieldAccessProcessor {
 		if ("init".equals(fieldName)) {
 			return ArrayInitFieldAccessHandler.handleArrayInitFieldAccess(varName, decl, continuation, instructions,
 					functionRegistry);
-		} else if ("length".equals(fieldName)) {
-			return ArrayLengthFieldAccessHandler.handleArrayLengthFieldAccess(varName, decl, continuation,
+		} else if ("capacity".equals(fieldName)) {
+			return ArrayCapacityFieldAccessHandler.handleArrayCapacityFieldAccess(varName, decl, continuation,
 					instructions, functionRegistry);
 		}
 		return null;

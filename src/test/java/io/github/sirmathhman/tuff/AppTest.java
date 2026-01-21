@@ -1232,18 +1232,18 @@ public final class AppTest {
 	}
 
 	@Test
-	void shouldAccessLengthFieldOnArray() {
-		// Test accessing .length field on an array to get total capacity
+	void shouldAccessCapacityFieldOnArray() {
+		// Test accessing .capacity field on an array to get total capacity
 		assertValid(
-				"let array : [I32; 3; 5] = [1, 2, 3]; array.length",
+				"let array : [I32; 3; 5] = [1, 2, 3]; array.capacity",
 				5);
 	}
 
 	@Test
-	void shouldAccessLengthFieldOnArrayPointer() {
-		// Test accessing .length field on an array pointer
+	void shouldAccessCapacityFieldOnArrayPointer() {
+		// Test accessing .capacity field on an array pointer
 		assertValid(
-				"let array : [I32; 2; 4] = [10, 20]; let ref = &array; ref.length",
+				"let array : [I32; 2; 4] = [10, 20]; let ref = &array; ref.capacity",
 				4);
 	}
 
