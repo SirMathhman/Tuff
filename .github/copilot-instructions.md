@@ -318,6 +318,17 @@ String varName = decl.varName();  // Access via record getter
 - **Syntax**: Supports parameter lists: `()`, `(x : I32)`, `(x : I32, y : I32)` followed by `=>` and body
 - **File**: `letbinding/LetBindingProcessor.java`
 
+### String Indexing
+
+- **Pattern**: `let msg : *Str = "hello"; msg[0]` returns character code at index (104 for 'h')
+- **Behavior**: Access individual characters in strings via bracket notation with zero-based indexing
+- **Implementation**: Parser detects `[index]` after string variable/field access, validates index as integer type
+- **Handler**: `StringIndexingHandler`
+- **Type Requirements**: Index must be integer type (`U8`, `U16`, `U32`, `I8`, `I16`, `I32`)
+- **Memory Layout**: Strings stored as `[length, char1, char2, ...]`; indexing uses offset calculation
+- **Instructions Generated**: Loads pointer, adds index offset, loads character from memory
+- **File**: `compiler/StringIndexingHandler.java`
+
 ## Common Patterns & Conventions
 
 ### Error Handling Pattern

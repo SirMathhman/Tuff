@@ -16,11 +16,11 @@ public final class StringFieldAccessProcessor {
 	 * literal values.
 	 *
 	 * @param varName
-	 *            the variable name
+	 *                     the variable name
 	 * @param valueExpr
-	 *            the value expression
+	 *                     the value expression
 	 * @param continuation
-	 *            the continuation code
+	 *                     the continuation code
 	 * @return the continuation with field accesses substituted
 	 */
 	public static String handleStringFieldAccess(String varName, String valueExpr, String continuation) {
@@ -29,8 +29,7 @@ public final class StringFieldAccessProcessor {
 		}
 		var stringResult = StringLiteralHandler.handleStringLiteral(valueExpr, new HashMap<>());
 		if (stringResult instanceof Result.Ok<?, ?> ok) {
-			StringLiteralHandler.StringAllocationResult strAlloc =
-					(StringLiteralHandler.StringAllocationResult) ok.value();
+			StringLiteralHandler.StringAllocationResult strAlloc = (StringLiteralHandler.StringAllocationResult) ok.value();
 			return continuation.replace(varName + ".length", String.valueOf(strAlloc.length()));
 		}
 		return continuation;

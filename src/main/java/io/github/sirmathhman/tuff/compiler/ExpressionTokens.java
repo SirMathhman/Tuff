@@ -320,6 +320,16 @@ public final class ExpressionTokens {
 				return Result.ok(0L);
 			}
 
+			// Handle string indexing: "string"[index]
+			if (literal.contains("\"") && literal.contains("[")) {
+				Result<Long, CompileError> stringIndexResult = io.github.sirmathhman.tuff.compiler.strings.StringIndexingHandler
+						.parseStringIndexing(literal);
+				if (stringIndexResult instanceof Result.Ok<Long, CompileError>) {
+					return stringIndexResult;
+				}
+				// If it fails, fall through to other parsing attempts
+			}
+
 			// Handle char literals: 'a', '\n', '\0', etc.
 			if (literal.startsWith("'") && literal.endsWith("'")) {
 				return parseCharLiteral(literal);
@@ -382,47 +392,34 @@ public final class ExpressionTokens {
 	}
 
 	private static Result<Long, CompileError> parseCharLiteral(String literal) {
-		// Char literal format: 'c' or '\escape'
 		if (literal.length() < 3) {
 			return Result.err(new CompileError("Invalid char literal: too short: " + literal));
 		}
-
 		String inner = literal.substring(1, literal.length() - 1);
-
-		// Handle escaped characters
 		if (inner.startsWith("\\")) {
 			if (inner.length() == 1) {
 				return Result.err(new CompileError("Invalid escape sequence in char literal: " + literal));
 			}
 			char escapeChar = inner.charAt(1);
 			long code = switch (escapeChar) {
-				case '0' -> 0; // null
-				case 'n' -> 10; // newline
-				case 't' -> 9; // tab
-				case 'r' -> 13; // carriage return
-				case '\\' -> 92; // backslash
-				case '\'' -> 39; // single quote
-				case '"' -> 34; // double quote
-				default -> {
-					if (inner.length() == 2) {
-						yield -1; // Signal error for invalid escape
-					} else {
-						yield -1;
-					}
-				}
+				case '0' -> 0;
+				case 'n' -> 10;
+				case 't' -> 9;
+				case 'r' -> 13;
+				case '\\' -> 92;
+				case '\'' -> 39;
+				case '"' -> 34;
+				default -> -1;
 			};
 			if (code == -1) {
 				return Result.err(new CompileError("Invalid escape sequence in char literal: " + literal));
 			}
 			return Result.ok(code);
 		}
-
-		// Single character (UTF-8 code point)
 		if (inner.length() == 1) {
 			char c = inner.charAt(0);
 			return Result.ok((long) c);
 		}
-
 		return Result
 				.err(new CompileError("Invalid char literal: must be single character or escape sequence: " + literal));
 	}
@@ -452,7 +449,6 @@ public final class ExpressionTokens {
 
 		String inner = expr.substring(1, expr.length() - 1).trim();
 		List<String> parts = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ';');
-
 		if (parts.size() != 3) {
 			return Result.err(new CompileError("Invalid array type: expected [Type; InitCount; TotalCount], got " + expr));
 		}
@@ -461,13 +457,11 @@ public final class ExpressionTokens {
 		String initCountStr = parts.get(1).trim();
 		String totalCountStr = parts.get(2).trim();
 
-		// Validate element type - can be primitive OR nested array
 		boolean isValidElementType = isValidArrayElementType(elementType);
 		if (!isValidElementType) {
 			return Result.err(new CompileError("Invalid array element type: " + elementType));
 		}
 
-		// Validate counts are numeric
 		try {
 			int initCount = Integer.parseInt(initCountStr);
 			int totalCount = Integer.parseInt(totalCountStr);
@@ -480,7 +474,6 @@ public final class ExpressionTokens {
 		} catch (NumberFormatException e) {
 			return Result.err(new CompileError("Array counts must be numeric: " + e.getMessage()));
 		}
-
 		return Result.ok(expr);
 	}
 

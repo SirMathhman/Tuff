@@ -1278,6 +1278,36 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldIndexStringAtZero() {
+		// "test"[0] => 't' (code 116)
+		assertValid("let x : Char = \"test\"[0]; x", 116);
+	}
+
+	@Test
+	void shouldIndexStringAtOne() {
+		// "test"[1] => 'e' (code 101)
+		assertValid("let x : Char = \"test\"[1]; x", 101);
+	}
+
+	@Test
+	void shouldIndexStringAtTwo() {
+		// "test"[2] => 's' (code 115)
+		assertValid("let x : Char = \"test\"[2]; x", 115);
+	}
+
+	@Test
+	void shouldIndexStringAtThree() {
+		// "test"[3] => 't' (code 116)
+		assertValid("let x : Char = \"test\"[3]; x", 116);
+	}
+
+	@Test
+	void shouldIndexSimpleString() {
+		// "hello"[0] => 'h' (code 104)
+		assertValid("\"hello\"[0]", 104);
+	}
+
+	@Test
 	void shouldParseCharLiteral() {
 		// 'a' is UTF-8 code 97
 		assertValid("'a'", 97);

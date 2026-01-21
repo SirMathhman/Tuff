@@ -396,7 +396,8 @@ public final class LetBindingProcessor {
 					instructions, functionRegistry);
 		}
 		if (FunctionHandler.isFunctionDefinition(decl.valueExpr().trim())) {
-			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, decl.valueExpr().trim(), normalizedContinuation,
+			return FunctionBindingHandler.handleFunctionDefinitionBinding(varName, decl.valueExpr().trim(),
+					normalizedContinuation,
 					instructions, functionRegistry);
 		}
 		boolean isFunctionReferenceBinding = decl.declaredType() != null

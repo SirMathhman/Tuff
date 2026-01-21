@@ -346,6 +346,14 @@ Strings represent sequences of characters, stored as pointers (`*Str`) in VM mem
   let spaced : *Str = "a b"; spaced.length  // Returns 3
   ```
 
+- **String Indexing**: Access individual characters in a string using bracket notation
+
+  ```
+  let msg : *Str = "hello"; msg[0]      // Returns 104 ('h')
+  let msg : *Str = "hello"; msg[1]      // Returns 101 ('e')
+  let msg : *Str = "world"; msg[4]      // Returns 100 ('d')
+  ```
+
 - **Storage**: Strings are stored in VM memory starting at address 1000, with layout `[length, char1, char2, ...]`
 
 ### Comparison Operators
