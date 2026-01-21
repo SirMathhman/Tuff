@@ -121,4 +121,17 @@ public final class CompilerHelpers {
 		}
 		return true;
 	}
+
+	/**
+	 * Wrap a value for substitution based on its declared type.
+	 * Arrays are double-wrapped for indexing support; other types are unchanged.
+	 */
+	public static String wrapValueForSubstitution(String value, String declaredType) {
+		if (declaredType != null && declaredType.startsWith("[") && declaredType.endsWith("]")) {
+			if (value.startsWith("[") && value.endsWith("]")) {
+				return "[" + value + "]";
+			}
+		}
+		return value;
+	}
 }

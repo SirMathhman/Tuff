@@ -81,10 +81,16 @@ public final class ExpressionTokens {
 			return Result.ok("Bool");
 		}
 
+		// Handle array types: [Type; InitCount; TotalCount]
+		Result<String, CompileError> arrayResult = tryParseArrayType(expr);
+		if (arrayResult instanceof Result.Ok<String, CompileError>) {
+			return arrayResult;
+		}
+
 		// Handle tuple expressions: (expr1, expr2, ...)
 		if (expr.startsWith("(") && expr.endsWith(")")) {
 			String inner = expr.substring(1, expr.length() - 1).trim();
-			
+
 			// Check if there are commas at depth 0 (indicating a tuple)
 			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
 			if (elements.size() > 1) {
@@ -253,7 +259,7 @@ public final class ExpressionTokens {
 
 		// Handle tuple types - must match exactly
 		if (sourceType.startsWith("(") && sourceType.endsWith(")") ||
-			targetType.startsWith("(") && targetType.endsWith(")")) {
+				targetType.startsWith("(") && targetType.endsWith(")")) {
 			return sourceType.equals(targetType);
 		}
 
@@ -364,7 +370,8 @@ public final class ExpressionTokens {
 
 	/**
 	 * Check if an expression is a tuple expression.
-	 * A tuple expression starts with ( and ends with ), and contains at least one comma at depth 0.
+	 * A tuple expression starts with ( and ends with ), and contains at least one
+	 * comma at depth 0.
 	 */
 	public static boolean isTupleExpression(String expr) {
 		if (!expr.startsWith("(") || !expr.endsWith(")")) {
@@ -373,5 +380,47 @@ public final class ExpressionTokens {
 		String inner = expr.substring(1, expr.length() - 1);
 		List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ',');
 		return elements.size() > 1;
+	}
+
+	/**
+	 * Parse array type: [ElementType; InitializedCount; TotalCount]
+	 * Returns the array type string in the format [Type; InitCount; TotalCount]
+	 */
+	private static Result<String, CompileError> tryParseArrayType(String expr) {
+		if (!expr.startsWith("[") || !expr.endsWith("]")) {
+			return Result.err(new CompileError("Invalid array type: must start with [ and end with ]"));
+		}
+
+		String inner = expr.substring(1, expr.length() - 1).trim();
+		List<String> parts = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ';');
+
+		if (parts.size() != 3) {
+			return Result.err(new CompileError("Invalid array type: expected [Type; InitCount; TotalCount], got " + expr));
+		}
+
+		String elementType = parts.get(0).trim();
+		String initCountStr = parts.get(1).trim();
+		String totalCountStr = parts.get(2).trim();
+
+		// Validate element type
+		if (!elementType.matches("[UI]\\d+|Bool")) {
+			return Result.err(new CompileError("Invalid array element type: " + elementType));
+		}
+
+		// Validate counts are numeric
+		try {
+			int initCount = Integer.parseInt(initCountStr);
+			int totalCount = Integer.parseInt(totalCountStr);
+			if (initCount < 0 || totalCount < 0) {
+				return Result.err(new CompileError("Array counts must be non-negative"));
+			}
+			if (initCount > totalCount) {
+				return Result.err(new CompileError("Initialized count cannot exceed total count"));
+			}
+		} catch (NumberFormatException e) {
+			return Result.err(new CompileError("Array counts must be numeric: " + e.getMessage()));
+		}
+
+		return Result.ok(expr);
 	}
 }

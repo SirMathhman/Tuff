@@ -33,19 +33,54 @@ final class AppParsingUtils {
 
 	static int findAssignmentEqualsAtDepthZero(String stmt) {
 		int depth = 0;
+		int bracketDepth = 0;
 		for (int i = 4; i < stmt.length(); i++) { // Start after "let "
 			char c = stmt.charAt(i);
 			if (c == '(') {
 				depth++;
 			} else if (c == ')') {
 				depth--;
+			} else if (c == '[') {
+				bracketDepth++;
+			} else if (c == ']') {
+				bracketDepth--;
 			}
-			if (depth == 0 && c == '=' && i + 1 < stmt.length() && stmt.charAt(i + 1) != '>') {
+			if (depth == 0 && bracketDepth == 0 && c == '=' && i + 1 < stmt.length() && stmt.charAt(i + 1) != '>') {
 				if (i == 0 || stmt.charAt(i - 1) != '=') {
 					return i;
 				}
 			}
 		}
 		return -1;
+	}
+
+	static int findSemicolonAtDepthZero(String s, int startIndex) {
+		int depth = 0;
+		int bracketDepth = 0;
+		for (int i = startIndex; i < s.length(); i++) {
+			char c = s.charAt(i);
+			if (c == '(' || c == '{') {
+				depth++;
+			} else if (c == ')' || c == '}') {
+				depth--;
+			} else if (c == '[') {
+				bracketDepth++;
+			} else if (c == ']') {
+				bracketDepth--;
+			} else if (c == ';' && depth == 0 && bracketDepth == 0) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	static boolean isArrayExpression(String expr) {
+		if (!expr.startsWith("[") || !expr.endsWith("]")) {
+			return false;
+		}
+		String inner = expr.substring(1, expr.length() - 1);
+		java.util.List<String> elements = io.github.sirmathhman.tuff.compiler.DepthAwareSplitter
+				.splitByDelimiterAtDepthZero(inner, ',');
+		return elements.size() >= 1 && !inner.contains(";");
 	}
 }

@@ -929,8 +929,8 @@ public final class AppTest {
 		// and inner() reads 0 and returns 0
 		// Total: 1 + 1 + 0 = 2
 		assertValidWithInput(
-			"fn sumThenMult(n : I32) => if (n <= 0) 1 else n + sumThenMult(n - 1) + (fn inner() => { let x = read I32; if (x <= 0) 0 else x + inner() }; inner()); sumThenMult(1)",
-			2, 0);
+				"fn sumThenMult(n : I32) => if (n <= 0) 1 else n + sumThenMult(n - 1) + (fn inner() => { let x = read I32; if (x <= 0) 0 else x + inner() }; inner()); sumThenMult(1)",
+				2, 0);
 	}
 
 	@Test
@@ -938,8 +938,8 @@ public final class AppTest {
 		// Chain multiple function calls
 		// add(a, b) + multiply(a, b) with a=3, b=4 -> 7 + 12 = 19
 		assertValid(
-			"fn add(x : I32, y : I32) => x + y; fn multiply(x : I32, y : I32) => x * y; add(3, 4) + multiply(3, 4)",
-			19);
+				"fn add(x : I32, y : I32) => x + y; fn multiply(x : I32, y : I32) => x * y; add(3, 4) + multiply(3, 4)",
+				19);
 	}
 
 	@Test
@@ -947,32 +947,32 @@ public final class AppTest {
 		// One function's result becomes another function's input
 		// double(add(10, 5)) -> double(15) -> 30
 		assertValid(
-			"fn add(a : I32, b : I32) => a + b; fn double(x : I32) => x * 2; double(add(10, 5))",
-			30);
+				"fn add(a : I32, b : I32) => a + b; fn double(x : I32) => x * 2; double(add(10, 5))",
+				30);
 	}
 
 	@Test
 	void shouldSupportMultipleNestedFunctions() {
 		// Three levels of nested functions
 		assertValid(
-			"fn outer() => { fn middle() => { fn inner() => 42; inner() }; middle() }; outer()",
-			42);
+				"fn outer() => { fn middle() => { fn inner() => 42; inner() }; middle() }; outer()",
+				42);
 	}
 
 	@Test
 	void shouldSupportRecursiveFactorialPattern() {
 		// Tail-additive recursion: sum(4) = 4 + sum(3) + sum(2) + sum(1) + sum(0) = 10
 		assertValid(
-			"fn sum(n : I32) : I32 => if (n <= 0) 0 else n + sum(n - 1); sum(4)",
-			10);
+				"fn sum(n : I32) : I32 => if (n <= 0) 0 else n + sum(n - 1); sum(4)",
+				10);
 	}
 
 	@Test
 	void shouldSupportDeepRecursionWithLargeDepth() {
 		// Deep recursion: sum from 100 down to 0 = 5050
 		assertValid(
-			"fn sum(n : I32) : I32 => if (n <= 0) 0 else n + sum(n - 1); sum(100)",
-			5050);
+				"fn sum(n : I32) : I32 => if (n <= 0) 0 else n + sum(n - 1); sum(100)",
+				5050);
 	}
 
 	@Test
@@ -980,24 +980,24 @@ public final class AppTest {
 		// Simple pattern: if n <= 0 then base else n + recursion
 		// test(5) = 5 + test(4) = 5 + 4 + test(3) = ... = 15
 		assertValid(
-			"fn test(n : I32) : I32 => if (n <= 0) 0 else n + test(n - 1); test(5)",
-			15);
+				"fn test(n : I32) : I32 => if (n <= 0) 0 else n + test(n - 1); test(5)",
+				15);
 	}
 
 	@Test
 	void shouldSupportFunctionReturningResultOfArithmetic() {
 		// Ensure complex arithmetic in function return works
 		assertValid(
-			"fn complex(a : I32, b : I32, c : I32) => a * b + c * 2 - a; complex(3, 4, 5)",
-			19);
+				"fn complex(a : I32, b : I32, c : I32) => a * b + c * 2 - a; complex(3, 4, 5)",
+				19);
 	}
 
 	@Test
 	void shouldSupportFunctionWithMaximumParameters() {
 		// Function with maximum allowed parameters (6)
 		assertValid(
-			"fn sum6(a : I32, b : I32, c : I32, d : I32, e : I32, f : I32) : I32 => a + b + c + d + e + f; sum6(1, 2, 3, 4, 5, 6)",
-			21);
+				"fn sum6(a : I32, b : I32, c : I32, d : I32, e : I32, f : I32) : I32 => a + b + c + d + e + f; sum6(1, 2, 3, 4, 5, 6)",
+				21);
 	}
 
 	@Test
@@ -1005,57 +1005,58 @@ public final class AppTest {
 		// Recursive summation with read operations matching the pattern
 		// let n = read I32; if (n <= 0) 0 else n + sumList()
 		assertValidWithInput(
-			"fn sumList() : I32 => { let n = read I32; if (n <= 0) 0 else n + sumList() }; sumList()",
-			15, 1, 2, 3, 4, 5);
+				"fn sumList() : I32 => { let n = read I32; if (n <= 0) 0 else n + sumList() }; sumList()",
+				15, 1, 2, 3, 4, 5);
 	}
 
 	@Test
 	void shouldSupportFunctionWithBitwiseOperations() {
 		// Function using bitwise operations
 		assertValid(
-			"fn bitOp(a : I32, b : I32) : I32 => (a & b) | (a ^ b); bitOp(12, 10)",
-			14);
+				"fn bitOp(a : I32, b : I32) : I32 => (a & b) | (a ^ b); bitOp(12, 10)",
+				14);
 	}
 
 	@Test
 	void shouldSupportFunctionWithShiftOperations() {
 		// Function with shift operations
 		assertValid(
-			"fn shiftOp(x : I32, n : I32) : I32 => (x << n) + (x >> 1); shiftOp(5, 2)",
-			22);
+				"fn shiftOp(x : I32, n : I32) : I32 => (x << n) + (x >> 1); shiftOp(5, 2)",
+				22);
 	}
 
 	@Test
 	void shouldSupportMultipleFunctionCallsInExpression() {
 		// Many function calls in single expression
 		assertValid(
-			"fn a() => 1; fn b() => 2; fn c() => 3; fn d() => 4; fn e() => 5; a() + b() + c() + d() + e()",
-			15);
+				"fn a() => 1; fn b() => 2; fn c() => 3; fn d() => 4; fn e() => 5; a() + b() + c() + d() + e()",
+				15);
 	}
 
 	@Test
 	void shouldSupportFunctionWithComplexNesting() {
 		// Function calling another function that calls a third
 		assertValid(
-			"fn base(x : I32) => x + 1; fn middle(y : I32) => base(y) * 2; fn top() => middle(10); top()",
-			22);
+				"fn base(x : I32) => x + 1; fn middle(y : I32) => base(y) * 2; fn top() => middle(10); top()",
+				22);
 	}
 
 	@Test
 	void shouldSupportRecursiveMultiplyingValues() {
 		// Recursive sum where each level adds the parameter
-		// multi(5) = 5 + multi(4) = 5 + 4 + multi(3) = 5 + 4 + 3 + multi(2) = 5+4+3+2+multi(1) = 5+4+3+2+1+multi(0) = 15
+		// multi(5) = 5 + multi(4) = 5 + 4 + multi(3) = 5 + 4 + 3 + multi(2) =
+		// 5+4+3+2+multi(1) = 5+4+3+2+1+multi(0) = 15
 		assertValid(
-			"fn multi(n : I32) : I32 => if (n <= 0) 0 else n + multi(n - 1); multi(5)",
-			15);
+				"fn multi(n : I32) : I32 => if (n <= 0) 0 else n + multi(n - 1); multi(5)",
+				15);
 	}
 
 	@Test
 	void shouldSupportFunctionReturningThisFieldMultipleTimes() {
 		// Test function that accesses 'this' multiple times
 		assertValid(
-			"fn getValue() => 42; fn getValue2() => 100; this.getValue() + this.getValue2()",
-			142);
+				"fn getValue() => 42; fn getValue2() => 100; this.getValue() + this.getValue2()",
+				142);
 	}
 
 	@Test
@@ -1063,49 +1064,50 @@ public final class AppTest {
 		// Tail-recursive with base case
 		// sumWithBase(5) = 5 + sumWithBase(4) + ... = 15
 		assertValid(
-			"fn sumWithBase(n : I32) : I32 => if (n <= 0) 0 else n + sumWithBase(n - 1); sumWithBase(5)",
-			15);
+				"fn sumWithBase(n : I32) : I32 => if (n <= 0) 0 else n + sumWithBase(n - 1); sumWithBase(5)",
+				15);
 	}
 
 	@Test
 	void shouldSupportFunctionWithReadOperationInParameter() {
 		// Function taking read value as parameter
 		assertValidWithInput(
-			"fn addTen(x : I32) => x + 10; addTen(read I32)",
-			52, 42);
+				"fn addTen(x : I32) => x + 10; addTen(read I32)",
+				52, 42);
 	}
 
 	@Test
 	void shouldSupportNestedFunctionCallChain() {
 		// Chain of function calls through nested definitions
 		assertValid(
-			"fn f1(x : I32) => x; fn f2(x : I32) => f1(x + 1); fn f3(x : I32) => f2(x + 1); f3(10)",
-			12);
+				"fn f1(x : I32) => x; fn f2(x : I32) => f1(x + 1); fn f3(x : I32) => f2(x + 1); f3(10)",
+				12);
 	}
 
 	@Test
 	void shouldSupportRecursiveWithSubtraction() {
 		// Recursion using subtraction
-		// countDown(3) = 3 + countDown(2) = 3 + 2 + countDown(1) = 3+2+1+countDown(0) = 6
+		// countDown(3) = 3 + countDown(2) = 3 + 2 + countDown(1) = 3+2+1+countDown(0) =
+		// 6
 		assertValid(
-			"fn countDown(n : I32) : I32 => if (n <= 0) 0 else n + countDown(n - 1); countDown(3)",
-			6);
+				"fn countDown(n : I32) : I32 => if (n <= 0) 0 else n + countDown(n - 1); countDown(3)",
+				6);
 	}
 
 	@Test
 	void shouldSupportSimpleFunctionWithReadInput() {
 		// Simple function that uses a read value
 		assertValidWithInput(
-			"fn process(x : I32) => x + 5; process(read I32)",
-			47, 42);
+				"fn process(x : I32) => x + 5; process(read I32)",
+				47, 42);
 	}
 
 	@Test
 	void shouldSupportFunctionCallingMultipleFunctions() {
 		// One function calls multiple other functions
 		assertValid(
-			"fn f1() => 10; fn f2() => 20; fn combine() => f1() + f2(); combine()",
-			30);
+				"fn f1() => 10; fn f2() => 20; fn combine() => f1() + f2(); combine()",
+				30);
 	}
 
 	@Test
@@ -1113,16 +1115,16 @@ public final class AppTest {
 		// Recursion with zero as base case
 		// sum(3) = 3 + sum(2) = 3 + 2 + sum(1) = 3 + 2 + 1 + sum(0) = 6
 		assertValid(
-			"fn sum(n : I32) : I32 => if (n <= 0) 0 else n + sum(n - 1); sum(3)",
-			6);
+				"fn sum(n : I32) : I32 => if (n <= 0) 0 else n + sum(n - 1); sum(3)",
+				6);
 	}
 
 	@Test
 	void shouldSupportDeepFunctionCallChain() {
 		// Deep chain of function calls
 		assertValid(
-			"fn a(x : I32) => x; fn b(x : I32) => a(x + 1); fn c(x : I32) => b(x + 1); fn d(x : I32) => c(x + 1); d(1)",
-			4);
+				"fn a(x : I32) => x; fn b(x : I32) => a(x + 1); fn c(x : I32) => b(x + 1); fn d(x : I32) => c(x + 1); d(1)",
+				4);
 	}
 
 	@Test
@@ -1130,16 +1132,16 @@ public final class AppTest {
 		// Classic recursive addition
 		// add(5) = 5 + add(4) = 5 + 4 + add(3) = ... = 15
 		assertValid(
-			"fn add(n : I32) : I32 => if (n <= 0) 0 else n + add(n - 1); add(5)",
-			15);
+				"fn add(n : I32) : I32 => if (n <= 0) 0 else n + add(n - 1); add(5)",
+				15);
 	}
 
 	@Test
 	void shouldSupportFunctionWithMultipleArithmetic() {
 		// Function with complex arithmetic operations
 		assertValid(
-			"fn calc(a : I32, b : I32) => a * 3 + b * 2 - 1; calc(5, 7)",
-			28);
+				"fn calc(a : I32, b : I32) => a * 3 + b * 2 - 1; calc(5, 7)",
+				28);
 	}
 
 	@Test
@@ -1147,18 +1149,27 @@ public final class AppTest {
 		// Function called with method syntax: value.function()
 		// The parameter named 'this' receives the value the function is called on
 		assertValid(
-			"fn addOnce(this : I32) => this + 1; 100.addOnce()",
-			101);
+				"fn addOnce(this : I32) => this + 1; 100.addOnce()",
+				101);
 	}
 
 	@Test
 	void shouldSupportTuples() {
 		// Tuple type annotation and indexing
 		assertValidWithInput(
-			"let x : (U8, U8) = (read U8, read U8); x[0] + x[1]",
-			15,
-			10,
-			5);
+				"let x : (U8, U8) = (read U8, read U8); x[0] + x[1]",
+				15,
+				10,
+				5);
+	}
+
+	@Test
+	void shouldSupportArrays() {
+		// Array type annotation: [Type; InitializedCount; TotalCount]
+		// and array indexing
+		assertValid(
+				"let x : [I32; 3; 3] = [1, 2, 3]; x[0] + x[1] + x[2]",
+				6);
 	}
 
 	private void assertInvalid(String source) {

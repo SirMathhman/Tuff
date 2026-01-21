@@ -91,7 +91,7 @@ public final class BitwiseNotParser {
 		if (tupleIndexMatcher.matches()) {
 			String tupleExpr = tupleIndexMatcher.group(1);
 			int index = Integer.parseInt(tupleIndexMatcher.group(2));
-			
+
 			// Split the tuple expression by comma at depth 0
 			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(tupleExpr, ',');
 			if (index >= 0 && index < elements.size()) {
@@ -102,7 +102,25 @@ public final class BitwiseNotParser {
 				return Result.err(new CompileError("Tuple index " + index + " out of bounds"));
 			}
 		}
-		
+
+		// Handle array indexing: ([[elem1, elem2, ...]))[index]
+		java.util.regex.Pattern arrayIndexPattern = java.util.regex.Pattern.compile("^\\(\\[\\[(.+)\\]\\]\\)\\[(\\d+)\\]$");
+		java.util.regex.Matcher arrayIndexMatcher = arrayIndexPattern.matcher(term);
+		if (arrayIndexMatcher.matches()) {
+			String arrayExpr = arrayIndexMatcher.group(1);
+			int index = Integer.parseInt(arrayIndexMatcher.group(2));
+
+			// Split the array expression by comma at depth 0
+			java.util.List<String> elements = DepthAwareSplitter.splitByDelimiterAtDepthZero(arrayExpr, ',');
+			if (index >= 0 && index < elements.size()) {
+				String element = elements.get(index).trim();
+				// Recursively parse the element
+				return parseTermWithNot(element);
+			} else {
+				return Result.err(new CompileError("Array index " + index + " out of bounds"));
+			}
+		}
+
 		// Handle this.x or this.functionName() syntax - normalize and treat as
 		// variable/function reference
 		if (term.startsWith("this.")) {

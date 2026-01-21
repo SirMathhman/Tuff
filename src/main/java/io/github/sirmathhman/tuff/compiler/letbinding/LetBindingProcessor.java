@@ -361,77 +361,68 @@ public final class LetBindingProcessor {
 	private static Result<Void, CompileError> completeVariableSubstitution(String varName, VariableDecl decl,
 			String continuation, List<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
-		// First, normalize this.varName to varName for occurrence counting and
-		// substitution
-		// This ensures "let x = 100; this.x" is treated as a single reference to x
 		String normalizedContinuation = continuation.replaceAll("\\bthis\\." + varName + "\\b", varName);
-
-		// Count occurrences, treating x[...] patterns as single occurrences (for tuples)
 		int occurrences = CompilerHelpers.countVariableOccurrences(varName, normalizedContinuation);
-		
-		// For tuple types, allow multiple indexed accesses (e.g., x[0], x[1])
 		boolean isTupleType = decl.declaredType() != null && decl.declaredType().startsWith("(")
 				&& decl.declaredType().endsWith(")");
-		boolean isIndexedOnlyAccess = isTupleType
+		boolean isArrayType = decl.declaredType() != null && decl.declaredType().startsWith("[")
+				&& decl.declaredType().endsWith("]");
+		boolean isIndexedOnlyAccess = (isTupleType || isArrayType)
 				&& CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation);
-		
+
 		if (occurrences > 1 && !isIndexedOnlyAccess) {
 			return LetBindingHandler.handleMultipleVariableReferences(varName, decl.valueExpr(),
 					normalizedContinuation, occurrences, instructions);
 		}
 
 		String valueExpr = decl.valueExpr().trim();
-
-		// Check if we're binding an anonymous function (lambda) to a variable
 		if (isAnonymousFunction(valueExpr)) {
 			String namedFunction = convertAnonymousFunctionToNamed(varName, valueExpr);
 			return handleFunctionDefinitionBinding(varName, namedFunction, normalizedContinuation, instructions,
 					functionRegistry);
 		}
 
-		// Check if we're binding a function definition to a variable
 		if (FunctionHandler.isFunctionDefinition(valueExpr)) {
 			return handleFunctionDefinitionBinding(varName, valueExpr, normalizedContinuation, instructions,
 					functionRegistry);
 		}
+
 		boolean isFunctionReferenceBinding = decl.declaredType() != null
 				&& decl.declaredType().contains("=>")
 				&& functionRegistry.containsKey(valueExpr);
-
-		// IMPORTANT: If we're binding a function reference (e.g., `let f : () => I32 =
-		// get;`),
-		// do NOT inline-substitute `f` into the continuation, because it breaks the
-		// call syntax (turning `f()` into `(get)()`). Instead, keep `f()` intact and
-		// let the function-call parser resolve it via capturedVariables.
+		String wrappedValue = isFunctionReferenceBinding
+				? decl.valueExpr()
+				: CompilerHelpers.wrapValueForSubstitution(decl.valueExpr(), decl.declaredType());
 		String substitutedContinuation = isFunctionReferenceBinding
 				? normalizedContinuation
-				: normalizedContinuation.replaceAll("\\b" + varName + "\\b", "(" + decl.valueExpr() + ")");
+				: normalizedContinuation.replaceAll("\\b" + varName + "\\b", "(" + wrappedValue + ")");
+
 		Result<Void, CompileError> typeCheckResult = validateContinuationTypes(continuation, varName,
 				decl.valueExpr());
 		if (typeCheckResult instanceof Result.Err<Void, CompileError>) {
 			return typeCheckResult;
 		}
 
-		// Build captured variables map for function definitions in continuation
+		java.util.Map<String, String> capturedVariables = buildCapturedVariablesMap(varName, valueExpr,
+				isFunctionReferenceBinding);
+		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App
+				.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
+		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+	}
+
+	private static java.util.Map<String, String> buildCapturedVariablesMap(String varName, String valueExpr,
+			boolean isFunctionReferenceBinding) {
 		java.util.Map<String, String> capturedVariables = new java.util.HashMap<>();
-		// Check if the value is a function reference (bare function name)
-		// If it is and the declared type is a function type, store the binding
 		if (isFunctionReferenceBinding) {
-			// Store the function binding (not the type) so it can be resolved in function
-			// calls
 			capturedVariables.put(varName, valueExpr);
 		} else {
-			// For non-function values, store the type
 			Result<String, CompileError> varTypeResult = ExpressionTokens.extractTypeFromExpression(valueExpr,
 					new java.util.HashMap<>());
 			if (varTypeResult instanceof Result.Ok<String, CompileError> ok) {
 				capturedVariables.put(varName, ok.value());
 			}
 		}
-
-		Result<ExpressionModel.ExpressionResult, CompileError> contResult = App
-				.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
-		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+		return capturedVariables;
 	}
 
 	private static boolean isAnonymousFunction(String expr) {
@@ -494,5 +485,10 @@ public final class LetBindingProcessor {
 			return Result.ok(null);
 		}, err -> Result.ok(null));
 	}
-}
 
+	/**
+	 * Wrap a value for substitution based on its type.
+	 * For arrays, double-wrap to enable indexing: [1, 2, 3] -> [[1, 2, 3]]
+	 * For other types, return as-is.
+	 */
+}

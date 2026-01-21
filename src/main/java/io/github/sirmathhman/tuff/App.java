@@ -117,8 +117,9 @@ public final class App {
 		// '=>')
 		int equalsIndex = AppParsingUtils.findAssignmentEqualsAtDepthZero(stmt);
 
-		// First, find the first semicolon to check for uninitialized declarations
-		int firstSemiIndex = stmt.indexOf(';');
+		// First, find the first semicolon at depth 0 (accounting for brackets and
+		// parens)
+		int firstSemiIndex = AppParsingUtils.findSemicolonAtDepthZero(stmt, 0);
 		if (firstSemiIndex == -1) {
 			return Result.err(new CompileError("Invalid let binding: missing ';'"));
 		}
@@ -130,20 +131,7 @@ public final class App {
 		}
 
 		// Find the first semicolon at depth 0 after the equals
-		int semiIndex = -1;
-		int depth = 0;
-		for (int i = equalsIndex; i < stmt.length(); i++) {
-			char c = stmt.charAt(i);
-			if (c == '(' || c == '{') {
-				depth++;
-			} else if (c == ')' || c == '}') {
-				depth--;
-			} else if (c == ';' && depth == 0) {
-				semiIndex = i;
-				break;
-			}
-		}
-
+		int semiIndex = AppParsingUtils.findSemicolonAtDepthZero(stmt, equalsIndex);
 		if (semiIndex == -1) {
 			return Result.err(new CompileError("Invalid let binding: missing ';'"));
 		}
@@ -291,6 +279,15 @@ public final class App {
 		if (ExpressionTokens.isTupleExpression(expr)) {
 			// Parse tuple expression - for now returns zero result
 			// Tuple elements are handled via substitution and indexing
+			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
+			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
+			return Result.ok(result);
+		}
+
+		// Check if this is an array expression (before normalizing braces!)
+		if (AppParsingUtils.isArrayExpression(expr)) {
+			// Parse array expression - for now returns zero result
+			// Array elements are handled via substitution and indexing
 			List<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 			ExpressionModel.ExpressionResult result = new ExpressionModel.ExpressionResult(0, 0, terms);
 			return Result.ok(result);
