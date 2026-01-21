@@ -453,27 +453,7 @@ public final class App {
 
 	public static Result<RunResult, ApplicationError> run(String source, int[] input) {
 		return compile(source).match(
-				instructions -> {
-					final int[] inputPointer = { 0 };
-					List<Integer> output = new ArrayList<>();
-					try {
-						int returnValue = Vm.execute(
-								instructions,
-								() -> {
-									if (inputPointer[0] >= input.length) {
-										return 0;
-									}
-									return input[inputPointer[0]++];
-								},
-								output::add);
-
-						return Result.ok(new RunResult(output, returnValue, instructions));
-					} catch (Exception e) {
-						e.printStackTrace();
-						System.err.println("Exception occurred during execution!");
-						return Result.err(new ApplicationError(new ExecutionError(instructions)));
-					}
-				},
+				instructions -> VmExecutor.executeWithIO(instructions, input),
 				err -> Result.err(new ApplicationError(err)));
 	}
 

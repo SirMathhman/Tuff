@@ -150,15 +150,7 @@ public final class TreeRecursionCompiler {
 		st.code.add(insn(Operation.Load, Variant.Immediate, 1, spec.initialArg));
 
 		// Push initial frame: firstResult(0), n, ret
-		addDecrementSP(st.code);
-		st.code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
-		addDecrementSP(st.code);
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 1, SP_ADDR));
-		addDecrementSP(st.code);
-		st.endAddrPatch = st.code.size();
-		st.code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
+		st.endAddrPatch = pushFrame(st.code);
 	}
 
 	private static void emitFuncStartAndFirstCall(CompileState st, Spec spec) {
@@ -172,15 +164,7 @@ public final class TreeRecursionCompiler {
 		st.code.add(insn(Operation.JumpIfLessThanZero, Variant.Immediate, 0, 0L));
 
 		// Push child frame: firstResult(0), n, ret=AFTER_FIRST
-		addDecrementSP(st.code);
-		st.code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
-		addDecrementSP(st.code);
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 1, SP_ADDR));
-		addDecrementSP(st.code);
-		st.afterFirstPatch = st.code.size();
-		st.code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
+		st.afterFirstPatch = pushFrame(st.code);
 		st.code.add(insn(Operation.Load, Variant.Immediate, 2, spec.firstOff));
 		st.code.add(insn(Operation.Sub, Variant.Immediate, 1, 2L));
 		st.code.add(insn(Operation.Jump, Variant.Immediate, 0L, (long) st.funcStart));
@@ -207,15 +191,7 @@ public final class TreeRecursionCompiler {
 		addDecrementSP(st.code);
 
 		// Push child2 frame: firstResult(0), n, ret=AFTER_SECOND
-		addDecrementSP(st.code);
-		st.code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
-		addDecrementSP(st.code);
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 1, SP_ADDR));
-		addDecrementSP(st.code);
-		st.afterSecondPatch = st.code.size();
-		st.code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
-		st.code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
+		st.afterSecondPatch = pushFrame(st.code);
 		st.code.add(insn(Operation.Load, Variant.Immediate, 2, spec.secondOff));
 		st.code.add(insn(Operation.Sub, Variant.Immediate, 1, 2L));
 		st.code.add(insn(Operation.Jump, Variant.Immediate, 0L, (long) st.funcStart));
@@ -239,18 +215,14 @@ public final class TreeRecursionCompiler {
 		st.code.add(insn(combineOp, Variant.Immediate, 0, 2L));
 
 		// Return to ret addr at [SP] without popping current frame (caller will pop)
-		st.code.add(insn(Operation.Load, Variant.IndirectAddress, 2, SP_ADDR));
-		st.code.add(insn(Operation.Store, Variant.DirectAddress, 2, JUMP_TEMP));
-		st.code.add(insn(Operation.Jump, Variant.DirectAddress, 0L, JUMP_TEMP));
+		emitReturn(st.code);
 	}
 
 	private static void emitBaseCase(CompileState st, Spec spec) {
 		st.baseCase = st.code.size();
 		st.code.add(insn(Operation.Load, Variant.Immediate, 0, spec.baseValue));
 		// Return to ret addr at [SP] without popping current frame (caller will pop)
-		st.code.add(insn(Operation.Load, Variant.IndirectAddress, 2, SP_ADDR));
-		st.code.add(insn(Operation.Store, Variant.DirectAddress, 2, JUMP_TEMP));
-		st.code.add(insn(Operation.Jump, Variant.DirectAddress, 0L, JUMP_TEMP));
+		emitReturn(st.code);
 	}
 
 	private static void emitEndAndPatch(CompileState st) {
@@ -276,6 +248,32 @@ public final class TreeRecursionCompiler {
 		code.add(insn(Operation.Load, Variant.Immediate, 3, 1L));
 		code.add(insn(Operation.Add, Variant.Immediate, 2, 3L));
 		code.add(insn(Operation.Store, Variant.DirectAddress, 2, SP_ADDR));
+	}
+
+	/**
+	 * Pushes a stack frame with: firstResult(0), n (reg[1]), and a return address.
+	 * The return address patch index is returned.
+	 */
+	private static int pushFrame(List<Instruction> code) {
+		addDecrementSP(code);
+		code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
+		code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
+		addDecrementSP(code);
+		code.add(insn(Operation.Store, Variant.IndirectAddress, 1, SP_ADDR));
+		addDecrementSP(code);
+		int patchIndex = code.size();
+		code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
+		code.add(insn(Operation.Store, Variant.IndirectAddress, 0, SP_ADDR));
+		return patchIndex;
+	}
+
+	/**
+	 * Emits code to return to the address stored at [SP] without popping the current frame.
+	 */
+	private static void emitReturn(List<Instruction> code) {
+		code.add(insn(Operation.Load, Variant.IndirectAddress, 2, SP_ADDR));
+		code.add(insn(Operation.Store, Variant.DirectAddress, 2, JUMP_TEMP));
+		code.add(insn(Operation.Jump, Variant.DirectAddress, 0L, JUMP_TEMP));
 	}
 
 	private static Instruction insn(Operation op, Variant var, long first, long second) {

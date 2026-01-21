@@ -25,25 +25,6 @@ public final class TraceRunner {
 			int[] input,
 			Vm.TraceConfig traceConfig,
 			Vm.TraceSink traceSink) {
-		final int[] inputPointer = { 0 };
-		List<Integer> output = new ArrayList<>();
-		try {
-			int returnValue = Vm.execute(
-					instructions,
-					() -> {
-						if (inputPointer[0] >= input.length) {
-							return 0;
-						}
-						return input[inputPointer[0]++];
-					},
-					output::add,
-					traceConfig,
-					traceSink);
-			return Result.ok(new RunResult(output, returnValue, instructions));
-		} catch (Exception e) {
-			e.printStackTrace();
-			System.err.println("Exception occurred during execution!");
-			return Result.err(new ApplicationError(new ExecutionError(instructions)));
-		}
+		return VmExecutor.executeWithTrace(instructions, input, traceConfig, traceSink);
 	}
 }
