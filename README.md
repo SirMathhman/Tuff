@@ -198,6 +198,22 @@ let t : (U8, U8) = (read U8, read U8);
 t[0] + t[1]
 ```
 
+### Arrays
+
+Arrays are fixed-size homogeneous collections with indexed access:
+
+```
+let x : [I32; 3; 3] = [1, 2, 3];
+x[0] + x[1] + x[2]  // Returns 6
+```
+
+Array type format: `[ElementType; InitializedCount; TotalCount]`
+- `ElementType`: Type of array elements (e.g., `I32`, `U8`)
+- `InitializedCount`: Number of initial values provided
+- `TotalCount`: Total size of the array (must be ≥ InitializedCount)
+
+Arrays support zero-based indexing via `array[index]` syntax.
+
 ### Pointers, references, and dereference assignment
 
 Take references with `&` / `&mut` and assign through a pointer with `*ptr = expr`:
@@ -334,6 +350,7 @@ sum
 - `Bool` (0 or 1)
 - Pointers: `*T`, `*mut T`
 - Tuples: `(T1, T2, ...)`
+- Arrays: `[ElementType; InitializedCount; TotalCount]`
 
 ## Operator Precedence
 
