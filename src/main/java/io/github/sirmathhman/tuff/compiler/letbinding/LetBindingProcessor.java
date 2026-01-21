@@ -316,7 +316,8 @@ public final class LetBindingProcessor {
 			Result<ExpressionModel.ExpressionResult, CompileError> valueResult;
 			if (ConditionalExpressionHandler.hasConditional(decl.valueExpr()))
 				valueResult = ConditionalExpressionHandler.parseConditional(decl.valueExpr());
-			else valueResult = App.parseExpressionWithRead(decl.valueExpr(), ctx.functionRegistry());
+			else
+				valueResult = App.parseExpressionWithRead(decl.valueExpr(), ctx.functionRegistry());
 			return valueResult.match(
 					expr -> App.generateInstructions(expr, ctx.instructions()).map(ignored -> (Void) null), Result::err);
 		}
