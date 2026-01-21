@@ -8,7 +8,7 @@
 
 	<!-- UnusedAssignment: Flag assignments that are never read -->
 	<rule ref="category/java/bestpractices.xml/UnusedAssignment" />
-	
+
 	<!-- UnusedLocalVariable: Flag local variables that are never used -->
 	<rule ref="category/java/bestpractices.xml/UnusedLocalVariable" />
 </ruleset>

@@ -147,8 +147,8 @@ public final class WhileLoopHandler {
 		}
 
 		var genResult = App.generateInstructions(ok.value(), instr);
-		if (genResult instanceof Result.Err<Void, CompileError>) {
-			return genResult;
+		if (genResult instanceof Result.Err<ArrayList<Instruction>, CompileError> err) {
+			return Result.err(err.error());
 		}
 
 		if (storeAddr != null) {
@@ -169,6 +169,7 @@ public final class WhileLoopHandler {
 		return null;
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static Result<Void, CompileError> handleCompoundOp(String varName, String rhs, String operator,
 			ArrayList<Instruction> instructions, Map<String, Integer> variableAddresses) {
 		var instr = instructions;
@@ -192,17 +193,19 @@ public final class WhileLoopHandler {
 			default -> throw new IllegalArgumentException("Unknown operator: " + operator);
 		};
 
-		instr = instr.add(new Instruction(op, Variant.Immediate, 0, 0L));
-		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) varAddr));
+		instructions.add(new Instruction(op, Variant.Immediate, 0, 0L));
+		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) varAddr));
 		return Result.ok(null);
 	}
 
-	private static Result<Void, CompileError> handleSelfReferentialAssignment(String varName, int varAddr,
+	private static Result<Void, CompileError> handleSelfReferentialAssignment(@SuppressWarnings("unused") String varName,
+			int varAddr,
 			String rhsAfterVar, ArrayList<Instruction> instructions) {
 		var instr = instructions;
 		if (rhsAfterVar.isEmpty()) {
 			instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) varAddr));
-			instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) varAddr));
+			@SuppressWarnings("UnusedVariable")
+			var unused = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) varAddr));
 			return Result.ok(null);
 		}
 
@@ -227,7 +230,8 @@ public final class WhileLoopHandler {
 			}
 		}
 
-		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) varAddr));
+		@SuppressWarnings("CheckReturnValue")
+		var unused = instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) varAddr));
 		return Result.ok(null);
 	}
 
@@ -238,7 +242,9 @@ public final class WhileLoopHandler {
 		holder[0] = instructions.add(new Instruction(Operation.Load, Variant.Immediate, 1, 0L))
 				.add(new Instruction(Operation.Add, Variant.Immediate, 1, 0L));
 		Result<Void, CompileError> genResult = App.parseExpressionWithRead(expr)
-				.match(parsed -> App.generateInstructions(parsed, holder[0]), Result::err);
+				.match(
+						parsed -> App.generateInstructions(parsed, holder[0]).map(ignored -> (Void) null),
+						Result::err);
 		if (genResult instanceof Result.Err<Void, CompileError>) {
 			return genResult;
 		}

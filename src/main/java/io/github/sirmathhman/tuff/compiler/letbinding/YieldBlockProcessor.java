@@ -15,6 +15,7 @@ public final class YieldBlockProcessor {
 	private YieldBlockProcessor() {
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	public static Result<Void, CompileError> handleYieldBlock(
 			String varName,
 			String blockContent,
@@ -110,11 +111,13 @@ public final class YieldBlockProcessor {
 		}
 		if (!isLast) {
 			var placeholder = addJumpPlaceholder(instr);
-			var unused = endJumpPatchPoints.add(placeholder);
+			@SuppressWarnings("CheckReturnValue")
+			var unused2 = endJumpPatchPoints.add(placeholder);
 		}
 
 		var afterYieldAddr = instr.size();
-		instr = instr.set(skipYieldJumpIdx,
+		@SuppressWarnings("UnusedVariable")
+		var unused = instr.set(skipYieldJumpIdx,
 				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, (long) afterYieldAddr));
 		return Result.ok(null);
 	}
@@ -125,24 +128,25 @@ public final class YieldBlockProcessor {
 			return Result.err(err.error());
 		}
 		return App.generateInstructions(((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) result).value(),
-				instructions);
+				instructions).map(ignored -> (Void) null);
 	}
 
+	@SuppressWarnings({ "CheckReturnValue", "UnusedVariable" })
 	private static void patchEndJumps(ArrayList<Integer> endJumpPatchPoints, ArrayList<Instruction> instructions) {
 		var endAddr = instructions.size();
-		var instr = instructions;
 		for (int jumpIdx : endJumpPatchPoints) {
-			instr = instr.set(jumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endAddr));
+			instructions.set(jumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endAddr));
 		}
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static int addJumpPlaceholder(ArrayList<Instruction> instructions) {
 		var idx = instructions.size();
-		var instr = instructions;
-		instr = instr.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
+		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
 		return idx;
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static Result<Void, CompileError> emitYieldToStore(String yieldExpr,
 			ArrayList<Instruction> instructions, int storeAddr) {
 		var expr = yieldExpr.trim();
@@ -154,8 +158,7 @@ public final class YieldBlockProcessor {
 		if (genResult instanceof Result.Err<Void, CompileError>) {
 			return genResult;
 		}
-		var instr = instructions;
-		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) storeAddr));
+		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) storeAddr));
 		return Result.ok(null);
 	}
 

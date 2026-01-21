@@ -63,7 +63,8 @@ public final class ArrayPointerIndexingHandler {
 		var contResult = App
 				.parseExpressionWithRead(substitutedCont, functionRegistry);
 		final var finalInstructions = instr;
-		return contResult.match(expr -> App.generateInstructions(expr, finalInstructions),
+		return contResult.match(
+				expr -> App.generateInstructions(expr, finalInstructions).map(ignored -> (Void) null),
 				Result::err);
 	}
 

@@ -158,6 +158,8 @@ public final class ArrayFieldAccessBase {
 		// Parse the substituted continuation
 		var contResult = App.parseExpressionWithRead(result,
 																								 ctx.functionRegistry);
-		return contResult.match(expr -> App.generateInstructions(expr, ctx.instructions), Result::err);
+		return contResult.match(
+				expr -> App.generateInstructions(expr, ctx.instructions).map(ignored -> (Void) null),
+				Result::err);
 	}
 }

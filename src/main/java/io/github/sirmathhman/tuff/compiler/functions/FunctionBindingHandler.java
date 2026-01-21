@@ -51,7 +51,8 @@ public final class FunctionBindingHandler {
 		// Continue with the rest of the statement
 		var contResult = io.github.sirmathhman.tuff.App
 				.parseExpressionWithRead(continuation, updatedRegistry);
-		return contResult.match(expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions),
+		return contResult.match(
+				expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions).map(ignored -> (Void) null),
 				Result::err);
 	}
 }

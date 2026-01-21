@@ -115,9 +115,9 @@ public final class LetBindingProcessor {
 		// Replace field accesses with their values
 		var substitutedContinuation = replaceFieldAccesses(varName, continuation, usedFields, fieldValues);
 		// Parse the substituted continuation
-		var contResult = App
-				.parseExpressionWithRead(substitutedContinuation, functionRegistry);
-		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+		var contResult = App.parseExpressionWithRead(substitutedContinuation, functionRegistry);
+		return contResult.match(
+				expr -> App.generateInstructions(expr, instructions).map(ignored -> (Void) null), Result::err);
 	}
 
 	private static FunctionHandler.FunctionDef getFunctionDef(String valueExpr,
@@ -142,7 +142,8 @@ public final class LetBindingProcessor {
 	}
 
 	private static boolean verifyFields(java.util.Set<String> usedFields,
-			java.util.Map<String, String> fieldValues, StructDefinition structDef, String structName) {
+			java.util.Map<String, String> fieldValues, StructDefinition structDef,
+			@SuppressWarnings("unused") String structName) {
 		for (var field : usedFields) {
 			var fieldExists = structDef.fields().stream()
 					.anyMatch(f -> f.name().equals(field));
@@ -245,7 +246,8 @@ public final class LetBindingProcessor {
 			}
 			// Parse the substituted continuation
 			var contResult = App.parseExpressionWithRead(result);
-			return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+			return contResult.match(
+					expr -> App.generateInstructions(expr, instructions).map(ignored -> (Void) null), Result::err);
 		}
 		// If struct parsing fails, return null to fall through
 		return null;
@@ -314,9 +316,9 @@ public final class LetBindingProcessor {
 			Result<ExpressionModel.ExpressionResult, CompileError> valueResult;
 			if (ConditionalExpressionHandler.hasConditional(decl.valueExpr()))
 				valueResult = ConditionalExpressionHandler.parseConditional(decl.valueExpr());
-			else
-				valueResult = App.parseExpressionWithRead(decl.valueExpr(), ctx.functionRegistry());
-			return valueResult.match(expr -> App.generateInstructions(expr, ctx.instructions()), Result::err);
+			else valueResult = App.parseExpressionWithRead(decl.valueExpr(), ctx.functionRegistry());
+			return valueResult.match(
+					expr -> App.generateInstructions(expr, ctx.instructions()).map(ignored -> (Void) null), Result::err);
 		}
 		// Handle this.varName syntax - treat as reference to variable
 		if (cont.startsWith("this.") && cont.substring(5).trim().matches("[a-zA-Z_][a-zA-Z0-9_]*"))
@@ -392,7 +394,8 @@ public final class LetBindingProcessor {
 
 		var capturedVariables = buildCapturedVariablesMap(varName, decl.valueExpr().trim(), isFunctionRef);
 		var contResult = App.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
-		return contResult.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+		return contResult.match(
+				expr -> App.generateInstructions(expr, instructions).map(ignored -> (Void) null), Result::err);
 	}
 
 	private static Result<Void, CompileError> handleSpecialContinuationCases(String varName, VariableDecl decl,
@@ -488,9 +491,9 @@ public final class LetBindingProcessor {
 			var pattern = "\\b" + java.util.regex.Pattern.quote(varName) + "\\[" + i + "\\]";
 			substitutedContinuation = substitutedContinuation.replaceAll(pattern, "(" + arrayElements.get(i).trim() + ")");
 		}
-		var contResult = io.github.sirmathhman.tuff.App
-				.parseExpressionWithRead(substitutedContinuation, functionRegistry);
-		return contResult.match(expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions),
+		var contResult = io.github.sirmathhman.tuff.App.parseExpressionWithRead(substitutedContinuation, functionRegistry);
+		return contResult.match(
+				expr -> io.github.sirmathhman.tuff.App.generateInstructions(expr, instructions).map(ignored -> (Void) null),
 				Result::err);
 	}
 

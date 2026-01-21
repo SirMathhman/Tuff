@@ -39,9 +39,9 @@ public final class DepthAwareSplitter {
 	 * @param instructions the instruction list to add to
 	 * @param refAddr      the address to load from
 	 */
+	@SuppressWarnings("CheckReturnValue")
 	public static void addLoadAndHalt(ArrayList<Instruction> instructions, long refAddr) {
-		var instr = instructions;
-		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, refAddr))
+		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, refAddr))
 				.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 	}
 

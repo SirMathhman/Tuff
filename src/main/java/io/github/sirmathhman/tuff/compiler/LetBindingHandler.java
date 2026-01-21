@@ -86,8 +86,8 @@ public final class LetBindingHandler {
 				break;
 			var parsed = assignOk.value();
 			var processResult = processAssignmentValue(parsed.valueExpr(), instr, nextMemAddr);
-			if (processResult instanceof Result.Err<Void, CompileError>)
-				return processResult;
+			if (processResult instanceof Result.Err<ArrayList<Instruction>, CompileError> err)
+				return Result.err(err.error());
 			remaining = parsed.remaining();
 		}
 		if (!remaining.isEmpty() && !remaining.equals(varName))
@@ -288,6 +288,7 @@ public final class LetBindingHandler {
 	public record MutableVarAssignmentContext(ArrayList<Instruction> instructions, MutableVarContext varCtx) {
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	public static Result<Void, CompileError> handleMutableVariableWithAssignment(
 			String varName,
 			String initialValueExpr,
@@ -312,8 +313,8 @@ public final class LetBindingHandler {
 		var assignmentResult = MutableAssignmentHandler.handleAssignment(varName, continuation,
 				isUninitialized, isMutableUninitialized,
 				new MutableAssignmentHandler.AssignmentContext(instr, nextMemAddr));
-		if (assignmentResult instanceof Result.Err<Void, CompileError>)
-			return assignmentResult;
+		if (assignmentResult instanceof Result.Err<ArrayList<Instruction>, CompileError> err)
+			return Result.err(err.error());
 
 		// Final part should be variable reference or expression
 		var remaining = continuation;
@@ -349,7 +350,7 @@ public final class LetBindingHandler {
 				// Then generate instructions for the expression
 				// But we need to substitute varName with a load instruction...
 				// This is complex. For now, let's just return the expression result
-				return App.generateInstructions(ok.value(), instr);
+				return App.generateInstructions(ok.value(), instr).map(ignored -> (Void) null);
 			}
 		}
 
@@ -363,7 +364,8 @@ public final class LetBindingHandler {
 				"Mutable variable continuation must end with variable reference or expression"));
 	}
 
-	static Result<Void, CompileError> processAssignmentValue(String valueExpr, ArrayList<Instruction> instructions,
+	static Result<ArrayList<Instruction>, CompileError> processAssignmentValue(String valueExpr,
+			ArrayList<Instruction> instructions,
 			int nextMemAddr) {
 		var instr = instructions;
 		var exprResult = App.parseExpressionWithRead(valueExpr);
@@ -372,10 +374,11 @@ public final class LetBindingHandler {
 		var exprOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) exprResult)
 				.value();
 		var assignGenResult = App.generateInstructions(exprOk, instr);
-		if (assignGenResult instanceof Result.Err<Void, CompileError>)
-			return assignGenResult;
+		if (assignGenResult instanceof Result.Err<ArrayList<Instruction>, CompileError> err)
+			return Result.err(err.error());
+		instr = ((Result.Ok<ArrayList<Instruction>, CompileError>) assignGenResult).value();
 		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
-		return Result.ok(null);
+		return Result.ok(instr);
 	}
 
 	static Result<AssignmentParseResult, CompileError> parseAssignment(String varName, String remaining) {

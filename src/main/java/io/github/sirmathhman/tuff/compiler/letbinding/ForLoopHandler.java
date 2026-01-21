@@ -103,6 +103,7 @@ public final class ForLoopHandler {
 		return Result.ok(null);
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static Result<Integer, CompileError> setupLoopVariables(
 			String startExpr,
 			String endExpr,
@@ -124,7 +125,7 @@ public final class ForLoopHandler {
 			var startOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) startResult)
 					.value();
 			var genStart = App.generateInstructions(startOk, instr);
-			if (genStart instanceof Result.Err<Void, CompileError> genStartErr) {
+			if (genStart instanceof Result.Err<ArrayList<Instruction>, CompileError> genStartErr) {
 				return Result.err(genStartErr.error());
 			}
 		}
@@ -143,12 +144,12 @@ public final class ForLoopHandler {
 			var endOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) endResult)
 					.value();
 			var genEnd = App.generateInstructions(endOk, instr);
-			if (genEnd instanceof Result.Err<Void, CompileError> genEndErr) {
+			if (genEnd instanceof Result.Err<ArrayList<Instruction>, CompileError> genEndErr) {
 				return Result.err(genEndErr.error());
 			}
 		}
 
-		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 201L));
+		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 201L));
 		return Result.ok(iterVarAddr);
 	}
 
@@ -191,6 +192,7 @@ public final class ForLoopHandler {
 		return -1;
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static Result<Void, CompileError> parseForLoopBody(String body, Integer iterVarAddr, String iterVarName,
 			ArrayList<Instruction> instructions, Map<String, Integer> externalVariables) {
 		var b = body.trim();
@@ -216,9 +218,10 @@ public final class ForLoopHandler {
 		}
 		var bodyOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) bodyResult)
 				.value();
-		return App.generateInstructions(bodyOk, instructions);
+		return App.generateInstructions(bodyOk, instructions).map(ignored -> (Void) null);
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static Result<Void, CompileError> handleCompoundAssignmentInForLoop(String stmt, Integer iterVarAddr,
 			String iterVarName, ArrayList<Instruction> instructions, Map<String, Integer> externalVariables) {
 		// Format: "var += expr" or similar
@@ -236,7 +239,6 @@ public final class ForLoopHandler {
 		}
 
 		var varAddr = externalVariables.get(varName);
-		var instr = instructions;
 
 		// Determine the operator
 		char opChar;
@@ -252,14 +254,14 @@ public final class ForLoopHandler {
 			return Result.err(new CompileError("Unknown compound operator"));
 
 		// Load variable value
-		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) varAddr));
+		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) varAddr));
 
 		// Parse and evaluate right-hand side expression
 		// If the RHS is just the loop iterator, load it directly to reg[3]
 		if (exprStr.equals(iterVarName)) {
-			instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 3, (long) iterVarAddr));
+			instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 3, (long) iterVarAddr));
 		} else {
-			var genResult = CompilerHelpers.parseAndGenerateExpression(exprStr, instr);
+			var genResult = CompilerHelpers.parseAndGenerateExpression(exprStr, instructions);
 			if (genResult instanceof Result.Err<Void, CompileError>) {
 				return genResult;
 			}
@@ -270,7 +272,7 @@ public final class ForLoopHandler {
 		// We need to do: result = var op rhs
 
 		// Load variable again to reg[1]
-		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) varAddr));
+		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) varAddr));
 		// Determine which register has the RHS
 		int rhsReg;
 		if (exprStr.equals(iterVarName))
@@ -286,7 +288,7 @@ public final class ForLoopHandler {
 			default -> throw new IllegalArgumentException();
 		};
 
-		instr = instr.add(new Instruction(op, Variant.Immediate, 1, (long) rhsReg))
+		instructions.add(new Instruction(op, Variant.Immediate, 1, (long) rhsReg))
 				.add(new Instruction(Operation.Store, Variant.DirectAddress, 1, (long) varAddr));
 
 		return Result.ok(null);

@@ -107,7 +107,8 @@ public final class App {
 
 		// Parse as expression (which may contain "read")
 		return parseExpressionWithRead(stmt, functionRegistry)
-				.flatMap(expr -> generateInstructions(expr, instructions));
+				.flatMap(expr -> generateInstructions(expr, instructions))
+				.map(ignored -> (Void) null);
 	}
 
 	private static Result<Void, CompileError> continueParseStatement(String remaining,
@@ -123,7 +124,7 @@ public final class App {
 	}
 
 	private static Result<Void, CompileError> handleLetBindingStatement(String stmt, ArrayList<Instruction> instructions,
-			Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
+			@SuppressWarnings("unused") Set<String> definedStructs, Map<String, StructDefinition> structRegistry,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> typeAliasRegistry) {
 		// Peek ahead to see if this is a chained let binding
 		// Format: "let x = expr1; let y = expr2; z"
@@ -175,9 +176,9 @@ public final class App {
 						// Empty struct - return 0
 						ArrayList<ExpressionModel.ExpressionTerm> terms = new ArrayList<>();
 						ExpressionModel.ExpressionResult zeroResult = new ExpressionModel.ExpressionResult(0, 0, terms);
-						Result<Void, CompileError> zeroInstructions = generateInstructions(zeroResult, instructions);
-						if (zeroInstructions instanceof Result.Err<Void, CompileError>) {
-							return zeroInstructions;
+						var zeroInstructions = generateInstructions(zeroResult, instructions);
+						if (zeroInstructions instanceof Result.Err<ArrayList<Instruction>, CompileError> err) {
+							return Result.err(err.error());
 						}
 					} else {
 						// Get first field value expression and evaluate it
@@ -199,9 +200,9 @@ public final class App {
 								.value();
 
 						// Generate instructions for the first field expression
-						Result<Void, CompileError> fieldInstructions = generateInstructions(fieldExpr, instructions);
-						if (fieldInstructions instanceof Result.Err<Void, CompileError>) {
-							return fieldInstructions;
+						var fieldInstructions = generateInstructions(fieldExpr, instructions);
+						if (fieldInstructions instanceof Result.Err<ArrayList<Instruction>, CompileError> err) {
+							return Result.err(err.error());
 						}
 					}
 
@@ -221,7 +222,8 @@ public final class App {
 	}
 
 	private static Result<Void, CompileError> handleFieldAccessStatement(String stmt,
-			StructDefinition structDef, ArrayList<Instruction> instructions, Set<String> definedStructs,
+			@SuppressWarnings("unused") StructDefinition structDef, ArrayList<Instruction> instructions,
+			Set<String> definedStructs,
 			Map<String, StructDefinition> structRegistry) {
 		return FieldAccessHandler.parseFieldAccess(stmt, structRegistry)
 				.flatMap(fieldResult -> {
@@ -236,7 +238,7 @@ public final class App {
 				});
 	}
 
-	public static Result<Void, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
+	public static Result<ArrayList<Instruction>, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
 			ArrayList<Instruction> instructions) {
 		var instr = instructions;
 		boolean hasControlMarkers = expr.terms().stream().anyMatch(t -> t.readCount < 0);
@@ -246,7 +248,7 @@ public final class App {
 			instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue()));
 		} else {
 			// Load all reads into registers
-			InstructionBuilder.loadAllReads(expr.terms(), instr);
+			instr = InstructionBuilder.loadAllReads(expr.terms(), instr);
 
 			// Apply masking for bitwise-notted unsigned types
 			int readReg = 0;
@@ -270,11 +272,11 @@ public final class App {
 
 			// Add literal if present
 			if (expr.literalValue() != 0) {
-				InstructionBuilder.addLiteralToResult(resultReg, expr.literalValue(), expr.terms().size(), instr);
+				instr = InstructionBuilder.addLiteralToResult(resultReg, expr.literalValue(), expr.terms().size(), instr);
 			}
 		}
 
-		return Result.ok(null);
+		return Result.ok(instr);
 	}
 
 	@SuppressWarnings("checkstyle:MethodLength")

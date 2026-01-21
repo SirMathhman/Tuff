@@ -187,8 +187,8 @@ public final class ConditionalExpressionHandler {
 		var condExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) condRes)
 				.value();
 		var genCond = App.generateInstructions(condExpr, instr);
-		if (genCond instanceof Result.Err<Void, CompileError>)
-			return Result.err(new CompileError("Bad cond"));
+		if (genCond instanceof Result.Err<ArrayList<Instruction>, CompileError> err)
+			return Result.err(err.error());
 		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 1, -1L));
 		instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, 1, 0L));
 		var jumpElseIdx = instr.size();
@@ -224,6 +224,7 @@ public final class ConditionalExpressionHandler {
 		}, err -> Result.ok(null));
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static Result<Integer, CompileError> processTrueBranch(String trueVal, ArrayList<Instruction> instructions) {
 		var instr = instructions;
 		var trueRes = App.parseExpressionWithRead(trueVal);
@@ -233,12 +234,12 @@ public final class ConditionalExpressionHandler {
 		var trueExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) trueRes)
 				.value();
 		var genTrue = App.generateInstructions(trueExpr, instr);
-		if (genTrue instanceof Result.Err<Void, CompileError>) {
-			return Result.err(new CompileError("Bad true"));
+		if (genTrue instanceof Result.Err<ArrayList<Instruction>, CompileError> err) {
+			return Result.err(err.error());
 		}
-		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
+		instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
 		var jumpEndIdx = instr.size();
-		instr = instr.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
+		instr.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
 		return Result.ok(jumpEndIdx);
 	}
 
@@ -262,8 +263,8 @@ public final class ConditionalExpressionHandler {
 			var falseExpr = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) falseRes)
 					.value();
 			var genFalse = App.generateInstructions(falseExpr, instr);
-			if (genFalse instanceof Result.Err<Void, CompileError>) {
-				return Result.err(new CompileError("Bad else"));
+			if (genFalse instanceof Result.Err<ArrayList<Instruction>, CompileError> err) {
+				return Result.err(err.error());
 			}
 			instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 100L));
 			return Result.ok(null);

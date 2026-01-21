@@ -114,8 +114,8 @@ public final class TreeRecursionCompiler {
 		return compile(spec, instructions);
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static Result<Void, CompileError> compile(Spec spec, ArrayList<Instruction> instructions) {
-		var instr = instructions;
 		var st = new CompileState();
 		emitInit(st, spec);
 		emitFuncStartAndFirstCall(st, spec);
@@ -123,7 +123,7 @@ public final class TreeRecursionCompiler {
 		emitAfterSecond(st, spec);
 		emitBaseCase(st, spec);
 		emitEndAndPatch(st);
-		instr = instr.addAll(st.code);
+		instructions.addAll(st.code);
 		return Result.ok(null);
 	}
 

@@ -64,8 +64,8 @@ public final class DereferenceAssignmentHandler {
 
 		// Generate instructions for assignment value
 		var assignGenResult = App.generateInstructions(exprOk.value(), instr);
-		if (assignGenResult instanceof Result.Err<Void, CompileError>) {
-			return assignGenResult;
+		if (assignGenResult instanceof Result.Err<ArrayList<Instruction>, CompileError> err) {
+			return Result.err(err.error());
 		}
 
 		// Store the computed value to the dereferenced address

@@ -12,7 +12,7 @@ public final class InstructionBuilder {
 	private record BuildContext(ArrayList<ExpressionModel.ExpressionTerm> terms, ArrayList<Instruction> instructions) {
 	}
 
-	public static void loadAllReads(ArrayList<ExpressionModel.ExpressionTerm> terms,
+	public static ArrayList<Instruction> loadAllReads(ArrayList<ExpressionModel.ExpressionTerm> terms,
 			ArrayList<Instruction> instructions) {
 		var nextReg = 0;
 		var instr = instructions;
@@ -28,6 +28,7 @@ public final class InstructionBuilder {
 				nextReg++;
 			}
 		}
+		return instr;
 	}
 
 	public static int buildResultWithPrecedence(ArrayList<ExpressionModel.ExpressionTerm> terms,
@@ -72,6 +73,7 @@ public final class InstructionBuilder {
 		return new ConditionalMarkers(branchIdx, elseIdx, trueLiteral, falseLiteral);
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static int buildConditionalExpression(ArrayList<ExpressionModel.ExpressionTerm> terms,
 			ConditionalMarkers markers, ArrayList<Instruction> instructions) {
 		var instr = instructions;
@@ -115,13 +117,13 @@ public final class InstructionBuilder {
 		instr = instr.add(new Instruction(Operation.Jump, Variant.Immediate, 0, null));
 
 		var elseBodyIdx = instr.size();
-		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 0, 0L));
-		instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) falseValueReg));
+		instr.add(new Instruction(Operation.Load, Variant.Immediate, 0, 0L))
+				.add(new Instruction(Operation.Add, Variant.Immediate, 0, (long) falseValueReg));
 
 		var endIdx = instr.size();
-		instr = instr.set(elseJumpIdx,
+		instr.set(elseJumpIdx,
 				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, (long) elseBodyIdx));
-		instr = instr.set(trueJumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endIdx));
+		instr.set(trueJumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endIdx));
 
 		return 0;
 	}
@@ -196,18 +198,19 @@ public final class InstructionBuilder {
 		}
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static void generateCompoundComparison(int leftResult, int rightResult, Operation comparisonOp,
 			ArrayList<Instruction> instructions) {
 		// For compound comparisons: (a op b) OR (a == b)
 		var tempReg = rightResult + 1;
-		var instr = instructions;
-		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, leftResult, 0L))
+		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, leftResult, 0L))
 				.add(new Instruction(Operation.Load, Variant.DirectAddress, tempReg, 0L))
 				.add(new Instruction(comparisonOp, Variant.Immediate, tempReg, (long) rightResult))
 				.add(new Instruction(Operation.Equal, Variant.Immediate, leftResult, (long) rightResult))
 				.add(new Instruction(Operation.LogicalOr, Variant.Immediate, leftResult, (long) tempReg));
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static int buildTypeCheckExpression(ArrayList<ExpressionModel.ExpressionTerm> terms, int markerIdx,
 			ArrayList<Instruction> instructions) {
 		var instr = instructions;
@@ -248,8 +251,8 @@ public final class InstructionBuilder {
 			if (term.isMultiplied() && idx > 0 && terms.get(idx - 1).isParenthesizedGroupEnd()
 					&& !firstAdditiveGroup) {
 				// Multiply the previous result by this term
-				var instr = instructions;
-				instr = instr.add(
+				@SuppressWarnings("CheckReturnValue")
+				var unused = instructions.add(
 						new Instruction(Operation.Mul, Variant.Immediate, resReg, (long) regIdx));
 				regIdx++;
 				idx++;
@@ -359,8 +362,8 @@ public final class InstructionBuilder {
 			idx = findLastMultiplicativeTermIndex(terms, idx);
 
 			// Perform logical operation (OR or AND)
-			var instr = instructions;
-			instr = instr.add(new Instruction(logicalOp, Variant.Immediate, resultReg, (long) nextGroupReg));
+			@SuppressWarnings("CheckReturnValue")
+			var unused = instructions.add(new Instruction(logicalOp, Variant.Immediate, resultReg, (long) nextGroupReg));
 		}
 
 		return new ProcessOrResult(resultReg, regIdx, idx);
@@ -470,7 +473,7 @@ public final class InstructionBuilder {
 		}
 	}
 
-	public static void addLiteralToResult(int resultReg, long literalValue, int termCount,
+	public static ArrayList<Instruction> addLiteralToResult(int resultReg, long literalValue, int termCount,
 			ArrayList<Instruction> instructions) {
 		// Count how many reads we have to determine next register
 		var literalReg = 0;
@@ -489,8 +492,7 @@ public final class InstructionBuilder {
 				}
 			}
 		}
-		var instr = instructions;
-		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, literalReg, literalValue))
+		return instructions.add(new Instruction(Operation.Load, Variant.Immediate, literalReg, literalValue))
 				.add(new Instruction(Operation.Add, Variant.Immediate, resultReg, (long) literalReg));
 	}
 }

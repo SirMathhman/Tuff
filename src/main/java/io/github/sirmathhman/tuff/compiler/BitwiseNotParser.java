@@ -248,7 +248,7 @@ public final class BitwiseNotParser {
 	}
 
 	private static Result<ExpressionModel.ExpressionTerm, CompileError> applyLogicalNot(
-			ExpressionModel.ExpressionTerm baseTerm, String originalTerm) {
+			ExpressionModel.ExpressionTerm baseTerm, @SuppressWarnings("unused") String originalTerm) {
 		// For read operations, set the isLogicalNotted flag
 		if (baseTerm.readCount > 0) {
 			return applyUnaryOperator(baseTerm, false, true);

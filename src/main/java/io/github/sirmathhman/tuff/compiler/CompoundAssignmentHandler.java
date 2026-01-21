@@ -18,9 +18,10 @@ public final class CompoundAssignmentHandler {
 	 * @param operator     the compound operator (+, -, *, /)
 	 * @param nextMemAddr  the memory address of the variable
 	 * @param instructions the instruction list to add to
-	 * @return Result.ok if successful, Result.err otherwise
+	 * @return Result.ok with updated instructions if successful, Result.err
+	 *         otherwise
 	 */
-	public static Result<Void, CompileError> handle(
+	public static Result<ArrayList<Instruction>, CompileError> handle(
 			String valueExpr,
 			String operator,
 			int nextMemAddr,
@@ -29,8 +30,9 @@ public final class CompoundAssignmentHandler {
 		var instr = instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) nextMemAddr));
 		// 2. Parse and evaluate the expression
 		var genResult = MutableAssignmentHandler.parseAndEvaluateExpression(valueExpr, instr);
-		if (genResult instanceof Result.Err<Void, CompileError>)
-			return genResult;
+		if (genResult instanceof Result.Err<ArrayList<Instruction>, CompileError> err)
+			return Result.err(err.error());
+		instr = ((Result.Ok<ArrayList<Instruction>, CompileError>) genResult).value();
 
 		// The expression result is in register 0, store it temporarily
 		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, 999L));
@@ -51,6 +53,6 @@ public final class CompoundAssignmentHandler {
 		}
 		// Store result back to memory
 		instr = instr.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) nextMemAddr));
-		return Result.ok(null);
+		return Result.ok(instr);
 	}
 }

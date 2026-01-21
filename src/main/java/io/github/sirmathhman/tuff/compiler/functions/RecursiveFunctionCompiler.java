@@ -206,7 +206,8 @@ public final class RecursiveFunctionCompiler {
 
 		// Update jump target to current position (end of loop)
 		var jumpInstr = instr.get(jumpToEndIdx);
-		instr = instr.set(jumpToEndIdx,
+		@SuppressWarnings("UnusedVariable")
+		var unused = instr.set(jumpToEndIdx,
 				new Instruction(jumpInstr.operation(), jumpInstr.variant(), jumpInstr.firstOperand(),
 						(long) instr.size()));
 		return Result.ok(null);
@@ -221,6 +222,7 @@ public final class RecursiveFunctionCompiler {
 	 * <p>
 	 * Returns null if the body doesn't match the expected pattern.
 	 */
+	@SuppressWarnings("CheckReturnValue")
 	private static Result<Void, CompileError> tryCompileParametricRecursion(
 			FunctionHandler.FunctionDef funcDef,
 			String callArgs,
@@ -317,12 +319,12 @@ public final class RecursiveFunctionCompiler {
 		return Result.ok(null);
 	}
 
+	@SuppressWarnings("CheckReturnValue")
 	private static void finishLoopWithBackjump(ArrayList<Instruction> instructions, int loopStart, int jumpToEndIdx) {
-		var instr = instructions;
-		instr = instr.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopStart));
+		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, (long) loopStart));
 
-		var loopEnd = instr.size();
-		instr = instr.set(jumpToEndIdx, new Instruction(
+		var loopEnd = instructions.size();
+		instructions.set(jumpToEndIdx, new Instruction(
 				Operation.JumpIfLessThanZero, Variant.Immediate, 1, (long) loopEnd));
 	}
 
@@ -334,15 +336,15 @@ public final class RecursiveFunctionCompiler {
 	 * Returns the index of the JumpIfLessThanZero instruction to be patched with
 	 * the end label.
 	 */
+	@SuppressWarnings("CheckReturnValue")
 	private static int emitLessThanOrEqualZeroCheck(int regNum, ArrayList<Instruction> instructions) {
-		var instr = instructions;
-		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-		instr = instr.add(new Instruction(Operation.Sub, Variant.Immediate, regNum, 2L));
-		var jumpIdx = instr.size();
-		instr = instr.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, regNum, 0L));
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, regNum, 2L));
+		var jumpIdx = instructions.size();
+		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, regNum, 0L));
 		// Restore register: reg = (reg - 1) + 1 = reg
-		instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-		instr = instr.add(new Instruction(Operation.Add, Variant.Immediate, regNum, 2L));
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+		instructions.add(new Instruction(Operation.Add, Variant.Immediate, regNum, 2L));
 		return jumpIdx;
 	}
 

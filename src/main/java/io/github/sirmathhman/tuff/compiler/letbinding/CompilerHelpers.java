@@ -23,9 +23,9 @@ public final class CompilerHelpers {
 	 * Load a variable from memory and halt execution.
 	 * Used by continuation handlers to return variable values.
 	 */
+	@SuppressWarnings("CheckReturnValue")
 	public static void loadVariableAndHalt(ArrayList<Instruction> instructions, long memAddr) {
-		var instr = instructions;
-		instr = instr.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, memAddr))
+		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, memAddr))
 				.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 	}
 
@@ -55,7 +55,7 @@ public final class CompilerHelpers {
 						((Result.Ok<io.github.sirmathhman.tuff.compiler.ExpressionModel.ExpressionResult, io.github.sirmathhman.tuff.CompileError>) elemResult)
 								.value(),
 						instructions);
-				if (genResult instanceof Result.Err<Void, io.github.sirmathhman.tuff.CompileError> err) {
+				if (genResult instanceof Result.Err<ArrayList<Instruction>, io.github.sirmathhman.tuff.CompileError> err) {
 					return Result.err(err.error());
 				}
 
@@ -74,7 +74,7 @@ public final class CompilerHelpers {
 				.map(ignored -> {
 					// Store result (in register 0) to a memory location
 					holder[0] = holder[0].add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) memAddr));
-					return null;
+					return (Void) null;
 				});
 	}
 
@@ -86,7 +86,8 @@ public final class CompilerHelpers {
 	public static Result<Void, CompileError> parseAndGenerateExpression(String expr,
 			ArrayList<Instruction> instructions) {
 		return App.parseExpressionWithRead(expr)
-				.flatMap(parsed -> App.generateInstructions(parsed, instructions));
+				.flatMap(parsed -> App.generateInstructions(parsed, instructions))
+				.map(ignored -> (Void) null);
 	}
 
 	/**

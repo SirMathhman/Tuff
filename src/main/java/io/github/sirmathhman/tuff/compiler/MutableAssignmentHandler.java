@@ -19,7 +19,7 @@ public final class MutableAssignmentHandler {
 	public record AssignmentContext(ArrayList<Instruction> instructions, int nextMemAddr) {
 	}
 
-	public static Result<Void, CompileError> handleAssignment(
+	public static Result<ArrayList<Instruction>, CompileError> handleAssignment(
 			String varName,
 			String continuation,
 			boolean isUninitialized,
@@ -39,30 +39,32 @@ public final class MutableAssignmentHandler {
 			var parsed = assignOk.value();
 			var validationResult = validateUninitializedAssignment(isUninitialized,
 					varName, assignmentCount, isMutableUninitialized);
-			if (validationResult instanceof Result.Err<Void, CompileError>)
-				return validationResult;
+			if (validationResult instanceof Result.Err<Void, CompileError> err)
+				return Result.err(err.error());
 			assignmentCount++;
 
 			if (parsed.isDereference()) {
 				var parseResult = parseAndEvaluateExpression(parsed.valueExpr(), instructions);
-				if (parseResult instanceof Result.Err<Void, CompileError>)
-					return parseResult;
+				if (parseResult instanceof Result.Err<ArrayList<Instruction>, CompileError> err)
+					return Result.err(err.error());
+				instructions = ((Result.Ok<ArrayList<Instruction>, CompileError>) parseResult).value();
 				instructions = instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) nextMemAddr));
 				instructions = instructions.add(new Instruction(Operation.Store, Variant.IndirectAddress, 0, 1L));
 			} else {
-				Result<Void, CompileError> processResult;
+				Result<ArrayList<Instruction>, CompileError> processResult;
 				if (parsed.compoundOp() != null) {
 					processResult = CompoundAssignmentHandler.handle(
 							parsed.valueExpr(), parsed.compoundOp(), nextMemAddr, instructions);
 				} else {
 					processResult = LetBindingHandler.processAssignmentValue(parsed.valueExpr(), instructions, nextMemAddr);
 				}
-				if (processResult instanceof Result.Err<Void, CompileError>)
-					return processResult;
+				if (processResult instanceof Result.Err<ArrayList<Instruction>, CompileError> err)
+					return Result.err(err.error());
+				instructions = ((Result.Ok<ArrayList<Instruction>, CompileError>) processResult).value();
 			}
 			remaining = parsed.remaining();
 		}
-		return Result.ok(null);
+		return Result.ok(instructions);
 	}
 
 	private static Result<Void, CompileError> validateUninitializedAssignment(
@@ -77,8 +79,9 @@ public final class MutableAssignmentHandler {
 		return Result.ok(null);
 	}
 
-	static Result<Void, CompileError> parseAndEvaluateExpression(String valueExpr, ArrayList<Instruction> instructions) {
+	static Result<ArrayList<Instruction>, CompileError> parseAndEvaluateExpression(String valueExpr,
+			ArrayList<Instruction> instructions) {
 		return App.parseExpressionWithRead(valueExpr)
-				.match(expr -> App.generateInstructions(expr, instructions), Result::err);
+				.flatMap(expr -> App.generateInstructions(expr, instructions));
 	}
 }

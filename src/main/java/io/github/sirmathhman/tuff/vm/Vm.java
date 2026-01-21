@@ -143,7 +143,8 @@ public final class Vm {
 		}
 	}
 
-	private static CycleResult executeSingleCycle(Instruction[] source, ExecutionContext ctx) {
+	private static CycleResult executeSingleCycle(@SuppressWarnings("unused") Instruction[] source,
+			ExecutionContext ctx) {
 		var encodedInstruction = ctx.memory[ctx.programCounter];
 		var operation = (int) ((encodedInstruction >>> 56) & 0xff);
 		var variant = (int) ((encodedInstruction >>> 48) & 0xff);
