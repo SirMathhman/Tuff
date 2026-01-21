@@ -22,5 +22,10 @@
 		<module name="io.github.sirmathhman.tuff.checkstyle.BooleanFieldCountCheck">
 			<property name="max" value="3" />
 		</module>
+
+		<!-- Enforce maximum parameters of 13 per method -->
+		<module name="ParameterNumber">
+			<property name="max" value="13" />
+		</module>
 	</module>
 </module>
