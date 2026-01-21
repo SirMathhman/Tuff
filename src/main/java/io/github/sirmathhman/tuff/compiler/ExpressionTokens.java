@@ -132,7 +132,7 @@ public final class ExpressionTokens {
 		// Handle read operations
 		if (expr.startsWith("read ")) {
 			String typeSpec = expr.substring(5).trim();
-			if (!typeSpec.matches("\\*?([UI]\\d+|Bool)")) {
+			if (!typeSpec.matches("\\*?([UI]\\d+|Bool|Char)")) {
 				return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 			}
 			return Result.ok(typeSpec);
@@ -320,6 +320,11 @@ public final class ExpressionTokens {
 				return Result.ok(0L);
 			}
 
+			// Handle char literals: 'a', '\n', '\0', etc.
+			if (literal.startsWith("'") && literal.endsWith("'")) {
+				return parseCharLiteral(literal);
+			}
+
 			String numericPart = literal;
 			String typeSuffix = null;
 
@@ -334,31 +339,9 @@ public final class ExpressionTokens {
 			long value = Long.parseLong(numericPart);
 
 			if (typeSuffix != null) {
-				if ("Bool".equals(typeSuffix)) {
-					if (value != 0 && value != 1) {
-						return Result.err(new CompileError("Bool literal must be 0 or 1, got: " + literal));
-					}
-				} else {
-					boolean isUnsigned = typeSuffix.startsWith("U");
-					int bits = Integer.parseInt(typeSuffix.substring(1));
-
-					if (isUnsigned) {
-						if (value < 0) {
-							return Result.err(new CompileError("Negative value not allowed for unsigned type: " + literal));
-						}
-						long maxValue = (1L << bits) - 1;
-						if (value > maxValue) {
-							return Result.err(new CompileError(
-									"Value " + value + " exceeds maximum for " + typeSuffix + " (" + maxValue + "): " + literal));
-						}
-					} else {
-						long minValue = -(1L << (bits - 1));
-						long maxValue = (1L << (bits - 1)) - 1;
-						if (value < minValue || value > maxValue) {
-							return Result.err(new CompileError("Value " + value + " out of range for " + typeSuffix + " (" + minValue
-									+ " to " + maxValue + "): " + literal));
-						}
-					}
+				Result<Void, CompileError> typeCheck = validateTypeSuffix(typeSuffix, value, literal);
+				if (typeCheck instanceof Result.Err<Void, CompileError> err) {
+					return Result.err(err.error());
 				}
 			}
 
@@ -366,6 +349,81 @@ public final class ExpressionTokens {
 		} catch (NumberFormatException e) {
 			return Result.err(new CompileError("Failed to parse numeric value: " + literal));
 		}
+	}
+
+	private static Result<Void, CompileError> validateTypeSuffix(String typeSuffix, long value, String literal) {
+		if ("Bool".equals(typeSuffix)) {
+			if (value != 0 && value != 1) {
+				return Result.err(new CompileError("Bool literal must be 0 or 1, got: " + literal));
+			}
+		} else {
+			boolean isUnsigned = typeSuffix.startsWith("U");
+			int bits = Integer.parseInt(typeSuffix.substring(1));
+
+			if (isUnsigned) {
+				if (value < 0) {
+					return Result.err(new CompileError("Negative value not allowed for unsigned type: " + literal));
+				}
+				long maxValue = (1L << bits) - 1;
+				if (value > maxValue) {
+					return Result.err(new CompileError(
+							"Value " + value + " exceeds maximum for " + typeSuffix + " (" + maxValue + "): " + literal));
+				}
+			} else {
+				long minValue = -(1L << (bits - 1));
+				long maxValue = (1L << (bits - 1)) - 1;
+				if (value < minValue || value > maxValue) {
+					return Result.err(new CompileError("Value " + value + " out of range for " + typeSuffix + " (" + minValue
+							+ " to " + maxValue + "): " + literal));
+				}
+			}
+		}
+		return Result.ok(null);
+	}
+
+	private static Result<Long, CompileError> parseCharLiteral(String literal) {
+		// Char literal format: 'c' or '\escape'
+		if (literal.length() < 3) {
+			return Result.err(new CompileError("Invalid char literal: too short: " + literal));
+		}
+
+		String inner = literal.substring(1, literal.length() - 1);
+
+		// Handle escaped characters
+		if (inner.startsWith("\\")) {
+			if (inner.length() == 1) {
+				return Result.err(new CompileError("Invalid escape sequence in char literal: " + literal));
+			}
+			char escapeChar = inner.charAt(1);
+			long code = switch (escapeChar) {
+				case '0' -> 0;   // null
+				case 'n' -> 10;  // newline
+				case 't' -> 9;   // tab
+				case 'r' -> 13;  // carriage return
+				case '\\' -> 92; // backslash
+				case '\'' -> 39; // single quote
+				case '"' -> 34;  // double quote
+				default -> {
+					if (inner.length() == 2) {
+						yield -1; // Signal error for invalid escape
+					} else {
+						yield -1;
+					}
+				}
+			};
+			if (code == -1) {
+				return Result.err(new CompileError("Invalid escape sequence in char literal: " + literal));
+			}
+			return Result.ok(code);
+		}
+
+		// Single character (UTF-8 code point)
+		if (inner.length() == 1) {
+			char c = inner.charAt(0);
+			return Result.ok((long) c);
+		}
+
+		return Result.err(new CompileError("Invalid char literal: must be single character or escape sequence: " + literal));
 	}
 
 	/**
@@ -428,7 +486,7 @@ public final class ExpressionTokens {
 	private static boolean isValidArrayElementType(String type) {
 		type = type.trim();
 		// Primitive types
-		if (type.matches("[UI]\\d+|Bool")) {
+		if (type.matches("[UI]\\d+|Bool|Char")) {
 			return true;
 		}
 		// Nested array type

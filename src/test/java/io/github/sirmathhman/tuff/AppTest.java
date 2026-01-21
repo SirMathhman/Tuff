@@ -1247,6 +1247,66 @@ public final class AppTest {
 				4);
 	}
 
+	@Test
+	void shouldParseCharLiteral() {
+		// 'a' is UTF-8 code 97
+		assertValid("'a'", 97);
+	}
+
+	@Test
+	void shouldParseCharLiteralZero() {
+		// '\0' is null character (code 0)
+		assertValid("'\\0'", 0);
+	}
+
+	@Test
+	void shouldParseCharLiteralNewline() {
+		// '\n' is newline (code 10)
+		assertValid("'\\n'", 10);
+	}
+
+	@Test
+	void shouldParseCharLiteralSpace() {
+		// ' ' is space (code 32)
+		assertValid("' '", 32);
+	}
+
+	@Test
+	void shouldParseCharLiteralNumber() {
+		// '9' is digit 9 (code 57)
+		assertValid("'9'", 57);
+	}
+
+	@Test
+	void shouldParseCharLiteralInLetBinding() {
+		// let temp : Char = 'a'; temp
+		assertValid("let temp : Char = 'a'; temp", 97);
+	}
+
+	@Test
+	void shouldInferCharType() {
+		// let temp = 'x'; temp => inferred type is Char
+		assertValid("let temp = 'x'; temp", 120);
+	}
+
+	@Test
+	void shouldAddCharLiterals() {
+		// 'a' + 'b' should work (97 + 98 = 195)
+		assertValid("'a' + 'b'", 195);
+	}
+
+	@Test
+	void shouldReadChar() {
+		// read Char with input 65 ('A')
+		assertValidWithInput("read Char", 65, 65);
+	}
+
+	@Test
+	void shouldUpcaseCharFromInput() {
+		// read Char + read Char should allow char operations
+		assertValidWithInput("read Char + read Char", 97 + 98, 97, 98);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

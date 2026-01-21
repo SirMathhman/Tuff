@@ -69,7 +69,7 @@ public final class BitwiseNotParser {
 		if (typeSpec.contains(",")) {
 			return Result.err(new CompileError("Invalid tuple expression in term position: " + term));
 		}
-		if (!typeSpec.matches("\\*?([UI]\\d+|Bool)")) {
+		if (!typeSpec.matches("\\*?([UI]\\d+|Bool|Char)")) {
 			return Result.err(new CompileError("Invalid type specification: " + typeSpec));
 		}
 		return Result.ok(new ExpressionModel.ExpressionTerm(1, 0,

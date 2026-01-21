@@ -121,7 +121,8 @@ public final class ArrayFieldAccessBase {
 			}
 		}
 
-		// Handle both direct array types [Type; InitCount; TotalCount] and pointer types
+		// Handle both direct array types [Type; InitCount; TotalCount] and pointer
+		// types
 		String arrayTypeStr = declaredType;
 		if (declaredType.startsWith("*")) {
 			arrayTypeStr = declaredType.substring(1).trim();
@@ -151,7 +152,8 @@ public final class ArrayFieldAccessBase {
 		LetBindingProcessor.getVariableTypes().put(ctx.varName, declaredType);
 
 		// Replace all occurrences of varName.fieldName with the field value
-		String result = ctx.continuation.replaceAll("\\b" + java.util.regex.Pattern.quote(ctx.varName) + "\\." + ctx.fieldName + "\\b",
+		String result = ctx.continuation.replaceAll(
+				"\\b" + java.util.regex.Pattern.quote(ctx.varName) + "\\." + ctx.fieldName + "\\b",
 				fieldValue);
 
 		// Parse the substituted continuation

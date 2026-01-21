@@ -192,7 +192,7 @@ public final class FunctionDefinitionProcessor {
 	}
 
 	private static boolean isValidParameterType(String type) {
-		return type.matches("([UI]\\d+|I32|Bool|\\*[a-zA-Z_][a-zA-Z0-9_]*|\\*mut\\s+[a-zA-Z_][a-zA-Z0-9_]*)");
+		return type.matches("([UI]\\d+|I32|Bool|Char|\\*[a-zA-Z_][a-zA-Z0-9_]*|\\*mut\\s+[a-zA-Z_][a-zA-Z0-9_]*)");
 	}
 
 	public static Result<String, CompileError> inferReturnType(String body) {
@@ -240,7 +240,7 @@ public final class FunctionDefinitionProcessor {
 
 	private static boolean isValidReturnType(String type) {
 		return type
-				.matches("([UI]\\d+|I32|Bool|[A-Z][a-zA-Z0-9_]*|\\*[a-zA-Z_][a-zA-Z0-9_]*|\\*mut\\s+[a-zA-Z_][a-zA-Z0-9_]*)");
+				.matches("([UI]\\d+|I32|Bool|Char|[A-Z][a-zA-Z0-9_]*|\\*[a-zA-Z_][a-zA-Z0-9_]*|\\*mut\\s+[a-zA-Z_][a-zA-Z0-9_]*)");
 	}
 
 	/**

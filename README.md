@@ -29,6 +29,7 @@ See `src/test/java/io/github/sirmathhman/tuff/AppTest.java` for many runnable ex
 Tuff runs on 64-bit VM registers, but the language tracks types at compile time.
 
 - **Integers**: `U8`, `U16`, `U32`, `U64`, `I8`, `I16`, `I32`, `I64` (and other `U<bits>` / `I<bits>` forms).
+- **Char**: `Char` (UTF-8 code point as 64-bit integer; literals written as `'a'`, `'\n'`, etc.).
 - **Bool**: `Bool` (values are `0`/`1`; keywords `true` and `false` are supported).
 - **Pointers**: `*T` and `*mut T`.
 - **Tuples**: `(T1, T2, ...)` with indexing `expr[index]`.
@@ -252,6 +253,58 @@ x
   if (true) 1 else 2
   ```
 
+### Character Type
+
+Char represents a single UTF-8 character, stored as its Unicode code point (0–1,114,111):
+
+- **Char Literals**: Use single quotes with optional escape sequences
+
+  ```
+  'a'       // Lowercase 'a' (code 97)
+  'A'       // Uppercase 'A' (code 65)
+  ' '       // Space (code 32)
+  '9'       // Digit '9' (code 57)
+  ```
+
+- **Escape Sequences**: Common escapes are supported
+
+  ```
+  '\0'      // Null character (code 0)
+  '\n'      // Newline (code 10)
+  '\t'      // Tab (code 9)
+  '\r'      // Carriage return (code 13)
+  '\\'      // Backslash (code 92)
+  '\''      // Single quote (code 39)
+  '\"'      // Double quote (code 34)
+  ```
+
+- **Type Annotation and Inference**
+
+  ```
+  let temp : Char = 'a'; temp           // Explicit type: 97
+  let x = 'x'; x                        // Inferred type: 120
+  ```
+
+- **Read Char**: Input a character from the input stream
+
+  ```
+  read Char                             // Reads one character code
+  read Char + read Char                 // Add two character codes
+  ```
+
+- **Arithmetic**: Char values can be used in arithmetic operations
+
+  ```
+  'a' + 1                               // 97 + 1 = 98 (Unicode for 'b')
+  'z' - 'a'                             // 122 - 97 = 25 (distance between letters)
+  ```
+
+- **Boolean literals**: `true` and `false`
+
+  ```
+  if (true) 1 else 2
+  ```
+
 ### Comparison Operators
 
 All comparison operators return a boolean value (1 for true, 0 for false):
@@ -348,6 +401,7 @@ sum
 
 - Unsigned integers: `U8`, `U16`, `U32`, `U64`
 - Signed integers: `I8`, `I16`, `I32`, `I64`
+- `Char` (UTF-8 character code)
 - `Bool` (0 or 1)
 - Pointers: `*T`, `*mut T`
 - Tuples: `(T1, T2, ...)`
