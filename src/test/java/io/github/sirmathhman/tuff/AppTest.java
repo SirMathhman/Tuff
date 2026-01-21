@@ -1023,6 +1023,14 @@ public final class AppTest {
 				5, 10, 4, 5, 0, 0); // (5+10) + (4+5) + (0+0) = 15 + 9 + 0 = 24
 	}
 
+	@Test
+	void shouldSupportProductRecursion() {
+		assertValidWithInput(
+				"fn product() => { let n = read I32; if (n <= 0) 1 else n * product() }; product()",
+				24, // 4 * 3 * 2 * 1 = 24
+				4, 3, 2, 1, 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

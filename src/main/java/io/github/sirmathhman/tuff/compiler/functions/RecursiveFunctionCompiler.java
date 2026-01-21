@@ -106,16 +106,16 @@ public final class RecursiveFunctionCompiler {
 		if (pattern.varName().contains(",")) {
 			return compileMultiReadSumLoop(pattern, instructions);
 		}
-		return compileReadSumLoopSingleRead(pattern.baseValue(), instructions);
+		return compileReadSumLoopSingleRead(pattern.baseValue(), pattern.op(), instructions);
 	}
 
-	private static Result<Void, CompileError> compileReadSumLoopSingleRead(long baseValue,
+	private static Result<Void, CompileError> compileReadSumLoopSingleRead(long baseValue, String operator,
 			List<Instruction> instructions) {
 		// Iterative code for single-read pattern:
-		// 1. reg[0] = BASE (accumulator)
+		// 1. reg[0] = BASE (accumulator, e.g., 0 for +, 1 for *)
 		// 2. Loop start: reg[1] = read input
 		// 3. Check if reg[1] <= 0, if so jump to end
-		// 4. Accumulate: reg[0] += reg[1]
+		// 4. Accumulate: reg[0] += reg[1] (or *= or -= or /=, depending on operator)
 		// 5. Jump back to loop start
 		// 6. End: reg[0] has result
 
@@ -129,10 +129,22 @@ public final class RecursiveFunctionCompiler {
 
 		int jumpToEndIdx = emitLessThanOrEqualZeroCheck(1, instructions);
 
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 3L));
+		// Emit the appropriate operator instruction
+		Operation accumulateOp = mapOperatorToOperation(operator);
+		instructions.add(new Instruction(accumulateOp, Variant.Immediate, 0, 3L));
 
 		finishLoopWithBackjump(instructions, loopStart, jumpToEndIdx);
 		return Result.ok(null);
+	}
+
+	private static Operation mapOperatorToOperation(String operator) {
+		return switch (operator) {
+			case "+" -> Operation.Add;
+			case "-" -> Operation.Sub;
+			case "*" -> Operation.Mul;
+			case "/" -> Operation.Div;
+			default -> throw new IllegalArgumentException("Unknown operator: " + operator);
+		};
 	}
 
 	/**
