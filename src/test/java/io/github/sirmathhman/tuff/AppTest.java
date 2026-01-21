@@ -969,6 +969,18 @@ public final class AppTest {
 		assertValidWithInput("fn sum() => { let n = read I32; if (n <= 0) 0 else n + sum() }; sum()", 6, 3, 2, 1, 0);
 	}
 
+	@Test
+	void shouldSupportRecursiveFunctionWithNestedInnerFunction() {
+		// Complex recursive function with nested inner function that also recurses
+		// sumThenMult(1) returns: 1 + sumThenMult(0) + inner()
+		// where sumThenMult(0) = 1
+		// and inner() reads 0 and returns 0
+		// Total: 1 + 1 + 0 = 2
+		assertValidWithInput(
+			"fn sumThenMult(n : I32) => if (n <= 0) 1 else n + sumThenMult(n - 1) + (fn inner() => { let x = read I32; if (x <= 0) 0 else x + inner() }; inner()); sumThenMult(1)",
+			2, 0);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {
