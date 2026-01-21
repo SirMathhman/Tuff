@@ -84,7 +84,16 @@ public final class RecursiveFunctionCompiler {
 		String funcName = funcDef.name();
 		String body = funcDef.body().trim();
 
-		// Try parametric recursion first (fn name(n : Type) => ...)
+		// Try tree recursion first (e.g., Fibonacci with two recursive calls)
+		if (!funcDef.params().isEmpty() && !callArgs.trim().isEmpty()) {
+			Result<Void, CompileError> treeResult = TreeRecursionCompiler.tryCompileTreeRecursion(
+					funcDef, callArgs, instructions);
+			if (treeResult != null) {
+				return treeResult;
+			}
+		}
+
+		// Try parametric recursion (fn name(n : Type) => ...)
 		if (!funcDef.params().isEmpty() && !callArgs.trim().isEmpty()) {
 			Result<Void, CompileError> result = tryCompileParametricRecursion(funcDef, callArgs, instructions);
 			if (result != null) {
@@ -198,8 +207,6 @@ public final class RecursiveFunctionCompiler {
 		instructions.set(jumpToEndIdx,
 				new Instruction(jumpInstr.operation(), jumpInstr.variant(), jumpInstr.firstOperand(),
 						(long) instructions.size()));
-
-		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 		return Result.ok(null);
 	}
 

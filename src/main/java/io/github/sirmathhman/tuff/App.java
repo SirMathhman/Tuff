@@ -3,8 +3,9 @@ package io.github.sirmathhman.tuff;
 import io.github.sirmathhman.tuff.compiler.AdditiveExpressionParser;
 import io.github.sirmathhman.tuff.compiler.ComparisonOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
+import io.github.sirmathhman.tuff.compiler.DepthAwareSplitter;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
-import io.github.sirmathhman.tuff.compiler.functions.ChainedFunctionCallHandler;
+import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
 import io.github.sirmathhman.tuff.compiler.functions.RecursiveFunctionCompiler;
 import io.github.sirmathhman.tuff.compiler.letbinding.FunctionCallSubstituter;
 import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
@@ -12,7 +13,6 @@ import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
 import io.github.sirmathhman.tuff.compiler.LogicalOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.MultiplicativeExpressionBuilder;
-import io.github.sirmathhman.tuff.compiler.WhileLoopHandler;
 import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.LetExpressionProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.MatchExpressionHandler;
@@ -85,7 +85,7 @@ public final class App {
 					});
 		}
 		if (stmt.startsWith("while (")) {
-			return handleTopLevelWhileLoop(stmt, instructions);
+			return AppParsingUtils.handleTopLevelWhileLoop(stmt, instructions);
 		}
 		if (stmt.startsWith("let ")) {
 			return handleLetBindingStatement(stmt, instructions, definedStructs, structRegistry, functionRegistry);
@@ -94,9 +94,8 @@ public final class App {
 			return handleStructInstantiationStatement(stmt, instructions, definedStructs, structRegistry);
 		}
 
-		// Check if this is a call to a recursive function
-		Result<Void, CompileError> recursiveResult = RecursiveFunctionCompiler.tryCompileRecursiveCall(
-				stmt, instructions, functionRegistry);
+		Result<Void, CompileError> recursiveResult = RecursiveFunctionCompiler.tryCompileRecursiveCall(stmt,
+				instructions, functionRegistry);
 		if (recursiveResult != null) {
 			return recursiveResult;
 		}
@@ -116,7 +115,7 @@ public final class App {
 
 		// Find the assignment '=' at depth 0 (not inside the type annotation like in
 		// '=>')
-		int equalsIndex = findAssignmentEqualsAtDepthZero(stmt);
+		int equalsIndex = AppParsingUtils.findAssignmentEqualsAtDepthZero(stmt);
 
 		// First, find the first semicolon to check for uninitialized declarations
 		int firstSemiIndex = stmt.indexOf(';');
@@ -337,18 +336,22 @@ public final class App {
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		expr = expr.trim();
 
-		// Check for chained function call pattern: outer()()
-		// This handles higher-order functions that return function references
-		Result<ExpressionModel.ExpressionResult, CompileError> chainedResult = ChainedFunctionCallHandler.tryParse(expr,
-				functionRegistry, capturedVariables);
-		if (chainedResult != null) {
-			return chainedResult;
-		}
-
 		// Normalize ALL occurrences of this.functionName() to functionName() using
 		// regex
 		// This handles cases like "this.a() + this.b()" in arithmetic expressions
 		expr = expr.replaceAll("\\bthis\\.([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(", "$1(");
+
+		// Check if this is a block expression containing let bindings
+		if (expr.startsWith("{")) {
+			int closingBrace = DepthAwareSplitter.findMatchingBrace(expr, 0);
+			if (closingBrace != -1 && closingBrace == expr.length() - 1) {
+				String inner = expr.substring(1, closingBrace).trim();
+				if (inner.startsWith("let ")) {
+					// Parse block with let binding using the function registry
+					return parseBlockWithLetBinding(inner, functionRegistry, capturedVariables);
+				}
+			}
+		}
 
 		// Check if this is a function definition
 		if (FunctionHandler.isFunctionDefinition(expr)) {
@@ -405,6 +408,38 @@ public final class App {
 		return ComparisonOperatorHandler.parseAllComparisons(expr);
 	}
 
+	private static Result<ExpressionModel.ExpressionResult, CompileError> parseBlockWithLetBinding(
+			String inner, Map<String, FunctionHandler.FunctionDef> functionRegistry,
+			Map<String, String> capturedVariables) {
+		// Parse: let varName = valueExpr; continuation
+		int equalsIndex = ExpressionTokens.findFirstColonAtDepthZero(inner);
+		if (equalsIndex == -1) {
+			equalsIndex = inner.indexOf('=');
+		} else {
+			// Found colon, now find equals after it
+			equalsIndex = inner.indexOf('=', equalsIndex);
+		}
+		if (equalsIndex == -1) {
+			return Result.err(new CompileError("Invalid let binding in block: missing '='"));
+		}
+		int semiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(inner, equalsIndex);
+		if (semiIndex == -1) {
+			return Result.err(new CompileError("Invalid let binding in block: missing ';'"));
+		}
+		String declPart = inner.substring(4, equalsIndex).trim();
+		String varName = declPart.contains(":")
+				? declPart.substring(0, declPart.indexOf(':')).trim()
+				: declPart.trim();
+		String valueExpr = inner.substring(equalsIndex + 1, semiIndex).trim();
+		String continuation = inner.substring(semiIndex + 1).trim();
+
+		// Substitute the variable in the continuation
+		String substituted = continuation.replaceAll("\\b" + varName + "\\b", "(" + valueExpr + ")");
+
+		// Parse the substituted continuation with the function registry
+		return parseExpressionWithRead(substituted, functionRegistry, capturedVariables);
+	}
+
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseLetExpressionBinding(String expr,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry) {
 		return LetExpressionProcessor.parseLetExpressionBindingWithContext(expr, new java.util.HashMap<>(),
@@ -442,43 +477,4 @@ public final class App {
 				err -> Result.err(new ApplicationError(err)));
 	}
 
-	private static Result<Void, CompileError> handleTopLevelWhileLoop(String stmt, List<Instruction> instructions) {
-		int condEnd = -1, depth = 1;
-		for (int i = 7; i < stmt.length() && depth > 0; i++) {
-			if (stmt.charAt(i) == '(')
-				depth++;
-			else if (stmt.charAt(i) == ')')
-				depth--;
-			if (depth == 0) {
-				condEnd = i;
-				break;
-			}
-		}
-		if (condEnd == -1)
-			return Result.err(new CompileError("Malformed while loop: missing closing paren"));
-
-		String remaining = stmt.substring(condEnd + 1).trim();
-		return WhileLoopHandler.handleWhileLoop(stmt, remaining, instructions, new java.util.HashMap<>());
-	}
-
-	private static int findAssignmentEqualsAtDepthZero(String stmt) {
-		int depth = 0;
-		for (int i = 4; i < stmt.length(); i++) { // Start after "let "
-			char c = stmt.charAt(i);
-			// Track parenthesis depth
-			if (c == '(') {
-				depth++;
-			} else if (c == ')') {
-				depth--;
-			}
-			// At depth 0, look for the assignment '=' that's not part of '=>'
-			if (depth == 0 && c == '=' && i + 1 < stmt.length() && stmt.charAt(i + 1) != '>') {
-				// Check if this '=' is not preceded by '=' (to exclude '==')
-				if (i == 0 || stmt.charAt(i - 1) != '=') {
-					return i;
-				}
-			}
-		}
-		return -1;
-	}
 }

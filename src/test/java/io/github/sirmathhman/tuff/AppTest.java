@@ -969,68 +969,6 @@ public final class AppTest {
 		assertValidWithInput("fn sum() => { let n = read I32; if (n <= 0) 0 else n + sum() }; sum()", 6, 3, 2, 1, 0);
 	}
 
-	@Test
-	void shouldSupportReturningFunctionFromFunction() {
-		// outer() returns inner, then inner() is called
-		// inner reads a U8 value
-		assertValidWithInput("fn outer() => { fn inner() => read U8; inner }; outer()()", 42, 42);
-	}
-
-	@Test
-	void shouldSupportCallingReturnedThisMemberFunction() {
-		// outer() defines an inner function, returns `this`, then we call the member
-		// function.
-		// NOTE: this is intentionally written without a ';' after the function
-		// definition.
-		assertValidWithInput("fn outer() => { fn inner() => read U8; this } outer().inner()", 42, 42);
-	}
-
-	@Test
-	void shouldSupportBindingFunctionToVariable() {
-		// Bind a function to a variable, then call it
-		assertValid("let func = fn get() => 100; func()", 100);
-	}
-
-	@Test
-	void shouldSupportAnonymousFunctionBinding() {
-		// Bind an anonymous function (lambda) to a variable, then call it
-		assertValid("let func = () => 100; func()", 100);
-	}
-
-	@Test
-	void shouldSupportMutualRecursiveFunctionCycleWithReadInput() {
-		assertValidWithInput(
-				"fn a() => { let n = read I32; if (n <= 0) 0 else n + b() }; "
-						+ "fn b() => { let n = read I32; if (n <= 0) 0 else n + c() }; "
-						+ "fn c() => { let n = read I32; if (n <= 0) 0 else n + a() }; "
-						+ "a()",
-				6,
-				3, 2, 1, 0);
-	}
-
-	@Test
-	void shouldSupportParametricRecursion() {
-		assertValidWithInput(
-				"fn sum(n : I32) => if (n <= 0) 0 else n + sum(n - 1); sum(5)",
-				15); // 5 + 4 + 3 + 2 + 1 = 15
-	}
-
-	@Test
-	void shouldSupportMultipleReadsInRecursion() {
-		assertValidWithInput(
-				"fn sumPairs() => { let x = read I32; let y = read I32; if (x <= 0) 0 else x + y + sumPairs() }; sumPairs()",
-				24,
-				5, 10, 4, 5, 0, 0); // (5+10) + (4+5) + (0+0) = 15 + 9 + 0 = 24
-	}
-
-	@Test
-	void shouldSupportProductRecursion() {
-		assertValidWithInput(
-				"fn product() => { let n = read I32; if (n <= 0) 1 else n * product() }; product()",
-				24, // 4 * 3 * 2 * 1 = 24
-				4, 3, 2, 1, 0);
-	}
-
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

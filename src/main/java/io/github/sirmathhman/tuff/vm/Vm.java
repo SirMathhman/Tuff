@@ -8,6 +8,48 @@ public final class Vm {
 	private Vm() {
 	}
 
+	public interface TraceSink {
+		void onCycle(TraceCycle cycle, TraceConfig config);
+	}
+
+	public record TraceConfig(long maxCycles, int[] watchAddresses, int spAddress, int stackWindowSize) {
+		public static TraceConfig disabled() {
+			return TRACE_DISABLED;
+		}
+
+		public static TraceConfig standardStackDebug() {
+			return new TraceConfig(0L, new int[] { 500, 501, 502 }, 500, 16);
+		}
+	}
+
+	public record TraceInstruction(
+			long encodedInstruction,
+			Operation op,
+			Variant variant,
+			long firstOperand,
+			long secondOperand) {
+	}
+
+	public record TraceMachine(
+			long[] registers,
+			int spValue,
+			long[] stackValues,
+			long[] watchValues) {
+	}
+
+	public record TraceFlow(boolean shouldJump, int nextProgramCounter) {
+	}
+
+	public record TraceCycle(
+			long cycle,
+			int programCounter,
+			TraceInstruction instruction,
+			TraceMachine machine,
+			TraceFlow flow) {
+	}
+
+	private static final TraceConfig TRACE_DISABLED = new TraceConfig(0L, new int[0], -1, 0);
+
 	private record Operands(long firstOperand, long secondOperand) {
 	}
 
@@ -27,9 +69,20 @@ public final class Vm {
 			Instruction[] source,
 			IntSupplier read,
 			IntConsumer write) {
+		return execute(source, read, write, TRACE_DISABLED, null);
+	}
+
+	public static int execute(
+			Instruction[] source,
+			IntSupplier read,
+			IntConsumer write,
+			TraceConfig traceConfig,
+			TraceSink traceSink) {
 		// Do not adjust this too much!
 
+		TraceConfig cfg = (traceConfig == null) ? TRACE_DISABLED : traceConfig;
 		int programCounter = 0;
+		long cycle = 0;
 		long[] registers = new long[4];
 		Arrays.fill(registers, 0L);
 
@@ -38,6 +91,10 @@ public final class Vm {
 		loadInstructionsIntoMemory(source, memory);
 
 		while (true) {
+			if (cfg.maxCycles > 0 && cycle >= cfg.maxCycles) {
+				throw new IllegalStateException(
+						"Cycle limit exceeded: " + cfg.maxCycles + " at PC " + programCounter);
+			}
 			if (programCounter < 0 || programCounter >= memory.length) {
 				throw new IllegalStateException("Program did not halt before reaching end of memory.");
 			}
@@ -55,16 +112,66 @@ public final class Vm {
 					new Operands(firstOperand, secondOperand));
 			boolean shouldJump = executeInstruction(ctx, read, write);
 
+			int nextProgramCounter;
+			if (op == Operation.Halt) {
+				nextProgramCounter = programCounter;
+			} else if (shouldJump) {
+				nextProgramCounter = resolveJumpTarget(var, memory, (int) secondOperand);
+			} else {
+				nextProgramCounter = programCounter + 1;
+			}
+
+			if (traceSink != null) {
+				TraceInstruction instruction = new TraceInstruction(encodedInstruction, op, var, firstOperand,
+						secondOperand);
+				TraceMachine machine = createMachineSnapshot(registers, memory, cfg);
+				TraceFlow flow = new TraceFlow(shouldJump, nextProgramCounter);
+				TraceCycle cycleSnapshot = new TraceCycle(cycle, programCounter, instruction, machine, flow);
+				traceSink.onCycle(cycleSnapshot, cfg);
+			}
+
+			cycle++;
+
 			if (op == Operation.Halt) {
 				return (int) registers[0];
 			}
 
-			if (shouldJump) {
-				programCounter = resolveJumpTarget(var, memory, (int) secondOperand);
-			} else {
-				programCounter++;
-			}
+			programCounter = nextProgramCounter;
 		}
+	}
+
+	private static TraceMachine createMachineSnapshot(long[] registers, long[] memory, TraceConfig cfg) {
+		long[] regSnapshot = Arrays.copyOf(registers, registers.length);
+		int spValue = -1;
+		long[] stackValues = new long[0];
+		if (cfg.spAddress >= 0 && cfg.spAddress < memory.length) {
+			spValue = (int) memory[cfg.spAddress];
+			stackValues = readMemoryWindow(memory, spValue, cfg.stackWindowSize);
+		}
+		int[] watchAddresses = (cfg.watchAddresses == null) ? new int[0] : cfg.watchAddresses;
+		long[] watchValues = readWatchedMemory(memory, watchAddresses);
+		return new TraceMachine(regSnapshot, spValue, stackValues, watchValues);
+	}
+
+	private static long[] readWatchedMemory(long[] memory, int[] addresses) {
+		long[] values = new long[addresses.length];
+		for (int i = 0; i < addresses.length; i++) {
+			int addr = addresses[i];
+			values[i] = (addr >= 0 && addr < memory.length) ? memory[addr] : 0L;
+		}
+		return values;
+	}
+
+	private static long[] readMemoryWindow(long[] memory, int startAddress, int size) {
+		if (size <= 0 || startAddress < 0 || startAddress >= memory.length) {
+			return new long[0];
+		}
+		int safeSize = Math.min(size, memory.length - startAddress);
+		long[] values = new long[safeSize];
+		for (int i = 0; i < safeSize; i++) {
+			values[i] = memory[startAddress + i];
+		}
+		return values;
 	}
 
 	private static boolean executeInstruction(InstructionContext ctx, IntSupplier read,

@@ -76,6 +76,8 @@ public final class LetExpressionProcessor {
 											boundVariables.get(varName));
 								}
 
+								final String boundValueExpr = "(" + valueExpr + ")";
+
 								// Parse the value expression using provided parser
 								Result<ExpressionModel.ExpressionResult, CompileError> valueResult = exprParser
 										.apply(valueExpr);
@@ -89,28 +91,27 @@ public final class LetExpressionProcessor {
 											// Get the continuation after the semicolon
 											String continuation = expr.substring(semiIndex + 1).trim();
 
-											// Parse the continuation (either another let binding or final variable
-											// reference)
+											// Parse the continuation (either another let binding or a final expression)
 											if (continuation.startsWith("let ")) {
 												// Another let binding follows - recursively parse it with updated context
 												Map<String, String> newVariables = new HashMap<>(boundVariables);
-												newVariables.put(decl.varName(), decl.valueExpr());
+												newVariables.put(decl.varName(), boundValueExpr);
 												Map<String, String> newTypes = new HashMap<>(variableTypes);
 												newTypes.put(decl.varName(), actualType);
 												return parseLetExpressionBindingWithContext(continuation, newVariables,
 														newTypes, exprParser);
 											}
 
-											// Should be a variable reference - validate it matches the declared
-											// variable
-											if (!continuation.equals(decl.varName())) {
-												return Result.err(new CompileError("Invalid let binding: expected reference to variable '"
-														+ decl.varName() + "' but got '" + continuation + "'"));
+											// Otherwise, treat the continuation as an expression in the extended
+											// let-binding context (substitute all bound variables, then parse).
+											Map<String, String> newVariables = new HashMap<>(boundVariables);
+											newVariables.put(decl.varName(), boundValueExpr);
+											String continuationExpr = continuation;
+											for (String varName : newVariables.keySet()) {
+												continuationExpr = continuationExpr.replaceAll("\\b" + varName + "\\b",
+														newVariables.get(varName));
 											}
-
-											// Return the value expression result (the variable evaluates to its bound
-											// value)
-											return Result.ok(valueExprResult);
+											return exprParser.apply(continuationExpr);
 										},
 										err -> Result.err(err));
 							},
