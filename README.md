@@ -92,6 +92,20 @@ A stack-based virtual machine compiler with support for type-safe let bindings.
   let mut x : U8; x = read U8; x = 100; x  // Reads input, assigns 100, returns 100 (valid)
   ```
 
+### Blocks and `yield`
+
+You can use a scoped block as the initializer of a `let` binding. Inside the block, `yield <expr>` sets the block's value.
+
+```
+let x : U8 = { yield read U8; }; x
+```
+
+You can also conditionally `yield` early; if no `yield` runs, the final expression becomes the block result.
+
+```
+let x = { if (read Bool) yield 100; 200 }; x
+```
+
 ### Logical Operators
 
 - **Logical OR**: Combine boolean expressions with the `||` operator (lowest precedence)

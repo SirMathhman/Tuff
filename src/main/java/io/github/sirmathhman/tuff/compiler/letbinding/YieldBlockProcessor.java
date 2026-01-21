@@ -1,0 +1,197 @@
+package io.github.sirmathhman.tuff.compiler.letbinding;
+
+import io.github.sirmathhman.tuff.App;
+import io.github.sirmathhman.tuff.CompileError;
+import io.github.sirmathhman.tuff.Result;
+import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
+import io.github.sirmathhman.tuff.compiler.ExpressionModel;
+import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
+import io.github.sirmathhman.tuff.vm.Instruction;
+import io.github.sirmathhman.tuff.vm.Operation;
+import io.github.sirmathhman.tuff.vm.Variant;
+import java.util.ArrayList;
+import java.util.List;
+
+public final class YieldBlockProcessor {
+	private YieldBlockProcessor() {
+	}
+
+	public static Result<Void, CompileError> handleYieldBlock(
+			String varName,
+			String blockContent,
+			String continuation,
+			List<Instruction> instructions,
+			int storeAddr) {
+		List<String> parts = splitSemicolonsAtDepthZero(blockContent);
+		int lastIdx = lastNonEmptyIndex(parts);
+		if (lastIdx == -1) {
+			return Result.err(new CompileError("Yield block is empty"));
+		}
+
+		List<Integer> endJumpPatchPoints = new ArrayList<>();
+		for (int i = 0; i <= lastIdx; i++) {
+			String part = parts.get(i).trim();
+			if (part.isEmpty()) {
+				continue;
+			}
+			boolean isLast = i == lastIdx;
+			Result<Void, CompileError> partResult = processYieldBlockPart(part, isLast, instructions, storeAddr,
+					endJumpPatchPoints);
+			if (partResult instanceof Result.Err<Void, CompileError>) {
+				return partResult;
+			}
+		}
+
+		patchEndJumps(endJumpPatchPoints, instructions);
+		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) storeAddr));
+
+		if (!continuation.isEmpty() && !continuation.equals(varName)) {
+			return App.parseStatement(continuation, instructions);
+		}
+		return Result.ok(null);
+	}
+
+	private static Result<Void, CompileError> processYieldBlockPart(String part, boolean isLast,
+			List<Instruction> instructions, int storeAddr, List<Integer> endJumpPatchPoints) {
+		String trimmed = part.trim();
+		if (trimmed.startsWith("yield")) {
+			Result<Void, CompileError> yieldResult = emitYieldToStore(trimmed.substring(5).trim(), instructions, storeAddr);
+			if (yieldResult instanceof Result.Err<Void, CompileError>) {
+				return yieldResult;
+			}
+			if (!isLast) {
+				endJumpPatchPoints.add(addJumpPlaceholder(instructions));
+			}
+			return Result.ok(null);
+		}
+		if (trimmed.startsWith("if (") && trimmed.contains("yield")) {
+			return processConditionalYieldPart(trimmed, isLast, instructions, storeAddr, endJumpPatchPoints);
+		}
+		if (isLast) {
+			return emitYieldToStore(trimmed, instructions, storeAddr);
+		}
+		return App.parseStatement(trimmed, instructions);
+	}
+
+	private static Result<Void, CompileError> processConditionalYieldPart(String part, boolean isLast,
+			List<Instruction> instructions, int storeAddr, List<Integer> endJumpPatchPoints) {
+		int conditionEnd = ConditionalExpressionHandler.findConditionEnd(part);
+		if (conditionEnd == -1) {
+			return Result.err(new CompileError("Malformed conditional in yield block: missing closing paren"));
+		}
+		String condition = part.substring(4, conditionEnd).trim();
+		String remaining = part.substring(conditionEnd + 1).trim();
+		if (!remaining.startsWith("yield")) {
+			return Result.err(new CompileError("Expected 'yield' after if condition in yield block"));
+		}
+		String yieldExpr = remaining.substring(5).trim();
+
+		Result<Void, CompileError> condTypeResult = validateBoolCondition(condition);
+		if (condTypeResult instanceof Result.Err<Void, CompileError>) {
+			return condTypeResult;
+		}
+
+		Result<Void, CompileError> genCond = generateExpression(condition, instructions);
+		if (genCond instanceof Result.Err<Void, CompileError>) {
+			return genCond;
+		}
+
+		final int formulaReg = 1;
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, formulaReg, -1L));
+		instructions.add(new Instruction(Operation.Add, Variant.Immediate, formulaReg, 0L));
+		int skipYieldJumpIdx = instructions.size();
+		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, 0L));
+
+		Result<Void, CompileError> yieldResult = emitYieldToStore(yieldExpr, instructions, storeAddr);
+		if (yieldResult instanceof Result.Err<Void, CompileError>) {
+			return yieldResult;
+		}
+		if (!isLast) {
+			endJumpPatchPoints.add(addJumpPlaceholder(instructions));
+		}
+
+		int afterYieldAddr = instructions.size();
+		instructions.set(skipYieldJumpIdx,
+				new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, (long) formulaReg, (long) afterYieldAddr));
+		return Result.ok(null);
+	}
+
+	private static Result<Void, CompileError> generateExpression(String expr, List<Instruction> instructions) {
+		Result<ExpressionModel.ExpressionResult, CompileError> result = App.parseExpressionWithRead(expr);
+		if (result instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> err) {
+			return Result.err(err.error());
+		}
+		return App.generateInstructions(((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) result).value(),
+				instructions);
+	}
+
+	private static void patchEndJumps(List<Integer> endJumpPatchPoints, List<Instruction> instructions) {
+		int endAddr = instructions.size();
+		for (int jumpIdx : endJumpPatchPoints) {
+			instructions.set(jumpIdx, new Instruction(Operation.Jump, Variant.Immediate, 0, (long) endAddr));
+		}
+	}
+
+	private static int addJumpPlaceholder(List<Instruction> instructions) {
+		int idx = instructions.size();
+		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0, 0L));
+		return idx;
+	}
+
+	private static Result<Void, CompileError> emitYieldToStore(String yieldExpr,
+			List<Instruction> instructions, int storeAddr) {
+		String expr = yieldExpr.trim();
+		if (expr.endsWith(";")) {
+			expr = expr.substring(0, expr.length() - 1).trim();
+		}
+
+		Result<Void, CompileError> genResult = generateExpression(expr, instructions);
+		if (genResult instanceof Result.Err<Void, CompileError>) {
+			return genResult;
+		}
+		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) storeAddr));
+		return Result.ok(null);
+	}
+
+	private static Result<Void, CompileError> validateBoolCondition(String condition) {
+		Result<String, CompileError> typeResult = ExpressionTokens.extractTypeFromExpression(condition,
+				new java.util.HashMap<>());
+		return typeResult.match(condType -> {
+			if (!condType.equals("Bool")) {
+				return Result.err(new CompileError(
+						"Conditional expression requires Bool type, but got " + condType));
+			}
+			return Result.ok(null);
+		}, err -> Result.ok(null));
+	}
+
+	private static List<String> splitSemicolonsAtDepthZero(String blockContent) {
+		List<String> parts = new ArrayList<>();
+		int depth = 0;
+		int start = 0;
+		for (int i = 0; i < blockContent.length(); i++) {
+			char c = blockContent.charAt(i);
+			if (c == '(' || c == '{') {
+				depth++;
+			} else if (c == ')' || c == '}') {
+				depth--;
+			} else if (c == ';' && depth == 0) {
+				parts.add(blockContent.substring(start, i).trim());
+				start = i + 1;
+			}
+		}
+		if (start <= blockContent.length()) {
+			parts.add(blockContent.substring(start).trim());
+		}
+		return parts;
+	}
+
+	private static int lastNonEmptyIndex(List<String> parts) {
+		for (int i = parts.size() - 1; i >= 0; i--) {
+			if (!parts.get(i).trim().isEmpty()) {
+				return i;
+			}
+		}
+		return -1;
+	}
+}

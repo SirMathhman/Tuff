@@ -9,6 +9,7 @@ import io.github.sirmathhman.tuff.compiler.letbinding.CompilerHelpers;
 import io.github.sirmathhman.tuff.compiler.letbinding.ForLoopProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.LetBindingProcessor;
 import io.github.sirmathhman.tuff.compiler.letbinding.MutableVarContext;
+import io.github.sirmathhman.tuff.compiler.letbinding.YieldBlockProcessor;
 import io.github.sirmathhman.tuff.vm.Instruction;
 import io.github.sirmathhman.tuff.vm.Operation;
 import io.github.sirmathhman.tuff.vm.Variant;
@@ -105,58 +106,7 @@ public final class LetBindingHandler {
 			String continuation,
 			List<Instruction> instructions,
 			int storeAddr) {
-		// Find yield keyword
-		int yieldIdx = blockContent.indexOf("yield");
-		if (yieldIdx == -1)
-			return Result.err(new CompileError("Expected 'yield' in block"));
-
-		// Get content before yield (statements to execute)
-		String beforeYield = blockContent.substring(0, yieldIdx).trim();
-
-		// Get yield expression (after 'yield' keyword)
-		String afterYield = blockContent.substring(yieldIdx + 5).trim();
-
-		// Remove trailing semicolon from afterYield if present
-		if (afterYield.endsWith(";"))
-			afterYield = afterYield.substring(0, afterYield.length() - 1).trim();
-
-		// Execute statements before yield
-		if (!beforeYield.isEmpty()) {
-			String[] statements = beforeYield.split(";");
-			for (String stmt : statements) {
-				stmt = stmt.trim();
-				if (!stmt.isEmpty()) {
-					Result<Void, CompileError> stmtResult = App.parseStatement(stmt, instructions);
-					if (stmtResult instanceof Result.Err<Void, CompileError>)
-						return stmtResult;
-				}
-			}
-		}
-
-		// Evaluate yield expression
-		Result<ExpressionModel.ExpressionResult, CompileError> yieldResult = App.parseExpressionWithRead(afterYield);
-		if (yieldResult instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> yieldErr)
-			return Result.err(yieldErr.error());
-		ExpressionModel.ExpressionResult yieldOk = ((Result.Ok<ExpressionModel.ExpressionResult, CompileError>) yieldResult)
-				.value();
-
-		// Generate instructions for the yield expression
-		Result<Void, CompileError> genResult = App.generateInstructions(yieldOk, instructions);
-		if (genResult instanceof Result.Err<Void, CompileError>)
-			return genResult;
-
-		// Store result to memory address
-		instructions.add(new Instruction(Operation.Store, Variant.DirectAddress, 0, (long) storeAddr));
-
-		// Load result back to register 0
-		instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 0, (long) storeAddr));
-
-		// Handle continuation if not empty
-		if (!continuation.isEmpty() && !continuation.equals(varName)) {
-			return App.parseStatement(continuation, instructions);
-		}
-
-		return Result.ok(null);
+		return YieldBlockProcessor.handleYieldBlock(varName, blockContent, continuation, instructions, storeAddr);
 	}
 
 	public static Result<Void, CompileError> handleWhileLoopAfterLet(String varName, String initialValueExpr,

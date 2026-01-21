@@ -761,6 +761,16 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportConditionalYieldInBlockTrueBranch() {
+		assertValidWithInput("let x = { if ( read Bool ) yield 100; 200 }; x", 100, 1);
+	}
+
+	@Test
+	void shouldSupportConditionalYieldInBlockFalseBranch() {
+		assertValidWithInput("let x = { if ( read Bool ) yield 100; 200 }; x", 200, 0);
+	}
+
+	@Test
 	void shouldSupportIfElseWithEqualityComparisonRead() {
 		assertValidWithInput("if (read U8 == read U8) 100 else 50", 100, 60, 60);
 	}
