@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -61,7 +62,7 @@ public final class RecursiveFunctionCompiler {
 				return Result.err(err.error());
 			}
 			ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) mutual).value();
-			return compileReadSumLoop(pattern.baseValue(), instructions);
+			return compileReadSumLoop(pattern, instructions);
 		}
 		// Compile using recursive function compiler
 		return compileRecursiveFunction(funcDef, args, instructions);
@@ -97,19 +98,26 @@ public final class RecursiveFunctionCompiler {
 			return Result.err(err.error());
 		}
 		ParsedPattern pattern = ((Result.Ok<ParsedPattern, CompileError>) patternResult).value();
-		return compileReadSumLoop(pattern.baseValue(), instructions);
+		return compileReadSumLoop(pattern, instructions);
 	}
 
-	private static Result<Void, CompileError> compileReadSumLoop(long baseValue, List<Instruction> instructions) {
-		// Iterative code:
+	private static Result<Void, CompileError> compileReadSumLoop(ParsedPattern pattern, List<Instruction> instructions) {
+		// Check if this is a multi-read pattern by seeing if varName contains commas
+		if (pattern.varName().contains(",")) {
+			return compileMultiReadSumLoop(pattern, instructions);
+		}
+		return compileReadSumLoopSingleRead(pattern.baseValue(), instructions);
+	}
+
+	private static Result<Void, CompileError> compileReadSumLoopSingleRead(long baseValue,
+			List<Instruction> instructions) {
+		// Iterative code for single-read pattern:
 		// 1. reg[0] = BASE (accumulator)
-		// 2. Loop start:
-		// 3. reg[1] = read input
-		// 4. save n to reg[3]
-		// 5. if reg[1] <= 0, jump to end
-		// 6. reg[0] += reg[3]
-		// 7. jump to loop start
-		// 8. End: reg[0] has result
+		// 2. Loop start: reg[1] = read input
+		// 3. Check if reg[1] <= 0, if so jump to end
+		// 4. Accumulate: reg[0] += reg[1]
+		// 5. Jump back to loop start
+		// 6. End: reg[0] has result
 
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, baseValue));
 
@@ -124,6 +132,62 @@ public final class RecursiveFunctionCompiler {
 		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 3L));
 
 		finishLoopWithBackjump(instructions, loopStart, jumpToEndIdx);
+		return Result.ok(null);
+	}
+
+	/**
+	 * Compile multi-read recursion: fn sumPairs() => { let x = read I32; let y =
+	 * read I32; if (x <= 0) 0 else x + y + sumPairs() }
+	 * 
+	 * Multi-read strategy uses all 4 registers efficiently:
+	 * - reg[0] = accumulator (result)
+	 * - reg[1] = first read value (used in accumulation, then destroyed in check)
+	 * - reg[2] = second read value (used in accumulation, preserved)
+	 * - reg[3] = temp for subtract during condition check
+	 * 
+	 * Order: read → accumulate → check condition
+	 */
+	private static Result<Void, CompileError> compileMultiReadSumLoop(ParsedPattern pattern,
+			List<Instruction> instructions) {
+		String[] readVars = pattern.varName().split(",");
+		if (readVars.length != 2) {
+			return Result.err(new CompileError("Currently only support 2-read recursion, got " + readVars.length));
+		}
+		if (!"+".equals(pattern.op())) {
+			return Result
+					.err(new CompileError("Multi-read recursion currently only supports + operator, got " + pattern.op()));
+		}
+
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 0, pattern.baseValue()));
+
+		int loopStart = instructions.size();
+		// Read both values
+		instructions.add(new Instruction(Operation.In, Variant.Immediate, 1, 0L));
+		instructions.add(new Instruction(Operation.In, Variant.Immediate, 2, 0L));
+
+		// Accumulate FIRST: reg[0] += reg[1] + reg[2]
+		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 1L));
+		instructions.add(new Instruction(Operation.Add, Variant.Immediate, 0, 2L));
+
+		// Then check condition: if (reg[1] <= 0) exit; else loop back
+		// Check: compute (reg[1] - 1) and jump if < 0 (meaning reg[1] <= 0)
+		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 3, 1L)); // reg[3] = 1
+		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, 1, 3L)); // reg[1] -= reg[3], so reg[1] = reg[1]
+																																								// - 1
+
+		int jumpToEndIdx = instructions.size();
+		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, 1, 0L));
+
+		// Jump back to loop start (secondOperand is jump target for Jump instruction)
+		instructions.add(new Instruction(Operation.Jump, Variant.Immediate, 0L, (long) loopStart));
+
+		// Update jump target to current position (end of loop)
+		Instruction jumpInstr = instructions.get(jumpToEndIdx);
+		instructions.set(jumpToEndIdx,
+				new Instruction(jumpInstr.operation(), jumpInstr.variant(), jumpInstr.firstOperand(),
+						(long) instructions.size()));
+
+		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, 0L));
 		return Result.ok(null);
 	}
 
@@ -240,10 +304,12 @@ public final class RecursiveFunctionCompiler {
 	}
 
 	/**
-	 * Emit the `<= 0` check for a register by computing (reg - 1) and checking if result < 0.
+	 * Emit the `<= 0` check for a register by computing (reg - 1) and checking if
+	 * result < 0.
 	 * This is semantically equivalent to `if (reg <= 0)`.
 	 * Uses register 2 as temporary for the literal 1.
-	 * Returns the index of the JumpIfLessThanZero instruction to be patched with the end label.
+	 * Returns the index of the JumpIfLessThanZero instruction to be patched with
+	 * the end label.
 	 */
 	private static int emitLessThanOrEqualZeroCheck(int regNum, List<Instruction> instructions) {
 		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
@@ -334,15 +400,69 @@ public final class RecursiveFunctionCompiler {
 	}
 
 	private static Result<ParsedPattern, CompileError> parseReadSumPattern(String body) {
-		// Match: let VAR = read TYPE; if (VAR <= 0) BASE else VAR + callee()
-		Pattern p = Pattern.compile(
+		// Match: let VAR = read TYPE; ... if (VAR <= 0) BASE else EXPR + callee()
+		// Where EXPR can reference multiple read variables
+		// First, try the simpler single-read pattern
+		Pattern singleReadPattern = Pattern.compile(
 				"let\\s+(\\w+)\\s*(?::\\s*\\w+)?\\s*=\\s*read\\s+\\w+\\s*;\\s*"
 						+ "if\\s*\\(\\s*\\1\\s*<=\\s*0\\s*\\)\\s*(\\d+)\\s+else\\s+\\1\\s*([+\\-*/])\\s*"
 						+ "(\\w+)\\s*\\(\\s*\\)");
-		Matcher m = p.matcher(body);
-		if (!m.find()) {
-			return Result.err(new CompileError("Function body doesn't match recursive pattern: " + body));
+		Matcher m = singleReadPattern.matcher(body);
+		if (m.find()) {
+			return Result.ok(new ParsedPattern(m.group(1), Long.parseLong(m.group(2)), m.group(3), m.group(4)));
 		}
-		return Result.ok(new ParsedPattern(m.group(1), Long.parseLong(m.group(2)), m.group(3), m.group(4)));
+
+		// Try multi-read pattern: let x = read I32; let y = read I32; if (x <= 0) 0
+		// else x + y + funcName()
+		Result<ParsedPattern, CompileError> multiReadResult = tryParseMultiReadSumPattern(body);
+		if (multiReadResult != null) {
+			return multiReadResult;
+		}
+
+		return Result.err(new CompileError("Function body doesn't match recursive pattern: " + body));
+	}
+
+	private static Result<ParsedPattern, CompileError> tryParseMultiReadSumPattern(String body) {
+		// Extract all let statements: let x = read I32; let y = read I32; ...
+		Pattern letPattern = Pattern.compile("let\\s+(\\w+)\\s*(?::\\s*\\w+)?\\s*=\\s*read\\s+\\w+\\s*;");
+		Matcher letMatcher = letPattern.matcher(body);
+
+		List<String> readVars = new ArrayList<>();
+		int lastEnd = 0;
+		while (letMatcher.find()) {
+			readVars.add(letMatcher.group(1));
+			lastEnd = letMatcher.end();
+		}
+
+		if (readVars.size() < 2) {
+			return null; // Not a multi-read pattern
+		}
+
+		String firstVar = readVars.get(0);
+		String afterReads = body.substring(lastEnd).trim();
+
+		// Match: if (FIRST_VAR <= 0) BASE else EXPR + funcName()
+		// The EXPR should reference the read variables
+		Pattern ifPattern = Pattern.compile(
+				"if\\s*\\(\\s*" + Pattern.quote(firstVar) + "\\s*<=\\s*0\\s*\\)\\s*(\\d+)\\s+else\\s+"
+						+ "(.+?)\\s*([+\\-*/])\\s*(\\w+)\\s*\\(\\s*\\)");
+		Matcher ifMatcher = ifPattern.matcher(afterReads);
+
+		if (!ifMatcher.find()) {
+			return null;
+		}
+
+		String baseValueStr = ifMatcher.group(1);
+		String operator = ifMatcher.group(3);
+		String funcName = ifMatcher.group(4);
+
+		try {
+			long baseValue = Long.parseLong(baseValueStr);
+			// For multi-read, we pack the variable names into the varName field
+			String packedVars = String.join(",", readVars);
+			return Result.ok(new ParsedPattern(packedVars, baseValue, operator, funcName));
+		} catch (NumberFormatException e) {
+			return null;
+		}
 	}
 }

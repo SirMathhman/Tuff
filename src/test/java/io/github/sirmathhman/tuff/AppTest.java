@@ -1015,6 +1015,14 @@ public final class AppTest {
 				15); // 5 + 4 + 3 + 2 + 1 = 15
 	}
 
+	@Test
+	void shouldSupportMultipleReadsInRecursion() {
+		assertValidWithInput(
+				"fn sumPairs() => { let x = read I32; let y = read I32; if (x <= 0) 0 else x + y + sumPairs() }; sumPairs()",
+				24,
+				5, 10, 4, 5, 0, 0); // (5+10) + (4+5) + (0+0) = 15 + 9 + 0 = 24
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

@@ -60,7 +60,7 @@ def main():
 
     if not is_valid:
         print(
-            "❌ Package class limit violations detected (max 15 per package). You are strongly suggested to move files using commands and adjusting imports later:\n",
+            "[FAIL] Package class limit violations detected (max 15 per package). You are strongly suggested to move files using commands and adjusting imports later:\n",
             file=sys.stderr,
         )
         for violation in violations:
@@ -71,7 +71,7 @@ def main():
             print()
         return 1
     else:
-        print("✓ All packages are within the 15-class limit")
+        print("[OK] All packages are within the 15-class limit")
         return 0
 
 
