@@ -129,6 +129,29 @@
 					</execution>
 				</executions>
 			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-pmd-plugin</artifactId>
+				<version>3.25.0</version>
+				<configuration>
+					<rulesets>
+						<ruleset>pmd-ruleset.xml</ruleset>
+					</rulesets>
+					<includes>
+						<include>src/main/java/**/*.java</include>
+					</includes>
+					<failOnViolation>true</failOnViolation>
+				</configuration>
+				<executions>
+					<execution>
+						<id>pmd</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 	</build>
 </project>
