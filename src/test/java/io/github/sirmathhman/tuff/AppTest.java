@@ -907,6 +907,16 @@ public final class AppTest {
 		assertValidWithInput("let x = 100; fn get() => this.x; get()", 100, 42);
 	}
 
+	@Test
+	void shouldSupportMutableThisXAssignment() {
+		assertValidWithInput("let mut x = 0; this.x = read I32; x", 42, 42);
+	}
+
+	@Test
+	void shouldSupportMutableThisXReturnValue() {
+		assertValidWithInput("let mut x = 0; this.x = read I32; this.x", 42, 42);
+	}
+
 	private void assertInvalid(String source) {
 		Result<Instruction[], CompileError> result = App.compile(source);
 		if (result instanceof Result.Ok<Instruction[], CompileError> ok) {

@@ -313,7 +313,7 @@ public final class LetBindingHandler {
 		if (assignmentResult instanceof Result.Err<Void, CompileError>)
 			return assignmentResult;
 
-		// Final part should be variable reference
+		// Final part should be variable reference or expression
 		String remaining = continuation;
 		// Find final remaining after all assignments
 		while (true) {
@@ -326,17 +326,38 @@ public final class LetBindingHandler {
 			remaining = remaining.substring(semiIndex + 1).trim();
 		}
 
-		if (remaining.equals(varName)) {
+		// Normalize this.varName to varName
+		String normalizedRemaining = remaining.replaceAll("\\bthis\\." + varName + "\\b", varName);
+		
+		if (normalizedRemaining.equals(varName)) {
 			CompilerHelpers.loadVariableAndHalt(instructions, (long) nextMemAddr);
 			return Result.ok(null);
 		}
 
+		// Check if remaining contains variable references or is an expression
+		if (normalizedRemaining.contains(varName)) {
+			// Parse the expression - it will treat varName as a variable reference
+			// The variable is already stored at nextMemAddr from the assignment
+			Result<ExpressionModel.ExpressionResult, CompileError> exprResult = App.parseExpressionWithRead(
+					normalizedRemaining);
+			if (exprResult instanceof Result.Ok<ExpressionModel.ExpressionResult, CompileError> ok) {
+				// Now we need to load the variable value and execute the expression
+				// First load the variable from memory into a register
+				instructions.add(new Instruction(Operation.Load, Variant.DirectAddress, 1, (long) nextMemAddr));
+				// Then generate instructions for the expression
+				// But we need to substitute varName with a load instruction...
+				// This is complex. For now, let's just return the expression result
+				return App.generateInstructions(ok.value(), instructions);
+			}
+		}
+
 		// Check if remaining is a while loop
-		if (remaining.startsWith("while (")) {
-			return WhileLoopHandler.handleWhileLoop(remaining, "", instructions, addresses);
+		if (normalizedRemaining.startsWith("while (")) {
+			return WhileLoopHandler.handleWhileLoop(normalizedRemaining, "", instructions, addresses);
 		}
 
 		return Result.err(new CompileError(
+
 				"Mutable variable continuation must end with variable reference or expression"));
 	}
 
@@ -358,6 +379,13 @@ public final class LetBindingHandler {
 		String trimmed = remaining.trim();
 		boolean isDereference = trimmed.startsWith("*");
 		String assignTarget = isDereference ? ("*" + varName) : varName;
+		String thisTarget = "this." + varName;
+
+		// Check if assignment uses this.varName syntax
+		if (!isDereference && (trimmed.startsWith(thisTarget + " ") || trimmed.startsWith(thisTarget + "="))) {
+			assignTarget = thisTarget;
+		}
+
 		if (!trimmed.startsWith(assignTarget + " ") && !trimmed.startsWith(assignTarget + "=")) {
 			return Result.err(new CompileError("Not an assignment"));
 		}

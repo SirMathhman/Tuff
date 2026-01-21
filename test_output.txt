@@ -28,21 +28,14 @@ WARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release
 [INFO]  T E S T S
 [INFO] -------------------------------------------------------
 [INFO] Running io.github.sirmathhman.tuff.AppTest
-[ERROR] Tests run: 173, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.291 s <<< FAILURE! -- in io.github.sirmathhman.tuff.AppTest
-[ERROR] io.github.sirmathhman.tuff.AppTest.shouldSupportThisXWithMultipleVariables -- Time elapsed: 0.006 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: 
-Unexpected exit code, instructions compiled are: [
-	0000: Load Immediate 0 100,
-	0001: Store DirectAddress 0 100,
-	0002: Load Immediate 0 50,
-	0003: Halt Immediate 0,
-] ==> expected: <150> but was: <50>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
-	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
-	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:563)
-	at io.github.sirmathhman.tuff.AppTest.assertValidResult(AppTest.java:35)
+[ERROR] Tests run: 174, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 0.253 s <<< FAILURE! -- in io.github.sirmathhman.tuff.AppTest
+[ERROR] io.github.sirmathhman.tuff.AppTest.shouldSupportMutableThisXWithArithmetic -- Time elapsed: 0.005 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Compilation failed: Mutable variable continuation must end with variable reference or expression
+	at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38)
+	at org.junit.jupiter.api.Assertions.fail(Assertions.java:138)
+	at io.github.sirmathhman.tuff.AppTest.lambda$2(AppTest.java:32)
+	at io.github.sirmathhman.tuff.Result$Err.match(Result.java:162)
+	at io.github.sirmathhman.tuff.AppTest.assertValidResult(AppTest.java:31)
 	at io.github.sirmathhman.tuff.AppTest.lambda$0(AppTest.java:22)
 	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
 	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1095)
@@ -53,20 +46,15 @@ Unexpected exit code, instructions compiled are: [
 [INFO] Results:
 [INFO] 
 [ERROR] Failures: 
-[ERROR]   AppTest.lambda$0:22->assertValidResult:35 Unexpected exit code, instructions compiled are: [
-	0000: Load Immediate 0 100,
-	0001: Store DirectAddress 0 100,
-	0002: Load Immediate 0 50,
-	0003: Halt Immediate 0,
-] ==> expected: <150> but was: <50>
+[ERROR]   AppTest.lambda$0:22->assertValidResult:31->lambda$2:32 Compilation failed: Mutable variable continuation must end with variable reference or expression
 [INFO] 
-[ERROR] Tests run: 173, Failures: 1, Errors: 0, Skipped: 0
+[ERROR] Tests run: 174, Failures: 1, Errors: 0, Skipped: 0
 [INFO] 
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD FAILURE
 [INFO] ------------------------------------------------------------------------
-[INFO] Total time:  1.741 s
-[INFO] Finished at: 2026-01-20T20:46:04-05:00
+[INFO] Total time:  1.484 s
+[INFO] Finished at: 2026-01-20T20:48:06-05:00
 [INFO] ------------------------------------------------------------------------
 [ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.2:test (default-test) on project tuff: There are test failures.
 [ERROR] 
