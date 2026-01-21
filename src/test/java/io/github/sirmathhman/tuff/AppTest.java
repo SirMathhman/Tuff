@@ -927,6 +927,21 @@ public final class AppTest {
 	}
 
 	@Test
+	void shouldSupportThisCallToNestedFunction() {
+		assertValid("fn outer() => { fn inner() => 100; this.inner() }; outer()", 100);
+	}
+
+	@Test
+	void shouldSupportThisCallToNestedFunctionWithParams() {
+		assertValid("fn outer() => { fn inner(x : I32) => x * 2; this.inner(21) }; outer()", 42);
+	}
+
+	@Test
+	void shouldSupportMultipleNestedFunctionsWithThis() {
+		assertValid("fn a() => 10; fn b() => 20; this.a() + this.b()", 30);
+	}
+
+	@Test
 	void shouldTestFunctionDefining() {
 		// Just to test that function definition and body are correct
 		assertValidWithInput("fn createPoint() => Point { x : read I32, y : read I32 }; read I32", 42, 42);

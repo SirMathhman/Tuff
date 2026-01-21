@@ -154,7 +154,7 @@ public final class FunctionHandler {
 		return Result.ok(new FunctionDefParts(name, params, returnType, body, remaining));
 	}
 
-	private static int findMatchingParen(String s, int openIdx) {
+	static int findMatchingParen(String s, int openIdx) {
 		int depth = 1;
 		for (int i = openIdx + 1; i < s.length(); i++) {
 			char c = s.charAt(i);
@@ -433,12 +433,34 @@ public final class FunctionHandler {
 	}
 
 	private static FunctionCallMatch parseFunctionCallPattern(String expr) {
-		Pattern pattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\((.*)\\)$", Pattern.DOTALL);
-		Matcher matcher = pattern.matcher(expr);
-		if (!matcher.matches()) {
+		// Use depth-aware parsing instead of greedy regex to handle expressions like
+		// "a() + b()"
+		expr = expr.trim();
+
+		// Check if it matches function call pattern: name(...)
+		Pattern namePattern = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
+		Matcher nameMatcher = namePattern.matcher(expr);
+		if (!nameMatcher.find()) {
 			return null;
 		}
-		return new FunctionCallMatch(matcher.group(1), matcher.group(2).trim());
+
+		String functionName = nameMatcher.group(1);
+		int openParen = nameMatcher.end() - 1;
+
+		// Find matching closing parenthesis using depth-aware parsing
+		int closeParen = findMatchingParen(expr, openParen);
+		if (closeParen == -1) {
+			return null; // Unmatched parentheses
+		}
+
+		// Verify there's nothing after the closing parenthesis (except whitespace)
+		String afterParen = expr.substring(closeParen + 1).trim();
+		if (!afterParen.isEmpty()) {
+			return null; // Not a simple function call
+		}
+
+		String argsString = expr.substring(openParen + 1, closeParen).trim();
+		return new FunctionCallMatch(functionName, argsString);
 	}
 
 	/**

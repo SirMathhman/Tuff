@@ -5,6 +5,7 @@ import io.github.sirmathhman.tuff.compiler.ComparisonOperatorHandler;
 import io.github.sirmathhman.tuff.compiler.ConditionalExpressionHandler;
 import io.github.sirmathhman.tuff.compiler.ExpressionModel;
 import io.github.sirmathhman.tuff.compiler.ExpressionTokens;
+import io.github.sirmathhman.tuff.compiler.letbinding.FunctionCallSubstituter;
 import io.github.sirmathhman.tuff.compiler.letbinding.FunctionHandler;
 import io.github.sirmathhman.tuff.compiler.InstructionBuilder;
 import io.github.sirmathhman.tuff.compiler.LetBindingHandler;
@@ -31,7 +32,6 @@ import java.util.Set;
 public final class App {
 	private App() {
 	}
-
 	public static Result<Instruction[], CompileError> compile(String source) {
 		List<Instruction> instructions = new ArrayList<>();
 		if (!source.isEmpty()) {
@@ -44,11 +44,9 @@ public final class App {
 					},
 					Result::err);
 		}
-
 		instructions.add(new Instruction(Operation.Halt, Variant.Immediate, 0, null));
 		return Result.ok(instructions.toArray(new Instruction[0]));
 	}
-
 	public static Result<Void, CompileError> parseStatement(String stmt, List<Instruction> instructions) {
 		return parseStatement(stmt, instructions, new HashSet<>(), new HashMap<>(), new HashMap<>(), new HashMap<>());
 	}
@@ -326,14 +324,10 @@ public final class App {
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, String> capturedVariables) {
 		expr = expr.trim();
 
-		// Normalize this.functionName() to functionName() for function call syntax
-		if (expr.startsWith("this.")) {
-			String afterThis = expr.substring(5).trim();
-			// Check if it looks like a function call
-			if (afterThis.matches("[a-zA-Z_][a-zA-Z0-9_]*\\s*\\(.*")) {
-				expr = afterThis;
-			}
-		}
+		// Normalize ALL occurrences of this.functionName() to functionName() using
+		// regex
+		// This handles cases like "this.a() + this.b()" in arithmetic expressions
+		expr = expr.replaceAll("\\bthis\\.([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(", "$1(");
 
 		// Check if this is a function definition
 		if (FunctionHandler.isFunctionDefinition(expr)) {
@@ -365,8 +359,16 @@ public final class App {
 					.flatMap(App::parseExpressionWithRead);
 		}
 
+		// Substitute all function calls in the expression before parsing
+		Result<String, CompileError> substitutedResult = FunctionCallSubstituter.substituteAllFunctionCalls(expr,
+				functionRegistry);
+		if (substitutedResult instanceof Result.Err<String, CompileError> err) {
+			return Result.err(err.error());
+		}
+		String substitutedExpr = ((Result.Ok<String, CompileError>) substitutedResult).value();
+
 		// Otherwise use the standard parsing without function registry
-		return parseExpressionWithRead(expr);
+		return parseExpressionWithRead(substitutedExpr);
 	}
 
 	private static Result<ExpressionModel.ExpressionResult, CompileError> parseComparisonOperators(String expr) {
