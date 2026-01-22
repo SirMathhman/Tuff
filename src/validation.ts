@@ -1,4 +1,4 @@
-import { type CompileError, getTypeBits, isSignedType } from "./types";
+import { type CompileError, isTypeCompatible } from "./types";
 import {
   parseLetComponents,
   extractExpressionType,
@@ -6,8 +6,11 @@ import {
   type VariableContext,
   isBareNumber,
   isNumberLiteral,
-  parseReassignmentComponents,
 } from "./let-binding";
+import {
+  detectNonMutableReassignment,
+  detectReassignmentTypeChange,
+} from "./reassignment-validation";
 import {
   isParenthesizedExpression,
   extractParenthesizedContent,
@@ -15,45 +18,6 @@ import {
   extractBracedContent,
   findConditionParentheses,
 } from "./parser";
-
-function isTypeCompatible(declaredType: string, exprType: string): boolean {
-  if (declaredType === exprType) return true;
-
-  // Bool type only matches Bool
-  if (declaredType === "Bool" || exprType === "Bool") return false;
-
-  const declaredBits = getTypeBits(declaredType);
-  const exprBits = getTypeBits(exprType);
-
-  if (declaredBits === undefined || exprBits === undefined) return false;
-
-  const declaredSigned = isSignedType(declaredType);
-  const exprSigned = isSignedType(exprType);
-
-  // Allow widening: expr type can fit in declared type
-  // For unsigned: U8 (8 bits) -> U16 (16 bits), U8 -> I16 (16 bits, signed)
-  // For signed: I8 (8 bits) -> I16 (16 bits)
-  // For mixed: U8 (8 bits) -> I16 (16 bits - room for sign and value)
-
-  // If expr is unsigned and declared is unsigned, allow if expr bits <= declared bits
-  if (!exprSigned && !declaredSigned) {
-    return exprBits <= declaredBits;
-  }
-
-  // If expr is signed and declared is signed, allow if expr bits <= declared bits
-  if (exprSigned && declaredSigned) {
-    return exprBits <= declaredBits;
-  }
-
-  // If expr is unsigned and declared is signed, allow if expr fits in signed range
-  // U8 (0-255) fits in I16 (-32768 to 32767) but not I8 (-128 to 127)
-  if (!exprSigned && declaredSigned) {
-    return exprBits < declaredBits;
-  }
-
-  // If expr is signed and declared is unsigned, disallow (can't fit negative)
-  return false;
-}
 
 function buildTypeError(
   typeAnnotation: string,
@@ -545,80 +509,4 @@ export function detectIfBranchTypeMismatch(
   return undefined;
 }
 
-function skipLetBindings(source: string): string {
-  let current = source;
-  while (current.length > 0) {
-    current = current.trim();
-    if (!current.startsWith("let")) break;
-    const comp = parseLetComponents(current);
-    if (!comp) break;
-    current = comp.remaining;
-  }
-  return current;
-}
-
-function validateReassignments(
-  source: string,
-  context: VariableContext,
-  validator: (
-    varName: string,
-    exprPart: string,
-    binding: (typeof context)[number] | undefined,
-  ) => CompileError | undefined,
-): CompileError | undefined {
-  let current = skipLetBindings(source);
-
-  while (current.length > 0) {
-    current = current.trim();
-    const reassignComp = parseReassignmentComponents(current);
-    if (!reassignComp) break;
-
-    const binding = context.find((b) => b.name === reassignComp.varName);
-    const error = validator(reassignComp.varName, reassignComp.exprPart, binding);
-    if (error) return error;
-
-    current = reassignComp.remaining;
-  }
-
-  return undefined;
-}
-
-export function detectNonMutableReassignment(
-  source: string,
-  context: VariableContext,
-): CompileError | undefined {
-  return validateReassignments(source, context, (varName, _exprPart, binding) => {
-    if (binding && !binding.mutable) {
-      return {
-        cause: `Cannot reassign non-mutable variable '${varName}'`,
-        reason:
-          "Variables must be declared with 'let mut' keyword to allow reassignment",
-        fix: `Change 'let ${varName}' to 'let mut ${varName}'`,
-        first: { line: 0, column: 0, length: source.length },
-      };
-    }
-    return undefined;
-  });
-}
-
-export function detectReassignmentTypeChange(
-  source: string,
-  context: VariableContext,
-): CompileError | undefined {
-  return validateReassignments(source, context, (varName, exprPart, binding) => {
-    if (!binding || !binding.type) {
-      return undefined;
-    }
-
-    const newExprType = extractExpressionType(exprPart, context);
-    if (newExprType && newExprType !== binding.type) {
-      return {
-        cause: `Cannot reassign variable '${varName}' with incompatible type: ${newExprType} vs ${binding.type}`,
-        reason: "Reassigned value must have the same type as the variable",
-        fix: `Ensure the reassigned value has type ${binding.type}`,
-        first: { line: 0, column: 0, length: source.length },
-      };
-    }
-    return undefined;
-  });
-}
+export { detectNonMutableReassignment, detectReassignmentTypeChange };

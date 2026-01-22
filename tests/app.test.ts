@@ -315,4 +315,8 @@ describe("The application - Mutable variables", () => {
   it("should reject reassignment with type change", () => {
     assertInvalid("let mut x = read Bool; x = read I32; x");
   });
+
+  it("should allow type narrowing on reassignment", () => {
+    assertValid("let mut x = read U16; x = read U8; x", 50, 300, 50);
+  });
 });
