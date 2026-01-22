@@ -295,4 +295,10 @@ describe("The application - If-else expressions", () => {
       99,
     );
   });
+
+  it("should reject if-expression result type mismatch in second variable", () => {
+    assertInvalid(
+      "let x = if ( read Bool ) 3U32 else 5U32; let y : Bool = x; y",
+    );
+  });
 });
