@@ -131,15 +131,8 @@ export function extractExpressionType(
 export function extractArithmeticTypes(exprPart: string): string[] | undefined {
   const trimmed = exprPart.trim();
 
-  // Check if contains operators: + - * /
-  let opIndex = -1;
-  for (let i = 1; i < trimmed.length; i++) {
-    const char = trimmed[i];
-    if (char === "+" || char === "-" || char === "*" || char === "/") {
-      opIndex = i;
-      break;
-    }
-  }
+  // Check if contains operators: + - * / (scanning at depth 0 only)
+  const opIndex = findTopLevelOperator(trimmed);
 
   if (opIndex === -1) return undefined;
 
@@ -152,6 +145,32 @@ export function extractArithmeticTypes(exprPart: string): string[] | undefined {
   if (!leftType || !rightType) return undefined;
 
   return [leftType, rightType];
+}
+
+function findTopLevelOperator(trimmed: string): number {
+  let parenDepth = 0;
+  let braceDepth = 0;
+
+  for (let i = 1; i < trimmed.length; i++) {
+    const char = trimmed[i];
+
+    // Track depth of parentheses and braces
+    if (char === "(") parenDepth++;
+    if (char === ")") parenDepth--;
+    if (char === "{") braceDepth++;
+    if (char === "}") braceDepth--;
+
+    // Check for operators at depth 0 only
+    const isOperator =
+      char === "+" || char === "-" || char === "*" || char === "/";
+    const isTopLevel = parenDepth === 0 && braceDepth === 0;
+
+    if (isOperator && isTopLevel) {
+      return i;
+    }
+  }
+
+  return -1;
 }
 
 export function hasArithmeticMismatch(exprPart: string): boolean {

@@ -3,8 +3,13 @@ import {
   parseLetComponents,
   extractExpressionType,
   type VariableContext,
-  hasArithmeticMismatch,
 } from "./let-binding";
+import {
+  isParenthesizedExpression,
+  extractParenthesizedContent,
+  isBracedExpression,
+  extractBracedContent,
+} from "./parser";
 
 function isTypeCompatible(declaredType: string, exprType: string): boolean {
   if (declaredType === exprType) return true;
@@ -55,6 +60,67 @@ function buildTypeError(
   };
 }
 
+function checkArithmeticMismatchRecursive(exprPart: string): boolean {
+  const trimmed = exprPart.trim();
+
+  // First, unwrap any outer grouping
+  let toCheck = trimmed;
+  if (isParenthesizedExpression(trimmed)) {
+    toCheck = extractParenthesizedContent(trimmed);
+  } else if (isBracedExpression(trimmed)) {
+    toCheck = extractBracedContent(trimmed);
+  }
+
+  // Check for arithmetic operators at depth 0
+  let parenDepth = 0;
+  let braceDepth = 0;
+  let firstOpIndex = -1;
+
+  for (let i = 0; i < toCheck.length; i++) {
+    const char = toCheck[i];
+
+    if (char === "(") parenDepth++;
+    if (char === ")") parenDepth--;
+    if (char === "{") braceDepth++;
+    if (char === "}") braceDepth--;
+
+    // Skip checking operators inside parentheses or on first character
+    if (i === 0 || parenDepth !== 0 || braceDepth !== 0) continue;
+
+    if (char === "+" || char === "-" || char === "*" || char === "/") {
+      firstOpIndex = i;
+      break;
+    }
+  }
+
+  // If there's an operator at this level, check if operands have consistent types
+  if (firstOpIndex !== -1) {
+    const leftPart = toCheck.substring(0, firstOpIndex).trim();
+    const rightPart = toCheck.substring(firstOpIndex + 1).trim();
+
+    const leftType = extractExpressionType(leftPart);
+    const rightType = extractExpressionType(rightPart);
+
+    // If both parts have types and they differ, we have a mismatch
+    if (leftType && rightType && leftType !== rightType) {
+      return true;
+    }
+
+    // Recursively check left and right parts for nested mismatches
+    if (checkArithmeticMismatchRecursive(leftPart)) {
+      return true;
+    }
+    if (checkArithmeticMismatchRecursive(rightPart)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // No operators at this level, nothing to check
+  return false;
+}
+
 export function detectVariableShadowing(
   source: string,
 ): CompileError | undefined {
@@ -101,8 +167,8 @@ function processLetBinding(
 
   const { varName, typeAnnotation, exprPart } = components;
 
-  // Check for mixed-type arithmetic expressions
-  if (hasArithmeticMismatch(exprPart)) {
+  // Check for mixed-type arithmetic expressions (recursively at all levels)
+  if (checkArithmeticMismatchRecursive(exprPart)) {
     return {
       error: {
         cause: "Mixed-type arithmetic expression",
