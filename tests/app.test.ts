@@ -58,4 +58,8 @@ describe("The application", () => {
   it("should accept negative values with signed type suffix", () => {
     assertValid("-100I8", -100);
   });
+
+  it("should reject values that overflow unsigned 8-bit", () => {
+    assertInvalid("256U8");
+  });
 });
