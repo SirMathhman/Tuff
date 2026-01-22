@@ -1,8 +1,10 @@
 import { execute, type Instruction, OpCode, Variant } from "./vm";
 import {
   parseMulExpression,
+  parseDivExpression,
   parseNumberWithSuffix,
   parseReadInstruction,
+  findTypeSuffixIndex,
 } from "./parser";
 
 export interface Ok<T> {
@@ -47,18 +49,6 @@ export function ok<T>(value: T): Ok<T> {
 
 export function err<X>(error: X): Err<X> {
   return { ok: false, error };
-}
-
-function findTypeSuffixIndex(source: string): number {
-  for (let i = source.length - 1; i >= 0; i--) {
-    const char = source[i];
-    if (char && char >= "0" && char <= "9") continue;
-    if (char && char >= "A" && char <= "Z") {
-      return i;
-    }
-    break;
-  }
-  return -1;
 }
 
 function getTypeSuffix(source: string): string {
@@ -376,12 +366,21 @@ function parseAddExpressionReadLeft(
   const leftInstructions = parseReadInstruction(leftPart);
   if (!leftInstructions) return undefined;
 
-  // First, try parsing right side as multiplication (higher precedence)
+  // First, try parsing right side as multiplication or division (higher precedence)
   const mulResult = parseMulExpression(rightPart);
   if (mulResult) {
     return [
       ...leftInstructions.slice(0, -1), // Exclude halt from left, leaves value in memory[901]
       ...mulResult, // Result is in memory[902], no halt to exclude
+      ...buildReadAddMulInstructions(),
+    ];
+  }
+
+  const divResult = parseDivExpression(rightPart);
+  if (divResult) {
+    return [
+      ...leftInstructions.slice(0, -1), // Exclude halt from left, leaves value in memory[901]
+      ...divResult, // Result is in memory[902], no halt to exclude
       ...buildReadAddMulInstructions(),
     ];
   }

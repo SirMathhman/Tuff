@@ -153,41 +153,45 @@ export function parseRightAtom(source: string): Instruction[] | undefined {
   return undefined;
 }
 
-export function parseMulExpression(source: string): Instruction[] | undefined {
-  // Look for * operator
-  let mulIndex = -1;
+function parseMulOrDivExpression(
+  source: string,
+  opcode: OpCode,
+  operator: string,
+): Instruction[] | undefined {
+  // Look for operator (* or /)
+  let opIndex = -1;
   for (let i = 0; i < source.length; i++) {
-    if (source[i] === "*") {
-      mulIndex = i;
+    if (source[i] === operator) {
+      opIndex = i;
       break;
     }
   }
-  if (mulIndex === -1) return undefined;
+  if (opIndex === -1) return undefined;
 
-  const leftPart = source.substring(0, mulIndex).trim();
-  const rightPart = source.substring(mulIndex + 1).trim();
+  const leftPart = source.substring(0, opIndex).trim();
+  const rightPart = source.substring(opIndex + 1).trim();
 
   const leftInstructions = parseSimpleAtom(leftPart);
   if (!leftInstructions) return undefined;
 
-  // Parse right side - could be read, number, or another multiplication
+  // Parse right side - could be read, number, or another mul/div operation
   let rightInstructions: Instruction[] | undefined;
-  const rightMul = parseMulExpression(rightPart);
-  if (rightMul) {
-    rightInstructions = rightMul;
+  const rightMulDiv = parseMulExpression(rightPart) || parseDivExpression(rightPart);
+  if (rightMulDiv) {
+    rightInstructions = rightMulDiv;
   } else {
     rightInstructions = parseRightAtom(rightPart);
   }
 
   if (!rightInstructions) return undefined;
 
-  // Build complete multiplication instruction sequence
+  // Build complete mul/div instruction sequence
   // Store result in memory[902] to avoid collision with addition operands
   return [
     ...leftInstructions,
     ...rightInstructions,
     {
-      opcode: OpCode.Mul,
+      opcode,
       variant: Variant.Immediate,
       operand1: 1,
       operand2: 0,
@@ -201,4 +205,12 @@ export function parseMulExpression(source: string): Instruction[] | undefined {
   ];
 }
 
-export { parseNumberWithSuffix };
+export function parseMulExpression(source: string): Instruction[] | undefined {
+  return parseMulOrDivExpression(source, OpCode.Mul, "*");
+}
+
+export function parseDivExpression(source: string): Instruction[] | undefined {
+  return parseMulOrDivExpression(source, OpCode.Div, "/");
+}
+
+export { parseNumberWithSuffix, findTypeSuffixIndex };
