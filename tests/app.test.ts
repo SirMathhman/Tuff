@@ -120,4 +120,8 @@ describe("The application - Grouping and variables", () => {
   it("should support let binding variable in expressions", () => {
     assertValid("let x : U8 = read U8; x + x", 84, 42);
   });
+
+  it("should support multiple let bindings", () => {
+    assertValid("let x : U8 = read U8; let y : U8 = x; y", 42, 42);
+  });
 });

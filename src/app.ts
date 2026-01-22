@@ -387,7 +387,10 @@ function parseLetExpression(
   if (!components) return undefined;
 
   const { varName, exprPart, remaining } = components;
-  const exprCompile = compileNoContext(exprPart);
+  const exprCompileResult = compileWithContext(exprPart, context);
+  if (!exprCompileResult) return undefined;
+
+  const exprCompile = exprCompileResult.instructions;
   if (!exprCompile || exprCompile.length === 0) return undefined;
 
   const { context: newContext, address } = allocateVariable(context, varName);
