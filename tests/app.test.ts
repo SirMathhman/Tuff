@@ -4,11 +4,17 @@ import { compile, executeWithArray } from "../src/app";
 
 // Test helpers
 function assertValid(source: string, expected: number, ...stdIn: number[]) {
-	const compileResult = compile(source);
+  const compileResult = compile(source);
   if (compileResult.ok) {
-		const execResult = executeWithArray(compileResult.value, stdIn);
+    const execResult = executeWithArray(compileResult.value, stdIn);
+		if (expected !== undefined) {
+			// Do we have an  equivalent to Assertions.fail()?
+			expect("Failed to execute compiled instructions: " + compileResult.value).toBeUndefined();
+		}
+
     expect(execResult).toBe(expected);
   } else {
+    // Do we have an  equivalent to Assertions.fail()?
     expect(compileResult.error).toBeUndefined();
   }
 }
