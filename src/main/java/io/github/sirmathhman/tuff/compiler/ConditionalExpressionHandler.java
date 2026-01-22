@@ -141,16 +141,17 @@ public final class ConditionalExpressionHandler {
 
 	private static int findElseKeyword(String expr) {
 		var depth = 0;
-		for (var i = 0; i < expr.length() - 3; i++) {
+		var exprLength = expr.length();
+		for (var i = 0; i < exprLength - 3; i++) {
 			var c = expr.charAt(i);
 			if (c == '(' || c == '{')
 				depth++;
 			else if (c == ')' || c == '}')
 				depth--;
 			else if (depth == 0 && expr.startsWith("else", i)) {
-				// Make sure 'else' is not part of a larger word
-				if ((i == 0 || !Character.isLetterOrDigit(expr.charAt(i - 1)))
-						&& (i + 4 >= expr.length() || !Character.isLetterOrDigit(expr.charAt(i + 4)))) {
+				var isPrevValid = i == 0 || !Character.isLetterOrDigit(expr.charAt(i - 1));
+				var isNextValid = i + 4 >= exprLength || !Character.isLetterOrDigit(expr.charAt(i + 4));
+				if (isPrevValid && isNextValid) {
 					return i;
 				}
 			}
@@ -246,15 +247,20 @@ public final class ConditionalExpressionHandler {
 	private static Result<Void, CompileError> processFalseBranch(String varName, String r2,
 			ArrayList<Instruction> instructions) {
 		var instr = instructions;
-		if (r2.startsWith("if (")) {
-			return buildConditionalAssignmentChain(varName, r2, instr, false);
-		} else if (r2.startsWith(varName + " =") || r2.startsWith(varName + "=")) {
-			var eqIdx = r2.indexOf('=');
-			var sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(r2, eqIdx);
+		var falseBranch = r2;
+		var startsWithIf = falseBranch.startsWith("if (");
+		if (startsWithIf) {
+			return buildConditionalAssignmentChain(varName, falseBranch, instr, false);
+		}
+		var startsWithVarEq = falseBranch.startsWith(varName + " =") || falseBranch.startsWith(varName + "=");
+		if (startsWithVarEq) {
+			var eqIdx = falseBranch.indexOf('=');
+			var sIdx = DepthAwareSplitter.findSemicolonAtDepthZero(falseBranch, eqIdx);
 			if (sIdx == -1)
 				return Result.err(new CompileError("Missing ';'"));
-			var falseVal = r2.substring(eqIdx + 1, sIdx).trim();
-			if (!r2.substring(sIdx + 1).trim().equals(varName))
+			var falseVal = falseBranch.substring(eqIdx + 1, sIdx).trim();
+			var remaining = falseBranch.substring(sIdx + 1).trim();
+			if (!remaining.equals(varName))
 				return Result.err(new CompileError("Bad var"));
 			var falseRes = App.parseExpressionWithRead(falseVal);
 			if (falseRes instanceof Result.Err<ExpressionModel.ExpressionResult, CompileError> falseErr) {

@@ -338,13 +338,13 @@ public final class RecursiveFunctionCompiler {
 	 */
 	@SuppressWarnings("CheckReturnValue")
 	private static int emitLessThanOrEqualZeroCheck(int regNum, ArrayList<Instruction> instructions) {
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-		instructions.add(new Instruction(Operation.Sub, Variant.Immediate, regNum, 2L));
-		var jumpIdx = instructions.size();
-		instructions.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, regNum, 0L));
-		// Restore register: reg = (reg - 1) + 1 = reg
-		instructions.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
-		instructions.add(new Instruction(Operation.Add, Variant.Immediate, regNum, 2L));
+		var instr = instructions;
+		instr.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+		instr.add(new Instruction(Operation.Sub, Variant.Immediate, regNum, 2L));
+		var jumpIdx = instr.size();
+		instr.add(new Instruction(Operation.JumpIfLessThanZero, Variant.Immediate, regNum, 0L));
+		instr.add(new Instruction(Operation.Load, Variant.Immediate, 2, 1L));
+		instr.add(new Instruction(Operation.Add, Variant.Immediate, regNum, 2L));
 		return jumpIdx;
 	}
 

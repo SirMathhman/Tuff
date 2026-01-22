@@ -26,7 +26,6 @@ public final class LetBindingProcessor {
 	private LetBindingProcessor() {
 	}
 
-	// ThreadLocal to track variable types across let bindings
 	private static final ThreadLocal<Map<String, String>> variableTypes = ThreadLocal.withInitial(java.util.HashMap::new);
 
 	public static Map<String, String> getVariableTypes() {
@@ -62,7 +61,6 @@ public final class LetBindingProcessor {
 		if (declPart.contains(":")) {
 			var colonIndex = ExpressionTokens.findFirstColonAtDepthZero(declPart);
 			if (colonIndex == -1) {
-				// Fallback to split if depth-aware search fails
 				var parts = declPart.split(":");
 				varName = parts[0].trim();
 				declaredType = parts[1].trim();
@@ -82,12 +80,10 @@ public final class LetBindingProcessor {
 		var instructions = ctx.instructions();
 		var structRegistry = ctx.structRegistry();
 		var functionRegistry = ctx.functionRegistry();
-		// Check if valueExpr is a function call
 		var valueExpr = decl.valueExpr().trim();
 		if (!FunctionHandler.isFunctionCall(valueExpr, functionRegistry)) {
 			return null;
 		}
-		// Get the function definition and return type
 		var funcDef = getFunctionDef(valueExpr,
 				functionRegistry);
 		if (funcDef == null) {
@@ -97,7 +93,6 @@ public final class LetBindingProcessor {
 		if (returnType == null || !structRegistry.containsKey(returnType)) {
 			return null;
 		}
-		// Extract used fields from continuation
 		var usedFields = extractUsedFields(varName, continuation);
 		if (usedFields.isEmpty()) {
 			return null;
@@ -166,9 +161,6 @@ public final class LetBindingProcessor {
 	}
 
 	private static java.util.Map<String, String> extractFieldValuesFromFunctionBody(String body) {
-		// Try to extract struct initialization from body
-		// Body format: Point { x : read I32, y : read I32 }
-		// We need to find { ... } and extract field: value pairs
 		var openBrace = body.indexOf('{');
 		var closeBrace = body.lastIndexOf('}');
 		if (openBrace == -1 || closeBrace == -1 || closeBrace <= openBrace) {
@@ -176,8 +168,6 @@ public final class LetBindingProcessor {
 		}
 		var structInit = body.substring(openBrace + 1, closeBrace);
 		java.util.Map<String, String> fieldValues = new java.util.HashMap<>();
-		// Parse field: value pairs
-		// Split by comma at depth 0
 		ArrayList<String> assignments = new ArrayList<>();
 		var current = new StringBuilder();
 		var depth = 0;
@@ -199,7 +189,6 @@ public final class LetBindingProcessor {
 		if (current.length() > 0) {
 			assignments = assignments.add(current.toString().trim());
 		}
-		// Parse each assignment
 		for (var assignment : assignments) {
 			var colonIndex = assignment.indexOf(':');
 			if (colonIndex > 0) {
@@ -277,29 +266,31 @@ public final class LetBindingProcessor {
 
 	private static Result<Void, CompileError> tryEarlyReturns(String varName, VariableDecl decl,
 			String continuation, ProcessContext ctx) {
-		// Handle yield blocks
-		if (decl.valueExpr().trim().startsWith("{")) {
-			var blockContent = decl.valueExpr().trim();
-			var closingBrace = DepthAwareSplitter.findMatchingBrace(blockContent, 0);
+		var instr = ctx.instructions();
+		var nextMem = ctx.nextMemAddr();
+		var varAddrs = ctx.variableAddresses();
+		var valueExpr = decl.valueExpr().trim();
+		if (valueExpr.startsWith("{")) {
+			var closingBrace = DepthAwareSplitter.findMatchingBrace(valueExpr, 0);
 			if (closingBrace != -1) {
-				var inner = blockContent.substring(1, closingBrace).trim();
+				var inner = valueExpr.substring(1, closingBrace).trim();
 				if (inner.contains("yield")) {
-					return LetBindingHandler.handleYieldBlock(varName, inner, continuation, ctx.instructions(),
-							ctx.nextMemAddr());
+					return LetBindingHandler.handleYieldBlock(varName, inner, continuation, instr,
+							nextMem);
 				}
 			}
 		}
-		var varCtx = new MutableVarContext(ctx.variableAddresses(), ctx.nextMemAddr());
-		if (continuation.trim().startsWith("{")) {
-			return LetBindingHandler.handleScopedBlock(varName, decl.valueExpr(), continuation, ctx.instructions(),
+		var varCtx = new MutableVarContext(varAddrs, nextMem);
+		var contTrimmed = continuation.trim();
+		if (contTrimmed.startsWith("{")) {
+			return LetBindingHandler.handleScopedBlock(varName, decl.valueExpr(), continuation, instr,
 					varCtx);
 		}
 		if (continuation.startsWith("let ")) {
-			return LetBindingHandler.handleChainedLetBinding(varName, decl.valueExpr(), continuation, ctx.instructions(),
+			return LetBindingHandler.handleChainedLetBinding(varName, decl.valueExpr(), continuation, instr,
 					varCtx);
 		}
 		if (continuation.startsWith("fn ")) {
-			// Function definition in continuation - pass to completeVariableSubstitution
 			return null;
 		}
 		if (continuation.startsWith("while (") && decl.isMutable()) {
@@ -312,32 +303,38 @@ public final class LetBindingProcessor {
 	private static Result<Void, CompileError> handleSimpleContinuationCases(String varName, VariableDecl decl,
 			String continuation, ProcessContext ctx, MutableVarContext varCtx) {
 		var cont = continuation;
+		var valueExpr = decl.valueExpr();
+		var functionRegistry = ctx.functionRegistry();
+		var instr = ctx.instructions();
+		var varAddrs = ctx.variableAddresses();
+		var nextMem = ctx.nextMemAddr();
 		if (cont.equals(varName)) {
 			Result<ExpressionModel.ExpressionResult, CompileError> valueResult;
-			if (ConditionalExpressionHandler.hasConditional(decl.valueExpr()))
-				valueResult = ConditionalExpressionHandler.parseConditional(decl.valueExpr());
+			if (ConditionalExpressionHandler.hasConditional(valueExpr))
+				valueResult = ConditionalExpressionHandler.parseConditional(valueExpr);
 			else
-				valueResult = App.parseExpressionWithRead(decl.valueExpr(), ctx.functionRegistry());
+				valueResult = App.parseExpressionWithRead(valueExpr, functionRegistry);
 			return valueResult.match(
-					expr -> App.generateInstructions(expr, ctx.instructions()).map(ignored -> (Void) null), Result::err);
+					expr -> App.generateInstructions(expr, instr).map(ignored -> (Void) null), Result::err);
 		}
-		// Handle this.varName syntax - treat as reference to variable
 		if (cont.startsWith("this.") && cont.substring(5).trim().matches("[a-zA-Z_][a-zA-Z0-9_]*"))
 			cont = cont.substring(5).trim();
-		if (ctx.variableAddresses().containsKey(cont)) {
-			return LetBindingHandler.handleVariableReference(decl.valueExpr(), cont, ctx.instructions(),
-					ctx.variableAddresses(), ctx.nextMemAddr());
+		if (varAddrs.containsKey(cont)) {
+			return LetBindingHandler.handleVariableReference(valueExpr, cont, instr,
+					varAddrs, nextMem);
 		}
-		if (cont.contains("=") && cont.contains(";")) {
+		var hasEquals = cont.contains("=");
+		var hasSemi = cont.contains(";");
+		if (hasEquals && hasSemi) {
 			if (cont.trim().startsWith("*")) {
-				return DereferenceAssignmentHandler.handle(varName, decl.valueExpr(), cont, ctx.instructions(),
-						ctx.variableAddresses());
+				return DereferenceAssignmentHandler.handle(varName, decl.valueExpr(), cont, instr,
+						varAddrs);
 			}
 			if (!decl.isMutable()) {
 				return Result.err(new CompileError("Cannot assign to immutable variable '" + varName + "'. Use 'let mut'."));
 			}
 			return LetBindingHandler.handleMutableVariableWithAssignment(varName, decl.valueExpr(), cont, false,
-					new LetBindingHandler.MutableVarAssignmentContext(ctx.instructions(), varCtx));
+					new LetBindingHandler.MutableVarAssignmentContext(instr, varCtx));
 		}
 		return null;
 	}
@@ -372,7 +369,8 @@ public final class LetBindingProcessor {
 			String continuation, ArrayList<Instruction> instructions,
 			Map<String, FunctionHandler.FunctionDef> functionRegistry, Map<String, Integer> variableAddresses) {
 		var normalizedContinuation = continuation.replaceAll("\\bthis\\." + varName + "\\b", varName);
-		normalizedContinuation = StringFieldAccessProcessor.handleStringFieldAccess(varName, decl.valueExpr().trim(),
+		var valueExpr = decl.valueExpr().trim();
+		normalizedContinuation = StringFieldAccessProcessor.handleStringFieldAccess(varName, valueExpr,
 				normalizedContinuation);
 
 		var typeCheckResult = handleSpecialContinuationCases(varName, decl, normalizedContinuation, instructions,
@@ -381,10 +379,11 @@ public final class LetBindingProcessor {
 			return typeCheckResult;
 		}
 
-		var isFunctionRef = decl.declaredType() != null && decl.declaredType().contains("=>")
-				&& functionRegistry.containsKey(decl.valueExpr().trim());
+		var declaredType = decl.declaredType();
+		var isFunctionRef = declaredType != null && declaredType.contains("=>")
+				&& functionRegistry.containsKey(valueExpr);
 		var wrappedValue = isFunctionRef ? decl.valueExpr()
-				: CompilerHelpers.wrapValueForSubstitution(decl.valueExpr(), decl.declaredType());
+				: CompilerHelpers.wrapValueForSubstitution(decl.valueExpr(), declaredType);
 		var substitutedContinuation = isFunctionRef ? normalizedContinuation
 				: normalizedContinuation.replaceAll("\\b" + varName + "\\b", "(" + wrappedValue + ")");
 
@@ -393,7 +392,7 @@ public final class LetBindingProcessor {
 			return valTypeCheck;
 		}
 
-		var capturedVariables = buildCapturedVariablesMap(varName, decl.valueExpr().trim(), isFunctionRef);
+		var capturedVariables = buildCapturedVariablesMap(varName, valueExpr, isFunctionRef);
 		var contResult = App.parseExpressionWithRead(substitutedContinuation, functionRegistry, capturedVariables);
 		return contResult.match(
 				expr -> App.generateInstructions(expr, instructions).map(ignored -> (Void) null), Result::err);
@@ -426,19 +425,19 @@ public final class LetBindingProcessor {
 	}
 
 	private static boolean isIndexedOnlyAccess(VariableDecl decl, String varName, String normalizedContinuation) {
-		var isTupleType = decl.declaredType() != null && decl.declaredType().startsWith("(")
-				&& decl.declaredType().endsWith(")");
-		var isArrayType = decl.declaredType() != null && decl.declaredType().startsWith("[")
-				&& decl.declaredType().endsWith("]");
-		var isArrayPointerType = decl.declaredType() != null
-				&& (decl.declaredType().startsWith("*[") || decl.declaredType().startsWith("*mut ["));
+		var declaredType = decl.declaredType();
+		var isTupleType = declaredType != null && declaredType.startsWith("(") && declaredType.endsWith(")");
+		var isArrayType = declaredType != null && declaredType.startsWith("[") && declaredType.endsWith("]");
+		var isArrayPointerType = declaredType != null
+				&& (declaredType.startsWith("*[") || declaredType.startsWith("*mut ["));
 		return (isTupleType || isArrayType || isArrayPointerType)
 				&& CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation);
 	}
 
 	private static boolean isArrayPointerIndexed(VariableDecl decl, String varName, String normalizedContinuation) {
-		var isArrayPointerType = decl.declaredType() != null
-				&& (decl.declaredType().startsWith("*[") || decl.declaredType().startsWith("*mut ["));
+		var declaredType = decl.declaredType();
+		var isArrayPointerType = declaredType != null
+				&& (declaredType.startsWith("*[") || declaredType.startsWith("*mut ["));
 		return isArrayPointerType && CompilerHelpers.allAccessesAreIndexed(varName, normalizedContinuation);
 	}
 

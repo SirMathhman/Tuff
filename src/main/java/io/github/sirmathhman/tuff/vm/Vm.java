@@ -145,9 +145,13 @@ public final class Vm {
 
 	private static CycleResult executeSingleCycle(@SuppressWarnings("unused") Instruction[] source,
 			ExecutionContext ctx) {
-		var memory = ctx.memory;
-		var pc = ctx.programCounter;
-		var registers = ctx.registers;
+		var c = ctx;
+		var memory = c.memory;
+		var pc = c.programCounter;
+		var registers = c.registers;
+		var read = c.read;
+		var write = c.write;
+		var traceSink = c.traceSink;
 		var encodedInstruction = memory[pc];
 		var operation = (int) ((encodedInstruction >>> 56) & 0xff);
 		var variant = (int) ((encodedInstruction >>> 48) & 0xff);
@@ -156,14 +160,14 @@ public final class Vm {
 		var op = Operation.values()[operation];
 		var var = Variant.values()[variant];
 		var inctx = new InstructionContext(registers, memory, op, var, new Operands(firstOperand, secondOperand));
-		var shouldJump = executeInstruction(inctx, ctx.read, ctx.write);
+		var shouldJump = executeInstruction(inctx, read, write);
 		var nextPC = op == Operation.Halt ? pc
 				: (shouldJump ? resolveJumpTarget(var, memory, (int) secondOperand) : pc + 1);
-		if (ctx.traceSink != null) {
+		if (traceSink != null) {
 			var decoded = new DecodedInstruction(op, var, firstOperand, secondOperand);
-			var cycleInfo = new CycleInfo(ctx.cycle, pc, shouldJump, nextPC);
+			var cycleInfo = new CycleInfo(c.cycle, pc, shouldJump, nextPC);
 			var traceData = new TraceData(encodedInstruction, decoded, cycleInfo, registers, memory);
-			recordTrace(ctx.traceSink, ctx.traceConfig, traceData);
+			recordTrace(traceSink, c.traceConfig, traceData);
 		}
 		return new CycleResult(nextPC, op == Operation.Halt);
 	}
@@ -206,11 +210,13 @@ public final class Vm {
 
 	private static TraceMachine createMachineSnapshot(long[] registers, long[] memory, TraceConfig cfg) {
 		var regSnapshot = Arrays.copyOf(registers, registers.length);
+		var spAddress = cfg.spAddress;
+		var stackWindowSize = cfg.stackWindowSize;
 		var spValue = -1;
 		var stackValues = new long[0];
-		if (cfg.spAddress >= 0 && cfg.spAddress < memory.length) {
-			spValue = (int) memory[cfg.spAddress];
-			stackValues = readMemoryWindow(memory, spValue, cfg.stackWindowSize);
+		if (spAddress >= 0 && spAddress < memory.length) {
+			spValue = (int) memory[spAddress];
+			stackValues = readMemoryWindow(memory, spValue, stackWindowSize);
 		}
 		int[] watchAddresses;
 		if (cfg.watchAddresses == null)
@@ -249,8 +255,9 @@ public final class Vm {
 		var registers = ctx.registers;
 		var memory = ctx.memory;
 		var variant = ctx.var;
-		var firstOp = ctx.operands.firstOperand;
-		var secondOp = ctx.operands.secondOperand;
+		var operands = ctx.operands;
+		var firstOp = operands.firstOperand;
+		var secondOp = operands.secondOperand;
 		return switch (op) {
 			case Load -> executeLoad(registers, memory, variant, firstOp, secondOp);
 			case Store -> executeStore(registers, memory, variant, firstOp, secondOp);

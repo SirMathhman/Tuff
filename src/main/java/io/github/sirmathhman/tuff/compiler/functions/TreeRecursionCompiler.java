@@ -143,7 +143,8 @@ public final class TreeRecursionCompiler {
 
 	private static void emitFuncStartAndFirstCall(CompileState st, Spec spec) {
 		var code = st.code;
-		st.funcStart = code.size();
+		var funcStart = code.size();
+		st.funcStart = funcStart;
 
 		code = code.add(insn(Operation.Load, Variant.Immediate, 0, 0L));
 		code = code.add(insn(Operation.Add, Variant.Immediate, 0, 1L));
@@ -158,7 +159,7 @@ public final class TreeRecursionCompiler {
 		st.afterFirstPatch = afterFirstResult.patchIndex();
 		code = code.add(insn(Operation.Load, Variant.Immediate, 2, spec.firstOff))
 				.add(insn(Operation.Sub, Variant.Immediate, 1, 2L))
-				.add(insn(Operation.Jump, Variant.Immediate, 0L, (long) st.funcStart));
+				.add(insn(Operation.Jump, Variant.Immediate, 0L, (long) funcStart));
 		st.code = code;
 	}
 
@@ -225,10 +226,10 @@ public final class TreeRecursionCompiler {
 	}
 
 	private static void emitBaseCase(CompileState st, Spec spec) {
-		st.baseCase = st.code.size();
-		st.code = st.code.add(insn(Operation.Load, Variant.Immediate, 0, spec.baseValue));
-		// Return to ret addr at [SP] without popping current frame (caller will pop)
-		st.code = emitReturn(st.code);
+		var code = st.code;
+		st.baseCase = code.size();
+		code = code.add(insn(Operation.Load, Variant.Immediate, 0, spec.baseValue));
+		st.code = emitReturn(code);
 	}
 
 	private static void emitEndAndPatch(CompileState st) {
@@ -239,12 +240,20 @@ public final class TreeRecursionCompiler {
 	}
 
 	private static ArrayList<Instruction> applyPatches(ArrayList<Instruction> code, CompileState st) {
+		var s = st;
+		var endAddr = s.endAddr;
+		var baseCase = s.baseCase;
+		var afterFirst = s.afterFirst;
+		var afterSecond = s.afterSecond;
+		var endAddrPatch = s.endAddrPatch;
+		var baseCasePatch = s.baseCasePatch;
+		var afterFirstPatch = s.afterFirstPatch;
+		var afterSecondPatch = s.afterSecondPatch;
 		var c = code;
-		c = c.set(st.endAddrPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.endAddr));
-		c = c.set(st.baseCasePatch,
-				insn(Operation.JumpIfLessThanZero, Variant.Immediate, 0, (long) st.baseCase));
-		c = c.set(st.afterFirstPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.afterFirst));
-		return c.set(st.afterSecondPatch, insn(Operation.Load, Variant.Immediate, 0, (long) st.afterSecond));
+		c = c.set(endAddrPatch, insn(Operation.Load, Variant.Immediate, 0, (long) endAddr));
+		c = c.set(baseCasePatch, insn(Operation.JumpIfLessThanZero, Variant.Immediate, 0, (long) baseCase));
+		c = c.set(afterFirstPatch, insn(Operation.Load, Variant.Immediate, 0, (long) afterFirst));
+		return c.set(afterSecondPatch, insn(Operation.Load, Variant.Immediate, 0, (long) afterSecond));
 	}
 
 	private static ArrayList<Instruction> addDecrementSP(ArrayList<Instruction> code) {

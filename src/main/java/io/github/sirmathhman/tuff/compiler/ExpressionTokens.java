@@ -260,25 +260,26 @@ public final class ExpressionTokens {
 			return true;
 		}
 
-		// Handle tuple types - must match exactly
-		if (sourceType.startsWith("(") && sourceType.endsWith(")") ||
-				targetType.startsWith("(") && targetType.endsWith(")")) {
+		var src = sourceType;
+		var tgt = targetType;
+		var sourceIsTuple = src.startsWith("(") && src.endsWith(")");
+		var targetIsTuple = tgt.startsWith("(") && tgt.endsWith(")");
+		if (sourceIsTuple || targetIsTuple) {
 			return false;
 		}
 
-		// Handle function types - must match exactly
-		if (sourceType.contains("=>") || targetType.contains("=>")) {
+		var sourceIsFn = src.contains("=>");
+		var targetIsFn = tgt.contains("=>");
+		if (sourceIsFn || targetIsFn) {
 			return false;
 		}
 
-		// Handle This type - must match exactly
-		if ("This".equals(sourceType) || "This".equals(targetType)) {
+		if ("This".equals(src) || "This".equals(tgt)) {
 			return false;
 		}
 
-		// Strip 'mut' keyword for comparison: *mut Type -> *Type
-		var sourceNorm = sourceType.replaceAll("\\*mut\\s+", "*");
-		var targetNorm = targetType.replaceAll("\\*mut\\s+", "*");
+		var sourceNorm = src.replaceAll("\\*mut\\s+", "*");
+		var targetNorm = tgt.replaceAll("\\*mut\\s+", "*");
 		if (sourceNorm.equals(targetNorm)) {
 			return true;
 		}
@@ -316,26 +317,27 @@ public final class ExpressionTokens {
 
 	public static Result<Long, CompileError> parseLiteral(String literal) {
 		try {
-			if ("true".equals(literal)) {
+			var lit = literal;
+			if ("true".equals(lit)) {
 				return Result.ok(1L);
 			}
-			if ("false".equals(literal)) {
+			if ("false".equals(lit)) {
 				return Result.ok(0L);
 			}
 
-			// Handle string indexing: "string"[index]
-			if (literal.contains("\"") && literal.contains("[")) {
+			var hasQuote = lit.contains("\"");
+			var hasBracket = lit.contains("[");
+			if (hasQuote && hasBracket) {
 				var stringIndexResult = io.github.sirmathhman.tuff.compiler.strings.StringIndexingHandler
-						.parseStringIndexing(literal);
+						.parseStringIndexing(lit);
 				if (stringIndexResult instanceof Result.Ok<Long, CompileError>) {
 					return stringIndexResult;
 				}
-				// If it fails, fall through to other parsing attempts
 			}
 
-			// Handle char literals: 'a', '\n', '\0', etc.
-			if (literal.startsWith("'") && literal.endsWith("'")) {
-				return parseCharLiteral(literal);
+			var isChar = lit.startsWith("'") && lit.endsWith("'");
+			if (isChar) {
+				return parseCharLiteral(lit);
 			}
 
 			var numericPart = literal;

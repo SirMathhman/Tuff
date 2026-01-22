@@ -241,24 +241,22 @@ public final class App {
 	public static Result<ArrayList<Instruction>, CompileError> generateInstructions(ExpressionModel.ExpressionResult expr,
 			ArrayList<Instruction> instructions) {
 		var instr = instructions;
-		boolean hasControlMarkers = expr.terms().stream().anyMatch(t -> t.readCount < 0);
-		boolean hasReads = expr.terms().stream().anyMatch(t -> t.readCount > 0);
+		var terms = expr.terms();
+		var literalValue = expr.literalValue();
+		boolean hasControlMarkers = terms.stream().anyMatch(t -> t.readCount < 0);
+		boolean hasReads = terms.stream().anyMatch(t -> t.readCount > 0);
 		if (!hasReads && !hasControlMarkers) {
-			// Constant expression: always overwrite result (avoid `result += literal`).
-			instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 0, expr.literalValue()));
+			instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, 0, literalValue));
 		} else {
-			// Load all reads into registers
-			instr = InstructionBuilder.loadAllReads(expr.terms(), instr);
+			instr = InstructionBuilder.loadAllReads(terms, instr);
 
-			// Apply masking for bitwise-notted unsigned types
 			int readReg = 0;
-			for (ExpressionModel.ExpressionTerm term : expr.terms()) {
+			for (ExpressionModel.ExpressionTerm term : terms) {
 				if (term.readCount > 0) {
 					if (term.isBitwiseNotted() && term.readTypeSpec != null && term.readTypeSpec.matches("[UI]\\d+")) {
 						int bits = Integer.parseInt(term.readTypeSpec.substring(1));
 						long mask = (1L << bits) - 1;
-						// Use a temporary register for the mask value
-						int tempReg = expr.terms().size() + 1; // Use a register beyond all reads
+						int tempReg = terms.size() + 1;
 						instr = instr.add(new Instruction(Operation.Load, Variant.Immediate, tempReg, mask));
 						instr = instr
 								.add(new Instruction(Operation.BitsAnd, Variant.Immediate, readReg, (long) tempReg));
@@ -267,12 +265,10 @@ public final class App {
 				}
 			}
 
-			// Build result respecting precedence
-			int resultReg = InstructionBuilder.buildResultWithPrecedence(expr.terms(), instr);
+			int resultReg = InstructionBuilder.buildResultWithPrecedence(terms, instr);
 
-			// Add literal if present
-			if (expr.literalValue() != 0) {
-				instr = InstructionBuilder.addLiteralToResult(resultReg, expr.literalValue(), expr.terms().size(), instr);
+			if (literalValue != 0) {
+				instr = InstructionBuilder.addLiteralToResult(resultReg, literalValue, terms.size(), instr);
 			}
 		}
 

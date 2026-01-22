@@ -320,7 +320,7 @@ public final class WhileLoopHandler {
 		return applyComparisonOp(operator, instr);
 	}
 
-	private static final String[] COMPARISON_OPERATORS = {"==", "!=", "<=", ">=", "<", ">" };
+	private static final String[] COMPARISON_OPERATORS = { "==", "!=", "<=", ">=", "<", ">" };
 
 	private static String[] findComparisonParts(String condition) {
 		for (var op : COMPARISON_OPERATORS) {

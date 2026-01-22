@@ -89,21 +89,19 @@ public class TypeAliasHandler {
 	}
 
 	private static boolean isValidTargetType(String type) {
-		// Check if it's a basic valid type by testing compatibility with itself
-		if (ExpressionTokens.isTypeCompatible(type, type)) {
+		var t = type;
+		if (ExpressionTokens.isTypeCompatible(t, t)) {
 			return true;
 		}
 
-		// Check for pointer types
-		if (type.startsWith("*")) {
-			var baseType = type.substring(1);
+		if (t.startsWith("*")) {
+			var baseType = t.substring(1);
 			if (baseType.startsWith("mut ")) {
 				baseType = baseType.substring(4);
 			}
 			return ExpressionTokens.isTypeCompatible(baseType, baseType);
 		}
 
-		// Check for array types or tuple types
-		return (type.startsWith("[") && type.endsWith("]")) || (type.startsWith("(") && type.endsWith(")"));
+		return (t.startsWith("[") && t.endsWith("]")) || (t.startsWith("(") && t.endsWith(")"));
 	}
 }

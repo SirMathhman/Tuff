@@ -370,12 +370,15 @@ public final class InstructionBuilder {
 	}
 
 	private static boolean isMultiplicativeNext(ArrayList<ExpressionModel.ExpressionTerm> terms, int i) {
-		return i + 1 < terms.size()
-				&& (terms.get(i + 1).isMultiplied() || terms.get(i + 1).isDivided()
-						|| terms.get(i + 1).multiplicativeOperator == '&' || terms.get(i + 1).multiplicativeOperator == '|'
-						|| terms.get(i + 1).multiplicativeOperator == '^' || terms.get(i + 1).multiplicativeOperator == '<'
-						|| terms.get(i + 1).multiplicativeOperator == '>')
-				&& terms.get(i + 1).readCount > 0;
+		if (i + 1 >= terms.size()) {
+			return false;
+		}
+		var nextTerm = terms.get(i + 1);
+		var hasReadCount = nextTerm.readCount > 0;
+		var isMultOrDiv = nextTerm.isMultiplied() || nextTerm.isDivided();
+		var multOp = nextTerm.multiplicativeOperator;
+		var isBitwise = multOp == '&' || multOp == '|' || multOp == '^' || multOp == '<' || multOp == '>';
+		return (isMultOrDiv || isBitwise) && hasReadCount;
 	}
 
 	private static int consumeAndEmitMultiplicativeTerms(ArrayList<ExpressionModel.ExpressionTerm> terms, int i,
@@ -427,12 +430,12 @@ public final class InstructionBuilder {
 		var firstAdditiveGroup = state.firstAdditiveGroup();
 		var resultReg = state.resultReg();
 		var instr = state.instructions();
-		if (groupRegs.size() == 1) {
-			// Single read in this group
+		var regs = groupRegs;
+		var groupSize = regs.size();
+		if (groupSize == 1) {
 			if (firstAdditiveGroup) {
-				return groupRegs.get(0);
+				return regs.get(0);
 			} else {
-				// Add or subtract to result
 				Operation op;
 				if (isSubtracted)
 					op = Operation.Sub;
@@ -442,7 +445,6 @@ public final class InstructionBuilder {
 				return resultReg;
 			}
 		} else {
-			// Multiple reads: perform multiplications, divisions, and bitwise operations
 			int groupResultReg = groupRegs.get(0);
 			for (int j = 1; j < groupRegs.size(); j++) {
 				var op = switch (groupOps.get(j)) {

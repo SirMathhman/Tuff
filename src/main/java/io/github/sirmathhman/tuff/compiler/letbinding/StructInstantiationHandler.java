@@ -222,23 +222,22 @@ public final class StructInstantiationHandler {
 	}
 
 	private static Result<FieldAssignment, CompileError> parseOneFieldAssignment(String text) {
-		// Find field name
-		var colonPos = text.indexOf(':');
+		var t = text;
+		var colonPos = t.indexOf(':');
 		if (colonPos == -1) {
 			return Result.err(new CompileError("Field assignment must have colon"));
 		}
 
-		var fieldName = text.substring(0, colonPos).trim();
+		var fieldName = t.substring(0, colonPos).trim();
 		if (!isValidFieldName(fieldName)) {
 			return Result.err(new CompileError("Invalid field name: " + fieldName));
 		}
 
-		// Find the end of the value (before comma or end)
 		var valueStart = colonPos + 1;
 		var valueEnd = valueStart;
 		var depth = 0;
-		while (valueEnd < text.length()) {
-			var c = text.charAt(valueEnd);
+		while (valueEnd < t.length()) {
+			var c = t.charAt(valueEnd);
 			if (c == '(' || c == '{') {
 				depth++;
 			} else if (c == ')' || c == '}') {
@@ -249,7 +248,7 @@ public final class StructInstantiationHandler {
 			valueEnd++;
 		}
 
-		var fieldValue = text.substring(valueStart, valueEnd).trim();
+		var fieldValue = t.substring(valueStart, valueEnd).trim();
 		if (fieldValue.isEmpty()) {
 			return Result.err(new CompileError("Field value cannot be empty"));
 		}

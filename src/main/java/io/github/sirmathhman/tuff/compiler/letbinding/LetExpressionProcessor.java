@@ -18,26 +18,19 @@ public final class LetExpressionProcessor {
 
 	public static Result<String, CompileError> determineAndValidateType(ExpressionTokens.LetBindingDecl decl,
 			Map<String, String> variableTypes) {
-		// Extract the type from the value expression BEFORE substitution
-		// This allows variable references to be resolved in the type context
-		var typeResult = ExpressionTokens.extractTypeFromExpression(decl.valueExpr(),
+		var d = decl;
+		var typeResult = ExpressionTokens.extractTypeFromExpression(d.valueExpr(),
 																																variableTypes);
 
-		// Determine the actual type to use
-		if (decl.declaredType() == null) {
-			// Type inference: require successful type extraction
+		if (d.declaredType() == null) {
 			return typeResult.match(Result::ok, Result::err);
 		} else {
-			// If type is explicitly declared, try to extract type for validation
 			return typeResult.match(
 					inferredType -> {
-						// Validate that the inferred type is compatible with the declared type
-						// But skip validation for pointer types (they're complex and require more
-						// infrastructure)
-						if (!decl.declaredType().startsWith("*")
-								&& !ExpressionTokens.isTypeCompatible(inferredType, decl.declaredType())) {
+						if (!d.declaredType().startsWith("*")
+								&& !ExpressionTokens.isTypeCompatible(inferredType, d.declaredType())) {
 							return Result.err(new CompileError("Type mismatch in let binding: variable '"
-									+ decl.varName() + "' declared as " + decl.declaredType() + " but initialized with "
+									+ d.varName() + "' declared as " + d.declaredType() + " but initialized with "
 									+ inferredType));
 						}
 						return Result.ok(decl.declaredType());

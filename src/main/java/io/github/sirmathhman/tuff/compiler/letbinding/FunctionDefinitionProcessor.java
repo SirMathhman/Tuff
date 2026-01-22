@@ -74,28 +74,25 @@ public final class FunctionDefinitionProcessor {
 	}
 
 	private static Result<BodyAndRemaining, CompileError> parseBodyAndRemaining(String s, int bodyStart) {
-		var semiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(s, bodyStart);
+		var str = s;
+		var semiIndex = DepthAwareSplitter.findSemicolonAtDepthZero(str, bodyStart);
 		if (semiIndex != -1) {
-			var body = s.substring(bodyStart, semiIndex).trim();
-			var remaining = s.substring(semiIndex + 1).trim();
+			var body = str.substring(bodyStart, semiIndex).trim();
+			var remaining = str.substring(semiIndex + 1).trim();
 			return Result.ok(new BodyAndRemaining(body, remaining));
 		}
 
-		// Allow omitting ';' terminator for block bodies: fn f() => { ... } nextExpr
-		if (bodyStart < s.length() && s.charAt(bodyStart) == '{') {
-			var closeBrace = DepthAwareSplitter.findMatchingBrace(s, bodyStart);
+		if (bodyStart < str.length() && str.charAt(bodyStart) == '{') {
+			var closeBrace = DepthAwareSplitter.findMatchingBrace(str, bodyStart);
 			if (closeBrace == -1) {
 				return Result.err(new CompileError("Invalid function definition: unmatched '}' in body"));
 			}
-			var body = s.substring(bodyStart, closeBrace + 1).trim();
-			var remaining = s.substring(closeBrace + 1).trim();
+			var body = str.substring(bodyStart, closeBrace + 1).trim();
+			var remaining = str.substring(closeBrace + 1).trim();
 			return Result.ok(new BodyAndRemaining(body, remaining));
 		}
 
-		// If there's no semicolon and no block, treat the entire rest as body with
-		// empty remaining
-		// This supports: let func = fn get() => 100; func()
-		var body = s.substring(bodyStart).trim();
+		var body = str.substring(bodyStart).trim();
 		return Result.ok(new BodyAndRemaining(body, ""));
 	}
 

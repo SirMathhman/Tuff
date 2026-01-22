@@ -95,7 +95,8 @@ public final class ArrayFieldAccessBase {
 	 * which part of the array type to extract (init=1, length=2).
 	 */
 	public static Result<Void, CompileError> handleArrayFieldAccess(Context ctx) {
-		var declaredType = resolveDeclaredType(ctx.decl);
+		var c = ctx;
+		var declaredType = resolveDeclaredType(c.decl);
 		if (declaredType == null) {
 			return null;
 		}
@@ -110,18 +111,18 @@ public final class ArrayFieldAccessBase {
 			return null;
 		}
 
-		var fieldValue = ctx.extractor.apply(parts, ctx.fieldName);
+		var fieldValue = c.extractor.apply(parts, c.fieldName);
 		if (fieldValue == null) {
-			return Result.err(new CompileError("Invalid array " + ctx.fieldName + ": could not extract"));
+			return Result.err(new CompileError("Invalid array " + c.fieldName + ": could not extract"));
 		}
 
-		LetBindingProcessor.getVariableTypes().put(ctx.varName, declaredType);
+		LetBindingProcessor.getVariableTypes().put(c.varName, declaredType);
 
-		var result = ctx.continuation.replaceAll(
-				"\\b" + java.util.regex.Pattern.quote(ctx.varName) + "\\." + ctx.fieldName + "\\b",
+		var result = c.continuation.replaceAll(
+				"\\b" + java.util.regex.Pattern.quote(c.varName) + "\\." + c.fieldName + "\\b",
 				fieldValue);
 
-		var contResult = App.parseExpressionWithRead(result, ctx.functionRegistry);
+		var contResult = App.parseExpressionWithRead(result, c.functionRegistry);
 		return contResult.match(
 				expr -> App.generateInstructions(expr, ctx.instructions).map(ignored -> (Void) null),
 				Result::err);

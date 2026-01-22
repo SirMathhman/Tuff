@@ -169,9 +169,10 @@ public final class MultiplicativeExpressionBuilder {
 		var token = new StringBuilder();
 		var lastOp = '\0';
 		var depth = 0;
+		var e = expr;
 
-		for (var i = 0; i < expr.length(); i++) {
-			var c = expr.charAt(i);
+		for (var i = 0; i < e.length(); i++) {
+			var c = e.charAt(i);
 
 			if (c == '(') {
 				depth++;
@@ -180,7 +181,7 @@ public final class MultiplicativeExpressionBuilder {
 				depth--;
 				token.append(c);
 			} else if ((c == '*' || c == '/' || c == '&' || c == '|' || c == '^') && depth == 0) {
-				if ((c == '&' || c == '|') && i + 1 < expr.length() && expr.charAt(i + 1) == c) {
+				if ((c == '&' || c == '|') && i + 1 < e.length() && e.charAt(i + 1) == c) {
 					token.append(c);
 				} else {
 					result = result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
@@ -188,7 +189,7 @@ public final class MultiplicativeExpressionBuilder {
 					lastOp = c;
 				}
 			} else if ((c == '<' || c == '>') && depth == 0) {
-				if (i + 1 < expr.length() && expr.charAt(i + 1) == c) {
+				if (i + 1 < e.length() && e.charAt(i + 1) == c) {
 					result = result.add(new ExpressionModel.MultOperatorToken(token.toString(), lastOp));
 					token = new StringBuilder();
 					lastOp = c;

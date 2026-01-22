@@ -16,25 +16,24 @@ public final class StringIndexingHandler {
 	 * Returns the character code (long value) or an error if parsing fails.
 	 */
 	public static Result<Long, CompileError> parseStringIndexing(String literal) {
-		// Pattern: "string"[index]
-		// Find the closing quote of the string
-		var quoteStart = literal.indexOf('"');
+		var lit = literal;
+		var quoteStart = lit.indexOf('"');
 		if (quoteStart == -1) {
 			return Result.err(new CompileError("No opening quote found in string indexing"));
 		}
 
 		var quoteEnd = -1;
 		var escaped = false;
-		for (var i = quoteStart + 1; i < literal.length(); i++) {
+		for (var i = quoteStart + 1; i < lit.length(); i++) {
 			if (escaped) {
 				escaped = false;
 				continue;
 			}
-			if (literal.charAt(i) == '\\') {
+			if (lit.charAt(i) == '\\') {
 				escaped = true;
 				continue;
 			}
-			if (literal.charAt(i) == '"') {
+			if (lit.charAt(i) == '"') {
 				quoteEnd = i;
 				break;
 			}
