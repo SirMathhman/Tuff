@@ -39,9 +39,7 @@ export function isVariableShadowed(
   return context.some((b) => b.name === varName);
 }
 
-export function parseLetComponents(
-  source: string,
-):
+export function parseLetComponents(source: string):
   | {
       varName: string;
       exprPart: string;

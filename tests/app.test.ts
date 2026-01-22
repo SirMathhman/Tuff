@@ -140,4 +140,8 @@ describe("The application - Grouping and variables", () => {
   it("should reject type mismatch in let binding", () => {
     assertInvalid("let x : U8 = read U16; x");
   });
+
+  it("should allow widening type in let binding", () => {
+    assertValid("let x : U16 = read U8; x", 42, 42);
+  });
 });

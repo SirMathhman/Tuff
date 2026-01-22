@@ -1,12 +1,40 @@
-import { type CompileError } from "./types";
+import { type CompileError, getTypeBits, isSignedType } from "./types";
 import { parseLetComponents, extractExpressionType } from "./let-binding";
 
-function checkTypeAnnotationCompatibility(
-  typeAnnotation: string,
-  exprType: string | undefined,
-): boolean {
-  if (!exprType) return true;
-  return exprType === typeAnnotation;
+function isTypeCompatible(declaredType: string, exprType: string): boolean {
+  if (declaredType === exprType) return true;
+
+  const declaredBits = getTypeBits(declaredType);
+  const exprBits = getTypeBits(exprType);
+
+  if (declaredBits === undefined || exprBits === undefined) return false;
+
+  const declaredSigned = isSignedType(declaredType);
+  const exprSigned = isSignedType(exprType);
+
+  // Allow widening: expr type can fit in declared type
+  // For unsigned: U8 (8 bits) -> U16 (16 bits), U8 -> I16 (16 bits, signed)
+  // For signed: I8 (8 bits) -> I16 (16 bits)
+  // For mixed: U8 (8 bits) -> I16 (16 bits - room for sign and value)
+
+  // If expr is unsigned and declared is unsigned, allow if expr bits <= declared bits
+  if (!exprSigned && !declaredSigned) {
+    return exprBits <= declaredBits;
+  }
+
+  // If expr is signed and declared is signed, allow if expr bits <= declared bits
+  if (exprSigned && declaredSigned) {
+    return exprBits <= declaredBits;
+  }
+
+  // If expr is unsigned and declared is signed, allow if expr fits in signed range
+  // U8 (0-255) fits in I16 (-32768 to 32767) but not I8 (-128 to 127)
+  if (!exprSigned && declaredSigned) {
+    return exprBits < declaredBits;
+  }
+
+  // If expr is signed and declared is unsigned, disallow (can't fit negative)
+  return false;
 }
 
 function buildTypeError(
@@ -67,10 +95,7 @@ export function detectTypeIncompatibility(
     }
 
     const exprType = extractExpressionType(exprPart);
-    if (
-      exprType &&
-      !checkTypeAnnotationCompatibility(typeAnnotation, exprType)
-    ) {
+    if (exprType && !isTypeCompatible(typeAnnotation, exprType)) {
       return buildTypeError(typeAnnotation, exprType, exprPart);
     }
 
