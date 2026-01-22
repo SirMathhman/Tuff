@@ -183,9 +183,16 @@ export function detectDereferenceReassignmentOnImmutablePointer(
   return undefined;
 }
 
-export function detectArrayIndexReassignmentOnImmutableArray(
+type ArrayIndexProcessor = (
+  comp: ReturnType<typeof parseArrayIndexReassignmentComponents>,
+  binding: VariableBinding | undefined,
+  source: string,
+) => CompileError | undefined;
+
+function processArrayIndexReassignments(
   source: string,
   context: VariableContext,
+  processor: ArrayIndexProcessor,
 ): CompileError | undefined {
   let current = skipLetBindings(source);
 
@@ -195,6 +202,20 @@ export function detectArrayIndexReassignmentOnImmutableArray(
     if (!comp) break;
 
     const binding = context.find((b) => b.name === comp.arrayName);
+    const error = processor(comp, binding, source);
+    if (error) return error;
+
+    current = comp.remaining;
+  }
+
+  return undefined;
+}
+
+export function detectArrayIndexReassignmentOnImmutableArray(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  return processArrayIndexReassignments(source, context, (comp, binding) => {
     if (binding && !binding.mutable) {
       return {
         cause: `Cannot assign to index of non-mutable array '${comp.arrayName}'`,
@@ -204,11 +225,44 @@ export function detectArrayIndexReassignmentOnImmutableArray(
         first: { line: 0, column: 0, length: source.length },
       };
     }
+    return undefined;
+  });
+}
 
-    current = comp.remaining;
-  }
+export function detectOutOfOrderArrayAssignment(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  const arrayAssignments: Map<string, number> = new Map();
 
-  return undefined;
+  return processArrayIndexReassignments(
+    source,
+    context,
+    (comp, binding, srcArg) => {
+      if (!binding || !binding.type || !binding.type.startsWith("[")) {
+        return undefined;
+      }
+
+      const indexNum = parseInt(comp.indexExpr, 10);
+      if (isNaN(indexNum)) {
+        return undefined;
+      }
+
+      const lastAssignedIndex = arrayAssignments.get(comp.arrayName) ?? -1;
+
+      if (indexNum !== lastAssignedIndex + 1) {
+        return {
+          cause: `Array elements must be initialized in order for declaration-only arrays`,
+          reason: `Array '${comp.arrayName}' has ${lastAssignedIndex + 1} initialized element(s), but trying to assign to index ${indexNum}. Must assign to index ${lastAssignedIndex + 1} next.`,
+          fix: `Assign array elements sequentially starting from index 0`,
+          first: { line: 0, column: 0, length: srcArg.length },
+        };
+      }
+
+      arrayAssignments.set(comp.arrayName, indexNum);
+      return undefined;
+    },
+  );
 }
 
 function checkDeclarationOnlyRestrictions(

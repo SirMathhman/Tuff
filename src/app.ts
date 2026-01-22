@@ -27,6 +27,7 @@ import {
   detectMultipleReassignmentsToDeclarationOnly,
   detectUninitializedDeclarationOnly,
   detectArrayIndexReassignmentOnImmutableArray,
+  detectOutOfOrderArrayAssignment,
 } from "./reassignment-validation";
 import { detectPointerTypeErrors } from "./pointer-validation";
 import { compileNoContext } from "./arithmetic-parsing";
@@ -244,6 +245,11 @@ function performValidationChecks(trimmed: string): CompileError | undefined {
   const arrayIndexReassignmentError =
     detectArrayIndexReassignmentOnImmutableArray(trimmed, preContext);
   if (arrayIndexReassignmentError) return arrayIndexReassignmentError;
+  const outOfOrderArrayError = detectOutOfOrderArrayAssignment(
+    trimmed,
+    preContext,
+  );
+  if (outOfOrderArrayError) return outOfOrderArrayError;
   const declarationOnlyError = detectMultipleReassignmentsToDeclarationOnly(
     trimmed,
     preContext,

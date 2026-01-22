@@ -2,26 +2,27 @@
 
 ## Project Overview
 
-Tuff is a 64-bit virtual machine with a compiler for a typed expression language. The architecture separates concerns: [src/app.ts](../src/app.ts) orchestrates compilation, [src/parser.ts](../src/parser.ts) tokenizes/parses, [src/vm.ts](../src/vm.ts) executes 64-bit instructions on a 4-register, 1024-byte memory VM. Supports arithmetic, variables with type checking, mutable references, pointers, if-expressions, and comparisons.
+Tuff is a 64-bit virtual machine with a compiler for a typed expression language. The architecture separates concerns: [src/app.ts](../src/app.ts) orchestrates compilation, [src/parser.ts](../src/parser.ts) tokenizes/parses, [src/vm.ts](../src/vm.ts) executes 64-bit instructions on a 4-register, 1024-byte memory VM. Supports arithmetic, variables with type checking, mutable references, pointers, if-expressions, comparisons, and arrays.
 
 ## Core Architecture & Data Flow
 
 **Compilation Pipeline**: Source → tokenize → parse/validate → generate `Instruction[]` → encode to 64-bit format → execute
 
-**Five Compiler Layers**:
+**Six Compiler Layers**:
 
 1. **Parser** ([src/parser.ts](../src/parser.ts)) - Tokenization, basic syntax extraction (variables, parentheses, operators, type suffixes)
 2. **Arithmetic** ([src/arithmetic-parsing.ts](../src/arithmetic-parsing.ts)) - Recursive descent for add/sub/mul/div expressions with operator precedence
 3. **Comparisons** ([src/comparison-parsing.ts](../src/comparison-parsing.ts)) - `==`, `<`, `>`, `<=`, `>=` operators returning Bool type
 4. **Variables & Binding** ([src/let-binding.ts](../src/let-binding.ts), [src/let-expression-parsing.ts](../src/let-expression-parsing.ts)) - `let x: Type = expr;` with mutable binding support, context tracking (memory 904+)
-5. **App Layer** ([src/app.ts](../src/app.ts)) - Orchestrates all validators, handles parentheses/braces unwrapping, returns `Result<Instruction[], CompileError>`
+5. **Compilation Strategies** ([src/compilation-strategies.ts](../src/compilation-strategies.ts)) - Strategy pattern handlers (try\* functions) for reassignment, dereference, array access, references—each returns instructions or undefined
+6. **App Layer** ([src/app.ts](../src/app.ts)) - Orchestrates all validators, coordinates strategy handlers, handles parentheses/braces unwrapping, returns `Result<Instruction[], CompileError>`
 
 **Memory Layout** (1024 bytes):
 
 - 0-899: Program instructions (encoded 64-bit)
 - 900-903: Temp storage for expr evaluation
-- 904-999: Variable storage (context-allocated, `address = 904 + context.length`)
-- 950-980: If-expression nesting temp storage
+- 904+: Variable storage (arrays allocated contiguously, scalars at 904, 905, etc.)
+- 950+: If-expression nesting temp storage (950+3N for nested level N)
 
 ## Critical Implementation Patterns
 
@@ -48,21 +49,31 @@ if (result.ok) {
 - `Direct`: memory address (operand is memory location)
 - `Indirect`: pointer lookup (memory[operand] points to actual address)
 
+**Compilation Strategies Pattern** ([src/compilation-strategies.ts](../src/compilation-strategies.ts))
+
+- Each `try*` function (tryReassignment, tryDereference, tryArrayIndexing, etc.) follows: `(source, context, compileFunc) → { instructions, context } | undefined`
+- Return undefined if pattern doesn't match; caller tries next strategy
+- Each handler encapsulates one syntax/semantic concern without orchestration logic
+- Strategies are **order-dependent**: app.ts `tryAllPatterns()` attempts let → basic → arithmetic → arrays → braced in sequence
+- Always use `compileFunc` to recursively compile sub-expressions with current context
+
 **Type Compatibility** ([src/types.ts](../src/types.ts))
 
-- Supported types: `U8`, `U16`, `I8`, `I16`, `Bool`, `*Type` (pointer), `*mut Type` (mutable pointer)
+- Supported types: `U8`, `U16`, `I8`, `I16`, `Bool`, `*Type` (pointer), `*mut Type` (mutable pointer), `[Type; InitLen; TotalLen]` (arrays)
 - `isTypeCompatible(declared, expr)` allows narrowing: `expr` type must fit in `declared` type
 - `U8` → `U16` ✓, `U8` → `I8` ✗, `U16` → `U8` ✗ (narrowing rejected)
 - Bool only matches Bool; doesn't coerce to/from integers
+- Array types must match exactly: `[U8; 2; 2]` ≠ `[U16; 2; 2]`
 
 **Variable Context Management** ([src/let-binding.ts](../src/let-binding.ts))
 
 ```typescript
 export interface VariableBinding {
   name: string;
-  memoryAddress: number; // 904 + index in context array
+  memoryAddress: number; // 904 + sum of previous variable sizes
   type?: string; // Inferred or annotated
   mutable?: boolean; // let mut x = ...
+  declarationOnly?: boolean; // let x: Type; (no init)
 }
 ```
 
@@ -70,11 +81,18 @@ export interface VariableBinding {
 - `resolveVariable(context, "x")` returns memory address or undefined
 - Variable shadowing detected during validation, not allowed
 - Untyped bindings infer type from expression: `let x = read U8;` → x: U8
+- Declaration-only variables (no init) must be assigned before use; allow single assignment if immutable
 
 **Instruction Primitives** ([src/instruction-primitives.ts](../src/instruction-primitives.ts))
 
-- Use helper functions: `buildLoadImmediate()`, `buildLoadDirect()`, `buildStoreDirect()`, `buildStoreAndHalt()`, etc.
-- Eliminates repetitive instruction construction, centralizes Variant/OpCode logic
+- Use helpers: `buildLoadImmediate()`, `buildLoadDirect()`, `buildStoreDirect()`, `buildStoreAndHalt()`, etc.
+- Centralizes Variant/OpCode logic, eliminates manual instruction construction errors
+
+**Debug Execution Tracing** ([src/debug-dump.ts](../src/debug-dump.ts))
+
+- `ExecutionState`: registers, memory, PC, exit code, `prettyPrint()` method
+- `Cycle`: instruction + state before execution
+- `execute()` accepts optional `dumper(state, instruction)` callback for instruction-by-instruction tracing (used in tests/diagnostics)
 
 ## Expression Compilation & Validation
 
@@ -89,6 +107,7 @@ export interface VariableBinding {
 - Parses `let [mut] varName [: Type] = exprPart; remaining`
 - Compiles expression, stores result to allocated variable address, then compiles remaining (if any)
 - If remaining is empty, appends Halt instruction
+- Declaration-only syntax: `let x: Type;` (no equals, no expr)
 
 **If-Expression Parsing** ([src/if-expression-parsing.ts](../src/if-expression-parsing.ts))
 
@@ -103,12 +122,22 @@ export interface VariableBinding {
 - Returns result (0/1) in register, stored to memory for type tracking
 - Type must match on both sides: `read U8 == read U8` ✓, `read U8 == read U16` ✗
 
+**Array Support** ([src/array-parsing.ts](../src/array-parsing.ts), [src/array-compilation.ts](../src/array-compilation.ts))
+
+- Array type format: `[ElementType; InitializedCount; TotalCapacity]` (e.g., `[U8; 2; 2]`)
+- Array literals: `[expr1, expr2, ...]` — elements compiled sequentially and stored to base address
+- Array indexing: `array[index]` — dynamic or constant indices, computed address loaded indirectly
+- Array assignment: `let mut array[i] = expr;` — requires mutable array, stores to computed address
+- Arrays allocated contiguously from base address; `array[0]` at base, `array[i]` at base+i
+- Distinction between `initializedLength` (elements provided) and `totalLength` (allocated slots)
+
 **Pointer Support** ([src/pointer-validation.ts](../src/pointer-validation.ts))
 
 - Reference: `&x` creates pointer to x; `&mut x` mutable pointer (requires `let mut`)
 - Dereference: `*ptr` loads value from pointer; `*ptr = value` reassigns (only for `*mut`)
 - Indirect Load variant used for dereference: Load r1 Indirect from ptr address
 - Type: `*U8`, `*I32`, `*Bool`, `*mut Type` (pointer types are distinct)
+- Cannot mix mutable and immutable references to same variable in one scope
 
 ## Validation System
 
@@ -121,6 +150,9 @@ export interface VariableBinding {
 **Type Mismatch**: Let binding type annotation must match expression type
 **Mutability**: Reassignment (`x = value`) only allowed if `let mut x`
 **Pointer Safety**: Dereference only on pointer types; only `*mut` can be assigned
+**Array Mutability**: Array element assignment (`array[i] = value`) only on `let mut array`
+**Reference Borrowing**: Cannot mix mutable (`&mut`) and immutable (`&`) references to same variable
+**Declaration-Only**: Variables declared without init (e.g., `let x: Type;`) must be assigned before use; immutable declaration-only vars can only be assigned once
 
 ## Development Workflow
 
@@ -163,8 +195,12 @@ export interface VariableBinding {
 | [src/let-expression-parsing.ts](../src/let-expression-parsing.ts)   | Parses `let` statements; compiles RHS; stores to allocated address                             |
 | [src/comparison-parsing.ts](../src/comparison-parsing.ts)           | Parses ==, <, >, <=, >= returning Bool                                                         |
 | [src/if-expression-parsing.ts](../src/if-expression-parsing.ts)     | Parses if-then-else; validates condition is Bool; unifies branch types                         |
-| [src/pointer-validation.ts](../src/pointer-validation.ts)           | Validates &, &mut, \* operators; checks type compatibility                                     |
+| [src/compilation-strategies.ts](../src/compilation-strategies.ts)   | Strategy pattern handlers for reassignment, dereference, arrays, references, etc.              |
+| [src/debug-dump.ts](../src/debug-dump.ts)                           | Interfaces for execution state tracing (ExecutionState, Cycle, Dump)                           |
+| [src/pointer-validation.ts](../src/pointer-validation.ts)           | Validates &, &mut, \* operators; checks reference borrowing rules                              |
 | [src/expression-with-context.ts](../src/expression-with-context.ts) | Arithmetic parsing aware of variable context; resolves variable references                     |
+| [src/array-parsing.ts](../src/array-parsing.ts)                     | Array type parsing and literal detection ([Type; initLen; totalLen])                           |
+| [src/array-compilation.ts](../src/array-compilation.ts)             | Array element store/load instruction generation; computed address handling                     |
 | [src/types.ts](../src/types.ts)                                     | Type range checking, overflow detection, type compatibility rules                              |
 | [src/instruction-primitives.ts](../src/instruction-primitives.ts)   | Reusable instruction builders to reduce duplication                                            |
 | [src/vm.ts](../src/vm.ts)                                           | Instruction fetch/decode/execute loop; 4 registers, 1024 memory, 1000 cycle max                |
@@ -177,3 +213,25 @@ export interface VariableBinding {
 ✗ **Bad**: Direct bit shifting instead of `encodeTo64Bits()` / `decode()`
 ✗ **Bad**: Shadowing or redefining variables without validation check
 ✗ **Bad**: Type inference without explicit validation via `isTypeCompatible()`
+
+## Refactoring & Code Organization
+
+**Strategy for Adding Features**:
+
+1. Add tests first in `tests/app.test.ts` (use `assertValid()` or `assertInvalid()`)
+2. Implement parser logic in domain-specific modules (e.g., new operator parsing in separate file)
+3. Add validation in `validation.ts`, `reassignment-validation.ts`, or `pointer-validation.ts`
+4. Add strategy handler in `compilation-strategies.ts` if pattern-matching is needed
+5. Update `app.ts` `tryAllPatterns()` to coordinate new strategy
+6. Update this file's **Key Files** table and patterns
+
+**Code Deduplication**:
+
+- PMD copy-paste detector (CPD) enforces 50-token threshold; extract common patterns into helpers
+- Example: `extractLeftAndExprParts()` in `reassignment-parsing.ts` unifies parsing logic across three `parse*` functions
+- Shared instruction sequences go to `instruction-primitives.ts`
+
+**File Size Management**:
+
+- 500-line limit enforced per file; if approaching, identify cohesive subset for new module
+- Example: `debug-dump.ts` extracted debug interfaces from `vm.ts`, `compilation-strategies.ts` extracted 10+ try\* handlers from `app.ts`

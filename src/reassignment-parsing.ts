@@ -32,9 +32,9 @@ function isValidIdentifier(name: string): boolean {
   return true;
 }
 
-function extractLeftAndExprParts(base: ReturnType<typeof extractReassignmentBase>): 
-  | { leftSide: string; exprPart: string; remaining: string }
-  | undefined {
+function extractLeftAndExprParts(
+  base: ReturnType<typeof extractReassignmentBase>,
+): { leftSide: string; exprPart: string; remaining: string } | undefined {
   if (!base) return undefined;
   const { bindingScope, remaining, equalsIndex } = base;
   const leftSide = bindingScope.substring(0, equalsIndex).trim();
@@ -55,7 +55,11 @@ export function parseReassignmentComponents(source: string):
 
   if (!isValidIdentifier(parts.leftSide)) return undefined;
 
-  return { varName: parts.leftSide, exprPart: parts.exprPart, remaining: parts.remaining };
+  return {
+    varName: parts.leftSide,
+    exprPart: parts.exprPart,
+    remaining: parts.remaining,
+  };
 }
 
 export function parseDereferenceReassignmentComponents(source: string):

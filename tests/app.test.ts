@@ -4,12 +4,30 @@ import { describe, it, expect } from "bun:test";
 import { compile, executeWithArray, executeWithArrayToDump } from "../src/app";
 
 // Test helpers
+function buildDumpMessage(
+  expected: number,
+  exitCode: number,
+  dump: ReturnType<typeof executeWithArrayToDump>[1],
+): string {
+  const joinedCycles = dump.cycles
+    .map(
+      (cycle, index) =>
+        index +
+        ": " +
+        cycle.beforeInstructionExecuted.prettyPrint() +
+        " -> " +
+        JSON.stringify(cycle.instructionToExecute),
+    )
+    .join("\n");
+
+  return `Expected exit code ${expected} but got ${exitCode}\nMemory Dump:\n${joinedCycles}`;
+}
+
 function assertValid(source: string, expected: number, ...stdIn: number[]) {
   const compileResult = compile(source);
   if (compileResult.ok) {
     const execResult = executeWithArray(compileResult.value, stdIn);
     if (execResult !== expected) {
-      // Do we have an equivalent to Assertions.fail()?
       expect(
         "Failed to execute compiled instructions: " +
           JSON.stringify(compileResult.value, null, 2),
@@ -21,29 +39,9 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
         compileResult.value,
         stdIn,
       );
-
-      const joinedCycles = dump.cycles
-        .map(
-          (cycle, index) =>
-            index +
-            ": " +
-            cycle.beforeInstructionExecuted.prettyPrint() +
-            " -> " +
-            JSON.stringify(cycle.instructionToExecute),
-        )
-        .join("\n");
-
-      expect(
-        "Expected exit code " +
-          expected +
-          " but got " +
-          exitCode +
-          "\nMemory Dump:\n" +
-          joinedCycles,
-      ).toBeUndefined();
+      expect(buildDumpMessage(expected, exitCode, dump)).toBeUndefined();
     }
   } else {
-    // Do we have an equivalent to Assertions.fail()?
     expect(compileResult.error).toBeUndefined();
   }
 }
@@ -51,7 +49,6 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
 function assertInvalid(source: string) {
   const compileResult = compile(source);
   if (compileResult.ok) {
-    // Do we have an equivalent to Assertions.fail()?
     expect(
       "Expected compilation to fail, but it succeeded with: " +
         JSON.stringify(compileResult.value, null, 2),
@@ -436,6 +433,14 @@ describe("The application - Arrays", () => {
       15,
       5,
       10,
+    );
+  });
+});
+
+describe("The application - Array validation", () => {
+  it("should reject out-of-order array element assignment", () => {
+    assertInvalid(
+      "let mut array : [U8; 0; 2]; array[1] = read U8; array[0] = read U8; array[0] + array[1]",
     );
   });
 });
