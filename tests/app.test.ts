@@ -116,4 +116,8 @@ describe("The application - Grouping and variables", () => {
   it("should support let binding with read expression", () => {
     assertValid("let x : U8 = read U8; x", 42, 42);
   });
+
+  it("should support let binding variable in expressions", () => {
+    assertValid("let x : U8 = read U8; x + x", 84, 42);
+  });
 });

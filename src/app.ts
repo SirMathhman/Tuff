@@ -39,6 +39,7 @@ import {
   buildLetStoreInstructions,
   buildVarRefInstructions,
 } from "./let-binding";
+import { parseAddExpressionWithContext } from "./expression-with-context";
 
 export interface Ok<T> {
   ok: true;
@@ -453,6 +454,15 @@ function compileWithContext(
   if (varAddress !== undefined) {
     return {
       instructions: buildVarRefInstructions(varAddress),
+      context,
+    };
+  }
+
+  // Try parsing as an addition expression with context (for variables)
+  const addExprWithContext = parseAddExpressionWithContext(trimmed, context);
+  if (addExprWithContext) {
+    return {
+      instructions: addExprWithContext,
       context,
     };
   }
