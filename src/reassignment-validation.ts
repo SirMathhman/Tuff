@@ -24,10 +24,7 @@ function skipLetBindings(source: string): string {
   return current;
 }
 
-function countReassignments(
-  source: string,
-  varName: string,
-): number {
+function countReassignments(source: string, varName: string): number {
   let count = 0;
   let current = skipLetBindings(source);
 
@@ -187,6 +184,153 @@ export function detectMultipleReassignmentsToDeclarationOnly(
     const error = checkDeclarationOnlyRestrictions(binding, source);
     if (error) {
       return error;
+    }
+  }
+
+  return undefined;
+}
+
+function findVariableUsage(source: string, varName: string): number {
+  let current = skipLetBindings(source);
+
+  // Check remaining code for any reference to the variable
+  while (current.length > 0) {
+    current = current.trim();
+
+    // Skip reassignments
+    const reassignComp = parseReassignmentComponents(current);
+    if (reassignComp) {
+      current = reassignComp.remaining;
+      continue;
+    }
+
+    // Check if the remaining code is just the variable name or contains it
+    if (current === varName || current.startsWith(varName)) {
+      return 1; // Found a usage
+    }
+
+    break;
+  }
+
+  return 0;
+}
+
+function buildUninitializedVarError(
+  varName: string,
+  source: string,
+  fixSuffix?: string,
+): CompileError {
+  return {
+    cause: `Uninitialized declaration-only variable '${varName}' used without assignment`,
+    reason:
+      "Declaration-only variables (let x: Type;) must be assigned before use",
+    fix:
+      fixSuffix ||
+      `Assign a value to '${varName}' before using it in expressions`,
+    first: { line: 0, column: 0, length: source.length },
+  };
+}
+
+function checkBindingUsesUninitializedVar(
+  comp: ReturnType<typeof parseLetComponents>,
+  binding: VariableBinding,
+  source: string,
+): CompileError | undefined {
+  const isUsed =
+    comp &&
+    comp.exprPart.includes(binding.name) &&
+    !comp.varName.includes(binding.name);
+
+  if (!isUsed) {
+    return undefined;
+  }
+
+  return buildUninitializedVarError(binding.name, source);
+}
+
+function processBindingForUninitializedVars(
+  comp: ReturnType<typeof parseLetComponents>,
+  context: VariableContext,
+  assignedVars: Set<string>,
+  source: string,
+): CompileError | undefined {
+  for (const binding of context) {
+    if (!binding.declarationOnly || assignedVars.has(binding.name)) {
+      continue;
+    }
+
+    const error = checkBindingUsesUninitializedVar(comp, binding, source);
+    if (error) {
+      return error;
+    }
+  }
+
+  return undefined;
+}
+
+function checkDeclarationOnlyUsageInBindings(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  let remaining = source;
+  const assignedVars = new Set<string>();
+
+  while (remaining.length > 0) {
+    remaining = remaining.trim();
+    if (!remaining.startsWith("let")) break;
+
+    const comp = parseLetComponents(remaining);
+    if (!comp) break;
+
+    const error = processBindingForUninitializedVars(
+      comp,
+      context,
+      assignedVars,
+      source,
+    );
+    if (error) {
+      return error;
+    }
+
+    // Mark this variable as assigned if it has an expression
+    if (comp.exprPart !== "") {
+      assignedVars.add(comp.varName);
+    }
+
+    remaining = comp.remaining;
+  }
+
+  return undefined;
+}
+
+export function detectUninitializedDeclarationOnly(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  // First check for usage in let binding expressions
+  const bindingError = checkDeclarationOnlyUsageInBindings(source, context);
+  if (bindingError) return bindingError;
+
+  // Then check for usage in remaining code after let bindings
+  for (const binding of context) {
+    if (!binding.declarationOnly) {
+      continue;
+    }
+
+    // Check if this declaration-only variable was assigned
+    const reassignCount = countReassignments(source, binding.name);
+    if (reassignCount > 0) {
+      continue; // Variable was assigned, it's fine
+    }
+
+    // Check if the variable is used anywhere after declaration
+    const usageCount = findVariableUsage(source, binding.name);
+    if (usageCount > 0) {
+      return buildUninitializedVarError(
+        binding.name,
+        source,
+        `Assign a value before using the variable, e.g., 'let ${binding.name} : ${binding.type}; ${binding.name} = value;'`,
+      );
     }
   }
 

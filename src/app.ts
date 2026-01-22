@@ -42,6 +42,7 @@ import {
   detectReassignmentTypeChange,
   detectDereferenceReassignmentOnImmutablePointer,
   detectMultipleReassignmentsToDeclarationOnly,
+  detectUninitializedDeclarationOnly,
 } from "./reassignment-validation";
 import { detectPointerTypeErrors } from "./pointer-validation";
 import { compileNoContext } from "./arithmetic-parsing";
@@ -317,6 +318,11 @@ function performValidationChecks(trimmed: string): CompileError | undefined {
     preContext,
   );
   if (declarationOnlyError) return declarationOnlyError;
+  const uninitializedError = detectUninitializedDeclarationOnly(
+    trimmed,
+    preContext,
+  );
+  if (uninitializedError) return uninitializedError;
   return undefined;
 }
 
