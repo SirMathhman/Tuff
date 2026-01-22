@@ -135,10 +135,7 @@ export function extractExpressionType(
   return undefined;
 }
 
-function validateNumericPrefix(
-  expr: string,
-  allowTypeChars: boolean,
-): boolean {
+function validateNumericPrefix(expr: string, allowTypeChars: boolean): boolean {
   const trimmed = expr.trim();
   if (trimmed.length === 0) return false;
 
