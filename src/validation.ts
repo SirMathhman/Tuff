@@ -108,7 +108,7 @@ function processLetBinding(
         cause: "Mixed-type arithmetic expression",
         reason:
           "All operands in an arithmetic expression must have the same type",
-        fix: "Use the same type for all operands or cast to a common type",
+        fix: "Use the same type for all operands",
         first: { line: 0, column: 0, length: exprPart.length },
       },
     };

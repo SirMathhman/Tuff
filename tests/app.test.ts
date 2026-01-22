@@ -152,4 +152,8 @@ describe("The application - Grouping and variables", () => {
   it("should reject mixed-type arithmetic expressions", () => {
     assertInvalid("let x : U8 = 1U8 + 2U16; x");
   });
+
+  it("should allow same-type widening in arithmetic", () => {
+    assertValid("let x : U16 = read U16 + read U16; x", 50, 25, 25);
+  });
 });
