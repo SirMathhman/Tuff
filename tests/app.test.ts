@@ -196,4 +196,8 @@ describe("The application - Type checking", () => {
   it("should reject arithmetic operations on boolean types", () => {
     assertInvalid("let x = true; let y = false; x + y");
   });
+
+  it("should reject bool narrowing to larger types", () => {
+    assertInvalid("let x = { let y = true; y }; let z : I32 = x; z");
+  });
 });

@@ -108,6 +108,12 @@ export function extractExpressionType(
 ): string | undefined {
   const trimmed = exprPart.trim();
 
+  // For braced expressions, unwrap and extract from inner content
+  if (isBracedExpression(trimmed)) {
+    const innerExpr = extractBracedContent(trimmed);
+    return extractExpressionType(innerExpr, context);
+  }
+
   // For read expressions, extract the type directly
   if (trimmed.startsWith("read ")) {
     const parts = trimmed.split(" ");
