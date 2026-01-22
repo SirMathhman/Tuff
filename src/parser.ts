@@ -1,5 +1,15 @@
 import { type Instruction, OpCode, Variant } from "./vm";
 
+function findMatchingParen(source: string, startIndex: number): number {
+  let depth = 1;
+  for (let i = startIndex + 1; i < source.length; i++) {
+    if (source[i] === "(") depth++;
+    if (source[i] === ")") depth--;
+    if (depth === 0) return i;
+  }
+  return -1;
+}
+
 function parseNumberWithSuffix(source: string): number | undefined {
   const suffixIndex = findTypeSuffixIndex(source);
   const numStr = suffixIndex >= 0 ? source.substring(0, suffixIndex) : source;
@@ -112,10 +122,20 @@ function parseReadIntoRegister1(): Instruction[] {
   ];
 }
 
-export function parseSimpleAtom(source: string): Instruction[] | undefined {
+function parseAtom(
+  source: string,
+  register: number,
+  readFunction: () => Instruction[] | undefined,
+): Instruction[] | undefined {
+  if (source.startsWith("(")) {
+    const closingIndex = findMatchingParen(source, 0);
+    if (closingIndex === source.length - 1) {
+      return undefined;
+    }
+  }
+
   if (source.startsWith("read")) {
-    // For multiplication left side, read into r1 so right side can use r0
-    return parseReadIntoRegister1();
+    return readFunction();
   }
 
   const num = parseNumberWithSuffix(source);
@@ -124,69 +144,28 @@ export function parseSimpleAtom(source: string): Instruction[] | undefined {
       {
         opcode: OpCode.Load,
         variant: Variant.Immediate,
-        operand1: 1,
+        operand1: register,
         operand2: num,
       },
     ];
   }
 
   return undefined;
+}
+
+export function parseSimpleAtom(source: string): Instruction[] | undefined {
+  return parseAtom(source, 1, parseReadIntoRegister1);
 }
 
 export function parseRightAtom(source: string): Instruction[] | undefined {
-  if (source.startsWith("read")) {
-    return parseReadIntoRegister0();
-  }
-
-  const num = parseNumberWithSuffix(source);
-  if (num !== undefined) {
-    return [
-      {
-        opcode: OpCode.Load,
-        variant: Variant.Immediate,
-        operand1: 0,
-        operand2: num,
-      },
-    ];
-  }
-
-  return undefined;
+  return parseAtom(source, 0, parseReadIntoRegister0);
 }
 
-function parseMulOrDivExpression(
-  source: string,
+export function buildMulOrDivResult(
+  leftInstructions: Instruction[],
+  rightInstructions: Instruction[],
   opcode: OpCode,
-  operator: string,
-): Instruction[] | undefined {
-  // Look for operator (* or /)
-  let opIndex = -1;
-  for (let i = 0; i < source.length; i++) {
-    if (source[i] === operator) {
-      opIndex = i;
-      break;
-    }
-  }
-  if (opIndex === -1) return undefined;
-
-  const leftPart = source.substring(0, opIndex).trim();
-  const rightPart = source.substring(opIndex + 1).trim();
-
-  const leftInstructions = parseSimpleAtom(leftPart);
-  if (!leftInstructions) return undefined;
-
-  // Parse right side - could be read, number, or another mul/div operation
-  let rightInstructions: Instruction[] | undefined;
-  const rightMulDiv = parseMulExpression(rightPart) || parseDivExpression(rightPart);
-  if (rightMulDiv) {
-    rightInstructions = rightMulDiv;
-  } else {
-    rightInstructions = parseRightAtom(rightPart);
-  }
-
-  if (!rightInstructions) return undefined;
-
-  // Build complete mul/div instruction sequence
-  // Store result in memory[902] to avoid collision with addition operands
+): Instruction[] {
   return [
     ...leftInstructions,
     ...rightInstructions,
@@ -205,12 +184,79 @@ function parseMulOrDivExpression(
   ];
 }
 
+export function findOperatorIndex(source: string, operator: string): number {
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === operator) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+export function splitByOperator(
+  source: string,
+  operator: string,
+): { leftPart: string; rightPart: string } | undefined {
+  const opIndex = findOperatorIndex(source, operator);
+  if (opIndex === -1) return undefined;
+  return {
+    leftPart: source.substring(0, opIndex).trim(),
+    rightPart: source.substring(opIndex + 1).trim(),
+  };
+}
+
+function parseMulOrDivExpression(
+  source: string,
+  opcode: OpCode,
+  operator: string,
+): Instruction[] | undefined {
+  const parts = splitByOperator(source, operator);
+  if (!parts) return undefined;
+
+  const leftInstructions = parseSimpleAtom(parts.leftPart);
+  if (!leftInstructions) return undefined;
+
+  let rightInstructions: Instruction[] | undefined;
+  const rightMulDiv =
+    parseMulExpression(parts.rightPart) || parseDivExpression(parts.rightPart);
+  if (rightMulDiv) {
+    rightInstructions = rightMulDiv;
+  } else {
+    rightInstructions = parseRightAtom(parts.rightPart);
+  }
+
+  if (!rightInstructions) return undefined;
+
+  return buildMulOrDivResult(leftInstructions, rightInstructions, opcode);
+}
+
 export function parseMulExpression(source: string): Instruction[] | undefined {
   return parseMulOrDivExpression(source, OpCode.Mul, "*");
 }
 
 export function parseDivExpression(source: string): Instruction[] | undefined {
   return parseMulOrDivExpression(source, OpCode.Div, "/");
+}
+
+export function isParenthesizedExpression(source: string): boolean {
+  if (!source.startsWith("(")) return false;
+  const closingIndex = findMatchingParen(source, 0);
+  return closingIndex === source.length - 1;
+}
+
+export function extractParenthesizedContent(source: string): string {
+  if (!source.startsWith("(")) return source;
+  const closingIndex = findMatchingParen(source, 0);
+  if (closingIndex === -1) return source;
+  return source.substring(1, closingIndex);
+}
+
+export function getTypeSuffix(source: string): string {
+  const suffixIndex = findTypeSuffixIndex(source);
+  if (suffixIndex >= 0) {
+    return source.substring(suffixIndex);
+  }
+  return "";
 }
 
 export { parseNumberWithSuffix, findTypeSuffixIndex };

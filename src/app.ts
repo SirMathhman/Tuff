@@ -1,11 +1,22 @@
 import { execute, type Instruction, OpCode, Variant } from "./vm";
 import {
-  parseMulExpression,
-  parseDivExpression,
   parseNumberWithSuffix,
   parseReadInstruction,
-  findTypeSuffixIndex,
+  isParenthesizedExpression,
+  extractParenthesizedContent,
+  parseSimpleAtom,
+  parseRightAtom,
+  parseMulExpression,
+  parseDivExpression,
+  buildMulOrDivResult,
+  splitByOperator,
 } from "./parser";
+import {
+  type CompileError,
+  checkTypeOverflow,
+  checkNegativeUnsignedError,
+  buildMulOrDivHalt,
+} from "./types";
 
 export interface Ok<T> {
   ok: true;
@@ -19,88 +30,12 @@ export interface Err<X> {
 
 export type Result<T, X> = Ok<T> | Err<X>;
 
-export interface Error {
-  // What went wrong
-  cause: string;
-
-  // Why it went wrong
-  reason: string;
-
-  // How to fix it
-  fix: string;
-}
-
-export interface Location {
-  line: number;
-  column: number;
-  length: number;
-}
-
-export interface CompileError extends Error {
-  first: Location;
-
-  // Sometimes, we might have two different places that conflict with each other
-  second?: Location;
-}
-
 export function ok<T>(value: T): Ok<T> {
   return { ok: true, value };
 }
 
 export function err<X>(error: X): Err<X> {
   return { ok: false, error };
-}
-
-function getTypeSuffix(source: string): string {
-  const suffixIndex = findTypeSuffixIndex(source);
-  if (suffixIndex >= 0) {
-    return source.substring(suffixIndex);
-  }
-  return "";
-}
-
-function isSignedType(suffix: string): boolean {
-  return suffix.length > 0 && suffix[0] === "I";
-}
-
-function getTypeBits(suffix: string): number | undefined {
-  if (suffix.length < 2) return undefined;
-  const bitsStr = suffix.substring(1);
-  let isValidNumber = true;
-  for (let i = 0; i < bitsStr.length; i++) {
-    const char = bitsStr[i];
-    if (!(char && char >= "0" && char <= "9")) {
-      isValidNumber = false;
-      break;
-    }
-  }
-  if (isValidNumber) {
-    const bits = parseInt(bitsStr, 10);
-    if (!isNaN(bits)) {
-      return bits;
-    }
-  }
-  return undefined;
-}
-
-function getTypeRange(
-  suffix: string,
-): { min: number; max: number } | undefined {
-  const bits = getTypeBits(suffix);
-  if (bits === undefined) return undefined;
-
-  if (isSignedType(suffix)) {
-    const minVal = -Math.pow(2, bits - 1);
-    const maxVal = Math.pow(2, bits - 1) - 1;
-    return { min: minVal, max: maxVal };
-  }
-  const minVal = 0;
-  const maxVal = Math.pow(2, bits) - 1;
-  return { min: minVal, max: maxVal };
-}
-
-function hasTypeSuffix(source: string): boolean {
-  return findTypeSuffixIndex(source) >= 0;
 }
 
 function buildStoreHaltInstructions(opcode: OpCode): Instruction[] {
@@ -125,10 +60,6 @@ function buildStoreHaltInstructions(opcode: OpCode): Instruction[] {
   ];
 }
 
-function buildAddStoreHaltInstructions(): Instruction[] {
-  return buildStoreHaltInstructions(OpCode.Add);
-}
-
 function buildAddInstructions(): Instruction[] {
   return [
     {
@@ -137,7 +68,7 @@ function buildAddInstructions(): Instruction[] {
       operand1: 1,
       operand2: 901,
     },
-    ...buildAddStoreHaltInstructions(),
+    ...buildStoreHaltInstructions(OpCode.Add),
   ];
 }
 
@@ -166,7 +97,7 @@ function buildReadAddConstantInstructions(constant: number): Instruction[] {
       operand1: 1,
       operand2: 901,
     },
-    ...buildAddStoreHaltInstructions(),
+    ...buildStoreHaltInstructions(OpCode.Add),
   ];
 }
 
@@ -195,27 +126,48 @@ function buildConstantAddReadInstructions(constant: number): Instruction[] {
       operand1: 1,
       operand2: 901,
     },
-    ...buildAddStoreHaltInstructions(),
+    ...buildStoreHaltInstructions(OpCode.Add),
   ];
 }
 
-function buildSubInstructions(): Instruction[] {
-  return buildStoreHaltInstructions(OpCode.Sub);
+function parseSubExpression(source: string): Instruction[] | undefined {
+  let minusIndex = -1;
+  for (let i = 1; i < source.length; i++) {
+    if (source[i] === "-") {
+      minusIndex = i;
+      break;
+    }
+  }
+  if (minusIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, minusIndex).trim();
+  const rightPart = source.substring(minusIndex + 1).trim();
+
+  const leftInstructions = parseLeftForSub(leftPart);
+  if (!leftInstructions) return undefined;
+
+  const rightInstructions = parseRightForSub(rightPart);
+  if (!rightInstructions) return undefined;
+
+  return [
+    ...leftInstructions.slice(0, -1),
+    ...rightInstructions.slice(0, -1),
+    ...buildStoreHaltInstructions(OpCode.Sub),
+  ];
 }
 
-function parseLeftSideForSub(leftPart: string): Instruction[] | undefined {
-  // Try add/sub expressions first, then simple values
-  let leftInstructions = parseAddExpression(leftPart);
-  if (leftInstructions) return leftInstructions;
+function parseLeftForSub(part: string): Instruction[] | undefined {
+  let result = parseAddExpression(part);
+  if (result) return result;
 
-  leftInstructions = parseSubExpression(leftPart);
-  if (leftInstructions) return leftInstructions;
+  result = parseSubExpression(part);
+  if (result) return result;
 
-  if (leftPart.startsWith("read")) {
-    return parseReadInstruction(leftPart);
+  if (part.startsWith("read")) {
+    return parseReadInstruction(part);
   }
 
-  const num = parseNumberWithSuffix(leftPart);
+  const num = parseNumberWithSuffix(part);
   if (num !== undefined) {
     return [
       {
@@ -236,12 +188,12 @@ function parseLeftSideForSub(leftPart: string): Instruction[] | undefined {
   return undefined;
 }
 
-function parseRightSideForSub(rightPart: string): Instruction[] | undefined {
-  if (rightPart.startsWith("read")) {
-    return parseReadInstruction(rightPart);
+function parseRightForSub(part: string): Instruction[] | undefined {
+  if (part.startsWith("read")) {
+    return parseReadInstruction(part);
   }
 
-  const num = parseNumberWithSuffix(rightPart);
+  const num = parseNumberWithSuffix(part);
   if (num !== undefined) {
     return [
       {
@@ -256,31 +208,25 @@ function parseRightSideForSub(rightPart: string): Instruction[] | undefined {
   return undefined;
 }
 
-function parseSubExpression(source: string): Instruction[] | undefined {
-  // Look for - operator (skip if it's at the start, as that's a negative number)
-  let minusIndex = -1;
-  for (let i = 1; i < source.length; i++) {
-    if (source[i] === "-") {
-      minusIndex = i;
-      break;
-    }
-  }
-  if (minusIndex === -1) return undefined;
+function parseParenthesizedAtom(
+  source: string,
+  targetRegister: number,
+): Instruction[] | undefined {
+  if (!isParenthesizedExpression(source)) return undefined;
+  const innerExpr = extractParenthesizedContent(source);
 
-  const leftPart = source.substring(0, minusIndex).trim();
-  const rightPart = source.substring(minusIndex + 1).trim();
+  const innerResult =
+    parseAddExpression(innerExpr) || parseSubExpression(innerExpr);
+  if (!innerResult) return undefined;
 
-  const leftInstructions = parseLeftSideForSub(leftPart);
-  if (!leftInstructions) return undefined;
-
-  const rightInstructions = parseRightSideForSub(rightPart);
-  if (!rightInstructions) return undefined;
-
-  // Build complete subtraction instruction sequence
   return [
-    ...leftInstructions.slice(0, -1), // Exclude halt from left
-    ...rightInstructions.slice(0, -1), // Exclude halt from right (if exists)
-    ...buildSubInstructions(),
+    ...innerResult.slice(0, -1),
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: targetRegister,
+      operand2: 900,
+    },
   ];
 }
 
@@ -336,7 +282,7 @@ function buildChainedReadAddExpression(
       operand1: 1,
       operand2: 902,
     },
-    ...buildAddStoreHaltInstructions(),
+    ...buildStoreHaltInstructions(OpCode.Add),
   ];
 }
 
@@ -354,8 +300,71 @@ function buildReadAddMulInstructions(): Instruction[] {
       operand1: 1,
       operand2: 901,
     },
-    ...buildAddStoreHaltInstructions(),
+    ...buildStoreHaltInstructions(OpCode.Add),
   ];
+}
+
+function parseLeftMulDivAtom(leftPart: string): Instruction[] | undefined {
+  if (isParenthesizedExpression(leftPart)) {
+    return parseParenthesizedAtom(leftPart, 1);
+  }
+  return parseSimpleAtom(leftPart);
+}
+
+function parseRightMulDivAtom(rightPart: string): Instruction[] | undefined {
+  const rightMulDiv =
+    parseMulExpressionWithParens(rightPart) ||
+    parseDivExpressionWithParens(rightPart);
+  if (rightMulDiv) return rightMulDiv;
+
+  if (isParenthesizedExpression(rightPart)) {
+    return parseParenthesizedAtom(rightPart, 0);
+  }
+  return parseRightAtom(rightPart);
+}
+
+function parseMulOrDivExpressionWithParens(
+  source: string,
+  opcode: OpCode,
+  operator: string,
+): Instruction[] | undefined {
+  // Quick check: if source has no parentheses, use the parser.ts version
+  if (!source.includes("(")) {
+    return opcode === OpCode.Mul
+      ? parseMulExpression(source)
+      : parseDivExpression(source);
+  }
+
+  const parts = splitByOperator(source, operator);
+  if (!parts) return undefined;
+
+  const leftInstructions = parseLeftMulDivAtom(parts.leftPart);
+  if (!leftInstructions) return undefined;
+
+  const rightInstructions = parseRightMulDivAtom(parts.rightPart);
+  if (!rightInstructions) return undefined;
+
+  return buildMulOrDivResult(leftInstructions, rightInstructions, opcode);
+}
+
+function parseMulExpressionWithParens(
+  source: string,
+): Instruction[] | undefined {
+  return parseMulOrDivExpressionWithParens(source, OpCode.Mul, "*");
+}
+
+function parseDivExpressionWithParens(
+  source: string,
+): Instruction[] | undefined {
+  return parseMulOrDivExpressionWithParens(source, OpCode.Div, "/");
+}
+
+function parseRightMulOrDivWithParens(
+  rightPart: string,
+): Instruction[] | undefined {
+  const mulResult = parseMulExpressionWithParens(rightPart);
+  if (mulResult) return mulResult;
+  return parseDivExpressionWithParens(rightPart);
 }
 
 function parseAddExpressionReadLeft(
@@ -367,20 +376,11 @@ function parseAddExpressionReadLeft(
   if (!leftInstructions) return undefined;
 
   // First, try parsing right side as multiplication or division (higher precedence)
-  const mulResult = parseMulExpression(rightPart);
-  if (mulResult) {
+  const mulDivResult = parseRightMulOrDivWithParens(rightPart);
+  if (mulDivResult) {
     return [
       ...leftInstructions.slice(0, -1), // Exclude halt from left, leaves value in memory[901]
-      ...mulResult, // Result is in memory[902], no halt to exclude
-      ...buildReadAddMulInstructions(),
-    ];
-  }
-
-  const divResult = parseDivExpression(rightPart);
-  if (divResult) {
-    return [
-      ...leftInstructions.slice(0, -1), // Exclude halt from left, leaves value in memory[901]
-      ...divResult, // Result is in memory[902], no halt to exclude
+      ...mulDivResult, // Result is in memory[902], no halt to exclude
       ...buildReadAddMulInstructions(),
     ];
   }
@@ -468,72 +468,48 @@ function parseNumberLiteral(source: string): Instruction[] | undefined {
   ];
 }
 
-function checkTypeOverflow(source: string): CompileError | undefined {
-  if (!hasTypeSuffix(source)) return undefined;
-
-  const suffix = getTypeSuffix(source);
-  const range = getTypeRange(suffix);
-  if (range === undefined) return undefined;
-
-  const num = parseNumberWithSuffix(source);
-  if (num === undefined) return undefined;
-
-  if (num < range.min || num > range.max) {
-    return {
-      cause: `Value ${num} overflows type ${suffix}`,
-      reason: `${suffix} can only hold values between ${range.min} and ${range.max}`,
-      fix: `Use a larger type suffix or remove the suffix`,
-      first: { line: 0, column: 0, length: source.length },
-    };
-  }
-
-  return undefined;
-}
-
 export function compile(source: string): Result<Instruction[], CompileError> {
-  // TODO, this will get rather complex!
-  // This is the function you should probably implement
-
   const trimmed = source.trim();
 
-  // Empty source: return empty instructions (implicit halt with 0)
   if (!trimmed) {
     return ok([]);
   }
 
-  // Check for invalid: negative numbers with unsigned type suffix
-  if (trimmed.startsWith("-") && hasTypeSuffix(trimmed)) {
-    const suffix = getTypeSuffix(trimmed);
-    if (!isSignedType(suffix)) {
-      return err({
-        cause: "Negative literals cannot have unsigned type suffixes",
-        reason:
-          "Type suffixes like U8 are for unsigned types, which cannot be negative",
-        fix: "Use a signed type suffix like I8, or remove the type suffix",
-        first: { line: 0, column: 0, length: trimmed.length },
-      });
-    }
+  const negError = checkNegativeUnsignedError(trimmed);
+  if (negError) {
+    return err(negError);
   }
 
-  // Check for value overflow with type suffixes
   const overflowError = checkTypeOverflow(trimmed);
   if (overflowError) {
     return err(overflowError);
   }
 
-  // Check for arithmetic expressions
+  if (isParenthesizedExpression(trimmed)) {
+    const innerExpr = extractParenthesizedContent(trimmed);
+    return compile(innerExpr);
+  }
+
   const arithResult = parseAddExpression(trimmed);
   if (arithResult) {
     return ok(arithResult);
   }
 
-  // Check for subtraction expressions
   const subResult = parseSubExpression(trimmed);
   if (subResult) {
     return ok(subResult);
   }
 
-  // Check for read instruction
+  const divResult = parseDivExpressionWithParens(trimmed);
+  if (divResult) {
+    return ok([...divResult, ...buildMulOrDivHalt(OpCode.Halt, 902)]);
+  }
+
+  const mulResult = parseMulExpressionWithParens(trimmed);
+  if (mulResult) {
+    return ok([...mulResult, ...buildMulOrDivHalt(OpCode.Halt, 902)]);
+  }
+
   if (trimmed.startsWith("read")) {
     const readResult = parseReadInstruction(trimmed);
     if (readResult) {
@@ -541,7 +517,6 @@ export function compile(source: string): Result<Instruction[], CompileError> {
     }
   }
 
-  // Try to parse as a number with optional type suffix
   const numResult = parseNumberLiteral(trimmed);
   if (numResult) {
     return ok(numResult);

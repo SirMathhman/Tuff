@@ -72,6 +72,10 @@ describe("The application", () => {
     assertValid("read U8 + read U8 / read U8", 7, 4, 6, 2);
   });
 
+  it("should add two U8 values in parentheses, then divide by third, and halt with result", () => {
+    assertValid("(read U8 + read U8) / read U8", 2, 10, 2, 6);
+  });
+
   it("should reject negative values with type suffix", () => {
     assertInvalid("-100U8");
   });
