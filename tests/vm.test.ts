@@ -7,6 +7,7 @@ import {
   type Instruction,
 } from "../src/vm";
 
+// eslint-disable-next-line max-lines-per-function
 describe("encodeTo64Bits and decode", () => {
   it("should encode and decode an instruction with operand1 and operand2", () => {
     const instruction: Instruction = {

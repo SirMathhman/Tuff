@@ -1,6 +1,6 @@
 // Our first compile test, the VM should shut down instantly
 
-import { compile, run } from "../src/app";
+import { run } from "../src/app";
 
 // Test helpers
 function assertValid(source: string, expected: number, ...stdIn: number[]) {
@@ -9,14 +9,6 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
     expect(result.error).toBeUndefined();
   } else {
     expect(result.value).toBe(expected);
-  }
-}
-
-// For assert invalid, we just have to make sure compilation fails, we don't have to run it in the VM
-function assertInvalid(source: string) {
-  let result = compile(source);
-  if (result.ok) {
-    expect(result.value).toBeUndefined();
   }
 }
 

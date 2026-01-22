@@ -30,6 +30,14 @@ export default [
           message: "RegExp constructor is not allowed.",
         },
       ],
+      "max-lines-per-function": [
+        "error",
+        {
+          max: 50,
+          skipComments: true,
+          skipBlankLines: true,
+        },
+      ],
     },
   },
 ];
