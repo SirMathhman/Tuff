@@ -8,6 +8,40 @@ interface ExecutionState {
   exitCode?: number;
 }
 
+function resolveIndirectAddress(
+  addrRef: number,
+  memory: number[],
+): number | undefined {
+  if (addrRef >= memory.length) return undefined;
+  const address = memory[addrRef];
+  if (address === undefined || address >= memory.length) return undefined;
+  return address;
+}
+
+function readVariant(
+  variant: number,
+  operand1: number,
+  memory: number[],
+): number | undefined {
+  if (variant === Variant.Immediate) {
+    return operand1;
+  }
+  if (variant === Variant.Direct) {
+    const value = memory[operand1];
+    if (value !== undefined) {
+      return value;
+    }
+    return undefined;
+  }
+  if (variant === Variant.Indirect) {
+    const address = resolveIndirectAddress(operand1, memory);
+    if (address !== undefined) {
+      return memory[address] ?? 0;
+    }
+    return undefined;
+  }
+}
+
 function handleLoad(
   variant: number,
   operand1: number,
@@ -27,10 +61,8 @@ function handleLoad(
     return;
   }
   if (variant === Variant.Indirect) {
-    const addrRef = operand2;
-    if (addrRef >= memory.length) return;
-    const address = memory[addrRef] ?? 0;
-    if (address < memory.length) {
+    const address = resolveIndirectAddress(operand2, memory);
+    if (address !== undefined) {
       registers[operand1] = memory[address] ?? 0;
     }
   }
@@ -50,10 +82,8 @@ function handleStore(
     return;
   }
   if (variant === Variant.Indirect) {
-    const addrRef = operand2;
-    if (addrRef >= memory.length) return;
-    const address = memory[addrRef] ?? 0;
-    if (address < memory.length) {
+    const address = resolveIndirectAddress(operand2, memory);
+    if (address !== undefined) {
       memory[address] = registers[operand1] ?? 0;
     }
   }
@@ -65,23 +95,7 @@ function handleHalt(
   registers: number[],
   memory: number[],
 ): number | undefined {
-  if (variant === Variant.Immediate) {
-    return operand1;
-  }
-  if (variant === Variant.Direct) {
-    const exitCode = memory[operand1];
-    if (exitCode !== undefined) {
-      return exitCode;
-    }
-    return undefined;
-  }
-  if (variant === Variant.Indirect) {
-    const addrRef = operand1;
-    if (addrRef >= memory.length) return undefined;
-    const address = memory[addrRef];
-    if (address === undefined || address >= memory.length) return undefined;
-    return memory[address] ?? 0;
-  }
+  return readVariant(variant, operand1, memory);
 }
 
 function handleJump(
@@ -90,23 +104,7 @@ function handleJump(
   registers: number[],
   memory: number[],
 ): number | undefined {
-  if (variant === Variant.Immediate) {
-    return operand1;
-  }
-  if (variant === Variant.Direct) {
-    const jumpAddr = memory[operand1];
-    if (jumpAddr !== undefined) {
-      return jumpAddr;
-    }
-    return undefined;
-  }
-  if (variant === Variant.Indirect) {
-    const addrRef = operand1;
-    if (addrRef >= memory.length) return undefined;
-    const address = memory[addrRef];
-    if (address === undefined || address >= memory.length) return undefined;
-    return memory[address] ?? 0;
-  }
+  return readVariant(variant, operand1, memory);
 }
 
 function handleArithmetic(

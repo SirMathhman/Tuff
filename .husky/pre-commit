@@ -1,1 +1,1 @@
-bun test && bun run lint:fix && bun run format
+bun test && bun run lint:fix && bun run format && bun run cpd
