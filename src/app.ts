@@ -152,7 +152,7 @@ function parseReadInstruction(source: string): Instruction[] | undefined {
     return undefined;
   }
 
-  // Read from stdin into register 0, store in memory at 0, then halt
+  // Read from stdin into register 0, store in memory at 900, then halt
   return [
     {
       opcode: OpCode.In,
@@ -163,24 +163,18 @@ function parseReadInstruction(source: string): Instruction[] | undefined {
       opcode: OpCode.Store,
       variant: Variant.Direct,
       operand1: 0,
-      operand2: 0,
+      operand2: 900,
     },
     {
       opcode: OpCode.Halt,
       variant: Variant.Direct,
-      operand1: 0,
+      operand1: 900,
     },
   ];
 }
 
-function buildAddInstructions(): Instruction[] {
+function buildAddStoreHaltInstructions(): Instruction[] {
   return [
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Direct,
-      operand1: 1,
-      operand2: 1,
-    },
     {
       opcode: OpCode.Add,
       variant: Variant.Immediate,
@@ -191,13 +185,25 @@ function buildAddInstructions(): Instruction[] {
       opcode: OpCode.Store,
       variant: Variant.Direct,
       operand1: 1,
-      operand2: 0,
+      operand2: 900,
     },
     {
       opcode: OpCode.Halt,
       variant: Variant.Direct,
-      operand1: 0,
+      operand1: 900,
     },
+  ];
+}
+
+function buildAddInstructions(): Instruction[] {
+  return [
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 1,
+      operand2: 901,
+    },
+    ...buildAddStoreHaltInstructions(),
   ];
 }
 
@@ -212,7 +218,7 @@ function buildReadAddConstantInstructions(constant: number): Instruction[] {
       opcode: OpCode.Store,
       variant: Variant.Direct,
       operand1: 0,
-      operand2: 1,
+      operand2: 901,
     },
     {
       opcode: OpCode.Load,
@@ -224,9 +230,9 @@ function buildReadAddConstantInstructions(constant: number): Instruction[] {
       opcode: OpCode.Load,
       variant: Variant.Direct,
       operand1: 1,
-      operand2: 1,
+      operand2: 901,
     },
-    ...buildAddInstructions().slice(1),
+    ...buildAddStoreHaltInstructions(),
   ];
 }
 
@@ -242,7 +248,7 @@ function buildConstantAddReadInstructions(constant: number): Instruction[] {
       opcode: OpCode.Store,
       variant: Variant.Direct,
       operand1: 0,
-      operand2: 1,
+      operand2: 901,
     },
     {
       opcode: OpCode.In,
@@ -253,9 +259,9 @@ function buildConstantAddReadInstructions(constant: number): Instruction[] {
       opcode: OpCode.Load,
       variant: Variant.Direct,
       operand1: 1,
-      operand2: 1,
+      operand2: 901,
     },
-    ...buildAddInstructions().slice(1),
+    ...buildAddStoreHaltInstructions(),
   ];
 }
 
@@ -283,6 +289,38 @@ function parseAddExpression(source: string): Instruction[] | undefined {
   return parseAddExpressionReadLeft(leftPart, rightPart);
 }
 
+function buildChainedReadAddExpression(
+  chainedAddition: Instruction[],
+): Instruction[] {
+  return [
+    {
+      opcode: OpCode.In,
+      variant: Variant.Immediate,
+      operand1: 0,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 902,
+    },
+    ...chainedAddition.slice(0, -1), // Process chain, exclude halt
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 900,
+    },
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 1,
+      operand2: 902,
+    },
+    ...buildAddStoreHaltInstructions(),
+  ];
+}
+
 function parseAddExpressionReadLeft(
   leftPart: string,
   rightPart: string,
@@ -291,37 +329,45 @@ function parseAddExpressionReadLeft(
   const leftInstructions = parseReadInstruction(leftPart);
   if (!leftInstructions) return undefined;
 
-  // Parse right side - could be "read U8" or a number
-  const rightNum = parseNumberWithSuffix(rightPart);
-  if (rightNum === undefined) {
-    // Try parsing as read instruction
-    const rightInstructions = parseReadInstruction(rightPart);
-    if (!rightInstructions) return undefined;
+  // Parse right side - could be "read U8", a number, or another addition expression
 
-    // Both are reads
-    return [
-      {
-        opcode: OpCode.In,
-        variant: Variant.Immediate,
-        operand1: 0,
-      },
-      {
-        opcode: OpCode.Store,
-        variant: Variant.Direct,
-        operand1: 0,
-        operand2: 1,
-      },
-      {
-        opcode: OpCode.In,
-        variant: Variant.Immediate,
-        operand1: 0,
-      },
-      ...buildAddInstructions(),
-    ];
+  // First, try parsing right side as another addition expression (for chaining)
+  const chainedAddition = parseAddExpression(rightPart);
+  if (chainedAddition) {
+    return buildChainedReadAddExpression(chainedAddition);
   }
 
-  // Right side is a number constant
-  return buildReadAddConstantInstructions(rightNum);
+  // Try parsing as a number constant
+  const rightNum = parseNumberWithSuffix(rightPart);
+  if (rightNum !== undefined) {
+    // Right side is a number constant
+    return buildReadAddConstantInstructions(rightNum);
+  }
+
+  // Try parsing as read instruction
+  const rightInstructions = parseReadInstruction(rightPart);
+  if (!rightInstructions) return undefined;
+
+  // Both are reads
+  return [
+    {
+      opcode: OpCode.In,
+      variant: Variant.Immediate,
+      operand1: 0,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 901,
+    },
+    {
+      opcode: OpCode.In,
+      variant: Variant.Immediate,
+      operand1: 0,
+    },
+    ...buildAddInstructions(),
+  ];
 }
 
 function parseAddExpressionConstantLeft(
@@ -346,7 +392,7 @@ function parseNumberLiteral(source: string): Instruction[] | undefined {
   const num = parseNumberWithSuffix(source);
   if (num === undefined) return undefined;
 
-  // Store the number in memory at address 0
+  // Store the number in memory at address 900
   return [
     {
       opcode: OpCode.Load,
@@ -358,12 +404,12 @@ function parseNumberLiteral(source: string): Instruction[] | undefined {
       opcode: OpCode.Store,
       variant: Variant.Direct,
       operand1: 0,
-      operand2: 0,
+      operand2: 900,
     },
     {
       opcode: OpCode.Halt,
       variant: Variant.Direct,
-      operand1: 0,
+      operand1: 900,
     },
   ];
 }

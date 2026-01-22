@@ -55,6 +55,10 @@ describe("The application", () => {
     assertValid("50U8 + read U8", 150, 100);
   });
 
+  it("should read three U8 values, add them, and halt with result", () => {
+    assertValid("read U8 + read U8 + read U8", 6, 1, 2, 3);
+  });
+
   it("should reject negative values with type suffix", () => {
     assertInvalid("-100U8");
   });
