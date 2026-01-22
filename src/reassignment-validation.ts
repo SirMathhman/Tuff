@@ -1,4 +1,8 @@
-import { type CompileError, isTypeCompatible, isMutablePointerType } from "./types";
+import {
+  type CompileError,
+  isTypeCompatible,
+  isMutablePointerType,
+} from "./types";
 import {
   parseLetComponents,
   extractExpressionType,

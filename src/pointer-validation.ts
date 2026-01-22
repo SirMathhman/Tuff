@@ -269,6 +269,17 @@ export function detectPointerTypeErrors(
       return checkPointerTypeWithoutInit(current);
     }
 
+    // Check for pointer type without initialization (declaration-only pointer)
+    if (comp.exprPart === "" && comp.typeAnnotation?.startsWith("*")) {
+      return {
+        cause: "Pointer types must be initialized",
+        reason:
+          "Pointer variables require an expression like &x to create a reference",
+        fix: "Add an initialization expression, e.g., 'let y : *I32 = &x;'",
+        first: { line: 0, column: 0, length: current.length },
+      };
+    }
+
     current = comp.remaining;
   }
 

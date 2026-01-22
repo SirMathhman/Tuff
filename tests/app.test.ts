@@ -329,4 +329,8 @@ describe("The application - Valid reference patterns", () => {
   it("should allow multiple immutable references without trailing expression", () => {
     assertValid("let x = read U8; let y = &x; let z = &x;", 0, 100);
   });
+
+  it("should allow variable declaration with type annotation but no initialization", () => {
+    assertValid("let x : U8; x = read U8; x", 42, 42);
+  });
 });

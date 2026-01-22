@@ -86,11 +86,16 @@ export function buildContextFromLetBindings(source: string): VariableContext {
       varType = extractExpressionType(comp.exprPart, context);
     }
 
+    // Declaration-only variables (exprPart === "") are implicitly mutable
+    // since they must be assigned before use
+    const isDeclarationOnly = comp.exprPart === "";
+    const isMutable = comp.mutable || isDeclarationOnly;
+
     context.push({
       name: comp.varName,
       memoryAddress: 904 + context.length,
       type: varType,
-      mutable: comp.mutable,
+      mutable: isMutable,
     });
 
     remaining = comp.remaining;
@@ -122,21 +127,26 @@ export function parseLetComponents(source: string):
 
   const colonIndex = findChar(bindingScope, ":");
   const equalsIndex = findChar(bindingScope, "=");
-  if (equalsIndex === -1) return undefined;
+
+  // Extract type annotation if present
+  let typeAnnotation: string | undefined;
+  if (colonIndex !== -1) {
+    const typePartEnd = equalsIndex === -1 ? bindingScope.length : equalsIndex;
+    const typePart = bindingScope.substring(colonIndex + 1, typePartEnd).trim();
+    typeAnnotation = typePart;
+  }
+
+  // If there's no equals sign, it's a declaration-only let binding (requires type annotation)
+  if (equalsIndex === -1) {
+    if (!typeAnnotation) return undefined;
+    return { varName, exprPart: "", remaining: source.substring(firstSemicolonIndex + 1).trim(), typeAnnotation, mutable: isMutable };
+  }
 
   // If there's a colon, it must come before the equals sign
   if (colonIndex !== -1 && colonIndex >= equalsIndex) return undefined;
 
   const exprPart = bindingScope.substring(equalsIndex + 1).trim();
   const remaining = source.substring(firstSemicolonIndex + 1).trim();
-
-  // Extract type annotation if present
-  let typeAnnotation: string | undefined;
-  if (colonIndex !== -1) {
-    const typePartEnd = equalsIndex;
-    const typePart = bindingScope.substring(colonIndex + 1, typePartEnd).trim();
-    typeAnnotation = typePart;
-  }
 
   return { varName, exprPart, remaining, typeAnnotation, mutable: isMutable };
 }

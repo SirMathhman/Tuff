@@ -202,6 +202,32 @@ function findFirstSemicolon(str: string): number {
   return -1;
 }
 
+function validateArithmetic(exprPart: string, variableTypes: VariableContext): CompileError | undefined {
+  // Check for boolean values in arithmetic expressions
+  if (checkBooleanArithmetic(exprPart, variableTypes)) {
+    return {
+      cause: "Boolean values cannot be used in arithmetic expressions",
+      reason:
+        "Arithmetic operators (+, -, *, /) are not supported for Bool type",
+      fix: "Remove the arithmetic operation or use numeric types instead",
+      first: { line: 0, column: 0, length: exprPart.length },
+    };
+  }
+
+  // Check for mixed-type arithmetic expressions (recursively at all levels)
+  if (checkArithmeticMismatchRecursive(exprPart)) {
+    return {
+      cause: "Mixed-type arithmetic expression",
+      reason:
+        "All operands in an arithmetic expression must have the same type",
+      fix: "Use the same type for all operands",
+      first: { line: 0, column: 0, length: exprPart.length },
+    };
+  }
+
+  return undefined;
+}
+
 function processLetBinding(
   thisLet: string,
   variableTypes: VariableContext,
@@ -211,30 +237,22 @@ function processLetBinding(
 
   const { varName, typeAnnotation, exprPart } = components;
 
-  // Check for boolean values in arithmetic expressions
-  if (checkBooleanArithmetic(exprPart, variableTypes)) {
-    return {
-      error: {
-        cause: "Boolean values cannot be used in arithmetic expressions",
-        reason:
-          "Arithmetic operators (+, -, *, /) are not supported for Bool type",
-        fix: "Remove the arithmetic operation or use numeric types instead",
-        first: { line: 0, column: 0, length: exprPart.length },
-      },
-    };
+  // For declaration-only bindings (let x: Type;), skip expression validation
+  if (exprPart === "") {
+    if (typeAnnotation) {
+      variableTypes.push({
+        name: varName,
+        memoryAddress: 0,
+        type: typeAnnotation,
+      });
+      return { added: true };
+    }
+    return {};
   }
 
-  // Check for mixed-type arithmetic expressions (recursively at all levels)
-  if (checkArithmeticMismatchRecursive(exprPart)) {
-    return {
-      error: {
-        cause: "Mixed-type arithmetic expression",
-        reason:
-          "All operands in an arithmetic expression must have the same type",
-        fix: "Use the same type for all operands",
-        first: { line: 0, column: 0, length: exprPart.length },
-      },
-    };
+  const arithmeticError = validateArithmetic(exprPart, variableTypes);
+  if (arithmeticError) {
+    return { error: arithmeticError };
   }
 
   // Validate type annotation if present
