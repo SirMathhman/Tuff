@@ -283,6 +283,12 @@ describe("The application - Pointers", () => {
 	});
 
 	it("should reject mutable reference assigned to immutable pointer type", () => {
-		assertInvalid("let mut x = read I32; let y : *I32 = &mut x; *y = read I32; x");
+		assertInvalid(
+			"let mut x = read I32; let y : *I32 = &mut x; *y = read I32; x",
+		);
+	});
+
+	it("should reject write-through on immutable pointer", () => {
+		assertInvalid("let mut x = read I32; let y = &x; *y = read I32; x");
 	});
 });

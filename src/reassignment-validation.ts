@@ -1,9 +1,10 @@
-import { type CompileError, isTypeCompatible } from "./types";
+import { type CompileError, isTypeCompatible, isMutablePointerType } from "./types";
 import {
   parseLetComponents,
   extractExpressionType,
   type VariableContext,
   parseReassignmentComponents,
+  parseDereferenceReassignmentComponents,
 } from "./let-binding";
 
 function skipLetBindings(source: string): string {
@@ -94,4 +95,32 @@ export function detectReassignmentTypeChange(
       return undefined;
     },
   );
+}
+
+export function detectDereferenceReassignmentOnImmutablePointer(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  let current = skipLetBindings(source);
+
+  while (current.length > 0) {
+    current = current.trim();
+    const comp = parseDereferenceReassignmentComponents(current);
+    if (!comp) break;
+
+    const binding = context.find((b) => b.name === comp.pointerName);
+    if (binding && binding.type && !isMutablePointerType(binding.type)) {
+      return {
+        cause: `Cannot write through immutable pointer '${comp.pointerName}'`,
+        reason:
+          "Dereference assignment (*ptr = value) requires a mutable pointer (*mut Type), not an immutable pointer (*Type)",
+        fix: "Use a mutable pointer type or remove the assignment",
+        first: { line: 0, column: 0, length: source.length },
+      };
+    }
+
+    current = comp.remaining;
+  }
+
+  return undefined;
 }
