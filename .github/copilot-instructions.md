@@ -2,118 +2,178 @@
 
 ## Project Overview
 
-Tuff is a 64-bit virtual machine with an arithmetic expression compiler in TypeScript. The architecture separates concerns: [src/parser.ts](../src/parser.ts) and [src/app.ts](../src/app.ts) handle compilation of typed expressions (with validation), while [src/vm.ts](../src/vm.ts) executes instructions on a 4-register, 1024-byte memory VM. [src/types.ts](../src/types.ts) defines error handling and type constraints.
+Tuff is a 64-bit virtual machine with a compiler for a typed expression language. The architecture separates concerns: [src/app.ts](../src/app.ts) orchestrates compilation, [src/parser.ts](../src/parser.ts) tokenizes/parses, [src/vm.ts](../src/vm.ts) executes 64-bit instructions on a 4-register, 1024-byte memory VM. Supports arithmetic, variables with type checking, mutable references, pointers, if-expressions, and comparisons.
 
-## Core Architecture
+## Core Architecture & Data Flow
 
-**Data Flow**: Source code → parse/validate → compile to `Instruction[]` → encode to memory → execute
+**Compilation Pipeline**: Source → tokenize → parse/validate → generate `Instruction[]` → encode to 64-bit format → execute
 
-**Three Layers**:
+**Five Compiler Layers**:
 
-1. **Parser** ([src/parser.ts](../src/parser.ts)) - Recursive descent for arithmetic expressions: precedence-aware (add/sub at top, mul/div higher), parentheses support, `read U8` I/O
-2. **Compiler** ([src/app.ts](../src/app.ts)) - Orchestrates parsing, type checking, generates instruction sequences using memory slots 900-903 for temp storage
-3. **VM** ([src/vm.ts](../src/vm.ts)) - Executes 64-bit encoded instructions with register/memory operations, max 1000 cycles
+1. **Parser** ([src/parser.ts](../src/parser.ts)) - Tokenization, basic syntax extraction (variables, parentheses, operators, type suffixes)
+2. **Arithmetic** ([src/arithmetic-parsing.ts](../src/arithmetic-parsing.ts)) - Recursive descent for add/sub/mul/div expressions with operator precedence
+3. **Comparisons** ([src/comparison-parsing.ts](../src/comparison-parsing.ts)) - `==`, `<`, `>`, `<=`, `>=` operators returning Bool type
+4. **Variables & Binding** ([src/let-binding.ts](../src/let-binding.ts), [src/let-expression-parsing.ts](../src/let-expression-parsing.ts)) - `let x: Type = expr;` with mutable binding support, context tracking (memory 904+)
+5. **App Layer** ([src/app.ts](../src/app.ts)) - Orchestrates all validators, handles parentheses/braces unwrapping, returns `Result<Instruction[], CompileError>`
 
-## Critical Patterns
+**Memory Layout** (1024 bytes):
 
-**Result Type Error Handling**
-All fallible operations return `Result<T, X> = Ok<T> | Err<X>`. Always branch on `result.ok`:
+- 0-899: Program instructions (encoded 64-bit)
+- 900-903: Temp storage for expr evaluation
+- 904-999: Variable storage (context-allocated, `address = 904 + context.length`)
+- 950-980: If-expression nesting temp storage
+
+## Critical Implementation Patterns
+
+**Result Type & Error Handling**
 
 ```typescript
-const result = compile(source);
 if (result.ok) {
-  /* use result.value */
+  const instructions: Instruction[] = result.value;
+  // Use instructions
 } else {
-  /* use result.error */
+  const error: CompileError = result.error;
+  // Show error.cause, error.reason, error.fix + error.first (location)
 }
 ```
 
-**Instruction Encoding** (64-bit layout)
+**Instruction Encoding** - 64-bit format (bits 32-39: OpCode, 24-31: Variant, 12-23: Operand1, 0-11: Operand2)
 
-- Bits 32-39: OpCode | Bits 24-31: Variant | Bits 12-23: Operand1 | Bits 0-11: Operand2
-- Use `encodeTo64Bits()` and `decode()` - never manual bit operations
-- Sign-extension handles negative immediates in Load instructions automatically
+- Use `encodeTo64Bits(instruction)` and `decode(encoded)` only—never manual bit shifting
+- Load Immediate: sign-extends 12-bit operand2 automatically for negative constants
 
-**Three Addressing Variants**
+**Instruction Addressing** - Three addressing modes in variant:
 
-- `Immediate`: operand is constant value
-- `Direct`: operand is memory address
-- `Indirect`: operand points to address containing target address
+- `Immediate`: constant value (operand is the value)
+- `Direct`: memory address (operand is memory location)
+- `Indirect`: pointer lookup (memory[operand] points to actual address)
 
-Each opcode handles variants differently in switch cases.
+**Type Compatibility** ([src/types.ts](../src/types.ts))
 
-**Compiler Memory Layout**
-Reserved slots for temp values (compiler state management):
+- Supported types: `U8`, `U16`, `I8`, `I16`, `Bool`, `*Type` (pointer), `*mut Type` (mutable pointer)
+- `isTypeCompatible(declared, expr)` allows narrowing: `expr` type must fit in `declared` type
+- `U8` → `U16` ✓, `U8` → `I8` ✗, `U16` → `U8` ✗ (narrowing rejected)
+- Bool only matches Bool; doesn't coerce to/from integers
 
-- 900: Main computation result storage
-- 901: Operand staging area
-- 902: Multiply/divide result location
-- 903: Temporary read values
+**Variable Context Management** ([src/let-binding.ts](../src/let-binding.ts))
 
-Parse functions return `Instruction[]` ending with `Halt` (top-level) or omitting it (sub-expressions that chain).
+```typescript
+export interface VariableBinding {
+  name: string;
+  memoryAddress: number; // 904 + index in context array
+  type?: string; // Inferred or annotated
+  mutable?: boolean; // let mut x = ...
+}
+```
 
-**Type System with Suffixes**
-Supported: `U8`, `U16`, `I8`, `I16` (unsigned/signed, bits). Parser extracts suffix via `findTypeSuffixIndex()`. Validation in [src/types.ts](../src/types.ts): `checkTypeOverflow()` and `checkNegativeUnsignedError()` prevent illegal combinations.
+- Context is immutable array; new bindings append
+- `resolveVariable(context, "x")` returns memory address or undefined
+- Variable shadowing detected during validation, not allowed
+- Untyped bindings infer type from expression: `let x = read U8;` → x: U8
 
-## Common Compiler Patterns
+**Instruction Primitives** ([src/instruction-primitives.ts](../src/instruction-primitives.ts))
 
-**Building Instruction Sequences**
-Sub-expression parsers (e.g., `parseAddExpression()`) build arrays by:
+- Use helper functions: `buildLoadImmediate()`, `buildLoadDirect()`, `buildStoreDirect()`, `buildStoreAndHalt()`, etc.
+- Eliminates repetitive instruction construction, centralizes Variant/OpCode logic
 
-1. Left operand → instructions (value in register)
-2. Right operand → instructions (value in another register)
-3. Operation instruction + store result to shared memory
-4. Top-level adds Halt pointing to result slot
+## Expression Compilation & Validation
 
-**Chained Operations**
-Addition chains (`a + b + c`) parse recursively: left computes and stores to memory[900], right recursively parses remaining expression to memory[902], final Add combines both. See `buildChainedReadAddExpression()`.
+**Arithmetic Parsing** ([src/arithmetic-parsing.ts](../src/arithmetic-parsing.ts))
 
-**Read Statements**
-`read U8` → In (stdin→r0) → Store to memory → Load if needed. Multiple reads use different temp slots to avoid clobbering.
+- Precedence: `*`, `/` bind tighter than `+`, `-`
+- Chained additions `a + b + c` compile as: load a→r1 store→900, load b→r1 store→902, load c→r1, add r1 r0, load+add from stored values
+- Parentheses/braces unwrapped by [src/app.ts](../src/app.ts) before arithmetic parsing
+
+**Let-Expression Parsing** ([src/let-expression-parsing.ts](../src/let-expression-parsing.ts))
+
+- Parses `let [mut] varName [: Type] = exprPart; remaining`
+- Compiles expression, stores result to allocated variable address, then compiles remaining (if any)
+- If remaining is empty, appends Halt instruction
+
+**If-Expression Parsing** ([src/if-expression-parsing.ts](../src/if-expression-parsing.ts))
+
+- Syntax: `if ( condition ) thenBranch else elseBranch`
+- Condition must be Bool type; branches must return compatible types
+- Uses nesting depth counter to allocate disjoint temp memory slots (950+3N for nested level N)
+- Both branches' result addresses unified in final instruction
+
+**Comparison Parsing** ([src/comparison-parsing.ts](../src/comparison-parsing.ts))
+
+- Operators: `==`, `<`, `>`, `<=`, `>=` → OpCode.Equal, LessThan, GreaterThan, etc.
+- Returns result (0/1) in register, stored to memory for type tracking
+- Type must match on both sides: `read U8 == read U8` ✓, `read U8 == read U16` ✗
+
+**Pointer Support** ([src/pointer-validation.ts](../src/pointer-validation.ts))
+
+- Reference: `&x` creates pointer to x; `&mut x` mutable pointer (requires `let mut`)
+- Dereference: `*ptr` loads value from pointer; `*ptr = value` reassigns (only for `*mut`)
+- Indirect Load variant used for dereference: Load r1 Indirect from ptr address
+- Type: `*U8`, `*I32`, `*Bool`, `*mut Type` (pointer types are distinct)
+
+## Validation System
+
+**Centralized Validators** ([src/validation.ts](../src/validation.ts), [src/pointer-validation.ts](../src/pointer-validation.ts), [src/reassignment-validation.ts](../src/reassignment-validation.ts))
+
+- All called from [src/app.ts](../src/app.ts) `performValidationChecks()` before compilation
+- Return `CompileError | undefined` with specific cause, reason, fix, and location
+
+**Shadowing Detection**: Variables in same scope can't redeclare
+**Type Mismatch**: Let binding type annotation must match expression type
+**Mutability**: Reassignment (`x = value`) only allowed if `let mut x`
+**Pointer Safety**: Dereference only on pointer types; only `*mut` can be assigned
 
 ## Development Workflow
 
-**Commands**: `bun install`, `bun test`, `bun run`
+**Build & Test**: `bun install`, `bun test`, `bun run` (no external runtime)
 
-**Precommit Gates** (via Husky)
-Commits trigger the precommit hook which runs in sequence:
+**Precommit Hooks** (via Husky, enforced on commit):
 
-1. `bun test --coverage` - All tests must pass with coverage reporting; blocks commit if failures occur
-2. `bun run lint:fix` - ESLint (TypeScript config) auto-fixes violations; commit proceeds if fixable, fails if unfixable issues remain
-3. `bun run format` - Prettier reformats all files for consistency
-4. `bun run cpd` - PMD copy-paste detector flags duplicated token sequences (≥50 tokens); informational but doesn't block
+1. `bun test --coverage` - All tests pass with coverage; blocks commit on failure
+2. `bun run lint:fix` - ESLint auto-fixes; blocks if unfixable violations remain
+3. `bun run format` - Prettier reformats all files
+4. `bun run cpd` - PMD copy-paste detector (≥50 tokens) flags but doesn't block
 
-**Avoid precommit failures**: Run locally before pushing with `bun test && bun run lint:fix && bun run format` to catch issues early.
+**Linting Rules** - [eslint.config.mjs](../eslint.config.mjs):
 
-**Linting Rules** (via ESLint + TypeScript)
-The [eslint.config.mjs](../eslint.config.mjs) enforces strict code quality:
+- **No regex**: Use char-by-char iteration (e.g., `findTypeSuffixIndex()`, `findOperatorIndex()`)
+- **max-lines-per-function: 50** - Refactor into helpers (e.g., `parseAtom()`, `buildHaltInstruction()`)
+- **max-depth: 2** - Extract nested logic to separate functions
+- **max-lines: 500** per file - Split large files; whitespace/comments ignored in line count
 
-**Prohibited Patterns**:
+**TypeScript Strictness** ([tsconfig.json](../tsconfig.json)):
 
-- Regular expressions: Use `findTypeSuffixIndex()`, `findOperatorIndex()` string iteration patterns instead (char-by-char parsing required)
-- RegExp constructor calls: No dynamic regex creation
-- `max-lines-per-function: 50` - Functions must be concise; split complex logic into helpers (e.g., `parseAtom()`, `parseLeftForSub()`)
-- `max-depth: 2` - Nesting limited to 2 levels; refactor deep nesting into separate functions
-- `max-lines: 500` - Files capped at 500 lines; split if approaching limit; Don't remove whitespace or comments, whitespace and comments are ignored
+- `noUncheckedIndexedAccess` - Always check array/object access for undefined
+- `noFallthroughCasesInSwitch` - All switch cases need break/return
+- `noImplicitOverride` - Mark overrides explicitly (N/A here, but enforced)
 
-**TypeScript Config** ([tsconfig.json](../tsconfig.json))
+**Testing** - [tests/app.test.ts](../tests/app.test.ts):
 
-- `strict: true` - Enables all strict type checks
-- `noFallthroughCasesInSwitch: true` - All switch cases must have breaks or exhaustive handling
-- `noUncheckedIndexedAccess: true` - Array/object access returns `T | undefined`; must check before use
-- `noImplicitOverride: true` - Override methods must explicitly mark `override` keyword
-- `skipLibCheck: true` - Skip type checking of .d.ts files
+- `assertValid(source, expectedExit, ...stdIn)` - Full compilation + execution round-trip
+- `assertInvalid(source)` - Expect compilation error
+- Test edge cases: type overflow (256U8), negative unsigned (-100U8), shadowing, pointer misuse
 
-**Testing Conventions**
+## Key Files & Responsibilities
 
-- VM tests ([tests/vm.test.ts](../tests/vm.test.ts)): encode/decode round-trip, boundary cases (12-bit limits)
-- App tests ([tests/app.test.ts](../tests/app.test.ts)): end-to-end via `assertValid(source, expectedExit, ...stdIn)` and `assertInvalid(source)` for error paths
-- Test invalid cases: negative unsigned (`-100U8`), overflow (`256U8`)
+| File                                                                | Purpose                                                                                        |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [src/app.ts](../src/app.ts)                                         | Orchestrates parse/validate/compile pipeline; calls all validators; unwraps parentheses/braces |
+| [src/parser.ts](../src/parser.ts)                                   | Tokenization helpers: suffix extraction, operator finding, parenthesis matching                |
+| [src/arithmetic-parsing.ts](../src/arithmetic-parsing.ts)           | Recursive descent for +, -, \*, / with operator precedence                                     |
+| [src/let-binding.ts](../src/let-binding.ts)                         | Variable context: allocation, resolution, type tracking, shadowing detection                   |
+| [src/let-expression-parsing.ts](../src/let-expression-parsing.ts)   | Parses `let` statements; compiles RHS; stores to allocated address                             |
+| [src/comparison-parsing.ts](../src/comparison-parsing.ts)           | Parses ==, <, >, <=, >= returning Bool                                                         |
+| [src/if-expression-parsing.ts](../src/if-expression-parsing.ts)     | Parses if-then-else; validates condition is Bool; unifies branch types                         |
+| [src/pointer-validation.ts](../src/pointer-validation.ts)           | Validates &, &mut, \* operators; checks type compatibility                                     |
+| [src/expression-with-context.ts](../src/expression-with-context.ts) | Arithmetic parsing aware of variable context; resolves variable references                     |
+| [src/types.ts](../src/types.ts)                                     | Type range checking, overflow detection, type compatibility rules                              |
+| [src/instruction-primitives.ts](../src/instruction-primitives.ts)   | Reusable instruction builders to reduce duplication                                            |
+| [src/vm.ts](../src/vm.ts)                                           | Instruction fetch/decode/execute loop; 4 registers, 1024 memory, 1000 cycle max                |
 
-## Implementation Notes
+## Common Patterns & Anti-Patterns
 
-- **4 registers** (r0-r3), **1024 bytes** memory, **1000 cycle** limit
-- **Program counter wraps** at memory boundary
-- **Halt required** to exit (return value from Halt's operand)
-- **Validate** operand indices before register/memory access
-- **Sign-extend** 12-bit immediates for negative constants
+✓ **Good**: Parse components into named struct, validate, then compile (separation of concerns)
+✓ **Good**: Use instruction primitives for common sequences (`buildStoreAndHalt()`)
+✓ **Good**: Return `Instruction[]` from parsers; top-level adds Halt, sub-parsers omit it
+✗ **Bad**: Direct bit shifting instead of `encodeTo64Bits()` / `decode()`
+✗ **Bad**: Shadowing or redefining variables without validation check
+✗ **Bad**: Type inference without explicit validation via `isTypeCompatible()`
