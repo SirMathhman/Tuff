@@ -128,4 +128,8 @@ describe("The application - Grouping and variables", () => {
   it("should support let binding without trailing expression", () => {
     assertValid("let x : U8 = read U8;", 0, 42);
   });
+
+  it("should support let binding without type annotation", () => {
+    assertValid("let x = read U8; x", 42, 42);
+  });
 });

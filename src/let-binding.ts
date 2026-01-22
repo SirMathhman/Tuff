@@ -35,14 +35,15 @@ export function resolveVariable(
 export function parseLetComponents(
   source: string,
 ): { varName: string; exprPart: string; remaining: string } | undefined {
-  const colonIndex = findChar(source, ":");
-  if (colonIndex === -1) return undefined;
-
   const varName = extractVariableName(source);
   if (varName.length === 0) return undefined;
 
-  const equalsIndex = findChar(source, "=", colonIndex + 1);
+  const colonIndex = findChar(source, ":");
+  const equalsIndex = findChar(source, "=");
   if (equalsIndex === -1) return undefined;
+
+  // If there's a colon, it must come before the equals sign
+  if (colonIndex !== -1 && colonIndex >= equalsIndex) return undefined;
 
   const semicolonIndex = findChar(source, ";", equalsIndex + 1);
   if (semicolonIndex === -1) return undefined;
