@@ -1,5 +1,13 @@
 import { type Instruction, OpCode } from "./vm";
-import { findChar, extractVariableName, getTypeSuffix } from "./parser";
+import {
+  findChar,
+  extractVariableName,
+  getTypeSuffix,
+  isParenthesizedExpression,
+  extractParenthesizedContent,
+  isBracedExpression,
+  extractBracedContent,
+} from "./parser";
 import {
   buildLoadDirect,
   buildStoreDirect,
@@ -147,7 +155,16 @@ export function extractArithmeticTypes(exprPart: string): string[] | undefined {
 }
 
 export function hasArithmeticMismatch(exprPart: string): boolean {
-  const types = extractArithmeticTypes(exprPart);
+  let unwrapped = exprPart;
+
+  // Unwrap parentheses if the entire expression is wrapped
+  if (isParenthesizedExpression(exprPart)) {
+    unwrapped = extractParenthesizedContent(exprPart);
+  } else if (isBracedExpression(exprPart)) {
+    unwrapped = extractBracedContent(exprPart);
+  }
+
+  const types = extractArithmeticTypes(unwrapped);
   if (!types || types.length < 2) return false;
 
   // All operands must have the same type

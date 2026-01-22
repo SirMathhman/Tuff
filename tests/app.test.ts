@@ -164,4 +164,8 @@ describe("The application - Type checking", () => {
   it("should reject mixed-type multiplication expressions", () => {
     assertInvalid("let x : U8 = 1U8 * 2U16; x");
   });
+
+  it("should reject mixed-type arithmetic in parentheses", () => {
+    assertInvalid("let x : U16 = (1U8 * 2U16); x");
+  });
 });
