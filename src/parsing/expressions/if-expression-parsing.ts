@@ -1,5 +1,5 @@
-import { type Instruction, OpCode, Variant } from "./vm";
-import { findMatchingParen } from "./parser";
+import { type Instruction, OpCode, Variant } from "../../core/vm";
+import { findMatchingParen } from "../../parsing/parser";
 
 let ifNestingDepth = 0;
 

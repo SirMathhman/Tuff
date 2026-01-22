@@ -1,4 +1,4 @@
-import { type Instruction, OpCode, Variant } from "./vm";
+import { type Instruction, OpCode, Variant } from "../core/vm";
 import {
   findChar,
   extractVariableName,
@@ -12,22 +12,22 @@ import {
   extractReferenceTarget,
   isMutableReference,
   isArrayIndexing,
-} from "./parser";
-import { isArrayLiteral } from "./array-parsing";
+} from "../parsing/parser";
+import { isArrayLiteral } from "../parsing/array-parsing";
 import {
   parseArraySize,
   extractArrayLiteralType,
   extractArrayIndexType,
-} from "./array-helpers";
-import { isBareNumber } from "./type-inference-helpers";
-import { type VariableContext } from "./variable-types";
-export type { VariableBinding, VariableContext } from "./variable-types";
+} from "../types/array-helpers";
+import { isBareNumber } from "../types/type-inference-helpers";
+import { type VariableContext } from "../types/variable-types";
+export type { VariableBinding, VariableContext } from "../types/variable-types";
 import {
   buildLoadDirect,
   buildLoadImmediate,
   buildStoreDirect,
   buildStoreAndHalt,
-} from "./instruction-primitives";
+} from "../compilation/instruction-primitives";
 
 function getVariableMemorySize(type: string | undefined): number {
   if (!type) return 1;

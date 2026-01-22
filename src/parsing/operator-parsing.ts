@@ -1,4 +1,4 @@
-import { findOperatorIndex } from "./parser";
+import { findOperatorIndex } from "../parsing/parser";
 
 export function splitByAddOperator(
   source: string,

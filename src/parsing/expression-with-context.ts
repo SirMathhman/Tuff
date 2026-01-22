@@ -1,4 +1,4 @@
-import { type Instruction, OpCode, Variant } from "./vm";
+import { type Instruction, OpCode, Variant } from "../core/vm";
 import {
   parseNumberWithSuffix,
   isDereferenceOperator,
@@ -7,12 +7,12 @@ import {
   extractArrayIndexComponents,
   findOperatorIndex,
   parseReadInstruction,
-} from "./parser";
-import { buildStoreHaltInstructions } from "./types";
-import { type VariableContext } from "./variable-types";
-import { resolveVariable } from "./let-binding";
-import { splitByAddOperator } from "./operator-parsing";
-import { compileNoContext } from "./arithmetic-parsing";
+} from "../parsing/parser";
+import { buildStoreHaltInstructions } from "../types/types";
+import { type VariableContext } from "../types/variable-types";
+import { resolveVariable } from "../support/let-binding";
+import { splitByAddOperator } from "../parsing/operator-parsing";
+import { compileNoContext } from "../parsing/arithmetic-parsing";
 
 function splitBySubOperator(
   source: string,

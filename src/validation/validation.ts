@@ -1,18 +1,18 @@
-import { type CompileError, isTypeCompatible } from "./types";
-import { type VariableContext } from "./variable-types";
+import { type CompileError, isTypeCompatible } from "../types/types";
+import { type VariableContext } from "../types/variable-types";
 import {
   parseLetComponents,
   extractExpressionType,
   extractIfBranchTypes,
-} from "./let-binding";
-import { isBareNumber, isNumberLiteral } from "./type-inference-helpers";
+} from "../support/let-binding";
+import { isBareNumber, isNumberLiteral } from "../types/type-inference-helpers";
 import {
   isParenthesizedExpression,
   extractParenthesizedContent,
   isBracedExpression,
   extractBracedContent,
   findConditionParentheses,
-} from "./parser";
+} from "../parsing/parser";
 
 function buildTypeError(
   typeAnnotation: string,

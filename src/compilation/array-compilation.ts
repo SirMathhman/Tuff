@@ -1,9 +1,9 @@
-import { type Instruction, OpCode, Variant } from "./vm";
+import { type Instruction, OpCode, Variant } from "../core/vm";
 import {
   buildLoadDirect,
   buildLoadImmediate,
   buildStoreDirect,
-} from "./instruction-primitives";
+} from "../compilation/instruction-primitives";
 
 /**
  * Memory layout for arrays:

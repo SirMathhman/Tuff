@@ -1,4 +1,4 @@
-import { type Instruction, OpCode, Variant } from "./vm";
+import { type Instruction, OpCode, Variant } from "../core/vm";
 import {
   parseNumberWithSuffix,
   parseReadInstruction,
@@ -12,13 +12,13 @@ import {
   parseDivExpression,
   buildMulOrDivResult,
   splitByOperator,
-} from "./parser";
+} from "../parsing/parser";
 import {
   checkTypeOverflow,
   checkNegativeUnsignedError,
   buildMulOrDivHalt,
   buildStoreHaltInstructions,
-} from "./types";
+} from "../types/types";
 import {
   buildAddInstructions,
   buildReadAddConstantInstructions,
@@ -26,8 +26,8 @@ import {
   buildChainedReadAddExpression,
   buildReadAddMulInstructions,
   buildNumberLiteral,
-} from "./helpers";
-import { splitByAddOperator } from "./operator-parsing";
+} from "../support/helpers";
+import { splitByAddOperator } from "../parsing/operator-parsing";
 
 export function parseSubExpressionLeftPart(
   part: string,

@@ -1,4 +1,4 @@
-import { type Instruction, OpCode } from "./vm";
+import { type Instruction, OpCode } from "../core/vm";
 import {
   buildLoadDirect,
   buildLoadImmediate,
@@ -8,7 +8,7 @@ import {
   buildIn,
   buildLoadAddAndHalt,
   buildComparisonImmediate,
-} from "./instruction-primitives";
+} from "../compilation/instruction-primitives";
 
 export function buildAddInstructions(): Instruction[] {
   return buildLoadAddAndHalt(901);

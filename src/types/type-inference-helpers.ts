@@ -3,7 +3,7 @@ import {
   extractParenthesizedContent,
   isBracedExpression,
   extractBracedContent,
-} from "./parser";
+} from "../parsing/parser";
 
 function validateNumericPrefix(expr: string, allowTypeChars: boolean): boolean {
   const trimmed = expr.trim();

@@ -2,14 +2,14 @@ import {
   type CompileError,
   isTypeCompatible,
   isMutablePointerType,
-} from "./types";
-import { type VariableContext, type VariableBinding } from "./variable-types";
-import { parseLetComponents, extractExpressionType } from "./let-binding";
+} from "../types/types";
+import { type VariableContext, type VariableBinding } from "../types/variable-types";
+import { parseLetComponents, extractExpressionType } from "../support/let-binding";
 import {
   parseReassignmentComponents,
   parseDereferenceReassignmentComponents,
   parseArrayIndexReassignmentComponents,
-} from "./reassignment-parsing";
+} from "../parsing/reassignment-parsing";
 
 function skipLetBindings(source: string): string {
   let current = source;

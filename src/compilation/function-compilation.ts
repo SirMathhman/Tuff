@@ -1,7 +1,7 @@
-import { type Instruction, OpCode, Variant } from "./vm";
-import { type VariableContext } from "./variable-types";
-import { type FunctionContext } from "./function-types";
-import { parseFunctionCall } from "./function-parsing";
+import { type Instruction, OpCode, Variant } from "../core/vm";
+import { type VariableContext } from "../types/variable-types";
+import { type FunctionContext } from "../types/function-types";
+import { parseFunctionCall } from "../parsing/function-parsing";
 
 type CompileFunc = (
   expr: string,

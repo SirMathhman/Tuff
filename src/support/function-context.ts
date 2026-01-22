@@ -1,5 +1,5 @@
-import { type FunctionBinding, type FunctionContext } from "./function-types";
-import { parseFunctionDefinition } from "./function-parsing";
+import { type FunctionBinding, type FunctionContext } from "../types/function-types";
+import { parseFunctionDefinition } from "../parsing/function-parsing";
 
 export function extractFunctionDefinitions(source: string): FunctionContext {
   const functions: FunctionBinding[] = [];

@@ -1,7 +1,7 @@
-import { type Instruction, OpCode, Variant } from "./vm";
-import { getTypeSuffix, findTypeSuffixIndex } from "./parser";
-import { parseArrayTypeComponents } from "./array-helpers";
-import { buildStoreAndHalt } from "./instruction-primitives";
+import { type Instruction, OpCode, Variant } from "../core/vm";
+import { getTypeSuffix, findTypeSuffixIndex } from "../parsing/parser";
+import { parseArrayTypeComponents } from "../types/array-helpers";
+import { buildStoreAndHalt } from "../compilation/instruction-primitives";
 
 export interface Error {
   // What went wrong

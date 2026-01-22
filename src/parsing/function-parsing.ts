@@ -1,4 +1,4 @@
-import { isIdentifierChar, findChar, findMatchingParen } from "./parser";
+import { isIdentifierChar, findChar, findMatchingParen } from "../parsing/parser";
 
 function extractFunctionName(source: string): string {
   // After "fn", extract the identifier until '('

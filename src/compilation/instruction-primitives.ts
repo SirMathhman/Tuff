@@ -1,4 +1,4 @@
-import { type Instruction, OpCode, Variant } from "./vm";
+import { type Instruction, OpCode, Variant } from "../core/vm";
 
 // Shared instruction patterns to eliminate code duplication
 // All complex instruction sequences are built from these primitives

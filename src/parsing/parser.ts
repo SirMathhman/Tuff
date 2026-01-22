@@ -1,4 +1,4 @@
-import { type Instruction, OpCode, Variant } from "./vm";
+import { type Instruction, OpCode, Variant } from "../core/vm";
 
 export function parseSpaceSeparatedTokens(source: string): string[] {
   const trimmed = source.trim();

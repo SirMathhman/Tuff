@@ -5,7 +5,7 @@ import {
   OpCode,
   Variant,
   type Instruction,
-} from "../src/vm";
+} from "../src/core/vm";
 
 // eslint-disable-next-line max-lines-per-function
 describe("encodeTo64Bits and decode", () => {

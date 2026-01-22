@@ -1,5 +1,5 @@
-import { type Instruction, OpCode, Variant } from "./vm";
-import { type VariableContext } from "./variable-types";
+import { type Instruction, OpCode, Variant } from "../../core/vm";
+import { type VariableContext } from "../../types/variable-types";
 import {
   allocateVariable,
   parseLetComponents,
@@ -7,8 +7,8 @@ import {
   adjustReadInstructions,
   buildLetStoreInstructions,
   extractExpressionType,
-} from "./let-binding";
-import { isReferenceOperator, extractReferenceTarget } from "./parser";
+} from "../../support/let-binding";
+import { isReferenceOperator, extractReferenceTarget } from "../../parsing/parser";
 
 function determineResultAddress(
   exprCompile: Instruction[],

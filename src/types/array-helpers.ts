@@ -1,6 +1,6 @@
-import { parseArrayLiteral } from "./array-parsing";
-import { extractArrayIndexComponents } from "./parser";
-import { type VariableContext } from "./variable-types";
+import { parseArrayLiteral } from "../parsing/array-parsing";
+import { extractArrayIndexComponents } from "../parsing/parser";
+import { type VariableContext } from "../types/variable-types";
 
 export function parseArrayTypeComponents(type: string): string[] | undefined {
   if (!type.endsWith("]")) return undefined;

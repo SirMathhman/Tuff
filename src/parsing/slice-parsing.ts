@@ -1,9 +1,9 @@
-import { type Instruction } from "./vm";
-import { isIdentifierChar } from "./parser";
+import { type Instruction } from "../core/vm";
+import { isIdentifierChar } from "../parsing/parser";
 import {
   buildStoreAndHalt,
   buildLoadImmediate,
-} from "./instruction-primitives";
+} from "../compilation/instruction-primitives";
 
 export interface SliceFieldAccess {
   sliceName: string;

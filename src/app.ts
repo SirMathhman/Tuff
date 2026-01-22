@@ -1,31 +1,31 @@
-import { execute, type Instruction } from "./vm";
+import { execute, type Instruction } from "./core/vm";
 import {
   isParenthesizedExpression,
   extractParenthesizedContent,
   isBracedExpression,
   extractBracedContent,
-} from "./parser";
+} from "./parsing/parser";
 import {
   type CompileError,
   checkTypeOverflow,
   checkNegativeUnsignedError,
-} from "./types";
-import { type VariableContext } from "./variable-types";
-import { buildContextFromLetBindings } from "./let-binding";
-import { parseLetExpression as parseLetExpressionModule } from "./let-expression-parsing";
+} from "./types/types";
+import { type VariableContext } from "./types/variable-types";
+import { buildContextFromLetBindings } from "./support/let-binding";
+import { parseLetExpression as parseLetExpressionModule } from "./parsing/expressions/let-expression-parsing";
 import {
   extractFunctionDefinitions,
   getRemainningAfterFunctions,
-} from "./function-context";
-import { tryFunctionCall } from "./function-compilation";
-import { type FunctionContext } from "./function-types";
+} from "./support/function-context";
+import { tryFunctionCall } from "./compilation/function-compilation";
+import { type FunctionContext } from "./types/function-types";
 import {
   detectVariableShadowing,
   detectTypeIncompatibility,
   detectComparisonTypeMismatch,
   detectInvalidIfCondition,
   detectIfBranchTypeMismatch,
-} from "./validation";
+} from "./validation/validation";
 import {
   detectNonMutableReassignment,
   detectReassignmentTypeChange,
@@ -34,10 +34,10 @@ import {
   detectUninitializedDeclarationOnly,
   detectArrayIndexReassignmentOnImmutableArray,
   detectOutOfOrderArrayAssignment,
-} from "./reassignment-validation";
-import { detectPointerTypeErrors } from "./pointer-validation";
-import { compileNoContext } from "./arithmetic-parsing";
-import { type ExecutionState, type Dump } from "./debug-dump";
+} from "./validation/reassignment-validation";
+import { detectPointerTypeErrors } from "./validation/pointer-validation";
+import { compileNoContext } from "./parsing/arithmetic-parsing";
+import { type ExecutionState, type Dump } from "./support/debug-dump";
 import {
   tryReassignment,
   tryDereferenceReassignment,
@@ -50,7 +50,7 @@ import {
   tryArrayIndexing,
   tryArrayLiteral,
   trySliceFieldAccess,
-} from "./compilation-strategies";
+} from "./compilation/compilation-strategies";
 
 export interface Ok<T> {
   ok: true;

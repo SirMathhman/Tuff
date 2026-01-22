@@ -1,10 +1,10 @@
-import { type Instruction, OpCode, Variant } from "./vm";
-import { findChar, isIdentifierChar } from "./parser";
+import { type Instruction, OpCode, Variant } from "../core/vm";
+import { findChar, isIdentifierChar } from "../parsing/parser";
 import {
   buildLoadDirect,
   buildStoreDirect,
   buildStoreAndHalt,
-} from "./instruction-primitives";
+} from "../compilation/instruction-primitives";
 
 function findCompoundOperator(
   source: string,

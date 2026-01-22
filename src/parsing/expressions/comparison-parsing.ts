@@ -1,10 +1,10 @@
-import { type Instruction, OpCode } from "./vm";
-import { parseNumberWithSuffix, parseSpaceSeparatedTokens } from "./parser";
+import { type Instruction, OpCode } from "../../core/vm";
+import { parseNumberWithSuffix, parseSpaceSeparatedTokens } from "../../parsing/parser";
 import {
   buildReadComparisonRead,
   buildReadComparisonConstant,
-} from "./helpers";
-import { splitByComparisonOperator } from "./operator-parsing";
+} from "../../support/helpers";
+import { splitByComparisonOperator } from "../../parsing/operator-parsing";
 
 function extractReadType(readExpr: string): string | undefined {
   const parts = parseSpaceSeparatedTokens(readExpr);

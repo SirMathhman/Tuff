@@ -1,5 +1,5 @@
-import { type Instruction, OpCode, Variant } from "./vm";
-import { type VariableContext } from "./variable-types";
+import { type Instruction, OpCode, Variant } from "../core/vm";
+import { type VariableContext } from "../types/variable-types";
 import {
   isDereferenceOperator,
   extractDereferenceTarget,
@@ -10,13 +10,13 @@ import {
   extractArrayIndexComponents,
   isBracedExpression,
   extractBracedContent,
-} from "./parser";
+} from "../parsing/parser";
 import {
   resolveVariable,
   buildVarRefInstructions,
   buildReferenceAddressInstructions,
   isVariableMutable,
-} from "./let-binding";
+} from "../support/let-binding";
 import {
   parseReassignmentComponents,
   buildReassignmentInstructions,
@@ -24,25 +24,25 @@ import {
   buildDereferenceReassignmentInstructions,
   buildDereferenceInstructions,
   parseArrayIndexReassignmentComponents,
-} from "./reassignment-parsing";
+} from "../parsing/reassignment-parsing";
 import {
   parseAddExpressionWithContext,
   parseSubExpressionWithContext,
   parseMulExpressionWithContext,
   parseDivExpressionWithContext,
-} from "./expression-with-context";
-import { isArrayLiteral, parseArrayLiteral } from "./array-parsing";
+} from "../parsing/expression-with-context";
+import { isArrayLiteral, parseArrayLiteral } from "../parsing/array-parsing";
 import {
   buildLoadDirect,
   buildLoadImmediate,
   buildStoreDirect,
   buildStoreAndHalt,
-} from "./instruction-primitives";
+} from "../compilation/instruction-primitives";
 import {
   isSliceFieldAccess,
   parseSliceFieldAccess,
   buildSliceFieldAccessInstructions,
-} from "./slice-parsing";
+} from "../parsing/slice-parsing";
 
 type CompileFunc = (
   expr: string,
