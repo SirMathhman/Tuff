@@ -524,3 +524,9 @@ describe("The application - Compound assignments", () => {
     assertInvalid("let x = 10I32; x += 5I32; x");
   });
 });
+
+describe("The application - Functions", () => {
+  it("should support function definition and call with no parameters", () => {
+    assertValid("fn get() : I32 => 100; get()", 100);
+  });
+});

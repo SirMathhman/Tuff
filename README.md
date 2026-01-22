@@ -30,6 +30,7 @@ bun run visualize
 ## Language Features
 
 ### Basic Expressions
+
 ```
 100          # Halt with exit code 100
 read U8      # Read 8-bit unsigned integer from stdin
@@ -38,6 +39,7 @@ read U8      # Read 8-bit unsigned integer from stdin
 ```
 
 ### Variables & Type System
+
 ```
 let x : U8 = read U8;           # Variable with type annotation
 let y = 42I32;                  # Type inferred from literal (42I32 = 42 as I32)
@@ -46,6 +48,7 @@ z = 200U16;                      # Reassignment only allowed with 'let mut'
 ```
 
 ### Compound Assignment Operators
+
 ```
 let mut x = 10I32;
 x += 5I32;                       # Equivalent to: x = x + 5I32
@@ -60,6 +63,7 @@ x += 2I32 + 3I32;                # Arithmetic expression
 ```
 
 ### Pointers & References
+
 ```
 let mut x = 5I32;
 let y : *mut I32 = &mut x;      # Mutable pointer (can write through)
@@ -69,12 +73,14 @@ let z = &x;                       # Immutable reference (auto-typed)
 ```
 
 ### If-Expressions
+
 ```
 if (read U8 == 5U8) 100U32 else 200U32
 if (true) read I32 else read I32
 ```
 
 ### Arrays & Slices
+
 ```
 let array = [1I32, 2I32, 3I32];  # Array literal with inferred type
 let arr : [U8; 2; 4] = [10U8, 20U8];  # 2 initialized, 4 total capacity
@@ -93,6 +99,7 @@ slice.capacity                    # Total capacity of underlying array
 ## Type System
 
 Supported types:
+
 - **Unsigned integers**: `U8` (0-255), `U16` (0-65535)
 - **Signed integers**: `I8` (-128 to 127), `I16` (-32768 to 32767)
 - **Booleans**: `Bool` (true/false, 0/1)

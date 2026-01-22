@@ -14,6 +14,12 @@ import { type VariableContext } from "./variable-types";
 import { buildContextFromLetBindings } from "./let-binding";
 import { parseLetExpression as parseLetExpressionModule } from "./let-expression-parsing";
 import {
+  extractFunctionDefinitions,
+  getRemainningAfterFunctions,
+} from "./function-context";
+import { tryFunctionCall } from "./function-compilation";
+import { type FunctionContext } from "./function-types";
+import {
   detectVariableShadowing,
   detectTypeIncompatibility,
   detectComparisonTypeMismatch,
@@ -69,20 +75,26 @@ export function err<X>(error: X): Err<X> {
 function parseLetExpression(
   source: string,
   context: VariableContext,
+  functionContext: FunctionContext,
 ): { instructions: Instruction[]; newContext: VariableContext } | undefined {
-  return parseLetExpressionModule(source, compileWithContext, context);
+  return parseLetExpressionModule(
+    source,
+    (expr: string, ctx: VariableContext) =>
+      compileWithContext(expr, ctx, functionContext),
+    context,
+  );
 }
 
 function tryBasicPatterns(
   trimmed: string,
   context: VariableContext,
+  functionContext: FunctionContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
+  const compileFunc = (expr: string, ctx: VariableContext) =>
+    compileWithContext(expr, ctx, functionContext);
+
   // Try parsing as reassignment
-  const reassignmentResult = tryReassignment(
-    trimmed,
-    context,
-    compileWithContext,
-  );
+  const reassignmentResult = tryReassignment(trimmed, context, compileFunc);
   if (reassignmentResult) {
     return reassignmentResult;
   }
@@ -91,7 +103,7 @@ function tryBasicPatterns(
   const arrayIndexReassignmentResult = tryArrayIndexReassignment(
     trimmed,
     context,
-    compileWithContext,
+    compileFunc,
   );
   if (arrayIndexReassignmentResult) {
     return arrayIndexReassignmentResult;
@@ -101,7 +113,7 @@ function tryBasicPatterns(
   const dereferenceReassignmentResult = tryDereferenceReassignment(
     trimmed,
     context,
-    compileWithContext,
+    compileFunc,
   );
   if (dereferenceReassignmentResult) {
     return dereferenceReassignmentResult;
@@ -131,7 +143,11 @@ function tryBasicPatterns(
 function tryArrayHandlers(
   trimmed: string,
   context: VariableContext,
+  functionContext: FunctionContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
+  const compileFunc = (expr: string, ctx: VariableContext) =>
+    compileWithContext(expr, ctx, functionContext);
+
   // Try parsing as slice field access (e.g., slice.init)
   const sliceFieldResult = trySliceFieldAccess(trimmed, context);
   if (sliceFieldResult) {
@@ -139,23 +155,46 @@ function tryArrayHandlers(
   }
 
   // Try parsing as array indexing
-  const arrayIndexResult = tryArrayIndexing(
-    trimmed,
-    context,
-    compileWithContext,
-  );
+  const arrayIndexResult = tryArrayIndexing(trimmed, context, compileFunc);
   if (arrayIndexResult) {
     return arrayIndexResult;
   }
 
   // Try parsing as array literal
-  const arrayLiteralResult = tryArrayLiteral(
-    trimmed,
-    context,
-    compileWithContext,
-  );
+  const arrayLiteralResult = tryArrayLiteral(trimmed, context, compileFunc);
   if (arrayLiteralResult) {
     return arrayLiteralResult;
+  }
+
+  return undefined;
+}
+
+function tryFunctionOrLetPatterns(
+  trimmed: string,
+  context: VariableContext,
+  functionContext: FunctionContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
+  // Try parsing as function call
+  const funcCallResult = tryFunctionCall(
+    trimmed,
+    functionContext,
+    (expr: string, ctx: VariableContext) =>
+      compileWithContext(expr, ctx, functionContext),
+  );
+  if (funcCallResult) {
+    return {
+      instructions: funcCallResult.instructions,
+      context,
+    };
+  }
+
+  // Try parsing as let expression
+  const letResult = parseLetExpression(trimmed, context, functionContext);
+  if (letResult) {
+    return {
+      instructions: letResult.instructions,
+      context: letResult.newContext,
+    };
   }
 
   return undefined;
@@ -164,20 +203,18 @@ function tryArrayHandlers(
 function tryAllPatterns(
   trimmed: string,
   context: VariableContext,
+  functionContext: FunctionContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
-  // Try parsing as let expression
-  const letResult = parseLetExpression(trimmed, context);
-  if (letResult) {
-    return {
-      instructions: letResult.instructions,
-      context: letResult.newContext,
-    };
+  // Try function or let patterns first
+  let result = tryFunctionOrLetPatterns(trimmed, context, functionContext);
+  if (result) {
+    return result;
   }
 
   // Try basic patterns
-  const basicResult = tryBasicPatterns(trimmed, context);
-  if (basicResult) {
-    return basicResult;
+  result = tryBasicPatterns(trimmed, context, functionContext);
+  if (result) {
+    return result;
   }
 
   // Try parsing as an addition expression with context
@@ -187,25 +224,26 @@ function tryAllPatterns(
   }
 
   // Try array handlers
-  const arrayResult = tryArrayHandlers(trimmed, context);
-  if (arrayResult) {
-    return arrayResult;
+  result = tryArrayHandlers(trimmed, context, functionContext);
+  if (result) {
+    return result;
   }
 
   // Unwrap braces if present and try parsing the inner content with context
   const bracedResult = tryBracedExpression(
     trimmed,
     context,
-    compileWithContext,
+    (expr: string, ctx: VariableContext) =>
+      compileWithContext(expr, ctx, functionContext),
   );
   if (bracedResult) {
     return bracedResult;
   }
 
   // Fall back to regular parsing (which doesn't have context support yet)
-  const result = compileNoContext(trimmed);
-  if (result) {
-    return { instructions: result, context };
+  const compileResult = compileNoContext(trimmed);
+  if (compileResult) {
+    return { instructions: compileResult, context };
   }
 
   return undefined;
@@ -214,6 +252,7 @@ function tryAllPatterns(
 function compileWithContext(
   source: string,
   context: VariableContext,
+  functionContext: FunctionContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
   const trimmed = source.trim();
 
@@ -221,7 +260,7 @@ function compileWithContext(
     return { instructions: [], context };
   }
 
-  return tryAllPatterns(trimmed, context);
+  return tryAllPatterns(trimmed, context, functionContext);
 }
 
 function performValidationChecks(trimmed: string): CompileError | undefined {
@@ -285,7 +324,13 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   if (validationError) {
     return err(validationError);
   }
-  const result = compileWithContext(trimmed, []);
+  const functionContext = extractFunctionDefinitions(trimmed);
+  const remainingAfterFunctions = getRemainningAfterFunctions(trimmed);
+  const result = compileWithContext(
+    remainingAfterFunctions,
+    [],
+    functionContext,
+  );
   return result ? ok(result.instructions) : ok([]);
 }
 

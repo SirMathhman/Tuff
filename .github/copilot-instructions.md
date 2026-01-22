@@ -8,21 +8,23 @@ Tuff is a 64-bit virtual machine with a compiler for a typed expression language
 
 **Compilation Pipeline**: Source → tokenize → parse/validate → generate `Instruction[]` → encode to 64-bit format → execute
 
-**Six Compiler Layers**:
+**Eight Compiler Layers** (ordered by `tryAllPatterns()` in app.ts):
 
 1. **Parser** ([src/parser.ts](../src/parser.ts)) - Tokenization, basic syntax extraction (variables, parentheses, operators, type suffixes)
-2. **Arithmetic** ([src/arithmetic-parsing.ts](../src/arithmetic-parsing.ts)) - Recursive descent for add/sub/mul/div expressions with operator precedence
-3. **Comparisons** ([src/comparison-parsing.ts](../src/comparison-parsing.ts)) - `==`, `<`, `>`, `<=`, `>=` operators returning Bool type
-4. **Variables & Binding** ([src/let-binding.ts](../src/let-binding.ts), [src/let-expression-parsing.ts](../src/let-expression-parsing.ts)) - `let x: Type = expr;` with mutable binding support, context tracking (memory 904+)
-5. **Compilation Strategies** ([src/compilation-strategies.ts](../src/compilation-strategies.ts)) - Strategy pattern handlers (try\* functions) for reassignment, dereference, array access, references—each returns instructions or undefined
-6. **App Layer** ([src/app.ts](../src/app.ts)) - Orchestrates all validators, coordinates strategy handlers, handles parentheses/braces unwrapping, returns `Result<Instruction[], CompileError>`
+2. **Let Expressions** ([src/let-expression-parsing.ts](../src/let-expression-parsing.ts)) - `let [mut] x [: Type] = expr;` with context allocation
+3. **Basic Reassignments** ([src/compilation-strategies.ts](../src/compilation-strategies.ts) → `tryReassignment`) - Simple `x = expr`, including compound ops (`+=`, `-=`, `*=`, `/=`)
+4. **Arithmetic with Context** ([src/expression-with-context.ts](../src/expression-with-context.ts)) - Binary operators with variable resolution via generic `parseArithmeticExpressionWithContext()` helper
+5. **Array Operations** ([src/compilation-strategies.ts](../src/compilation-strategies.ts)) - Array indexing, literals, and field access (slices)
+6. **Braced Expressions** ([src/compilation-strategies.ts](../src/compilation-strategies.ts) → `tryBracedExpression`) - Recursive unwrapping of `{ ... }`
+7. **Arithmetic (Context-Free)** ([src/arithmetic-parsing.ts](../src/arithmetic-parsing.ts) → `parseArithmeticOrLiteral`) - Fallback for `+/-/*/` without variables
+8. **App Layer** ([src/app.ts](../src/app.ts)) - Orchestrates all validators, coordinates strategy handlers, returns `Result<Instruction[], CompileError>`
 
 **Memory Layout** (1024 bytes):
 
 - 0-899: Program instructions (encoded 64-bit)
-- 900-903: Temp storage for expr evaluation
+- 900-903: Temp storage for expr evaluation (900=primary result, 901=read result, 902-903=misc temp)
 - 904+: Variable storage (arrays allocated contiguously, scalars at 904, 905, etc.)
-- 950+: If-expression nesting temp storage (950+3N for nested level N)
+- 950-951+: Register preservation for compound ops & nested expressions (r1 saved to 951 during arithmetic eval)
 
 ## Critical Implementation Patterns
 
@@ -96,11 +98,31 @@ export interface VariableBinding {
 
 ## Expression Compilation & Validation
 
+**Compound Assignment Operators** (`+=`, `-=`, `*=`, `/=`)
+
+- Syntactic sugar: `x += expr` transforms to `x = x + expr` internally
+- Detection: [src/reassignment-parsing.ts](../src/reassignment-parsing.ts) → `findCompoundOperator()` checks for operator char before `=`
+- Operand types supported: variables, constants, read expressions, arithmetic expressions (`x += 2I32 + 3I32`)
+- Context-aware parsing: [src/expression-with-context.ts](../src/expression-with-context.ts) provides `parseAddExpressionWithContext()`, `parseSubExpressionWithContext()`, etc.
+- **Critical Pattern - Register Preservation**: When evaluating arithmetic on right operand:
+  ```typescript
+  // Save r1 (left value) to preserve during arithmetic evaluation
+  Store r1 to memory[951]
+  // Evaluate right-side arithmetic (clobbers r1)
+  compileNoContext(arithmetic_expr)
+  // Restore r1 from memory[951]
+  Load r1 from memory[951]
+  // Load result to r0 for binary operation
+  Load r0 from memory[900]
+  ```
+- Reason: Nested arithmetic expressions use r1; without preservation, left operand value is lost
+
 **Arithmetic Parsing** ([src/arithmetic-parsing.ts](../src/arithmetic-parsing.ts))
 
 - Precedence: `*`, `/` bind tighter than `+`, `-`
 - Chained additions `a + b + c` compile as: load a→r1 store→900, load b→r1 store→902, load c→r1, add r1 r0, load+add from stored values
 - Parentheses/braces unwrapped by [src/app.ts](../src/app.ts) before arithmetic parsing
+- Context-free fallback: `parseArithmeticOrLiteral()` for expressions without variable context (used in base layer)
 
 **Let-Expression Parsing** ([src/let-expression-parsing.ts](../src/let-expression-parsing.ts))
 
@@ -121,6 +143,18 @@ export interface VariableBinding {
 - Operators: `==`, `<`, `>`, `<=`, `>=` → OpCode.Equal, LessThan, GreaterThan, etc.
 - Returns result (0/1) in register, stored to memory for type tracking
 - Type must match on both sides: `read U8 == read U8` ✓, `read U8 == read U16` ✗
+
+**Expression Resolution with Context** ([src/expression-with-context.ts](../src/expression-with-context.ts))
+
+- **Pattern**: Resolve operands to registers via context-aware lookups, skip context-free fallback
+- **Operand Types** (resolution order in `resolveRightOperand()`):
+  1. Variable reference: `tryResolveVariableAtom(part, context, 0)` → loads from context
+  2. Numeric literal: `parseNumberWithSuffix(part)` → load immediate
+  3. Read expression: `parseReadInstruction(part)` → in r0
+  4. Arithmetic expression: `resolveArithmeticOperand(part)` → with r1 preservation
+- **Generic Helper**: `parseArithmeticExpressionWithContext(source, context, splitFunc, opcode)` unifies all four operators (+, -, \*, /)
+  - Each operator-specific function (`parseAddExpressionWithContext`, etc.) delegates to generic with operator-specific split function
+  - Eliminates 15-line duplication across 4 functions
 
 **Array Support** ([src/array-parsing.ts](../src/array-parsing.ts), [src/array-compilation.ts](../src/array-compilation.ts))
 
@@ -196,11 +230,14 @@ export interface VariableBinding {
 | [src/comparison-parsing.ts](../src/comparison-parsing.ts)           | Parses ==, <, >, <=, >= returning Bool                                                         |
 | [src/if-expression-parsing.ts](../src/if-expression-parsing.ts)     | Parses if-then-else; validates condition is Bool; unifies branch types                         |
 | [src/compilation-strategies.ts](../src/compilation-strategies.ts)   | Strategy pattern handlers for reassignment, dereference, arrays, references, etc.              |
-| [src/debug-dump.ts](../src/debug-dump.ts)                           | Interfaces for execution state tracing (ExecutionState, Cycle, Dump)                           |
-| [src/pointer-validation.ts](../src/pointer-validation.ts)           | Validates &, &mut, \* operators; checks reference borrowing rules                              |
-| [src/expression-with-context.ts](../src/expression-with-context.ts) | Arithmetic parsing aware of variable context; resolves variable references                     |
+| [src/reassignment-parsing.ts](../src/reassignment-parsing.ts)       | Detects reassignment patterns incl. compound ops; parses left/right expr parts                 |
+| [src/operator-parsing.ts](../src/operator-parsing.ts)               | Finds comparison/arithmetic/add operators in source; splits expressions by operator            |
+| [src/expression-with-context.ts](../src/expression-with-context.ts) | Parses arithmetic expressions with variable context; resolves operands (vars, reads, expr)     |
 | [src/array-parsing.ts](../src/array-parsing.ts)                     | Array type parsing and literal detection ([Type; initLen; totalLen])                           |
 | [src/array-compilation.ts](../src/array-compilation.ts)             | Array element store/load instruction generation; computed address handling                     |
+| [src/debug-dump.ts](../src/debug-dump.ts)                           | Interfaces for execution state tracing (ExecutionState, Cycle, Dump)                           |
+| [src/pointer-validation.ts](../src/pointer-validation.ts)           | Validates &, &mut, \* operators; checks reference borrowing rules                              |
+| [src/slice-parsing.ts](../src/slice-parsing.ts)                     | Parses slice field access (slice.initialized, slice.capacity)                                  |
 | [src/types.ts](../src/types.ts)                                     | Type range checking, overflow detection, type compatibility rules                              |
 | [src/instruction-primitives.ts](../src/instruction-primitives.ts)   | Reusable instruction builders to reduce duplication                                            |
 | [src/vm.ts](../src/vm.ts)                                           | Instruction fetch/decode/execute loop; 4 registers, 1024 memory, 1000 cycle max                |
