@@ -248,3 +248,30 @@ describe("The application - Comparison operators", () => {
     assertInvalid("read Bool >= read Bool");
   });
 });
+
+describe("The application - If-else expressions", () => {
+  it("should support if-else with true condition", () => {
+    assertValid("if (read U8 == read U8) 3U8 else 5U8", 3, 5, 5);
+  });
+
+  it("should support if-else with false condition", () => {
+    assertValid("if (read U8 == read U8) 3U8 else 5U8", 5, 5, 3);
+  });
+
+  it("should support if-else in let binding", () => {
+    assertValid(
+      "let x : U8 = if (read U8 == read U8) 3U8 else 5U8; x",
+      3,
+      5,
+      5,
+    );
+  });
+
+  it("should support if-else with read in branches", () => {
+    assertValid("if (true) read U8 else read U8", 42, 42, 99);
+  });
+
+  it("should support if-else with false literal condition", () => {
+    assertValid("if (false) read U8 else read U8", 99, 42, 99);
+  });
+});

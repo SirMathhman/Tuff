@@ -56,7 +56,7 @@ export function extractVariableName(source: string): string {
   return varName;
 }
 
-function findMatchingParen(source: string, startIndex: number): number {
+export function findMatchingParen(source: string, startIndex: number): number {
   let depth = 1;
   for (let i = startIndex + 1; i < source.length; i++) {
     if (source[i] === "(") depth++;
@@ -119,7 +119,7 @@ export function parseReadInstruction(
     return undefined;
   }
 
-  // Read from stdin into register 0, store in memory at 901, then halt
+  // Read from stdin into register 0, store in memory at 901 and 900, then halt
   return [
     {
       opcode: OpCode.In,
@@ -131,6 +131,12 @@ export function parseReadInstruction(
       variant: Variant.Direct,
       operand1: 0,
       operand2: 901,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 900,
     },
     {
       opcode: OpCode.Halt,

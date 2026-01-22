@@ -39,6 +39,7 @@ import { parseAddExpressionWithContext } from "./expression-with-context";
 import { splitByAddOperator } from "./operator-parsing";
 import { parseComparisonExpression } from "./comparison-parsing";
 import { parseLetExpression as parseLetExpressionModule } from "./let-expression-parsing";
+import { parseIfExpression } from "./if-expression-parsing";
 import {
   detectVariableShadowing,
   detectTypeIncompatibility,
@@ -428,39 +429,7 @@ function parseLiteralExpression(source: string): Instruction[] | undefined {
   return undefined;
 }
 
-function compileNoContext(source: string): Instruction[] | undefined {
-  const trimmed = source.trim();
-
-  if (!trimmed) {
-    return [];
-  }
-
-  const negError = checkNegativeUnsignedError(trimmed);
-  if (negError) {
-    return undefined;
-  }
-
-  const overflowError = checkTypeOverflow(trimmed);
-  if (overflowError) {
-    return undefined;
-  }
-
-  if (isParenthesizedExpression(trimmed)) {
-    const innerExpr = extractParenthesizedContent(trimmed);
-    return compileNoContext(innerExpr);
-  }
-
-  if (isBracedExpression(trimmed)) {
-    const innerExpr = extractBracedContent(trimmed);
-    return compileNoContext(innerExpr);
-  }
-
-  // Check comparisons first (lower precedence than arithmetic)
-  const comparisonResult = parseComparisonExpression(trimmed);
-  if (comparisonResult) {
-    return comparisonResult;
-  }
-
+function parseArithmeticOrLiteral(trimmed: string): Instruction[] | undefined {
   const arithResult = parseAddExpression(trimmed);
   if (arithResult) {
     return arithResult;
@@ -489,6 +458,50 @@ function compileNoContext(source: string): Instruction[] | undefined {
   }
 
   return parseLiteralExpression(trimmed);
+}
+
+function compileNoContext(source: string): Instruction[] | undefined {
+  const trimmed = source.trim();
+
+  if (!trimmed) {
+    return [];
+  }
+
+  const negError = checkNegativeUnsignedError(trimmed);
+  if (negError) {
+    return undefined;
+  }
+
+  const overflowError = checkTypeOverflow(trimmed);
+  if (overflowError) {
+    return undefined;
+  }
+
+  if (isParenthesizedExpression(trimmed)) {
+    const innerExpr = extractParenthesizedContent(trimmed);
+    return compileNoContext(innerExpr);
+  }
+
+  if (isBracedExpression(trimmed)) {
+    const innerExpr = extractBracedContent(trimmed);
+    return compileNoContext(innerExpr);
+  }
+
+  // Check if-expressions first (control flow)
+  if (trimmed.startsWith("if")) {
+    const ifResult = parseIfExpression(trimmed, compileNoContext);
+    if (ifResult) {
+      return ifResult;
+    }
+  }
+
+  // Check comparisons first (lower precedence than arithmetic)
+  const comparisonResult = parseComparisonExpression(trimmed);
+  if (comparisonResult) {
+    return comparisonResult;
+  }
+
+  return parseArithmeticOrLiteral(trimmed);
 }
 
 export function compile(source: string): Result<Instruction[], CompileError> {

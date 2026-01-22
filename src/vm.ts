@@ -163,7 +163,6 @@ function handleComparison(
   }
 }
 
-
 function handleLogical(
   opcode: OpCode,
   operand1: number,
