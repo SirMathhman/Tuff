@@ -132,4 +132,8 @@ describe("The application - Grouping and variables", () => {
   it("should support let binding without type annotation", () => {
     assertValid("let x = read U8; x", 42, 42);
   });
+
+  it("should reject variable shadowing", () => {
+    assertInvalid("let x = read U8; let x = read U8; x");
+  });
 });

@@ -32,6 +32,13 @@ export function resolveVariable(
   return binding?.memoryAddress;
 }
 
+export function isVariableShadowed(
+  context: VariableContext,
+  varName: string,
+): boolean {
+  return context.some((b) => b.name === varName);
+}
+
 export function parseLetComponents(
   source: string,
 ): { varName: string; exprPart: string; remaining: string } | undefined {

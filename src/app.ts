@@ -40,6 +40,7 @@ import {
 } from "./let-binding";
 import { parseAddExpressionWithContext } from "./expression-with-context";
 import { splitByAddOperator } from "./operator-parsing";
+import { detectVariableShadowing } from "./validation";
 
 export interface Ok<T> {
   ok: true;
@@ -571,6 +572,12 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   if (isBracedExpression(trimmed)) {
     const innerExpr = extractBracedContent(trimmed);
     return compile(innerExpr);
+  }
+
+  // Check for variable shadowing in let bindings
+  const shadowError = detectVariableShadowing(trimmed);
+  if (shadowError) {
+    return err(shadowError);
   }
 
   const result = compileWithContext(trimmed, []);
