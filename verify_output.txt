@@ -1,0 +1,137 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::staticFieldBase has been called by com.google.inject.internal.aop.HiddenClassDefiner (file:/C:/ProgramData/chocolatey/lib/maven/apache-maven-3.9.11/lib/guice-5.1.0-classes.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.inject.internal.aop.HiddenClassDefiner
+WARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< io.github.sirmathhman:tuff >---------------------
+[INFO] Building Tuff 1.0.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.2.0:clean (default-clean) @ tuff ---
+[INFO] Deleting C:\Users\mathm\IdeaProjects\Tuff\target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ tuff ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ tuff ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 63 source files with javac [forked debug release 17] to target\classes
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\Error.java:[3,7] [JavaLangClash] io.github.sirmathhman.tuff.Error clashes with java.lang.Error
+  
+    (see https://errorprone.info/bugpattern/JavaLangClash)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\letbinding\FunctionHandler.java:[361,2] [LoopOverCharArray] toCharArray allocates a new array, using charAt is more efficient
+    (see https://errorprone.info/bugpattern/LoopOverCharArray)
+  Did you mean 'for (int i = 0; i < argsString.length(); i++) { char c = argsString.charAt(i);if (c == '(' || c == '{' || c == '<') {'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\RunResult.java:[7,82] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\ExecutionError.java:[5,43] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[15,49] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[34,10] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[36,10] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[37,10] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[56,42] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[56,60] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[153,29] [EnumOrdinal] You should almost never invoke the Enum.ordinal() method or depend on the enum values by index.
+    (see https://errorprone.info/bugpattern/EnumOrdinal)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[154,28] [EnumOrdinal] You should almost never invoke the Enum.ordinal() method or depend on the enum values by index.
+    (see https://errorprone.info/bugpattern/EnumOrdinal)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[175,10] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[175,28] [ArrayRecordComponent] Record components should not be arrays.
+    (see https://errorprone.info/bugpattern/ArrayRecordComponent)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[414,52] [EnumOrdinal] You should almost never invoke the Enum.ordinal() method or depend on the enum values by index.
+    (see https://errorprone.info/bugpattern/EnumOrdinal)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:[415,50] [EnumOrdinal] You should almost never invoke the Enum.ordinal() method or depend on the enum values by index.
+    (see https://errorprone.info/bugpattern/EnumOrdinal)
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\ExpressionTokens.java:[264,33] [OperatorPrecedence] Use grouping parenthesis to make the operator precedence explicit
+    (see https://errorprone.info/bugpattern/OperatorPrecedence)
+  Did you mean 'if ((sourceType.startsWith("(") && sourceType.endsWith(")")) ||'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\ExpressionTokens.java:[265,31] [OperatorPrecedence] Use grouping parenthesis to make the operator precedence explicit
+    (see https://errorprone.info/bugpattern/OperatorPrecedence)
+  Did you mean '(targetType.startsWith("(") && targetType.endsWith(")"))) {'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\letbinding\LetBindingProcessor.java:[66,30] [StringSplitter] String.split(String) has surprising behavior
+    (see https://errorprone.info/bugpattern/StringSplitter)
+  Did you mean 'var parts = Splitter.on(':').splitToList(declPart);'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\LetBindingHandler.java:[32,30] [StringSplitter] String.split(String) has surprising behavior
+    (see https://errorprone.info/bugpattern/StringSplitter)
+  Did you mean 'var varName = Iterables.get(Splitter.on(':').split(declPart), 0).trim();'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\LetBindingHandler.java:[172,39] [StringSplitter] String.split(String) has surprising behavior
+    (see https://errorprone.info/bugpattern/StringSplitter)
+  Did you mean 'var declParts = Splitter.on(':').splitToList(secondDeclPart);'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\LetBindingHandler.java:[192,41] [StringSplitter] String.split(String) has surprising behavior
+    (see https://errorprone.info/bugpattern/StringSplitter)
+  Did you mean 'var variableName = Iterables.get(Splitter.on(':').split(secondDeclPart), 0).trim();'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\functions\RecursiveFunctionCompiler.java:[174,40] [StringSplitter] String.split(String) has surprising behavior
+    (see https://errorprone.info/bugpattern/StringSplitter)
+  Did you mean 'var readVars = Splitter.on(',').splitToList(pattern.varName());'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\letbinding\ForLoopHandler.java:[228,24] [StringSplitter] String.split(String) has surprising behavior
+    (see https://errorprone.info/bugpattern/StringSplitter)
+  Did you mean 'var parts = Splitter.on(Pattern.compile("\\+=|-=|\\*=|/=")).splitToList(stmt);'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\letbinding\FunctionDefinitionProcessor.java:[129,2] [LoopOverCharArray] toCharArray allocates a new array, using charAt is more efficient
+    (see https://errorprone.info/bugpattern/LoopOverCharArray)
+  Did you mean 'for (int i = 0; i < input.length(); i++) { char c = input.charAt(i);if (c == '<' || c == '(' || c == '{') {'?
+[WARNING] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\letbinding\FunctionDefinitionProcessor.java:[167,30] [StringSplitter] String.split(String) has surprising behavior
+    (see https://errorprone.info/bugpattern/StringSplitter)
+  Did you mean 'var parts = Splitter.on(':').splitToList(paramPart);'?
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ tuff ---
+[INFO] Copying 4 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ tuff ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 1 source file with javac [forked debug release 17] to target\test-classes
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ tuff ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running io.github.sirmathhman.tuff.AppTest
+[INFO] Tests run: 240, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.329 s -- in io.github.sirmathhman.tuff.AppTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 240, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.1:jar (default-jar) @ tuff ---
+[INFO] Building jar: C:\Users\mathm\IdeaProjects\Tuff\target\tuff-1.0.0-SNAPSHOT.jar
+[INFO] 
+[INFO] --- install:3.1.4:install (install-for-checkstyle) @ tuff ---
+[INFO] Installing C:\Users\mathm\IdeaProjects\Tuff\pom.xml to C:\Users\mathm\.m2\repository\io\github\sirmathhman\tuff\1.0.0-SNAPSHOT\tuff-1.0.0-SNAPSHOT.pom
+[INFO] Installing C:\Users\mathm\IdeaProjects\Tuff\target\tuff-1.0.0-SNAPSHOT.jar to C:\Users\mathm\.m2\repository\io\github\sirmathhman\tuff\1.0.0-SNAPSHOT\tuff-1.0.0-SNAPSHOT.jar
+[INFO] 
+[INFO] --- checkstyle:3.6.0:check (checkstyle) @ tuff ---
+[INFO] Starting audit...
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\functions\TreeRecursionCompiler.java:143: Parameter 'st' is accessed 20 times, which exceeds the threshold of 10. Consider moving functionality into the parameter's class. [FeatureEnvy]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\functions\TreeRecursionCompiler.java:179: Parameter 'st' is accessed 18 times, which exceeds the threshold of 10. Consider moving functionality into the parameter's class. [FeatureEnvy]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\functions\TreeRecursionCompiler.java:223: Parameter 'st' is accessed 20 times, which exceeds the threshold of 10. Consider moving functionality into the parameter's class. [FeatureEnvy]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\letbinding\fields\ArrayFieldAccessBase.java:97: Parameter 'ctx' is accessed 11 times, which exceeds the threshold of 10. Consider moving functionality into the parameter's class. [FeatureEnvy]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\compiler\WhileLoopHandler.java:323: Parameter 'condition' is accessed 12 times, which exceeds the threshold of 10. Consider moving functionality into the parameter's class. [FeatureEnvy]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:146: Parameter 'ctx' is accessed 16 times, which exceeds the threshold of 10. Consider moving functionality into the parameter's class. [FeatureEnvy]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:178: Parameter 'data' is accessed 11 times, which exceeds the threshold of 10. Consider moving functionality into the parameter's class. [FeatureEnvy]
+[ERROR] C:\Users\mathm\IdeaProjects\Tuff\src\main\java\io\github\sirmathhman\tuff\vm\Vm.java:228: Parameter 'ctx' is accessed 63 times, which exceeds the threshold of 10. Consider moving functionality into the parameter's class. [FeatureEnvy]
+Audit done.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  10.297 s
+[INFO] Finished at: 2026-01-21T19:02:01-05:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (checkstyle) on project tuff: Failed during checkstyle execution: There are 8 errors reported by Checkstyle 9.3 with checkstyle.xml ruleset. -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
