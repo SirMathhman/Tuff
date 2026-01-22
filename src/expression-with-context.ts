@@ -1,7 +1,8 @@
 import { type Instruction, OpCode, Variant } from "./vm";
-import { parseNumberWithSuffix, findOperatorIndex } from "./parser";
+import { parseNumberWithSuffix } from "./parser";
 import { buildStoreHaltInstructions } from "./types";
 import { type VariableContext, resolveVariable } from "./let-binding";
+import { splitByAddOperator } from "./operator-parsing";
 
 export function tryResolveVariableAtom(
   part: string,
@@ -25,11 +26,10 @@ export function parseAddExpressionWithContext(
   source: string,
   context: VariableContext,
 ): Instruction[] | undefined {
-  const plusIndex = findOperatorIndex(source, "+");
-  if (plusIndex === -1) return undefined;
+  const parts = splitByAddOperator(source);
+  if (!parts) return undefined;
 
-  const leftPart = source.substring(0, plusIndex).trim();
-  const rightPart = source.substring(plusIndex + 1).trim();
+  const { leftPart, rightPart } = parts;
 
   // Try to resolve left as a variable
   const leftVarInstructions = tryResolveVariableAtom(leftPart, context, 1);

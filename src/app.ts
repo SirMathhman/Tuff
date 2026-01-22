@@ -12,7 +12,6 @@ import {
   parseDivExpression,
   buildMulOrDivResult,
   splitByOperator,
-  findOperatorIndex,
 } from "./parser";
 import {
   type CompileError,
@@ -41,6 +40,7 @@ import {
   buildVarRefInstructions,
 } from "./let-binding";
 import { parseAddExpressionWithContext } from "./expression-with-context";
+import { splitByAddOperator } from "./operator-parsing";
 
 export interface Ok<T> {
   ok: true;
@@ -177,11 +177,10 @@ function parseParenthesizedAtom(
 }
 
 function parseAddExpression(source: string): Instruction[] | undefined {
-  const plusIndex = findOperatorIndex(source, "+");
-  if (plusIndex === -1) return undefined;
+  const parts = splitByAddOperator(source);
+  if (!parts) return undefined;
 
-  const leftPart = source.substring(0, plusIndex).trim();
-  const rightPart = source.substring(plusIndex + 1).trim();
+  const { leftPart, rightPart } = parts;
 
   // Check if left is "read U8"
   const isLeftRead = leftPart.startsWith("read");
