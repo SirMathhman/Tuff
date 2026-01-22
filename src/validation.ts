@@ -423,3 +423,72 @@ export function detectComparisonTypeMismatch(
 
   return undefined;
 }
+
+function isValidIfCondition(condition: string): boolean {
+  const trimmed = condition.trim();
+
+  // Boolean literals are valid
+  if (trimmed === "true" || trimmed === "false") {
+    return true;
+  }
+
+  // Comparison operators: ==, <, >, <=, >=
+  const comparisonOps = ["==", "<=", ">=", "<", ">"];
+  for (const op of comparisonOps) {
+    if (trimmed.includes(op)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function detectInvalidIfCondition(source: string): CompileError | undefined {
+  // Match if ( ... ) pattern
+  if (!source.startsWith("if")) {
+    return undefined;
+  }
+
+  let parenStart = -1;
+  for (let i = 2; i < source.length; i++) {
+    if (source[i] === "(") {
+      parenStart = i;
+      break;
+    }
+    if (source[i] !== " " && source[i] !== "\t") {
+      break;
+    }
+  }
+
+  if (parenStart === -1) {
+    return undefined;
+  }
+
+  let depth = 1;
+  let parenEnd = -1;
+  for (let i = parenStart + 1; i < source.length; i++) {
+    if (source[i] === "(") depth++;
+    if (source[i] === ")") depth--;
+    if (depth === 0) {
+      parenEnd = i;
+      break;
+    }
+  }
+
+  if (parenEnd === -1) {
+    return undefined;
+  }
+
+  const condition = source.substring(parenStart + 1, parenEnd).trim();
+
+  if (!isValidIfCondition(condition)) {
+    return {
+      cause: `If-expression condition must be a boolean or comparison, got: ${condition}`,
+      reason: "If-expressions require conditions that evaluate to boolean values",
+      fix: "Use a comparison (==, <, >, <=, >=) or boolean literal (true, false) as the condition",
+      first: { line: 0, column: parenStart, length: parenEnd - parenStart + 1 },
+    };
+  }
+
+  return undefined;
+}

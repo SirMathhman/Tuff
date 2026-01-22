@@ -250,6 +250,10 @@ describe("The application - Comparison operators", () => {
 });
 
 describe("The application - If-else expressions", () => {
+  it("should reject if-expression with non-boolean condition", () => {
+    assertInvalid("let x = if ( read U8 ) 3 else 5; x");
+  });
+
   it("should support if-else with true condition", () => {
     assertValid("if (read U8 == read U8) 3U8 else 5U8", 3, 5, 5);
   });

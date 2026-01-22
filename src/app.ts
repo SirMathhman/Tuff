@@ -44,6 +44,7 @@ import {
   detectVariableShadowing,
   detectTypeIncompatibility,
   detectComparisonTypeMismatch,
+  detectInvalidIfCondition,
 } from "./validation";
 
 export interface Ok<T> {
@@ -547,6 +548,12 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   const comparisonError = detectComparisonTypeMismatch(trimmed);
   if (comparisonError) {
     return err(comparisonError);
+  }
+
+  // Check for invalid if-expression conditions
+  const ifConditionError = detectInvalidIfCondition(trimmed);
+  if (ifConditionError) {
+    return err(ifConditionError);
   }
 
   const result = compileWithContext(trimmed, []);
