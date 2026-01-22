@@ -1,5 +1,9 @@
 import { type CompileError, getTypeBits, isSignedType } from "./types";
-import { parseLetComponents, extractExpressionType } from "./let-binding";
+import {
+  parseLetComponents,
+  extractExpressionType,
+  type VariableContext,
+} from "./let-binding";
 
 function isTypeCompatible(declaredType: string, exprType: string): boolean {
   if (declaredType === exprType) return true;
@@ -78,28 +82,61 @@ export function detectVariableShadowing(
   return undefined;
 }
 
+function findFirstSemicolon(str: string): number {
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === ";") {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function processLetBinding(
+  thisLet: string,
+  variableTypes: VariableContext,
+): { error?: CompileError; added?: boolean } {
+  const components = parseLetComponents(thisLet);
+  if (!components) return {};
+
+  const { varName, typeAnnotation, exprPart } = components;
+  const exprType = extractExpressionType(exprPart, variableTypes);
+
+  if (!typeAnnotation) {
+    // No annotation, infer from expression
+    if (exprType) {
+      variableTypes.push({ name: varName, memoryAddress: 0, type: exprType });
+    }
+    return { added: true };
+  }
+
+  // Has annotation, check compatibility
+  if (exprType && !isTypeCompatible(typeAnnotation, exprType)) {
+    return { error: buildTypeError(typeAnnotation, exprType, exprPart) };
+  }
+
+  // Store the annotated type for this variable
+  variableTypes.push({ name: varName, memoryAddress: 0, type: typeAnnotation });
+  return { added: true };
+}
+
 export function detectTypeIncompatibility(
   source: string,
 ): CompileError | undefined {
   let remaining = source;
+  const variableTypes: VariableContext = [];
 
   while (remaining.startsWith("let")) {
-    const components = parseLetComponents(remaining);
-    if (!components) break;
+    const semicolonIndex = findFirstSemicolon(remaining);
+    if (semicolonIndex === -1) break;
 
-    const { typeAnnotation, exprPart, remaining: nextRemaining } = components;
+    const thisLet = remaining.substring(0, semicolonIndex + 1);
+    const result = processLetBinding(thisLet, variableTypes);
 
-    if (!typeAnnotation) {
-      remaining = nextRemaining;
-      continue;
+    if (result.error) {
+      return result.error;
     }
 
-    const exprType = extractExpressionType(exprPart);
-    if (exprType && !isTypeCompatible(typeAnnotation, exprType)) {
-      return buildTypeError(typeAnnotation, exprType, exprPart);
-    }
-
-    remaining = nextRemaining;
+    remaining = remaining.substring(semicolonIndex + 1).trim();
   }
 
   return undefined;

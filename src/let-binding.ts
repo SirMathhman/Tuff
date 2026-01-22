@@ -9,6 +9,7 @@ import {
 export interface VariableBinding {
   name: string;
   memoryAddress: number;
+  type?: string;
 }
 
 export type VariableContext = VariableBinding[];
@@ -16,10 +17,14 @@ export type VariableContext = VariableBinding[];
 export function allocateVariable(
   context: VariableContext,
   varName: string,
+  varType?: string,
 ): { context: VariableContext; address: number } {
   const address = 904 + context.length;
   return {
-    context: [...context, { name: varName, memoryAddress: address }],
+    context: [
+      ...context,
+      { name: varName, memoryAddress: address, type: varType },
+    ],
     address,
   };
 }
@@ -83,20 +88,32 @@ export function isReadExpressionPattern(exprPart: string): boolean {
   );
 }
 
-export function extractExpressionType(exprPart: string): string | undefined {
+export function extractExpressionType(
+  exprPart: string,
+  context?: VariableContext,
+): string | undefined {
+  const trimmed = exprPart.trim();
+
   // For read expressions, extract the type directly
-  if (exprPart.startsWith("read ")) {
-    const parts = exprPart.split(" ");
+  if (trimmed.startsWith("read ")) {
+    const parts = trimmed.split(" ");
     if (parts.length === 2) {
       return parts[1];
     }
   }
 
   // For number literals, extract type suffix
-  const trimmed = exprPart.trim();
   const suffix = getTypeSuffix(trimmed);
   if (suffix) {
     return suffix;
+  }
+
+  // For variable references, look up in context
+  if (context) {
+    const binding = context.find((b) => b.name === trimmed);
+    if (binding && binding.type) {
+      return binding.type;
+    }
   }
 
   // If no type suffix and not a read expression, return undefined

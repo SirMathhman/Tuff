@@ -37,6 +37,7 @@ import {
   adjustReadInstructions,
   buildLetStoreInstructions,
   buildVarRefInstructions,
+  extractExpressionType,
 } from "./let-binding";
 import { parseAddExpressionWithContext } from "./expression-with-context";
 import { splitByAddOperator } from "./operator-parsing";
@@ -382,30 +383,28 @@ function parseLetExpression(
   const components = parseLetComponents(source);
   if (!components) return undefined;
 
-  const { varName, exprPart, remaining } = components;
+  const { varName, exprPart, remaining, typeAnnotation } = components;
   const exprCompileResult = compileWithContext(exprPart, context);
   if (!exprCompileResult) return undefined;
 
   const exprCompile = exprCompileResult.instructions;
   if (!exprCompile || exprCompile.length === 0) return undefined;
 
-  const { context: newContext, address } = allocateVariable(context, varName);
+  const varType = typeAnnotation || extractExpressionType(exprPart, context);
+  const { context: newContext, address } = allocateVariable(
+    context,
+    varName,
+    varType,
+  );
+
   const lastInstruction = exprCompile[exprCompile.length - 1];
   let resultAddress = 900;
   if (lastInstruction && lastInstruction.opcode === OpCode.Halt) {
     resultAddress = lastInstruction.operand1;
   }
-
-  const exprWithoutHalt = exprCompile.slice(0, -1);
-  const adjustedInstructions = adjustReadInstructions(
-    exprWithoutHalt,
-    exprPart,
-  );
-
   if (isReadExpressionPattern(exprPart)) resultAddress = 903;
-
   const storeInstructions = buildLetStoreInstructions(
-    adjustedInstructions,
+    adjustReadInstructions(exprCompile.slice(0, -1), exprPart),
     resultAddress,
     address,
   );

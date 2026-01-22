@@ -144,4 +144,8 @@ describe("The application - Grouping and variables", () => {
   it("should allow widening type in let binding", () => {
     assertValid("let x : U16 = read U8; x", 42, 42);
   });
+
+  it("should reject type narrowing with variable", () => {
+    assertInvalid("let x = read U16; let y : U8 = x; y");
+  });
 });
