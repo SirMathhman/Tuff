@@ -45,6 +45,7 @@ import {
   detectTypeIncompatibility,
   detectComparisonTypeMismatch,
   detectInvalidIfCondition,
+  detectIfBranchTypeMismatch,
 } from "./validation";
 
 export interface Ok<T> {
@@ -554,6 +555,12 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   const ifConditionError = detectInvalidIfCondition(trimmed);
   if (ifConditionError) {
     return err(ifConditionError);
+  }
+
+  // Check for incompatible if-branch types
+  const branchError = detectIfBranchTypeMismatch(trimmed);
+  if (branchError) {
+    return err(branchError);
   }
 
   const result = compileWithContext(trimmed, []);

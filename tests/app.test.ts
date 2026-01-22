@@ -254,6 +254,10 @@ describe("The application - If-else expressions", () => {
     assertInvalid("let x = if ( read U8 ) 3 else 5; x");
   });
 
+  it("should reject if-expression with incompatible branch types", () => {
+    assertInvalid("let x = if ( read Bool ) 3U32 else true; x");
+  });
+
   it("should support if-else with true condition", () => {
     assertValid("if (read U8 == read U8) 3U8 else 5U8", 3, 5, 5);
   });

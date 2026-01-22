@@ -443,14 +443,27 @@ function isValidIfCondition(condition: string): boolean {
   return false;
 }
 
-export function detectInvalidIfCondition(source: string): CompileError | undefined {
-  // Match if ( ... ) pattern
-  if (!source.startsWith("if")) {
-    return undefined;
-  }
+function isElseKeyword(source: string, index: number): boolean {
+  if (source.substring(index, index + 4) !== "else") return false;
+  const afterElse = source[index + 4];
+  return !afterElse || afterElse === " " || afterElse === "\t";
+}
 
+function findElseKeyword(source: string, afterParenEnd: number): number {
+  for (let i = afterParenEnd; i < source.length; i++) {
+    if (isElseKeyword(source, i)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function findConditionParentheses(
+  source: string,
+  startPos: number,
+): { start: number; end: number } | undefined {
   let parenStart = -1;
-  for (let i = 2; i < source.length; i++) {
+  for (let i = startPos; i < source.length; i++) {
     if (source[i] === "(") {
       parenStart = i;
       break;
@@ -465,28 +478,99 @@ export function detectInvalidIfCondition(source: string): CompileError | undefin
   }
 
   let depth = 1;
-  let parenEnd = -1;
   for (let i = parenStart + 1; i < source.length; i++) {
     if (source[i] === "(") depth++;
     if (source[i] === ")") depth--;
     if (depth === 0) {
-      parenEnd = i;
-      break;
+      return { start: parenStart, end: i };
     }
   }
 
-  if (parenEnd === -1) {
+  return undefined;
+}
+
+function extractIfBranchTypes(
+  source: string,
+): { thenType: string | undefined; elseType: string | undefined } | undefined {
+  if (!source.startsWith("if")) {
     return undefined;
   }
 
-  const condition = source.substring(parenStart + 1, parenEnd).trim();
+  const parens = findConditionParentheses(source, 2);
+  if (!parens) {
+    return undefined;
+  }
+
+  const elseIndex = findElseKeyword(source, parens.end + 1);
+  if (elseIndex === -1) {
+    return undefined;
+  }
+
+  const thenExpr = source.substring(parens.end + 1, elseIndex).trim();
+  const elseExpr = source.substring(elseIndex + 4).trim();
+
+  const thenType = extractExpressionType(thenExpr);
+  const elseType = extractExpressionType(elseExpr);
+
+  return { thenType, elseType };
+}
+
+export function detectInvalidIfCondition(
+  source: string,
+): CompileError | undefined {
+  if (!source.startsWith("if")) {
+    return undefined;
+  }
+
+  const parens = findConditionParentheses(source, 2);
+  if (!parens) {
+    return undefined;
+  }
+
+  const condition = source.substring(parens.start + 1, parens.end).trim();
 
   if (!isValidIfCondition(condition)) {
     return {
       cause: `If-expression condition must be a boolean or comparison, got: ${condition}`,
-      reason: "If-expressions require conditions that evaluate to boolean values",
+      reason:
+        "If-expressions require conditions that evaluate to boolean values",
       fix: "Use a comparison (==, <, >, <=, >=) or boolean literal (true, false) as the condition",
-      first: { line: 0, column: parenStart, length: parenEnd - parenStart + 1 },
+      first: {
+        line: 0,
+        column: parens.start,
+        length: parens.end - parens.start + 1,
+      },
+    };
+  }
+
+  return undefined;
+}
+
+export function detectIfBranchTypeMismatch(
+  source: string,
+): CompileError | undefined {
+  const branches = extractIfBranchTypes(source);
+  if (!branches) {
+    return undefined;
+  }
+
+  const { thenType, elseType } = branches;
+
+  // Both branches must have determined types
+  if (!thenType || !elseType) {
+    return undefined;
+  }
+
+  // Check compatibility using existing type compatibility rules
+  if (
+    !isTypeCompatible(thenType, elseType) &&
+    !isTypeCompatible(elseType, thenType)
+  ) {
+    return {
+      cause: `If-expression branches have incompatible types: ${thenType} and ${elseType}`,
+      reason: "Both branches of an if-expression must have compatible types",
+      fix: "Ensure both branches return the same type or compatible widening types",
+      first: { line: 0, column: 0, length: source.length },
     };
   }
 
