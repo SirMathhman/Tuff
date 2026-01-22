@@ -72,6 +72,16 @@ export function err<X>(error: X): Err<X> {
   return { ok: false, error };
 }
 
+function createCompileFunc(
+  functionContext: FunctionContext,
+): (
+  expr: string,
+  ctx: VariableContext,
+) => { instructions: Instruction[]; context: VariableContext } | undefined {
+  return (expr: string, ctx: VariableContext) =>
+    compileWithContext(expr, ctx, functionContext);
+}
+
 function parseLetExpression(
   source: string,
   context: VariableContext,
@@ -79,8 +89,7 @@ function parseLetExpression(
 ): { instructions: Instruction[]; newContext: VariableContext } | undefined {
   return parseLetExpressionModule(
     source,
-    (expr: string, ctx: VariableContext) =>
-      compileWithContext(expr, ctx, functionContext),
+    createCompileFunc(functionContext),
     context,
   );
 }
@@ -90,8 +99,7 @@ function tryBasicPatterns(
   context: VariableContext,
   functionContext: FunctionContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
-  const compileFunc = (expr: string, ctx: VariableContext) =>
-    compileWithContext(expr, ctx, functionContext);
+  const compileFunc = createCompileFunc(functionContext);
 
   // Try parsing as reassignment
   const reassignmentResult = tryReassignment(trimmed, context, compileFunc);
@@ -145,8 +153,7 @@ function tryArrayHandlers(
   context: VariableContext,
   functionContext: FunctionContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
-  const compileFunc = (expr: string, ctx: VariableContext) =>
-    compileWithContext(expr, ctx, functionContext);
+  const compileFunc = createCompileFunc(functionContext);
 
   // Try parsing as slice field access (e.g., slice.init)
   const sliceFieldResult = trySliceFieldAccess(trimmed, context);
@@ -178,8 +185,7 @@ function tryFunctionOrLetPatterns(
   const funcCallResult = tryFunctionCall(
     trimmed,
     functionContext,
-    (expr: string, ctx: VariableContext) =>
-      compileWithContext(expr, ctx, functionContext),
+    createCompileFunc(functionContext),
   );
   if (funcCallResult) {
     return {
@@ -233,8 +239,7 @@ function tryAllPatterns(
   const bracedResult = tryBracedExpression(
     trimmed,
     context,
-    (expr: string, ctx: VariableContext) =>
-      compileWithContext(expr, ctx, functionContext),
+    createCompileFunc(functionContext),
   );
   if (bracedResult) {
     return bracedResult;

@@ -1,6 +1,6 @@
 import { type Instruction, OpCode, Variant } from "./vm";
 import { type VariableContext } from "./variable-types";
-import { type FunctionBinding, type FunctionContext } from "./function-types";
+import { type FunctionContext } from "./function-types";
 import { parseFunctionCall } from "./function-parsing";
 
 type CompileFunc = (
@@ -67,22 +67,4 @@ export function tryFunctionCall(
     instructions: [...argInstructions, ...bodyCompiled.instructions],
     returnType: func.returnType,
   };
-}
-
-export function buildFunctionContext(source: string): FunctionContext {
-  // Extract all function definitions from the source and return them
-  const functions: FunctionBinding[] = [];
-  let remaining = source;
-
-  while (remaining.length > 0) {
-    remaining = remaining.trim();
-    if (!remaining.startsWith("fn ")) break;
-
-    // Try to parse a function definition
-    // For now, we'll return empty and add this as a placeholder
-    // The actual implementation will parse function definitions
-    break;
-  }
-
-  return functions;
 }

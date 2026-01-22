@@ -1,4 +1,4 @@
-import { isIdentifierChar, findChar } from "./parser";
+import { isIdentifierChar, findChar, findMatchingParen } from "./parser";
 
 function extractFunctionName(source: string): string {
   // After "fn", extract the identifier until '('
@@ -12,21 +12,11 @@ function extractFunctionName(source: string): string {
   return name;
 }
 
-function findParameterListEnd(source: string, openParenIndex: number): number {
-  let depth = 1;
-  for (let i = openParenIndex + 1; i < source.length; i++) {
-    if (source[i] === "(") depth++;
-    if (source[i] === ")") depth--;
-    if (depth === 0) return i;
-  }
-  return -1;
-}
-
 function extractParameterList(
   source: string,
   openParenIndex: number,
 ): string | undefined {
-  const closeParenIndex = findParameterListEnd(source, openParenIndex);
+  const closeParenIndex = findMatchingParen(source, openParenIndex);
   if (closeParenIndex === -1) return undefined;
   return source.substring(openParenIndex + 1, closeParenIndex).trim();
 }
@@ -133,7 +123,7 @@ export function parseFunctionDefinition(source: string):
   const paramStr = extractParameterList(trimmed, openParenIndex);
   if (paramStr === undefined) return undefined;
 
-  const closeParenIndex = findParameterListEnd(trimmed, openParenIndex);
+  const closeParenIndex = findMatchingParen(trimmed, openParenIndex);
   if (closeParenIndex === -1) return undefined;
 
   const colonIndex = findReturnTypeArrow(trimmed, closeParenIndex);
@@ -203,7 +193,7 @@ export function parseFunctionCall(
   const openParenIndex = findChar(trimmed, "(");
   if (openParenIndex === -1) return undefined;
 
-  const closeParenIndex = findParameterListEnd(trimmed, openParenIndex);
+  const closeParenIndex = findMatchingParen(trimmed, openParenIndex);
   if (closeParenIndex === -1) return undefined;
 
   const argsStr = trimmed.substring(openParenIndex + 1, closeParenIndex).trim();
