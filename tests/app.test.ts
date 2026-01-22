@@ -261,4 +261,8 @@ describe("The application - Pointers", () => {
       100,
     );
   });
+
+  it("should reject pointer type assignment to Bool", () => {
+    assertInvalid("let x = 100; let y = &x; let z : Bool = y; z");
+  });
 });
