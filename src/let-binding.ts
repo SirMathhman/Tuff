@@ -1,5 +1,5 @@
 import { type Instruction, OpCode } from "./vm";
-import { findChar, extractVariableName } from "./parser";
+import { findChar, extractVariableName, getTypeSuffix } from "./parser";
 import {
   buildLoadDirect,
   buildStoreDirect,
@@ -41,7 +41,14 @@ export function isVariableShadowed(
 
 export function parseLetComponents(
   source: string,
-): { varName: string; exprPart: string; remaining: string } | undefined {
+):
+  | {
+      varName: string;
+      exprPart: string;
+      remaining: string;
+      typeAnnotation?: string;
+    }
+  | undefined {
   const varName = extractVariableName(source);
   if (varName.length === 0) return undefined;
 
@@ -58,7 +65,15 @@ export function parseLetComponents(
   const exprPart = source.substring(equalsIndex + 1, semicolonIndex).trim();
   const remaining = source.substring(semicolonIndex + 1).trim();
 
-  return { varName, exprPart, remaining };
+  // Extract type annotation if present
+  let typeAnnotation: string | undefined;
+  if (colonIndex !== -1) {
+    const typePartEnd = equalsIndex;
+    const typePart = source.substring(colonIndex + 1, typePartEnd).trim();
+    typeAnnotation = typePart;
+  }
+
+  return { varName, exprPart, remaining, typeAnnotation };
 }
 
 export function isReadExpressionPattern(exprPart: string): boolean {
@@ -68,6 +83,26 @@ export function isReadExpressionPattern(exprPart: string): boolean {
     exprPart === "read I8" ||
     exprPart === "read I16"
   );
+}
+
+export function extractExpressionType(exprPart: string): string | undefined {
+  // For read expressions, extract the type directly
+  if (exprPart.startsWith("read ")) {
+    const parts = exprPart.split(" ");
+    if (parts.length === 2) {
+      return parts[1];
+    }
+  }
+
+  // For number literals, extract type suffix
+  const trimmed = exprPart.trim();
+  const suffix = getTypeSuffix(trimmed);
+  if (suffix) {
+    return suffix;
+  }
+
+  // If no type suffix and not a read expression, return undefined
+  return undefined;
 }
 
 export function adjustReadInstructions(

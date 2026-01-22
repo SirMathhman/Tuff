@@ -136,4 +136,8 @@ describe("The application - Grouping and variables", () => {
   it("should reject variable shadowing", () => {
     assertInvalid("let x = read U8; let x = read U8; x");
   });
+
+  it("should reject type mismatch in let binding", () => {
+    assertInvalid("let x : U8 = read U16; x");
+  });
 });

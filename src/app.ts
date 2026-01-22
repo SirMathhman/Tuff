@@ -40,7 +40,10 @@ import {
 } from "./let-binding";
 import { parseAddExpressionWithContext } from "./expression-with-context";
 import { splitByAddOperator } from "./operator-parsing";
-import { detectVariableShadowing } from "./validation";
+import {
+  detectVariableShadowing,
+  detectTypeIncompatibility,
+} from "./validation";
 
 export interface Ok<T> {
   ok: true;
@@ -578,6 +581,12 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   const shadowError = detectVariableShadowing(trimmed);
   if (shadowError) {
     return err(shadowError);
+  }
+
+  // Check for type incompatibility in let bindings
+  const typeError = detectTypeIncompatibility(trimmed);
+  if (typeError) {
+    return err(typeError);
   }
 
   const result = compileWithContext(trimmed, []);
