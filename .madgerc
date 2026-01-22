@@ -1,0 +1,10 @@
+{
+  "fontSize": "10px",
+  "fileExtensions": ["ts", "tsx"],
+  "graphVizOptions": {
+    "G": {
+      "rankdir": "LR",
+      "splines": "ortho"
+    }
+  }
+}
