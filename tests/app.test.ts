@@ -32,4 +32,8 @@ describe("The application", () => {
   it("should read two U8 values, add them, and halt with result", () => {
     assertValid("read U8 + read U8", 150, 100, 50);
   });
+
+  it("should read a U8 value and add a constant, and halt with result", () => {
+    assertValid("read U8 + 50U8", 150, 100);
+  });
 });

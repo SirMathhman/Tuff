@@ -146,35 +146,9 @@ function buildAddInstructions(): Instruction[] {
   ];
 }
 
-function parseArithmeticExpression(source: string): Instruction[] | undefined {
-  // Look for + operator
-  let plusIndex = -1;
-  for (let i = 0; i < source.length; i++) {
-    if (source[i] === "+") {
-      plusIndex = i;
-      break;
-    }
-  }
-  if (plusIndex === -1) return undefined;
-
-  const leftPart = source.substring(0, plusIndex).trim();
-  const rightPart = source.substring(plusIndex + 1).trim();
-
-  // Parse left side (read U8)
-  const leftInstructions = parseReadInstruction(leftPart);
-  if (!leftInstructions) return undefined;
-
-  // Parse right side (read U8)
-  const rightInstructions = parseReadInstruction(rightPart);
-  if (!rightInstructions) return undefined;
-
-  // Build instruction sequence:
-  // 1. Read first value into register 0, store at address 1
-  // 2. Read second value into register 0
-  // 3. Load value from address 1 into register 1
-  // 4. Add register 1 and register 0, result in register 1
-  // 5. Store result at address 0
-  // 6. Halt with value from address 0
+function buildReadAddConstantInstructions(
+  constant: number,
+): Instruction[] {
   return [
     {
       opcode: OpCode.In,
@@ -188,12 +162,74 @@ function parseArithmeticExpression(source: string): Instruction[] | undefined {
       operand2: 1,
     },
     {
-      opcode: OpCode.In,
+      opcode: OpCode.Load,
       variant: Variant.Immediate,
       operand1: 0,
+      operand2: constant,
     },
-    ...buildAddInstructions(),
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 1,
+      operand2: 1,
+    },
+    ...buildAddInstructions().slice(1),
   ];
+}
+
+function parseAddExpression(source: string): Instruction[] | undefined {
+  // Look for + operator
+  let plusIndex = -1;
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "+") {
+      plusIndex = i;
+      break;
+    }
+  }
+  if (plusIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, plusIndex).trim();
+  const rightPart = source.substring(plusIndex + 1).trim();
+
+  // Check if left is "read U8"
+  const isLeftRead = leftPart.startsWith("read");
+  if (!isLeftRead) return undefined;
+
+  // Parse left side as read
+  const leftInstructions = parseReadInstruction(leftPart);
+  if (!leftInstructions) return undefined;
+
+  // Parse right side - could be "read U8" or a number
+  const rightNum = parseNumberWithSuffix(rightPart);
+  if (rightNum === undefined) {
+    // Try parsing as read instruction
+    const rightInstructions = parseReadInstruction(rightPart);
+    if (!rightInstructions) return undefined;
+
+    // Both are reads
+    return [
+      {
+        opcode: OpCode.In,
+        variant: Variant.Immediate,
+        operand1: 0,
+      },
+      {
+        opcode: OpCode.Store,
+        variant: Variant.Direct,
+        operand1: 0,
+        operand2: 1,
+      },
+      {
+        opcode: OpCode.In,
+        variant: Variant.Immediate,
+        operand1: 0,
+      },
+      ...buildAddInstructions(),
+    ];
+  }
+
+  // Right side is a number constant
+  return buildReadAddConstantInstructions(rightNum);
 }
 
 export function compile(source: string): Result<Instruction[], CompileError> {
@@ -208,7 +244,7 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   }
 
   // Check for arithmetic expressions
-  const arithResult = parseArithmeticExpression(trimmed);
+  const arithResult = parseAddExpression(trimmed);
   if (arithResult) {
     return ok(arithResult);
   }
