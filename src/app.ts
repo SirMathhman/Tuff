@@ -230,6 +230,35 @@ function buildReadAddConstantInstructions(constant: number): Instruction[] {
   ];
 }
 
+function buildConstantAddReadInstructions(constant: number): Instruction[] {
+  return [
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Immediate,
+      operand1: 0,
+      operand2: constant,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 1,
+    },
+    {
+      opcode: OpCode.In,
+      variant: Variant.Immediate,
+      operand1: 0,
+    },
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 1,
+      operand2: 1,
+    },
+    ...buildAddInstructions().slice(1),
+  ];
+}
+
 function parseAddExpression(source: string): Instruction[] | undefined {
   // Look for + operator
   let plusIndex = -1;
@@ -246,8 +275,18 @@ function parseAddExpression(source: string): Instruction[] | undefined {
 
   // Check if left is "read U8"
   const isLeftRead = leftPart.startsWith("read");
-  if (!isLeftRead) return undefined;
 
+  if (!isLeftRead) {
+    return parseAddExpressionConstantLeft(leftPart, rightPart);
+  }
+
+  return parseAddExpressionReadLeft(leftPart, rightPart);
+}
+
+function parseAddExpressionReadLeft(
+  leftPart: string,
+  rightPart: string,
+): Instruction[] | undefined {
   // Parse left side as read
   const leftInstructions = parseReadInstruction(leftPart);
   if (!leftInstructions) return undefined;
@@ -285,38 +324,46 @@ function parseAddExpression(source: string): Instruction[] | undefined {
   return buildReadAddConstantInstructions(rightNum);
 }
 
+function parseAddExpressionConstantLeft(
+  leftPart: string,
+  rightPart: string,
+): Instruction[] | undefined {
+  // Left side is not "read", try to parse it as a number
+  const leftNum = parseNumberWithSuffix(leftPart);
+  if (leftNum === undefined) return undefined;
+
+  // Check if right is "read U8"
+  if (!rightPart.startsWith("read")) return undefined;
+
+  const rightInstructions = parseReadInstruction(rightPart);
+  if (!rightInstructions) return undefined;
+
+  // Constant on left, read on right
+  return buildConstantAddReadInstructions(leftNum);
+}
+
 function parseNumberLiteral(source: string): Instruction[] | undefined {
   const num = parseNumberWithSuffix(source);
   if (num === undefined) return undefined;
 
-  // For negative numbers, store in memory at address 0 and use Direct variant
-  if (num < 0) {
-    return [
-      {
-        opcode: OpCode.Load,
-        variant: Variant.Immediate,
-        operand1: 0,
-        operand2: num,
-      },
-      {
-        opcode: OpCode.Store,
-        variant: Variant.Direct,
-        operand1: 0,
-        operand2: 0,
-      },
-      {
-        opcode: OpCode.Halt,
-        variant: Variant.Direct,
-        operand1: 0,
-      },
-    ];
-  }
-  // Create a halt instruction with the number as immediate value
+  // Store the number in memory at address 0
   return [
     {
-      opcode: OpCode.Halt,
+      opcode: OpCode.Load,
       variant: Variant.Immediate,
-      operand1: num,
+      operand1: 0,
+      operand2: num,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 0,
+    },
+    {
+      opcode: OpCode.Halt,
+      variant: Variant.Direct,
+      operand1: 0,
     },
   ];
 }
