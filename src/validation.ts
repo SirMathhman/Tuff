@@ -8,10 +8,6 @@ import {
   isNumberLiteral,
 } from "./let-binding";
 import {
-  detectNonMutableReassignment,
-  detectReassignmentTypeChange,
-} from "./reassignment-validation";
-import {
   isParenthesizedExpression,
   extractParenthesizedContent,
   isBracedExpression,
@@ -508,5 +504,3 @@ export function detectIfBranchTypeMismatch(
 
   return undefined;
 }
-
-export { detectNonMutableReassignment, detectReassignmentTypeChange };

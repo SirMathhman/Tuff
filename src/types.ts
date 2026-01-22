@@ -129,6 +129,12 @@ export function isTypeCompatible(
   // Bool type only matches Bool
   if (declaredType === "Bool" || exprType === "Bool") return false;
 
+  // Handle pointer types
+  if (declaredType.startsWith("*") || exprType.startsWith("*")) {
+    // Pointers must match exactly or both be pointer types to same base
+    return declaredType === exprType;
+  }
+
   const declaredBits = getTypeBits(declaredType);
   const exprBits = getTypeBits(exprType);
 
@@ -161,6 +167,15 @@ export function isTypeCompatible(
   // If expr is signed and declared is unsigned, reject
   // Signed values can't safely go into unsigned types
   return false;
+}
+
+export function isPointerType(type: string): boolean {
+  return type.startsWith("*");
+}
+
+export function getPointerBaseType(type: string): string | undefined {
+  if (!isPointerType(type)) return undefined;
+  return type.substring(1);
 }
 
 export function buildMulOrDivHalt(

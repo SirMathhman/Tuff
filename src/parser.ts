@@ -390,3 +390,25 @@ export function findElseKeyword(source: string, afterParenEnd: number): number {
   }
   return -1;
 }
+
+export function isReferenceOperator(source: string): boolean {
+  return source.startsWith("&");
+}
+
+export function extractReferenceTarget(source: string): string {
+  if (!isReferenceOperator(source)) return source;
+  return source.substring(1).trim();
+}
+
+export function isDereferenceOperator(source: string): boolean {
+  return (
+    source.startsWith("*") &&
+    source.length > 1 &&
+    isIdentifierChar(source[1], true)
+  );
+}
+
+export function extractDereferenceTarget(source: string): string {
+  if (!isDereferenceOperator(source)) return source;
+  return source.substring(1).trim();
+}

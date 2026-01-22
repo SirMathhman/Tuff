@@ -1,4 +1,4 @@
-import { type Instruction, OpCode } from "./vm";
+import { type Instruction, OpCode, Variant } from "./vm";
 import {
   findChar,
   extractVariableName,
@@ -11,6 +11,8 @@ import {
   findConditionParentheses,
   findElseKeyword,
   isIdentifierChar,
+  isReferenceOperator,
+  extractReferenceTarget,
 } from "./parser";
 import {
   buildLoadDirect,
@@ -218,6 +220,17 @@ export function extractExpressionType(
     return extractExpressionType(innerExpr, context);
   }
 
+  // For reference expressions (&x), infer pointer type from variable
+  if (isReferenceOperator(trimmed)) {
+    const varName = extractReferenceTarget(trimmed);
+    if (!context) return undefined;
+    const binding = context.find((b) => b.name === varName);
+    if (binding && binding.type) {
+      return `*${binding.type}`;
+    }
+    return undefined;
+  }
+
   // For read expressions, extract the type directly
   if (trimmed.startsWith("read ")) {
     const parts = trimmed.split(" ");
@@ -386,6 +399,25 @@ export function buildVarRefInstructions(varAddress: number): Instruction[] {
   return [buildLoadDirect(1, varAddress), ...buildStoreAndHalt()];
 }
 
+export function buildVarRefInstructionsForBinding(
+  varAddress: number,
+): Instruction[] {
+  return [
+    buildLoadDirect(1, varAddress),
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 1,
+      operand2: 900,
+    },
+    {
+      opcode: OpCode.Halt,
+      variant: Variant.Immediate,
+      operand1: 900,
+    },
+  ];
+}
+
 export function parseReassignmentComponents(source: string):
   | {
       varName: string;
@@ -423,5 +455,40 @@ export function buildReassignmentInstructions(
     ...exprInstructions.slice(0, -1),
     buildLoadDirect(1, 900),
     buildStoreDirect(1, varAddress),
+  ];
+}
+
+export function buildDereferenceInstructions(
+  varAddress: number,
+): Instruction[] {
+  return [
+    buildLoadDirect(0, varAddress),
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Indirect,
+      operand1: 0,
+      operand2: 0,
+    },
+    ...buildStoreAndHalt(),
+  ];
+}
+
+export function buildDereferenceInstructionsForExpr(
+  varAddress: number,
+): Instruction[] {
+  return [
+    buildLoadDirect(0, varAddress),
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Indirect,
+      operand1: 0,
+      operand2: 0,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 900,
+    },
   ];
 }

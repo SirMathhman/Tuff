@@ -1,5 +1,9 @@
 import { type Instruction, OpCode, Variant } from "./vm";
-import { parseNumberWithSuffix } from "./parser";
+import {
+  parseNumberWithSuffix,
+  isDereferenceOperator,
+  extractDereferenceTarget,
+} from "./parser";
 import { buildStoreHaltInstructions } from "./types";
 import { type VariableContext, resolveVariable } from "./let-binding";
 import { splitByAddOperator } from "./operator-parsing";
@@ -9,6 +13,44 @@ export function tryResolveVariableAtom(
   context: VariableContext,
   targetRegister: number,
 ): Instruction[] | undefined {
+  // Check for dereference first (*varName)
+  if (isDereferenceOperator(part)) {
+    const varName = extractDereferenceTarget(part);
+    const varAddress = resolveVariable(context, varName);
+    if (varAddress === undefined) return undefined;
+
+    // Use different temp addresses for different registers
+    const tempAddress = targetRegister === 1 ? 900 : 902;
+
+    return [
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Direct,
+        operand1: 0,
+        operand2: varAddress,
+      },
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Indirect,
+        operand1: 0,
+        operand2: 0,
+      },
+      {
+        opcode: OpCode.Store,
+        variant: Variant.Direct,
+        operand1: 0,
+        operand2: tempAddress,
+      },
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Direct,
+        operand1: targetRegister,
+        operand2: tempAddress,
+      },
+    ];
+  }
+
+  // Regular variable resolution
   const varAddress = resolveVariable(context, part);
   if (varAddress === undefined) return undefined;
 
