@@ -365,11 +365,34 @@ function extractComparisonTypes(
   return { left: leftType, right: rightType };
 }
 
+function isComparisonOperatorForInequality(source: string): boolean {
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "<" || source[i] === ">") {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function detectComparisonTypeMismatch(
   source: string,
 ): CompileError | undefined {
   const types = extractComparisonTypes(source);
   if (!types) return undefined;
+
+  // Reject comparisons with Bool type using inequality operators
+  if (
+    (types.left === "Bool" || types.right === "Bool") &&
+    isComparisonOperatorForInequality(source)
+  ) {
+    return {
+      cause: "Boolean values cannot be compared with inequality operators",
+      reason:
+        "Only equality (==) comparisons are supported for Bool type, not < or >",
+      fix: "Use == for boolean comparisons or use numeric types for inequality",
+      first: { line: 0, column: 0, length: source.length },
+    };
+  }
 
   if (types.left !== types.right) {
     return {

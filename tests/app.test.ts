@@ -221,4 +221,12 @@ describe("The application - Comparison operators", () => {
   it("should reject comparisons with mixed types", () => {
     assertInvalid("read U8 == read Bool");
   });
+
+  it("should reject inequality comparisons with Bool types", () => {
+    assertInvalid("read Bool < read Bool");
+  });
+
+  it("should reject inequality comparisons with Bool types using >", () => {
+    assertInvalid("read Bool > read Bool");
+  });
 });
