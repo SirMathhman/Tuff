@@ -57,9 +57,30 @@ export function compile(source: string): Result<Instruction[], CompileError> {
 
   // Try to parse as a number with optional type suffix
   // Remove type suffix if present (U8, I16, etc.) and parse
-  const typeMatch = trimmed.match(/^(-?\d+)([A-Z]\d+)?$/);
-  if (typeMatch && typeMatch[1]) {
-    const num = parseInt(typeMatch[1], 10);
+  let numStr = trimmed;
+
+  // Check for type suffix (capital letter followed by digits)
+  for (let i = trimmed.length - 1; i >= 0; i--) {
+    const char = trimmed[i];
+    if (char && char >= "0" && char <= "9") continue;
+    if (char && char >= "A" && char <= "Z") {
+      numStr = trimmed.substring(0, i);
+    }
+    break;
+  }
+
+  // Validate the number part contains only digits and optional minus sign
+  let isValidNumber = numStr.length > 0;
+  for (let i = 0; i < numStr.length; i++) {
+    const char = numStr[i];
+    if (i === 0 && char === "-") continue;
+    if (char && char >= "0" && char <= "9") continue;
+    isValidNumber = false;
+    break;
+  }
+
+  if (isValidNumber) {
+    const num = parseInt(numStr, 10);
     if (!isNaN(num)) {
       // Create a halt instruction with the number as immediate value
       return ok([
