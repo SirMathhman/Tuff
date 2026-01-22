@@ -7,10 +7,12 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
   const compileResult = compile(source);
   if (compileResult.ok) {
     const execResult = executeWithArray(compileResult.value, stdIn);
-		if (expected !== undefined) {
-			// Do we have an  equivalent to Assertions.fail()?
-			expect("Failed to execute compiled instructions: " + compileResult.value).toBeUndefined();
-		}
+    if (execResult !== expected) {
+      // Do we have an  equivalent to Assertions.fail()?
+      expect(
+        "Failed to execute compiled instructions: " + compileResult.value,
+      ).toBeUndefined();
+    }
 
     expect(execResult).toBe(expected);
   } else {
