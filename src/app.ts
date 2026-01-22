@@ -118,6 +118,84 @@ function parseReadInstruction(source: string): Instruction[] | undefined {
   ];
 }
 
+function buildAddInstructions(): Instruction[] {
+  return [
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 1,
+      operand2: 1,
+    },
+    {
+      opcode: OpCode.Add,
+      variant: Variant.Immediate,
+      operand1: 1,
+      operand2: 0,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 1,
+      operand2: 0,
+    },
+    {
+      opcode: OpCode.Halt,
+      variant: Variant.Direct,
+      operand1: 0,
+    },
+  ];
+}
+
+function parseArithmeticExpression(source: string): Instruction[] | undefined {
+  // Look for + operator
+  let plusIndex = -1;
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "+") {
+      plusIndex = i;
+      break;
+    }
+  }
+  if (plusIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, plusIndex).trim();
+  const rightPart = source.substring(plusIndex + 1).trim();
+
+  // Parse left side (read U8)
+  const leftInstructions = parseReadInstruction(leftPart);
+  if (!leftInstructions) return undefined;
+
+  // Parse right side (read U8)
+  const rightInstructions = parseReadInstruction(rightPart);
+  if (!rightInstructions) return undefined;
+
+  // Build instruction sequence:
+  // 1. Read first value into register 0, store at address 1
+  // 2. Read second value into register 0
+  // 3. Load value from address 1 into register 1
+  // 4. Add register 1 and register 0, result in register 1
+  // 5. Store result at address 0
+  // 6. Halt with value from address 0
+  return [
+    {
+      opcode: OpCode.In,
+      variant: Variant.Immediate,
+      operand1: 0,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 1,
+    },
+    {
+      opcode: OpCode.In,
+      variant: Variant.Immediate,
+      operand1: 0,
+    },
+    ...buildAddInstructions(),
+  ];
+}
+
 export function compile(source: string): Result<Instruction[], CompileError> {
   // TODO, this will get rather complex!
   // This is the function you should probably implement
@@ -127,6 +205,12 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   // Empty source: return empty instructions (implicit halt with 0)
   if (!trimmed) {
     return ok([]);
+  }
+
+  // Check for arithmetic expressions
+  const arithResult = parseArithmeticExpression(trimmed);
+  if (arithResult) {
+    return ok(arithResult);
   }
 
   // Check for read instruction

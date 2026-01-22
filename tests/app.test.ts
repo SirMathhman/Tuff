@@ -28,4 +28,8 @@ describe("The application", () => {
   it("should read a U8 value from stdin and halt with it", () => {
     assertValid("read U8", 100, 100);
   });
+
+  it("should read two U8 values, add them, and halt with result", () => {
+    assertValid("read U8 + read U8", 150, 100, 50);
+  });
 });
