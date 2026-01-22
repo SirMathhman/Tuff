@@ -273,67 +273,67 @@ src/
 
 **Core & App**
 
-| File                                      | Purpose                                                                                        |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [src/app.ts](../src/app.ts)               | Orchestrates parse/validate/compile pipeline; calls all validators; unwraps parentheses/braces |
-| [src/core/vm.ts](../src/core/vm.ts)       | Instruction fetch/decode/execute loop; 4 registers, 1024 memory, 1000 cycle max                |
+| File                                | Purpose                                                                                        |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [src/app.ts](../src/app.ts)         | Orchestrates parse/validate/compile pipeline; calls all validators; unwraps parentheses/braces |
+| [src/core/vm.ts](../src/core/vm.ts) | Instruction fetch/decode/execute loop; 4 registers, 1024 memory, 1000 cycle max                |
 
 **Parsing** (src/parsing/)
 
-| File                                                                              | Purpose                                                                                |
-| ------------------------------------ -------- --------------------------------- | -------------------------------------------------------------------------------------- |
-| [src/parsing/parser.ts](../src/parsing/parser.ts)                                 | Tokenization helpers: suffix extraction, operator finding, parenthesis matching        |
-| [src/parsing/arithmetic-parsing.ts](../src/parsing/arithmetic-parsing.ts)         | Recursive descent for +, -, \*, / with operator precedence                             |
-| [src/parsing/function-parsing.ts](../src/parsing/function-parsing.ts)             | Parses function definitions and calls                                                  |
-| [src/parsing/reassignment-parsing.ts](../src/parsing/reassignment-parsing.ts)     | Detects reassignment patterns incl. compound ops; parses left/right expr parts         |
-| [src/parsing/operator-parsing.ts](../src/parsing/operator-parsing.ts)             | Finds comparison/arithmetic/add operators in source; splits expressions by operator    |
-| [src/parsing/expression-with-context.ts](../src/parsing/expression-with-context.ts) | Parses arithmetic expressions with variable context; resolves operands                 |
-| [src/parsing/array-parsing.ts](../src/parsing/array-parsing.ts)                   | Array type parsing and literal detection ([Type; initLen; totalLen])                   |
-| [src/parsing/slice-parsing.ts](../src/parsing/slice-parsing.ts)                   | Parses slice field access (slice.initialized, slice.capacity)                         |
+| File                                                                                | Purpose                                                                             |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [src/parsing/parser.ts](../src/parsing/parser.ts)                                   | Tokenization helpers: suffix extraction, operator finding, parenthesis matching     |
+| [src/parsing/arithmetic-parsing.ts](../src/parsing/arithmetic-parsing.ts)           | Recursive descent for +, -, \*, / with operator precedence                          |
+| [src/parsing/function-parsing.ts](../src/parsing/function-parsing.ts)               | Parses function definitions and calls                                               |
+| [src/parsing/reassignment-parsing.ts](../src/parsing/reassignment-parsing.ts)       | Detects reassignment patterns incl. compound ops; parses left/right expr parts      |
+| [src/parsing/operator-parsing.ts](../src/parsing/operator-parsing.ts)               | Finds comparison/arithmetic/add operators in source; splits expressions by operator |
+| [src/parsing/expression-with-context.ts](../src/parsing/expression-with-context.ts) | Parses arithmetic expressions with variable context; resolves operands              |
+| [src/parsing/array-parsing.ts](../src/parsing/array-parsing.ts)                     | Array type parsing and literal detection ([Type; initLen; totalLen])                |
+| [src/parsing/slice-parsing.ts](../src/parsing/slice-parsing.ts)                     | Parses slice field access (slice.initialized, slice.capacity)                       |
 
 **Parsing/Expressions** (src/parsing/expressions/)
 
-| File                                                                                      | Purpose                                                                |
-| ---------- --------------------------------------------------------- | ------ -------- -------- |
+| File                                                                                                      | Purpose                                                                |
+| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | [src/parsing/expressions/let-expression-parsing.ts](../src/parsing/expressions/let-expression-parsing.ts) | Parses `let` statements; compiles RHS; stores to allocated address     |
 | [src/parsing/expressions/comparison-parsing.ts](../src/parsing/expressions/comparison-parsing.ts)         | Parses ==, <, >, <=, >= returning Bool                                 |
 | [src/parsing/expressions/if-expression-parsing.ts](../src/parsing/expressions/if-expression-parsing.ts)   | Parses if-then-else; validates condition is Bool; unifies branch types |
 
 **Compilation** (src/compilation/)
 
-| File                                                                                | Purpose                                                          |
-| --------------- -------- -------- -------- -------- | -------- |
+| File                                                                                      | Purpose                                                                     |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | [src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts) | Strategy pattern handlers for reassignment, dereference, arrays, references |
-| [src/compilation/array-compilation.ts](../src/compilation/array-compilation.ts)   | Array element store/load instruction generation; computed address handling     |
-| [src/compilation/function-compilation.ts](../src/compilation/function-compilation.ts) | Compiles function calls with instruction generation                          |
-| [src/compilation/instruction-primitives.ts](../src/compilation/instruction-primitives.ts) | Reusable instruction builders to reduce duplication                           |
+| [src/compilation/array-compilation.ts](../src/compilation/array-compilation.ts)           | Array element store/load instruction generation; computed address handling  |
+| [src/compilation/function-compilation.ts](../src/compilation/function-compilation.ts)     | Compiles function calls with instruction generation                         |
+| [src/compilation/instruction-primitives.ts](../src/compilation/instruction-primitives.ts) | Reusable instruction builders to reduce duplication                         |
 
 **Validation** (src/validation/)
 
-| File                                                                              | Purpose                                                          |
-| -------- -------- -------- -------- -------- | -------- |
-| [src/validation/validation.ts](../src/validation/validation.ts)                   | Core validators: shadowing, type compatibility, if-expression validation |
-| [src/validation/pointer-validation.ts](../src/validation/pointer-validation.ts)   | Validates &, &mut, \* operators; checks reference borrowing rules |
-| [src/validation/reassignment-validation.ts](../src/validation/reassignment-validation.ts) | Validates reassignments, mutability, type safety               |
+| File                                                                                      | Purpose                                                                  |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [src/validation/validation.ts](../src/validation/validation.ts)                           | Core validators: shadowing, type compatibility, if-expression validation |
+| [src/validation/pointer-validation.ts](../src/validation/pointer-validation.ts)           | Validates &, &mut, \* operators; checks reference borrowing rules        |
+| [src/validation/reassignment-validation.ts](../src/validation/reassignment-validation.ts) | Validates reassignments, mutability, type safety                         |
 
 **Types** (src/types/)
 
-| File                                                                            | Purpose                                                          |
-| -------- -------- -------- -------- | -------- |
-| [src/types/types.ts](../src/types/types.ts)                                     | Type range checking, overflow detection, type compatibility rules |
-| [src/types/variable-types.ts](../src/types/variable-types.ts)                   | Variable context types and interfaces                             |
-| [src/types/function-types.ts](../src/types/function-types.ts)                   | Function context and binding types                                |
-| [src/types/type-inference-helpers.ts](../src/types/type-inference-helpers.ts)   | Type inference utilities                                           |
-| [src/types/array-helpers.ts](../src/types/array-helpers.ts)                     | Array type parsing and helpers                                    |
+| File                                                                          | Purpose                                                           |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [src/types/types.ts](../src/types/types.ts)                                   | Type range checking, overflow detection, type compatibility rules |
+| [src/types/variable-types.ts](../src/types/variable-types.ts)                 | Variable context types and interfaces                             |
+| [src/types/function-types.ts](../src/types/function-types.ts)                 | Function context and binding types                                |
+| [src/types/type-inference-helpers.ts](../src/types/type-inference-helpers.ts) | Type inference utilities                                          |
+| [src/types/array-helpers.ts](../src/types/array-helpers.ts)                   | Array type parsing and helpers                                    |
 
 **Support** (src/support/)
 
-| File                                                                      | Purpose                                                          |
-| -------- -------- -------- | -------- |
-| [src/support/let-binding.ts](../src/support/let-binding.ts)              | Variable context: allocation, resolution, type tracking         |
-| [src/support/function-context.ts](../src/support/function-context.ts)    | Function definition extraction and context management             |
-| [src/support/debug-dump.ts](../src/support/debug-dump.ts)                | Interfaces for execution state tracing (ExecutionState, Cycle, Dump) |
-| [src/support/helpers.ts](../src/support/helpers.ts)                      | Utility functions shared across modules                          |
+| File                                                                  | Purpose                                                              |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [src/support/let-binding.ts](../src/support/let-binding.ts)           | Variable context: allocation, resolution, type tracking              |
+| [src/support/function-context.ts](../src/support/function-context.ts) | Function definition extraction and context management                |
+| [src/support/debug-dump.ts](../src/support/debug-dump.ts)             | Interfaces for execution state tracing (ExecutionState, Cycle, Dump) |
+| [src/support/helpers.ts](../src/support/helpers.ts)                   | Utility functions shared across modules                              |
 
 ## Common Patterns & Anti-Patterns
 

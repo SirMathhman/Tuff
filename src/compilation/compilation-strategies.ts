@@ -1,5 +1,6 @@
 import { type Instruction, OpCode, Variant } from "../core/vm";
 import { type VariableContext } from "../types/variable-types";
+import { type FunctionContext } from "../types/function-types";
 import {
   isDereferenceOperator,
   extractDereferenceTarget,
@@ -47,7 +48,7 @@ import {
 type CompileFunc = (
   expr: string,
   ctx: VariableContext,
-) => { instructions: Instruction[]; context: VariableContext } | undefined;
+) => { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } | undefined;
 
 export function tryReassignment(
   source: string,
@@ -74,7 +75,7 @@ export function tryReassignment(
     };
   }
 
-  const remRes = compileWithContext(comp.remaining, context);
+  const remRes = compileWithContext(comp.remaining, res.context);
   return remRes
     ? {
         instructions: [...instr, ...remRes.instructions],
@@ -266,7 +267,13 @@ export function tryBracedExpression(
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
   if (!isBracedExpression(trimmed)) return undefined;
   const innerExpr = extractBracedContent(trimmed);
-  return compileWithContext(innerExpr, context);
+  const result = compileWithContext(innerExpr, context);
+  return result
+    ? {
+        instructions: result.instructions,
+        context: result.context,
+      }
+    : undefined;
 }
 
 export function tryArrayIndexing(

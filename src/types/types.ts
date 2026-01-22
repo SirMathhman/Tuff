@@ -130,6 +130,11 @@ export function isTypeCompatible(
   // Bool type only matches Bool
   if (declaredType === "Bool" || exprType === "Bool") return false;
 
+  // Handle function types - must match exactly
+  if (isFunctionType(declaredType) || isFunctionType(exprType)) {
+    return declaredType === exprType;
+  }
+
   // Handle array types
   if (isArrayType(declaredType) || isArrayType(exprType)) {
     // Arrays must match exactly
@@ -187,6 +192,11 @@ export function isTypeCompatible(
   // If expr is signed and declared is unsigned, reject
   // Signed values can't safely go into unsigned types
   return false;
+}
+
+export function isFunctionType(type: string): boolean {
+  // Function type format: (...) => ReturnType
+  return type.startsWith("(") && type.includes(") =>");
 }
 
 export function isPointerType(type: string): boolean {

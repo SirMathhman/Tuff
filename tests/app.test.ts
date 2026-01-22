@@ -529,4 +529,8 @@ describe("The application - Functions", () => {
   it("should support function definition and call with no parameters", () => {
     assertValid("fn get() : I32 => 100; get()", 100);
   });
+
+  it("should support assigning function to variable and calling via variable", () => {
+    assertValid("let temp : () => I32 = fn get() : I32 => read I32; temp()", 42, 42);
+  });
 });

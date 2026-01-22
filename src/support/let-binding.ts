@@ -13,6 +13,10 @@ import {
   isMutableReference,
   isArrayIndexing,
 } from "../parsing/parser";
+import {
+  isFunctionDefinition,
+  extractFunctionType,
+} from "../parsing/function-parsing";
 import { isArrayLiteral } from "../parsing/array-parsing";
 import {
   parseArraySize,
@@ -145,6 +149,30 @@ function findSemicolonOutsideBrackets(source: string): number {
   return -1;
 }
 
+function isArrowOperator(source: string, equalsIndex: number): boolean {
+  return source[equalsIndex + 1] === ">";
+}
+
+function findAssignmentEquals(source: string): number {
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "=" && !isArrowOperator(source, i)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function extractTypeAnnotation(
+  bindingScope: string,
+  colonIndex: number,
+  equalsIndex: number,
+): string | undefined {
+  if (colonIndex === -1) return undefined;
+  const typePartEnd = equalsIndex === -1 ? bindingScope.length : equalsIndex;
+  const typePart = bindingScope.substring(colonIndex + 1, typePartEnd).trim();
+  return typePart;
+}
+
 export function parseLetComponents(source: string):
   | {
       varName: string;
@@ -159,25 +187,15 @@ export function parseLetComponents(source: string):
   const varName = extractVariableName(source);
   if (varName.length === 0) return undefined;
 
-  // Find the first semicolon outside brackets to limit search scope
   const firstSemicolonIndex = findSemicolonOutsideBrackets(source);
   if (firstSemicolonIndex === -1) return undefined;
 
-  // Only search within the current let binding (before the semicolon)
   const bindingScope = source.substring(0, firstSemicolonIndex);
-
   const colonIndex = findChar(bindingScope, ":");
-  const equalsIndex = findChar(bindingScope, "=");
+  const equalsIndex = findAssignmentEquals(bindingScope);
+  const typeAnnotation = extractTypeAnnotation(bindingScope, colonIndex, equalsIndex);
 
-  // Extract type annotation if present
-  let typeAnnotation: string | undefined;
-  if (colonIndex !== -1) {
-    const typePartEnd = equalsIndex === -1 ? bindingScope.length : equalsIndex;
-    const typePart = bindingScope.substring(colonIndex + 1, typePartEnd).trim();
-    typeAnnotation = typePart;
-  }
-
-  // If there's no equals sign, it's a declaration-only let binding (requires type annotation)
+  // Declaration-only: no equals sign
   if (equalsIndex === -1) {
     if (!typeAnnotation) return undefined;
     return {
@@ -189,7 +207,7 @@ export function parseLetComponents(source: string):
     };
   }
 
-  // If there's a colon, it must come before the equals sign
+  // Type annotation must come before equals
   if (colonIndex !== -1 && colonIndex >= equalsIndex) return undefined;
 
   const exprPart = bindingScope.substring(equalsIndex + 1).trim();
@@ -312,6 +330,10 @@ export function extractExpressionType(
   if (isBracedExpression(trimmed)) {
     const innerExpr = extractBracedContent(trimmed);
     return extractExpressionType(innerExpr, context);
+  }
+
+  if (isFunctionDefinition(trimmed)) {
+    return extractFunctionType(trimmed);
   }
 
   if (isArrayLiteral(trimmed)) {

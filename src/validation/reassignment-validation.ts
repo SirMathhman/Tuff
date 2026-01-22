@@ -3,8 +3,14 @@ import {
   isTypeCompatible,
   isMutablePointerType,
 } from "../types/types";
-import { type VariableContext, type VariableBinding } from "../types/variable-types";
-import { parseLetComponents, extractExpressionType } from "../support/let-binding";
+import {
+  type VariableContext,
+  type VariableBinding,
+} from "../types/variable-types";
+import {
+  parseLetComponents,
+  extractExpressionType,
+} from "../support/let-binding";
 import {
   parseReassignmentComponents,
   parseDereferenceReassignmentComponents,

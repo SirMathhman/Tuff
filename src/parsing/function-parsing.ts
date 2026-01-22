@@ -1,4 +1,8 @@
-import { isIdentifierChar, findChar, findMatchingParen } from "../parsing/parser";
+import {
+  isIdentifierChar,
+  findChar,
+  findMatchingParen,
+} from "../parsing/parser";
 
 function extractFunctionName(source: string): string {
   // After "fn", extract the identifier until '('
@@ -149,6 +153,23 @@ export function parseFunctionDefinition(source: string):
     body,
     remaining,
   };
+}
+
+export function isFunctionDefinition(source: string): boolean {
+  const trimmed = source.trim();
+  return trimmed.startsWith("fn ") && trimmed.includes("=>");
+}
+
+export function extractFunctionType(source: string): string | undefined {
+  if (!isFunctionDefinition(source)) return undefined;
+
+  const parsed = parseFunctionDefinition(source);
+  if (!parsed) return undefined;
+
+  // Function type format: (param1Type, param2Type, ...) => returnType
+  // For no parameters: () => returnType
+  const paramTypes = parsed.parameters.map((p) => p.type).join(", ");
+  return `(${paramTypes}) => ${parsed.returnType}`;
 }
 
 export function isFunctionCall(source: string): boolean {

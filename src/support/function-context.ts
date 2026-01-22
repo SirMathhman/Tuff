@@ -1,4 +1,7 @@
-import { type FunctionBinding, type FunctionContext } from "../types/function-types";
+import {
+  type FunctionBinding,
+  type FunctionContext,
+} from "../types/function-types";
 import { parseFunctionDefinition } from "../parsing/function-parsing";
 
 export function extractFunctionDefinitions(source: string): FunctionContext {

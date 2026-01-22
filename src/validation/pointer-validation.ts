@@ -1,6 +1,9 @@
 import { type CompileError } from "../types/types";
 import { type VariableContext } from "../types/variable-types";
-import { parseLetComponents, buildContextFromLetBindings } from "../support/let-binding";
+import {
+  parseLetComponents,
+  buildContextFromLetBindings,
+} from "../support/let-binding";
 import { isIdentifierChar } from "../parsing/parser";
 
 function validateDereferenceIsPointer(
