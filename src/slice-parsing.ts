@@ -7,7 +7,7 @@ import {
 
 export interface SliceFieldAccess {
   sliceName: string;
-  field: "init" | "total";
+  field: "initialized" | "capacity";
 }
 
 export function isSliceFieldAccess(source: string): boolean {
@@ -22,8 +22,8 @@ export function isSliceFieldAccess(source: string): boolean {
   // Check if slice part is a valid identifier
   if (!isValidIdentifier(slicePart)) return false;
 
-  // Check if field is "init" or "total"
-  return fieldPart === "init" || fieldPart === "total";
+  // Check if field is "initialized" or "capacity"
+  return fieldPart === "initialized" || fieldPart === "capacity";
 }
 
 function findDotOperator(source: string): number {
@@ -56,7 +56,7 @@ export function parseSliceFieldAccess(
   const sliceName = trimmed.substring(0, dotIndex).trim();
   const field = trimmed.substring(dotIndex + 1).trim();
 
-  if (field !== "init" && field !== "total") {
+  if (field !== "initialized" && field !== "capacity") {
     return undefined;
   }
 
@@ -65,27 +65,27 @@ export function parseSliceFieldAccess(
 
 export function buildSliceFieldAccessInstructions(
   arrayBinding: { type?: string } | undefined,
-  field: "init" | "total",
+  field: "initialized" | "capacity",
 ): Instruction[] | undefined {
   if (!arrayBinding?.type || !arrayBinding.type.startsWith("[")) {
     return undefined;
   }
 
-  // Parse array type [ElementType; init; total]
+  // Parse array type [ElementType; initialized; capacity]
   const typeStr = arrayBinding.type;
   const inner = typeStr.substring(1, typeStr.length - 1);
   const parts = inner.split(";");
   if (parts.length !== 3) return undefined;
 
-  const initCount = parseInt(parts[1]?.trim() ?? "0", 10);
-  const totalCount = parseInt(parts[2]?.trim() ?? "0", 10);
+  const initializedCount = parseInt(parts[1]?.trim() ?? "0", 10);
+  const capacityCount = parseInt(parts[2]?.trim() ?? "0", 10);
 
-  if (field === "init") {
-    return [buildLoadImmediate(1, initCount), ...buildStoreAndHalt()];
+  if (field === "initialized") {
+    return [buildLoadImmediate(1, initializedCount), ...buildStoreAndHalt()];
   }
 
-  if (field === "total") {
-    return [buildLoadImmediate(1, totalCount), ...buildStoreAndHalt()];
+  if (field === "capacity") {
+    return [buildLoadImmediate(1, capacityCount), ...buildStoreAndHalt()];
   }
 
   return undefined;

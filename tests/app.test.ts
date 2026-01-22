@@ -453,23 +453,23 @@ describe("The application - Slices", () => {
     );
   });
 
-  it("should access slice.init to get initialized count", () => {
+  it("should access slice.initialized to get initialized count", () => {
     assertValid(
-      "let array = [1I32, 2I32, 3I32]; let slice : *[I32] = &array; slice.init",
+      "let array = [1I32, 2I32, 3I32]; let slice : *[I32] = &array; slice.initialized",
       3,
     );
   });
 
-  it("should access slice.total to get total capacity", () => {
+  it("should access slice.capacity to get total capacity", () => {
     assertValid(
-      "let array : [I32; 2; 4] = [1I32, 2I32]; let slice : *[I32] = &array; slice.total",
+      "let array : [I32; 2; 4] = [1I32, 2I32]; let slice : *[I32] = &array; slice.capacity",
       4,
     );
   });
 
   it("should support mutable slice creation", () => {
     assertValid(
-      "let mut array = [1I32, 2I32, 3I32]; let slice : *mut [I32] = &mut array; slice.init",
+      "let mut array = [1I32, 2I32, 3I32]; let slice : *mut [I32] = &mut array; slice.initialized",
       3,
     );
   });
