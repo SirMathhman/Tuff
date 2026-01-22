@@ -173,10 +173,10 @@ function parseReadInstruction(source: string): Instruction[] | undefined {
   ];
 }
 
-function buildAddStoreHaltInstructions(): Instruction[] {
+function buildStoreHaltInstructions(opcode: OpCode): Instruction[] {
   return [
     {
-      opcode: OpCode.Add,
+      opcode,
       variant: Variant.Immediate,
       operand1: 1,
       operand2: 0,
@@ -193,6 +193,10 @@ function buildAddStoreHaltInstructions(): Instruction[] {
       operand1: 900,
     },
   ];
+}
+
+function buildAddStoreHaltInstructions(): Instruction[] {
+  return buildStoreHaltInstructions(OpCode.Add);
 }
 
 function buildAddInstructions(): Instruction[] {
@@ -265,6 +269,63 @@ function buildConstantAddReadInstructions(constant: number): Instruction[] {
   ];
 }
 
+function buildSubInstructions(): Instruction[] {
+  return buildStoreHaltInstructions(OpCode.Sub);
+}
+
+function parseLeftSideForSub(leftPart: string): Instruction[] | undefined {
+  // Try add/sub expressions first, then simple values
+  let leftInstructions = parseAddExpression(leftPart);
+  if (leftInstructions) return leftInstructions;
+
+  leftInstructions = parseSubExpression(leftPart);
+  if (leftInstructions) return leftInstructions;
+
+  if (leftPart.startsWith("read")) {
+    return parseReadInstruction(leftPart);
+  }
+
+  const num = parseNumberWithSuffix(leftPart);
+  if (num !== undefined) {
+    return [
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Immediate,
+        operand1: 1,
+        operand2: num,
+      },
+      {
+        opcode: OpCode.Store,
+        variant: Variant.Direct,
+        operand1: 1,
+        operand2: 901,
+      },
+    ];
+  }
+
+  return undefined;
+}
+
+function parseRightSideForSub(rightPart: string): Instruction[] | undefined {
+  if (rightPart.startsWith("read")) {
+    return parseReadInstruction(rightPart);
+  }
+
+  const num = parseNumberWithSuffix(rightPart);
+  if (num !== undefined) {
+    return [
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Immediate,
+        operand1: 0,
+        operand2: num,
+      },
+    ];
+  }
+
+  return undefined;
+}
+
 function parseAddExpression(source: string): Instruction[] | undefined {
   // Look for + operator
   let plusIndex = -1;
@@ -287,6 +348,34 @@ function parseAddExpression(source: string): Instruction[] | undefined {
   }
 
   return parseAddExpressionReadLeft(leftPart, rightPart);
+}
+
+function parseSubExpression(source: string): Instruction[] | undefined {
+  // Look for - operator (skip if it's at the start, as that's a negative number)
+  let minusIndex = -1;
+  for (let i = 1; i < source.length; i++) {
+    if (source[i] === "-") {
+      minusIndex = i;
+      break;
+    }
+  }
+  if (minusIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, minusIndex).trim();
+  const rightPart = source.substring(minusIndex + 1).trim();
+
+  const leftInstructions = parseLeftSideForSub(leftPart);
+  if (!leftInstructions) return undefined;
+
+  const rightInstructions = parseRightSideForSub(rightPart);
+  if (!rightInstructions) return undefined;
+
+  // Build complete subtraction instruction sequence
+  return [
+    ...leftInstructions.slice(0, -1), // Exclude halt from left
+    ...rightInstructions.slice(0, -1), // Exclude halt from right (if exists)
+    ...buildSubInstructions(),
+  ];
 }
 
 function buildChainedReadAddExpression(
@@ -471,6 +560,12 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   const arithResult = parseAddExpression(trimmed);
   if (arithResult) {
     return ok(arithResult);
+  }
+
+  // Check for subtraction expressions
+  const subResult = parseSubExpression(trimmed);
+  if (subResult) {
+    return ok(subResult);
   }
 
   // Check for read instruction
