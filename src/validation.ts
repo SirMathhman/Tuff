@@ -332,27 +332,40 @@ export function detectTypeIncompatibility(
   return undefined;
 }
 
+function checkTwoCharOperator(source: string, i: number): string | undefined {
+  if (i >= source.length - 1) return undefined;
+  const twoChar = source.substring(i, i + 2);
+  return isTwoCharComparisonOperator(twoChar) ? twoChar : undefined;
+}
+
+function isTwoCharComparisonOperator(twoChar: string): boolean {
+  return twoChar === "==" || twoChar === "<=" || twoChar === ">=";
+}
+
+function findComparisonOperatorAndType(
+  source: string,
+): { index: number; operator: string } | undefined {
+  for (let i = 0; i < source.length; i++) {
+    const twoCharOp = checkTwoCharOperator(source, i);
+    if (twoCharOp) {
+      return { index: i, operator: twoCharOp };
+    }
+
+    const char = source[i];
+    if (char === "<" || char === ">") {
+      return { index: i, operator: char };
+    }
+  }
+  return undefined;
+}
+
 function extractComparisonTypes(
   source: string,
 ): { left: string; right: string } | undefined {
-  // Find comparison operator
-  let comparisonIndex = -1;
-  let operator = "";
+  const found = findComparisonOperatorAndType(source);
+  if (!found) return undefined;
 
-  for (let i = 0; i < source.length; i++) {
-    if (source[i] === "=" && source[i + 1] === "=") {
-      comparisonIndex = i;
-      operator = "==";
-      break;
-    }
-    if (source[i] === "<" || source[i] === ">") {
-      comparisonIndex = i;
-      operator = source[i];
-      break;
-    }
-  }
-
-  if (comparisonIndex === -1) return undefined;
+  const { index: comparisonIndex, operator } = found;
 
   const leftPart = source.substring(0, comparisonIndex).trim();
   const rightPart = source.substring(comparisonIndex + operator.length).trim();
@@ -367,7 +380,12 @@ function extractComparisonTypes(
 
 function isComparisonOperatorForInequality(source: string): boolean {
   for (let i = 0; i < source.length; i++) {
-    if (source[i] === "<" || source[i] === ">") {
+    const char = source[i];
+    if (char === "<" || char === ">") {
+      return true;
+    }
+    // Check for <= or >=
+    if ((char === "<" || char === ">") && source[i + 1] === "=") {
       return true;
     }
   }

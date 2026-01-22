@@ -229,4 +229,22 @@ describe("The application - Comparison operators", () => {
   it("should reject inequality comparisons with Bool types using >", () => {
     assertInvalid("read Bool > read Bool");
   });
+
+  it("should evaluate read U8 <= read U8 as 0 or 1", () => {
+    assertValid("read U8 <= read U8", 1, 5, 5);
+    assertValid("read U8 <= read U8", 0, 5, 3);
+  });
+
+  it("should evaluate read U8 >= read U8 as 0 or 1", () => {
+    assertValid("read U8 >= read U8", 1, 5, 3);
+    assertValid("read U8 >= read U8", 0, 3, 5);
+  });
+
+  it("should reject inequality comparisons with Bool using <=", () => {
+    assertInvalid("read Bool <= read Bool");
+  });
+
+  it("should reject inequality comparisons with Bool using >=", () => {
+    assertInvalid("read Bool >= read Bool");
+  });
 });

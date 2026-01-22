@@ -29,9 +29,10 @@ export function parseComparisonExpression(
     opcode = OpCode.LessThan;
   } else if (operator === ">") {
     opcode = OpCode.GreaterThan;
-  } else if (operator === "<=" || operator === ">=") {
-    // Not yet implemented
-    return undefined;
+  } else if (operator === "<=") {
+    opcode = OpCode.LessThanOrEqual;
+  } else if (operator === ">=") {
+    opcode = OpCode.GreaterThanOrEqual;
   } else {
     return undefined;
   }

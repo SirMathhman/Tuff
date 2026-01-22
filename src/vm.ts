@@ -152,8 +152,17 @@ function handleComparison(
       registers[operand1] =
         (registers[operand1] ?? 0) > (registers[operand2] ?? 0) ? 1 : 0;
       break;
+    case OpCode.LessThanOrEqual:
+      registers[operand1] =
+        (registers[operand1] ?? 0) <= (registers[operand2] ?? 0) ? 1 : 0;
+      break;
+    case OpCode.GreaterThanOrEqual:
+      registers[operand1] =
+        (registers[operand1] ?? 0) >= (registers[operand2] ?? 0) ? 1 : 0;
+      break;
   }
 }
+
 
 function handleLogical(
   opcode: OpCode,
@@ -288,6 +297,8 @@ function dispatchInstruction(
     case OpCode.Equal:
     case OpCode.LessThan:
     case OpCode.GreaterThan:
+    case OpCode.LessThanOrEqual:
+    case OpCode.GreaterThanOrEqual:
       handleComparison(opcode, operand1, operand2, registers);
       return { state, isJump: false };
     case OpCode.LogicalAnd:
@@ -410,6 +421,8 @@ export enum OpCode {
   Equal,
   LessThan,
   GreaterThan,
+  LessThanOrEqual,
+  GreaterThanOrEqual,
   LogicalAnd,
   LogicalOr,
   LogicalNot,
