@@ -20,9 +20,7 @@ import {
   extractArrayIndexType,
 } from "./array-helpers";
 import { isBareNumber } from "./type-inference-helpers";
-import {
-  type VariableContext,
-} from "./variable-types";
+import { type VariableContext } from "./variable-types";
 export type { VariableBinding, VariableContext } from "./variable-types";
 import {
   buildLoadDirect,

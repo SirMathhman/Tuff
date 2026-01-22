@@ -32,6 +32,16 @@ function isValidIdentifier(name: string): boolean {
   return true;
 }
 
+function extractLeftAndExprParts(base: ReturnType<typeof extractReassignmentBase>): 
+  | { leftSide: string; exprPart: string; remaining: string }
+  | undefined {
+  if (!base) return undefined;
+  const { bindingScope, remaining, equalsIndex } = base;
+  const leftSide = bindingScope.substring(0, equalsIndex).trim();
+  const exprPart = bindingScope.substring(equalsIndex + 1).trim();
+  return { leftSide, exprPart, remaining };
+}
+
 export function parseReassignmentComponents(source: string):
   | {
       varName: string;
@@ -40,15 +50,12 @@ export function parseReassignmentComponents(source: string):
     }
   | undefined {
   const base = extractReassignmentBase(source);
-  if (!base) return undefined;
+  const parts = extractLeftAndExprParts(base);
+  if (!parts) return undefined;
 
-  const { bindingScope, remaining, equalsIndex } = base;
-  const varName = bindingScope.substring(0, equalsIndex).trim();
-  const exprPart = bindingScope.substring(equalsIndex + 1).trim();
+  if (!isValidIdentifier(parts.leftSide)) return undefined;
 
-  if (!isValidIdentifier(varName)) return undefined;
-
-  return { varName, exprPart, remaining };
+  return { varName: parts.leftSide, exprPart: parts.exprPart, remaining: parts.remaining };
 }
 
 export function parseDereferenceReassignmentComponents(source: string):
@@ -59,20 +66,16 @@ export function parseDereferenceReassignmentComponents(source: string):
     }
   | undefined {
   const base = extractReassignmentBase(source);
-  if (!base) return undefined;
+  const parts = extractLeftAndExprParts(base);
+  if (!parts) return undefined;
 
-  const { bindingScope, remaining, equalsIndex } = base;
-  const leftSide = bindingScope.substring(0, equalsIndex).trim();
+  if (!parts.leftSide.startsWith("*")) return undefined;
 
-  if (!leftSide.startsWith("*")) return undefined;
-
-  const pointerName = leftSide.substring(1).trim();
+  const pointerName = parts.leftSide.substring(1).trim();
 
   if (!isValidIdentifier(pointerName)) return undefined;
 
-  const exprPart = bindingScope.substring(equalsIndex + 1).trim();
-
-  return { pointerName, exprPart, remaining };
+  return { pointerName, exprPart: parts.exprPart, remaining: parts.remaining };
 }
 
 export function buildReassignmentInstructions(
@@ -137,4 +140,65 @@ export function buildDereferenceInstructionsForExpr(
       operand2: 900,
     },
   ];
+}
+
+function extractArrayIndexFromLeftSide(
+  leftSide: string,
+): { arrayName: string; indexExpr: string } | undefined {
+  // leftSide should be "arrayName[indexExpr]"
+  let i = 0;
+  let arrayName = "";
+
+  // Extract array name
+  while (i < leftSide.length) {
+    const char = leftSide[i];
+    if (!char || !isIdentifierChar(char, i === 0)) break;
+    arrayName += char;
+    i++;
+  }
+
+  if (i >= leftSide.length || leftSide[i] !== "[") return undefined;
+
+  // Find matching bracket
+  const bracketStart = i;
+  let bracketEnd = -1;
+  let depth = 1;
+
+  for (let j = i + 1; j < leftSide.length; j++) {
+    if (leftSide[j] === "[") depth++;
+    if (leftSide[j] === "]") depth--;
+    if (depth === 0) {
+      bracketEnd = j;
+      break;
+    }
+  }
+
+  if (bracketEnd === -1 || bracketEnd !== leftSide.length - 1) return undefined;
+
+  const indexExpr = leftSide.substring(bracketStart + 1, bracketEnd).trim();
+
+  return { arrayName, indexExpr };
+}
+
+export function parseArrayIndexReassignmentComponents(source: string):
+  | {
+      arrayName: string;
+      indexExpr: string;
+      exprPart: string;
+      remaining: string;
+    }
+  | undefined {
+  const base = extractReassignmentBase(source);
+  const parts = extractLeftAndExprParts(base);
+  if (!parts) return undefined;
+
+  const arrayIndex = extractArrayIndexFromLeftSide(parts.leftSide);
+  if (!arrayIndex) return undefined;
+
+  return {
+    arrayName: arrayIndex.arrayName,
+    indexExpr: arrayIndex.indexExpr,
+    exprPart: parts.exprPart,
+    remaining: parts.remaining,
+  };
 }

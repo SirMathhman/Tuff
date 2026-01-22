@@ -1,7 +1,7 @@
 // Our first compile test, the VM should shut down instantly
 
 import { describe, it, expect } from "bun:test";
-import { compile, executeWithArray } from "../src/app";
+import { compile, executeWithArray, executeWithArrayToDump } from "../src/app";
 
 // Test helpers
 function assertValid(source: string, expected: number, ...stdIn: number[]) {
@@ -16,7 +16,32 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
       ).toBeUndefined();
     }
 
-    expect(execResult).toBe(expected);
+    if (execResult !== expected) {
+      const [exitCode, dump] = executeWithArrayToDump(
+        compileResult.value,
+        stdIn,
+      );
+
+      const joinedCycles = dump.cycles
+        .map(
+          (cycle, index) =>
+            index +
+            ": " +
+            cycle.beforeInstructionExecuted.prettyPrint() +
+            " -> " +
+            JSON.stringify(cycle.instructionToExecute),
+        )
+        .join("\n");
+
+      expect(
+        "Expected exit code " +
+          expected +
+          " but got " +
+          exitCode +
+          "\nMemory Dump:\n" +
+          joinedCycles,
+      ).toBeUndefined();
+    }
   } else {
     // Do we have an equivalent to Assertions.fail()?
     expect(compileResult.error).toBeUndefined();
@@ -400,6 +425,15 @@ describe("The application - Arrays", () => {
     assertValid(
       "let array : [U8; 2; 2] = [read U8, read U8]; let idx = 1; array[idx]",
       10,
+      5,
+      10,
+    );
+  });
+
+  it("should support mutable array with indexed element assignment", () => {
+    assertValid(
+      "let mut array : [U8; 0; 2]; array[0] = read U8; array[1] = read U8; array[0] + array[1]",
+      15,
       5,
       10,
     );

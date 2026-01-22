@@ -4,13 +4,11 @@ import {
   isMutablePointerType,
 } from "./types";
 import { type VariableContext, type VariableBinding } from "./variable-types";
-import {
-  parseLetComponents,
-  extractExpressionType,
-} from "./let-binding";
+import { parseLetComponents, extractExpressionType } from "./let-binding";
 import {
   parseReassignmentComponents,
   parseDereferenceReassignmentComponents,
+  parseArrayIndexReassignmentComponents,
 } from "./reassignment-parsing";
 
 function skipLetBindings(source: string): string {
@@ -25,20 +23,50 @@ function skipLetBindings(source: string): string {
   return current;
 }
 
+function handleRegularReassignment(
+  reassignComp: ReturnType<typeof parseReassignmentComponents>,
+  varName: string,
+): number {
+  if (reassignComp && reassignComp.varName === varName) {
+    return 1;
+  }
+  return 0;
+}
+
+function handleArrayReassignment(
+  arrayIndexComp: ReturnType<typeof parseArrayIndexReassignmentComponents>,
+  varName: string,
+): number {
+  if (arrayIndexComp && arrayIndexComp.arrayName === varName) {
+    return 1;
+  }
+  return 0;
+}
+
 function countReassignments(source: string, varName: string): number {
   let count = 0;
   let current = skipLetBindings(source);
 
   while (current.length > 0) {
     current = current.trim();
-    const reassignComp = parseReassignmentComponents(current);
-    if (!reassignComp) break;
 
-    if (reassignComp.varName === varName) {
-      count++;
+    // Check for regular reassignments
+    const reassignComp = parseReassignmentComponents(current);
+    if (reassignComp) {
+      count += handleRegularReassignment(reassignComp, varName);
+      current = reassignComp.remaining;
+      continue;
     }
 
-    current = reassignComp.remaining;
+    // Check for array index reassignments
+    const arrayIndexComp = parseArrayIndexReassignmentComponents(current);
+    if (arrayIndexComp) {
+      count += handleArrayReassignment(arrayIndexComp, varName);
+      current = arrayIndexComp.remaining;
+      continue;
+    }
+
+    break;
   }
 
   return count;
@@ -155,6 +183,34 @@ export function detectDereferenceReassignmentOnImmutablePointer(
   return undefined;
 }
 
+export function detectArrayIndexReassignmentOnImmutableArray(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  let current = skipLetBindings(source);
+
+  while (current.length > 0) {
+    current = current.trim();
+    const comp = parseArrayIndexReassignmentComponents(current);
+    if (!comp) break;
+
+    const binding = context.find((b) => b.name === comp.arrayName);
+    if (binding && !binding.mutable) {
+      return {
+        cause: `Cannot assign to index of non-mutable array '${comp.arrayName}'`,
+        reason:
+          "Array element assignment requires the array to be declared with 'let mut'",
+        fix: `Change 'let ${comp.arrayName}' to 'let mut ${comp.arrayName}'`,
+        first: { line: 0, column: 0, length: source.length },
+      };
+    }
+
+    current = comp.remaining;
+  }
+
+  return undefined;
+}
+
 function checkDeclarationOnlyRestrictions(
   binding: VariableBinding,
   source: string,
@@ -198,10 +254,17 @@ function findVariableUsage(source: string, varName: string): number {
   while (current.length > 0) {
     current = current.trim();
 
-    // Skip reassignments
+    // Skip regular reassignments
     const reassignComp = parseReassignmentComponents(current);
     if (reassignComp) {
       current = reassignComp.remaining;
+      continue;
+    }
+
+    // Skip array index reassignments
+    const arrayIndexComp = parseArrayIndexReassignmentComponents(current);
+    if (arrayIndexComp) {
+      current = arrayIndexComp.remaining;
       continue;
     }
 

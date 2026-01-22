@@ -6,6 +6,8 @@ interface ExecutionState {
   programCounter: number;
   shouldContinue: boolean;
   exitCode?: number;
+
+  prettyPrint(): string;
 }
 
 function resolveIndirectAddress(
@@ -350,6 +352,7 @@ export function execute(
   instructions: Instruction[],
   read: () => number,
   write: (value: number) => void,
+  dumper: (state: ExecutionState, instruction: Instruction) => void = () => {},
   maxInstructions: number = 1000,
 ): number {
   const memory: number[] = new Array(1024).fill(0);
@@ -368,16 +371,20 @@ export function execute(
     memory,
     programCounter: 0,
     shouldContinue: true,
+    prettyPrint(): string {
+      return `PC: ${this.programCounter}, Registers: [${this.registers.join(", ")}], Memory[900]: ${this.memory[900]}`;
+    },
   };
 
   let currentInstructionCount = 0;
   while (currentInstructionCount < maxInstructions && state.shouldContinue) {
     const instructionValue = memory[state.programCounter];
     if (instructionValue === undefined) break;
-
     currentInstructionCount++;
 
     const decoded = decode(instructionValue);
+    dumper(state, decoded);
+
     const { operand1 } = decoded;
 
     // Validate operand indices

@@ -131,7 +131,7 @@ export interface VariableBinding {
 1. `bun test --coverage` - All tests pass with coverage; blocks commit on failure
 2. `bun run lint:fix` - ESLint auto-fixes; blocks if unfixable violations remain
 3. `bun run format` - Prettier reformats all files
-4. `bun run cpd` - PMD copy-paste detector (≥50 tokens) flags but doesn't block
+4. `bun run cpd` - PMD copy-paste detector (≥50 tokens) flags and blocks
 
 **Linting Rules** - [eslint.config.mjs](../eslint.config.mjs):
 
