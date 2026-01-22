@@ -6,6 +6,7 @@ import {
   type VariableContext,
   isBareNumber,
   isNumberLiteral,
+  parseReassignmentComponents,
 } from "./let-binding";
 import {
   isParenthesizedExpression,
@@ -539,6 +540,48 @@ export function detectIfBranchTypeMismatch(
       fix: "Ensure both branches return the same type or compatible widening types",
       first: { line: 0, column: 0, length: source.length },
     };
+  }
+
+  return undefined;
+}
+
+export function detectNonMutableReassignment(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  // Skip past all let bindings to find reassignments
+  let current = source;
+
+  // Skip let bindings
+  while (current.length > 0) {
+    current = current.trim();
+    if (!current.startsWith("let")) break;
+
+    const comp = parseLetComponents(current);
+    if (!comp) break;
+
+    current = comp.remaining;
+  }
+
+  // Now check for reassignments in the remaining code
+  while (current.length > 0) {
+    current = current.trim();
+    const reassignComp = parseReassignmentComponents(current);
+    if (!reassignComp) break;
+
+    // Check if this variable exists and is not mutable
+    const binding = context.find((b) => b.name === reassignComp.varName);
+    if (binding && !binding.mutable) {
+      return {
+        cause: `Cannot reassign non-mutable variable '${reassignComp.varName}'`,
+        reason:
+          "Variables must be declared with 'let mut' keyword to allow reassignment",
+        fix: `Change 'let ${reassignComp.varName}' to 'let mut ${reassignComp.varName}'`,
+        first: { line: 0, column: 0, length: source.length },
+      };
+    }
+
+    current = reassignComp.remaining;
   }
 
   return undefined;

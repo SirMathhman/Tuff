@@ -307,4 +307,8 @@ describe("The application - Mutable variables", () => {
   it("should support mutable variable initialization and reassignment", () => {
     assertValid("let mut x = 0; x = read I32; x", 42, 42);
   });
+
+  it("should reject reassignment of non-mutable variables", () => {
+    assertInvalid("let x = 0; x = read I32; x");
+  });
 });

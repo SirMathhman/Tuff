@@ -58,6 +58,38 @@ export function isVariableShadowed(
   return context.some((b) => b.name === varName);
 }
 
+export function isVariableMutable(
+  context: VariableContext,
+  varName: string,
+): boolean {
+  const binding = context.find((b) => b.name === varName);
+  return binding?.mutable ?? false;
+}
+
+export function buildContextFromLetBindings(source: string): VariableContext {
+  const context: VariableContext = [];
+  let remaining = source;
+
+  while (remaining.length > 0) {
+    remaining = remaining.trim();
+    if (!remaining.startsWith("let")) break;
+
+    const comp = parseLetComponents(remaining);
+    if (!comp) break;
+
+    context.push({
+      name: comp.varName,
+      memoryAddress: 904 + context.length,
+      type: comp.typeAnnotation,
+      mutable: comp.mutable,
+    });
+
+    remaining = comp.remaining;
+  }
+
+  return context;
+}
+
 export function parseLetComponents(source: string):
   | {
       varName: string;
@@ -67,7 +99,8 @@ export function parseLetComponents(source: string):
       mutable: boolean;
     }
   | undefined {
-  const isMutable = source.substring(3, 6).trim() === "mut";
+  const afterLet = source.substring(3).trim();
+  const isMutable = afterLet.startsWith("mut");
   const varName = extractVariableName(source);
   if (varName.length === 0) return undefined;
 

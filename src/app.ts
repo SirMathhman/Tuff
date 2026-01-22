@@ -36,6 +36,8 @@ import {
   buildVarRefInstructions,
   parseReassignmentComponents,
   buildReassignmentInstructions,
+  isVariableMutable,
+  buildContextFromLetBindings,
 } from "./let-binding";
 import { parseAddExpressionWithContext } from "./expression-with-context";
 import { splitByAddOperator } from "./operator-parsing";
@@ -48,6 +50,7 @@ import {
   detectComparisonTypeMismatch,
   detectInvalidIfCondition,
   detectIfBranchTypeMismatch,
+  detectNonMutableReassignment,
 } from "./validation";
 
 export interface Ok<T> {
@@ -374,6 +377,8 @@ function tryReassignment(
   const addr = resolveVariable(context, comp.varName);
   if (addr === undefined) return undefined;
 
+  if (!isVariableMutable(context, comp.varName)) return undefined;
+
   const res = compileWithContext(comp.exprPart, context);
   if (!res) return undefined;
 
@@ -545,69 +550,44 @@ function compileNoContext(source: string): Instruction[] | undefined {
   return parseArithmeticOrLiteral(trimmed);
 }
 
+function performValidationChecks(trimmed: string): CompileError | undefined {
+  const negError = checkNegativeUnsignedError(trimmed);
+  if (negError) return negError;
+  const overflowError = checkTypeOverflow(trimmed);
+  if (overflowError) return overflowError;
+  const shadowError = detectVariableShadowing(trimmed);
+  if (shadowError) return shadowError;
+  const comparisonError = detectComparisonTypeMismatch(trimmed);
+  if (comparisonError) return comparisonError;
+  const ifConditionError = detectInvalidIfCondition(trimmed);
+  if (ifConditionError) return ifConditionError;
+  const typeError = detectTypeIncompatibility(trimmed);
+  if (typeError) return typeError;
+  const branchError = detectIfBranchTypeMismatch(trimmed);
+  if (branchError) return branchError;
+  const preContext = buildContextFromLetBindings(trimmed);
+  const mutabilityError = detectNonMutableReassignment(trimmed, preContext);
+  if (mutabilityError) return mutabilityError;
+  return undefined;
+}
+
 export function compile(source: string): Result<Instruction[], CompileError> {
   const trimmed = source.trim();
-
   if (!trimmed) {
     return ok([]);
   }
-
-  const negError = checkNegativeUnsignedError(trimmed);
-  if (negError) {
-    return err(negError);
-  }
-
-  const overflowError = checkTypeOverflow(trimmed);
-  if (overflowError) {
-    return err(overflowError);
-  }
-
   if (isParenthesizedExpression(trimmed)) {
-    const innerExpr = extractParenthesizedContent(trimmed);
-    return compile(innerExpr);
+    return compile(extractParenthesizedContent(trimmed));
   }
-
   if (isBracedExpression(trimmed)) {
-    const innerExpr = extractBracedContent(trimmed);
-    return compile(innerExpr);
+    return compile(extractBracedContent(trimmed));
   }
-
-  // Check for variable shadowing in let bindings
-  const shadowError = detectVariableShadowing(trimmed);
-  if (shadowError) {
-    return err(shadowError);
+  const validationError = performValidationChecks(trimmed);
+  if (validationError) {
+    return err(validationError);
   }
-
-  // Check for type mismatch in comparisons
-  const comparisonError = detectComparisonTypeMismatch(trimmed);
-  if (comparisonError) {
-    return err(comparisonError);
-  }
-
-  // Check for invalid if-expression conditions (before type incompatibility)
-  const ifConditionError = detectInvalidIfCondition(trimmed);
-  if (ifConditionError) {
-    return err(ifConditionError);
-  }
-
-  // Check for type incompatibility in let bindings
-  const typeError = detectTypeIncompatibility(trimmed);
-  if (typeError) {
-    return err(typeError);
-  }
-
-  // Check for incompatible if-branch types
-  const branchError = detectIfBranchTypeMismatch(trimmed);
-  if (branchError) {
-    return err(branchError);
-  }
-
   const result = compileWithContext(trimmed, []);
-  if (result) {
-    return ok(result.instructions);
-  }
-
-  return ok([]);
+  return result ? ok(result.instructions) : ok([]);
 }
 
 export function executeWithArray(
