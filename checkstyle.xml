@@ -23,9 +23,9 @@
 			<property name="max" value="3" />
 		</module>
 
-		<!-- Detect Feature Envy code smell (parameter accessed >65 times) -->
+		<!-- Detect Feature Envy code smell (parameter accessed >50 times) -->
 		<module name="io.github.sirmathhman.tuff.checkstyle.FeatureEnvyCheck">
-			<property name="threshold" value="65" />
+			<property name="threshold" value="50" />
 		</module>
 
 		<!-- Enforce maximum parameters of 7 per method (increased for parseStatement with type aliases) -->
