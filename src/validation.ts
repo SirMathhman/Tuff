@@ -434,6 +434,11 @@ function isValidIfCondition(condition: string): boolean {
     return true;
   }
 
+  // read Bool is valid
+  if (trimmed === "read Bool") {
+    return true;
+  }
+
   // Comparison operators: ==, <, >, <=, >=
   const comparisonOps = ["==", "<=", ">=", "<", ">"];
   for (const op of comparisonOps) {

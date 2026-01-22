@@ -1,6 +1,20 @@
 import { type Instruction, OpCode, Variant } from "./vm";
 import { findMatchingParen } from "./parser";
 
+let ifNestingDepth = 0;
+
+function getConditionAddress(): number {
+  return 950 + ifNestingDepth * 3;
+}
+
+function getThenAddress(): number {
+  return 951 + ifNestingDepth * 3;
+}
+
+function getElseAddress(): number {
+  return 952 + ifNestingDepth * 3;
+}
+
 function skipWhitespace(source: string, start: number): number {
   let i = start;
   while (i < source.length && (source[i] === " " || source[i] === "\t")) {
@@ -52,13 +66,19 @@ export function parseIfExpression(
   const components = parseIfComponents(source);
   if (!components) return undefined;
 
+  ifNestingDepth++;
   const condInstr = compileExpr(components.condition);
+  ifNestingDepth--;
   if (!condInstr) return undefined;
 
+  ifNestingDepth++;
   const thenInstr = compileExpr(components.thenExpr);
+  ifNestingDepth--;
   if (!thenInstr) return undefined;
 
+  ifNestingDepth++;
   const elseInstr = compileExpr(components.elseExpr);
+  ifNestingDepth--;
   if (!elseInstr) return undefined;
 
   return buildConditional(condInstr, thenInstr, elseInstr);
@@ -98,11 +118,11 @@ function storeBranchResults(
   elseBranch: Instruction[],
 ): Instruction[] {
   return [
-    ...loadAndStore(910),
+    ...loadAndStore(getConditionAddress()),
     ...thenBranch.slice(0, -1),
-    ...loadAndStore(911),
+    ...loadAndStore(getThenAddress()),
     ...elseBranch.slice(0, -1),
-    ...loadAndStore(912),
+    ...loadAndStore(getElseAddress()),
   ];
 }
 
@@ -112,13 +132,13 @@ function computeThenPart(): Instruction[] {
       opcode: OpCode.Load,
       variant: Variant.Direct,
       operand1: 0,
-      operand2: 910,
+      operand2: getConditionAddress(),
     },
     {
       opcode: OpCode.Load,
       variant: Variant.Direct,
       operand1: 2,
-      operand2: 911,
+      operand2: getThenAddress(),
     },
     {
       opcode: OpCode.Mul,
@@ -141,7 +161,7 @@ function computeElsePart(): Instruction[] {
       opcode: OpCode.Load,
       variant: Variant.Direct,
       operand1: 2,
-      operand2: 910,
+      operand2: getConditionAddress(),
     },
     {
       opcode: OpCode.Sub,
@@ -153,7 +173,7 @@ function computeElsePart(): Instruction[] {
       opcode: OpCode.Load,
       variant: Variant.Direct,
       operand1: 2,
-      operand2: 912,
+      operand2: getElseAddress(),
     },
     {
       opcode: OpCode.Mul,

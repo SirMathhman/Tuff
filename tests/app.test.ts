@@ -286,4 +286,13 @@ describe("The application - If-else expressions", () => {
   it("should support if-else with false literal condition", () => {
     assertValid("if (false) read U8 else read U8", 99, 42, 99);
   });
+
+  it("should support nested if-else expressions", () => {
+    assertValid(
+      "let x = if ( read Bool ) 1 else if ( read Bool ) 2 else 3; x",
+      1,
+      1,
+      99,
+    );
+  });
 });
