@@ -6,10 +6,36 @@ import {
   buildStoreAndHalt,
 } from "./instruction-primitives";
 
-function extractReassignmentBase(
+function findCompoundOperator(
   source: string,
-):
-  | { bindingScope: string; remaining: string; equalsIndex: number }
+  equalsIndex: number,
+): { operator: string; opIndex: number } | undefined {
+  if (equalsIndex === -1) return undefined;
+
+  // Check if there's an operator before the '='
+  if (equalsIndex === 0) return undefined;
+
+  const charBefore = source[equalsIndex - 1];
+  if (
+    charBefore === "+" ||
+    charBefore === "-" ||
+    charBefore === "*" ||
+    charBefore === "/"
+  ) {
+    return { operator: charBefore, opIndex: equalsIndex - 1 };
+  }
+
+  return undefined;
+}
+
+function extractReassignmentBase(source: string):
+  | {
+      bindingScope: string;
+      remaining: string;
+      equalsIndex: number;
+      isCompound: boolean;
+      compoundOp?: string;
+    }
   | undefined {
   const trimmed = source.trim();
   const firstSemicolonIndex = findChar(trimmed, ";");
@@ -19,8 +45,18 @@ function extractReassignmentBase(
   const equalsIndex = findChar(bindingScope, "=");
   if (equalsIndex === -1) return undefined;
 
+  // Check for compound operator (+=, -=, *=, /=)
+  const compound = findCompoundOperator(bindingScope, equalsIndex);
+  const isCompound = compound !== undefined;
+
   const remaining = trimmed.substring(firstSemicolonIndex + 1).trim();
-  return { bindingScope, remaining, equalsIndex };
+  return {
+    bindingScope,
+    remaining,
+    equalsIndex,
+    isCompound,
+    compoundOp: compound?.operator,
+  };
 }
 
 function isValidIdentifier(name: string): boolean {
@@ -36,9 +72,20 @@ function extractLeftAndExprParts(
   base: ReturnType<typeof extractReassignmentBase>,
 ): { leftSide: string; exprPart: string; remaining: string } | undefined {
   if (!base) return undefined;
-  const { bindingScope, remaining, equalsIndex } = base;
-  const leftSide = bindingScope.substring(0, equalsIndex).trim();
-  const exprPart = bindingScope.substring(equalsIndex + 1).trim();
+  const { bindingScope, remaining, equalsIndex, isCompound, compoundOp } = base;
+
+  // For compound operators, the left side ends at the operator, not the equals
+  const leftEndIndex = isCompound ? equalsIndex - 1 : equalsIndex;
+  const leftSide = bindingScope.substring(0, leftEndIndex).trim();
+  const rightStartIndex = equalsIndex + 1;
+  const exprPart = bindingScope.substring(rightStartIndex).trim();
+
+  // If compound, wrap the expression as: leftSide op exprPart
+  if (isCompound && compoundOp) {
+    const wrappedExpr = `${leftSide} ${compoundOp} ${exprPart}`;
+    return { leftSide, exprPart: wrappedExpr, remaining };
+  }
+
   return { leftSide, exprPart, remaining };
 }
 

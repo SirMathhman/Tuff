@@ -370,13 +370,36 @@ export function parseAddExpressionConstantLeft(
   if (leftNum === undefined) return undefined;
 
   // Check if right is "read U8"
-  if (!rightPart.startsWith("read")) return undefined;
+  if (rightPart.startsWith("read")) {
+    const rightInstructions = parseReadInstruction(rightPart);
+    if (!rightInstructions) return undefined;
 
-  const rightInstructions = parseReadInstruction(rightPart);
-  if (!rightInstructions) return undefined;
+    // Constant on left, read on right
+    return buildConstantAddReadInstructions(leftNum);
+  }
 
-  // Constant on left, read on right
-  return buildConstantAddReadInstructions(leftNum);
+  // Try to parse right as a constant or arithmetic expression
+  const rightNum = parseNumberWithSuffix(rightPart);
+  if (rightNum !== undefined) {
+    // Both are constants - compile as 5I32 + 2I32
+    return [
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Immediate,
+        operand1: 1,
+        operand2: leftNum,
+      },
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Immediate,
+        operand1: 0,
+        operand2: rightNum,
+      },
+      ...buildStoreHaltInstructions(OpCode.Add),
+    ];
+  }
+
+  return undefined;
 }
 
 export function parseArithmeticOrLiteral(

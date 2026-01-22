@@ -5,11 +5,50 @@ import {
   extractDereferenceTarget,
   isArrayIndexing,
   extractArrayIndexComponents,
+  findOperatorIndex,
+  parseReadInstruction,
 } from "./parser";
 import { buildStoreHaltInstructions } from "./types";
 import { type VariableContext } from "./variable-types";
 import { resolveVariable } from "./let-binding";
 import { splitByAddOperator } from "./operator-parsing";
+import { compileNoContext } from "./arithmetic-parsing";
+
+function splitBySubOperator(
+  source: string,
+): { leftPart: string; rightPart: string } | undefined {
+  const minusIndex = findOperatorIndex(source, "-");
+  if (minusIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, minusIndex).trim();
+  const rightPart = source.substring(minusIndex + 1).trim();
+
+  return { leftPart, rightPart };
+}
+
+function splitByMulOperator(
+  source: string,
+): { leftPart: string; rightPart: string } | undefined {
+  const mulIndex = findOperatorIndex(source, "*");
+  if (mulIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, mulIndex).trim();
+  const rightPart = source.substring(mulIndex + 1).trim();
+
+  return { leftPart, rightPart };
+}
+
+function splitByDivOperator(
+  source: string,
+): { leftPart: string; rightPart: string } | undefined {
+  const divIndex = findOperatorIndex(source, "/");
+  if (divIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, divIndex).trim();
+  const rightPart = source.substring(divIndex + 1).trim();
+
+  return { leftPart, rightPart };
+}
 
 function resolveArrayIndexing(
   part: string,
@@ -126,42 +165,169 @@ export function tryResolveVariableAtom(
   ];
 }
 
-export function parseAddExpressionWithContext(
-  source: string,
+function resolveVariableOperand(
+  part: string,
   context: VariableContext,
 ): Instruction[] | undefined {
-  const parts = splitByAddOperator(source);
+  const varInstructions = tryResolveVariableAtom(part, context, 0);
+  if (varInstructions) return varInstructions;
+  return undefined;
+}
+
+function resolveNumberOperand(part: string): Instruction[] | undefined {
+  const num = parseNumberWithSuffix(part);
+  if (num !== undefined) {
+    return [
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Immediate,
+        operand1: 0,
+        operand2: num,
+      },
+    ];
+  }
+  return undefined;
+}
+
+function resolveReadOperand(part: string): Instruction[] | undefined {
+  if (!part.startsWith("read")) return undefined;
+  const readInstructions = parseReadInstruction(part);
+  if (readInstructions) {
+    return [
+      ...readInstructions.slice(0, -1),
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Direct,
+        operand1: 0,
+        operand2: 901,
+      },
+    ];
+  }
+  return undefined;
+}
+
+function resolveArithmeticOperand(part: string): Instruction[] | undefined {
+  const contextFreeResult = compileNoContext(part);
+  if (contextFreeResult && contextFreeResult.length > 0) {
+    return [
+      {
+        opcode: OpCode.Store,
+        variant: Variant.Direct,
+        operand1: 1,
+        operand2: 951,
+      },
+      ...contextFreeResult.slice(0, -1),
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Direct,
+        operand1: 1,
+        operand2: 951,
+      },
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Direct,
+        operand1: 0,
+        operand2: 900,
+      },
+    ];
+  }
+  return undefined;
+}
+
+function resolveRightOperand(
+  part: string,
+  context: VariableContext,
+): Instruction[] | undefined {
+  // Try to resolve as a variable
+  const varResult = resolveVariableOperand(part, context);
+  if (varResult) return varResult;
+
+  // Try to resolve as a number
+  const numResult = resolveNumberOperand(part);
+  if (numResult) return numResult;
+
+  // Try to resolve as a read expression
+  const readResult = resolveReadOperand(part);
+  if (readResult) return readResult;
+
+  // Try to resolve as a context-free arithmetic expression
+  const arithmeticResult = resolveArithmeticOperand(part);
+  if (arithmeticResult) return arithmeticResult;
+
+  return undefined;
+}
+
+function parseArithmeticExpressionWithContext(
+  source: string,
+  context: VariableContext,
+  splitFunc: (
+    source: string,
+  ) => { leftPart: string; rightPart: string } | undefined,
+  opcode: OpCode,
+): Instruction[] | undefined {
+  const parts = splitFunc(source);
   if (!parts) return undefined;
 
   const { leftPart, rightPart } = parts;
-
-  // Try to resolve left as a variable
   const leftVarInstructions = tryResolveVariableAtom(leftPart, context, 1);
   if (leftVarInstructions) {
-    // Left is a variable, try to resolve right as variable or number
-    const rightVarInstructions = tryResolveVariableAtom(rightPart, context, 0);
-    if (rightVarInstructions) {
+    const rightInstructions = resolveRightOperand(rightPart, context);
+    if (rightInstructions) {
       return [
         ...leftVarInstructions,
-        ...rightVarInstructions,
-        ...buildStoreHaltInstructions(OpCode.Add),
-      ];
-    }
-
-    const rightNum = parseNumberWithSuffix(rightPart);
-    if (rightNum !== undefined) {
-      return [
-        ...leftVarInstructions,
-        {
-          opcode: OpCode.Load,
-          variant: Variant.Immediate,
-          operand1: 0,
-          operand2: rightNum,
-        },
-        ...buildStoreHaltInstructions(OpCode.Add),
+        ...rightInstructions,
+        ...buildStoreHaltInstructions(opcode),
       ];
     }
   }
 
   return undefined;
+}
+
+export function parseAddExpressionWithContext(
+  source: string,
+  context: VariableContext,
+): Instruction[] | undefined {
+  return parseArithmeticExpressionWithContext(
+    source,
+    context,
+    splitByAddOperator,
+    OpCode.Add,
+  );
+}
+
+export function parseSubExpressionWithContext(
+  source: string,
+  context: VariableContext,
+): Instruction[] | undefined {
+  return parseArithmeticExpressionWithContext(
+    source,
+    context,
+    splitBySubOperator,
+    OpCode.Sub,
+  );
+}
+
+export function parseMulExpressionWithContext(
+  source: string,
+  context: VariableContext,
+): Instruction[] | undefined {
+  return parseArithmeticExpressionWithContext(
+    source,
+    context,
+    splitByMulOperator,
+    OpCode.Mul,
+  );
+}
+
+export function parseDivExpressionWithContext(
+  source: string,
+  context: VariableContext,
+): Instruction[] | undefined {
+  return parseArithmeticExpressionWithContext(
+    source,
+    context,
+    splitByDivOperator,
+    OpCode.Div,
+  );
 }

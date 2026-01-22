@@ -474,3 +474,53 @@ describe("The application - Slices", () => {
     );
   });
 });
+
+describe("The application - Compound assignments", () => {
+  it("should support += operator with constants", () => {
+    assertValid("let mut x = 10I32; x += 5I32; x", 15);
+  });
+
+  it("should support += operator with read expressions", () => {
+    assertValid("let mut x = 10I32; x += read I32; x", 25, 15);
+  });
+
+  it("should support -= operator with constants", () => {
+    assertValid("let mut x = 20I32; x -= 5I32; x", 15);
+  });
+
+  it("should support -= operator with read expressions", () => {
+    assertValid("let mut x = 20I32; x -= read I32; x", 10, 10);
+  });
+
+  it("should support *= operator with constants", () => {
+    assertValid("let mut x = 5I32; x *= 3I32; x", 15);
+  });
+
+  it("should support *= operator with read expressions", () => {
+    assertValid("let mut x = 5I32; x *= read I32; x", 20, 4);
+  });
+
+  it("should support /= operator with constants", () => {
+    assertValid("let mut x = 20I32; x /= 4I32; x", 5);
+  });
+
+  it("should support /= operator with read expressions", () => {
+    assertValid("let mut x = 20I32; x /= read I32; x", 5, 4);
+  });
+
+  it("should support chained compound assignments", () => {
+    assertValid("let mut x = 10I32; x += 5I32; x -= 3I32; x", 12);
+  });
+
+  it("should support compound assignment with arithmetic expressions", () => {
+    assertValid("let mut x = 10I32; x += 5I32 + 2I32; x", 17);
+  });
+
+  it("should support compound assignment in variable context", () => {
+    assertValid("let y = 5I32; let mut x = 10I32; x += y; x", 15);
+  });
+
+  it("should reject compound assignment on non-mutable variables", () => {
+    assertInvalid("let x = 10I32; x += 5I32; x");
+  });
+});

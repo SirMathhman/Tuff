@@ -25,7 +25,12 @@ import {
   buildDereferenceInstructions,
   parseArrayIndexReassignmentComponents,
 } from "./reassignment-parsing";
-import { parseAddExpressionWithContext } from "./expression-with-context";
+import {
+  parseAddExpressionWithContext,
+  parseSubExpressionWithContext,
+  parseMulExpressionWithContext,
+  parseDivExpressionWithContext,
+} from "./expression-with-context";
 import { isArrayLiteral, parseArrayLiteral } from "./array-parsing";
 import {
   buildLoadDirect,
@@ -240,10 +245,16 @@ export function tryAddExpressionWithContext(
   trimmed: string,
   context: VariableContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
-  const addExprWithContext = parseAddExpressionWithContext(trimmed, context);
-  if (!addExprWithContext) return undefined;
+  // Try all arithmetic operators with context
+  const exprResult =
+    parseAddExpressionWithContext(trimmed, context) ||
+    parseSubExpressionWithContext(trimmed, context) ||
+    parseMulExpressionWithContext(trimmed, context) ||
+    parseDivExpressionWithContext(trimmed, context);
+
+  if (!exprResult) return undefined;
   return {
-    instructions: addExprWithContext,
+    instructions: exprResult,
     context,
   };
 }
