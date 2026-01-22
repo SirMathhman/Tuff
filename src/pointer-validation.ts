@@ -201,6 +201,28 @@ function checkMutableReferencesConflict(
   return undefined;
 }
 
+function checkMultipleMutableReferences(
+  source: string,
+): CompileError | undefined {
+  const mutRefs = findMutableReferencesInString(source);
+  const seenVars = new Set<string>();
+
+  for (const varName of mutRefs) {
+    if (seenVars.has(varName)) {
+      return {
+        cause: `Cannot create multiple mutable references to '${varName}'`,
+        reason:
+          "A variable can only have one mutable reference (exclusive borrow) at a time",
+        fix: "Use only one mutable reference or convert to immutable references",
+        first: { line: 0, column: 0, length: source.length },
+      };
+    }
+    seenVars.add(varName);
+  }
+
+  return undefined;
+}
+
 function checkMutableReferenceConstraints(
   source: string,
 ): CompileError | undefined {
@@ -228,6 +250,10 @@ export function detectPointerTypeErrors(
   // Check for mixed mutable and immutable references first
   const mixedRefError = checkMutableReferencesConflict(source);
   if (mixedRefError) return mixedRefError;
+
+  // Check for multiple mutable references to same variable
+  const multiMutError = checkMultipleMutableReferences(source);
+  if (multiMutError) return multiMutError;
 
   // Check mutable reference constraints
   const mutRefError = checkMutableReferenceConstraints(source);
