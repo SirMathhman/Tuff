@@ -145,21 +145,24 @@ public final class Vm {
 
 	private static CycleResult executeSingleCycle(@SuppressWarnings("unused") Instruction[] source,
 			ExecutionContext ctx) {
-		var encodedInstruction = ctx.memory[ctx.programCounter];
+		var memory = ctx.memory;
+		var pc = ctx.programCounter;
+		var registers = ctx.registers;
+		var encodedInstruction = memory[pc];
 		var operation = (int) ((encodedInstruction >>> 56) & 0xff);
 		var variant = (int) ((encodedInstruction >>> 48) & 0xff);
 		var firstOperand = sign_extend_24bit(encodedInstruction & 0xFFFFFFL);
 		var secondOperand = sign_extend_24bit((encodedInstruction >>> 24) & 0xFFFFFFL);
 		var op = Operation.values()[operation];
 		var var = Variant.values()[variant];
-		var inctx = new InstructionContext(ctx.registers, ctx.memory, op, var, new Operands(firstOperand, secondOperand));
+		var inctx = new InstructionContext(registers, memory, op, var, new Operands(firstOperand, secondOperand));
 		var shouldJump = executeInstruction(inctx, ctx.read, ctx.write);
-		var nextPC = op == Operation.Halt ? ctx.programCounter
-				: (shouldJump ? resolveJumpTarget(var, ctx.memory, (int) secondOperand) : ctx.programCounter + 1);
+		var nextPC = op == Operation.Halt ? pc
+				: (shouldJump ? resolveJumpTarget(var, memory, (int) secondOperand) : pc + 1);
 		if (ctx.traceSink != null) {
 			var decoded = new DecodedInstruction(op, var, firstOperand, secondOperand);
-			var cycleInfo = new CycleInfo(ctx.cycle, ctx.programCounter, shouldJump, nextPC);
-			var traceData = new TraceData(encodedInstruction, decoded, cycleInfo, ctx.registers, ctx.memory);
+			var cycleInfo = new CycleInfo(ctx.cycle, pc, shouldJump, nextPC);
+			var traceData = new TraceData(encodedInstruction, decoded, cycleInfo, registers, memory);
 			recordTrace(ctx.traceSink, ctx.traceConfig, traceData);
 		}
 		return new CycleResult(nextPC, op == Operation.Halt);
@@ -176,14 +179,29 @@ public final class Vm {
 	}
 
 	private static void recordTrace(TraceSink traceSink, TraceConfig traceConfig, TraceData data) {
-		var instruction = new TraceInstruction(data.encodedInstruction(), data.decoded().op(), data.decoded().var(),
-				data.decoded().firstOperand(), data.decoded().secondOperand());
+		var instruction = buildTraceInstruction(data);
 		var machine = createMachineSnapshot(data.registers(), data.memory(),
 				traceConfig != null ? traceConfig : TRACE_DISABLED);
-		var flow = new TraceFlow(data.cycleInfo().shouldJump(), data.cycleInfo().nextPC());
-		var cycleSnapshot = new TraceCycle(data.cycleInfo().cycle(), data.cycleInfo().programCounter(), instruction,
-				machine, flow);
+		var flow = buildTraceFlow(data);
+		var cycleSnapshot = buildTraceCycle(data, instruction, machine, flow);
 		traceSink.onCycle(cycleSnapshot, traceConfig != null ? traceConfig : TRACE_DISABLED);
+	}
+
+	private static TraceInstruction buildTraceInstruction(TraceData data) {
+		var decoded = data.decoded();
+		return new TraceInstruction(data.encodedInstruction(), decoded.op(), decoded.var(),
+				decoded.firstOperand(), decoded.secondOperand());
+	}
+
+	private static TraceFlow buildTraceFlow(TraceData data) {
+		var cycleInfo = data.cycleInfo();
+		return new TraceFlow(cycleInfo.shouldJump(), cycleInfo.nextPC());
+	}
+
+	private static TraceCycle buildTraceCycle(TraceData data, TraceInstruction instruction,
+			TraceMachine machine, TraceFlow flow) {
+		var cycleInfo = data.cycleInfo();
+		return new TraceCycle(cycleInfo.cycle(), cycleInfo.programCounter(), instruction, machine, flow);
 	}
 
 	private static TraceMachine createMachineSnapshot(long[] registers, long[] memory, TraceConfig cfg) {

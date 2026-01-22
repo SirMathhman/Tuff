@@ -95,33 +95,57 @@ public final class ArrayFieldAccessBase {
 	 * which part of the array type to extract (init=1, length=2).
 	 */
 	public static Result<Void, CompileError> handleArrayFieldAccess(Context ctx) {
-		var declaredType = ctx.decl.declaredType();
-
-		// If no explicit type, try to infer from value expression
+		var declaredType = resolveDeclaredType(ctx.decl);
 		if (declaredType == null) {
-			var valueExpr = ctx.decl.valueExpr().trim();
-			if (valueExpr.startsWith("&")) {
-				// It's a reference - extract the referenced variable
-				var refName = valueExpr.substring(1).trim();
-				if (refName.startsWith("mut ")) {
-					refName = refName.substring(4).trim();
-				}
-				// Look up the type of the referenced variable
-				var knownTypes = LetBindingProcessor.getVariableTypes();
-				var refType = knownTypes.get(refName);
-				if (refType != null) {
-					// Reference type is *<original type>
-					declaredType = "*" + refType;
-				} else {
-					return null;
-				}
-			} else {
-				return null;
-			}
+			return null;
 		}
 
-		// Handle both direct array types [Type; InitCount; TotalCount] and pointer
-		// types
+		var arrayTypeStr = extractArrayTypeString(declaredType);
+		if (arrayTypeStr == null) {
+			return null;
+		}
+
+		var parts = parseArrayTypeParts(arrayTypeStr);
+		if (parts == null) {
+			return null;
+		}
+
+		var fieldValue = ctx.extractor.apply(parts, ctx.fieldName);
+		if (fieldValue == null) {
+			return Result.err(new CompileError("Invalid array " + ctx.fieldName + ": could not extract"));
+		}
+
+		LetBindingProcessor.getVariableTypes().put(ctx.varName, declaredType);
+
+		var result = ctx.continuation.replaceAll(
+				"\\b" + java.util.regex.Pattern.quote(ctx.varName) + "\\." + ctx.fieldName + "\\b",
+				fieldValue);
+
+		var contResult = App.parseExpressionWithRead(result, ctx.functionRegistry);
+		return contResult.match(
+				expr -> App.generateInstructions(expr, ctx.instructions).map(ignored -> (Void) null),
+				Result::err);
+	}
+
+	private static String resolveDeclaredType(VariableDecl decl) {
+		var declaredType = decl.declaredType();
+		if (declaredType != null) {
+			return declaredType;
+		}
+		var valueExpr = decl.valueExpr().trim();
+		if (!valueExpr.startsWith("&")) {
+			return null;
+		}
+		var refName = valueExpr.substring(1).trim();
+		if (refName.startsWith("mut ")) {
+			refName = refName.substring(4).trim();
+		}
+		var knownTypes = LetBindingProcessor.getVariableTypes();
+		var refType = knownTypes.get(refName);
+		return refType != null ? "*" + refType : null;
+	}
+
+	private static String extractArrayTypeString(String declaredType) {
 		var arrayTypeStr = declaredType;
 		if (declaredType.startsWith("*")) {
 			arrayTypeStr = declaredType.substring(1).trim();
@@ -129,37 +153,15 @@ public final class ArrayFieldAccessBase {
 				arrayTypeStr = arrayTypeStr.substring(4).trim();
 			}
 		}
-
 		if (!arrayTypeStr.startsWith("[") || !arrayTypeStr.endsWith("]")) {
 			return null;
 		}
+		return arrayTypeStr;
+	}
 
-		// Extract the array type format: [Type; InitCount; TotalCount]
+	private static ArrayList<String> parseArrayTypeParts(String arrayTypeStr) {
 		var inner = arrayTypeStr.substring(1, arrayTypeStr.length() - 1).trim();
 		var parts = DepthAwareSplitter.splitByDelimiterAtDepthZero(inner, ';');
-		if (parts.size() != 3) {
-			return null;
-		}
-
-		// Extract the value using the provided function
-		var fieldValue = ctx.extractor.apply(parts, ctx.fieldName);
-		if (fieldValue == null) {
-			return Result.err(new CompileError("Invalid array " + ctx.fieldName + ": could not extract"));
-		}
-
-		// Track this variable's type for future references
-		LetBindingProcessor.getVariableTypes().put(ctx.varName, declaredType);
-
-		// Replace all occurrences of varName.fieldName with the field value
-		var result = ctx.continuation.replaceAll(
-				"\\b" + java.util.regex.Pattern.quote(ctx.varName) + "\\." + ctx.fieldName + "\\b",
-				fieldValue);
-
-		// Parse the substituted continuation
-		var contResult = App.parseExpressionWithRead(result,
-				ctx.functionRegistry);
-		return contResult.match(
-				expr -> App.generateInstructions(expr, ctx.instructions).map(ignored -> (Void) null),
-				Result::err);
+		return parts.size() == 3 ? parts : null;
 	}
 }

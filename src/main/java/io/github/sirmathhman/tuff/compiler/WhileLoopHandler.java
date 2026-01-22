@@ -320,35 +320,23 @@ public final class WhileLoopHandler {
 		return applyComparisonOp(operator, instr);
 	}
 
+	private static final String[] COMPARISON_OPERATORS = {"==", "!=", "<=", ">=", "<", ">" };
+
 	private static String[] findComparisonParts(String condition) {
-		if (condition.contains("=="))
-			return condition.split("==", 2);
-		if (condition.contains("!="))
-			return condition.split("!=", 2);
-		if (condition.contains("<="))
-			return condition.split("<=", 2);
-		if (condition.contains(">="))
-			return condition.split(">=", 2);
-		if (condition.contains("<"))
-			return condition.split("<", 2);
-		if (condition.contains(">"))
-			return condition.split(">", 2);
+		for (var op : COMPARISON_OPERATORS) {
+			if (condition.contains(op)) {
+				return condition.split(java.util.regex.Pattern.quote(op), 2);
+			}
+		}
 		return null;
 	}
 
 	private static String findComparisonOperator(String condition) {
-		if (condition.contains("=="))
-			return "==";
-		if (condition.contains("!="))
-			return "!=";
-		if (condition.contains("<="))
-			return "<=";
-		if (condition.contains(">="))
-			return ">=";
-		if (condition.contains("<"))
-			return "<";
-		if (condition.contains(">"))
-			return ">";
+		for (var op : COMPARISON_OPERATORS) {
+			if (condition.contains(op)) {
+				return op;
+			}
+		}
 		return null;
 	}
 
