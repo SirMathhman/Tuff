@@ -24,4 +24,8 @@ describe("The application", () => {
   it("should halt with exit code 100 from U8 literal", () => {
     assertValid("100U8", 100);
   });
+
+  it("should read a U8 value from stdin and halt with it", () => {
+    assertValid("read U8", 100, 100);
+  });
 });

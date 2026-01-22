@@ -44,27 +44,15 @@ export function err<X>(error: X): Err<X> {
   return { ok: false, error };
 }
 
-export function compile(source: string): Result<Instruction[], CompileError> {
-  // TODO, this will get rather complex!
-  // This is the function you should probably implement
-
-  const trimmed = source.trim();
-
-  // Empty source: return empty instructions (implicit halt with 0)
-  if (!trimmed) {
-    return ok([]);
-  }
-
-  // Try to parse as a number with optional type suffix
-  // Remove type suffix if present (U8, I16, etc.) and parse
-  let numStr = trimmed;
+function parseNumberWithSuffix(source: string): number | undefined {
+  let numStr = source;
 
   // Check for type suffix (capital letter followed by digits)
-  for (let i = trimmed.length - 1; i >= 0; i--) {
-    const char = trimmed[i];
+  for (let i = source.length - 1; i >= 0; i--) {
+    const char = source[i];
     if (char && char >= "0" && char <= "9") continue;
     if (char && char >= "A" && char <= "Z") {
-      numStr = trimmed.substring(0, i);
+      numStr = source.substring(0, i);
     }
     break;
   }
@@ -82,15 +70,84 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   if (isValidNumber) {
     const num = parseInt(numStr, 10);
     if (!isNaN(num)) {
-      // Create a halt instruction with the number as immediate value
-      return ok([
-        {
-          opcode: OpCode.Halt,
-          variant: Variant.Immediate,
-          operand1: num,
-        },
-      ]);
+      return num;
     }
+  }
+}
+
+function parseReadInstruction(source: string): Instruction[] | undefined {
+  const parts: string[] = [];
+  let current = "";
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    if (char !== " " && char !== "\t") {
+      current += char;
+      continue;
+    }
+    if (current.length > 0) {
+      parts.push(current);
+      current = "";
+    }
+  }
+  if (current.length > 0) {
+    parts.push(current);
+  }
+
+  if (parts.length !== 2 || parts[0] !== "read") {
+    return undefined;
+  }
+
+  // Read from stdin into register 0, store in memory at 0, then halt
+  return [
+    {
+      opcode: OpCode.In,
+      variant: Variant.Immediate,
+      operand1: 0,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 0,
+    },
+    {
+      opcode: OpCode.Halt,
+      variant: Variant.Direct,
+      operand1: 0,
+    },
+  ];
+}
+
+export function compile(source: string): Result<Instruction[], CompileError> {
+  // TODO, this will get rather complex!
+  // This is the function you should probably implement
+
+  const trimmed = source.trim();
+
+  // Empty source: return empty instructions (implicit halt with 0)
+  if (!trimmed) {
+    return ok([]);
+  }
+
+  // Check for read instruction
+  if (trimmed.startsWith("read")) {
+    const readResult = parseReadInstruction(trimmed);
+    if (readResult) {
+      return ok(readResult);
+    }
+  }
+
+  // Try to parse as a number with optional type suffix
+  const num = parseNumberWithSuffix(trimmed);
+  if (num !== undefined) {
+    // Create a halt instruction with the number as immediate value
+    return ok([
+      {
+        opcode: OpCode.Halt,
+        variant: Variant.Immediate,
+        operand1: num,
+      },
+    ]);
   }
 
   return ok([]);
