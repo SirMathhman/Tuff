@@ -545,44 +545,80 @@ export function detectIfBranchTypeMismatch(
   return undefined;
 }
 
-export function detectNonMutableReassignment(
-  source: string,
-  context: VariableContext,
-): CompileError | undefined {
-  // Skip past all let bindings to find reassignments
+function skipLetBindings(source: string): string {
   let current = source;
-
-  // Skip let bindings
   while (current.length > 0) {
     current = current.trim();
     if (!current.startsWith("let")) break;
-
     const comp = parseLetComponents(current);
     if (!comp) break;
-
     current = comp.remaining;
   }
+  return current;
+}
 
-  // Now check for reassignments in the remaining code
+function validateReassignments(
+  source: string,
+  context: VariableContext,
+  validator: (
+    varName: string,
+    exprPart: string,
+    binding: (typeof context)[number] | undefined,
+  ) => CompileError | undefined,
+): CompileError | undefined {
+  let current = skipLetBindings(source);
+
   while (current.length > 0) {
     current = current.trim();
     const reassignComp = parseReassignmentComponents(current);
     if (!reassignComp) break;
 
-    // Check if this variable exists and is not mutable
     const binding = context.find((b) => b.name === reassignComp.varName);
-    if (binding && !binding.mutable) {
-      return {
-        cause: `Cannot reassign non-mutable variable '${reassignComp.varName}'`,
-        reason:
-          "Variables must be declared with 'let mut' keyword to allow reassignment",
-        fix: `Change 'let ${reassignComp.varName}' to 'let mut ${reassignComp.varName}'`,
-        first: { line: 0, column: 0, length: source.length },
-      };
-    }
+    const error = validator(reassignComp.varName, reassignComp.exprPart, binding);
+    if (error) return error;
 
     current = reassignComp.remaining;
   }
 
   return undefined;
+}
+
+export function detectNonMutableReassignment(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  return validateReassignments(source, context, (varName, _exprPart, binding) => {
+    if (binding && !binding.mutable) {
+      return {
+        cause: `Cannot reassign non-mutable variable '${varName}'`,
+        reason:
+          "Variables must be declared with 'let mut' keyword to allow reassignment",
+        fix: `Change 'let ${varName}' to 'let mut ${varName}'`,
+        first: { line: 0, column: 0, length: source.length },
+      };
+    }
+    return undefined;
+  });
+}
+
+export function detectReassignmentTypeChange(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  return validateReassignments(source, context, (varName, exprPart, binding) => {
+    if (!binding || !binding.type) {
+      return undefined;
+    }
+
+    const newExprType = extractExpressionType(exprPart, context);
+    if (newExprType && newExprType !== binding.type) {
+      return {
+        cause: `Cannot reassign variable '${varName}' with incompatible type: ${newExprType} vs ${binding.type}`,
+        reason: "Reassigned value must have the same type as the variable",
+        fix: `Ensure the reassigned value has type ${binding.type}`,
+        first: { line: 0, column: 0, length: source.length },
+      };
+    }
+    return undefined;
+  });
 }

@@ -51,6 +51,7 @@ import {
   detectInvalidIfCondition,
   detectIfBranchTypeMismatch,
   detectNonMutableReassignment,
+  detectReassignmentTypeChange,
 } from "./validation";
 
 export interface Ok<T> {
@@ -568,6 +569,8 @@ function performValidationChecks(trimmed: string): CompileError | undefined {
   const preContext = buildContextFromLetBindings(trimmed);
   const mutabilityError = detectNonMutableReassignment(trimmed, preContext);
   if (mutabilityError) return mutabilityError;
+  const typeChangeError = detectReassignmentTypeChange(trimmed, preContext);
+  if (typeChangeError) return typeChangeError;
   return undefined;
 }
 

@@ -77,10 +77,15 @@ export function buildContextFromLetBindings(source: string): VariableContext {
     const comp = parseLetComponents(remaining);
     if (!comp) break;
 
+    let varType = comp.typeAnnotation;
+    if (!varType) {
+      varType = extractExpressionType(comp.exprPart, context);
+    }
+
     context.push({
       name: comp.varName,
       memoryAddress: 904 + context.length,
-      type: comp.typeAnnotation,
+      type: varType,
       mutable: comp.mutable,
     });
 

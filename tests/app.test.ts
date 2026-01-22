@@ -311,4 +311,8 @@ describe("The application - Mutable variables", () => {
   it("should reject reassignment of non-mutable variables", () => {
     assertInvalid("let x = 0; x = read I32; x");
   });
+
+  it("should reject reassignment with type change", () => {
+    assertInvalid("let mut x = read Bool; x = read I32; x");
+  });
 });
