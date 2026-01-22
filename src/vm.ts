@@ -5,13 +5,14 @@ export function execute(
   instructions: Instruction[],
   read: () => number,
   write: (value: number) => void,
-) : number {
+  maxInstructions: number = 1000,
+): number {
   let programCounter = 0;
   let registers: number[] = Array(4).fill(0);
 
   let memory: number[] = new Array(1024).fill(0);
-  // This VM requires a halt instruction. If we hit the last index of memory, we loop back around.
 
+  // This VM requires a halt instruction. If we hit the last index of memory, we loop back around.
   // Read instructions into memory start at address 0
   for (let i = 0; i < instructions.length; i++) {
     const inst = instructions[i];
@@ -20,9 +21,13 @@ export function execute(
     }
   }
 
-  while (true) {
+  // To prevent the VM running forever, create a simple counter.
+  let currentInstructionCount = 0;
+  while (currentInstructionCount < maxInstructions) {
     const instructionValue = memory[programCounter];
     if (instructionValue === undefined) break;
+
+		currentInstructionCount++;
 
     const decoded = decode(instructionValue);
     const { opcode, variant, operand1, operand2 } = decoded;
@@ -82,23 +87,23 @@ export function execute(
           (registers[operand1] ?? 0) / (registers[operand2] ?? 1);
         break;
       case OpCode.Halt:
-				if (variant === Variant.Immediate) {
-					return operand1;
-				} else if (variant === Variant.Direct) {
-					const exitCode = memory[operand1];
-					if (exitCode !== undefined) {
-						return exitCode;
-					}
-				} else if (variant === Variant.Indirect) {
-					const addrRef = operand1;
-					if (addrRef < memory.length) {
-						const address = memory[addrRef];
-						if (address !== undefined && address < memory.length) {
-							return memory[address] ?? 0;
-						}
-					}
-				}
-				break;
+        if (variant === Variant.Immediate) {
+          return operand1;
+        } else if (variant === Variant.Direct) {
+          const exitCode = memory[operand1];
+          if (exitCode !== undefined) {
+            return exitCode;
+          }
+        } else if (variant === Variant.Indirect) {
+          const addrRef = operand1;
+          if (addrRef < memory.length) {
+            const address = memory[addrRef];
+            if (address !== undefined && address < memory.length) {
+              return memory[address] ?? 0;
+            }
+          }
+        }
+        break;
       case OpCode.In:
         registers[operand1] = read();
         break;
@@ -201,14 +206,14 @@ export function execute(
     }
 
     programCounter++;
-		// wrap around to the start
-		if (programCounter >= memory.length) {
-			programCounter = 0;
-		}
+    // wrap around to the start
+    if (programCounter >= memory.length) {
+      programCounter = 0;
+    }
   }
 
-	// Somehow we get here without a halt, return 0
-	return 0;
+  // Somehow we get here without a halt, return 0
+  return 0;
 }
 
 export enum OpCode {

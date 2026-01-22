@@ -23,6 +23,19 @@ export interface Error {
 	fix : string
 }
 
+export interface Location {
+	line : number,
+	column : number,
+	length : number,
+}
+
+export interface CompileError extends Error {
+	first : Location,
+
+	// Sometimes, we might have two different places that conflict with each other
+	second? : Location
+}
+
 export function ok<T>(value : T) : Ok<T> {
 	return { ok: true, value };
 }
@@ -31,14 +44,14 @@ export function err<X>(error : X) : Err<X> {
 	return { ok: false, error };
 }
 
-export function compile(source: string): Result<Instruction[], Error> {
+export function compile(source: string): Result<Instruction[], CompileError> {
   // TODO, this will get rather complex!
   // This is the function you should probably implement
 
   return ok([]);
 }
 
-export function run (source : string, stdIn : number[]) : Result<number, Error> {
+export function run (source : string, stdIn : number[] = []) : Result<number, Error> {
 	const instructions = compile(source);
 	if (!instructions.ok) {
 		return err(instructions.error);
