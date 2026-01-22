@@ -303,6 +303,12 @@ describe("The application - Pointer type safety", () => {
   });
 
   it("should reject multiple mutable pointers to same variable", () => {
-    assertInvalid("let mut x = read U8; let y = &mut x; let z = &mut x; *y + *z");
+    assertInvalid(
+      "let mut x = read U8; let y = &mut x; let z = &mut x; *y + *z",
+    );
+  });
+
+  it("should reject mixing immutable and mutable references in different order", () => {
+    assertInvalid("let mut x = read U8; let y = &x; let z = &mut x; *y + *z");
   });
 });
