@@ -3,7 +3,7 @@
   "fileExtensions": ["ts", "tsx"],
   "graphVizOptions": {
     "G": {
-      "rankdir": "LR",
+      "rankdir": "TB",
       "splines": "ortho"
     }
   }
