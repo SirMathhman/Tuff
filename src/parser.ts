@@ -10,6 +10,16 @@ function findMatchingParen(source: string, startIndex: number): number {
   return -1;
 }
 
+function findMatchingBrace(source: string, startIndex: number): number {
+  let depth = 1;
+  for (let i = startIndex + 1; i < source.length; i++) {
+    if (source[i] === "{") depth++;
+    if (source[i] === "}") depth--;
+    if (depth === 0) return i;
+  }
+  return -1;
+}
+
 function parseNumberWithSuffix(source: string): number | undefined {
   const suffixIndex = findTypeSuffixIndex(source);
   const numStr = suffixIndex >= 0 ? source.substring(0, suffixIndex) : source;
@@ -247,6 +257,19 @@ export function isParenthesizedExpression(source: string): boolean {
 export function extractParenthesizedContent(source: string): string {
   if (!source.startsWith("(")) return source;
   const closingIndex = findMatchingParen(source, 0);
+  if (closingIndex === -1) return source;
+  return source.substring(1, closingIndex);
+}
+
+export function isBracedExpression(source: string): boolean {
+  if (!source.startsWith("{")) return false;
+  const closingIndex = findMatchingBrace(source, 0);
+  return closingIndex === source.length - 1;
+}
+
+export function extractBracedContent(source: string): string {
+  if (!source.startsWith("{")) return source;
+  const closingIndex = findMatchingBrace(source, 0);
   if (closingIndex === -1) return source;
   return source.substring(1, closingIndex);
 }

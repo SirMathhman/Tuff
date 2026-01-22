@@ -4,6 +4,8 @@ import {
   parseReadInstruction,
   isParenthesizedExpression,
   extractParenthesizedContent,
+  isBracedExpression,
+  extractBracedContent,
   parseSimpleAtom,
   parseRightAtom,
   parseMulExpression,
@@ -208,12 +210,19 @@ function parseRightForSub(part: string): Instruction[] | undefined {
   return undefined;
 }
 
-function parseParenthesizedAtom(
+function parseGroupedAtom(
   source: string,
   targetRegister: number,
 ): Instruction[] | undefined {
-  if (!isParenthesizedExpression(source)) return undefined;
-  const innerExpr = extractParenthesizedContent(source);
+  let innerExpr: string | undefined;
+
+  if (isParenthesizedExpression(source)) {
+    innerExpr = extractParenthesizedContent(source);
+  } else if (isBracedExpression(source)) {
+    innerExpr = extractBracedContent(source);
+  } else {
+    return undefined;
+  }
 
   const innerResult =
     parseAddExpression(innerExpr) || parseSubExpression(innerExpr);
@@ -228,6 +237,13 @@ function parseParenthesizedAtom(
       operand2: 900,
     },
   ];
+}
+
+function parseParenthesizedAtom(
+  source: string,
+  targetRegister: number,
+): Instruction[] | undefined {
+  return parseGroupedAtom(source, targetRegister);
 }
 
 function parseAddExpression(source: string): Instruction[] | undefined {
@@ -305,7 +321,7 @@ function buildReadAddMulInstructions(): Instruction[] {
 }
 
 function parseLeftMulDivAtom(leftPart: string): Instruction[] | undefined {
-  if (isParenthesizedExpression(leftPart)) {
+  if (isParenthesizedExpression(leftPart) || isBracedExpression(leftPart)) {
     return parseParenthesizedAtom(leftPart, 1);
   }
   return parseSimpleAtom(leftPart);
@@ -317,7 +333,7 @@ function parseRightMulDivAtom(rightPart: string): Instruction[] | undefined {
     parseDivExpressionWithParens(rightPart);
   if (rightMulDiv) return rightMulDiv;
 
-  if (isParenthesizedExpression(rightPart)) {
+  if (isParenthesizedExpression(rightPart) || isBracedExpression(rightPart)) {
     return parseParenthesizedAtom(rightPart, 0);
   }
   return parseRightAtom(rightPart);
@@ -328,8 +344,8 @@ function parseMulOrDivExpressionWithParens(
   opcode: OpCode,
   operator: string,
 ): Instruction[] | undefined {
-  // Quick check: if source has no parentheses, use the parser.ts version
-  if (!source.includes("(")) {
+  // Quick check: if source has no parentheses or braces, use the parser.ts version
+  if (!source.includes("(") && !source.includes("{")) {
     return opcode === OpCode.Mul
       ? parseMulExpression(source)
       : parseDivExpression(source);
@@ -375,8 +391,14 @@ function parseAddExpressionReadLeft(
   const leftInstructions = parseReadInstruction(leftPart);
   if (!leftInstructions) return undefined;
 
+  // Unwrap braces if present
+  let unwrappedRightPart = rightPart;
+  if (isBracedExpression(rightPart)) {
+    unwrappedRightPart = extractBracedContent(rightPart);
+  }
+
   // First, try parsing right side as multiplication or division (higher precedence)
-  const mulDivResult = parseRightMulOrDivWithParens(rightPart);
+  const mulDivResult = parseRightMulOrDivWithParens(unwrappedRightPart);
   if (mulDivResult) {
     return [
       ...leftInstructions.slice(0, -1), // Exclude halt from left, leaves value in memory[901]
@@ -386,20 +408,20 @@ function parseAddExpressionReadLeft(
   }
 
   // Try parsing right side as another addition expression (for chaining)
-  const chainedAddition = parseAddExpression(rightPart);
+  const chainedAddition = parseAddExpression(unwrappedRightPart);
   if (chainedAddition) {
     return buildChainedReadAddExpression(chainedAddition);
   }
 
   // Try parsing as a number constant
-  const rightNum = parseNumberWithSuffix(rightPart);
+  const rightNum = parseNumberWithSuffix(unwrappedRightPart);
   if (rightNum !== undefined) {
     // Right side is a number constant
     return buildReadAddConstantInstructions(rightNum);
   }
 
   // Try parsing as read instruction
-  const rightInstructions = parseReadInstruction(rightPart);
+  const rightInstructions = parseReadInstruction(unwrappedRightPart);
   if (!rightInstructions) return undefined;
 
   // Both are reads
@@ -487,6 +509,11 @@ export function compile(source: string): Result<Instruction[], CompileError> {
 
   if (isParenthesizedExpression(trimmed)) {
     const innerExpr = extractParenthesizedContent(trimmed);
+    return compile(innerExpr);
+  }
+
+  if (isBracedExpression(trimmed)) {
+    const innerExpr = extractBracedContent(trimmed);
     return compile(innerExpr);
   }
 

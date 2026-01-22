@@ -87,4 +87,8 @@ describe("The application", () => {
   it("should reject values that overflow unsigned 8-bit", () => {
     assertInvalid("256U8");
   });
+
+  it("should support curly braces as grouping mechanism", () => {
+    assertValid("(read U8 + { read U8 }) / read U8", 2, 10, 2, 6);
+  });
 });
