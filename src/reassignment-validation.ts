@@ -8,9 +8,11 @@ import {
   extractExpressionType,
   type VariableContext,
   type VariableBinding,
+} from "./let-binding";
+import {
   parseReassignmentComponents,
   parseDereferenceReassignmentComponents,
-} from "./let-binding";
+} from "./reassignment-parsing";
 
 function skipLetBindings(source: string): string {
   let current = source;

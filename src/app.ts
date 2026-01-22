@@ -1,4 +1,4 @@
-import { execute, type Instruction } from "./vm";
+import { execute, type Instruction, OpCode, Variant } from "./vm";
 import {
   isParenthesizedExpression,
   extractParenthesizedContent,
@@ -9,6 +9,8 @@ import {
   isReferenceOperator,
   extractReferenceTarget,
   isMutableReference,
+  isArrayIndexing,
+  extractArrayIndexComponents,
 } from "./parser";
 import {
   type CompileError,
@@ -20,15 +22,24 @@ import {
   resolveVariable,
   buildVarRefInstructions,
   buildReferenceAddressInstructions,
-  buildDereferenceInstructions,
+  isVariableMutable,
+  buildContextFromLetBindings,
+} from "./let-binding";
+import {
   parseReassignmentComponents,
   buildReassignmentInstructions,
   parseDereferenceReassignmentComponents,
   buildDereferenceReassignmentInstructions,
-  isVariableMutable,
-  buildContextFromLetBindings,
-} from "./let-binding";
+  buildDereferenceInstructions,
+} from "./reassignment-parsing";
 import { parseAddExpressionWithContext } from "./expression-with-context";
+import { isArrayLiteral, parseArrayLiteral } from "./array-parsing";
+import {
+  buildLoadDirect,
+  buildLoadImmediate,
+  buildStoreDirect,
+  buildStoreAndHalt,
+} from "./instruction-primitives";
 import { parseLetExpression as parseLetExpressionModule } from "./let-expression-parsing";
 import {
   detectVariableShadowing,
@@ -181,8 +192,17 @@ function tryVariableReference(
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
   const varAddress = resolveVariable(context, trimmed);
   if (varAddress === undefined) return undefined;
+
+  // Check if this is an array variable - if so, return the address, not the value
+  const binding = context.find((b) => b.name === trimmed);
+  const isArray = binding && binding.type && binding.type.startsWith("[");
+
+  const instructions = isArray
+    ? buildReferenceAddressInstructions(varAddress) // Return address for arrays
+    : buildVarRefInstructions(varAddress); // Load value for non-arrays
+
   return {
-    instructions: buildVarRefInstructions(varAddress),
+    instructions,
     context,
   };
 }
@@ -208,19 +228,103 @@ function tryBracedExpression(
   return compileWithContext(innerExpr, context);
 }
 
-function tryAllPatterns(
+function tryArrayIndexing(
   trimmed: string,
   context: VariableContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
-  // Try parsing as let expression
-  const letResult = parseLetExpression(trimmed, context);
-  if (letResult) {
-    return {
-      instructions: letResult.instructions,
-      context: letResult.newContext,
-    };
+  if (!isArrayIndexing(trimmed)) return undefined;
+
+  const comp = extractArrayIndexComponents(trimmed);
+  if (!comp) return undefined;
+
+  const arrayAddr = resolveVariable(context, comp.arrayName);
+  if (arrayAddr === undefined) return undefined;
+
+  // Compile the index expression
+  const indexResult = compileWithContext(comp.indexExpr, context);
+  if (!indexResult) return undefined;
+
+  // Strategy:
+  // 1. Compile index expression → result in memory[900]
+  // 2. Load array base address into r0
+  // 3. Load index from memory[900] into r1
+  // 4. Add r0 + r1 → r0 (calculate target address)
+  // 5. Store r0 to temp location (memory[902])
+  // 6. Load indirectly from memory[902] into r1
+  // 7. Store r1 to memory[900] and halt
+  const instructions: Instruction[] = [
+    ...indexResult.instructions.slice(0, -1), // Remove halt, index in memory[900]
+    buildLoadImmediate(0, arrayAddr), // Load array base address into r0
+    buildLoadDirect(1, 900), // Load index into r1
+    {
+      opcode: OpCode.Add,
+      variant: Variant.Immediate,
+      operand1: 0,
+      operand2: 1, // r0 = r0 + r1 (array base + index)
+    },
+    buildStoreDirect(0, 902), // Store target address to memory[902]
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Indirect,
+      operand1: 1,
+      operand2: 902, // Load value from address stored in memory[902]
+    },
+    ...buildStoreAndHalt(),
+  ];
+
+  return {
+    instructions,
+    context,
+  };
+}
+
+function tryArrayLiteral(
+  trimmed: string,
+  context: VariableContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
+  if (!isArrayLiteral(trimmed)) return undefined;
+
+  const arrayLit = parseArrayLiteral(trimmed);
+  if (!arrayLit || arrayLit.elements.length === 0) return undefined;
+
+  // Calculate the starting address for array elements (same as variable address)
+  let elementsAddr = 904;
+  for (let i = 0; i < context.length; i++) {
+    elementsAddr += 1;
   }
 
+  // Compile each element
+  let instructions: Instruction[] = [];
+
+  for (let i = 0; i < arrayLit.elements.length; i++) {
+    const element = arrayLit.elements[i];
+    if (!element) return undefined;
+    const elemResult = compileWithContext(element, context);
+    if (!elemResult) return undefined;
+
+    const elemInstructions = elemResult.instructions.slice(0, -1); // Remove halt
+    instructions = [
+      ...instructions,
+      ...elemInstructions,
+      buildLoadDirect(1, 900),
+      buildStoreDirect(1, elementsAddr + i),
+    ];
+  }
+
+  // Return the base address of the array elements (same as variable address)
+  instructions.push(buildLoadImmediate(1, elementsAddr));
+  instructions.push(...buildStoreAndHalt());
+
+  return {
+    instructions,
+    context,
+  };
+}
+
+function tryBasicPatterns(
+  trimmed: string,
+  context: VariableContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
   // Try parsing as reassignment (e.g., "x = read I32;")
   const reassignmentResult = tryReassignment(trimmed, context);
   if (reassignmentResult) {
@@ -254,10 +358,57 @@ function tryAllPatterns(
     return varRefResult;
   }
 
+  return undefined;
+}
+
+function tryArrayHandlers(
+  trimmed: string,
+  context: VariableContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
+  // Try parsing as array indexing (e.g., "array[0]")
+  const arrayIndexResult = tryArrayIndexing(trimmed, context);
+  if (arrayIndexResult) {
+    return arrayIndexResult;
+  }
+
+  // Try parsing as array literal (e.g., "[1, 2, 3]")
+  const arrayLiteralResult = tryArrayLiteral(trimmed, context);
+  if (arrayLiteralResult) {
+    return arrayLiteralResult;
+  }
+
+  return undefined;
+}
+
+function tryAllPatterns(
+  trimmed: string,
+  context: VariableContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
+  // Try parsing as let expression
+  const letResult = parseLetExpression(trimmed, context);
+  if (letResult) {
+    return {
+      instructions: letResult.instructions,
+      context: letResult.newContext,
+    };
+  }
+
+  // Try basic patterns
+  const basicResult = tryBasicPatterns(trimmed, context);
+  if (basicResult) {
+    return basicResult;
+  }
+
   // Try parsing as an addition expression with context (for variables)
   const addExprResult = tryAddExpressionWithContext(trimmed, context);
   if (addExprResult) {
     return addExprResult;
+  }
+
+  // Try array handlers
+  const arrayResult = tryArrayHandlers(trimmed, context);
+  if (arrayResult) {
+    return arrayResult;
   }
 
   // Unwrap braces if present and try parsing the inner content with context

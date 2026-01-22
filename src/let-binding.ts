@@ -3,18 +3,23 @@ import {
   findChar,
   extractVariableName,
   getTypeSuffix,
-  isParenthesizedExpression,
-  extractParenthesizedContent,
   isBracedExpression,
   extractBracedContent,
   parseBooleanLiteral,
   findConditionParentheses,
   findElseKeyword,
-  isIdentifierChar,
   isReferenceOperator,
   extractReferenceTarget,
   isMutableReference,
+  isArrayIndexing,
 } from "./parser";
+import { isArrayLiteral } from "./array-parsing";
+import {
+  parseArraySize,
+  extractArrayLiteralType,
+  extractArrayIndexType,
+} from "./array-helpers";
+import { isBareNumber } from "./type-inference-helpers";
 import {
   buildLoadDirect,
   buildLoadImmediate,
@@ -32,6 +37,15 @@ export interface VariableBinding {
 
 export type VariableContext = VariableBinding[];
 
+function getVariableMemorySize(type: string | undefined): number {
+  if (!type) return 1;
+  if (type.startsWith("[")) {
+    const size = parseArraySize(type);
+    if (size !== undefined) return size;
+  }
+  return 1;
+}
+
 export function allocateVariable(
   context: VariableContext,
   varName: string,
@@ -39,7 +53,13 @@ export function allocateVariable(
   mutable?: boolean,
   declarationOnly?: boolean,
 ): { context: VariableContext; address: number } {
-  const address = 904 + context.length;
+  // Calculate start address based on all previous variables' memory usage
+  let address = 904;
+  for (const binding of context) {
+    const size = getVariableMemorySize(binding.type);
+    address += size;
+  }
+
   return {
     context: [
       ...context,
@@ -113,6 +133,17 @@ export function buildContextFromLetBindings(source: string): VariableContext {
   return context;
 }
 
+function findSemicolonOutsideBrackets(source: string): number {
+  let bracketDepth = 0;
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    if (char === "[") bracketDepth++;
+    if (char === "]") bracketDepth--;
+    if (char === ";" && bracketDepth === 0) return i;
+  }
+  return -1;
+}
+
 export function parseLetComponents(source: string):
   | {
       varName: string;
@@ -127,8 +158,8 @@ export function parseLetComponents(source: string):
   const varName = extractVariableName(source);
   if (varName.length === 0) return undefined;
 
-  // Find the first semicolon to limit search scope
-  const firstSemicolonIndex = findChar(source, ";");
+  // Find the first semicolon outside brackets to limit search scope
+  const firstSemicolonIndex = findSemicolonOutsideBrackets(source);
   if (firstSemicolonIndex === -1) return undefined;
 
   // Only search within the current let binding (before the semicolon)
@@ -230,33 +261,45 @@ export function extractIfBranchTypes(
   return { thenType, elseType };
 }
 
+function extractReferenceType(
+  trimmed: string,
+  context?: VariableContext,
+): string | undefined {
+  const varName = extractReferenceTarget(trimmed);
+  if (!context) return undefined;
+
+  const binding = context.find((b) => b.name === varName);
+  if (!binding || !binding.type) return undefined;
+
+  const isMut = isMutableReference(trimmed);
+  return isMut ? `*mut ${binding.type}` : `*${binding.type}`;
+}
+
 export function extractExpressionType(
   exprPart: string,
   context?: VariableContext,
 ): string | undefined {
   const trimmed = exprPart.trim();
 
-  // For if-expressions, extract the type from branches
   if (trimmed.startsWith("if")) {
     return extractIfExpressionType(trimmed, context);
   }
 
-  // For braced expressions, unwrap and extract from inner content
   if (isBracedExpression(trimmed)) {
     const innerExpr = extractBracedContent(trimmed);
     return extractExpressionType(innerExpr, context);
   }
 
-  // For reference expressions (&x or &mut x), infer pointer type from variable
+  if (isArrayLiteral(trimmed)) {
+    return extractArrayLiteralType(trimmed, context, extractExpressionType);
+  }
+
+  if (isArrayIndexing(trimmed)) {
+    return extractArrayIndexType(trimmed, context);
+  }
+
   if (isReferenceOperator(trimmed)) {
-    const varName = extractReferenceTarget(trimmed);
-    if (!context) return undefined;
-    const binding = context.find((b) => b.name === varName);
-    if (binding && binding.type) {
-      const isMut = isMutableReference(trimmed);
-      return isMut ? `*mut ${binding.type}` : `*${binding.type}`;
-    }
-    return undefined;
+    return extractReferenceType(trimmed, context);
   }
 
   // For read expressions, extract the type directly
@@ -296,100 +339,6 @@ export function extractExpressionType(
 
   // If no type suffix and not a read expression, return undefined
   return undefined;
-}
-
-function validateNumericPrefix(expr: string, allowTypeChars: boolean): boolean {
-  const trimmed = expr.trim();
-  if (trimmed.length === 0) return false;
-
-  let i = 0;
-  if (trimmed[i] === "-") i++;
-
-  if (i >= trimmed.length) return false;
-
-  for (; i < trimmed.length; i++) {
-    const char = trimmed[i];
-    if (char === undefined) return false;
-
-    const isDigit = char >= "0" && char <= "9";
-    const isTypeChar = char >= "A" && char <= "Z";
-
-    const isValidChar = allowTypeChars ? isDigit || isTypeChar : isDigit;
-    if (!isValidChar) return false;
-  }
-
-  return true;
-}
-
-export function isBareNumber(expr: string): boolean {
-  return validateNumericPrefix(expr, false);
-}
-
-export function isNumberLiteral(expr: string): boolean {
-  return validateNumericPrefix(expr, true);
-}
-
-export function extractArithmeticTypes(exprPart: string): string[] | undefined {
-  const trimmed = exprPart.trim();
-
-  // Check if contains operators: + - * / (scanning at depth 0 only)
-  const opIndex = findTopLevelOperator(trimmed);
-
-  if (opIndex === -1) return undefined;
-
-  const leftPart = trimmed.substring(0, opIndex).trim();
-  const rightPart = trimmed.substring(opIndex + 1).trim();
-
-  const leftType = extractExpressionType(leftPart);
-  const rightType = extractExpressionType(rightPart);
-
-  if (!leftType || !rightType) return undefined;
-
-  return [leftType, rightType];
-}
-
-function findTopLevelOperator(trimmed: string): number {
-  let parenDepth = 0;
-  let braceDepth = 0;
-
-  for (let i = 1; i < trimmed.length; i++) {
-    const char = trimmed[i];
-
-    // Track depth of parentheses and braces
-    if (char === "(") parenDepth++;
-    if (char === ")") parenDepth--;
-    if (char === "{") braceDepth++;
-    if (char === "}") braceDepth--;
-
-    // Check for operators at depth 0 only
-    const isOperator =
-      char === "+" || char === "-" || char === "*" || char === "/";
-    const isTopLevel = parenDepth === 0 && braceDepth === 0;
-
-    if (isOperator && isTopLevel) {
-      return i;
-    }
-  }
-
-  return -1;
-}
-
-export function hasArithmeticMismatch(exprPart: string): boolean {
-  let unwrapped = exprPart;
-
-  // Unwrap parentheses if the entire expression is wrapped
-  if (isParenthesizedExpression(exprPart)) {
-    unwrapped = extractParenthesizedContent(exprPart);
-  } else if (isBracedExpression(exprPart)) {
-    unwrapped = extractBracedContent(exprPart);
-  }
-
-  const types = extractArithmeticTypes(unwrapped);
-  if (!types || types.length < 2) return false;
-
-  // All operands must have the same type
-  const firstType = types[0];
-  return types.some((t) => t !== firstType);
 }
 
 export function adjustReadInstructions(
@@ -450,139 +399,6 @@ export function buildVarRefInstructionsForBinding(
       opcode: OpCode.Halt,
       variant: Variant.Immediate,
       operand1: 900,
-    },
-  ];
-}
-
-function extractReassignmentBase(
-  source: string,
-):
-  | { bindingScope: string; remaining: string; equalsIndex: number }
-  | undefined {
-  const trimmed = source.trim();
-  const firstSemicolonIndex = findChar(trimmed, ";");
-  if (firstSemicolonIndex === -1) return undefined;
-
-  const bindingScope = trimmed.substring(0, firstSemicolonIndex);
-  const equalsIndex = findChar(bindingScope, "=");
-  if (equalsIndex === -1) return undefined;
-
-  const remaining = trimmed.substring(firstSemicolonIndex + 1).trim();
-  return { bindingScope, remaining, equalsIndex };
-}
-
-function isValidIdentifier(name: string): boolean {
-  if (name.length === 0) return false;
-  for (let i = 0; i < name.length; i++) {
-    const char = name[i];
-    if (!char || !isIdentifierChar(char, i === 0)) return false;
-  }
-  return true;
-}
-
-export function parseReassignmentComponents(source: string):
-  | {
-      varName: string;
-      exprPart: string;
-      remaining: string;
-    }
-  | undefined {
-  const base = extractReassignmentBase(source);
-  if (!base) return undefined;
-
-  const { bindingScope, remaining, equalsIndex } = base;
-  const varName = bindingScope.substring(0, equalsIndex).trim();
-  const exprPart = bindingScope.substring(equalsIndex + 1).trim();
-
-  if (!isValidIdentifier(varName)) return undefined;
-
-  return { varName, exprPart, remaining };
-}
-
-export function parseDereferenceReassignmentComponents(source: string):
-  | {
-      pointerName: string;
-      exprPart: string;
-      remaining: string;
-    }
-  | undefined {
-  const base = extractReassignmentBase(source);
-  if (!base) return undefined;
-
-  const { bindingScope, remaining, equalsIndex } = base;
-  const leftSide = bindingScope.substring(0, equalsIndex).trim();
-
-  if (!leftSide.startsWith("*")) return undefined;
-
-  const pointerName = leftSide.substring(1).trim();
-
-  if (!isValidIdentifier(pointerName)) return undefined;
-
-  const exprPart = bindingScope.substring(equalsIndex + 1).trim();
-
-  return { pointerName, exprPart, remaining };
-}
-
-export function buildReassignmentInstructions(
-  exprInstructions: Instruction[],
-  varAddress: number,
-): Instruction[] {
-  return [
-    ...exprInstructions.slice(0, -1),
-    buildLoadDirect(1, 900),
-    buildStoreDirect(1, varAddress),
-  ];
-}
-
-export function buildDereferenceReassignmentInstructions(
-  exprInstructions: Instruction[],
-  pointerAddress: number,
-): Instruction[] {
-  return [
-    ...exprInstructions.slice(0, -1),
-    buildLoadDirect(1, 900),
-    buildLoadDirect(0, pointerAddress),
-    buildStoreDirect(0, 902), // Store pointer value (the address) to temp location 902
-    {
-      opcode: OpCode.Store,
-      variant: Variant.Indirect,
-      operand1: 1,
-      operand2: 902, // Use 902 as the address reference
-    },
-  ];
-}
-
-export function buildDereferenceInstructions(
-  varAddress: number,
-): Instruction[] {
-  return [
-    buildLoadDirect(0, varAddress),
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Indirect,
-      operand1: 0,
-      operand2: 0,
-    },
-    ...buildStoreAndHalt(),
-  ];
-}
-
-export function buildDereferenceInstructionsForExpr(
-  varAddress: number,
-): Instruction[] {
-  return [
-    buildLoadDirect(0, varAddress),
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Indirect,
-      operand1: 0,
-      operand2: 0,
-    },
-    {
-      opcode: OpCode.Store,
-      variant: Variant.Direct,
-      operand1: 0,
-      operand2: 900,
     },
   ];
 }

@@ -86,12 +86,15 @@ function parseInitializedBinding(
     mutable,
   );
 
-  const resultAddress = determineResultAddress(exprCompile, exprPart);
-  const storeInstructions = buildLetStoreInstructions(
-    adjustReadInstructions(exprCompile.slice(0, -1), exprPart),
-    resultAddress,
-    address,
-  );
+  // For array types, skip the store step - elements are already in place
+  const isArray = varType && varType.startsWith("[");
+  const storeInstructions = isArray
+    ? exprCompile.slice(0, -1) // Just the array literal instructions, no store
+    : buildLetStoreInstructions(
+        adjustReadInstructions(exprCompile.slice(0, -1), exprPart),
+        determineResultAddress(exprCompile, exprPart),
+        address,
+      );
 
   if (remaining.length === 0) {
     return {

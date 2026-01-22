@@ -9,7 +9,7 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
   if (compileResult.ok) {
     const execResult = executeWithArray(compileResult.value, stdIn);
     if (execResult !== expected) {
-      // Do we have an  equivalent to Assertions.fail()?
+      // Do we have an equivalent to Assertions.fail()?
       expect(
         "Failed to execute compiled instructions: " +
           JSON.stringify(compileResult.value, null, 2),
@@ -18,7 +18,7 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
 
     expect(execResult).toBe(expected);
   } else {
-    // Do we have an  equivalent to Assertions.fail()?
+    // Do we have an equivalent to Assertions.fail()?
     expect(compileResult.error).toBeUndefined();
   }
 }
@@ -26,7 +26,7 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
 function assertInvalid(source: string) {
   const compileResult = compile(source);
   if (compileResult.ok) {
-    // Do we have an  equivalent to Assertions.fail()?
+    // Do we have an equivalent to Assertions.fail()?
     expect(
       "Expected compilation to fail, but it succeeded with: " +
         JSON.stringify(compileResult.value, null, 2),
@@ -360,5 +360,48 @@ describe("The application - Valid reference patterns", () => {
 
   it("should allow declaration-only variable after assignment", () => {
     assertValid("let x : U8; x = read U8; x", 42, 42);
+  });
+});
+
+describe("The application - Arrays", () => {
+  it("should support array type inference from literal", () => {
+    assertValid("let array = [5U8, 10U8]; array", 904);
+  });
+
+  it("should support array literal with explicit type", () => {
+    assertValid(
+      "let array : [U8; 2; 2] = [read U8, read U8]; array",
+      904,
+      5,
+      10,
+    );
+  });
+
+  it("should support array indexing", () => {
+    assertValid(
+      "let array : [U8; 2; 2] = [read U8, read U8]; array[0] + array[1]",
+      15,
+      5,
+      10,
+    );
+  });
+
+  it("should support array with read elements", () => {
+    assertValid(
+      "let array : [U8; 3; 3] = [read U8, read U8, read U8]; array[1]",
+      20,
+      10,
+      20,
+      30,
+    );
+  });
+
+  it("should support dynamic array indexing", () => {
+    assertValid(
+      "let array : [U8; 2; 2] = [read U8, read U8]; let idx = 1; array[idx]",
+      10,
+      5,
+      10,
+    );
   });
 });

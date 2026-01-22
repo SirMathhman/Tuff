@@ -4,9 +4,8 @@ import {
   extractExpressionType,
   extractIfBranchTypes,
   type VariableContext,
-  isBareNumber,
-  isNumberLiteral,
 } from "./let-binding";
+import { isBareNumber, isNumberLiteral } from "./type-inference-helpers";
 import {
   isParenthesizedExpression,
   extractParenthesizedContent,

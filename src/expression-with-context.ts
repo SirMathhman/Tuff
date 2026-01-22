@@ -3,54 +3,115 @@ import {
   parseNumberWithSuffix,
   isDereferenceOperator,
   extractDereferenceTarget,
+  isArrayIndexing,
+  extractArrayIndexComponents,
 } from "./parser";
 import { buildStoreHaltInstructions } from "./types";
 import { type VariableContext, resolveVariable } from "./let-binding";
 import { splitByAddOperator } from "./operator-parsing";
+
+function resolveArrayIndexing(
+  part: string,
+  context: VariableContext,
+  targetRegister: number,
+): Instruction[] | undefined {
+  const comp = extractArrayIndexComponents(part);
+  if (!comp) return undefined;
+
+  const arrayAddr = resolveVariable(context, comp.arrayName);
+  if (arrayAddr === undefined) return undefined;
+
+  const indexNum = parseNumberWithSuffix(comp.indexExpr);
+  if (indexNum === undefined) return undefined;
+
+  const indexRegister = targetRegister === 1 ? 2 : 3;
+
+  return [
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Immediate,
+      operand1: targetRegister,
+      operand2: arrayAddr,
+    },
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Immediate,
+      operand1: indexRegister,
+      operand2: indexNum,
+    },
+    {
+      opcode: OpCode.Add,
+      variant: Variant.Immediate,
+      operand1: targetRegister,
+      operand2: indexRegister,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: targetRegister,
+      operand2: targetRegister === 1 ? 903 : 902,
+    },
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Indirect,
+      operand1: targetRegister,
+      operand2: targetRegister === 1 ? 903 : 902,
+    },
+  ];
+}
+
+function resolveDereference(
+  part: string,
+  context: VariableContext,
+  targetRegister: number,
+): Instruction[] | undefined {
+  const varName = extractDereferenceTarget(part);
+  const varAddress = resolveVariable(context, varName);
+  if (varAddress === undefined) return undefined;
+
+  const tempAddress = targetRegister === 1 ? 900 : 902;
+
+  return [
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: varAddress,
+    },
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Indirect,
+      operand1: 0,
+      operand2: 0,
+    },
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: tempAddress,
+    },
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: targetRegister,
+      operand2: tempAddress,
+    },
+  ];
+}
 
 export function tryResolveVariableAtom(
   part: string,
   context: VariableContext,
   targetRegister: number,
 ): Instruction[] | undefined {
-  // Check for dereference first (*varName)
-  if (isDereferenceOperator(part)) {
-    const varName = extractDereferenceTarget(part);
-    const varAddress = resolveVariable(context, varName);
-    if (varAddress === undefined) return undefined;
-
-    // Use different temp addresses for different registers
-    const tempAddress = targetRegister === 1 ? 900 : 902;
-
-    return [
-      {
-        opcode: OpCode.Load,
-        variant: Variant.Direct,
-        operand1: 0,
-        operand2: varAddress,
-      },
-      {
-        opcode: OpCode.Load,
-        variant: Variant.Indirect,
-        operand1: 0,
-        operand2: 0,
-      },
-      {
-        opcode: OpCode.Store,
-        variant: Variant.Direct,
-        operand1: 0,
-        operand2: tempAddress,
-      },
-      {
-        opcode: OpCode.Load,
-        variant: Variant.Direct,
-        operand1: targetRegister,
-        operand2: tempAddress,
-      },
-    ];
+  if (isArrayIndexing(part)) {
+    return resolveArrayIndexing(part, context, targetRegister);
   }
 
-  // Regular variable resolution
+  if (isDereferenceOperator(part)) {
+    return resolveDereference(part, context, targetRegister);
+  }
+
   const varAddress = resolveVariable(context, part);
   if (varAddress === undefined) return undefined;
 

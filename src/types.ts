@@ -1,5 +1,6 @@
 import { type Instruction, OpCode, Variant } from "./vm";
 import { getTypeSuffix, findTypeSuffixIndex } from "./parser";
+import { parseArrayTypeComponents } from "./array-helpers";
 import { buildStoreAndHalt } from "./instruction-primitives";
 
 export interface Error {
@@ -129,6 +130,12 @@ export function isTypeCompatible(
   // Bool type only matches Bool
   if (declaredType === "Bool" || exprType === "Bool") return false;
 
+  // Handle array types
+  if (isArrayType(declaredType) || isArrayType(exprType)) {
+    // Arrays must match exactly
+    return declaredType === exprType;
+  }
+
   // Handle pointer types
   if (declaredType.startsWith("*") || exprType.startsWith("*")) {
     // Pointers must match exactly or both be pointer types to same base
@@ -187,6 +194,17 @@ export function isMutablePointerType(type: string): boolean {
   if (!isPointerType(type)) return false;
   const afterStar = type.substring(1);
   return afterStar.startsWith("mut");
+}
+
+export function isArrayType(type: string): boolean {
+  return type.startsWith("[") && type.includes(";");
+}
+
+export function getArrayElementType(type: string): string | undefined {
+  if (!isArrayType(type)) return undefined;
+  const parts = parseArrayTypeComponents(type);
+  if (!parts) return undefined;
+  return parts[0];
 }
 
 export function buildMulOrDivHalt(

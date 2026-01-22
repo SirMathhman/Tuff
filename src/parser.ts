@@ -423,3 +423,51 @@ export function extractDereferenceTarget(source: string): string {
   if (!isDereferenceOperator(source)) return source;
   return source.substring(1).trim();
 }
+
+export function isArrayIndexing(source: string): boolean {
+  // Format: varName[indexExpr]
+  // Look for [ after valid identifier
+  let i = 0;
+  if (!isIdentifierChar(source[i], true)) return false;
+
+  while (i < source.length && isIdentifierChar(source[i], false)) {
+    i++;
+  }
+
+  return i < source.length && source[i] === "[";
+}
+
+export function extractArrayIndexComponents(
+  source: string,
+): { arrayName: string; indexExpr: string } | undefined {
+  if (!isArrayIndexing(source)) return undefined;
+
+  // Find variable name
+  let i = 0;
+  let arrayName = "";
+  while (i < source.length && isIdentifierChar(source[i], i === 0)) {
+    arrayName += source[i];
+    i++;
+  }
+
+  if (i >= source.length || source[i] !== "[") return undefined;
+
+  // Find matching bracket
+  const bracketStart = i;
+  let bracketEnd = -1;
+  let depth = 1;
+
+  for (let j = i + 1; j < source.length; j++) {
+    if (source[j] === "[") depth++;
+    if (source[j] === "]") depth--;
+    if (depth === 0) {
+      bracketEnd = j;
+      break;
+    }
+  }
+
+  if (bracketEnd === -1) return undefined;
+
+  const indexExpr = source.substring(bracketStart + 1, bracketEnd).trim();
+  return { arrayName, indexExpr };
+}
