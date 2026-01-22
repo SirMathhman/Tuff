@@ -12,6 +12,7 @@ import {
   parseDivExpression,
   buildMulOrDivResult,
   splitByOperator,
+  parseBooleanLiteral,
 } from "./parser";
 import {
   type CompileError,
@@ -27,6 +28,7 @@ import {
   buildChainedReadAddExpression,
   buildReadAddMulInstructions,
   buildNumberLiteral,
+  buildBooleanLiteral,
 } from "./helpers";
 import {
   type VariableContext,
@@ -66,42 +68,14 @@ export function err<X>(error: X): Err<X> {
   return { ok: false, error };
 }
 
-function parseSubExpression(source: string): Instruction[] | undefined {
-  let minusIndex = -1;
-  for (let i = 1; i < source.length; i++) {
-    if (source[i] === "-") {
-      minusIndex = i;
-      break;
-    }
-  }
-  if (minusIndex === -1) return undefined;
-
-  const leftPart = source.substring(0, minusIndex).trim();
-  const rightPart = source.substring(minusIndex + 1).trim();
-
-  const leftInstructions = parseLeftForSub(leftPart);
-  if (!leftInstructions) return undefined;
-
-  const rightInstructions = parseRightForSub(rightPart);
-  if (!rightInstructions) return undefined;
-
-  return [
-    ...leftInstructions.slice(0, -1),
-    ...rightInstructions.slice(0, -1),
-    ...buildStoreHaltInstructions(OpCode.Sub),
-  ];
-}
-
-function parseLeftForSub(part: string): Instruction[] | undefined {
+function parseSubExpressionLeftPart(
+  part: string,
+): Instruction[] | undefined {
   let result = parseAddExpression(part);
   if (result) return result;
-
   result = parseSubExpression(part);
   if (result) return result;
-
-  if (part.startsWith("read")) {
-    return parseReadInstruction(part);
-  }
+  if (part.startsWith("read")) return parseReadInstruction(part);
 
   const num = parseNumberWithSuffix(part);
   if (num !== undefined) {
@@ -124,10 +98,10 @@ function parseLeftForSub(part: string): Instruction[] | undefined {
   return undefined;
 }
 
-function parseRightForSub(part: string): Instruction[] | undefined {
-  if (part.startsWith("read")) {
-    return parseReadInstruction(part);
-  }
+function parseSubExpressionRightPart(
+  part: string,
+): Instruction[] | undefined {
+  if (part.startsWith("read")) return parseReadInstruction(part);
 
   const num = parseNumberWithSuffix(part);
   if (num !== undefined) {
@@ -142,6 +116,32 @@ function parseRightForSub(part: string): Instruction[] | undefined {
   }
 
   return undefined;
+}
+
+function parseSubExpression(source: string): Instruction[] | undefined {
+  let minusIndex = -1;
+  for (let i = 1; i < source.length; i++) {
+    if (source[i] === "-") {
+      minusIndex = i;
+      break;
+    }
+  }
+  if (minusIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, minusIndex).trim();
+  const rightPart = source.substring(minusIndex + 1).trim();
+
+  const leftInstructions = parseSubExpressionLeftPart(leftPart);
+  if (!leftInstructions) return undefined;
+
+  const rightInstructions = parseSubExpressionRightPart(rightPart);
+  if (!rightInstructions) return undefined;
+
+  return [
+    ...leftInstructions.slice(0, -1),
+    ...rightInstructions.slice(0, -1),
+    ...buildStoreHaltInstructions(OpCode.Sub),
+  ];
 }
 
 function parseGroupedAtom(
@@ -173,13 +173,6 @@ function parseGroupedAtom(
   ];
 }
 
-function parseParenthesizedAtom(
-  source: string,
-  targetRegister: number,
-): Instruction[] | undefined {
-  return parseGroupedAtom(source, targetRegister);
-}
-
 function parseAddExpression(source: string): Instruction[] | undefined {
   const parts = splitByAddOperator(source);
   if (!parts) return undefined;
@@ -198,7 +191,7 @@ function parseAddExpression(source: string): Instruction[] | undefined {
 
 function parseLeftMulDivAtom(leftPart: string): Instruction[] | undefined {
   if (isParenthesizedExpression(leftPart) || isBracedExpression(leftPart)) {
-    return parseParenthesizedAtom(leftPart, 1);
+    return parseGroupedAtom(leftPart, 1);
   }
   return parseSimpleAtom(leftPart);
 }
@@ -210,7 +203,7 @@ function parseRightMulDivAtom(rightPart: string): Instruction[] | undefined {
   if (rightMulDiv) return rightMulDiv;
 
   if (isParenthesizedExpression(rightPart) || isBracedExpression(rightPart)) {
-    return parseParenthesizedAtom(rightPart, 0);
+    return parseGroupedAtom(rightPart, 0);
   }
   return parseRightAtom(rightPart);
 }
@@ -487,6 +480,20 @@ function compileWithContext(
   return undefined;
 }
 
+function parseLiteralExpression(source: string): Instruction[] | undefined {
+  const num = parseNumberWithSuffix(source);
+  if (num !== undefined) {
+    return buildNumberLiteral(num);
+  }
+
+  const boolValue = parseBooleanLiteral(source);
+  if (boolValue !== undefined) {
+    return buildBooleanLiteral(boolValue);
+  }
+
+  return undefined;
+}
+
 function compileNoContext(source: string): Instruction[] | undefined {
   const trimmed = source.trim();
 
@@ -541,12 +548,7 @@ function compileNoContext(source: string): Instruction[] | undefined {
     }
   }
 
-  const num = parseNumberWithSuffix(trimmed);
-  if (num !== undefined) {
-    return buildNumberLiteral(num);
-  }
-
-  return undefined;
+  return parseLiteralExpression(trimmed);
 }
 
 export function compile(source: string): Result<Instruction[], CompileError> {

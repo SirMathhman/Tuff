@@ -80,10 +80,10 @@ export function checkTypeOverflow(source: string): CompileError | undefined {
   if (!hasTypeSuffix(source)) return undefined;
 
   const suffix = getTypeSuffix(source);
-  
+
   // Bool doesn't have numeric literals (only read Bool), so skip overflow check
   if (suffix === "Bool") return undefined;
-  
+
   const range = getTypeRange(suffix);
   if (range === undefined) return undefined;
 

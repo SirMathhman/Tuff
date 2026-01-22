@@ -7,6 +7,7 @@ import {
   extractParenthesizedContent,
   isBracedExpression,
   extractBracedContent,
+  parseBooleanLiteral,
 } from "./parser";
 import {
   buildLoadDirect,
@@ -113,6 +114,12 @@ export function extractExpressionType(
     if (parts.length === 2) {
       return parts[1];
     }
+  }
+
+  // For boolean literals, return Bool type
+  const boolValue = parseBooleanLiteral(trimmed);
+  if (boolValue !== undefined) {
+    return "Bool";
   }
 
   // For number literals, extract type suffix

@@ -316,3 +316,14 @@ export function getTypeSuffix(source: string): string {
   }
   return "";
 }
+
+export function parseBooleanLiteral(source: string): boolean | undefined {
+  if (source === "true") {
+    return true;
+  }
+  if (source === "false") {
+    return false;
+  }
+  return undefined;
+}
+

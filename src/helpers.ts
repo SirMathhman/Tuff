@@ -61,3 +61,7 @@ export function buildNumberLiteral(num: number): Instruction[] {
     buildHaltDirect(900),
   ];
 }
+
+export function buildBooleanLiteral(value: boolean): Instruction[] {
+  return buildNumberLiteral(value ? 1 : 0);
+}

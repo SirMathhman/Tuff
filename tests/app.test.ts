@@ -162,6 +162,14 @@ describe("The application - Variable bindings", () => {
   it("should support Bool type with read expression", () => {
     assertValid("let x : Bool = read Bool; x", 1, 1);
   });
+
+  it("should support boolean literal true", () => {
+    assertValid("let x : Bool = true; x", 1);
+  });
+
+  it("should support boolean literal false", () => {
+    assertValid("let x : Bool = false; x", 0);
+  });
 });
 
 describe("The application - Type checking", () => {
