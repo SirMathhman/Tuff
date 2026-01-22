@@ -148,4 +148,8 @@ describe("The application - Grouping and variables", () => {
   it("should reject type narrowing with variable", () => {
     assertInvalid("let x = read U16; let y : U8 = x; y");
   });
+
+  it("should reject mixed-type arithmetic expressions", () => {
+    assertInvalid("let x : U8 = 1U8 + 2U16; x");
+  });
 });

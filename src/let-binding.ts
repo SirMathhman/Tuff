@@ -120,6 +120,40 @@ export function extractExpressionType(
   return undefined;
 }
 
+export function extractArithmeticTypes(exprPart: string): string[] | undefined {
+  const trimmed = exprPart.trim();
+
+  // Check if contains + or - (addition/subtraction operators)
+  let opIndex = -1;
+  for (let i = 1; i < trimmed.length; i++) {
+    if (trimmed[i] === "+" || trimmed[i] === "-") {
+      opIndex = i;
+      break;
+    }
+  }
+
+  if (opIndex === -1) return undefined;
+
+  const leftPart = trimmed.substring(0, opIndex).trim();
+  const rightPart = trimmed.substring(opIndex + 1).trim();
+
+  const leftType = extractExpressionType(leftPart);
+  const rightType = extractExpressionType(rightPart);
+
+  if (!leftType || !rightType) return undefined;
+
+  return [leftType, rightType];
+}
+
+export function hasArithmeticMismatch(exprPart: string): boolean {
+  const types = extractArithmeticTypes(exprPart);
+  if (!types || types.length < 2) return false;
+
+  // All operands must have the same type
+  const firstType = types[0];
+  return types.some((t) => t !== firstType);
+}
+
 export function adjustReadInstructions(
   instructions: Instruction[],
   exprPart: string,

@@ -3,6 +3,7 @@ import {
   parseLetComponents,
   extractExpressionType,
   type VariableContext,
+  hasArithmeticMismatch,
 } from "./let-binding";
 
 function isTypeCompatible(declaredType: string, exprType: string): boolean {
@@ -99,6 +100,20 @@ function processLetBinding(
   if (!components) return {};
 
   const { varName, typeAnnotation, exprPart } = components;
+
+  // Check for mixed-type arithmetic expressions
+  if (hasArithmeticMismatch(exprPart)) {
+    return {
+      error: {
+        cause: "Mixed-type arithmetic expression",
+        reason:
+          "All operands in an arithmetic expression must have the same type",
+        fix: "Use the same type for all operands or cast to a common type",
+        first: { line: 0, column: 0, length: exprPart.length },
+      },
+    };
+  }
+
   const exprType = extractExpressionType(exprPart, variableTypes);
 
   if (!typeAnnotation) {
