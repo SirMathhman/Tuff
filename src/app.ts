@@ -42,6 +42,7 @@ import { parseLetExpression as parseLetExpressionModule } from "./let-expression
 import {
   detectVariableShadowing,
   detectTypeIncompatibility,
+  detectComparisonTypeMismatch,
 } from "./validation";
 
 export interface Ok<T> {
@@ -224,11 +225,14 @@ function parseMulOrDivExpressionWithParens(
   return buildMulOrDivResult(leftInstructions, rightInstructions, opcode);
 }
 
-
 function parseRightMulOrDivWithParens(
   rightPart: string,
 ): Instruction[] | undefined {
-  const mulResult = parseMulOrDivExpressionWithParens(rightPart, OpCode.Mul, "*");
+  const mulResult = parseMulOrDivExpressionWithParens(
+    rightPart,
+    OpCode.Mul,
+    "*",
+  );
   if (mulResult) return mulResult;
   return parseMulOrDivExpressionWithParens(rightPart, OpCode.Div, "/");
 }
@@ -524,6 +528,12 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   const typeError = detectTypeIncompatibility(trimmed);
   if (typeError) {
     return err(typeError);
+  }
+
+  // Check for type mismatch in comparisons
+  const comparisonError = detectComparisonTypeMismatch(trimmed);
+  if (comparisonError) {
+    return err(comparisonError);
   }
 
   const result = compileWithContext(trimmed, []);

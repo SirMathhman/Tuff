@@ -1,12 +1,18 @@
 import { type Instruction, OpCode } from "./vm";
-import {
-  parseNumberWithSuffix,
-} from "./parser";
+import { parseNumberWithSuffix, parseSpaceSeparatedTokens } from "./parser";
 import {
   buildReadComparisonRead,
   buildReadComparisonConstant,
 } from "./helpers";
 import { splitByComparisonOperator } from "./operator-parsing";
+
+function extractReadType(readExpr: string): string | undefined {
+  const parts = parseSpaceSeparatedTokens(readExpr);
+  if (parts.length === 2 && parts[0] === "read") {
+    return parts[1];
+  }
+  return undefined;
+}
 
 export function parseComparisonExpression(
   source: string,
@@ -32,6 +38,11 @@ export function parseComparisonExpression(
 
   // For now, only support "read U8 == read U8" pattern
   if (leftPart.startsWith("read") && rightPart.startsWith("read")) {
+    const leftType = extractReadType(leftPart);
+    const rightType = extractReadType(rightPart);
+    if (leftType !== rightType) {
+      return undefined;
+    }
     return buildReadComparisonRead(opcode);
   }
 

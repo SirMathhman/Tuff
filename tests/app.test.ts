@@ -217,4 +217,8 @@ describe("The application - Comparison operators", () => {
     assertValid("read U8 > read U8", 1, 5, 3);
     assertValid("read U8 > read U8", 0, 3, 5);
   });
+
+  it("should reject comparisons with mixed types", () => {
+    assertInvalid("read U8 == read Bool");
+  });
 });

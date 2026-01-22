@@ -67,9 +67,7 @@ export function buildBooleanLiteral(value: boolean): Instruction[] {
   return buildNumberLiteral(value ? 1 : 0);
 }
 
-export function buildReadComparisonRead(
-  opcode: OpCode,
-): Instruction[] {
+export function buildReadComparisonRead(opcode: OpCode): Instruction[] {
   return [
     buildIn(0),
     buildStoreDirect(0, 901),

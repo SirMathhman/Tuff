@@ -331,3 +331,54 @@ export function detectTypeIncompatibility(
 
   return undefined;
 }
+
+function extractComparisonTypes(
+  source: string,
+): { left: string; right: string } | undefined {
+  // Find comparison operator
+  let comparisonIndex = -1;
+  let operator = "";
+
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "=" && source[i + 1] === "=") {
+      comparisonIndex = i;
+      operator = "==";
+      break;
+    }
+    if (source[i] === "<" || source[i] === ">") {
+      comparisonIndex = i;
+      operator = source[i];
+      break;
+    }
+  }
+
+  if (comparisonIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, comparisonIndex).trim();
+  const rightPart = source.substring(comparisonIndex + operator.length).trim();
+
+  const leftType = extractExpressionType(leftPart);
+  const rightType = extractExpressionType(rightPart);
+
+  if (!leftType || !rightType) return undefined;
+
+  return { left: leftType, right: rightType };
+}
+
+export function detectComparisonTypeMismatch(
+  source: string,
+): CompileError | undefined {
+  const types = extractComparisonTypes(source);
+  if (!types) return undefined;
+
+  if (types.left !== types.right) {
+    return {
+      cause: `Type mismatch in comparison: ${types.left} compared to ${types.right}`,
+      reason: "Comparisons require both operands to have the same type",
+      fix: "Ensure both sides of the comparison have matching types",
+      first: { line: 0, column: 0, length: source.length },
+    };
+  }
+
+  return undefined;
+}

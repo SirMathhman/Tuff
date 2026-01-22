@@ -9,9 +9,33 @@ import {
   extractExpressionType,
 } from "./let-binding";
 
+function determineResultAddress(
+  exprCompile: Instruction[],
+  exprPart: string,
+): number {
+  let resultAddress = 900;
+  const lastInstruction = exprCompile[exprCompile.length - 1];
+  if (lastInstruction && lastInstruction.opcode === OpCode.Halt) {
+    resultAddress = lastInstruction.operand1;
+  }
+  if (isReadExpressionPattern(exprPart)) resultAddress = 903;
+  return resultAddress;
+}
+
+function buildHaltInstruction(): Instruction {
+  return {
+    opcode: OpCode.Halt,
+    variant: Variant.Immediate,
+    operand1: 0,
+  };
+}
+
 export function parseLetExpression(
   source: string,
-  compileWithContextFn: (expr: string, ctx: VariableContext) => { instructions: Instruction[]; context: VariableContext } | undefined,
+  compileWithContextFn: (
+    expr: string,
+    ctx: VariableContext,
+  ) => { instructions: Instruction[]; context: VariableContext } | undefined,
   context: VariableContext,
 ): { instructions: Instruction[]; newContext: VariableContext } | undefined {
   if (!source.startsWith("let")) return undefined;
@@ -33,12 +57,7 @@ export function parseLetExpression(
     varType,
   );
 
-  const lastInstruction = exprCompile[exprCompile.length - 1];
-  let resultAddress = 900;
-  if (lastInstruction && lastInstruction.opcode === OpCode.Halt) {
-    resultAddress = lastInstruction.operand1;
-  }
-  if (isReadExpressionPattern(exprPart)) resultAddress = 903;
+  const resultAddress = determineResultAddress(exprCompile, exprPart);
   const storeInstructions = buildLetStoreInstructions(
     adjustReadInstructions(exprCompile.slice(0, -1), exprPart),
     resultAddress,
@@ -47,14 +66,7 @@ export function parseLetExpression(
 
   if (remaining.length === 0) {
     return {
-      instructions: [
-        ...storeInstructions,
-        {
-          opcode: OpCode.Halt,
-          variant: Variant.Immediate,
-          operand1: 0,
-        },
-      ],
+      instructions: [...storeInstructions, buildHaltInstruction()],
       newContext,
     };
   }

@@ -1,5 +1,26 @@
 import { type Instruction, OpCode, Variant } from "./vm";
 
+export function parseSpaceSeparatedTokens(source: string): string[] {
+  const trimmed = source.trim();
+  const parts: string[] = [];
+  let current = "";
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (char !== " " && char !== "\t") {
+      current += char;
+      continue;
+    }
+    if (current.length > 0) {
+      parts.push(current);
+      current = "";
+    }
+  }
+  if (current.length > 0) {
+    parts.push(current);
+  }
+  return parts;
+}
+
 export function isIdentifierChar(char: string, isFirstChar: boolean): boolean {
   const isLetter = (char >= "a" && char <= "z") || (char >= "A" && char <= "Z");
   const isDigit = char >= "0" && char <= "9";
@@ -92,22 +113,7 @@ export function findTypeSuffixIndex(source: string): number {
 export function parseReadInstruction(
   source: string,
 ): Instruction[] | undefined {
-  const parts: string[] = [];
-  let current = "";
-  for (let i = 0; i < source.length; i++) {
-    const char = source[i];
-    if (char !== " " && char !== "\t") {
-      current += char;
-      continue;
-    }
-    if (current.length > 0) {
-      parts.push(current);
-      current = "";
-    }
-  }
-  if (current.length > 0) {
-    parts.push(current);
-  }
+  const parts = parseSpaceSeparatedTokens(source);
 
   if (parts.length !== 2 || parts[0] !== "read") {
     return undefined;
