@@ -12,6 +12,11 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
   }
 }
 
+function assertInvalid(source: string) {
+  const result = run(source, []);
+  expect(result.ok).toBe(false);
+}
+
 describe("The application", () => {
   it("should execute a simple program that halts immediately", () => {
     assertValid("", 0);
@@ -35,5 +40,9 @@ describe("The application", () => {
 
   it("should read a U8 value and add a constant, and halt with result", () => {
     assertValid("read U8 + 50U8", 150, 100);
+  });
+
+  it("should reject negative values with type suffix", () => {
+    assertInvalid("-100U8");
   });
 });

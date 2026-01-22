@@ -44,18 +44,21 @@ export function err<X>(error: X): Err<X> {
   return { ok: false, error };
 }
 
-function parseNumberWithSuffix(source: string): number | undefined {
-  let numStr = source;
-
-  // Check for type suffix (capital letter followed by digits)
+function findTypeSuffixIndex(source: string): number {
   for (let i = source.length - 1; i >= 0; i--) {
     const char = source[i];
     if (char && char >= "0" && char <= "9") continue;
     if (char && char >= "A" && char <= "Z") {
-      numStr = source.substring(0, i);
+      return i;
     }
     break;
   }
+  return -1;
+}
+
+function parseNumberWithSuffix(source: string): number | undefined {
+  const suffixIndex = findTypeSuffixIndex(source);
+  const numStr = suffixIndex >= 0 ? source.substring(0, suffixIndex) : source;
 
   // Validate the number part contains only digits and optional minus sign
   let isValidNumber = numStr.length > 0;
@@ -73,6 +76,10 @@ function parseNumberWithSuffix(source: string): number | undefined {
       return num;
     }
   }
+}
+
+function hasTypeSuffix(source: string): boolean {
+  return findTypeSuffixIndex(source) >= 0;
 }
 
 function parseReadInstruction(source: string): Instruction[] | undefined {
@@ -146,9 +153,7 @@ function buildAddInstructions(): Instruction[] {
   ];
 }
 
-function buildReadAddConstantInstructions(
-  constant: number,
-): Instruction[] {
+function buildReadAddConstantInstructions(constant: number): Instruction[] {
   return [
     {
       opcode: OpCode.In,
@@ -241,6 +246,17 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   // Empty source: return empty instructions (implicit halt with 0)
   if (!trimmed) {
     return ok([]);
+  }
+
+  // Check for invalid: negative numbers with type suffix
+  if (trimmed.startsWith("-") && hasTypeSuffix(trimmed)) {
+    return err({
+      cause: "Negative literals cannot have type suffixes",
+      reason:
+        "Type suffixes like U8 are for unsigned types, which cannot be negative",
+      fix: "Remove the type suffix or use a positive number",
+      first: { line: 0, column: 0, length: trimmed.length },
+    });
   }
 
   // Check for arithmetic expressions
