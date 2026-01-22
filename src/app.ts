@@ -55,17 +55,21 @@ export function compile(source: string): Result<Instruction[], CompileError> {
     return ok([]);
   }
 
-  // Try to parse as a number
-  const num = parseInt(trimmed, 10);
-  if (!isNaN(num)) {
-    // Create a halt instruction with the number as immediate value
-    return ok([
-      {
-        opcode: OpCode.Halt,
-        variant: Variant.Immediate,
-        operand1: num,
-      },
-    ]);
+  // Try to parse as a number with optional type suffix
+  // Remove type suffix if present (U8, I16, etc.) and parse
+  const typeMatch = trimmed.match(/^(-?\d+)([A-Z]\d+)?$/);
+  if (typeMatch && typeMatch[1]) {
+    const num = parseInt(typeMatch[1], 10);
+    if (!isNaN(num)) {
+      // Create a halt instruction with the number as immediate value
+      return ok([
+        {
+          opcode: OpCode.Halt,
+          variant: Variant.Immediate,
+          operand1: num,
+        },
+      ]);
+    }
   }
 
   return ok([]);

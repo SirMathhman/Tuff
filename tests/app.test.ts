@@ -28,4 +28,8 @@ describe("The application", () => {
   it("should halt with exit code 100", () => {
     assertValid("100", 100);
   });
+
+  it("should halt with exit code 100 from U8 literal", () => {
+    assertValid("100U8", 100);
+  });
 });
