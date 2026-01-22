@@ -46,6 +46,7 @@ function parseDeclarationOnlyBinding(
     varName,
     typeAnnotation,
     true, // Always mutable for declaration-only
+    true, // Mark as declaration-only
   );
 
   if (remaining.length === 0) {

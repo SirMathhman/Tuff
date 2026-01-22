@@ -333,4 +333,29 @@ describe("The application - Valid reference patterns", () => {
   it("should allow variable declaration with type annotation but no initialization", () => {
     assertValid("let x : U8; x = read U8; x", 42, 42);
   });
+
+  it("should reject multiple reassignments to declaration-only variable", () => {
+    assertInvalid("let x : U8; x = read U8; x = 10U8; x");
+  });
+
+  it("should allow multiple reassignments to mutable declaration-only variable", () => {
+    assertValid(
+      "let mut x : U8; x = read U8; x = 10U8; x",
+      10,
+      42,
+    );
+  });
+
+  it("should reject two reassignments to immutable declaration-only with constant", () => {
+    assertInvalid("let x : I8; x = 5I8; x = -3I8; x");
+  });
+
+  it("should allow mutable declaration-only with multiple read and reassignments", () => {
+    assertValid(
+      "let mut x : U8; x = read U8; x = read U8; x",
+      200,
+      100,
+      200,
+    );
+  });
 });

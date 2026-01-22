@@ -27,6 +27,7 @@ export interface VariableBinding {
   memoryAddress: number;
   type?: string;
   mutable?: boolean;
+  declarationOnly?: boolean;
 }
 
 export type VariableContext = VariableBinding[];
@@ -36,12 +37,19 @@ export function allocateVariable(
   varName: string,
   varType?: string,
   mutable?: boolean,
+  declarationOnly?: boolean,
 ): { context: VariableContext; address: number } {
   const address = 904 + context.length;
   return {
     context: [
       ...context,
-      { name: varName, memoryAddress: address, type: varType, mutable },
+      {
+        name: varName,
+        memoryAddress: address,
+        type: varType,
+        mutable,
+        declarationOnly,
+      },
     ],
     address,
   };
@@ -86,16 +94,17 @@ export function buildContextFromLetBindings(source: string): VariableContext {
       varType = extractExpressionType(comp.exprPart, context);
     }
 
-    // Declaration-only variables (exprPart === "") are implicitly mutable
-    // since they must be assigned before use
+    // Declaration-only variables (exprPart === "")
+    // Their mutability is determined by whether they have the 'mut' keyword
+    // NOT implicitly made mutable just because they're declaration-only
     const isDeclarationOnly = comp.exprPart === "";
-    const isMutable = comp.mutable || isDeclarationOnly;
 
     context.push({
       name: comp.varName,
       memoryAddress: 904 + context.length,
       type: varType,
-      mutable: isMutable,
+      mutable: comp.mutable,
+      declarationOnly: isDeclarationOnly,
     });
 
     remaining = comp.remaining;
@@ -139,7 +148,13 @@ export function parseLetComponents(source: string):
   // If there's no equals sign, it's a declaration-only let binding (requires type annotation)
   if (equalsIndex === -1) {
     if (!typeAnnotation) return undefined;
-    return { varName, exprPart: "", remaining: source.substring(firstSemicolonIndex + 1).trim(), typeAnnotation, mutable: isMutable };
+    return {
+      varName,
+      exprPart: "",
+      remaining: source.substring(firstSemicolonIndex + 1).trim(),
+      typeAnnotation,
+      mutable: isMutable,
+    };
   }
 
   // If there's a colon, it must come before the equals sign

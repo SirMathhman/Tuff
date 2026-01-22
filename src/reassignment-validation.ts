@@ -7,6 +7,7 @@ import {
   parseLetComponents,
   extractExpressionType,
   type VariableContext,
+  type VariableBinding,
   parseReassignmentComponents,
   parseDereferenceReassignmentComponents,
 } from "./let-binding";
@@ -21,6 +22,28 @@ function skipLetBindings(source: string): string {
     current = comp.remaining;
   }
   return current;
+}
+
+function countReassignments(
+  source: string,
+  varName: string,
+): number {
+  let count = 0;
+  let current = skipLetBindings(source);
+
+  while (current.length > 0) {
+    current = current.trim();
+    const reassignComp = parseReassignmentComponents(current);
+    if (!reassignComp) break;
+
+    if (reassignComp.varName === varName) {
+      count++;
+    }
+
+    current = reassignComp.remaining;
+  }
+
+  return count;
 }
 
 function validateReassignments(
@@ -62,6 +85,11 @@ export function detectNonMutableReassignment(
     context,
     (varName, _exprPart, binding) => {
       if (binding && !binding.mutable) {
+        // Declaration-only variables can be assigned once without needing 'mut'
+        if (binding.declarationOnly) {
+          // Allow first assignment, but not subsequent ones (handled by detectMultipleReassignmentsToDeclarationOnly)
+          return undefined;
+        }
         return {
           cause: `Cannot reassign non-mutable variable '${varName}'`,
           reason:
@@ -124,6 +152,42 @@ export function detectDereferenceReassignmentOnImmutablePointer(
     }
 
     current = comp.remaining;
+  }
+
+  return undefined;
+}
+
+function checkDeclarationOnlyRestrictions(
+  binding: VariableBinding,
+  source: string,
+): CompileError | undefined {
+  if (!binding.declarationOnly || binding.mutable) {
+    return undefined;
+  }
+
+  const reassignCount = countReassignments(source, binding.name);
+  if (reassignCount <= 1) {
+    return undefined;
+  }
+
+  return {
+    cause: `Cannot reassign declaration-only variable '${binding.name}' more than once`,
+    reason:
+      "Variables declared without initialization (let x: Type;) can only be assigned once to initialize them. Use 'let mut x: Type;' for multiple reassignments.",
+    fix: `Change declaration to 'let mut ${binding.name} : ${binding.type};'`,
+    first: { line: 0, column: 0, length: source.length },
+  };
+}
+
+export function detectMultipleReassignmentsToDeclarationOnly(
+  source: string,
+  context: VariableContext,
+): CompileError | undefined {
+  for (const binding of context) {
+    const error = checkDeclarationOnlyRestrictions(binding, source);
+    if (error) {
+      return error;
+    }
   }
 
   return undefined;

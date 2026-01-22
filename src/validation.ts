@@ -202,7 +202,10 @@ function findFirstSemicolon(str: string): number {
   return -1;
 }
 
-function validateArithmetic(exprPart: string, variableTypes: VariableContext): CompileError | undefined {
+function validateArithmetic(
+  exprPart: string,
+  variableTypes: VariableContext,
+): CompileError | undefined {
   // Check for boolean values in arithmetic expressions
   if (checkBooleanArithmetic(exprPart, variableTypes)) {
     return {

@@ -41,6 +41,7 @@ import {
   detectNonMutableReassignment,
   detectReassignmentTypeChange,
   detectDereferenceReassignmentOnImmutablePointer,
+  detectMultipleReassignmentsToDeclarationOnly,
 } from "./reassignment-validation";
 import { detectPointerTypeErrors } from "./pointer-validation";
 import { compileNoContext } from "./arithmetic-parsing";
@@ -311,6 +312,11 @@ function performValidationChecks(trimmed: string): CompileError | undefined {
   const dereferenceReassignmentError =
     detectDereferenceReassignmentOnImmutablePointer(trimmed, preContext);
   if (dereferenceReassignmentError) return dereferenceReassignmentError;
+  const declarationOnlyError = detectMultipleReassignmentsToDeclarationOnly(
+    trimmed,
+    preContext,
+  );
+  if (declarationOnlyError) return declarationOnlyError;
   return undefined;
 }
 
