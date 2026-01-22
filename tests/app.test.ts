@@ -1,20 +1,21 @@
 // Our first compile test, the VM should shut down instantly
 
-import { run } from "../src/app";
+import { compile, executeWithArray } from "../src/app";
 
 // Test helpers
 function assertValid(source: string, expected: number, ...stdIn: number[]) {
-  const result = run(source, stdIn);
-  if (!result.ok) {
-    expect(result.error).toBeUndefined();
+	const compileResult = compile(source);
+  if (compileResult.ok) {
+		const execResult = executeWithArray(compileResult.value, stdIn);
+    expect(execResult).toBe(expected);
   } else {
-    expect(result.value).toBe(expected);
+    expect(compileResult.error).toBeUndefined();
   }
 }
 
 function assertInvalid(source: string) {
-  const result = run(source, []);
-  expect(result.ok).toBe(false);
+  const compileResult = compile(source);
+  expect(compileResult.ok).toBe(false);
 }
 
 describe("The application", () => {

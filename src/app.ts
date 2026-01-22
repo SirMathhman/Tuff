@@ -333,26 +333,19 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   return ok([]);
 }
 
-export function run(
-  source: string,
-  stdIn: number[] = [],
-): Result<number, Error> {
-  const instructions = compile(source);
-  if (!instructions.ok) {
-    return err(instructions.error);
-  }
-
-  return ok(
-    execute(
-      instructions.value,
-      () => {
-        // Read from stdIn
-        return stdIn.shift() ?? 0;
-      },
-      (value: number) => {
-        // Write to stdout
-        console.log("Output:", value);
-      },
-    ),
+export function executeWithArray(
+  instructions: Instruction[],
+  stdIn: number[],
+): number {
+  return execute(
+    instructions,
+    () => {
+      // Read from stdIn
+      return stdIn.shift() ?? 0;
+    },
+    (value: number) => {
+      // Write to stdouts
+      console.log("Output:", value);
+    },
   );
 }
