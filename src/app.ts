@@ -56,6 +56,18 @@ function findTypeSuffixIndex(source: string): number {
   return -1;
 }
 
+function getTypeSuffix(source: string): string {
+  const suffixIndex = findTypeSuffixIndex(source);
+  if (suffixIndex >= 0) {
+    return source.substring(suffixIndex);
+  }
+  return "";
+}
+
+function isSignedType(suffix: string): boolean {
+  return suffix.length > 0 && suffix[0] === "I";
+}
+
 function parseNumberWithSuffix(source: string): number | undefined {
   const suffixIndex = findTypeSuffixIndex(source);
   const numStr = suffixIndex >= 0 ? source.substring(0, suffixIndex) : source;
@@ -237,6 +249,42 @@ function parseAddExpression(source: string): Instruction[] | undefined {
   return buildReadAddConstantInstructions(rightNum);
 }
 
+function parseNumberLiteral(source: string): Instruction[] | undefined {
+  const num = parseNumberWithSuffix(source);
+  if (num === undefined) return undefined;
+
+  // For negative numbers, store in memory at address 0 and use Direct variant
+  if (num < 0) {
+    return [
+      {
+        opcode: OpCode.Load,
+        variant: Variant.Immediate,
+        operand1: 0,
+        operand2: num,
+      },
+      {
+        opcode: OpCode.Store,
+        variant: Variant.Direct,
+        operand1: 0,
+        operand2: 0,
+      },
+      {
+        opcode: OpCode.Halt,
+        variant: Variant.Direct,
+        operand1: 0,
+      },
+    ];
+  }
+  // Create a halt instruction with the number as immediate value
+  return [
+    {
+      opcode: OpCode.Halt,
+      variant: Variant.Immediate,
+      operand1: num,
+    },
+  ];
+}
+
 export function compile(source: string): Result<Instruction[], CompileError> {
   // TODO, this will get rather complex!
   // This is the function you should probably implement
@@ -248,15 +296,18 @@ export function compile(source: string): Result<Instruction[], CompileError> {
     return ok([]);
   }
 
-  // Check for invalid: negative numbers with type suffix
+  // Check for invalid: negative numbers with unsigned type suffix
   if (trimmed.startsWith("-") && hasTypeSuffix(trimmed)) {
-    return err({
-      cause: "Negative literals cannot have type suffixes",
-      reason:
-        "Type suffixes like U8 are for unsigned types, which cannot be negative",
-      fix: "Remove the type suffix or use a positive number",
-      first: { line: 0, column: 0, length: trimmed.length },
-    });
+    const suffix = getTypeSuffix(trimmed);
+    if (!isSignedType(suffix)) {
+      return err({
+        cause: "Negative literals cannot have unsigned type suffixes",
+        reason:
+          "Type suffixes like U8 are for unsigned types, which cannot be negative",
+        fix: "Use a signed type suffix like I8, or remove the type suffix",
+        first: { line: 0, column: 0, length: trimmed.length },
+      });
+    }
   }
 
   // Check for arithmetic expressions
@@ -274,16 +325,9 @@ export function compile(source: string): Result<Instruction[], CompileError> {
   }
 
   // Try to parse as a number with optional type suffix
-  const num = parseNumberWithSuffix(trimmed);
-  if (num !== undefined) {
-    // Create a halt instruction with the number as immediate value
-    return ok([
-      {
-        opcode: OpCode.Halt,
-        variant: Variant.Immediate,
-        operand1: num,
-      },
-    ]);
+  const numResult = parseNumberLiteral(trimmed);
+  if (numResult) {
+    return ok(numResult);
   }
 
   return ok([]);

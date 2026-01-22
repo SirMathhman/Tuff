@@ -452,7 +452,15 @@ export function decode(instruction: number): Required<Instruction> {
   const opcode = Math.floor(instruction / Math.pow(2, 32)) & 0xff;
   const variant = Math.floor(instruction / Math.pow(2, 24)) & 0xff;
   const operand1 = Math.floor(instruction / Math.pow(2, 12)) & 0xfff;
-  const operand2 = instruction & 0xfff;
+  let operand2 = instruction & 0xfff;
+
+  // Sign-extend 12-bit value for Load immediate variant
+  if (opcode === OpCode.Load && variant === Variant.Immediate) {
+    if (operand2 & 0x800) {
+      operand2 |= 0xfffff000;
+    }
+  }
+
   return {
     opcode,
     variant,

@@ -45,4 +45,8 @@ describe("The application", () => {
   it("should reject negative values with type suffix", () => {
     assertInvalid("-100U8");
   });
+
+  it("should accept negative values with signed type suffix", () => {
+    assertValid("-100I8", -100);
+  });
 });
