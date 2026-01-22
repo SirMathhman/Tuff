@@ -22,11 +22,6 @@ function assertInvalid(source: string) {
 
 describe("The application", () => {
   it("should execute a simple program that halts immediately", () => {
-    let result = run("");
-    if (result.ok) {
-      expect(result.value).toBe(0);
-    } else {
-      throw new Error(`Execution failed: ${result.error}`);
-    }
+		assertValid("", 0);
   });
 });
