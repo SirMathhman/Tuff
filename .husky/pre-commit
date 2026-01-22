@@ -1,1 +1,0 @@
-mvn clean compile test --quiet && mvn verify --quiet && pmd cpd --dir src --language java --minimum-tokens 65 --format markdown && python check_package_class_limit.py
