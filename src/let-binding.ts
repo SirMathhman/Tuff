@@ -123,10 +123,11 @@ export function extractExpressionType(
 export function extractArithmeticTypes(exprPart: string): string[] | undefined {
   const trimmed = exprPart.trim();
 
-  // Check if contains + or - (addition/subtraction operators)
+  // Check if contains operators: + - * /
   let opIndex = -1;
   for (let i = 1; i < trimmed.length; i++) {
-    if (trimmed[i] === "+" || trimmed[i] === "-") {
+    const char = trimmed[i];
+    if (char === "+" || char === "-" || char === "*" || char === "/") {
       opIndex = i;
       break;
     }

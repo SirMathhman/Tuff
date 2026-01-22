@@ -120,7 +120,9 @@ describe("The application - Grouping and variables", () => {
   it("should support let binding variable in expressions", () => {
     assertValid("let x : U8 = read U8; x + x", 84, 42);
   });
+});
 
+describe("The application - Variable bindings", () => {
   it("should support multiple let bindings", () => {
     assertValid("let x : U8 = read U8; let y : U8 = x; y", 42, 42);
   });
@@ -148,12 +150,18 @@ describe("The application - Grouping and variables", () => {
   it("should reject type narrowing with variable", () => {
     assertInvalid("let x = read U16; let y : U8 = x; y");
   });
+});
 
+describe("The application - Type checking", () => {
   it("should reject mixed-type arithmetic expressions", () => {
     assertInvalid("let x : U8 = 1U8 + 2U16; x");
   });
 
   it("should allow same-type widening in arithmetic", () => {
     assertValid("let x : U16 = read U16 + read U16; x", 50, 25, 25);
+  });
+
+  it("should reject mixed-type multiplication expressions", () => {
+    assertInvalid("let x : U8 = 1U8 * 2U16; x");
   });
 });
