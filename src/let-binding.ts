@@ -44,6 +44,7 @@ export function allocateVariable(
   varType?: string,
   mutable?: boolean,
   declarationOnly?: boolean,
+  sourceArrayName?: string,
 ): { context: VariableContext; address: number } {
   // Calculate start address based on all previous variables' memory usage
   let address = 904;
@@ -61,6 +62,7 @@ export function allocateVariable(
         type: varType,
         mutable,
         declarationOnly,
+        sourceArrayName,
       },
     ],
     address,
@@ -93,6 +95,7 @@ export function isVariableMutable(
 export function buildContextFromLetBindings(source: string): VariableContext {
   const context: VariableContext = [];
   let remaining = source;
+  let addressOffset = 0;
 
   while (remaining.length > 0) {
     remaining = remaining.trim();
@@ -111,13 +114,19 @@ export function buildContextFromLetBindings(source: string): VariableContext {
     // NOT implicitly made mutable just because they're declaration-only
     const isDeclarationOnly = comp.exprPart === "";
 
-    context.push({
+    const binding = {
       name: comp.varName,
-      memoryAddress: 904 + context.length,
+      memoryAddress: 904 + addressOffset,
       type: varType,
       mutable: comp.mutable,
       declarationOnly: isDeclarationOnly,
-    });
+    };
+
+    context.push(binding);
+
+    // Account for array size in next variable allocation
+    const varSize = getVariableMemorySize(varType);
+    addressOffset += varSize;
 
     remaining = comp.remaining;
   }
@@ -264,7 +273,30 @@ function extractReferenceType(
   if (!binding || !binding.type) return undefined;
 
   const isMut = isMutableReference(trimmed);
-  return isMut ? `*mut ${binding.type}` : `*${binding.type}`;
+  const baseType = binding.type;
+
+  // If referencing an array, convert to slice type
+  if (baseType.startsWith("[") && baseType.includes(";")) {
+    // Extract element type from [ElementType; init; total]
+    const elementType = extractArrayElementTypeFromBinding(baseType);
+    if (elementType) {
+      const sliceType = `*[${elementType}]`;
+      return isMut ? `*mut [${elementType}]` : sliceType;
+    }
+  }
+
+  return isMut ? `*mut ${baseType}` : `*${baseType}`;
+}
+
+function extractArrayElementTypeFromBinding(
+  arrayType: string,
+): string | undefined {
+  // Format: [ElementType; init; total]
+  if (!arrayType.startsWith("[") || !arrayType.endsWith("]")) return undefined;
+  const inner = arrayType.substring(1, arrayType.length - 1);
+  const parts = inner.split(";");
+  if (parts.length !== 3) return undefined;
+  return parts[0]?.trim();
 }
 
 export function extractExpressionType(

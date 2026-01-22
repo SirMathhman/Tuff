@@ -8,6 +8,7 @@ import {
   buildLetStoreInstructions,
   extractExpressionType,
 } from "./let-binding";
+import { isReferenceOperator, extractReferenceTarget } from "./parser";
 
 function determineResultAddress(
   exprCompile: Instruction[],
@@ -79,11 +80,21 @@ function parseInitializedBinding(
   ) => { instructions: Instruction[]; context: VariableContext } | undefined,
 ): { instructions: Instruction[]; newContext: VariableContext } | undefined {
   const varType = typeAnnotation || extractExpressionType(exprPart, context);
+
+  // For slice creation (&array), track the source array name
+  let sourceArrayName: string | undefined;
+  const trimmedExpr = exprPart.trim();
+  if (isReferenceOperator(trimmedExpr)) {
+    sourceArrayName = extractReferenceTarget(trimmedExpr);
+  }
+
   const { context: newContext, address } = allocateVariable(
     context,
     varName,
     varType,
     mutable,
+    false,
+    sourceArrayName,
   );
 
   // For array types, skip the store step - elements are already in place

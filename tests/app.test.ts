@@ -444,3 +444,33 @@ describe("The application - Array validation", () => {
     );
   });
 });
+
+describe("The application - Slices", () => {
+  it("should create and access slice from array literal", () => {
+    assertValid(
+      "let array = [1I32, 2I32, 3I32]; let slice : *[I32] = &array; slice",
+      904,
+    );
+  });
+
+  it("should access slice.init to get initialized count", () => {
+    assertValid(
+      "let array = [1I32, 2I32, 3I32]; let slice : *[I32] = &array; slice.init",
+      3,
+    );
+  });
+
+  it("should access slice.total to get total capacity", () => {
+    assertValid(
+      "let array : [I32; 2; 4] = [1I32, 2I32]; let slice : *[I32] = &array; slice.total",
+      4,
+    );
+  });
+
+  it("should support mutable slice creation", () => {
+    assertValid(
+      "let mut array = [1I32, 2I32, 3I32]; let slice : *mut [I32] = &mut array; slice.init",
+      3,
+    );
+  });
+});

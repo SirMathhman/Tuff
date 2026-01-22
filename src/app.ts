@@ -43,6 +43,7 @@ import {
   tryBracedExpression,
   tryArrayIndexing,
   tryArrayLiteral,
+  trySliceFieldAccess,
 } from "./compilation-strategies";
 
 export interface Ok<T> {
@@ -131,6 +132,12 @@ function tryArrayHandlers(
   trimmed: string,
   context: VariableContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
+  // Try parsing as slice field access (e.g., slice.init)
+  const sliceFieldResult = trySliceFieldAccess(trimmed, context);
+  if (sliceFieldResult) {
+    return sliceFieldResult;
+  }
+
   // Try parsing as array indexing
   const arrayIndexResult = tryArrayIndexing(
     trimmed,

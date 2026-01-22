@@ -136,6 +136,19 @@ export function isTypeCompatible(
     return declaredType === exprType;
   }
 
+  // Handle slice types - can accept array types when creating slices
+  if (isSliceType(declaredType) && isArrayType(exprType)) {
+    // Slice type accepting array type: check element types match
+    const sliceElem = getSliceElementType(declaredType);
+    const arrayElem = getArrayElementType(exprType);
+    return sliceElem === arrayElem;
+  }
+
+  if (isSliceType(declaredType)) {
+    // If expr is a slice type, must match exactly
+    return declaredType === exprType;
+  }
+
   // Handle pointer types
   if (declaredType.startsWith("*") || exprType.startsWith("*")) {
     // Pointers must match exactly or both be pointer types to same base
@@ -192,6 +205,37 @@ export function getPointerBaseType(type: string): string | undefined {
 
 export function isMutablePointerType(type: string): boolean {
   if (!isPointerType(type)) return false;
+  const afterStar = type.substring(1);
+  return afterStar.startsWith("mut");
+}
+
+export function isSliceType(type: string): boolean {
+  // Slice type: *[ElementType] or *mut [ElementType]
+  if (!type.startsWith("*")) return false;
+  let afterStar = type.substring(1);
+  if (afterStar.startsWith("mut ")) {
+    afterStar = afterStar.substring(4);
+  }
+  return (
+    afterStar.startsWith("[") &&
+    afterStar.endsWith("]") &&
+    !afterStar.includes(";")
+  );
+}
+
+export function getSliceElementType(type: string): string | undefined {
+  if (!isSliceType(type)) return undefined;
+  let afterStar = type.substring(1);
+  if (afterStar.startsWith("mut ")) {
+    afterStar = afterStar.substring(4);
+  }
+  // Extract from [ElementType]
+  const inner = afterStar.substring(1, afterStar.length - 1);
+  return inner;
+}
+
+export function isMutableSliceType(type: string): boolean {
+  if (!isSliceType(type)) return false;
   const afterStar = type.substring(1);
   return afterStar.startsWith("mut");
 }

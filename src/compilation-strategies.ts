@@ -33,6 +33,11 @@ import {
   buildStoreDirect,
   buildStoreAndHalt,
 } from "./instruction-primitives";
+import {
+  isSliceFieldAccess,
+  parseSliceFieldAccess,
+  buildSliceFieldAccessInstructions,
+} from "./slice-parsing";
 
 type CompileFunc = (
   expr: string,
@@ -188,10 +193,23 @@ export function tryReferenceExpression(
   const varName = extractReferenceTarget(trimmed);
   const varAddress = resolveVariable(context, varName);
   if (varAddress === undefined) return undefined;
+
   const isMut = isMutableReference(trimmed);
-  const instructions = isMut
-    ? buildReferenceAddressInstructions(varAddress)
-    : buildVarRefInstructions(varAddress);
+  const binding = context.find((b) => b.name === varName);
+  const isArray = binding && binding.type && binding.type.startsWith("[");
+
+  // For arrays or mutable references, always use buildReferenceAddressInstructions
+  // to get the address as an immediate value
+  if (isArray || isMut) {
+    const instructions = buildReferenceAddressInstructions(varAddress);
+    return {
+      instructions,
+      context,
+    };
+  }
+
+  // For immutable references to non-arrays, load the value (which might be a pointer)
+  const instructions = buildVarRefInstructions(varAddress);
   return {
     instructions,
     context,
@@ -316,6 +334,44 @@ export function tryArrayLiteral(
 
   instructions.push(buildLoadImmediate(1, elementsAddr));
   instructions.push(...buildStoreAndHalt());
+
+  return {
+    instructions,
+    context,
+  };
+}
+
+export function trySliceFieldAccess(
+  trimmed: string,
+  context: VariableContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
+  if (!isSliceFieldAccess(trimmed)) return undefined;
+
+  const fieldAccess = parseSliceFieldAccess(trimmed);
+  if (!fieldAccess) return undefined;
+
+  // Find the slice variable binding
+  const sliceBinding = context.find((b) => b.name === fieldAccess.sliceName);
+  if (!sliceBinding || !sliceBinding.type?.startsWith("*")) {
+    return undefined;
+  }
+
+  // Find the source array binding by name
+  const sourceArrayName = sliceBinding.sourceArrayName;
+  if (!sourceArrayName) {
+    return undefined;
+  }
+
+  const arrayBinding = context.find((b) => b.name === sourceArrayName);
+  if (!arrayBinding || !arrayBinding.type?.startsWith("[")) {
+    return undefined;
+  }
+
+  const instructions = buildSliceFieldAccessInstructions(
+    arrayBinding,
+    fieldAccess.field,
+  );
+  if (!instructions) return undefined;
 
   return {
     instructions,

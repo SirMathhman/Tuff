@@ -7,6 +7,7 @@ export interface VariableBinding {
   type?: string;
   mutable?: boolean;
   declarationOnly?: boolean;
+  sourceArrayName?: string; // For slices: tracks which array they were derived from
 }
 
 export type VariableContext = VariableBinding[];
