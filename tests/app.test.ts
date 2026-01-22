@@ -269,4 +269,8 @@ describe("The application - Pointers", () => {
 	it("should reject mismatched pointer types", () => {
 		assertInvalid("let x = 100; let y = &x; let z : *U8 = y; z");
 	});
+
+	it("should reject mutable reference to immutable variable", () => {
+		assertInvalid("let x = read I32; let y : *mut I32 = &mut x; *y = read I32; x");
+	});
 });

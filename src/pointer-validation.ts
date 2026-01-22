@@ -6,8 +6,6 @@ import {
 } from "./let-binding";
 import {
   isIdentifierChar,
-  extractReferenceTarget,
-  isMutableReference,
 } from "./parser";
 
 function validateDereferenceIsPointer(
@@ -123,15 +121,45 @@ function isVariableMutableInContext(
   return false;
 }
 
+function extractVariableName(text: string, startPos: number): string {
+  let varName = "";
+  let j = startPos;
+  while (j < text.length) {
+    const char = text[j];
+    if (!char || !isIdentifierChar(char, varName.length === 0)) break;
+    varName += char;
+    j++;
+  }
+  return varName;
+}
+
+function findMutableReferencesInString(text: string): string[] {
+  const references: string[] = [];
+  for (let i = 0; i < text.length - 1; i++) {
+    if (text[i] !== "&" || text[i + 1] !== "m") continue;
+    if (text.substring(i, i + 4) !== "&mut") continue;
+
+    // Skip whitespace after &mut
+    let j = i + 4;
+    while (j < text.length && (text[j] === " " || text[j] === "\t")) {
+      j++;
+    }
+
+    const varName = extractVariableName(text, j);
+    if (varName.length > 0) {
+      references.push(varName);
+    }
+  }
+  return references;
+}
+
 function checkMutableReferenceConstraints(
   source: string,
 ): CompileError | undefined {
-  // Check for &mut operator on non-mutable variables
-  if (isMutableReference(source)) {
-    const varName = extractReferenceTarget(source);
-    const context = buildContextFromLetBindings(source);
+  const context = buildContextFromLetBindings(source);
+  const mutRefVarNames = findMutableReferencesInString(source);
 
-    // Check if variable is mutable
+  for (const varName of mutRefVarNames) {
     if (!isVariableMutableInContext(varName, context)) {
       return {
         cause: `Cannot create mutable reference to non-mutable variable '${varName}'`,
