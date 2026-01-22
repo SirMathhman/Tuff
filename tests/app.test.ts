@@ -155,8 +155,7 @@ describe("The application - Variable bindings", () => {
     assertInvalid("let x = 1; let y : U8 = x; y");
   });
 
-  it.skip("should allow untyped variable assignment with I32", () => {
-    // TODO: Code generation bug - compiles to empty instruction array
+  it("should allow untyped variable assignment with I32", () => {
     assertValid("let x = 1; let y : I32 = x; y", 1);
   });
 });

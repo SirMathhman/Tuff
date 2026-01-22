@@ -63,24 +63,28 @@ export function parseLetComponents(source: string):
   const varName = extractVariableName(source);
   if (varName.length === 0) return undefined;
 
-  const colonIndex = findChar(source, ":");
-  const equalsIndex = findChar(source, "=");
+  // Find the first semicolon to limit search scope
+  const firstSemicolonIndex = findChar(source, ";");
+  if (firstSemicolonIndex === -1) return undefined;
+
+  // Only search within the current let binding (before the semicolon)
+  const bindingScope = source.substring(0, firstSemicolonIndex);
+
+  const colonIndex = findChar(bindingScope, ":");
+  const equalsIndex = findChar(bindingScope, "=");
   if (equalsIndex === -1) return undefined;
 
   // If there's a colon, it must come before the equals sign
   if (colonIndex !== -1 && colonIndex >= equalsIndex) return undefined;
 
-  const semicolonIndex = findChar(source, ";", equalsIndex + 1);
-  if (semicolonIndex === -1) return undefined;
-
-  const exprPart = source.substring(equalsIndex + 1, semicolonIndex).trim();
-  const remaining = source.substring(semicolonIndex + 1).trim();
+  const exprPart = bindingScope.substring(equalsIndex + 1).trim();
+  const remaining = source.substring(firstSemicolonIndex + 1).trim();
 
   // Extract type annotation if present
   let typeAnnotation: string | undefined;
   if (colonIndex !== -1) {
     const typePartEnd = equalsIndex;
-    const typePart = source.substring(colonIndex + 1, typePartEnd).trim();
+    const typePart = bindingScope.substring(colonIndex + 1, typePartEnd).trim();
     typeAnnotation = typePart;
   }
 
