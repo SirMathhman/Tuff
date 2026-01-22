@@ -35,7 +35,6 @@ import {
   parseLetComponents,
   isReadExpressionPattern,
   adjustReadInstructions,
-  buildLetFinalInstructions,
   buildLetStoreInstructions,
   buildVarRefInstructions,
 } from "./let-binding";
@@ -411,7 +410,11 @@ function parseLetExpression(
     return {
       instructions: [
         ...storeInstructions,
-        ...buildLetFinalInstructions(address),
+        {
+          opcode: OpCode.Halt,
+          variant: Variant.Immediate,
+          operand1: 0,
+        },
       ],
       newContext,
     };

@@ -124,4 +124,8 @@ describe("The application - Grouping and variables", () => {
   it("should support multiple let bindings", () => {
     assertValid("let x : U8 = read U8; let y : U8 = x; y", 42, 42);
   });
+
+  it("should support let binding without trailing expression", () => {
+    assertValid("let x : U8 = read U8;", 0, 42);
+  });
 });
