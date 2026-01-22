@@ -1,0 +1,4 @@
+[test]
+# Global coverage threshold: 85% functions
+# Current: 91.06% functions, 85.85% lines
+thresholdPercent = 85
