@@ -258,6 +258,10 @@ describe("The application - If-else expressions", () => {
     assertInvalid("let x = if ( read Bool ) 3U32 else true; x");
   });
 
+  it("should reject if-expression result type mismatch with let binding", () => {
+    assertInvalid("let x : Bool = if ( read Bool ) 3U32 else 5U32; x");
+  });
+
   it("should support if-else with true condition", () => {
     assertValid("if (read U8 == read U8) 3U8 else 5U8", 3, 5, 5);
   });

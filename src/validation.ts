@@ -2,6 +2,7 @@ import { type CompileError, getTypeBits, isSignedType } from "./types";
 import {
   parseLetComponents,
   extractExpressionType,
+  extractIfBranchTypes,
   type VariableContext,
   isBareNumber,
   isNumberLiteral,
@@ -11,6 +12,7 @@ import {
   extractParenthesizedContent,
   isBracedExpression,
   extractBracedContent,
+  findConditionParentheses,
 } from "./parser";
 
 function isTypeCompatible(declaredType: string, exprType: string): boolean {
@@ -443,91 +445,51 @@ function isValidIfCondition(condition: string): boolean {
   return false;
 }
 
-function isElseKeyword(source: string, index: number): boolean {
-  if (source.substring(index, index + 4) !== "else") return false;
-  const afterElse = source[index + 4];
-  return !afterElse || afterElse === " " || afterElse === "\t";
+function isIfKeywordAt(source: string, index: number): boolean {
+  if (source.substring(index, index + 2) !== "if") return false;
+  const beforeIf = source[index - 1];
+  return !beforeIf || beforeIf === " " || beforeIf === "\t";
 }
 
-function findElseKeyword(source: string, afterParenEnd: number): number {
-  for (let i = afterParenEnd; i < source.length; i++) {
-    if (isElseKeyword(source, i)) {
+function findIfInExpression(source: string, afterEqualsIndex: number): number {
+  for (let i = afterEqualsIndex + 1; i < source.length; i++) {
+    if (isIfKeywordAt(source, i)) {
       return i;
     }
   }
   return -1;
 }
 
-function findConditionParentheses(
-  source: string,
-  startPos: number,
-): { start: number; end: number } | undefined {
-  let parenStart = -1;
-  for (let i = startPos; i < source.length; i++) {
-    if (source[i] === "(") {
-      parenStart = i;
-      break;
-    }
-    if (source[i] !== " " && source[i] !== "\t") {
-      break;
-    }
+function findIfExpressionStart(source: string): number {
+  // Find the position where "if" starts (could be at beginning or after let binding)
+  if (source.startsWith("if")) {
+    return 0;
   }
 
-  if (parenStart === -1) {
-    return undefined;
+  // Look for "if" after an equals sign in a let binding
+  const equalsIndex = source.indexOf("=");
+  if (equalsIndex === -1) {
+    return -1;
   }
 
-  let depth = 1;
-  for (let i = parenStart + 1; i < source.length; i++) {
-    if (source[i] === "(") depth++;
-    if (source[i] === ")") depth--;
-    if (depth === 0) {
-      return { start: parenStart, end: i };
-    }
-  }
-
-  return undefined;
-}
-
-function extractIfBranchTypes(
-  source: string,
-): { thenType: string | undefined; elseType: string | undefined } | undefined {
-  if (!source.startsWith("if")) {
-    return undefined;
-  }
-
-  const parens = findConditionParentheses(source, 2);
-  if (!parens) {
-    return undefined;
-  }
-
-  const elseIndex = findElseKeyword(source, parens.end + 1);
-  if (elseIndex === -1) {
-    return undefined;
-  }
-
-  const thenExpr = source.substring(parens.end + 1, elseIndex).trim();
-  const elseExpr = source.substring(elseIndex + 4).trim();
-
-  const thenType = extractExpressionType(thenExpr);
-  const elseType = extractExpressionType(elseExpr);
-
-  return { thenType, elseType };
+  return findIfInExpression(source, equalsIndex);
 }
 
 export function detectInvalidIfCondition(
   source: string,
 ): CompileError | undefined {
-  if (!source.startsWith("if")) {
+  const ifStart = findIfExpressionStart(source);
+  if (ifStart === -1) {
     return undefined;
   }
 
-  const parens = findConditionParentheses(source, 2);
+  const ifExpr = source.substring(ifStart);
+  const parens = findConditionParentheses(ifExpr, 2);
   if (!parens) {
     return undefined;
   }
 
-  const condition = source.substring(parens.start + 1, parens.end).trim();
+  const condition = ifExpr.substring(parens.start + 1, parens.end).trim();
 
   if (!isValidIfCondition(condition)) {
     return {
@@ -537,7 +499,7 @@ export function detectInvalidIfCondition(
       fix: "Use a comparison (==, <, >, <=, >=) or boolean literal (true, false) as the condition",
       first: {
         line: 0,
-        column: parens.start,
+        column: ifStart + parens.start,
         length: parens.end - parens.start + 1,
       },
     };

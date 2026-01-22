@@ -8,6 +8,8 @@ import {
   isBracedExpression,
   extractBracedContent,
   parseBooleanLiteral,
+  findConditionParentheses,
+  findElseKeyword,
 } from "./parser";
 import {
   buildLoadDirect,
@@ -102,11 +104,70 @@ export function isReadExpressionPattern(exprPart: string): boolean {
   );
 }
 
+function extractIfExpressionType(
+  source: string,
+  context?: VariableContext,
+): string | undefined {
+  const branches = extractIfBranchTypes(source, context);
+  if (!branches) {
+    return undefined;
+  }
+
+  const { thenType, elseType } = branches;
+
+  // If both branches have types and match, return that type
+  if (thenType && elseType && thenType === elseType) {
+    return thenType;
+  }
+
+  // If one is undefined, return the other if it exists
+  if (thenType && !elseType) {
+    return thenType;
+  }
+  if (elseType && !thenType) {
+    return elseType;
+  }
+
+  return undefined;
+}
+
+export function extractIfBranchTypes(
+  source: string,
+  context?: VariableContext,
+): { thenType: string | undefined; elseType: string | undefined } | undefined {
+  if (!source.startsWith("if")) {
+    return undefined;
+  }
+
+  const parens = findConditionParentheses(source, 2);
+  if (!parens) {
+    return undefined;
+  }
+
+  const elseIndex = findElseKeyword(source, parens.end + 1);
+  if (elseIndex === -1) {
+    return undefined;
+  }
+
+  const thenExpr = source.substring(parens.end + 1, elseIndex).trim();
+  const elseExpr = source.substring(elseIndex + 4).trim();
+
+  const thenType = extractExpressionType(thenExpr, context);
+  const elseType = extractExpressionType(elseExpr, context);
+
+  return { thenType, elseType };
+}
+
 export function extractExpressionType(
   exprPart: string,
   context?: VariableContext,
 ): string | undefined {
   const trimmed = exprPart.trim();
+
+  // For if-expressions, extract the type from branches
+  if (trimmed.startsWith("if")) {
+    return extractIfExpressionType(trimmed, context);
+  }
 
   // For braced expressions, unwrap and extract from inner content
   if (isBracedExpression(trimmed)) {

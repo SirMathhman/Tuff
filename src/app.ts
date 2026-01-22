@@ -539,22 +539,22 @@ export function compile(source: string): Result<Instruction[], CompileError> {
     return err(shadowError);
   }
 
-  // Check for type incompatibility in let bindings
-  const typeError = detectTypeIncompatibility(trimmed);
-  if (typeError) {
-    return err(typeError);
-  }
-
   // Check for type mismatch in comparisons
   const comparisonError = detectComparisonTypeMismatch(trimmed);
   if (comparisonError) {
     return err(comparisonError);
   }
 
-  // Check for invalid if-expression conditions
+  // Check for invalid if-expression conditions (before type incompatibility)
   const ifConditionError = detectInvalidIfCondition(trimmed);
   if (ifConditionError) {
     return err(ifConditionError);
+  }
+
+  // Check for type incompatibility in let bindings
+  const typeError = detectTypeIncompatibility(trimmed);
+  if (typeError) {
+    return err(typeError);
   }
 
   // Check for incompatible if-branch types

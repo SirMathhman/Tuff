@@ -338,3 +338,49 @@ export function parseBooleanLiteral(source: string): boolean | undefined {
   }
   return undefined;
 }
+
+export function findConditionParentheses(
+  source: string,
+  startPos: number,
+): { start: number; end: number } | undefined {
+  let parenStart = -1;
+  for (let i = startPos; i < source.length; i++) {
+    if (source[i] === "(") {
+      parenStart = i;
+      break;
+    }
+    if (source[i] !== " " && source[i] !== "\t") {
+      break;
+    }
+  }
+
+  if (parenStart === -1) {
+    return undefined;
+  }
+
+  let depth = 1;
+  for (let i = parenStart + 1; i < source.length; i++) {
+    if (source[i] === "(") depth++;
+    if (source[i] === ")") depth--;
+    if (depth === 0) {
+      return { start: parenStart, end: i };
+    }
+  }
+
+  return undefined;
+}
+
+export function isElseKeyword(source: string, index: number): boolean {
+  if (source.substring(index, index + 4) !== "else") return false;
+  const afterElse = source[index + 4];
+  return !afterElse || afterElse === " " || afterElse === "\t";
+}
+
+export function findElseKeyword(source: string, afterParenEnd: number): number {
+  for (let i = afterParenEnd; i < source.length; i++) {
+    if (isElseKeyword(source, i)) {
+      return i;
+    }
+  }
+  return -1;
+}
