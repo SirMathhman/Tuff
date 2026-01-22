@@ -1,4 +1,9 @@
 import { execute, type Instruction, OpCode, Variant } from "./vm";
+import {
+  parseMulExpression,
+  parseNumberWithSuffix,
+  parseReadInstruction,
+} from "./parser";
 
 export interface Ok<T> {
   ok: true;
@@ -104,73 +109,8 @@ function getTypeRange(
   return { min: minVal, max: maxVal };
 }
 
-function parseNumberWithSuffix(source: string): number | undefined {
-  const suffixIndex = findTypeSuffixIndex(source);
-  const numStr = suffixIndex >= 0 ? source.substring(0, suffixIndex) : source;
-
-  // Validate the number part contains only digits and optional minus sign
-  let isValidNumber = numStr.length > 0;
-  for (let i = 0; i < numStr.length; i++) {
-    const char = numStr[i];
-    if (i === 0 && char === "-") continue;
-    if (char && char >= "0" && char <= "9") continue;
-    isValidNumber = false;
-    break;
-  }
-
-  if (isValidNumber) {
-    const num = parseInt(numStr, 10);
-    if (!isNaN(num)) {
-      return num;
-    }
-  }
-}
-
 function hasTypeSuffix(source: string): boolean {
   return findTypeSuffixIndex(source) >= 0;
-}
-
-function parseReadInstruction(source: string): Instruction[] | undefined {
-  const parts: string[] = [];
-  let current = "";
-  for (let i = 0; i < source.length; i++) {
-    const char = source[i];
-    if (char !== " " && char !== "\t") {
-      current += char;
-      continue;
-    }
-    if (current.length > 0) {
-      parts.push(current);
-      current = "";
-    }
-  }
-  if (current.length > 0) {
-    parts.push(current);
-  }
-
-  if (parts.length !== 2 || parts[0] !== "read") {
-    return undefined;
-  }
-
-  // Read from stdin into register 0, store in memory at 900, then halt
-  return [
-    {
-      opcode: OpCode.In,
-      variant: Variant.Immediate,
-      operand1: 0,
-    },
-    {
-      opcode: OpCode.Store,
-      variant: Variant.Direct,
-      operand1: 0,
-      operand2: 900,
-    },
-    {
-      opcode: OpCode.Halt,
-      variant: Variant.Direct,
-      operand1: 900,
-    },
-  ];
 }
 
 function buildStoreHaltInstructions(opcode: OpCode): Instruction[] {
@@ -326,30 +266,6 @@ function parseRightSideForSub(rightPart: string): Instruction[] | undefined {
   return undefined;
 }
 
-function parseAddExpression(source: string): Instruction[] | undefined {
-  // Look for + operator
-  let plusIndex = -1;
-  for (let i = 0; i < source.length; i++) {
-    if (source[i] === "+") {
-      plusIndex = i;
-      break;
-    }
-  }
-  if (plusIndex === -1) return undefined;
-
-  const leftPart = source.substring(0, plusIndex).trim();
-  const rightPart = source.substring(plusIndex + 1).trim();
-
-  // Check if left is "read U8"
-  const isLeftRead = leftPart.startsWith("read");
-
-  if (!isLeftRead) {
-    return parseAddExpressionConstantLeft(leftPart, rightPart);
-  }
-
-  return parseAddExpressionReadLeft(leftPart, rightPart);
-}
-
 function parseSubExpression(source: string): Instruction[] | undefined {
   // Look for - operator (skip if it's at the start, as that's a negative number)
   let minusIndex = -1;
@@ -376,6 +292,30 @@ function parseSubExpression(source: string): Instruction[] | undefined {
     ...rightInstructions.slice(0, -1), // Exclude halt from right (if exists)
     ...buildSubInstructions(),
   ];
+}
+
+function parseAddExpression(source: string): Instruction[] | undefined {
+  // Look for + operator
+  let plusIndex = -1;
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "+") {
+      plusIndex = i;
+      break;
+    }
+  }
+  if (plusIndex === -1) return undefined;
+
+  const leftPart = source.substring(0, plusIndex).trim();
+  const rightPart = source.substring(plusIndex + 1).trim();
+
+  // Check if left is "read U8"
+  const isLeftRead = leftPart.startsWith("read");
+
+  if (!isLeftRead) {
+    return parseAddExpressionConstantLeft(leftPart, rightPart);
+  }
+
+  return parseAddExpressionReadLeft(leftPart, rightPart);
 }
 
 function buildChainedReadAddExpression(
@@ -410,6 +350,24 @@ function buildChainedReadAddExpression(
   ];
 }
 
+function buildReadAddMulInstructions(): Instruction[] {
+  return [
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 902,
+    },
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 1,
+      operand2: 901,
+    },
+    ...buildAddStoreHaltInstructions(),
+  ];
+}
+
 function parseAddExpressionReadLeft(
   leftPart: string,
   rightPart: string,
@@ -418,9 +376,17 @@ function parseAddExpressionReadLeft(
   const leftInstructions = parseReadInstruction(leftPart);
   if (!leftInstructions) return undefined;
 
-  // Parse right side - could be "read U8", a number, or another addition expression
+  // First, try parsing right side as multiplication (higher precedence)
+  const mulResult = parseMulExpression(rightPart);
+  if (mulResult) {
+    return [
+      ...leftInstructions.slice(0, -1), // Exclude halt from left, leaves value in memory[901]
+      ...mulResult, // Result is in memory[902], no halt to exclude
+      ...buildReadAddMulInstructions(),
+    ];
+  }
 
-  // First, try parsing right side as another addition expression (for chaining)
+  // Try parsing right side as another addition expression (for chaining)
   const chainedAddition = parseAddExpression(rightPart);
   if (chainedAddition) {
     return buildChainedReadAddExpression(chainedAddition);

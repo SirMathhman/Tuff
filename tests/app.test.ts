@@ -10,7 +10,8 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
     if (execResult !== expected) {
       // Do we have an  equivalent to Assertions.fail()?
       expect(
-        "Failed to execute compiled instructions: " + compileResult.value,
+        "Failed to execute compiled instructions: " +
+          JSON.stringify(compileResult.value, null, 2),
       ).toBeUndefined();
     }
 
@@ -61,6 +62,10 @@ describe("The application", () => {
 
   it("should read three U8 values, add first two, subtract third, and halt with result", () => {
     assertValid("read U8 + read U8 - read U8", 1, 2, 3, 4);
+  });
+
+  it("should read three U8 values, add first, multiply second and third, and halt with result", () => {
+    assertValid("read U8 + read U8 * read U8", 10, 4, 2, 3);
   });
 
   it("should reject negative values with type suffix", () => {
