@@ -68,9 +68,7 @@ export function err<X>(error: X): Err<X> {
   return { ok: false, error };
 }
 
-function parseSubExpressionLeftPart(
-  part: string,
-): Instruction[] | undefined {
+function parseSubExpressionLeftPart(part: string): Instruction[] | undefined {
   let result = parseAddExpression(part);
   if (result) return result;
   result = parseSubExpression(part);
@@ -98,9 +96,7 @@ function parseSubExpressionLeftPart(
   return undefined;
 }
 
-function parseSubExpressionRightPart(
-  part: string,
-): Instruction[] | undefined {
+function parseSubExpressionRightPart(part: string): Instruction[] | undefined {
   if (part.startsWith("read")) return parseReadInstruction(part);
 
   const num = parseNumberWithSuffix(part);

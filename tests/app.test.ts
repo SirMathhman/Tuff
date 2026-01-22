@@ -192,4 +192,8 @@ describe("The application - Type checking", () => {
   it("should reject mixed-type arithmetic across operations", () => {
     assertInvalid("let x : U16 = (1U8 * 2U16) + 100U8; x");
   });
+
+  it("should reject arithmetic operations on boolean types", () => {
+    assertInvalid("let x = true; let y = false; x + y");
+  });
 });

@@ -65,65 +65,87 @@ function buildTypeError(
   };
 }
 
-function checkArithmeticMismatchRecursive(exprPart: string): boolean {
-  const trimmed = exprPart.trim();
-
-  // First, unwrap any outer grouping
-  let toCheck = trimmed;
+function unwrapExpression(expr: string): string {
+  const trimmed = expr.trim();
   if (isParenthesizedExpression(trimmed)) {
-    toCheck = extractParenthesizedContent(trimmed);
-  } else if (isBracedExpression(trimmed)) {
-    toCheck = extractBracedContent(trimmed);
+    return extractParenthesizedContent(trimmed);
   }
+  if (isBracedExpression(trimmed)) {
+    return extractBracedContent(trimmed);
+  }
+  return trimmed;
+}
 
-  // Check for arithmetic operators at depth 0
+function findTopLevelOperatorIndex(expr: string): number {
   let parenDepth = 0;
   let braceDepth = 0;
-  let firstOpIndex = -1;
 
-  for (let i = 0; i < toCheck.length; i++) {
-    const char = toCheck[i];
+  for (let i = 0; i < expr.length; i++) {
+    const char = expr[i];
 
     if (char === "(") parenDepth++;
     if (char === ")") parenDepth--;
     if (char === "{") braceDepth++;
     if (char === "}") braceDepth--;
 
-    // Skip checking operators inside parentheses or on first character
+    // Skip checking operators inside parentheses/braces or on first character
     if (i === 0 || parenDepth !== 0 || braceDepth !== 0) continue;
 
     if (char === "+" || char === "-" || char === "*" || char === "/") {
-      firstOpIndex = i;
-      break;
+      return i;
     }
   }
 
-  // If there's an operator at this level, check if operands have consistent types
-  if (firstOpIndex !== -1) {
-    const leftPart = toCheck.substring(0, firstOpIndex).trim();
-    const rightPart = toCheck.substring(firstOpIndex + 1).trim();
+  return -1;
+}
 
-    const leftType = extractExpressionType(leftPart);
-    const rightType = extractExpressionType(rightPart);
+type OperandChecker = (
+  left: string,
+  right: string,
+  context?: VariableContext,
+) => boolean;
 
-    // If both parts have types and they differ, we have a mismatch
-    if (leftType && rightType && leftType !== rightType) {
-      return true;
-    }
+function checkOperandsRecursive(
+  exprPart: string,
+  checker: OperandChecker,
+  context?: VariableContext,
+): boolean {
+  const toCheck = unwrapExpression(exprPart);
+  const firstOpIndex = findTopLevelOperatorIndex(toCheck);
 
-    // Recursively check left and right parts for nested mismatches
-    if (checkArithmeticMismatchRecursive(leftPart)) {
-      return true;
-    }
-    if (checkArithmeticMismatchRecursive(rightPart)) {
-      return true;
-    }
+  if (firstOpIndex === -1) return false;
 
-    return false;
-  }
+  const leftPart = toCheck.substring(0, firstOpIndex).trim();
+  const rightPart = toCheck.substring(firstOpIndex + 1).trim();
 
-  // No operators at this level, nothing to check
-  return false;
+  return (
+    checker(leftPart, rightPart, context) ||
+    checkOperandsRecursive(leftPart, checker, context) ||
+    checkOperandsRecursive(rightPart, checker, context)
+  );
+}
+
+function checkArithmeticMismatchRecursive(exprPart: string): boolean {
+  const checker: OperandChecker = (left, right) => {
+    const leftType = extractExpressionType(left);
+    const rightType = extractExpressionType(right);
+    return !!(leftType && rightType && leftType !== rightType);
+  };
+
+  return checkOperandsRecursive(exprPart, checker);
+}
+
+function checkBooleanArithmetic(
+  exprPart: string,
+  context?: VariableContext,
+): boolean {
+  const checker: OperandChecker = (left, right, ctx) => {
+    const leftType = extractExpressionType(left, ctx);
+    const rightType = extractExpressionType(right, ctx);
+    return leftType === "Bool" || rightType === "Bool";
+  };
+
+  return checkOperandsRecursive(exprPart, checker, context);
 }
 
 export function detectVariableShadowing(
@@ -226,6 +248,19 @@ function processLetBinding(
 
   const { varName, typeAnnotation, exprPart } = components;
 
+  // Check for boolean values in arithmetic expressions
+  if (checkBooleanArithmetic(exprPart, variableTypes)) {
+    return {
+      error: {
+        cause: "Boolean values cannot be used in arithmetic expressions",
+        reason:
+          "Arithmetic operators (+, -, *, /) are not supported for Bool type",
+        fix: "Remove the arithmetic operation or use numeric types instead",
+        first: { line: 0, column: 0, length: exprPart.length },
+      },
+    };
+  }
+
   // Check for mixed-type arithmetic expressions (recursively at all levels)
   if (checkArithmeticMismatchRecursive(exprPart)) {
     return {
@@ -278,6 +313,20 @@ export function detectTypeIncompatibility(
     }
 
     remaining = remaining.substring(semicolonIndex + 1).trim();
+  }
+
+  // Check any remaining expression (after all let bindings)
+  if (
+    remaining.length > 0 &&
+    checkBooleanArithmetic(remaining, variableTypes)
+  ) {
+    return {
+      cause: "Boolean values cannot be used in arithmetic expressions",
+      reason:
+        "Arithmetic operators (+, -, *, /) are not supported for Bool type",
+      fix: "Remove the arithmetic operation or use numeric types instead",
+      first: { line: 0, column: 0, length: remaining.length },
+    };
   }
 
   return undefined;

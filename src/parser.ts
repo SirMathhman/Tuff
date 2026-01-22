@@ -326,4 +326,3 @@ export function parseBooleanLiteral(source: string): boolean | undefined {
   }
   return undefined;
 }
-
