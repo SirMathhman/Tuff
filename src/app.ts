@@ -19,6 +19,8 @@ import {
 } from "./types";
 import {
   type VariableContext,
+} from "./variable-types";
+import {
   resolveVariable,
   buildVarRefInstructions,
   buildReferenceAddressInstructions,

@@ -1,9 +1,9 @@
 import { type CompileError, isTypeCompatible } from "./types";
+import { type VariableContext } from "./variable-types";
 import {
   parseLetComponents,
   extractExpressionType,
   extractIfBranchTypes,
-  type VariableContext,
 } from "./let-binding";
 import { isBareNumber, isNumberLiteral } from "./type-inference-helpers";
 import {

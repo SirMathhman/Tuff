@@ -21,21 +21,15 @@ import {
 } from "./array-helpers";
 import { isBareNumber } from "./type-inference-helpers";
 import {
+  type VariableContext,
+} from "./variable-types";
+export type { VariableBinding, VariableContext } from "./variable-types";
+import {
   buildLoadDirect,
   buildLoadImmediate,
   buildStoreDirect,
   buildStoreAndHalt,
 } from "./instruction-primitives";
-
-export interface VariableBinding {
-  name: string;
-  memoryAddress: number;
-  type?: string;
-  mutable?: boolean;
-  declarationOnly?: boolean;
-}
-
-export type VariableContext = VariableBinding[];
 
 function getVariableMemorySize(type: string | undefined): number {
   if (!type) return 1;

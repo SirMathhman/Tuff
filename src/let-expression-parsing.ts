@@ -1,6 +1,6 @@
 import { type Instruction, OpCode, Variant } from "./vm";
+import { type VariableContext } from "./variable-types";
 import {
-  type VariableContext,
   allocateVariable,
   parseLetComponents,
   isReadExpressionPattern,

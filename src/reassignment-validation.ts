@@ -3,11 +3,10 @@ import {
   isTypeCompatible,
   isMutablePointerType,
 } from "./types";
+import { type VariableContext, type VariableBinding } from "./variable-types";
 import {
   parseLetComponents,
   extractExpressionType,
-  type VariableContext,
-  type VariableBinding,
 } from "./let-binding";
 import {
   parseReassignmentComponents,

@@ -1,6 +1,6 @@
 import { type CompileError } from "./types";
+import { type VariableContext } from "./variable-types";
 import {
-  type VariableContext,
   parseLetComponents,
   buildContextFromLetBindings,
 } from "./let-binding";

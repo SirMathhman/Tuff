@@ -7,7 +7,8 @@ import {
   extractArrayIndexComponents,
 } from "./parser";
 import { buildStoreHaltInstructions } from "./types";
-import { type VariableContext, resolveVariable } from "./let-binding";
+import { type VariableContext } from "./variable-types";
+import { resolveVariable } from "./let-binding";
 import { splitByAddOperator } from "./operator-parsing";
 
 function resolveArrayIndexing(
