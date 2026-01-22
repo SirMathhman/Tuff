@@ -18,7 +18,27 @@ import {
   checkTypeOverflow,
   checkNegativeUnsignedError,
   buildMulOrDivHalt,
+  buildStoreHaltInstructions,
 } from "./types";
+import {
+  buildAddInstructions,
+  buildReadAddConstantInstructions,
+  buildConstantAddReadInstructions,
+  buildChainedReadAddExpression,
+  buildReadAddMulInstructions,
+  buildNumberLiteral,
+} from "./helpers";
+import {
+  type VariableContext,
+  allocateVariable,
+  resolveVariable,
+  parseLetComponents,
+  isReadExpressionPattern,
+  adjustReadInstructions,
+  buildLetFinalInstructions,
+  buildLetStoreInstructions,
+  buildVarRefInstructions,
+} from "./let-binding";
 
 export interface Ok<T> {
   ok: true;
@@ -38,98 +58,6 @@ export function ok<T>(value: T): Ok<T> {
 
 export function err<X>(error: X): Err<X> {
   return { ok: false, error };
-}
-
-function buildStoreHaltInstructions(opcode: OpCode): Instruction[] {
-  return [
-    {
-      opcode,
-      variant: Variant.Immediate,
-      operand1: 1,
-      operand2: 0,
-    },
-    {
-      opcode: OpCode.Store,
-      variant: Variant.Direct,
-      operand1: 1,
-      operand2: 900,
-    },
-    {
-      opcode: OpCode.Halt,
-      variant: Variant.Direct,
-      operand1: 900,
-    },
-  ];
-}
-
-function buildAddInstructions(): Instruction[] {
-  return [
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Direct,
-      operand1: 1,
-      operand2: 901,
-    },
-    ...buildStoreHaltInstructions(OpCode.Add),
-  ];
-}
-
-function buildReadAddConstantInstructions(constant: number): Instruction[] {
-  return [
-    {
-      opcode: OpCode.In,
-      variant: Variant.Immediate,
-      operand1: 0,
-    },
-    {
-      opcode: OpCode.Store,
-      variant: Variant.Direct,
-      operand1: 0,
-      operand2: 901,
-    },
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Immediate,
-      operand1: 0,
-      operand2: constant,
-    },
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Direct,
-      operand1: 1,
-      operand2: 901,
-    },
-    ...buildStoreHaltInstructions(OpCode.Add),
-  ];
-}
-
-function buildConstantAddReadInstructions(constant: number): Instruction[] {
-  return [
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Immediate,
-      operand1: 0,
-      operand2: constant,
-    },
-    {
-      opcode: OpCode.Store,
-      variant: Variant.Direct,
-      operand1: 0,
-      operand2: 901,
-    },
-    {
-      opcode: OpCode.In,
-      variant: Variant.Immediate,
-      operand1: 0,
-    },
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Direct,
-      operand1: 1,
-      operand2: 901,
-    },
-    ...buildStoreHaltInstructions(OpCode.Add),
-  ];
 }
 
 function parseSubExpression(source: string): Instruction[] | undefined {
@@ -270,56 +198,6 @@ function parseAddExpression(source: string): Instruction[] | undefined {
   return parseAddExpressionReadLeft(leftPart, rightPart);
 }
 
-function buildChainedReadAddExpression(
-  chainedAddition: Instruction[],
-): Instruction[] {
-  return [
-    {
-      opcode: OpCode.In,
-      variant: Variant.Immediate,
-      operand1: 0,
-    },
-    {
-      opcode: OpCode.Store,
-      variant: Variant.Direct,
-      operand1: 0,
-      operand2: 902,
-    },
-    ...chainedAddition.slice(0, -1), // Process chain, exclude halt
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Direct,
-      operand1: 0,
-      operand2: 900,
-    },
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Direct,
-      operand1: 1,
-      operand2: 902,
-    },
-    ...buildStoreHaltInstructions(OpCode.Add),
-  ];
-}
-
-function buildReadAddMulInstructions(): Instruction[] {
-  return [
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Direct,
-      operand1: 0,
-      operand2: 902,
-    },
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Direct,
-      operand1: 1,
-      operand2: 901,
-    },
-    ...buildStoreHaltInstructions(OpCode.Add),
-  ];
-}
-
 function parseLeftMulDivAtom(leftPart: string): Instruction[] | undefined {
   if (isParenthesizedExpression(leftPart) || isBracedExpression(leftPart)) {
     return parseParenthesizedAtom(leftPart, 1);
@@ -383,6 +261,38 @@ function parseRightMulOrDivWithParens(
   return parseDivExpressionWithParens(rightPart);
 }
 
+function tryLetInBraces(
+  rightPart: string,
+  leftInstructions: Instruction[],
+): Instruction[] | undefined {
+  if (!isBracedExpression(rightPart)) return undefined;
+
+  const unwrappedRightPart = extractBracedContent(rightPart).trim();
+  const letResult = parseLetExpression(unwrappedRightPart, []);
+  if (!letResult) return undefined;
+
+  // Let expression compiled successfully - combine with left
+  // Left side has value in memory[901]
+  // Let result has value in memory[900]
+  return [
+    ...leftInstructions.slice(0, -1), // Exclude halt from left, value in 901
+    ...letResult.instructions.slice(0, -1), // Exclude halt from let, value in 900
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 0,
+      operand2: 900,
+    },
+    {
+      opcode: OpCode.Load,
+      variant: Variant.Direct,
+      operand1: 1,
+      operand2: 901,
+    },
+    ...buildStoreHaltInstructions(OpCode.Add),
+  ];
+}
+
 function parseAddExpressionReadLeft(
   leftPart: string,
   rightPart: string,
@@ -391,13 +301,15 @@ function parseAddExpressionReadLeft(
   const leftInstructions = parseReadInstruction(leftPart);
   if (!leftInstructions) return undefined;
 
-  // Unwrap braces if present
-  let unwrappedRightPart = rightPart;
-  if (isBracedExpression(rightPart)) {
-    unwrappedRightPart = extractBracedContent(rightPart);
-  }
+  // Try parsing braced let expression first
+  const letResult = tryLetInBraces(rightPart, leftInstructions);
+  if (letResult) return letResult;
 
-  // First, try parsing right side as multiplication or division (higher precedence)
+  const unwrappedRightPart = isBracedExpression(rightPart)
+    ? extractBracedContent(rightPart).trim()
+    : rightPart;
+
+  // Try parsing right side as multiplication or division (higher precedence)
   const mulDivResult = parseRightMulOrDivWithParens(unwrappedRightPart);
   if (mulDivResult) {
     return [
@@ -464,30 +376,165 @@ function parseAddExpressionConstantLeft(
   return buildConstantAddReadInstructions(leftNum);
 }
 
-function parseNumberLiteral(source: string): Instruction[] | undefined {
-  const num = parseNumberWithSuffix(source);
-  if (num === undefined) return undefined;
+function parseLetExpression(
+  source: string,
+  context: VariableContext,
+): { instructions: Instruction[]; newContext: VariableContext } | undefined {
+  if (!source.startsWith("let")) return undefined;
 
-  // Store the number in memory at address 900
-  return [
-    {
-      opcode: OpCode.Load,
-      variant: Variant.Immediate,
-      operand1: 0,
-      operand2: num,
-    },
-    {
-      opcode: OpCode.Store,
-      variant: Variant.Direct,
-      operand1: 0,
-      operand2: 900,
-    },
-    {
-      opcode: OpCode.Halt,
-      variant: Variant.Direct,
-      operand1: 900,
-    },
-  ];
+  const components = parseLetComponents(source);
+  if (!components) return undefined;
+
+  const { varName, exprPart, remaining } = components;
+  const exprCompile = compileNoContext(exprPart);
+  if (!exprCompile || exprCompile.length === 0) return undefined;
+
+  const { context: newContext, address } = allocateVariable(context, varName);
+  const lastInstruction = exprCompile[exprCompile.length - 1];
+  let resultAddress = 900;
+  if (lastInstruction && lastInstruction.opcode === OpCode.Halt) {
+    resultAddress = lastInstruction.operand1;
+  }
+
+  const exprWithoutHalt = exprCompile.slice(0, -1);
+  const adjustedInstructions = adjustReadInstructions(
+    exprWithoutHalt,
+    exprPart,
+  );
+
+  if (isReadExpressionPattern(exprPart)) resultAddress = 903;
+
+  const storeInstructions = buildLetStoreInstructions(
+    adjustedInstructions,
+    resultAddress,
+    address,
+  );
+
+  if (remaining.length === 0) {
+    return {
+      instructions: [
+        ...storeInstructions,
+        ...buildLetFinalInstructions(address),
+      ],
+      newContext,
+    };
+  }
+
+  const remainingResult = compileWithContext(remaining, newContext);
+  if (!remainingResult) return undefined;
+
+  return {
+    instructions: [...storeInstructions, ...remainingResult.instructions],
+    newContext,
+  };
+}
+
+function compileWithContext(
+  source: string,
+  context: VariableContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
+  const trimmed = source.trim();
+
+  if (!trimmed) {
+    return { instructions: [], context };
+  }
+
+  // Try parsing as let expression
+  const letResult = parseLetExpression(trimmed, context);
+  if (letResult) {
+    return {
+      instructions: letResult.instructions,
+      context: letResult.newContext,
+    };
+  }
+
+  // Try parsing as a variable reference
+  const varAddress = resolveVariable(context, trimmed);
+  if (varAddress !== undefined) {
+    return {
+      instructions: buildVarRefInstructions(varAddress),
+      context,
+    };
+  }
+
+  // Unwrap braces if present and try parsing the inner content with context
+  if (isBracedExpression(trimmed)) {
+    const innerExpr = extractBracedContent(trimmed);
+    const innerResult = compileWithContext(innerExpr, context);
+    if (innerResult) {
+      return innerResult;
+    }
+  }
+
+  // Fall back to regular parsing (which doesn't have context support yet)
+  const result = compileNoContext(trimmed);
+  if (result) {
+    return { instructions: result, context };
+  }
+
+  return undefined;
+}
+
+function compileNoContext(source: string): Instruction[] | undefined {
+  const trimmed = source.trim();
+
+  if (!trimmed) {
+    return [];
+  }
+
+  const negError = checkNegativeUnsignedError(trimmed);
+  if (negError) {
+    return undefined;
+  }
+
+  const overflowError = checkTypeOverflow(trimmed);
+  if (overflowError) {
+    return undefined;
+  }
+
+  if (isParenthesizedExpression(trimmed)) {
+    const innerExpr = extractParenthesizedContent(trimmed);
+    return compileNoContext(innerExpr);
+  }
+
+  if (isBracedExpression(trimmed)) {
+    const innerExpr = extractBracedContent(trimmed);
+    return compileNoContext(innerExpr);
+  }
+
+  const arithResult = parseAddExpression(trimmed);
+  if (arithResult) {
+    return arithResult;
+  }
+
+  const subResult = parseSubExpression(trimmed);
+  if (subResult) {
+    return subResult;
+  }
+
+  const divResult = parseDivExpressionWithParens(trimmed);
+  if (divResult) {
+    return [...divResult, ...buildMulOrDivHalt(OpCode.Halt, 902)];
+  }
+
+  const mulResult = parseMulExpressionWithParens(trimmed);
+  if (mulResult) {
+    return [...mulResult, ...buildMulOrDivHalt(OpCode.Halt, 902)];
+  }
+
+  if (trimmed.startsWith("read")) {
+    const readResult = parseReadInstruction(trimmed);
+    if (readResult) {
+      return readResult;
+    }
+  }
+
+  const num = parseNumberWithSuffix(trimmed);
+  if (num !== undefined) {
+    return buildNumberLiteral(num);
+  }
+
+  return undefined;
 }
 
 export function compile(source: string): Result<Instruction[], CompileError> {
@@ -517,36 +564,9 @@ export function compile(source: string): Result<Instruction[], CompileError> {
     return compile(innerExpr);
   }
 
-  const arithResult = parseAddExpression(trimmed);
-  if (arithResult) {
-    return ok(arithResult);
-  }
-
-  const subResult = parseSubExpression(trimmed);
-  if (subResult) {
-    return ok(subResult);
-  }
-
-  const divResult = parseDivExpressionWithParens(trimmed);
-  if (divResult) {
-    return ok([...divResult, ...buildMulOrDivHalt(OpCode.Halt, 902)]);
-  }
-
-  const mulResult = parseMulExpressionWithParens(trimmed);
-  if (mulResult) {
-    return ok([...mulResult, ...buildMulOrDivHalt(OpCode.Halt, 902)]);
-  }
-
-  if (trimmed.startsWith("read")) {
-    const readResult = parseReadInstruction(trimmed);
-    if (readResult) {
-      return ok(readResult);
-    }
-  }
-
-  const numResult = parseNumberLiteral(trimmed);
-  if (numResult) {
-    return ok(numResult);
+  const result = compileWithContext(trimmed, []);
+  if (result) {
+    return ok(result.instructions);
   }
 
   return ok([]);

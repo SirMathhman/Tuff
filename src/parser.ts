@@ -1,5 +1,40 @@
 import { type Instruction, OpCode, Variant } from "./vm";
 
+export function isIdentifierChar(char: string, isFirstChar: boolean): boolean {
+  const isLetter = (char >= "a" && char <= "z") || (char >= "A" && char <= "Z");
+  const isDigit = char >= "0" && char <= "9";
+  const isUnderscore = char === "_";
+
+  if (isFirstChar) {
+    return isLetter || isUnderscore;
+  }
+  return isLetter || isDigit || isUnderscore;
+}
+
+export function findChar(
+  source: string,
+  char: string,
+  startIndex: number = 0,
+): number {
+  for (let i = startIndex; i < source.length; i++) {
+    if (source[i] === char) return i;
+  }
+  return -1;
+}
+
+export function extractVariableName(source: string): string {
+  const afterLet = source.substring(3).trim();
+  let varName = "";
+  for (let i = 0; i < afterLet.length; i++) {
+    const char = afterLet[i];
+    if (char === undefined) break;
+    if (varName.length > 0 && (char === " " || char === "\t")) break;
+    if (!isIdentifierChar(char, varName.length === 0)) break;
+    varName += char;
+  }
+  return varName;
+}
+
 function findMatchingParen(source: string, startIndex: number): number {
   let depth = 1;
   for (let i = startIndex + 1; i < source.length; i++) {
@@ -20,7 +55,7 @@ function findMatchingBrace(source: string, startIndex: number): number {
   return -1;
 }
 
-function parseNumberWithSuffix(source: string): number | undefined {
+export function parseNumberWithSuffix(source: string): number | undefined {
   const suffixIndex = findTypeSuffixIndex(source);
   const numStr = suffixIndex >= 0 ? source.substring(0, suffixIndex) : source;
 
@@ -42,7 +77,7 @@ function parseNumberWithSuffix(source: string): number | undefined {
   }
 }
 
-function findTypeSuffixIndex(source: string): number {
+export function findTypeSuffixIndex(source: string): number {
   for (let i = source.length - 1; i >= 0; i--) {
     const char = source[i];
     if (char && char >= "0" && char <= "9") continue;
@@ -281,5 +316,3 @@ export function getTypeSuffix(source: string): string {
   }
   return "";
 }
-
-export { parseNumberWithSuffix, findTypeSuffixIndex };

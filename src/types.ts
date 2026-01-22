@@ -1,5 +1,6 @@
 import { type Instruction, OpCode, Variant } from "./vm";
 import { getTypeSuffix, findTypeSuffixIndex } from "./parser";
+import { buildStoreAndHalt } from "./instruction-primitives";
 
 export interface Error {
   // What went wrong
@@ -119,5 +120,17 @@ export function buildMulOrDivHalt(
       variant: Variant.Direct,
       operand1: resultMemory,
     },
+  ];
+}
+
+export function buildStoreHaltInstructions(opcode: OpCode): Instruction[] {
+  return [
+    {
+      opcode,
+      variant: Variant.Immediate,
+      operand1: 1,
+      operand2: 0,
+    },
+    ...buildStoreAndHalt(),
   ];
 }

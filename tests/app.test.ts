@@ -27,7 +27,7 @@ function assertInvalid(source: string) {
   expect(compileResult.ok).toBe(false);
 }
 
-describe("The application", () => {
+describe("The application - Basic tests", () => {
   it("should execute a simple program that halts immediately", () => {
     assertValid("", 0);
   });
@@ -59,7 +59,9 @@ describe("The application", () => {
   it("should read three U8 values, add them, and halt with result", () => {
     assertValid("read U8 + read U8 + read U8", 6, 1, 2, 3);
   });
+});
 
+describe("The application - Complex expressions", () => {
   it("should read three U8 values, add first two, subtract third, and halt with result", () => {
     assertValid("read U8 + read U8 - read U8", 1, 2, 3, 4);
   });
@@ -75,7 +77,9 @@ describe("The application", () => {
   it("should add two U8 values in parentheses, then divide by third, and halt with result", () => {
     assertValid("(read U8 + read U8) / read U8", 2, 10, 2, 6);
   });
+});
 
+describe("The application - Type validation", () => {
   it("should reject negative values with type suffix", () => {
     assertInvalid("-100U8");
   });
@@ -87,8 +91,24 @@ describe("The application", () => {
   it("should reject values that overflow unsigned 8-bit", () => {
     assertInvalid("256U8");
   });
+});
 
+describe("The application - Grouping and variables", () => {
   it("should support curly braces as grouping mechanism", () => {
     assertValid("(read U8 + { read U8 }) / read U8", 2, 10, 2, 6);
+  });
+
+  it("should support let-binding expressions with variables", () => {
+    assertValid(
+      "(read U8 + { let example : U8 = read U8; example }) / read U8",
+      2,
+      10,
+      2,
+      6,
+    );
+  });
+
+  it("should support simple let binding", () => {
+    assertValid("let x : U8 = 5U8; x", 5);
   });
 });
