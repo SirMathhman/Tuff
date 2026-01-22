@@ -1,5 +1,6 @@
 // Our first compile test, the VM should shut down instantly
 
+import { describe, it, expect } from "bun:test";
 import { compile, executeWithArray } from "../src/app";
 
 // Test helpers
