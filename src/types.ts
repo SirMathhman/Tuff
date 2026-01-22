@@ -53,6 +53,11 @@ export function getTypeBits(suffix: string): number | undefined {
 export function getTypeRange(
   suffix: string,
 ): { min: number; max: number } | undefined {
+  // Handle Bool as a special case
+  if (suffix === "Bool") {
+    return { min: 0, max: 1 };
+  }
+
   const bits = getTypeBits(suffix);
   if (bits === undefined) return undefined;
 
@@ -67,6 +72,7 @@ export function getTypeRange(
 }
 
 export function hasTypeSuffix(source: string): boolean {
+  if (source.endsWith("Bool")) return true;
   return findTypeSuffixIndex(source) >= 0;
 }
 
@@ -74,6 +80,10 @@ export function checkTypeOverflow(source: string): CompileError | undefined {
   if (!hasTypeSuffix(source)) return undefined;
 
   const suffix = getTypeSuffix(source);
+  
+  // Bool doesn't have numeric literals (only read Bool), so skip overflow check
+  if (suffix === "Bool") return undefined;
+  
   const range = getTypeRange(suffix);
   if (range === undefined) return undefined;
 

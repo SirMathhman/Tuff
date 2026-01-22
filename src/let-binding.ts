@@ -96,7 +96,8 @@ export function isReadExpressionPattern(exprPart: string): boolean {
     exprPart === "read U8" ||
     exprPart === "read U16" ||
     exprPart === "read I8" ||
-    exprPart === "read I16"
+    exprPart === "read I16" ||
+    exprPart === "read Bool"
   );
 }
 

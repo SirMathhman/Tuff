@@ -16,6 +16,9 @@ import {
 function isTypeCompatible(declaredType: string, exprType: string): boolean {
   if (declaredType === exprType) return true;
 
+  // Bool type only matches Bool
+  if (declaredType === "Bool" || exprType === "Bool") return false;
+
   const declaredBits = getTypeBits(declaredType);
   const exprBits = getTypeBits(exprType);
 

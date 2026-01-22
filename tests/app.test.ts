@@ -158,6 +158,10 @@ describe("The application - Variable bindings", () => {
   it("should allow untyped variable assignment with I32", () => {
     assertValid("let x = 1; let y : I32 = x; y", 1);
   });
+
+  it("should support Bool type with read expression", () => {
+    assertValid("let x : Bool = read Bool; x", 1, 1);
+  });
 });
 
 describe("The application - Type checking", () => {
