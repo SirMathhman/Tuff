@@ -22,6 +22,6 @@
     "format": "prettier --write .",
     "test": "bun test",
     "cpd": "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./tools/pmd-bin-7.20.0/bin/pmd cpd --dir src tests --language typescript --minimum-tokens 50",
-    "graph-deps": "npx madge --image dependency-graph.svg src"
+    "visualize": "npx madge --image ./docs/images/graph.svg src"
   }
 }

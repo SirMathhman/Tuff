@@ -13,10 +13,10 @@ export function parseArrayTypeComponents(type: string): string[] | undefined {
 export function parseArraySize(type: string): number | undefined {
   const parts = parseArrayTypeComponents(type);
   if (!parts) return undefined;
-  
+
   const totalLenStr = parts[2];
   if (!totalLenStr) return undefined;
-  
+
   const totalLen = parseInt(totalLenStr, 10);
   return isNaN(totalLen) ? undefined : totalLen;
 }
