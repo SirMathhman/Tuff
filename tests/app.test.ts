@@ -201,3 +201,20 @@ describe("The application - Type checking", () => {
     assertInvalid("let x = { let y = true; y }; let z : I32 = x; z");
   });
 });
+
+describe("The application - Comparison operators", () => {
+  it("should evaluate read U8 == read U8 as 0 or 1", () => {
+    assertValid("read U8 == read U8", 1, 5, 5);
+    assertValid("read U8 == read U8", 0, 5, 3);
+  });
+
+  it("should evaluate read U8 < read U8 as 0 or 1", () => {
+    assertValid("read U8 < read U8", 1, 3, 5);
+    assertValid("read U8 < read U8", 0, 5, 3);
+  });
+
+  it("should evaluate read U8 > read U8 as 0 or 1", () => {
+    assertValid("read U8 > read U8", 1, 5, 3);
+    assertValid("read U8 > read U8", 0, 3, 5);
+  });
+});

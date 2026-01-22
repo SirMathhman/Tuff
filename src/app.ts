@@ -32,17 +32,13 @@ import {
 } from "./helpers";
 import {
   type VariableContext,
-  allocateVariable,
   resolveVariable,
-  parseLetComponents,
-  isReadExpressionPattern,
-  adjustReadInstructions,
-  buildLetStoreInstructions,
   buildVarRefInstructions,
-  extractExpressionType,
 } from "./let-binding";
 import { parseAddExpressionWithContext } from "./expression-with-context";
 import { splitByAddOperator } from "./operator-parsing";
+import { parseComparisonExpression } from "./comparison-parsing";
+import { parseLetExpression as parseLetExpressionModule } from "./let-expression-parsing";
 import {
   detectVariableShadowing,
   detectTypeIncompatibility,
@@ -194,8 +190,8 @@ function parseLeftMulDivAtom(leftPart: string): Instruction[] | undefined {
 
 function parseRightMulDivAtom(rightPart: string): Instruction[] | undefined {
   const rightMulDiv =
-    parseMulExpressionWithParens(rightPart) ||
-    parseDivExpressionWithParens(rightPart);
+    parseMulOrDivExpressionWithParens(rightPart, OpCode.Mul, "*") ||
+    parseMulOrDivExpressionWithParens(rightPart, OpCode.Div, "/");
   if (rightMulDiv) return rightMulDiv;
 
   if (isParenthesizedExpression(rightPart) || isBracedExpression(rightPart)) {
@@ -228,24 +224,13 @@ function parseMulOrDivExpressionWithParens(
   return buildMulOrDivResult(leftInstructions, rightInstructions, opcode);
 }
 
-function parseMulExpressionWithParens(
-  source: string,
-): Instruction[] | undefined {
-  return parseMulOrDivExpressionWithParens(source, OpCode.Mul, "*");
-}
-
-function parseDivExpressionWithParens(
-  source: string,
-): Instruction[] | undefined {
-  return parseMulOrDivExpressionWithParens(source, OpCode.Div, "/");
-}
 
 function parseRightMulOrDivWithParens(
   rightPart: string,
 ): Instruction[] | undefined {
-  const mulResult = parseMulExpressionWithParens(rightPart);
+  const mulResult = parseMulOrDivExpressionWithParens(rightPart, OpCode.Mul, "*");
   if (mulResult) return mulResult;
-  return parseDivExpressionWithParens(rightPart);
+  return parseMulOrDivExpressionWithParens(rightPart, OpCode.Div, "/");
 }
 
 function tryLetInBraces(
@@ -367,58 +352,7 @@ function parseLetExpression(
   source: string,
   context: VariableContext,
 ): { instructions: Instruction[]; newContext: VariableContext } | undefined {
-  if (!source.startsWith("let")) return undefined;
-
-  const components = parseLetComponents(source);
-  if (!components) return undefined;
-
-  const { varName, exprPart, remaining, typeAnnotation } = components;
-  const exprCompileResult = compileWithContext(exprPart, context);
-  if (!exprCompileResult) return undefined;
-
-  const exprCompile = exprCompileResult.instructions;
-  if (!exprCompile || exprCompile.length === 0) return undefined;
-
-  const varType = typeAnnotation || extractExpressionType(exprPart, context);
-  const { context: newContext, address } = allocateVariable(
-    context,
-    varName,
-    varType,
-  );
-
-  const lastInstruction = exprCompile[exprCompile.length - 1];
-  let resultAddress = 900;
-  if (lastInstruction && lastInstruction.opcode === OpCode.Halt) {
-    resultAddress = lastInstruction.operand1;
-  }
-  if (isReadExpressionPattern(exprPart)) resultAddress = 903;
-  const storeInstructions = buildLetStoreInstructions(
-    adjustReadInstructions(exprCompile.slice(0, -1), exprPart),
-    resultAddress,
-    address,
-  );
-
-  if (remaining.length === 0) {
-    return {
-      instructions: [
-        ...storeInstructions,
-        {
-          opcode: OpCode.Halt,
-          variant: Variant.Immediate,
-          operand1: 0,
-        },
-      ],
-      newContext,
-    };
-  }
-
-  const remainingResult = compileWithContext(remaining, newContext);
-  if (!remainingResult) return undefined;
-
-  return {
-    instructions: [...storeInstructions, ...remainingResult.instructions],
-    newContext,
-  };
+  return parseLetExpressionModule(source, compileWithContext, context);
 }
 
 function compileWithContext(
@@ -517,6 +451,12 @@ function compileNoContext(source: string): Instruction[] | undefined {
     return compileNoContext(innerExpr);
   }
 
+  // Check comparisons first (lower precedence than arithmetic)
+  const comparisonResult = parseComparisonExpression(trimmed);
+  if (comparisonResult) {
+    return comparisonResult;
+  }
+
   const arithResult = parseAddExpression(trimmed);
   if (arithResult) {
     return arithResult;
@@ -527,12 +467,12 @@ function compileNoContext(source: string): Instruction[] | undefined {
     return subResult;
   }
 
-  const divResult = parseDivExpressionWithParens(trimmed);
+  const divResult = parseMulOrDivExpressionWithParens(trimmed, OpCode.Div, "/");
   if (divResult) {
     return [...divResult, ...buildMulOrDivHalt(OpCode.Halt, 902)];
   }
 
-  const mulResult = parseMulExpressionWithParens(trimmed);
+  const mulResult = parseMulOrDivExpressionWithParens(trimmed, OpCode.Mul, "*");
   if (mulResult) {
     return [...mulResult, ...buildMulOrDivHalt(OpCode.Halt, 902)];
   }

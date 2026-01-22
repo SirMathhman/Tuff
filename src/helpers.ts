@@ -1,4 +1,4 @@
-import { type Instruction } from "./vm";
+import { type Instruction, OpCode } from "./vm";
 import {
   buildLoadDirect,
   buildLoadImmediate,
@@ -7,6 +7,7 @@ import {
   buildHaltDirect,
   buildIn,
   buildLoadAddAndHalt,
+  buildComparisonImmediate,
 } from "./instruction-primitives";
 
 export function buildAddInstructions(): Instruction[] {
@@ -64,4 +65,31 @@ export function buildNumberLiteral(num: number): Instruction[] {
 
 export function buildBooleanLiteral(value: boolean): Instruction[] {
   return buildNumberLiteral(value ? 1 : 0);
+}
+
+export function buildReadComparisonRead(
+  opcode: OpCode,
+): Instruction[] {
+  return [
+    buildIn(0),
+    buildStoreDirect(0, 901),
+    buildIn(0),
+    buildLoadDirect(1, 901),
+    buildComparisonImmediate(1, opcode),
+    buildStoreDirect(1, 900),
+    buildHaltDirect(900),
+  ];
+}
+
+export function buildReadComparisonConstant(
+  constant: number,
+  opcode: OpCode,
+): Instruction[] {
+  return [
+    buildIn(0),
+    buildLoadImmediate(1, constant),
+    buildComparisonImmediate(0, opcode),
+    buildStoreDirect(0, 900),
+    buildHaltDirect(900),
+  ];
 }

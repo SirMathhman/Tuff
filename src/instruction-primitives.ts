@@ -77,3 +77,15 @@ export function buildLoadAddAndHalt(fromAddr: number): Instruction[] {
     buildHaltDirect(900),
   ];
 }
+
+export function buildComparisonImmediate(
+  register: number,
+  opcode: OpCode,
+): Instruction {
+  return {
+    opcode,
+    variant: Variant.Immediate,
+    operand1: register,
+    operand2: 0,
+  };
+}
