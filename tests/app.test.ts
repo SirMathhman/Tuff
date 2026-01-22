@@ -16,12 +16,16 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
 function assertInvalid(source: string) {
   let result = compile(source);
   if (result.ok) {
-		expect(result.value).toBeUndefined();
+    expect(result.value).toBeUndefined();
   }
 }
 
 describe("The application", () => {
   it("should execute a simple program that halts immediately", () => {
-		assertValid("", 0);
+    assertValid("", 0);
+  });
+
+  it("should halt with exit code 100", () => {
+    assertValid("100", 100);
   });
 });
