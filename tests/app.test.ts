@@ -252,4 +252,13 @@ describe("The application - Pointers", () => {
   it("should reject dereferencing non-pointer value", () => {
     assertInvalid("let x = 5I32; *x");
   });
+
+  it("should support mutable pointer with write-through assignment", () => {
+    assertValid(
+      "let mut x = read I32; let y : *mut I32 = &mut x; *y = read I32; x",
+      100,
+      50,
+      100,
+    );
+  });
 });

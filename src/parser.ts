@@ -397,7 +397,18 @@ export function isReferenceOperator(source: string): boolean {
 
 export function extractReferenceTarget(source: string): string {
   if (!isReferenceOperator(source)) return source;
-  return source.substring(1).trim();
+  let result = source.substring(1).trim();
+  // Handle &mut by skipping "mut" keyword
+  if (result.startsWith("mut")) {
+    result = result.substring(3).trim();
+  }
+  return result;
+}
+
+export function isMutableReference(source: string): boolean {
+  if (!isReferenceOperator(source)) return false;
+  const after = source.substring(1).trim();
+  return after.startsWith("mut");
 }
 
 export function isDereferenceOperator(source: string): boolean {

@@ -175,7 +175,18 @@ export function isPointerType(type: string): boolean {
 
 export function getPointerBaseType(type: string): string | undefined {
   if (!isPointerType(type)) return undefined;
-  return type.substring(1);
+  let baseType = type.substring(1);
+  // Handle *mut by removing "mut " prefix
+  if (baseType.startsWith("mut ")) {
+    baseType = baseType.substring(4);
+  }
+  return baseType;
+}
+
+export function isMutablePointerType(type: string): boolean {
+  if (!isPointerType(type)) return false;
+  const afterStar = type.substring(1);
+  return afterStar.startsWith("mut");
 }
 
 export function buildMulOrDivHalt(

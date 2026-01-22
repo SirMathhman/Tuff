@@ -8,6 +8,7 @@ import {
   extractDereferenceTarget,
   isReferenceOperator,
   extractReferenceTarget,
+  isMutableReference,
 } from "./parser";
 import {
   type CompileError,
@@ -18,9 +19,12 @@ import {
   type VariableContext,
   resolveVariable,
   buildVarRefInstructions,
+  buildReferenceAddressInstructions,
   buildDereferenceInstructions,
   parseReassignmentComponents,
   buildReassignmentInstructions,
+  parseDereferenceReassignmentComponents,
+  buildDereferenceReassignmentInstructions,
   isVariableMutable,
   buildContextFromLetBindings,
 } from "./let-binding";
@@ -100,6 +104,40 @@ function tryReassignment(
     : undefined;
 }
 
+function tryDereferenceReassignment(
+  source: string,
+  context: VariableContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
+  const comp = parseDereferenceReassignmentComponents(source);
+  if (!comp) return undefined;
+
+  const pointerAddr = resolveVariable(context, comp.pointerName);
+  if (pointerAddr === undefined) return undefined;
+
+  const res = compileWithContext(comp.exprPart, context);
+  if (!res) return undefined;
+
+  const instr = buildDereferenceReassignmentInstructions(
+    res.instructions,
+    pointerAddr,
+  );
+
+  if (comp.remaining.length === 0) {
+    return {
+      instructions: [...instr, ...buildVarRefInstructions(pointerAddr)],
+      context,
+    };
+  }
+
+  const remRes = compileWithContext(comp.remaining, context);
+  return remRes
+    ? {
+        instructions: [...instr, ...remRes.instructions],
+        context: remRes.context,
+      }
+    : undefined;
+}
+
 function tryDereference(
   trimmed: string,
   context: VariableContext,
@@ -122,8 +160,14 @@ function tryReferenceExpression(
   const varName = extractReferenceTarget(trimmed);
   const varAddress = resolveVariable(context, varName);
   if (varAddress === undefined) return undefined;
+  // For mutable references (&mut x), load the address as an immediate
+  // For immutable references (&x), load the value from the variable
+  const isMut = isMutableReference(trimmed);
+  const instructions = isMut
+    ? buildReferenceAddressInstructions(varAddress)
+    : buildVarRefInstructions(varAddress);
   return {
-    instructions: buildVarRefInstructions(varAddress),
+    instructions,
     context,
   };
 }
@@ -161,16 +205,10 @@ function tryBracedExpression(
   return compileWithContext(innerExpr, context);
 }
 
-function compileWithContext(
-  source: string,
+function tryAllPatterns(
+  trimmed: string,
   context: VariableContext,
 ): { instructions: Instruction[]; context: VariableContext } | undefined {
-  const trimmed = source.trim();
-
-  if (!trimmed) {
-    return { instructions: [], context };
-  }
-
   // Try parsing as let expression
   const letResult = parseLetExpression(trimmed, context);
   if (letResult) {
@@ -184,6 +222,15 @@ function compileWithContext(
   const reassignmentResult = tryReassignment(trimmed, context);
   if (reassignmentResult) {
     return reassignmentResult;
+  }
+
+  // Try parsing as dereference reassignment (e.g., "*y = value;")
+  const dereferenceReassignmentResult = tryDereferenceReassignment(
+    trimmed,
+    context,
+  );
+  if (dereferenceReassignmentResult) {
+    return dereferenceReassignmentResult;
   }
 
   // Try parsing as dereference (e.g., "*y")
@@ -223,6 +270,19 @@ function compileWithContext(
   }
 
   return undefined;
+}
+
+function compileWithContext(
+  source: string,
+  context: VariableContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
+  const trimmed = source.trim();
+
+  if (!trimmed) {
+    return { instructions: [], context };
+  }
+
+  return tryAllPatterns(trimmed, context);
 }
 
 function performValidationChecks(trimmed: string): CompileError | undefined {

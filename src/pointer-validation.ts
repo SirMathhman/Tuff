@@ -4,7 +4,11 @@ import {
   parseLetComponents,
   buildContextFromLetBindings,
 } from "./let-binding";
-import { isIdentifierChar } from "./parser";
+import {
+  isIdentifierChar,
+  extractReferenceTarget,
+  isMutableReference,
+} from "./parser";
 
 function validateDereferenceIsPointer(
   varName: string,
@@ -106,9 +110,49 @@ function checkPointerTypeWithoutInit(source: string): CompileError | undefined {
   return undefined;
 }
 
+function isVariableMutableInContext(
+  varName: string,
+  context: VariableContext,
+): boolean {
+  for (let i = 0; i < context.length; i++) {
+    const binding = context[i];
+    if (binding && binding.name === varName && binding.mutable) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function checkMutableReferenceConstraints(
+  source: string,
+): CompileError | undefined {
+  // Check for &mut operator on non-mutable variables
+  if (isMutableReference(source)) {
+    const varName = extractReferenceTarget(source);
+    const context = buildContextFromLetBindings(source);
+
+    // Check if variable is mutable
+    if (!isVariableMutableInContext(varName, context)) {
+      return {
+        cause: `Cannot create mutable reference to non-mutable variable '${varName}'`,
+        reason:
+          "Mutable references (&mut) can only be created for variables declared with 'let mut'",
+        fix: "Declare the variable as mutable using 'let mut', or use '&' for an immutable reference",
+        first: { line: 0, column: 0, length: source.length },
+      };
+    }
+  }
+
+  return undefined;
+}
+
 export function detectPointerTypeErrors(
   source: string,
 ): CompileError | undefined {
+  // Check mutable reference constraints first
+  const mutRefError = checkMutableReferenceConstraints(source);
+  if (mutRefError) return mutRefError;
+
   let current = source;
   while (current.length > 0) {
     current = current.trim();

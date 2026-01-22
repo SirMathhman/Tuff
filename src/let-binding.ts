@@ -13,9 +13,11 @@ import {
   isIdentifierChar,
   isReferenceOperator,
   extractReferenceTarget,
+  isMutableReference,
 } from "./parser";
 import {
   buildLoadDirect,
+  buildLoadImmediate,
   buildStoreDirect,
   buildStoreAndHalt,
 } from "./instruction-primitives";
@@ -220,13 +222,14 @@ export function extractExpressionType(
     return extractExpressionType(innerExpr, context);
   }
 
-  // For reference expressions (&x), infer pointer type from variable
+  // For reference expressions (&x or &mut x), infer pointer type from variable
   if (isReferenceOperator(trimmed)) {
     const varName = extractReferenceTarget(trimmed);
     if (!context) return undefined;
     const binding = context.find((b) => b.name === varName);
     if (binding && binding.type) {
-      return `*${binding.type}`;
+      const isMut = isMutableReference(trimmed);
+      return isMut ? `*mut ${binding.type}` : `*${binding.type}`;
     }
     return undefined;
   }
@@ -399,6 +402,14 @@ export function buildVarRefInstructions(varAddress: number): Instruction[] {
   return [buildLoadDirect(1, varAddress), ...buildStoreAndHalt()];
 }
 
+export function buildReferenceAddressInstructions(
+  varAddress: number,
+): Instruction[] {
+  // For a reference (&x), we want the ADDRESS to be stored, not the value
+  // We load the address as an immediate value
+  return [buildLoadImmediate(1, varAddress), ...buildStoreAndHalt()];
+}
+
 export function buildVarRefInstructionsForBinding(
   varAddress: number,
 ): Instruction[] {
@@ -447,6 +458,41 @@ export function parseReassignmentComponents(source: string):
   return { varName, exprPart, remaining };
 }
 
+export function parseDereferenceReassignmentComponents(source: string):
+  | {
+      pointerName: string;
+      exprPart: string;
+      remaining: string;
+    }
+  | undefined {
+  const trimmed = source.trim();
+  const firstSemicolonIndex = findChar(trimmed, ";");
+  if (firstSemicolonIndex === -1) return undefined;
+
+  const bindingScope = trimmed.substring(0, firstSemicolonIndex);
+  const equalsIndex = findChar(bindingScope, "=");
+  if (equalsIndex === -1) return undefined;
+
+  const leftSide = bindingScope.substring(0, equalsIndex).trim();
+
+  // Check if left side is a dereference (*varName)
+  if (!leftSide.startsWith("*")) return undefined;
+
+  const pointerName = leftSide.substring(1).trim();
+
+  // Validate pointerName is a valid identifier
+  if (pointerName.length === 0) return undefined;
+  for (let i = 0; i < pointerName.length; i++) {
+    const char = pointerName[i];
+    if (!char || !isIdentifierChar(char, i === 0)) return undefined;
+  }
+
+  const exprPart = bindingScope.substring(equalsIndex + 1).trim();
+  const remaining = trimmed.substring(firstSemicolonIndex + 1).trim();
+
+  return { pointerName, exprPart, remaining };
+}
+
 export function buildReassignmentInstructions(
   exprInstructions: Instruction[],
   varAddress: number,
@@ -455,6 +501,24 @@ export function buildReassignmentInstructions(
     ...exprInstructions.slice(0, -1),
     buildLoadDirect(1, 900),
     buildStoreDirect(1, varAddress),
+  ];
+}
+
+export function buildDereferenceReassignmentInstructions(
+  exprInstructions: Instruction[],
+  pointerAddress: number,
+): Instruction[] {
+  return [
+    ...exprInstructions.slice(0, -1),
+    buildLoadDirect(1, 900),
+    buildLoadDirect(0, pointerAddress),
+    buildStoreDirect(0, 902), // Store pointer value (the address) to temp location 902
+    {
+      opcode: OpCode.Store,
+      variant: Variant.Indirect,
+      operand1: 1,
+      operand2: 902, // Use 902 as the address reference
+    },
   ];
 }
 
