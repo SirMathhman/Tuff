@@ -4,9 +4,7 @@ import {
   parseLetComponents,
   buildContextFromLetBindings,
 } from "./let-binding";
-import {
-  isIdentifierChar,
-} from "./parser";
+import { isIdentifierChar } from "./parser";
 
 function validateDereferenceIsPointer(
   varName: string,
@@ -133,24 +131,74 @@ function extractVariableName(text: string, startPos: number): string {
   return varName;
 }
 
-function findMutableReferencesInString(text: string): string[] {
+function skipWhitespaceFrom(text: string, startPos: number): number {
+  let j = startPos;
+  while (j < text.length && (text[j] === " " || text[j] === "\t")) {
+    j++;
+  }
+  return j;
+}
+
+function extractAndAppendReference(
+  references: string[],
+  text: string,
+  startPos: number,
+): void {
+  const varName = extractVariableName(text, startPos);
+  if (varName.length > 0) {
+    references.push(varName);
+  }
+}
+
+function extractReferencesWithPattern(text: string, pattern: string): string[] {
   const references: string[] = [];
-  for (let i = 0; i < text.length - 1; i++) {
-    if (text[i] !== "&" || text[i + 1] !== "m") continue;
-    if (text.substring(i, i + 4) !== "&mut") continue;
+  const patternLen = pattern.length;
 
-    // Skip whitespace after &mut
-    let j = i + 4;
-    while (j < text.length && (text[j] === " " || text[j] === "\t")) {
-      j++;
-    }
-
-    const varName = extractVariableName(text, j);
-    if (varName.length > 0) {
-      references.push(varName);
-    }
+  for (let i = 0; i <= text.length - patternLen; i++) {
+    if (text.substring(i, i + patternLen) !== pattern) continue;
+    const j = skipWhitespaceFrom(text, i + patternLen);
+    extractAndAppendReference(references, text, j);
   }
   return references;
+}
+
+function findMutableReferencesInString(text: string): string[] {
+  return extractReferencesWithPattern(text, "&mut");
+}
+
+function findImmutableReferencesInString(text: string): string[] {
+  const references: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "&") continue;
+    // Skip &mut patterns
+    if (text.substring(i, i + 4) === "&mut") continue;
+
+    const j = skipWhitespaceFrom(text, i + 1);
+    extractAndAppendReference(references, text, j);
+  }
+  return references;
+}
+
+function checkMutableReferencesConflict(
+  source: string,
+): CompileError | undefined {
+  const mutRefs = findMutableReferencesInString(source);
+  const immutRefs = findImmutableReferencesInString(source);
+
+  // Check if any variable has both mutable and immutable references
+  for (const mutVar of mutRefs) {
+    if (immutRefs.includes(mutVar)) {
+      return {
+        cause: `Cannot mix mutable and immutable references to '${mutVar}'`,
+        reason:
+          "A variable cannot have both mutable (&mut) and immutable (&) references in the same scope",
+        fix: "Use either all mutable or all immutable references to a variable",
+        first: { line: 0, column: 0, length: source.length },
+      };
+    }
+  }
+
+  return undefined;
 }
 
 function checkMutableReferenceConstraints(
@@ -177,7 +225,11 @@ function checkMutableReferenceConstraints(
 export function detectPointerTypeErrors(
   source: string,
 ): CompileError | undefined {
-  // Check mutable reference constraints first
+  // Check for mixed mutable and immutable references first
+  const mixedRefError = checkMutableReferencesConflict(source);
+  if (mixedRefError) return mixedRefError;
+
+  // Check mutable reference constraints
   const mutRefError = checkMutableReferenceConstraints(source);
   if (mutRefError) return mutRefError;
 

@@ -297,4 +297,8 @@ describe("The application - Pointer type safety", () => {
   it("should support multiple pointers to same variable with dereference in arithmetic", () => {
     assertValid("let x = read U8; let y = &x; let z = &x; *y + *z", 20, 10);
   });
+
+  it("should reject mixing mutable and immutable pointers to same variable", () => {
+    assertInvalid("let mut x = read U8; let y = &mut x; let z = &x; *y + *z");
+  });
 });
