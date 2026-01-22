@@ -5,7 +5,7 @@ import {
   OpCode,
   Variant,
   type Instruction,
-} from "./vm";
+} from "../src/vm";
 
 describe("encodeTo64Bits and decode", () => {
   it("should encode and decode an instruction with operand1 and operand2", () => {
