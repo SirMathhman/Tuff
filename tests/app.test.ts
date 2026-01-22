@@ -316,3 +316,17 @@ describe("The application - Pointer type safety", () => {
     assertInvalid("let mut x = read U8; let y = &x; let z = &mut x;");
   });
 });
+
+describe("The application - Valid reference patterns", () => {
+  it("should allow one mutable reference without trailing expression", () => {
+    assertValid("let mut x = read U8; let y : *mut U8 = &mut x;", 0, 100);
+  });
+
+  it("should allow multiple immutable references with arithmetic", () => {
+    assertValid("let x = read U8; let y = &x; let z = &x; *y + *z", 20, 10);
+  });
+
+  it("should allow multiple immutable references without trailing expression", () => {
+    assertValid("let x = read U8; let y = &x; let z = &x;", 0, 100);
+  });
+});
