@@ -3,7 +3,7 @@ import { parseArrayLiteral, isArrayLiteral } from "./array-parsing";
 import { buildArrayStoreInstructions } from "./array-compilation";
 import { buildLoadDirect, buildStoreAndHalt } from "./instruction-primitives";
 
-export function compileArrayLiteral(
+export function _compileArrayLiteral(
   source: string,
   arrayBaseAddress: number,
 ): { instructions: Instruction[] | undefined } {

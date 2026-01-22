@@ -17,6 +17,7 @@ export default [
       },
     },
     rules: {
+      "no-unused-vars": "off",
       "no-regex-spaces": "error",
       "no-restricted-syntax": [
         "error",
@@ -45,6 +46,14 @@ export default [
           max: 500,
           skipComments: true,
           skipBlankLines: true,
+        },
+      ],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          args: "after-used",
+          argsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
         },
       ],
     },
