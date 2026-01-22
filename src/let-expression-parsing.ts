@@ -43,7 +43,7 @@ export function parseLetExpression(
   const components = parseLetComponents(source);
   if (!components) return undefined;
 
-  const { varName, exprPart, remaining, typeAnnotation } = components;
+  const { varName, exprPart, remaining, typeAnnotation, mutable } = components;
   const exprCompileResult = compileWithContextFn(exprPart, context);
   if (!exprCompileResult) return undefined;
 
@@ -55,6 +55,7 @@ export function parseLetExpression(
     context,
     varName,
     varType,
+    mutable,
   );
 
   const resultAddress = determineResultAddress(exprCompile, exprPart);

@@ -34,6 +34,8 @@ import {
   type VariableContext,
   resolveVariable,
   buildVarRefInstructions,
+  parseReassignmentComponents,
+  buildReassignmentInstructions,
 } from "./let-binding";
 import { parseAddExpressionWithContext } from "./expression-with-context";
 import { splitByAddOperator } from "./operator-parsing";
@@ -362,6 +364,37 @@ function parseLetExpression(
   return parseLetExpressionModule(source, compileWithContext, context);
 }
 
+function tryReassignment(
+  source: string,
+  context: VariableContext,
+): { instructions: Instruction[]; context: VariableContext } | undefined {
+  const comp = parseReassignmentComponents(source);
+  if (!comp) return undefined;
+
+  const addr = resolveVariable(context, comp.varName);
+  if (addr === undefined) return undefined;
+
+  const res = compileWithContext(comp.exprPart, context);
+  if (!res) return undefined;
+
+  const instr = buildReassignmentInstructions(res.instructions, addr);
+
+  if (comp.remaining.length === 0) {
+    return {
+      instructions: [...instr, ...buildVarRefInstructions(addr)],
+      context,
+    };
+  }
+
+  const remRes = compileWithContext(comp.remaining, context);
+  return remRes
+    ? {
+        instructions: [...instr, ...remRes.instructions],
+        context: remRes.context,
+      }
+    : undefined;
+}
+
 function compileWithContext(
   source: string,
   context: VariableContext,
@@ -379,6 +412,12 @@ function compileWithContext(
       instructions: letResult.instructions,
       context: letResult.newContext,
     };
+  }
+
+  // Try parsing as reassignment (e.g., "x = read I32;")
+  const reassignmentResult = tryReassignment(trimmed, context);
+  if (reassignmentResult) {
+    return reassignmentResult;
   }
 
   // Try parsing as a variable reference

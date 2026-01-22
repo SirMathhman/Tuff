@@ -44,7 +44,13 @@ export function findChar(
 }
 
 export function extractVariableName(source: string): string {
-  const afterLet = source.substring(3).trim();
+  let afterLet = source.substring(3).trim();
+
+  // Skip the "mut" keyword if present
+  if (afterLet.startsWith("mut")) {
+    afterLet = afterLet.substring(3).trim();
+  }
+
   let varName = "";
   for (let i = 0; i < afterLet.length; i++) {
     const char = afterLet[i];

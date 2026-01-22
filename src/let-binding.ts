@@ -10,6 +10,7 @@ import {
   parseBooleanLiteral,
   findConditionParentheses,
   findElseKeyword,
+  isIdentifierChar,
 } from "./parser";
 import {
   buildLoadDirect,
@@ -21,6 +22,7 @@ export interface VariableBinding {
   name: string;
   memoryAddress: number;
   type?: string;
+  mutable?: boolean;
 }
 
 export type VariableContext = VariableBinding[];
@@ -29,12 +31,13 @@ export function allocateVariable(
   context: VariableContext,
   varName: string,
   varType?: string,
+  mutable?: boolean,
 ): { context: VariableContext; address: number } {
   const address = 904 + context.length;
   return {
     context: [
       ...context,
-      { name: varName, memoryAddress: address, type: varType },
+      { name: varName, memoryAddress: address, type: varType, mutable },
     ],
     address,
   };
@@ -61,8 +64,10 @@ export function parseLetComponents(source: string):
       exprPart: string;
       remaining: string;
       typeAnnotation?: string;
+      mutable: boolean;
     }
   | undefined {
+  const isMutable = source.substring(3, 6).trim() === "mut";
   const varName = extractVariableName(source);
   if (varName.length === 0) return undefined;
 
@@ -91,7 +96,7 @@ export function parseLetComponents(source: string):
     typeAnnotation = typePart;
   }
 
-  return { varName, exprPart, remaining, typeAnnotation };
+  return { varName, exprPart, remaining, typeAnnotation, mutable: isMutable };
 }
 
 export function isReadExpressionPattern(exprPart: string): boolean {
@@ -341,4 +346,44 @@ export function buildLetStoreInstructions(
 
 export function buildVarRefInstructions(varAddress: number): Instruction[] {
   return [buildLoadDirect(1, varAddress), ...buildStoreAndHalt()];
+}
+
+export function parseReassignmentComponents(source: string):
+  | {
+      varName: string;
+      exprPart: string;
+      remaining: string;
+    }
+  | undefined {
+  const trimmed = source.trim();
+  const firstSemicolonIndex = findChar(trimmed, ";");
+  if (firstSemicolonIndex === -1) return undefined;
+
+  const bindingScope = trimmed.substring(0, firstSemicolonIndex);
+  const equalsIndex = findChar(bindingScope, "=");
+  if (equalsIndex === -1) return undefined;
+
+  const varName = bindingScope.substring(0, equalsIndex).trim();
+  const exprPart = bindingScope.substring(equalsIndex + 1).trim();
+  const remaining = trimmed.substring(firstSemicolonIndex + 1).trim();
+
+  // Validate varName is a valid identifier
+  if (varName.length === 0) return undefined;
+  for (let i = 0; i < varName.length; i++) {
+    const char = varName[i];
+    if (!char || !isIdentifierChar(char, i === 0)) return undefined;
+  }
+
+  return { varName, exprPart, remaining };
+}
+
+export function buildReassignmentInstructions(
+  exprInstructions: Instruction[],
+  varAddress: number,
+): Instruction[] {
+  return [
+    ...exprInstructions.slice(0, -1),
+    buildLoadDirect(1, 900),
+    buildStoreDirect(1, varAddress),
+  ];
 }
