@@ -113,10 +113,6 @@ describe("The application - Grouping and variables", () => {
     assertValid("let x : U8 = 5U8; x", 5);
   });
 
-  it("should support let binding with bare number literal", () => {
-    assertValid("let x : U8 = 1; x", 1);
-  });
-
   it("should support let binding with read expression", () => {
     assertValid("let x : U8 = read U8; x", 42, 42);
   });
@@ -153,6 +149,10 @@ describe("The application - Variable bindings", () => {
 
   it("should reject type narrowing with variable", () => {
     assertInvalid("let x = read U16; let y : U8 = x; y");
+  });
+
+  it("should reject untyped variable assignment with U8", () => {
+    assertInvalid("let x = 1; let y : U8 = x; y");
   });
 });
 

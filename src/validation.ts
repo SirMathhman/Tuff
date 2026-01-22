@@ -3,6 +3,8 @@ import {
   parseLetComponents,
   extractExpressionType,
   type VariableContext,
+  isBareNumber,
+  isNumberLiteral,
 } from "./let-binding";
 import {
   isParenthesizedExpression,
@@ -149,6 +151,60 @@ export function detectVariableShadowing(
   return undefined;
 }
 
+function isSimpleConstantExpression(expr: string): boolean {
+  const trimmed = expr.trim();
+  // A simple constant can be:
+  // 1. A bare number like "1" or "-5"
+  // 2. A typed number like "1U8" or "5I16"
+
+  if (isBareNumber(trimmed)) {
+    return true;
+  }
+
+  // Check for typed number (e.g., "1U8", "-5I16")
+  return isNumberLiteral(trimmed);
+}
+
+function processLetBindingValidation(
+  exprPart: string,
+  typeAnnotation: string | undefined,
+  variableTypes: VariableContext,
+): CompileError | undefined {
+  const exprType = extractExpressionType(exprPart, variableTypes);
+
+  if (!typeAnnotation) {
+    // No annotation, infer from expression
+    if (!exprType && !isSimpleConstantExpression(exprPart)) {
+      // No inferred type and no annotation - untyped expression
+      return {
+        cause: `Expression has no inferred type and no type annotation provided`,
+        reason: `Bare numbers and untyped expressions require explicit type annotations`,
+        fix: `Add a type annotation like ': U8' or use a typed literal like '1U8'`,
+        first: { line: 0, column: 0, length: exprPart.length },
+      };
+    }
+    return undefined;
+  }
+
+  // Has annotation, check compatibility
+  if (exprType) {
+    // Both have types, check compatibility
+    if (!isTypeCompatible(typeAnnotation, exprType)) {
+      return buildTypeError(typeAnnotation, exprType, exprPart);
+    }
+  } else if (!isSimpleConstantExpression(exprPart)) {
+    // No type and not a simple constant - variable or complex expr
+    return {
+      cause: `Expression type cannot be determined`,
+      reason: `Cannot assign untyped expression to ${typeAnnotation}`,
+      fix: `Use a typed expression or variable`,
+      first: { line: 0, column: 0, length: exprPart.length },
+    };
+  }
+
+  return undefined;
+}
+
 function findFirstSemicolon(str: string): number {
   for (let i = 0; i < str.length; i++) {
     if (str[i] === ";") {
@@ -180,23 +236,24 @@ function processLetBinding(
     };
   }
 
+  // Validate type annotation if present
+  const validationError = processLetBindingValidation(
+    exprPart,
+    typeAnnotation,
+    variableTypes,
+  );
+  if (validationError) {
+    return { error: validationError };
+  }
+
+  // Extract type and add to context
   const exprType = extractExpressionType(exprPart, variableTypes);
+  const finalType = typeAnnotation || exprType;
 
-  if (!typeAnnotation) {
-    // No annotation, infer from expression
-    if (exprType) {
-      variableTypes.push({ name: varName, memoryAddress: 0, type: exprType });
-    }
-    return { added: true };
+  if (finalType) {
+    variableTypes.push({ name: varName, memoryAddress: 0, type: finalType });
   }
 
-  // Has annotation, check compatibility
-  if (exprType && !isTypeCompatible(typeAnnotation, exprType)) {
-    return { error: buildTypeError(typeAnnotation, exprType, exprPart) };
-  }
-
-  // Store the annotated type for this variable
-  variableTypes.push({ name: varName, memoryAddress: 0, type: typeAnnotation });
   return { added: true };
 }
 

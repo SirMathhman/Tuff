@@ -116,6 +116,13 @@ export function extractExpressionType(
     return suffix;
   }
 
+  // For bare numbers without type suffix, infer a default type
+  const isBareLiteral = isBareNumber(trimmed);
+  if (isBareLiteral) {
+    // Bare numbers default to I32 for compatibility with signed/unsigned and various sizes
+    return "I32";
+  }
+
   // For variable references, look up in context
   if (context) {
     const binding = context.find((b) => b.name === trimmed);
@@ -126,6 +133,40 @@ export function extractExpressionType(
 
   // If no type suffix and not a read expression, return undefined
   return undefined;
+}
+
+function validateNumericPrefix(
+  expr: string,
+  allowTypeChars: boolean,
+): boolean {
+  const trimmed = expr.trim();
+  if (trimmed.length === 0) return false;
+
+  let i = 0;
+  if (trimmed[i] === "-") i++;
+
+  if (i >= trimmed.length) return false;
+
+  for (; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (char === undefined) return false;
+
+    const isDigit = char >= "0" && char <= "9";
+    const isTypeChar = char >= "A" && char <= "Z";
+
+    const isValidChar = allowTypeChars ? isDigit || isTypeChar : isDigit;
+    if (!isValidChar) return false;
+  }
+
+  return true;
+}
+
+export function isBareNumber(expr: string): boolean {
+  return validateNumericPrefix(expr, false);
+}
+
+export function isNumberLiteral(expr: string): boolean {
+  return validateNumericPrefix(expr, true);
 }
 
 export function extractArithmeticTypes(exprPart: string): string[] | undefined {
