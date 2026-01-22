@@ -38,6 +38,7 @@ export default [
           skipBlankLines: true,
         },
       ],
+      "max-depth": ["error", 2],
     },
   },
 ];

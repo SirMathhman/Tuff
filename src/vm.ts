@@ -17,18 +17,21 @@ function handleLoad(
 ): void {
   if (variant === Variant.Immediate) {
     registers[operand1] = operand2;
-  } else if (variant === Variant.Direct) {
+    return;
+  }
+  if (variant === Variant.Direct) {
     const addr1 = operand2;
     if (addr1 < memory.length) {
       registers[operand1] = memory[addr1] ?? 0;
     }
-  } else if (variant === Variant.Indirect) {
+    return;
+  }
+  if (variant === Variant.Indirect) {
     const addrRef = operand2;
-    if (addrRef < memory.length) {
-      const address = memory[addrRef] ?? 0;
-      if (address < memory.length) {
-        registers[operand1] = memory[address] ?? 0;
-      }
+    if (addrRef >= memory.length) return;
+    const address = memory[addrRef] ?? 0;
+    if (address < memory.length) {
+      registers[operand1] = memory[address] ?? 0;
     }
   }
 }
@@ -44,13 +47,14 @@ function handleStore(
     if (operand2 < memory.length) {
       memory[operand2] = registers[operand1] ?? 0;
     }
-  } else if (variant === Variant.Indirect) {
+    return;
+  }
+  if (variant === Variant.Indirect) {
     const addrRef = operand2;
-    if (addrRef < memory.length) {
-      const address = memory[addrRef] ?? 0;
-      if (address < memory.length) {
-        memory[address] = registers[operand1] ?? 0;
-      }
+    if (addrRef >= memory.length) return;
+    const address = memory[addrRef] ?? 0;
+    if (address < memory.length) {
+      memory[address] = registers[operand1] ?? 0;
     }
   }
 }
@@ -63,19 +67,20 @@ function handleHalt(
 ): number | undefined {
   if (variant === Variant.Immediate) {
     return operand1;
-  } else if (variant === Variant.Direct) {
+  }
+  if (variant === Variant.Direct) {
     const exitCode = memory[operand1];
     if (exitCode !== undefined) {
       return exitCode;
     }
-  } else if (variant === Variant.Indirect) {
+    return undefined;
+  }
+  if (variant === Variant.Indirect) {
     const addrRef = operand1;
-    if (addrRef < memory.length) {
-      const address = memory[addrRef];
-      if (address !== undefined && address < memory.length) {
-        return memory[address] ?? 0;
-      }
-    }
+    if (addrRef >= memory.length) return undefined;
+    const address = memory[addrRef];
+    if (address === undefined || address >= memory.length) return undefined;
+    return memory[address] ?? 0;
   }
 }
 
@@ -87,19 +92,20 @@ function handleJump(
 ): number | undefined {
   if (variant === Variant.Immediate) {
     return operand1;
-  } else if (variant === Variant.Direct) {
+  }
+  if (variant === Variant.Direct) {
     const jumpAddr = memory[operand1];
     if (jumpAddr !== undefined) {
       return jumpAddr;
     }
-  } else if (variant === Variant.Indirect) {
+    return undefined;
+  }
+  if (variant === Variant.Indirect) {
     const addrRef = operand1;
-    if (addrRef < memory.length) {
-      const address = memory[addrRef];
-      if (address !== undefined && address < memory.length) {
-        return memory[address] ?? 0;
-      }
-    }
+    if (addrRef >= memory.length) return undefined;
+    const address = memory[addrRef];
+    if (address === undefined || address >= memory.length) return undefined;
+    return memory[address] ?? 0;
   }
 }
 
@@ -211,9 +217,8 @@ function handleJumpIfLessThanZero(
   registers: number[],
   memory: number[],
 ): number | undefined {
-  if ((registers[0] ?? 0) < 0) {
-    return handleJump(variant, operand1, registers, memory);
-  }
+  if ((registers[0] ?? 0) >= 0) return undefined;
+  return handleJump(variant, operand1, registers, memory);
 }
 
 // eslint-disable-next-line max-lines-per-function
@@ -322,6 +327,16 @@ function executeInstruction(
   return result.state;
 }
 
+function incrementProgramCounter(
+  state: ExecutionState,
+  memory: number[],
+): void {
+  state.programCounter++;
+  if (state.programCounter >= memory.length) {
+    state.programCounter = 0;
+  }
+}
+
 // Returns the exit code
 export function execute(
   instructions: Instruction[],
@@ -369,10 +384,7 @@ export function execute(
 
     // Only increment if instruction didn't change PC (e.g., jump)
     if (state.programCounter === previousPC) {
-      state.programCounter++;
-      if (state.programCounter >= memory.length) {
-        state.programCounter = 0;
-      }
+      incrementProgramCounter(state, memory);
     }
   }
 
