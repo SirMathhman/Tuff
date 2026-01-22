@@ -2,7 +2,7 @@
 
 import { run } from "../src/app";
 
-describe("VM execute", () => {
+describe("The application", () => {
   it("should execute a simple program that halts immediately", () => {
     let result = run("");
     if (result.ok) {
