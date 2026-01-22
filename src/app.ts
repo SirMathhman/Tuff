@@ -12,6 +12,7 @@ import {
   parseDivExpression,
   buildMulOrDivResult,
   splitByOperator,
+  findOperatorIndex,
 } from "./parser";
 import {
   type CompileError,
@@ -176,14 +177,7 @@ function parseParenthesizedAtom(
 }
 
 function parseAddExpression(source: string): Instruction[] | undefined {
-  // Look for + operator
-  let plusIndex = -1;
-  for (let i = 0; i < source.length; i++) {
-    if (source[i] === "+") {
-      plusIndex = i;
-      break;
-    }
-  }
+  const plusIndex = findOperatorIndex(source, "+");
   if (plusIndex === -1) return undefined;
 
   const leftPart = source.substring(0, plusIndex).trim();

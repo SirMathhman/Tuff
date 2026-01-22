@@ -1,5 +1,5 @@
 import { type Instruction, OpCode, Variant } from "./vm";
-import { parseNumberWithSuffix } from "./parser";
+import { parseNumberWithSuffix, findOperatorIndex } from "./parser";
 import { buildStoreHaltInstructions } from "./types";
 import { type VariableContext, resolveVariable } from "./let-binding";
 
@@ -25,14 +25,7 @@ export function parseAddExpressionWithContext(
   source: string,
   context: VariableContext,
 ): Instruction[] | undefined {
-  // Look for + operator
-  let plusIndex = -1;
-  for (let i = 0; i < source.length; i++) {
-    if (source[i] === "+") {
-      plusIndex = i;
-      break;
-    }
-  }
+  const plusIndex = findOperatorIndex(source, "+");
   if (plusIndex === -1) return undefined;
 
   const leftPart = source.substring(0, plusIndex).trim();

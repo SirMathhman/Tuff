@@ -20,6 +20,6 @@
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
     "test": "bun test",
-    "cpd": "pmd cpd --dir src tests --language typescript --minimum-tokens 50"
+    "cpd": "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./tools/pmd-bin-7.20.0/bin/pmd cpd --dir src tests --language typescript --minimum-tokens 50"
   }
 }
