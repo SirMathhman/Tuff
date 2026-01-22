@@ -39,6 +39,14 @@ export default [
         },
       ],
       "max-depth": ["error", 2],
+      "max-lines": [
+        "error",
+        {
+          max: 500,
+          skipComments: true,
+          skipBlankLines: true,
+        },
+      ],
     },
   },
 ];
