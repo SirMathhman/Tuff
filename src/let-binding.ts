@@ -429,12 +429,10 @@ export function buildVarRefInstructionsForBinding(
   ];
 }
 
-export function parseReassignmentComponents(source: string):
-  | {
-      varName: string;
-      exprPart: string;
-      remaining: string;
-    }
+function extractReassignmentBase(
+  source: string,
+):
+  | { bindingScope: string; remaining: string; equalsIndex: number }
   | undefined {
   const trimmed = source.trim();
   const firstSemicolonIndex = findChar(trimmed, ";");
@@ -444,16 +442,34 @@ export function parseReassignmentComponents(source: string):
   const equalsIndex = findChar(bindingScope, "=");
   if (equalsIndex === -1) return undefined;
 
+  const remaining = trimmed.substring(firstSemicolonIndex + 1).trim();
+  return { bindingScope, remaining, equalsIndex };
+}
+
+function isValidIdentifier(name: string): boolean {
+  if (name.length === 0) return false;
+  for (let i = 0; i < name.length; i++) {
+    const char = name[i];
+    if (!char || !isIdentifierChar(char, i === 0)) return false;
+  }
+  return true;
+}
+
+export function parseReassignmentComponents(source: string):
+  | {
+      varName: string;
+      exprPart: string;
+      remaining: string;
+    }
+  | undefined {
+  const base = extractReassignmentBase(source);
+  if (!base) return undefined;
+
+  const { bindingScope, remaining, equalsIndex } = base;
   const varName = bindingScope.substring(0, equalsIndex).trim();
   const exprPart = bindingScope.substring(equalsIndex + 1).trim();
-  const remaining = trimmed.substring(firstSemicolonIndex + 1).trim();
 
-  // Validate varName is a valid identifier
-  if (varName.length === 0) return undefined;
-  for (let i = 0; i < varName.length; i++) {
-    const char = varName[i];
-    if (!char || !isIdentifierChar(char, i === 0)) return undefined;
-  }
+  if (!isValidIdentifier(varName)) return undefined;
 
   return { varName, exprPart, remaining };
 }
@@ -465,30 +481,19 @@ export function parseDereferenceReassignmentComponents(source: string):
       remaining: string;
     }
   | undefined {
-  const trimmed = source.trim();
-  const firstSemicolonIndex = findChar(trimmed, ";");
-  if (firstSemicolonIndex === -1) return undefined;
+  const base = extractReassignmentBase(source);
+  if (!base) return undefined;
 
-  const bindingScope = trimmed.substring(0, firstSemicolonIndex);
-  const equalsIndex = findChar(bindingScope, "=");
-  if (equalsIndex === -1) return undefined;
-
+  const { bindingScope, remaining, equalsIndex } = base;
   const leftSide = bindingScope.substring(0, equalsIndex).trim();
 
-  // Check if left side is a dereference (*varName)
   if (!leftSide.startsWith("*")) return undefined;
 
   const pointerName = leftSide.substring(1).trim();
 
-  // Validate pointerName is a valid identifier
-  if (pointerName.length === 0) return undefined;
-  for (let i = 0; i < pointerName.length; i++) {
-    const char = pointerName[i];
-    if (!char || !isIdentifierChar(char, i === 0)) return undefined;
-  }
+  if (!isValidIdentifier(pointerName)) return undefined;
 
   const exprPart = bindingScope.substring(equalsIndex + 1).trim();
-  const remaining = trimmed.substring(firstSemicolonIndex + 1).trim();
 
   return { pointerName, exprPart, remaining };
 }
