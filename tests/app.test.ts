@@ -101,4 +101,8 @@ describe("interpret", () => {
   it("supports mutable variable assignment", () => {
     expect(interpret("let mut x = 0; x = 100; x")).toBe(100);
   });
+
+  it("throws when reassigning immutable variable", () => {
+    expect(() => interpret("let x = 0; x = 100; x")).toThrow();
+  });
 });
