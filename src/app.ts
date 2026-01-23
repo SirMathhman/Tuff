@@ -11,12 +11,23 @@ import {
   getSuffixInfo,
 } from "./parser";
 
-function getExpressionType(expr: Expression): string {
+function getExpressionType(
+  expr: Expression,
+  variableTypeMap?: Map<string, string>,
+): string {
   if (expr.type === "literal") return "U8"; // Literals default to U8
   if (expr.type === "read") return expr.typeStr;
-  if (expr.type === "block") return getExpressionType(expr.result);
-  if (expr.type === "binary") return getExpressionType(expr.left);
-  if (expr.type === "variable") return ""; // Variable types are tracked at runtime
+  if (expr.type === "block")
+    return getExpressionType(expr.result, variableTypeMap);
+  if (expr.type === "binary")
+    return getExpressionType(expr.left, variableTypeMap);
+  if (expr.type === "variable") {
+    // Look up the variable type if we have a type map
+    if (variableTypeMap && variableTypeMap.has(expr.name)) {
+      return variableTypeMap.get(expr.name) || "";
+    }
+    return "";
+  }
   return "";
 }
 
@@ -90,10 +101,21 @@ function compileByType(
   expr: Expression,
   nextRegister: number,
   variableMap: Map<string, number>,
+  variableTypeMap?: Map<string, string>,
 ): Result<
   { instructions: Instruction[]; resultRegister: number },
   CompileError
 > {
+  // Handle blocks specially to pass the type map
+  if (expr.type === "block") {
+    return compileBlockWithContext(
+      expr as Expression & { type: "block" },
+      nextRegister,
+      variableMap,
+      variableTypeMap,
+    );
+  }
+
   const handler = EXPRESSION_HANDLERS[expr.type];
   if (handler) {
     return handler(expr, nextRegister, variableMap);
@@ -122,11 +144,12 @@ function compileExpressionWithContext(
   expr: Expression,
   nextRegister: number,
   variableMap: Map<string, number>,
+  variableTypeMap?: Map<string, string>,
 ): Result<
   { instructions: Instruction[]; resultRegister: number },
   CompileError
 > {
-  return compileByType(expr, nextRegister, variableMap);
+  return compileByType(expr, nextRegister, variableMap, variableTypeMap);
 }
 
 function compileBinaryWithContext(
@@ -229,10 +252,11 @@ function isTypeCompatible(fromType: string, toType: string): boolean {
 function checkTypeMismatch(
   declaredType: string,
   expr: Expression,
+  variableTypeMap?: Map<string, string>,
 ): Result<true, CompileError> {
   if (declaredType === "") return ok(true);
 
-  const exprType = getExpressionType(expr);
+  const exprType = getExpressionType(expr, variableTypeMap);
   if (exprType !== "" && !isTypeCompatible(exprType, declaredType)) {
     return err(
       createCompileError(
@@ -246,10 +270,65 @@ function checkTypeMismatch(
   return ok(true);
 }
 
+function determineVariableType(
+  declaredType: string,
+  expr: Expression,
+  variableTypeMap: Map<string, string>,
+): string {
+  if (declaredType !== "") {
+    return declaredType;
+  }
+  // Implicit type inference from the expression
+  return getExpressionType(expr, variableTypeMap);
+}
+
+function processBlockStatement(
+  statement: { name: string; typeStr: string; value: Expression },
+  instructions: Instruction[],
+  currentRegister: number,
+  variableMap: Map<string, number>,
+  variableTypeMap: Map<string, string>,
+): Result<number, CompileError> {
+  let typeCheck = validateTypeAnnotation(statement.typeStr);
+  if (!typeCheck.ok) return typeCheck;
+
+  typeCheck = checkDuplicateVariable(statement.name, variableMap) as Result<
+    true,
+    CompileError
+  >;
+  if (!typeCheck.ok) return typeCheck;
+
+  const valueResult = compileExpressionWithContext(
+    statement.value,
+    currentRegister,
+    variableMap,
+  );
+  if (!valueResult.ok) return valueResult;
+
+  typeCheck = checkTypeMismatch(
+    statement.typeStr,
+    statement.value,
+    variableTypeMap,
+  );
+  if (!typeCheck.ok) return typeCheck;
+
+  const actualType = determineVariableType(
+    statement.typeStr,
+    statement.value,
+    variableTypeMap,
+  );
+
+  instructions.push(...valueResult.value.instructions);
+  variableMap.set(statement.name, valueResult.value.resultRegister);
+  variableTypeMap.set(statement.name, actualType);
+  return ok(valueResult.value.resultRegister + 1);
+}
+
 function compileBlockWithContext(
   expr: Expression & { type: "block" },
   nextRegister: number,
   parentVariableMap: Map<string, number>,
+  parentVariableTypeMap?: Map<string, string>,
 ): Result<
   { instructions: Instruction[]; resultRegister: number },
   CompileError
@@ -257,36 +336,27 @@ function compileBlockWithContext(
   const instructions: Instruction[] = [];
   let currentRegister = nextRegister;
   const variableMap = new Map(parentVariableMap);
+  const variableTypeMap = new Map(parentVariableTypeMap || []);
 
   for (const statement of expr.statements) {
-    const typeCheck = validateTypeAnnotation(statement.typeStr);
-    if (!typeCheck.ok) return typeCheck;
-
-    const dupCheck = checkDuplicateVariable(statement.name, variableMap);
-    if (!dupCheck.ok) return dupCheck;
-
-    const valueResult = compileExpressionWithContext(
-      statement.value,
+    const processResult = processBlockStatement(
+      statement,
+      instructions,
       currentRegister,
       variableMap,
+      variableTypeMap,
     );
-    if (!valueResult.ok) return valueResult;
-
-    const mismatchCheck = checkTypeMismatch(statement.typeStr, statement.value);
-    if (!mismatchCheck.ok) return mismatchCheck;
-
-    instructions.push(...valueResult.value.instructions);
-    variableMap.set(statement.name, valueResult.value.resultRegister);
-    currentRegister = valueResult.value.resultRegister + 1;
+    if (!processResult.ok) return processResult;
+    currentRegister = processResult.value;
   }
 
   const resultCompile = compileExpressionWithContext(
     expr.result,
     currentRegister,
     variableMap,
+    variableTypeMap,
   );
   if (!resultCompile.ok) return resultCompile;
-
   instructions.push(...resultCompile.value.instructions);
 
   return ok({
