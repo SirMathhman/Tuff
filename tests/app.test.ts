@@ -30,7 +30,7 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
     if (execResult !== expected) {
       expect(
         "Failed to execute compiled instructions: " +
-          JSON.stringify(compileResult.value, null, 2),
+          JSON.stringify(compileResult.value, undefined, 2),
       ).toBeUndefined();
     }
 
@@ -51,7 +51,7 @@ function assertInvalid(source: string) {
   if (compileResult.ok) {
     expect(
       "Expected compilation to fail, but it succeeded with: " +
-        JSON.stringify(compileResult.value, null, 2),
+        JSON.stringify(compileResult.value, undefined, 2),
     ).toBeUndefined();
   }
 }

@@ -30,6 +30,11 @@ export default [
           selector: 'NewExpression[callee.name="RegExp"]',
           message: "RegExp constructor is not allowed.",
         },
+        {
+          selector: "Literal[value=null]",
+          message:
+            "null is not allowed. Use undefined instead for consistency.",
+        },
       ],
       "max-lines-per-function": [
         "error",

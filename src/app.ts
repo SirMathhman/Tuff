@@ -36,7 +36,7 @@ function createCompileError(
   };
 }
 
-type SuffixInfo = { suffix: string; minVal: number; maxVal: number } | null;
+type SuffixInfo = { suffix: string; minVal: number; maxVal: number } | undefined;
 
 function createSignedBoundary(bits: number): {
   minVal: number;
@@ -74,7 +74,7 @@ function getSuffixInfo(source: string): SuffixInfo {
     }
   }
 
-  return null;
+  return undefined;
 }
 
 function parseNumericLiteral(source: string): Result<number, CompileError> {
@@ -227,20 +227,27 @@ function checkBracketPairing(
 
 function isFullyWrappedInBrackets(
   source: string,
-): { type: "paren" | "brace" } | null {
-  const bracketPairs: Array<{ open: string; close: string; type: "paren" | "brace" }> = [
+): { type: "paren" | "brace" } | undefined {
+  const bracketPairs: Array<{
+    open: string;
+    close: string;
+    type: "paren" | "brace";
+  }> = [
     { open: "(", close: ")", type: "paren" },
     { open: "{", close: "}", type: "brace" },
   ];
 
   for (const pair of bracketPairs) {
-    const isWrapped = source.startsWith(pair.open) && source.endsWith(pair.close) && checkBracketPairing(source, pair.open, pair.close);
+    const isWrapped =
+      source.startsWith(pair.open) &&
+      source.endsWith(pair.close) &&
+      checkBracketPairing(source, pair.open, pair.close);
     if (isWrapped) {
       return { type: pair.type };
     }
   }
 
-  return null;
+  return undefined;
 }
 
 function parsePrimary(source: string): Result<Expression, CompileError> {
