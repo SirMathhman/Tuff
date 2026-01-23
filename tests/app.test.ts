@@ -109,4 +109,8 @@ describe("interpret", () => {
   it("allows mutable variable reassignment inside grouped expressions", () => {
     expect(interpret("let mut x = 0; { x = 100; } x")).toBe(100);
   });
+
+  it("throws when variable is declared inside grouped expressions and used outside", () => {
+    expect(() => interpret("{ let mut x = 0; } x = 100; x")).toThrow();
+  });
 });

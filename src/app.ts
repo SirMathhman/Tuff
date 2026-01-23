@@ -181,7 +181,12 @@ function evaluateGroupedExpressionsWithScope(s: string, scope: Map<string, numbe
         const closeIndex = findMatchingClose(s, openIndex, openChar, closeChar);
         if (closeIndex === -1) throw new Error(`unmatched opening ${openChar}`);
         const inside = s.slice(openIndex + 1, closeIndex);
-        const result = interpretWithScope(inside, scope, typeMap, mutMap);
+        const cScope = new Map(scope), cTypeMap = new Map(typeMap), cMutMap = new Map(mutMap);
+        const result = interpretWithScope(inside, cScope, cTypeMap, cMutMap);
+        if (openChar === "{") {
+            for (const [k, v] of cScope.entries()) if (scope.has(k)) scope.set(k, v);
+            for (const [k, v] of cMutMap.entries()) if (mutMap.has(k)) mutMap.set(k, v);
+        }
         const after = s.slice(closeIndex + 1).trim();
         if (openChar === "{" && inside.includes("=") && after && !after.includes("+") && !after.includes("-") && !after.includes("*") && !after.includes("/")) {
             return evaluateGroupedExpressionsWithScope(s.slice(0, openIndex) + after, scope, typeMap, mutMap);
@@ -195,25 +200,14 @@ function parseTypedNumber(s: string): number {
     const prefixEnd = scanNumericPrefix(s);
     if (prefixEnd === 0) {
         const n = Number(s);
-        return Number.isFinite(n) ? n : 0;
+        if (!Number.isFinite(n)) throw new Error(`invalid expression: ${s}`);
+        return n;
     }
-
-    const numStr = s.slice(0, prefixEnd);
-    const n = Number(numStr);
-    const suffix = s.slice(prefixEnd);
-    const typeSize = extractUnsignedSize(suffix);
-
-    // Negative value with unsigned suffix is an error
-    if (typeSize > 0 && n < 0) {
-        throw new Error("negative value with unsigned suffix");
-    }
-
-    // Validate value against unsigned type bounds
-    if (typeSize > 0) {
-        validateUnsignedValue(n, typeSize);
-    }
-
-    return Number.isFinite(n) ? n : 0;
+    const n = Number(s.slice(0, prefixEnd)), suffix = s.slice(prefixEnd).trim(), typeSize = extractUnsignedSize(suffix);
+    if (typeSize > 0 && n < 0) throw new Error("negative value with unsigned suffix");
+    if (typeSize > 0) validateUnsignedValue(n, typeSize);
+    if (!Number.isFinite(n)) throw new Error(`invalid expression: ${s}`);
+    return n;
 }
 
 export function interpret(input: string): number {
