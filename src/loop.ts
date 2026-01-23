@@ -49,22 +49,9 @@ export function handleLoop(
     // Infinite loop - keep executing the body
     for (;;) {
       try {
-        const bodyStatements = loopBody.split(";").map((s) => s.trim());
-        for (const stmt of bodyStatements) {
-          if (!stmt) continue;
-          if (stmt.startsWith("break")) {
-            // Handle break statement
-            const breakValue = handleBreak(
-              stmt,
-              scope,
-              typeMap,
-              mutMap,
-              interpreter,
-            );
-            throw breakValue;
-          }
-          interpreter(stmt, scope, typeMap, mutMap);
-        }
+        // Interpret the entire loop body as a single expression
+        // This allows complex statements like if-break to work
+        interpreter(loopBody, scope, typeMap, mutMap);
       } catch (e) {
         if (e instanceof BreakException) {
           throw e; // Re-throw to be caught by outer handler
@@ -93,9 +80,9 @@ export function handleBreak(
   typeMap: Map<string, number>,
   mutMap: Map<string, boolean>,
   interpreter: Interpreter,
-): BreakException | undefined {
+): void {
   const trimmed = s.trim();
-  if (!trimmed.startsWith("break")) return undefined;
+  if (!trimmed.startsWith("break")) return;
 
   const afterBreak = trimmed.slice(5).trim();
 

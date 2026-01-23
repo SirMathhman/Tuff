@@ -161,4 +161,10 @@ describe("interpret", () => {
   it("supports loop expression with break", () => {
     expect(interpret("let x : I32 = loop { break 5; }; x")).toBe(5);
   });
+
+  it("supports loop with break inside if condition", () => {
+    expect(
+      interpret("let x : I32 = loop { if (true) break 5; }; x"),
+    ).toBe(5);
+  });
 });

@@ -1,6 +1,6 @@
 import { handleVarDecl, evaluateGroupedExpressionsWithScope } from "./scope";
 import { handleMatch } from "./match";
-import { handleLoop } from "./loop";
+import { handleLoop, BreakException, handleBreak } from "./loop";
 import { findOperatorIndex, performBinaryOp } from "./operators";
 import { parseTypedNumber, extractTypedInfo } from "./parser";
 
@@ -31,14 +31,18 @@ export function interpretWithScope(
   );
   if (matchResult !== undefined) return matchResult;
 
-  const loopResult = handleLoop(
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpretWithScope,
-  );
+  const loopResult = handleLoop(s, scope, typeMap, mutMap, interpretWithScope);
   if (loopResult !== undefined) return loopResult;
+
+  try {
+    handleBreak(s, scope, typeMap, mutMap, interpretWithScope);
+    // If handleBreak returns, it means the string doesn't start with "break"
+  } catch (e) {
+    if (e instanceof BreakException) {
+      throw e;
+    }
+    // If it's not a BreakException, continue to other handlers
+  }
 
   if (s.indexOf("if ") === 0) {
     const cIdx = s.indexOf(")");
@@ -81,6 +85,13 @@ export function interpretWithScope(
         return cond !== 0
           ? interpretWithScope(thenStr, scope, typeMap, mutMap)
           : interpretWithScope(elseStr, scope, typeMap, mutMap);
+      } else {
+        // No else clause - just handle the then part
+        const thenStr = s.slice(cIdx + 1).trim();
+        if (cond !== 0) {
+          return interpretWithScope(thenStr, scope, typeMap, mutMap);
+        }
+        return 0; // If condition is false and no else, return 0
       }
     }
   }
