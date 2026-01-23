@@ -40,43 +40,43 @@ export function handleVarDecl(
     }
   }
 
-  // If no semicolon found, check if this might be a declaration with a match expression
-  // In that case, look for where the match expression ends
+  // If no semicolon found, check if this might be a declaration with a match or loop expression
+  // In that case, look for where the expression ends
   let declStr: string;
   let restIndex: number;
 
   if (semiIndex === -1) {
-    // Look for "match" keyword in the assignment value
+    // Look for "match" or "loop" keyword in the assignment value
     const eqIndex = s.indexOf("=");
     if (eqIndex === -1) return undefined;
 
     const afterEq = s.slice(eqIndex + 1).trim();
     const trimLenDiff = s.slice(eqIndex + 1).length - afterEq.length;
 
-    if (afterEq.startsWith("match")) {
-      // Find where the match expression ends (closing brace at depth 0)
-      let matchBraceDepth = 0;
-      let matchParenDepth = 0;
-      let matchBraceCloseIdx = -1;
+    if (afterEq.startsWith("match") || afterEq.startsWith("loop")) {
+      // Find where the expression ends (closing brace at depth 0)
+      let exprBraceDepth = 0;
+      let exprParenDepth = 0;
+      let exprBraceCloseIdx = -1;
 
       for (let i = 0; i < afterEq.length; i++) {
         const ch = afterEq[i];
-        if (ch === "(") matchParenDepth++;
-        else if (ch === ")") matchParenDepth--;
-        else if (ch === "{") matchBraceDepth++;
+        if (ch === "(") exprParenDepth++;
+        else if (ch === ")") exprParenDepth--;
+        else if (ch === "{") exprBraceDepth++;
         else if (ch === "}") {
-          matchBraceDepth--;
-          if (matchBraceDepth === 0 && matchParenDepth === 0) {
-            matchBraceCloseIdx = i;
+          exprBraceDepth--;
+          if (exprBraceDepth === 0 && exprParenDepth === 0) {
+            exprBraceCloseIdx = i;
             break;
           }
         }
       }
 
-      if (matchBraceCloseIdx !== -1) {
-        // The declaration ends where the match expression ends
+      if (exprBraceCloseIdx !== -1) {
+        // The declaration ends where the expression ends
         // restIndex points to right after the closing brace
-        restIndex = eqIndex + 1 + trimLenDiff + matchBraceCloseIdx + 1;
+        restIndex = eqIndex + 1 + trimLenDiff + exprBraceCloseIdx + 1;
         declStr = s.slice(0, restIndex);
       } else {
         return undefined;

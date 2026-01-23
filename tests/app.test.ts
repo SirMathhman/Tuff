@@ -157,4 +157,8 @@ describe("interpret", () => {
       interpret("let x : I32 = match (100) { case 100 => 3; case _ => 2; } x"),
     ).toBe(3);
   });
+
+  it("supports loop expression with break", () => {
+    expect(interpret("let x : I32 = loop { break 5; }; x")).toBe(5);
+  });
 });

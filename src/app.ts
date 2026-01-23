@@ -1,8 +1,6 @@
-import {
-  handleVarDecl,
-  evaluateGroupedExpressionsWithScope,
-} from "./scope";
+import { handleVarDecl, evaluateGroupedExpressionsWithScope } from "./scope";
 import { handleMatch } from "./match";
+import { handleLoop } from "./loop";
 import { findOperatorIndex, performBinaryOp } from "./operators";
 import { parseTypedNumber, extractTypedInfo } from "./parser";
 
@@ -32,6 +30,15 @@ export function interpretWithScope(
     interpretWithScope,
   );
   if (matchResult !== undefined) return matchResult;
+
+  const loopResult = handleLoop(
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    interpretWithScope,
+  );
+  if (loopResult !== undefined) return loopResult;
 
   if (s.indexOf("if ") === 0) {
     const cIdx = s.indexOf(")");
