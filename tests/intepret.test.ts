@@ -66,4 +66,10 @@ describe("intepret - expressions", () => {
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) expect(result.error).toContain("Mixed");
   });
+
+  it("returns err for expressions with mixed type suffixes like '1U8 + 255'", () => {
+    const result = intepret("1U8 + 255");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) expect(result.error).toContain("Mixed");
+  });
 });
