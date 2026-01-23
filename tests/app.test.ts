@@ -213,4 +213,18 @@ describe("The application - Read tests", () => {
     // Evaluates as: (A + B) * C = (2 + 3) * 4 = 5 * 4 = 20
     assertValid("(read U8 + { read U8 }) * read U8", 20, 2, 3, 4);
   });
+
+  it("should support let bindings and block expressions", () => {
+    // Expression: (read U8 + { let x : U8 = read U8; x }) * read U8
+    // Block with let binding: reads into x, then returns x
+    // Left-to-right evaluation: A=2, B=3, C=4
+    // Evaluates as: (A + B) * C = (2 + 3) * 4 = 5 * 4 = 20
+    assertValid(
+      "(read U8 + { let x : U8 = read U8; x }) * read U8",
+      20,
+      2,
+      3,
+      4,
+    );
+  });
 });

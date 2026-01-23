@@ -5,6 +5,6 @@ bun test --coverage\
 	&& bun run format\
 	&& bun run check:circular\
 	&& bun run check:structure\
-	&& JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH" ./tools/pmd-bin-7.20.0/bin/pmd cpd --dir src tests --language typescript --minimum-tokens 50\
+	&& JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH" ./tools/pmd-bin-7.20.0/bin/pmd cpd --dir src tests --language typescript --minimum-tokens 50 --ignore-identifiers\
 	&& npm run dupfind\
 	&& npm run visualize
