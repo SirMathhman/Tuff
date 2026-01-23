@@ -64,4 +64,8 @@ describe("The application - Basic tests", () => {
   it("should output 100", () => {
     assertValid("100", 100);
   });
+
+  it("should output 100 with U8 suffix", () => {
+    assertValid("100U8", 100);
+  });
 });
