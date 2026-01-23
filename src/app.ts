@@ -12,6 +12,7 @@ export function interpret(input: string): number {
     let hasDigits = false;
     while (i < len) {
         const ch = s[i];
+        if (ch === undefined) break;
         if (ch >= "0" && ch <= "9") {
             hasDigits = true;
             i++;
@@ -26,6 +27,7 @@ export function interpret(input: string): number {
         let fracDigits = false;
         while (i < len) {
             const ch = s[i];
+            if (ch === undefined) break;
             if (ch >= "0" && ch <= "9") {
                 fracDigits = true;
                 i++;

@@ -78,9 +78,11 @@ function buildSubdirectoryGraph(
       const toSubdir = getFileSubdirectory(dep, srcDir);
       if (!toSubdir || toSubdir === fromSubdir) continue;
 
-      // Add edge if not already present
-      if (!subdirGraph[fromSubdir].includes(toSubdir)) {
-        subdirGraph[fromSubdir].push(toSubdir);
+      // Add edge if not already present (guard in case fromSubdir wasn't initialized)
+      const edges = subdirGraph[fromSubdir];
+      if (!edges) continue;
+      if (!edges.includes(toSubdir)) {
+        edges.push(toSubdir);
       }
     }
   }
@@ -102,8 +104,8 @@ function findCircularPaths(
     if (cycleStartIndex !== -1) {
       const cyclePath = path.slice(cycleStartIndex);
       cycles.push({
-        from: cyclePath[0],
-        to: cyclePath[cyclePath.length - 1],
+        from: cyclePath[0]!,
+        to: cyclePath[cyclePath.length - 1]!,
         path: [...cyclePath, current],
       });
     }
