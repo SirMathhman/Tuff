@@ -116,7 +116,7 @@ export function parseFunctionDefinition(source: string):
     }
   | undefined {
   const trimmed = source.trim();
-  
+
   // Support lambda syntax: () : Type => body
   const isLambda = trimmed.startsWith("(");
   if (!isLambda && !trimmed.startsWith("fn ")) return undefined;
@@ -135,17 +135,29 @@ export function parseFunctionDefinition(source: string):
   if (closeParenIndex === -1) return undefined;
 
   const colonIndex = findReturnTypeArrow(trimmed, closeParenIndex);
-  if (colonIndex === -1) return undefined;
+  let explicitReturnType: string | undefined;
 
-  const returnType = extractReturnType(trimmed, colonIndex);
-  if (!returnType) return undefined;
+  // Return type is optional - if no colon, search for => directly
+  let arrowSearchStart = colonIndex;
+  if (colonIndex !== -1) {
+    explicitReturnType = extractReturnType(trimmed, colonIndex);
+    arrowSearchStart = colonIndex;
+  } else {
+    // No explicit return type, look for => after closing paren
+    arrowSearchStart = closeParenIndex;
+  }
 
-  const arrowIndex = findArrowIndex(trimmed, colonIndex);
+  const arrowIndex = findArrowIndex(trimmed, arrowSearchStart);
   if (arrowIndex === -1) return undefined;
 
   const semiIndex = findChar(trimmed, ";");
   const body = extractFunctionBody(trimmed, arrowIndex, semiIndex);
   if (body.length === 0) return undefined;
+
+  // If no explicit return type, we'll infer it later from the body
+  // For now, use a placeholder that will be replaced
+  const returnType =
+    explicitReturnType || "<inferred>"; // Placeholder for inference
 
   const remaining =
     semiIndex === -1 ? "" : trimmed.substring(semiIndex + 1).trim();
@@ -162,7 +174,11 @@ export function parseFunctionDefinition(source: string):
 export function isFunctionDefinition(source: string): boolean {
   const trimmed = source.trim();
   // Support both "fn name() => body" and lambda "() => body" syntax
-  return (trimmed.startsWith("fn ") || trimmed.startsWith("(")) && trimmed.includes("=>");
+  // Return type annotation is optional
+  return (
+    (trimmed.startsWith("fn ") || trimmed.startsWith("(")) &&
+    trimmed.includes("=>")
+  );
 }
 
 export function extractFunctionType(source: string): string | undefined {
@@ -171,10 +187,19 @@ export function extractFunctionType(source: string): string | undefined {
   const parsed = parseFunctionDefinition(source);
   if (!parsed) return undefined;
 
+  let returnType = parsed.returnType;
+
+  // If return type was inferred (placeholder), we need to infer it from the body
+  if (returnType === "<inferred>") {
+    // For now, we'll use a generic type that can be narrowed later
+    // This allows the function to be used without explicit type annotation
+    returnType = "<inferred>"; // Keep placeholder, validation will handle it
+  }
+
   // Function type format: (param1Type, param2Type, ...) => returnType
   // For no parameters: () => returnType
   const paramTypes = parsed.parameters.map((p) => p.type).join(", ");
-  return `(${paramTypes}) => ${parsed.returnType}`;
+  return `(${paramTypes}) => ${returnType}`;
 }
 
 export function isFunctionCall(source: string): boolean {

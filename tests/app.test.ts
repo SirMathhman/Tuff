@@ -545,4 +545,8 @@ describe("The application - Functions", () => {
   it("should support lambda syntax without fn keyword", () => {
     assertValid("let temp = () : I32 => read I32; temp()", 42, 42);
   });
+
+  it("should support lambda syntax without return type annotation", () => {
+    assertValid("let temp = () => read I32; temp()", 42, 42);
+  });
 });
