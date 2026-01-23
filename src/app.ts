@@ -111,7 +111,40 @@ function parseNumericLiteral(source: string): Result<number, CompileError> {
   return ok(value);
 }
 
+function createInstruction(
+  opcode: OpCode,
+  variant: Variant,
+  operand1: number,
+): Instruction {
+  return { opcode, variant, operand1 };
+}
+
 export function compile(source: string): Result<Instruction[], CompileError> {
+  // Check if this is a read command
+  if (source.startsWith("read ")) {
+    const typeStr = source.slice(5);
+    const suffixInfo = getSuffixInfo(typeStr);
+
+    if (!suffixInfo) {
+      return err(
+        createCompileError(
+          "Invalid read command",
+          `Unknown integer type: ${typeStr}`,
+          "Use format like 'read U8', 'read I32', etc.",
+          source.length,
+        ),
+      );
+    }
+
+    // Compile to: In (read into register 0), Halt (with register 0)
+    const instructions: Instruction[] = [
+      createInstruction(OpCode.In, Variant.Immediate, 0),
+      createInstruction(OpCode.Halt, Variant.Direct, 0),
+    ];
+
+    return ok(instructions);
+  }
+
   let valueResult: Result<number, CompileError>;
 
   if (source === "") {
@@ -126,11 +159,7 @@ export function compile(source: string): Result<Instruction[], CompileError> {
 
   // Generate instructions to halt with the value as exit code
   const instructions: Instruction[] = [
-    {
-      opcode: OpCode.Halt,
-      variant: Variant.Immediate,
-      operand1: valueResult.value,
-    },
+    createInstruction(OpCode.Halt, Variant.Immediate, valueResult.value),
   ];
 
   return ok(instructions);

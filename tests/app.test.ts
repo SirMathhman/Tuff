@@ -151,3 +151,9 @@ describe("The application - I64 tests", () => {
     assertValid("100I64", 100);
   });
 });
+
+describe("The application - Read tests", () => {
+  it("should read U8 from input", () => {
+    assertValid("read U8", 100, 100);
+  });
+});

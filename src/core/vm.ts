@@ -46,27 +46,50 @@ function handleIndirectMemoryOp(
   }
 }
 
+function getDirectValue(
+  operand1: number,
+  storage: number[],
+): number | undefined {
+  const value = storage[operand1];
+  return value !== undefined ? value : undefined;
+}
+
+function getIndirectValue(
+  operand1: number,
+  memory: number[],
+): number | undefined {
+  const address = resolveIndirectAddress(operand1, memory);
+  return address !== undefined ? (memory[address] ?? 0) : undefined;
+}
+
 function readVariant(
   variant: number,
   operand1: number,
   memory: number[],
 ): number | undefined {
-  if (variant === Variant.Immediate) {
-    return operand1;
+  switch (variant) {
+    case Variant.Immediate:
+      return operand1;
+    case Variant.Direct:
+      return getDirectValue(operand1, memory);
+    case Variant.Indirect:
+      return getIndirectValue(operand1, memory);
   }
-  if (variant === Variant.Direct) {
-    const value = memory[operand1];
-    if (value !== undefined) {
-      return value;
-    }
-    return undefined;
-  }
-  if (variant === Variant.Indirect) {
-    const address = resolveIndirectAddress(operand1, memory);
-    if (address !== undefined) {
-      return memory[address] ?? 0;
-    }
-    return undefined;
+}
+
+function readVariantDirect(
+  variant: number,
+  operand1: number,
+  storage: number[],
+  memory: number[],
+): number | undefined {
+  switch (variant) {
+    case Variant.Immediate:
+      return operand1;
+    case Variant.Direct:
+      return getDirectValue(operand1, storage);
+    case Variant.Indirect:
+      return getIndirectValue(operand1, memory);
   }
 }
 
@@ -97,7 +120,7 @@ function handleHalt(
   registers: number[],
   memory: number[],
 ): number | undefined {
-  return readVariant(variant, operand1, memory);
+  return readVariantDirect(variant, operand1, registers, memory);
 }
 
 function handleJump(
