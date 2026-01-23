@@ -86,7 +86,7 @@ describe("intepret - expressions: arithmetic", () => {
   });
 });
 
-describe("intepret - expressions: precedence and operators", () => {
+describe("intepret - expressions: operators", () => {
   it("parses and evaluates expressions with multiplication like '2 * 3 + 4'", () => {
     const result = intepret("2 * 3 + 4");
     expect(isOk(result)).toBe(true);
@@ -116,7 +116,9 @@ describe("intepret - expressions: precedence and operators", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(10);
   });
+});
 
+describe("intepret - expressions: variables", () => {
   it("parses and evaluates variable declarations like '10 / ( { let x : I32 = 2; x } - 1)'", () => {
     const result = intepret("10 / ( { let x : I32 = 2; x } - 1)");
     expect(isOk(result)).toBe(true);
@@ -131,6 +133,12 @@ describe("intepret - expressions: precedence and operators", () => {
 
   it("parses and evaluates top-level variable declarations without type suffix like 'let x = 100; x'", () => {
     const result = intepret("let x = 100; x");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(100);
+  });
+
+  it("parses and evaluates variable declarations with different value suffix like 'let x : U16 = 100U8; x'", () => {
+    const result = intepret("let x : U16 = 100U8; x");
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(100);
   });
