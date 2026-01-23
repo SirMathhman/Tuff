@@ -23,10 +23,9 @@ function resolveVariableValue(
   vars: Map<string, VariableEntry>,
 ): Result<{ suffix: string; num: number }, TuffError> {
   const varRef = vars.get(valueStr);
-  if (varRef) {
-    return ok({ suffix: varRef.suffix, num: varRef.value });
-  }
-  return parseLiteral(valueStr);
+  return varRef
+    ? ok({ suffix: varRef.suffix, num: varRef.value })
+    : parseLiteral(valueStr);
 }
 
 function validateVariableDeclaration(
