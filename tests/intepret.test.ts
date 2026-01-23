@@ -38,4 +38,10 @@ describe("intepret", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(-100);
   });
+
+  it("returns err for numbers out of range for their type suffix like '256U8'", () => {
+    const result = intepret("256U8");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) expect(result.error).toContain("range");
+  });
 });
