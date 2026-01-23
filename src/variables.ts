@@ -189,5 +189,19 @@ export function parseVariableDeclarations(
     if (!result.ok) return result;
   }
 
-  return ok({ finalExpr: working, vars: newVars });
+  // Propagate all variable changes back to original scope
+  for (const [varName, entry] of newVars.entries()) {
+    if (vars.has(varName)) {
+      // Update existing variable (mutations)
+      const origEntry = vars.get(varName);
+      if (origEntry && origEntry.isMutable) {
+        origEntry.value = entry.value;
+      }
+    } else {
+      // Add newly declared variables to original scope
+      vars.set(varName, entry);
+    }
+  }
+
+  return ok({ finalExpr: working, vars });
 }
