@@ -85,6 +85,40 @@ function extractTypedInfo(s: string): { value: number; typeSize: number } {
     return { value: n, typeSize };
 }
 
+function evaluateParenthesizedExpression(s: string): { result: number; replaced: string } {
+    // Find the first opening parenthesis
+    const openIndex = s.indexOf("(");
+    if (openIndex === -1) {
+        return { result: 0, replaced: s };
+    }
+
+    // Find the matching closing parenthesis
+    let closeIndex = -1;
+    let depth = 0;
+    for (let i = openIndex; i < s.length; i++) {
+        const ch = s[i];
+        if (ch === "(") depth++;
+        else if (ch === ")") {
+            depth--;
+            if (depth === 0) {
+                closeIndex = i;
+                break;
+            }
+        }
+    }
+
+    if (closeIndex === -1) {
+        throw new Error("unmatched opening parenthesis");
+    }
+
+    const inside = s.slice(openIndex + 1, closeIndex);
+    const result = interpret(inside);
+
+    // Replace the parenthesized expression with its result
+    const replaced = s.slice(0, openIndex) + result + s.slice(closeIndex + 1);
+    return { result, replaced };
+}
+
 function parseTypedNumber(s: string): number {
     const prefixEnd = scanNumericPrefix(s);
     if (prefixEnd === 0) {
@@ -113,6 +147,13 @@ function parseTypedNumber(s: string): number {
 export function interpret(input: string): number {
     const s = input.trim();
     if (s === "") return 0;
+
+    // Handle parentheses first
+    if (s.includes("(")) {
+        const { replaced } = evaluateParenthesizedExpression(s);
+        // Recursively interpret the expression with parentheses replaced by their values
+        return interpret(replaced);
+    }
 
     // Find the lowest precedence operator for correct left-to-right evaluation
     // Precedence: + and - (lowest), then * and / (highest)

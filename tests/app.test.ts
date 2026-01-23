@@ -53,4 +53,8 @@ describe("interpret", () => {
   it("respects operator precedence: multiplication before addition", () => {
     expect(interpret("2 + 3 * 4")).toBe(14);
   });
+
+  it("respects parentheses for grouping", () => {
+    expect(interpret("(2 + 3) * 4")).toBe(20);
+  });
 });
