@@ -120,34 +120,39 @@ function createInstruction(
   return { opcode, variant, operand1, operand2 };
 }
 
-type Expression = 
+type Expression =
   | { type: "literal"; value: number }
   | { type: "read"; typeStr: string }
-  | { type: "binary"; op: "+" | "-" | "*" | "/"; left: Expression; right: Expression };
+  | {
+      type: "binary";
+      op: "+" | "-" | "*" | "/";
+      left: Expression;
+      right: Expression;
+    };
 
 function parseExpression(source: string): Result<Expression, CompileError> {
   // Handle empty input as literal 0
   if (source === "") {
     return ok({ type: "literal", value: 0 });
   }
-  
+
   // Try to parse as addition/subtraction (lowest precedence)
   const plusIndex = source.lastIndexOf("+");
   const minusIndex = source.lastIndexOf("-");
-  
+
   const operatorIndex = Math.max(plusIndex, minusIndex);
-  
+
   if (operatorIndex > 0) {
     const op = source[operatorIndex] as "+" | "-";
     const left = source.slice(0, operatorIndex).trim();
     const right = source.slice(operatorIndex + 1).trim();
-    
+
     const leftResult = parseExpression(left);
     const rightResult = parseExpression(right);
-    
+
     if (!leftResult.ok) return leftResult;
     if (!rightResult.ok) return rightResult;
-    
+
     return ok({
       type: "binary",
       op,
@@ -155,12 +160,12 @@ function parseExpression(source: string): Result<Expression, CompileError> {
       right: rightResult.value,
     });
   }
-  
+
   // Check if it's a read command
   if (source.startsWith("read ")) {
     const typeStr = source.slice(5).trim();
     const suffixInfo = getSuffixInfo(typeStr);
-    
+
     if (!suffixInfo) {
       return err(
         createCompileError(
@@ -171,90 +176,117 @@ function parseExpression(source: string): Result<Expression, CompileError> {
         ),
       );
     }
-    
+
     return ok({ type: "read", typeStr });
   }
-  
+
   // Try to parse as a numeric literal
   const numResult = parseNumericLiteral(source);
   if (!numResult.ok) return numResult;
-  
+
   return ok({ type: "literal", value: numResult.value });
 }
 
-function compileExpression(
+function compileLiteral(
   expr: Expression,
   nextRegister: number,
 ): Result<{ instructions: Instruction[]; resultRegister: number }, CompileError> {
-  if (expr.type === "literal") {
-    // Load literal into register
-    const instructions = [
-      createInstruction(OpCode.Load, Variant.Immediate, nextRegister, expr.value),
-    ];
-    return ok({ instructions, resultRegister: nextRegister });
+  const instructions = [
+    createInstruction(
+      OpCode.Load,
+      Variant.Immediate,
+      nextRegister,
+      expr.value,
+    ),
+  ];
+  return ok({ instructions, resultRegister: nextRegister });
+}
+
+function compileRead(
+  nextRegister: number,
+): Result<{ instructions: Instruction[]; resultRegister: number }, CompileError> {
+  const instructions = [
+    createInstruction(OpCode.In, Variant.Immediate, nextRegister),
+  ];
+  return ok({ instructions, resultRegister: nextRegister });
+}
+
+function getOpCode(op: "+" | "-" | "*" | "/"): OpCode {
+  switch (op) {
+    case "+":
+      return OpCode.Add;
+    case "-":
+      return OpCode.Sub;
+    case "*":
+      return OpCode.Mul;
+    case "/":
+      return OpCode.Div;
   }
-  
-  if (expr.type === "read") {
-    // Read into register
-    const instructions = [
-      createInstruction(OpCode.In, Variant.Immediate, nextRegister),
-    ];
-    return ok({ instructions, resultRegister: nextRegister });
-  }
-  
-  // Binary operation
+}
+
+function compileBinary(
+  expr: Expression & { type: "binary" },
+  nextRegister: number,
+): Result<{ instructions: Instruction[]; resultRegister: number }, CompileError> {
   const leftResult = compileExpression(expr.left, nextRegister);
   if (!leftResult.ok) return leftResult;
-  
+
   const rightResult = compileExpression(
     expr.right,
     leftResult.value.resultRegister + 1,
   );
   if (!rightResult.ok) return rightResult;
-  
+
   const leftReg = leftResult.value.resultRegister;
   const rightReg = rightResult.value.resultRegister;
-  
-  let opcode: OpCode;
-  switch (expr.op) {
-    case "+":
-      opcode = OpCode.Add;
-      break;
-    case "-":
-      opcode = OpCode.Sub;
-      break;
-    case "*":
-      opcode = OpCode.Mul;
-      break;
-    case "/":
-      opcode = OpCode.Div;
-      break;
-  }
-  
+  const opcode = getOpCode(expr.op);
+
   const instructions = [
     ...leftResult.value.instructions,
     ...rightResult.value.instructions,
     createInstruction(opcode, Variant.Immediate, leftReg, rightReg),
   ];
-  
+
   return ok({
     instructions,
     resultRegister: leftReg,
   });
 }
 
+function compileExpression(
+  expr: Expression,
+  nextRegister: number,
+): Result<
+  { instructions: Instruction[]; resultRegister: number },
+  CompileError
+> {
+  if (expr.type === "literal") {
+    return compileLiteral(expr, nextRegister);
+  }
+
+  if (expr.type === "read") {
+    return compileRead(nextRegister);
+  }
+
+  return compileBinary(expr, nextRegister);
+}
+
 export function compile(source: string): Result<Instruction[], CompileError> {
   const exprResult = parseExpression(source.trim());
   if (!exprResult.ok) return exprResult;
-  
+
   const compileResult = compileExpression(exprResult.value, 0);
   if (!compileResult.ok) return compileResult;
-  
+
   const instructions = [
     ...compileResult.value.instructions,
-    createInstruction(OpCode.Halt, Variant.Direct, compileResult.value.resultRegister),
+    createInstruction(
+      OpCode.Halt,
+      Variant.Direct,
+      compileResult.value.resultRegister,
+    ),
   ];
-  
+
   return ok(instructions);
 }
 
