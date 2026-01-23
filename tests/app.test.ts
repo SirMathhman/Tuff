@@ -604,7 +604,7 @@ describe("The application - Function validation", () => {
       "let add = (x : U8, y : U8) => x + y; let multiply = (x : U8, y : U8) => x * y; let chosen = if (read Bool) add else multiply; chosen(read U8, read U8)",
       15,
       1,
-      5,	
+      5,
       10,
     );
   });
