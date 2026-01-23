@@ -4,7 +4,8 @@
   "layout": "dot",
   "graphVizOptions": {
     "G": {
-      "splines": "ortho"
+      "splines": "ortho",
+      "rankdir": "TB"
     }
   }
 }

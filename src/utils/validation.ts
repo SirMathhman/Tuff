@@ -2,7 +2,7 @@ import { type Result, ok, err } from "../core/result";
 import { type TuffError, makeError } from "../core/error";
 
 const ARITHMETIC_OPS = new Set(["+", "-", "*", "/"]);
-const LOGICAL_OPS = new Set(["||" , "&&"]);
+const LOGICAL_OPS = new Set(["||", "&&"]);
 const COMPARISON_OPS = new Set(["==", "!=", "<", ">", "<=", ">="]);
 
 export function isArithmeticOperator(op: string): boolean {

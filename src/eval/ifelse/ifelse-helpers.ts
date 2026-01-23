@@ -1,6 +1,6 @@
-import { type Result, ok, err } from "../core/result";
-import { type TuffError } from "../core/error";
-import { type VariableEntry } from "./variables";
+import { type Result, ok, err } from "../../core/result";
+import { type TuffError } from "../../core/error";
+import { type VariableEntry } from "../variables-types";
 
 export function makeError(
   cause: string,

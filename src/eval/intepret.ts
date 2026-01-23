@@ -15,6 +15,7 @@ import {
   tokenizeExpression,
   hasComparisonOperator,
 } from "./intepret-helpers";
+import { parseLoop } from "./loop";
 
 function hasOpenParen(s: string): boolean {
   for (let i = 0; i < s.length; i = i + 1) {
@@ -130,6 +131,11 @@ function evaluateCore(
 
   const trimmedExpr = finalExpr.trim();
 
+  // Check for loop expression
+  if (trimmedExpr.startsWith("loop")) {
+    return parseLoop(trimmedExpr, newVars, evaluateExpression);
+  }
+
   // Check for if-else expression, evaluateExpression
   if (trimmedExpr.startsWith("if")) {
     const split = splitIfStatement(trimmedExpr);
@@ -173,6 +179,11 @@ function evaluateExpression(
   vars: Map<string, VariableEntry>,
 ): Result<number, TuffError> {
   const trimmed = expr.trim();
+
+  // Handle loop expressions before resolving parentheses
+  if (trimmed.startsWith("loop")) {
+    return parseLoop(trimmed, vars, evaluateExpression);
+  }
 
   // Handle if-else expressions directly before resolving parentheses
   if (trimmed.startsWith("if")) {

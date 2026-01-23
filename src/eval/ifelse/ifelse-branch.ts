@@ -1,8 +1,8 @@
-import { type Result, ok, err } from "../core/result";
-import { type TuffError } from "../core/error";
-import { type VariableEntry } from "./variables";
-import { isTypeCompatible } from "../utils/types";
-import { parseLiteral } from "../parse/parser";
+import { type Result, ok, err } from "../../core/result";
+import { type TuffError } from "../../core/error";
+import { type VariableEntry } from "../variables-types";
+import { isTypeCompatible } from "../../utils/types";
+import { parseLiteral } from "../../parse/parser";
 import { makeError } from "./ifelse-helpers";
 
 function getBranchTypeSuffix(

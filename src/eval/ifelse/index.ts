@@ -1,7 +1,7 @@
-import { type Result } from "../core/result";
-import { type TuffError } from "../core/error";
-import { type VariableEntry } from "./variables";
-import { parseVariableDeclarations } from "./variables";
+import { type Result } from "../../core/result";
+import { type TuffError } from "../../core/error";
+import { type VariableEntry } from "../variables";
+import { parseVariableDeclarations } from "../variables";
 import {
   validateIfStart,
   extractCondition,
