@@ -115,16 +115,52 @@ function createInstruction(
   opcode: OpCode,
   variant: Variant,
   operand1: number,
+  operand2?: number,
 ): Instruction {
-  return { opcode, variant, operand1 };
+  return { opcode, variant, operand1, operand2 };
 }
 
-export function compile(source: string): Result<Instruction[], CompileError> {
-  // Check if this is a read command
-  if (source.startsWith("read ")) {
-    const typeStr = source.slice(5);
-    const suffixInfo = getSuffixInfo(typeStr);
+type Expression = 
+  | { type: "literal"; value: number }
+  | { type: "read"; typeStr: string }
+  | { type: "binary"; op: "+" | "-" | "*" | "/"; left: Expression; right: Expression };
 
+function parseExpression(source: string): Result<Expression, CompileError> {
+  // Handle empty input as literal 0
+  if (source === "") {
+    return ok({ type: "literal", value: 0 });
+  }
+  
+  // Try to parse as addition/subtraction (lowest precedence)
+  const plusIndex = source.lastIndexOf("+");
+  const minusIndex = source.lastIndexOf("-");
+  
+  const operatorIndex = Math.max(plusIndex, minusIndex);
+  
+  if (operatorIndex > 0) {
+    const op = source[operatorIndex] as "+" | "-";
+    const left = source.slice(0, operatorIndex).trim();
+    const right = source.slice(operatorIndex + 1).trim();
+    
+    const leftResult = parseExpression(left);
+    const rightResult = parseExpression(right);
+    
+    if (!leftResult.ok) return leftResult;
+    if (!rightResult.ok) return rightResult;
+    
+    return ok({
+      type: "binary",
+      op,
+      left: leftResult.value,
+      right: rightResult.value,
+    });
+  }
+  
+  // Check if it's a read command
+  if (source.startsWith("read ")) {
+    const typeStr = source.slice(5).trim();
+    const suffixInfo = getSuffixInfo(typeStr);
+    
     if (!suffixInfo) {
       return err(
         createCompileError(
@@ -135,33 +171,90 @@ export function compile(source: string): Result<Instruction[], CompileError> {
         ),
       );
     }
+    
+    return ok({ type: "read", typeStr });
+  }
+  
+  // Try to parse as a numeric literal
+  const numResult = parseNumericLiteral(source);
+  if (!numResult.ok) return numResult;
+  
+  return ok({ type: "literal", value: numResult.value });
+}
 
-    // Compile to: In (read into register 0), Halt (with register 0)
-    const instructions: Instruction[] = [
-      createInstruction(OpCode.In, Variant.Immediate, 0),
-      createInstruction(OpCode.Halt, Variant.Direct, 0),
+function compileExpression(
+  expr: Expression,
+  nextRegister: number,
+): Result<{ instructions: Instruction[]; resultRegister: number }, CompileError> {
+  if (expr.type === "literal") {
+    // Load literal into register
+    const instructions = [
+      createInstruction(OpCode.Load, Variant.Immediate, nextRegister, expr.value),
     ];
-
-    return ok(instructions);
+    return ok({ instructions, resultRegister: nextRegister });
   }
-
-  let valueResult: Result<number, CompileError>;
-
-  if (source === "") {
-    valueResult = ok(0);
-  } else {
-    valueResult = parseNumericLiteral(source);
+  
+  if (expr.type === "read") {
+    // Read into register
+    const instructions = [
+      createInstruction(OpCode.In, Variant.Immediate, nextRegister),
+    ];
+    return ok({ instructions, resultRegister: nextRegister });
   }
-
-  if (!valueResult.ok) {
-    return valueResult;
+  
+  // Binary operation
+  const leftResult = compileExpression(expr.left, nextRegister);
+  if (!leftResult.ok) return leftResult;
+  
+  const rightResult = compileExpression(
+    expr.right,
+    leftResult.value.resultRegister + 1,
+  );
+  if (!rightResult.ok) return rightResult;
+  
+  const leftReg = leftResult.value.resultRegister;
+  const rightReg = rightResult.value.resultRegister;
+  
+  let opcode: OpCode;
+  switch (expr.op) {
+    case "+":
+      opcode = OpCode.Add;
+      break;
+    case "-":
+      opcode = OpCode.Sub;
+      break;
+    case "*":
+      opcode = OpCode.Mul;
+      break;
+    case "/":
+      opcode = OpCode.Div;
+      break;
   }
-
-  // Generate instructions to halt with the value as exit code
-  const instructions: Instruction[] = [
-    createInstruction(OpCode.Halt, Variant.Immediate, valueResult.value),
+  
+  const instructions = [
+    ...leftResult.value.instructions,
+    ...rightResult.value.instructions,
+    createInstruction(opcode, Variant.Immediate, leftReg, rightReg),
   ];
+  
+  return ok({
+    instructions,
+    resultRegister: leftReg,
+  });
+}
 
+export function compile(source: string): Result<Instruction[], CompileError> {
+  const exprResult = parseExpression(source.trim());
+  if (!exprResult.ok) return exprResult;
+  
+  const compileResult = compileExpression(exprResult.value, 0);
+  if (!compileResult.ok) return compileResult;
+  
+  const instructions = [
+    ...compileResult.value.instructions,
+    createInstruction(OpCode.Halt, Variant.Direct, compileResult.value.resultRegister),
+  ];
+  
   return ok(instructions);
 }
 
