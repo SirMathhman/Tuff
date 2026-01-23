@@ -13,6 +13,7 @@ import {
   determineSuffix,
   splitIfStatement,
   tokenizeExpression,
+  hasComparisonOperator,
 } from "./intepret-helpers";
 
 function hasOpenParen(s: string): boolean {
@@ -99,7 +100,11 @@ function validateTokens(
   tokens: Array<string>,
   vars: Map<string, VariableEntry>,
 ): Result<
-  { commonSuffix: string; parsedTokens: Array<number | string> },
+  {
+    commonSuffix: string;
+    parsedTokens: Array<number | string>;
+    resultSuffix: string;
+  },
   TuffError
 > {
   const suffixResult = determineSuffix(tokens, vars);
@@ -110,7 +115,9 @@ function validateTokens(
   if (!tokensResult.ok) return tokensResult;
   const parsedTokens = tokensResult.value;
 
-  return ok({ commonSuffix, parsedTokens });
+  const resultSuffix = hasComparisonOperator(tokens) ? "Bool" : commonSuffix;
+
+  return ok({ commonSuffix, parsedTokens, resultSuffix });
 }
 
 function evaluateCore(
@@ -154,11 +161,11 @@ function evaluateCore(
 
   const validated = validateTokens(tokens, newVars);
   if (!validated.ok) return validated;
-  const { commonSuffix, parsedTokens } = validated.value;
+  const { parsedTokens, resultSuffix } = validated.value;
 
   const evaluated = evaluateTokens(parsedTokens);
   if (!evaluated.ok) return evaluated;
-  return validateResult(evaluated.value, commonSuffix);
+  return validateResult(evaluated.value, resultSuffix);
 }
 
 function evaluateExpression(

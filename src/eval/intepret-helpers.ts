@@ -2,7 +2,11 @@ import { type Result, ok } from "../core/result";
 import { type TuffError } from "../core/error";
 import { parseLiteral } from "../parse/parser";
 import { type VariableEntry } from "./variables";
-import { isOperatorToken, updateDepth } from "../utils/validation";
+import {
+  isOperatorToken,
+  isComparisonOperator,
+  updateDepth,
+} from "../utils/validation";
 
 export function makeError(
   cause: string,
@@ -44,6 +48,13 @@ export function determineSuffix(
   return ok("");
 }
 
+export function hasComparisonOperator(tokens: Array<string>): boolean {
+  for (let i = 0; i < tokens.length; i = i + 1) {
+    if (isComparisonOperator(tokens[i] || "")) return true;
+  }
+  return false;
+}
+
 function findStatementSemicolon(expr: string): number {
   let depth = 0;
   for (let i = 0; i < expr.length; i = i + 1) {
@@ -65,17 +76,30 @@ export function splitIfStatement(
   };
 }
 
+const LOGICAL_PAIR_CHARS = new Set(["|", "&"]);
+const COMPARISON_DOUBLE_CHARS = new Set(["<", ">", "=", "!"]);
+const COMPARISON_SINGLE_CHARS = new Set(["<", ">"]);
+
 export function tokenizeExpression(expr: string): Array<string> {
   const tokens = [];
   let current = "";
   for (let i = 0; i < expr.length; i = i + 1) {
     const c = expr[i],
       nextC = i + 1 < expr.length ? expr[i + 1] : "";
-    if ((c === "|" || c === "&") && nextC === c) {
+    if (LOGICAL_PAIR_CHARS.has(c) && nextC === c) {
       if (current) tokens.push(current);
       tokens.push(c + c);
       current = "";
       i = i + 1;
+    } else if (COMPARISON_DOUBLE_CHARS.has(c) && nextC === "=") {
+      if (current) tokens.push(current);
+      tokens.push(c + nextC);
+      current = "";
+      i = i + 1;
+    } else if (COMPARISON_SINGLE_CHARS.has(c)) {
+      if (current) tokens.push(current);
+      tokens.push(c);
+      current = "";
     } else if (c === " ") {
       if (current) tokens.push(current);
       current = "";

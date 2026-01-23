@@ -1,5 +1,6 @@
 import { type Result, ok, err } from "./result";
 import { type TuffError, makeError } from "./error";
+import { isComparisonOperator } from "../utils/validation";
 
 export function applyMultiplicationDivision(
   val: number,
@@ -56,7 +57,11 @@ function handleHighPrecedence(
 
   while (i < tokens.length) {
     const op = tokens[i];
-    if (op === "||" || op === "&&") {
+    const isLowPrecedence =
+      op === "||" ||
+      op === "&&" ||
+      (typeof op === "string" && isComparisonOperator(op));
+    if (isLowPrecedence) {
       multDivResult.push(op);
       i = i + 1;
       const nextVal = tokens[i];
@@ -107,6 +112,12 @@ export function evaluateTokens(
       else if (op === "-") result = result - val;
       else if (op === "&&") result = result !== 0 && val !== 0 ? 1 : 0;
       else if (op === "||") result = result !== 0 || val !== 0 ? 1 : 0;
+      else if (op === "<") result = result < val ? 1 : 0;
+      else if (op === ">") result = result > val ? 1 : 0;
+      else if (op === "<=") result = result <= val ? 1 : 0;
+      else if (op === ">=") result = result >= val ? 1 : 0;
+      else if (op === "==") result = result === val ? 1 : 0;
+      else if (op === "!=") result = result !== val ? 1 : 0;
     }
 
     j = j + 2;

@@ -37,9 +37,18 @@ function resolveValue(
   if (!evaluator) return parsed;
   const needsEval = valueStr.trim().startsWith("if") || valueStr.includes(" ");
   if (!needsEval) return parsed;
+
+  // Check if expression contains comparison operator
+  const hasComparison =
+    valueStr.includes("<") ||
+    valueStr.includes(">") ||
+    valueStr.includes("==") ||
+    valueStr.includes("!=");
+  const resultSuffix = hasComparison ? "Bool" : defaultSuffix;
+
   const evalResult = evaluator(valueStr, vars);
   return evalResult.ok
-    ? ok({ num: evalResult.value, suffix: defaultSuffix })
+    ? ok({ num: evalResult.value, suffix: resultSuffix })
     : evalResult;
 }
 
