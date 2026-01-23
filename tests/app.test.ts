@@ -21,4 +21,8 @@ describe("interpret", () => {
   it("throws for overflow with unsigned suffix U8", () => {
     expect(() => interpret("256U8")).toThrow();
   });
+
+  it("parses simple addition with typed literals", () => {
+    expect(interpret("1U8 + 2U8")).toBe(3);
+  });
 });
