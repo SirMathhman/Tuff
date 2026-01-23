@@ -1,3 +1,5 @@
+import { splitByCommaRespectingNesting } from "../support/helpers";
+
 /**
  * Array type format: [BaseType; InitializedLength; TotalLength]
  * Example: [U8; 2; 2] means array of U8, 2 elements initialized, 2 total slots
@@ -63,32 +65,7 @@ export function parseArrayLiteral(source: string): ArrayLiteral | undefined {
   }
 
   // Split by comma, but respect nested brackets
-  const elements: string[] = [];
-  let current = "";
-  let depth = 0;
-
-  for (let i = 0; i < inner.length; i++) {
-    const char = inner[i];
-
-    if (char === "[" || char === "(") {
-      depth++;
-      current += char;
-    } else if (char === "]" || char === ")") {
-      depth--;
-      current += char;
-    } else if (char === "," && depth === 0) {
-      elements.push(current.trim());
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-
-  if (current.trim().length > 0) {
-    elements.push(current.trim());
-  }
-
-  return { elements };
+  return { elements: splitByCommaRespectingNesting(inner) };
 }
 
 export function formatArrayType(arrayType: ArrayType): string {

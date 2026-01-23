@@ -1,7 +1,13 @@
 import { type Instruction, OpCode, Variant } from "../../core/vm";
 import { type VariableContext } from "../../types/variable-types";
-import { findComparisonOperatorIndex, splitByComparisonOperator } from "../operator-parsing";
-import { buildStoreAndHalt, buildIn } from "../../compilation/instruction-primitives";
+import {
+  findComparisonOperatorIndex,
+  splitByComparisonOperator,
+} from "../operator-parsing";
+import {
+  buildStoreAndHalt,
+  buildIn,
+} from "../../compilation/instruction-primitives";
 import { tryResolveVariableAtom } from "../expression-with-context";
 import { parseNumberWithSuffix } from "../parser";
 
@@ -33,7 +39,9 @@ function getComparisonOpcode(operator: string): OpCode | undefined {
   }
 }
 
-function tryResolveReadExpression(rightPart: string): Instruction[] | undefined {
+function tryResolveReadExpression(
+  rightPart: string,
+): Instruction[] | undefined {
   if (!rightPart.startsWith("read ")) return undefined;
   // Read into r0
   return [buildIn(0)];

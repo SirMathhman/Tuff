@@ -16,6 +16,7 @@
     "prettier": "^3.8.1"
   },
   "scripts": {
+		"dupfind": "./tools/dupfind.exe src --min-nodes 50",
     "prepare": "husky",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",

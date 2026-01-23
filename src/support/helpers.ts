@@ -91,3 +91,39 @@ export function buildReadComparisonConstant(
     buildHaltDirect(900),
   ];
 }
+
+/**
+ * Splits a string by commas while respecting nested brackets and parentheses.
+ * Used for parsing array literals and function arguments.
+ *
+ * @param input - String to split (without outer delimiters)
+ * @returns Array of trimmed string parts separated by commas
+ */
+export function splitByCommaRespectingNesting(input: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+
+    if (char === "[" || char === "(") {
+      depth++;
+      current += char;
+    } else if (char === "]" || char === ")") {
+      depth--;
+      current += char;
+    } else if (char === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim().length > 0) {
+    parts.push(current.trim());
+  }
+
+  return parts;
+}

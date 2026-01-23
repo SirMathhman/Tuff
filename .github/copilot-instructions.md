@@ -8,16 +8,18 @@ Tuff is a 64-bit virtual machine with a compiler for a typed expression language
 
 **Compilation Pipeline**: Source → tokenize → parse/validate → generate `Instruction[]` → encode to 64-bit format → execute
 
-**Eight Compiler Layers** (ordered by `tryAllPatterns()` in app.ts):
+**Ten Compiler Layers** (ordered by `tryAllPatterns()` in app.ts):
 
 1. **Parser** ([src/parsing/parser.ts](../src/parsing/parser.ts)) - Tokenization, basic syntax extraction (variables, parentheses, operators, type suffixes)
 2. **Let Expressions** ([src/parsing/expressions/let-expression-parsing.ts](../src/parsing/expressions/let-expression-parsing.ts)) - `let [mut] x [: Type] = expr;` with context allocation
-3. **Basic Reassignments** ([src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts) → `tryReassignment`) - Simple `x = expr`, including compound ops (`+=`, `-=`, `*=`, `/=`)
-4. **Arithmetic with Context** ([src/parsing/expression-with-context.ts](../src/parsing/expression-with-context.ts)) - Binary operators with variable resolution via generic `parseArithmeticExpressionWithContext()` helper
-5. **Array Operations** ([src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts)) - Array indexing, literals, and field access (slices)
-6. **Braced Expressions** ([src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts) → `tryBracedExpression`) - Recursive unwrapping of `{ ... }`
-7. **Arithmetic (Context-Free)** ([src/parsing/arithmetic-parsing.ts](../src/parsing/arithmetic-parsing.ts) → `parseArithmeticOrLiteral`) - Fallback for `+/-/*/` without variables
-8. **App Layer** ([src/app.ts](../src/app.ts)) - Orchestrates all validators, coordinates strategy handlers, returns `Result<Instruction[], CompileError>`
+3. **While Loops** ([src/parsing/expressions/while-expression-parsing.ts](../src/parsing/expressions/while-expression-parsing.ts)) - `while (condition) { body }` with jump instruction generation
+4. **Basic Reassignments** ([src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts) → `tryReassignment`) - Simple `x = expr`, including compound ops (`+=`, `-=`, `*=`, `/=`)
+5. **Arithmetic with Context** ([src/parsing/expression-with-context.ts](../src/parsing/expression-with-context.ts)) - Binary operators with variable resolution via generic `parseArithmeticExpressionWithContext()` helper
+6. **Array Operations** ([src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts)) - Array indexing, literals, and field access (slices)
+7. **Braced Expressions** ([src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts) → `tryBracedExpression`) - Recursive unwrapping of `{ ... }`
+8. **If Expressions** ([src/parsing/expressions/comparison-parsing.ts](../src/parsing/expressions/comparison-parsing.ts)) - Conditional branching with type-unified branches
+9. **Arithmetic (Context-Free)** ([src/parsing/arithmetic-parsing.ts](../src/parsing/arithmetic-parsing.ts) → `parseArithmeticOrLiteral`) - Fallback for `+/-/*/` without variables
+10. **App Layer** ([src/app.ts](../src/app.ts)) - Orchestrates all validators, coordinates strategy handlers, returns `Result<Instruction[], CompileError>`
 
 **Memory Layout** (1024 bytes):
 
@@ -131,12 +133,20 @@ export interface VariableBinding {
 - If remaining is empty, appends Halt instruction
 - Declaration-only syntax: `let x: Type;` (no equals, no expr)
 
-**If-Expression Parsing** ([src/parsing/expressions/if-expression-parsing.ts](../src/parsing/expressions/if-expression-parsing.ts))
+**If-Expression Parsing** ([src/parsing/expressions/comparison-parsing.ts](../src/parsing/expressions/comparison-parsing.ts))
 
 - Syntax: `if ( condition ) thenBranch else elseBranch`
 - Condition must be Bool type; branches must return compatible types
 - Uses nesting depth counter to allocate disjoint temp memory slots (950+3N for nested level N)
 - Both branches' result addresses unified in final instruction
+
+**While-Loop Parsing** ([src/parsing/expressions/while-expression-parsing.ts](../src/parsing/expressions/while-expression-parsing.ts))
+
+- Syntax: `while (condition) { body }`
+- Compiles condition as Bool expression
+- Generates jump instruction at start and conditional jump at end for loop control
+- Allows variables from surrounding scope to be mutated in loop body
+- Loop condition and body both compiled with same context for variable modifications
 
 **Comparison Parsing** ([src/parsing/expressions/comparison-parsing.ts](../src/parsing/expressions/comparison-parsing.ts))
 
@@ -156,7 +166,7 @@ export interface VariableBinding {
   - Each operator-specific function (`parseAddExpressionWithContext`, etc.) delegates to generic with operator-specific split function
   - Eliminates 15-line duplication across 4 functions
 
-**Array Support** ([src/parsing/array-parsing.ts](../src/parsing/array-parsing.ts), [src/compilation/array-compilation.ts](../src/compilation/array-compilation.ts))
+**Array Support** ([src/parsing/array-parsing.ts](../src/parsing/array-parsing.ts), [src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts))
 
 - Array type format: `[ElementType; InitializedCount; TotalCapacity]` (e.g., `[U8; 2; 2]`)
 - Array literals: `[expr1, expr2, ...]` — elements compiled sequentially and stored to base address
@@ -173,9 +183,18 @@ export interface VariableBinding {
 - Type: `*U8`, `*I32`, `*Bool`, `*mut Type` (pointer types are distinct)
 - Cannot mix mutable and immutable references to same variable in one scope
 
+**Function Support** ([src/parsing/function-parsing.ts](../src/parsing/function-parsing.ts), [src/compilation/function-compilation.ts](../src/compilation/function-compilation.ts))
+
+- Syntax: `fn name(param1: Type1, param2: Type2) : ReturnType => body` or lambda `(params) => expr`
+- Functions are first-class values: can be assigned to variables, passed in if-expressions, called via variables
+- Type: `(ParamType1, ParamType2, ...) => ReturnType` (inferred from body when not explicit)
+- Parameters stored at memory[960..], allowing function context to shadow outer variables
+- Function calls compile arguments to parameter slots, compile body with parameter context, return result
+- Validation: uncalled function references (bare function variable without `()`) are compilation errors
+
 ## Validation System
 
-**Centralized Validators** ([src/validation/validation.ts](../src/validation/validation.ts), [src/validation/pointer-validation.ts](../src/validation/pointer-validation.ts), [src/validation/reassignment-validation.ts](../src/validation/reassignment-validation.ts))
+**Centralized Validators** ([src/validation/validation.ts](../src/validation/validation.ts), [src/validation/pointer-validation.ts](../src/validation/pointer-validation.ts), [src/validation/reassignment-validation.ts](../src/validation/reassignment-validation.ts), [src/validation/function-validation.ts](../src/validation/function-validation.ts))
 
 - All called from [src/app.ts](../src/app.ts) `performValidationChecks()` before compilation
 - Return `CompileError | undefined` with specific cause, reason, fix, and location
@@ -187,6 +206,7 @@ export interface VariableBinding {
 **Array Mutability**: Array element assignment (`array[i] = value`) only on `let mut array`
 **Reference Borrowing**: Cannot mix mutable (`&mut`) and immutable (`&`) references to same variable
 **Declaration-Only**: Variables declared without init (e.g., `let x: Type;`) must be assigned before use; immutable declaration-only vars can only be assigned once
+**Function Calls**: Uncalled function references (variable without `()`) are compilation errors; function variables can only be called with correct argument count
 
 ## Directory Structure
 
@@ -210,17 +230,17 @@ src/
   │  ├─ slice-parsing.ts
   │  └─ expressions/                 # Expression-specific parsing
   │     ├─ comparison-parsing.ts
-  │     ├─ if-expression-parsing.ts
-  │     └─ let-expression-parsing.ts
+  │     ├─ let-expression-parsing.ts
+  │     └─ while-expression-parsing.ts
   ├─ compilation/                    # Code generation
   │  ├─ compilation-strategies.ts
-  │  ├─ array-compilation.ts
   │  ├─ function-compilation.ts
   │  └─ instruction-primitives.ts
   ├─ validation/                     # Type and semantic validation
   │  ├─ validation.ts
   │  ├─ pointer-validation.ts
-  │  └─ reassignment-validation.ts
+  │  ├─ reassignment-validation.ts
+  │  └─ function-validation.ts
   ├─ types/                          # Type system
   │  ├─ types.ts
   │  ├─ variable-types.ts
@@ -296,15 +316,14 @@ src/
 | File                                                                                                      | Purpose                                                                |
 | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | [src/parsing/expressions/let-expression-parsing.ts](../src/parsing/expressions/let-expression-parsing.ts) | Parses `let` statements; compiles RHS; stores to allocated address     |
-| [src/parsing/expressions/comparison-parsing.ts](../src/parsing/expressions/comparison-parsing.ts)         | Parses ==, <, >, <=, >= returning Bool                                 |
-| [src/parsing/expressions/if-expression-parsing.ts](../src/parsing/expressions/if-expression-parsing.ts)   | Parses if-then-else; validates condition is Bool; unifies branch types |
+| [src/parsing/expressions/comparison-parsing.ts](../src/parsing/expressions/comparison-parsing.ts)         | Parses ==, <, >, <=, >= returning Bool and if-then-else expressions    |
+| [src/parsing/expressions/while-expression-parsing.ts](../src/parsing/expressions/while-expression-parsing.ts) | Parses while loops with jump instruction generation              |
 
 **Compilation** (src/compilation/)
 
 | File                                                                                      | Purpose                                                                     |
 | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts) | Strategy pattern handlers for reassignment, dereference, arrays, references |
-| [src/compilation/array-compilation.ts](../src/compilation/array-compilation.ts)           | Array element store/load instruction generation; computed address handling  |
+| [src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts) | Strategy pattern handlers for reassignment, dereference, arrays, references, functions |
 | [src/compilation/function-compilation.ts](../src/compilation/function-compilation.ts)     | Compiles function calls with instruction generation                         |
 | [src/compilation/instruction-primitives.ts](../src/compilation/instruction-primitives.ts) | Reusable instruction builders to reduce duplication                         |
 
@@ -315,6 +334,7 @@ src/
 | [src/validation/validation.ts](../src/validation/validation.ts)                           | Core validators: shadowing, type compatibility, if-expression validation |
 | [src/validation/pointer-validation.ts](../src/validation/pointer-validation.ts)           | Validates &, &mut, \* operators; checks reference borrowing rules        |
 | [src/validation/reassignment-validation.ts](../src/validation/reassignment-validation.ts) | Validates reassignments, mutability, type safety                         |
+| [src/validation/function-validation.ts](../src/validation/function-validation.ts)         | Validates function calls, argument counts, uncalled function references  |
 
 **Types** (src/types/)
 

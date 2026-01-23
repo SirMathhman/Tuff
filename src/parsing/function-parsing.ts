@@ -3,6 +3,7 @@ import {
   findChar,
   findMatchingParen,
 } from "../parsing/parser";
+import { splitByCommaRespectingNesting } from "../support/helpers";
 
 function extractFunctionName(source: string): string {
   // After "fn", extract the identifier until '('
@@ -305,30 +306,5 @@ export function parseFunctionCall(
   }
 
   // Split args by comma (respecting nested parentheses/brackets)
-  const args: string[] = [];
-  let current = "";
-  let depth = 0;
-
-  for (let i = 0; i < argsStr.length; i++) {
-    const char = argsStr[i];
-
-    if (char === "(" || char === "[") {
-      depth++;
-      current += char;
-    } else if (char === ")" || char === "]") {
-      depth--;
-      current += char;
-    } else if (char === "," && depth === 0) {
-      args.push(current.trim());
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-
-  if (current.trim().length > 0) {
-    args.push(current.trim());
-  }
-
-  return { name, args };
+  return { name, args: splitByCommaRespectingNesting(argsStr) };
 }

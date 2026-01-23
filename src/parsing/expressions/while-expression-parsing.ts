@@ -75,10 +75,10 @@ export function parseWhileExpression(
   source: string,
 ): WhileExpression | undefined {
   const trimmed = source.trim();
-  
+
   // Only match if the source STARTS with "while"
   if (!trimmed.startsWith("while")) return undefined;
-  
+
   const whileStart = 0; // We know it starts with "while"
 
   const afterWhile = trimmed.substring(whileStart + 5);
@@ -234,13 +234,13 @@ export function adjustWhileLoopJumpAddress(
   // Two jumps need adjustment:
   // 1. JumpIfLessThanZero: jumps to after the loop when condition is false
   // 2. Jump: jumps back to the start of the loop
-  
+
   const adjusted = [...instructions];
-  
+
   // Find and adjust both jumps
   for (let i = 0; i < adjusted.length; i++) {
     const inst = adjusted[i];
-    
+
     if (inst && inst.opcode === OpCode.JumpIfLessThanZero) {
       // Adjust the forward jump (condition false → skip loop)
       // The operand1 is relative to loop start, make it absolute
@@ -256,7 +256,6 @@ export function adjustWhileLoopJumpAddress(
       };
     }
   }
-  
+
   return adjusted;
 }
-
