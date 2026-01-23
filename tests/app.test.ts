@@ -57,4 +57,8 @@ describe("interpret", () => {
   it("respects parentheses for grouping", () => {
     expect(interpret("(2 + 3) * 4")).toBe(20);
   });
+
+  it("respects curly braces for grouping", () => {
+    expect(interpret("(2 + { 3 }) * 4")).toBe(20);
+  });
 });

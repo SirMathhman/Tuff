@@ -85,38 +85,48 @@ function extractTypedInfo(s: string): { value: number; typeSize: number } {
     return { value: n, typeSize };
 }
 
-function evaluateParenthesizedExpression(s: string): { result: number; replaced: string } {
-    // Find the first opening parenthesis
-    const openIndex = s.indexOf("(");
-    if (openIndex === -1) {
-        return { result: 0, replaced: s };
-    }
+function evaluateGroupedExpressions(s: string): string {
+    // Recursively evaluate all grouped expressions: parentheses (), curly braces {}, and square brackets []
+    // Return the string with innermost grouped expressions replaced by their values
+    const openChars = ["(", "{", "["];
+    const closeChars = [")", "}", "]"];
 
-    // Find the matching closing parenthesis
-    let closeIndex = -1;
-    let depth = 0;
-    for (let i = openIndex; i < s.length; i++) {
-        const ch = s[i];
-        if (ch === "(") depth++;
-        else if (ch === ")") {
-            depth--;
-            if (depth === 0) {
-                closeIndex = i;
-                break;
+    for (const [openIdx, openChar] of openChars.entries()) {
+        const closeChar = closeChars[openIdx];
+        const openIndex = s.indexOf(openChar);
+
+        if (openIndex === -1) continue;
+
+        // Find the matching closing character
+        let closeIndex = -1;
+        let depth = 0;
+        for (let i = openIndex; i < s.length; i++) {
+            const ch = s[i];
+            if (ch === openChar) depth++;
+            else if (ch === closeChar) {
+                depth--;
+                if (depth === 0) {
+                    closeIndex = i;
+                    break;
+                }
             }
         }
+
+        if (closeIndex === -1) {
+            throw new Error(`unmatched opening ${openChar}`);
+        }
+
+        const inside = s.slice(openIndex + 1, closeIndex);
+        const result = interpret(inside);
+
+        // Replace the grouped expression with its result
+        const replaced = s.slice(0, openIndex) + result + s.slice(closeIndex + 1);
+        // Recursively process the result in case there are more grouped expressions
+        return evaluateGroupedExpressions(replaced);
     }
 
-    if (closeIndex === -1) {
-        throw new Error("unmatched opening parenthesis");
-    }
-
-    const inside = s.slice(openIndex + 1, closeIndex);
-    const result = interpret(inside);
-
-    // Replace the parenthesized expression with its result
-    const replaced = s.slice(0, openIndex) + result + s.slice(closeIndex + 1);
-    return { result, replaced };
+    // No more grouped expressions found
+    return s;
 }
 
 function parseTypedNumber(s: string): number {
@@ -148,11 +158,13 @@ export function interpret(input: string): number {
     const s = input.trim();
     if (s === "") return 0;
 
-    // Handle parentheses first
-    if (s.includes("(")) {
-        const { replaced } = evaluateParenthesizedExpression(s);
-        // Recursively interpret the expression with parentheses replaced by their values
-        return interpret(replaced);
+    // Handle all grouped expressions (parentheses, curly braces, square brackets) first
+    if (s.includes("(") || s.includes("{") || s.includes("[")) {
+        const processed = evaluateGroupedExpressions(s);
+        // If the result changed, recursively interpret it
+        if (processed !== s) {
+            return interpret(processed);
+        }
     }
 
     // Find the lowest precedence operator for correct left-to-right evaluation
