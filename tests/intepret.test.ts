@@ -26,4 +26,10 @@ describe("intepret", () => {
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) expect(result.error).toContain("Negative");
   });
+
+  it("parses negative integers like '-100'", () => {
+    const result = intepret("-100");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(-100);
+  });
 });
