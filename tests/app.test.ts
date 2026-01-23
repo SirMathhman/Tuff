@@ -302,4 +302,8 @@ describe("The application - Mutable variable tests", () => {
     // Binding: x = 42 (from read I32), return x = 42
     assertValid("let mut x : I32 = read I32; x", 42, 42);
   });
+
+  // TODO: Full mutable variable reassignment requires VM support for mutable state
+  // The parser supports: let mut x = 0I32; x = read I32; x
+  // But execution requires memory-based variables with load/store instructions
 });
