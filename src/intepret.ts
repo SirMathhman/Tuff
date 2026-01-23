@@ -80,7 +80,11 @@ function validateTokens(
     if (token === undefined) return err(errorUndefinedToken(`Index: ${i}`));
 
     const isOp =
-      token === "+" || token === "-" || token === "*" || token === "/";
+      token === "+" ||
+      token === "-" ||
+      token === "*" ||
+      token === "/" ||
+      token === "||";
     if (isOp) {
       parsedTokens.push(token);
     } else if (vars.has(token)) {
@@ -113,6 +117,16 @@ function validateTokens(
   return ok({ commonSuffix, parsedTokens });
 }
 
+function pushToken(
+  tokens: Array<string>,
+  current: string,
+): { tokens: Array<string>; current: string } {
+  if (current !== "") {
+    tokens.push(current);
+  }
+  return { tokens, current: "" };
+}
+
 function evaluateCore(
   expr: string,
   vars: Map<string, VariableEntry>,
@@ -127,17 +141,22 @@ function evaluateCore(
 
   for (let i = 0; i < trimmed.length; i = i + 1) {
     const c = trimmed[i];
-    if (c === " ") {
-      if (current !== "") {
-        tokens.push(current);
-        current = "";
-      }
+    const nextC = i + 1 < trimmed.length ? trimmed[i + 1] : "";
+    if (c === "|" && nextC === "|") {
+      const result = pushToken(tokens, current);
+      tokens.push("||");
+      current = result.current;
+      i = i + 1;
+    } else if (c === " ") {
+      const result = pushToken(tokens, current);
+      current = result.current;
     } else {
       current = current + c;
     }
   }
 
-  if (current !== "") tokens.push(current);
+  const result = pushToken(tokens, current);
+  current = result.current;
   if (tokens.length === 0) return ok(0);
 
   if (tokens.length === 1) {

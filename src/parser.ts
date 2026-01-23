@@ -119,8 +119,6 @@ export function validateResult(
   return ok(result);
 }
 
-
-
 export function parseLiteral(
   s: string,
 ): Result<{ num: number; suffix: string }, TuffError> {
