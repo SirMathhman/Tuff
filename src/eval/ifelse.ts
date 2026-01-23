@@ -41,7 +41,7 @@ function evaluateIfExpression({
   const condResult = extractCondition(exprToProcess, posResult.value);
   if (!condResult.ok) return condResult;
   const { condition, pos } = condResult.value;
-  const condValidation = validateConditionIsBoolean(condition);
+  const condValidation = validateConditionIsBoolean(condition, vars);
   if (!condValidation.ok) return condValidation;
   const evalCond = evaluateExpression(condition, vars);
   if (!evalCond.ok) return evalCond;

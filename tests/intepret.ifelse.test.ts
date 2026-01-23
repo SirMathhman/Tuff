@@ -37,4 +37,9 @@ describe("intepret - expressions: if-else", () => {
     const result = intepret("if (100) 2 else 3");
     expect(isOk(result)).toBe(false);
   });
+
+  it("returns err for numeric variable condition like 'let x = 100; if (x) 2 else 3'", () => {
+    const result = intepret("let x = 100; if (x) 2 else 3");
+    expect(isOk(result)).toBe(false);
+  });
 });

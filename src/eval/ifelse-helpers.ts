@@ -1,5 +1,6 @@
 import { type Result, ok, err } from "../core/result";
 import { type TuffError } from "../core/error";
+import { type VariableEntry } from "./variables";
 
 export function makeError(
   cause: string,
@@ -156,10 +157,27 @@ export function evaluateIfCondition(
 
 export function validateConditionIsBoolean(
   condition: string,
+  vars: Map<string, VariableEntry>,
 ): Result<void, TuffError> {
   const trimmed = condition.trim();
-  const allDigits = trimmed[0] === "-" ? true : (trimmed[0] >= "0" && trimmed[0] <= "9");
-  if (!allDigits) return ok();
+  const allDigits =
+    trimmed[0] === "-" ? true : trimmed[0] >= "0" && trimmed[0] <= "9";
+  if (!allDigits) {
+    const isVariable = vars.has(trimmed);
+    if (isVariable) {
+      const entry = vars.get(trimmed);
+      if (entry && entry.suffix !== "Bool")
+        return err(
+          makeError(
+            "Type error",
+            `Condition: ${trimmed}`,
+            "Condition must be boolean, but variable is numeric type",
+            `Use boolean variables or boolean operators (||, &&)`,
+          ),
+        );
+    }
+    return ok();
+  }
   for (let i = trimmed[0] === "-" ? 1 : 0; i < trimmed.length; i = i + 1) {
     const ch = trimmed[i];
     const isDigit = ch >= "0" && ch <= "9";
