@@ -227,4 +227,18 @@ describe("The application - Read tests", () => {
       4,
     );
   });
+
+  it("should support top-level let bindings with final expression", () => {
+    // Expression: let z : U8 = (read U8 + { let x : U8 = read U8; x }) * read U8; z
+    // Top-level let binding: evaluates the RHS expression and binds to z, then returns z
+    // Left-to-right evaluation: A=2, B=3, C=4
+    // Evaluates as: z = (A + B) * C = (2 + 3) * 4 = 5 * 4 = 20, return z = 20
+    assertValid(
+      "let z : U8 = (read U8 + { let x : U8 = read U8; x }) * read U8; z",
+      20,
+      2,
+      3,
+      4,
+    );
+  });
 });

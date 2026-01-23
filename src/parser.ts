@@ -22,7 +22,10 @@ export function createCompileError(
   };
 }
 
-function createBounds(minVal: number, maxVal: number): { minVal: number; maxVal: number } {
+function createBounds(
+  minVal: number,
+  maxVal: number,
+): { minVal: number; maxVal: number } {
   return { minVal, maxVal };
 }
 
@@ -155,15 +158,24 @@ function isValidIdentifier(source: string): boolean {
   return true;
 }
 
-function findSemicolonAtDepth0(source: string): number {
+function findSemicolonAtDepth0WithConstraint(
+  source: string,
+  mustFindEqualsFirst: boolean = false,
+): number {
   let depth = 0;
+  let foundConstraint = !mustFindEqualsFirst;
   for (let i = 0; i < source.length; i++) {
     const char = source[i];
     if (char === "(" || char === "{") depth++;
     else if (char === ")" || char === "}") depth--;
-    else if (depth === 0 && char === ";") return i;
+    else if (char === "=" && depth === 0) foundConstraint = true;
+    else if (depth === 0 && char === ";" && foundConstraint) return i;
   }
   return -1;
+}
+
+function findSemicolonAtDepth0(source: string): number {
+  return findSemicolonAtDepth0WithConstraint(source, false);
 }
 
 function createLetError(
@@ -404,12 +416,63 @@ function parseMultiplicationDivision(
 ): Result<Expression, CompileError> {
   return parseBinaryExpression(source, ["*", "/"], parsePrimary);
 }
+function findTopLevelSemicolonAfterEquals(source: string): number {
+  return findSemicolonAtDepth0WithConstraint(source, true);
+}
+
+function parseTopLevelLet(source: string): Result<Expression, CompileError> {
+  const eqIndex = source.indexOf("=");
+  if (eqIndex === -1)
+    return createLetError(
+      "Missing = in let binding",
+      "Add = between name:type and value",
+      source.length,
+    );
+
+  const semiIndex = findTopLevelSemicolonAfterEquals(source);
+  if (semiIndex === -1)
+    return createLetError(
+      "Missing ; after let binding value",
+      "Add ; to complete let binding",
+      source.length,
+    );
+
+  const letPart = source.slice(4, eqIndex).trim();
+  const colonIndex = letPart.indexOf(":");
+  if (colonIndex === -1)
+    return createLetError(
+      "Missing : in let binding",
+      "Use format: let name : Type",
+      letPart.length,
+    );
+
+  const name = letPart.slice(0, colonIndex).trim();
+  const typeStr = letPart.slice(colonIndex + 1).trim();
+  const expr = source.slice(eqIndex + 1, semiIndex).trim();
+  const resultPart = source.slice(semiIndex + 1).trim();
+
+  const valueResult = parseExpression(expr);
+  if (!valueResult.ok) return valueResult;
+
+  const resultExpr = parseExpression(resultPart);
+  if (!resultExpr.ok) return resultExpr;
+
+  return ok({
+    type: "block",
+    statements: [{ name, typeStr, value: valueResult.value }],
+    result: resultExpr.value,
+  });
+}
 
 export function parseExpression(
   source: string,
 ): Result<Expression, CompileError> {
   if (source === "") {
     return ok({ type: "literal", value: 0 });
+  }
+
+  if (source.startsWith("let ")) {
+    return parseTopLevelLet(source);
   }
 
   return parseAdditionSubtraction(source);
