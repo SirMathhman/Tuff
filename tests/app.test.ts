@@ -177,4 +177,8 @@ describe("interpret", () => {
   it("supports mut uninitialized variable declaration", () => {
     expect(interpret("let mut x : I32; x = 10; x = 20; x")).toBe(20);
   });
+
+  it("supports variable assignment inside if-else branches", () => {
+    expect(interpret("let x : I32; if (true) x = 10; else x = 20; x")).toBe(10);
+  });
 });

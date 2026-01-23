@@ -131,8 +131,12 @@ export function handleVarAssignment(
     unmutUninitializedSet.delete(lhs);
     mutMap.delete(lhs);
   }
+  const rest = s.slice(semiIdx + 1).trim();
+  if (rest === "") {
+    return newValue;
+  }
   return interpretWithScope(
-    s.slice(semiIdx + 1).trim(),
+    rest,
     scope,
     typeMap,
     mutMap,
