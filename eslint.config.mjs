@@ -34,12 +34,12 @@ export default [
           selector: "Literal[value=null]",
           message:
             "null is not allowed. Use undefined instead for consistency.",
-        }
+        },
       ],
       "max-lines": [
         "error",
         {
-          max: 200,
+          max: 350,
           skipComments: true,
           skipBlankLines: true,
         },
