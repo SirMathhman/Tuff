@@ -49,4 +49,8 @@ describe("interpret", () => {
   it("respects operator precedence: multiplication before subtraction", () => {
     expect(interpret("2 * 3 - 4")).toBe(2);
   });
+
+  it("respects operator precedence: multiplication before addition", () => {
+    expect(interpret("2 + 3 * 4")).toBe(14);
+  });
 });

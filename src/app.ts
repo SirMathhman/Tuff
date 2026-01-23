@@ -162,7 +162,7 @@ export function interpret(input: string): number {
     const leftInfo = extractTypedInfo(leftStr);
 
     const left = interpret(leftStr);
-    const right = parseTypedNumber(rightStr);
+    const right = interpret(rightStr);
 
     let result = 0;
     switch (op) {
