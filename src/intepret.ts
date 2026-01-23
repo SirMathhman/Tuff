@@ -17,7 +17,7 @@ function makeError(
 
 function hasOpenParen(s: string): boolean {
   for (let i = 0; i < s.length; i = i + 1) {
-    if (s[i] === "(") return true;
+    if (s[i] === "(" || s[i] === "{") return true;
   }
   return false;
 }
@@ -30,9 +30,15 @@ function resolveParentheses(
 
   while (hasOpenParen(result)) {
     let lastOpen = -1;
+    let openChar = "";
     for (let i = 0; i < result.length; i = i + 1) {
-      if (result[i] === "(") lastOpen = i;
-      if (result[i] === ")" && lastOpen !== -1) {
+      const ch = result.charAt(i);
+      if (ch === "(" || ch === "{") {
+        lastOpen = i;
+        openChar = ch;
+      }
+      const closeChar = openChar === "{" ? "}" : ")";
+      if (ch === closeChar && lastOpen !== -1) {
         const inner = result.substring(lastOpen + 1, i);
         const evaluated = evaluate(inner);
         if (!evaluated.ok) return evaluated;

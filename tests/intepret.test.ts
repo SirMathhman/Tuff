@@ -110,4 +110,10 @@ describe("intepret - expressions: precedence and operators", () => {
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) expect(result.error.cause).toContain("Division");
   });
+
+  it("parses and evaluates expressions with curly braces like '10 / ( { 2 } - 1)'", () => {
+    const result = intepret("10 / ( { 2 } - 1)");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(10);
+  });
 });
