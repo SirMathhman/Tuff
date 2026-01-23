@@ -72,4 +72,10 @@ describe("intepret - expressions", () => {
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) expect(result.error).toContain("Mixed");
   });
+
+  it("parses and evaluates multi-operand expressions like '1U8 + 2U8 + 3U8'", () => {
+    const result = intepret("1U8 + 2U8 + 3U8");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(6);
+  });
 });
