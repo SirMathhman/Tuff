@@ -36,31 +36,49 @@ function createCompileError(
   };
 }
 
+type SuffixInfo = { suffix: string; minVal: number; maxVal: number } | null;
+
+function getSuffixInfo(source: string): SuffixInfo {
+  const suffixMap: Record<string, { minVal: number; maxVal: number }> = {
+    U8: { minVal: 0, maxVal: 255 },
+    U16: { minVal: 0, maxVal: 65535 },
+  };
+
+  for (const [suffix, limits] of Object.entries(suffixMap)) {
+    if (source.endsWith(suffix)) {
+      return { suffix, ...limits };
+    }
+  }
+
+  return null;
+}
+
 function parseNumericLiteral(source: string): Result<number, CompileError> {
-  // Check for U8 suffix
-  const hasU8Suffix = source.endsWith("U8");
-  const isU8Parse = hasU8Suffix;
-  const numStr = hasU8Suffix ? source.slice(0, -2) : source;
+  const suffixInfo = getSuffixInfo(source);
+  const numStr = suffixInfo
+    ? source.slice(0, -suffixInfo.suffix.length)
+    : source;
   const value = parseInt(numStr, 10);
 
   if (isNaN(value)) {
-    const cause = isU8Parse ? "Invalid U8 literal" : "Invalid input";
-    const reason = isU8Parse
-      ? "U8 suffix requires a valid integer before it"
+    const cause = suffixInfo
+      ? `Invalid ${suffixInfo.suffix} literal`
+      : "Invalid input";
+    const reason = suffixInfo
+      ? `${suffixInfo.suffix} suffix requires a valid integer before it`
       : "Input must be a valid integer or empty";
-    const fix = isU8Parse
-      ? "Use format like '100U8'"
+    const fix = suffixInfo
+      ? `Use format like '100${suffixInfo.suffix}'`
       : "Provide a valid integer like '100' or leave empty";
     return err(createCompileError(cause, reason, fix, source.length));
   }
 
-  // U8 must be non-negative and fit in 0-255 range
-  if (isU8Parse && (value < 0 || value > 255)) {
+  if (suffixInfo && (value < suffixInfo.minVal || value > suffixInfo.maxVal)) {
     return err(
       createCompileError(
-        "Invalid U8 literal",
-        `U8 literals must be in range 0-255, got ${value}`,
-        "Use a value between 0 and 255 for U8 suffix",
+        `Invalid ${suffixInfo.suffix} literal`,
+        `${suffixInfo.suffix} literals must be in range ${suffixInfo.minVal}-${suffixInfo.maxVal}, got ${value}`,
+        `Use a value between ${suffixInfo.minVal} and ${suffixInfo.maxVal} for ${suffixInfo.suffix} suffix`,
         source.length,
       ),
     );
