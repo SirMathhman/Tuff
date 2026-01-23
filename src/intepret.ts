@@ -2,15 +2,22 @@
  * Stubbed function `intepret` — parses a string input and returns a number.
  * Implementation TODO.
  *
+ * Behavior implemented so far:
+ *  - empty or whitespace-only string => 0
+ *  - numeric string => parsed number
+ *  - otherwise => NaN
+ *
  * @param input - the input string to interpret
  * @returns number result of interpretation
  */
 export function intepret(input: string): number {
-  // Minimal implementation: empty string should return 0
-  if (input === '') return 0;
+  const s = input.trim();
+  if (s === "") return 0;
 
-  // TODO: implement full interpretation logic
-  // Note: throwing is banned by ESLint. Prefer returning a Result<T, E> instead.
-  // For now return NaN to indicate unimplemented behavior without throwing.
+  // Attempt to parse numeric strings (integers, floats)
+  const n = Number(s);
+  if (!Number.isNaN(n) && Number.isFinite(n)) return n;
+
+  // For non-numeric input, return NaN (avoid throwing; prefer Result<T,E> pattern)
   return NaN;
 }
