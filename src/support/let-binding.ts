@@ -16,6 +16,8 @@ import {
 import {
   isFunctionDefinition,
   extractFunctionType,
+  isFunctionCall,
+  parseFunctionCall,
 } from "../parsing/function-parsing";
 import { isArrayLiteral } from "../parsing/array-parsing";
 import {
@@ -328,38 +330,87 @@ function extractArrayElementTypeFromBinding(
   return parts[0]?.trim();
 }
 
-export function extractExpressionType(
-  exprPart: string,
+function extractFunctionCallReturnType(
+  funcCall: string,
   context?: VariableContext,
 ): string | undefined {
-  const trimmed = exprPart.trim();
+  const parsed = parseFunctionCall(funcCall);
+  if (!parsed || !context) return undefined;
 
+  const binding = context.find((b) => b.name === parsed.name);
+  if (!binding || !binding.type) return undefined;
+
+  // binding.type is the full function type like "(I32, I32) => U16"
+  // Extract the return type (after =>)
+  const funcType = binding.type;
+  const arrowIndex = funcType.indexOf("=>");
+  if (arrowIndex === -1) return undefined;
+
+  return funcType.substring(arrowIndex + 2).trim();
+}
+
+function extractTypeFromPattern(
+  trimmed: string,
+  context?: VariableContext,
+): string | undefined {
+  // If-expressions
   if (trimmed.startsWith("if")) {
     return extractIfExpressionType(trimmed, context);
   }
 
+  // Braced expressions
   if (isBracedExpression(trimmed)) {
     const innerExpr = extractBracedContent(trimmed);
     return extractExpressionType(innerExpr, context);
   }
 
+  // Function definitions
   if (isFunctionDefinition(trimmed)) {
     return extractFunctionType(trimmed);
   }
 
+  // Array literals
   if (isArrayLiteral(trimmed)) {
     return extractArrayLiteralType(trimmed, context, extractExpressionType);
   }
 
+  // Array indexing
   if (isArrayIndexing(trimmed)) {
     return extractArrayIndexType(trimmed, context);
   }
 
+  // References
   if (isReferenceOperator(trimmed)) {
     return extractReferenceType(trimmed, context);
   }
 
-  // For read expressions, extract the type directly
+  // Function calls
+  if (isFunctionCall(trimmed)) {
+    return extractFunctionCallReturnType(trimmed, context);
+  }
+
+  return undefined;
+}
+
+function extractTypeFromLiteral(trimmed: string): string | undefined {
+  // Boolean literals
+  const boolValue = parseBooleanLiteral(trimmed);
+  if (boolValue !== undefined) {
+    return "Bool";
+  }
+
+  // Typed number literals
+  const suffix = getTypeSuffix(trimmed);
+  if (suffix) {
+    return suffix;
+  }
+
+  // Bare numbers default to I32
+  if (isBareNumber(trimmed)) {
+    return "I32";
+  }
+
+  // Read expressions
   if (trimmed.startsWith("read ")) {
     const parts = trimmed.split(" ");
     if (parts.length === 2) {
@@ -367,23 +418,25 @@ export function extractExpressionType(
     }
   }
 
-  // For boolean literals, return Bool type
-  const boolValue = parseBooleanLiteral(trimmed);
-  if (boolValue !== undefined) {
-    return "Bool";
+  return undefined;
+}
+
+export function extractExpressionType(
+  exprPart: string,
+  context?: VariableContext,
+): string | undefined {
+  const trimmed = exprPart.trim();
+
+  // Try pattern-based extraction first
+  const patternType = extractTypeFromPattern(trimmed, context);
+  if (patternType) {
+    return patternType;
   }
 
-  // For number literals, extract type suffix
-  const suffix = getTypeSuffix(trimmed);
-  if (suffix) {
-    return suffix;
-  }
-
-  // For bare numbers without type suffix, infer a default type
-  const isBareLiteral = isBareNumber(trimmed);
-  if (isBareLiteral) {
-    // Bare numbers default to I32 for compatibility with signed/unsigned and various sizes
-    return "I32";
+  // Try literal-based extraction
+  const literalType = extractTypeFromLiteral(trimmed);
+  if (literalType) {
+    return literalType;
   }
 
   // For variable references, look up in context
@@ -394,7 +447,6 @@ export function extractExpressionType(
     }
   }
 
-  // If no type suffix and not a read expression, return undefined
   return undefined;
 }
 

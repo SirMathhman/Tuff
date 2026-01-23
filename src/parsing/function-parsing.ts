@@ -180,6 +180,59 @@ export function isFunctionDefinition(source: string): boolean {
   );
 }
 
+function findTypeSuffixIndex(expr: string): number {
+  for (let i = expr.length - 1; i >= 0; i--) {
+    const char = expr[i];
+    if (char && char >= "0" && char <= "9") continue;
+    if (char && char >= "A" && char <= "Z") {
+      return i;
+    }
+    break;
+  }
+  return -1;
+}
+
+function inferReturnTypeFromBody(body: string): string {
+  // Check for boolean literals
+  if (body === "true" || body === "false") {
+    return "Bool";
+  }
+  // Check for read expressions
+  if (body.startsWith("read ")) {
+    const parts = body.split(" ");
+    if (parts.length === 2) {
+      return parts[1] || "I32";
+    }
+  }
+  // Check for bare numbers (default to I32)
+  const isBareNumber = isNumericLiteral(body);
+  if (isBareNumber) {
+    // Extract type suffix if present
+    const suffixStart = findTypeSuffixIndex(body);
+    if (suffixStart !== -1) {
+      return body.substring(suffixStart);
+    }
+    return "I32";
+  }
+  return "<inferred>";
+}
+
+function isNumericLiteral(expr: string): boolean {
+  if (expr.length === 0) return false;
+  let i = 0;
+  if (expr[0] === "-") i++;
+  if (i >= expr.length) return false;
+  while (i < expr.length) {
+    const char = expr[i];
+    if (char && char >= "0" && char <= "9") {
+      i++;
+      continue;
+    }
+    return !!(char && char >= "A" && char <= "Z");
+  }
+  return true;
+}
+
 export function extractFunctionType(source: string): string | undefined {
   if (!isFunctionDefinition(source)) return undefined;
 
@@ -190,9 +243,8 @@ export function extractFunctionType(source: string): string | undefined {
 
   // If return type was inferred (placeholder), we need to infer it from the body
   if (returnType === "<inferred>") {
-    // For now, we'll use a generic type that can be narrowed later
-    // This allows the function to be used without explicit type annotation
-    returnType = "<inferred>"; // Keep placeholder, validation will handle it
+    const body = parsed.body.trim();
+    returnType = inferReturnTypeFromBody(body);
   }
 
   // Function type format: (param1Type, param2Type, ...) => returnType

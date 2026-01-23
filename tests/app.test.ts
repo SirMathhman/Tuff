@@ -571,4 +571,22 @@ describe("The application - Function validation", () => {
   it("should reject uncalled lambda in nested binding", () => {
     assertInvalid("let temp = () => read I32; let x = temp; x");
   });
+
+  it("should reject calling non-function variable", () => {
+    assertInvalid("let temp = 100; temp()");
+  });
+
+  it("should reject calling non-function variable with type annotation", () => {
+    assertInvalid("let temp : I32 = 100; temp()");
+  });
+
+  it("should reject calling read expression as function", () => {
+    assertInvalid("let temp = read I32; temp()");
+  });
+
+  it("should reject type mismatch on function call result", () => {
+    assertInvalid(
+      "let temp = () => read I32; let result : Bool = temp(); result",
+    );
+  });
 });

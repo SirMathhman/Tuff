@@ -5,27 +5,37 @@ import {
   getRemainningAfterFunctions,
 } from "../support/function-context";
 
-function collectFunctionVariables(source: string): {
-  functionVars: Set<string>;
-  remaining: string;
-} {
-  const functionVars = new Set<string>();
+function processLetBindings(
+  source: string,
+  processor: (expr: string, varName: string) => void,
+): string {
   let remaining = source;
 
   while (remaining.startsWith("let")) {
     const comp = parseLetComponents(remaining);
     if (!comp) break;
 
-    const expr = comp.exprPart.trim();
+    processor(comp.exprPart.trim(), comp.varName);
+    remaining = comp.remaining;
+  }
+
+  return remaining;
+}
+
+function collectFunctionVariables(source: string): {
+  functionVars: Set<string>;
+  remaining: string;
+} {
+  const functionVars = new Set<string>();
+
+  const remaining = processLetBindings(source, (expr, varName) => {
     if (
       expr.startsWith("()") ||
       (expr.startsWith("(") && expr.includes("=>"))
     ) {
-      functionVars.add(comp.varName);
+      functionVars.add(varName);
     }
-
-    remaining = comp.remaining;
-  }
+  });
 
   return { functionVars, remaining };
 }
@@ -42,10 +52,7 @@ function findFunctionVarInExpression(
   return undefined;
 }
 
-function buildUncalledVarError(
-  varName: string,
-  len: number,
-): CompileError {
+function buildUncalledVarError(varName: string, len: number): CompileError {
   return {
     cause: `Function variable '${varName}' referenced without being called`,
     reason:
@@ -106,6 +113,98 @@ function findNamedFunctionReference(
   return undefined;
 }
 
+function extractIdentifierAt(
+  source: string,
+  startPos: number,
+): {
+  name: string;
+  endPos: number;
+} {
+  let name = "";
+  let pos = startPos;
+  const firstChar = source[pos];
+  if (!firstChar || !isIdentifierChar(firstChar, true)) {
+    return { name: "", endPos: startPos };
+  }
+
+  while (pos < source.length) {
+    const c = source[pos];
+    if (!c || !isIdentifierChar(c, false)) break;
+    name += c;
+    pos++;
+  }
+
+  return { name, endPos: pos };
+}
+
+function extractFunctionCalls(source: string): string[] {
+  const calls: string[] = [];
+  let i = 0;
+  while (i < source.length) {
+    const { name, endPos } = extractIdentifierAt(source, i);
+
+    if (name.length > 0 && endPos < source.length && source[endPos] === "(") {
+      calls.push(name);
+      i = endPos + 1;
+    } else {
+      i = endPos > i ? endPos : i + 1;
+    }
+  }
+  return calls;
+}
+
+function isIdentifierChar(char: string, isFirst: boolean): boolean {
+  const isLetter = (char >= "a" && char <= "z") || (char >= "A" && char <= "Z");
+  const isDigit = char >= "0" && char <= "9";
+  const isUnderscore = char === "_";
+
+  if (isFirst) {
+    return isLetter || isUnderscore;
+  }
+  return isLetter || isDigit || isUnderscore;
+}
+
+function isFunctionDefinitionExpression(expr: string): boolean {
+  return (
+    expr.startsWith("fn ") || // named function
+    expr.startsWith("()") || // lambda
+    (expr.startsWith("(") && expr.includes("=>"))
+  );
+}
+
+function collectNonFunctionVariables(source: string): Set<string> {
+  const nonFunctionVars = new Set<string>();
+
+  processLetBindings(source, (expr, varName) => {
+    const isFuncDef = isFunctionDefinitionExpression(expr);
+    const couldBeFunc = isFuncDef || expr.startsWith("if");
+
+    if (!couldBeFunc) {
+      nonFunctionVars.add(varName);
+    }
+  });
+
+  return nonFunctionVars;
+}
+
+function checkNonFunctionCalls(
+  source: string,
+  nonFunctionVars: Set<string>,
+): CompileError | undefined {
+  const calls = extractFunctionCalls(source);
+  for (const call of calls) {
+    if (nonFunctionVars.has(call)) {
+      return {
+        cause: `Cannot call non-function variable '${call}'`,
+        reason: `Variable '${call}' is not a function and cannot be called`,
+        fix: `Remove the parentheses or assign a function to '${call}'`,
+        first: { line: 0, column: 0, length: source.length },
+      };
+    }
+  }
+  return undefined;
+}
+
 export function detectUncalledFunctionReference(
   source: string,
 ): CompileError | undefined {
@@ -128,5 +227,10 @@ export function detectUncalledFunctionReference(
   if (exprError) return exprError;
 
   // Check if function variables are used in trailing expression
-  return checkFunctionVarInTrailing(remaining, functionVars);
+  const uncalledError = checkFunctionVarInTrailing(remaining, functionVars);
+  if (uncalledError) return uncalledError;
+
+  // Check if non-function variables are being called
+  const nonFunctionVars = collectNonFunctionVariables(source);
+  return checkNonFunctionCalls(source, nonFunctionVars);
 }
