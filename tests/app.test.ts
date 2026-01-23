@@ -25,4 +25,8 @@ describe("interpret", () => {
   it("parses simple addition with typed literals", () => {
     expect(interpret("1U8 + 2U8")).toBe(3);
   });
+
+  it("throws on overflow when adding two U8 values", () => {
+    expect(() => interpret("1U8 + 255U8")).toThrow();
+  });
 });

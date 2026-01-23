@@ -1,4 +1,5 @@
-function parseTypedNumber(s: string): number {
+function scanNumericPrefix(s: string): number {
+    // Returns the end index of the numeric prefix (including optional sign and fractional part)
     const len = s.length;
     let i = 0;
 
@@ -34,50 +35,76 @@ function parseTypedNumber(s: string): number {
         hasDigits = hasDigits || fracDigits;
     }
 
-    if (!hasDigits) {
+    return hasDigits ? i : 0;
+}
+
+function extractUnsignedSize(suffix: string): number {
+    // Parse digits after the 'U' or 'u' without regex
+    const first = suffix[0];
+    if (first !== "U" && first !== "u") return 0;
+
+    let j = 1;
+    let sizeStr = "";
+    while (j < suffix.length) {
+        const ch = suffix[j];
+        if (ch === undefined) break;
+        if (ch >= "0" && ch <= "9") {
+            sizeStr += ch;
+            j++;
+            continue;
+        }
+        break;
+    }
+
+    return sizeStr.length > 0 ? Number(sizeStr) : 0;
+}
+
+function validateUnsignedValue(n: number, size: number): void {
+    if (size === 8) {
+        if (n > 255) throw new RangeError(`value ${n} out of range for U8`);
+    } else if (size === 16) {
+        if (n > 65535) throw new RangeError(`value ${n} out of range for U16`);
+    } else if (size === 32) {
+        if (n > 4294967295) throw new RangeError(`value ${n} out of range for U32`);
+    } else if (size === 64) {
+        if (n > Number.MAX_SAFE_INTEGER) throw new RangeError(`value ${n} out of range for U64`);
+    }
+}
+
+function extractTypedInfo(s: string): { value: number; typeSize: number } {
+    const prefixEnd = scanNumericPrefix(s);
+    if (prefixEnd === 0) {
+        return { value: Number.isFinite(Number(s)) ? Number(s) : 0, typeSize: 0 };
+    }
+
+    const numStr = s.slice(0, prefixEnd);
+    const n = Number(numStr);
+    const suffix = s.slice(prefixEnd);
+    const typeSize = extractUnsignedSize(suffix);
+
+    return { value: n, typeSize };
+}
+
+function parseTypedNumber(s: string): number {
+    const prefixEnd = scanNumericPrefix(s);
+    if (prefixEnd === 0) {
         const n = Number(s);
         return Number.isFinite(n) ? n : 0;
     }
 
-    const numStr = s.slice(0, i);
+    const numStr = s.slice(0, prefixEnd);
     const n = Number(numStr);
+    const suffix = s.slice(prefixEnd);
+    const typeSize = extractUnsignedSize(suffix);
 
-    // If there's a suffix (e.g., "U8") and it indicates unsigned (starts with 'U' or 'u'),
-    // negative values are invalid and should throw an error. Also validate size-specific ranges (e.g., U8 <= 255).
-    const suffix = s.slice(i);
-    const first = suffix[0];
-    if ((first === "U" || first === "u") && n < 0) {
+    // Negative value with unsigned suffix is an error
+    if (typeSize > 0 && n < 0) {
         throw new Error("negative value with unsigned suffix");
     }
 
-    if (first === "U" || first === "u") {
-        // Parse digits after the 'U' without regex
-        let j = 1;
-        let sizeStr = "";
-        while (j < suffix.length) {
-            const ch = suffix[j];
-            if (ch === undefined) break;
-            if (ch >= "0" && ch <= "9") {
-                sizeStr += ch;
-                j++;
-                continue;
-            }
-            break;
-        }
-
-        if (sizeStr.length > 0) {
-            const size = Number(sizeStr);
-            if (size === 8) {
-                if (n > 255) throw new RangeError(`value ${n} out of range for U8`);
-            } else if (size === 16) {
-                if (n > 65535) throw new RangeError(`value ${n} out of range for U16`);
-            } else if (size === 32) {
-                if (n > 4294967295) throw new RangeError(`value ${n} out of range for U32`);
-            } else if (size === 64) {
-                // U64 overflow check: use MAX_SAFE_INTEGER as a conservative bound
-                if (n > Number.MAX_SAFE_INTEGER) throw new RangeError(`value ${n} out of range for U64`);
-            }
-        }
+    // Validate value against unsigned type bounds
+    if (typeSize > 0) {
+        validateUnsignedValue(n, typeSize);
     }
 
     return Number.isFinite(n) ? n : 0;
@@ -115,20 +142,35 @@ export function interpret(input: string): number {
     const leftStr = s.slice(0, opIndex).trim();
     const rightStr = s.slice(opIndex + 1).trim();
 
+    const leftInfo = extractTypedInfo(leftStr);
+    const rightInfo = extractTypedInfo(rightStr);
+
     const left = parseTypedNumber(leftStr);
     const right = parseTypedNumber(rightStr);
 
+    let result = 0;
     switch (op) {
         case "+":
-            return left + right;
+            result = left + right;
+            break;
         case "-":
-            return left - right;
+            result = left - right;
+            break;
         case "*":
-            return left * right;
+            result = left * right;
+            break;
         case "/":
             if (right === 0) throw new Error("division by zero");
-            return Math.floor(left / right);
+            result = Math.floor(left / right);
+            break;
         default:
             return 0;
     }
+
+    // If both operands have the same unsigned type, validate the result against that type
+    if (leftInfo.typeSize > 0 && leftInfo.typeSize === rightInfo.typeSize) {
+        validateUnsignedValue(result, leftInfo.typeSize);
+    }
+
+    return result;
 }
