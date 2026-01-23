@@ -30,12 +30,11 @@ function collectFunctionVariables(source: string): {
 
   const remaining = processLetBindings(source, (expr, varName) => {
     const isFuncDef =
-      expr.startsWith("()") ||
-      (expr.startsWith("(") && expr.includes("=>"));
-    
+      expr.startsWith("()") || (expr.startsWith("(") && expr.includes("=>"));
+
     // Check if expr is a reference to another function variable
     const isFuncRef = isSimpleIdentifier(expr) && functionVars.has(expr);
-    
+
     // Check if expr is an if-expression (could select between functions)
     const isIfExpr = expr.startsWith("if");
 
@@ -51,17 +50,17 @@ function isFunctionReferenceAssignment(expr: string): boolean {
   // Check if this is just a simple variable reference or if-expression
   // These are allowed when assigning function values
   const trimmed = expr.trim();
-  
+
   // Allow simple variable references (e.g., "let chosen = add")
   if (isSimpleIdentifier(trimmed)) {
     return true;
   }
-  
+
   // Allow if-expressions (e.g., "let chosen = if (cond) add else multiply")
   if (trimmed.startsWith("if")) {
     return true;
   }
-  
+
   return false;
 }
 
@@ -83,7 +82,7 @@ function findFunctionVarInExpression(
   if (allowFunctionRef && isFunctionReferenceAssignment(expr)) {
     return undefined;
   }
-  
+
   for (const funcVar of functionVars) {
     if (expr === funcVar) {
       return funcVar;
@@ -223,7 +222,7 @@ function collectNonFunctionVariables(
   processLetBindings(source, (expr, varName) => {
     const isFuncDef = isFunctionDefinitionExpression(expr);
     const couldBeFunc = isFuncDef || expr.startsWith("if");
-    
+
     // Also check if expression is a reference to another function variable
     const isFuncRef = isSimpleIdentifier(expr) && functionVars.has(expr);
 

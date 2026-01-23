@@ -135,7 +135,7 @@ function buildVariableAllocation(
   // Check if this is a reference to another function variable
   let functionBody: string | undefined;
   let functionParameters: { name: string; type: string }[] | undefined;
-  
+
   // Simple identifier check for function variable reference
   if (!trimmedExpr.includes(" ") && !trimmedExpr.includes("(")) {
     const sourceBinding = context.find((b) => b.name === trimmedExpr);

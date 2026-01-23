@@ -81,7 +81,9 @@ function tryCallFunctionVariable(
   const bodyCompiled = compileWithContext(varBinding.functionBody, funcContext);
   if (!bodyCompiled) return undefined;
 
-  const returnType = varBinding.type.substring(varBinding.type.indexOf("=>") + 2).trim();
+  const returnType = varBinding.type
+    .substring(varBinding.type.indexOf("=>") + 2)
+    .trim();
 
   return {
     instructions: [...argInstructions, ...bodyCompiled.instructions],
