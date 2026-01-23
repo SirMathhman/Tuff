@@ -92,16 +92,29 @@ function parseVariableDeclarations(
     const colonIdx = nameTypePart.indexOf(":");
 
     let varName = "";
+    let varTypeSuffix = "";
     if (colonIdx === -1) {
       varName = nameTypePart;
     } else {
       varName = nameTypePart.substring(0, colonIdx).trim();
+      varTypeSuffix = nameTypePart.substring(colonIdx + 1).trim();
     }
 
     const valueStr = declStr.substring(eqIdx + 1).trim();
 
     const parsed = parseNumberWithSuffix(valueStr);
     if (!parsed.ok) return parsed;
+
+    if (varTypeSuffix !== "" && parsed.value.suffix !== "" && varTypeSuffix !== parsed.value.suffix) {
+      return err(
+        makeError(
+          "Type suffix mismatch",
+          `Variable: ${varTypeSuffix}, Value: ${parsed.value.suffix}`,
+          "Variable type and value type must match",
+          `Use matching suffixes, e.g., let x : U8 = 100U8; or let x = 100;`,
+        ),
+      );
+    }
 
     newVars.set(varName, parsed.value.num);
   }

@@ -137,10 +137,16 @@ describe("intepret - expressions: variables", () => {
     if (isOk(result)) expect(result.value).toBe(100);
   });
 
-  it("parses and evaluates variable declarations with different value suffix like 'let x : U16 = 100U8; x'", () => {
-    const result = intepret("let x : U16 = 100U8; x");
+  it("parses and evaluates variable declarations with matching type suffixes like 'let x : U16 = 100U16; x'", () => {
+    const result = intepret("let x : U16 = 100U16; x");
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(100);
+  });
+
+  it("returns err for variable declarations with incompatible type suffixes like 'let x : U8 = 100U16; x'", () => {
+    const result = intepret("let x : U8 = 100U16; x");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) expect(result.error.cause).toContain("mismatch");
   });
 
   it("parses and evaluates top-level variable declarations like 'let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z'", () => {
