@@ -111,6 +111,7 @@ function evaluateExpression(expr: string): Result<number, string> {
   let operator = "+";
   let i = 0;
   let commonSuffix = "";
+  let suffixSet = false;
 
   while (i < tokens.length) {
     const token = tokens[i];
@@ -118,8 +119,9 @@ function evaluateExpression(expr: string): Result<number, string> {
     const parsed = parseNumberWithSuffix(token);
     if (!parsed.ok) return parsed;
 
-    if (i === 0 || (i === 2 && operator !== undefined)) {
+    if (!suffixSet) {
       commonSuffix = parsed.value.suffix;
+      suffixSet = true;
     } else if (parsed.value.suffix !== commonSuffix) {
       return err("Mixed type suffixes in expression");
     }

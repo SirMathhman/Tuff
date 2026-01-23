@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { intepret } from "../src/intepret";
 import { isOk } from "../src/result";
 
-describe("intepret", () => {
+describe("intepret - basic parsing", () => {
   it("returns ok(0) for empty string", () => {
     const result = intepret("");
     expect(isOk(result)).toBe(true);
@@ -21,12 +21,6 @@ describe("intepret", () => {
     if (isOk(result)) expect(result.value).toBe(100);
   });
 
-  it("returns err for negative numbers with suffixes like '-100U8'", () => {
-    const result = intepret("-100U8");
-    expect(isOk(result)).toBe(false);
-    if (!isOk(result)) expect(result.error).toContain("Negative");
-  });
-
   it("parses negative integers like '-100'", () => {
     const result = intepret("-100");
     expect(isOk(result)).toBe(true);
@@ -38,13 +32,23 @@ describe("intepret", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(-100);
   });
+});
+
+describe("intepret - validation", () => {
+  it("returns err for negative numbers with suffixes like '-100U8'", () => {
+    const result = intepret("-100U8");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) expect(result.error).toContain("Negative");
+  });
 
   it("returns err for numbers out of range for their type suffix like '256U8'", () => {
     const result = intepret("256U8");
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) expect(result.error).toContain("range");
   });
+});
 
+describe("intepret - expressions", () => {
   it("parses and evaluates simple expressions like '1U8 + 2U8'", () => {
     const result = intepret("1U8 + 2U8");
     expect(isOk(result)).toBe(true);
@@ -55,5 +59,11 @@ describe("intepret", () => {
     const result = intepret("1U8 + 255U8");
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) expect(result.error).toContain("range");
+  });
+
+  it("returns err for expressions with mixed type suffixes like '1 + 255U8'", () => {
+    const result = intepret("1 + 255U8");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) expect(result.error).toContain("Mixed");
   });
 });
