@@ -46,15 +46,15 @@ function assertValid(source: string, expected: number, ...stdIn: number[]) {
   }
 }
 
-// function assertInvalid(source: string) {
-//   const compileResult = compile(source);
-//   if (compileResult.ok) {
-//     expect(
-//       "Expected compilation to fail, but it succeeded with: " +
-//         JSON.stringify(compileResult.value, null, 2),
-//     ).toBeUndefined();
-//   }
-// }
+function assertInvalid(source: string) {
+  const compileResult = compile(source);
+  if (compileResult.ok) {
+    expect(
+      "Expected compilation to fail, but it succeeded with: " +
+        JSON.stringify(compileResult.value, null, 2),
+    ).toBeUndefined();
+  }
+}
 
 describe("The application - Basic tests", () => {
   it("should execute a simple program that halts immediately", () => {
@@ -67,5 +67,9 @@ describe("The application - Basic tests", () => {
 
   it("should output 100 with U8 suffix", () => {
     assertValid("100U8", 100);
+  });
+
+  it("should reject negative U8 literal", () => {
+    assertInvalid("-100U8");
   });
 });
