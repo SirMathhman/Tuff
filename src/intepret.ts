@@ -1,86 +1,44 @@
 import { type Result, ok, err } from "./result";
+import {
+  parseNumberWithSuffix,
+  validateResult,
+  evaluateTokens,
+} from "./parser";
 
-function isInRange(n: number, suffix: string): boolean {
-  if (suffix === "U8") return n >= 0 && n <= 255;
-  if (suffix === "U16") return n >= 0 && n <= 65535;
-  if (suffix === "U32") return n >= 0 && n <= 4294967295;
-  if (suffix === "I8") return n >= -128 && n <= 127;
-  if (suffix === "I16") return n >= -32768 && n <= 32767;
-  if (suffix === "I32") return n >= -2147483648 && n <= 2147483647;
-  return true;
-}
-
-function getRangeError(suffix: string): string {
-  if (suffix === "U8") return "Value out of range for U8 (0-255)";
-  if (suffix === "U16") return "Value out of range for U16 (0-65535)";
-  if (suffix === "U32") return "Value out of range for U32 (0-4294967295)";
-  if (suffix === "I8") return "Value out of range for I8 (-128 to 127)";
-  if (suffix === "I16") return "Value out of range for I16 (-32768 to 32767)";
-  if (suffix === "I32")
-    return "Value out of range for I32 (-2147483648 to 2147483647)";
-  return "Value out of range";
-}
-
-function parseNumberWithSuffix(
-  s: string,
-): Result<{ num: number; suffix: string; len: number }, string> {
-  const trimmed = s.trim();
-  let isNeg = false;
-  let idx = 0;
-
-  if (trimmed.length > 0 && trimmed[0] === "-") {
-    isNeg = true;
-    idx = 1;
+function hasOpenParen(s: string): boolean {
+  for (let i = 0; i < s.length; i = i + 1) {
+    if (s[i] === "(") return true;
   }
+  return false;
+}
 
-  let digits = "";
-  while (idx < trimmed.length) {
-    const ch = trimmed.charAt(idx);
-    if (ch >= "0" && ch <= "9") {
-      digits = digits + ch;
-      idx = idx + 1;
-    } else {
-      break;
+function resolveParentheses(
+  expr: string,
+  evaluate: (s: string) => Result<number, string>,
+): Result<string, string> {
+  let result = expr;
+
+  while (hasOpenParen(result)) {
+    let lastOpen = -1;
+    for (let i = 0; i < result.length; i = i + 1) {
+      if (result[i] === "(") lastOpen = i;
+      if (result[i] === ")" && lastOpen !== -1) {
+        const inner = result.substring(lastOpen + 1, i);
+        const evaluated = evaluate(inner);
+        if (!evaluated.ok) return evaluated;
+
+        const before = result.substring(0, lastOpen);
+        const after = result.substring(i + 1);
+        result = before + evaluated.value + after;
+        break;
+      }
     }
   }
 
-  if (digits === "") return err("No digits found");
-
-  let num = Number(digits);
-  if (isNeg) num = -num;
-
-  let suffix = "";
-  let sidx = idx;
-  while (sidx < trimmed.length) {
-    const ch = trimmed.charAt(sidx);
-    if (ch !== " ") {
-      suffix = suffix + ch;
-      sidx = sidx + 1;
-    } else {
-      break;
-    }
-  }
-
-  if (suffix && isNeg && suffix[0] === "U") {
-    return err("Negative numbers with unsigned type suffixes are not allowed");
-  }
-  if (suffix && !isInRange(num, suffix)) return err(getRangeError(suffix));
-
-  const negSign = isNeg ? 1 : 0;
-  return ok({ num, suffix, len: negSign + digits.length + suffix.length });
-}
-
-function validateResult(
-  result: number,
-  suffix: string,
-): Result<number, string> {
-  if (suffix && !isInRange(result, suffix)) {
-    return err(getRangeError(suffix));
-  }
   return ok(result);
 }
 
-function evaluateExpression(expr: string): Result<number, string> {
+function evaluateCore(expr: string): Result<number, string> {
   const trimmed = expr.trim();
   const tokens = [];
   let current = "";
@@ -137,88 +95,10 @@ function evaluateExpression(expr: string): Result<number, string> {
   return validateResult(result, commonSuffix);
 }
 
-function applyMultiplication(
-  val: number,
-  tokens: Array<number | string>,
-  startIdx: number,
-): { result: number; nextIdx: number } {
-  let current = val;
-  let i = startIdx;
-
-  while (i < tokens.length) {
-    const op = tokens[i];
-    if (op !== "*") break;
-
-    i = i + 1;
-    const multNum = tokens[i];
-    if (typeof multNum !== "number") break;
-
-    current = current * multNum;
-    i = i + 1;
-  }
-
-  return { result: current, nextIdx: i };
-}
-
-function evaluateTokens(tokens: Array<number | string>): number {
-  const multDivResult: Array<number | string> = [];
-  let i = 0;
-  let current = tokens[0];
-
-  if (typeof current !== "number") return 0;
-
-  i = 1;
-  while (i < tokens.length) {
-    const op = tokens[i];
-    if (op !== "*") break;
-
-    i = i + 1;
-    const nextNum = tokens[i];
-    if (typeof nextNum !== "number") break;
-
-    if (typeof current === "number") {
-      current = current * nextNum;
-    }
-    i = i + 1;
-  }
-
-  multDivResult.push(current);
-
-  while (i < tokens.length) {
-    const op = tokens[i];
-    if (op !== "+" && op !== "-") break;
-
-    multDivResult.push(op);
-    i = i + 1;
-
-    const nextVal = tokens[i];
-    if (typeof nextVal !== "number") break;
-
-    const applied = applyMultiplication(nextVal, tokens, i + 1);
-    multDivResult.push(applied.result);
-    i = applied.nextIdx;
-  }
-
-  let result = 0;
-  const firstVal = multDivResult[0];
-  if (typeof firstVal === "number") {
-    result = firstVal;
-  }
-
-  let j = 1;
-  while (j < multDivResult.length) {
-    const op = multDivResult[j];
-    const val = multDivResult[j + 1];
-
-    if (typeof val === "number") {
-      if (op === "+") result = result + val;
-      else if (op === "-") result = result - val;
-    }
-
-    j = j + 2;
-  }
-
-  return result;
+function evaluateExpression(expr: string): Result<number, string> {
+  const resolvedResult = resolveParentheses(expr, evaluateExpression);
+  if (!resolvedResult.ok) return resolvedResult;
+  return evaluateCore(resolvedResult.value);
 }
 
 /**
@@ -229,6 +109,7 @@ function evaluateTokens(tokens: Array<number | string>): number {
  *  - positive numeric string => ok(parsed number)
  *  - "100U8" format => ok(100)
  *  - expressions like "1U8 + 2U8" => ok(3)
+ *  - expressions with parentheses like "(4 + 2) * 3" => ok(18)
  *  - negative with suffix (e.g., "-100U8") => err(message)
  *  - out of range for type (e.g., "256U8") => err(message)
  *  - non-numeric => err(message)

@@ -96,4 +96,10 @@ describe("intepret - expressions", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(10);
   });
+
+  it("parses and evaluates expressions with parentheses like '(4 + 2) * 3'", () => {
+    const result = intepret("(4 + 2) * 3");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(18);
+  });
 });
