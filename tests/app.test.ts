@@ -182,6 +182,8 @@ describe("The application - Read tests", () => {
   });
 
   it("should respect operator precedence with multiplication", () => {
+    // Expression: A + B * C where A=5, B=3, C=4
+    // Evaluates as: A + (B * C) = 5 + (3 * 4) = 5 + 12 = 17
     assertValid("read U8 + read U8 * read U8", 17, 5, 3, 4);
   });
 });
