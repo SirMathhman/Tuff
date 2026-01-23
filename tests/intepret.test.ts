@@ -50,4 +50,10 @@ describe("intepret", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(3);
   });
+
+  it("returns err for expressions that overflow their common suffix type (1U8 + 255U8)", () => {
+    const result = intepret("1U8 + 255U8");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) expect(result.error).toContain("range");
+  });
 });

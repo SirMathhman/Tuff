@@ -70,6 +70,16 @@ function parseNumberWithSuffix(
   return ok({ num, suffix, len: negSign + digits.length + suffix.length });
 }
 
+function validateResult(
+  result: number,
+  suffix: string,
+): Result<number, string> {
+  if (suffix && !isInRange(result, suffix)) {
+    return err(getRangeError(suffix));
+  }
+  return ok(result);
+}
+
 function evaluateExpression(expr: string): Result<number, string> {
   const trimmed = expr.trim();
   const tokens = [];
@@ -100,12 +110,19 @@ function evaluateExpression(expr: string): Result<number, string> {
   let result = 0;
   let operator = "+";
   let i = 0;
+  let commonSuffix = "";
 
   while (i < tokens.length) {
     const token = tokens[i];
     if (token === undefined) return err("Invalid token");
     const parsed = parseNumberWithSuffix(token);
     if (!parsed.ok) return parsed;
+
+    if (i === 0 || (i === 2 && operator !== undefined)) {
+      commonSuffix = parsed.value.suffix;
+    } else if (parsed.value.suffix !== commonSuffix) {
+      return err("Mixed type suffixes in expression");
+    }
 
     if (operator === "+") result = result + parsed.value.num;
     else if (operator === "-") result = result - parsed.value.num;
@@ -118,7 +135,7 @@ function evaluateExpression(expr: string): Result<number, string> {
     }
   }
 
-  return ok(result);
+  return validateResult(result, commonSuffix);
 }
 
 /**
