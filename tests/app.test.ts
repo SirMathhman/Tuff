@@ -41,4 +41,8 @@ describe("interpret", () => {
   it("parses chained addition expressions", () => {
     expect(interpret("1 + 2 + 3")).toBe(6);
   });
+
+  it("parses mixed addition and subtraction", () => {
+    expect(interpret("2 + 3 - 4")).toBe(1);
+  });
 });
