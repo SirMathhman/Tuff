@@ -45,4 +45,8 @@ describe("interpret", () => {
   it("parses mixed addition and subtraction", () => {
     expect(interpret("2 + 3 - 4")).toBe(1);
   });
+
+  it("respects operator precedence: multiplication before subtraction", () => {
+    expect(interpret("2 * 3 - 4")).toBe(2);
+  });
 });

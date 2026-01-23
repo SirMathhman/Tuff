@@ -114,15 +114,16 @@ export function interpret(input: string): number {
     const s = input.trim();
     if (s === "") return 0;
 
-    // Check for binary operators (+, -, *, /)
-    // We need to find the operator that is not part of a number's sign
+    // Find the lowest precedence operator for correct left-to-right evaluation
+    // Precedence: + and - (lowest), then * and / (highest)
+    // We scan right-to-left to get the rightmost low-precedence operator
     let opIndex = -1;
     let op = "";
-    for (let i = 1; i < s.length; i++) {
+
+    // First, find the rightmost + or - that is not part of a number's sign
+    for (let i = s.length - 1; i >= 1; i--) {
         const ch = s[i];
-        if (ch === "+" || ch === "-" || ch === "*" || ch === "/") {
-            // Make sure it's not part of a typed suffix (e.g., "U8+" should split as "U8" and "+")
-            // Check if the previous character is not a letter or digit (to avoid matching inside suffixes)
+        if (ch === "+" || ch === "-") {
             const prev = s[i - 1];
             if (prev === undefined) continue;
             // If prev is a digit, space, or closing paren, this is likely an operator
@@ -130,6 +131,22 @@ export function interpret(input: string): number {
                 opIndex = i;
                 op = ch;
                 break;
+            }
+        }
+    }
+
+    // If no + or - found, look for * or /
+    if (opIndex === -1) {
+        for (let i = s.length - 1; i >= 1; i--) {
+            const ch = s[i];
+            if (ch === "*" || ch === "/") {
+                const prev = s[i - 1];
+                if (prev === undefined) continue;
+                if ((prev >= "0" && prev <= "9") || prev === " " || prev === ")") {
+                    opIndex = i;
+                    op = ch;
+                    break;
+                }
             }
         }
     }
@@ -144,9 +161,8 @@ export function interpret(input: string): number {
 
     const leftInfo = extractTypedInfo(leftStr);
 
-    const left = parseTypedNumber(leftStr);
-    // Recursively parse the right operand to handle chained operations
-    const right = interpret(rightStr);
+    const left = interpret(leftStr);
+    const right = parseTypedNumber(rightStr);
 
     let result = 0;
     switch (op) {
