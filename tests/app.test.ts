@@ -61,4 +61,16 @@ describe("interpret", () => {
   it("respects curly braces for grouping", () => {
     expect(interpret("(2 + { 3 }) * 4")).toBe(20);
   });
+
+  it("supports simple variable declaration", () => {
+    expect(interpret("let x : I32 = 3; x")).toBe(3);
+  });
+
+  it("handles variable declarations in grouped expressions", () => {
+    expect(interpret("{ let x : I32 = 3; x }")).toBe(3);
+  });
+
+  it("supports variable declarations with type annotations", () => {
+    expect(interpret("(2 + { let x : I32 = 3; x }) * 4")).toBe(20);
+  });
 });
