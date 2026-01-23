@@ -28,6 +28,37 @@ function resolveVariableValue(
   return parseNumberWithSuffix(valueStr);
 }
 
+function validateVariableDeclaration(
+  varName: string,
+  valueSuffix: string,
+  varTypeSuffix: string,
+  existingVars: Map<string, VariableEntry>,
+): Result<void, TuffError> {
+  if (existingVars.has(varName)) {
+    return err(
+      makeError(
+        "Variable already declared",
+        `Variable: ${varName}`,
+        "Cannot redeclare a variable in the same scope",
+        `Use a different variable name, e.g., let x2 = ...;`,
+      ),
+    );
+  }
+
+  if (!isTypeCompatible(valueSuffix, varTypeSuffix)) {
+    return err(
+      makeError(
+        "Incompatible type assignment",
+        `Variable: ${varTypeSuffix}, Value: ${valueSuffix}`,
+        "Cannot assign a larger type to a smaller type variable",
+        `Assign a compatible type, e.g., let x : U8 = 100U8; or let x : U16 = 100U8;`,
+      ),
+    );
+  }
+
+  return ok();
+}
+
 export function parseVariableDeclarations(
   expr: string,
   vars: Map<string, VariableEntry>,
@@ -70,16 +101,13 @@ export function parseVariableDeclarations(
 
     const { suffix: valueSuffix, num: valueNum } = resolved.value;
 
-    if (!isTypeCompatible(valueSuffix, varTypeSuffix)) {
-      return err(
-        makeError(
-          "Incompatible type assignment",
-          `Variable: ${varTypeSuffix}, Value: ${valueSuffix}`,
-          "Cannot assign a larger type to a smaller type variable",
-          `Assign a compatible type, e.g., let x : U8 = 100U8; or let x : U16 = 100U8;`,
-        ),
-      );
-    }
+    const validated = validateVariableDeclaration(
+      varName,
+      valueSuffix,
+      varTypeSuffix,
+      newVars,
+    );
+    if (!validated.ok) return validated;
 
     newVars.set(varName, {
       value: valueNum,
