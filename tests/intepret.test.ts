@@ -9,4 +9,8 @@ describe("intepret", () => {
   it("parses integer strings like '100'", () => {
     expect(intepret("100")).toBe(100);
   });
+
+  it("parses numeric strings with type suffixes like '100U8'", () => {
+    expect(intepret("100U8")).toBe(100);
+  });
 });

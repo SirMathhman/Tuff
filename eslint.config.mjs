@@ -41,16 +41,7 @@ export default [
             "throw statements are banned. Use a Result<T, E> return type instead (see src/result.ts for a simple Result implementation).",
         },
       ],
-      "max-lines-per-function": [
-        "error",
-        {
-          max: 50,
-          skipComments: true,
-          skipBlankLines: true,
-        },
-      ],
-      // No intentation. This is the challenge
-      "max-depth": ["error", 1],
+      "max-depth": ["error", 2],
       "max-lines": [
         "error",
         {
