@@ -278,4 +278,12 @@ describe("The application - Operator precedence tests", () => {
     // Type annotation says U8 but expression type is U16
     assertInvalid("let x : U8 = read U16; x");
   });
+
+  it("should allow implicit widening conversion from U8 to U16", () => {
+    // Expression: let x : U16 = read U8; x
+    // U8 can be implicitly widened to U16
+    // Binding: x = 42 (as U16)
+    // Return x = 42
+    assertValid("let x : U16 = read U8; x", 42, 42);
+  });
 });

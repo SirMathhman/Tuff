@@ -201,6 +201,31 @@ function validateTypeAnnotation(typeStr: string): Result<true, CompileError> {
   return ok(true);
 }
 
+function isTypeCompatible(fromType: string, toType: string): boolean {
+  if (fromType === toType) return true;
+  if (fromType === "" || toType === "") return true; // Unknown types are compatible
+
+  // Type widening compatibility: smaller types can be widened to larger types
+  const widthMap: Record<string, number> = {
+    I8: 1,
+    U8: 1,
+    I16: 2,
+    U16: 2,
+    I32: 4,
+    U32: 4,
+    I64: 8,
+    U64: 8,
+  };
+
+  const fromWidth = widthMap[fromType];
+  const toWidth = widthMap[toType];
+
+  if (fromWidth === undefined || toWidth === undefined) return false;
+
+  // Allow widening (smaller to larger)
+  return fromWidth <= toWidth;
+}
+
 function checkTypeMismatch(
   declaredType: string,
   expr: Expression,
@@ -208,7 +233,7 @@ function checkTypeMismatch(
   if (declaredType === "") return ok(true);
 
   const exprType = getExpressionType(expr);
-  if (exprType !== "" && exprType !== declaredType) {
+  if (exprType !== "" && !isTypeCompatible(exprType, declaredType)) {
     return err(
       createCompileError(
         "Type mismatch",
