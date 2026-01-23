@@ -5,6 +5,7 @@ import {
   validateResult,
   evaluateTokens,
 } from "./parser";
+import { parseVariableDeclarations } from "./variables";
 
 function makeError(
   cause: string,
@@ -62,64 +63,6 @@ function errorUndefinedToken(label: string): TuffError {
     "Token is undefined",
     "Ensure all tokens are valid",
   );
-}
-
-function parseVariableDeclarations(
-  expr: string,
-  vars: Map<string, number>,
-): Result<{ finalExpr: string; vars: Map<string, number> }, TuffError> {
-  let working = expr.trim();
-  const newVars = new Map(vars);
-
-  while (working.startsWith("let ")) {
-    let semicolonIdx = -1;
-    for (let i = 0; i < working.length; i = i + 1) {
-      if (working.charAt(i) === ";") {
-        semicolonIdx = i;
-        break;
-      }
-    }
-
-    if (semicolonIdx === -1) break;
-
-    const declStr = working.substring(0, semicolonIdx).trim();
-    working = working.substring(semicolonIdx + 1).trim();
-
-    const eqIdx = declStr.indexOf("=");
-    if (eqIdx === -1) break;
-
-    const nameTypePart = declStr.substring(4, eqIdx).trim();
-    const colonIdx = nameTypePart.indexOf(":");
-
-    let varName = "";
-    let varTypeSuffix = "";
-    if (colonIdx === -1) {
-      varName = nameTypePart;
-    } else {
-      varName = nameTypePart.substring(0, colonIdx).trim();
-      varTypeSuffix = nameTypePart.substring(colonIdx + 1).trim();
-    }
-
-    const valueStr = declStr.substring(eqIdx + 1).trim();
-
-    const parsed = parseNumberWithSuffix(valueStr);
-    if (!parsed.ok) return parsed;
-
-    if (varTypeSuffix !== "" && parsed.value.suffix !== "" && varTypeSuffix !== parsed.value.suffix) {
-      return err(
-        makeError(
-          "Type suffix mismatch",
-          `Variable: ${varTypeSuffix}, Value: ${parsed.value.suffix}`,
-          "Variable type and value type must match",
-          `Use matching suffixes, e.g., let x : U8 = 100U8; or let x = 100;`,
-        ),
-      );
-    }
-
-    newVars.set(varName, parsed.value.num);
-  }
-
-  return ok({ finalExpr: working, vars: newVars });
 }
 
 function validateTokens(

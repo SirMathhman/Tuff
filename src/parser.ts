@@ -1,5 +1,6 @@
 import { type Result, ok, err } from "./result";
 import { type TuffError } from "./error";
+import { isInRange, getRangeError } from "./types";
 
 function makeError(
   cause: string,
@@ -8,34 +9,6 @@ function makeError(
   fix: string,
 ): TuffError {
   return { cause, context, reason, fix };
-}
-
-function isInRange(n: number, suffix: string): boolean {
-  if (suffix === "U8") return n >= 0 && n <= 255;
-  if (suffix === "U16") return n >= 0 && n <= 65535;
-  if (suffix === "U32") return n >= 0 && n <= 4294967295;
-  if (suffix === "I8") return n >= -128 && n <= 127;
-  if (suffix === "I16") return n >= -32768 && n <= 32767;
-  if (suffix === "I32") return n >= -2147483648 && n <= 2147483647;
-  return true;
-}
-
-function getRangeError(suffix: string): TuffError {
-  const rangeMap: { [key: string]: string } = {
-    U8: "0-255",
-    U16: "0-65535",
-    U32: "0-4294967295",
-    I8: "-128 to 127",
-    I16: "-32768 to 32767",
-    I32: "-2147483648 to 2147483647",
-  };
-  const range = rangeMap[suffix] || "unknown range";
-  return makeError(
-    "Out of range",
-    `Type suffix: ${suffix}`,
-    `Value is outside the valid range for ${suffix}: ${range}`,
-    `Use a value within the ${suffix} range (${range})`,
-  );
 }
 
 function extractSuffix(
