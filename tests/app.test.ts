@@ -73,4 +73,8 @@ describe("interpret", () => {
   it("supports variable declarations with type annotations", () => {
     expect(interpret("(2 + { let x : I32 = 3; x }) * 4")).toBe(20);
   });
+
+  it("supports variable references in declarations", () => {
+    expect(interpret("let x : I32 = 100; let y : I32 = x; y")).toBe(100);
+  });
 });
