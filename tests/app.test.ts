@@ -37,4 +37,8 @@ describe("interpret", () => {
   it("parses addition with typed operand on left and untyped on right", () => {
     expect(interpret("1U8 + 2")).toBe(3);
   });
+
+  it("parses chained addition expressions", () => {
+    expect(interpret("1 + 2 + 3")).toBe(6);
+  });
 });

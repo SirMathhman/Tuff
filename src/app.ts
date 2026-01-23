@@ -143,10 +143,10 @@ export function interpret(input: string): number {
     const rightStr = s.slice(opIndex + 1).trim();
 
     const leftInfo = extractTypedInfo(leftStr);
-    const rightInfo = extractTypedInfo(rightStr);
 
     const left = parseTypedNumber(leftStr);
-    const right = parseTypedNumber(rightStr);
+    // Recursively parse the right operand to handle chained operations
+    const right = interpret(rightStr);
 
     let result = 0;
     switch (op) {
@@ -167,9 +167,13 @@ export function interpret(input: string): number {
             return 0;
     }
 
-    // If both operands have the same unsigned type, validate the result against that type
-    if (leftInfo.typeSize > 0 && leftInfo.typeSize === rightInfo.typeSize) {
-        validateUnsignedValue(result, leftInfo.typeSize);
+    // If the left operand is typed, validate the result against that type
+    // (only when the right side is a single typed number, not a chained expression)
+    if (leftInfo.typeSize > 0 && !rightStr.includes("+") && !rightStr.includes("-") && !rightStr.includes("*") && !rightStr.includes("/")) {
+        const rightInfo = extractTypedInfo(rightStr);
+        if (rightInfo.typeSize === leftInfo.typeSize) {
+            validateUnsignedValue(result, leftInfo.typeSize);
+        }
     }
 
     return result;
