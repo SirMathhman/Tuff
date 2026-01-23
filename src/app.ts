@@ -138,19 +138,28 @@ function parseBinaryExpression(
   operators: BinaryOp[],
   nextParser: ParserFunction,
 ): Result<Expression, CompileError> {
-  // Find the rightmost operator at depth 0 (not inside parentheses)
+  // Find the rightmost operator at depth 0 (not inside parentheses or braces)
   let operatorIndex = -1;
   let operator: BinaryOp | undefined;
-  let depth = 0;
+  let parenDepth = 0;
+  let braceDepth = 0;
 
   for (let i = source.length - 1; i >= 0; i--) {
     const char = source[i];
 
     if (char === ")") {
-      depth++;
+      parenDepth++;
     } else if (char === "(") {
-      depth--;
-    } else if (depth === 0 && operators.includes(char as BinaryOp)) {
+      parenDepth--;
+    } else if (char === "}") {
+      braceDepth++;
+    } else if (char === "{") {
+      braceDepth--;
+    } else if (
+      parenDepth === 0 &&
+      braceDepth === 0 &&
+      operators.includes(char as BinaryOp)
+    ) {
       operatorIndex = i;
       operator = char as BinaryOp;
       break;
@@ -200,26 +209,44 @@ function parseMultiplicationDivision(
   return parseBinaryExpression(source, ["*", "/"], parsePrimary);
 }
 
-function isFullyWrappedInParentheses(source: string): boolean {
-  if (!source.startsWith("(") || !source.endsWith(")")) {
-    return false;
-  }
-
+function checkBracketPairing(
+  source: string,
+  openChar: string,
+  closeChar: string,
+): boolean {
   let depth = 0;
   for (let i = 0; i < source.length; i++) {
-    if (source[i] === "(") depth++;
-    if (source[i] === ")") depth--;
+    if (source[i] === openChar) depth++;
+    if (source[i] === closeChar) depth--;
     if (depth === 0 && i < source.length - 1) {
       return false;
     }
   }
-
   return depth === 0;
 }
 
+function isFullyWrappedInBrackets(
+  source: string,
+): { type: "paren" | "brace" } | null {
+  const bracketPairs: Array<{ open: string; close: string; type: "paren" | "brace" }> = [
+    { open: "(", close: ")", type: "paren" },
+    { open: "{", close: "}", type: "brace" },
+  ];
+
+  for (const pair of bracketPairs) {
+    const isWrapped = source.startsWith(pair.open) && source.endsWith(pair.close) && checkBracketPairing(source, pair.open, pair.close);
+    if (isWrapped) {
+      return { type: pair.type };
+    }
+  }
+
+  return null;
+}
+
 function parsePrimary(source: string): Result<Expression, CompileError> {
-  // Check if it's a parenthesized expression
-  if (isFullyWrappedInParentheses(source)) {
+  // Check if it's a parenthesized or braced expression
+  const bracketInfo = isFullyWrappedInBrackets(source);
+  if (bracketInfo) {
     const inner = source.slice(1, -1).trim();
     return parseExpression(inner);
   }

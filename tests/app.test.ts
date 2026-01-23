@@ -204,4 +204,13 @@ describe("The application - Read tests", () => {
     // Evaluates as: (A + B) * C = (2 + 3) * 4 = 5 * 4 = 20
     assertValid("(read U8 + read U8) * read U8", 20, 2, 3, 4);
   });
+
+  it("should respect curly braces and operator precedence", () => {
+    // Expression: (read U8 + { read U8 }) * read U8
+    // Curly braces should behave like parentheses for grouping
+    // Parses as: (read U8 + { read U8 }) * read U8
+    // Left-to-right evaluation: A=2, B=3, C=4
+    // Evaluates as: (A + B) * C = (2 + 3) * 4 = 5 * 4 = 20
+    assertValid("(read U8 + { read U8 }) * read U8", 20, 2, 3, 4);
+  });
 });
