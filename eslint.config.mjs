@@ -39,7 +39,7 @@ export default [
       "max-lines": [
         "error",
         {
-          max: 350,
+          max: 200,
           skipComments: true,
           skipBlankLines: true,
         },

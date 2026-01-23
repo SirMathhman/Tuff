@@ -145,4 +145,10 @@ describe("interpret", () => {
   it("supports if-else with arithmetic", () => {
     expect(interpret("if (1 + 1 > 1) 10 else 20")).toBe(10);
   });
+
+  it("supports nested if-else-if-else expressions", () => {
+    expect(
+      interpret("let x : I32 = if (true) 3 else if (false) 4 else 5; x"),
+    ).toBe(3);
+  });
 });
