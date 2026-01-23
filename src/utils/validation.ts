@@ -57,3 +57,9 @@ export function createMixedSuffixError(
 export function isOperatorToken(token: string): boolean {
   return isOperator(token);
 }
+
+export function updateDepth(ch: string, currentDepth: number): number {
+  if (ch === "(" || ch === "{") return currentDepth + 1;
+  if (ch === ")" || ch === "}") return currentDepth - 1;
+  return currentDepth;
+}

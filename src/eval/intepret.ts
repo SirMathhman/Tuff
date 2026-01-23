@@ -8,7 +8,12 @@ import {
   isOperatorToken,
 } from "../utils/validation";
 import { parseIfElseTopLevel, parseIfElse } from "./ifelse";
-import { errorUndefinedToken, determineSuffix } from "./intepret-helpers";
+import {
+  errorUndefinedToken,
+  determineSuffix,
+  splitIfStatement,
+  tokenizeExpression,
+} from "./intepret-helpers";
 
 function hasOpenParen(s: string): boolean {
   for (let i = 0; i < s.length; i = i + 1) {
@@ -120,29 +125,18 @@ function evaluateCore(
 
   // Check for if-else expression, evaluateExpression
   if (trimmedExpr.startsWith("if")) {
+    const split = splitIfStatement(trimmedExpr);
+    if (split) {
+      const ifResult = parseIfElse(split.ifPart, newVars, evaluateExpression);
+      if (!ifResult.ok) return ifResult;
+      return split.remaining
+        ? evaluateExpression(split.remaining, newVars)
+        : ifResult;
+    }
     return parseIfElse(trimmedExpr, newVars, evaluateExpression);
   }
 
-  const tokens = [];
-  let current = "";
-
-  for (let i = 0; i < trimmedExpr.length; i = i + 1) {
-    const c = trimmedExpr[i];
-    const nextC = i + 1 < trimmedExpr.length ? trimmedExpr[i + 1] : "";
-    if ((c === "|" || c === "&") && nextC === c) {
-      if (current) tokens.push(current);
-      tokens.push(c + c);
-      current = "";
-      i = i + 1;
-    } else if (c === " ") {
-      if (current) tokens.push(current);
-      current = "";
-    } else {
-      current = current + c;
-    }
-  }
-
-  if (current) tokens.push(current);
+  const tokens = tokenizeExpression(trimmedExpr);
   if (!tokens.length) return ok(0);
 
   if (tokens.length === 1) {

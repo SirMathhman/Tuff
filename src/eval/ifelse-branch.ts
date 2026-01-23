@@ -16,11 +16,25 @@ function getBranchTypeSuffix(
   return parsed.ok ? parsed.value.suffix : "";
 }
 
+function isAssignment(branch: string): boolean {
+  const trimmed = branch.trim(),
+    eqIdx = trimmed.indexOf("=");
+  if (eqIdx === -1) return false;
+  const beforeEq = trimmed.substring(0, eqIdx).trim();
+  return (
+    !beforeEq.includes(" ") &&
+    beforeEq.length > 0 &&
+    beforeEq[0] >= "a" &&
+    beforeEq[0] <= "z"
+  );
+}
+
 export function validateBranchTypes(
   thenBranch: string,
   elseBranch: string,
   vars: Map<string, VariableEntry>,
 ): Result<void, TuffError> {
+  if (isAssignment(thenBranch) && isAssignment(elseBranch)) return ok();
   const thenType = getBranchTypeSuffix(thenBranch, vars),
     elseType = getBranchTypeSuffix(elseBranch, vars);
   if (thenType && elseType && !isTypeCompatible(thenType, elseType)) {

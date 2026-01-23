@@ -54,9 +54,17 @@ function evaluateIfExpression({
   const { thenBranch, elseBranch } = branchResult.value;
   const branchValidation = validateBranchTypes(thenBranch, elseBranch, vars);
   if (!branchValidation.ok) return branchValidation;
-  return evalCond.value !== 0
-    ? evaluateExpression(thenBranch, vars)
-    : evaluateExpression(elseBranch, vars);
+  const selectedBranch = evalCond.value !== 0 ? thenBranch : elseBranch,
+    trimmedBranch = selectedBranch.trim();
+  if (trimmedBranch.includes("=") && !trimmedBranch.startsWith("let ")) {
+    const parsed = parseVariableDeclarations(
+      trimmedBranch + ";",
+      vars,
+      evaluateExpression,
+    );
+    return parsed.ok ? { ok: true, value: 0 } : parsed;
+  }
+  return evaluateExpression(selectedBranch, vars);
 }
 
 export function parseIfElseTopLevel(

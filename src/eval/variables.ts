@@ -2,6 +2,7 @@ import { type Result, ok, err } from "../core/result";
 import { type TuffError } from "../core/error";
 import { parseLiteral } from "../parse/parser";
 import { isTypeCompatible } from "../utils/types";
+import { updateDepth } from "../utils/validation";
 
 export interface VariableEntry {
   value: number;
@@ -169,12 +170,12 @@ export function parseVariableDeclarations(
   while (working.length > 0) {
     const isDecl = working.startsWith("let ");
     if (!isDecl && (newVars.size === 0 || !working.includes("="))) break;
+    if (!isDecl && working.startsWith("if")) break;
     semicolonIdx = -1;
     depth = 0;
     for (let i = 0; i < working.length; i = i + 1) {
       const ch = working.charAt(i);
-      if (ch === "(" || ch === "{") depth = depth + 1;
-      if (ch === ")" || ch === "}") depth = depth - 1;
+      depth = updateDepth(ch, depth);
       if (ch === ";" && depth === 0) {
         semicolonIdx = i;
         break;
