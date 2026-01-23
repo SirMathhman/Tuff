@@ -106,7 +106,7 @@ function extractTypeSize(typeStr: string): number {
     return sizeStr.length > 0 ? Number(sizeStr) : 0;
 }
 
-function interpretWithScope(input: string, scope: Map<string, number> = new Map()): number {
+function interpretWithScope(input: string, scope: Map<string, number> = new Map(), typeMap: Map<string, number> = new Map()): number {
     const s = input.trim();
     if (s === "") return 0;
 
@@ -122,16 +122,19 @@ function interpretWithScope(input: string, scope: Map<string, number> = new Map(
                 const declaredType = colonIndex !== -1 ? varPart.slice(colonIndex + 1).trim() : "";
                 if (scope.has(varName)) throw new Error(`variable '${varName}' already declared in this scope`);
                 const exprStr = declStr.slice(eqIndex + 1).trim();
-                const varValue = interpretWithScope(exprStr, scope);
+                const varValue = interpretWithScope(exprStr, scope, typeMap);
                 const valueInfo = extractTypedInfo(exprStr);
+                let valueType = valueInfo.typeSize;
+                if (valueType === 0 && scope.has(exprStr)) valueType = typeMap.get(exprStr) || 0;
                 if (declaredType) {
                     const declTypeSize = extractTypeSize(declaredType);
-                    if (declTypeSize > 0 && valueInfo.typeSize > 0 && valueInfo.typeSize > declTypeSize) {
-                        throw new Error(`cannot assign type of size ${valueInfo.typeSize} to ${declaredType}`);
+                    if (declTypeSize > 0 && valueType > 0 && valueType > declTypeSize) {
+                        throw new Error(`cannot assign type of size ${valueType} to ${declaredType}`);
                     }
                 }
                 scope.set(varName, varValue);
-                return interpretWithScope(s.slice(semiIndex + 1).trim(), scope);
+                if (valueType > 0) typeMap.set(varName, valueType);
+                return interpretWithScope(s.slice(semiIndex + 1).trim(), scope, typeMap);
             }
         }
     }
@@ -141,16 +144,16 @@ function interpretWithScope(input: string, scope: Map<string, number> = new Map(
         return parseTypedNumber(s);
     }
     if (s.includes("(") || s.includes("{") || s.includes("[")) {
-        const processed = evaluateGroupedExpressionsWithScope(s, scope);
-        if (processed !== s) return interpretWithScope(processed, scope);
+        const processed = evaluateGroupedExpressionsWithScope(s, scope, typeMap);
+        if (processed !== s) return interpretWithScope(processed, scope, typeMap);
     }
     const { index: opIndex, operator: op } = findOperatorIndex(s);
     if (opIndex === -1) return parseTypedNumber(s);
     const leftStr = s.slice(0, opIndex).trim();
     const rightStr = s.slice(opIndex + 1).trim();
     const leftInfo = extractTypedInfo(leftStr);
-    const left = interpretWithScope(leftStr, scope);
-    const right = interpretWithScope(rightStr, scope);
+    const left = interpretWithScope(leftStr, scope, typeMap);
+    const right = interpretWithScope(rightStr, scope, typeMap);
     return performBinaryOp(left, op, right, leftInfo, rightStr);
 }
 
@@ -167,7 +170,7 @@ function findMatchingClose(s: string, openIndex: number, openChar: string, close
     return -1;
 }
 
-function evaluateGroupedExpressionsWithScope(s: string, scope: Map<string, number>): string {
+function evaluateGroupedExpressionsWithScope(s: string, scope: Map<string, number>, typeMap: Map<string, number>): string {
     const pairs: Array<[string, string]> = [["(", ")"], ["{", "}"], ["[", "]"]];
 
     for (const [openChar, closeChar] of pairs) {
@@ -178,9 +181,9 @@ function evaluateGroupedExpressionsWithScope(s: string, scope: Map<string, numbe
         if (closeIndex === -1) throw new Error(`unmatched opening ${openChar}`);
 
         const inside = s.slice(openIndex + 1, closeIndex);
-        const result = interpretWithScope(inside, scope);
+        const result = interpretWithScope(inside, scope, typeMap);
         const replaced = s.slice(0, openIndex) + String(result) + s.slice(closeIndex + 1);
-        return evaluateGroupedExpressionsWithScope(replaced, scope);
+        return evaluateGroupedExpressionsWithScope(replaced, scope, typeMap);
     }
 
     return s;
@@ -212,5 +215,5 @@ function parseTypedNumber(s: string): number {
 }
 
 export function interpret(input: string): number {
-    return interpretWithScope(input, new Map());
+    return interpretWithScope(input, new Map(), new Map());
 }

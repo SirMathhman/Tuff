@@ -93,4 +93,8 @@ describe("interpret", () => {
   it("throws when assigning wider type to narrower type variable", () => {
     expect(() => interpret("let x : U8 = 100U16; x")).toThrow();
   });
+
+  it("throws when assigning variable of wider type to narrower type variable", () => {
+    expect(() => interpret("let x = 100U16; let y : U8 = x; y")).toThrow();
+  });
 });
