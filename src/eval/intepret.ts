@@ -16,6 +16,7 @@ import {
   hasComparisonOperator,
 } from "./intepret-helpers";
 import { parseLoop } from "./loop";
+import { handleWhileExpression } from "./while-helpers";
 
 function hasOpenParen(s: string): boolean {
   for (let i = 0; i < s.length; i = i + 1) {
@@ -131,6 +132,11 @@ function evaluateCore(
 
   const trimmedExpr = finalExpr.trim();
 
+  // Check for while expression
+  if (trimmedExpr.startsWith("while")) {
+    return handleWhileExpression(trimmedExpr, newVars, evaluateExpression);
+  }
+
   // Check for loop expression
   if (trimmedExpr.startsWith("loop")) {
     return parseLoop(trimmedExpr, newVars, evaluateExpression);
@@ -179,6 +185,11 @@ function evaluateExpression(
   vars: Map<string, VariableEntry>,
 ): Result<number, TuffError> {
   const trimmed = expr.trim();
+
+  // Handle while expressions before resolving parentheses
+  if (trimmed.startsWith("while")) {
+    return evaluateCore(trimmed, vars);
+  }
 
   // Handle loop expressions before resolving parentheses
   if (trimmed.startsWith("loop")) {

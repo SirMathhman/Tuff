@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import { intepret } from "../src/eval/intepret";
-import { isOk } from "../src/core/result";
+import { intepret } from "../../src/eval/intepret";
+import { isOk } from "../../src/core/result";
 
 describe("Loop expressions - basic", () => {
   it("evaluates simple loop with break", () => {

@@ -1,11 +1,11 @@
 #!/bin/bash
 export PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH"
 bun test --coverage\
+	&& JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH" ./tools/pmd-bin-7.20.0/bin/pmd cpd --dir src tests --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals\
+	&& npm run dupfind\
 	&& bun run lint:fix\
 	&& bun run format\
 	&& bun run check:circular\
 	&& bun run check:structure\
 	&& bun run check:subdir-deps\
-	&& JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH" ./tools/pmd-bin-7.20.0/bin/pmd cpd --dir src tests --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals\
-	&& npm run dupfind\
 	&& npm run visualize

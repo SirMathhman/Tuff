@@ -168,6 +168,8 @@ export function parseVariableDeclarations(
     const isDecl = working.startsWith("let ");
     if (!isDecl && (newVars.size === 0 || !working.includes("="))) break;
     if (!isDecl && working.startsWith("if")) break;
+    if (!isDecl && working.startsWith("while")) break;
+    if (!isDecl && working.startsWith("loop")) break;
     semicolonIdx = -1;
     depth = 0;
     for (let i = 0; i < working.length; i = i + 1) {

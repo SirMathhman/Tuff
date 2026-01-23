@@ -7,20 +7,9 @@ import {
   processLoopStatement,
   splitLoopStatements,
 } from "./loop-helpers";
+import { syncMutableVars } from "./loop-utils";
 
 const MAX_ITERATIONS = 10000;
-
-function syncMutableVars(
-  iterationVars: Map<string, VariableEntry>,
-  loopVars: Map<string, VariableEntry>,
-): void {
-  for (const [key, entry] of iterationVars.entries()) {
-    const originalEntry = loopVars.get(key);
-    if (originalEntry && originalEntry.isMutable) {
-      originalEntry.value = entry.value;
-    }
-  }
-}
 
 function processLoopBody(
   body: string,

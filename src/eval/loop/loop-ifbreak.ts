@@ -1,4 +1,5 @@
 import { extractValueExpression } from "./loop-common";
+import { findMatchingBrace } from "./loop-utils";
 
 export function findIfBreak(stmt: string): {
   hasIf: boolean;
@@ -13,19 +14,7 @@ export function findIfBreak(stmt: string): {
     return { hasIf: false, condition: "", breakValue: "" };
   }
 
-  let depth = 0,
-    condEnd = -1;
-  for (let i = 0; i < afterIf.length; i = i + 1) {
-    const ch = afterIf.charAt(i);
-    if (ch === "(") depth = depth + 1;
-    if (ch === ")") {
-      depth = depth - 1;
-      if (depth === 0) {
-        condEnd = i;
-        break;
-      }
-    }
-  }
+  const condEnd = findMatchingBrace(afterIf, "(", ")");
 
   if (condEnd === -1) {
     return { hasIf: false, condition: "", breakValue: "" };
