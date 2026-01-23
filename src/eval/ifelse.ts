@@ -10,6 +10,7 @@ import {
   checkIfNotStartsWith,
   validateConditionIsBoolean,
 } from "./ifelse-helpers";
+import { validateBranchTypes } from "./ifelse-branch";
 
 interface IfExpressionParams {
   exprToProcess: string;
@@ -51,6 +52,8 @@ function evaluateIfExpression({
     branchResult = extractBranches(exprToProcess, searchPos, elseIdx);
   if (!branchResult.ok) return branchResult;
   const { thenBranch, elseBranch } = branchResult.value;
+  const branchValidation = validateBranchTypes(thenBranch, elseBranch, vars);
+  if (!branchValidation.ok) return branchValidation;
   return evalCond.value !== 0
     ? evaluateExpression(thenBranch, vars)
     : evaluateExpression(elseBranch, vars);

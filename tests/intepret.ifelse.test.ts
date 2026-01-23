@@ -42,4 +42,11 @@ describe("intepret - expressions: if-else", () => {
     const result = intepret("let x = 100; if (x) 2 else 3");
     expect(isOk(result)).toBe(false);
   });
+
+  it("returns err for mismatched branch types like 'let x : Bool = false; let y : I32 = if ( true ) x else 100; y'", () => {
+    const result = intepret(
+      "let x : Bool = false; let y : I32 = if ( true ) x else 100; y",
+    );
+    expect(isOk(result)).toBe(false);
+  });
 });

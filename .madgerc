@@ -1,10 +1,10 @@
 {
   "fontSize": "10px",
   "fileExtensions": ["ts", "tsx"],
+  "layout": "neato",
   "graphVizOptions": {
     "G": {
-      "rankdir": "TB",
-      "splines": "ortho"
+      "overlap": "false"
     }
   }
 }
