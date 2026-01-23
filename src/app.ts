@@ -81,31 +81,29 @@ function findOperatorIndex(s: string): { index: number; operator: string } {
 function performBinaryOp(left: number, op: string, right: number, leftInfo: { value: number; typeSize: number }, rightStr: string): number {
     let result = 0;
     switch (op) {
-        case "+":
-            result = left + right;
-            break;
-        case "-":
-            result = left - right;
-            break;
-        case "*":
-            result = left * right;
-            break;
-        case "/":
-            if (right === 0) throw new Error("division by zero");
-            result = Math.floor(left / right);
-            break;
-        default:
-            return 0;
+        case "+": result = left + right; break;
+        case "-": result = left - right; break;
+        case "*": result = left * right; break;
+        case "/": if (right === 0) throw new Error("division by zero"); result = Math.floor(left / right); break;
+        default: return 0;
     }
-
     if (leftInfo.typeSize > 0 && !rightStr.includes("+") && !rightStr.includes("-") && !rightStr.includes("*") && !rightStr.includes("/")) {
         const rightInfo = extractTypedInfo(rightStr);
-        if (rightInfo.typeSize === leftInfo.typeSize) {
-            validateUnsignedValue(result, leftInfo.typeSize);
-        }
+        if (rightInfo.typeSize === leftInfo.typeSize) validateUnsignedValue(result, leftInfo.typeSize);
     }
-
     return result;
+}
+
+function extractTypeSize(typeStr: string): number {
+    const t = typeStr.trim();
+    if (t[0] !== "U" && t[0] !== "I") return 0;
+    let sizeStr = "";
+    for (let j = 1; j < t.length; j++) {
+        const ch = t[j];
+        if (ch && ch >= "0" && ch <= "9") sizeStr += ch;
+        else break;
+    }
+    return sizeStr.length > 0 ? Number(sizeStr) : 0;
 }
 
 function interpretWithScope(input: string, scope: Map<string, number> = new Map()): number {
@@ -117,48 +115,42 @@ function interpretWithScope(input: string, scope: Map<string, number> = new Map(
         if (semiIndex !== -1) {
             const declStr = s.slice(0, semiIndex);
             const eqIndex = declStr.indexOf("=");
-
             if (eqIndex !== -1) {
                 const varPart = declStr.slice(4, eqIndex).trim();
-                const varName = varPart.includes(":") ? (varPart.split(":")[0] || varPart).trim() : varPart;
-                if (scope.has(varName)) {
-                    throw new Error(`variable '${varName}' already declared in this scope`);
-                }
+                const colonIndex = varPart.indexOf(":");
+                const varName = colonIndex !== -1 ? varPart.slice(0, colonIndex).trim() : varPart;
+                const declaredType = colonIndex !== -1 ? varPart.slice(colonIndex + 1).trim() : "";
+                if (scope.has(varName)) throw new Error(`variable '${varName}' already declared in this scope`);
                 const exprStr = declStr.slice(eqIndex + 1).trim();
                 const varValue = interpretWithScope(exprStr, scope);
+                const valueInfo = extractTypedInfo(exprStr);
+                if (declaredType) {
+                    const declTypeSize = extractTypeSize(declaredType);
+                    if (declTypeSize > 0 && valueInfo.typeSize > 0 && valueInfo.typeSize > declTypeSize) {
+                        throw new Error(`cannot assign type of size ${valueInfo.typeSize} to ${declaredType}`);
+                    }
+                }
                 scope.set(varName, varValue);
-                const afterDecl = s.slice(semiIndex + 1).trim();
-                return interpretWithScope(afterDecl, scope);
+                return interpretWithScope(s.slice(semiIndex + 1).trim(), scope);
             }
         }
     }
 
-    if (scope.has(s.trim())) {
-        return scope.get(s.trim())!;
-    }
-
+    if (scope.has(s.trim())) return scope.get(s.trim())!;
     if (!s.includes("+") && !s.includes("-") && !s.includes("*") && !s.includes("/") && !s.includes("(") && !s.includes("{") && !s.includes("[")) {
         return parseTypedNumber(s);
     }
-
     if (s.includes("(") || s.includes("{") || s.includes("[")) {
         const processed = evaluateGroupedExpressionsWithScope(s, scope);
-        if (processed !== s) {
-            return interpretWithScope(processed, scope);
-        }
+        if (processed !== s) return interpretWithScope(processed, scope);
     }
-
     const { index: opIndex, operator: op } = findOperatorIndex(s);
-    if (opIndex === -1) {
-        return parseTypedNumber(s);
-    }
-
+    if (opIndex === -1) return parseTypedNumber(s);
     const leftStr = s.slice(0, opIndex).trim();
     const rightStr = s.slice(opIndex + 1).trim();
     const leftInfo = extractTypedInfo(leftStr);
     const left = interpretWithScope(leftStr, scope);
     const right = interpretWithScope(rightStr, scope);
-
     return performBinaryOp(left, op, right, leftInfo, rightStr);
 }
 

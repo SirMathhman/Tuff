@@ -85,4 +85,12 @@ describe("interpret", () => {
   it("throws on duplicate variable declaration in same scope", () => {
     expect(() => interpret("let x = 100; let x = 200; x")).toThrow();
   });
+
+  it("allows narrower type assignment to wider type variable", () => {
+    expect(interpret("let x : U16 = 100U8; x")).toBe(100);
+  });
+
+  it("throws when assigning wider type to narrower type variable", () => {
+    expect(() => interpret("let x : U8 = 100U16; x")).toThrow();
+  });
 });
