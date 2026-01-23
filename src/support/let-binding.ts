@@ -51,6 +51,8 @@ export function allocateVariable(
   mutable?: boolean,
   declarationOnly?: boolean,
   sourceArrayName?: string,
+  functionBody?: string,
+  functionParameters?: { name: string; type: string }[],
 ): { context: VariableContext; address: number } {
   // Calculate start address based on all previous variables' memory usage
   let address = 904;
@@ -69,6 +71,8 @@ export function allocateVariable(
         mutable,
         declarationOnly,
         sourceArrayName,
+        functionBody,
+        functionParameters,
       },
     ],
     address,

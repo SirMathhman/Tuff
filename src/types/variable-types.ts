@@ -8,6 +8,8 @@ export interface VariableBinding {
   mutable?: boolean;
   declarationOnly?: boolean;
   sourceArrayName?: string; // For slices: tracks which array they were derived from
+  functionBody?: string; // For function variables: stores the function body
+  functionParameters?: { name: string; type: string }[]; // For function variables: parameter info
 }
 
 export type VariableContext = VariableBinding[];

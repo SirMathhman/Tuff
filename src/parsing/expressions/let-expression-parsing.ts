@@ -64,6 +64,9 @@ function handleFunctionDefinitionBinding(
     varType,
     mutable,
     false,
+    undefined,
+    funcDef.body,
+    funcDef.parameters,
   );
 
   return { newContext, newFunctionContext };
@@ -120,12 +123,27 @@ function buildVariableAllocation(
   varType: string | undefined;
   newContext: VariableContext;
   address: number;
+  functionBody?: string;
+  functionParameters?: { name: string; type: string }[];
 } {
   const varType = typeAnnotation || extractExpressionType(exprPart, context);
   const trimmedExpr = exprPart.trim();
   const sourceArrayName = isReferenceOperator(trimmedExpr)
     ? extractReferenceTarget(trimmedExpr)
     : undefined;
+
+  // Check if this is a reference to another function variable
+  let functionBody: string | undefined;
+  let functionParameters: { name: string; type: string }[] | undefined;
+  
+  // Simple identifier check for function variable reference
+  if (!trimmedExpr.includes(" ") && !trimmedExpr.includes("(")) {
+    const sourceBinding = context.find((b) => b.name === trimmedExpr);
+    if (sourceBinding?.functionBody && sourceBinding?.functionParameters) {
+      functionBody = sourceBinding.functionBody;
+      functionParameters = sourceBinding.functionParameters;
+    }
+  }
 
   const { context: newContext, address } = allocateVariable(
     context,
@@ -134,9 +152,11 @@ function buildVariableAllocation(
     mutable,
     false,
     sourceArrayName,
+    functionBody,
+    functionParameters,
   );
 
-  return { varType, newContext, address };
+  return { varType, newContext, address, functionBody, functionParameters };
 }
 
 function parseInitializedBinding(

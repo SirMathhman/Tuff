@@ -29,10 +29,17 @@ function collectFunctionVariables(source: string): {
   const functionVars = new Set<string>();
 
   const remaining = processLetBindings(source, (expr, varName) => {
-    if (
+    const isFuncDef =
       expr.startsWith("()") ||
-      (expr.startsWith("(") && expr.includes("=>"))
-    ) {
+      (expr.startsWith("(") && expr.includes("=>"));
+    
+    // Check if expr is a reference to another function variable
+    const isFuncRef = isSimpleIdentifier(expr) && functionVars.has(expr);
+    
+    // Check if expr is an if-expression (could select between functions)
+    const isIfExpr = expr.startsWith("if");
+
+    if (isFuncDef || isFuncRef || isIfExpr) {
       functionVars.add(varName);
     }
   });
@@ -40,10 +47,43 @@ function collectFunctionVariables(source: string): {
   return { functionVars, remaining };
 }
 
+function isFunctionReferenceAssignment(expr: string): boolean {
+  // Check if this is just a simple variable reference or if-expression
+  // These are allowed when assigning function values
+  const trimmed = expr.trim();
+  
+  // Allow simple variable references (e.g., "let chosen = add")
+  if (isSimpleIdentifier(trimmed)) {
+    return true;
+  }
+  
+  // Allow if-expressions (e.g., "let chosen = if (cond) add else multiply")
+  if (trimmed.startsWith("if")) {
+    return true;
+  }
+  
+  return false;
+}
+
+function isSimpleIdentifier(text: string): boolean {
+  if (text.length === 0) return false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (!char || !isIdentifierChar(char, i === 0)) return false;
+  }
+  return true;
+}
+
 function findFunctionVarInExpression(
   expr: string,
   functionVars: Set<string>,
+  allowFunctionRef: boolean = false,
 ): string | undefined {
+  // Allow function references when assigning to variables (only if flag is set)
+  if (allowFunctionRef && isFunctionReferenceAssignment(expr)) {
+    return undefined;
+  }
+  
   for (const funcVar of functionVars) {
     if (expr === funcVar) {
       return funcVar;
@@ -73,7 +113,8 @@ function checkFunctionVarInExpressions(
     if (!comp) break;
 
     const expr = comp.exprPart.trim();
-    const uncalledVar = findFunctionVarInExpression(expr, functionVars);
+    // Allow function references in let bindings (for variable assignment)
+    const uncalledVar = findFunctionVarInExpression(expr, functionVars, true);
     if (uncalledVar) {
       return buildUncalledVarError(uncalledVar, source.length);
     }
@@ -89,7 +130,8 @@ function checkFunctionVarInTrailing(
   functionVars: Set<string>,
 ): CompileError | undefined {
   const trimmed = remaining.trim();
-  const uncalledVar = findFunctionVarInExpression(trimmed, functionVars);
+  // Do NOT allow function references in trailing expressions
+  const uncalledVar = findFunctionVarInExpression(trimmed, functionVars, false);
   if (!uncalledVar) return undefined;
   return buildUncalledVarError(uncalledVar, trimmed.length);
 }
@@ -172,14 +214,20 @@ function isFunctionDefinitionExpression(expr: string): boolean {
   );
 }
 
-function collectNonFunctionVariables(source: string): Set<string> {
+function collectNonFunctionVariables(
+  source: string,
+  functionVars: Set<string>,
+): Set<string> {
   const nonFunctionVars = new Set<string>();
 
   processLetBindings(source, (expr, varName) => {
     const isFuncDef = isFunctionDefinitionExpression(expr);
     const couldBeFunc = isFuncDef || expr.startsWith("if");
+    
+    // Also check if expression is a reference to another function variable
+    const isFuncRef = isSimpleIdentifier(expr) && functionVars.has(expr);
 
-    if (!couldBeFunc) {
+    if (!couldBeFunc && !isFuncRef) {
       nonFunctionVars.add(varName);
     }
   });
@@ -231,6 +279,6 @@ export function detectUncalledFunctionReference(
   if (uncalledError) return uncalledError;
 
   // Check if non-function variables are being called
-  const nonFunctionVars = collectNonFunctionVariables(source);
+  const nonFunctionVars = collectNonFunctionVariables(source, functionVars);
   return checkNonFunctionCalls(source, nonFunctionVars);
 }

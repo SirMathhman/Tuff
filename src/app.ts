@@ -217,6 +217,7 @@ function tryFunctionOrLetPatterns(
   // Try parsing as function call
   const funcCallResult = tryFunctionCall(
     trimmed,
+    context,
     functionContext,
     createCompileFunc(functionContext),
   );
