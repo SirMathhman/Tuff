@@ -1,4 +1,8 @@
-import { handleVarDecl, evaluateGroupedExpressionsWithScope } from "./scope";
+import {
+  handleVarDecl,
+  evaluateGroupedExpressionsWithScope,
+} from "./scope";
+import { handleMatch } from "./match";
 import { findOperatorIndex, performBinaryOp } from "./operators";
 import { parseTypedNumber, extractTypedInfo } from "./parser";
 
@@ -11,8 +15,23 @@ export function interpretWithScope(
   const s = input.trim();
   if (s === "") return 0;
 
-  const declResult = handleVarDecl(s, scope, typeMap, mutMap, interpretWithScope);
+  const declResult = handleVarDecl(
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    interpretWithScope,
+  );
   if (declResult !== undefined) return declResult;
+
+  const matchResult = handleMatch(
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    interpretWithScope,
+  );
+  if (matchResult !== undefined) return matchResult;
 
   if (s.indexOf("if ") === 0) {
     const cIdx = s.indexOf(")");
@@ -99,7 +118,11 @@ export function interpretWithScope(
   ) {
     return parseTypedNumber(s);
   }
-  if (s.includes("(") || s.includes("{") || s.includes("[")) {
+  const trimmedS = s.trim();
+  const isMatch =
+    trimmedS.startsWith("match") &&
+    trimmedS.slice(5).trimStart().startsWith("(");
+  if ((s.includes("(") || s.includes("{") || s.includes("[")) && !isMatch) {
     const processed = evaluateGroupedExpressionsWithScope(
       s,
       scope,

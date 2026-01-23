@@ -151,4 +151,10 @@ describe("interpret", () => {
       interpret("let x : I32 = if (true) 3 else if (false) 4 else 5; x"),
     ).toBe(3);
   });
+
+  it("supports match expression with literal pattern", () => {
+    expect(
+      interpret("let x : I32 = match (100) { case 100 => 3; case _ => 2; } x"),
+    ).toBe(3);
+  });
 });
