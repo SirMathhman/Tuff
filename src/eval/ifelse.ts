@@ -8,7 +8,17 @@ import {
   extractBranches,
   evaluateIfCondition,
   checkIfNotStartsWith,
+  validateConditionIsBoolean,
 } from "./ifelse-helpers";
+
+interface IfExpressionParams {
+  exprToProcess: string;
+  vars: Map<string, VariableEntry>;
+  evaluateExpression: (
+    expr: string,
+    vars: Map<string, VariableEntry>,
+  ) => Result<number, TuffError>;
+}
 
 interface IfExpressionParams {
   exprToProcess: string;
@@ -30,8 +40,10 @@ function evaluateIfExpression({
   if (!posResult.ok) return posResult;
   const condResult = extractCondition(exprToProcess, posResult.value);
   if (!condResult.ok) return condResult;
-  const { condition, pos } = condResult.value,
-    evalCond = evaluateExpression(condition, vars);
+  const { condition, pos } = condResult.value;
+  const condValidation = validateConditionIsBoolean(condition);
+  if (!condValidation.ok) return condValidation;
+  const evalCond = evaluateExpression(condition, vars);
   if (!evalCond.ok) return evalCond;
   const evalIfResult = evaluateIfCondition(exprToProcess, pos);
   if (!evalIfResult.ok) return evalIfResult;

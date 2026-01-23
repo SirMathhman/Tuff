@@ -13,6 +13,7 @@ core/ → parse/ → eval/
 ```
 
 **NEVER** create circular dependencies between these subdirectories. The `check-subdir-deps` tool will reject commits that violate this. Valid patterns:
+
 - ✅ `eval/` importing from `core/`, `parse/`, `utils/`
 - ✅ `parse/` importing from `core/`, `utils/`
 - ❌ `core/` importing from `eval/` or `parse/`
@@ -31,14 +32,20 @@ function divide(a: number, b: number): number {
 
 // ✅ CORRECT
 function divide(a: number, b: number): Result<number, TuffError> {
-  if (b === 0) return err({ cause: "Division by zero", context: "...", reason: "...", fix: "..." });
+  if (b === 0)
+    return err({
+      cause: "Division by zero",
+      context: "...",
+      reason: "...",
+      fix: "...",
+    });
   return ok(a / b);
 }
 
 // ✅ Pattern when consuming Result
 const result = divide(10, 0);
-if (!result.ok) return result;  // Propagate error
-const value = result.value;     // Safe to access
+if (!result.ok) return result; // Propagate error
+const value = result.value; // Safe to access
 ```
 
 ## Code Quality Constraints (ENFORCED BY PRE-COMMIT)
@@ -75,21 +82,24 @@ Follow this 4-layer pattern (see `src/eval/ifelse.ts` + `ifelse-helpers.ts` for 
 
 ```typescript
 // Example: Adding support for new expressions
-export function evaluateExpression(expr: string, vars: Map<string, VariableEntry>): Result<number, TuffError> {
+export function evaluateExpression(
+  expr: string,
+  vars: Map<string, VariableEntry>,
+): Result<number, TuffError> {
   const trimmed = expr.trim();
-  
+
   // 1. Check for variable declarations first
   if (trimmed.startsWith("let ")) {
     const parsed = parseVariableDeclarations(trimmed, vars, evaluateExpression);
     if (!parsed.ok) return parsed;
     return evaluateExpression(parsed.value.finalExpr, parsed.value.vars);
   }
-  
+
   // 2. Check for if-else before parentheses resolution
   if (trimmed.startsWith("if")) {
     return parseIfElseTopLevel(trimmed, vars, evaluateExpression);
   }
-  
+
   // 3. Resolve parentheses/braces recursively
   // ... rest of evaluation
 }
@@ -100,9 +110,10 @@ export function evaluateExpression(expr: string, vars: Map<string, VariableEntry
 ```typescript
 it("evaluates expression", () => {
   const result = intepret("if (true) 10 else 20");
-  expect(isOk(result)).toBe(true);  // Type guard
-  if (isOk(result)) {                // TypeScript narrows type here
-    expect(result.value).toBe(10);   // Now safe to access .value
+  expect(isOk(result)).toBe(true); // Type guard
+  if (isOk(result)) {
+    // TypeScript narrows type here
+    expect(result.value).toBe(10); // Now safe to access .value
   }
 });
 ```

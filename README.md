@@ -37,17 +37,17 @@ This project maintains strict code quality standards enforced by pre-commit hook
 
 - **Tests**: 100% pass rate required (57/57 tests currently passing)
 - **Test Coverage**: ~93% function coverage, ~93% line coverage
-- **Linting**: 
+- **Linting**:
   - Max 50 lines per function
   - Max 200 lines per file
   - No regex literals (use string methods)
   - No `null` (use `undefined`)
 - **Formatting**: Prettier enforced
-- **Circular Dependencies**: 
+- **Circular Dependencies**:
   - File-level check via `madge`
   - Subdirectory-level check via custom tool
 - **Directory Structure**: Max 8 TypeScript files per directory
-- **Code Duplication**: 
+- **Code Duplication**:
   - AST-based duplication check (min 15 nodes)
   - Token-based duplication check (min 50 tokens via PMD CPD)
 
@@ -123,6 +123,7 @@ git commit
 ```
 
 All commits must pass:
+
 1. Test suite (57 tests)
 2. Linting (ESLint)
 3. Formatting (Prettier)

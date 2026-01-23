@@ -32,4 +32,9 @@ describe("intepret - expressions: if-else", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(2);
   });
+
+  it("returns err for numeric literal condition like 'if (100) 2 else 3'", () => {
+    const result = intepret("if (100) 2 else 3");
+    expect(isOk(result)).toBe(false);
+  });
 });

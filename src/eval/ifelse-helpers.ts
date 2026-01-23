@@ -153,3 +153,26 @@ export function evaluateIfCondition(
     );
   return ok({ elseIdx, searchPos });
 }
+
+export function validateConditionIsBoolean(
+  condition: string,
+): Result<void, TuffError> {
+  const trimmed = condition.trim();
+  const allDigits = trimmed[0] === "-" ? true : (trimmed[0] >= "0" && trimmed[0] <= "9");
+  if (!allDigits) return ok();
+  for (let i = trimmed[0] === "-" ? 1 : 0; i < trimmed.length; i = i + 1) {
+    const ch = trimmed[i];
+    const isDigit = ch >= "0" && ch <= "9";
+    const isLetter = (ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z");
+    const isSuffix = isLetter && i >= 1;
+    if (!isDigit && !isSuffix) return ok();
+  }
+  return err(
+    makeError(
+      "Type error",
+      `Condition: ${trimmed}`,
+      "Condition must be a boolean expression, not a numeric literal",
+      `Use boolean literals (true/false) or boolean operators (||, &&)`,
+    ),
+  );
+}
