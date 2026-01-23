@@ -72,4 +72,8 @@ describe("The application - Basic tests", () => {
   it("should reject negative U8 literal", () => {
     assertInvalid("-100U8");
   });
+
+  it("should reject U8 literal exceeding max value", () => {
+    assertInvalid("256U8");
+  });
 });
