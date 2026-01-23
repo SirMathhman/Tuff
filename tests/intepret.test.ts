@@ -214,6 +214,13 @@ describe("intepret - expressions: variables (mutability)", () => {
       expect(result.error.cause.toLowerCase()).toContain("incompatible");
   });
 
+  it("returns err for reassignment of undefined variable like 'let mut y = 0U8; x = 1U8; y'", () => {
+    const result = intepret("let mut y = 0U8; x = 1U8; y");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("undefined");
+  });
+
   it("parses and evaluates top-level variable declarations like 'let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z'", () => {
     const result = intepret(
       "let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z",
