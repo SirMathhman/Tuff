@@ -28,15 +28,20 @@ function parseNumberWithSuffix(
   let isNeg = false;
   let idx = 0;
 
-  if (trimmed[0] === "-") {
+  if (trimmed.length > 0 && trimmed[0] === "-") {
     isNeg = true;
     idx = 1;
   }
 
   let digits = "";
-  while (idx < trimmed.length && trimmed[idx] >= "0" && trimmed[idx] <= "9") {
-    digits = digits + trimmed[idx];
-    idx = idx + 1;
+  while (idx < trimmed.length) {
+    const ch = trimmed.charAt(idx);
+    if (ch >= "0" && ch <= "9") {
+      digits = digits + ch;
+      idx = idx + 1;
+    } else {
+      break;
+    }
   }
 
   if (digits === "") return err("No digits found");
@@ -44,7 +49,18 @@ function parseNumberWithSuffix(
   let num = Number(digits);
   if (isNeg) num = -num;
 
-  const suffix = trimmed.slice(idx).split(" ")[0];
+  let suffix = "";
+  let sidx = idx;
+  while (sidx < trimmed.length) {
+    const ch = trimmed.charAt(sidx);
+    if (ch !== " ") {
+      suffix = suffix + ch;
+      sidx = sidx + 1;
+    } else {
+      break;
+    }
+  }
+
   if (suffix && isNeg && suffix[0] === "U") {
     return err("Negative numbers with unsigned type suffixes are not allowed");
   }
@@ -75,7 +91,9 @@ function evaluateExpression(expr: string): Result<number, string> {
   if (tokens.length === 0) return ok(0);
 
   if (tokens.length === 1) {
-    const parsed = parseNumberWithSuffix(tokens[0]);
+    const token = tokens[0];
+    if (token === undefined) return err("Invalid token");
+    const parsed = parseNumberWithSuffix(token);
     return parsed.ok ? ok(parsed.value.num) : parsed;
   }
 
@@ -84,7 +102,9 @@ function evaluateExpression(expr: string): Result<number, string> {
   let i = 0;
 
   while (i < tokens.length) {
-    const parsed = parseNumberWithSuffix(tokens[i]);
+    const token = tokens[i];
+    if (token === undefined) return err("Invalid token");
+    const parsed = parseNumberWithSuffix(token);
     if (!parsed.ok) return parsed;
 
     if (operator === "+") result = result + parsed.value.num;
@@ -92,7 +112,8 @@ function evaluateExpression(expr: string): Result<number, string> {
 
     i = i + 1;
     if (i < tokens.length) {
-      operator = tokens[i];
+      const op = tokens[i];
+      if (op !== undefined) operator = op;
       i = i + 1;
     }
   }

@@ -18,7 +18,7 @@
   "scripts": {
     "dupfind": "./tools/dupfind.exe src --min-nodes 15",
     "prepare": "husky",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "tsc --noEmit && eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
     "test": "bun test",
