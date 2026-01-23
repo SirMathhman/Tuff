@@ -176,7 +176,15 @@ export function performBinaryOp(
       if (rightType === 0 && typeMap.has("__alias__" + rightStr)) {
         rightType = typeMap.get("__alias__" + rightStr) || 0;
       }
-      result = leftType === rightType ? 1 : 0;
+      // Check if it's a union type
+      if (rightType === 0 && typeMap.has("__union__" + rightStr)) {
+        const unionTypes = (
+          typeMap.get("__union__" + rightStr) as unknown as string
+        ).split(",");
+        result = unionTypes.some((t) => leftType === Number(t)) ? 1 : 0;
+      } else {
+        result = leftType === rightType ? 1 : 0;
+      }
       break;
     }
     default:

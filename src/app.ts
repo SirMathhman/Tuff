@@ -11,7 +11,7 @@ import {
 } from "./expressions/handlers";
 import { handleBinaryOperation } from "./expressions/binary-operation";
 import { parseTypedNumber } from "./parser";
-import { extractTypeSize } from "./types";
+import { handleTypeDeclaration } from "./type-declarations";
 
 export function interpretWithScope(
   input: string,
@@ -25,43 +25,16 @@ export function interpretWithScope(
   if (s === "") return 0;
 
   // Handle type alias declarations first - these are stored in typeMap with a special prefix
-  if (s.startsWith("type ")) {
-    const rest = s.slice(5).trim();
-    const semiIndex = rest.indexOf(";");
-    if (semiIndex !== -1) {
-      const declStr = rest.slice(0, semiIndex);
-      const eqIndex = declStr.indexOf("=");
-      if (eqIndex !== -1) {
-        const aliasName = declStr.slice(0, eqIndex).trim();
-        const aliasType = declStr.slice(eqIndex + 1).trim();
-
-        let typeSize = extractTypeSize(aliasType);
-
-        // If it's an alias to another alias, resolve it
-        if (typeSize === 0 && typeMap.has("__alias__" + aliasType)) {
-          typeSize = typeMap.get("__alias__" + aliasType) || 0;
-        }
-
-        if (typeSize > 0) {
-          // Store the alias
-          typeMap.set("__alias__" + aliasName, typeSize);
-
-          const afterDecl = rest.slice(semiIndex + 1).trim();
-          if (afterDecl) {
-            return interpretWithScope(
-              afterDecl,
-              scope,
-              typeMap,
-              mutMap,
-              uninitializedSet,
-              unmutUninitializedSet,
-            );
-          }
-          return 0;
-        }
-      }
-    }
-  }
+  const typeDecl = handleTypeDeclaration(
+    s,
+    typeMap,
+    scope,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpretWithScope as Interpreter,
+  );
+  if (typeDecl.handled) return typeDecl.result;
 
   const declResult = handleVarDecl(
     s,

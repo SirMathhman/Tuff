@@ -209,4 +209,12 @@ describe("interpret", () => {
       ),
     ).toBe(1);
   });
+
+  it("supports union types and type checking", () => {
+    expect(
+      interpret(
+        "type MyUnion = Bool | I32; let temp : MyUnion = 100I32; temp is I32 && temp is MyUnion",
+      ),
+    ).toBe(1);
+  });
 });

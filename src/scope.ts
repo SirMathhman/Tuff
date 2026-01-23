@@ -109,6 +109,12 @@ export function handleVarDecl(
     if (vType === 0 && typeMap.has("__alias__" + typeStr)) {
       vType = typeMap.get("__alias__" + typeStr) || 0;
     }
+    // Check if it's a union type
+    if (vType === 0 && typeMap.has("__union__" + typeStr)) {
+      // For uninitialized union types, we can't determine the type yet
+      // This shouldn't happen in practice since we can't use uninitialized union vars
+      return undefined;
+    }
   } else {
     // Has assignment
     const varPart = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim(),
@@ -134,10 +140,39 @@ export function handleVarDecl(
       if (dType === 0 && typeMap.has("__alias__" + typeStr)) {
         dType = typeMap.get("__alias__" + typeStr) || 0;
       }
+      // Check if it's a union type
+      if (dType === 0 && typeMap.has("__union__" + typeStr)) {
+        // For union types, extract the actual type from the expression
+        if (vType === 0) {
+          // If vType wasn't extracted from the expression, try to extract from the string
+          // This handles cases like "100I32" where the type suffix needs to be parsed
+          // Extract the type suffix (e.g., "I32" from "100I32")
+          // Look for the pattern INN or UNN at the end
+          let typeStart = exprStr.length - 1;
+          while (typeStart >= 0) {
+            const char = exprStr[typeStart];
+            if (char === undefined || (char < "0" || char > "9")) {
+              break;
+            }
+            typeStart--;
+          }
+          if (typeStart >= 0 && typeStart < exprStr.length) {
+            const typeSuffix = exprStr.slice(typeStart);
+            const firstChar = typeSuffix[0];
+            if (firstChar === "I" || firstChar === "U") {
+              vType = extractTypeSize(typeSuffix);
+            }
+          }
+        }
+        // Mark that this is a union type (dType = -1 is a sentinel)
+        dType = -1;
+      }
       if (dType > 0) {
         if (vType > 0 && vType > dType)
           throw new Error(`bad type: ${vType} to U${dType}`);
         vType = dType;
+      } else if (dType === -1) {
+        // Union type - vType has been set above
       }
     }
   }
