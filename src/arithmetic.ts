@@ -1,14 +1,5 @@
 import { type Result, ok, err } from "./result";
-import { type TuffError } from "./error";
-
-function makeError(
-  cause: string,
-  context: string,
-  reason: string,
-  fix: string,
-): TuffError {
-  return { cause, context, reason, fix };
-}
+import { type TuffError, makeError } from "./error";
 
 export function applyMultiplicationDivision(
   val: number,

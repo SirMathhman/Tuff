@@ -2,6 +2,11 @@ import { type Result, ok, err } from "./result";
 import { type TuffError } from "./error";
 import { validateResult, evaluateTokens, parseLiteral } from "./parser";
 import { parseVariableDeclarations, type VariableEntry } from "./variables";
+import {
+  checkOperatorTypeCompat,
+  createMixedSuffixError,
+  isOperatorToken,
+} from "./validation";
 
 function makeError(
   cause: string,
@@ -64,6 +69,65 @@ function errorUndefinedToken(label: string): TuffError {
   );
 }
 
+function determineSuffix(
+  tokens: Array<string>,
+  vars: Map<string, VariableEntry>,
+): Result<string, TuffError> {
+  for (let i = 0; i < tokens.length; i = i + 1) {
+    const token = tokens[i];
+    if (!isOperatorToken(token)) {
+      if (vars.has(token)) {
+        const entry = vars.get(token);
+        if (entry) {
+          return ok(entry.suffix);
+        }
+      } else {
+        const parsed = parseLiteral(token);
+        if (!parsed.ok) return parsed;
+        return ok(parsed.value.suffix);
+      }
+    }
+  }
+  return ok("");
+}
+
+function buildParsedTokens(
+  tokens: Array<string>,
+  commonSuffix: string,
+  vars: Map<string, VariableEntry>,
+): Result<Array<number | string>, TuffError> {
+  const parsedTokens = [];
+  for (let i = 0; i < tokens.length; i = i + 1) {
+    const token = tokens[i];
+    if (token === undefined) return err(errorUndefinedToken(`Index: ${i}`));
+
+    if (isOperatorToken(token)) {
+      const typeCheck = checkOperatorTypeCompat(token, commonSuffix);
+      if (!typeCheck.ok) return typeCheck;
+      parsedTokens.push(token);
+    } else if (vars.has(token)) {
+      const entry = vars.get(token);
+      if (entry) {
+        if (entry.suffix !== commonSuffix) {
+          return err(createMixedSuffixError(commonSuffix, entry.suffix));
+        }
+        parsedTokens.push(entry.value);
+      }
+    } else {
+      const parsed = parseLiteral(token);
+      if (!parsed.ok) return parsed;
+
+      if (parsed.value.suffix !== commonSuffix) {
+        return err(createMixedSuffixError(commonSuffix, parsed.value.suffix));
+      }
+
+      parsedTokens.push(parsed.value.num);
+    }
+  }
+
+  return ok(parsedTokens);
+}
+
 function validateTokens(
   tokens: Array<string>,
   vars: Map<string, VariableEntry>,
@@ -71,49 +135,13 @@ function validateTokens(
   { commonSuffix: string; parsedTokens: Array<number | string> },
   TuffError
 > {
-  let commonSuffix = "";
-  let suffixSet = false;
-  const parsedTokens = [];
+  const suffixResult = determineSuffix(tokens, vars);
+  if (!suffixResult.ok) return suffixResult;
+  const commonSuffix = suffixResult.value;
 
-  for (let i = 0; i < tokens.length; i = i + 1) {
-    const token = tokens[i];
-    if (token === undefined) return err(errorUndefinedToken(`Index: ${i}`));
-
-    const isOp =
-      token === "+" ||
-      token === "-" ||
-      token === "*" ||
-      token === "/" ||
-      token === "||" ||
-      token === "&&";
-    if (isOp) {
-      parsedTokens.push(token);
-    } else if (vars.has(token)) {
-      const entry = vars.get(token);
-      if (entry) {
-        parsedTokens.push(entry.value);
-      }
-    } else {
-      const parsed = parseLiteral(token);
-      if (!parsed.ok) return parsed;
-
-      if (!suffixSet) {
-        commonSuffix = parsed.value.suffix;
-        suffixSet = true;
-      } else if (parsed.value.suffix !== commonSuffix) {
-        return err(
-          makeError(
-            "Mixed type suffixes",
-            `Common: ${commonSuffix}, Found: ${parsed.value.suffix}`,
-            "Cannot mix different type suffixes in expression",
-            `Use the same suffix for all numbers (e.g., all U8 or all I32)`,
-          ),
-        );
-      }
-
-      parsedTokens.push(parsed.value.num);
-    }
-  }
+  const tokensResult = buildParsedTokens(tokens, commonSuffix, vars);
+  if (!tokensResult.ok) return tokensResult;
+  const parsedTokens = tokensResult.value;
 
   return ok({ commonSuffix, parsedTokens });
 }

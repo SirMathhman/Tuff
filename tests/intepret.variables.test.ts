@@ -202,3 +202,33 @@ describe("intepret - expressions: variables (bool operators)", () => {
     if (isOk(result)) expect(result.value).toBe(1);
   });
 });
+
+describe("intepret - expressions: variables (operator type constraints)", () => {
+  it("returns err for logical OR on numeric types like '100U8 || 20U8'", () => {
+    const result = intepret("100U8 || 20U8");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("type");
+  });
+
+  it("returns err for arithmetic on boolean types like 'true + false'", () => {
+    const result = intepret("true + false");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("type");
+  });
+
+  it("returns err for logical AND on numeric types like 'let x = 100U8; let y = 20U8; x && y'", () => {
+    const result = intepret("let x = 100U8; let y = 20U8; x && y");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("type");
+  });
+
+  it("returns err for arithmetic on mixed boolean like 'let x = true; x - 1'", () => {
+    const result = intepret("let x = true; x - 1");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("type");
+  });
+});
