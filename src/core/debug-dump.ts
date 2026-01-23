@@ -1,4 +1,4 @@
-import { type Instruction } from "../core/vm";
+import { type Instruction } from "./vm";
 
 export interface ExecutionState {
   registers: number[];

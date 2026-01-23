@@ -20,6 +20,30 @@ function resolveIndirectAddress(
   return address;
 }
 
+function handleIndirectLoad(
+  operand1: number,
+  operand2: number,
+  registers: number[],
+  memory: number[],
+): void {
+  const address = resolveIndirectAddress(operand2, memory);
+  if (address !== undefined) {
+    registers[operand1] = memory[address] ?? 0;
+  }
+}
+
+function handleIndirectStore(
+  operand1: number,
+  operand2: number,
+  registers: number[],
+  memory: number[],
+): void {
+  const address = resolveIndirectAddress(operand2, memory);
+  if (address !== undefined) {
+    memory[address] = registers[operand1] ?? 0;
+  }
+}
+
 function readVariant(
   variant: number,
   operand1: number,
@@ -63,10 +87,7 @@ function handleLoad(
     return;
   }
   if (variant === Variant.Indirect) {
-    const address = resolveIndirectAddress(operand2, memory);
-    if (address !== undefined) {
-      registers[operand1] = memory[address] ?? 0;
-    }
+    handleIndirectLoad(operand1, operand2, registers, memory);
   }
 }
 
@@ -84,10 +105,7 @@ function handleStore(
     return;
   }
   if (variant === Variant.Indirect) {
-    const address = resolveIndirectAddress(operand2, memory);
-    if (address !== undefined) {
-      memory[address] = registers[operand1] ?? 0;
-    }
+    handleIndirectStore(operand1, operand2, registers, memory);
   }
 }
 
