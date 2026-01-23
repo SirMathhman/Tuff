@@ -241,10 +241,10 @@ function parseBlockExpression(
   source: string,
 ): Result<Expression, CompileError> {
   const inner = source.slice(1, -1).trim();
-
   const statements: Array<{
     name: string;
     typeStr: string;
+    mutable: boolean;
     value: Expression;
   }> = [];
   let remaining = inner;
@@ -493,6 +493,77 @@ function parseTopLevelLet(source: string): Result<Expression, CompileError> {
   });
 }
 
+function isInCharRange(
+  char: string,
+  minLower: string,
+  maxLower: string,
+  minUpper: string,
+  maxUpper: string,
+): boolean {
+  return (
+    (char >= minLower && char <= maxLower) ||
+    (char >= minUpper && char <= maxUpper)
+  );
+}
+
+function isValidIdentifierStart(char: string | undefined): boolean {
+  if (!char) return false;
+  return isInCharRange(char, "a", "z", "A", "Z") || char === "_";
+}
+
+function isValidIdentifierChar(char: string | undefined): boolean {
+  if (!char) return false;
+  return (
+    isInCharRange(char, "a", "z", "A", "Z") ||
+    (char >= "0" && char <= "9") ||
+    char === "_"
+  );
+}
+
+function skipWhitespace(source: string, index: number): number {
+  let i = index;
+  while (i < source.length && source[i] === " ") {
+    i++;
+  }
+  return i;
+}
+
+function tryParseAssignment(source: string): {
+  isAssignment: boolean;
+  name?: string;
+  valueStr?: string;
+} {
+  let i = 0;
+
+  // Parse identifier
+  if (!isValidIdentifierStart(source[i])) {
+    return { isAssignment: false };
+  }
+
+  const nameStart = i;
+  while (i < source.length && isValidIdentifierChar(source[i])) {
+    i++;
+  }
+
+  const name = source.slice(nameStart, i);
+
+  // Skip whitespace
+  i = skipWhitespace(source, i);
+
+  // Check for =
+  if (i >= source.length || source[i] !== "=") {
+    return { isAssignment: false };
+  }
+
+  i++; // skip =
+
+  // Skip whitespace
+  i = skipWhitespace(source, i);
+
+  const valueStr = source.slice(i).trim();
+  return { isAssignment: true, name, valueStr };
+}
+
 export function parseExpression(
   source: string,
 ): Result<Expression, CompileError> {
@@ -502,6 +573,19 @@ export function parseExpression(
 
   if (source.startsWith("let ")) {
     return parseTopLevelLet(source);
+  }
+
+  // Check for assignment expression: name = value
+  const assignment = tryParseAssignment(source);
+  if (assignment.isAssignment && assignment.name && assignment.valueStr) {
+    const valueResult = parseExpression(assignment.valueStr);
+    if (!valueResult.ok) return valueResult;
+
+    return ok({
+      type: "assignment",
+      name: assignment.name,
+      value: valueResult.value,
+    });
   }
 
   return parseAdditionSubtraction(source);

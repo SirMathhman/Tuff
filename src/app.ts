@@ -97,6 +97,43 @@ const EXPRESSION_HANDLERS: Record<
     compileBinaryWithContext(expr, nextRegister, variableMap),
 };
 
+function createUndefinedVariableError(varName: string): CompileError {
+  return createCompileError(
+    "Undefined variable",
+    `Variable '${varName}' is not defined`,
+    "Make sure the variable is declared with a let binding",
+    varName.length,
+  );
+}
+
+function compileAssignmentExpression(
+  expr: Expression & { type: "assignment" },
+  nextRegister: number,
+  variableMap: Map<string, number>,
+  variableTypeMap?: Map<string, string>,
+): Result<
+  { instructions: Instruction[]; resultRegister: number },
+  CompileError
+> {
+  const varReg = variableMap.get(expr.name);
+  if (varReg === undefined) {
+    return err(createUndefinedVariableError(expr.name));
+  }
+
+  const valueResult = compileExpressionWithContext(
+    expr.value,
+    nextRegister,
+    variableMap,
+    variableTypeMap,
+  );
+  if (!valueResult.ok) return valueResult;
+
+  return ok({
+    instructions: valueResult.value.instructions,
+    resultRegister: valueResult.value.resultRegister,
+  });
+}
+
 function compileByType(
   expr: Expression,
   nextRegister: number,
@@ -106,15 +143,21 @@ function compileByType(
   { instructions: Instruction[]; resultRegister: number },
   CompileError
 > {
-  // Handle blocks specially to pass the type map
-  if (expr.type === "block") {
+  // Dispatch to special handlers that need the type map
+  if (expr.type === "block")
     return compileBlockWithContext(
       expr as Expression & { type: "block" },
       nextRegister,
       variableMap,
       variableTypeMap,
     );
-  }
+  if (expr.type === "assignment")
+    return compileAssignmentExpression(
+      expr as Expression & { type: "assignment" },
+      nextRegister,
+      variableMap,
+      variableTypeMap,
+    );
 
   const handler = EXPRESSION_HANDLERS[expr.type];
   if (handler) {
@@ -125,14 +168,7 @@ function compileByType(
   const varExpr = expr as Expression & { type: "variable" };
   const reg = variableMap.get(varExpr.name);
   if (reg === undefined) {
-    return err(
-      createCompileError(
-        "Undefined variable",
-        `Variable '${varExpr.name}' is not defined`,
-        "Make sure the variable is declared with a let binding",
-        varExpr.name.length,
-      ),
-    );
+    return err(createUndefinedVariableError(varExpr.name));
   }
   return ok({
     instructions: [],
