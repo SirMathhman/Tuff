@@ -174,16 +174,26 @@ describe("The application - Read tests", () => {
   });
 
   it("should read and perform mixed arithmetic", () => {
-    assertValid("read U8 + read U8 - read U8", 1, 2, 3, 4);
+    // Expression: read U8 + read U8 - read U8
+    // Parses as: (read U8 + read U8) - read U8
+    // Right-first: subtraction's right reads A=4, then addition's right reads B=3, then addition's left reads C=2
+    // Evaluates as: (C + B) - A = (2 + 3) - 4 = 5 - 4 = 1
+    assertValid("read U8 + read U8 - read U8", 1, 4, 3, 2);
   });
 
   it("should multiply and subtract", () => {
-    assertValid("read U8 * read U8 - read U8", 2, 2, 3, 4);
+    // Expression: read U8 * read U8 - read U8
+    // Parses as: (read U8 * read U8) - read U8
+    // Right-first: subtraction's right reads A=4, then multiplication's right reads B=3, then multiplication's left reads C=2
+    // Evaluates as: (C * B) - A = (2 * 3) - 4 = 6 - 4 = 2
+    assertValid("read U8 * read U8 - read U8", 2, 4, 3, 2);
   });
 
   it("should respect operator precedence with multiplication", () => {
-    // Expression: A + B * C where A=5, B=3, C=4
-    // Evaluates as: A + (B * C) = 5 + (3 * 4) = 5 + 12 = 17
-    assertValid("read U8 + read U8 * read U8", 17, 5, 3, 4);
+    // Expression: read U8 + read U8 * read U8
+    // Higher precedence operations read first: multiplication reads A=3, B=4
+    // Then addition reads C=5
+    // Evaluates as: C + (A * B) = 5 + (3 * 4) = 5 + 12 = 17
+    assertValid("read U8 + read U8 * read U8", 17, 3, 4, 5);
   });
 });

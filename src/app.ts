@@ -265,22 +265,24 @@ function compileBinary(
   { instructions: Instruction[]; resultRegister: number },
   CompileError
 > {
-  const leftResult = compileExpression(expr.left, nextRegister);
-  if (!leftResult.ok) return leftResult;
-
-  const rightResult = compileExpression(
-    expr.right,
-    leftResult.value.resultRegister + 1,
-  );
+  // Compile right side first (higher precedence operations)
+  const rightResult = compileExpression(expr.right, nextRegister);
   if (!rightResult.ok) return rightResult;
+
+  // Then compile left side
+  const leftResult = compileExpression(
+    expr.left,
+    rightResult.value.resultRegister + 1,
+  );
+  if (!leftResult.ok) return leftResult;
 
   const leftReg = leftResult.value.resultRegister;
   const rightReg = rightResult.value.resultRegister;
   const opcode = getOpCode(expr.op);
 
   const instructions = [
-    ...leftResult.value.instructions,
     ...rightResult.value.instructions,
+    ...leftResult.value.instructions,
     createInstruction(opcode, Variant.Immediate, leftReg, rightReg),
   ];
 
