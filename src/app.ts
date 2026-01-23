@@ -75,9 +75,7 @@ export function err<X>(error: X): Err<X> {
   return { ok: false, error };
 }
 
-function createCompileFunc(
-  functionContext: FunctionContext,
-): (
+function createCompileFunc(functionContext: FunctionContext): (
   expr: string,
   ctx: VariableContext,
 ) =>

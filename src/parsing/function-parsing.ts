@@ -116,13 +116,17 @@ export function parseFunctionDefinition(source: string):
     }
   | undefined {
   const trimmed = source.trim();
-  if (!trimmed.startsWith("fn ")) return undefined;
+  
+  // Support lambda syntax: () : Type => body
+  const isLambda = trimmed.startsWith("(");
+  if (!isLambda && !trimmed.startsWith("fn ")) return undefined;
 
   const openParenIndex = findChar(trimmed, "(");
   if (openParenIndex === -1) return undefined;
 
-  const name = extractFunctionName(trimmed);
-  if (name.length === 0) return undefined;
+  // For lambda syntax, name will be empty and should be provided by caller
+  const name = isLambda ? "" : extractFunctionName(trimmed);
+  if (!isLambda && name.length === 0) return undefined;
 
   const paramStr = extractParameterList(trimmed, openParenIndex);
   if (paramStr === undefined) return undefined;
@@ -157,7 +161,8 @@ export function parseFunctionDefinition(source: string):
 
 export function isFunctionDefinition(source: string): boolean {
   const trimmed = source.trim();
-  return trimmed.startsWith("fn ") && trimmed.includes("=>");
+  // Support both "fn name() => body" and lambda "() => body" syntax
+  return (trimmed.startsWith("fn ") || trimmed.startsWith("(")) && trimmed.includes("=>");
 }
 
 export function extractFunctionType(source: string): string | undefined {

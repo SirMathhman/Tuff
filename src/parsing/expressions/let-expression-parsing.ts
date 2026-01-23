@@ -116,7 +116,11 @@ function buildVariableAllocation(
   typeAnnotation: string | undefined,
   mutable: boolean,
   context: VariableContext,
-): { varType: string | undefined; newContext: VariableContext; address: number } {
+): {
+  varType: string | undefined;
+  newContext: VariableContext;
+  address: number;
+} {
   const varType = typeAnnotation || extractExpressionType(exprPart, context);
   const trimmedExpr = exprPart.trim();
   const sourceArrayName = isReferenceOperator(trimmedExpr)
