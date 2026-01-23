@@ -138,15 +138,22 @@ function parseBinaryExpression(
   operators: BinaryOp[],
   nextParser: ParserFunction,
 ): Result<Expression, CompileError> {
-  // Find the rightmost operator (for left-associativity)
+  // Find the rightmost operator at depth 0 (not inside parentheses)
   let operatorIndex = -1;
   let operator: BinaryOp | undefined;
+  let depth = 0;
 
-  for (const op of operators) {
-    const idx = source.lastIndexOf(op);
-    if (idx > operatorIndex) {
-      operatorIndex = idx;
-      operator = op;
+  for (let i = source.length - 1; i >= 0; i--) {
+    const char = source[i];
+
+    if (char === ")") {
+      depth++;
+    } else if (char === "(") {
+      depth--;
+    } else if (depth === 0 && operators.includes(char as BinaryOp)) {
+      operatorIndex = i;
+      operator = char as BinaryOp;
+      break;
     }
   }
 
@@ -193,7 +200,30 @@ function parseMultiplicationDivision(
   return parseBinaryExpression(source, ["*", "/"], parsePrimary);
 }
 
+function isFullyWrappedInParentheses(source: string): boolean {
+  if (!source.startsWith("(") || !source.endsWith(")")) {
+    return false;
+  }
+
+  let depth = 0;
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "(") depth++;
+    if (source[i] === ")") depth--;
+    if (depth === 0 && i < source.length - 1) {
+      return false;
+    }
+  }
+
+  return depth === 0;
+}
+
 function parsePrimary(source: string): Result<Expression, CompileError> {
+  // Check if it's a parenthesized expression
+  if (isFullyWrappedInParentheses(source)) {
+    const inner = source.slice(1, -1).trim();
+    return parseExpression(inner);
+  }
+
   // Check if it's a read command
   if (source.startsWith("read ")) {
     const typeStr = source.slice(5).trim();
