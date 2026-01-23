@@ -1,3 +1,6 @@
-export function interpret(input : string) : number {
-    return 0;
+export function interpret(input: string): number {
+    const s = input.trim();
+    if (s === "") return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
 }
