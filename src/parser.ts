@@ -1,4 +1,14 @@
 import { type Result, ok, err } from "./result";
+import { type TuffError } from "./error";
+
+function makeError(
+  cause: string,
+  context: string,
+  reason: string,
+  fix: string,
+): TuffError {
+  return { cause, context, reason, fix };
+}
 
 function isInRange(n: number, suffix: string): boolean {
   if (suffix === "U8") return n >= 0 && n <= 255;
@@ -10,20 +20,45 @@ function isInRange(n: number, suffix: string): boolean {
   return true;
 }
 
-function getRangeError(suffix: string): string {
-  if (suffix === "U8") return "Value out of range for U8 (0-255)";
-  if (suffix === "U16") return "Value out of range for U16 (0-65535)";
-  if (suffix === "U32") return "Value out of range for U32 (0-4294967295)";
-  if (suffix === "I8") return "Value out of range for I8 (-128 to 127)";
-  if (suffix === "I16") return "Value out of range for I16 (-32768 to 32767)";
-  if (suffix === "I32")
-    return "Value out of range for I32 (-2147483648 to 2147483647)";
-  return "Value out of range";
+function getRangeError(suffix: string): TuffError {
+  const rangeMap: { [key: string]: string } = {
+    U8: "0-255",
+    U16: "0-65535",
+    U32: "0-4294967295",
+    I8: "-128 to 127",
+    I16: "-32768 to 32767",
+    I32: "-2147483648 to 2147483647",
+  };
+  const range = rangeMap[suffix] || "unknown range";
+  return makeError(
+    "Out of range",
+    `Type suffix: ${suffix}`,
+    `Value is outside the valid range for ${suffix}: ${range}`,
+    `Use a value within the ${suffix} range (${range})`,
+  );
+}
+
+function extractSuffix(
+  trimmed: string,
+  idx: number,
+): { suffix: string; nextIdx: number } {
+  let suffix = "";
+  let sidx = idx;
+  while (sidx < trimmed.length) {
+    const ch = trimmed.charAt(sidx);
+    if (ch !== " ") {
+      suffix = suffix + ch;
+      sidx = sidx + 1;
+    } else {
+      break;
+    }
+  }
+  return { suffix, nextIdx: sidx };
 }
 
 export function parseNumberWithSuffix(
   s: string,
-): Result<{ num: number; suffix: string; len: number }, string> {
+): Result<{ num: number; suffix: string; len: number }, TuffError> {
   const trimmed = s.trim();
   let isNeg = false;
   let idx = 0;
@@ -44,25 +79,30 @@ export function parseNumberWithSuffix(
     }
   }
 
-  if (digits === "") return err("No digits found");
+  if (digits === "")
+    return err(
+      makeError(
+        "Invalid number",
+        `Input: ${trimmed}`,
+        "No digits found in token",
+        "Ensure the token starts with a digit",
+      ),
+    );
 
   let num = Number(digits);
   if (isNeg) num = -num;
 
-  let suffix = "";
-  let sidx = idx;
-  while (sidx < trimmed.length) {
-    const ch = trimmed.charAt(sidx);
-    if (ch !== " ") {
-      suffix = suffix + ch;
-      sidx = sidx + 1;
-    } else {
-      break;
-    }
-  }
+  const { suffix } = extractSuffix(trimmed, idx);
 
   if (suffix && isNeg && suffix[0] === "U") {
-    return err("Negative numbers with unsigned type suffixes are not allowed");
+    return err(
+      makeError(
+        "Invalid combination",
+        `Input: ${s}`,
+        "Cannot use negative numbers with unsigned type suffixes",
+        `Remove the negative sign or use a signed suffix like I${suffix.slice(1)}`,
+      ),
+    );
   }
   if (suffix && !isInRange(num, suffix)) return err(getRangeError(suffix));
 
@@ -73,7 +113,7 @@ export function parseNumberWithSuffix(
 export function validateResult(
   result: number,
   suffix: string,
-): Result<number, string> {
+): Result<number, TuffError> {
   if (suffix && !isInRange(result, suffix)) {
     return err(getRangeError(suffix));
   }
@@ -84,7 +124,7 @@ export function applyMultiplicationDivision(
   val: number,
   tokens: Array<number | string>,
   startIdx: number,
-): Result<{ result: number; nextIdx: number }, string> {
+): Result<{ result: number; nextIdx: number }, TuffError> {
   let current = val;
   let i = startIdx;
 
@@ -100,7 +140,14 @@ export function applyMultiplicationDivision(
       current = current * nextNum;
     } else if (op === "/") {
       if (nextNum === 0) {
-        return err("Division by zero");
+        return err(
+          makeError(
+            "Division by zero",
+            `Divisor: ${nextNum}`,
+            "Cannot divide by zero",
+            "Ensure all divisors are non-zero",
+          ),
+        );
       }
       current = Math.floor(current / nextNum);
     }
@@ -112,7 +159,7 @@ export function applyMultiplicationDivision(
 
 function handleHighPrecedence(
   tokens: Array<number | string>,
-): Result<Array<number | string>, string> {
+): Result<Array<number | string>, TuffError> {
   const multDivResult: Array<number | string> = [];
   let i = 0;
   let current = tokens[0];
@@ -147,7 +194,7 @@ function handleHighPrecedence(
 
 export function evaluateTokens(
   tokens: Array<number | string>,
-): Result<number, string> {
+): Result<number, TuffError> {
   const highPrecedence = handleHighPrecedence(tokens);
   if (!highPrecedence.ok) return highPrecedence;
 

@@ -1,9 +1,19 @@
 import { type Result, ok, err } from "./result";
+import { type TuffError } from "./error";
 import {
   parseNumberWithSuffix,
   validateResult,
   evaluateTokens,
 } from "./parser";
+
+function makeError(
+  cause: string,
+  context: string,
+  reason: string,
+  fix: string,
+): TuffError {
+  return { cause, context, reason, fix };
+}
 
 function hasOpenParen(s: string): boolean {
   for (let i = 0; i < s.length; i = i + 1) {
@@ -14,8 +24,8 @@ function hasOpenParen(s: string): boolean {
 
 function resolveParentheses(
   expr: string,
-  evaluate: (s: string) => Result<number, string>,
-): Result<string, string> {
+  evaluate: (s: string) => Result<number, TuffError>,
+): Result<string, TuffError> {
   let result = expr;
 
   while (hasOpenParen(result)) {
@@ -38,7 +48,59 @@ function resolveParentheses(
   return ok(result);
 }
 
-function evaluateCore(expr: string): Result<number, string> {
+function errorUndefinedToken(label: string): TuffError {
+  return makeError(
+    "Invalid token",
+    label,
+    "Token is undefined",
+    "Ensure all tokens are valid",
+  );
+}
+
+function validateTokens(
+  tokens: Array<string>,
+): Result<
+  { commonSuffix: string; parsedTokens: Array<number | string> },
+  TuffError
+> {
+  let commonSuffix = "";
+  let suffixSet = false;
+  const parsedTokens = [];
+
+  for (let i = 0; i < tokens.length; i = i + 1) {
+    const token = tokens[i];
+    if (token === undefined) return err(errorUndefinedToken(`Index: ${i}`));
+
+    const isOp =
+      token === "+" || token === "-" || token === "*" || token === "/";
+    if (isOp) {
+      parsedTokens.push(token);
+    } else {
+      const parsed = parseNumberWithSuffix(token);
+      if (!parsed.ok) return parsed;
+
+      if (!suffixSet) {
+        commonSuffix = parsed.value.suffix;
+        suffixSet = true;
+      } else if (parsed.value.suffix !== commonSuffix) {
+        return err(
+          makeError(
+            "Mixed type suffixes",
+            `Common: ${commonSuffix}, Found: ${parsed.value.suffix}`,
+            "Cannot mix different type suffixes in expression",
+            `Use the same suffix for all numbers (e.g., all U8 or all I32)`,
+          ),
+        );
+      }
+
+      parsedTokens.push(parsed.value.num);
+    }
+  }
+
+  return ok({ commonSuffix, parsedTokens });
+}
+
+function evaluateCore(expr: string): Result<number, TuffError> {
   const trimmed = expr.trim();
   const tokens = [];
   let current = "";
@@ -60,51 +122,28 @@ function evaluateCore(expr: string): Result<number, string> {
 
   if (tokens.length === 1) {
     const token = tokens[0];
-    if (token === undefined) return err("Invalid token");
+    if (token === undefined) return err(errorUndefinedToken(`Token: ${token}`));
     const parsed = parseNumberWithSuffix(token);
     return parsed.ok ? ok(parsed.value.num) : parsed;
   }
 
-  let commonSuffix = "";
-  let suffixSet = false;
-  const parsedTokens = [];
-
-  for (let i = 0; i < tokens.length; i = i + 1) {
-    const token = tokens[i];
-    if (token === undefined) return err("Invalid token");
-
-    const isOp =
-      token === "+" || token === "-" || token === "*" || token === "/";
-    if (isOp) {
-      parsedTokens.push(token);
-    } else {
-      const parsed = parseNumberWithSuffix(token);
-      if (!parsed.ok) return parsed;
-
-      if (!suffixSet) {
-        commonSuffix = parsed.value.suffix;
-        suffixSet = true;
-      } else if (parsed.value.suffix !== commonSuffix) {
-        return err("Mixed type suffixes in expression");
-      }
-
-      parsedTokens.push(parsed.value.num);
-    }
-  }
+  const validated = validateTokens(tokens);
+  if (!validated.ok) return validated;
+  const { commonSuffix, parsedTokens } = validated.value;
 
   const evaluated = evaluateTokens(parsedTokens);
   if (!evaluated.ok) return evaluated;
   return validateResult(evaluated.value, commonSuffix);
 }
 
-function evaluateExpression(expr: string): Result<number, string> {
+function evaluateExpression(expr: string): Result<number, TuffError> {
   const resolvedResult = resolveParentheses(expr, evaluateExpression);
   if (!resolvedResult.ok) return resolvedResult;
   return evaluateCore(resolvedResult.value);
 }
 
 /**
- * Parses a string input and returns a Result<number, string>.
+ * Parses a string input and returns a Result<number, TuffError>.
  *
  * Behavior:
  *  - empty or whitespace-only string => ok(0)
@@ -112,14 +151,14 @@ function evaluateExpression(expr: string): Result<number, string> {
  *  - "100U8" format => ok(100)
  *  - expressions like "1U8 + 2U8" => ok(3)
  *  - expressions with parentheses like "(4 + 2) * 3" => ok(18)
- *  - negative with suffix (e.g., "-100U8") => err(message)
- *  - out of range for type (e.g., "256U8") => err(message)
- *  - non-numeric => err(message)
+ *  - negative with suffix (e.g., "-100U8") => err(TuffError)
+ *  - out of range for type (e.g., "256U8") => err(TuffError)
+ *  - non-numeric => err(TuffError)
  *
  * @param input - the input string to interpret
- * @returns Result<number, string>
+ * @returns Result<number, TuffError>
  */
-export function intepret(input: string): Result<number, string> {
+export function intepret(input: string): Result<number, TuffError> {
   const s = input.trim();
   if (s === "") return ok(0);
   return evaluateExpression(s);
