@@ -20,10 +20,20 @@ export function checkIfNotStartsWith(expr: string): Result<void, TuffError> {
   return ok();
 }
 
-function isAtDepthZeroWithKeyword(expr: string, i: number, parenDepth: number, keyword: string): boolean {
+function isAtDepthZeroWithKeyword(
+  expr: string,
+  i: number,
+  parenDepth: number,
+  keyword: string,
+): boolean {
   const keywordLen = keyword.length;
-  return parenDepth === 0 && expr[i] === " " && i + keywordLen + 1 < expr.length &&
-    expr.substring(i + 1, i + 1 + keywordLen) === keyword && expr[i + 1 + keywordLen] === " ";
+  return (
+    parenDepth === 0 &&
+    expr[i] === " " &&
+    i + keywordLen + 1 < expr.length &&
+    expr.substring(i + 1, i + 1 + keywordLen) === keyword &&
+    expr[i + 1 + keywordLen] === " "
+  );
 }
 
 export function validateIfStart(expr: string): Result<number, TuffError> {
@@ -70,7 +80,10 @@ export function findElseKeyword(
   expr: string,
   startPos: number,
 ): Result<number, TuffError> {
-  let elseIdx = -1, parenDepth = 0, nestedIfCount = 0, i = startPos;
+  let elseIdx = -1,
+    parenDepth = 0,
+    nestedIfCount = 0,
+    i = startPos;
   const tempPos = skipWhitespace(expr, startPos);
   if (isAtDepthZeroWithKeyword(expr, tempPos - 1, 0, "if")) nestedIfCount = 1;
   while (i < expr.length) {
@@ -82,7 +95,10 @@ export function findElseKeyword(
       if (checkPos < expr.length && expr[checkPos] === "(") nestedIfCount += 1;
     }
     if (isAtDepthZeroWithKeyword(expr, i, parenDepth, "else")) {
-      if (nestedIfCount === 0) { elseIdx = i; break; }
+      if (nestedIfCount === 0) {
+        elseIdx = i;
+        break;
+      }
       nestedIfCount -= 1;
     }
     i += 1;
