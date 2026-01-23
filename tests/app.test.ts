@@ -272,4 +272,10 @@ describe("The application - Operator precedence tests", () => {
     // Return x = 42
     assertValid("let x = read U8; x", 42, 42);
   });
+
+  it("should reject type mismatches in let bindings", () => {
+    // Expression: let x : U8 = read U16; x
+    // Type annotation says U8 but expression type is U16
+    assertInvalid("let x : U8 = read U16; x");
+  });
 });

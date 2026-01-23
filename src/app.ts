@@ -11,6 +11,15 @@ import {
   getSuffixInfo,
 } from "./parser";
 
+function getExpressionType(expr: Expression): string {
+  if (expr.type === "literal") return "U8"; // Literals default to U8
+  if (expr.type === "read") return expr.typeStr;
+  if (expr.type === "block") return getExpressionType(expr.result);
+  if (expr.type === "binary") return getExpressionType(expr.left);
+  if (expr.type === "variable") return ""; // Variable types are tracked at runtime
+  return "";
+}
+
 function createInstruction(
   opcode: OpCode,
   variant: Variant,
@@ -192,6 +201,26 @@ function validateTypeAnnotation(typeStr: string): Result<true, CompileError> {
   return ok(true);
 }
 
+function checkTypeMismatch(
+  declaredType: string,
+  expr: Expression,
+): Result<true, CompileError> {
+  if (declaredType === "") return ok(true);
+
+  const exprType = getExpressionType(expr);
+  if (exprType !== "" && exprType !== declaredType) {
+    return err(
+      createCompileError(
+        "Type mismatch",
+        `Expected ${declaredType} but expression is ${exprType}`,
+        "Make sure the expression matches the declared type",
+        declaredType.length,
+      ),
+    );
+  }
+  return ok(true);
+}
+
 function compileBlockWithContext(
   expr: Expression & { type: "block" },
   nextRegister: number,
@@ -217,6 +246,9 @@ function compileBlockWithContext(
       variableMap,
     );
     if (!valueResult.ok) return valueResult;
+
+    const mismatchCheck = checkTypeMismatch(statement.typeStr, statement.value);
+    if (!mismatchCheck.ok) return mismatchCheck;
 
     instructions.push(...valueResult.value.instructions);
     variableMap.set(statement.name, valueResult.value.resultRegister);
