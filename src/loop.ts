@@ -3,7 +3,19 @@ type Interpreter = (
   scope: Map<string, number>,
   typeMap: Map<string, number>,
   mutMap: Map<string, boolean>,
+  uninitializedSet: Set<string>,
+  unmutUninitializedSet: Set<string>,
 ) => number;
+
+interface HandlerParams {
+  s: string;
+  scope: Map<string, number>;
+  typeMap: Map<string, number>;
+  mutMap: Map<string, boolean>;
+  interpreter: Interpreter;
+  uninitializedSet?: Set<string>;
+  unmutUninitializedSet?: Set<string>;
+}
 
 // Special error used to break out of a loop with a value
 class BreakException extends Error {
@@ -12,13 +24,16 @@ class BreakException extends Error {
   }
 }
 
-export function handleLoop(
-  s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  interpreter: Interpreter,
-): number | undefined {
+export function handleLoop(params: HandlerParams): number | undefined {
+  const {
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    interpreter,
+    uninitializedSet = new Set(),
+    unmutUninitializedSet = new Set(),
+  } = params;
   const trimmed = s.trim();
   if (!trimmed.startsWith("loop")) return undefined;
 
@@ -51,7 +66,14 @@ export function handleLoop(
       try {
         // Interpret the entire loop body as a single expression
         // This allows complex statements like if-break to work
-        interpreter(loopBody, scope, typeMap, mutMap);
+        interpreter(
+          loopBody,
+          scope,
+          typeMap,
+          mutMap,
+          uninitializedSet,
+          unmutUninitializedSet,
+        );
       } catch (e) {
         if (e instanceof BreakException) {
           throw e; // Re-throw to be caught by outer handler
@@ -66,7 +88,14 @@ export function handleLoop(
       const afterLoopExpr = trimmed.slice(loopExprEnd).trim();
 
       if (afterLoopExpr) {
-        return interpreter(afterLoopExpr, scope, typeMap, mutMap);
+        return interpreter(
+          afterLoopExpr,
+          scope,
+          typeMap,
+          mutMap,
+          uninitializedSet,
+          unmutUninitializedSet,
+        );
       }
       return e.value;
     }
@@ -74,13 +103,16 @@ export function handleLoop(
   }
 }
 
-export function handleBreak(
-  s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  interpreter: Interpreter,
-): void {
+export function handleBreak(params: HandlerParams): void {
+  const {
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    interpreter,
+    uninitializedSet = new Set(),
+    unmutUninitializedSet = new Set(),
+  } = params;
   const trimmed = s.trim();
   if (!trimmed.startsWith("break")) return;
 
@@ -97,7 +129,14 @@ export function handleBreak(
     valueStr = afterBreak.slice(0, afterBreak.indexOf(";")).trim();
   }
 
-  const value = interpreter(valueStr, scope, typeMap, mutMap);
+  const value = interpreter(
+    valueStr,
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+  );
   throw new BreakException(value);
 }
 

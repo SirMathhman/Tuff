@@ -5,9 +5,9 @@ import { handleLoop, BreakException, handleBreak } from "./loop";
 import {
   handleIfExpression,
   handleVarAssignment,
-  handleBinaryOperation,
   type Interpreter,
 } from "./expressions/handlers";
+import { handleBinaryOperation } from "./expressions/binary-operation";
 import { parseTypedNumber } from "./parser";
 
 export function interpretWithScope(
@@ -41,11 +41,27 @@ export function interpretWithScope(
   );
   if (matchResult !== undefined) return matchResult;
 
-  const loopResult = handleLoop(s, scope, typeMap, mutMap, interpretWithScope);
+  const loopResult = handleLoop({
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    interpreter: interpretWithScope,
+    uninitializedSet,
+    unmutUninitializedSet,
+  });
   if (loopResult !== undefined) return loopResult;
 
   try {
-    handleBreak(s, scope, typeMap, mutMap, interpretWithScope);
+    handleBreak({
+      s,
+      scope,
+      typeMap,
+      mutMap,
+      interpreter: interpretWithScope,
+      uninitializedSet,
+      unmutUninitializedSet,
+    });
   } catch (e) {
     if (e instanceof BreakException) {
       throw e;
@@ -80,6 +96,10 @@ export function interpretWithScope(
     !s.includes("-") &&
     !s.includes("*") &&
     !s.includes("/") &&
+    !s.includes("<") &&
+    !s.includes(">") &&
+    !s.includes("=") &&
+    !s.includes("!") &&
     !s.includes("(") &&
     !s.includes("{") &&
     !s.includes("[")

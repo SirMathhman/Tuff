@@ -1,7 +1,7 @@
 #!/bin/bash
 export PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH"
 bun test --coverage\
-	&& JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH" ./tools/pmd-bin-7.20.0/bin/pmd cpd --dir src tests --language typescript --minimum-tokens 60 --ignore-identifiers --ignore-literals\
+	&& npm run cpd\
 	&& bun run format\
 	&& bun run lint:fix\
 	&& bun run check:circular\

@@ -181,4 +181,10 @@ describe("interpret", () => {
   it("supports variable assignment inside if-else branches", () => {
     expect(interpret("let x : I32; if (true) x = 10; else x = 20; x")).toBe(10);
   });
+
+  it("supports compound assignment and loop with break value", () => {
+    expect(
+      interpret("let mut i = 0; loop { if (i < 4) i += 1; else break i; }"),
+    ).toBe(4);
+  });
 });

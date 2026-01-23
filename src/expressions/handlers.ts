@@ -1,6 +1,3 @@
-import { findOperatorIndex, performBinaryOp } from "../operators";
-import { parseTypedNumber, extractTypedInfo } from "../parser";
-
 export type Interpreter = (
   input: string,
   scope: Map<string, number>,
@@ -106,19 +103,46 @@ export function handleVarAssignment(
   interpretWithScope: Interpreter,
 ): number | undefined {
   const eqIdx = s.indexOf("=");
-  if (
-    eqIdx <= 0 ||
-    s[eqIdx + 1] === "=" ||
-    !scope.has(s.slice(0, eqIdx).trim())
-  )
-    return undefined;
+  if (eqIdx <= 0) return undefined;
 
-  const lhs = s.slice(0, eqIdx).trim();
+  // Check if this is a compound assignment (+=, -=, etc.) or regular assignment
+  const prevChar = s[eqIdx - 1];
+  let isCompound = false;
+  let operator = "";
+
+  if (
+    prevChar === "+" ||
+    prevChar === "-" ||
+    prevChar === "*" ||
+    prevChar === "/" ||
+    prevChar === "!" ||
+    prevChar === "<" ||
+    prevChar === ">"
+  ) {
+    isCompound = true;
+    operator = prevChar;
+    // For compound assignment, the lhs is from 0 to eqIdx - 1
+    // But we need to verify it's actually a compound operator before proceeding
+    if (s[eqIdx + 1] === "=") {
+      // This is ==, !=, <=, >= - not an assignment
+      return undefined;
+    }
+  } else if (s[eqIdx + 1] === "=") {
+    // This is ==, !=, <=, >=  or just = after something
+    return undefined;
+  }
+
+  const lhs = isCompound
+    ? s.slice(0, eqIdx - 1).trim()
+    : s.slice(0, eqIdx).trim();
+
+  if (!scope.has(lhs)) return undefined;
+
   const semiIdx = s.indexOf(";", eqIdx);
   if (!mutMap.has(lhs)) throw new Error(`variable '${lhs}' is immutable`);
   if (semiIdx === -1) return undefined;
 
-  const newValue = interpretWithScope(
+  let newValue = interpretWithScope(
     s.slice(eqIdx + 1, semiIdx).trim(),
     scope,
     typeMap,
@@ -126,6 +150,29 @@ export function handleVarAssignment(
     uninitializedSet,
     unmutUninitializedSet,
   );
+
+  // Handle compound assignment
+  if (isCompound) {
+    const currentValue = scope.get(lhs)!;
+    switch (operator) {
+      case "+":
+        newValue = currentValue + newValue;
+        break;
+      case "-":
+        newValue = currentValue - newValue;
+        break;
+      case "*":
+        newValue = currentValue * newValue;
+        break;
+      case "/":
+        if (newValue === 0) throw new Error("divide by 0");
+        newValue = Math.floor(currentValue / newValue);
+        break;
+      default:
+        return undefined;
+    }
+  }
+
   scope.set(lhs, newValue);
   if (unmutUninitializedSet.has(lhs)) {
     unmutUninitializedSet.delete(lhs);
@@ -142,39 +189,5 @@ export function handleVarAssignment(
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
-  );
-}
-
-export function handleBinaryOperation(
-  s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpretWithScope: Interpreter,
-): number {
-  const { index: opIndex, operator: op } = findOperatorIndex(s);
-  if (opIndex === -1) return parseTypedNumber(s);
-  return performBinaryOp(
-    interpretWithScope(
-      s.slice(0, opIndex).trim(),
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-    ),
-    op,
-    interpretWithScope(
-      s.slice(opIndex + 1).trim(),
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-    ),
-    extractTypedInfo(s.slice(0, opIndex).trim()),
-    s.slice(opIndex + 1).trim(),
   );
 }
