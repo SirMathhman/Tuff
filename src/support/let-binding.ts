@@ -270,10 +270,9 @@ function extractIfExpressionType(
   return undefined;
 }
 
-export function extractIfBranchTypes(
+function extractIfBranchExpressions(
   source: string,
-  context?: VariableContext,
-): { thenType: string | undefined; elseType: string | undefined } | undefined {
+): { thenExpr: string; elseExpr: string } | undefined {
   if (!source.startsWith("if")) {
     return undefined;
   }
@@ -291,10 +290,70 @@ export function extractIfBranchTypes(
   const thenExpr = source.substring(parens.end + 1, elseIndex).trim();
   const elseExpr = source.substring(elseIndex + 4).trim();
 
+  return { thenExpr, elseExpr };
+}
+
+export function extractIfBranchTypes(
+  source: string,
+  context?: VariableContext,
+): { thenType: string | undefined; elseType: string | undefined } | undefined {
+  const branches = extractIfBranchExpressions(source);
+  if (!branches) {
+    return undefined;
+  }
+
+  const { thenExpr, elseExpr } = branches;
+
   const thenType = extractExpressionType(thenExpr, context);
   const elseType = extractExpressionType(elseExpr, context);
 
   return { thenType, elseType };
+}
+
+export function extractIfBranchFunctionInfo(
+  source: string,
+  context?: VariableContext,
+): {
+  functionBody?: string;
+  functionParameters?: { name: string; type: string }[];
+} {
+  const branches = extractIfBranchExpressions(source);
+  if (!branches || !context) {
+    return {};
+  }
+
+  const { thenExpr, elseExpr } = branches;
+
+  // Check if both branches are simple variable references
+  const isThenSimpleRef = !thenExpr.includes(" ") && !thenExpr.includes("(");
+  const isElseSimpleRef = !elseExpr.includes(" ") && !elseExpr.includes("(");
+
+  if (!isThenSimpleRef || !isElseSimpleRef) {
+    return {};
+  }
+
+  // Look up both variables in context
+  const thenBinding = context.find((b) => b.name === thenExpr);
+  const elseBinding = context.find((b) => b.name === elseExpr);
+
+  // Check if both are function variables with the same signature
+  if (
+    thenBinding?.functionBody &&
+    thenBinding?.functionParameters &&
+    elseBinding?.functionBody &&
+    elseBinding?.functionParameters
+  ) {
+    // Verify they have the same signature (same parameter types)
+    if (thenBinding.type === elseBinding.type) {
+      // Return the function info from the then branch (could be either since they match)
+      return {
+        functionBody: thenBinding.functionBody,
+        functionParameters: thenBinding.functionParameters,
+      };
+    }
+  }
+
+  return {};
 }
 
 function extractReferenceType(

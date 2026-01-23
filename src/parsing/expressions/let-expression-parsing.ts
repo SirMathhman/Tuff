@@ -8,10 +8,12 @@ import {
   adjustReadInstructions,
   buildLetStoreInstructions,
   extractExpressionType,
+  extractIfBranchFunctionInfo,
 } from "../../support/let-binding";
 import {
   isReferenceOperator,
   extractReferenceTarget,
+  findConditionParentheses,
 } from "../../parsing/parser";
 import {
   isFunctionDefinition,
@@ -38,9 +40,7 @@ function handleFunctionDefinitionBinding(
   context: VariableContext,
   mutable: boolean,
   functionContext: FunctionContext,
-):
-  | { newContext: VariableContext; newFunctionContext: FunctionContext }
-  | undefined {
+): Omit<LetExpressionResult, "instructions"> | undefined {
   const trimmedExpr = exprPart.trim();
   if (!isFunctionDefinition(trimmedExpr)) return undefined;
 
@@ -77,11 +77,7 @@ function parseDeclarationOnlyBinding(
   typeAnnotation: string,
   context: VariableContext,
   functionContext: FunctionContext,
-): {
-  instructions: Instruction[];
-  newContext: VariableContext;
-  newFunctionContext: FunctionContext;
-} {
+): LetExpressionResult {
   const { context: newContext } = allocateVariable(
     context,
     varName,
@@ -136,8 +132,15 @@ function buildVariableAllocation(
   let functionBody: string | undefined;
   let functionParameters: { name: string; type: string }[] | undefined;
 
-  // Simple identifier check for function variable reference
-  if (!trimmedExpr.includes(" ") && !trimmedExpr.includes("(")) {
+  // Check if expression is an if-expression that returns functions
+  if (trimmedExpr.startsWith("if")) {
+    const ifFuncInfo = extractIfBranchFunctionInfo(trimmedExpr, context);
+    if (ifFuncInfo.functionBody && ifFuncInfo.functionParameters) {
+      functionBody = ifFuncInfo.functionBody;
+      functionParameters = ifFuncInfo.functionParameters;
+    }
+  } else if (!trimmedExpr.includes(" ") && !trimmedExpr.includes("(")) {
+    // Simple identifier check for function variable reference
     const sourceBinding = context.find((b) => b.name === trimmedExpr);
     if (sourceBinding?.functionBody && sourceBinding?.functionParameters) {
       functionBody = sourceBinding.functionBody;
@@ -167,13 +170,7 @@ function parseInitializedBinding(
   context: VariableContext,
   exprCompile: Instruction[],
   functionContext: FunctionContext,
-):
-  | {
-      instructions: Instruction[];
-      newContext: VariableContext;
-      newFunctionContext: FunctionContext;
-    }
-  | undefined {
+): LetExpressionResult | undefined {
   // Check if this is a function definition being assigned
   const funcResult = handleFunctionDefinitionBinding(
     exprPart,
@@ -220,13 +217,7 @@ function handleFunctionAssignment(
   context: VariableContext,
   mutable: boolean,
   functionContext: FunctionContext,
-):
-  | {
-      instructions: Instruction[];
-      newContext: VariableContext;
-      newFunctionContext: FunctionContext;
-    }
-  | undefined {
+): LetExpressionResult | undefined {
   const funcResult = handleFunctionDefinitionBinding(
     exprPart,
     varName,
@@ -249,6 +240,74 @@ type CompileWithContextFn = (
     }
   | undefined;
 
+type LetExpressionResult = {
+  instructions: Instruction[];
+  newContext: VariableContext;
+  newFunctionContext: FunctionContext;
+};
+
+function allocateFunctionVariable(
+  varName: string,
+  typeAnnotation: string | undefined,
+  trimmed: string,
+  mutable: boolean,
+  context: VariableContext,
+  functionBody: string,
+  functionParameters: { name: string; type: string }[],
+): VariableContext {
+  const varType = typeAnnotation || extractExpressionType(trimmed, context);
+  const { context: newContext } = allocateVariable(
+    context,
+    varName,
+    varType,
+    mutable,
+    false,
+    undefined,
+    functionBody,
+    functionParameters,
+  );
+  return newContext;
+}
+
+function handleIfExpressionFunctionBinding(
+  trimmed: string,
+  varName: string,
+  typeAnnotation: string | undefined,
+  mutable: boolean,
+  context: VariableContext,
+  functionContext: FunctionContext,
+  compileWithContextFn: CompileWithContextFn,
+): LetExpressionResult | undefined {
+  const ifFuncInfo = extractIfBranchFunctionInfo(trimmed, context);
+  if (!ifFuncInfo.functionBody || !ifFuncInfo.functionParameters) {
+    return undefined;
+  }
+
+  const parens = findConditionParentheses(trimmed, 2);
+  const conditionCompiled = parens
+    ? compileWithContextFn(
+        trimmed.substring(parens.start + 1, parens.end).trim(),
+        context,
+      )
+    : undefined;
+
+  const newContext = allocateFunctionVariable(
+    varName,
+    typeAnnotation,
+    trimmed,
+    mutable,
+    context,
+    ifFuncInfo.functionBody,
+    ifFuncInfo.functionParameters,
+  );
+
+  return {
+    instructions: conditionCompiled?.instructions.slice(0, -1) || [],
+    newContext,
+    newFunctionContext: functionContext,
+  };
+}
+
 function parseExpressionPart(
   exprPart: string,
   varName: string,
@@ -257,13 +316,7 @@ function parseExpressionPart(
   context: VariableContext,
   functionContext: FunctionContext,
   compileWithContextFn: CompileWithContextFn,
-):
-  | {
-      instructions: Instruction[];
-      newContext: VariableContext;
-      newFunctionContext: FunctionContext;
-    }
-  | undefined {
+): LetExpressionResult | undefined {
   // Check if this is a function definition
   if (isFunctionDefinition(exprPart.trim())) {
     return handleFunctionAssignment(
@@ -274,6 +327,21 @@ function parseExpressionPart(
       mutable,
       functionContext,
     );
+  }
+
+  // Special case: if-expression returning function references
+  const trimmed = exprPart.trim();
+  if (trimmed.startsWith("if")) {
+    const result = handleIfExpressionFunctionBinding(
+      trimmed,
+      varName,
+      typeAnnotation,
+      mutable,
+      context,
+      functionContext,
+      compileWithContextFn,
+    );
+    if (result) return result;
   }
 
   // For regular variable assignments, compile the expression
@@ -296,13 +364,7 @@ export function parseLetExpression(
   compileWithContextFn: CompileWithContextFn,
   context: VariableContext,
   functionContext: FunctionContext,
-):
-  | {
-      instructions: Instruction[];
-      newContext: VariableContext;
-      newFunctionContext: FunctionContext;
-    }
-  | undefined {
+): LetExpressionResult | undefined {
   if (!source.startsWith("let")) return undefined;
 
   const components = parseLetComponents(source);

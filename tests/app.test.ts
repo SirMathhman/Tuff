@@ -599,14 +599,13 @@ describe("The application - Function validation", () => {
     );
   });
 
-  // TODO: Support choosing functions via if-expressions requires runtime function dispatch
-  // it("should support choosing function via if-expression and calling with parameters", () => {
-  //   assertValid(
-  //     "let add = (x : U8, y : U8) => x + y; let multiply = (x : U8, y : U8) => x * y; let chosen = if (read Bool) add else multiply; chosen(read U8, read U8)",
-  //     15,
-  //     1,
-  //     5,
-  //     10,
-  //   );
-  // });
+  it("should support choosing function via if-expression and calling with parameters", () => {
+    assertValid(
+      "let add = (x : U8, y : U8) => x + y; let multiply = (x : U8, y : U8) => x * y; let chosen = if (read Bool) add else multiply; chosen(read U8, read U8)",
+      15,
+      1,
+      5,	
+      10,
+    );
+  });
 });
