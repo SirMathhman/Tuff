@@ -190,21 +190,22 @@ function parseExpression(source: string): Result<Expression, CompileError> {
 function compileLiteral(
   expr: Expression,
   nextRegister: number,
-): Result<{ instructions: Instruction[]; resultRegister: number }, CompileError> {
+): Result<
+  { instructions: Instruction[]; resultRegister: number },
+  CompileError
+> {
   const instructions = [
-    createInstruction(
-      OpCode.Load,
-      Variant.Immediate,
-      nextRegister,
-      expr.value,
-    ),
+    createInstruction(OpCode.Load, Variant.Immediate, nextRegister, expr.value),
   ];
   return ok({ instructions, resultRegister: nextRegister });
 }
 
 function compileRead(
   nextRegister: number,
-): Result<{ instructions: Instruction[]; resultRegister: number }, CompileError> {
+): Result<
+  { instructions: Instruction[]; resultRegister: number },
+  CompileError
+> {
   const instructions = [
     createInstruction(OpCode.In, Variant.Immediate, nextRegister),
   ];
@@ -227,7 +228,10 @@ function getOpCode(op: "+" | "-" | "*" | "/"): OpCode {
 function compileBinary(
   expr: Expression & { type: "binary" },
   nextRegister: number,
-): Result<{ instructions: Instruction[]; resultRegister: number }, CompileError> {
+): Result<
+  { instructions: Instruction[]; resultRegister: number },
+  CompileError
+> {
   const leftResult = compileExpression(expr.left, nextRegister);
   if (!leftResult.ok) return leftResult;
 

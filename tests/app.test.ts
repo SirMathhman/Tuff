@@ -160,4 +160,8 @@ describe("The application - Read tests", () => {
   it("should read U8 and add 1", () => {
     assertValid("read U8 + 1U8", 101, 100);
   });
+
+  it("should add 1 and read U8", () => {
+    assertValid("1U8 + read U8", 101, 100);
+  });
 });
