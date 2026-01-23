@@ -121,6 +121,9 @@ function interpretWithScope(input: string, scope: Map<string, number> = new Map(
             if (eqIndex !== -1) {
                 const varPart = declStr.slice(4, eqIndex).trim();
                 const varName = varPart.includes(":") ? (varPart.split(":")[0] || varPart).trim() : varPart;
+                if (scope.has(varName)) {
+                    throw new Error(`variable '${varName}' already declared in this scope`);
+                }
                 const exprStr = declStr.slice(eqIndex + 1).trim();
                 const varValue = interpretWithScope(exprStr, scope);
                 scope.set(varName, varValue);

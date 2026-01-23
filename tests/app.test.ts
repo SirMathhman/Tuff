@@ -81,4 +81,8 @@ describe("interpret", () => {
   it("supports variable declarations without type annotations", () => {
     expect(interpret("let x = 100; let y = x; y")).toBe(100);
   });
+
+  it("throws on duplicate variable declaration in same scope", () => {
+    expect(() => interpret("let x = 100; let x = 200; x")).toThrow();
+  });
 });
