@@ -96,46 +96,43 @@ function performBinaryOp(left: number, op: string, right: number, leftInfo: { va
 
 function extractTypeSize(typeStr: string): number {
     const t = typeStr.trim();
-    if (t[0] !== "U" && t[0] !== "I") return 0;
-    let sizeStr = "";
-    for (let j = 1; j < t.length; j++) {
-        const ch = t[j];
-        if (ch && ch >= "0" && ch <= "9") sizeStr += ch;
+    if (t.length < 1 || (t[0] !== "U" && t[0] !== "I")) return 0;
+    let s = "";
+    for (let i = 1; i < t.length; i++) {
+        const ch = t[i];
+        if (ch && ch >= "0" && ch <= "9") s += ch;
         else break;
     }
-    return sizeStr.length > 0 ? Number(sizeStr) : 0;
+    return s.length > 0 ? Number(s) : 0;
+}
+
+function handleVarDecl(s: string, scope: Map<string, number>, typeMap: Map<string, number>, mutMap: Map<string, boolean>): number | undefined {
+    if (s.indexOf("let ") !== 0) return undefined;
+    const semiIndex = s.indexOf(";");
+    if (semiIndex === -1) return undefined;
+    const isMut = s.indexOf("mut ") !== -1, declStr = s.slice(0, semiIndex), eqIndex = declStr.indexOf("=");
+    if (eqIndex === -1) return undefined;
+    const varPart = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim(), colonIndex = varPart.indexOf(":");
+    const varName = colonIndex !== -1 ? varPart.slice(0, colonIndex).trim() : varPart;
+    if (scope.has(varName)) throw new Error(`variable '${varName}' already declared in this scope`);
+    const exprStr = declStr.slice(eqIndex + 1).trim(), varValue = interpretWithScope(exprStr, scope, typeMap, mutMap);
+    const vType = extractTypedInfo(exprStr).typeSize || (scope.has(exprStr) ? typeMap.get(exprStr) || 0 : 0);
+    if (colonIndex !== -1 && vType > 0) {
+        const dType = extractTypeSize(varPart.slice(colonIndex + 1).trim());
+        if (dType > 0 && vType > dType) throw new Error(`cannot assign type of size ${vType} to U${dType}`);
+    }
+    scope.set(varName, varValue);
+    if (vType > 0) typeMap.set(varName, vType);
+    if (isMut) mutMap.set(varName, true);
+    return interpretWithScope(s.slice(semiIndex + 1).trim(), scope, typeMap, mutMap);
 }
 
 function interpretWithScope(input: string, scope: Map<string, number> = new Map(), typeMap: Map<string, number> = new Map(), mutMap: Map<string, boolean> = new Map()): number {
     const s = input.trim();
     if (s === "") return 0;
 
-    if (s.indexOf("let ") === 0) {
-        const semiIndex = s.indexOf(";");
-        if (semiIndex !== -1) {
-            const isMut = s.indexOf("mut ") !== -1;
-            const declStr = s.slice(0, semiIndex);
-            const eqIndex = declStr.indexOf("=");
-            if (eqIndex !== -1) {
-                const varPart = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim();
-                const colonIndex = varPart.indexOf(":");
-                const varName = colonIndex !== -1 ? varPart.slice(0, colonIndex).trim() : varPart;
-                if (scope.has(varName)) throw new Error(`variable '${varName}' already declared in this scope`);
-                const exprStr = declStr.slice(eqIndex + 1).trim();
-                const varValue = interpretWithScope(exprStr, scope, typeMap, mutMap);
-                const valueInfo = extractTypedInfo(exprStr);
-                const vType = valueInfo.typeSize || (scope.has(exprStr) ? typeMap.get(exprStr) || 0 : 0);
-                if (colonIndex !== -1) {
-                    const dType = extractTypeSize(varPart.slice(colonIndex + 1).trim());
-                    if (dType > 0 && vType > 0 && vType > dType) throw new Error(`cannot assign type of size ${vType} to U${dType}`);
-                }
-                scope.set(varName, varValue);
-                if (vType > 0) typeMap.set(varName, vType);
-                if (isMut) mutMap.set(varName, true);
-                return interpretWithScope(s.slice(semiIndex + 1).trim(), scope, typeMap, mutMap);
-            }
-        }
-    }
+    const declResult = handleVarDecl(s, scope, typeMap, mutMap);
+    if (declResult !== undefined) return declResult;
 
     const eqIdx = s.indexOf("=");
     if (eqIdx > 0 && s[eqIdx + 1] !== "=" && scope.has(s.slice(0, eqIdx).trim())) {
@@ -143,8 +140,7 @@ function interpretWithScope(input: string, scope: Map<string, number> = new Map(
         if (!mutMap.has(lhs)) throw new Error(`variable '${lhs}' is immutable`);
         const semiIdx = s.indexOf(";", eqIdx);
         if (semiIdx !== -1) {
-            const rhs = s.slice(eqIdx + 1, semiIdx).trim();
-            scope.set(lhs, interpretWithScope(rhs, scope, typeMap, mutMap));
+            scope.set(lhs, interpretWithScope(s.slice(eqIdx + 1, semiIdx).trim(), scope, typeMap, mutMap));
             return interpretWithScope(s.slice(semiIdx + 1).trim(), scope, typeMap, mutMap);
         }
     }
@@ -179,20 +175,19 @@ function findMatchingClose(s: string, openIndex: number, openChar: string, close
 
 function evaluateGroupedExpressionsWithScope(s: string, scope: Map<string, number>, typeMap: Map<string, number>, mutMap: Map<string, boolean>): string {
     const pairs: Array<[string, string]> = [["(", ")"], ["{", "}"], ["[", "]"]];
-
     for (const [openChar, closeChar] of pairs) {
         const openIndex = s.indexOf(openChar);
         if (openIndex === -1) continue;
-
         const closeIndex = findMatchingClose(s, openIndex, openChar, closeChar);
         if (closeIndex === -1) throw new Error(`unmatched opening ${openChar}`);
-
         const inside = s.slice(openIndex + 1, closeIndex);
         const result = interpretWithScope(inside, scope, typeMap, mutMap);
-        const replaced = s.slice(0, openIndex) + String(result) + s.slice(closeIndex + 1);
-        return evaluateGroupedExpressionsWithScope(replaced, scope, typeMap, mutMap);
+        const after = s.slice(closeIndex + 1).trim();
+        if (openChar === "{" && inside.includes("=") && after && !after.includes("+") && !after.includes("-") && !after.includes("*") && !after.includes("/")) {
+            return evaluateGroupedExpressionsWithScope(s.slice(0, openIndex) + after, scope, typeMap, mutMap);
+        }
+        return evaluateGroupedExpressionsWithScope(s.slice(0, openIndex) + String(result) + s.slice(closeIndex + 1), scope, typeMap, mutMap);
     }
-
     return s;
 }
 

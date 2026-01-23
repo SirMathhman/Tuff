@@ -105,4 +105,8 @@ describe("interpret", () => {
   it("throws when reassigning immutable variable", () => {
     expect(() => interpret("let x = 0; x = 100; x")).toThrow();
   });
+
+  it("allows mutable variable reassignment inside grouped expressions", () => {
+    expect(interpret("let mut x = 0; { x = 100; } x")).toBe(100);
+  });
 });
