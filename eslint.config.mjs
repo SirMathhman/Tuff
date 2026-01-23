@@ -44,7 +44,8 @@ export default [
           skipBlankLines: true,
         },
       ],
-      "max-depth": ["error", 2],
+			// No intentation. This is the challenge!
+      "max-depth": ["error", 0],
       "max-lines": [
         "error",
         {
