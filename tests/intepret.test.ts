@@ -186,6 +186,19 @@ describe("intepret - expressions: variables (type compatibility)", () => {
       expect(result.error.cause.toLowerCase()).toContain("already");
   });
 
+  it("parses and evaluates unsuffixed literal assignment to matching type like 'let x = 100; let y : I32 = x; y'", () => {
+    const result = intepret("let x = 100; let y : I32 = x; y");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(100);
+  });
+
+  it("returns err for unsuffixed literal assignment to narrower type like 'let x = 100; let y : U8 = x; y'", () => {
+    const result = intepret("let x = 100; let y : U8 = x; y");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("incompatible");
+  });
+
   it("parses and evaluates top-level variable declarations like 'let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z'", () => {
     const result = intepret(
       "let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z",

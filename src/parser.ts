@@ -66,21 +66,22 @@ export function parseNumberWithSuffix(
   if (isNeg) num = -num;
 
   const { suffix } = extractSuffix(trimmed, idx);
+  const finalSuffix = suffix || "I32";
 
-  if (suffix && isNeg && suffix[0] === "U") {
+  if (finalSuffix && isNeg && finalSuffix[0] === "U") {
     return err(
       makeError(
         "Invalid combination",
         `Input: ${s}`,
         "Cannot use negative numbers with unsigned type suffixes",
-        `Remove the negative sign or use a signed suffix like I${suffix.slice(1)}`,
+        `Remove the negative sign or use a signed suffix like I${finalSuffix.slice(1)}`,
       ),
     );
   }
-  if (suffix && !isInRange(num, suffix)) return err(getRangeError(suffix));
+  if (finalSuffix && !isInRange(num, finalSuffix)) return err(getRangeError(finalSuffix));
 
   const negSign = isNeg ? 1 : 0;
-  return ok({ num, suffix, len: negSign + digits.length + suffix.length });
+  return ok({ num, suffix: finalSuffix, len: negSign + digits.length + suffix.length });
 }
 
 export function validateResult(
