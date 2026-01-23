@@ -1,12 +1,12 @@
-import { type Result, ok, err } from "./result";
-import { type TuffError } from "./error";
+import { type Result, ok, err } from "../core/result";
+import { type TuffError } from "../core/error";
 import {
   isInRange,
   getRangeError,
   looksLikeNumber,
   parseBooleanLiteral,
-} from "./types";
-import { evaluateTokens as evaluateTokensImpl } from "./arithmetic";
+} from "../utils/types";
+import { evaluateTokens as evaluateTokensImpl } from "../core/arithmetic";
 
 export const evaluateTokens = evaluateTokensImpl;
 

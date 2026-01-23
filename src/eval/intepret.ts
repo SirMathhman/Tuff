@@ -1,21 +1,14 @@
-import { type Result, ok, err } from "./result";
-import { type TuffError } from "./error";
-import { validateResult, evaluateTokens, parseLiteral } from "./parser";
+import { type Result, ok, err } from "../core/result";
+import { type TuffError } from "../core/error";
+import { validateResult, evaluateTokens, parseLiteral } from "../parse/parser";
 import { parseVariableDeclarations, type VariableEntry } from "./variables";
 import {
   checkOperatorTypeCompat,
   createMixedSuffixError,
   isOperatorToken,
-} from "./validation";
-
-function makeError(
-  cause: string,
-  context: string,
-  reason: string,
-  fix: string,
-): TuffError {
-  return { cause, context, reason, fix };
-}
+} from "../utils/validation";
+import { parseIfElseTopLevel, parseIfElse } from "./ifelse";
+import { errorUndefinedToken, determineSuffix } from "./intepret-helpers";
 
 function hasOpenParen(s: string): boolean {
   for (let i = 0; i < s.length; i = i + 1) {
@@ -58,37 +51,6 @@ function resolveParentheses(
   }
 
   return ok(result);
-}
-
-function errorUndefinedToken(label: string): TuffError {
-  return makeError(
-    "Invalid token",
-    label,
-    "Token is undefined",
-    "Ensure all tokens are valid",
-  );
-}
-
-function determineSuffix(
-  tokens: Array<string>,
-  vars: Map<string, VariableEntry>,
-): Result<string, TuffError> {
-  for (let i = 0; i < tokens.length; i = i + 1) {
-    const token = tokens[i];
-    if (!isOperatorToken(token)) {
-      if (vars.has(token)) {
-        const entry = vars.get(token);
-        if (entry) {
-          return ok(entry.suffix);
-        }
-      } else {
-        const parsed = parseLiteral(token);
-        if (!parsed.ok) return parsed;
-        return ok(parsed.value.suffix);
-      }
-    }
-  }
-  return ok("");
 }
 
 function buildParsedTokens(
@@ -150,17 +112,23 @@ function evaluateCore(
   expr: string,
   vars: Map<string, VariableEntry>,
 ): Result<number, TuffError> {
-  const parsed = parseVariableDeclarations(expr, vars);
+  const parsed = parseVariableDeclarations(expr, vars, evaluateExpression);
   if (!parsed.ok) return parsed;
   const { finalExpr, vars: newVars } = parsed.value;
 
-  const trimmed = finalExpr.trim();
+  const trimmedExpr = finalExpr.trim();
+
+  // Check for if-else expression, evaluateExpression
+  if (trimmedExpr.startsWith("if")) {
+    return parseIfElse(trimmedExpr, newVars, evaluateExpression);
+  }
+
   const tokens = [];
   let current = "";
 
-  for (let i = 0; i < trimmed.length; i = i + 1) {
-    const c = trimmed[i];
-    const nextC = i + 1 < trimmed.length ? trimmed[i + 1] : "";
+  for (let i = 0; i < trimmedExpr.length; i = i + 1) {
+    const c = trimmedExpr[i];
+    const nextC = i + 1 < trimmedExpr.length ? trimmedExpr[i + 1] : "";
     if ((c === "|" || c === "&") && nextC === c) {
       if (current) tokens.push(current);
       tokens.push(c + c);
@@ -203,6 +171,22 @@ function evaluateExpression(
   expr: string,
   vars: Map<string, VariableEntry>,
 ): Result<number, TuffError> {
+  const trimmed = expr.trim();
+
+  // Handle if-else expressions directly before resolving parentheses
+  if (trimmed.startsWith("if")) {
+    const ifResult = parseIfElseTopLevel(trimmed, vars, evaluateExpression);
+    if (ifResult.ok) return ifResult;
+    // If it failed, it's a real error
+    if (!ifResult.ok && ifResult.error.cause !== "Not if") return ifResult;
+  }
+
+  // If expression starts with "let" at top level, parse variable declarations first
+  // This needs to happen before resolveParentheses to handle if-expressions in variable assignments
+  if (trimmed.startsWith("let ")) {
+    return evaluateCore(expr, vars);
+  }
+
   const resolvedResult = resolveParentheses(expr, evaluateExpression, vars);
   if (!resolvedResult.ok) return resolvedResult;
   return evaluateCore(resolvedResult.value, vars);

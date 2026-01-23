@@ -1,5 +1,5 @@
-import { type Result, ok, err } from "./result";
-import { type TuffError, makeError } from "./error";
+import { type Result, ok, err } from "../core/result";
+import { type TuffError, makeError } from "../core/error";
 
 function isArithmeticOperator(op: string): boolean {
   return op === "+" || op === "-" || op === "*" || op === "/";

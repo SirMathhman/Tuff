@@ -1,5 +1,5 @@
-import { type TuffError } from "./error";
-import { type Result, ok, err } from "./result";
+import { type TuffError } from "../core/error";
+import { type Result, ok, err } from "../core/result";
 
 function makeError(
   cause: string,

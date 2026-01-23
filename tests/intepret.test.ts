@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import { intepret } from "../src/intepret";
-import { isOk } from "../src/result";
+import { intepret } from "../src/eval/intepret";
+import { isOk } from "../src/core/result";
 
 describe("intepret - basic parsing", () => {
   it("returns ok(0) for empty string", () => {
