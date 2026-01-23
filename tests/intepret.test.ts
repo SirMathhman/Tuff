@@ -123,8 +123,16 @@ describe("intepret - expressions: precedence and operators", () => {
     if (isOk(result)) expect(result.value).toBe(10);
   });
 
+  it("parses and evaluates simple top-level variable declarations like 'let x : I32 = 100; x'", () => {
+    const result = intepret("let x : I32 = 100; x");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(100);
+  });
+
   it("parses and evaluates top-level variable declarations like 'let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z'", () => {
-    const result = intepret("let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z");
+    const result = intepret(
+      "let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z",
+    );
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(10);
   });
