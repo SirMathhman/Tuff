@@ -87,32 +87,56 @@ export function handleVarDecl(
   } else {
     declStr = s.slice(0, semiIndex);
     restIndex = semiIndex + 1;
+
+    // Check if this is a declaration without initialization (no = sign in declStr)
+    // This flag is used to mark uninitialized variables as implicitly mutable
   }
 
   const isMut = declStr.indexOf("mut ") !== -1;
   const eqIndex = declStr.indexOf("=");
-  if (eqIndex === -1) return undefined;
 
-  const varPart = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim(),
-    colonIndex = varPart.indexOf(":");
-  const varName =
-    colonIndex !== -1 ? varPart.slice(0, colonIndex).trim() : varPart;
+  let varName: string;
+  let varValue: number = 0;
+  let vType = 0;
+
+  if (eqIndex === -1) {
+    // No assignment - just declaration with type
+    const varPart = declStr.slice(4 + (isMut ? 4 : 0)).trim(),
+      colonIndex = varPart.indexOf(":");
+    if (colonIndex === -1) {
+      // Must have a type annotation for uninitialized variables
+      return undefined;
+    }
+    varName = varPart.slice(0, colonIndex).trim();
+    vType = extractTypeSize(varPart.slice(colonIndex + 1).trim());
+  } else {
+    // Has assignment
+    const varPart = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim(),
+      colonIndex = varPart.indexOf(":");
+    varName =
+      colonIndex !== -1 ? varPart.slice(0, colonIndex).trim() : varPart;
+
+    const exprStr = declStr.slice(eqIndex + 1).trim();
+    varValue = interpreter(exprStr, scope, typeMap, mutMap);
+    vType =
+      extractTypedInfo(exprStr).typeSize ||
+      (scope.has(exprStr) ? typeMap.get(exprStr) || 0 : 0);
+    if (colonIndex !== -1 && vType > 0) {
+      const dType = extractTypeSize(varPart.slice(colonIndex + 1).trim());
+      if (dType > 0 && vType > dType)
+        throw new Error(`bad type: ${vType} to U${dType}`);
+    }
+  }
+
   if (scope.has(varName))
     throw new Error(`variable '${varName}' already declared`);
 
-  const exprStr = declStr.slice(eqIndex + 1).trim(),
-    varValue = interpreter(exprStr, scope, typeMap, mutMap);
-  const vType =
-    extractTypedInfo(exprStr).typeSize ||
-    (scope.has(exprStr) ? typeMap.get(exprStr) || 0 : 0);
-  if (colonIndex !== -1 && vType > 0) {
-    const dType = extractTypeSize(varPart.slice(colonIndex + 1).trim());
-    if (dType > 0 && vType > dType)
-      throw new Error(`bad type: ${vType} to U${dType}`);
-  }
   scope.set(varName, varValue);
   if (vType > 0) typeMap.set(varName, vType);
-  if (isMut) mutMap.set(varName, true);
+  // Mark as mutable if explicitly declared with 'mut' or if uninitialized
+  if (isMut || eqIndex === -1) {
+    mutMap.set(varName, true);
+  }
 
   const rest = s.slice(restIndex).trim();
   if (rest) {

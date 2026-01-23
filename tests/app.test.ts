@@ -163,8 +163,10 @@ describe("interpret", () => {
   });
 
   it("supports loop with break inside if condition", () => {
-    expect(
-      interpret("let x : I32 = loop { if (true) break 5; }; x"),
-    ).toBe(5);
+    expect(interpret("let x : I32 = loop { if (true) break 5; }; x")).toBe(5);
+  });
+
+  it("supports uninitialized variable declaration", () => {
+    expect(interpret("let x : I32; x = 100; x")).toBe(100);
   });
 });
