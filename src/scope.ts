@@ -1,14 +1,7 @@
 import { extractTypedInfo } from "./parser";
 import { extractTypeSize } from "./types";
-import { findMatchingClose } from "./match";
+import type { Interpreter } from "./expressions/handlers";
 
-type Interpreter = (
-  input: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet?: Set<string>,
-) => number;
 export function handleVarDecl(
   s: string,
   scope: Map<string, number>,
@@ -16,6 +9,7 @@ export function handleVarDecl(
   mutMap: Map<string, boolean>,
   interpreter: Interpreter,
   uninitializedSet: Set<string> = new Set(),
+  unmutUninitializedSet: Set<string> = new Set(),
 ): number | undefined {
   if (s.indexOf("let ") !== 0) return undefined;
   let semiIndex = -1;
@@ -117,7 +111,14 @@ export function handleVarDecl(
     varName = colonIndex !== -1 ? varPart.slice(0, colonIndex).trim() : varPart;
 
     const exprStr = declStr.slice(eqIndex + 1).trim();
-    varValue = interpreter(exprStr, scope, typeMap, mutMap);
+    varValue = interpreter(
+      exprStr,
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+      unmutUninitializedSet,
+    );
     vType =
       extractTypedInfo(exprStr).typeSize ||
       (scope.has(exprStr) ? typeMap.get(exprStr) || 0 : 0);
@@ -137,86 +138,25 @@ export function handleVarDecl(
   if (isMut || eqIndex === -1) {
     mutMap.set(varName, true);
   }
-  // Track uninitialized variables so they can be marked immutable after first assignment
+  // Track uninitialized variables - but only those WITHOUT mut become immutable after first assignment
   if (eqIndex === -1) {
     uninitializedSet.add(varName);
+    // Only add to unmutUninitializedSet if it's NOT declared with mut
+    if (!isMut) {
+      unmutUninitializedSet.add(varName);
+    }
   }
 
   const rest = s.slice(restIndex).trim();
   if (rest) {
-    return interpreter(rest, scope, typeMap, mutMap, uninitializedSet);
-  }
-  return varValue;
-}
-
-export function evaluateGroupedExpressionsWithScope(
-  s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  interpreter: Interpreter,
-): string {
-  // Skip if this appears to be a match expression
-  const trimmed = s.trim();
-  if (trimmed.startsWith("match") && trimmed.includes("case ")) {
-    return s;
-  }
-  const pairs: Array<[string, string]> = [
-    ["(", ")"],
-    ["{", "}"],
-    ["[", "]"],
-  ];
-  for (const [openChar, closeChar] of pairs) {
-    const openIndex = s.indexOf(openChar);
-    if (openIndex === -1) continue;
-    // For braces, skip if part of a match expression (contains "case" keyword)
-    if (openChar === "{") {
-      const closeIdx = findMatchingClose(s, openIndex, openChar, closeChar);
-      if (closeIdx > 0) {
-        const inside = s.slice(openIndex + 1, closeIdx);
-        if (inside.includes("case ")) {
-          // This is likely a match expression, skip it
-          continue;
-        }
-      }
-    }
-    const closeIndex = findMatchingClose(s, openIndex, openChar, closeChar);
-    if (closeIndex === -1) throw new Error(`unmatched opening ${openChar}`);
-    const inside = s.slice(openIndex + 1, closeIndex);
-    const cScope = new Map(scope),
-      cTypeMap = new Map(typeMap),
-      cMutMap = new Map(mutMap);
-    const result = interpreter(inside, cScope, cTypeMap, cMutMap);
-    if (openChar === "{") {
-      for (const [k, v] of cScope.entries()) if (scope.has(k)) scope.set(k, v);
-      for (const [k, v] of cMutMap.entries())
-        if (mutMap.has(k)) mutMap.set(k, v);
-    }
-    const after = s.slice(closeIndex + 1).trim();
-    if (
-      openChar === "{" &&
-      inside.includes("=") &&
-      after &&
-      !after.includes("+") &&
-      !after.includes("-") &&
-      !after.includes("*") &&
-      !after.includes("/")
-    ) {
-      return evaluateGroupedExpressionsWithScope(
-        s.slice(0, openIndex) + after,
-        scope,
-        typeMap,
-        mutMap,
-        interpreter,
-      );
-    }
-    return evaluateGroupedExpressionsWithScope(
-      s.slice(0, openIndex) + String(result) + s.slice(closeIndex + 1),
+    return interpreter(
+      rest,
       scope,
       typeMap,
       mutMap,
-      interpreter,
+      uninitializedSet,
+      unmutUninitializedSet,
     );
   }
-  return s;
+  return varValue;
 }

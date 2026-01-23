@@ -1,8 +1,14 @@
-import { handleVarDecl, evaluateGroupedExpressionsWithScope } from "./scope";
+import { handleVarDecl } from "./scope";
+import { evaluateGroupedExpressionsWithScope } from "./expressions/grouped-expressions";
 import { handleMatch } from "./match";
 import { handleLoop, BreakException, handleBreak } from "./loop";
-import { findOperatorIndex, performBinaryOp } from "./operators";
-import { parseTypedNumber, extractTypedInfo } from "./parser";
+import {
+  handleIfExpression,
+  handleVarAssignment,
+  handleBinaryOperation,
+  type Interpreter,
+} from "./expressions/handlers";
+import { parseTypedNumber } from "./parser";
 
 export function interpretWithScope(
   input: string,
@@ -10,6 +16,7 @@ export function interpretWithScope(
   typeMap: Map<string, number> = new Map(),
   mutMap: Map<string, boolean> = new Map(),
   uninitializedSet: Set<string> = new Set(),
+  unmutUninitializedSet: Set<string> = new Set(),
 ): number {
   const s = input.trim();
   if (s === "") return 0;
@@ -19,8 +26,9 @@ export function interpretWithScope(
     scope,
     typeMap,
     mutMap,
-    interpretWithScope,
+    interpretWithScope as Interpreter,
     uninitializedSet,
+    unmutUninitializedSet,
   );
   if (declResult !== undefined) return declResult;
 
@@ -38,123 +46,33 @@ export function interpretWithScope(
 
   try {
     handleBreak(s, scope, typeMap, mutMap, interpretWithScope);
-    // If handleBreak returns, it means the string doesn't start with "break"
   } catch (e) {
     if (e instanceof BreakException) {
       throw e;
     }
-    // If it's not a BreakException, continue to other handlers
   }
 
-  if (s.indexOf("if ") === 0) {
-    const cIdx = s.indexOf(")");
-    if (cIdx > 0) {
-      const cond = interpretWithScope(
-        s.slice(4, cIdx),
-        scope,
-        typeMap,
-        mutMap,
-        uninitializedSet,
-      );
-      let elseIdx = -1;
-      let ifDepth = 0;
-      let parenDepth = 0;
-      let braceDepth = 0;
+  const ifResult = handleIfExpression(
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpretWithScope as Interpreter,
+  );
+  if (ifResult !== undefined) return ifResult;
 
-      // Find the matching "else" for this "if"
-      for (let i = cIdx + 1; i < s.length; i++) {
-        if (s[i] === "(") parenDepth++;
-        else if (s[i] === ")") parenDepth--;
-        else if (s[i] === "{") braceDepth++;
-        else if (s[i] === "}") braceDepth--;
-        else if (
-          parenDepth === 0 &&
-          braceDepth === 0 &&
-          s.slice(i, i + 5) === " else"
-        ) {
-          if (ifDepth === 0) {
-            elseIdx = i;
-            break;
-          }
-          ifDepth--;
-        } else if (
-          parenDepth === 0 &&
-          braceDepth === 0 &&
-          s.slice(i, i + 3) === "if " &&
-          (i === 0 || " \t\n".includes(s.charAt(i - 1)))
-        ) {
-          ifDepth++;
-        }
-      }
-
-      if (elseIdx > 0) {
-        const thenStr = s.slice(cIdx + 1, elseIdx).trim(),
-          elseStr = s.slice(elseIdx + 6).trim();
-        return cond !== 0
-          ? interpretWithScope(
-              thenStr,
-              scope,
-              typeMap,
-              mutMap,
-              uninitializedSet,
-            )
-          : interpretWithScope(
-              elseStr,
-              scope,
-              typeMap,
-              mutMap,
-              uninitializedSet,
-            );
-      } else {
-        // No else clause - just handle the then part
-        const thenStr = s.slice(cIdx + 1).trim();
-        if (cond !== 0) {
-          return interpretWithScope(
-            thenStr,
-            scope,
-            typeMap,
-            mutMap,
-            uninitializedSet,
-          );
-        }
-        return 0; // If condition is false and no else, return 0
-      }
-    }
-  }
-
-  const eqIdx = s.indexOf("=");
-  if (
-    eqIdx > 0 &&
-    s[eqIdx + 1] !== "=" &&
-    scope.has(s.slice(0, eqIdx).trim())
-  ) {
-    const lhs = s.slice(0, eqIdx).trim(),
-      semiIdx = s.indexOf(";", eqIdx);
-    if (!mutMap.has(lhs)) throw new Error(`variable '${lhs}' is immutable`);
-    if (semiIdx !== -1) {
-      const newValue = interpretWithScope(
-        s.slice(eqIdx + 1, semiIdx).trim(),
-        scope,
-        typeMap,
-        mutMap,
-        uninitializedSet,
-      );
-      scope.set(lhs, newValue);
-      // If this variable was uninitialized, remove it from the uninitialized set and mutMap
-      // after the first assignment (so it becomes immutable)
-      if (uninitializedSet.has(lhs)) {
-        uninitializedSet.delete(lhs);
-        mutMap.delete(lhs);
-      }
-      return interpretWithScope(
-        s.slice(semiIdx + 1).trim(),
-        scope,
-        typeMap,
-        mutMap,
-        uninitializedSet,
-      );
-    }
-  }
+  const assignmentResult = handleVarAssignment(
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpretWithScope as Interpreter,
+  );
+  if (assignmentResult !== undefined) return assignmentResult;
 
   if (scope.has(s.trim())) return scope.get(s.trim())!;
   if (
@@ -187,28 +105,17 @@ export function interpretWithScope(
         typeMap,
         mutMap,
         uninitializedSet,
+        unmutUninitializedSet,
       );
   }
-  const { index: opIndex, operator: op } = findOperatorIndex(s);
-  if (opIndex === -1) return parseTypedNumber(s);
-  return performBinaryOp(
-    interpretWithScope(
-      s.slice(0, opIndex).trim(),
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-    ),
-    op,
-    interpretWithScope(
-      s.slice(opIndex + 1).trim(),
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-    ),
-    extractTypedInfo(s.slice(0, opIndex).trim()),
-    s.slice(opIndex + 1).trim(),
+  return handleBinaryOperation(
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpretWithScope as Interpreter,
   );
 }
 
