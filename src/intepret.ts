@@ -73,7 +73,8 @@ function evaluateCore(expr: string): Result<number, string> {
     const token = tokens[i];
     if (token === undefined) return err("Invalid token");
 
-    const isOp = token === "+" || token === "-" || token === "*";
+    const isOp =
+      token === "+" || token === "-" || token === "*" || token === "/";
     if (isOp) {
       parsedTokens.push(token);
     } else {
@@ -91,8 +92,9 @@ function evaluateCore(expr: string): Result<number, string> {
     }
   }
 
-  const result = evaluateTokens(parsedTokens);
-  return validateResult(result, commonSuffix);
+  const evaluated = evaluateTokens(parsedTokens);
+  if (!evaluated.ok) return evaluated;
+  return validateResult(evaluated.value, commonSuffix);
 }
 
 function evaluateExpression(expr: string): Result<number, string> {

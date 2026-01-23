@@ -48,7 +48,7 @@ describe("intepret - validation", () => {
   });
 });
 
-describe("intepret - expressions", () => {
+describe("intepret - expressions: arithmetic", () => {
   it("parses and evaluates simple expressions like '1U8 + 2U8'", () => {
     const result = intepret("1U8 + 2U8");
     expect(isOk(result)).toBe(true);
@@ -84,7 +84,9 @@ describe("intepret - expressions", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(1);
   });
+});
 
+describe("intepret - expressions: precedence and operators", () => {
   it("parses and evaluates expressions with multiplication like '2 * 3 + 4'", () => {
     const result = intepret("2 * 3 + 4");
     expect(isOk(result)).toBe(true);
@@ -101,5 +103,11 @@ describe("intepret - expressions", () => {
     const result = intepret("(4 + 2) * 3");
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(18);
+  });
+
+  it("returns err for division by zero like '10 / (2 - 2)'", () => {
+    const result = intepret("10 / (2 - 2)");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result)) expect(result.error).toContain("Division by zero");
   });
 });

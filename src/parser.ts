@@ -80,50 +80,49 @@ export function validateResult(
   return ok(result);
 }
 
-export function applyMultiplication(
+export function applyMultiplicationDivision(
   val: number,
   tokens: Array<number | string>,
   startIdx: number,
-): { result: number; nextIdx: number } {
+): Result<{ result: number; nextIdx: number }, string> {
   let current = val;
   let i = startIdx;
 
   while (i < tokens.length) {
     const op = tokens[i];
-    if (op !== "*") break;
-
-    i = i + 1;
-    const multNum = tokens[i];
-    if (typeof multNum !== "number") break;
-
-    current = current * multNum;
-    i = i + 1;
-  }
-
-  return { result: current, nextIdx: i };
-}
-
-export function evaluateTokens(tokens: Array<number | string>): number {
-  const multDivResult: Array<number | string> = [];
-  let i = 0;
-  let current = tokens[0];
-
-  if (typeof current !== "number") return 0;
-
-  i = 1;
-  while (i < tokens.length) {
-    const op = tokens[i];
-    if (op !== "*") break;
+    if (op !== "*" && op !== "/") break;
 
     i = i + 1;
     const nextNum = tokens[i];
     if (typeof nextNum !== "number") break;
 
-    if (typeof current === "number") {
+    if (op === "*") {
       current = current * nextNum;
+    } else if (op === "/") {
+      if (nextNum === 0) {
+        return err("Division by zero");
+      }
+      current = Math.floor(current / nextNum);
     }
     i = i + 1;
   }
+
+  return ok({ result: current, nextIdx: i });
+}
+
+function handleHighPrecedence(
+  tokens: Array<number | string>,
+): Result<Array<number | string>, string> {
+  const multDivResult: Array<number | string> = [];
+  let i = 0;
+  let current = tokens[0];
+
+  if (typeof current !== "number") return ok([0]);
+
+  const initial = applyMultiplicationDivision(current, tokens, 1);
+  if (!initial.ok) return initial;
+  current = initial.value.result;
+  i = initial.value.nextIdx;
 
   multDivResult.push(current);
 
@@ -137,11 +136,22 @@ export function evaluateTokens(tokens: Array<number | string>): number {
     const nextVal = tokens[i];
     if (typeof nextVal !== "number") break;
 
-    const applied = applyMultiplication(nextVal, tokens, i + 1);
-    multDivResult.push(applied.result);
-    i = applied.nextIdx;
+    const applied = applyMultiplicationDivision(nextVal, tokens, i + 1);
+    if (!applied.ok) return applied;
+    multDivResult.push(applied.value.result);
+    i = applied.value.nextIdx;
   }
 
+  return ok(multDivResult);
+}
+
+export function evaluateTokens(
+  tokens: Array<number | string>,
+): Result<number, string> {
+  const highPrecedence = handleHighPrecedence(tokens);
+  if (!highPrecedence.ok) return highPrecedence;
+
+  const multDivResult = highPrecedence.value;
   let result = 0;
   const firstVal = multDivResult[0];
   if (typeof firstVal === "number") {
@@ -161,5 +171,5 @@ export function evaluateTokens(tokens: Array<number | string>): number {
     j = j + 2;
   }
 
-  return result;
+  return ok(result);
 }
