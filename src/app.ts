@@ -130,6 +130,47 @@ type Expression =
       right: Expression;
     };
 
+type BinaryOp = "+" | "-" | "*" | "/";
+type ParserFunction = (source: string) => Result<Expression, CompileError>;
+
+function parseBinaryExpression(
+  source: string,
+  operators: BinaryOp[],
+  nextParser: ParserFunction,
+): Result<Expression, CompileError> {
+  // Find the rightmost operator (for left-associativity)
+  let operatorIndex = -1;
+  let operator: BinaryOp | undefined;
+
+  for (const op of operators) {
+    const idx = source.lastIndexOf(op);
+    if (idx > operatorIndex) {
+      operatorIndex = idx;
+      operator = op;
+    }
+  }
+
+  if (operatorIndex > 0 && operator) {
+    const left = source.slice(0, operatorIndex).trim();
+    const right = source.slice(operatorIndex + 1).trim();
+
+    const leftResult = parseBinaryExpression(left, operators, nextParser);
+    const rightResult = nextParser(right);
+
+    if (!leftResult.ok) return leftResult;
+    if (!rightResult.ok) return rightResult;
+
+    return ok({
+      type: "binary",
+      op: operator,
+      left: leftResult.value,
+      right: rightResult.value,
+    });
+  }
+
+  return nextParser(source);
+}
+
 function parseExpression(source: string): Result<Expression, CompileError> {
   // Handle empty input as literal 0
   if (source === "") {
@@ -137,30 +178,22 @@ function parseExpression(source: string): Result<Expression, CompileError> {
   }
 
   // Try to parse as addition/subtraction (lowest precedence)
-  const plusIndex = source.lastIndexOf("+");
-  const minusIndex = source.lastIndexOf("-");
+  return parseAdditionSubtraction(source);
+}
 
-  const operatorIndex = Math.max(plusIndex, minusIndex);
+function parseAdditionSubtraction(
+  source: string,
+): Result<Expression, CompileError> {
+  return parseBinaryExpression(source, ["+", "-"], parseMultiplicationDivision);
+}
 
-  if (operatorIndex > 0) {
-    const op = source[operatorIndex] as "+" | "-";
-    const left = source.slice(0, operatorIndex).trim();
-    const right = source.slice(operatorIndex + 1).trim();
+function parseMultiplicationDivision(
+  source: string,
+): Result<Expression, CompileError> {
+  return parseBinaryExpression(source, ["*", "/"], parsePrimary);
+}
 
-    const leftResult = parseExpression(left);
-    const rightResult = parseExpression(right);
-
-    if (!leftResult.ok) return leftResult;
-    if (!rightResult.ok) return rightResult;
-
-    return ok({
-      type: "binary",
-      op,
-      left: leftResult.value,
-      right: rightResult.value,
-    });
-  }
-
+function parsePrimary(source: string): Result<Expression, CompileError> {
   // Check if it's a read command
   if (source.startsWith("read ")) {
     const typeStr = source.slice(5).trim();
@@ -188,7 +221,7 @@ function parseExpression(source: string): Result<Expression, CompileError> {
 }
 
 function compileLiteral(
-  expr: Expression,
+  expr: Expression & { type: "literal" },
   nextRegister: number,
 ): Result<
   { instructions: Instruction[]; resultRegister: number },

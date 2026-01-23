@@ -176,4 +176,8 @@ describe("The application - Read tests", () => {
   it("should read and perform mixed arithmetic", () => {
     assertValid("read U8 + read U8 - read U8", 1, 2, 3, 4);
   });
+
+  it("should multiply and subtract", () => {
+    assertValid("read U8 * read U8 - read U8", 2, 2, 3, 4);
+  });
 });
