@@ -1,14 +1,16 @@
-import { type Result, ok, err } from "../core/result";
+import { type Result, ok } from "../core/result";
 import { type TuffError } from "../core/error";
 import { parseLiteral } from "../parse/parser";
-import { isTypeCompatible } from "../utils/types";
-import { updateDepth } from "../utils/validation";
+import { updateDepth, isArithmeticOperator } from "../utils/validation";
+import { type VariableEntry } from "./variables-types";
+import {
+  validateVariableDeclaration,
+  validateVariableExists,
+  validateVariableMutability,
+  validateReassignmentType,
+} from "./variables-helpers";
 
-export interface VariableEntry {
-  value: number;
-  suffix: string;
-  isMutable: boolean;
-}
+export type { VariableEntry };
 interface VariableHandlerParams {
   stmt: string;
   newVars: Map<string, VariableEntry>;
@@ -17,12 +19,6 @@ interface VariableHandlerParams {
     vars: Map<string, VariableEntry>,
   ) => Result<number, TuffError>;
 }
-const makeError = (
-  cause: string,
-  context: string,
-  reason: string,
-  fix: string,
-): TuffError => ({ cause, context, reason, fix });
 
 function resolveValue(
   valueStr: string,
@@ -38,38 +34,13 @@ function resolveValue(
   const parsed = parseLiteral(valueStr);
   if (parsed.ok)
     return ok({ num: parsed.value.num, suffix: parsed.value.suffix });
-  if (!evaluator || !valueStr.trim().startsWith("if")) return parsed;
+  if (!evaluator) return parsed;
+  const needsEval = valueStr.trim().startsWith("if") || valueStr.includes(" ");
+  if (!needsEval) return parsed;
   const evalResult = evaluator(valueStr, vars);
   return evalResult.ok
     ? ok({ num: evalResult.value, suffix: defaultSuffix })
     : evalResult;
-}
-
-function validateVariableDeclaration(
-  varName: string,
-  valueSuffix: string,
-  varTypeSuffix: string,
-  existingVars: Map<string, VariableEntry>,
-): Result<void, TuffError> {
-  return existingVars.has(varName)
-    ? err(
-        makeError(
-          "Variable already declared",
-          `Variable: ${varName}`,
-          "Cannot redeclare a variable in the same scope",
-          `Use a different variable name, e.g., let x2 = ...;`,
-        ),
-      )
-    : isTypeCompatible(valueSuffix, varTypeSuffix)
-      ? ok()
-      : err(
-          makeError(
-            "Incompatible type assignment",
-            `Variable: ${varTypeSuffix}, Value: ${valueSuffix}`,
-            "Cannot assign a larger type to a smaller type variable",
-            `Assign a compatible type, e.g., let x : U8 = 100U8; or let x : U16 = 100U8;`,
-          ),
-        );
 }
 
 function handleVariableDeclaration({
@@ -103,7 +74,31 @@ function handleVariableDeclaration({
     suffix: varTypeSuffix || valueResult.value.suffix,
     isMutable,
   });
-  return ok();
+  return ok(undefined);
+}
+
+function parseCompoundOperator(
+  stmt: string,
+  eqIdx: number,
+): {
+  compoundOp: string;
+  actualVarName: string;
+  adjustedEqIdx: number;
+} {
+  const beforeEq = stmt.substring(0, eqIdx),
+    varName = beforeEq.trim();
+  let compoundOp = "",
+    actualVarName = varName,
+    adjustedEqIdx = eqIdx;
+  if (eqIdx > 0 && stmt[eqIdx - 1]) {
+    const prevChar = stmt[eqIdx - 1];
+    if (isArithmeticOperator(prevChar)) {
+      compoundOp = prevChar;
+      actualVarName = beforeEq.substring(0, beforeEq.length - 1).trim();
+      adjustedEqIdx = eqIdx - 1;
+    }
+  }
+  return { compoundOp, actualVarName, adjustedEqIdx };
 }
 
 function handleVariableReassignment({
@@ -111,45 +106,38 @@ function handleVariableReassignment({
   newVars,
   evaluator,
 }: VariableHandlerParams): Result<void, TuffError> {
-  const eqIdx = stmt.indexOf("="),
-    varName = stmt.substring(0, eqIdx).trim(),
-    valueStr = stmt.substring(eqIdx + 1).trim(),
-    existing = newVars.get(varName);
-  if (!existing)
-    return err(
-      makeError(
-        "Undefined variable",
-        `Variable: ${varName}`,
-        "Cannot reassign an undefined variable",
-        "Declare the variable first with 'let'",
-      ),
-    );
-  if (!existing.isMutable)
-    return err(
-      makeError(
-        "Cannot reassign immutable variable",
-        `Variable: ${varName}`,
-        "This variable is not declared as mutable",
-        `Declare it as mutable with 'let mut ${varName} = ...'`,
-      ),
-    );
+  let eqIdx = stmt.indexOf("=");
+  const { compoundOp, actualVarName, adjustedEqIdx } = parseCompoundOperator(
+    stmt,
+    eqIdx,
+  );
+  eqIdx = adjustedEqIdx;
+  const valueStr = stmt.substring(eqIdx + (compoundOp ? 2 : 1)).trim();
+  const existingResult = validateVariableExists(
+    actualVarName,
+    newVars.get(actualVarName),
+  );
+  if (!existingResult.ok) return existingResult;
+  const existing = existingResult.value;
+  const mutabilityCheck = validateVariableMutability(actualVarName, existing);
+  if (!mutabilityCheck.ok) return mutabilityCheck;
+  const expandedValueStr = compoundOp
+    ? `${actualVarName} ${compoundOp} ${valueStr}`
+    : valueStr;
   const valueResult = resolveValue(
-    valueStr,
+    expandedValueStr,
     newVars,
     evaluator,
     existing.suffix,
   );
   if (!valueResult.ok) return valueResult;
-  return isTypeCompatible(valueResult.value.suffix, existing.suffix)
-    ? ((existing.value = valueResult.value.num), ok())
-    : err(
-        makeError(
-          "Incompatible type assignment",
-          `Variable: ${existing.suffix}, Value: ${valueResult.value.suffix}`,
-          "Cannot assign a larger type to a smaller type variable",
-          "Assign a compatible type",
-        ),
-      );
+  const typeCheck = validateReassignmentType(
+    valueResult.value.suffix,
+    existing.suffix,
+  );
+  if (!typeCheck.ok) return typeCheck;
+  existing.value = valueResult.value.num;
+  return ok(undefined);
 }
 
 export function parseVariableDeclarations(
