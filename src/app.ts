@@ -41,6 +41,14 @@ export function interpret(input: string): number {
     if (hasDigits) {
         const numStr = s.slice(0, i);
         const n = Number(numStr);
+
+        // If there's a suffix (e.g., "U8") and it indicates unsigned (starts with 'U' or 'u'),
+        // negative values are invalid and should throw an error.
+        const suffix = s.slice(i);
+        if ((suffix[0] === "U" || suffix[0] === "u") && n < 0) {
+            throw new Error("negative value with unsigned suffix");
+        }
+
         return Number.isFinite(n) ? n : 0;
     }
 

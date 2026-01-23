@@ -13,4 +13,8 @@ describe("interpret", () => {
   it("parses a number with a type suffix and returns the number", () => {
     expect(interpret("100U8")).toBe(100);
   });
+
+  it("throws for negative value with unsigned suffix", () => {
+    expect(() => interpret("-100U8")).toThrow();
+  });
 });

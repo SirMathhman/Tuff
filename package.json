@@ -19,7 +19,7 @@
     "dupfind": "./tools/dupfind.exe src --min-nodes 20",
     "prepare": "husky",
     "lint": "tsc --noEmit && eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "lint:fix": "tsc --noEmit && eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
     "test": "bun test",
     "cpd": "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./tools/pmd-bin-7.20.0/bin/pmd cpd --dir src tests --language typescript --minimum-tokens 50",
