@@ -129,6 +129,12 @@ describe("intepret - expressions: precedence and operators", () => {
     if (isOk(result)) expect(result.value).toBe(100);
   });
 
+  it("parses and evaluates top-level variable declarations without type suffix like 'let x = 100; x'", () => {
+    const result = intepret("let x = 100; x");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(100);
+  });
+
   it("parses and evaluates top-level variable declarations like 'let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z'", () => {
     const result = intepret(
       "let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z",

@@ -90,9 +90,14 @@ function parseVariableDeclarations(
 
     const nameTypePart = declStr.substring(4, eqIdx).trim();
     const colonIdx = nameTypePart.indexOf(":");
-    if (colonIdx === -1) break;
 
-    const varName = nameTypePart.substring(0, colonIdx).trim();
+    let varName = "";
+    if (colonIdx === -1) {
+      varName = nameTypePart;
+    } else {
+      varName = nameTypePart.substring(0, colonIdx).trim();
+    }
+
     const valueStr = declStr.substring(eqIdx + 1).trim();
 
     const parsed = parseNumberWithSuffix(valueStr);
