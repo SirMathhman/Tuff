@@ -175,6 +175,23 @@ function checkDuplicateVariable(
   return ok(true);
 }
 
+function validateTypeAnnotation(typeStr: string): Result<true, CompileError> {
+  if (typeStr === "") return ok(true);
+
+  const suffixInfo = getSuffixInfo(typeStr);
+  if (!suffixInfo) {
+    return err(
+      createCompileError(
+        "Invalid type annotation",
+        `Unknown type: ${typeStr}`,
+        "Use format like 'U8', 'I32', etc.",
+        typeStr.length,
+      ),
+    );
+  }
+  return ok(true);
+}
+
 function compileBlockWithContext(
   expr: Expression & { type: "block" },
   nextRegister: number,
@@ -188,17 +205,8 @@ function compileBlockWithContext(
   const variableMap = new Map(parentVariableMap);
 
   for (const statement of expr.statements) {
-    const suffixInfo = getSuffixInfo(statement.typeStr);
-    if (!suffixInfo) {
-      return err(
-        createCompileError(
-          "Invalid type in let statement",
-          `Unknown type: ${statement.typeStr}`,
-          "Use format like 'U8', 'I32', etc.",
-          statement.typeStr.length,
-        ),
-      );
-    }
+    const typeCheck = validateTypeAnnotation(statement.typeStr);
+    if (!typeCheck.ok) return typeCheck;
 
     const dupCheck = checkDuplicateVariable(statement.name, variableMap);
     if (!dupCheck.ok) return dupCheck;

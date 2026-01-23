@@ -264,4 +264,12 @@ describe("The application - Operator precedence tests", () => {
     // This should be invalid because x is being redefined
     assertInvalid("let x : U8 = 100U8; let x : U8 = 200U8; x");
   });
+
+  it("should support implicit type inference in let bindings", () => {
+    // Expression: let x = read U8; x
+    // Type is inferred from the read U8 expression
+    // Binding: x = 42
+    // Return x = 42
+    assertValid("let x = read U8; x", 42, 42);
+  });
 });

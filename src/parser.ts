@@ -193,7 +193,7 @@ function parseLetStatement(
   if (eqIndex === -1) {
     return createLetError(
       "let statement must have assignment",
-      'Use format: "let name : Type = expr;"',
+      'Use format: "let name : Type = expr;" or "let name = expr;"',
       statement.length,
     );
   }
@@ -203,11 +203,9 @@ function parseLetStatement(
 
   const colonIndex = nameAndType.indexOf(":");
   if (colonIndex === -1) {
-    return createLetError(
-      "let statement must have type annotation",
-      'Use format: "let name : Type = expr;"',
-      nameAndType.length,
-    );
+    // No type annotation - use the entire nameAndType as the name
+    const name = nameAndType.trim();
+    return ok({ name, typeStr: "", expr });
   }
 
   const name = nameAndType.slice(0, colonIndex).trim();
@@ -323,10 +321,10 @@ function parsePrimary(source: string): Result<Expression, CompileError> {
     const typeStr = source.slice(5).trim();
     const suffixInfo = getSuffixInfo(typeStr);
 
-    if (!suffixInfo) {
+    if (suffixInfo === undefined) {
       return err(
         createCompileError(
-          "Invalid read command",
+          "Invalid read type",
           `Unknown integer type: ${typeStr}`,
           "Use format like 'read U8', 'read I32', etc.",
           source.length,
@@ -425,7 +423,7 @@ function parseTopLevelLet(source: string): Result<Expression, CompileError> {
   if (eqIndex === -1)
     return createLetError(
       "Missing = in let binding",
-      "Add = between name:type and value",
+      "Add = between name and value",
       source.length,
     );
 
@@ -439,15 +437,19 @@ function parseTopLevelLet(source: string): Result<Expression, CompileError> {
 
   const letPart = source.slice(4, eqIndex).trim();
   const colonIndex = letPart.indexOf(":");
-  if (colonIndex === -1)
-    return createLetError(
-      "Missing : in let binding",
-      "Use format: let name : Type",
-      letPart.length,
-    );
+  let name: string;
+  let typeStr: string;
 
-  const name = letPart.slice(0, colonIndex).trim();
-  const typeStr = letPart.slice(colonIndex + 1).trim();
+  if (colonIndex === -1) {
+    // No type annotation - entire letPart is the name
+    name = letPart;
+    typeStr = "";
+  } else {
+    // Type annotation present
+    name = letPart.slice(0, colonIndex).trim();
+    typeStr = letPart.slice(colonIndex + 1).trim();
+  }
+
   const expr = source.slice(eqIndex + 1, semiIndex).trim();
   const resultPart = source.slice(semiIndex + 1).trim();
 
