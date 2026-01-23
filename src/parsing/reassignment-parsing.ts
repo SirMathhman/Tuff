@@ -1,5 +1,9 @@
 import { type Instruction, OpCode, Variant } from "../core/vm";
-import { findChar, isIdentifierChar } from "../parsing/parser";
+import {
+  findChar,
+  isIdentifierChar,
+  findMatchingBracket,
+} from "../parsing/parser";
 import {
   buildLoadDirect,
   buildStoreDirect,
@@ -212,17 +216,7 @@ function extractArrayIndexFromLeftSide(
 
   // Find matching bracket
   const bracketStart = i;
-  let bracketEnd = -1;
-  let depth = 1;
-
-  for (let j = i + 1; j < leftSide.length; j++) {
-    if (leftSide[j] === "[") depth++;
-    if (leftSide[j] === "]") depth--;
-    if (depth === 0) {
-      bracketEnd = j;
-      break;
-    }
-  }
+  const bracketEnd = findMatchingBracket(leftSide, bracketStart);
 
   if (bracketEnd === -1 || bracketEnd !== leftSide.length - 1) return undefined;
 

@@ -2,6 +2,7 @@ import {
   isIdentifierChar,
   findChar,
   findMatchingParen,
+  findTypeSuffixIndex,
 } from "../parsing/parser";
 import { splitByCommaRespectingNesting } from "../support/helpers";
 
@@ -179,18 +180,6 @@ export function isFunctionDefinition(source: string): boolean {
     (trimmed.startsWith("fn ") || trimmed.startsWith("(")) &&
     trimmed.includes("=>")
   );
-}
-
-function findTypeSuffixIndex(expr: string): number {
-  for (let i = expr.length - 1; i >= 0; i--) {
-    const char = expr[i];
-    if (char && char >= "0" && char <= "9") continue;
-    if (char && char >= "A" && char <= "Z") {
-      return i;
-    }
-    break;
-  }
-  return -1;
 }
 
 function inferReturnTypeFromBody(body: string): string {

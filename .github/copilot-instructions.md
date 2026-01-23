@@ -313,19 +313,19 @@ src/
 
 **Parsing/Expressions** (src/parsing/expressions/)
 
-| File                                                                                                      | Purpose                                                                |
-| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| [src/parsing/expressions/let-expression-parsing.ts](../src/parsing/expressions/let-expression-parsing.ts) | Parses `let` statements; compiles RHS; stores to allocated address     |
-| [src/parsing/expressions/comparison-parsing.ts](../src/parsing/expressions/comparison-parsing.ts)         | Parses ==, <, >, <=, >= returning Bool and if-then-else expressions    |
-| [src/parsing/expressions/while-expression-parsing.ts](../src/parsing/expressions/while-expression-parsing.ts) | Parses while loops with jump instruction generation              |
+| File                                                                                                          | Purpose                                                             |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [src/parsing/expressions/let-expression-parsing.ts](../src/parsing/expressions/let-expression-parsing.ts)     | Parses `let` statements; compiles RHS; stores to allocated address  |
+| [src/parsing/expressions/comparison-parsing.ts](../src/parsing/expressions/comparison-parsing.ts)             | Parses ==, <, >, <=, >= returning Bool and if-then-else expressions |
+| [src/parsing/expressions/while-expression-parsing.ts](../src/parsing/expressions/while-expression-parsing.ts) | Parses while loops with jump instruction generation                 |
 
 **Compilation** (src/compilation/)
 
-| File                                                                                      | Purpose                                                                     |
-| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| File                                                                                      | Purpose                                                                                |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | [src/compilation/compilation-strategies.ts](../src/compilation/compilation-strategies.ts) | Strategy pattern handlers for reassignment, dereference, arrays, references, functions |
-| [src/compilation/function-compilation.ts](../src/compilation/function-compilation.ts)     | Compiles function calls with instruction generation                         |
-| [src/compilation/instruction-primitives.ts](../src/compilation/instruction-primitives.ts) | Reusable instruction builders to reduce duplication                         |
+| [src/compilation/function-compilation.ts](../src/compilation/function-compilation.ts)     | Compiles function calls with instruction generation                                    |
+| [src/compilation/instruction-primitives.ts](../src/compilation/instruction-primitives.ts) | Reusable instruction builders to reduce duplication                                    |
 
 **Validation** (src/validation/)
 

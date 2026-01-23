@@ -116,6 +116,19 @@ export function findTypeSuffixIndex(source: string): number {
   return -1;
 }
 
+export function findMatchingBracket(
+  source: string,
+  startIndex: number,
+): number {
+  let depth = 1;
+  for (let i = startIndex + 1; i < source.length; i++) {
+    if (source[i] === "[") depth++;
+    if (source[i] === "]") depth--;
+    if (depth === 0) return i;
+  }
+  return -1;
+}
+
 export function parseReadInstruction(
   source: string,
 ): Instruction[] | undefined {
@@ -454,17 +467,7 @@ export function extractArrayIndexComponents(
 
   // Find matching bracket
   const bracketStart = i;
-  let bracketEnd = -1;
-  let depth = 1;
-
-  for (let j = i + 1; j < source.length; j++) {
-    if (source[j] === "[") depth++;
-    if (source[j] === "]") depth--;
-    if (depth === 0) {
-      bracketEnd = j;
-      break;
-    }
-  }
+  const bracketEnd = findMatchingBracket(source, bracketStart);
 
   if (bracketEnd === -1) return undefined;
 
