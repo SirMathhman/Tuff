@@ -187,4 +187,8 @@ describe("interpret", () => {
       interpret("let mut i = 0; loop { if (i < 4) i += 1; else break i; }"),
     ).toBe(4);
   });
+
+  it("supports while loop with condition and increment", () => {
+    expect(interpret("let mut i = 0; while (i < 4) i += 1; i")).toBe(4);
+  });
 });

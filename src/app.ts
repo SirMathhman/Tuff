@@ -2,6 +2,7 @@ import { handleVarDecl } from "./scope";
 import { evaluateGroupedExpressionsWithScope } from "./expressions/grouped-expressions";
 import { handleMatch } from "./match";
 import { handleLoop, BreakException, handleBreak } from "./loop";
+import { handleWhile } from "./while";
 import {
   handleIfExpression,
   handleVarAssignment,
@@ -51,6 +52,17 @@ export function interpretWithScope(
     unmutUninitializedSet,
   });
   if (loopResult !== undefined) return loopResult;
+
+  const whileResult = handleWhile({
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    interpreter: interpretWithScope,
+    uninitializedSet,
+    unmutUninitializedSet,
+  });
+  if (whileResult !== undefined) return whileResult;
 
   try {
     handleBreak({
