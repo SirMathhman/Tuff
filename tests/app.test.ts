@@ -191,4 +191,10 @@ describe("interpret", () => {
   it("supports while loop with condition and increment", () => {
     expect(interpret("let mut i = 0; while (i < 4) i += 1; i")).toBe(4);
   });
+
+  it("supports for-in loop with range", () => {
+    expect(
+      interpret("let mut sum = 0; for (let mut i in 0..10) sum += i; sum"),
+    ).toBe(45);
+  });
 });

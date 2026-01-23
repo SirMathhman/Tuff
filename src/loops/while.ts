@@ -1,15 +1,6 @@
-import type { Interpreter } from "./expressions/handlers";
 import { BreakException } from "./loop";
-
-interface HandlerParams {
-  s: string;
-  scope: Map<string, number>;
-  typeMap: Map<string, number>;
-  mutMap: Map<string, boolean>;
-  interpreter: Interpreter;
-  uninitializedSet?: Set<string>;
-  unmutUninitializedSet?: Set<string>;
-}
+import { findClosingParenthesis, parseLoopBody } from "./helpers";
+import type { HandlerParams } from "./types";
 
 export function handleWhile(params: HandlerParams): number | undefined {
   const {
@@ -30,53 +21,18 @@ export function handleWhile(params: HandlerParams): number | undefined {
   while (idx < trimmed.length && trimmed[idx] === " ") idx++;
 
   if (idx >= trimmed.length || trimmed[idx] !== "(") return undefined;
-  idx++; // Skip opening paren
 
-  // Find the matching closing parenthesis for the condition
-  let parenDepth = 1;
-  const condStart = idx;
+  const condEnd = findClosingParenthesis(trimmed, idx);
+  if (condEnd === -1) return undefined;
 
-  while (idx < trimmed.length && parenDepth > 0) {
-    if (trimmed[idx] === "(") parenDepth++;
-    else if (trimmed[idx] === ")") parenDepth--;
-    if (parenDepth > 0) idx++;
-  }
+  const conditionStr = trimmed.slice(idx + 1, condEnd);
+  idx = condEnd + 1;
 
-  if (parenDepth !== 0) return undefined;
+  const bodyResult = parseLoopBody(trimmed, idx);
+  if (!bodyResult) return undefined;
 
-  const conditionStr = trimmed.slice(condStart, idx);
-  idx++; // Skip closing paren
-
-  // Skip whitespace
-  while (idx < trimmed.length && trimmed[idx] === " ") idx++;
-
-  let loopBody: string;
-  const bodyStart = idx;
-
-  if (idx < trimmed.length && trimmed[idx] === "{") {
-    // Braced body
-    idx++; // Skip opening brace
-    let braceDepth = 1;
-
-    while (idx < trimmed.length && braceDepth > 0) {
-      if (trimmed[idx] === "{") braceDepth++;
-      else if (trimmed[idx] === "}") braceDepth--;
-      if (braceDepth > 0) idx++;
-    }
-
-    if (braceDepth !== 0) return undefined;
-
-    loopBody = trimmed.slice(bodyStart + 1, idx).trim();
-    idx++; // Skip closing brace
-  } else {
-    // Non-braced body - find the semicolon
-    const semiIdx = trimmed.indexOf(";", idx);
-    if (semiIdx === -1) return undefined;
-    loopBody = trimmed.slice(idx, semiIdx + 1);
-    idx = semiIdx + 1;
-  }
-
-  const whileExprEnd = idx;
+  const loopBody = bodyResult.body;
+  const whileExprEnd = bodyResult.nextIdx;
 
   // Execute while loop: keep executing body while condition is true
   try {
