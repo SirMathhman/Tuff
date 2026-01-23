@@ -116,11 +116,11 @@ function interpretWithScope(input: string, scope: Map<string, number> = new Map(
         const semiIndex = s.indexOf(";");
         if (semiIndex !== -1) {
             const declStr = s.slice(0, semiIndex);
-            const colonIndex = declStr.indexOf(":");
             const eqIndex = declStr.indexOf("=");
 
-            if (colonIndex !== -1 && eqIndex !== -1) {
-                const varName = declStr.slice(4, colonIndex).trim();
+            if (eqIndex !== -1) {
+                const varPart = declStr.slice(4, eqIndex).trim();
+                const varName = varPart.includes(":") ? (varPart.split(":")[0] || varPart).trim() : varPart;
                 const exprStr = declStr.slice(eqIndex + 1).trim();
                 const varValue = interpretWithScope(exprStr, scope);
                 scope.set(varName, varValue);
