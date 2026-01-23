@@ -5,7 +5,7 @@ import {
   validateResult,
   evaluateTokens,
 } from "./parser";
-import { parseVariableDeclarations } from "./variables";
+import { parseVariableDeclarations, type VariableEntry } from "./variables";
 
 function makeError(
   cause: string,
@@ -25,8 +25,8 @@ function hasOpenParen(s: string): boolean {
 
 function resolveParentheses(
   expr: string,
-  evaluate: (s: string, vars: Map<string, number>) => Result<number, TuffError>,
-  vars: Map<string, number>,
+  evaluate: (s: string, vars: Map<string, VariableEntry>) => Result<number, TuffError>,
+  vars: Map<string, VariableEntry>,
 ): Result<string, TuffError> {
   let result = expr;
 
@@ -67,7 +67,7 @@ function errorUndefinedToken(label: string): TuffError {
 
 function validateTokens(
   tokens: Array<string>,
-  vars: Map<string, number>,
+  vars: Map<string, VariableEntry>,
 ): Result<
   { commonSuffix: string; parsedTokens: Array<number | string> },
   TuffError
@@ -85,9 +85,9 @@ function validateTokens(
     if (isOp) {
       parsedTokens.push(token);
     } else if (vars.has(token)) {
-      const val = vars.get(token);
-      if (typeof val === "number") {
-        parsedTokens.push(val);
+      const entry = vars.get(token);
+      if (entry) {
+        parsedTokens.push(entry.value);
       }
     } else {
       const parsed = parseNumberWithSuffix(token);
@@ -116,7 +116,7 @@ function validateTokens(
 
 function evaluateCore(
   expr: string,
-  vars: Map<string, number>,
+  vars: Map<string, VariableEntry>,
 ): Result<number, TuffError> {
   const parsed = parseVariableDeclarations(expr, vars);
   if (!parsed.ok) return parsed;
@@ -146,8 +146,8 @@ function evaluateCore(
     if (token === undefined) return err(errorUndefinedToken(`Token: ${token}`));
 
     if (newVars.has(token)) {
-      const val = newVars.get(token);
-      if (typeof val === "number") return ok(val);
+      const entry = newVars.get(token);
+      if (entry) return ok(entry.value);
     }
 
     const parsed = parseNumberWithSuffix(token);
@@ -165,7 +165,7 @@ function evaluateCore(
 
 function evaluateExpression(
   expr: string,
-  vars: Map<string, number>,
+  vars: Map<string, VariableEntry>,
 ): Result<number, TuffError> {
   const resolvedResult = resolveParentheses(expr, evaluateExpression, vars);
   if (!resolvedResult.ok) return resolvedResult;

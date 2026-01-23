@@ -3,6 +3,11 @@ import { type TuffError } from "./error";
 import { parseNumberWithSuffix } from "./parser";
 import { isTypeCompatible } from "./types";
 
+export interface VariableEntry {
+  value: number;
+  suffix: string;
+}
+
 function makeError(
   cause: string,
   context: string,
@@ -12,10 +17,21 @@ function makeError(
   return { cause, context, reason, fix };
 }
 
+function resolveVariableValue(
+  valueStr: string,
+  vars: Map<string, VariableEntry>,
+): Result<{ suffix: string; num: number }, TuffError> {
+  const varRef = vars.get(valueStr);
+  if (varRef) {
+    return ok({ suffix: varRef.suffix, num: varRef.value });
+  }
+  return parseNumberWithSuffix(valueStr);
+}
+
 export function parseVariableDeclarations(
   expr: string,
-  vars: Map<string, number>,
-): Result<{ finalExpr: string; vars: Map<string, number> }, TuffError> {
+  vars: Map<string, VariableEntry>,
+): Result<{ finalExpr: string; vars: Map<string, VariableEntry> }, TuffError> {
   let working = expr.trim();
   const newVars = new Map(vars);
 
@@ -49,23 +65,25 @@ export function parseVariableDeclarations(
     }
 
     const valueStr = declStr.substring(eqIdx + 1).trim();
+    const resolved = resolveVariableValue(valueStr, newVars);
+    if (!resolved.ok) return resolved;
 
-    const parsed = parseNumberWithSuffix(valueStr);
-    if (!parsed.ok) return parsed;
+    const { suffix: valueSuffix, num: valueNum } = resolved.value;
 
-    if (!isTypeCompatible(parsed.value.suffix, varTypeSuffix)) {
+    if (!isTypeCompatible(valueSuffix, varTypeSuffix)) {
       return err(
         makeError(
           "Incompatible type assignment",
-          `Variable: ${varTypeSuffix}, Value: ${parsed.value.suffix}`,
+          `Variable: ${varTypeSuffix}, Value: ${valueSuffix}`,
           "Cannot assign a larger type to a smaller type variable",
           `Assign a compatible type, e.g., let x : U8 = 100U8; or let x : U16 = 100U8;`,
         ),
       );
     }
 
-    newVars.set(varName, parsed.value.num);
+    newVars.set(varName, { value: valueNum, suffix: varTypeSuffix || valueSuffix });
   }
 
   return ok({ finalExpr: working, vars: newVars });
 }
+

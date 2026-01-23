@@ -152,7 +152,15 @@ describe("intepret - expressions: variables", () => {
   it("returns err for variable declarations with narrowing type assignment like 'let x : U8 = 100U16; x'", () => {
     const result = intepret("let x : U8 = 100U16; x");
     expect(isOk(result)).toBe(false);
-    if (!isOk(result)) expect(result.error.cause.toLowerCase()).toContain("incompatible");
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("incompatible");
+  });
+
+  it("returns err for narrowing assignment with variable reference like 'let x : U16 = 100U16; let y : U8 = x; y'", () => {
+    const result = intepret("let x : U16 = 100U16; let y : U8 = x; y");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("incompatible");
   });
 
   it("parses and evaluates top-level variable declarations like 'let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z'", () => {
