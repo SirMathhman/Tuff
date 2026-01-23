@@ -6,7 +6,27 @@ export function findOperatorIndex(s: string): {
   index: number;
   operator: string;
 } {
-  // Check for 'is' operator (lowest precedence, after comparisons)
+  // Check for logical AND (lowest precedence)
+  for (let i = s.length - 2; i >= 1; i--) {
+    const twoChar = s.slice(i, i + 2);
+    if (twoChar === "&&") {
+      const prev = s[i - 1];
+      if (
+        !prev ||
+        prev === " " ||
+        (prev >= "0" && prev <= "9") ||
+        prev === ")" ||
+        prev === "}" ||
+        (prev >= "a" && prev <= "z") ||
+        (prev >= "A" && prev <= "Z") ||
+        prev === "_"
+      ) {
+        return { index: i, operator: "&&" };
+      }
+    }
+  }
+
+  // Check for 'is' operator (after logical AND)
   for (let i = s.length - 1; i >= 1; i--) {
     if (
       s[i - 1] === " " &&
@@ -143,12 +163,19 @@ export function performBinaryOp(
     case "!=":
       result = left !== right ? 1 : 0;
       break;
+    case "&&":
+      result = left !== 0 && right !== 0 ? 1 : 0;
+      break;
     case "is": {
       if (!typeMap || !leftStr) throw new Error("invalid 'is' operator usage");
       // Get the type of the left operand
       const leftType = typeMap.get(leftStr) || 0;
-      // Extract the expected type from rightStr (e.g., "I32", "U8", "Bool")
-      const rightType = extractTypeSize(rightStr);
+      // Extract the expected type from rightStr (e.g., "I32", "U8", "Bool", or alias)
+      let rightType = extractTypeSize(rightStr);
+      // Check if it's a type alias
+      if (rightType === 0 && typeMap.has("__alias__" + rightStr)) {
+        rightType = typeMap.get("__alias__" + rightStr) || 0;
+      }
       result = leftType === rightType ? 1 : 0;
       break;
     }

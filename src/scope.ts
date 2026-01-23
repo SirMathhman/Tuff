@@ -103,7 +103,12 @@ export function handleVarDecl(
       return undefined;
     }
     varName = varPart.slice(0, colonIndex).trim();
-    vType = extractTypeSize(varPart.slice(colonIndex + 1).trim());
+    const typeStr = varPart.slice(colonIndex + 1).trim();
+    vType = extractTypeSize(typeStr);
+    // Check if it's a type alias
+    if (vType === 0 && typeMap.has("__alias__" + typeStr)) {
+      vType = typeMap.get("__alias__" + typeStr) || 0;
+    }
   } else {
     // Has assignment
     const varPart = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim(),
@@ -123,7 +128,12 @@ export function handleVarDecl(
       extractTypedInfo(exprStr).typeSize ||
       (scope.has(exprStr) ? typeMap.get(exprStr) || 0 : 0);
     if (colonIndex !== -1) {
-      const dType = extractTypeSize(varPart.slice(colonIndex + 1).trim());
+      const typeStr = varPart.slice(colonIndex + 1).trim();
+      let dType = extractTypeSize(typeStr);
+      // Check if it's a type alias
+      if (dType === 0 && typeMap.has("__alias__" + typeStr)) {
+        dType = typeMap.get("__alias__" + typeStr) || 0;
+      }
       if (dType > 0) {
         if (vType > 0 && vType > dType)
           throw new Error(`bad type: ${vType} to U${dType}`);

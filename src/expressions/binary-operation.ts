@@ -15,10 +15,15 @@ export function handleBinaryOperation(
   if (opIndex === -1) return parseTypedNumber(s);
 
   const leftStr = s.slice(0, opIndex).trim();
-  const rightStr =
-    op === "is"
-      ? s.slice(opIndex + 3).trim()
-      : s.slice(opIndex + op.length).trim();
+  let rightStr: string;
+
+  if (op === "is") {
+    rightStr = s.slice(opIndex + 3).trim();
+  } else if (op === "&&") {
+    rightStr = s.slice(opIndex + 2).trim();
+  } else {
+    rightStr = s.slice(opIndex + op.length).trim();
+  }
 
   // For 'is' operator, we need different handling
   if (op === "is") {

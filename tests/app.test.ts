@@ -201,4 +201,12 @@ describe("interpret", () => {
   it("supports type check with 'is' operator", () => {
     expect(interpret("let temp : I32 = 100; temp is I32")).toBe(1);
   });
+
+  it("supports type aliases and type checking", () => {
+    expect(
+      interpret(
+        "type MyAlias = I32; let temp : MyAlias = 100I32; temp is I32 && temp is MyAlias",
+      ),
+    ).toBe(1);
+  });
 });
