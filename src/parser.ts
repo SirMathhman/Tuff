@@ -44,7 +44,8 @@ function validateSuffixForNumber(
       ),
     );
   }
-  if (finalSuffix && !isInRange(0, finalSuffix)) return err(getRangeError(finalSuffix));
+  if (finalSuffix && !isInRange(0, finalSuffix))
+    return err(getRangeError(finalSuffix));
   return ok();
 }
 

@@ -193,11 +193,19 @@ describe("intepret - expressions: variables (type compatibility)", () => {
   });
 });
 
+
 describe("intepret - expressions: variables (mutability)", () => {
   it("parses and evaluates mutable variable reassignment like 'let mut x = 0; x = 1; x'", () => {
     const result = intepret("let mut x = 0; x = 1; x");
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(1);
+  });
+
+  it("returns err for immutable variable reassignment like 'let x = 0; x = 1; x'", () => {
+    const result = intepret("let x = 0; x = 1; x");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("immutable");
   });
 
   it("parses and evaluates top-level variable declarations like 'let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z'", () => {
