@@ -72,8 +72,18 @@ export type Expression =
       right: Expression;
     }
   | {
+      type: "assignment";
+      name: string;
+      value: Expression;
+    }
+  | {
       type: "block";
-      statements: Array<{ name: string; typeStr: string; value: Expression }>;
+      statements: Array<{
+        name: string;
+        typeStr: string;
+        mutable: boolean;
+        value: Expression;
+      }>;
       result: Expression;
     };
 
@@ -186,9 +196,19 @@ function createLetError(
   return err(createCompileError("Invalid let statement", message, fix, length));
 }
 
+function parseMutKeyword(input: string): { mutable: boolean; rest: string } {
+  if (input.startsWith("mut ")) {
+    return { mutable: true, rest: input.slice(4).trim() };
+  }
+  return { mutable: false, rest: input };
+}
+
 function parseLetStatement(
   statement: string,
-): Result<{ name: string; typeStr: string; expr: string }, CompileError> {
+): Result<
+  { name: string; typeStr: string; mutable: boolean; expr: string },
+  CompileError
+> {
   const eqIndex = statement.lastIndexOf("=");
   if (eqIndex === -1) {
     return createLetError(
@@ -201,17 +221,20 @@ function parseLetStatement(
   const nameAndType = statement.slice(0, eqIndex).trim();
   const expr = statement.slice(eqIndex + 1).trim();
 
-  const colonIndex = nameAndType.indexOf(":");
+  // Check for 'mut' keyword
+  const { mutable, rest: nameAndTypeForParsing } = parseMutKeyword(nameAndType);
+
+  const colonIndex = nameAndTypeForParsing.indexOf(":");
   if (colonIndex === -1) {
-    // No type annotation - use the entire nameAndType as the name
-    const name = nameAndType.trim();
-    return ok({ name, typeStr: "", expr });
+    // No type annotation - use the entire nameAndTypeForParsing as the name
+    const name = nameAndTypeForParsing.trim();
+    return ok({ name, typeStr: "", mutable, expr });
   }
 
-  const name = nameAndType.slice(0, colonIndex).trim();
-  const typeStr = nameAndType.slice(colonIndex + 1).trim();
+  const name = nameAndTypeForParsing.slice(0, colonIndex).trim();
+  const typeStr = nameAndTypeForParsing.slice(colonIndex + 1).trim();
 
-  return ok({ name, typeStr, expr });
+  return ok({ name, typeStr, mutable, expr });
 }
 
 function parseBlockExpression(
@@ -248,6 +271,7 @@ function parseBlockExpression(
     statements.push({
       name: letResult.value.name,
       typeStr: letResult.value.typeStr,
+      mutable: letResult.value.mutable,
       value: exprResult.value,
     });
   }
@@ -435,7 +459,10 @@ function parseTopLevelLet(source: string): Result<Expression, CompileError> {
       source.length,
     );
 
-  const letPart = source.slice(4, eqIndex).trim();
+  let letPart = source.slice(4, eqIndex).trim();
+  const { mutable, rest: letPartAfterMut } = parseMutKeyword(letPart);
+  letPart = letPartAfterMut;
+
   const colonIndex = letPart.indexOf(":");
   let name: string;
   let typeStr: string;
@@ -461,7 +488,7 @@ function parseTopLevelLet(source: string): Result<Expression, CompileError> {
 
   return ok({
     type: "block",
-    statements: [{ name, typeStr, value: valueResult.value }],
+    statements: [{ name, typeStr, mutable, value: valueResult.value }],
     result: resultExpr.value,
   });
 }

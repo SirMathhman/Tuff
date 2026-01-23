@@ -294,3 +294,12 @@ describe("The application - Operator precedence tests", () => {
     assertInvalid("let x = read U16; let y : U8 = x; y");
   });
 });
+
+describe("The application - Mutable variable tests", () => {
+  it("should support mutable variable declarations", () => {
+    // Expression: let mut x : I32 = read I32; x
+    // Mutable binding: x can theoretically be reassigned (but we don't use that yet)
+    // Binding: x = 42 (from read I32), return x = 42
+    assertValid("let mut x : I32 = read I32; x", 42, 42);
+  });
+});
