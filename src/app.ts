@@ -9,6 +9,7 @@ export function interpretWithScope(
   scope: Map<string, number> = new Map(),
   typeMap: Map<string, number> = new Map(),
   mutMap: Map<string, boolean> = new Map(),
+  uninitializedSet: Set<string> = new Set(),
 ): number {
   const s = input.trim();
   if (s === "") return 0;
@@ -19,6 +20,7 @@ export function interpretWithScope(
     typeMap,
     mutMap,
     interpretWithScope,
+    uninitializedSet,
   );
   if (declResult !== undefined) return declResult;
 
@@ -47,7 +49,13 @@ export function interpretWithScope(
   if (s.indexOf("if ") === 0) {
     const cIdx = s.indexOf(")");
     if (cIdx > 0) {
-      const cond = interpretWithScope(s.slice(4, cIdx), scope, typeMap, mutMap);
+      const cond = interpretWithScope(
+        s.slice(4, cIdx),
+        scope,
+        typeMap,
+        mutMap,
+        uninitializedSet,
+      );
       let elseIdx = -1;
       let ifDepth = 0;
       let parenDepth = 0;
@@ -83,13 +91,31 @@ export function interpretWithScope(
         const thenStr = s.slice(cIdx + 1, elseIdx).trim(),
           elseStr = s.slice(elseIdx + 6).trim();
         return cond !== 0
-          ? interpretWithScope(thenStr, scope, typeMap, mutMap)
-          : interpretWithScope(elseStr, scope, typeMap, mutMap);
+          ? interpretWithScope(
+              thenStr,
+              scope,
+              typeMap,
+              mutMap,
+              uninitializedSet,
+            )
+          : interpretWithScope(
+              elseStr,
+              scope,
+              typeMap,
+              mutMap,
+              uninitializedSet,
+            );
       } else {
         // No else clause - just handle the then part
         const thenStr = s.slice(cIdx + 1).trim();
         if (cond !== 0) {
-          return interpretWithScope(thenStr, scope, typeMap, mutMap);
+          return interpretWithScope(
+            thenStr,
+            scope,
+            typeMap,
+            mutMap,
+            uninitializedSet,
+          );
         }
         return 0; // If condition is false and no else, return 0
       }
@@ -106,20 +132,26 @@ export function interpretWithScope(
       semiIdx = s.indexOf(";", eqIdx);
     if (!mutMap.has(lhs)) throw new Error(`variable '${lhs}' is immutable`);
     if (semiIdx !== -1) {
-      scope.set(
-        lhs,
-        interpretWithScope(
-          s.slice(eqIdx + 1, semiIdx).trim(),
-          scope,
-          typeMap,
-          mutMap,
-        ),
+      const newValue = interpretWithScope(
+        s.slice(eqIdx + 1, semiIdx).trim(),
+        scope,
+        typeMap,
+        mutMap,
+        uninitializedSet,
       );
+      scope.set(lhs, newValue);
+      // If this variable was uninitialized, remove it from the uninitialized set and mutMap
+      // after the first assignment (so it becomes immutable)
+      if (uninitializedSet.has(lhs)) {
+        uninitializedSet.delete(lhs);
+        mutMap.delete(lhs);
+      }
       return interpretWithScope(
         s.slice(semiIdx + 1).trim(),
         scope,
         typeMap,
         mutMap,
+        uninitializedSet,
       );
     }
   }
@@ -149,14 +181,32 @@ export function interpretWithScope(
       interpretWithScope,
     );
     if (processed !== s)
-      return interpretWithScope(processed, scope, typeMap, mutMap);
+      return interpretWithScope(
+        processed,
+        scope,
+        typeMap,
+        mutMap,
+        uninitializedSet,
+      );
   }
   const { index: opIndex, operator: op } = findOperatorIndex(s);
   if (opIndex === -1) return parseTypedNumber(s);
   return performBinaryOp(
-    interpretWithScope(s.slice(0, opIndex).trim(), scope, typeMap, mutMap),
+    interpretWithScope(
+      s.slice(0, opIndex).trim(),
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+    ),
     op,
-    interpretWithScope(s.slice(opIndex + 1).trim(), scope, typeMap, mutMap),
+    interpretWithScope(
+      s.slice(opIndex + 1).trim(),
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+    ),
     extractTypedInfo(s.slice(0, opIndex).trim()),
     s.slice(opIndex + 1).trim(),
   );

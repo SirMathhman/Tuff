@@ -7,14 +7,15 @@ type Interpreter = (
   scope: Map<string, number>,
   typeMap: Map<string, number>,
   mutMap: Map<string, boolean>,
+  uninitializedSet?: Set<string>,
 ) => number;
-
 export function handleVarDecl(
   s: string,
   scope: Map<string, number>,
   typeMap: Map<string, number>,
   mutMap: Map<string, boolean>,
   interpreter: Interpreter,
+  uninitializedSet: Set<string> = new Set(),
 ): number | undefined {
   if (s.indexOf("let ") !== 0) return undefined;
   let semiIndex = -1;
@@ -113,8 +114,7 @@ export function handleVarDecl(
     // Has assignment
     const varPart = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim(),
       colonIndex = varPart.indexOf(":");
-    varName =
-      colonIndex !== -1 ? varPart.slice(0, colonIndex).trim() : varPart;
+    varName = colonIndex !== -1 ? varPart.slice(0, colonIndex).trim() : varPart;
 
     const exprStr = declStr.slice(eqIndex + 1).trim();
     varValue = interpreter(exprStr, scope, typeMap, mutMap);
@@ -137,10 +137,14 @@ export function handleVarDecl(
   if (isMut || eqIndex === -1) {
     mutMap.set(varName, true);
   }
+  // Track uninitialized variables so they can be marked immutable after first assignment
+  if (eqIndex === -1) {
+    uninitializedSet.add(varName);
+  }
 
   const rest = s.slice(restIndex).trim();
   if (rest) {
-    return interpreter(rest, scope, typeMap, mutMap);
+    return interpreter(rest, scope, typeMap, mutMap, uninitializedSet);
   }
   return varValue;
 }

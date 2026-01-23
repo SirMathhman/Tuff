@@ -169,4 +169,8 @@ describe("interpret", () => {
   it("supports uninitialized variable declaration", () => {
     expect(interpret("let x : I32; x = 100; x")).toBe(100);
   });
+
+  it("throws when reassigning uninitialized variable without mut", () => {
+    expect(() => interpret("let x : I32; x = 10; x = 20; x")).toThrow();
+  });
 });
