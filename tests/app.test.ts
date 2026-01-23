@@ -251,4 +251,11 @@ describe("The application - Operator precedence tests", () => {
     // Return y = 5
     assertValid("let x : U8 = read U8; let y : U8 = x; y", 5, 5);
   });
+
+  it("should support variable usage in arithmetic operations", () => {
+    // Expression: let x : U8 = read U8; x + x
+    // Binding: x = 7
+    // Return x + x = 7 + 7 = 14
+    assertValid("let x : U8 = read U8; x + x", 14, 7);
+  });
 });
