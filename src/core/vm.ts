@@ -20,27 +20,29 @@ function resolveIndirectAddress(
   return address;
 }
 
-function handleIndirectLoad(
-  operand1: number,
-  operand2: number,
+function transferValue(
   registers: number[],
   memory: number[],
+  regIndex: number,
+  memIndex: number,
+  isStore: boolean,
 ): void {
-  const address = resolveIndirectAddress(operand2, memory);
-  if (address !== undefined) {
-    registers[operand1] = memory[address] ?? 0;
-  }
+  const [source, dest, sourceIndex, destIndex] = isStore
+    ? [registers, memory, regIndex, memIndex]
+    : [memory, registers, memIndex, regIndex];
+  dest[destIndex] = source[sourceIndex] ?? 0;
 }
 
-function handleIndirectStore(
+function handleIndirectMemoryOp(
   operand1: number,
   operand2: number,
   registers: number[],
   memory: number[],
+  isStore: boolean,
 ): void {
   const address = resolveIndirectAddress(operand2, memory);
   if (address !== undefined) {
-    memory[address] = registers[operand1] ?? 0;
+    transferValue(registers, memory, operand1, address, isStore);
   }
 }
 
@@ -68,44 +70,24 @@ function readVariant(
   }
 }
 
-function handleLoad(
+function handleMemoryOp(
   variant: number,
   operand1: number,
   operand2: number,
   registers: number[],
   memory: number[],
+  isStore: boolean,
 ): void {
-  if (variant === Variant.Immediate) {
+  if (!isStore && variant === Variant.Immediate) {
     registers[operand1] = operand2;
     return;
   }
-  if (variant === Variant.Direct) {
-    const addr1 = operand2;
-    if (addr1 < memory.length) {
-      registers[operand1] = memory[addr1] ?? 0;
-    }
+  if (variant === Variant.Direct && operand2 < memory.length) {
+    transferValue(registers, memory, operand1, operand2, isStore);
     return;
   }
   if (variant === Variant.Indirect) {
-    handleIndirectLoad(operand1, operand2, registers, memory);
-  }
-}
-
-function handleStore(
-  variant: number,
-  operand1: number,
-  operand2: number,
-  registers: number[],
-  memory: number[],
-): void {
-  if (variant === Variant.Direct) {
-    if (operand2 < memory.length) {
-      memory[operand2] = registers[operand1] ?? 0;
-    }
-    return;
-  }
-  if (variant === Variant.Indirect) {
-    handleIndirectStore(operand1, operand2, registers, memory);
+    handleIndirectMemoryOp(operand1, operand2, registers, memory, isStore);
   }
 }
 
@@ -247,6 +229,19 @@ function handleJumpIfLessThanZero(
   return handleJump(variant, operand1, registers, memory);
 }
 
+function createJumpResult(
+  state: ExecutionState,
+  jumpAddr: number | undefined,
+): { state: ExecutionState; isJump: boolean } {
+  if (jumpAddr !== undefined) {
+    return {
+      state: { ...state, programCounter: jumpAddr, shouldContinue: true },
+      isJump: true,
+    };
+  }
+  return { state, isJump: false };
+}
+
 // eslint-disable-next-line max-lines-per-function
 function dispatchInstruction(
   opcode: OpCode,
@@ -261,10 +256,10 @@ function dispatchInstruction(
 
   switch (opcode) {
     case OpCode.Load:
-      handleLoad(variant, operand1, operand2, registers, memory);
+      handleMemoryOp(variant, operand1, operand2, registers, memory, false);
       return { state, isJump: false };
     case OpCode.Store:
-      handleStore(variant, operand1, operand2, registers, memory);
+      handleMemoryOp(variant, operand1, operand2, registers, memory, true);
       return { state, isJump: false };
     case OpCode.Add:
     case OpCode.Sub:
@@ -290,13 +285,7 @@ function dispatchInstruction(
       return { state, isJump: false };
     case OpCode.Jump: {
       const jumpAddr = handleJump(variant, operand1, registers, memory);
-      if (jumpAddr !== undefined) {
-        return {
-          state: { ...state, programCounter: jumpAddr, shouldContinue: true },
-          isJump: true,
-        };
-      }
-      return { state, isJump: false };
+      return createJumpResult(state, jumpAddr);
     }
     case OpCode.JumpIfLessThanZero: {
       const jumpAddr = handleJumpIfLessThanZero(
@@ -305,13 +294,7 @@ function dispatchInstruction(
         registers,
         memory,
       );
-      if (jumpAddr !== undefined) {
-        return {
-          state: { ...state, programCounter: jumpAddr, shouldContinue: true },
-          isJump: true,
-        };
-      }
-      return { state, isJump: false };
+      return createJumpResult(state, jumpAddr);
     }
     case OpCode.Equal:
     case OpCode.LessThan:
@@ -473,22 +456,30 @@ export interface Instruction {
   operand2?: number;
 }
 
+function encodeBitField(value: number, mask: number, shift: number): number {
+  return (value & mask) * Math.pow(2, shift);
+}
+
 export function encodeTo64Bits(instruction: Instruction): number {
   const { opcode, variant, operand1, operand2 } = instruction;
   let encoded = 0;
-  encoded += (opcode & 0xff) * Math.pow(2, 32);
-  encoded += (variant & 0xff) * Math.pow(2, 24);
-  encoded += (operand1 & 0xfff) * Math.pow(2, 12);
+  encoded += encodeBitField(opcode, 0xff, 32);
+  encoded += encodeBitField(variant, 0xff, 24);
+  encoded += encodeBitField(operand1, 0xfff, 12);
   if (operand2 !== undefined) {
     encoded += operand2 & 0xfff;
   }
   return encoded;
 }
 
+function decodeBitField(value: number, shift: number, mask: number): number {
+  return Math.floor(value / Math.pow(2, shift)) & mask;
+}
+
 export function decode(instruction: number): Required<Instruction> {
-  const opcode = Math.floor(instruction / Math.pow(2, 32)) & 0xff;
-  const variant = Math.floor(instruction / Math.pow(2, 24)) & 0xff;
-  const operand1 = Math.floor(instruction / Math.pow(2, 12)) & 0xfff;
+  const opcode = decodeBitField(instruction, 32, 0xff);
+  const variant = decodeBitField(instruction, 24, 0xff);
+  const operand1 = decodeBitField(instruction, 12, 0xfff);
   let operand2 = instruction & 0xfff;
 
   // Sign-extend 12-bit value for Load immediate variant

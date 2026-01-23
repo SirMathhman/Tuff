@@ -60,4 +60,8 @@ describe("The application - Basic tests", () => {
   it("should execute a simple program that halts immediately", () => {
     assertValid("", 0);
   });
+
+  it("should output 100", () => {
+    assertValid("100", 100);
+  });
 });
