@@ -97,4 +97,8 @@ describe("interpret", () => {
   it("throws when assigning variable of wider type to narrower type variable", () => {
     expect(() => interpret("let x = 100U16; let y : U8 = x; y")).toThrow();
   });
+
+  it("supports mutable variable assignment", () => {
+    expect(interpret("let mut x = 0; x = 100; x")).toBe(100);
+  });
 });
