@@ -180,4 +180,8 @@ describe("The application - Read tests", () => {
   it("should multiply and subtract", () => {
     assertValid("read U8 * read U8 - read U8", 2, 2, 3, 4);
   });
+
+  it("should respect operator precedence with multiplication", () => {
+    assertValid("read U8 + read U8 * read U8", 17, 5, 3, 4);
+  });
 });
