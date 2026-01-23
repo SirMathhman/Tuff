@@ -25,7 +25,10 @@ function hasOpenParen(s: string): boolean {
 
 function resolveParentheses(
   expr: string,
-  evaluate: (s: string, vars: Map<string, VariableEntry>) => Result<number, TuffError>,
+  evaluate: (
+    s: string,
+    vars: Map<string, VariableEntry>,
+  ) => Result<number, TuffError>,
   vars: Map<string, VariableEntry>,
 ): Result<string, TuffError> {
   let result = expr;

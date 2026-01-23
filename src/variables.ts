@@ -81,9 +81,11 @@ export function parseVariableDeclarations(
       );
     }
 
-    newVars.set(varName, { value: valueNum, suffix: varTypeSuffix || valueSuffix });
+    newVars.set(varName, {
+      value: valueNum,
+      suffix: varTypeSuffix || valueSuffix,
+    });
   }
 
   return ok({ finalExpr: working, vars: newVars });
 }
-
