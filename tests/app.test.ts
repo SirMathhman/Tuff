@@ -17,4 +17,8 @@ describe("interpret", () => {
   it("throws for negative value with unsigned suffix", () => {
     expect(() => interpret("-100U8")).toThrow();
   });
+
+  it("throws for overflow with unsigned suffix U8", () => {
+    expect(() => interpret("256U8")).toThrow();
+  });
 });
