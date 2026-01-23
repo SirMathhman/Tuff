@@ -126,7 +126,8 @@ export function interpretWithScope(
     !s.includes("!") &&
     !s.includes("(") &&
     !s.includes("{") &&
-    !s.includes("[")
+    !s.includes("[") &&
+    !s.includes(" is ")
   ) {
     return parseTypedNumber(s);
   }

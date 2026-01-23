@@ -122,10 +122,13 @@ export function handleVarDecl(
     vType =
       extractTypedInfo(exprStr).typeSize ||
       (scope.has(exprStr) ? typeMap.get(exprStr) || 0 : 0);
-    if (colonIndex !== -1 && vType > 0) {
+    if (colonIndex !== -1) {
       const dType = extractTypeSize(varPart.slice(colonIndex + 1).trim());
-      if (dType > 0 && vType > dType)
-        throw new Error(`bad type: ${vType} to U${dType}`);
+      if (dType > 0) {
+        if (vType > 0 && vType > dType)
+          throw new Error(`bad type: ${vType} to U${dType}`);
+        vType = dType;
+      }
     }
   }
 

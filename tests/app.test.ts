@@ -197,4 +197,8 @@ describe("interpret", () => {
       interpret("let mut sum = 0; for (let mut i in 0..10) sum += i; sum"),
     ).toBe(45);
   });
+
+  it("supports type check with 'is' operator", () => {
+    expect(interpret("let temp : I32 = 100; temp is I32")).toBe(1);
+  });
 });

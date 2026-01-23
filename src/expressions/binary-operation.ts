@@ -13,9 +13,37 @@ export function handleBinaryOperation(
 ): number {
   const { index: opIndex, operator: op } = findOperatorIndex(s);
   if (opIndex === -1) return parseTypedNumber(s);
+
+  const leftStr = s.slice(0, opIndex).trim();
+  const rightStr =
+    op === "is"
+      ? s.slice(opIndex + 3).trim()
+      : s.slice(opIndex + op.length).trim();
+
+  // For 'is' operator, we need different handling
+  if (op === "is") {
+    const leftValue = interpretWithScope(
+      leftStr,
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+      unmutUninitializedSet,
+    );
+    return performBinaryOp(
+      leftValue,
+      op,
+      0, // right value is not used for 'is'
+      extractTypedInfo(leftStr),
+      rightStr,
+      typeMap,
+      leftStr,
+    );
+  }
+
   return performBinaryOp(
     interpretWithScope(
-      s.slice(0, opIndex).trim(),
+      leftStr,
       scope,
       typeMap,
       mutMap,
@@ -24,14 +52,16 @@ export function handleBinaryOperation(
     ),
     op,
     interpretWithScope(
-      s.slice(opIndex + 1).trim(),
+      rightStr,
       scope,
       typeMap,
       mutMap,
       uninitializedSet,
       unmutUninitializedSet,
     ),
-    extractTypedInfo(s.slice(0, opIndex).trim()),
-    s.slice(opIndex + 1).trim(),
+    extractTypedInfo(leftStr),
+    rightStr,
+    typeMap,
+    leftStr,
   );
 }
