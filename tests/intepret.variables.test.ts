@@ -151,7 +151,9 @@ describe("intepret - expressions: variables (bool)", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(1);
   });
+});
 
+describe("intepret - expressions: variables (bool operators)", () => {
   it("parses and evaluates boolean OR like 'let x = true; let y = false; x || y'", () => {
     const result = intepret("let x = true; let y = false; x || y");
     expect(isOk(result)).toBe(true);
@@ -172,6 +174,30 @@ describe("intepret - expressions: variables (bool)", () => {
 
   it("parses and evaluates boolean OR with variables like 'let x = false; let y = true; x || y'", () => {
     const result = intepret("let x = false; let y = true; x || y");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(1);
+  });
+
+  it("parses and evaluates boolean AND like 'let x = true; let y = false; x && y'", () => {
+    const result = intepret("let x = true; let y = false; x && y");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(0);
+  });
+
+  it("parses and evaluates boolean AND true && true like 'true && true'", () => {
+    const result = intepret("true && true");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(1);
+  });
+
+  it("parses and evaluates boolean AND true && false like 'true && false'", () => {
+    const result = intepret("true && false");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(0);
+  });
+
+  it("parses and evaluates boolean AND with variables like 'let x = true; let y = true; x && y'", () => {
+    const result = intepret("let x = true; let y = true; x && y");
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(1);
   });

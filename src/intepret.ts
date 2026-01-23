@@ -84,7 +84,8 @@ function validateTokens(
       token === "-" ||
       token === "*" ||
       token === "/" ||
-      token === "||";
+      token === "||" ||
+      token === "&&";
     if (isOp) {
       parsedTokens.push(token);
     } else if (vars.has(token)) {
@@ -132,9 +133,9 @@ function evaluateCore(
   for (let i = 0; i < trimmed.length; i = i + 1) {
     const c = trimmed[i];
     const nextC = i + 1 < trimmed.length ? trimmed[i + 1] : "";
-    if (c === "|" && nextC === "|") {
+    if ((c === "|" || c === "&") && nextC === c) {
       if (current) tokens.push(current);
-      tokens.push("||");
+      tokens.push(c + c);
       current = "";
       i = i + 1;
     } else if (c === " ") {

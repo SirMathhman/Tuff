@@ -65,7 +65,7 @@ function handleHighPrecedence(
 
   while (i < tokens.length) {
     const op = tokens[i];
-    if (op === "||") {
+    if (op === "||" || op === "&&") {
       multDivResult.push(op);
       i = i + 1;
       const nextVal = tokens[i];
@@ -114,6 +114,7 @@ export function evaluateTokens(
     if (typeof val === "number") {
       if (op === "+") result = result + val;
       else if (op === "-") result = result - val;
+      else if (op === "&&") result = result !== 0 && val !== 0 ? 1 : 0;
       else if (op === "||") result = result !== 0 || val !== 0 ? 1 : 0;
     }
 
