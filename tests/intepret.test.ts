@@ -78,4 +78,10 @@ describe("intepret - expressions", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(6);
   });
+
+  it("parses and evaluates expressions with subtraction like '2 + 3 - 4'", () => {
+    const result = intepret("2 + 3 - 4");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(1);
+  });
 });
