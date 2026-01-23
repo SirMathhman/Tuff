@@ -81,3 +81,69 @@ describe("The application - Basic tests", () => {
     assertInvalid("-100U16");
   });
 });
+
+describe("The application - U32 and U64 tests", () => {
+  it("should output 100 with U32 suffix", () => {
+    assertValid("100U32", 100);
+  });
+
+  it("should reject negative U32 literal", () => {
+    assertInvalid("-100U32");
+  });
+
+  it("should output 100 with U64 suffix", () => {
+    assertValid("100U64", 100);
+  });
+
+  it("should reject negative U64 literal", () => {
+    assertInvalid("-100U64");
+  });
+});
+
+describe("The application - I8 tests", () => {
+  it("should output 100 with I8 suffix", () => {
+    assertValid("100I8", 100);
+  });
+
+  it("should reject I8 literal exceeding max value", () => {
+    assertInvalid("128I8");
+  });
+
+  it("should reject I8 literal below min value", () => {
+    assertInvalid("-129I8");
+  });
+});
+
+describe("The application - I16 tests", () => {
+  it("should output 100 with I16 suffix", () => {
+    assertValid("100I16", 100);
+  });
+
+  it("should reject I16 literal exceeding max value", () => {
+    assertInvalid("32768I16");
+  });
+
+  it("should reject I16 literal below min value", () => {
+    assertInvalid("-32769I16");
+  });
+});
+
+describe("The application - I32 tests", () => {
+  it("should output 100 with I32 suffix", () => {
+    assertValid("100I32", 100);
+  });
+
+  it("should reject I32 literal exceeding max value", () => {
+    assertInvalid("2147483648I32");
+  });
+
+  it("should reject I32 literal below min value", () => {
+    assertInvalid("-2147483649I32");
+  });
+});
+
+describe("The application - I64 tests", () => {
+  it("should output 100 with I64 suffix", () => {
+    assertValid("100I64", 100);
+  });
+});

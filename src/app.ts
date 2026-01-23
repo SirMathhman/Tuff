@@ -38,10 +38,28 @@ function createCompileError(
 
 type SuffixInfo = { suffix: string; minVal: number; maxVal: number } | null;
 
+function createSignedBoundary(bits: number): { minVal: number; maxVal: number } {
+  const minVal = -(2 ** (bits - 1));
+  const maxVal = 2 ** (bits - 1) - 1;
+  return { minVal, maxVal };
+}
+
+function createUnsignedBoundary(bits: number): { minVal: number; maxVal: number } {
+  const minVal = 0;
+  const maxVal = 2 ** bits - 1;
+  return { minVal, maxVal };
+}
+
 function getSuffixInfo(source: string): SuffixInfo {
   const suffixMap: Record<string, { minVal: number; maxVal: number }> = {
-    U8: { minVal: 0, maxVal: 255 },
-    U16: { minVal: 0, maxVal: 65535 },
+    I64: createSignedBoundary(64),
+    I32: createSignedBoundary(32),
+    I16: createSignedBoundary(16),
+    I8: createSignedBoundary(8),
+    U64: createUnsignedBoundary(64),
+    U32: createUnsignedBoundary(32),
+    U16: createUnsignedBoundary(16),
+    U8: createUnsignedBoundary(8),
   };
 
   for (const [suffix, limits] of Object.entries(suffixMap)) {
