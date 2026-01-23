@@ -107,37 +107,118 @@ function evaluateExpression(expr: string): Result<number, string> {
     return parsed.ok ? ok(parsed.value.num) : parsed;
   }
 
-  let result = 0;
-  let operator = "+";
-  let i = 0;
   let commonSuffix = "";
   let suffixSet = false;
+  const parsedTokens = [];
 
-  while (i < tokens.length) {
+  for (let i = 0; i < tokens.length; i = i + 1) {
     const token = tokens[i];
     if (token === undefined) return err("Invalid token");
-    const parsed = parseNumberWithSuffix(token);
-    if (!parsed.ok) return parsed;
 
-    if (!suffixSet) {
-      commonSuffix = parsed.value.suffix;
-      suffixSet = true;
-    } else if (parsed.value.suffix !== commonSuffix) {
-      return err("Mixed type suffixes in expression");
-    }
+    const isOp = token === "+" || token === "-" || token === "*";
+    if (isOp) {
+      parsedTokens.push(token);
+    } else {
+      const parsed = parseNumberWithSuffix(token);
+      if (!parsed.ok) return parsed;
 
-    if (operator === "+") result = result + parsed.value.num;
-    else if (operator === "-") result = result - parsed.value.num;
+      if (!suffixSet) {
+        commonSuffix = parsed.value.suffix;
+        suffixSet = true;
+      } else if (parsed.value.suffix !== commonSuffix) {
+        return err("Mixed type suffixes in expression");
+      }
 
-    i = i + 1;
-    if (i < tokens.length) {
-      const op = tokens[i];
-      if (op !== undefined) operator = op;
-      i = i + 1;
+      parsedTokens.push(parsed.value.num);
     }
   }
 
+  const result = evaluateTokens(parsedTokens);
   return validateResult(result, commonSuffix);
+}
+
+function applyMultiplication(
+  val: number,
+  tokens: Array<number | string>,
+  startIdx: number,
+): { result: number; nextIdx: number } {
+  let current = val;
+  let i = startIdx;
+
+  while (i < tokens.length) {
+    const op = tokens[i];
+    if (op !== "*") break;
+
+    i = i + 1;
+    const multNum = tokens[i];
+    if (typeof multNum !== "number") break;
+
+    current = current * multNum;
+    i = i + 1;
+  }
+
+  return { result: current, nextIdx: i };
+}
+
+function evaluateTokens(tokens: Array<number | string>): number {
+  const multDivResult: Array<number | string> = [];
+  let i = 0;
+  let current = tokens[0];
+
+  if (typeof current !== "number") return 0;
+
+  i = 1;
+  while (i < tokens.length) {
+    const op = tokens[i];
+    if (op !== "*") break;
+
+    i = i + 1;
+    const nextNum = tokens[i];
+    if (typeof nextNum !== "number") break;
+
+    if (typeof current === "number") {
+      current = current * nextNum;
+    }
+    i = i + 1;
+  }
+
+  multDivResult.push(current);
+
+  while (i < tokens.length) {
+    const op = tokens[i];
+    if (op !== "+" && op !== "-") break;
+
+    multDivResult.push(op);
+    i = i + 1;
+
+    const nextVal = tokens[i];
+    if (typeof nextVal !== "number") break;
+
+    const applied = applyMultiplication(nextVal, tokens, i + 1);
+    multDivResult.push(applied.result);
+    i = applied.nextIdx;
+  }
+
+  let result = 0;
+  const firstVal = multDivResult[0];
+  if (typeof firstVal === "number") {
+    result = firstVal;
+  }
+
+  let j = 1;
+  while (j < multDivResult.length) {
+    const op = multDivResult[j];
+    const val = multDivResult[j + 1];
+
+    if (typeof val === "number") {
+      if (op === "+") result = result + val;
+      else if (op === "-") result = result - val;
+    }
+
+    j = j + 2;
+  }
+
+  return result;
 }
 
 /**

@@ -84,4 +84,10 @@ describe("intepret - expressions", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(1);
   });
+
+  it("parses and evaluates expressions with multiplication like '2 * 3 + 4'", () => {
+    const result = intepret("2 * 3 + 4");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(10);
+  });
 });
