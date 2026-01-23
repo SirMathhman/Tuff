@@ -531,6 +531,18 @@ describe("The application - Functions", () => {
   });
 
   it("should support assigning function to variable and calling via variable", () => {
-    assertValid("let temp : () => I32 = fn get() : I32 => read I32; temp()", 42, 42);
+    assertValid(
+      "let temp : () => I32 = fn get() : I32 => read I32; temp()",
+      42,
+      42,
+    );
+  });
+
+  it("should support calling function via variable without type annotation", () => {
+    assertValid(
+      "let temp = fn get() : I32 => read I32; temp()",
+      42,
+      42,
+    );
   });
 });

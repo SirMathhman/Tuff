@@ -48,7 +48,13 @@ import {
 type CompileFunc = (
   expr: string,
   ctx: VariableContext,
-) => { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } | undefined;
+) =>
+  | {
+      instructions: Instruction[];
+      context: VariableContext;
+      functionContext: FunctionContext;
+    }
+  | undefined;
 
 export function tryReassignment(
   source: string,

@@ -12,14 +12,17 @@ if (result) {
   console.log("✓ typeAnnotation:", result.typeAnnotation);
   console.log("✓ exprPart:", result.exprPart);
   console.log("✓ remaining:", result.remaining);
-  
+
   // Validate
-  const isCorrect = 
+  const isCorrect =
     result.varName === "temp" &&
     result.typeAnnotation === "() => I32" &&
     result.exprPart.startsWith("fn get()");
-  
-  console.log("\n" + (isCorrect ? "✅ PASS: Parsing fixed!" : "❌ FAIL: Still has issues"));
+
+  console.log(
+    "\n" +
+      (isCorrect ? "✅ PASS: Parsing fixed!" : "❌ FAIL: Still has issues"),
+  );
 } else {
   console.log("❌ FAIL: parseLetComponents returned undefined");
 }

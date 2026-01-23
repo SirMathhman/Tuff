@@ -38,7 +38,9 @@ function handleFunctionDefinitionBinding(
   context: VariableContext,
   mutable: boolean,
   functionContext: FunctionContext,
-): { newContext: VariableContext; newFunctionContext: FunctionContext } | undefined {
+):
+  | { newContext: VariableContext; newFunctionContext: FunctionContext }
+  | undefined {
   const trimmedExpr = exprPart.trim();
   if (!isFunctionDefinition(trimmedExpr)) return undefined;
 
@@ -72,7 +74,11 @@ function parseDeclarationOnlyBinding(
   typeAnnotation: string,
   context: VariableContext,
   functionContext: FunctionContext,
-): { instructions: Instruction[]; newContext: VariableContext; newFunctionContext: FunctionContext } {
+): {
+  instructions: Instruction[];
+  newContext: VariableContext;
+  newFunctionContext: FunctionContext;
+} {
   const { context: newContext } = allocateVariable(
     context,
     varName,
@@ -104,6 +110,31 @@ function buildArrayOrScalarInstructions(
       );
 }
 
+function buildVariableAllocation(
+  varName: string,
+  exprPart: string,
+  typeAnnotation: string | undefined,
+  mutable: boolean,
+  context: VariableContext,
+): { varType: string | undefined; newContext: VariableContext; address: number } {
+  const varType = typeAnnotation || extractExpressionType(exprPart, context);
+  const trimmedExpr = exprPart.trim();
+  const sourceArrayName = isReferenceOperator(trimmedExpr)
+    ? extractReferenceTarget(trimmedExpr)
+    : undefined;
+
+  const { context: newContext, address } = allocateVariable(
+    context,
+    varName,
+    varType,
+    mutable,
+    false,
+    sourceArrayName,
+  );
+
+  return { varType, newContext, address };
+}
+
 function parseInitializedBinding(
   varName: string,
   exprPart: string,
@@ -112,7 +143,13 @@ function parseInitializedBinding(
   context: VariableContext,
   exprCompile: Instruction[],
   functionContext: FunctionContext,
-): { instructions: Instruction[]; newContext: VariableContext; newFunctionContext: FunctionContext } | undefined {
+):
+  | {
+      instructions: Instruction[];
+      newContext: VariableContext;
+      newFunctionContext: FunctionContext;
+    }
+  | undefined {
   // Check if this is a function definition being assigned
   const funcResult = handleFunctionDefinitionBinding(
     exprPart,
@@ -130,19 +167,12 @@ function parseInitializedBinding(
     };
   }
 
-  const varType = typeAnnotation || extractExpressionType(exprPart, context);
-  const trimmedExpr = exprPart.trim();
-  const sourceArrayName = isReferenceOperator(trimmedExpr)
-    ? extractReferenceTarget(trimmedExpr)
-    : undefined;
-
-  const { context: newContext, address } = allocateVariable(
-    context,
+  const { varType, newContext, address } = buildVariableAllocation(
     varName,
-    varType,
+    exprPart,
+    typeAnnotation,
     mutable,
-    false,
-    sourceArrayName,
+    context,
   );
 
   const storeInstructions = buildArrayOrScalarInstructions(
@@ -159,15 +189,96 @@ function parseInitializedBinding(
   };
 }
 
-export function parseLetExpression(
-  source: string,
-  compileWithContextFn: (
-    expr: string,
-    ctx: VariableContext,
-  ) => { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } | undefined,
+function handleFunctionAssignment(
+  exprPart: string,
+  varName: string,
+  typeAnnotation: string | undefined,
+  context: VariableContext,
+  mutable: boolean,
+  functionContext: FunctionContext,
+):
+  | {
+      instructions: Instruction[];
+      newContext: VariableContext;
+      newFunctionContext: FunctionContext;
+    }
+  | undefined {
+  const funcResult = handleFunctionDefinitionBinding(
+    exprPart,
+    varName,
+    typeAnnotation,
+    context,
+    mutable,
+    functionContext,
+  );
+  return funcResult ? { instructions: [], ...funcResult } : undefined;
+}
+
+type CompileWithContextFn = (
+  expr: string,
+  ctx: VariableContext,
+) =>
+  | {
+      instructions: Instruction[];
+      context: VariableContext;
+      functionContext: FunctionContext;
+    }
+  | undefined;
+
+function parseExpressionPart(
+  exprPart: string,
+  varName: string,
+  typeAnnotation: string | undefined,
+  mutable: boolean,
   context: VariableContext,
   functionContext: FunctionContext,
-): { instructions: Instruction[]; newContext: VariableContext; newFunctionContext: FunctionContext } | undefined {
+  compileWithContextFn: CompileWithContextFn,
+):
+  | {
+      instructions: Instruction[];
+      newContext: VariableContext;
+      newFunctionContext: FunctionContext;
+    }
+  | undefined {
+  // Check if this is a function definition
+  if (isFunctionDefinition(exprPart.trim())) {
+    return handleFunctionAssignment(
+      exprPart,
+      varName,
+      typeAnnotation,
+      context,
+      mutable,
+      functionContext,
+    );
+  }
+
+  // For regular variable assignments, compile the expression
+  const exprCompileResult = compileWithContextFn(exprPart, context);
+  if (!exprCompileResult?.instructions.length) return undefined;
+
+  return parseInitializedBinding(
+    varName,
+    exprPart,
+    typeAnnotation,
+    mutable,
+    context,
+    exprCompileResult.instructions,
+    functionContext,
+  );
+}
+
+export function parseLetExpression(
+  source: string,
+  compileWithContextFn: CompileWithContextFn,
+  context: VariableContext,
+  functionContext: FunctionContext,
+):
+  | {
+      instructions: Instruction[];
+      newContext: VariableContext;
+      newFunctionContext: FunctionContext;
+    }
+  | undefined {
   if (!source.startsWith("let")) return undefined;
 
   const components = parseLetComponents(source);
@@ -186,32 +297,13 @@ export function parseLetExpression(
     );
   }
 
-  // Check if this is a function definition
-  if (isFunctionDefinition(exprPart.trim())) {
-    const funcResult = handleFunctionDefinitionBinding(
-      exprPart,
-      varName,
-      typeAnnotation,
-      context,
-      mutable,
-      functionContext,
-    );
-    return funcResult ? { instructions: [], ...funcResult } : undefined;
-  }
-
-  // For regular variable assignments, compile the expression
-  const exprCompileResult = compileWithContextFn(exprPart, context);
-  if (!exprCompileResult?.instructions.length) return undefined;
-
-  const bindingResult = parseInitializedBinding(
-    varName,
+  return parseExpressionPart(
     exprPart,
+    varName,
     typeAnnotation,
     mutable,
     context,
-    exprCompileResult.instructions,
     functionContext,
+    compileWithContextFn,
   );
-
-  return bindingResult;
 }

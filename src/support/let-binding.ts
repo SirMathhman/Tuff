@@ -191,9 +191,19 @@ export function parseLetComponents(source: string):
   if (firstSemicolonIndex === -1) return undefined;
 
   const bindingScope = source.substring(0, firstSemicolonIndex);
-  const colonIndex = findChar(bindingScope, ":");
+  
   const equalsIndex = findAssignmentEquals(bindingScope);
-  const typeAnnotation = extractTypeAnnotation(bindingScope, colonIndex, equalsIndex);
+  
+  // Only look for colon BEFORE equals for type annotation
+  const colonIndex = equalsIndex === -1 
+    ? findChar(bindingScope, ":") 
+    : findChar(bindingScope.substring(0, equalsIndex), ":");
+  
+  const typeAnnotation = extractTypeAnnotation(
+    bindingScope,
+    colonIndex,
+    equalsIndex,
+  );
 
   // Declaration-only: no equals sign
   if (equalsIndex === -1) {

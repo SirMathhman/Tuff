@@ -11,7 +11,10 @@ import {
   checkNegativeUnsignedError,
 } from "./types/types";
 import { type VariableContext } from "./types/variable-types";
-import { buildContextFromLetBindings, parseLetComponents } from "./support/let-binding";
+import {
+  buildContextFromLetBindings,
+  parseLetComponents,
+} from "./support/let-binding";
 import { parseLetExpression as parseLetExpressionModule } from "./parsing/expressions/let-expression-parsing";
 import {
   extractFunctionDefinitions,
@@ -77,7 +80,13 @@ function createCompileFunc(
 ): (
   expr: string,
   ctx: VariableContext,
-) => { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } | undefined {
+) =>
+  | {
+      instructions: Instruction[];
+      context: VariableContext;
+      functionContext: FunctionContext;
+    }
+  | undefined {
   return (expr: string, ctx: VariableContext) =>
     compileWithContext(expr, ctx, functionContext);
 }
@@ -86,7 +95,13 @@ function parseLetExpression(
   source: string,
   context: VariableContext,
   functionContext: FunctionContext,
-): { instructions: Instruction[]; newContext: VariableContext; newFunctionContext: FunctionContext } | undefined {
+):
+  | {
+      instructions: Instruction[];
+      newContext: VariableContext;
+      newFunctionContext: FunctionContext;
+    }
+  | undefined {
   return parseLetExpressionModule(
     source,
     createCompileFunc(functionContext),
@@ -99,7 +114,13 @@ function tryBasicPatterns(
   trimmed: string,
   context: VariableContext,
   functionContext: FunctionContext,
-): { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } | undefined {
+):
+  | {
+      instructions: Instruction[];
+      context: VariableContext;
+      functionContext: FunctionContext;
+    }
+  | undefined {
   const compileFunc = createCompileFunc(functionContext);
 
   // Try parsing as reassignment
@@ -153,7 +174,13 @@ function tryArrayHandlers(
   trimmed: string,
   context: VariableContext,
   functionContext: FunctionContext,
-): { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } | undefined {
+):
+  | {
+      instructions: Instruction[];
+      context: VariableContext;
+      functionContext: FunctionContext;
+    }
+  | undefined {
   const compileFunc = createCompileFunc(functionContext);
 
   // Try parsing as slice field access (e.g., slice.init)
@@ -181,7 +208,13 @@ function tryFunctionOrLetPatterns(
   trimmed: string,
   context: VariableContext,
   functionContext: FunctionContext,
-): { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } | undefined {
+):
+  | {
+      instructions: Instruction[];
+      context: VariableContext;
+      functionContext: FunctionContext;
+    }
+  | undefined {
   // Try parsing as function call
   const funcCallResult = tryFunctionCall(
     trimmed,
@@ -201,7 +234,6 @@ function tryFunctionOrLetPatterns(
   if (letResult) {
     return compileRemainingAfterLet(trimmed, letResult);
   }
-
   return undefined;
 }
 
@@ -217,8 +249,12 @@ function skipFirstLetBinding(source: string): string {
 
 function compileRemainingAfterLet(
   trimmed: string,
-  letResult: ReturnType<typeof parseLetExpression>,
-): { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } {
+  letResult: NonNullable<ReturnType<typeof parseLetExpression>>,
+): {
+  instructions: Instruction[];
+  context: VariableContext;
+  functionContext: FunctionContext;
+} {
   let finalInstructions = letResult.instructions;
   let finalContext = letResult.newContext;
   let finalFunctionContext = letResult.newFunctionContext;
@@ -231,7 +267,10 @@ function compileRemainingAfterLet(
       finalFunctionContext,
     );
     if (remainingResult) {
-      finalInstructions = [...finalInstructions, ...remainingResult.instructions];
+      finalInstructions = [
+        ...finalInstructions,
+        ...remainingResult.instructions,
+      ];
       finalContext = remainingResult.context;
       finalFunctionContext = remainingResult.functionContext;
     }
@@ -248,7 +287,13 @@ function tryAllPatterns(
   trimmed: string,
   context: VariableContext,
   functionContext: FunctionContext,
-): { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } | undefined {
+):
+  | {
+      instructions: Instruction[];
+      context: VariableContext;
+      functionContext: FunctionContext;
+    }
+  | undefined {
   // Try function or let patterns first
   let result = tryFunctionOrLetPatterns(trimmed, context, functionContext);
   if (result) {
@@ -296,7 +341,13 @@ function compileWithContext(
   source: string,
   context: VariableContext,
   functionContext: FunctionContext,
-): { instructions: Instruction[]; context: VariableContext; functionContext: FunctionContext } | undefined {
+):
+  | {
+      instructions: Instruction[];
+      context: VariableContext;
+      functionContext: FunctionContext;
+    }
+  | undefined {
   const trimmed = source.trim();
 
   if (!trimmed) {
