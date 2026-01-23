@@ -550,3 +550,25 @@ describe("The application - Functions", () => {
     assertValid("let temp = () => read I32; temp()", 42, 42);
   });
 });
+
+describe("The application - Function validation", () => {
+  it("should reject uncalled function reference from named function", () => {
+    assertInvalid("fn get() : I32 => 100; get");
+  });
+
+  it("should reject uncalled function reference from lambda", () => {
+    assertInvalid("let temp = () => read I32; temp");
+  });
+
+  it("should allow calling lambda function", () => {
+    assertValid("let temp = () => read I32; temp()", 42, 42);
+  });
+
+  it("should allow calling named function", () => {
+    assertValid("fn get() : I32 => 100; get()", 100);
+  });
+
+  it("should reject uncalled lambda in nested binding", () => {
+    assertInvalid("let temp = () => read I32; let x = temp; x");
+  });
+});

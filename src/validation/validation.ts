@@ -13,6 +13,10 @@ import {
   extractBracedContent,
   findConditionParentheses,
 } from "../parsing/parser";
+import { detectUncalledFunctionReference as detectUncalledFunctionReferenceImpl } from "./function-validation";
+
+// Re-export for use in app.ts
+export { detectUncalledFunctionReferenceImpl as detectUncalledFunctionReference };
 
 function buildTypeError(
   typeAnnotation: string,

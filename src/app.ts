@@ -28,6 +28,7 @@ import {
   detectComparisonTypeMismatch,
   detectInvalidIfCondition,
   detectIfBranchTypeMismatch,
+  detectUncalledFunctionReference,
 } from "./validation/validation";
 import {
   detectNonMutableReassignment,
@@ -370,6 +371,8 @@ function performValidationChecks(trimmed: string): CompileError | undefined {
   if (typeError) return typeError;
   const branchError = detectIfBranchTypeMismatch(trimmed);
   if (branchError) return branchError;
+  const uncalledFuncError = detectUncalledFunctionReference(trimmed);
+  if (uncalledFuncError) return uncalledFuncError;
   const pointerError = detectPointerTypeErrors(trimmed);
   if (pointerError) return pointerError;
   const preContext = buildContextFromLetBindings(trimmed);

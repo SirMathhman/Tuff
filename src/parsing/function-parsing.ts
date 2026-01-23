@@ -156,8 +156,7 @@ export function parseFunctionDefinition(source: string):
 
   // If no explicit return type, we'll infer it later from the body
   // For now, use a placeholder that will be replaced
-  const returnType =
-    explicitReturnType || "<inferred>"; // Placeholder for inference
+  const returnType = explicitReturnType || "<inferred>"; // Placeholder for inference
 
   const remaining =
     semiIndex === -1 ? "" : trimmed.substring(semiIndex + 1).trim();
