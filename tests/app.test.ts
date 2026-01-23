@@ -112,6 +112,10 @@ describe("The application - I8 tests", () => {
   it("should reject I8 literal below min value", () => {
     assertInvalid("-129I8");
   });
+
+  it("should output -1 with I8 suffix", () => {
+    assertValid("-1I8", -1);
+  });
 });
 
 describe("The application - I16 tests", () => {

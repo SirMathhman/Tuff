@@ -476,23 +476,35 @@ function decodeBitField(value: number, shift: number, mask: number): number {
   return Math.floor(value / Math.pow(2, shift)) & mask;
 }
 
+function signExtend12Bit(value: number): number {
+  if (value & 0x800) {
+    return value | 0xfffff000;
+  }
+  return value;
+}
+
 export function decode(instruction: number): Required<Instruction> {
   const opcode = decodeBitField(instruction, 32, 0xff);
   const variant = decodeBitField(instruction, 24, 0xff);
   const operand1 = decodeBitField(instruction, 12, 0xfff);
-  let operand2 = instruction & 0xfff;
+  const operand2 = instruction & 0xfff;
 
-  // Sign-extend 12-bit value for Load immediate variant
-  if (opcode === OpCode.Load && variant === Variant.Immediate) {
-    if (operand2 & 0x800) {
-      operand2 |= 0xfffff000;
+  let extendedOperand1 = operand1;
+  let extendedOperand2 = operand2;
+
+  if (variant === Variant.Immediate) {
+    if (opcode === OpCode.Halt || opcode === OpCode.Load) {
+      extendedOperand1 = signExtend12Bit(operand1);
+    }
+    if (opcode === OpCode.Load) {
+      extendedOperand2 = signExtend12Bit(operand2);
     }
   }
 
   return {
     opcode,
     variant,
-    operand1,
-    operand2,
+    operand1: extendedOperand1,
+    operand2: extendedOperand2,
   };
 }

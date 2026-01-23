@@ -38,13 +38,19 @@ function createCompileError(
 
 type SuffixInfo = { suffix: string; minVal: number; maxVal: number } | null;
 
-function createSignedBoundary(bits: number): { minVal: number; maxVal: number } {
+function createSignedBoundary(bits: number): {
+  minVal: number;
+  maxVal: number;
+} {
   const minVal = -(2 ** (bits - 1));
   const maxVal = 2 ** (bits - 1) - 1;
   return { minVal, maxVal };
 }
 
-function createUnsignedBoundary(bits: number): { minVal: number; maxVal: number } {
+function createUnsignedBoundary(bits: number): {
+  minVal: number;
+  maxVal: number;
+} {
   const minVal = 0;
   const maxVal = 2 ** bits - 1;
   return { minVal, maxVal };
