@@ -35,6 +35,11 @@ export default [
           message:
             "null is not allowed. Use undefined instead for consistency.",
         },
+        {
+          selector: "ThrowStatement",
+          message:
+            "throw statements are banned. Use a Result<T, E> return type instead (see src/result.ts for a simple Result implementation).",
+        },
       ],
       "max-lines-per-function": [
         "error",
