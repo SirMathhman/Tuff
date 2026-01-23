@@ -188,7 +188,9 @@ describe("The application - Read tests", () => {
     // Evaluates as: (A * B) - C = (2 * 3) - 4 = 6 - 4 = 2
     assertValid("read U8 * read U8 - read U8", 2, 2, 3, 4);
   });
+});
 
+describe("The application - Operator precedence tests", () => {
   it("should respect operator precedence with multiplication", () => {
     // Expression: read U8 + read U8 * read U8
     // Parses as: read U8 + (read U8 * read U8)
@@ -240,5 +242,13 @@ describe("The application - Read tests", () => {
       3,
       4,
     );
+  });
+
+  it("should support multiple sequential let bindings", () => {
+    // Expression: let x : U8 = read U8; let y : U8 = x; y
+    // First binding: x = 5
+    // Second binding: y = x = 5
+    // Return y = 5
+    assertValid("let x : U8 = read U8; let y : U8 = x; y", 5, 5);
   });
 });
