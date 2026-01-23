@@ -35,10 +35,14 @@ export function intepret(input: string): Result<number, string> {
 
   // Check if there are non-numeric characters after the digits
   const hasSuffix = i < s.length;
+  let suffixStartsWithU = false;
+  if (hasSuffix && s[i] === "U") {
+    suffixStartsWithU = true;
+  }
 
-  // Reject negative numbers with suffixes
-  if (isNegative && hasSuffix) {
-    return err("Negative numbers with type suffixes are not allowed");
+  // Reject negative numbers with unsigned type suffixes (U8, U16, etc.)
+  if (isNegative && suffixStartsWithU) {
+    return err("Negative numbers with unsigned type suffixes are not allowed");
   }
 
   // Parse the number

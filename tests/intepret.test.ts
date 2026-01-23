@@ -32,4 +32,10 @@ describe("intepret", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(-100);
   });
+
+  it("parses negative integers with signed suffixes like '-100I8'", () => {
+    const result = intepret("-100I8");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(-100);
+  });
 });
