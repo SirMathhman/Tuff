@@ -158,6 +158,23 @@ function compileBinaryWithContext(
   });
 }
 
+function checkDuplicateVariable(
+  name: string,
+  variableMap: Map<string, number>,
+): Result<true, CompileError> {
+  if (variableMap.has(name)) {
+    return err(
+      createCompileError(
+        "Duplicate variable name",
+        `Variable '${name}' is already defined`,
+        "Use a different name for this variable",
+        name.length,
+      ),
+    );
+  }
+  return ok(true);
+}
+
 function compileBlockWithContext(
   expr: Expression & { type: "block" },
   nextRegister: number,
@@ -182,6 +199,9 @@ function compileBlockWithContext(
         ),
       );
     }
+
+    const dupCheck = checkDuplicateVariable(statement.name, variableMap);
+    if (!dupCheck.ok) return dupCheck;
 
     const valueResult = compileExpressionWithContext(
       statement.value,

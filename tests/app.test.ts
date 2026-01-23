@@ -258,4 +258,10 @@ describe("The application - Operator precedence tests", () => {
     // Return x + x = 7 + 7 = 14
     assertValid("let x : U8 = read U8; x + x", 14, 7);
   });
+
+  it("should reject variable shadowing (duplicate variable names)", () => {
+    // Expression: let x : U8 = 100; let x : U8 = 200; x
+    // This should be invalid because x is being redefined
+    assertInvalid("let x : U8 = 100U8; let x : U8 = 200U8; x");
+  });
 });
