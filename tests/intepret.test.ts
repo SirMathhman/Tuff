@@ -44,4 +44,10 @@ describe("intepret", () => {
     expect(isOk(result)).toBe(false);
     if (!isOk(result)) expect(result.error).toContain("range");
   });
+
+  it("parses and evaluates simple expressions like '1U8 + 2U8'", () => {
+    const result = intepret("1U8 + 2U8");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(3);
+  });
 });

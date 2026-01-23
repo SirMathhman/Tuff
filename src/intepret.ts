@@ -1,4 +1,4 @@
-import { Result, ok, err } from "./result";
+import { type Result, ok, err } from "./result";
 
 function isInRange(n: number, suffix: string): boolean {
   if (suffix === "U8") return n >= 0 && n <= 255;
@@ -16,8 +16,88 @@ function getRangeError(suffix: string): string {
   if (suffix === "U32") return "Value out of range for U32 (0-4294967295)";
   if (suffix === "I8") return "Value out of range for I8 (-128 to 127)";
   if (suffix === "I16") return "Value out of range for I16 (-32768 to 32767)";
-  if (suffix === "I32") return "Value out of range for I32 (-2147483648 to 2147483647)";
+  if (suffix === "I32")
+    return "Value out of range for I32 (-2147483648 to 2147483647)";
   return "Value out of range";
+}
+
+function parseNumberWithSuffix(
+  s: string,
+): Result<{ num: number; suffix: string; len: number }, string> {
+  const trimmed = s.trim();
+  let isNeg = false;
+  let idx = 0;
+
+  if (trimmed[0] === "-") {
+    isNeg = true;
+    idx = 1;
+  }
+
+  let digits = "";
+  while (idx < trimmed.length && trimmed[idx] >= "0" && trimmed[idx] <= "9") {
+    digits = digits + trimmed[idx];
+    idx = idx + 1;
+  }
+
+  if (digits === "") return err("No digits found");
+
+  let num = Number(digits);
+  if (isNeg) num = -num;
+
+  const suffix = trimmed.slice(idx).split(" ")[0];
+  if (suffix && isNeg && suffix[0] === "U") {
+    return err("Negative numbers with unsigned type suffixes are not allowed");
+  }
+  if (suffix && !isInRange(num, suffix)) return err(getRangeError(suffix));
+
+  const negSign = isNeg ? 1 : 0;
+  return ok({ num, suffix, len: negSign + digits.length + suffix.length });
+}
+
+function evaluateExpression(expr: string): Result<number, string> {
+  const trimmed = expr.trim();
+  const tokens = [];
+  let current = "";
+
+  for (let i = 0; i < trimmed.length; i = i + 1) {
+    const c = trimmed[i];
+    if (c === " ") {
+      if (current !== "") {
+        tokens.push(current);
+        current = "";
+      }
+    } else {
+      current = current + c;
+    }
+  }
+
+  if (current !== "") tokens.push(current);
+  if (tokens.length === 0) return ok(0);
+
+  if (tokens.length === 1) {
+    const parsed = parseNumberWithSuffix(tokens[0]);
+    return parsed.ok ? ok(parsed.value.num) : parsed;
+  }
+
+  let result = 0;
+  let operator = "+";
+  let i = 0;
+
+  while (i < tokens.length) {
+    const parsed = parseNumberWithSuffix(tokens[i]);
+    if (!parsed.ok) return parsed;
+
+    if (operator === "+") result = result + parsed.value.num;
+    else if (operator === "-") result = result - parsed.value.num;
+
+    i = i + 1;
+    if (i < tokens.length) {
+      operator = tokens[i];
+      i = i + 1;
+    }
+  }
+
+  return ok(result);
 }
 
 /**
@@ -27,6 +107,7 @@ function getRangeError(suffix: string): string {
  *  - empty or whitespace-only string => ok(0)
  *  - positive numeric string => ok(parsed number)
  *  - "100U8" format => ok(100)
+ *  - expressions like "1U8 + 2U8" => ok(3)
  *  - negative with suffix (e.g., "-100U8") => err(message)
  *  - out of range for type (e.g., "256U8") => err(message)
  *  - non-numeric => err(message)
@@ -37,39 +118,5 @@ function getRangeError(suffix: string): string {
 export function intepret(input: string): Result<number, string> {
   const s = input.trim();
   if (s === "") return ok(0);
-
-  let isNegative = false;
-  let startIdx = 0;
-  if (s[0] === "-") {
-    isNegative = true;
-    startIdx = 1;
-  }
-
-  let numPart = "";
-  let i = startIdx;
-  while (i < s.length && s[i] >= "0" && s[i] <= "9") {
-    numPart = numPart + s[i];
-    i = i + 1;
-  }
-
-  const hasSuffix = i < s.length;
-  const suffixStartsWithU = hasSuffix && s[i] === "U";
-
-  if (isNegative && suffixStartsWithU) {
-    return err("Negative numbers with unsigned type suffixes are not allowed");
-  }
-
-  let n = Number(numPart);
-  if (Number.isNaN(n) || !Number.isFinite(n)) {
-    return err("Invalid numeric format");
-  }
-
-  if (isNegative) n = -n;
-
-  if (hasSuffix) {
-    const suffix = s.slice(i);
-    if (!isInRange(n, suffix)) return err(getRangeError(suffix));
-  }
-
-  return ok(n);
+  return evaluateExpression(s);
 }
