@@ -9,4 +9,8 @@ describe("interpret", () => {
   it("parses a number string and returns the number", () => {
     expect(interpret("100")).toBe(100);
   });
+
+  it("parses a number with a type suffix and returns the number", () => {
+    expect(interpret("100U8")).toBe(100);
+  });
 });
