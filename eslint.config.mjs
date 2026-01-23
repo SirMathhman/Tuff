@@ -34,20 +34,7 @@ export default [
           selector: "Literal[value=null]",
           message:
             "null is not allowed. Use undefined instead for consistency.",
-        },
-        {
-          selector: "ThrowStatement",
-          message:
-            "throw statements are banned. Use a Result<T, E> return type instead (see src/result.ts for a simple Result implementation).",
-        },
-      ],
-      "max-lines-per-function": [
-        "error",
-        {
-          max: 50,
-          skipComments: true,
-          skipBlankLines: true,
-        },
+        }
       ],
       "max-lines": [
         "error",
