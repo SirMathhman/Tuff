@@ -44,12 +44,12 @@ export default [
           skipBlankLines: true,
         },
       ],
-			// No intentation. This is the challenge!
-      "max-depth": ["error", 0],
+      // No intentation. This is the challenge
+      "max-depth": ["error", 1],
       "max-lines": [
         "error",
         {
-          max: 500,
+          max: 200,
           skipComments: true,
           skipBlankLines: true,
         },
