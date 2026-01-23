@@ -118,4 +118,11 @@ describe("intepret - expressions: variables (mutability)", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(10);
   });
+
+  it("returns err for block-scoped variable access like '{ let mut x = 0; } x = 1; x'", () => {
+    const result = intepret("{ let mut x = 0; } x = 1; x");
+    expect(isOk(result)).toBe(false);
+    if (!isOk(result))
+      expect(result.error.cause.toLowerCase()).toContain("undefined");
+  });
 });
