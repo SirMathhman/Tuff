@@ -1,6 +1,6 @@
 import { type Result, ok, err } from "./result";
 import { type TuffError } from "./error";
-import { parseNumberWithSuffix } from "./parser";
+import { parseLiteral } from "./parser";
 import { isTypeCompatible } from "./types";
 
 export interface VariableEntry {
@@ -26,7 +26,7 @@ function resolveVariableValue(
   if (varRef) {
     return ok({ suffix: varRef.suffix, num: varRef.value });
   }
-  return parseNumberWithSuffix(valueStr);
+  return parseLiteral(valueStr);
 }
 
 function validateVariableDeclaration(

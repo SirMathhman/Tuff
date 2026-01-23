@@ -126,3 +126,29 @@ describe("intepret - expressions: variables (mutability)", () => {
       expect(result.error.cause.toLowerCase()).toContain("undefined");
   });
 });
+
+describe("intepret - expressions: variables (bool)", () => {
+  it("parses and evaluates boolean variable declaration like 'let x : Bool = true; x'", () => {
+    const result = intepret("let x : Bool = true; x");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(1);
+  });
+
+  it("parses and evaluates boolean false like 'let x : Bool = false; x'", () => {
+    const result = intepret("let x : Bool = false; x");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(0);
+  });
+
+  it("parses and evaluates mutable boolean reassignment like 'let mut x : Bool = true; x = false; x'", () => {
+    const result = intepret("let mut x : Bool = true; x = false; x");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(0);
+  });
+
+  it("returns err for Bool type mixed with numeric types like 'let x : Bool = true; let y : U8 = 100U8; x'", () => {
+    const result = intepret("let x : Bool = true; let y : U8 = 100U8; x");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(1);
+  });
+});

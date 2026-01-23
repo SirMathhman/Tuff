@@ -1,4 +1,5 @@
 import { type TuffError } from "./error";
+import { type Result, ok, err } from "./result";
 
 function makeError(
   cause: string,
@@ -26,6 +27,7 @@ export function isTypeCompatible(
   if (sourceSuffix === "") return true;
   if (targetSuffix === "") return true;
   if (sourceSuffix === targetSuffix) return true;
+  if (sourceSuffix === "Bool" || targetSuffix === "Bool") return false;
 
   const typeOrder: { [key: string]: number } = {
     U8: 0,
@@ -68,5 +70,35 @@ export function getRangeError(suffix: string): TuffError {
     `Type suffix: ${suffix}`,
     `Value is outside the valid range for ${suffix}: ${range}`,
     `Use a value within the ${suffix} range (${range})`,
+  );
+}
+
+export function looksLikeNumber(s: string): boolean {
+  const trimmed = s.trim();
+  let idx = 0;
+  if (trimmed.length > 0 && trimmed[0] === "-") {
+    idx = 1;
+  }
+  if (idx >= trimmed.length) return false;
+  return trimmed[idx] >= "0" && trimmed[idx] <= "9";
+}
+
+export function parseBooleanLiteral(
+  s: string,
+): Result<{ num: number; suffix: string }, TuffError> {
+  const trimmed = s.trim();
+  if (trimmed === "true") {
+    return ok({ num: 1, suffix: "Bool" });
+  }
+  if (trimmed === "false") {
+    return ok({ num: 0, suffix: "Bool" });
+  }
+  return err(
+    makeError(
+      "Invalid boolean",
+      `Input: ${trimmed}`,
+      "Expected 'true' or 'false'",
+      "Use 'true' or 'false' for boolean literals",
+    ),
   );
 }

@@ -1,6 +1,6 @@
 import { type Result, ok, err } from "./result";
 import { type TuffError } from "./error";
-import { isInRange, getRangeError } from "./types";
+import { isInRange, getRangeError, looksLikeNumber, parseBooleanLiteral } from "./types";
 
 function makeError(
   cause: string,
@@ -210,4 +210,14 @@ export function evaluateTokens(
   }
 
   return ok(result);
+}
+
+export function parseLiteral(
+  s: string,
+): Result<{ num: number; suffix: string }, TuffError> {
+  let result = parseNumberWithSuffix(s);
+  if (!result.ok && !looksLikeNumber(s)) {
+    result = parseBooleanLiteral(s);
+  }
+  return result;
 }

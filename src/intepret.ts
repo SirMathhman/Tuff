@@ -1,10 +1,6 @@
 import { type Result, ok, err } from "./result";
 import { type TuffError } from "./error";
-import {
-  parseNumberWithSuffix,
-  validateResult,
-  evaluateTokens,
-} from "./parser";
+import { validateResult, evaluateTokens, parseLiteral } from "./parser";
 import { parseVariableDeclarations, type VariableEntry } from "./variables";
 
 function makeError(
@@ -93,7 +89,7 @@ function validateTokens(
         parsedTokens.push(entry.value);
       }
     } else {
-      const parsed = parseNumberWithSuffix(token);
+      const parsed = parseLiteral(token);
       if (!parsed.ok) return parsed;
 
       if (!suffixSet) {
@@ -153,7 +149,7 @@ function evaluateCore(
       if (entry) return ok(entry.value);
     }
 
-    const parsed = parseNumberWithSuffix(token);
+    const parsed = parseLiteral(token);
     return parsed.ok ? ok(parsed.value.num) : parsed;
   }
 
