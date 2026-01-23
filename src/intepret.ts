@@ -24,7 +24,8 @@ function hasOpenParen(s: string): boolean {
 
 function resolveParentheses(
   expr: string,
-  evaluate: (s: string) => Result<number, TuffError>,
+  evaluate: (s: string, vars: Map<string, number>) => Result<number, TuffError>,
+  vars: Map<string, number>,
 ): Result<string, TuffError> {
   let result = expr;
 
@@ -40,7 +41,7 @@ function resolveParentheses(
       const closeChar = openChar === "{" ? "}" : ")";
       if (ch === closeChar && lastOpen !== -1) {
         const inner = result.substring(lastOpen + 1, i);
-        const evaluated = evaluate(inner);
+        const evaluated = evaluate(inner, vars);
         if (!evaluated.ok) return evaluated;
 
         const before = result.substring(0, lastOpen);
@@ -63,8 +64,49 @@ function errorUndefinedToken(label: string): TuffError {
   );
 }
 
+function parseVariableDeclarations(
+  expr: string,
+  vars: Map<string, number>,
+): Result<{ finalExpr: string; vars: Map<string, number> }, TuffError> {
+  let working = expr.trim();
+  const newVars = new Map(vars);
+
+  while (working.startsWith("let ")) {
+    let semicolonIdx = -1;
+    for (let i = 0; i < working.length; i = i + 1) {
+      if (working.charAt(i) === ";") {
+        semicolonIdx = i;
+        break;
+      }
+    }
+
+    if (semicolonIdx === -1) break;
+
+    const declStr = working.substring(0, semicolonIdx).trim();
+    working = working.substring(semicolonIdx + 1).trim();
+
+    const eqIdx = declStr.indexOf("=");
+    if (eqIdx === -1) break;
+
+    const nameTypePart = declStr.substring(4, eqIdx).trim();
+    const colonIdx = nameTypePart.indexOf(":");
+    if (colonIdx === -1) break;
+
+    const varName = nameTypePart.substring(0, colonIdx).trim();
+    const valueStr = declStr.substring(eqIdx + 1).trim();
+
+    const parsed = parseNumberWithSuffix(valueStr);
+    if (!parsed.ok) return parsed;
+
+    newVars.set(varName, parsed.value.num);
+  }
+
+  return ok({ finalExpr: working, vars: newVars });
+}
+
 function validateTokens(
   tokens: Array<string>,
+  vars: Map<string, number>,
 ): Result<
   { commonSuffix: string; parsedTokens: Array<number | string> },
   TuffError
@@ -81,6 +123,11 @@ function validateTokens(
       token === "+" || token === "-" || token === "*" || token === "/";
     if (isOp) {
       parsedTokens.push(token);
+    } else if (vars.has(token)) {
+      const val = vars.get(token);
+      if (typeof val === "number") {
+        parsedTokens.push(val);
+      }
     } else {
       const parsed = parseNumberWithSuffix(token);
       if (!parsed.ok) return parsed;
@@ -106,8 +153,15 @@ function validateTokens(
   return ok({ commonSuffix, parsedTokens });
 }
 
-function evaluateCore(expr: string): Result<number, TuffError> {
-  const trimmed = expr.trim();
+function evaluateCore(
+  expr: string,
+  vars: Map<string, number>,
+): Result<number, TuffError> {
+  const parsed = parseVariableDeclarations(expr, vars);
+  if (!parsed.ok) return parsed;
+  const { finalExpr, vars: newVars } = parsed.value;
+
+  const trimmed = finalExpr.trim();
   const tokens = [];
   let current = "";
 
@@ -129,11 +183,17 @@ function evaluateCore(expr: string): Result<number, TuffError> {
   if (tokens.length === 1) {
     const token = tokens[0];
     if (token === undefined) return err(errorUndefinedToken(`Token: ${token}`));
+
+    if (newVars.has(token)) {
+      const val = newVars.get(token);
+      if (typeof val === "number") return ok(val);
+    }
+
     const parsed = parseNumberWithSuffix(token);
     return parsed.ok ? ok(parsed.value.num) : parsed;
   }
 
-  const validated = validateTokens(tokens);
+  const validated = validateTokens(tokens, newVars);
   if (!validated.ok) return validated;
   const { commonSuffix, parsedTokens } = validated.value;
 
@@ -142,10 +202,13 @@ function evaluateCore(expr: string): Result<number, TuffError> {
   return validateResult(evaluated.value, commonSuffix);
 }
 
-function evaluateExpression(expr: string): Result<number, TuffError> {
-  const resolvedResult = resolveParentheses(expr, evaluateExpression);
+function evaluateExpression(
+  expr: string,
+  vars: Map<string, number>,
+): Result<number, TuffError> {
+  const resolvedResult = resolveParentheses(expr, evaluateExpression, vars);
   if (!resolvedResult.ok) return resolvedResult;
-  return evaluateCore(resolvedResult.value);
+  return evaluateCore(resolvedResult.value, vars);
 }
 
 /**
@@ -167,5 +230,5 @@ function evaluateExpression(expr: string): Result<number, TuffError> {
 export function intepret(input: string): Result<number, TuffError> {
   const s = input.trim();
   if (s === "") return ok(0);
-  return evaluateExpression(s);
+  return evaluateExpression(s, new Map());
 }

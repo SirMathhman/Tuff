@@ -116,4 +116,10 @@ describe("intepret - expressions: precedence and operators", () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) expect(result.value).toBe(10);
   });
+
+  it("parses and evaluates variable declarations like '10 / ( { let x : I32 = 2; x } - 1)'", () => {
+    const result = intepret("10 / ( { let x : I32 = 2; x } - 1)");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(10);
+  });
 });
