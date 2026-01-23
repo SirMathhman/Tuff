@@ -117,16 +117,6 @@ function validateTokens(
   return ok({ commonSuffix, parsedTokens });
 }
 
-function pushToken(
-  tokens: Array<string>,
-  current: string,
-): { tokens: Array<string>; current: string } {
-  if (current !== "") {
-    tokens.push(current);
-  }
-  return { tokens, current: "" };
-}
-
 function evaluateCore(
   expr: string,
   vars: Map<string, VariableEntry>,
@@ -143,25 +133,24 @@ function evaluateCore(
     const c = trimmed[i];
     const nextC = i + 1 < trimmed.length ? trimmed[i + 1] : "";
     if (c === "|" && nextC === "|") {
-      const result = pushToken(tokens, current);
+      if (current) tokens.push(current);
       tokens.push("||");
-      current = result.current;
+      current = "";
       i = i + 1;
     } else if (c === " ") {
-      const result = pushToken(tokens, current);
-      current = result.current;
+      if (current) tokens.push(current);
+      current = "";
     } else {
       current = current + c;
     }
   }
 
-  const result = pushToken(tokens, current);
-  current = result.current;
-  if (tokens.length === 0) return ok(0);
+  if (current) tokens.push(current);
+  if (!tokens.length) return ok(0);
 
   if (tokens.length === 1) {
     const token = tokens[0];
-    if (token === undefined) return err(errorUndefinedToken(`Token: ${token}`));
+    if (!token) return err(errorUndefinedToken(`Token: ${token}`));
 
     if (newVars.has(token)) {
       const entry = newVars.get(token);
