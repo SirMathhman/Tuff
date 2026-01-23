@@ -29,6 +29,25 @@ function extractSuffix(
   return { suffix, nextIdx: sidx };
 }
 
+function validateSuffixForNumber(
+  finalSuffix: string,
+  isNeg: boolean,
+  inputStr: string,
+): Result<void, TuffError> {
+  if (finalSuffix && isNeg && finalSuffix[0] === "U") {
+    return err(
+      makeError(
+        "Invalid combination",
+        `Input: ${inputStr}`,
+        "Cannot use negative numbers with unsigned type suffixes",
+        `Remove the negative sign or use a signed suffix like I${finalSuffix.slice(1)}`,
+      ),
+    );
+  }
+  if (finalSuffix && !isInRange(0, finalSuffix)) return err(getRangeError(finalSuffix));
+  return ok();
+}
+
 export function parseNumberWithSuffix(
   s: string,
 ): Result<{ num: number; suffix: string; len: number }, TuffError> {
@@ -68,20 +87,17 @@ export function parseNumberWithSuffix(
   const { suffix } = extractSuffix(trimmed, idx);
   const finalSuffix = suffix || "I32";
 
-  if (finalSuffix && isNeg && finalSuffix[0] === "U") {
-    return err(
-      makeError(
-        "Invalid combination",
-        `Input: ${s}`,
-        "Cannot use negative numbers with unsigned type suffixes",
-        `Remove the negative sign or use a signed suffix like I${finalSuffix.slice(1)}`,
-      ),
-    );
-  }
-  if (finalSuffix && !isInRange(num, finalSuffix)) return err(getRangeError(finalSuffix));
+  const validated = validateSuffixForNumber(finalSuffix, isNeg, s);
+  if (!validated.ok) return validated;
+
+  if (!isInRange(num, finalSuffix)) return err(getRangeError(finalSuffix));
 
   const negSign = isNeg ? 1 : 0;
-  return ok({ num, suffix: finalSuffix, len: negSign + digits.length + suffix.length });
+  return ok({
+    num,
+    suffix: finalSuffix,
+    len: negSign + digits.length + suffix.length,
+  });
 }
 
 export function validateResult(

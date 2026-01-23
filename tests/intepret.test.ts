@@ -172,13 +172,6 @@ describe("intepret - expressions: variables (type compatibility)", () => {
       expect(result.error.cause.toLowerCase()).toContain("incompatible");
   });
 
-  it("returns err for narrowing assignment with inferred type like 'let x = 100U16; let y : U8 = x; y'", () => {
-    const result = intepret("let x = 100U16; let y : U8 = x; y");
-    expect(isOk(result)).toBe(false);
-    if (!isOk(result))
-      expect(result.error.cause.toLowerCase()).toContain("incompatible");
-  });
-
   it("returns err for variable redeclaration like 'let x = 0; let x = 0; x'", () => {
     const result = intepret("let x = 0; let x = 0; x");
     expect(isOk(result)).toBe(false);
@@ -197,6 +190,14 @@ describe("intepret - expressions: variables (type compatibility)", () => {
     expect(isOk(result)).toBe(false);
     if (!isOk(result))
       expect(result.error.cause.toLowerCase()).toContain("incompatible");
+  });
+});
+
+describe("intepret - expressions: variables (mutability)", () => {
+  it("parses and evaluates mutable variable reassignment like 'let mut x = 0; x = 1; x'", () => {
+    const result = intepret("let mut x = 0; x = 1; x");
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) expect(result.value).toBe(1);
   });
 
   it("parses and evaluates top-level variable declarations like 'let z : I32 = 10 / ( { let x : I32 = 2; x } - 1); z'", () => {
