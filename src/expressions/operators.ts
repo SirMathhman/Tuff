@@ -2,7 +2,11 @@ import { extractTypedInfo } from "../parser";
 import type { TypedInfo } from "../parser";
 import { validateUnsignedValue, extractTypeSize } from "../type-utils";
 import { getStructField, isStructInstance } from "../types/structs";
-import { getArrayElement, isArrayInstance } from "../utils/array";
+import {
+  getArrayElement,
+  getArrayMetadata,
+  isArrayInstance,
+} from "../utils/array";
 import {
   findFieldAccessOperator,
   findArrayIndexOperator,
@@ -80,6 +84,15 @@ export function performBinaryOp(
   switch (op) {
     case ".": {
       // Field access operator
+      if (isArrayInstance(left)) {
+        const meta = getArrayMetadata(left);
+        if (!meta) throw new Error("array metadata missing");
+        if (rightStr === "length") {
+          result = meta.initialized;
+          break;
+        }
+        throw new Error(`cannot access '${rightStr}' on array value`);
+      }
       if (!isStructInstance(left)) {
         throw new Error(`cannot access field on non-struct value`);
       }

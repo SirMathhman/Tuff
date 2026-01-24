@@ -105,3 +105,10 @@ export function isArrayInstance(value: number): boolean {
 export function getArrayMetadata(arrayId: number) {
   return arrays.get(arrayId);
 }
+
+export function createArrayFromLiteral(expr: string): number | undefined {
+  const literal = parseArrayLiteral(expr);
+  if (literal === undefined) return undefined;
+  const len = literal.length;
+  return createArray(0, len, len, literal);
+}

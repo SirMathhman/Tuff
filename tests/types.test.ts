@@ -57,4 +57,8 @@ describe("interpret - types", () => {
       ),
     ).toBe(6);
   });
+
+  it("supports array length property", () => {
+    expect(interpret("let array = [1, 2, 3]; array.length")).toBe(3);
+  });
 });

@@ -19,6 +19,7 @@ import {
   handleDereferenceOperation,
 } from "./handlers/pointer-operations";
 import { evaluateThisKeyword } from "./utils/this-keyword";
+import { createArrayFromLiteral } from "./utils/array";
 
 export function interpretWithScope(
   input: string,
@@ -31,6 +32,8 @@ export function interpretWithScope(
   const s = input.trim();
   if (s === "") return 0;
   if (s === "this") return evaluateThisKeyword(scope);
+  const literalArrayId = createArrayFromLiteral(s);
+  if (literalArrayId !== undefined) return literalArrayId;
   const d = tryDeclarations({
     s,
     typeMap,
@@ -164,10 +167,8 @@ export function interpretWithScope(
   ) {
     return parseTypedNumber(s);
   }
-  const trimmedS = s.trim();
   const isMatch =
-    trimmedS.startsWith("match") &&
-    trimmedS.slice(5).trimStart().startsWith("(");
+    s.startsWith("match") && s.slice(5).trimStart().startsWith("(");
   if ((s.includes("(") || s.includes("{") || s.includes("[")) && !isMatch) {
     const processed = evaluateGroupedExpressionsWithScope(
       s,
