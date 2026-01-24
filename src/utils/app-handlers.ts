@@ -1,17 +1,11 @@
-import type { Interpreter } from "../expressions/handlers";
 import { handleTypeDeclaration } from "../types/type-declarations";
 import { handleStructDeclaration } from "../types/structs";
 import { handleFunctionDeclaration } from "../functions";
+import { parseFunctionCall } from "../functions";
+import { handleMethodCall } from "../handlers/method-call";
+import type { FunctionCallParams } from "./function-call-params";
 
-type Params = {
-  s: string;
-  typeMap: Map<string, number>;
-  scope: Map<string, number>;
-  mutMap: Map<string, boolean>;
-  uninitializedSet: Set<string>;
-  unmutUninitializedSet: Set<string>;
-  interpreter: Interpreter;
-};
+type Params = FunctionCallParams;
 
 export function tryDeclarations(p: Params): number | undefined {
   const t = handleTypeDeclaration(
@@ -47,30 +41,16 @@ export function tryDeclarations(p: Params): number | undefined {
   return undefined;
 }
 
-export function hasOperators(s: string): boolean {
-  return (
-    s.includes("+") ||
-    s.includes("-") ||
-    s.includes("*") ||
-    s.includes("/") ||
-    s.includes("<") ||
-    s.includes(">") ||
-    s.includes("=") ||
-    s.includes("!") ||
-    s.includes("(") ||
-    s.includes("{") ||
-    s.includes("[") ||
-    s.includes(" is ") ||
-    s.includes("&&") ||
-    s.includes(".")
+export function tryFunctionCalls(p: Params): number | undefined {
+  const method = handleMethodCall(
+    p.s,
+    p.typeMap,
+    p.scope,
+    p.mutMap,
+    p.uninitializedSet,
+    p.unmutUninitializedSet,
+    p.interpreter,
   );
-}
-
-export function isMatchExpression(s: string): boolean {
-  const t = s.trim();
-  return t.startsWith("match") && t.slice(5).trimStart().startsWith("(");
-}
-
-export function isGroupedExpression(s: string): boolean {
-  return s.includes("(") || s.includes("{") || s.includes("[");
+  if (method !== undefined) return method;
+  return parseFunctionCall(p);
 }

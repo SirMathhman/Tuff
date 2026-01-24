@@ -1,4 +1,3 @@
-import type { Interpreter } from "./expressions/handlers";
 import { isValidIdentifier } from "./utils/identifier-utils";
 import { registerAnonymousFunction } from "./handlers/anonymous-functions";
 import {
@@ -6,6 +5,8 @@ import {
   extractReturnTypeFromFunctionType,
 } from "./utils/function-utils";
 import { createFunctionDeclarationHandler } from "./handlers/function-declaration";
+import type { FunctionCallParams } from "./utils/function-call-params";
+
 type FnDef = {
   params: Array<{ name: string; type: number; typeStr?: string }>;
   returnType: number;
@@ -20,15 +21,28 @@ export const getFunctionRef = (varName: string) => functionRefs.get(varName);
 export const handleFunctionDeclaration =
   createFunctionDeclarationHandler(functionDefs);
 
-export function parseFunctionCall(
-  s: string,
-  typeMap: Map<string, number>,
-  scope: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpreter: Interpreter,
-): number | undefined {
+export function findMatchingCloseParen(s: string, openIndex: number): number {
+  let depth = 1;
+  for (let i = openIndex + 1; i < s.length; i++) {
+    if (s[i] === "(") depth++;
+    else if (s[i] === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+export function parseFunctionCall(p: FunctionCallParams): number | undefined {
+  const {
+    s,
+    typeMap,
+    scope,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpreter,
+  } = p;
   const trimmed = s.trim();
   const parenIndex = trimmed.indexOf("(");
   if (parenIndex === -1) return undefined;
@@ -38,18 +52,7 @@ export function parseFunctionCall(
   const actualFnName = referencedFnName || fnName;
   if (!functionDefs.has(actualFnName)) return undefined;
 
-  let parenDepth = 0,
-    closeParenIndex = -1;
-  for (let i = parenIndex; i < trimmed.length; i++) {
-    if (trimmed[i] === "(") parenDepth++;
-    else if (trimmed[i] === ")") {
-      parenDepth--;
-      if (parenDepth === 0) {
-        closeParenIndex = i;
-        break;
-      }
-    }
-  }
+  const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
   if (closeParenIndex === -1) return undefined;
 
   const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();

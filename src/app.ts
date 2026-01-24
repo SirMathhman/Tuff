@@ -12,8 +12,7 @@ import {
 import { handleDereferenceAssignment } from "./handlers/dereference-assignment";
 import { handleBinaryOperation } from "./expressions/binary-operation";
 import { parseTypedNumber } from "./parser";
-import { tryDeclarations } from "./utils/app-handlers";
-import { parseFunctionCall } from "./functions";
+import { tryDeclarations, tryFunctionCalls } from "./utils/app-handlers";
 import { handleLambdaExpression } from "./handlers/lambda-expressions";
 import {
   handleReferenceOperation,
@@ -134,15 +133,15 @@ export function interpretWithScope(
   );
   if (assignmentResult !== undefined) return assignmentResult;
   if (scope.has(s.trim())) return scope.get(s.trim())!;
-  const fnCallResult = parseFunctionCall(
+  const fnCallResult = tryFunctionCalls({
     s,
     typeMap,
     scope,
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
-    interpretWithScope as Interpreter,
-  );
+    interpreter: interpretWithScope as Interpreter,
+  });
   if (fnCallResult !== undefined) return fnCallResult;
   const referenceResult = handleReferenceOperation(s, scope, mutMap);
   if (referenceResult !== undefined) return referenceResult;

@@ -35,10 +35,14 @@ describe("interpret - functions", () => {
   });
 
   it("supports function scope closure with mutable outer variable", () => {
+    expect(interpret("let mut x = 0; fn add() => x += 1; add(); x")).toBe(1);
+  });
+
+  it("supports method call syntax with receiver as this parameter", () => {
     expect(
       interpret(
-        "let mut x = 0; fn add() => x += 1; add(); x",
+        "fn add(this : I32, argument : I32) => this + argument; 100.add(50)",
       ),
-    ).toBe(1);
+    ).toBe(150);
   });
 });
