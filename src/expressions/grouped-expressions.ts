@@ -79,6 +79,19 @@ export function evaluateGroupedExpressionsWithScope(
   for (const [openChar, closeChar] of pairs) {
     const openIndex = s.indexOf(openChar);
     if (openIndex === -1) continue;
+
+    // Skip if this is a lambda expression
+    if (openChar === "(") {
+      const closeIdx = findMatchingClose(s, openIndex, openChar, closeChar);
+      if (closeIdx !== -1 && closeIdx + 2 < s.length) {
+        const afterParen = s.slice(closeIdx + 1).trim();
+        if (afterParen.startsWith("=>")) {
+          // This is a lambda expression, skip it
+          continue;
+        }
+      }
+    }
+
     // For braces, skip if part of a match expression (contains "case" keyword)
     if (openChar === "{") {
       const closeIdx = findMatchingClose(s, openIndex, openChar, closeChar);

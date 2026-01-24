@@ -1,13 +1,22 @@
 {
   "name": "tuff",
+  "version": "0.1.0",
+  "description": "A typed expression interpreter with support for functions, lambdas, and advanced type system",
   "private": true,
+  "main": "./src/utils/interpret.ts",
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": "./src/utils/interpret.ts",
+    "./interpret": "./src/utils/interpret.ts"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@types/bun": "latest",
+    "typescript": "^5.9.2",
     "typescript-eslint": "^8.53.1"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
   },
   "dependencies": {
     "eslint": "^9.39.2",

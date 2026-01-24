@@ -1,8 +1,9 @@
 import { extractTypedInfo } from "./parser";
 import { extractTypeSize } from "./type-utils";
 import type { Interpreter } from "./expressions/handlers";
-import { isFunctionType } from "./functions";
+import { functionDefs } from "./functions";
 import { handleFunctionTypeAnnotation } from "./function-type-handler";
+import { isFunctionType } from "./utils/function-utils";
 
 export function handleVarDecl(
   s: string,
@@ -138,7 +139,13 @@ export function handleVarDecl(
     if (colonIndex !== -1) {
       const typeStr = beforeEq.slice(colonIndex + 1).trim();
       if (isFunctionType(typeStr)) {
-        const result = handleFunctionTypeAnnotation(typeStr, exprStr, varName, typeMap);
+        const result = handleFunctionTypeAnnotation(
+          typeStr,
+          exprStr,
+          varName,
+          typeMap,
+          functionDefs,
+        );
         if (!result.handled) return undefined;
         vType = result.vType;
       } else {
