@@ -1,11 +1,8 @@
 import { extractTypedInfo } from "./parser";
 import { extractTypeSize } from "./type-utils";
 import type { Interpreter } from "./expressions/handlers";
-import {
-  isFunctionType,
-  setFunctionRef,
-  registerAnonymousFunction,
-} from "./functions";
+import { isFunctionType } from "./functions";
+import { handleFunctionTypeAnnotation } from "./function-type-handler";
 
 export function handleVarDecl(
   s: string,
@@ -141,17 +138,9 @@ export function handleVarDecl(
     if (colonIndex !== -1) {
       const typeStr = beforeEq.slice(colonIndex + 1).trim();
       if (isFunctionType(typeStr)) {
-        if (!exprStr) return undefined;
-        // Check if exprStr is a lambda (starts with '(') or a function name
-        let fnName = exprStr;
-        if (exprStr.trim().startsWith("(")) {
-          // This is an anonymous function (lambda)
-          const anonName = registerAnonymousFunction(exprStr, typeMap);
-          if (!anonName) return undefined;
-          fnName = anonName;
-        }
-        setFunctionRef(varName, fnName);
-        vType = -2;
+        const result = handleFunctionTypeAnnotation(typeStr, exprStr, varName, typeMap);
+        if (!result.handled) return undefined;
+        vType = result.vType;
       } else {
         let dType = extractTypeSize(typeStr);
         if (dType === 0 && typeMap.has("__alias__" + typeStr))

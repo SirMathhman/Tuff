@@ -243,4 +243,8 @@ describe("interpret", () => {
       100,
     );
   });
+
+  it("supports lambda expressions without type annotations", () => {
+    expect(interpret("let func : () => I32 = () => 100; func()")).toBe(100);
+  });
 });

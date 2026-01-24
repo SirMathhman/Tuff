@@ -2,15 +2,24 @@ import type { Interpreter } from "./expressions/handlers";
 import { extractTypeSize } from "./type-utils";
 import { makeDeclarationHandler } from "./declarations";
 import { isValidIdentifier } from "./utils/identifier-utils";
-type FnDef = { params: Array<{ name: string; type: number }>; returnType: number; body: string };
-const functionDefs = new Map<string, FnDef>(), functionRefs = new Map<string, string>();
-export function setFunctionRef(varName: string, fnName: string): void { functionRefs.set(varName, fnName); }
-export function getFunctionRef(varName: string): string | undefined { return functionRefs.get(varName); }
-export function isFunctionType(typeStr: string): boolean {
+type FnDef = {
+  params: Array<{ name: string; type: number }>;
+  returnType: number;
+  body: string;
+};
+const functionDefs = new Map<string, FnDef>(),
+  functionRefs = new Map<string, string>();
+export const setFunctionRef = (varName: string, fnName: string) =>
+  functionRefs.set(varName, fnName);
+export const getFunctionRef = (varName: string) => functionRefs.get(varName);
+export const isFunctionType = (typeStr: string) => {
   const t = typeStr.trim();
-  return t.startsWith("(") && t.includes("=>") && t.lastIndexOf(")") < t.indexOf("=>");
-}
-
+  return (
+    t.startsWith("(") &&
+    t.includes("=>") &&
+    t.lastIndexOf(")") < t.indexOf("=>")
+  );
+};
 export const handleFunctionDeclaration = makeDeclarationHandler(
   "fn",
   (rest: string) => {
@@ -154,13 +163,13 @@ export function parseFunctionCall(
 export function registerAnonymousFunction(
   lambdaExpr: string,
   typeMap: Map<string, number>,
+  inferredReturnType?: number,
 ): string | undefined {
   const t = lambdaExpr.trim();
   if (!t.startsWith("(")) return undefined;
-  const arrowIdx = t.indexOf("=>");
-  if (arrowIdx === -1) return undefined;
-  const parenEnd = t.lastIndexOf(")", arrowIdx);
-  if (parenEnd === -1) return undefined;
+  const arrowIdx = t.indexOf("=>"),
+    parenEnd = t.lastIndexOf(")", arrowIdx);
+  if (arrowIdx === -1 || parenEnd === -1) return undefined;
   const paramsStr = t.slice(1, parenEnd).trim(),
     params: Array<{ name: string; type: number }> = [];
   if (paramsStr)
@@ -175,12 +184,14 @@ export function registerAnonymousFunction(
       if (pType === 0) return undefined;
       params.push({ name: pName, type: pType });
     }
-  const rTypeStr = t.slice(parenEnd + 1, arrowIdx).trim(),
-    rTypeNameStr = rTypeStr.slice(1).trim();
-  if (!rTypeStr.startsWith(":")) return undefined;
-  let rType = extractTypeSize(rTypeNameStr);
-  if (rType === 0 && typeMap.has("__alias__" + rTypeNameStr))
-    rType = typeMap.get("__alias__" + rTypeNameStr) || 0;
+  const rTypeStr = t.slice(parenEnd + 1, arrowIdx).trim();
+  let rType = inferredReturnType || 0;
+  if (rTypeStr.startsWith(":")) {
+    const rTypeNameStr = rTypeStr.slice(1).trim();
+    rType = extractTypeSize(rTypeNameStr);
+    if (rType === 0 && typeMap.has("__alias__" + rTypeNameStr))
+      rType = typeMap.get("__alias__" + rTypeNameStr) || 0;
+  }
   if (rType === 0) return undefined;
   const anonName = `__anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   functionDefs.set(anonName, {
@@ -190,4 +201,3 @@ export function registerAnonymousFunction(
   });
   return anonName;
 }
-
