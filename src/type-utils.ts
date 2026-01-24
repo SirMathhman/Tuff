@@ -33,6 +33,7 @@ export function extractTypeSize(typeStr: string): number {
   const t = typeStr.trim();
   if (t === "Bool") return 1;
   if (t === "Char") return 8;
+  if (t === "Str") return -1; // Str is a reference type (like a pointer)
   if (t.length < 1) return 0;
 
   // Handle pointer types like *I32 or *mut I32
@@ -43,7 +44,7 @@ export function extractTypeSize(typeStr: string): number {
       baseTypeStr = baseTypeStr.slice(4).trim();
     }
     const baseType = extractTypeSize(baseTypeStr);
-    return baseType > 0 ? -baseType : 0;
+    return baseType > 0 ? -baseType : baseType;
   }
 
   if (t[0] !== "U" && t[0] !== "I") return 0;

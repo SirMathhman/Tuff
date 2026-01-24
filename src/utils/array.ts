@@ -99,7 +99,7 @@ export function setArrayElement(
 }
 
 export function isArrayInstance(value: number): boolean {
-  return value >= 2000000;
+  return value >= 2000000 && value < 3000000;
 }
 
 export function getArrayMetadata(arrayId: number) {
@@ -111,4 +111,28 @@ export function createArrayFromLiteral(expr: string): number | undefined {
   if (literal === undefined) return undefined;
   const len = literal.length;
   return createArray(0, len, len, literal);
+}
+
+// Global string storage: maps string ID to its value
+const strings = new Map<number, string>();
+let nextStringId = 3000000; // Start after array IDs (2M+)
+
+export function createString(value: string): number {
+  const stringId = nextStringId++;
+  strings.set(stringId, value);
+  return stringId;
+}
+
+export function getString(stringId: number): string | undefined {
+  return strings.get(stringId);
+}
+
+export function isStringInstance(value: number): boolean {
+  return value >= 3000000;
+}
+
+export function getStringLength(stringId: number): number | undefined {
+  const str = strings.get(stringId);
+  if (str === undefined) return undefined;
+  return str.length;
 }

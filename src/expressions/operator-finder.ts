@@ -56,6 +56,35 @@ export function findFieldAccessOperator(
       ) {
         return { index: i };
       }
+      // Handle string literal: closing quote
+      if (prev === '"') {
+        // Find matching opening quote, accounting for escapes
+        let j = i - 2;
+        let escapedCount = 0;
+        while (j >= 0) {
+          if (s[j] === "\\") {
+            escapedCount++;
+            j--;
+          } else if (s[j] === '"' && escapedCount % 2 === 0) {
+            if (next && isValidCharAfterDot(next)) {
+              return { index: i };
+            }
+            break;
+          } else {
+            escapedCount = 0;
+            j--;
+          }
+        }
+      }
+      // Handle char literal: closing quote
+      if (prev === "'") {
+        // For char literals, they're always 1 char, so check simpler pattern
+        if (i >= 3 && s[i - 3] === "'") {
+          if (next && isValidCharAfterDot(next)) {
+            return { index: i };
+          }
+        }
+      }
     }
   }
   return undefined;

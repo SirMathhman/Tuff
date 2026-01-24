@@ -6,6 +6,8 @@ import {
   getArrayElement,
   getArrayMetadata,
   isArrayInstance,
+  getStringLength,
+  isStringInstance,
 } from "../utils/array";
 import { getPointerTarget } from "../handlers/pointer-operations";
 import {
@@ -106,6 +108,19 @@ export function performBinaryOp(
           break;
         }
         throw new Error(`cannot access '${rightStr}' on array value`);
+      }
+      const stringValue = isStringInstance(left)
+        ? left
+        : resolvedPointerValue && isStringInstance(resolvedPointerValue)
+          ? resolvedPointerValue
+          : undefined;
+      if (stringValue !== undefined && isStringInstance(stringValue)) {
+        if (rightStr === "length") {
+          const len = getStringLength(stringValue);
+          result = len !== undefined ? len : 0;
+          break;
+        }
+        throw new Error(`cannot access '${rightStr}' on string value`);
       }
       const structValue = isStructInstance(left) ? left : resolvedPointerValue;
       if (!structValue || !isStructInstance(structValue)) {

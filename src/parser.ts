@@ -3,6 +3,7 @@ import {
   validateUnsignedValue,
   type TypedInfo,
 } from "./type-utils";
+import { createString } from "./utils/array";
 
 export type { TypedInfo };
 
@@ -42,6 +43,57 @@ function parseCharLiteral(s: string): number | undefined {
   throw new Error(`multi-character literal: ${s}`);
 }
 
+function parseStringLiteral(s: string): number | undefined {
+  if (s.length < 2 || s[0] !== '"' || s[s.length - 1] !== '"') {
+    return undefined;
+  }
+  const content = s.slice(1, -1);
+  let result = "";
+  let i = 0;
+  while (i < content.length) {
+    if (content[i] === "\\") {
+      if (i + 1 < content.length) {
+        const escape = content[i + 1];
+        switch (escape) {
+          case "n":
+            result += "\n";
+            i += 2;
+            break;
+          case "t":
+            result += "\t";
+            i += 2;
+            break;
+          case "r":
+            result += "\r";
+            i += 2;
+            break;
+          case "\\":
+            result += "\\";
+            i += 2;
+            break;
+          case '"':
+            result += '"';
+            i += 2;
+            break;
+          case "'":
+            result += "'";
+            i += 2;
+            break;
+          default:
+            throw new Error(`unknown escape sequence: \\${escape}`);
+        }
+      } else {
+        result += content[i];
+        i++;
+      }
+    } else {
+      result += content[i];
+      i++;
+    }
+  }
+  return createString(result);
+}
+
 export function scanNumericPrefix(s: string): number {
   const len = s.length;
   let i = 0;
@@ -68,6 +120,8 @@ export function scanNumericPrefix(s: string): number {
 }
 
 export function extractTypedInfo(s: string): TypedInfo {
+  const stringId = parseStringLiteral(s);
+  if (stringId !== undefined) return { value: stringId, typeSize: -1 };
   const charCode = parseCharLiteral(s);
   if (charCode !== undefined) return { value: charCode, typeSize: 8 };
   const b = s === "true" ? 1 : s === "false" ? 0 : NaN;
@@ -86,6 +140,8 @@ export function extractTypedInfo(s: string): TypedInfo {
 }
 
 export function parseTypedNumber(s: string): number {
+  const stringId = parseStringLiteral(s);
+  if (stringId !== undefined) return stringId;
   const charCode = parseCharLiteral(s);
   if (charCode !== undefined) return charCode;
   const b = s === "true" ? 1 : s === "false" ? 0 : NaN;
