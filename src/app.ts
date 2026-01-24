@@ -11,7 +11,8 @@ import {
 } from "./expressions/handlers";
 import { handleBinaryOperation } from "./expressions/binary-operation";
 import { parseTypedNumber } from "./parser";
-import { handleTypeDeclaration } from "./type-declarations";
+import { handleTypeDeclaration } from "./types/type-declarations";
+import { handleStructDeclaration } from "./types/structs";
 
 export function interpretWithScope(
   input: string,
@@ -35,6 +36,18 @@ export function interpretWithScope(
     interpretWithScope as Interpreter,
   );
   if (typeDecl.handled) return typeDecl.result;
+
+  // Handle struct declarations
+  const structDecl = handleStructDeclaration(
+    s,
+    typeMap,
+    scope,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpretWithScope as Interpreter,
+  );
+  if (structDecl.handled) return structDecl.result;
 
   const declResult = handleVarDecl(
     s,
@@ -141,7 +154,8 @@ export function interpretWithScope(
     !s.includes("{") &&
     !s.includes("[") &&
     !s.includes(" is ") &&
-    !s.includes("&&")
+    !s.includes("&&") &&
+    !s.includes(".")
   ) {
     return parseTypedNumber(s);
   }

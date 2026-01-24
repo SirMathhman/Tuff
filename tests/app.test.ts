@@ -217,4 +217,10 @@ describe("interpret", () => {
       ),
     ).toBe(1);
   });
+
+  it("supports struct declaration and field access", () => {
+    expect(
+      interpret("struct Wrapper { field : 100 } Wrapper { field : 100 }.field"),
+    ).toBe(100);
+  });
 });

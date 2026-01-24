@@ -2,7 +2,7 @@ import {
   extractUnsignedSize,
   validateUnsignedValue,
   type TypedInfo,
-} from "./types";
+} from "./type-utils";
 
 export type { TypedInfo };
 

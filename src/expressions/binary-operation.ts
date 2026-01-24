@@ -1,4 +1,4 @@
-import { findOperatorIndex, performBinaryOp } from "../operators";
+import { findOperatorIndex, performBinaryOp } from "./operators";
 import { parseTypedNumber, extractTypedInfo } from "../parser";
 import type { Interpreter } from "./handlers";
 
@@ -39,6 +39,27 @@ export function handleBinaryOperation(
       leftValue,
       op,
       0, // right value is not used for 'is'
+      extractTypedInfo(leftStr),
+      rightStr,
+      typeMap,
+      leftStr,
+    );
+  }
+
+  // For field access operator '.', the right side is a field name, not an expression
+  if (op === ".") {
+    const leftValue = interpretWithScope(
+      leftStr,
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+      unmutUninitializedSet,
+    );
+    return performBinaryOp(
+      leftValue,
+      op,
+      0, // right value is not used for '.'
       extractTypedInfo(leftStr),
       rightStr,
       typeMap,

@@ -1,5 +1,34 @@
 import { findMatchingClose } from "../match";
+import { parseStructInstantiation } from "../types/structs";
 import type { Interpreter } from "./handlers";
+
+function isIdentifier(s: string): boolean {
+  if (s.length === 0) return false;
+  const first = s.charCodeAt(0);
+  if (
+    !(
+      (first >= 65 && first <= 90) ||
+      (first >= 97 && first <= 122) ||
+      first === 95
+    )
+  ) {
+    return false; // not A-Z, a-z, or _
+  }
+  for (let i = 1; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (
+      !(
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
+        (code >= 48 && code <= 57) ||
+        code === 95
+      )
+    ) {
+      return false; // not A-Z, a-z, 0-9, or _
+    }
+  }
+  return true;
+}
 
 export function evaluateGroupedExpressionsWithScope(
   s: string,
@@ -13,6 +42,62 @@ export function evaluateGroupedExpressionsWithScope(
   if (trimmed.startsWith("match") && trimmed.includes("case ")) {
     return s;
   }
+
+  // Check for struct instantiation before processing grouped expressions
+  const braceIndex = s.indexOf("{");
+  if (braceIndex > 0) {
+    const beforeBrace = s.slice(0, braceIndex).trim();
+    // Check if this looks like a struct instantiation (word { ... })
+    if (
+      beforeBrace &&
+      isIdentifier(beforeBrace) &&
+      typeMap.has("__struct__" + beforeBrace)
+    ) {
+      try {
+        const structResult = parseStructInstantiation(
+          s,
+          typeMap,
+          scope,
+          interpreter,
+        );
+        if (structResult !== undefined) {
+          // Find where the struct instantiation ends
+          let braceDepth = 0;
+          let closeIndex = -1;
+          for (let i = braceIndex; i < s.length; i++) {
+            if (s[i] === "{") braceDepth++;
+            else if (s[i] === "}") {
+              braceDepth--;
+              if (braceDepth === 0) {
+                closeIndex = i;
+                break;
+              }
+            }
+          }
+
+          if (closeIndex !== -1) {
+            // Replace the struct instantiation with its result
+            const after = s.slice(closeIndex + 1);
+            if (after.trim()) {
+              // There's something after the struct, continue evaluating
+              return evaluateGroupedExpressionsWithScope(
+                String(structResult) + after,
+                scope,
+                typeMap,
+                mutMap,
+                interpreter,
+              );
+            } else {
+              return String(structResult);
+            }
+          }
+        }
+      } catch (_e) {
+        // Not a valid struct instantiation, continue
+      }
+    }
+  }
+
   const pairs: Array<[string, string]> = [
     ["(", ")"],
     ["{", "}"],
@@ -29,6 +114,17 @@ export function evaluateGroupedExpressionsWithScope(
         if (inside.includes("case ")) {
           // This is likely a match expression, skip it
           continue;
+        }
+        // Skip if this looks like a struct instantiation
+        if (openIndex > 0) {
+          const beforeBrace = s.slice(0, openIndex).trim();
+          if (
+            beforeBrace &&
+            isIdentifier(beforeBrace) &&
+            typeMap.has("__struct__" + beforeBrace)
+          ) {
+            continue;
+          }
         }
       }
     }

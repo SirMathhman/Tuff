@@ -1,5 +1,5 @@
 import { extractTypedInfo } from "./parser";
-import { extractTypeSize } from "./types";
+import { extractTypeSize } from "./type-utils";
 import type { Interpreter } from "./expressions/handlers";
 
 export function handleVarDecl(
@@ -151,7 +151,7 @@ export function handleVarDecl(
           let typeStart = exprStr.length - 1;
           while (typeStart >= 0) {
             const char = exprStr[typeStart];
-            if (char === undefined || (char < "0" || char > "9")) {
+            if (char === undefined || char < "0" || char > "9") {
               break;
             }
             typeStart--;
