@@ -2,11 +2,14 @@ import { isValidIdentifier } from "../utils/identifier-utils";
 
 // Global map to store pointer values (which reference variable names)
 const pointerMap = new Map<number, string>();
+// Track which pointers are mutable
+const mutablePointerMap = new Map<number, boolean>();
 let pointerCounter = 1000; // Pointer values start at 1000 to distinguish from regular values
 
-export function createPointer(varName: string): number {
+export function createPointer(varName: string, isMutable: boolean = false): number {
   const pointerValue = pointerCounter++;
   pointerMap.set(pointerValue, varName);
+  mutablePointerMap.set(pointerValue, isMutable);
   return pointerValue;
 }
 
@@ -14,9 +17,14 @@ export function getPointerTarget(pointerValue: number): string | undefined {
   return pointerMap.get(pointerValue);
 }
 
+export function isPointerMutable(pointerValue: number): boolean {
+  return mutablePointerMap.get(pointerValue) ?? false;
+}
+
 export function handleReferenceOperation(
   s: string,
   scope: Map<string, number>,
+  mutMap: Map<string, boolean> = new Map(),
 ): number | undefined {
   const trimmed = s.trim();
 
@@ -32,7 +40,9 @@ export function handleReferenceOperation(
   if (!scope.has(varName)) return undefined;
 
   // Create and return a pointer to this variable
-  return createPointer(varName);
+  // Mark the pointer as mutable if the variable is mutable
+  const isMutable = mutMap.get(varName) ?? false;
+  return createPointer(varName, isMutable);
 }
 
 export function handleDereferenceOperation(

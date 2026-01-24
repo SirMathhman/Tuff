@@ -34,12 +34,14 @@ export function extractTypeSize(typeStr: string): number {
   if (t === "Bool") return 1;
   if (t.length < 1) return 0;
 
-  // Handle pointer types like *I32
+  // Handle pointer types like *I32 or *mut I32
   if (t[0] === "*") {
-    // For pointers, return the base type's size but marked as a pointer
-    // We use negative values to indicate pointers
-    // A pointer to I32 will be stored as -32 in the type system
-    const baseType = extractTypeSize(t.slice(1));
+    let baseTypeStr = t.slice(1).trim();
+    // Remove 'mut' keyword if present
+    if (baseTypeStr.startsWith("mut ")) {
+      baseTypeStr = baseTypeStr.slice(4).trim();
+    }
+    const baseType = extractTypeSize(baseTypeStr);
     return baseType > 0 ? -baseType : 0;
   }
 

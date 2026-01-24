@@ -9,6 +9,7 @@ import {
   handleVarAssignment,
   type Interpreter,
 } from "./expressions/handlers";
+import { handleDereferenceAssignment } from "./handlers/dereference-assignment";
 import { handleBinaryOperation } from "./expressions/binary-operation";
 import { parseTypedNumber } from "./parser";
 import { tryDeclarations } from "./utils/app-handlers";
@@ -111,6 +112,16 @@ export function interpretWithScope(
     interpretWithScope as Interpreter,
   );
   if (ifResult !== undefined) return ifResult;
+  const dereferenceAssignmentResult = handleDereferenceAssignment(
+    s,
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpretWithScope as Interpreter,
+  );
+  if (dereferenceAssignmentResult !== undefined) return dereferenceAssignmentResult;
   const assignmentResult = handleVarAssignment(
     s,
     scope,
@@ -132,7 +143,7 @@ export function interpretWithScope(
     interpretWithScope as Interpreter,
   );
   if (fnCallResult !== undefined) return fnCallResult;
-  const referenceResult = handleReferenceOperation(s, scope);
+  const referenceResult = handleReferenceOperation(s, scope, mutMap);
   if (referenceResult !== undefined) return referenceResult;
   const dereferenceResult = handleDereferenceOperation(s, scope);
   if (dereferenceResult !== undefined) return dereferenceResult;

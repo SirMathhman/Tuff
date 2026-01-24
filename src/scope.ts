@@ -71,7 +71,11 @@ export function handleVarDecl(
   const { declStr, restIndex } = findDeclStringAndRestIndex(s);
   if (!declStr) return undefined;
 
-  const isMut = declStr.indexOf("mut ") !== -1;
+  // Check if variable is mutable by looking for "mut " after "let " and before the colon
+  const afterLet = declStr.slice(4);
+  const colonIndex = afterLet.indexOf(":");
+  const beforeColon = colonIndex !== -1 ? afterLet.slice(0, colonIndex) : afterLet;
+  const isMut = beforeColon.indexOf("mut ") !== -1;
   const eqIndex = findEqualIndex(declStr);
 
   let varName: string,
@@ -80,24 +84,24 @@ export function handleVarDecl(
 
   if (eqIndex === -1) {
     const varPart = declStr.slice(4 + (isMut ? 4 : 0)).trim(),
-      colonIndex = varPart.indexOf(":");
-    if (colonIndex === -1) return undefined;
-    varName = varPart.slice(0, colonIndex).trim();
-    const typeStr = varPart.slice(colonIndex + 1).trim();
+      colonIndexInVarPart = varPart.indexOf(":");
+    if (colonIndexInVarPart === -1) return undefined;
+    varName = varPart.slice(0, colonIndexInVarPart).trim();
+    const typeStr = varPart.slice(colonIndexInVarPart + 1).trim();
     vType = extractTypeFromAnnotation(typeStr, typeMap);
     if (vType === 0 && typeMap.has("__union__" + typeStr)) return undefined;
   } else {
     const beforeEq = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim();
-    const colonIndex = findColonInBeforeEq(beforeEq);
+    const colonIndexInBeforeEq = findColonInBeforeEq(beforeEq);
     varName =
-      colonIndex !== -1 ? beforeEq.slice(0, colonIndex).trim() : beforeEq;
+      colonIndexInBeforeEq !== -1 ? beforeEq.slice(0, colonIndexInBeforeEq).trim() : beforeEq;
 
     const exprStr = declStr.slice(eqIndex + 1).trim();
     let isFunctionTypeAnnotation = false;
     let declaredTypeStr: string | undefined;
 
-    if (colonIndex !== -1) {
-      declaredTypeStr = beforeEq.slice(colonIndex + 1).trim();
+    if (colonIndexInBeforeEq !== -1) {
+      declaredTypeStr = beforeEq.slice(colonIndexInBeforeEq + 1).trim();
       isFunctionTypeAnnotation = isFunctionType(declaredTypeStr);
     }
 
@@ -118,7 +122,7 @@ export function handleVarDecl(
       }
     }
 
-    if (colonIndex !== -1 && declaredTypeStr) {
+    if (colonIndexInBeforeEq !== -1 && declaredTypeStr) {
       if (isFunctionType(declaredTypeStr)) {
         const result = handleFunctionTypeAnnotation(
           declaredTypeStr,
