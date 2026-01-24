@@ -3,7 +3,10 @@ import { makeDeclarationHandler } from "../declarations";
 
 // Global struct instance storage: maps instance ID to {fieldValues, typeParams}
 // typeParams maps generic param names to concrete type names (e.g., {T: "I32"})
-const structInstances = new Map<number, { fieldValues: Map<string, number>; typeParams: Map<string, string> }>();
+const structInstances = new Map<
+  number,
+  { fieldValues: Map<string, number>; typeParams: Map<string, string> }
+>();
 let nextInstanceId = 1000000; // Start from a high number to avoid conflicts with other values
 
 export interface StructDefinition {
@@ -12,14 +15,15 @@ export interface StructDefinition {
 }
 
 function parseGenericParams(s: string): { name: string; params: string[] } {
-  const angleStart = s.indexOf("<");
-  if (angleStart === -1) return { name: s.trim(), params: [] };
-  const angleEnd = s.indexOf(">");
-  if (angleEnd === -1) return { name: s.trim(), params: [] };
+  const angleStart = s.indexOf("<"), angleEnd = s.indexOf(">");
+  if (angleStart === -1 || angleEnd === -1)
+    return { name: s.trim(), params: [] };
   const name = s.slice(0, angleStart).trim();
   const paramStr = s.slice(angleStart + 1, angleEnd).trim();
-  const params = paramStr.split(",").map((p) => p.trim());
-  return { name, params };
+  return {
+    name,
+    params: paramStr ? paramStr.split(",").map((p) => p.trim()) : [],
+  };
 }
 
 export const handleStructDeclaration = makeDeclarationHandler(
@@ -28,7 +32,8 @@ export const handleStructDeclaration = makeDeclarationHandler(
   (rest: string, closeIndex: number, typeMap: Map<string, number>) => {
     const braceIndex = rest.indexOf("{");
     const headerStr = rest.slice(0, braceIndex).trim();
-    const { name: structName, params: genericParams } = parseGenericParams(headerStr);
+    const { name: structName, params: genericParams } =
+      parseGenericParams(headerStr);
     const fieldsStr = rest.slice(braceIndex + 1, closeIndex).trim();
 
     // Store struct definition
@@ -64,7 +69,8 @@ export function parseStructInstantiation(
   }
 
   const headerStr = trimmed.slice(0, braceIndex).trim();
-  const { name: structName, params: concreteTypes } = parseGenericParams(headerStr);
+  const { name: structName, params: concreteTypes } =
+    parseGenericParams(headerStr);
 
   if (!typeMap.has("__struct__" + structName)) {
     return undefined;
@@ -123,8 +129,14 @@ export function parseStructInstantiation(
   if (concreteTypes.length > 0) {
     const genericParamStr = typeMap.get("__struct_generics__" + structName);
     if (genericParamStr) {
-      const genericParams = (genericParamStr as unknown as string).split(",").map((p) => p.trim());
-      for (let i = 0; i < Math.min(genericParams.length, concreteTypes.length); i++) {
+      const genericParams = (genericParamStr as unknown as string)
+        .split(",")
+        .map((p) => p.trim());
+      for (
+        let i = 0;
+        i < Math.min(genericParams.length, concreteTypes.length);
+        i++
+      ) {
         const param = genericParams[i];
         const concreteType = concreteTypes[i];
         if (param && concreteType) {

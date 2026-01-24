@@ -11,6 +11,7 @@ type FnDef = {
   params: Array<{ name: string; type: number; typeStr?: string }>;
   returnType: number;
   body: string;
+  generics?: string[];
 };
 const functionDefs = new Map<string, FnDef>();
 export { functionDefs, registerAnonymousFunction, isFunctionType };
@@ -42,6 +43,17 @@ export function findMatchingCloseParen(s: string, openIndex: number): number {
   return -1;
 }
 
+function extractFunctionName(s: string): { name: string; generics: string[] } {
+  const angleStart = s.indexOf("<");
+  if (angleStart === -1) return { name: s, generics: [] };
+  const angleEnd = s.indexOf(">");
+  if (angleEnd === -1) return { name: s, generics: [] };
+  const name = s.slice(0, angleStart).trim();
+  const paramStr = s.slice(angleStart + 1, angleEnd).trim();
+  const generics = paramStr.split(",").map((p) => p.trim());
+  return { name, generics };
+}
+
 export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   const {
     s,
@@ -55,7 +67,8 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   const trimmed = s.trim();
   const parenIndex = trimmed.indexOf("(");
   if (parenIndex === -1) return undefined;
-  const fnName = trimmed.slice(0, parenIndex).trim();
+  const fnNamePart = trimmed.slice(0, parenIndex).trim();
+  const { name: fnName } = extractFunctionName(fnNamePart);
   if (!isValidIdentifier(fnName)) return undefined;
   const referencedFnName = getFunctionRef(fnName);
   const actualFnName = referencedFnName || fnName;

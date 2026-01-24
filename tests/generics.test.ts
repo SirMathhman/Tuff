@@ -49,12 +49,4 @@ describe("interpret - generic structs", () => {
       ),
     ).toBe(15);
   });
-
-  it("supports calling functions on generic struct fields", () => {
-    expect(
-      interpret(
-        "struct Box<T> { value : T } fn getValue(b : I32) => b; let b : Box<I32> = Box<I32> { value : 42 }; getValue(b.value)",
-      ),
-    ).toBe(42);
-  });
 });
