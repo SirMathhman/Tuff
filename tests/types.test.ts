@@ -27,4 +27,12 @@ describe("interpret - types", () => {
       interpret("struct Wrapper { field : 100 } Wrapper { field : 100 }.field"),
     ).toBe(100);
   });
+
+  it("supports method calls on struct instances", () => {
+    expect(
+      interpret(
+        "struct Point { x : 3, y : 4 } fn manhattan(this : Point) : I32 => this.x + this.y; let p = Point { x: 3, y: 4 }; p.manhattan()",
+      ),
+    ).toBe(7);
+  });
 });

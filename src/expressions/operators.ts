@@ -16,9 +16,6 @@ export function findOperatorIndex(s: string): {
   operator: string;
 } {
   // Check in order of precedence (lowest to highest)
-  const fieldAccess = findFieldAccessOperator(s);
-  if (fieldAccess) return { index: fieldAccess.index, operator: "." };
-
   const logicalAnd = findLogicalAnd(s);
   if (logicalAnd) return { index: logicalAnd.index, operator: "&&" };
 
@@ -34,6 +31,9 @@ export function findOperatorIndex(s: string): {
 
   const mulDiv = findMulDivOperator(s);
   if (mulDiv) return { index: mulDiv.index, operator: mulDiv.operator };
+
+  const fieldAccess = findFieldAccessOperator(s);
+  if (fieldAccess) return { index: fieldAccess.index, operator: "." };
 
   return { index: -1, operator: "" };
 }

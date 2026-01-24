@@ -54,6 +54,10 @@ export function createFunctionDeclarationHandler(
           if (paramType === 0 && isFunctionType(paramTypeStr)) {
             paramType = -2;
           }
+          // Support struct types: use a unique marker for struct parameters
+          if (paramType === 0 && typeMap.has("__struct__" + paramTypeStr)) {
+            paramType = -3; // -3 indicates struct type
+          }
           if (paramType === 0) return;
           params.push({
             name: paramName,
