@@ -17,6 +17,7 @@ import {
   tryFunctionCalls,
   tryUnaryOperation,
   mightNeedBinaryOp,
+  buildInterpreterParams,
 } from "./utils/app-handlers";
 import { handleLambdaExpression } from "./handlers/lambda-expressions";
 import {
@@ -25,6 +26,7 @@ import {
 } from "./handlers/pointer-operations";
 import { evaluateThisKeyword } from "./utils/this-keyword";
 import { createArrayFromLiteral } from "./utils/array";
+import { handleModuleAccess } from "./handlers/module-access";
 
 export function interpretWithScope(
   input: string,
@@ -39,161 +41,49 @@ export function interpretWithScope(
   if (s === "this") return evaluateThisKeyword(scope);
   const literalArrayId = createArrayFromLiteral(s);
   if (literalArrayId !== undefined) return literalArrayId;
-  const d = tryDeclarations({
-    s,
-    typeMap,
-    scope,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpreter: interpretWithScope as Interpreter,
-  });
-  if (d !== undefined) return d;
-  const dr = handleVarDecl(
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpretWithScope as Interpreter,
-    uninitializedSet,
-    unmutUninitializedSet,
-  );
-  if (dr !== undefined) return dr;
-  const mr = handleMatch(s, scope, typeMap, mutMap, (i, sc, tm, mm) =>
-    interpretWithScope(i, sc, tm, mm, uninitializedSet, unmutUninitializedSet),
-  );
-  if (mr !== undefined) return mr;
-  const lr = handleLoop({
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter: interpretWithScope,
-    uninitializedSet,
-    unmutUninitializedSet,
-  });
-  if (lr !== undefined) return lr;
-  const wr = handleWhile({
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter: interpretWithScope,
-    uninitializedSet,
-    unmutUninitializedSet,
-  });
-  if (wr !== undefined) return wr;
-  const fr = handleFor({
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter: interpretWithScope,
-    uninitializedSet,
-    unmutUninitializedSet,
-  });
-  if (fr !== undefined) return fr;
+  const p = buildInterpreterParams(s, scope, typeMap, mutMap, uninitializedSet, unmutUninitializedSet, interpretWithScope as Interpreter);
+  let result = tryDeclarations(p);
+  if (result !== undefined) return result;
+  result = handleVarDecl(s, scope, typeMap, mutMap, interpretWithScope as Interpreter, uninitializedSet, unmutUninitializedSet);
+  if (result !== undefined) return result;
+  result = handleMatch(s, scope, typeMap, mutMap, (i, sc, tm, mm) =>
+    interpretWithScope(i, sc, tm, mm, uninitializedSet, unmutUninitializedSet));
+  if (result !== undefined) return result;
+  result = handleLoop({ s, scope, typeMap, mutMap, interpreter: interpretWithScope, uninitializedSet, unmutUninitializedSet });
+  if (result !== undefined) return result;
+  result = handleWhile({ s, scope, typeMap, mutMap, interpreter: interpretWithScope, uninitializedSet, unmutUninitializedSet });
+  if (result !== undefined) return result;
+  result = handleFor({ s, scope, typeMap, mutMap, interpreter: interpretWithScope, uninitializedSet, unmutUninitializedSet });
+  if (result !== undefined) return result;
   try {
-    handleBreak({
-      s,
-      scope,
-      typeMap,
-      mutMap,
-      interpreter: interpretWithScope,
-      uninitializedSet,
-      unmutUninitializedSet,
-    });
+    handleBreak({ s, scope, typeMap, mutMap, interpreter: interpretWithScope, uninitializedSet, unmutUninitializedSet });
   } catch (e) {
     if (e instanceof BreakException) throw e;
   }
-  const ir = handleIfExpression(
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpretWithScope,
-  );
-  if (ir !== undefined) return ir;
-  const dereferenceAssignmentResult = handleDereferenceAssignment(
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpretWithScope as Interpreter,
-  );
-  if (dereferenceAssignmentResult !== undefined)
-    return dereferenceAssignmentResult;
-  const assignmentResult = handleVarAssignment(
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpretWithScope as Interpreter,
-  );
-  if (assignmentResult !== undefined) return assignmentResult;
+  result = handleIfExpression(s, scope, typeMap, mutMap, uninitializedSet, unmutUninitializedSet, interpretWithScope);
+  if (result !== undefined) return result;
+  result = handleDereferenceAssignment(s, scope, typeMap, mutMap, uninitializedSet, unmutUninitializedSet, interpretWithScope as Interpreter);
+  if (result !== undefined) return result;
+  result = handleVarAssignment(s, scope, typeMap, mutMap, uninitializedSet, unmutUninitializedSet, interpretWithScope as Interpreter);
+  if (result !== undefined) return result;
   if (scope.has(s.trim())) return scope.get(s.trim())!;
-  const fnCallResult = tryFunctionCalls({
-    s,
-    typeMap,
-    scope,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpreter: interpretWithScope as Interpreter,
-  });
-  if (fnCallResult !== undefined) return fnCallResult;
-  const referenceResult = handleReferenceOperation(s, scope, mutMap);
-  if (referenceResult !== undefined) return referenceResult;
-  const dereferenceResult = handleDereferenceOperation(s, scope);
-  if (dereferenceResult !== undefined) return dereferenceResult;
-  const lambdaResult = handleLambdaExpression(s, typeMap);
-  if (lambdaResult !== undefined) return lambdaResult;
-  const unaryResult = tryUnaryOperation({
-    s,
-    typeMap,
-    scope,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpreter: interpretWithScope as Interpreter,
-  });
-  if (unaryResult !== undefined) return unaryResult;
-  if (!mightNeedBinaryOp(s)) {
-    return parseTypedNumber(s);
-  }
-  const isMatch =
-    s.startsWith("match") && s.slice(5).trimStart().startsWith("(");
+  result = tryFunctionCalls(p);
+  if (result !== undefined) return result;
+  result = handleReferenceOperation(s, scope, mutMap);
+  if (result !== undefined) return result;
+  result = handleDereferenceOperation(s, scope);
+  if (result !== undefined) return result;
+  result = handleLambdaExpression(s, typeMap);
+  if (result !== undefined) return result;
+  result = tryUnaryOperation(p);
+  if (result !== undefined) return result;
+  result = handleModuleAccess(s, scope, typeMap, mutMap, interpretWithScope);
+  if (result !== undefined) return result;
+  if (!mightNeedBinaryOp(s)) return parseTypedNumber(s);
+  const isMatch = s.startsWith("match") && s.slice(5).trimStart().startsWith("(");
   if ((s.includes("(") || s.includes("{") || s.includes("[")) && !isMatch) {
-    const processed = evaluateGroupedExpressionsWithScope(
-      s,
-      scope,
-      typeMap,
-      mutMap,
-      interpretWithScope,
-    );
-    if (processed !== s)
-      return interpretWithScope(
-        processed,
-        scope,
-        typeMap,
-        mutMap,
-        uninitializedSet,
-        unmutUninitializedSet,
-      );
+    const processed = evaluateGroupedExpressionsWithScope(s, scope, typeMap, mutMap, interpretWithScope);
+    if (processed !== s) return interpretWithScope(processed, scope, typeMap, mutMap, uninitializedSet, unmutUninitializedSet);
   }
-  return handleBinaryOperation(
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpretWithScope as Interpreter,
-  );
+  return handleBinaryOperation(s, scope, typeMap, mutMap, uninitializedSet, unmutUninitializedSet, interpretWithScope as Interpreter);
 }
