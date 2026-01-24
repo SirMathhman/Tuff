@@ -6,6 +6,42 @@ import {
 
 export type { TypedInfo };
 
+function parseCharLiteral(s: string): number | undefined {
+  if (s.length < 2 || s[0] !== "'" || s[s.length - 1] !== "'") {
+    return undefined;
+  }
+  const content = s.slice(1, -1);
+  if (content.length === 0) {
+    throw new Error("empty char literal");
+  }
+  if (content.length === 1) {
+    return content.charCodeAt(0);
+  }
+  // Handle escape sequences
+  if (content[0] === "\\" && content.length >= 2) {
+    const escape = content[1];
+    if (content.length === 2) {
+      switch (escape) {
+        case "n":
+          return 10; // newline
+        case "t":
+          return 9; // tab
+        case "r":
+          return 13; // carriage return
+        case "\\":
+          return 92; // backslash
+        case "'":
+          return 39; // single quote
+        case '"':
+          return 34; // double quote
+        default:
+          throw new Error(`unknown escape sequence: \\${escape}`);
+      }
+    }
+  }
+  throw new Error(`multi-character literal: ${s}`);
+}
+
 export function scanNumericPrefix(s: string): number {
   const len = s.length;
   let i = 0;
@@ -32,6 +68,8 @@ export function scanNumericPrefix(s: string): number {
 }
 
 export function extractTypedInfo(s: string): TypedInfo {
+  const charCode = parseCharLiteral(s);
+  if (charCode !== undefined) return { value: charCode, typeSize: 8 };
   const b = s === "true" ? 1 : s === "false" ? 0 : NaN;
   if (Number.isFinite(b)) return { value: b, typeSize: 1 };
   const prefixEnd = scanNumericPrefix(s);
@@ -48,6 +86,8 @@ export function extractTypedInfo(s: string): TypedInfo {
 }
 
 export function parseTypedNumber(s: string): number {
+  const charCode = parseCharLiteral(s);
+  if (charCode !== undefined) return charCode;
   const b = s === "true" ? 1 : s === "false" ? 0 : NaN;
   if (Number.isFinite(b)) return b;
   const prefixEnd = scanNumericPrefix(s);

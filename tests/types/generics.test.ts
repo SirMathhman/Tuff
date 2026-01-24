@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { interpret } from "../src/utils/interpret";
+import { interpret } from "../../src/utils/interpret";
 
 describe("interpret - generic structs", () => {
   it("supports basic generic struct declaration and instantiation", () => {

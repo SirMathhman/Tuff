@@ -32,6 +32,7 @@ export function validateUnsignedValue(n: number, size: number): void {
 export function extractTypeSize(typeStr: string): number {
   const t = typeStr.trim();
   if (t === "Bool") return 1;
+  if (t === "Char") return 8;
   if (t.length < 1) return 0;
 
   // Handle pointer types like *I32 or *mut I32
