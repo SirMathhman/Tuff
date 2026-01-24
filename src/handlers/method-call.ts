@@ -1,4 +1,6 @@
 import { isValidIdentifier } from "../utils/identifier-utils";
+import { GLOBAL_THIS_VALUE } from "../utils/this-keyword";
+import { isStructInstance } from "../types/structs";
 import type { Interpreter } from "../expressions/handlers";
 import { parseFunctionCall, findMatchingCloseParen } from "../functions";
 
@@ -86,9 +88,21 @@ export function handleMethodCall(
     unmutUninitializedSet,
   );
 
-  const methodCallStr = argsStr
-    ? `${methodName}(${receiverValue}, ${argsStr})`
-    : `${methodName}(${receiverValue})`;
+  // Don't prepend receiver as argument if:
+  // 1. It's the global this marker, OR
+  // 2. It's a this-based struct instance (created inside a function)
+  const isThisKeyword = receiverStr.trim() === "this";
+  const isGlobalThis = receiverValue === GLOBAL_THIS_VALUE;
+  const isFunctionThis = isThisKeyword && isStructInstance(receiverValue);
+  const shouldNotPrependReceiver = isGlobalThis || isFunctionThis;
+
+  const methodCallStr = shouldNotPrependReceiver
+    ? argsStr
+      ? `${methodName}(${argsStr})`
+      : `${methodName}()`
+    : argsStr
+      ? `${methodName}(${receiverValue}, ${argsStr})`
+      : `${methodName}(${receiverValue})`;
 
   const methodResult = parseFunctionCall({
     s: methodCallStr,

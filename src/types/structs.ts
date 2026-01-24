@@ -15,7 +15,8 @@ export interface StructDefinition {
 }
 
 function parseGenericParams(s: string): { name: string; params: string[] } {
-  const angleStart = s.indexOf("<"), angleEnd = s.indexOf(">");
+  const angleStart = s.indexOf("<"),
+    angleEnd = s.indexOf(">");
   if (angleStart === -1 || angleEnd === -1)
     return { name: s.trim(), params: [] };
   const name = s.slice(0, angleStart).trim();

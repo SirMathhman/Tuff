@@ -97,4 +97,21 @@ describe("interpret - variables", () => {
       ),
     ).toBe(6);
   });
+
+  it("supports calling function via this.methodName() at global scope", () => {
+    expect(interpret("fn get() => 100; this.get()")).toBe(100);
+  });
+
+  it("supports function with parameters called via this", () => {
+    expect(
+      interpret("fn add(a : I32, b : I32) => a + b; this.add(10, 20)"),
+    ).toBe(30);
+  });
+
+  it("supports this in function returning value", () => {
+    expect(
+      interpret("fn getValue() => 42; fn wrapper() => this.getValue(); wrapper()",
+      ),
+    ).toBe(42);
+  });
 });
