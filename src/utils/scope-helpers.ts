@@ -3,6 +3,22 @@ import { extractTypeSize } from "../type-utils";
 import { isFunctionType } from "./function-utils";
 import { parseArrayType, type ArrayType } from "./array";
 
+// Track local functions defined in the current scope
+let localFunctionNames: Set<string> | undefined;
+
+export const getLocalFunctionNames = () => localFunctionNames;
+
+export const setLocalFunctionNames = (names: Set<string> | undefined) => {
+  localFunctionNames = names;
+};
+
+export const addLocalFunctionName = (name: string) => {
+  if (!localFunctionNames) {
+    localFunctionNames = new Set();
+  }
+  localFunctionNames.add(name);
+};
+
 export function trackDepths(
   s: string,
   startIdx: number,

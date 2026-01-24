@@ -6,6 +6,11 @@ import {
 } from "./utils/function-utils";
 import { createFunctionDeclarationHandler } from "./handlers/function-declaration";
 import type { FunctionCallParams } from "./utils/function-call-params";
+import {
+  getLocalFunctionNames,
+  setLocalFunctionNames,
+  addLocalFunctionName,
+} from "./utils/scope-helpers";
 
 type FnDef = {
   params: Array<{ name: string; type: number; typeStr?: string }>;
@@ -14,7 +19,14 @@ type FnDef = {
   generics?: string[];
 };
 const functionDefs = new Map<string, FnDef>();
-export { functionDefs, registerAnonymousFunction, isFunctionType };
+export {
+  functionDefs,
+  registerAnonymousFunction,
+  isFunctionType,
+  getLocalFunctionNames,
+  setLocalFunctionNames,
+  addLocalFunctionName,
+};
 const functionRefs = new Map<string, string>();
 export const setFunctionRef = (varName: string, fnName: string) =>
   functionRefs.set(varName, fnName);
@@ -166,6 +178,10 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   }));
   setCurrentFunctionParams(paramsList);
 
+  // Initialize local function tracking for this function's execution
+  const prevLocalFns = getLocalFunctionNames();
+  setLocalFunctionNames(new Set());
+
   const result = interpreter(
     fnDef.body,
     mergedScope,
@@ -177,6 +193,7 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
 
   // Clear function context
   setCurrentFunctionParams(undefined);
+  setLocalFunctionNames(prevLocalFns);
 
   // Handle trailing content after the function call (e.g., .field in foo().field)
   if (rest === "") {

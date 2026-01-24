@@ -6,6 +6,11 @@ import {
   splitParametersRespectingParens,
   findClosingParenIndex,
 } from "../utils/function-utils";
+import { addLocalFunctionName } from "../utils/scope-helpers";
+
+function isWhitespace(ch: string): boolean {
+  return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
+}
 
 function parseGenericParams(s: string): { name: string; params: string[] } {
   const angleStart = s.indexOf("<");
@@ -49,7 +54,35 @@ export function createFunctionDeclarationHandler(
       const parenEnd = findClosingParenIndex(rest, parenStart);
       if (parenEnd === -1) return -1;
       const arrowIndex = rest.indexOf("=>", parenEnd);
-      return arrowIndex !== -1 ? rest.indexOf(";", arrowIndex) : -1;
+      if (arrowIndex === -1) return -1;
+
+      // Check if body is brace-enclosed
+      let bodyStart = arrowIndex + 2;
+      while (bodyStart < rest.length && isWhitespace(rest[bodyStart]!))
+        bodyStart++;
+      if (bodyStart < rest.length && rest[bodyStart] === "{") {
+        // Find matching }
+        let braceDepth = 0;
+        for (let i = bodyStart; i < rest.length; i++) {
+          if (rest[i] === "{") braceDepth++;
+          else if (rest[i] === "}") {
+            braceDepth--;
+            if (braceDepth === 0) {
+              // Found the closing brace, now look for semicolon after it
+              let semiIndex = i + 1;
+              while (semiIndex < rest.length && isWhitespace(rest[semiIndex]!))
+                semiIndex++;
+              return semiIndex < rest.length && rest[semiIndex] === ";"
+                ? semiIndex
+                : -1;
+            }
+          }
+        }
+        return -1; // Unmatched brace
+      }
+
+      // Body is not brace-enclosed, look for semicolon after =>
+      return rest.indexOf(";", arrowIndex);
     },
     (rest: string, closeIndex: number, typeMap: Map<string, number>) => {
       // Extract function name/generics and find where they end
@@ -137,6 +170,8 @@ export function createFunctionDeclarationHandler(
         fnDef.generics = genericParams;
       }
       functionDefs.set(fnName, fnDef);
+      // Track this function as a local function in the current execution scope
+      addLocalFunctionName(fnName);
     },
   );
 }

@@ -1,6 +1,6 @@
 import { isValidIdentifier } from "../utils/identifier-utils";
-import { GLOBAL_THIS_VALUE } from "../utils/this-keyword";
-import { isStructInstance } from "../types/structs";
+import { GLOBAL_THIS_VALUE, getInstanceMethods } from "../utils/this-keyword";
+import { isStructInstance, getStructFields } from "../types/structs";
 import type { Interpreter } from "../expressions/handlers";
 import { parseFunctionCall, findMatchingCloseParen } from "../functions";
 
@@ -20,6 +20,44 @@ function isAlphaNumeric(ch: string | undefined): boolean {
     (ch >= "A" && ch <= "Z") ||
     (ch >= "0" && ch <= "9") ||
     ch === "_"
+  );
+}
+
+function callMethodAndHandleRest(
+  methodCallStr: string,
+  typeMap: Map<string, number>,
+  scope: Map<string, number>,
+  mutMap: Map<string, boolean>,
+  uninitializedSet: Set<string>,
+  unmutUninitializedSet: Set<string>,
+  interpreter: Interpreter,
+  rest: string,
+  _closeParenIndex: number,
+  _trimmed: string,
+): number | undefined {
+  const methodResult = parseFunctionCall({
+    s: methodCallStr,
+    typeMap,
+    scope,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpreter,
+  });
+
+  if (methodResult === undefined) return undefined;
+
+  if (rest === "") {
+    return methodResult;
+  }
+
+  return interpreter(
+    methodResult.toString() + rest,
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
   );
 }
 
@@ -88,12 +126,55 @@ export function handleMethodCall(
     unmutUninitializedSet,
   );
 
-  // Don't prepend receiver as argument if:
-  // 1. It's the global this marker, OR
-  // 2. It's a this-based struct instance (created inside a function)
-  const isThisKeyword = receiverStr.trim() === "this";
+  // Check if this is method call on 'this' keyword or on a function-context struct
+  const isThisKeywordLiteral = receiverStr.trim() === "this";
+  const isFunctionContextStruct =
+    isStructInstance(receiverValue) &&
+    getInstanceMethods(receiverValue) !== undefined;
+  const instanceMethods = isFunctionContextStruct
+    ? getInstanceMethods(receiverValue)
+    : undefined;
+
+  // If this is a call to a nested function on a function-context struct instance
+  if (
+    isFunctionContextStruct &&
+    instanceMethods &&
+    instanceMethods.has(methodName)
+  ) {
+    // Create a scope that includes the fields of the struct instance
+    const instanceScope = new Map(scope);
+    const instanceFields = getStructFields(receiverValue);
+    if (instanceFields) {
+      for (const [fieldName, fieldValue] of instanceFields) {
+        instanceScope.set(fieldName, fieldValue);
+      }
+    }
+
+    // Call the method function with the instance scope
+    const methodCallStr = argsStr
+      ? `${methodName}(${argsStr})`
+      : `${methodName}()`;
+
+    const rest = trimmed.slice(closeParenIndex + 1).trim();
+
+    return callMethodAndHandleRest(
+      methodCallStr,
+      typeMap,
+      instanceScope,
+      mutMap,
+      uninitializedSet,
+      unmutUninitializedSet,
+      interpreter,
+      rest,
+      closeParenIndex,
+      trimmed,
+    );
+  }
+
+  // Handle regular method calls or global/function 'this' method calls
   const isGlobalThis = receiverValue === GLOBAL_THIS_VALUE;
-  const isFunctionThis = isThisKeyword && isStructInstance(receiverValue);
+  const isFunctionThis =
+    isThisKeywordLiteral && isStructInstance(receiverValue);
   const shouldNotPrependReceiver = isGlobalThis || isFunctionThis;
 
   const methodCallStr = shouldNotPrependReceiver
@@ -104,29 +185,18 @@ export function handleMethodCall(
       ? `${methodName}(${receiverValue}, ${argsStr})`
       : `${methodName}(${receiverValue})`;
 
-  const methodResult = parseFunctionCall({
-    s: methodCallStr,
+  const rest = trimmed.slice(closeParenIndex + 1).trim();
+
+  return callMethodAndHandleRest(
+    methodCallStr,
     typeMap,
     scope,
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
     interpreter,
-  });
-
-  if (methodResult === undefined) return undefined;
-
-  const rest = trimmed.slice(closeParenIndex + 1).trim();
-  if (rest === "") {
-    return methodResult;
-  }
-
-  return interpreter(
-    methodResult.toString() + rest,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+    rest,
+    closeParenIndex,
+    trimmed,
   );
 }

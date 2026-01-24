@@ -183,3 +183,11 @@ export function getStructTypeParams(instanceId: number): Map<string, string> {
 export function isStructInstance(value: number): boolean {
   return value >= 1000000;
 }
+
+export function getStructFields(
+  instanceId: number,
+): Map<string, number> | undefined {
+  const instance = structInstances.get(instanceId);
+  if (!instance) return undefined;
+  return instance.fieldValues;
+}
