@@ -21,6 +21,15 @@ export const getFunctionRef = (varName: string) => functionRefs.get(varName);
 export const handleFunctionDeclaration =
   createFunctionDeclarationHandler(functionDefs);
 
+// Track current function context for 'this' support
+let currentFunctionParams: Array<{ name: string; value: number }> | undefined;
+export const getCurrentFunctionParams = () => currentFunctionParams;
+export const setCurrentFunctionParams = (
+  params: Array<{ name: string; value: number }> | undefined,
+) => {
+  currentFunctionParams = params;
+};
+
 export function findMatchingCloseParen(s: string, openIndex: number): number {
   let depth = 1;
   for (let i = openIndex + 1; i < s.length; i++) {
@@ -54,6 +63,9 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
 
   const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
   if (closeParenIndex === -1) return undefined;
+
+  // Check for trailing content after the function call
+  const rest = trimmed.slice(closeParenIndex + 1).trim();
 
   const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
   const fnDef = functionDefs.get(actualFnName)!;
@@ -133,6 +145,14 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   }
   const mergedScope = new Map(scope);
   for (const [k, v] of fnVarMap) mergedScope.set(k, v);
+
+  // Set function context for 'this' support
+  const paramsList = fnDef.params.map((p, i) => ({
+    name: p.name,
+    value: args[i]!,
+  }));
+  setCurrentFunctionParams(paramsList);
+
   const result = interpreter(
     fnDef.body,
     mergedScope,
@@ -141,5 +161,21 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
     uninitializedSet,
     unmutUninitializedSet,
   );
-  return result;
+
+  // Clear function context
+  setCurrentFunctionParams(undefined);
+
+  // Handle trailing content after the function call (e.g., .field in foo().field)
+  if (rest === "") {
+    return result;
+  }
+
+  return interpreter(
+    result.toString() + rest,
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+  );
 }

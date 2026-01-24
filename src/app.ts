@@ -18,6 +18,7 @@ import {
   handleReferenceOperation,
   handleDereferenceOperation,
 } from "./handlers/pointer-operations";
+import { evaluateThisKeyword } from "./utils/this-keyword";
 
 export function interpretWithScope(
   input: string,
@@ -25,11 +26,11 @@ export function interpretWithScope(
   typeMap: Map<string, number> = new Map(),
   mutMap: Map<string, boolean> = new Map(),
   uninitializedSet: Set<string> = new Set(),
-  unmutUninitializedSet: Set<string> = new Set(),
+  unmutUninitializedSet = new Set<string>(),
 ): number {
   const s = input.trim();
   if (s === "") return 0;
-
+  if (s === "this") return evaluateThisKeyword(scope);
   const d = tryDeclarations({
     s,
     typeMap,
@@ -40,7 +41,7 @@ export function interpretWithScope(
     interpreter: interpretWithScope as Interpreter,
   });
   if (d !== undefined) return d;
-  const declResult = handleVarDecl(
+  const dr = handleVarDecl(
     s,
     scope,
     typeMap,
@@ -49,16 +50,12 @@ export function interpretWithScope(
     uninitializedSet,
     unmutUninitializedSet,
   );
-  if (declResult !== undefined) return declResult;
-  const matchResult = handleMatch(
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpretWithScope,
+  if (dr !== undefined) return dr;
+  const mr = handleMatch(s, scope, typeMap, mutMap, (i, sc, tm, mm) =>
+    interpretWithScope(i, sc, tm, mm, uninitializedSet, unmutUninitializedSet),
   );
-  if (matchResult !== undefined) return matchResult;
-  const loopResult = handleLoop({
+  if (mr !== undefined) return mr;
+  const lr = handleLoop({
     s,
     scope,
     typeMap,
@@ -67,8 +64,8 @@ export function interpretWithScope(
     uninitializedSet,
     unmutUninitializedSet,
   });
-  if (loopResult !== undefined) return loopResult;
-  const whileResult = handleWhile({
+  if (lr !== undefined) return lr;
+  const wr = handleWhile({
     s,
     scope,
     typeMap,
@@ -77,8 +74,8 @@ export function interpretWithScope(
     uninitializedSet,
     unmutUninitializedSet,
   });
-  if (whileResult !== undefined) return whileResult;
-  const forResult = handleFor({
+  if (wr !== undefined) return wr;
+  const fr = handleFor({
     s,
     scope,
     typeMap,
@@ -87,7 +84,7 @@ export function interpretWithScope(
     uninitializedSet,
     unmutUninitializedSet,
   });
-  if (forResult !== undefined) return forResult;
+  if (fr !== undefined) return fr;
   try {
     handleBreak({
       s,
@@ -101,16 +98,16 @@ export function interpretWithScope(
   } catch (e) {
     if (e instanceof BreakException) throw e;
   }
-  const ifResult = handleIfExpression(
+  const ir = handleIfExpression(
     s,
     scope,
     typeMap,
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
-    interpretWithScope as Interpreter,
+    interpretWithScope,
   );
-  if (ifResult !== undefined) return ifResult;
+  if (ir !== undefined) return ir;
   const dereferenceAssignmentResult = handleDereferenceAssignment(
     s,
     scope,

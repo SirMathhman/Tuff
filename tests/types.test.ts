@@ -35,4 +35,10 @@ describe("interpret - types", () => {
       ),
     ).toBe(7);
   });
+
+  it("supports constructor functions that return struct-like objects", () => {
+    expect(
+      interpret("fn Wrapper(field : I32) => this; Wrapper(100).field"),
+    ).toBe(100);
+  });
 });
