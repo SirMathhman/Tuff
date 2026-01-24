@@ -89,4 +89,12 @@ describe("interpret - variables", () => {
       interpret("let mut x = 100; let y : *mut I32 = &x; *y = 100; x"),
     ).toBe(100);
   });
+
+  it("supports pointer access to array elements", () => {
+    expect(
+      interpret(
+        "let array = [1, 2, 3]; let slice : *[I32] = &array; slice[0] + slice[1] + slice[2]",
+      ),
+    ).toBe(6);
+  });
 });

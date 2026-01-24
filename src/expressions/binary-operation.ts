@@ -43,6 +43,7 @@ export function handleBinaryOperation(
       rightStr,
       typeMap,
       leftStr,
+      scope,
     );
   }
 
@@ -64,6 +65,7 @@ export function handleBinaryOperation(
       rightStr,
       typeMap,
       leftStr,
+      scope,
     );
   }
 
@@ -95,6 +97,7 @@ export function handleBinaryOperation(
       rightStr,
       typeMap,
       leftStr,
+      scope,
     );
   }
 
@@ -120,5 +123,6 @@ export function handleBinaryOperation(
     rightStr,
     typeMap,
     leftStr,
+    scope,
   );
 }

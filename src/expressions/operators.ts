@@ -7,6 +7,7 @@ import {
   getArrayMetadata,
   isArrayInstance,
 } from "../utils/array";
+import { getPointerTarget } from "../handlers/pointer-operations";
 import {
   findFieldAccessOperator,
   findArrayIndexOperator,
@@ -79,13 +80,28 @@ export function performBinaryOp(
   rightStr: string,
   typeMap?: Map<string, number>,
   leftStr?: string,
+  scope?: Map<string, number>,
 ): number {
   let result = 0;
+  const resolvePointerValue = (): number | undefined => {
+    if (!scope) return undefined;
+    const targetVar = getPointerTarget(left);
+    if (!targetVar) return undefined;
+    if (!scope.has(targetVar)) {
+      throw new Error(`pointer target '${targetVar}' not found`);
+    }
+    return scope.get(targetVar);
+  };
+
   switch (op) {
     case ".": {
       // Field access operator
-      if (isArrayInstance(left)) {
-        const meta = getArrayMetadata(left);
+      const resolvedPointerValue = resolvePointerValue();
+      const arrayValue = isArrayInstance(left)
+        ? left
+        : resolvedPointerValue;
+      if (arrayValue !== undefined && isArrayInstance(arrayValue)) {
+        const meta = getArrayMetadata(arrayValue);
         if (!meta) throw new Error("array metadata missing");
         if (rightStr === "length" || rightStr === "init") {
           result = meta.initialized;
@@ -93,18 +109,25 @@ export function performBinaryOp(
         }
         throw new Error(`cannot access '${rightStr}' on array value`);
       }
-      if (!isStructInstance(left)) {
+      const structValue = isStructInstance(left)
+        ? left
+        : resolvedPointerValue;
+      if (!structValue || !isStructInstance(structValue)) {
         throw new Error(`cannot access field on non-struct value`);
       }
-      result = getStructField(left, rightStr);
+      result = getStructField(structValue, rightStr);
       break;
     }
     case "[": {
       // Array indexing operator
-      if (!isArrayInstance(left)) {
+      const resolvedPointerValue = resolvePointerValue();
+      const arrayValue = isArrayInstance(left)
+        ? left
+        : resolvedPointerValue;
+      if (!arrayValue || !isArrayInstance(arrayValue)) {
         throw new Error(`cannot index non-array value`);
       }
-      const element = getArrayElement(left, right);
+      const element = getArrayElement(arrayValue, right);
       if (element === undefined) {
         throw new Error(`array index ${right} out of bounds`);
       }
