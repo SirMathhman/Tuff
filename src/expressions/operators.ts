@@ -97,9 +97,7 @@ export function performBinaryOp(
     case ".": {
       // Field access operator
       const resolvedPointerValue = resolvePointerValue();
-      const arrayValue = isArrayInstance(left)
-        ? left
-        : resolvedPointerValue;
+      const arrayValue = isArrayInstance(left) ? left : resolvedPointerValue;
       if (arrayValue !== undefined && isArrayInstance(arrayValue)) {
         const meta = getArrayMetadata(arrayValue);
         if (!meta) throw new Error("array metadata missing");
@@ -109,9 +107,7 @@ export function performBinaryOp(
         }
         throw new Error(`cannot access '${rightStr}' on array value`);
       }
-      const structValue = isStructInstance(left)
-        ? left
-        : resolvedPointerValue;
+      const structValue = isStructInstance(left) ? left : resolvedPointerValue;
       if (!structValue || !isStructInstance(structValue)) {
         throw new Error(`cannot access field on non-struct value`);
       }
@@ -121,9 +117,7 @@ export function performBinaryOp(
     case "[": {
       // Array indexing operator
       const resolvedPointerValue = resolvePointerValue();
-      const arrayValue = isArrayInstance(left)
-        ? left
-        : resolvedPointerValue;
+      const arrayValue = isArrayInstance(left) ? left : resolvedPointerValue;
       if (!arrayValue || !isArrayInstance(arrayValue)) {
         throw new Error(`cannot index non-array value`);
       }
