@@ -237,4 +237,10 @@ describe("interpret", () => {
       interpret("fn get() : I32 => 100; let func : () => I32 = get; func()"),
     ).toBe(100);
   });
+
+  it("supports anonymous functions and lambda expressions", () => {
+    expect(interpret("let func : () => I32 = () : I32 => 100; func()")).toBe(
+      100,
+    );
+  });
 });
