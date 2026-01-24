@@ -1,4 +1,5 @@
 import { getModule } from "../types/modules";
+import { getObject } from "../types/objects";
 import type { Interpreter } from "../expressions/handlers";
 import { isValidIdentifier } from "../utils/identifier-utils";
 
@@ -11,39 +12,79 @@ export function handleModuleAccess(
 ): number | undefined {
   const trimmed = s.trim();
   const colonIndex = trimmed.indexOf("::");
+  const dotIndex = trimmed.indexOf(".");
 
-  if (colonIndex === -1) return undefined;
+  // Handle module access with ::
+  if (colonIndex !== -1 && (dotIndex === -1 || colonIndex < dotIndex)) {
+    const moduleName = trimmed.slice(0, colonIndex).trim();
+    const memberStr = trimmed.slice(colonIndex + 2).trim();
 
-  const moduleName = trimmed.slice(0, colonIndex).trim();
-  const memberStr = trimmed.slice(colonIndex + 2).trim();
+    if (!isValidIdentifier(moduleName)) return undefined;
 
-  if (!isValidIdentifier(moduleName)) return undefined;
+    // Check if module exists
+    if (!typeMap.has("__module__" + moduleName)) return undefined;
 
-  // Check if module exists
-  if (!typeMap.has("__module__" + moduleName)) return undefined;
+    const module = getModule(moduleName);
+    if (!module) return undefined;
 
-  const module = getModule(moduleName);
-  if (!module) return undefined;
-
-  // Try to resolve the member in module scope
-  // Handle both variable access and function calls
-  if (memberStr.includes("(")) {
-    // Function call: Module::functionName(args)
-    // Use module scope for resolution
-    const result = interpreter(
-      memberStr,
-      module.scope,
-      module.typeMap,
-      module.mutMap,
-      new Set(),
-      new Set(),
-    );
-    return result;
-  } else {
-    // Variable/member access: Module::memberName
-    if (!module.scope.has(memberStr)) {
-      throw new Error(`module '${moduleName}' has no member '${memberStr}'`);
+    // Try to resolve the member in module scope
+    // Handle both variable access and function calls
+    if (memberStr.includes("(")) {
+      // Function call: Module::functionName(args)
+      // Use module scope for resolution
+      const result = interpreter(
+        memberStr,
+        module.scope,
+        module.typeMap,
+        module.mutMap,
+        new Set(),
+        new Set(),
+      );
+      return result;
+    } else {
+      // Variable/member access: Module::memberName
+      if (!module.scope.has(memberStr)) {
+        throw new Error(`module '${moduleName}' has no member '${memberStr}'`);
+      }
+      return module.scope.get(memberStr);
     }
-    return module.scope.get(memberStr);
   }
+
+  // Handle object access with .
+  if (dotIndex !== -1) {
+    const objectName = trimmed.slice(0, dotIndex).trim();
+    const memberStr = trimmed.slice(dotIndex + 1).trim();
+
+    if (!isValidIdentifier(objectName)) return undefined;
+
+    // Check if object exists
+    if (!typeMap.has("__object__" + objectName)) return undefined;
+
+    const obj = getObject(objectName);
+    if (!obj) return undefined;
+
+    // Try to resolve the member in object scope
+    // Handle both variable access and function calls
+    if (memberStr.includes("(")) {
+      // Function call: object.functionName(args)
+      // Use object scope for resolution
+      const result = interpreter(
+        memberStr,
+        obj.scope,
+        obj.typeMap,
+        obj.mutMap,
+        new Set(),
+        new Set(),
+      );
+      return result;
+    } else {
+      // Variable/member access: object.memberName
+      if (!obj.scope.has(memberStr)) {
+        throw new Error(`object '${objectName}' has no member '${memberStr}'`);
+      }
+      return obj.scope.get(memberStr);
+    }
+  }
+
+  return undefined;
 }

@@ -1,8 +1,8 @@
 import type { Interpreter } from "../expressions/handlers";
 import { createNamespacedDeclarationHandler } from "./namespace-handler";
 
-// Global module storage: maps module name to its scope
-const modules = new Map<
+// Global object storage: maps object name to its scope
+const objects = new Map<
   string,
   {
     scope: Map<string, number>;
@@ -11,30 +11,30 @@ const modules = new Map<
   }
 >();
 
-export function getModule(name: string):
+export function getObject(name: string):
   | {
       scope: Map<string, number>;
       typeMap: Map<string, number>;
       mutMap: Map<string, boolean>;
     }
   | undefined {
-  return modules.get(name);
+  return objects.get(name);
 }
 
-export function setModule(
+export function setObject(
   name: string,
   scope: Map<string, number>,
   typeMap: Map<string, number>,
   mutMap: Map<string, boolean>,
 ): void {
-  modules.set(name, { scope, typeMap, mutMap });
+  objects.set(name, { scope, typeMap, mutMap });
 }
 
-export function getModuleDeclarationHandler(interpreter: Interpreter) {
+export function getObjectDeclarationHandler(interpreter: Interpreter) {
   return createNamespacedDeclarationHandler(
-    "module",
-    (name: string) => "__module__" + name,
-    { get: getModule, set: setModule },
+    "object",
+    (name: string) => "__object__" + name,
+    { get: getObject, set: setObject },
     interpreter,
   );
 }

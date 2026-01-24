@@ -5,6 +5,7 @@ import { parseFunctionCall } from "../functions";
 import { handleMethodCall } from "../handlers/method-call";
 import { handleUnaryOperation } from "../expressions/unary-operation";
 import { getModuleDeclarationHandler } from "../types/modules";
+import { getObjectDeclarationHandler } from "../types/objects";
 import type { FunctionCallParams } from "./function-call-params";
 import type { Interpreter } from "../expressions/handlers";
 
@@ -28,6 +29,7 @@ export function buildInterpreterParams(
     unmutUninitializedSet,
     interpreter,
     moduleHandler: getModuleDeclarationHandler(interpreter),
+    objectHandler: getObjectDeclarationHandler(interpreter),
   };
 }
 
@@ -43,6 +45,18 @@ export function tryDeclarations(p: Params): number | undefined {
       p.interpreter,
     );
     if (m.handled) return m.result;
+  }
+  if (p.objectHandler) {
+    const o = p.objectHandler(
+      p.s,
+      p.typeMap,
+      p.scope,
+      p.mutMap,
+      p.uninitializedSet,
+      p.unmutUninitializedSet,
+      p.interpreter,
+    );
+    if (o.handled) return o.result;
   }
   const t = handleTypeDeclaration(
     p.s,

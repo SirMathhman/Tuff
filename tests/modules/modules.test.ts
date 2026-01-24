@@ -51,4 +51,24 @@ describe("interpret - modules", () => {
   it("supports nested module access in expressions", () => {
     expect(interpret("module M { fn get() => 50; } M::get() + 50")).toBe(100);
   });
+
+  it("supports object singleton with variable access", () => {
+    expect(interpret("object MySingleton { let x = 100; } MySingleton.x")).toBe(
+      100,
+    );
+  });
+
+  it("supports object singleton with multiple variables", () => {
+    expect(
+      interpret(
+        "object Config { let mode = 42; let timeout = 30; } Config.mode",
+      ),
+    ).toBe(42);
+  });
+
+  it("supports object singleton with function", () => {
+    expect(
+      interpret("object Utils { fn getValue() => 55; } Utils.getValue()"),
+    ).toBe(55);
+  });
 });
