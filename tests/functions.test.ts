@@ -45,4 +45,12 @@ describe("interpret - functions", () => {
       ),
     ).toBe(150);
   });
+
+  it("supports chained method calls", () => {
+    expect(
+      interpret(
+        "fn add(this : I32, argument : I32) => this + argument; 100.add(10).add(20)",
+      ),
+    ).toBe(130);
+  });
 });
