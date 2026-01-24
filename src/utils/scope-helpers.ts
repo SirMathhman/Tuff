@@ -3,30 +3,40 @@ import { extractTypeSize } from "../type-utils";
 import { isFunctionType } from "./function-utils";
 import { parseArrayType, type ArrayType } from "./array";
 
-export function findSemicolonIndex(s: string): number {
-  let semiIndex = -1;
-  let braceDepth = 0;
-  let parenDepth = 0;
-  let bracketDepth = 0;
-  for (let i = 0; i < s.length; i++) {
+export function trackDepths(
+  s: string,
+  startIdx: number,
+  endIdx: number,
+  predicate: (i: number, depth: DepthState) => boolean,
+): { index: number; depth: DepthState } {
+  const depth = { paren: 0, brace: 0, bracket: 0 };
+  for (let i = startIdx; i < endIdx; i++) {
     const ch = s[i];
-    if (ch === "(") parenDepth++;
-    else if (ch === ")") parenDepth--;
-    else if (ch === "{") braceDepth++;
-    else if (ch === "}") braceDepth--;
-    else if (ch === "[") bracketDepth++;
-    else if (ch === "]") bracketDepth--;
-    else if (
-      ch === ";" &&
-      braceDepth === 0 &&
-      parenDepth === 0 &&
-      bracketDepth === 0
-    ) {
-      semiIndex = i;
-      break;
-    }
+    if (ch === "(") depth.paren++;
+    else if (ch === ")") depth.paren--;
+    else if (ch === "{") depth.brace++;
+    else if (ch === "}") depth.brace--;
+    else if (ch === "[") depth.bracket++;
+    else if (ch === "]") depth.bracket--;
+    if (predicate(i, depth)) return { index: i, depth };
   }
-  return semiIndex;
+  return { index: -1, depth };
+}
+
+export interface DepthState {
+  paren: number;
+  brace: number;
+  bracket: number;
+}
+
+export function findSemicolonIndex(s: string): number {
+  const result = trackDepths(
+    s,
+    0,
+    s.length,
+    (_, d) => s[_] === ";" && d.brace === 0 && d.paren === 0 && d.bracket === 0,
+  );
+  return result.index;
 }
 
 export function findEqualIndex(declStr: string): number {

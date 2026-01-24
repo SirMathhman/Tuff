@@ -92,7 +92,7 @@ export function handleVarDecl(
     if (colonIndexInVarPart === -1) return undefined;
     varName = varPart.slice(0, colonIndexInVarPart).trim();
     const typeStr = varPart.slice(colonIndexInVarPart + 1).trim();
-    
+
     // Check if it's an array type
     if (isArrayTypeAnnotation(typeStr)) {
       vType = -4; // Special marker for array type

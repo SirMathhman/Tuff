@@ -49,4 +49,12 @@ describe("interpret - types", () => {
       ),
     ).toBe(6);
   });
+
+  it("supports array element assignment", () => {
+    expect(
+      interpret(
+        "let mut array : [I32; 3; 3] = [0, 0, 0]; array[0] = 1; array[1] = 2; array[2] = 3; array[0] + array[1] + array[2]",
+      ),
+    ).toBe(6);
+  });
 });

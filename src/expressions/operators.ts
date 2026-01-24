@@ -93,9 +93,7 @@ export function performBinaryOp(
       }
       const element = getArrayElement(left, right);
       if (element === undefined) {
-        throw new Error(
-          `array index ${right} out of bounds`,
-        );
+        throw new Error(`array index ${right} out of bounds`);
       }
       result = element;
       break;
