@@ -12,7 +12,12 @@ import {
 import { handleDereferenceAssignment } from "./handlers/dereference-assignment";
 import { handleBinaryOperation } from "./expressions/binary-operation";
 import { parseTypedNumber } from "./parser";
-import { tryDeclarations, tryFunctionCalls } from "./utils/app-handlers";
+import {
+  tryDeclarations,
+  tryFunctionCalls,
+  tryUnaryOperation,
+  mightNeedBinaryOp,
+} from "./utils/app-handlers";
 import { handleLambdaExpression } from "./handlers/lambda-expressions";
 import {
   handleReferenceOperation,
@@ -149,22 +154,17 @@ export function interpretWithScope(
   if (dereferenceResult !== undefined) return dereferenceResult;
   const lambdaResult = handleLambdaExpression(s, typeMap);
   if (lambdaResult !== undefined) return lambdaResult;
-  if (
-    !s.includes("+") &&
-    !s.includes("-") &&
-    !s.includes("*") &&
-    !s.includes("/") &&
-    !s.includes("<") &&
-    !s.includes(">") &&
-    !s.includes("=") &&
-    !s.includes("!") &&
-    !s.includes("(") &&
-    !s.includes("{") &&
-    !s.includes("[") &&
-    !s.includes(" is ") &&
-    !s.includes("&&") &&
-    !s.includes(".")
-  ) {
+  const unaryResult = tryUnaryOperation({
+    s,
+    typeMap,
+    scope,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpreter: interpretWithScope as Interpreter,
+  });
+  if (unaryResult !== undefined) return unaryResult;
+  if (!mightNeedBinaryOp(s)) {
     return parseTypedNumber(s);
   }
   const isMatch =

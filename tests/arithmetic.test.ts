@@ -61,4 +61,36 @@ describe("interpret - arithmetic", () => {
   it("respects curly braces for grouping", () => {
     expect(interpret("(2 + { 3 }) * 4")).toBe(20);
   });
+
+  it("supports logical not operator on boolean literal true", () => {
+    expect(interpret("!true")).toBe(0);
+  });
+
+  it("supports logical not operator on boolean literal false", () => {
+    expect(interpret("!false")).toBe(1);
+  });
+
+  it("supports logical not on variable", () => {
+    expect(interpret("let x = true; !x")).toBe(0);
+  });
+
+  it("supports logical not on expression", () => {
+    expect(interpret("!(1 + 1 > 2)")).toBe(1);
+  });
+
+  it("supports double negation", () => {
+    expect(interpret("!!true")).toBe(1);
+  });
+
+  it("supports unary minus on positive number", () => {
+    expect(interpret("-(5)")).toBe(-5);
+  });
+
+  it("supports unary minus on variable", () => {
+    expect(interpret("let x = 10; -x")).toBe(-10);
+  });
+
+  it("supports unary minus on expression", () => {
+    expect(interpret("-(2 + 3)")).toBe(-5);
+  });
 });

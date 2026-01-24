@@ -3,6 +3,7 @@ import { handleStructDeclaration } from "../types/structs";
 import { handleFunctionDeclaration } from "../functions";
 import { parseFunctionCall } from "../functions";
 import { handleMethodCall } from "../handlers/method-call";
+import { handleUnaryOperation } from "../expressions/unary-operation";
 import type { FunctionCallParams } from "./function-call-params";
 
 type Params = FunctionCallParams;
@@ -53,4 +54,35 @@ export function tryFunctionCalls(p: Params): number | undefined {
   );
   if (method !== undefined) return method;
   return parseFunctionCall(p);
+}
+
+export function tryUnaryOperation(p: Params): number | undefined {
+  return handleUnaryOperation(
+    p.s,
+    p.scope,
+    p.typeMap,
+    p.mutMap,
+    p.uninitializedSet,
+    p.unmutUninitializedSet,
+    p.interpreter,
+  );
+}
+
+export function mightNeedBinaryOp(s: string): boolean {
+  return (
+    s.includes("+") ||
+    s.includes("-") ||
+    s.includes("*") ||
+    s.includes("/") ||
+    s.includes("<") ||
+    s.includes(">") ||
+    s.includes("=") ||
+    s.includes("!") ||
+    s.includes("(") ||
+    s.includes("{") ||
+    s.includes("[") ||
+    s.includes(" is ") ||
+    s.includes("&&") ||
+    s.includes(".")
+  );
 }
