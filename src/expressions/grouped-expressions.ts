@@ -2,6 +2,7 @@ import { findMatchingClose } from "../match";
 import { parseStructInstantiation } from "../types/structs";
 import type { Interpreter } from "./handlers";
 import { isValidIdentifier } from "../utils/identifier-utils";
+import { parseArrayLiteral } from "../utils/array";
 
 export function evaluateGroupedExpressionsWithScope(
   s: string,
@@ -87,6 +88,36 @@ export function evaluateGroupedExpressionsWithScope(
         const afterParen = s.slice(closeIdx + 1).trim();
         if (afterParen.startsWith("=>")) {
           // This is a lambda expression, skip it
+          continue;
+        }
+      }
+    }
+
+    // For brackets, skip if this looks like array indexing (preceded by identifier/)/]/])
+    if (openChar === "[") {
+      if (openIndex > 0) {
+        const beforeBracket = s[openIndex - 1];
+        if (beforeBracket) {
+          if (
+            (beforeBracket >= "a" && beforeBracket <= "z") ||
+            (beforeBracket >= "A" && beforeBracket <= "Z") ||
+            (beforeBracket >= "0" && beforeBracket <= "9") ||
+            beforeBracket === "_" ||
+            beforeBracket === ")" ||
+            beforeBracket === "]"
+          ) {
+            // This looks like array indexing, skip it
+            continue;
+          }
+        }
+      }
+      // Also skip if this looks like an array literal (all numeric values)
+      const closeIdx = findMatchingClose(s, openIndex, openChar, "]");
+      if (closeIdx !== -1) {
+        const inside = s.slice(openIndex + 1, closeIdx);
+        // Check if it's an array literal by trying to parse it as numbers
+        if (inside === "" || parseArrayLiteral("[" + inside + "]")) {
+          // This is an array literal, skip it - it will be handled in scope.ts
           continue;
         }
       }

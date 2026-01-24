@@ -67,6 +67,37 @@ export function handleBinaryOperation(
     );
   }
 
+  // For array indexing operator '[', the right side is an expression inside brackets
+  if (op === "[") {
+    const leftValue = interpretWithScope(
+      leftStr,
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+      unmutUninitializedSet,
+    );
+    // rightStr contains the index expression followed by ']', remove the trailing ']'
+    const indexExpr = rightStr.endsWith("]") ? rightStr.slice(0, -1) : rightStr;
+    const indexValue = interpretWithScope(
+      indexExpr,
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+      unmutUninitializedSet,
+    );
+    return performBinaryOp(
+      leftValue,
+      op,
+      indexValue,
+      extractTypedInfo(leftStr),
+      rightStr,
+      typeMap,
+      leftStr,
+    );
+  }
+
   return performBinaryOp(
     interpretWithScope(
       leftStr,

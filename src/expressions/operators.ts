@@ -2,8 +2,10 @@ import { extractTypedInfo } from "../parser";
 import type { TypedInfo } from "../parser";
 import { validateUnsignedValue, extractTypeSize } from "../type-utils";
 import { getStructField, isStructInstance } from "../types/structs";
+import { getArrayElement, isArrayInstance } from "../utils/array";
 import {
   findFieldAccessOperator,
+  findArrayIndexOperator,
   findLogicalAnd,
   findIsOperator,
   findComparisonOperator,
@@ -34,6 +36,9 @@ export function findOperatorIndex(s: string): {
 
   const fieldAccess = findFieldAccessOperator(s);
   if (fieldAccess) return { index: fieldAccess.index, operator: "." };
+
+  const arrayIndex = findArrayIndexOperator(s);
+  if (arrayIndex) return { index: arrayIndex.index, operator: "[" };
 
   return { index: -1, operator: "" };
 }
@@ -79,6 +84,20 @@ export function performBinaryOp(
         throw new Error(`cannot access field on non-struct value`);
       }
       result = getStructField(left, rightStr);
+      break;
+    }
+    case "[": {
+      // Array indexing operator
+      if (!isArrayInstance(left)) {
+        throw new Error(`cannot index non-array value`);
+      }
+      const element = getArrayElement(left, right);
+      if (element === undefined) {
+        throw new Error(
+          `array index ${right} out of bounds`,
+        );
+      }
+      result = element;
       break;
     }
     case "+":

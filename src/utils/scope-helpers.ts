@@ -1,6 +1,7 @@
 import { extractTypedInfo } from "../parser";
 import { extractTypeSize } from "../type-utils";
 import { isFunctionType } from "./function-utils";
+import { parseArrayType, type ArrayType } from "./array";
 
 export function findSemicolonIndex(s: string): number {
   let semiIndex = -1;
@@ -47,10 +48,58 @@ export function extractTypeFromAnnotation(
   typeStr: string,
   typeMap: Map<string, number>,
 ): number {
+  // Check if this is an array type
+  const arrayType = parseArrayType(typeStr);
+  if (arrayType) {
+    return -3; // Special marker for array type
+  }
+
   let vType = extractTypeSize(typeStr);
   if (vType === 0 && typeMap.has("__alias__" + typeStr))
     vType = typeMap.get("__alias__" + typeStr) || 0;
   return vType;
+}
+
+export function isArrayTypeAnnotation(typeStr: string): boolean {
+  return parseArrayType(typeStr) !== undefined;
+}
+
+export function extractArrayTypeInfo(
+  typeStr: string,
+  typeMap: Map<string, number>,
+): { arrayType: ArrayType; elementTypeName: string } | undefined {
+  // Use parseArrayType to extract the basic array type info
+  const baseArrayType = parseArrayType(typeStr);
+  if (!baseArrayType) return undefined;
+
+  // Extract element type name
+  const t = typeStr.trim();
+  const closeIdx = t.lastIndexOf("]");
+  if (closeIdx === -1) return undefined;
+
+  const inner = t.slice(1, closeIdx).trim();
+  const parts = inner.split(";");
+
+  if (parts.length !== 3) return undefined;
+
+  const elemTypeStr = parts[0]?.trim();
+
+  if (!elemTypeStr) return undefined;
+
+  // Resolve element type
+  let elementType = extractTypeSize(elemTypeStr);
+  if (elementType === 0 && typeMap.has("__alias__" + elemTypeStr)) {
+    elementType = typeMap.get("__alias__" + elemTypeStr) || 0;
+  }
+
+  return {
+    arrayType: {
+      elementType,
+      initializedCount: baseArrayType.initializedCount,
+      capacity: baseArrayType.capacity,
+    },
+    elementTypeName: elemTypeStr,
+  };
 }
 
 export function extractAndValidateType(

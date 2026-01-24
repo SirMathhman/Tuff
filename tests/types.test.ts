@@ -41,4 +41,12 @@ describe("interpret - types", () => {
       interpret("fn Wrapper(field : I32) => this; Wrapper(100).field"),
     ).toBe(100);
   });
+
+  it("supports typed arrays with indexing", () => {
+    expect(
+      interpret(
+        "let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]",
+      ),
+    ).toBe(6);
+  });
 });

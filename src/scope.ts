@@ -13,7 +13,10 @@ import {
   extractTypeFromAnnotation,
   extractAndValidateType,
   findColonInBeforeEq,
+  isArrayTypeAnnotation,
+  extractArrayTypeInfo,
 } from "./utils/scope-helpers";
+import { parseArrayLiteral, createArray } from "./utils/array";
 
 function findDeclStringAndRestIndex(s: string): {
   declStr: string;
@@ -89,8 +92,14 @@ export function handleVarDecl(
     if (colonIndexInVarPart === -1) return undefined;
     varName = varPart.slice(0, colonIndexInVarPart).trim();
     const typeStr = varPart.slice(colonIndexInVarPart + 1).trim();
-    vType = extractTypeFromAnnotation(typeStr, typeMap);
-    if (vType === 0 && typeMap.has("__union__" + typeStr)) return undefined;
+    
+    // Check if it's an array type
+    if (isArrayTypeAnnotation(typeStr)) {
+      vType = -4; // Special marker for array type
+    } else {
+      vType = extractTypeFromAnnotation(typeStr, typeMap);
+      if (vType === 0 && typeMap.has("__union__" + typeStr)) return undefined;
+    }
   } else {
     const beforeEq = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim();
     const colonIndexInBeforeEq = findColonInBeforeEq(beforeEq);
@@ -101,14 +110,16 @@ export function handleVarDecl(
 
     const exprStr = declStr.slice(eqIndex + 1).trim();
     let isFunctionTypeAnnotation = false;
+    let isArrayTypeAnnotation_var = false;
     let declaredTypeStr: string | undefined;
 
     if (colonIndexInBeforeEq !== -1) {
       declaredTypeStr = beforeEq.slice(colonIndexInBeforeEq + 1).trim();
       isFunctionTypeAnnotation = isFunctionType(declaredTypeStr);
+      isArrayTypeAnnotation_var = isArrayTypeAnnotation(declaredTypeStr);
     }
 
-    if (!isFunctionTypeAnnotation) {
+    if (!isFunctionTypeAnnotation && !isArrayTypeAnnotation_var) {
       varValue = interpreter(
         exprStr,
         scope,
@@ -136,6 +147,32 @@ export function handleVarDecl(
         );
         if (!result.handled) return undefined;
         vType = result.vType;
+      } else if (isArrayTypeAnnotation(declaredTypeStr)) {
+        // Handle array type annotation
+        const arrayInfo = extractArrayTypeInfo(declaredTypeStr, typeMap);
+        if (!arrayInfo) return undefined;
+
+        // Parse the array literal
+        const literalValues = parseArrayLiteral(exprStr);
+        if (literalValues === undefined) {
+          throw new Error(`invalid array literal: ${exprStr}`);
+        }
+
+        // Validate that literal count matches initialized count
+        if (literalValues.length !== arrayInfo.arrayType.initializedCount) {
+          throw new Error(
+            `array literal has ${literalValues.length} values but initialized count is ${arrayInfo.arrayType.initializedCount}`,
+          );
+        }
+
+        // Create the array
+        varValue = createArray(
+          arrayInfo.arrayType.elementType,
+          arrayInfo.arrayType.initializedCount,
+          arrayInfo.arrayType.capacity,
+          literalValues,
+        );
+        vType = -4; // Special marker for array variable
       } else {
         const typeResult = extractAndValidateType(
           exprStr,

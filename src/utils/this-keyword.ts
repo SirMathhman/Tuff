@@ -1,9 +1,7 @@
 import { getCurrentFunctionParams } from "../functions";
 import { createStructInstance } from "../types/structs";
 
-export function evaluateThisKeyword(
-  scope: Map<string, number>,
-): number {
+export function evaluateThisKeyword(scope: Map<string, number>): number {
   if (scope.has("this")) return scope.get("this")!;
   const p = getCurrentFunctionParams();
   if (p) {

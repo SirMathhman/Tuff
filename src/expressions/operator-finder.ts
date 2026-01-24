@@ -4,6 +4,43 @@ import {
   isValidCharBeforeOperator,
 } from "./operator-utils";
 
+export function findArrayIndexOperator(
+  s: string,
+): { index: number } | undefined {
+  for (let i = s.length - 1; i >= 1; i--) {
+    if (s[i] === "]") {
+      // Find matching opening bracket
+      let bracketDepth = 1;
+      let j = i - 1;
+      while (j >= 0 && bracketDepth > 0) {
+        const char = s[j];
+        if (char === "]") bracketDepth++;
+        else if (char === "[") bracketDepth--;
+        j--;
+      }
+      if (bracketDepth === 0) {
+        // Found matching [, check if it's array indexing (preceded by identifier/)]
+        const beforeBracket = j;
+        if (beforeBracket >= 0) {
+          const ch = s[beforeBracket];
+          if (ch) {
+            if (
+              (ch >= "a" && ch <= "z") ||
+              (ch >= "A" && ch <= "Z") ||
+              ch === "_" ||
+              ch === ")" ||
+              ch === "]"
+            ) {
+              return { index: j + 1 };
+            }
+          }
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 export function findFieldAccessOperator(
   s: string,
 ): { index: number } | undefined {

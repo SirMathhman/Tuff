@@ -1,0 +1,107 @@
+// Global array storage: maps array ID to its data
+// Each array stores: {type: elementType, initialized: count, capacity: count, values: number[]}
+const arrays = new Map<
+  number,
+  { type: number; initialized: number; capacity: number; values: number[] }
+>();
+let nextArrayId = 2000000; // Start from high number to avoid conflicts
+
+export interface ArrayType {
+  elementType: number;
+  initializedCount: number;
+  capacity: number;
+}
+
+export function parseArrayType(typeStr: string): ArrayType | undefined {
+  const t = typeStr.trim();
+  if (!t.startsWith("[") || !t.includes(";")) return undefined;
+
+  const closeIdx = t.lastIndexOf("]");
+  if (closeIdx === -1) return undefined;
+
+  const inner = t.slice(1, closeIdx).trim();
+  const parts = inner.split(";").map((p) => p.trim());
+
+  if (parts.length !== 3) return undefined;
+
+  const initialStr = parts[1];
+  const capacityStr = parts[2];
+  const initialized = Number(initialStr);
+  const capacity = Number(capacityStr);
+
+  if (!Number.isFinite(initialized) || !Number.isFinite(capacity))
+    return undefined;
+  if (initialized < 0 || capacity < initialized) return undefined;
+
+  // elementType would be resolved elsewhere (e.g., "I32" -> 32)
+  return { elementType: 0, initializedCount: initialized, capacity };
+}
+
+export function parseArrayLiteral(s: string): number[] | undefined {
+  const t = s.trim();
+  if (!t.startsWith("[") || !t.endsWith("]")) return undefined;
+  if (t.includes(";")) return undefined; // This is a type annotation, not a literal
+
+  const inner = t.slice(1, -1).trim();
+  if (inner === "") return [];
+
+  const parts = inner.split(",").map((p) => p.trim());
+  const values: number[] = [];
+
+  for (const part of parts) {
+    const num = Number(part);
+    if (!Number.isFinite(num)) return undefined;
+    values.push(num);
+  }
+
+  return values;
+}
+
+export function createArray(
+  elementType: number,
+  initializedCount: number,
+  capacity: number,
+  values: number[],
+): number {
+  const arrayId = nextArrayId++;
+  arrays.set(arrayId, {
+    type: elementType,
+    initialized: initializedCount,
+    capacity,
+    values,
+  });
+  return arrayId;
+}
+
+export function getArrayElement(
+  arrayId: number,
+  index: number,
+): number | undefined {
+  const arr = arrays.get(arrayId);
+  if (!arr) return undefined;
+  if (index < 0 || index >= arr.initialized) return undefined;
+  return arr.values[index];
+}
+
+export function setArrayElement(
+  arrayId: number,
+  index: number,
+  value: number,
+): boolean {
+  const arr = arrays.get(arrayId);
+  if (!arr) return false;
+  if (index < 0 || index >= arr.capacity) return false;
+  arr.values[index] = value;
+  if (index >= arr.initialized) {
+    arr.initialized = index + 1;
+  }
+  return true;
+}
+
+export function isArrayInstance(value: number): boolean {
+  return value >= 2000000;
+}
+
+export function getArrayMetadata(arrayId: number) {
+  return arrays.get(arrayId);
+}
