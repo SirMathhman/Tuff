@@ -7,9 +7,9 @@ describe("interpret - strings", () => {
   });
 
   it("supports string variable declaration", () => {
-    expect(
-      interpret('let x : Str = "hello"; x'),
-    ).toBeGreaterThanOrEqual(1000000);
+    expect(interpret('let x : Str = "hello"; x')).toBeGreaterThanOrEqual(
+      1000000,
+    );
   });
 
   it("supports string length property", () => {
@@ -25,9 +25,9 @@ describe("interpret - strings", () => {
   });
 
   it("supports string pointer type", () => {
-    expect(
-      interpret('let x : *Str = "test"; x'),
-    ).toBeGreaterThanOrEqual(1000000);
+    expect(interpret('let x : *Str = "test"; x')).toBeGreaterThanOrEqual(
+      1000000,
+    );
   });
 
   it("supports string pointer length property", () => {
@@ -59,5 +59,45 @@ describe("interpret - strings", () => {
     expect(
       interpret('let msg : Str = "message"; let len = msg.length; len'),
     ).toBe(7);
+  });
+
+  it("supports string indexing with literals", () => {
+    expect(interpret('"test"[0]')).toBe(116); // 't'
+  });
+
+  it("supports string indexing at different positions", () => {
+    expect(interpret('"test"[1]')).toBe(101); // 'e'
+  });
+
+  it("supports string indexing last character", () => {
+    expect(interpret('"test"[3]')).toBe(116); // 't'
+  });
+
+  it("supports string indexing on variable", () => {
+    expect(interpret('let x : Str = "hello"; x[0]')).toBe(104); // 'h'
+  });
+
+  it("supports string indexing on pointer", () => {
+    expect(interpret('let x : *Str = "test"; x[0]')).toBe(116); // 't'
+  });
+
+  it("supports string indexing with expression index", () => {
+    expect(interpret('"test"[1 + 1]')).toBe(115); // 's'
+  });
+
+  it("supports string indexing space character", () => {
+    expect(interpret('"a b"[1]')).toBe(32); // ' '
+  });
+
+  it("supports string indexing with escaped characters", () => {
+    expect(interpret('"a\\nb"[1]')).toBe(10); // '\n'
+  });
+
+  it("throws for string index out of bounds", () => {
+    expect(() => interpret('"test"[4]')).toThrow();
+  });
+
+  it("throws for string index negative", () => {
+    expect(() => interpret('"test"[-1]')).toThrow();
   });
 });

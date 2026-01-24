@@ -103,7 +103,7 @@ export function evaluateGroupedExpressionsWithScope(
       }
     }
 
-    // For brackets, skip if this looks like array indexing (preceded by identifier/)/]/])
+    // For brackets, skip if this looks like array indexing (preceded by identifier/)/]/]/quote)
     if (openChar === "[") {
       if (openIndex > 0) {
         const beforeBracket = s[openIndex - 1];
@@ -114,7 +114,9 @@ export function evaluateGroupedExpressionsWithScope(
             (beforeBracket >= "0" && beforeBracket <= "9") ||
             beforeBracket === "_" ||
             beforeBracket === ")" ||
-            beforeBracket === "]"
+            beforeBracket === "]" ||
+            beforeBracket === '"' ||
+            beforeBracket === "'"
           ) {
             // This looks like array indexing, skip it
             continue;

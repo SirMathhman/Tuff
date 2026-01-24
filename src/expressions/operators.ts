@@ -1,24 +1,55 @@
 import { extractTypedInfo } from "../parser";
 import type { TypedInfo } from "../parser";
 import { validateUnsignedValue, extractTypeSize } from "../type-utils";
-import { getStructField, isStructInstance } from "../types/structs";
-import {
-  getArrayElement,
-  getArrayMetadata,
-  isArrayInstance,
-  getStringLength,
-  isStringInstance,
-} from "../utils/array";
 import { getPointerTarget } from "../handlers/pointer-operations";
 import {
   findFieldAccessOperator,
   findArrayIndexOperator,
   findLogicalAnd,
   findIsOperator,
-  findComparisonOperator,
   findAddSubOperator,
   findMulDivOperator,
 } from "./operator-finder";
+import {
+  findComparisonOperator,
+  handleFieldAccessOp,
+  handleIndexingOp,
+} from "./op-helpers";
+
+function performArithmeticOp(op: string, left: number, right: number): number {
+  switch (op) {
+    case "+":
+      return left + right;
+    case "-":
+      return left - right;
+    case "*":
+      return left * right;
+    case "/":
+      if (right === 0) throw new Error("divide by 0");
+      return Math.floor(left / right);
+    default:
+      return 0;
+  }
+}
+
+function performComparisonOp(op: string, left: number, right: number): number {
+  switch (op) {
+    case "<":
+      return left < right ? 1 : 0;
+    case ">":
+      return left > right ? 1 : 0;
+    case "<=":
+      return left <= right ? 1 : 0;
+    case ">=":
+      return left >= right ? 1 : 0;
+    case "==":
+      return left === right ? 1 : 0;
+    case "!=":
+      return left !== right ? 1 : 0;
+    default:
+      return 0;
+  }
+}
 
 export function findOperatorIndex(s: string): {
   index: number;
@@ -97,82 +128,28 @@ export function performBinaryOp(
 
   switch (op) {
     case ".": {
-      // Field access operator
       const resolvedPointerValue = resolvePointerValue();
-      const arrayValue = isArrayInstance(left) ? left : resolvedPointerValue;
-      if (arrayValue !== undefined && isArrayInstance(arrayValue)) {
-        const meta = getArrayMetadata(arrayValue);
-        if (!meta) throw new Error("array metadata missing");
-        if (rightStr === "length" || rightStr === "init") {
-          result = meta.initialized;
-          break;
-        }
-        throw new Error(`cannot access '${rightStr}' on array value`);
-      }
-      const stringValue = isStringInstance(left)
-        ? left
-        : resolvedPointerValue && isStringInstance(resolvedPointerValue)
-          ? resolvedPointerValue
-          : undefined;
-      if (stringValue !== undefined && isStringInstance(stringValue)) {
-        if (rightStr === "length") {
-          const len = getStringLength(stringValue);
-          result = len !== undefined ? len : 0;
-          break;
-        }
-        throw new Error(`cannot access '${rightStr}' on string value`);
-      }
-      const structValue = isStructInstance(left) ? left : resolvedPointerValue;
-      if (!structValue || !isStructInstance(structValue)) {
-        throw new Error(`cannot access field on non-struct value`);
-      }
-      result = getStructField(structValue, rightStr);
+      result = handleFieldAccessOp(left, rightStr, resolvedPointerValue);
       break;
     }
     case "[": {
-      // Array indexing operator
       const resolvedPointerValue = resolvePointerValue();
-      const arrayValue = isArrayInstance(left) ? left : resolvedPointerValue;
-      if (!arrayValue || !isArrayInstance(arrayValue)) {
-        throw new Error(`cannot index non-array value`);
-      }
-      const element = getArrayElement(arrayValue, right);
-      if (element === undefined) {
-        throw new Error(`array index ${right} out of bounds`);
-      }
-      result = element;
+      result = handleIndexingOp(left, right, resolvedPointerValue);
       break;
     }
     case "+":
-      result = left + right;
-      break;
     case "-":
-      result = left - right;
-      break;
     case "*":
-      result = left * right;
-      break;
     case "/":
-      if (right === 0) throw new Error("divide by 0");
-      result = Math.floor(left / right);
+      result = performArithmeticOp(op, left, right);
       break;
     case "<":
-      result = left < right ? 1 : 0;
-      break;
     case ">":
-      result = left > right ? 1 : 0;
-      break;
     case "<=":
-      result = left <= right ? 1 : 0;
-      break;
     case ">=":
-      result = left >= right ? 1 : 0;
-      break;
     case "==":
-      result = left === right ? 1 : 0;
-      break;
     case "!=":
-      result = left !== right ? 1 : 0;
+      result = performComparisonOp(op, left, right);
       break;
     case "&&":
       result = left !== 0 && right !== 0 ? 1 : 0;

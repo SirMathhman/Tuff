@@ -2,6 +2,7 @@ import {
   isValidCharBeforeDot,
   isValidCharAfterDot,
   isValidCharBeforeOperator,
+  isPositionInsideBrackets,
 } from "./operator-utils";
 
 export function findArrayIndexOperator(
@@ -19,7 +20,7 @@ export function findArrayIndexOperator(
         j--;
       }
       if (bracketDepth === 0) {
-        // Found matching [, check if it's array indexing (preceded by identifier/)]
+        // Found matching [, check if it's array indexing (preceded by identifier/)/]/"/')
         const beforeBracket = j;
         if (beforeBracket >= 0) {
           const ch = s[beforeBracket];
@@ -32,6 +33,30 @@ export function findArrayIndexOperator(
               ch === "]"
             ) {
               return { index: j + 1 };
+            }
+            // Handle string literals: closing quote
+            if (ch === '"') {
+              // Find matching opening quote, accounting for escapes
+              let k = beforeBracket - 1;
+              let escapedCount = 0;
+              while (k >= 0) {
+                if (s[k] === "\\") {
+                  escapedCount++;
+                  k--;
+                } else if (s[k] === '"' && escapedCount % 2 === 0) {
+                  return { index: j + 1 };
+                } else {
+                  escapedCount = 0;
+                  k--;
+                }
+              }
+            }
+            // Handle char literals: closing quote
+            if (ch === "'") {
+              // For char literals, check simple pattern
+              if (beforeBracket >= 2 && s[beforeBracket - 2] === "'") {
+                return { index: j + 1 };
+              }
             }
           }
         }
@@ -120,43 +145,20 @@ export function findIsOperator(s: string): { index: number } | undefined {
   return undefined;
 }
 
-export function findComparisonOperator(
+function findBinaryOperator(
   s: string,
+  ...ops: string[]
 ): { index: number; operator: string } | undefined {
   for (let i = s.length - 1; i >= 1; i--) {
-    const twoChar = s.slice(i - 1, i + 1);
-    if (
-      twoChar === "<=" ||
-      twoChar === ">=" ||
-      twoChar === "==" ||
-      twoChar === "!="
-    ) {
-      const prev = s[i - 2];
+    const ch = s[i]!;
+    if (ops.includes(ch)) {
+      if (isPositionInsideBrackets(s, i)) continue;
+      const prev = s[i - 1];
       if (
-        !prev ||
-        (prev >= "0" && prev <= "9") ||
-        prev === " " ||
-        prev === ")" ||
-        prev === "}"
+        prev &&
+        ((prev >= "0" && prev <= "9") || prev === " " || prev === ")")
       ) {
-        return { index: i - 1, operator: twoChar };
-      }
-    }
-
-    const ch = s[i];
-    if (ch === "<" || ch === ">") {
-      const nextCh = s[i + 1];
-      if (nextCh !== "=" && nextCh !== ">") {
-        const prev = s[i - 1];
-        if (
-          prev &&
-          ((prev >= "0" && prev <= "9") ||
-            prev === " " ||
-            prev === ")" ||
-            prev === "}")
-        ) {
-          return { index: i, operator: ch };
-        }
+        return { index: i, operator: ch };
       }
     }
   }
@@ -166,35 +168,11 @@ export function findComparisonOperator(
 export function findAddSubOperator(
   s: string,
 ): { index: number; operator: string } | undefined {
-  for (let i = s.length - 1; i >= 1; i--) {
-    const ch = s[i];
-    if (ch === "+" || ch === "-") {
-      const prev = s[i - 1];
-      if (
-        prev &&
-        ((prev >= "0" && prev <= "9") || prev === " " || prev === ")")
-      ) {
-        return { index: i, operator: ch };
-      }
-    }
-  }
-  return undefined;
+  return findBinaryOperator(s, "+", "-");
 }
 
 export function findMulDivOperator(
   s: string,
 ): { index: number; operator: string } | undefined {
-  for (let i = s.length - 1; i >= 1; i--) {
-    const ch = s[i];
-    if (ch === "*" || ch === "/") {
-      const prev = s[i - 1];
-      if (
-        prev &&
-        ((prev >= "0" && prev <= "9") || prev === " " || prev === ")")
-      ) {
-        return { index: i, operator: ch };
-      }
-    }
-  }
-  return undefined;
+  return findBinaryOperator(s, "*", "/");
 }

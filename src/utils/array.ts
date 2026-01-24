@@ -136,3 +136,14 @@ export function getStringLength(stringId: number): number | undefined {
   if (str === undefined) return undefined;
   return str.length;
 }
+
+export function getStringCharCode(
+  stringId: number,
+  index: number,
+): number | undefined {
+  if (index < 0) return undefined;
+  const str = strings.get(stringId);
+  if (str === undefined) return undefined;
+  if (index >= str.length) return undefined;
+  return str.charCodeAt(index);
+}

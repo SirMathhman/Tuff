@@ -34,3 +34,29 @@ export function isValidCharBeforeOperator(ch: string): boolean {
     ch === "_"
   );
 }
+export function isPositionInsideBrackets(s: string, pos: number): boolean {
+  let depth = 0;
+  for (let i = 0; i < pos; i++) {
+    const ch = s[i];
+    // Skip over string literals
+    if (ch === '"') {
+      i++;
+      while (i < pos && s[i] !== '"') {
+        if (s[i] === "\\") i++;
+        i++;
+      }
+      continue;
+    }
+    if (ch === "'") {
+      i++;
+      while (i < pos && s[i] !== "'") {
+        if (s[i] === "\\") i++;
+        i++;
+      }
+      continue;
+    }
+    if (ch === "[") depth++;
+    else if (ch === "]") depth--;
+  }
+  return depth > 0;
+}
