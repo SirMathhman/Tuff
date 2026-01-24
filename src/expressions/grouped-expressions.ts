@@ -4,6 +4,14 @@ import type { Interpreter } from "./handlers";
 import { isValidIdentifier } from "../utils/identifier-utils";
 import { parseArrayLiteral } from "../utils/array";
 
+function extractStructName(s: string): string | undefined {
+  const angleEnd = s.indexOf(">");
+  const angleStart = s.indexOf("<");
+  if (angleStart === -1) return s;
+  if (angleEnd === -1) return undefined;
+  return s.slice(0, angleStart).trim();
+}
+
 export function evaluateGroupedExpressionsWithScope(
   s: string,
   scope: Map<string, number>,
@@ -21,11 +29,13 @@ export function evaluateGroupedExpressionsWithScope(
   const braceIndex = s.indexOf("{");
   if (braceIndex > 0) {
     const beforeBrace = s.slice(0, braceIndex).trim();
-    // Check if this looks like a struct instantiation (word { ... })
+    // Check if this looks like a struct instantiation (word { ... } or word<type> { ... })
+    const baseStructName = extractStructName(beforeBrace);
     if (
       beforeBrace &&
-      isValidIdentifier(beforeBrace) &&
-      typeMap.has("__struct__" + beforeBrace)
+      baseStructName &&
+      (isValidIdentifier(beforeBrace) || beforeBrace.includes("<")) &&
+      typeMap.has("__struct__" + baseStructName)
     ) {
       try {
         const structResult = parseStructInstantiation(

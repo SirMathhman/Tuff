@@ -25,9 +25,9 @@ describe("interpret - modules", () => {
   });
 
   it("supports module with variable", () => {
-    expect(
-      interpret("module Config { let PI : I32 = 314; } Config::PI"),
-    ).toBe(314);
+    expect(interpret("module Config { let PI : I32 = 314; } Config::PI")).toBe(
+      314,
+    );
   });
 
   it("supports module with function accessing module variable", () => {
@@ -49,8 +49,6 @@ describe("interpret - modules", () => {
   });
 
   it("supports nested module access in expressions", () => {
-    expect(
-      interpret("module M { fn get() => 50; } M::get() + 50"),
-    ).toBe(100);
+    expect(interpret("module M { fn get() => 50; } M::get() + 50")).toBe(100);
   });
 });

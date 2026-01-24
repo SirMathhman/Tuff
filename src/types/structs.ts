@@ -1,13 +1,25 @@
 import type { Interpreter } from "../expressions/handlers";
 import { makeDeclarationHandler } from "../declarations";
 
-// Global struct instance storage: maps instance ID to field values
-// Each struct instance is a Map<fieldName, value>
-const structInstances = new Map<number, Map<string, number>>();
+// Global struct instance storage: maps instance ID to {fieldValues, typeParams}
+// typeParams maps generic param names to concrete type names (e.g., {T: "I32"})
+const structInstances = new Map<number, { fieldValues: Map<string, number>; typeParams: Map<string, string> }>();
 let nextInstanceId = 1000000; // Start from a high number to avoid conflicts with other values
 
 export interface StructDefinition {
   fields: string[];
+  generics?: string[];
+}
+
+function parseGenericParams(s: string): { name: string; params: string[] } {
+  const angleStart = s.indexOf("<");
+  if (angleStart === -1) return { name: s.trim(), params: [] };
+  const angleEnd = s.indexOf(">");
+  if (angleEnd === -1) return { name: s.trim(), params: [] };
+  const name = s.slice(0, angleStart).trim();
+  const paramStr = s.slice(angleStart + 1, angleEnd).trim();
+  const params = paramStr.split(",").map((p) => p.trim());
+  return { name, params };
 }
 
 export const handleStructDeclaration = makeDeclarationHandler(
@@ -15,7 +27,8 @@ export const handleStructDeclaration = makeDeclarationHandler(
   (rest: string) => rest.indexOf("}"),
   (rest: string, closeIndex: number, typeMap: Map<string, number>) => {
     const braceIndex = rest.indexOf("{");
-    const structName = rest.slice(0, braceIndex).trim();
+    const headerStr = rest.slice(0, braceIndex).trim();
+    const { name: structName, params: genericParams } = parseGenericParams(headerStr);
     const fieldsStr = rest.slice(braceIndex + 1, closeIndex).trim();
 
     // Store struct definition
@@ -28,6 +41,13 @@ export const handleStructDeclaration = makeDeclarationHandler(
       "__struct_fields__" + structName,
       fieldsStr as unknown as number,
     );
+    // Store generic parameters if any
+    if (genericParams.length > 0) {
+      typeMap.set(
+        "__struct_generics__" + structName,
+        genericParams.join(",") as unknown as number,
+      );
+    }
   },
 );
 
@@ -43,7 +63,9 @@ export function parseStructInstantiation(
     return undefined;
   }
 
-  const structName = trimmed.slice(0, braceIndex).trim();
+  const headerStr = trimmed.slice(0, braceIndex).trim();
+  const { name: structName, params: concreteTypes } = parseGenericParams(headerStr);
+
   if (!typeMap.has("__struct__" + structName)) {
     return undefined;
   }
@@ -96,15 +118,32 @@ export function parseStructInstantiation(
     fieldValues.set(fieldName, value);
   }
 
-  return createStructInstance(structName, fieldValues);
+  // Extract generic parameter mappings
+  const typeParamMap = new Map<string, string>();
+  if (concreteTypes.length > 0) {
+    const genericParamStr = typeMap.get("__struct_generics__" + structName);
+    if (genericParamStr) {
+      const genericParams = (genericParamStr as unknown as string).split(",").map((p) => p.trim());
+      for (let i = 0; i < Math.min(genericParams.length, concreteTypes.length); i++) {
+        const param = genericParams[i];
+        const concreteType = concreteTypes[i];
+        if (param && concreteType) {
+          typeParamMap.set(param, concreteType);
+        }
+      }
+    }
+  }
+
+  return createStructInstance(structName, fieldValues, typeParamMap);
 }
 
 export function createStructInstance(
   structName: string,
   fieldValues: Map<string, number>,
+  typeParams: Map<string, string> = new Map(),
 ): number {
   const instanceId = nextInstanceId++;
-  structInstances.set(instanceId, fieldValues);
+  structInstances.set(instanceId, { fieldValues, typeParams });
   return instanceId;
 }
 
@@ -113,13 +152,19 @@ export function getStructField(instanceId: number, fieldName: string): number {
   if (!instance) {
     throw new Error(`invalid struct instance: ${instanceId}`);
   }
-  const value = instance.get(fieldName);
+  const value = instance.fieldValues.get(fieldName);
   if (value === undefined) {
     throw new Error(
       `struct instance ${instanceId} has no field '${fieldName}'`,
     );
   }
   return value;
+}
+
+export function getStructTypeParams(instanceId: number): Map<string, string> {
+  const instance = structInstances.get(instanceId);
+  if (!instance) return new Map();
+  return instance.typeParams;
 }
 
 export function isStructInstance(value: number): boolean {

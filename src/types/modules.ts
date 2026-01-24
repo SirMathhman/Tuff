@@ -12,13 +12,13 @@ const modules = new Map<
   }
 >();
 
-export function getModule(
-  name: string,
-): {
-  scope: Map<string, number>;
-  typeMap: Map<string, number>;
-  mutMap: Map<string, boolean>;
-} | undefined {
+export function getModule(name: string):
+  | {
+      scope: Map<string, number>;
+      typeMap: Map<string, number>;
+      mutMap: Map<string, boolean>;
+    }
+  | undefined {
   return modules.get(name);
 }
 
