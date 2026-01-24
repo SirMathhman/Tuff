@@ -74,7 +74,8 @@ export function handleVarDecl(
   // Check if variable is mutable by looking for "mut " after "let " and before the colon
   const afterLet = declStr.slice(4);
   const colonIndex = afterLet.indexOf(":");
-  const beforeColon = colonIndex !== -1 ? afterLet.slice(0, colonIndex) : afterLet;
+  const beforeColon =
+    colonIndex !== -1 ? afterLet.slice(0, colonIndex) : afterLet;
   const isMut = beforeColon.indexOf("mut ") !== -1;
   const eqIndex = findEqualIndex(declStr);
 
@@ -94,7 +95,9 @@ export function handleVarDecl(
     const beforeEq = declStr.slice(4 + (isMut ? 4 : 0), eqIndex).trim();
     const colonIndexInBeforeEq = findColonInBeforeEq(beforeEq);
     varName =
-      colonIndexInBeforeEq !== -1 ? beforeEq.slice(0, colonIndexInBeforeEq).trim() : beforeEq;
+      colonIndexInBeforeEq !== -1
+        ? beforeEq.slice(0, colonIndexInBeforeEq).trim()
+        : beforeEq;
 
     const exprStr = declStr.slice(eqIndex + 1).trim();
     let isFunctionTypeAnnotation = false;

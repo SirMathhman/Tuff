@@ -6,7 +6,10 @@ const pointerMap = new Map<number, string>();
 const mutablePointerMap = new Map<number, boolean>();
 let pointerCounter = 1000; // Pointer values start at 1000 to distinguish from regular values
 
-export function createPointer(varName: string, isMutable: boolean = false): number {
+export function createPointer(
+  varName: string,
+  isMutable: boolean = false,
+): number {
   const pointerValue = pointerCounter++;
   pointerMap.set(pointerValue, varName);
   mutablePointerMap.set(pointerValue, isMutable);

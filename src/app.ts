@@ -121,7 +121,8 @@ export function interpretWithScope(
     unmutUninitializedSet,
     interpretWithScope as Interpreter,
   );
-  if (dereferenceAssignmentResult !== undefined) return dereferenceAssignmentResult;
+  if (dereferenceAssignmentResult !== undefined)
+    return dereferenceAssignmentResult;
   const assignmentResult = handleVarAssignment(
     s,
     scope,

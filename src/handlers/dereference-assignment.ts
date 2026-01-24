@@ -1,7 +1,4 @@
-import {
-  getPointerTarget,
-  isPointerMutable,
-} from "./pointer-operations";
+import { getPointerTarget, isPointerMutable } from "./pointer-operations";
 import type { Interpreter } from "../expressions/handlers";
 
 export function handleDereferenceAssignment(
@@ -24,7 +21,11 @@ export function handleDereferenceAssignment(
       // Make sure it's not ==, !=, <=, >=, =>
       if (
         (i + 1 >= trimmed.length || trimmed[i + 1] !== "=") &&
-        (i === 0 || (trimmed[i - 1] !== "!" && trimmed[i - 1] !== "<" && trimmed[i - 1] !== ">" && trimmed[i - 1] !== "="))
+        (i === 0 ||
+          (trimmed[i - 1] !== "!" &&
+            trimmed[i - 1] !== "<" &&
+            trimmed[i - 1] !== ">" &&
+            trimmed[i - 1] !== "="))
       ) {
         eqIdx = i;
         break;

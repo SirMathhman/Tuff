@@ -140,10 +140,12 @@ export function handleVarAssignment(
 
   const semiIdx = s.indexOf(";", eqIdx);
   if (!mutMap.has(lhs)) throw new Error(`variable '${lhs}' is immutable`);
-  if (semiIdx === -1) return undefined;
+  
+  // If no semicolon, treat the entire rest as the RHS (for function bodies)
+  const rhsEnd = semiIdx === -1 ? s.length : semiIdx;
 
   let newValue = interpretWithScope(
-    s.slice(eqIdx + 1, semiIdx).trim(),
+    s.slice(eqIdx + 1, rhsEnd).trim(),
     scope,
     typeMap,
     mutMap,
@@ -178,6 +180,12 @@ export function handleVarAssignment(
     unmutUninitializedSet.delete(lhs);
     mutMap.delete(lhs);
   }
+  
+  // Only process rest if there was a semicolon
+  if (semiIdx === -1) {
+    return newValue;
+  }
+  
   const rest = s.slice(semiIdx + 1).trim();
   if (rest === "") {
     return newValue;

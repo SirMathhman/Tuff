@@ -86,9 +86,7 @@ describe("interpret - variables", () => {
 
   it("supports mutable pointer with dereferencing assignment", () => {
     expect(
-      interpret(
-        "let mut x = 100; let y : *mut I32 = &x; *y = 100; x",
-      ),
+      interpret("let mut x = 100; let y : *mut I32 = &x; *y = 100; x"),
     ).toBe(100);
   });
 });

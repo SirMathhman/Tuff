@@ -33,4 +33,12 @@ describe("interpret - functions", () => {
       ),
     ).toBe(7);
   });
+
+  it("supports function scope closure with mutable outer variable", () => {
+    expect(
+      interpret(
+        "let mut x = 0; fn add() => x += 1; add(); x",
+      ),
+    ).toBe(1);
+  });
 });
