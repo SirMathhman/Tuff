@@ -7,7 +7,7 @@ import { handleUnaryOperation } from "../expressions/unary-operation";
 import { getModuleDeclarationHandler } from "../types/modules";
 import { getObjectDeclarationHandler } from "../types/objects";
 import type { FunctionCallParams } from "./function-call-params";
-import type { Interpreter } from "../expressions/handlers";
+import type { Interpreter, InterpreterContext } from "../expressions/handlers";
 
 type Params = FunctionCallParams;
 
@@ -19,6 +19,7 @@ export function buildInterpreterParams(
   uninitializedSet: Set<string>,
   unmutUninitializedSet: Set<string>,
   interpreter: Interpreter,
+  visMap: Map<string, boolean> = new Map(),
 ): Params {
   return {
     s,
@@ -28,65 +29,35 @@ export function buildInterpreterParams(
     uninitializedSet,
     unmutUninitializedSet,
     interpreter,
+    visMap,
     moduleHandler: getModuleDeclarationHandler(interpreter),
     objectHandler: getObjectDeclarationHandler(interpreter),
   };
 }
 
 export function tryDeclarations(p: Params): number | undefined {
+  const ctx: InterpreterContext = {
+    scope: p.scope,
+    typeMap: p.typeMap,
+    mutMap: p.mutMap,
+    uninitializedSet: p.uninitializedSet,
+    unmutUninitializedSet: p.unmutUninitializedSet,
+    visMap: p.visMap,
+  };
+
   if (p.moduleHandler) {
-    const m = p.moduleHandler(
-      p.s,
-      p.typeMap,
-      p.scope,
-      p.mutMap,
-      p.uninitializedSet,
-      p.unmutUninitializedSet,
-      p.interpreter,
-    );
+    const m = p.moduleHandler(p.s, ctx, p.interpreter);
     if (m.handled) return m.result;
   }
   if (p.objectHandler) {
-    const o = p.objectHandler(
-      p.s,
-      p.typeMap,
-      p.scope,
-      p.mutMap,
-      p.uninitializedSet,
-      p.unmutUninitializedSet,
-      p.interpreter,
-    );
+    const o = p.objectHandler(p.s, ctx, p.interpreter);
     if (o.handled) return o.result;
   }
-  const t = handleTypeDeclaration(
-    p.s,
-    p.typeMap,
-    p.scope,
-    p.mutMap,
-    p.uninitializedSet,
-    p.unmutUninitializedSet,
-    p.interpreter,
-  );
+  const t = handleTypeDeclaration(p.s, ctx, p.interpreter);
   if (t.handled) return t.result;
-  const s = handleStructDeclaration(
-    p.s,
-    p.typeMap,
-    p.scope,
-    p.mutMap,
-    p.uninitializedSet,
-    p.unmutUninitializedSet,
-    p.interpreter,
-  );
+  const s = handleStructDeclaration(p.s, ctx, p.interpreter);
   if (s.handled) return s.result;
-  const f = handleFunctionDeclaration(
-    p.s,
-    p.typeMap,
-    p.scope,
-    p.mutMap,
-    p.uninitializedSet,
-    p.unmutUninitializedSet,
-    p.interpreter,
-  );
+  const f = handleFunctionDeclaration(p.s, ctx, p.interpreter);
   if (f.handled) return f.result;
   return undefined;
 }

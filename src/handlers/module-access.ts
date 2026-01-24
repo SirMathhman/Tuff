@@ -31,6 +31,12 @@ export function handleModuleAccess(
     // Handle both variable access and function calls
     if (memberStr.includes("(")) {
       // Function call: Module::functionName(args)
+      // Check visibility before calling
+      const fnName = memberStr.slice(0, memberStr.indexOf("(")).trim();
+      const isPublic = module.visMap.get(fnName);
+      if (!isPublic) {
+        throw new Error(`member '${fnName}' of module '${moduleName}' is private`);
+      }
       // Use module scope for resolution
       const result = interpreter(
         memberStr,
@@ -45,6 +51,11 @@ export function handleModuleAccess(
       // Variable/member access: Module::memberName
       if (!module.scope.has(memberStr)) {
         throw new Error(`module '${moduleName}' has no member '${memberStr}'`);
+      }
+      // Check visibility for external access
+      const isPublic = module.visMap.get(memberStr);
+      if (!isPublic) {
+        throw new Error(`member '${memberStr}' of module '${moduleName}' is private`);
       }
       return module.scope.get(memberStr);
     }
@@ -67,6 +78,12 @@ export function handleModuleAccess(
     // Handle both variable access and function calls
     if (memberStr.includes("(")) {
       // Function call: object.functionName(args)
+      // Check visibility before calling
+      const fnName = memberStr.slice(0, memberStr.indexOf("(")).trim();
+      const isPublic = obj.visMap.get(fnName);
+      if (!isPublic) {
+        throw new Error(`member '${fnName}' of object '${objectName}' is private`);
+      }
       // Use object scope for resolution
       const result = interpreter(
         memberStr,
@@ -81,6 +98,11 @@ export function handleModuleAccess(
       // Variable/member access: object.memberName
       if (!obj.scope.has(memberStr)) {
         throw new Error(`object '${objectName}' has no member '${memberStr}'`);
+      }
+      // Check visibility for external access
+      const isPublic = obj.visMap.get(memberStr);
+      if (!isPublic) {
+        throw new Error(`member '${memberStr}' of object '${objectName}' is private`);
       }
       return obj.scope.get(memberStr);
     }

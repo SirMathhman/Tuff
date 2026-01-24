@@ -8,58 +8,18 @@ import {
   clearLastRegisteredLambdaName,
 } from "./handlers/lambda-expressions";
 import {
-  findSemicolonIndex,
   findEqualIndex,
   extractTypeFromAnnotation,
   extractAndValidateType,
   findColonInBeforeEq,
+  findDeclStringAndRestIndex,
+} from "./utils/scope-helpers";
+import {
   isArrayTypeAnnotation,
   extractArrayTypeInfo,
-} from "./utils/scope-helpers";
-import { parseArrayLiteral, createArray } from "./utils/array";
-
-function findDeclStringAndRestIndex(s: string): {
-  declStr: string;
-  restIndex: number;
-} {
-  const semiIndex = findSemicolonIndex(s);
-  let declStr: string, restIndex: number;
-
-  if (semiIndex === -1) {
-    const eqIndex = s.indexOf("=");
-    if (eqIndex === -1) return { declStr: "", restIndex: 0 };
-    const afterEq = s.slice(eqIndex + 1).trim(),
-      trimLenDiff = s.slice(eqIndex + 1).length - afterEq.length;
-
-    if (afterEq.startsWith("match") || afterEq.startsWith("loop")) {
-      let exprBraceDepth = 0,
-        exprParenDepth = 0,
-        exprBraceCloseIdx = -1;
-      for (let i = 0; i < afterEq.length; i++) {
-        const ch = afterEq[i];
-        if (ch === "(") exprParenDepth++;
-        else if (ch === ")") exprParenDepth--;
-        else if (ch === "{") exprBraceDepth++;
-        else if (ch === "}") {
-          exprBraceDepth--;
-          if (exprBraceDepth === 0 && exprParenDepth === 0) {
-            exprBraceCloseIdx = i;
-            break;
-          }
-        }
-      }
-      if (exprBraceCloseIdx !== -1) {
-        restIndex = eqIndex + 1 + trimLenDiff + exprBraceCloseIdx + 1;
-        declStr = s.slice(0, restIndex);
-      } else return { declStr: "", restIndex: 0 };
-    } else return { declStr: "", restIndex: 0 };
-  } else {
-    declStr = s.slice(0, semiIndex);
-    restIndex = semiIndex + 1;
-  }
-
-  return { declStr, restIndex };
-}
+  parseArrayLiteral,
+  createArray,
+} from "./utils/array";
 
 export function handleVarDecl(
   s: string,
@@ -69,9 +29,16 @@ export function handleVarDecl(
   interpreter: Interpreter,
   uninitializedSet: Set<string> = new Set(),
   unmutUninitializedSet: Set<string> = new Set(),
+  visMap: Map<string, boolean> = new Map(),
 ): number | undefined {
-  if (s.indexOf("let ") !== 0) return undefined;
-  const { declStr, restIndex } = findDeclStringAndRestIndex(s);
+  // Check for visibility modifier 'out'
+  const trimmed = s.trim();
+  const isPublic = trimmed.startsWith("out ");
+  const remaining = isPublic ? trimmed.slice(4).trim() : trimmed;
+  
+  if (!remaining.startsWith("let ")) return undefined;
+  
+  const { declStr, restIndex } = findDeclStringAndRestIndex(remaining);
   if (!declStr) return undefined;
 
   // Check if variable is mutable by looking for "mut " after "let " and before the colon
@@ -127,6 +94,7 @@ export function handleVarDecl(
         mutMap,
         uninitializedSet,
         unmutUninitializedSet,
+        visMap,
       );
       const registeredLambdaName = getLastRegisteredLambdaName();
       if (registeredLambdaName && varValue === 1) {
@@ -199,6 +167,9 @@ export function handleVarDecl(
   if (isMut || eqIndex === -1) {
     mutMap.set(varName, true);
   }
+  
+  // Store visibility information
+  visMap.set(varName, isPublic);
 
   if (eqIndex === -1) {
     uninitializedSet.add(varName);
@@ -207,7 +178,7 @@ export function handleVarDecl(
     }
   }
 
-  const rest = s.slice(restIndex).trim();
+  const rest = remaining.slice(restIndex).trim();
   if (rest) {
     return interpreter(
       rest,
@@ -216,6 +187,7 @@ export function handleVarDecl(
       mutMap,
       uninitializedSet,
       unmutUninitializedSet,
+      visMap,
     );
   }
   return varValue;

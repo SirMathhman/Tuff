@@ -4,13 +4,19 @@ import { makeDeclarationHandler } from "../declarations";
 export const handleTypeDeclaration = makeDeclarationHandler(
   "type",
   (rest: string) => rest.indexOf(";"),
-  (rest: string, closeIndex: number, typeMap: Map<string, number>) => {
+  (
+    rest: string,
+    closeIndex: number,
+    typeMap: Map<string, number>,
+    _visMap: Map<string, boolean>,
+    _isPublic: boolean,
+  ) => {
     const declStr = rest.slice(0, closeIndex);
     const eqIndex = declStr.indexOf("=");
     if (eqIndex === -1) return;
 
     const aliasName = declStr.slice(0, eqIndex).trim();
-    const aliasType = declStr.slice(eqIndex + 1).trim();
+    const aliasType = declStr. slice(eqIndex + 1).trim();
 
     // Check if it's a union type (contains |)
     if (aliasType.includes("|")) {

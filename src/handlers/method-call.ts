@@ -1,7 +1,7 @@
 import { isValidIdentifier } from "../utils/identifier-utils";
 import { GLOBAL_THIS_VALUE, getInstanceMethods } from "../utils/this-keyword";
 import { isStructInstance, getStructFields } from "../types/structs";
-import type { Interpreter } from "../expressions/handlers";
+import type { Interpreter, InterpreterContext } from "../expressions/handlers";
 import { parseFunctionCall, findMatchingCloseParen } from "../functions";
 
 function isWhitespace(ch: string | undefined): boolean {
@@ -25,11 +25,7 @@ function isAlphaNumeric(ch: string | undefined): boolean {
 
 function callMethodAndHandleRest(
   methodCallStr: string,
-  typeMap: Map<string, number>,
-  scope: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
+  ctx: InterpreterContext,
   interpreter: Interpreter,
   rest: string,
   _closeParenIndex: number,
@@ -37,12 +33,13 @@ function callMethodAndHandleRest(
 ): number | undefined {
   const methodResult = parseFunctionCall({
     s: methodCallStr,
-    typeMap,
-    scope,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+    typeMap: ctx.typeMap,
+    scope: ctx.scope,
+    mutMap: ctx.mutMap,
+    uninitializedSet: ctx.uninitializedSet,
+    unmutUninitializedSet: ctx.unmutUninitializedSet,
     interpreter,
+    visMap: ctx.visMap,
   });
 
   if (methodResult === undefined) return undefined;
@@ -53,11 +50,12 @@ function callMethodAndHandleRest(
 
   return interpreter(
     methodResult.toString() + rest,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+    ctx.scope,
+    ctx.typeMap,
+    ctx.mutMap,
+    ctx.uninitializedSet,
+    ctx.unmutUninitializedSet,
+    ctx.visMap,
   );
 }
 
@@ -69,7 +67,16 @@ export function handleMethodCall(
   uninitializedSet: Set<string>,
   unmutUninitializedSet: Set<string>,
   interpreter: Interpreter,
+  visMap: Map<string, boolean> = new Map(),
 ): number | undefined {
+  const ctx: InterpreterContext = {
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    visMap,
+  };
   const trimmed = s.trim();
 
   // Look for the pattern: <receiver>.<methodName>(<args>)
@@ -162,13 +169,18 @@ export function handleMethodCall(
 
     const rest = trimmed.slice(closeParenIndex + 1).trim();
 
+    const instanceCtx: InterpreterContext = {
+      scope: instanceScope,
+      typeMap: ctx.typeMap,
+      mutMap: ctx.mutMap,
+      uninitializedSet: ctx.uninitializedSet,
+      unmutUninitializedSet: ctx.unmutUninitializedSet,
+      visMap: ctx.visMap,
+    };
+
     return callMethodAndHandleRest(
       methodCallStr,
-      typeMap,
-      instanceScope,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
+      instanceCtx,
       interpreter,
       rest,
       closeParenIndex,
@@ -194,11 +206,7 @@ export function handleMethodCall(
 
   return callMethodAndHandleRest(
     methodCallStr,
-    typeMap,
-    scope,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+    ctx,
     interpreter,
     rest,
     closeParenIndex,

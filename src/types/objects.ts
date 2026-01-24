@@ -8,6 +8,7 @@ const objects = new Map<
     scope: Map<string, number>;
     typeMap: Map<string, number>;
     mutMap: Map<string, boolean>;
+    visMap: Map<string, boolean>;
   }
 >();
 
@@ -16,6 +17,7 @@ export function getObject(name: string):
       scope: Map<string, number>;
       typeMap: Map<string, number>;
       mutMap: Map<string, boolean>;
+      visMap: Map<string, boolean>;
     }
   | undefined {
   return objects.get(name);
@@ -26,8 +28,9 @@ export function setObject(
   scope: Map<string, number>,
   typeMap: Map<string, number>,
   mutMap: Map<string, boolean>,
+  visMap: Map<string, boolean>,
 ): void {
-  objects.set(name, { scope, typeMap, mutMap });
+  objects.set(name, { scope, typeMap, mutMap, visMap });
 }
 
 export function getObjectDeclarationHandler(interpreter: Interpreter) {

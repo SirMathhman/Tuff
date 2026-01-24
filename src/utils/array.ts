@@ -1,3 +1,5 @@
+import { extractTypeSize } from "../type-utils";
+
 // Global array storage: maps array ID to its data
 // Each array stores: {type: elementType, initialized: count, capacity: count, values: number[]}
 const arrays = new Map<
@@ -35,6 +37,45 @@ export function parseArrayType(typeStr: string): ArrayType | undefined {
 
   // elementType would be resolved elsewhere (e.g., "I32" -> 32)
   return { elementType: 0, initializedCount: initialized, capacity };
+}
+
+export function isArrayTypeAnnotation(typeStr: string): boolean {
+  return parseArrayType(typeStr) !== undefined;
+}
+
+export function extractArrayTypeInfo(
+  typeStr: string,
+  typeMap: Map<string, number>,
+): { arrayType: ArrayType; elementTypeName: string } | undefined {
+  const baseArrayType = parseArrayType(typeStr);
+  if (!baseArrayType) return undefined;
+
+  const t = typeStr.trim();
+  const closeIdx = t.lastIndexOf("]");
+  if (closeIdx === -1) return undefined;
+
+  const inner = t.slice(1, closeIdx).trim();
+  const parts = inner.split(";");
+
+  if (parts.length !== 3) return undefined;
+
+  const elemTypeStr = parts[0]?.trim();
+
+  if (!elemTypeStr) return undefined;
+
+  let elementType = extractTypeSize(elemTypeStr);
+  if (elementType === 0 && typeMap.has("__alias__" + elemTypeStr)) {
+    elementType = typeMap.get("__alias__" + elemTypeStr) || 0;
+  }
+
+  return {
+    arrayType: {
+      elementType,
+      initializedCount: baseArrayType.initializedCount,
+      capacity: baseArrayType.capacity,
+    },
+    elementTypeName: elemTypeStr,
+  };
 }
 
 export function parseArrayLiteral(s: string): number[] | undefined {

@@ -30,7 +30,13 @@ function parseGenericParams(s: string): { name: string; params: string[] } {
 export const handleStructDeclaration = makeDeclarationHandler(
   "struct",
   (rest: string) => rest.indexOf("}"),
-  (rest: string, closeIndex: number, typeMap: Map<string, number>) => {
+  (
+    rest: string,
+    closeIndex: number,
+    typeMap: Map<string, number>,
+    _visMap: Map<string, boolean>,
+    _isPublic: boolean,
+  ) => {
     const braceIndex = rest.indexOf("{");
     const headerStr = rest.slice(0, braceIndex).trim();
     const { name: structName, params: genericParams } =

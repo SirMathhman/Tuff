@@ -8,6 +8,7 @@ const modules = new Map<
     scope: Map<string, number>;
     typeMap: Map<string, number>;
     mutMap: Map<string, boolean>;
+    visMap: Map<string, boolean>;
   }
 >();
 
@@ -16,6 +17,7 @@ export function getModule(name: string):
       scope: Map<string, number>;
       typeMap: Map<string, number>;
       mutMap: Map<string, boolean>;
+      visMap: Map<string, boolean>;
     }
   | undefined {
   return modules.get(name);
@@ -26,8 +28,9 @@ export function setModule(
   scope: Map<string, number>,
   typeMap: Map<string, number>,
   mutMap: Map<string, boolean>,
+  visMap: Map<string, boolean>,
 ): void {
-  modules.set(name, { scope, typeMap, mutMap });
+  modules.set(name, { scope, typeMap, mutMap, visMap });
 }
 
 export function getModuleDeclarationHandler(interpreter: Interpreter) {

@@ -35,6 +35,7 @@ export function interpretWithScope(
   mutMap: Map<string, boolean> = new Map(),
   uninitializedSet: Set<string> = new Set(),
   unmutUninitializedSet = new Set<string>(),
+  visMap: Map<string, boolean> = new Map(),
 ): number {
   const s = input.trim();
   if (s === "") return 0;
@@ -49,6 +50,7 @@ export function interpretWithScope(
     uninitializedSet,
     unmutUninitializedSet,
     interpretWithScope as Interpreter,
+    visMap,
   );
   let result = tryDeclarations(p);
   if (result !== undefined) return result;
@@ -60,10 +62,11 @@ export function interpretWithScope(
     interpretWithScope as Interpreter,
     uninitializedSet,
     unmutUninitializedSet,
+    visMap,
   );
   if (result !== undefined) return result;
   result = handleMatch(s, scope, typeMap, mutMap, (i, sc, tm, mm) =>
-    interpretWithScope(i, sc, tm, mm, uninitializedSet, unmutUninitializedSet),
+    interpretWithScope(i, sc, tm, mm, uninitializedSet, unmutUninitializedSet, visMap),
   );
   if (result !== undefined) return result;
   result = handleLoop({

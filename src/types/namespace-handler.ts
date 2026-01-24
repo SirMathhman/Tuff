@@ -24,12 +24,14 @@ export function createNamespacedDeclarationHandler(
       scope: Map<string, number>;
       typeMap: Map<string, number>;
       mutMap: Map<string, boolean>;
+      visMap: Map<string, boolean>;
     } | undefined;
     set: (
       name: string,
       scope: Map<string, number>,
       typeMap: Map<string, number>,
       mutMap: Map<string, boolean>,
+      visMap: Map<string, boolean>,
     ) => void;
   },
   interpreter: Interpreter,
@@ -37,7 +39,13 @@ export function createNamespacedDeclarationHandler(
   return makeDeclarationHandler(
     keyword,
     findBraceClose,
-    (rest: string, closeIndex: number, typeMap: Map<string, number>) => {
+    (
+      rest: string,
+      closeIndex: number,
+      typeMap: Map<string, number>,
+      _visMap: Map<string, boolean>,
+      _isPublic: boolean,
+    ) => {
       const braceIndex = rest.indexOf("{");
       if (braceIndex === -1) return;
 
@@ -50,6 +58,7 @@ export function createNamespacedDeclarationHandler(
       const entityScope = new Map<string, number>();
       const entityTypeMap = new Map<string, number>();
       const entityMutMap = new Map<string, boolean>();
+      const entityVisMap = new Map<string, boolean>();
 
       interpreter(
         entityBody,
@@ -58,10 +67,11 @@ export function createNamespacedDeclarationHandler(
         entityMutMap,
         new Set(),
         new Set(),
+        entityVisMap,
       );
 
       // Store entity for later access
-      storage.set(entityName, entityScope, entityTypeMap, entityMutMap);
+      storage.set(entityName, entityScope, entityTypeMap, entityMutMap, entityVisMap);
       typeMap.set(namespacer(entityName), 1);
     },
   );

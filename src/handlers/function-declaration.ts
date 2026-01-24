@@ -84,7 +84,13 @@ export function createFunctionDeclarationHandler(
       // Body is not brace-enclosed, look for semicolon after =>
       return rest.indexOf(";", arrowIndex);
     },
-    (rest: string, closeIndex: number, typeMap: Map<string, number>) => {
+    (
+      rest: string,
+      closeIndex: number,
+      typeMap: Map<string, number>,
+      visMap: Map<string, boolean>,
+      isPublic: boolean,
+    ) => {
       // Extract function name/generics and find where they end
       const angleStart = rest.indexOf("<");
       let fnHeaderStr: string;
@@ -170,6 +176,8 @@ export function createFunctionDeclarationHandler(
         fnDef.generics = genericParams;
       }
       functionDefs.set(fnName, fnDef);
+      // Track visibility
+      visMap.set(fnName, isPublic);
       // Track this function as a local function in the current execution scope
       addLocalFunctionName(fnName);
     },
