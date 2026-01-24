@@ -13,6 +13,7 @@ import { handleBinaryOperation } from "./expressions/binary-operation";
 import { parseTypedNumber } from "./parser";
 import { handleTypeDeclaration } from "./types/type-declarations";
 import { handleStructDeclaration } from "./types/structs";
+import { handleFunctionDeclaration, parseFunctionCall } from "./functions";
 
 export function interpretWithScope(
   input: string,
@@ -25,7 +26,6 @@ export function interpretWithScope(
   const s = input.trim();
   if (s === "") return 0;
 
-  // Handle type alias declarations first - these are stored in typeMap with a special prefix
   const typeDecl = handleTypeDeclaration(
     s,
     typeMap,
@@ -36,8 +36,6 @@ export function interpretWithScope(
     interpretWithScope as Interpreter,
   );
   if (typeDecl.handled) return typeDecl.result;
-
-  // Handle struct declarations
   const structDecl = handleStructDeclaration(
     s,
     typeMap,
@@ -48,7 +46,16 @@ export function interpretWithScope(
     interpretWithScope as Interpreter,
   );
   if (structDecl.handled) return structDecl.result;
-
+  const fnDecl = handleFunctionDeclaration(
+    s,
+    typeMap,
+    scope,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpretWithScope as Interpreter,
+  );
+  if (fnDecl.handled) return fnDecl.result;
   const declResult = handleVarDecl(
     s,
     scope,
@@ -59,7 +66,6 @@ export function interpretWithScope(
     unmutUninitializedSet,
   );
   if (declResult !== undefined) return declResult;
-
   const matchResult = handleMatch(
     s,
     scope,
@@ -68,7 +74,6 @@ export function interpretWithScope(
     interpretWithScope,
   );
   if (matchResult !== undefined) return matchResult;
-
   const loopResult = handleLoop({
     s,
     scope,
@@ -79,7 +84,6 @@ export function interpretWithScope(
     unmutUninitializedSet,
   });
   if (loopResult !== undefined) return loopResult;
-
   const whileResult = handleWhile({
     s,
     scope,
@@ -90,7 +94,6 @@ export function interpretWithScope(
     unmutUninitializedSet,
   });
   if (whileResult !== undefined) return whileResult;
-
   const forResult = handleFor({
     s,
     scope,
@@ -101,7 +104,6 @@ export function interpretWithScope(
     unmutUninitializedSet,
   });
   if (forResult !== undefined) return forResult;
-
   try {
     handleBreak({
       s,
@@ -113,11 +115,8 @@ export function interpretWithScope(
       unmutUninitializedSet,
     });
   } catch (e) {
-    if (e instanceof BreakException) {
-      throw e;
-    }
+    if (e instanceof BreakException) throw e;
   }
-
   const ifResult = handleIfExpression(
     s,
     scope,
@@ -128,7 +127,6 @@ export function interpretWithScope(
     interpretWithScope as Interpreter,
   );
   if (ifResult !== undefined) return ifResult;
-
   const assignmentResult = handleVarAssignment(
     s,
     scope,
@@ -139,8 +137,17 @@ export function interpretWithScope(
     interpretWithScope as Interpreter,
   );
   if (assignmentResult !== undefined) return assignmentResult;
-
   if (scope.has(s.trim())) return scope.get(s.trim())!;
+  const fnCallResult = parseFunctionCall(
+    s,
+    typeMap,
+    scope,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpretWithScope as Interpreter,
+  );
+  if (fnCallResult !== undefined) return fnCallResult;
   if (
     !s.includes("+") &&
     !s.includes("-") &&
@@ -190,8 +197,4 @@ export function interpretWithScope(
     unmutUninitializedSet,
     interpretWithScope as Interpreter,
   );
-}
-
-export function interpret(input: string): number {
-  return interpretWithScope(input, new Map(), new Map(), new Map());
 }

@@ -1,34 +1,7 @@
 import { findMatchingClose } from "../match";
 import { parseStructInstantiation } from "../types/structs";
 import type { Interpreter } from "./handlers";
-
-function isIdentifier(s: string): boolean {
-  if (s.length === 0) return false;
-  const first = s.charCodeAt(0);
-  if (
-    !(
-      (first >= 65 && first <= 90) ||
-      (first >= 97 && first <= 122) ||
-      first === 95
-    )
-  ) {
-    return false; // not A-Z, a-z, or _
-  }
-  for (let i = 1; i < s.length; i++) {
-    const code = s.charCodeAt(i);
-    if (
-      !(
-        (code >= 65 && code <= 90) ||
-        (code >= 97 && code <= 122) ||
-        (code >= 48 && code <= 57) ||
-        code === 95
-      )
-    ) {
-      return false; // not A-Z, a-z, 0-9, or _
-    }
-  }
-  return true;
-}
+import { isValidIdentifier } from "../utils/identifier-utils";
 
 export function evaluateGroupedExpressionsWithScope(
   s: string,
@@ -50,7 +23,7 @@ export function evaluateGroupedExpressionsWithScope(
     // Check if this looks like a struct instantiation (word { ... })
     if (
       beforeBrace &&
-      isIdentifier(beforeBrace) &&
+      isValidIdentifier(beforeBrace) &&
       typeMap.has("__struct__" + beforeBrace)
     ) {
       try {
@@ -120,7 +93,7 @@ export function evaluateGroupedExpressionsWithScope(
           const beforeBrace = s.slice(0, openIndex).trim();
           if (
             beforeBrace &&
-            isIdentifier(beforeBrace) &&
+            isValidIdentifier(beforeBrace) &&
             typeMap.has("__struct__" + beforeBrace)
           ) {
             continue;

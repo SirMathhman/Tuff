@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { interpret } from "../src/app";
+import { interpret } from "../src/utils/interpret";
 
 describe("interpret", () => {
   it("returns 0 for empty string", () => {
@@ -222,5 +222,13 @@ describe("interpret", () => {
     expect(
       interpret("struct Wrapper { field : 100 } Wrapper { field : 100 }.field"),
     ).toBe(100);
+  });
+
+  it("supports function declaration and calls", () => {
+    expect(
+      interpret(
+        "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",
+      ),
+    ).toBe(7);
   });
 });
