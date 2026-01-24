@@ -69,4 +69,18 @@ describe("interpret - variables", () => {
   it("supports variable assignment inside if-else branches", () => {
     expect(interpret("let x : I32; if (true) x = 10; else x = 20; x")).toBe(10);
   });
+
+  it("supports pointer creation and dereferencing", () => {
+    expect(interpret("let x = 100; let y : *I32 = &x; *y")).toBe(100);
+  });
+
+  it("supports pointer dereferencing with modification", () => {
+    expect(interpret("let mut x = 100; let y : *I32 = &x; *y")).toBe(100);
+  });
+
+  it("supports chained pointer operations", () => {
+    expect(interpret("let x = 42; let p = &x; let pp : *I32 = p; *pp")).toBe(
+      42,
+    );
+  });
 });

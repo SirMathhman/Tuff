@@ -32,7 +32,18 @@ export function validateUnsignedValue(n: number, size: number): void {
 export function extractTypeSize(typeStr: string): number {
   const t = typeStr.trim();
   if (t === "Bool") return 1;
-  if (t.length < 1 || (t[0] !== "U" && t[0] !== "I")) return 0;
+  if (t.length < 1) return 0;
+
+  // Handle pointer types like *I32
+  if (t[0] === "*") {
+    // For pointers, return the base type's size but marked as a pointer
+    // We use negative values to indicate pointers
+    // A pointer to I32 will be stored as -32 in the type system
+    const baseType = extractTypeSize(t.slice(1));
+    return baseType > 0 ? -baseType : 0;
+  }
+
+  if (t[0] !== "U" && t[0] !== "I") return 0;
   let s = "";
   for (let i = 1; i < t.length; i++) {
     const ch = t[i];

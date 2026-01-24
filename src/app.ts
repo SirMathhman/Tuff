@@ -11,9 +11,13 @@ import {
 } from "./expressions/handlers";
 import { handleBinaryOperation } from "./expressions/binary-operation";
 import { parseTypedNumber } from "./parser";
-import { handleTypeDeclaration } from "./types/type-declarations";
-import { handleStructDeclaration } from "./types/structs";
-import { handleFunctionDeclaration, parseFunctionCall } from "./functions";
+import { tryDeclarations } from "./utils/app-handlers";
+import { parseFunctionCall } from "./functions";
+import { handleLambdaExpression } from "./handlers/lambda-expressions";
+import {
+  handleReferenceOperation,
+  handleDereferenceOperation,
+} from "./handlers/pointer-operations";
 
 export function interpretWithScope(
   input: string,
@@ -26,36 +30,16 @@ export function interpretWithScope(
   const s = input.trim();
   if (s === "") return 0;
 
-  const typeDecl = handleTypeDeclaration(
+  const d = tryDeclarations({
     s,
     typeMap,
     scope,
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
-    interpretWithScope as Interpreter,
-  );
-  if (typeDecl.handled) return typeDecl.result;
-  const structDecl = handleStructDeclaration(
-    s,
-    typeMap,
-    scope,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpretWithScope as Interpreter,
-  );
-  if (structDecl.handled) return structDecl.result;
-  const fnDecl = handleFunctionDeclaration(
-    s,
-    typeMap,
-    scope,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpretWithScope as Interpreter,
-  );
-  if (fnDecl.handled) return fnDecl.result;
+    interpreter: interpretWithScope as Interpreter,
+  });
+  if (d !== undefined) return d;
   const declResult = handleVarDecl(
     s,
     scope,
@@ -148,6 +132,12 @@ export function interpretWithScope(
     interpretWithScope as Interpreter,
   );
   if (fnCallResult !== undefined) return fnCallResult;
+  const referenceResult = handleReferenceOperation(s, scope);
+  if (referenceResult !== undefined) return referenceResult;
+  const dereferenceResult = handleDereferenceOperation(s, scope);
+  if (dereferenceResult !== undefined) return dereferenceResult;
+  const lambdaResult = handleLambdaExpression(s, typeMap);
+  if (lambdaResult !== undefined) return lambdaResult;
   if (
     !s.includes("+") &&
     !s.includes("-") &&
