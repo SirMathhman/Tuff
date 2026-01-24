@@ -13,6 +13,37 @@ const functionDefs = new Map<
   }
 >();
 
+// Store function references: varName => fnName
+const functionRefs = new Map<string, string>();
+
+export function setFunctionRef(varName: string, fnName: string): void {
+  functionRefs.set(varName, fnName);
+}
+
+export function getFunctionRef(varName: string): string | undefined {
+  return functionRefs.get(varName);
+}
+
+export function isFunctionType(typeStr: string): boolean {
+  // Check if type string matches function type pattern: () => ReturnType
+  const trimmed = typeStr.trim();
+  return (
+    trimmed.startsWith("(") &&
+    trimmed.includes("=>") &&
+    trimmed.lastIndexOf(")") < trimmed.indexOf("=>")
+  );
+}
+
+export function trySetFunctionRef(
+  varName: string,
+  exprStr: string,
+): boolean {
+  // Returns true if this was a function type, false otherwise
+  if (!exprStr) return false;
+  setFunctionRef(varName, exprStr);
+  return true;
+}
+
 export const handleFunctionDeclaration = makeDeclarationHandler(
   "fn",
   (rest: string) => {
@@ -107,7 +138,11 @@ export function parseFunctionCall(
     return undefined;
   }
 
-  if (!functionDefs.has(fnName)) {
+  // Check if fnName is a function reference (variable pointing to a function)
+  const referencedFnName = getFunctionRef(fnName);
+  const actualFnName = referencedFnName || fnName;
+
+  if (!functionDefs.has(actualFnName)) {
     return undefined;
   }
 
@@ -130,7 +165,7 @@ export function parseFunctionCall(
   }
 
   const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
-  const fnDef = functionDefs.get(fnName)!;
+  const fnDef = functionDefs.get(actualFnName)!;
 
   // Parse arguments
   const args: number[] = [];
@@ -160,7 +195,7 @@ export function parseFunctionCall(
 
     if (argParts.length !== fnDef.params.length) {
       throw new Error(
-        `function ${fnName} expects ${fnDef.params.length} arguments, got ${argParts.length}`,
+        `function ${actualFnName} expects ${fnDef.params.length} arguments, got ${argParts.length}`,
       );
     }
 
@@ -177,7 +212,7 @@ export function parseFunctionCall(
     }
   } else if (fnDef.params.length !== 0) {
     throw new Error(
-      `function ${fnName} expects ${fnDef.params.length} arguments, got 0`,
+      `function ${actualFnName} expects ${fnDef.params.length} arguments, got 0`,
     );
   }
 
@@ -220,4 +255,5 @@ export function isFunctionDefined(name: string): boolean {
 
 export function clearFunctions(): void {
   functionDefs.clear();
+  functionRefs.clear();
 }

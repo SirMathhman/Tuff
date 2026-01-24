@@ -231,4 +231,10 @@ describe("interpret", () => {
       ),
     ).toBe(7);
   });
+
+  it("supports function references and calls through variables", () => {
+    expect(
+      interpret("fn get() : I32 => 100; let func : () => I32 = get; func()"),
+    ).toBe(100);
+  });
 });
