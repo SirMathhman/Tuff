@@ -61,4 +61,8 @@ describe("interpret - types", () => {
   it("supports array length property", () => {
     expect(interpret("let array = [1, 2, 3]; array.length")).toBe(3);
   });
+
+  it("supports array init property", () => {
+    expect(interpret("let array = [1, 2, 3]; array.init")).toBe(3);
+  });
 });

@@ -87,7 +87,7 @@ export function performBinaryOp(
       if (isArrayInstance(left)) {
         const meta = getArrayMetadata(left);
         if (!meta) throw new Error("array metadata missing");
-        if (rightStr === "length") {
+        if (rightStr === "length" || rightStr === "init") {
           result = meta.initialized;
           break;
         }
