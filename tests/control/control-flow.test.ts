@@ -1,7 +1,10 @@
 import { describe, it } from "bun:test";
 import { assertExecuteValid, assertInterpretValid } from "../test-helpers";
 
-function itBoth(name: string, fn: (assertValid: (source: string, expected: number) => void) => void) {
+function itBoth(
+  name: string,
+  fn: (assertValid: (source: string, expected: number) => void) => void,
+) {
   it("Interpreted: " + name, () => fn(assertInterpretValid));
   it("Compiled: " + name, () => fn(assertExecuteValid));
 }
@@ -15,9 +18,12 @@ describe("interpret - control flow - basic", () => {
     assertValid("false", 0);
   });
 
-  itBoth("supports boolean variable declarations with Bool type", (assertValid) => {
-    assertValid("let x : Bool = true; x", 1);
-  });
+  itBoth(
+    "supports boolean variable declarations with Bool type",
+    (assertValid) => {
+      assertValid("let x : Bool = true; x", 1);
+    },
+  );
 
   itBoth("supports boolean variable with false", (assertValid) => {
     assertValid("let y : Bool = false; y", 0);
@@ -40,10 +46,7 @@ describe("interpret - control flow - basic", () => {
   });
 
   itBoth("supports nested if-else-if-else expressions", (assertValid) => {
-    assertValid(
-      "let x : I32 = if (true) 3 else if (false) 4 else 5; x",
-      3,
-    );
+    assertValid("let x : I32 = if (true) 3 else if (false) 4 else 5; x", 3);
   });
 
   itBoth("supports match expression with literal pattern", (assertValid) => {
@@ -63,21 +66,21 @@ describe("interpret - control flow - loops", () => {
     assertValid("let x : I32 = loop { if (true) break 5; }; x", 5);
   });
 
-  itBoth("supports compound assignment and loop with break value", (assertValid) => {
-    assertValid(
-      "let mut i = 0; loop { if (i < 4) i += 1; else break i; }",
-      4,
-    );
-  });
+  itBoth(
+    "supports compound assignment and loop with break value",
+    (assertValid) => {
+      assertValid(
+        "let mut i = 0; loop { if (i < 4) i += 1; else break i; }",
+        4,
+      );
+    },
+  );
 
   itBoth("supports while loop with condition and increment", (assertValid) => {
     assertValid("let mut i = 0; while (i < 4) i += 1; i", 4);
   });
 
   itBoth("supports for-in loop with range", (assertValid) => {
-    assertValid(
-      "let mut sum = 0; for (let mut i in 0..10) sum += i; sum",
-      45,
-    );
+    assertValid("let mut sum = 0; for (let mut i in 0..10) sum += i; sum", 45);
   });
 });

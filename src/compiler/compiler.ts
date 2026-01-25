@@ -2,10 +2,13 @@ import { createDeclarationParser } from "./declaration-parser";
 import {
   removeTypeSyntax,
   extractVarDeclarations,
+  transformControlFlow,
+} from "./transforms/syntax-transforms";
+import {
   replaceBooleanLiterals,
   stripTypeAnnotationsAndValidate,
   convertStatementsToExpressions,
-} from "./syntax-transforms";
+} from "./transforms/literal-transforms";
 
 interface VariableInfo {
   type: string | undefined;
@@ -25,13 +28,17 @@ function createTuffCompiler(source: string) {
       const parser = createDeclarationParser(source, variables);
       parser.parseDeclarations();
 
-      // Pass 2: Strip Tuff syntax
-      const js = removeTypeSyntax(source);
+      // Pass 2: Transform control flow BEFORE removing braces
+      // (if/else/loop/while/for/match need their braces)
+      const transformed = transformControlFlow(source);
 
-      // Pass 3: Extract variables that need declaration
+      // Pass 3: Strip Tuff syntax (let, mut, type annotations)
+      const js = removeTypeSyntax(transformed);
+
+      // Pass 4: Extract variables that need declaration
       const { expression, varDeclarations } = extractVarDeclarations(js);
 
-      // Pass 4: Transform literals
+      // Pass 5: Transform literals
       let transformedExpr = replaceBooleanLiterals(expression);
       transformedExpr = stripTypeAnnotationsAndValidate(transformedExpr);
 
@@ -71,7 +78,10 @@ export function compile(_source: string): string {
  * @returns The numeric result of execution
  */
 export function execute(source: string): number {
-  const js = compile(source);
+  return evalImpl(compile(source));
+}
+
+export function evalImpl(js: string) {
   const result = eval(js);
   return typeof result === "number" ? result : 0;
 }

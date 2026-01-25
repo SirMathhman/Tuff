@@ -5,8 +5,9 @@ import {
   isDigit,
   charAt,
 } from "./string-helpers";
-import { validateTypeAnnotation } from "./validation";
-import { isKeyword } from "./keywords";
+import { validateTypeAnnotation } from "../validation/validation";
+import { isKeyword } from "../keywords";
+import { parseUntilSemicolon } from "./parse-helpers";
 
 interface VariableInfo {
   type: string | undefined;
@@ -29,7 +30,7 @@ const REFERENCE_DELIMITERS = new Set([
   ">",
   "=",
 ]);
-const SPECIAL_IDENTIFIERS = new Set(["true", "false"]);
+const SPECIAL_IDENTIFIERS = new Set(["true", "false", "_"]);
 
 function parseMutability(
   source: string,
@@ -104,16 +105,11 @@ export function parseLetDeclaration(
   if (i < source.length && source[i] === "=") {
     i++;
     while (i < source.length && isWhitespace(source[i])) i++;
-    const valueStart = i;
-    let depth = 0;
-    while (i < source.length) {
-      if (source[i] === "{" || source[i] === "[" || source[i] === "(") depth++;
-      else if (source[i] === "}" || source[i] === "]" || source[i] === ")")
-        depth--;
-      else if (source[i] === ";" && depth === 0) break;
-      i++;
-    }
-    const value = source.slice(valueStart, i).trim();
+    const { content: value, endIdx: valueEndIdx } = parseUntilSemicolon(
+      source,
+      i,
+    );
+    i = valueEndIdx;
     if (typeAnnotation) validateTypeAnnotation(value, typeAnnotation);
   }
   if (i < source.length && source[i] === ";") i++;

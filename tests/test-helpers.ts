@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
 import { interpret, interpretAll } from "../src/utils/interpret";
-import { compile, execute } from "../src/compiler/compiler";
+import { compile, evalImpl } from "../src/compiler/compiler";
 
 /**
  * Assert that an interpretation is valid and returns the expected value.
@@ -54,8 +54,13 @@ export function assertInterpretAllInvalid(
 }
 
 export function assertExecuteValid(source: string, expected: number): void {
-  const result = execute(source);
-  expect(result).toBe(expected);
+  const compiled = compile(source);
+  try {
+    const result = evalImpl(compiled);
+    expect(result).toBe(expected);
+  } catch {
+    throw new Error("Failed to execute compiled code: " + compiled);
+  }
 }
 
 // Test helper for compile-time validation errors
