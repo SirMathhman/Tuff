@@ -34,6 +34,21 @@ const JS_KEYWORDS = new Set([
   "class",
 ]);
 
+const JS_RESERVED_WORDS = new Set([
+  ...JS_KEYWORDS,
+  "true",
+  "false",
+  "try",
+  "catch",
+  "finally",
+  "throw",
+  "new",
+  "this",
+  "in",
+  "of",
+  "default",
+]);
+
 /**
  * Check if identifier is a variable assignment (not keyword, followed by =)
  */
@@ -48,6 +63,64 @@ function isVarAssignment(
     source[nextIdx] === "=" &&
     charAt(source, nextIdx + 1) !== "="
   );
+}
+
+interface DestructuringInfo {
+  vars: string[];
+  endIdx: number;
+}
+
+/**
+ * Try to extract variables from destructuring pattern like { x, y } = value
+ */
+function tryExtractDestructuringVars(
+  source: string,
+  i: number,
+): DestructuringInfo | undefined {
+  if (source[i] !== "{") return undefined;
+
+  const vars: string[] = [];
+  let j = i + 1;
+  let braceDepth = 1;
+
+  while (j < source.length && braceDepth > 0) {
+    const ch = source[j];
+    if (ch === "{") {
+      braceDepth++;
+      j++;
+      continue;
+    }
+    if (ch === "}") {
+      braceDepth--;
+      j++;
+      continue;
+    }
+
+    if (braceDepth === 1 && isIdentifierChar(ch) && !isDigit(ch)) {
+      const varStart = j;
+      while (j < source.length && isIdentifierChar(source[j])) j++;
+      const varName = source.slice(varStart, j);
+      if (!JS_RESERVED_WORDS.has(varName)) vars.push(varName);
+      continue;
+    }
+
+    j++;
+  }
+
+  if (braceDepth !== 0) return undefined;
+  const afterBrace = skipWhitespace(source, j);
+  if (afterBrace >= source.length || source[afterBrace] !== "=")
+    return undefined;
+  return { vars, endIdx: afterBrace + 1 };
+}
+
+function takeIdentifier(
+  source: string,
+  start: number,
+): { name: string; endIdx: number } {
+  let i = start;
+  while (i < source.length && isIdentifierChar(source[i])) i++;
+  return { name: source.slice(start, i), endIdx: i };
 }
 
 /**
@@ -70,6 +143,17 @@ export function extractVarDeclarations(source: string): {
       continue;
     }
 
+    // Check for destructuring pattern at top level
+    if (ch === "{" && braceDepth === 0) {
+      const destruct = tryExtractDestructuringVars(source, i);
+      if (destruct) {
+        destruct.vars.forEach((v) => varDeclDecls.add(v));
+        result += source[i];
+        i++;
+        continue;
+      }
+    }
+
     // Track brace depth to know if we're inside a function body
     if (ch === "{") {
       braceDepth++;
@@ -84,29 +168,13 @@ export function extractVarDeclarations(source: string): {
       continue;
     }
 
-    // Extract var assignments
     if (isIdentifierChar(ch) && !isDigit(ch)) {
-      const nameStart = i;
-      while (i < source.length && isIdentifierChar(source[i])) i++;
-      const name = source.slice(nameStart, i);
-
-      const nextIdx = skipWhitespace(source, i);
-
-      // Check if this is a const/let declaration inside braces (skip extraction)
-      // or a bare assignment at any depth (extract)
-      if (isVarAssignment(name, source, nextIdx)) {
-        const isConstOrLet = name === "const" || name === "let";
-
-        // Skip const/let declarations inside braces, extract everything else
-        if (!(isConstOrLet && braceDepth > 0)) {
-          varDeclDecls.add(name);
-        }
-
-        result += name;
-        i = nextIdx;
-      } else {
-        result += name;
-      }
+      const { name, endIdx } = takeIdentifier(source, i);
+      const nextIdx = skipWhitespace(source, endIdx);
+      const isAssignment = isVarAssignment(name, source, nextIdx);
+      if (isAssignment) varDeclDecls.add(name);
+      result += name;
+      i = isAssignment ? nextIdx : endIdx;
       continue;
     }
 
