@@ -12,6 +12,7 @@ import {
 } from "./transforms/literal-transforms";
 import { transformStringIndexing } from "./transforms/string-transforms";
 import { validateTypedArithmetic } from "./transforms/type-arithmetic-validation";
+import { isWhitespace, isIdentifierChar } from "./parsing/string-helpers";
 
 function isAlphaNum(ch: string): boolean {
   return (
@@ -59,7 +60,76 @@ function findReceiverStart(result: string, isClosingParen: boolean): number {
  * Simple method call transformer: 100.add(50) => add(100, 50)
  * Skips built-in methods like charCodeAt, length, init
  */
+function collectLocalVariables(source: string): Set<string> {
+  const localVars = new Set<string>();
+  let braceDepth = 0;
+  for (let i = 0; i < source.length; i++) {
+    const ch = source.charAt(i);
+    if (ch === "{") {
+      braceDepth++;
+    } else if (ch === "}") {
+      braceDepth--;
+    } else if (braceDepth > 0 && source.slice(i, i + 5) === "const") {
+      let j = i + 5;
+      while (j < source.length && isWhitespace(source.charAt(j))) j++;
+      const nameStart = j;
+      while (j < source.length && isIdentifierChar(source.charAt(j))) j++;
+      if (j > nameStart) {
+        localVars.add(source.slice(nameStart, j));
+      }
+    }
+  }
+  return localVars;
+}
+
+function transformMethodCall(
+  source: string,
+  i: number,
+  result: string,
+  localVars: Set<string>,
+): { newI: number; newResult: string } {
+  let methodName = "";
+  let j = i + 1;
+  const len = source.length;
+  while (j < len && isAlphaNum(source.charAt(j))) {
+    methodName += source.charAt(j);
+    j++;
+  }
+
+  if (BUILTIN_METHODS.has(methodName) || localVars.has(methodName)) {
+    return { newI: j - 1, newResult: result + "." + methodName };
+  }
+
+  while (j < len && source.charAt(j) === " ") j++;
+  if (j < len && source.charAt(j) === "(") {
+    const isClosing = result.charAt(result.length - 1) === ")";
+    const receiverStart = findReceiverStart(result, isClosing);
+    const receiver = result.slice(receiverStart);
+    const newResult = result.slice(0, receiverStart);
+    j++;
+    let args = "";
+    let depth = 1;
+    while (j < len && depth > 0) {
+      const c = source.charAt(j);
+      if (c === "(") depth++;
+      else if (c === ")") depth--;
+      if (depth > 0) args += c;
+      j++;
+    }
+    const transformed =
+      newResult +
+      methodName +
+      "(" +
+      receiver +
+      (args.trim() ? ", " + args : "") +
+      ")";
+    return { newI: j - 1, newResult: transformed };
+  }
+  return { newI: j - 1, newResult: result + "." + methodName };
+}
+
 function transformMethodCalls(source: string): string {
+  const localVars = collectLocalVariables(source);
   let result = "";
   let i = 0;
   const len = source.length;
@@ -70,46 +140,20 @@ function transformMethodCalls(source: string): string {
     if (
       ch === "." &&
       result.length > 0 &&
-      (prevCh === "0" || prevCh === ")" || isAlphaNum(prevCh))
+      (isAlphaNum(prevCh) || prevCh === "0" || prevCh === ")")
     ) {
-      i++; // Skip dot
-      let methodName = "";
-      while (i < len && isAlphaNum(source.charAt(i))) {
-        methodName += source.charAt(i);
-        i++;
-      }
-
-      // Skip built-in methods that should not be transformed
-      if (BUILTIN_METHODS.has(methodName)) {
-        result += "." + methodName;
-        continue;
-      }
-
-      while (i < len && source.charAt(i) === " ") i++;
-      if (i < len && source.charAt(i) === "(") {
-        const receiverStart = findReceiverStart(
-          result,
-          result.charAt(result.length - 1) === ")",
-        );
-        const receiver = result.slice(receiverStart);
-        result = result.slice(0, receiverStart);
-        i++;
-        let args = "";
-        let depth = 1;
-        while (i < len && depth > 0) {
-          const c = source.charAt(i);
-          if (c === "(") depth++;
-          else if (c === ")") depth--;
-          if (depth > 0) args += c;
-          i++;
-        }
-        result +=
-          methodName + "(" + receiver + (args.trim() ? ", " + args : "") + ")";
-        continue;
-      }
+      const { newI, newResult } = transformMethodCall(
+        source,
+        i,
+        result,
+        localVars,
+      );
+      result = newResult;
+      i = newI + 1;
+    } else {
+      result += source.charAt(i);
+      i++;
     }
-    result += source.charAt(i);
-    i++;
   }
   return result;
 }

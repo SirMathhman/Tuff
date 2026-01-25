@@ -60,6 +60,7 @@ export function extractVarDeclarations(source: string): {
   const varDeclDecls = new Set<string>();
   let result = "";
   let i = 0;
+  let braceDepth = 0;
 
   while (i < source.length) {
     const ch = source[i];
@@ -69,14 +70,38 @@ export function extractVarDeclarations(source: string): {
       continue;
     }
 
+    // Track brace depth to know if we're inside a function body
+    if (ch === "{") {
+      braceDepth++;
+      result += ch;
+      i++;
+      continue;
+    }
+    if (ch === "}") {
+      braceDepth--;
+      result += ch;
+      i++;
+      continue;
+    }
+
+    // Extract var assignments
     if (isIdentifierChar(ch) && !isDigit(ch)) {
       const nameStart = i;
       while (i < source.length && isIdentifierChar(source[i])) i++;
       const name = source.slice(nameStart, i);
 
       const nextIdx = skipWhitespace(source, i);
+
+      // Check if this is a const/let declaration inside braces (skip extraction)
+      // or a bare assignment at any depth (extract)
       if (isVarAssignment(name, source, nextIdx)) {
-        varDeclDecls.add(name);
+        const isConstOrLet = name === "const" || name === "let";
+
+        // Skip const/let declarations inside braces, extract everything else
+        if (!(isConstOrLet && braceDepth > 0)) {
+          varDeclDecls.add(name);
+        }
+
         result += name;
         i = nextIdx;
       } else {
