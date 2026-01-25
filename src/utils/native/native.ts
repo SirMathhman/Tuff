@@ -12,7 +12,7 @@ export function parseNativeModules(
   nativeConfig: Map<string[], string>,
 ): Map<string, (...args: number[]) => number> {
   const nativeFunctions = new Map<string, (...args: number[]) => number>();
-  
+
   for (const [key, code] of nativeConfig.entries()) {
     const moduleName = key[0];
     if (moduleName) {
@@ -21,7 +21,7 @@ export function parseNativeModules(
         while (searchPos < code.length) {
           const exportIndex = code.indexOf("export function ", searchPos);
           if (exportIndex === -1) break;
-          
+
           const funcNameStart = exportIndex + 16;
           let funcNameEnd = funcNameStart;
           while (
@@ -30,24 +30,28 @@ export function parseNativeModules(
           ) {
             funcNameEnd++;
           }
-          
+
           const funcName = code.slice(funcNameStart, funcNameEnd);
           const parenStart = code.indexOf("(", funcNameEnd);
           if (parenStart === -1) break;
-          
+
           const parenEnd = code.indexOf(")", parenStart);
           if (parenEnd === -1) break;
-          
+
           let funcEnd = -1;
           let funcBody = "";
           const afterParen = code.slice(parenEnd + 1).trim();
-          
+
           if (afterParen.startsWith("=>")) {
             const arrowStart = code.indexOf("=>", parenEnd);
             const bodyStart = arrowStart + 2;
             let pos = bodyStart;
-            while (pos < code.length && (code[pos] === " " || code[pos] === "\t")) pos++;
-            
+            while (
+              pos < code.length &&
+              (code[pos] === " " || code[pos] === "\t")
+            )
+              pos++;
+
             if (code[pos] === "{") {
               let braceDepth = 1;
               funcEnd = pos + 1;
@@ -66,7 +70,7 @@ export function parseNativeModules(
           } else {
             const bodyStart = code.indexOf("{", parenEnd);
             if (bodyStart === -1) break;
-            
+
             let braceDepth = 1;
             funcEnd = bodyStart + 1;
             while (funcEnd < code.length && braceDepth > 0) {
@@ -76,7 +80,7 @@ export function parseNativeModules(
             }
             funcBody = code.slice(exportIndex + 7, funcEnd);
           }
-          
+
           if (funcBody) {
             try {
               const func = new Function(`return (${funcBody})`)();
@@ -87,7 +91,7 @@ export function parseNativeModules(
               throw new Error(`Failed to parse function ${funcName}: ${e}`);
             }
           }
-          
+
           searchPos = funcEnd;
         }
       } catch (e) {
@@ -95,7 +99,7 @@ export function parseNativeModules(
       }
     }
   }
-  
+
   return nativeFunctions;
 }
 

@@ -67,14 +67,14 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   if (!isValidIdentifier(fnName)) return undefined;
   const referencedFnName = getFunctionRef(fnName);
   const actualFnName = referencedFnName || fnName;
-  
+
   // Check for native function first
   const nativeFunc =
     typeof globalThis !== "undefined"
       ? (globalThis as Record<string, unknown>)[`__native__${actualFnName}`]
       : undefined;
   const hasNativeFunc = typeof nativeFunc === "function";
-  
+
   if (!hasNativeFunc && !functionDefs.has(actualFnName)) return undefined;
 
   const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
@@ -84,7 +84,7 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   const rest = trimmed.slice(closeParenIndex + 1).trim();
 
   const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
-  
+
   if (hasNativeFunc) {
     return handleNativeFunctionCall(
       actualFnName,
@@ -98,7 +98,7 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
       interpreter,
     );
   }
-  
+
   const fnDef = functionDefs.get(actualFnName)!;
   const argParts = parseArguments(argsStr);
   if (argParts.length !== fnDef.params.length)
@@ -119,8 +119,7 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
         typeMap,
         inferredReturnType,
       );
-      if (!anonResult)
-        throw new Error(`failed to register lambda: ${argStr}`);
+      if (!anonResult) throw new Error(`failed to register lambda: ${argStr}`);
       functionDefs.set(anonResult.name, anonResult.def);
       args.push(1);
       setFunctionRef(`__arg_${i}`, anonResult.name);

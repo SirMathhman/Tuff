@@ -27,7 +27,7 @@ export function handleVarDecl(
   const trimmed = s.trim();
   const isPublic = trimmed.startsWith("out ");
   let remaining = isPublic ? trimmed.slice(4).trim() : trimmed;
-  
+
   if (remaining.startsWith("extern ")) {
     remaining = remaining.slice(7).trim();
     return handleExternStatement(remaining, {
@@ -40,7 +40,7 @@ export function handleVarDecl(
       interpreter,
     });
   }
-  
+
   if (remaining.startsWith("use ")) {
     return handleUseStatement(remaining.slice(4), {
       scope,
