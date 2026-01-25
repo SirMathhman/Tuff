@@ -1,4 +1,4 @@
-import { extractTypeSize } from "../type-utils";
+import { extractTypeSize } from "../../type-utils";
 
 export function isFunctionType(typeStr: string): boolean {
   const t = typeStr.trim();

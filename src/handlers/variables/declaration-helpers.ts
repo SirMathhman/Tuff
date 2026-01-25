@@ -2,7 +2,7 @@ import { extractTypedInfo } from "../../parser";
 import type { Interpreter } from "../../expressions/handlers";
 import { functionDefs, setFunctionRef } from "../../functions";
 import { handleFunctionTypeAnnotation } from "../../function-type-handler";
-import { isFunctionType } from "../../utils/function-utils";
+import { isFunctionType } from "../../utils/function/function-utils";
 import {
   getLastRegisteredLambdaName,
   clearLastRegisteredLambdaName,

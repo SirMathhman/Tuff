@@ -8,7 +8,8 @@ import type {
   Interpreter,
   InterpreterContext,
 } from "../../expressions/handlers";
-import { parseFunctionCall, findMatchingCloseParen } from "../../functions";
+import { parseFunctionCall } from "../../functions";
+import { findMatchingCloseParen } from "../../utils/function/function-helpers";
 
 function isWhitespace(ch: string | undefined): boolean {
   return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";

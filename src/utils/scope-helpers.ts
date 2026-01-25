@@ -1,6 +1,6 @@
 import { extractTypedInfo } from "../parser";
 import { extractTypeSize } from "../type-utils";
-import { isFunctionType } from "./function-utils";
+import { isFunctionType } from "./function/function-utils";
 import { parseArrayType } from "./array";
 
 // Track local functions defined in the current scope

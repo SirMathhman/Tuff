@@ -3,14 +3,20 @@ import { registerAnonymousFunction } from "./handlers/functions/anonymous-functi
 import {
   isFunctionType,
   extractReturnTypeFromFunctionType,
-} from "./utils/function-utils";
+} from "./utils/function/function-utils";
 import { createFunctionDeclarationHandler } from "./handlers/functions/function-declaration";
-import type { FunctionCallParams } from "./utils/function-call-params";
+import type { FunctionCallParams } from "./utils/function/function-call-params";
 import {
   getLocalFunctionNames,
   setLocalFunctionNames,
   addLocalFunctionName,
 } from "./utils/scope-helpers";
+import { handleNativeFunctionCall } from "./utils/native/native-call";
+import {
+  findMatchingCloseParen,
+  extractFunctionName,
+} from "./utils/function/function-helpers";
+import { parseArguments } from "./utils/function/parse-arguments";
 
 type FnDef = {
   params: Array<{ name: string; type: number; typeStr?: string }>;
@@ -43,29 +49,6 @@ export const setCurrentFunctionParams = (
   currentFunctionParams = params;
 };
 
-export function findMatchingCloseParen(s: string, openIndex: number): number {
-  let depth = 1;
-  for (let i = openIndex + 1; i < s.length; i++) {
-    if (s[i] === "(") depth++;
-    else if (s[i] === ")") {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
-
-function extractFunctionName(s: string): { name: string; generics: string[] } {
-  const angleStart = s.indexOf("<");
-  if (angleStart === -1) return { name: s, generics: [] };
-  const angleEnd = s.indexOf(">");
-  if (angleEnd === -1) return { name: s, generics: [] };
-  const name = s.slice(0, angleStart).trim();
-  const paramStr = s.slice(angleStart + 1, angleEnd).trim();
-  const generics = paramStr.split(",").map((p) => p.trim());
-  return { name, generics };
-}
-
 export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   const {
     s,
@@ -84,7 +67,15 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   if (!isValidIdentifier(fnName)) return undefined;
   const referencedFnName = getFunctionRef(fnName);
   const actualFnName = referencedFnName || fnName;
-  if (!functionDefs.has(actualFnName)) return undefined;
+  
+  // Check for native function first
+  const nativeFunc =
+    typeof globalThis !== "undefined"
+      ? (globalThis as Record<string, unknown>)[`__native__${actualFnName}`]
+      : undefined;
+  const hasNativeFunc = typeof nativeFunc === "function";
+  
+  if (!hasNativeFunc && !functionDefs.has(actualFnName)) return undefined;
 
   const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
   if (closeParenIndex === -1) return undefined;
@@ -93,66 +84,59 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   const rest = trimmed.slice(closeParenIndex + 1).trim();
 
   const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
-  const fnDef = functionDefs.get(actualFnName)!;
-  const args: number[] = [];
-  if (argsStr) {
-    const argParts: string[] = [];
-    let current = "",
-      parenD = 0,
-      braceD = 0;
-    for (let i = 0; i < argsStr.length; i++) {
-      const ch = argsStr[i];
-      if (ch === "(") parenD++;
-      else if (ch === ")") parenD--;
-      else if (ch === "{") braceD++;
-      else if (ch === "}") braceD--;
-      else if (ch === "," && parenD === 0 && braceD === 0) {
-        argParts.push(current.trim());
-        current = "";
-        continue;
-      }
-      current += ch;
-    }
-    if (current.trim()) argParts.push(current.trim());
-    if (argParts.length !== fnDef.params.length)
-      throw new Error(
-        `function ${actualFnName} expects ${fnDef.params.length} arguments, got ${argParts.length}`,
-      );
-    for (let i = 0; i < argParts.length; i++) {
-      const argStr = argParts[i]!;
-      const paramType = fnDef.params[i]?.type;
-      if (paramType === -2) {
-        const paramTypeStr = fnDef.params[i]?.typeStr;
-        const inferredReturnType = paramTypeStr
-          ? extractReturnTypeFromFunctionType(paramTypeStr, typeMap)
-          : 0;
-        const anonResult = registerAnonymousFunction(
-          argStr,
-          typeMap,
-          inferredReturnType,
-        );
-        if (!anonResult)
-          throw new Error(`failed to register lambda: ${argStr}`);
-        functionDefs.set(anonResult.name, anonResult.def);
-        args.push(1);
-        setFunctionRef(`__arg_${i}`, anonResult.name);
-      } else {
-        args.push(
-          interpreter(
-            argStr,
-            scope,
-            typeMap,
-            mutMap,
-            uninitializedSet,
-            unmutUninitializedSet,
-          ),
-        );
-      }
-    }
-  } else if (fnDef.params.length !== 0)
-    throw new Error(
-      `function ${actualFnName} expects ${fnDef.params.length} arguments, got 0`,
+  
+  if (hasNativeFunc) {
+    return handleNativeFunctionCall(
+      actualFnName,
+      argsStr,
+      rest,
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+      unmutUninitializedSet,
+      interpreter,
     );
+  }
+  
+  const fnDef = functionDefs.get(actualFnName)!;
+  const argParts = parseArguments(argsStr);
+  if (argParts.length !== fnDef.params.length)
+    throw new Error(
+      `function ${actualFnName} expects ${fnDef.params.length} arguments, got ${argParts.length}`,
+    );
+  const args: number[] = [];
+  for (let i = 0; i < argParts.length; i++) {
+    const argStr = argParts[i]!;
+    const paramType = fnDef.params[i]?.type;
+    if (paramType === -2) {
+      const paramTypeStr = fnDef.params[i]?.typeStr;
+      const inferredReturnType = paramTypeStr
+        ? extractReturnTypeFromFunctionType(paramTypeStr, typeMap)
+        : 0;
+      const anonResult = registerAnonymousFunction(
+        argStr,
+        typeMap,
+        inferredReturnType,
+      );
+      if (!anonResult)
+        throw new Error(`failed to register lambda: ${argStr}`);
+      functionDefs.set(anonResult.name, anonResult.def);
+      args.push(1);
+      setFunctionRef(`__arg_${i}`, anonResult.name);
+    } else {
+      args.push(
+        interpreter(
+          argStr,
+          scope,
+          typeMap,
+          mutMap,
+          uninitializedSet,
+          unmutUninitializedSet,
+        ),
+      );
+    }
+  }
 
   const fnScope = new Map<string, boolean>(mutMap),
     fnVarMap = new Map<string, number>();

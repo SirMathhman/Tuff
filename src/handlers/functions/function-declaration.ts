@@ -5,7 +5,7 @@ import {
   isFunctionType,
   splitParametersRespectingParens,
   findClosingParenIndex,
-} from "../../utils/function-utils";
+} from "../../utils/function/function-utils";
 import { addLocalFunctionName } from "../../utils/scope-helpers";
 
 function isWhitespace(ch: string): boolean {

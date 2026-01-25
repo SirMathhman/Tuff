@@ -44,11 +44,41 @@ describe("interpretAll", () => {
 
   it("uses struct type from module with destructuring", () => {
     const config = new Map<string[], string>([
-      [["main"], "use { Wrapper } from lib; let value = Wrapper { x : 100 }; value.x"],
+      [
+        ["main"],
+        "use { Wrapper } from lib; let value = Wrapper { x : 100 }; value.x",
+      ],
       [["lib"], "out struct Wrapper { x : I32 }"],
     ]);
 
     const result = interpretAll(["main"], config);
     expect(result).toBe(100);
+  });
+
+  it("calls native function via extern declaration", () => {
+    const config = new Map<string[], string>([
+      [["main"], "extern use { get } from lib; extern fn get() : I32; get()"],
+    ]);
+    const nativeConfig = new Map<string[], string>([
+      [["lib"], "export function get() { return 100; }"],
+    ]);
+
+    const result = interpretAll(["main"], config, nativeConfig);
+    expect(result).toBe(100);
+  });
+
+  it("calls native function with parameters", () => {
+    const config = new Map<string[], string>([
+      [
+        ["main"],
+        "extern use { add } from lib; extern fn add(a: I32, b: I32) : I32; add(5, 7)",
+      ],
+    ]);
+    const nativeConfig = new Map<string[], string>([
+      [["lib"], "export function add(a, b) { return a + b; }"],
+    ]);
+
+    const result = interpretAll(["main"], config, nativeConfig);
+    expect(result).toBe(12);
   });
 });

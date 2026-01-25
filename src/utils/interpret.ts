@@ -1,4 +1,9 @@
 import { interpretWithScope } from "../app";
+import {
+  parseNativeModules,
+  installNativeFunctions,
+  cleanupNativeFunctions,
+} from "./native/native";
 
 export function interpret(input: string): number {
   return interpretWithScope(input, new Map(), new Map(), new Map());
@@ -108,44 +113,33 @@ function buildExecutionOrder(
 export function interpretAll(
   inputs: string[],
   config: Map<string[], string>,
+  nativeConfig: Map<string[], string> = new Map(),
 ): number {
   const executionOrder = buildExecutionOrder(inputs, config);
-
-  // Shared typeMap to accumulate type definitions across modules
   const sharedTypeMap = new Map<string, number>();
-
-  // First pass: execute all modules in isolated scopes to populate global functionDefs and typeMap
+  const nativeFunctions = parseNativeModules(nativeConfig);
+  const nativeFuncNames = installNativeFunctions(nativeFunctions);
   for (const modulePath of executionOrder) {
     const moduleName = modulePath[0];
     if (moduleName) {
       const moduleCode = findModuleConfig(moduleName, config);
       if (moduleCode) {
-        interpretWithScope(
-          moduleCode,
-          new Map(),
-          sharedTypeMap,
-          new Map(),
-        );
+        interpretWithScope(moduleCode, new Map(), sharedTypeMap, new Map());
       }
     }
   }
-
-  // Second pass: execute main module with shared scope pointing to end result
   const scope = new Map<string, number>();
   const mutMap = new Map<string, boolean>();
   const visMap = new Map<string, boolean>();
-
   const mainModuleName = inputs[0];
   if (!mainModuleName) {
     return 0;
   }
-
   const mainCode = findModuleConfig(mainModuleName, config);
   if (!mainCode) {
     return 0;
   }
-
-  return interpretWithScope(
+  const result = interpretWithScope(
     mainCode,
     scope,
     sharedTypeMap,
@@ -154,4 +148,6 @@ export function interpretAll(
     new Set(),
     visMap,
   );
+  cleanupNativeFunctions(nativeFuncNames);
+  return result;
 }

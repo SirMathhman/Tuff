@@ -11,56 +11,8 @@ import {
   handleUninitializedVariable,
   handleVariableInitialization,
 } from "./handlers/variables/declaration-helpers";
-
-function handleUseStatement(
-  remaining: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  interpreter: Interpreter,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  visMap: Map<string, boolean>,
-): number | undefined {
-  if (!remaining.includes(" from ")) return undefined;
-  const fromIndex = remaining.indexOf(" from ");
-  const beforeFrom = remaining.slice(0, fromIndex).trim();
-  const semicolonIndex = remaining.indexOf(";");
-  if (semicolonIndex === -1) return undefined;
-  if (beforeFrom.startsWith("{") && beforeFrom.endsWith("}")) {
-    const rest = remaining.slice(semicolonIndex + 1).trim();
-    return rest
-      ? interpreter(
-          rest,
-          scope,
-          typeMap,
-          mutMap,
-          uninitializedSet,
-          unmutUninitializedSet,
-          visMap,
-        )
-      : 0;
-  }
-  if (beforeFrom.length === 0) return undefined;
-  const afterFrom = remaining.slice(fromIndex + 6).trim();
-  const moduleNameEnd = afterFrom.indexOf(";");
-  const moduleName = afterFrom.slice(0, moduleNameEnd).trim();
-  if (moduleName.length === 0) return undefined;
-  scope.set(beforeFrom, 1);
-  typeMap.set("__module__" + beforeFrom, moduleName as unknown as number);
-  const rest = remaining.slice(semicolonIndex + 1).trim();
-  return rest
-    ? interpreter(
-        rest,
-        scope,
-        typeMap,
-        mutMap,
-        uninitializedSet,
-        unmutUninitializedSet,
-        visMap,
-      )
-    : 0;
-}
+import { handleExternStatement } from "./utils/native/extern-handler";
+import { handleUseStatement } from "./utils/use-statement";
 
 export function handleVarDecl(
   s: string,
@@ -74,31 +26,43 @@ export function handleVarDecl(
 ): number | undefined {
   const trimmed = s.trim();
   const isPublic = trimmed.startsWith("out ");
-  const remaining = isPublic ? trimmed.slice(4).trim() : trimmed;
-  if (remaining.startsWith("use ")) {
-    return handleUseStatement(
-      remaining.slice(4),
+  let remaining = isPublic ? trimmed.slice(4).trim() : trimmed;
+  
+  if (remaining.startsWith("extern ")) {
+    remaining = remaining.slice(7).trim();
+    return handleExternStatement(remaining, {
       scope,
       typeMap,
       mutMap,
-      interpreter,
       uninitializedSet,
       unmutUninitializedSet,
       visMap,
-    );
+      interpreter,
+    });
+  }
+  
+  if (remaining.startsWith("use ")) {
+    return handleUseStatement(remaining.slice(4), {
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+      unmutUninitializedSet,
+      visMap,
+      interpreter,
+    });
   }
   if (!remaining.startsWith("let ")) return undefined;
   if (remaining.includes(" from ")) {
-    return handleUseStatement(
-      remaining.slice(4),
+    return handleUseStatement(remaining.slice(4), {
       scope,
       typeMap,
       mutMap,
-      interpreter,
       uninitializedSet,
       unmutUninitializedSet,
       visMap,
-    );
+      interpreter,
+    });
   }
   const { declStr, restIndex } = findDeclStringAndRestIndex(remaining);
   if (!declStr) return undefined;
