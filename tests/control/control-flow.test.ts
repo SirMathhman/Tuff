@@ -1,13 +1,5 @@
-import { describe, it } from "bun:test";
-import { assertExecuteValid, assertInterpretValid } from "../test-helpers";
-
-function itBoth(
-  name: string,
-  fn: (assertValid: (source: string, expected: number) => void) => void,
-) {
-  it("Interpreted: " + name, () => fn(assertInterpretValid));
-  it("Compiled: " + name, () => fn(assertExecuteValid));
-}
+import { describe } from "bun:test";
+import { itBoth } from "../test-helpers";
 
 describe("interpret - control flow - basic", () => {
   itBoth("supports boolean literal true", (assertValid) => {

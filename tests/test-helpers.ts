@@ -1,4 +1,4 @@
-import { expect } from "bun:test";
+import { expect, test as it } from "bun:test";
 import { interpret, interpretAll } from "../src/utils/interpret";
 import { compile, evalImpl } from "../src/compiler/compiler";
 
@@ -66,4 +66,17 @@ export function assertExecuteValid(source: string, expected: number): void {
 // Test helper for compile-time validation errors
 export function assertCompileInvalid(source: string): void {
   expect(() => compile(source)).toThrow();
+}
+
+type AssertValid = (source: string, expected: number) => void;
+type AssertInvalid = (source: string) => void;
+
+export function itBoth(
+  name: string,
+  fn: (assertValid: AssertValid, assertInvalid: AssertInvalid) => void,
+) {
+  it("Interpreted: " + name, () =>
+    fn(assertInterpretValid, assertInterpretInvalid),
+  );
+  it("Compiled: " + name, () => fn(assertExecuteValid, assertCompileInvalid));
 }

@@ -1,5 +1,68 @@
-import { isWhitespace, isIdentifierChar, isDigit } from "../parsing/string-helpers";
+import {
+  isWhitespace,
+  isIdentifierChar,
+  isDigit,
+} from "../parsing/string-helpers";
 import { validateTypeConstraint } from "../validation/type-utils";
+import { getEscapeCode } from "../../utils/helpers/char-utils";
+
+/**
+ * Transform char literals to their character codes
+ */
+function transformCharLiterals(source: string): string {
+  let result = "";
+  let i = 0;
+
+  while (i < source.length) {
+    if (source[i] === "'") {
+      let j = i + 1;
+      let content = "";
+
+      // Scan until closing quote
+      while (j < source.length) {
+        if (source[j] === "'") {
+          break;
+        }
+        if (source[j] === "\\" && j + 1 < source.length) {
+          content += source.slice(j, j + 2);
+          j += 2;
+        } else {
+          content += source[j];
+          j++;
+        }
+      }
+
+      if (j >= source.length) {
+        // No closing quote found
+        result += source[i];
+        i++;
+        continue;
+      }
+
+      // Validate and convert char literal
+      if (content.length === 0) {
+        throw new Error("empty char literal");
+      }
+
+      let charCode: number;
+      if (content.length === 1) {
+        charCode = content.charCodeAt(0);
+      } else if (content[0] === "\\" && content.length === 2) {
+        charCode = getEscapeCode(content[1]!);
+      } else {
+        throw new Error(`multi-character literal: '${content}'`);
+      }
+
+      result += charCode.toString();
+      i = j + 1;
+    } else {
+      result += source[i];
+      i++;
+    }
+  }
+
+  return result;
+}
 
 /**
  * Convert statements to expressions by replacing semicolons with commas
@@ -57,6 +120,11 @@ export function replaceBooleanLiterals(js: string): string {
 
   return result;
 }
+
+/**
+ * Export char literal transformer
+ */
+export { transformCharLiterals };
 
 /**
  * Strip type annotations and validate numeric literals

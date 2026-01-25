@@ -8,6 +8,7 @@ import {
   replaceBooleanLiterals,
   stripTypeAnnotationsAndValidate,
   convertStatementsToExpressions,
+  transformCharLiterals,
 } from "./transforms/literal-transforms";
 
 interface VariableInfo {
@@ -39,7 +40,8 @@ function createTuffCompiler(source: string) {
       const { expression, varDeclarations } = extractVarDeclarations(js);
 
       // Pass 5: Transform literals
-      let transformedExpr = replaceBooleanLiterals(expression);
+      let transformedExpr = transformCharLiterals(expression);
+      transformedExpr = replaceBooleanLiterals(transformedExpr);
       transformedExpr = stripTypeAnnotationsAndValidate(transformedExpr);
 
       // Convert semicolons to commas for eval (statements to expressions)
@@ -83,5 +85,8 @@ export function execute(source: string): number {
 
 export function evalImpl(js: string) {
   const result = eval(js);
+  if (typeof result === "boolean") {
+    return result ? 1 : 0;
+  }
   return typeof result === "number" ? result : 0;
 }

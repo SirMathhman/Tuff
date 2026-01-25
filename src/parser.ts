@@ -4,6 +4,7 @@ import {
   type TypedInfo,
 } from "./type-utils";
 import { createString } from "./utils/array";
+import { getEscapeCode } from "./utils/helpers/char-utils";
 
 export type { TypedInfo };
 
@@ -19,26 +20,8 @@ function parseCharLiteral(s: string): number | undefined {
     return content.charCodeAt(0);
   }
   // Handle escape sequences
-  if (content[0] === "\\" && content.length >= 2) {
-    const escape = content[1];
-    if (content.length === 2) {
-      switch (escape) {
-        case "n":
-          return 10; // newline
-        case "t":
-          return 9; // tab
-        case "r":
-          return 13; // carriage return
-        case "\\":
-          return 92; // backslash
-        case "'":
-          return 39; // single quote
-        case '"':
-          return 34; // double quote
-        default:
-          throw new Error(`unknown escape sequence: \\${escape}`);
-      }
-    }
+  if (content[0] === "\\" && content.length === 2) {
+    return getEscapeCode(content[1]!);
   }
   throw new Error(`multi-character literal: ${s}`);
 }

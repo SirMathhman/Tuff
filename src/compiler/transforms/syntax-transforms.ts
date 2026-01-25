@@ -1,4 +1,8 @@
-import { isWhitespace, matchWord, isIdentifierChar } from "../parsing/string-helpers";
+import {
+  isWhitespace,
+  matchWord,
+  isIdentifierChar,
+} from "../parsing/string-helpers";
 import {
   transformMatch,
   transformLoop,

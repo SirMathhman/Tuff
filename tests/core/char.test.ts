@@ -1,68 +1,78 @@
-import { describe, it } from "bun:test";
-import { assertInterpretValid, assertInterpretInvalid } from "../test-helpers";
+import { describe } from "bun:test";
+import { itBoth } from "../test-helpers";
 
-describe("interpret - char", () => {
-  it("supports char literal with single quotes", () => {
-    assertInterpretValid("'a'", 97);
+describe("interpret - char - basic", () => {
+  itBoth("supports char litBotheral witBothh single quotes", (assertValid) => {
+    assertValid("'a'", 97);
   });
 
-  it("returns correct UTF-8 code for char 'b'", () => {
-    assertInterpretValid("'b'", 98);
+  itBoth("returns correct UTF-8 code for char 'b'", (assertValid) => {
+    assertValid("'b'", 98);
   });
 
-  it("returns correct UTF-8 code for space character", () => {
-    assertInterpretValid("' '", 32);
+  itBoth("returns correct UTF-8 code for space character", (assertValid) => {
+    assertValid("' '", 32);
   });
 
-  it("returns correct UTF-8 code for digit character '0'", () => {
-    assertInterpretValid("'0'", 48);
+  itBoth(
+    "returns correct UTF-8 code for digitBoth character '0'",
+    (assertValid) => {
+      assertValid("'0'", 48);
+    },
+  );
+
+  itBoth("supports char variable declaration", (assertValid) => {
+    assertValid("let x : Char = 'a'; x", 97);
   });
 
-  it("supports char variable declaration", () => {
-    assertInterpretValid("let x : Char = 'a'; x", 97);
+  itBoth(
+    "supports char variable witBothh different character",
+    (assertValid) => {
+      assertValid("let x : Char = 'z'; x", 122);
+    },
+  );
+});
+
+describe("interpret - char - operations", () => {
+  itBoth("supports char in expressions", (assertValid) => {
+    assertValid("'a' + 1", 98);
   });
 
-  it("supports char variable with different character", () => {
-    assertInterpretValid("let x : Char = 'z'; x", 122);
+  itBoth("supports char comparison", (assertValid) => {
+    assertValid("'a' < 'b'", 1);
   });
 
-  it("supports char in expressions", () => {
-    assertInterpretValid("'a' + 1", 98);
+  itBoth("supports char equalitBothy comparison", (assertValid) => {
+    assertValid("'a' == 'a'", 1);
   });
 
-  it("supports char comparison", () => {
-    assertInterpretValid("'a' < 'b'", 1);
+  itBoth("supports char inequalitBothy comparison", (assertValid) => {
+    assertValid("'a' != 'b'", 1);
   });
 
-  it("supports char equality comparison", () => {
-    assertInterpretValid("'a' == 'a'", 1);
+  itBoth("throws for empty char litBotheral", (_, assertInvalid) => {
+    assertInvalid("''");
   });
 
-  it("supports char inequality comparison", () => {
-    assertInterpretValid("'a' != 'b'", 1);
+  itBoth("throws for multi-character litBotheral", (_, assertInvalid) => {
+    assertInvalid("'ab'");
+  });
+});
+
+describe("interpret - char - escapes", () => {
+  itBoth("supports escaped newline character", (assertValid) => {
+    assertValid("'\\n'", 10);
   });
 
-  it("throws for empty char literal", () => {
-    assertInterpretInvalid("''");
+  itBoth("supports escaped tab character", (assertValid) => {
+    assertValid("'\\t'", 9);
   });
 
-  it("throws for multi-character literal", () => {
-    assertInterpretInvalid("'ab'");
+  itBoth("supports escaped backslash", (assertValid) => {
+    assertValid("'\\\\'", 92);
   });
 
-  it("supports escaped newline character", () => {
-    assertInterpretValid("'\\n'", 10);
-  });
-
-  it("supports escaped tab character", () => {
-    assertInterpretValid("'\\t'", 9);
-  });
-
-  it("supports escaped backslash", () => {
-    assertInterpretValid("'\\\\'", 92);
-  });
-
-  it("supports escaped single quote", () => {
-    assertInterpretValid("'\\''", 39);
+  itBoth("supports escaped single quote", (assertValid) => {
+    assertValid("'\\''", 39);
   });
 });

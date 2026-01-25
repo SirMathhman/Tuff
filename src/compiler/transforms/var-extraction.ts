@@ -1,4 +1,9 @@
-import { isWhitespace, isIdentifierChar, isDigit, charAt } from "../parsing/string-helpers";
+import {
+  isWhitespace,
+  isIdentifierChar,
+  isDigit,
+  charAt,
+} from "../parsing/string-helpers";
 
 /**
  * Skip whitespace in source starting at index

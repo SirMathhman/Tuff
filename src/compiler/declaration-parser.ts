@@ -1,5 +1,8 @@
 import { isWhitespace, matchWord } from "./parsing/string-helpers";
-import { parseLetDeclaration, validateVariableUsage } from "./parsing/parser-utils";
+import {
+  parseLetDeclaration,
+  validateVariableUsage,
+} from "./parsing/parser-utils";
 
 interface VariableInfo {
   type: string | undefined;
