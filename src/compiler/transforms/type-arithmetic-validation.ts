@@ -127,7 +127,14 @@ function validateOperation(
   }
 
   if (result < range.min || result > range.max) {
-    const operator = op === "+" ? "addition" : op === "-" ? "subtraction" : op === "*" ? "multiplication" : "division";
+    const operator =
+      op === "+"
+        ? "addition"
+        : op === "-"
+          ? "subtraction"
+          : op === "*"
+            ? "multiplication"
+            : "division";
     throw new Error(
       `${operator} overflow: result ${result} exceeds ${typeStr} range (${range.min} to ${range.max})`,
     );

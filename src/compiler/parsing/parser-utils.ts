@@ -35,6 +35,7 @@ const SPECIAL_IDENTIFIERS = new Set([
   "false",
   "_",
   "length",
+  "this",
   // Type suffixes
   "U8",
   "U16",
@@ -130,6 +131,34 @@ export function parseLetDeclaration(
   return { nextIndex: i, varName, typeAnnotation, isMutable };
 }
 
+function checkWriteAccess(
+  name: string,
+  variables: Map<string, VariableInfo>,
+): void {
+  if (variables.has(name)) {
+    if (!variables.get(name)!.mutable) {
+      throw new Error(
+        `Variable '${name}' is immutable and cannot be reassigned`,
+      );
+    }
+  } else if (!isKeyword(name) && !SPECIAL_IDENTIFIERS.has(name)) {
+    throw new Error(`Variable '${name}' is not defined`);
+  }
+}
+
+function checkReadAccess(
+  name: string,
+  variables: Map<string, VariableInfo>,
+): void {
+  if (
+    !variables.has(name) &&
+    !isKeyword(name) &&
+    !SPECIAL_IDENTIFIERS.has(name)
+  ) {
+    throw new Error(`Variable '${name}' is not defined`);
+  }
+}
+
 /**
  * Validate variable usage (assignments and references)
  */
@@ -141,46 +170,42 @@ export function validateVariableUsage(
   while (i < source.length) {
     while (i < source.length && isWhitespace(source[i])) i++;
     if (i >= source.length) break;
-
     if (source[i] === "{" || source[i] === "}") {
       i++;
       continue;
     }
-
     if (matchWord(source, i, "let")) {
       while (i < source.length && source[i] !== ";") i++;
       i++;
       continue;
     }
-
+    if (matchWord(source, i, "fn")) {
+      while (i < source.length && source[i] !== ";") i++;
+      if (i < source.length) i++;
+      continue;
+    }
+    if (source[i] === "(") {
+      let parenDepth = 1;
+      i++;
+      while (i < source.length && parenDepth > 0) {
+        if (source[i] === "(") parenDepth++;
+        else if (source[i] === ")") parenDepth--;
+        i++;
+      }
+      continue;
+    }
     if (isIdentifierChar(source[i]) && !isDigit(source[i])) {
       const nameStart = i;
       while (i < source.length && isIdentifierChar(source[i])) i++;
       const name = source.slice(nameStart, i);
-
       let nextIdx = i;
       while (nextIdx < source.length && isWhitespace(source[nextIdx]))
         nextIdx++;
       const nextChar = nextIdx < source.length ? source[nextIdx]! : "";
-
       if (nextChar === "=" && charAt(source, nextIdx + 1) !== "=") {
-        if (variables.has(name)) {
-          if (!variables.get(name)!.mutable) {
-            throw new Error(
-              `Variable '${name}' is immutable and cannot be reassigned`,
-            );
-          }
-        } else if (!isKeyword(name) && !SPECIAL_IDENTIFIERS.has(name)) {
-          throw new Error(`Variable '${name}' is not defined`);
-        }
+        checkWriteAccess(name, variables);
       } else if (REFERENCE_DELIMITERS.has(nextChar)) {
-        if (
-          !variables.has(name) &&
-          !isKeyword(name) &&
-          !SPECIAL_IDENTIFIERS.has(name)
-        ) {
-          throw new Error(`Variable '${name}' is not defined`);
-        }
+        checkReadAccess(name, variables);
       }
       continue;
     }

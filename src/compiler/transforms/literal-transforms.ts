@@ -127,6 +127,79 @@ export function replaceBooleanLiterals(js: string): string {
 export { transformCharLiterals };
 
 /**
+ * Check if colon at position i is a type annotation
+ */
+function isTypeAnnotationColon(js: string, i: number): boolean {
+  let j = i - 1;
+  while (j >= 0 && isWhitespace(js[j])) j--;
+  const afterCloseParen = j >= 0 && js[j] === ")";
+  const prevIsLetter =
+    j >= 0 &&
+    ((js[j]! >= "a" && js[j]! <= "z") || (js[j]! >= "A" && js[j]! <= "Z"));
+  return afterCloseParen || prevIsLetter;
+}
+
+/**
+ * Try to skip a type annotation starting at colon
+ */
+function trySkipTypeAnnotation(js: string, i: number): number | undefined {
+  let typeStart = i + 1;
+  while (typeStart < js.length && isWhitespace(js[typeStart])) typeStart++;
+
+  if (typeStart < js.length && isIdentifierChar(js[typeStart])) {
+    let typeEnd = typeStart;
+    while (
+      typeEnd < js.length &&
+      (isIdentifierChar(js[typeEnd]) ||
+        js[typeEnd] === "[" ||
+        js[typeEnd] === "]")
+    ) {
+      typeEnd++;
+    }
+    while (typeEnd < js.length && isWhitespace(js[typeEnd])) {
+      typeEnd++;
+    }
+
+    if (
+      typeEnd < js.length &&
+      (js[typeEnd] === "=" ||
+        js[typeEnd] === "," ||
+        js[typeEnd] === ")" ||
+        (typeEnd + 1 < js.length &&
+          js[typeEnd] === "=" &&
+          js[typeEnd + 1] === ">"))
+    ) {
+      return typeEnd;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Parse and validate a numeric literal with optional type suffix
+ */
+function parseNumericLiteral(
+  js: string,
+  startI: number,
+  isNegative: boolean,
+): { endI: number; numStr: string } {
+  let i = startI;
+  const numStart = i;
+  while (i < js.length && isDigit(js[i])) i++;
+  const numStr = js.slice(numStart, i);
+  const finalValue = isNegative ? -BigInt(numStr) : BigInt(numStr);
+
+  if (i < js.length && (js[i] === "U" || js[i] === "I")) {
+    const typeStart = i;
+    i++;
+    while (i < js.length && isDigit(js[i])) i++;
+    validateTypeConstraint(js.slice(typeStart, i), finalValue);
+  }
+
+  return { endI: i, numStr };
+}
+
+/**
  * Strip type annotations and validate numeric literals
  */
 export function stripTypeAnnotationsAndValidate(js: string): string {
@@ -134,6 +207,19 @@ export function stripTypeAnnotationsAndValidate(js: string): string {
   let i = 0;
 
   while (i < js.length) {
+    if (js[i] === ":") {
+      if (isTypeAnnotationColon(js, i)) {
+        const skipTo = trySkipTypeAnnotation(js, i);
+        if (skipTo !== undefined) {
+          while (result.length > 0 && isWhitespace(result[result.length - 1])) {
+            result = result.slice(0, -1);
+          }
+          i = skipTo;
+          continue;
+        }
+      }
+    }
+
     let isNegative = false;
     if (js[i] === "-" && i + 1 < js.length && isDigit(js[i + 1])) {
       isNegative = true;
@@ -142,19 +228,9 @@ export function stripTypeAnnotationsAndValidate(js: string): string {
     }
 
     if (i < js.length && isDigit(js[i])) {
-      const numStart = i;
-      while (i < js.length && isDigit(js[i])) i++;
-      const numStr = js.slice(numStart, i);
-      const finalValue = isNegative ? -BigInt(numStr) : BigInt(numStr);
-
-      if (i < js.length && (js[i] === "U" || js[i] === "I")) {
-        const typeStart = i;
-        i++;
-        while (i < js.length && isDigit(js[i])) i++;
-        validateTypeConstraint(js.slice(typeStart, i), finalValue);
-      }
-
-      result += numStr;
+      const numInfo = parseNumericLiteral(js, i, isNegative);
+      i = numInfo.endI;
+      result += numInfo.numStr;
     } else if (i < js.length) {
       result += js[i];
       i++;

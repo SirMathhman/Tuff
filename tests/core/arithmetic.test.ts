@@ -24,9 +24,12 @@ describe("interpret - arithmetic - basic - types", () => {
     },
   );
 
-  itBoth("throws for overflow with unsigned suffix U8", (_assertValid, assertInvalid) => {
-    assertInvalid("256U8");
-  });
+  itBoth(
+    "throws for overflow with unsigned suffix U8",
+    (_assertValid, assertInvalid) => {
+      assertInvalid("256U8");
+    },
+  );
 });
 
 describe("interpret - arithmetic - basic - addition", () => {
@@ -125,4 +128,3 @@ describe("interpret - arithmetic - unary - minus", () => {
     assertValid("-(2 + 3)", -5);
   });
 });
-

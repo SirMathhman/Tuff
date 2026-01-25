@@ -13,6 +13,107 @@ import {
 import { transformStringIndexing } from "./transforms/string-transforms";
 import { validateTypedArithmetic } from "./transforms/type-arithmetic-validation";
 
+function isAlphaNum(ch: string): boolean {
+  return (
+    (ch >= "a" && ch <= "z") ||
+    (ch >= "A" && ch <= "Z") ||
+    (ch >= "0" && ch <= "9") ||
+    ch === "_"
+  );
+}
+
+const BUILTIN_METHODS = new Set(["charCodeAt", "length", "init"]);
+
+function findReceiverStart(result: string, isClosingParen: boolean): number {
+  let receiverStart = result.length - 1;
+  if (isClosingParen) {
+    let depth = 1;
+    receiverStart--;
+    while (receiverStart >= 0 && depth > 0) {
+      const c = result.charAt(receiverStart);
+      if (c === ")") depth++;
+      else if (c === "(") depth--;
+      receiverStart--;
+    }
+    receiverStart++; // Move to the (
+    while (receiverStart > 0 && isAlphaNum(result.charAt(receiverStart - 1)))
+      receiverStart--;
+  } else {
+    while (receiverStart > 0) {
+      const charLeft = result.charAt(receiverStart - 1);
+      if (
+        charLeft === "." ||
+        (charLeft >= "0" && charLeft <= "9") ||
+        isAlphaNum(charLeft)
+      ) {
+        receiverStart--;
+      } else {
+        break;
+      }
+    }
+  }
+  return receiverStart;
+}
+
+/**
+ * Simple method call transformer: 100.add(50) => add(100, 50)
+ * Skips built-in methods like charCodeAt, length, init
+ */
+function transformMethodCalls(source: string): string {
+  let result = "";
+  let i = 0;
+  const len = source.length;
+
+  while (i < len) {
+    const ch = source.charAt(i);
+    const prevCh = i > 0 ? source.charAt(i - 1) : "";
+    if (
+      ch === "." &&
+      result.length > 0 &&
+      (prevCh === "0" || prevCh === ")" || isAlphaNum(prevCh))
+    ) {
+      i++; // Skip dot
+      let methodName = "";
+      while (i < len && isAlphaNum(source.charAt(i))) {
+        methodName += source.charAt(i);
+        i++;
+      }
+
+      // Skip built-in methods that should not be transformed
+      if (BUILTIN_METHODS.has(methodName)) {
+        result += "." + methodName;
+        continue;
+      }
+
+      while (i < len && source.charAt(i) === " ") i++;
+      if (i < len && source.charAt(i) === "(") {
+        const receiverStart = findReceiverStart(
+          result,
+          result.charAt(result.length - 1) === ")",
+        );
+        const receiver = result.slice(receiverStart);
+        result = result.slice(0, receiverStart);
+        i++;
+        let args = "";
+        let depth = 1;
+        while (i < len && depth > 0) {
+          const c = source.charAt(i);
+          if (c === "(") depth++;
+          else if (c === ")") depth--;
+          if (depth > 0) args += c;
+          i++;
+        }
+        result +=
+          methodName + "(" + receiver + (args.trim() ? ", " + args : "") + ")";
+        continue;
+      }
+    }
+    result += source.charAt(i);
+    i++;
+  }
+  return result;
+}
+
 interface VariableInfo {
   type: string | undefined;
   mutable: boolean;
@@ -49,6 +150,9 @@ function createTuffCompiler(source: string) {
       transformedExpr = transformCharLiterals(transformedExpr);
       transformedExpr = replaceBooleanLiterals(transformedExpr);
       transformedExpr = stripTypeAnnotationsAndValidate(transformedExpr);
+
+      // Transform method calls: 100.add(50) => add(100, 50)
+      transformedExpr = transformMethodCalls(transformedExpr);
 
       // Convert semicolons to commas for eval (statements to expressions)
       transformedExpr = convertStatementsToExpressions(transformedExpr);

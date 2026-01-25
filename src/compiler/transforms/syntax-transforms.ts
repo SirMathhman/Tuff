@@ -8,9 +8,10 @@ import {
   transformLoop,
   transformWhile,
   transformFor,
+  transformIfElse,
 } from "./control-flow";
-import { transformIfElse } from "./if-else";
 import { extractVarDeclarations } from "./var-extraction";
+import { transformFunctionDeclarations } from "./function-transforms";
 
 // Re-export for convenience
 export { extractVarDeclarations };
@@ -23,56 +24,85 @@ function skipWhitespace(source: string, index: number): number {
   return index;
 }
 
+function handleLetDeclaration(
+  source: string,
+  i: number,
+): { result: string; endIdx: number } {
+  let result = "";
+  i = skipWhitespace(source, i + 3);
+  if (matchWord(source, i, "mut")) i = skipWhitespace(source, i + 3);
+  const varStart = i;
+  while (i < source.length && isIdentifierChar(source[i])) i++;
+  result += source.slice(varStart, i);
+  i = skipWhitespace(source, i);
+  if (i < source.length && source[i] === ":") {
+    i++;
+    i = skipWhitespace(source, i);
+    let parenDepth = 0;
+    while (i < source.length) {
+      if (source[i] === "(") parenDepth++;
+      else if (source[i] === ")") parenDepth--;
+      else if (
+        parenDepth === 0 &&
+        source[i] === "=" &&
+        (i + 1 >= source.length || source[i + 1] !== ">")
+      ) {
+        break;
+      }
+      i++;
+    }
+  }
+  return { result, endIdx: skipWhitespace(source, i) };
+}
+
 /**
  * Remove Tuff-specific syntax like let, mut, type annotations
  */
 export function removeTypeSyntax(source: string): string {
+  // First handle function declarations
+  const sourceAfterFn = transformFunctionDeclarations(source);
+
   let result = "";
   let i = 0;
   let parenDepth = 0;
 
-  while (i < source.length) {
+  while (i < sourceAfterFn.length) {
     // Track parentheses/function depth
-    if (source[i] === "(") {
+    if (sourceAfterFn[i] === "(") {
       parenDepth++;
-    } else if (source[i] === ")") {
+    } else if (sourceAfterFn[i] === ")") {
       parenDepth--;
     }
 
     // Skip expression braces only when not inside other constructs and not control flow
     if (
-      (source[i] === "{" || source[i] === "}") &&
+      (sourceAfterFn[i] === "{" || sourceAfterFn[i] === "}") &&
       parenDepth === 0 &&
-      !isProbablyControlFlowBrace(source, i, result)
+      !isProbablyControlFlowBrace(sourceAfterFn, i, result)
     ) {
       i++;
       continue;
     }
 
-    // Handle let declarations
-    if (matchWord(source, i, "let")) {
-      i = skipWhitespace(source, i + 3);
-      if (matchWord(source, i, "mut")) i = skipWhitespace(source, i + 3);
-
-      const varStart = i;
-      while (i < source.length && isIdentifierChar(source[i])) i++;
-      result += source.slice(varStart, i);
-
-      i = skipWhitespace(source, i);
-      if (i < source.length && source[i] === ":") {
-        i++;
-        i = skipWhitespace(source, i);
-        while (
-          i < source.length &&
-          (isIdentifierChar(source[i]) || source[i] === "*")
-        )
-          i++;
-      }
-      i = skipWhitespace(source, i);
+    // Skip "fn" declarations (already handled by transformFunctionDeclarations)
+    if (matchWord(sourceAfterFn, i, "fn")) {
+      while (i < sourceAfterFn.length && sourceAfterFn[i] !== ";") i++;
+      i++;
       continue;
     }
 
-    result += source[i];
+    // Handle let declarations
+    if (matchWord(sourceAfterFn, i, "let")) {
+      const { result: letResult, endIdx } = handleLetDeclaration(
+        sourceAfterFn,
+        i,
+      );
+      result += letResult;
+      i = endIdx;
+      continue;
+    }
+
+    result += sourceAfterFn[i];
     i++;
   }
   return result;

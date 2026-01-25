@@ -5,6 +5,7 @@
 Tuff is a typed expression interpreter and compiler written in TypeScript that evaluates expressions and returns numeric values. It supports functions, lambdas, structs, modules, arrays, type checking, and control flow.
 
 **Dual execution modes**:
+
 - **Interpreter**: Direct evaluation via `interpretWithScope()` in [src/core/app.ts](../src/core/app.ts)
 - **Compiler**: Transpiles to JavaScript via `compile()` in [src/compiler/compiler.ts](../src/compiler/compiler.ts)
 
@@ -35,6 +36,7 @@ Tuff is a typed expression interpreter and compiler written in TypeScript that e
 ### Compiler Pipeline
 
 Multi-pass compilation in [src/compiler/compiler.ts](../src/compiler/compiler.ts):
+
 1. Parse declarations → track variables/types
 2. Transform control flow → `if`/`loop`/`match` to expressions
 3. Strip Tuff syntax → remove `let`/`mut`/type annotations
@@ -83,8 +85,8 @@ Use Bun test framework. **All tests run against both interpreter AND compiler** 
 import { itBoth } from "../test-helpers";
 
 itBoth("description", (assertValid, assertInvalid) => {
-  assertValid("let x = 5; x + 3", 8);  // Tests both modes
-  assertInvalid("-100U8");              // Tests error cases
+  assertValid("let x = 5; x + 3", 8); // Tests both modes
+  assertInvalid("-100U8"); // Tests error cases
 });
 ```
 
@@ -120,6 +122,7 @@ out fn main() => 0;  // public function
 ### Pre-commit Hooks (Husky)
 
 All commits automatically run ([.husky/pre-commit](.husky/pre-commit)):
+
 1. Tests with coverage (`bun test --coverage`)
 2. Copy-paste detection (`bun run cpd` - PMD with 60 token threshold)
 3. Format check (`bun run format` - Prettier)
