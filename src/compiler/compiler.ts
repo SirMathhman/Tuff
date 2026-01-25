@@ -162,6 +162,7 @@ interface VariableInfo {
   type: string | undefined;
   mutable: boolean;
   initialized: boolean;
+  isArray?: boolean;
 }
 
 /**
@@ -175,6 +176,12 @@ function createTuffCompiler(source: string) {
       // Pass 1: Parse variable declarations
       const parser = createDeclarationParser(source, variables);
       parser.parseDeclarations();
+
+      // Build set of array variable names
+      const arrayVars = new Set<string>();
+      for (const [name, info] of variables) {
+        if (info.isArray) arrayVars.add(name);
+      }
 
       // Validate typed arithmetic operations before removing type syntax
       validateTypedArithmetic(source);
@@ -190,7 +197,7 @@ function createTuffCompiler(source: string) {
       const { expression, varDeclarations } = extractVarDeclarations(js);
 
       // Pass 5: Transform literals
-      let transformedExpr = transformStringIndexing(expression);
+      let transformedExpr = transformStringIndexing(expression, arrayVars);
       transformedExpr = transformCharLiterals(transformedExpr);
       transformedExpr = replaceBooleanLiterals(transformedExpr);
       transformedExpr = stripTypeAnnotationsAndValidate(transformedExpr);

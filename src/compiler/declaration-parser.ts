@@ -2,12 +2,14 @@ import { isWhitespace, matchWord } from "./parsing/string-helpers";
 import {
   parseLetDeclaration,
   validateVariableUsage,
+  parseTypeDeclaration,
 } from "./parsing/parser-utils";
 
 interface VariableInfo {
   type: string | undefined;
   mutable: boolean;
   initialized: boolean;
+  isArray?: boolean;
 }
 
 function registerVariable(
@@ -15,6 +17,7 @@ function registerVariable(
   typeAnnotation: string | undefined,
   isMutable: boolean,
   variables: Map<string, VariableInfo>,
+  isArray?: boolean,
 ): void {
   if (variables.has(varName)) {
     throw new Error(`Variable '${varName}' already declared`);
@@ -23,6 +26,7 @@ function registerVariable(
     type: typeAnnotation,
     mutable: isMutable,
     initialized: true,
+    isArray,
   });
 }
 
@@ -95,6 +99,12 @@ export function createDeclarationParser(
           continue;
         }
 
+        if (matchWord(source, i, "type")) {
+          const decl = parseTypeDeclaration(source, i);
+          i = decl.nextIndex;
+          continue;
+        }
+
         if (matchWord(source, i, "let")) {
           const decl = parseLetDeclaration(source, i);
           registerVariable(
@@ -102,6 +112,7 @@ export function createDeclarationParser(
             decl.typeAnnotation,
             decl.isMutable,
             variables,
+            decl.isArray,
           );
           i = decl.nextIndex;
           continue;

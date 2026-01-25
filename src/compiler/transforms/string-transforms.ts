@@ -121,27 +121,63 @@ function processStringIndexing(
 
 /**
  * Process variable indexing like x[0]
+ * Skip charCodeAt for array variables - keep as x[i]
  */
 function processVariableIndexing(
   source: string,
   bracketPos: number,
-): { output: string; nextPos: number } {
+  arrayVars: Set<string>,
+): { output: string; nextPos: number; skipped: boolean } {
+  // Find the variable name before the bracket
+  let varEnd = bracketPos - 1;
+  while (varEnd >= 0 && isWhitespace(source[varEnd])) varEnd--;
+  let varStart = varEnd;
+  while (varStart > 0 && isIdentifierChar(source[varStart - 1])) varStart--;
+  const varName = source.slice(varStart, varEnd + 1);
+
+  // If it's an array variable, don't convert to charCodeAt
+  if (arrayVars.has(varName)) {
+    const bracketEnd = findIndexBracketEnd(source, bracketPos);
+    if (bracketEnd >= source.length) {
+      return {
+        output: source[bracketPos]!,
+        nextPos: bracketPos + 1,
+        skipped: true,
+      };
+    }
+    return {
+      output: source.slice(bracketPos, bracketEnd + 1),
+      nextPos: bracketEnd + 1,
+      skipped: true,
+    };
+  }
+
   const bracketEnd = findIndexBracketEnd(source, bracketPos);
   if (bracketEnd >= source.length) {
-    return { output: source[bracketPos]!, nextPos: bracketPos + 1 };
+    return {
+      output: source[bracketPos]!,
+      nextPos: bracketPos + 1,
+      skipped: false,
+    };
   }
 
   const indexExpr = source.slice(bracketPos + 1, bracketEnd).trim();
   return {
     output: `.charCodeAt(${indexExpr})`,
     nextPos: bracketEnd + 1,
+    skipped: false,
   };
 }
 
 /**
  * Transform string indexing to use charCodeAt
+ * Skip arrays - they keep normal indexing
  */
-export function transformStringIndexing(source: string): string {
+export function transformStringIndexing(
+  source: string,
+  arrayVars?: Set<string>,
+): string {
+  const arrays = arrayVars ?? new Set<string>();
   let result = "";
   let i = 0;
 
@@ -174,7 +210,7 @@ export function transformStringIndexing(source: string): string {
       (isIdentifierChar(source[i - 1]) || source[i - 1] === ")") &&
       !isStringIndexingContext(source, i)
     ) {
-      const { output, nextPos } = processVariableIndexing(source, i);
+      const { output, nextPos } = processVariableIndexing(source, i, arrays);
       result += output;
       i = nextPos;
     } else {

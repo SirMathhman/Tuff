@@ -1,51 +1,35 @@
-import {
-  isWhitespace,
-  matchWord,
-  isIdentifierChar,
-  isDigit,
-  charAt,
-} from "./string-helpers";
+import { isWhitespace, matchWord, isIdentifierChar } from "./string-helpers";
 import { validateTypeAnnotation } from "../validation/validation";
-import { isKeyword } from "../keywords";
 import { parseUntilSemicolon } from "./parse-helpers";
 
-interface VariableInfo {
-  type: string | undefined;
-  mutable: boolean;
-  initialized: boolean;
-}
+// Re-export from variable-validation for consumers
+export {
+  validateVariableUsage,
+  isDeclaredType,
+  addDeclaredType,
+} from "./variable-validation";
+import { addDeclaredType } from "./variable-validation";
 
-const REFERENCE_DELIMITERS = new Set([
-  "+",
-  "-",
-  "*",
-  "/",
-  ";",
-  ")",
-  "]",
-  "}",
-  ",",
-  ":",
-  "<",
-  ">",
-  "=",
-]);
-const SPECIAL_IDENTIFIERS = new Set([
-  "true",
-  "false",
-  "_",
-  "length",
-  "this",
-  // Type suffixes
-  "U8",
-  "U16",
-  "U32",
-  "U64",
-  "I8",
-  "I16",
-  "I32",
-  "I64",
-]);
+/**
+ * Parse a type declaration: type TypeName = TypeValue;
+ * Returns the type name and next index
+ */
+export function parseTypeDeclaration(
+  source: string,
+  startIndex: number,
+): { nextIndex: number; typeName: string } {
+  let i = startIndex + 4; // skip 'type'
+  while (i < source.length && isWhitespace(source[i])) i++;
+  const nameStart = i;
+  while (i < source.length && isIdentifierChar(source[i])) i++;
+  const typeName = source.slice(nameStart, i);
+  if (!typeName) throw new Error("Expected type name after type");
+  // Skip to semicolon
+  while (i < source.length && source[i] !== ";") i++;
+  if (i < source.length && source[i] === ";") i++;
+  addDeclaredType(typeName);
+  return { nextIndex: i, typeName };
+}
 
 function parseMutability(
   source: string,
@@ -84,11 +68,22 @@ function parseTypeAnnotation(
   index++;
   while (index < source.length && isWhitespace(source[index])) index++;
   const typeStart = index;
-  while (
-    index < source.length &&
-    (isIdentifierChar(source[index]) || source[index] === "*")
-  )
+  // Handle array type: [Type; N; M]
+  if (source[index] === "[") {
+    let depth = 1;
     index++;
+    while (index < source.length && depth > 0) {
+      if (source[index] === "[") depth++;
+      else if (source[index] === "]") depth--;
+      index++;
+    }
+  } else {
+    while (
+      index < source.length &&
+      (isIdentifierChar(source[index]) || source[index] === "*")
+    )
+      index++;
+  }
   const type = source.slice(typeStart, index).trim();
   return { type, nextIndex: index };
 }
@@ -104,6 +99,7 @@ export function parseLetDeclaration(
   varName: string;
   typeAnnotation?: string;
   isMutable: boolean;
+  isArray?: boolean;
 } {
   let i = startIndex + 3;
   while (i < source.length && isWhitespace(source[i])) i++;
@@ -117,9 +113,14 @@ export function parseLetDeclaration(
   );
   i = typeIndex;
   while (i < source.length && isWhitespace(source[i])) i++;
+  let isArray = false;
   if (i < source.length && source[i] === "=") {
     i++;
     while (i < source.length && isWhitespace(source[i])) i++;
+    // Check if value starts with [ (array literal)
+    if (source[i] === "[") {
+      isArray = true;
+    }
     const { content: value, endIdx: valueEndIdx } = parseUntilSemicolon(
       source,
       i,
@@ -127,88 +128,10 @@ export function parseLetDeclaration(
     i = valueEndIdx;
     if (typeAnnotation) validateTypeAnnotation(value, typeAnnotation);
   }
+  // Also check if type annotation indicates array: [Type; N] or [Type; N; M]
+  if (typeAnnotation && typeAnnotation.startsWith("[")) {
+    isArray = true;
+  }
   if (i < source.length && source[i] === ";") i++;
-  return { nextIndex: i, varName, typeAnnotation, isMutable };
-}
-
-function checkWriteAccess(
-  name: string,
-  variables: Map<string, VariableInfo>,
-): void {
-  if (variables.has(name)) {
-    if (!variables.get(name)!.mutable) {
-      throw new Error(
-        `Variable '${name}' is immutable and cannot be reassigned`,
-      );
-    }
-  } else if (!isKeyword(name) && !SPECIAL_IDENTIFIERS.has(name)) {
-    throw new Error(`Variable '${name}' is not defined`);
-  }
-}
-
-function checkReadAccess(
-  name: string,
-  variables: Map<string, VariableInfo>,
-): void {
-  if (
-    !variables.has(name) &&
-    !isKeyword(name) &&
-    !SPECIAL_IDENTIFIERS.has(name)
-  ) {
-    throw new Error(`Variable '${name}' is not defined`);
-  }
-}
-
-/**
- * Validate variable usage (assignments and references)
- */
-export function validateVariableUsage(
-  source: string,
-  variables: Map<string, VariableInfo>,
-): void {
-  let i = 0;
-  while (i < source.length) {
-    while (i < source.length && isWhitespace(source[i])) i++;
-    if (i >= source.length) break;
-    if (source[i] === "{" || source[i] === "}") {
-      i++;
-      continue;
-    }
-    if (matchWord(source, i, "let")) {
-      while (i < source.length && source[i] !== ";") i++;
-      i++;
-      continue;
-    }
-    if (matchWord(source, i, "fn")) {
-      while (i < source.length && source[i] !== ";") i++;
-      if (i < source.length) i++;
-      continue;
-    }
-    if (source[i] === "(") {
-      let parenDepth = 1;
-      i++;
-      while (i < source.length && parenDepth > 0) {
-        if (source[i] === "(") parenDepth++;
-        else if (source[i] === ")") parenDepth--;
-        i++;
-      }
-      continue;
-    }
-    if (isIdentifierChar(source[i]) && !isDigit(source[i])) {
-      const nameStart = i;
-      while (i < source.length && isIdentifierChar(source[i])) i++;
-      const name = source.slice(nameStart, i);
-      let nextIdx = i;
-      while (nextIdx < source.length && isWhitespace(source[nextIdx]))
-        nextIdx++;
-      const nextChar = nextIdx < source.length ? source[nextIdx]! : "";
-      if (nextChar === "=" && charAt(source, nextIdx + 1) !== "=") {
-        checkWriteAccess(name, variables);
-      } else if (REFERENCE_DELIMITERS.has(nextChar)) {
-        checkReadAccess(name, variables);
-      }
-      continue;
-    }
-    i++;
-  }
+  return { nextIndex: i, varName, typeAnnotation, isMutable, isArray };
 }

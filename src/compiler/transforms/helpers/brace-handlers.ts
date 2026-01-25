@@ -138,3 +138,18 @@ export function handleLetDeclaration(
   }
   return { result, endIdx: skipWhitespace(source, i) };
 }
+
+/**
+ * Handle type declarations - skip them entirely as they're compile-time only
+ * e.g., "type MyAlias = I32;" gets stripped completely
+ */
+export function handleTypeDeclaration(
+  source: string,
+  i: number,
+): { result: string; endIdx: number } | undefined {
+  if (!matchWord(source, i, "type")) return undefined;
+  // Skip to the semicolon
+  while (i < source.length && source[i] !== ";") i++;
+  if (i < source.length && source[i] === ";") i++;
+  return { result: "", endIdx: i };
+}

@@ -16,8 +16,10 @@ import {
   handleOpeningBrace,
   handleClosingBrace,
   handleLetDeclaration,
+  handleTypeDeclaration,
 } from "./helpers/brace-handlers";
 import { tryControlFlowTransform } from "./helpers/transform-helpers";
+import { transformIsOperator } from "./helpers/is-operator";
 
 export { extractVarDeclarations };
 
@@ -85,18 +87,49 @@ function tryProcessBraces(
     : { processed: false };
 }
 
+type ProcessResult = {
+  processed: boolean;
+  result?: string;
+  braceDepth?: number;
+  newIdx?: number;
+};
+
+function tryProcessDeclarations(
+  src: string,
+  i: number,
+  braceDepth: number,
+  result: string,
+): ProcessResult {
+  const fnDecl = processFnDeclLine(src, i);
+  if (fnDecl)
+    return {
+      processed: true,
+      result: result + fnDecl.declaration,
+      braceDepth,
+      newIdx: fnDecl.newIdx,
+    };
+  const typeDecl = handleTypeDeclaration(src, i);
+  if (typeDecl)
+    return {
+      processed: true,
+      result: result + typeDecl.result,
+      braceDepth,
+      newIdx: typeDecl.endIdx,
+    };
+  if (matchWord(src, i, "let")) {
+    const { result: r, endIdx } = handleLetDeclaration(src, i);
+    return { processed: true, result: result + r, braceDepth, newIdx: endIdx };
+  }
+  return { processed: false };
+}
+
 function processBracesAndSyntax(
   sourceAfterFn: string,
   i: number,
   parenDepth: number,
   braceDepth: number,
   result: string,
-): {
-  processed: boolean;
-  result?: string;
-  braceDepth?: number;
-  newIdx?: number;
-} {
+): ProcessResult {
   const braceResult = tryProcessBraces(
     sourceAfterFn,
     i,
@@ -105,38 +138,16 @@ function processBracesAndSyntax(
     result,
   );
   if (braceResult.processed) return braceResult;
-
-  const fnDecl = processFnDeclLine(sourceAfterFn, i);
-  if (fnDecl) {
-    return {
-      processed: true,
-      result: result + fnDecl.declaration,
-      braceDepth,
-      newIdx: fnDecl.newIdx,
-    };
-  }
-
-  if (matchWord(sourceAfterFn, i, "let")) {
-    const { result: letResult, endIdx } = handleLetDeclaration(
-      sourceAfterFn,
-      i,
-    );
-    return {
-      processed: true,
-      result: result + letResult,
-      braceDepth,
-      newIdx: endIdx,
-    };
-  }
-
-  return { processed: false };
+  return tryProcessDeclarations(sourceAfterFn, i, braceDepth, result);
 }
 
 /**
  * Remove Tuff-specific syntax like let, mut, type annotations
  */
 export function removeTypeSyntax(source: string): string {
-  const sourceAfterFn = transformFunctionDeclarations(source);
+  // First transform 'is' operator before other transforms
+  const sourceWithIs = transformIsOperator(source);
+  const sourceAfterFn = transformFunctionDeclarations(sourceWithIs);
   let result = "";
   let i = 0;
   let parenDepth = 0;
