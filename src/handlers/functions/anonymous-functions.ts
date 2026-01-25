@@ -1,6 +1,6 @@
-import { extractTypeSize } from "../type-utils";
-import { isValidIdentifier } from "../utils/identifier-utils";
-import { splitParametersRespectingParens } from "../utils/function-utils";
+import { extractTypeSize } from "../../type-utils";
+import { isValidIdentifier } from "../../utils/identifier-utils";
+import { splitParametersRespectingParens } from "../../utils/function-utils";
 
 export type AnonymousFnDef = {
   params: Array<{ name: string; type: number }>;

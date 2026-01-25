@@ -1,10 +1,10 @@
 import { isValidIdentifier } from "./utils/identifier-utils";
-import { registerAnonymousFunction } from "./handlers/anonymous-functions";
+import { registerAnonymousFunction } from "./handlers/functions/anonymous-functions";
 import {
   isFunctionType,
   extractReturnTypeFromFunctionType,
 } from "./utils/function-utils";
-import { createFunctionDeclarationHandler } from "./handlers/function-declaration";
+import { createFunctionDeclarationHandler } from "./handlers/functions/function-declaration";
 import type { FunctionCallParams } from "./utils/function-call-params";
 import {
   getLocalFunctionNames,

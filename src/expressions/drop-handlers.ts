@@ -1,9 +1,6 @@
 import { functionDefs } from "../functions";
 import { getArrayMetadata, isArrayInstance } from "../utils/array";
-import {
-  getStructFields,
-  isStructInstance,
-} from "../types/structs";
+import { getStructFields, isStructInstance } from "../types/structs";
 import type { Interpreter } from "./handlers";
 
 function extractArrayElementType(arrayTypeStr: string): string | undefined {

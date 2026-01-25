@@ -1,4 +1,4 @@
-import { isValidIdentifier } from "../utils/identifier-utils";
+import { isValidIdentifier } from "../../utils/identifier-utils";
 
 // Global map to store pointer values (which reference variable names)
 const pointerMap = new Map<number, string>();

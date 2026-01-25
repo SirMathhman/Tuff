@@ -9,7 +9,7 @@ import {
   handleVarAssignment,
   type Interpreter,
 } from "./expressions/handlers";
-import { handleDereferenceAssignment } from "./handlers/dereference-assignment";
+import { handleDereferenceAssignment } from "./handlers/variables/dereference-assignment";
 import { handleBinaryOperation } from "./expressions/operators/binary-operation";
 import { parseTypedNumber } from "./parser";
 import {
@@ -19,14 +19,14 @@ import {
   mightNeedBinaryOp,
   buildInterpreterParams,
 } from "./utils/app-handlers";
-import { handleLambdaExpression } from "./handlers/lambda-expressions";
+import { handleLambdaExpression } from "./handlers/functions/lambda-expressions";
 import {
   handleReferenceOperation,
   handleDereferenceOperation,
-} from "./handlers/pointer-operations";
+} from "./handlers/access/pointer-operations";
 import { evaluateThisKeyword } from "./utils/this-keyword";
 import { createArrayFromLiteral } from "./utils/array";
-import { handleModuleAccess } from "./handlers/module-access";
+import { handleModuleAccess } from "./handlers/access/module-access";
 
 export function interpretWithScope(
   input: string,

@@ -1,7 +1,7 @@
 import type { Interpreter, InterpreterContext } from "../types/interpreter";
 
 import { trackDepths } from "../utils/scope-helpers";
-export { handleVarAssignment } from "../handlers/assignment";
+export { handleVarAssignment } from "../handlers/variables/assignment";
 export type { Interpreter, InterpreterContext };
 
 export function handleIfExpression(

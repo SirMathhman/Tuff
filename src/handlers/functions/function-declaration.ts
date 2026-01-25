@@ -1,12 +1,12 @@
-import { extractTypeSize } from "../type-utils";
-import { makeDeclarationHandler } from "../declarations";
-import { isValidIdentifier } from "../utils/identifier-utils";
+import { extractTypeSize } from "../../type-utils";
+import { makeDeclarationHandler } from "../../declarations";
+import { isValidIdentifier } from "../../utils/identifier-utils";
 import {
   isFunctionType,
   splitParametersRespectingParens,
   findClosingParenIndex,
-} from "../utils/function-utils";
-import { addLocalFunctionName } from "../utils/scope-helpers";
+} from "../../utils/function-utils";
+import { addLocalFunctionName } from "../../utils/scope-helpers";
 
 function isWhitespace(ch: string): boolean {
   return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";

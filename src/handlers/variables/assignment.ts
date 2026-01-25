@@ -1,5 +1,5 @@
-import type { Interpreter } from "../types/interpreter";
-import { setArrayElement, isArrayInstance } from "../utils/array";
+import type { Interpreter } from "../../types/interpreter";
+import { setArrayElement, isArrayInstance } from "../../utils/array";
 
 function parseArrayElemAssignment(
   lhs: string,

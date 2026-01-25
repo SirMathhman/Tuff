@@ -1,5 +1,5 @@
 import { registerAnonymousFunction } from "./anonymous-functions";
-import { functionDefs } from "../functions";
+import { functionDefs } from "../../functions";
 
 // Track the most recently registered lambda from a function body
 // Used when a function returns a lambda

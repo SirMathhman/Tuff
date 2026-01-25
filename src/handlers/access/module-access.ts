@@ -1,7 +1,7 @@
-import { getModule } from "../types/modules";
-import { getObject } from "../types/objects";
-import type { Interpreter } from "../expressions/handlers";
-import { isValidIdentifier } from "../utils/identifier-utils";
+import { getModule } from "../../types/modules";
+import { getObject } from "../../types/objects";
+import type { Interpreter } from "../../expressions/handlers";
+import { isValidIdentifier } from "../../utils/identifier-utils";
 
 export function handleModuleAccess(
   s: string,

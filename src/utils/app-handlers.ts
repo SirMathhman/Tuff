@@ -2,7 +2,7 @@ import { handleTypeDeclaration } from "../types/type-declarations";
 import { handleStructDeclaration } from "../types/structs";
 import { handleFunctionDeclaration } from "../functions";
 import { parseFunctionCall } from "../functions";
-import { handleMethodCall } from "../handlers/method-call";
+import { handleMethodCall } from "../handlers/access/method-call";
 import { handleUnaryOperation } from "../expressions/operators/unary-operation";
 import { getModuleDeclarationHandler } from "../types/modules";
 import { getObjectDeclarationHandler } from "../types/objects";
