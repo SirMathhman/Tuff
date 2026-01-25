@@ -77,4 +77,12 @@ describe("interpret - types", () => {
       ),
     ).toBe(1);
   });
+
+  it("supports type destructors on array elements", () => {
+    expect(
+      interpret(
+        "let mut count = 0; fn drop(this : I32) => count += 1; type MyDroppable = I32 then drop; { let temp : [MyDroppable; 3; 3] = [1, 2, 3]; } count",
+      ),
+    ).toBe(3);
+  });
 });
