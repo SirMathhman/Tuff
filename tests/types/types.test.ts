@@ -65,4 +65,8 @@ describe("interpret - types", () => {
   it("supports array init property", () => {
     expect(interpret("let array = [1, 2, 3]; array.init")).toBe(3);
   });
+
+  it("supports forward type references - type declared after use", () => {
+    expect(interpret("let x : Temp = 100; type Temp = I32; x")).toBe(100);
+  });
 });

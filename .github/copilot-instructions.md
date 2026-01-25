@@ -1,92 +1,145 @@
-# AI Coding Agent Instructions for Tuff
+# Tuff - AI Coding Agent Instructions
 
-## Big Picture
+## Project Overview
+Tuff is a typed expression interpreter written in TypeScript that evaluates expressions and returns numeric values. It supports functions, lambdas, structs, modules, arrays, type checking, and control flow.
 
-Tuff is a **typed expression interpreter** for a small language. Entry point is `interpret()` in [src/utils/interpret.ts](src/utils/interpret.ts), which delegates to `interpretWithScope()` in [src/app.ts](src/app.ts).
+## Architecture & Design Patterns
 
-**Execution model:** All runtime values are numbers. Metadata is stored in four companion maps:
+### Interpreter Core
+- **Entry point**: [src/utils/interpret.ts](../src/utils/interpret.ts) → [src/app.ts](../src/app.ts) `interpretWithScope()`
+- **Value system**: Everything evaluates to a `number` (primitive values, IDs for objects/functions/strings, 0 for no-ops)
+- **Handler pattern**: Functions return `undefined` when they can't handle input, allowing fall-through to next handler
+- **Scope tracking**: Uses 5 Maps + 2 Sets passed through all calls:
+  - `scope`: variable name → value
+  - `typeMap`: variable/type name → type size (or negative markers: -2 for functions, -4 for arrays)
+  - `mutMap`: variable name → is mutable
+  - `visMap`: variable name → is public (`out` keyword)
+  - `uninitializedSet`: uninitialized variables
+  - `unmutUninitializedSet`: uninitialized immutable variables
 
-- `scope`: variable name → numeric value
-- `typeMap`: name → type size (positive for primitives/arrays, negative for pointers, special markers for functions)
-- `mutMap`: name → mutability boolean
-- `uninitializedSet`/`unmutUninitializedSet`: track uninitialized variables
+### Handler Organization
+- **Expressions**: [src/expressions/](../src/expressions/) - binary/unary operations, grouped expressions
+- **Handlers**: [src/handlers/](../src/handlers/) - specialized constructs (lambdas, method calls, etc.)
+- **Types**: [src/types/](../src/types/) - struct/module/namespace/type declarations
+- **Loops**: [src/loops/](../src/loops/) - for/while/loop constructs
+- Handlers in `app.ts` are tried in sequence; first to return non-undefined wins
 
-**Dispatch cascade** (in [src/app.ts](src/app.ts), lines ~60–185): type/struct/fn declarations → var decl → match/while/for/loop → if-expr → deref assignment → assignment → direct var lookup → fn calls → reference ops (\*ptr, &var) → lambda → unary ops → module access → grouped expressions (parens/braces) → binary ops.
+## Critical Code Constraints
 
-## Type System & Sentinels
+### Enforced by ESLint (exits with error)
+```javascript
+// NO regex - use string parsing instead
+"no-restricted-syntax": ["error", { selector: "Literal[regex]" }]
 
-**Primitive types** via `extractTypeSize()` in [src/type-utils.ts](src/type-utils.ts): `Bool` (size 1), `I32`/`I64` (signed), `U8`/`U16`/`U32`/`U64` (unsigned).
+// NO null - use undefined
+{ selector: "Literal[value=null]", message: "use undefined" }
 
-**Type markers in typeMap:**
-
-- **Positive:** base type size (e.g., 32 for I32)
-- **Negative:** pointer to type (e.g., -32 for `*I32`)
-- **-2:** function type; full signature string stored in separate `typeStr` map
-- **-3:** parsed array type annotation `[T; init; cap]`
-- **-4:** array variable created from literal or type info
-
-**Custom types:** Aliases stored as `__alias__TypeName` (value = size), unions as `__union__UnionName` (value = CSV of member sizes).
-
-## Arrays & Pointers
-
-**Array storage:** Global registry in [src/utils/array.ts](src/utils/array.ts); each array is assigned ID ≥ 2,000,000 with metadata `{type, initialized, capacity, values}`.
-
-**Syntax:** Typed arrays `[I32; 5; 10]` (element type, initialized count, capacity). Untyped literals `[1, 2, 3]` created via `createArrayFromLiteral()` with elementType 0.
-
-**Field access:** `.length` and `.init` (initialized count) on arrays/array pointers. Indexing (`arr[i]`) accepts array IDs or pointers; operators in [src/expressions/operators.ts](src/expressions/operators.ts) + [src/expressions/binary-operation.ts](src/expressions/binary-operation.ts) resolve pointer targets via scope.
-
-## Functions & Lambdas
-
-**Function definitions** in [src/functions.ts](src/functions.ts): stored in `functionDefs` map. Anonymous functions registered via [src/handlers/anonymous-functions.ts](src/handlers/anonymous-functions.ts), referenced with `setFunctionRef()`.
-
-**Function types:** Signature strings like `(I32, I32) => I32`. Parsed via `isFunctionType()` and `splitParametersRespectingParens()` in [src/utils/function-utils.ts](src/utils/function-utils.ts).
-
-**Lambdas:** Detected in function-type annotations; when param type is -2, `parseFunctionCall()` creates lambda. Anonymous function context tracked via `getLastRegisteredLambdaName()` in [src/handlers/lambda-expressions.ts](src/handlers/lambda-expressions.ts).
-
-## Variable Handling
-
-**Declaration:** `handleVarDecl()` in [src/scope.ts](src/scope.ts) parses `let x : Type = value;`. Supports typed arrays and function types. Uninitialized vars tracked in two sets; mutability in `mutMap`.
-
-**Array init validation:** Array literals checked against declared init count; typed arrays use `createArray()` helper.
-
-**Pointers:** Created via `&var` (handleReferenceOperation in [src/handlers/pointer-operations.ts](src/handlers/pointer-operations.ts)); dereferenced via `*ptr` in [src/handlers/dereference-assignment.ts](src/handlers/dereference-assignment.ts) for writes, operators for reads.
-
-## Control Flow & Expressions
-
-**Expression plumbing:** [src/expressions/](src/expressions/) directory; `grouped-expressions.ts` folds parentheses/braces before dispatch. `match.ts` and [src/loops/](src/loops/) handle control constructs (loop, while, for, break).
-
-**Fallback:** `parseTypedNumber()` in [src/parser.ts](src/parser.ts) when no operators found.
-
-**Binary operators:** Implemented in `handleBinaryOperation()` with scope passed for pointer-aware resolution.
-
-## Quality Gates & Limits
-
-- **Max 8 .ts files per directory** (enforced by `npm run check:structure`)
-- **Max 200 lines per file** (count code, skip comments/blanks)
-- **ESLint rules:** No RegExp, no null, no unused vars (prefix unused with `_`)
-- **Circular dependencies:** Checked via `npm run check:circular`
-- **Code duplication:** Detected via `npm run cpd` (PMD, min 60 tokens)
-
-## Commands & Workflow
-
-**Fast validation loop:**
-
-```bash
-npm test                    # bun test (run all *.test.ts)
-npm run lint                # tsc --noEmit + eslint
-npm run cpd                 # code duplication check
-npm run check:structure     # directory file count limits
-npm run check:circular      # circular dependency detection
+// Max 200 lines per file (excluding comments/blanks)
+"max-lines": ["error", { max: 200, skipComments: true }]
 ```
 
-**Pre-commit hook** (via husky) runs above plus `prettier`, `check-subdir-deps`, and `visualize` (madge → [docs/images/graph.svg](docs/images/graph.svg)).
+### Enforced by Custom Tools
+```bash
+# Max 8 TypeScript files per directory
+bun run check:structure  # tools/check-dir-structure.ts
 
-**Tests:** Located in [tests/](tests/); organized by feature (arithmetic, variables, control-flow, types, functions). Keep focused per feature.
+# No circular dependencies between src/ subdirectories
+bun run check:subdir-deps  # tools/check-subdir-deps.ts
+```
 
-## Hot Spots & Pitfalls
+When violating file limits, refactor into subdirectories grouped by feature.
 
-- **Scope in binary ops:** Pass scope when adding pointer-aware operations; operators must resolve pointer targets.
-- **Array bounds:** `getArrayElement` enforces index < initialized; `setArrayElement` grows initialized up to capacity.
-- **Function type marker -2:** Ensure consistency between scope.ts (declarations) and functions.ts (calls).
-- **File growth:** Extract helpers to new files or [src/utils/](src/utils/) when approaching 200 lines.
-- **Module access patterns:** [src/handlers/module-access.ts](src/handlers/module-access.ts) must resolve and validate module scope before returning values.
+## Testing Patterns
+
+Use Bun test framework. All tests follow this pattern:
+```typescript
+import { interpret } from "../../src/utils/interpret";
+
+expect(interpret("let x = 5; x + 3")).toBe(8);
+```
+
+The `interpret()` function returns the final numeric value. Test files in [tests/](../tests/) mirror [src/](../src/) structure.
+
+## Type System Specifics
+
+### Type Annotations
+- Unsigned types: `U8`, `U16`, `U32`, `U64` (validated at parse time)
+- Signed types: `I8`, `I16`, `I32`, `I64`
+- Others: `Bool` (1 bit), `Char` (8 bit)
+- Function types: `(I32, I32) => I32` or `() => Bool`
+- Array types: `[I32; 3; 5]` means 3 initialized elements, capacity 5
+
+### Type Checking
+- Type aliases: `type MyInt = I32;` stored in `typeMap` as `__alias__MyInt`
+- Union types: `type Result = I32 | Bool;` stored as `__union__Result`
+- Runtime check: `value is TypeName` operator
+
+### Visibility
+The `out` keyword makes declarations public (stored in `visMap`):
+```typescript
+out let x = 5;  // public variable
+out fn main() => 0;  // public function
+```
+
+## Key Development Workflows
+
+### Run Tests
+```bash
+bun test                    # All tests
+bun test tests/core/        # Specific directory
+```
+
+### Linting & Formatting
+```bash
+bun run lint                # TypeScript + ESLint check
+bun run lint:fix            # Auto-fix issues
+bun run format              # Prettier
+```
+
+### Structure Validation
+```bash
+bun run check:structure     # Verify ≤8 files per dir
+bun run check:subdir-deps   # Check circular subdirectory deps
+bun run check:circular      # Check all circular deps (madge)
+```
+
+### Code Quality Tools
+```bash
+bun run cpd                 # Copy-paste detection (PMD)
+bun run visualize           # Generate dependency graph
+```
+
+## Common Patterns
+
+### Adding New Language Features
+1. Create handler function that returns `number | undefined`
+2. Add to `interpretWithScope()` call sequence in [src/app.ts](../src/app.ts)
+3. If declaration: use `makeDeclarationHandler()` from [src/declarations.ts](../src/declarations.ts)
+4. Add tests in [tests/](../tests/) following existing structure
+
+### Parsing Without Regex
+Use character-by-character traversal with helper functions:
+- `scanNumericPrefix()` in [src/parser.ts](../src/parser.ts)
+- `findEqualIndex()`, `findColonInBeforeEq()` in [src/utils/scope-helpers.ts](../src/utils/scope-helpers.ts)
+- Track parentheses/brackets with counters, not regex matching
+
+### Function Storage
+- Function definitions: global `functionDefs` Map (name → definition)
+- Function references: `setFunctionRef()` for variable-to-function binding
+- Lambda expressions: auto-generated unique names stored in `typeMap` with `-2` marker
+
+### Module System
+Modules are namespaces with isolated scopes:
+```typescript
+module Math { out fn add(a: I32, b: I32) => a + b }
+Math::add(3, 4)  // Access with ::
+```
+Global `modules` Map in [src/types/modules.ts](../src/types/modules.ts) stores per-module scope/typeMap/mutMap/visMap.
+
+## Troubleshooting
+
+- **"invalid expression"**: Parser couldn't handle; check `parseTypedNumber()` and grouped-expression handlers
+- **"variable already declared"**: Scope collision; variables are function-scoped
+- **"uninitialized variable"**: Accessing `let x: I32; x` before assignment
+- **ESLint regex error**: Use string methods (`.indexOf()`, `.slice()`, `.includes()`) instead
+- **Max lines error**: Split file into subdirectory with focused modules
