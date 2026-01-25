@@ -66,7 +66,15 @@ export function interpretWithScope(
   );
   if (result !== undefined) return result;
   result = handleMatch(s, scope, typeMap, mutMap, (i, sc, tm, mm) =>
-    interpretWithScope(i, sc, tm, mm, uninitializedSet, unmutUninitializedSet, visMap),
+    interpretWithScope(
+      i,
+      sc,
+      tm,
+      mm,
+      uninitializedSet,
+      unmutUninitializedSet,
+      visMap,
+    ),
   );
   if (result !== undefined) return result;
   result = handleLoop({

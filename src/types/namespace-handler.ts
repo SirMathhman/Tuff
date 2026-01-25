@@ -20,12 +20,14 @@ export function createNamespacedDeclarationHandler(
   keyword: string,
   namespacer: (name: string) => string,
   storage: {
-    get: (name: string) => {
-      scope: Map<string, number>;
-      typeMap: Map<string, number>;
-      mutMap: Map<string, boolean>;
-      visMap: Map<string, boolean>;
-    } | undefined;
+    get: (name: string) =>
+      | {
+          scope: Map<string, number>;
+          typeMap: Map<string, number>;
+          mutMap: Map<string, boolean>;
+          visMap: Map<string, boolean>;
+        }
+      | undefined;
     set: (
       name: string,
       scope: Map<string, number>,
@@ -71,7 +73,13 @@ export function createNamespacedDeclarationHandler(
       );
 
       // Store entity for later access
-      storage.set(entityName, entityScope, entityTypeMap, entityMutMap, entityVisMap);
+      storage.set(
+        entityName,
+        entityScope,
+        entityTypeMap,
+        entityMutMap,
+        entityVisMap,
+      );
       typeMap.set(namespacer(entityName), 1);
     },
   );

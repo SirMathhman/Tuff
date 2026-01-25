@@ -35,7 +35,9 @@ export function handleModuleAccess(
       const fnName = memberStr.slice(0, memberStr.indexOf("(")).trim();
       const isPublic = module.visMap.get(fnName);
       if (!isPublic) {
-        throw new Error(`member '${fnName}' of module '${moduleName}' is private`);
+        throw new Error(
+          `member '${fnName}' of module '${moduleName}' is private`,
+        );
       }
       // Use module scope for resolution
       const result = interpreter(
@@ -55,7 +57,9 @@ export function handleModuleAccess(
       // Check visibility for external access
       const isPublic = module.visMap.get(memberStr);
       if (!isPublic) {
-        throw new Error(`member '${memberStr}' of module '${moduleName}' is private`);
+        throw new Error(
+          `member '${memberStr}' of module '${moduleName}' is private`,
+        );
       }
       return module.scope.get(memberStr);
     }
@@ -82,7 +86,9 @@ export function handleModuleAccess(
       const fnName = memberStr.slice(0, memberStr.indexOf("(")).trim();
       const isPublic = obj.visMap.get(fnName);
       if (!isPublic) {
-        throw new Error(`member '${fnName}' of object '${objectName}' is private`);
+        throw new Error(
+          `member '${fnName}' of object '${objectName}' is private`,
+        );
       }
       // Use object scope for resolution
       const result = interpreter(
@@ -102,7 +108,9 @@ export function handleModuleAccess(
       // Check visibility for external access
       const isPublic = obj.visMap.get(memberStr);
       if (!isPublic) {
-        throw new Error(`member '${memberStr}' of object '${objectName}' is private`);
+        throw new Error(
+          `member '${memberStr}' of object '${objectName}' is private`,
+        );
       }
       return obj.scope.get(memberStr);
     }

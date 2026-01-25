@@ -38,7 +38,7 @@ export function makeDeclarationHandler(
     interpreter: Interpreter,
   ): { handled: boolean; result: number } {
     const s = input.trim();
-    
+
     // Check for visibility modifier 'out'
     const isPublic = s.startsWith("out ");
     const stripped = isPublic ? s.slice(4).trim() : s;

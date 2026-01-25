@@ -16,7 +16,7 @@ export const handleTypeDeclaration = makeDeclarationHandler(
     if (eqIndex === -1) return;
 
     const aliasName = declStr.slice(0, eqIndex).trim();
-    const aliasType = declStr. slice(eqIndex + 1).trim();
+    const aliasType = declStr.slice(eqIndex + 1).trim();
 
     // Check if it's a union type (contains |)
     if (aliasType.includes("|")) {

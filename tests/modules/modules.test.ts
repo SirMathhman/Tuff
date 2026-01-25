@@ -3,9 +3,9 @@ import { interpret } from "../../src/utils/interpret";
 
 describe("interpret - modules", () => {
   it("supports module declaration with function", () => {
-    expect(interpret("module Sample { out fn get() => 100; } Sample::get()")).toBe(
-      100,
-    );
+    expect(
+      interpret("module Sample { out fn get() => 100; } Sample::get()"),
+    ).toBe(100);
   });
 
   it("supports module with multiple functions", () => {
@@ -25,9 +25,9 @@ describe("interpret - modules", () => {
   });
 
   it("supports module with variable", () => {
-    expect(interpret("module Config { out let PI : I32 = 314; } Config::PI")).toBe(
-      314,
-    );
+    expect(
+      interpret("module Config { out let PI : I32 = 314; } Config::PI"),
+    ).toBe(314);
   });
 
   it("supports module with function accessing module variable", () => {
@@ -49,13 +49,15 @@ describe("interpret - modules", () => {
   });
 
   it("supports nested module access in expressions", () => {
-    expect(interpret("module M { out fn get() => 50; } M::get() + 50")).toBe(100);
+    expect(interpret("module M { out fn get() => 50; } M::get() + 50")).toBe(
+      100,
+    );
   });
 
   it("supports object singleton with variable access", () => {
-    expect(interpret("object MySingleton { out let x = 100; } MySingleton.x")).toBe(
-      100,
-    );
+    expect(
+      interpret("object MySingleton { out let x = 100; } MySingleton.x"),
+    ).toBe(100);
   });
 
   it("supports object singleton with multiple variables", () => {

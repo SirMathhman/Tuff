@@ -109,7 +109,10 @@ export function handleMethodCall(
   const receiverStr = trimmed.slice(0, dotIndex).trim();
 
   // Check if receiver is a module or object name - if so, don't handle it here
-  if (typeMap.has("__module__" + receiverStr) || typeMap.has("__object__" + receiverStr)) {
+  if (
+    typeMap.has("__module__" + receiverStr) ||
+    typeMap.has("__object__" + receiverStr)
+  ) {
     return undefined;
   }
 

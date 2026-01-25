@@ -35,9 +35,9 @@ export function handleVarDecl(
   const trimmed = s.trim();
   const isPublic = trimmed.startsWith("out ");
   const remaining = isPublic ? trimmed.slice(4).trim() : trimmed;
-  
+
   if (!remaining.startsWith("let ")) return undefined;
-  
+
   const { declStr, restIndex } = findDeclStringAndRestIndex(remaining);
   if (!declStr) return undefined;
 
@@ -167,7 +167,7 @@ export function handleVarDecl(
   if (isMut || eqIndex === -1) {
     mutMap.set(varName, true);
   }
-  
+
   // Store visibility information
   visMap.set(varName, isPublic);
 
