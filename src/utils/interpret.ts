@@ -111,20 +111,27 @@ export function interpretAll(
 ): number {
   const executionOrder = buildExecutionOrder(inputs, config);
 
-  // First pass: execute all modules in isolated scopes to populate global functionDefs
+  // Shared typeMap to accumulate type definitions across modules
+  const sharedTypeMap = new Map<string, number>();
+
+  // First pass: execute all modules in isolated scopes to populate global functionDefs and typeMap
   for (const modulePath of executionOrder) {
     const moduleName = modulePath[0];
     if (moduleName) {
       const moduleCode = findModuleConfig(moduleName, config);
       if (moduleCode) {
-        interpretWithScope(moduleCode, new Map(), new Map(), new Map());
+        interpretWithScope(
+          moduleCode,
+          new Map(),
+          sharedTypeMap,
+          new Map(),
+        );
       }
     }
   }
 
   // Second pass: execute main module with shared scope pointing to end result
   const scope = new Map<string, number>();
-  const typeMap = new Map<string, number>();
   const mutMap = new Map<string, boolean>();
   const visMap = new Map<string, boolean>();
 
@@ -141,7 +148,7 @@ export function interpretAll(
   return interpretWithScope(
     mainCode,
     scope,
-    typeMap,
+    sharedTypeMap,
     mutMap,
     new Set(),
     new Set(),

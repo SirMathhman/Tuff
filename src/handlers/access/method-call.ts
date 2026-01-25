@@ -116,7 +116,7 @@ export function handleMethodCall(
 
   // Check if receiver is a module reference (module member access)
   const isModuleRef = typeMap.has("__module__" + receiverStr);
-  
+
   // Check if receiver is an object (struct instance)
   if (typeMap.has("__object__" + receiverStr)) {
     return undefined;
