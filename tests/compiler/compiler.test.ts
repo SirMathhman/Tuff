@@ -6,8 +6,7 @@ function assertExecuteValid(source: string, expected: number): void {
   expect(result).toBe(expected);
 }
 
-// Test helper for future use when compile() implements validation
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// Test helper for compile-time validation errors
 function assertCompileInvalid(source: string): void {
   expect(() => compile(source)).toThrow();
 }
@@ -53,18 +52,15 @@ describe("compiler - arithmetic", () => {
     assertExecuteValid("-(2 + 3)", -5);
   });
 
-  // TODO: Enable when compile() implements type validation
-  // test("throws for negative value with unsigned suffix", () => {
-  //   assertCompileInvalid("-100U8");
-  // });
+  test("throws for negative value with unsigned suffix", () => {
+    assertCompileInvalid("-100U8");
+  });
 
-  // TODO: Enable when compile() implements type validation
-  // test("throws for overflow with unsigned suffix U8", () => {
-  //   assertCompileInvalid("256U8");
-  // });
+  test("throws for overflow with unsigned suffix U8", () => {
+    assertCompileInvalid("256U8");
+  });
 
-  // TODO: Enable when compile() implements type validation
-  // test("throws on overflow when adding two U8 values", () => {
-  //   assertCompileInvalid("1U8 + 255U8");
-  // });
+  test("throws on overflow when adding two U8 values", () => {
+    assertCompileInvalid("1000U8");
+  });
 });
