@@ -4,19 +4,10 @@ import {
   installNativeFunctions,
   cleanupNativeFunctions,
 } from "./native/native";
+import { isIdentifierChar } from "./char-utils";
 
 export function interpret(input: string): number {
   return interpretWithScope(input, new Map(), new Map(), new Map());
-}
-
-function isIdentifierChar(ch: string | undefined): boolean {
-  if (ch === undefined) return false;
-  return (
-    (ch >= "a" && ch <= "z") ||
-    (ch >= "A" && ch <= "Z") ||
-    (ch >= "0" && ch <= "9") ||
-    ch === "_"
-  );
 }
 
 function findImportedModules(code: string): string[] {

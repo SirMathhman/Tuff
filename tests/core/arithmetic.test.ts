@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { interpret } from "../../src/utils/interpret";
 
-describe("interpret - arithmetic", () => {
+describe("interpret - arithmetic - basic", () => {
   it("returns 0 for empty string", () => {
     expect(interpret("")).toBe(0);
   });
@@ -61,7 +61,9 @@ describe("interpret - arithmetic", () => {
   it("respects curly braces for grouping", () => {
     expect(interpret("(2 + { 3 }) * 4")).toBe(20);
   });
+});
 
+describe("interpret - arithmetic - unary", () => {
   it("supports logical not operator on boolean literal true", () => {
     expect(interpret("!true")).toBe(0);
   });

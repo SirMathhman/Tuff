@@ -87,15 +87,11 @@ function handleIsOperator(
   rightStr: string,
   typeMap: Map<string, number>,
 ): number {
-  // Get the type of the left operand
   const leftType = typeMap.get(leftStr) || 0;
-  // Extract the expected type from rightStr (e.g., "I32", "U8", "Bool", or alias)
   let rightType = extractTypeSize(rightStr);
-  // Check if it's a type alias
   if (rightType === 0 && typeMap.has("__alias__" + rightStr)) {
     rightType = typeMap.get("__alias__" + rightStr) || 0;
   }
-  // Check if it's a union type
   if (rightType === 0 && typeMap.has("__union__" + rightStr)) {
     const unionTypes = (
       typeMap.get("__union__" + rightStr) as unknown as string
@@ -103,6 +99,76 @@ function handleIsOperator(
     return unionTypes.some((t) => leftType === Number(t)) ? 1 : 0;
   }
   return leftType === rightType ? 1 : 0;
+}
+
+function resolvePointerValue(
+  left: number,
+  scope?: Map<string, number>,
+): number | undefined {
+  if (!scope) return undefined;
+  const targetVar = getPointerTarget(left);
+  if (!targetVar) return undefined;
+  if (!scope.has(targetVar)) {
+    throw new Error(`pointer target '${targetVar}' not found`);
+  }
+  return scope.get(targetVar);
+}
+
+function performOperationLogic(
+  left: number,
+  op: string,
+  right: number,
+  rightStr: string,
+  typeMap?: Map<string, number>,
+  leftStr?: string,
+  scope?: Map<string, number>,
+): number {
+  const resolvedPointerValue = resolvePointerValue(left, scope);
+  switch (op) {
+    case ".":
+      return handleFieldAccessOp(left, rightStr, resolvedPointerValue);
+    case "[":
+      return handleIndexingOp(left, right, resolvedPointerValue);
+    case "+":
+    case "-":
+    case "*":
+    case "/":
+      return performArithmeticOp(op, left, right);
+    case "<":
+    case ">":
+    case "<=":
+    case ">=":
+    case "==":
+    case "!=":
+      return performComparisonOp(op, left, right);
+    case "&&":
+      return left !== 0 && right !== 0 ? 1 : 0;
+    case "is": {
+      if (!typeMap || !leftStr) throw new Error("invalid 'is' operator usage");
+      return handleIsOperator(left, leftStr, rightStr, typeMap);
+    }
+    default:
+      return 0;
+  }
+}
+
+function shouldValidateUnsigned(
+  op: string,
+  leftInfo: TypedInfo,
+  rightStr: string,
+): boolean {
+  return (
+    op !== "is" &&
+    op !== "." &&
+    leftInfo.typeSize > 0 &&
+    !rightStr.includes("+") &&
+    !rightStr.includes("-") &&
+    !rightStr.includes("*") &&
+    !rightStr.includes("/") &&
+    !rightStr.includes("<") &&
+    !rightStr.includes(">") &&
+    !rightStr.includes("=")
+  );
 }
 
 export function performBinaryOp(
@@ -115,65 +181,16 @@ export function performBinaryOp(
   leftStr?: string,
   scope?: Map<string, number>,
 ): number {
-  let result = 0;
-  const resolvePointerValue = (): number | undefined => {
-    if (!scope) return undefined;
-    const targetVar = getPointerTarget(left);
-    if (!targetVar) return undefined;
-    if (!scope.has(targetVar)) {
-      throw new Error(`pointer target '${targetVar}' not found`);
-    }
-    return scope.get(targetVar);
-  };
-
-  switch (op) {
-    case ".": {
-      const resolvedPointerValue = resolvePointerValue();
-      result = handleFieldAccessOp(left, rightStr, resolvedPointerValue);
-      break;
-    }
-    case "[": {
-      const resolvedPointerValue = resolvePointerValue();
-      result = handleIndexingOp(left, right, resolvedPointerValue);
-      break;
-    }
-    case "+":
-    case "-":
-    case "*":
-    case "/":
-      result = performArithmeticOp(op, left, right);
-      break;
-    case "<":
-    case ">":
-    case "<=":
-    case ">=":
-    case "==":
-    case "!=":
-      result = performComparisonOp(op, left, right);
-      break;
-    case "&&":
-      result = left !== 0 && right !== 0 ? 1 : 0;
-      break;
-    case "is": {
-      if (!typeMap || !leftStr) throw new Error("invalid 'is' operator usage");
-      result = handleIsOperator(left, leftStr, rightStr, typeMap);
-      break;
-    }
-    default:
-      return 0;
-  }
-  if (
-    op !== "is" &&
-    op !== "." &&
-    leftInfo.typeSize > 0 &&
-    !rightStr.includes("+") &&
-    !rightStr.includes("-") &&
-    !rightStr.includes("*") &&
-    !rightStr.includes("/") &&
-    !rightStr.includes("<") &&
-    !rightStr.includes(">") &&
-    !rightStr.includes("=")
-  ) {
+  const result = performOperationLogic(
+    left,
+    op,
+    right,
+    rightStr,
+    typeMap,
+    leftStr,
+    scope,
+  );
+  if (shouldValidateUnsigned(op, leftInfo, rightStr)) {
     const rightInfo = extractTypedInfo(rightStr);
     if (rightInfo.typeSize === leftInfo.typeSize)
       validateUnsignedValue(result, leftInfo.typeSize);

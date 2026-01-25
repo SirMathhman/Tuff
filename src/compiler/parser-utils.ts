@@ -31,6 +31,52 @@ const REFERENCE_DELIMITERS = new Set([
 ]);
 const SPECIAL_IDENTIFIERS = new Set(["true", "false"]);
 
+function parseMutability(
+  source: string,
+  i: number,
+): { isMutable: boolean; nextIndex: number } {
+  let index = i;
+  let isMutable = false;
+  if (matchWord(source, index, "mut")) {
+    isMutable = true;
+    index += 3;
+    while (index < source.length && isWhitespace(source[index])) index++;
+  }
+  return { isMutable, nextIndex: index };
+}
+
+function parseVarName(
+  source: string,
+  i: number,
+): { name: string; nextIndex: number } {
+  const nameStart = i;
+  let index = i;
+  while (index < source.length && isIdentifierChar(source[index])) index++;
+  const name = source.slice(nameStart, index);
+  if (!name) throw new Error("Expected variable name after let");
+  return { name, nextIndex: index };
+}
+
+function parseTypeAnnotation(
+  source: string,
+  i: number,
+): { type: string | undefined; nextIndex: number } {
+  let index = i;
+  while (index < source.length && isWhitespace(source[index])) index++;
+  if (index >= source.length || source[index] !== ":")
+    return { type: undefined, nextIndex: index };
+  index++;
+  while (index < source.length && isWhitespace(source[index])) index++;
+  const typeStart = index;
+  while (
+    index < source.length &&
+    (isIdentifierChar(source[index]) || source[index] === "*")
+  )
+    index++;
+  const type = source.slice(typeStart, index).trim();
+  return { type, nextIndex: index };
+}
+
 /**
  * Parse a single let declaration
  */
@@ -45,35 +91,16 @@ export function parseLetDeclaration(
 } {
   let i = startIndex + 3;
   while (i < source.length && isWhitespace(source[i])) i++;
-
-  let isMutable = false;
-  if (matchWord(source, i, "mut")) {
-    isMutable = true;
-    i += 3;
-    while (i < source.length && isWhitespace(source[i])) i++;
-  }
-
-  const nameStart = i;
-  while (i < source.length && isIdentifierChar(source[i])) i++;
-  const varName = source.slice(nameStart, i);
-  if (!varName) throw new Error("Expected variable name after let");
-
+  const { isMutable, nextIndex: mutIndex } = parseMutability(source, i);
+  i = mutIndex;
+  const { name: varName, nextIndex: nameIndex } = parseVarName(source, i);
+  i = nameIndex;
+  const { type: typeAnnotation, nextIndex: typeIndex } = parseTypeAnnotation(
+    source,
+    i,
+  );
+  i = typeIndex;
   while (i < source.length && isWhitespace(source[i])) i++;
-
-  let typeAnnotation: string | undefined;
-  if (i < source.length && source[i] === ":") {
-    i++;
-    while (i < source.length && isWhitespace(source[i])) i++;
-    const typeStart = i;
-    while (
-      i < source.length &&
-      (isIdentifierChar(source[i]) || source[i] === "*")
-    )
-      i++;
-    typeAnnotation = source.slice(typeStart, i).trim();
-    while (i < source.length && isWhitespace(source[i])) i++;
-  }
-
   if (i < source.length && source[i] === "=") {
     i++;
     while (i < source.length && isWhitespace(source[i])) i++;
@@ -89,7 +116,6 @@ export function parseLetDeclaration(
     const value = source.slice(valueStart, i).trim();
     if (typeAnnotation) validateTypeAnnotation(value, typeAnnotation);
   }
-
   if (i < source.length && source[i] === ";") i++;
   return { nextIndex: i, varName, typeAnnotation, isMutable };
 }
@@ -117,27 +143,17 @@ export function validateVariableUsage(
       continue;
     }
 
-    if (
-      isIdentifierChar(source[i]) &&
-      !isDigit(source[i])
-    ) {
+    if (isIdentifierChar(source[i]) && !isDigit(source[i])) {
       const nameStart = i;
-      while (i < source.length && isIdentifierChar(source[i]))
-        i++;
+      while (i < source.length && isIdentifierChar(source[i])) i++;
       const name = source.slice(nameStart, i);
 
       let nextIdx = i;
-      while (
-        nextIdx < source.length &&
-        isWhitespace(source[nextIdx])
-      )
+      while (nextIdx < source.length && isWhitespace(source[nextIdx]))
         nextIdx++;
       const nextChar = nextIdx < source.length ? source[nextIdx]! : "";
 
-      if (
-        nextChar === "=" &&
-        charAt(source, nextIdx + 1) !== "="
-      ) {
+      if (nextChar === "=" && charAt(source, nextIdx + 1) !== "=") {
         if (variables.has(name)) {
           if (!variables.get(name)!.mutable) {
             throw new Error(

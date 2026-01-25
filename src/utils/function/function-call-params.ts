@@ -1,7 +1,4 @@
-import type {
-  Interpreter,
-  InterpreterContext,
-} from "../../expressions/handlers";
+import type { Interpreter, InterpreterContext } from "../../types/interpreter";
 
 type DeclarationHandler = (
   input: string,

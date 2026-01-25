@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { interpret } from "../../src/utils/interpret";
 
-describe("interpret - variables", () => {
+describe("interpret - variables - basic", () => {
   it("supports simple variable declaration", () => {
     expect(interpret("let x : I32 = 3; x")).toBe(3);
   });
@@ -25,7 +25,9 @@ describe("interpret - variables", () => {
   it("throws on duplicate variable declaration in same scope", () => {
     expect(() => interpret("let x = 100; let x = 200; x")).toThrow();
   });
+});
 
+describe("interpret - variables - type coercion", () => {
   it("allows narrower type assignment to wider type variable", () => {
     expect(interpret("let x : U16 = 100U8; x")).toBe(100);
   });
@@ -37,7 +39,9 @@ describe("interpret - variables", () => {
   it("throws when assigning variable of wider type to narrower type variable", () => {
     expect(() => interpret("let x = 100U16; let y : U8 = x; y")).toThrow();
   });
+});
 
+describe("interpret - variables - mutable", () => {
   it("supports mutable variable assignment", () => {
     expect(interpret("let mut x = 0; x = 100; x")).toBe(100);
   });
@@ -53,7 +57,9 @@ describe("interpret - variables", () => {
   it("throws when variable is declared inside grouped expressions and used outside", () => {
     expect(() => interpret("{ let mut x = 0; } x = 100; x")).toThrow();
   });
+});
 
+describe("interpret - variables - uninitialized", () => {
   it("supports uninitialized variable declaration", () => {
     expect(interpret("let x : I32; x = 100; x")).toBe(100);
   });
@@ -69,7 +75,9 @@ describe("interpret - variables", () => {
   it("supports variable assignment inside if-else branches", () => {
     expect(interpret("let x : I32; if (true) x = 10; else x = 20; x")).toBe(10);
   });
+});
 
+describe("interpret - variables - pointers", () => {
   it("supports pointer creation and dereferencing", () => {
     expect(interpret("let x = 100; let y : *I32 = &x; *y")).toBe(100);
   });
@@ -97,7 +105,9 @@ describe("interpret - variables", () => {
       ),
     ).toBe(6);
   });
+});
 
+describe("interpret - variables - this keyword", () => {
   it("supports calling function via this.methodName() at global scope", () => {
     expect(interpret("fn get() => 100; this.get()")).toBe(100);
   });

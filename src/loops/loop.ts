@@ -17,7 +17,6 @@ interface HandlerParams {
   unmutUninitializedSet?: Set<string>;
 }
 
-// Special error used to break out of a loop with a value
 function createBreakException(value: number): Error & { value: number } {
   const error = new Error("break") as Error & { value: number };
   error.value = value;
@@ -34,7 +33,48 @@ function isBreakException(err: unknown): err is Error & { value: number } {
 
 export { isBreakException };
 
+function findLoopBodyBracesEnd(afterLoop: string): number {
+  let braceDepth = 0;
+  for (let i = 0; i < afterLoop.length; i++) {
+    const ch = afterLoop[i];
+    if (ch === "{") braceDepth++;
+    else if (ch === "}") {
+      braceDepth--;
+      if (braceDepth === 0) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
 
+function executeInfiniteLoop(
+  loopBody: string,
+  scope: Map<string, number>,
+  typeMap: Map<string, number>,
+  mutMap: Map<string, boolean>,
+  uninitializedSet: Set<string>,
+  unmutUninitializedSet: Set<string>,
+  interpreter: Interpreter,
+): void {
+  for (;;) {
+    try {
+      interpreter(
+        loopBody,
+        scope,
+        typeMap,
+        mutMap,
+        uninitializedSet,
+        unmutUninitializedSet,
+      );
+    } catch (e) {
+      if (isBreakException(e)) {
+        throw e;
+      }
+      throw e;
+    }
+  }
+}
 
 export function handleLoop(params: HandlerParams): number | undefined {
   const {
@@ -48,57 +88,25 @@ export function handleLoop(params: HandlerParams): number | undefined {
   } = params;
   const trimmed = s.trim();
   if (!trimmed.startsWith("loop")) return undefined;
-
   const afterLoop = trimmed.slice(4).trimStart();
   if (!afterLoop.startsWith("{")) return undefined;
-
-  // Find the matching closing brace
-  let braceDepth = 0;
-  let braceCloseIdx = -1;
-
-  for (let i = 0; i < afterLoop.length; i++) {
-    const ch = afterLoop[i];
-    if (ch === "{") braceDepth++;
-    else if (ch === "}") {
-      braceDepth--;
-      if (braceDepth === 0) {
-        braceCloseIdx = i;
-        break;
-      }
-    }
-  }
-
+  const braceCloseIdx = findLoopBodyBracesEnd(afterLoop);
   if (braceCloseIdx === -1) return undefined;
-
   const loopBody = afterLoop.slice(1, braceCloseIdx).trim();
-
   try {
-    // Infinite loop - keep executing the body
-    for (;;) {
-      try {
-        // Interpret the entire loop body as a single expression
-        // This allows complex statements like if-break to work
-        interpreter(
-          loopBody,
-          scope,
-          typeMap,
-          mutMap,
-          uninitializedSet,
-          unmutUninitializedSet,
-        );
-      } catch (e) {
-        if (isBreakException(e)) {
-          throw e; // Re-throw to be caught by outer handler
-        }
-        throw e;
-      }
-    }
+    executeInfiniteLoop(
+      loopBody,
+      scope,
+      typeMap,
+      mutMap,
+      uninitializedSet,
+      unmutUninitializedSet,
+      interpreter,
+    );
   } catch (e) {
     if (isBreakException(e)) {
-      // Calculate position after the loop body
       const loopExprEnd = trimmed.indexOf("{") + 1 + braceCloseIdx + 1;
       const afterLoopExpr = trimmed.slice(loopExprEnd).trim();
-
       if (afterLoopExpr) {
         return interpreter(
           afterLoopExpr,
@@ -151,4 +159,3 @@ export function handleBreak(params: HandlerParams): void {
   );
   throw createBreakException(value);
 }
-

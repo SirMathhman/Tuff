@@ -54,6 +54,14 @@ export default [
           skipBlankLines: true,
         },
       ],
+      "max-lines-per-function": [
+        "error",
+        {
+          max: 50,
+          skipComments: true,
+          skipBlankLines: true,
+        },
+      ],
       "@typescript-eslint/no-unused-vars": [
         "error",
         {

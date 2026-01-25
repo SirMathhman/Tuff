@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { interpret } from "../../src/utils/interpret";
 
-describe("interpret - strings", () => {
+describe("interpret - strings - basic", () => {
   it("supports string literal with double quotes", () => {
     expect(interpret('"test"')).toBeGreaterThanOrEqual(1000000);
   });
@@ -33,7 +33,9 @@ describe("interpret - strings", () => {
   it("supports string pointer length property", () => {
     expect(interpret('let x : *Str = "test"; x.length')).toBe(4);
   });
+});
 
+describe("interpret - strings - escaping", () => {
   it("supports string with escaped characters", () => {
     expect(interpret('"hello\\nworld".length')).toBe(11);
   });
@@ -60,7 +62,9 @@ describe("interpret - strings", () => {
       interpret('let msg : Str = "message"; let len = msg.length; len'),
     ).toBe(7);
   });
+});
 
+describe("interpret - strings - indexing", () => {
   it("supports string indexing with literals", () => {
     expect(interpret('"test"[0]')).toBe(116); // 't'
   });

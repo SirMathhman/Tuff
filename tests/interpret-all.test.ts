@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { interpretAll } from "../src/utils/interpret";
 
-describe("interpretAll", () => {
+describe("interpretAll - use statements", () => {
   it("executes main module with lib dependency via import", () => {
     const config = new Map<string[], string>([
       [["main"], "use { get } from lib; get()"],
@@ -21,7 +21,9 @@ describe("interpretAll", () => {
     const result = interpretAll(["main"], config);
     expect(result).toBe(7);
   });
+});
 
+describe("interpretAll - module references", () => {
   it("executes module function via variable reference", () => {
     const config = new Map<string[], string>([
       [["main"], "let temp from lib; temp.get()"],
@@ -41,7 +43,9 @@ describe("interpretAll", () => {
     const result = interpretAll(["main"], config);
     expect(result).toBe(12);
   });
+});
 
+describe("interpretAll - struct and native imports", () => {
   it("uses struct type from module with destructuring", () => {
     const config = new Map<string[], string>([
       [

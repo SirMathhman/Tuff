@@ -8,8 +8,40 @@ import { getModuleDeclarationHandler } from "../types/modules";
 import { getObjectDeclarationHandler } from "../types/objects";
 import type { FunctionCallParams } from "./function/function-call-params";
 import type { Interpreter, InterpreterContext } from "../expressions/handlers";
+import { handleMatch } from "../match";
+import { handleLoop, handleBreak, isBreakException } from "../loops/loop";
+import { handleWhile } from "../loops/while";
+import { handleFor } from "../loops/for";
+import { handleDereferenceAssignment } from "../handlers/variables/dereference-assignment";
+import { handleVarAssignment } from "../expressions/handlers";
+import { handleLambdaExpression } from "../handlers/functions/lambda-expressions";
+import {
+  handleReferenceOperation,
+  handleDereferenceOperation,
+} from "../handlers/access/pointer-operations";
+import { handleModuleAccess } from "../handlers/access/module-access";
 
 type Params = FunctionCallParams;
+type LoopCtx = {
+  s: string;
+  scope: Map<string, number>;
+  typeMap: Map<string, number>;
+  mutMap: Map<string, boolean>;
+  interpreter: Interpreter;
+  uninitializedSet: Set<string>;
+  unmutUninitializedSet: Set<string>;
+};
+function buildLoopCtx(p: Params): LoopCtx {
+  return {
+    s: p.s,
+    scope: p.scope,
+    typeMap: p.typeMap,
+    mutMap: p.mutMap,
+    interpreter: p.interpreter,
+    uninitializedSet: p.uninitializedSet,
+    unmutUninitializedSet: p.unmutUninitializedSet,
+  };
+}
 
 export function buildInterpreterParams(
   s: string,
@@ -77,15 +109,16 @@ export function tryFunctionCalls(p: Params): number | undefined {
 }
 
 export function tryUnaryOperation(p: Params): number | undefined {
-  return handleUnaryOperation(
-    p.s,
-    p.scope,
-    p.typeMap,
-    p.mutMap,
-    p.uninitializedSet,
-    p.unmutUninitializedSet,
-    p.interpreter,
-  );
+  return handleUnaryOperation({
+    s: p.s,
+    scope: p.scope,
+    typeMap: p.typeMap,
+    mutMap: p.mutMap,
+    uninitializedSet: p.uninitializedSet,
+    unmutUninitializedSet: p.unmutUninitializedSet,
+    interpreter: p.interpreter,
+    visMap: p.visMap,
+  });
 }
 
 export function mightNeedBinaryOp(s: string): boolean {
@@ -105,4 +138,57 @@ export function mightNeedBinaryOp(s: string): boolean {
     s.includes("&&") ||
     s.includes(".")
   );
+}
+
+export function tryControlFlow(p: Params): number | undefined {
+  let result = handleMatch(p.s, p.scope, p.typeMap, p.mutMap, (i, sc, tm, mm) =>
+    p.interpreter(i, sc, tm, mm, p.uninitializedSet, p.unmutUninitializedSet),
+  );
+  if (result !== undefined) return result;
+  const ctx = buildLoopCtx(p);
+  result = handleLoop(ctx);
+  if (result !== undefined) return result;
+  result = handleWhile(ctx);
+  if (result !== undefined) return result;
+  result = handleFor(ctx);
+  if (result !== undefined) return result;
+  try {
+    handleBreak(ctx);
+  } catch (e) {
+    if (isBreakException(e)) throw e;
+  }
+  return undefined;
+}
+
+export function tryAssignments(p: Params): number | undefined {
+  const result = handleDereferenceAssignment(
+    p.s,
+    p.scope,
+    p.typeMap,
+    p.mutMap,
+    p.uninitializedSet,
+    p.unmutUninitializedSet,
+    p.interpreter,
+  );
+  if (result !== undefined) return result;
+  return handleVarAssignment({
+    s: p.s,
+    scope: p.scope,
+    typeMap: p.typeMap,
+    mutMap: p.mutMap,
+    uninitializedSet: p.uninitializedSet,
+    unmutUninitializedSet: p.unmutUninitializedSet,
+    interpreter: p.interpreter,
+    visMap: p.visMap,
+  });
+}
+
+export function tryExpressions(p: Params): number | undefined {
+  let result = handleReferenceOperation(p.s, p.scope, p.mutMap);
+  if (result !== undefined) return result;
+  result = handleDereferenceOperation(p.s, p.scope);
+  if (result !== undefined) return result;
+  result = handleLambdaExpression(p.s, p.typeMap);
+  if (result !== undefined) return result;
+  return handleModuleAccess(p.s, p.scope, p.typeMap, p.mutMap, p.interpreter);
 }

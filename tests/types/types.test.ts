@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { interpret } from "../../src/utils/interpret";
 
-describe("interpret - types", () => {
+describe("interpret - types - checking and aliases", () => {
   it("supports type check with 'is' operator", () => {
     expect(interpret("let temp : I32 = 100; temp is I32")).toBe(1);
   });
@@ -22,6 +22,12 @@ describe("interpret - types", () => {
     ).toBe(1);
   });
 
+  it("supports forward type references - type declared after use", () => {
+    expect(interpret("let x : Temp = 100; type Temp = I32; x")).toBe(100);
+  });
+});
+
+describe("interpret - types - structs", () => {
   it("supports struct declaration and field access", () => {
     expect(
       interpret("struct Wrapper { field : 100 } Wrapper { field : 100 }.field"),
@@ -41,7 +47,9 @@ describe("interpret - types", () => {
       interpret("fn Wrapper(field : I32) => this; Wrapper(100).field"),
     ).toBe(100);
   });
+});
 
+describe("interpret - types - arrays", () => {
   it("supports typed arrays with indexing", () => {
     expect(
       interpret(
@@ -65,11 +73,9 @@ describe("interpret - types", () => {
   it("supports array init property", () => {
     expect(interpret("let array = [1, 2, 3]; array.init")).toBe(3);
   });
+});
 
-  it("supports forward type references - type declared after use", () => {
-    expect(interpret("let x : Temp = 100; type Temp = I32; x")).toBe(100);
-  });
-
+describe("interpret - types - destructors", () => {
   it("supports type destructors with 'then' clause", () => {
     expect(
       interpret(

@@ -11,8 +11,7 @@ import { validateTypeConstraint } from "./type-utils";
  * Skip whitespace in source starting at index
  */
 function skipWhitespace(source: string, index: number): number {
-  while (index < source.length && isWhitespace(source[index]))
-    index++;
+  while (index < source.length && isWhitespace(source[index])) index++;
   return index;
 }
 
@@ -31,12 +30,10 @@ export function removeTypeSyntax(source: string): string {
 
     if (matchWord(source, i, "let")) {
       i = skipWhitespace(source, i + 3);
-      if (matchWord(source, i, "mut"))
-        i = skipWhitespace(source, i + 3);
+      if (matchWord(source, i, "mut")) i = skipWhitespace(source, i + 3);
 
       const varStart = i;
-      while (i < source.length && isIdentifierChar(source[i]))
-        i++;
+      while (i < source.length && isIdentifierChar(source[i])) i++;
       result += source.slice(varStart, i);
 
       i = skipWhitespace(source, i);
@@ -80,8 +77,7 @@ export function extractVarDeclarations(source: string): {
 
     if (isIdentifierChar(ch) && !isDigit(ch)) {
       const nameStart = i;
-      while (i < source.length && isIdentifierChar(source[i]))
-        i++;
+      while (i < source.length && isIdentifierChar(source[i])) i++;
       const name = source.slice(nameStart, i);
 
       const nextIdx = skipWhitespace(source, i);
@@ -113,10 +109,7 @@ export function convertStatementsToExpressions(source: string): string {
   let result = "";
   let i = source.length - 1;
 
-  while (
-    i >= 0 &&
-    (source[i] === ";" || isWhitespace(source[i]))
-  ) {
+  while (i >= 0 && (source[i] === ";" || isWhitespace(source[i]))) {
     if (source[i] === ";") {
       i--;
       break;
@@ -175,11 +168,7 @@ export function stripTypeAnnotationsAndValidate(js: string): string {
 
   while (i < js.length) {
     let isNegative = false;
-    if (
-      js[i] === "-" &&
-      i + 1 < js.length &&
-      isDigit(js[i + 1])
-    ) {
+    if (js[i] === "-" && i + 1 < js.length && isDigit(js[i + 1])) {
       isNegative = true;
       result += js[i];
       i++;

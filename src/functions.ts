@@ -1,9 +1,6 @@
 import { isValidIdentifier } from "./utils/identifier-utils";
 import { registerAnonymousFunction } from "./handlers/functions/anonymous-functions";
-import {
-  isFunctionType,
-  extractReturnTypeFromFunctionType,
-} from "./utils/function/function-utils";
+import { isFunctionType } from "./utils/function/function-utils";
 import { createFunctionDeclarationHandler } from "./handlers/functions/function-declaration";
 import type { FunctionCallParams } from "./utils/function/function-call-params";
 import {
@@ -17,14 +14,20 @@ import {
   extractFunctionName,
 } from "./utils/function/function-helpers";
 import { parseArguments } from "./utils/function/parse-arguments";
+import {
+  functionDefs,
+  setFunctionRef,
+  getFunctionRef,
+  getCurrentFunctionParams,
+  setCurrentFunctionParams,
+} from "./function-defs";
+import {
+  processArguments,
+  createFunctionScope,
+  executeFunctionBody,
+  type FnContext,
+} from "./utils/function/invocation";
 
-type FnDef = {
-  params: Array<{ name: string; type: number; typeStr?: string }>;
-  returnType: number;
-  body: string;
-  generics?: string[];
-};
-const functionDefs = new Map<string, FnDef>();
 export {
   functionDefs,
   registerAnonymousFunction,
@@ -32,22 +35,107 @@ export {
   getLocalFunctionNames,
   setLocalFunctionNames,
   addLocalFunctionName,
+  setFunctionRef,
+  getFunctionRef,
+  getCurrentFunctionParams,
+  setCurrentFunctionParams,
 };
-const functionRefs = new Map<string, string>();
-export const setFunctionRef = (varName: string, fnName: string) =>
-  functionRefs.set(varName, fnName);
-export const getFunctionRef = (varName: string) => functionRefs.get(varName);
+
 export const handleFunctionDeclaration =
   createFunctionDeclarationHandler(functionDefs);
 
-// Track current function context for 'this' support
-let currentFunctionParams: Array<{ name: string; value: number }> | undefined;
-export const getCurrentFunctionParams = () => currentFunctionParams;
-export const setCurrentFunctionParams = (
-  params: Array<{ name: string; value: number }> | undefined,
-) => {
-  currentFunctionParams = params;
-};
+function callInterpreter(ctx: FnContext, input: string): number {
+  return ctx.interpreter(
+    input,
+    ctx.scope,
+    ctx.typeMap,
+    ctx.mutMap,
+    ctx.uninitializedSet,
+    ctx.unmutUninitializedSet,
+  );
+}
+
+function validateAndParseFunctionCall(
+  trimmed: string,
+):
+  | { fnName: string; actualFnName: string; argsStr: string; rest: string }
+  | undefined {
+  const parenIndex = trimmed.indexOf("(");
+  if (parenIndex === -1) return undefined;
+  const fnNamePart = trimmed.slice(0, parenIndex).trim();
+  const { name: fnName } = extractFunctionName(fnNamePart);
+  if (!isValidIdentifier(fnName)) return undefined;
+  const referencedFnName = getFunctionRef(fnName),
+    actualFnName = referencedFnName || fnName;
+  const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
+  if (closeParenIndex === -1) return undefined;
+  return {
+    fnName,
+    actualFnName,
+    argsStr: trimmed.slice(parenIndex + 1, closeParenIndex).trim(),
+    rest: trimmed.slice(closeParenIndex + 1).trim(),
+  };
+}
+
+function checkNativeOrDefinedFunction(actualFnName: string): {
+  hasNativeFunc: boolean;
+  hasFnDef: boolean;
+} {
+  const nativeFunc =
+    typeof globalThis !== "undefined"
+      ? (globalThis as Record<string, unknown>)[`__native__${actualFnName}`]
+      : undefined;
+  return {
+    hasNativeFunc: typeof nativeFunc === "function",
+    hasFnDef: functionDefs.has(actualFnName),
+  };
+}
+
+function handleResultWithRest(
+  result: number,
+  rest: string,
+  ctx: FnContext,
+): number {
+  if (rest === "") return result;
+  return callInterpreter(ctx, result.toString() + rest);
+}
+
+function executeDefinedFunction(
+  actualFnName: string,
+  argsStr: string,
+  rest: string,
+  ctx: FnContext,
+): number {
+  const fnDef = functionDefs.get(actualFnName)!;
+  const argParts = parseArguments(argsStr);
+  const args = processArguments(argParts, fnDef, actualFnName, ctx);
+  const mergedScope = createFunctionScope(fnDef, args, ctx);
+  const result = executeFunctionBody(fnDef, args, mergedScope, ctx);
+  return handleResultWithRest(result, rest, ctx);
+}
+
+function handleFunctionExecution(
+  actualFnName: string,
+  argsStr: string,
+  rest: string,
+  ctx: FnContext,
+  hasNativeFunc: boolean,
+): number {
+  if (hasNativeFunc) {
+    return handleNativeFunctionCall(
+      actualFnName,
+      argsStr,
+      rest,
+      ctx.scope,
+      ctx.typeMap,
+      ctx.mutMap,
+      ctx.uninitializedSet,
+      ctx.unmutUninitializedSet,
+      ctx.interpreter,
+    );
+  }
+  return executeDefinedFunction(actualFnName, argsStr, rest, ctx);
+}
 
 export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   const {
@@ -60,135 +148,25 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
     interpreter,
   } = p;
   const trimmed = s.trim();
-  const parenIndex = trimmed.indexOf("(");
-  if (parenIndex === -1) return undefined;
-  const fnNamePart = trimmed.slice(0, parenIndex).trim();
-  const { name: fnName } = extractFunctionName(fnNamePart);
-  if (!isValidIdentifier(fnName)) return undefined;
-  const referencedFnName = getFunctionRef(fnName);
-  const actualFnName = referencedFnName || fnName;
-
-  // Check for native function first
-  const nativeFunc =
-    typeof globalThis !== "undefined"
-      ? (globalThis as Record<string, unknown>)[`__native__${actualFnName}`]
-      : undefined;
-  const hasNativeFunc = typeof nativeFunc === "function";
-
-  if (!hasNativeFunc && !functionDefs.has(actualFnName)) return undefined;
-
-  const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
-  if (closeParenIndex === -1) return undefined;
-
-  // Check for trailing content after the function call
-  const rest = trimmed.slice(closeParenIndex + 1).trim();
-
-  const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
-
-  if (hasNativeFunc) {
-    return handleNativeFunctionCall(
-      actualFnName,
-      argsStr,
-      rest,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-      interpreter,
-    );
-  }
-
-  const fnDef = functionDefs.get(actualFnName)!;
-  const argParts = parseArguments(argsStr);
-  if (argParts.length !== fnDef.params.length)
-    throw new Error(
-      `function ${actualFnName} expects ${fnDef.params.length} arguments, got ${argParts.length}`,
-    );
-  const args: number[] = [];
-  for (let i = 0; i < argParts.length; i++) {
-    const argStr = argParts[i]!;
-    const paramType = fnDef.params[i]?.type;
-    if (paramType === -2) {
-      const paramTypeStr = fnDef.params[i]?.typeStr;
-      const inferredReturnType = paramTypeStr
-        ? extractReturnTypeFromFunctionType(paramTypeStr, typeMap)
-        : 0;
-      const anonResult = registerAnonymousFunction(
-        argStr,
-        typeMap,
-        inferredReturnType,
-      );
-      if (!anonResult) throw new Error(`failed to register lambda: ${argStr}`);
-      functionDefs.set(anonResult.name, anonResult.def);
-      args.push(1);
-      setFunctionRef(`__arg_${i}`, anonResult.name);
-    } else {
-      args.push(
-        interpreter(
-          argStr,
-          scope,
-          typeMap,
-          mutMap,
-          uninitializedSet,
-          unmutUninitializedSet,
-        ),
-      );
-    }
-  }
-
-  const fnScope = new Map<string, boolean>(mutMap),
-    fnVarMap = new Map<string, number>();
-  for (let i = 0; i < fnDef.params.length; i++) {
-    const paramName = fnDef.params[i]?.name;
-    const paramType = fnDef.params[i]?.type;
-    const paramValue = args[i];
-    if (paramName && paramValue !== undefined) {
-      if (paramType === -2) {
-        setFunctionRef(paramName, getFunctionRef(`__arg_${i}`) || "");
-      }
-      fnVarMap.set(paramName, paramValue);
-      fnScope.set(paramName, false);
-    }
-  }
-  const mergedScope = new Map(scope);
-  for (const [k, v] of fnVarMap) mergedScope.set(k, v);
-
-  // Set function context for 'this' support
-  const paramsList = fnDef.params.map((p, i) => ({
-    name: p.name,
-    value: args[i]!,
-  }));
-  setCurrentFunctionParams(paramsList);
-
-  // Initialize local function tracking for this function's execution
-  const prevLocalFns = getLocalFunctionNames();
-  setLocalFunctionNames(new Set());
-
-  const result = interpreter(
-    fnDef.body,
-    mergedScope,
-    typeMap,
-    fnScope,
-    uninitializedSet,
-    unmutUninitializedSet,
-  );
-
-  // Clear function context
-  setCurrentFunctionParams(undefined);
-  setLocalFunctionNames(prevLocalFns);
-
-  // Handle trailing content after the function call (e.g., .field in foo().field)
-  if (rest === "") {
-    return result;
-  }
-
-  return interpreter(
-    result.toString() + rest,
+  const parsed = validateAndParseFunctionCall(trimmed);
+  if (!parsed) return undefined;
+  const { actualFnName, argsStr, rest } = parsed;
+  const { hasNativeFunc, hasFnDef } =
+    checkNativeOrDefinedFunction(actualFnName);
+  if (!hasNativeFunc && !hasFnDef) return undefined;
+  const ctx: FnContext = {
     scope,
     typeMap,
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
+    interpreter,
+  };
+  return handleFunctionExecution(
+    actualFnName,
+    argsStr,
+    rest,
+    ctx,
+    hasNativeFunc,
   );
 }

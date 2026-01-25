@@ -1,128 +1,130 @@
 import { findOperatorIndex, performBinaryOp } from "./operators";
 import { parseTypedNumber, extractTypedInfo } from "../../parser";
-import type { Interpreter } from "../handlers";
+import type { ScopeContext } from "../../types/interpreter";
+import { callInterpreter } from "../../types/interpreter";
+import type { FunctionCallParams } from "../../utils/function/function-call-params";
 
-export function handleBinaryOperation(
-  s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpretWithScope: Interpreter,
+function getRightOperand(s: string, opIndex: number, op: string): string {
+  if (op === "is") return s.slice(opIndex + 3).trim();
+  if (op === "&&") return s.slice(opIndex + 2).trim();
+  return s.slice(opIndex + op.length).trim();
+}
+
+function handleIsOperator(
+  leftStr: string,
+  rightStr: string,
+  ctx: ScopeContext,
 ): number {
-  const { index: opIndex, operator: op } = findOperatorIndex(s);
-  if (opIndex === -1) return parseTypedNumber(s);
-
-  const leftStr = s.slice(0, opIndex).trim();
-  let rightStr: string;
-
-  if (op === "is") {
-    rightStr = s.slice(opIndex + 3).trim();
-  } else if (op === "&&") {
-    rightStr = s.slice(opIndex + 2).trim();
-  } else {
-    rightStr = s.slice(opIndex + op.length).trim();
-  }
-
-  // For 'is' operator, we need different handling
-  if (op === "is") {
-    const leftValue = interpretWithScope(
-      leftStr,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-    );
-    return performBinaryOp(
-      leftValue,
-      op,
-      0, // right value is not used for 'is'
-      extractTypedInfo(leftStr),
-      rightStr,
-      typeMap,
-      leftStr,
-      scope,
-    );
-  }
-
-  // For field access operator '.', the right side is a field name, not an expression
-  if (op === ".") {
-    const leftValue = interpretWithScope(
-      leftStr,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-    );
-    return performBinaryOp(
-      leftValue,
-      op,
-      0, // right value is not used for '.'
-      extractTypedInfo(leftStr),
-      rightStr,
-      typeMap,
-      leftStr,
-      scope,
-    );
-  }
-
-  // For array indexing operator '[', the right side is an expression inside brackets
-  if (op === "[") {
-    const leftValue = interpretWithScope(
-      leftStr,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-    );
-    // rightStr contains the index expression followed by ']', remove the trailing ']'
-    const indexExpr = rightStr.endsWith("]") ? rightStr.slice(0, -1) : rightStr;
-    const indexValue = interpretWithScope(
-      indexExpr,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-    );
-    return performBinaryOp(
-      leftValue,
-      op,
-      indexValue,
-      extractTypedInfo(leftStr),
-      rightStr,
-      typeMap,
-      leftStr,
-      scope,
-    );
-  }
-
+  const leftValue = callInterpreter(ctx, leftStr);
   return performBinaryOp(
-    interpretWithScope(
-      leftStr,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-    ),
-    op,
-    interpretWithScope(
-      rightStr,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-    ),
+    leftValue,
+    "is",
+    0,
     extractTypedInfo(leftStr),
     rightStr,
-    typeMap,
+    ctx.typeMap,
     leftStr,
-    scope,
+    ctx.scope,
   );
+}
+
+function handleFieldAccessOperator(
+  leftStr: string,
+  rightStr: string,
+  ctx: ScopeContext,
+): number {
+  const leftValue = callInterpreter(ctx, leftStr);
+  return performBinaryOp(
+    leftValue,
+    ".",
+    0,
+    extractTypedInfo(leftStr),
+    rightStr,
+    ctx.typeMap,
+    leftStr,
+    ctx.scope,
+  );
+}
+
+function handleArrayIndexOperator(
+  leftStr: string,
+  rightStr: string,
+  ctx: ScopeContext,
+): number {
+  const leftValue = callInterpreter(ctx, leftStr);
+  const indexExpr = rightStr.endsWith("]") ? rightStr.slice(0, -1) : rightStr;
+  const indexValue = callInterpreter(ctx, indexExpr);
+  return performBinaryOp(
+    leftValue,
+    "[",
+    indexValue,
+    extractTypedInfo(leftStr),
+    rightStr,
+    ctx.typeMap,
+    leftStr,
+    ctx.scope,
+  );
+}
+
+function handleSpecialOperators(
+  op: string,
+  leftStr: string,
+  rightStr: string,
+  ctx: ScopeContext,
+): number | undefined {
+  if (op === "is") return handleIsOperator(leftStr, rightStr, ctx);
+  if (op === ".") return handleFieldAccessOperator(leftStr, rightStr, ctx);
+  if (op === "[") return handleArrayIndexOperator(leftStr, rightStr, ctx);
+  return undefined;
+}
+
+function evaluateStandardBinaryOp(
+  s: string,
+  opIndex: number,
+  op: string,
+  ctx: ScopeContext,
+): number {
+  const leftStr = s.slice(0, opIndex).trim();
+  const rightStr = getRightOperand(s, opIndex, op);
+  return performBinaryOp(
+    callInterpreter(ctx, leftStr),
+    op,
+    callInterpreter(ctx, rightStr),
+    extractTypedInfo(leftStr),
+    rightStr,
+    ctx.typeMap,
+    leftStr,
+    ctx.scope,
+  );
+}
+
+type BinaryOpParams = Pick<
+  FunctionCallParams,
+  | "s"
+  | "scope"
+  | "typeMap"
+  | "mutMap"
+  | "uninitializedSet"
+  | "unmutUninitializedSet"
+  | "interpreter"
+  | "visMap"
+>;
+
+export function handleBinaryOperation(p: BinaryOpParams): number {
+  const { index: opIndex, operator: op } = findOperatorIndex(p.s);
+  if (opIndex === -1) return parseTypedNumber(p.s);
+  const ctx: ScopeContext = {
+    scope: p.scope,
+    typeMap: p.typeMap,
+    mutMap: p.mutMap,
+    uninitializedSet: p.uninitializedSet,
+    unmutUninitializedSet: p.unmutUninitializedSet,
+    visMap: p.visMap,
+    interpreter: p.interpreter,
+  };
+  const leftStr = p.s.slice(0, opIndex).trim();
+  const rightStr = getRightOperand(p.s, opIndex, op);
+  const specialResult = handleSpecialOperators(op, leftStr, rightStr, ctx);
+  if (specialResult !== undefined) return specialResult;
+  return evaluateStandardBinaryOp(p.s, opIndex, op, ctx);
 }

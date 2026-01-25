@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { interpret } from "../../src/utils/interpret";
 
-describe("interpret - functions", () => {
+describe("interpret - functions - declarations", () => {
   it("supports function declaration and calls", () => {
     expect(
       interpret(
@@ -16,6 +16,14 @@ describe("interpret - functions", () => {
     ).toBe(100);
   });
 
+  it("supports forward function references - function calling function declared later", () => {
+    expect(interpret("fn get0() => get1(); fn get1() => 100; get0()")).toBe(
+      100,
+    );
+  });
+});
+
+describe("interpret - functions - lambdas", () => {
   it("supports anonymous functions and lambda expressions", () => {
     expect(interpret("let func : () => I32 = () : I32 => 100; func()")).toBe(
       100,
@@ -33,7 +41,9 @@ describe("interpret - functions", () => {
       ),
     ).toBe(7);
   });
+});
 
+describe("interpret - functions - scope and methods", () => {
   it("supports function scope closure with mutable outer variable", () => {
     expect(interpret("let mut x = 0; fn add() => x += 1; add(); x")).toBe(1);
   });
@@ -52,11 +62,5 @@ describe("interpret - functions", () => {
         "fn add(this : I32, argument : I32) => this + argument; 100.add(10).add(20)",
       ),
     ).toBe(130);
-  });
-
-  it("supports forward function references - function calling function declared later", () => {
-    expect(interpret("fn get0() => get1(); fn get1() => 100; get0()")).toBe(
-      100,
-    );
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { interpret } from "../../src/utils/interpret";
 
-describe("interpret - modules", () => {
+describe("interpret - modules - declarations", () => {
   it("supports module declaration with function", () => {
     expect(
       interpret("module Sample { out fn get() => 100; } Sample::get()"),
@@ -38,6 +38,14 @@ describe("interpret - modules", () => {
     ).toBe(42);
   });
 
+  it("supports nested module access in expressions", () => {
+    expect(interpret("module M { out fn get() => 50; } M::get() + 50")).toBe(
+      100,
+    );
+  });
+});
+
+describe("interpret - modules - error handling", () => {
   it("throws when accessing non-existent module", () => {
     expect(() => interpret("NonExistent::foo()")).toThrow();
   });
@@ -47,13 +55,9 @@ describe("interpret - modules", () => {
       interpret("module Sample { out fn get() => 100; } Sample::missing()"),
     ).toThrow();
   });
+});
 
-  it("supports nested module access in expressions", () => {
-    expect(interpret("module M { out fn get() => 50; } M::get() + 50")).toBe(
-      100,
-    );
-  });
-
+describe("interpret - modules - objects", () => {
   it("supports object singleton with variable access", () => {
     expect(
       interpret("object MySingleton { out let x = 100; } MySingleton.x"),
@@ -79,7 +83,9 @@ describe("interpret - modules", () => {
       interpret("object MySingleton { out let x = 100; } MySingleton.x"),
     ).toBe(100);
   });
+});
 
+describe("interpret - modules - visibility", () => {
   it("throws when accessing private object member without out keyword", () => {
     expect(() =>
       interpret("object MySingleton { let x = 100; } MySingleton.x"),

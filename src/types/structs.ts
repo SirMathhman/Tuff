@@ -1,5 +1,6 @@
 import type { Interpreter } from "../expressions/handlers";
 import { makeDeclarationHandler } from "../declarations";
+import { parseGenericParams } from "../utils/generic-params";
 
 // Global struct instance storage: maps instance ID to {fieldValues, typeParams}
 // typeParams maps generic param names to concrete type names (e.g., {T: "I32"})
@@ -12,19 +13,6 @@ let nextInstanceId = 1000000; // Start from a high number to avoid conflicts wit
 export interface StructDefinition {
   fields: string[];
   generics?: string[];
-}
-
-function parseGenericParams(s: string): { name: string; params: string[] } {
-  const angleStart = s.indexOf("<"),
-    angleEnd = s.indexOf(">");
-  if (angleStart === -1 || angleEnd === -1)
-    return { name: s.trim(), params: [] };
-  const name = s.slice(0, angleStart).trim();
-  const paramStr = s.slice(angleStart + 1, angleEnd).trim();
-  return {
-    name,
-    params: paramStr ? paramStr.split(",").map((p) => p.trim()) : [],
-  };
 }
 
 export const handleStructDeclaration = makeDeclarationHandler(
@@ -63,27 +51,7 @@ export const handleStructDeclaration = makeDeclarationHandler(
   },
 );
 
-export function parseStructInstantiation(
-  s: string,
-  typeMap: Map<string, number>,
-  scope: Map<string, number>,
-  interpreter: Interpreter,
-): number | undefined {
-  const trimmed = s.trim();
-  const braceIndex = trimmed.indexOf("{");
-  if (braceIndex === -1) {
-    return undefined;
-  }
-
-  const headerStr = trimmed.slice(0, braceIndex).trim();
-  const { name: structName, params: concreteTypes } =
-    parseGenericParams(headerStr);
-
-  if (!typeMap.has("__struct__" + structName)) {
-    return undefined;
-  }
-
-  // Find the closing brace, accounting for nested braces in field values
+function findStructClosingBrace(trimmed: string, braceIndex: number): number {
   let closeIndex = -1;
   let braceDepth = 0;
   for (let i = braceIndex; i < trimmed.length; i++) {
@@ -96,29 +64,27 @@ export function parseStructInstantiation(
       }
     }
   }
+  return closeIndex;
+}
 
-  if (closeIndex === -1) {
-    return undefined;
-  }
-
-  const fieldsStr = trimmed.slice(braceIndex + 1, closeIndex).trim();
+function parseFieldAssignments(
+  fieldsStr: string,
+  scope: Map<string, number>,
+  typeMap: Map<string, number>,
+  interpreter: Interpreter,
+): Map<string, number> {
   const fieldAssignments = fieldsStr
     .split(",")
     .map((f) => f.trim())
     .filter((f) => f.length > 0);
-
   const fieldValues = new Map<string, number>();
-
   for (const assignment of fieldAssignments) {
     const colonIndex = assignment.indexOf(":");
     if (colonIndex === -1) {
       throw new Error(`invalid struct field assignment: ${assignment}`);
     }
-
     const fieldName = assignment.slice(0, colonIndex).trim();
     const valueStr = assignment.slice(colonIndex + 1).trim();
-
-    // Parse the value
     const value = interpreter(
       valueStr,
       scope,
@@ -127,11 +93,16 @@ export function parseStructInstantiation(
       new Set(),
       new Set(),
     );
-
     fieldValues.set(fieldName, value);
   }
+  return fieldValues;
+}
 
-  // Extract generic parameter mappings
+function extractTypeParameters(
+  concreteTypes: string[],
+  structName: string,
+  typeMap: Map<string, number>,
+): Map<string, string> {
   const typeParamMap = new Map<string, string>();
   if (concreteTypes.length > 0) {
     const genericParamStr = typeMap.get("__struct_generics__" + structName);
@@ -152,7 +123,42 @@ export function parseStructInstantiation(
       }
     }
   }
+  return typeParamMap;
+}
 
+export function parseStructInstantiation(
+  s: string,
+  typeMap: Map<string, number>,
+  scope: Map<string, number>,
+  interpreter: Interpreter,
+): number | undefined {
+  const trimmed = s.trim();
+  const braceIndex = trimmed.indexOf("{");
+  if (braceIndex === -1) {
+    return undefined;
+  }
+  const headerStr = trimmed.slice(0, braceIndex).trim();
+  const { name: structName, params: concreteTypes } =
+    parseGenericParams(headerStr);
+  if (!typeMap.has("__struct__" + structName)) {
+    return undefined;
+  }
+  const closeIndex = findStructClosingBrace(trimmed, braceIndex);
+  if (closeIndex === -1) {
+    return undefined;
+  }
+  const fieldsStr = trimmed.slice(braceIndex + 1, closeIndex).trim();
+  const fieldValues = parseFieldAssignments(
+    fieldsStr,
+    scope,
+    typeMap,
+    interpreter,
+  );
+  const typeParamMap = extractTypeParameters(
+    concreteTypes,
+    structName,
+    typeMap,
+  );
   return createStructInstance(structName, fieldValues, typeParamMap);
 }
 

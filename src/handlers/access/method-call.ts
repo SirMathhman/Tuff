@@ -1,4 +1,3 @@
-import { isValidIdentifier } from "../../utils/identifier-utils";
 import {
   GLOBAL_THIS_VALUE,
   getInstanceMethods,
@@ -9,34 +8,13 @@ import type {
   InterpreterContext,
 } from "../../expressions/handlers";
 import { parseFunctionCall } from "../../functions";
-import { findMatchingCloseParen } from "../../utils/function/function-helpers";
-
-function isWhitespace(ch: string | undefined): boolean {
-  return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
-}
-
-function isAlpha(ch: string | undefined): boolean {
-  if (!ch) return false;
-  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_";
-}
-
-function isAlphaNumeric(ch: string | undefined): boolean {
-  if (!ch) return false;
-  return (
-    (ch >= "a" && ch <= "z") ||
-    (ch >= "A" && ch <= "Z") ||
-    (ch >= "0" && ch <= "9") ||
-    ch === "_"
-  );
-}
+import { parseMethodCall, buildMethodCallString } from "./method-call-helpers";
 
 function callMethodAndHandleRest(
   methodCallStr: string,
   ctx: InterpreterContext,
   interpreter: Interpreter,
   rest: string,
-  _closeParenIndex: number,
-  _trimmed: string,
 ): number | undefined {
   const methodResult = parseFunctionCall({
     s: methodCallStr,
@@ -48,13 +26,8 @@ function callMethodAndHandleRest(
     interpreter,
     visMap: ctx.visMap,
   });
-
   if (methodResult === undefined) return undefined;
-
-  if (rest === "") {
-    return methodResult;
-  }
-
+  if (rest === "") return methodResult;
   return interpreter(
     methodResult.toString() + rest,
     ctx.scope,
@@ -63,6 +36,129 @@ function callMethodAndHandleRest(
     ctx.uninitializedSet,
     ctx.unmutUninitializedSet,
     ctx.visMap,
+  );
+}
+
+function handleModuleMethod(
+  methodName: string,
+  argsStr: string,
+  rest: string,
+  ctx: InterpreterContext,
+  interpreter: Interpreter,
+): number | undefined {
+  const methodCallStr = argsStr
+    ? `${methodName}(${argsStr})`
+    : `${methodName}()`;
+  return callMethodAndHandleRest(methodCallStr, ctx, interpreter, rest);
+}
+
+function handleFunctionContextMethod(
+  methodName: string,
+  receiverValue: number,
+  argsStr: string,
+  rest: string,
+  ctx: InterpreterContext,
+  interpreter: Interpreter,
+  scope: Map<string, number>,
+): number | undefined {
+  const instanceScope = new Map(scope);
+  const instanceFields = getStructFields(receiverValue);
+  if (instanceFields) {
+    for (const [fieldName, fieldValue] of instanceFields) {
+      instanceScope.set(fieldName, fieldValue);
+    }
+  }
+  const methodCallStr = argsStr
+    ? `${methodName}(${argsStr})`
+    : `${methodName}()`;
+  const instanceCtx: InterpreterContext = {
+    scope: instanceScope,
+    typeMap: ctx.typeMap,
+    mutMap: ctx.mutMap,
+    uninitializedSet: ctx.uninitializedSet,
+    unmutUninitializedSet: ctx.unmutUninitializedSet,
+    visMap: ctx.visMap,
+  };
+  return callMethodAndHandleRest(methodCallStr, instanceCtx, interpreter, rest);
+}
+
+function shouldHandleFunctionContextMethod(
+  receiverValue: number,
+  methodName: string,
+): boolean {
+  const isFunctionContextStruct =
+    isStructInstance(receiverValue) &&
+    getInstanceMethods(receiverValue) !== undefined;
+  if (!isFunctionContextStruct) return false;
+  const instanceMethods = getInstanceMethods(receiverValue);
+  return instanceMethods !== undefined && instanceMethods.has(methodName);
+}
+
+function handleSpecialMethodCall(
+  receiverStr: string,
+  methodName: string,
+  receiverValue: number,
+  argsStr: string,
+  rest: string,
+  ctx: InterpreterContext,
+  interpreter: Interpreter,
+  scope: Map<string, number>,
+): number | undefined {
+  if (shouldHandleFunctionContextMethod(receiverValue, methodName)) {
+    return handleFunctionContextMethod(
+      methodName,
+      receiverValue,
+      argsStr,
+      rest,
+      ctx,
+      interpreter,
+      scope,
+    );
+  }
+  const isThisKeywordLiteral = receiverStr.trim() === "this";
+  const isGlobalThis = receiverValue === GLOBAL_THIS_VALUE;
+  const isFunctionThis =
+    isThisKeywordLiteral && isStructInstance(receiverValue);
+  const shouldNotPrependReceiver = isGlobalThis || isFunctionThis;
+  const methodCallStr = buildMethodCallString(
+    methodName,
+    receiverValue,
+    argsStr,
+    shouldNotPrependReceiver,
+  );
+  return callMethodAndHandleRest(methodCallStr, ctx, interpreter, rest);
+}
+
+function evaluateReceiverAndHandleCall(
+  receiverStr: string,
+  methodName: string,
+  argsStr: string,
+  rest: string,
+  ctx: InterpreterContext,
+  interpreter: Interpreter,
+  scope: Map<string, number>,
+  typeMap: Map<string, number>,
+  mutMap: Map<string, boolean>,
+  uninitializedSet: Set<string>,
+  unmutUninitializedSet: Set<string>,
+): number | undefined {
+  const receiverValue = interpreter(
+    receiverStr,
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+  );
+  return handleSpecialMethodCall(
+    receiverStr,
+    methodName,
+    receiverValue,
+    argsStr,
+    rest,
+    ctx,
+    interpreter,
+    scope,
   );
 }
 
@@ -76,6 +172,12 @@ export function handleMethodCall(
   interpreter: Interpreter,
   visMap: Map<string, boolean> = new Map(),
 ): number | undefined {
+  const trimmed = s.trim();
+  const parsed = parseMethodCall(trimmed);
+  if (!parsed) return undefined;
+  if (typeMap.has("__object__" + parsed.receiverStr)) return undefined;
+  const { receiverStr, methodName, argsStr, rest } = parsed;
+  const isModuleRef = typeMap.has("__module__" + receiverStr);
   const ctx: InterpreterContext = {
     scope,
     typeMap,
@@ -84,160 +186,20 @@ export function handleMethodCall(
     unmutUninitializedSet,
     visMap,
   };
-  const trimmed = s.trim();
-
-  // Look for the pattern: <receiver>.<methodName>(<args>)
-  let dotIndex = -1;
-  let parenIndex = -1;
-
-  for (let i = 0; i < trimmed.length; i++) {
-    if (trimmed[i] === ".") {
-      let j = i + 1;
-      while (j < trimmed.length && isWhitespace(trimmed[j])) j++;
-
-      if (j < trimmed.length && isAlpha(trimmed[j])) {
-        let idEnd = j;
-        while (idEnd < trimmed.length && isAlphaNumeric(trimmed[idEnd]))
-          idEnd++;
-
-        while (idEnd < trimmed.length && isWhitespace(trimmed[idEnd])) idEnd++;
-
-        if (idEnd < trimmed.length && trimmed[idEnd] === "(") {
-          dotIndex = i;
-          parenIndex = idEnd;
-          break;
-        }
-      }
-    }
-  }
-
-  if (dotIndex === -1 || parenIndex === -1) return undefined;
-
-  const receiverStr = trimmed.slice(0, dotIndex).trim();
-
-  // Check if receiver is a module reference (module member access)
-  const isModuleRef = typeMap.has("__module__" + receiverStr);
-
-  // Check if receiver is an object (struct instance)
-  if (typeMap.has("__object__" + receiverStr)) {
-    return undefined;
-  }
-
-  let methodStart = dotIndex + 1;
-  while (methodStart < trimmed.length && isWhitespace(trimmed[methodStart]))
-    methodStart++;
-  let methodEnd = methodStart;
-  while (methodEnd < trimmed.length && isAlphaNumeric(trimmed[methodEnd]))
-    methodEnd++;
-  const methodName = trimmed.slice(methodStart, methodEnd);
-
-  if (!isValidIdentifier(methodName)) return undefined;
-
-  const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
-
-  if (closeParenIndex === -1) return undefined;
-
-  const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
-
-  // Handle module member access (e.g., temp.get() where temp is a module reference)
   if (isModuleRef) {
-    const methodCallStr = argsStr
-      ? `${methodName}(${argsStr})`
-      : `${methodName}()`;
-
-    const rest = trimmed.slice(closeParenIndex + 1).trim();
-
-    return callMethodAndHandleRest(
-      methodCallStr,
-      ctx,
-      interpreter,
-      rest,
-      closeParenIndex,
-      trimmed,
-    );
+    return handleModuleMethod(methodName, argsStr, rest, ctx, interpreter);
   }
-
-  const receiverValue = interpreter(
+  return evaluateReceiverAndHandleCall(
     receiverStr,
+    methodName,
+    argsStr,
+    rest,
+    ctx,
+    interpreter,
     scope,
     typeMap,
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
-  );
-
-  // Check if this is method call on 'this' keyword or on a function-context struct
-  const isThisKeywordLiteral = receiverStr.trim() === "this";
-  const isFunctionContextStruct =
-    isStructInstance(receiverValue) &&
-    getInstanceMethods(receiverValue) !== undefined;
-  const instanceMethods = isFunctionContextStruct
-    ? getInstanceMethods(receiverValue)
-    : undefined;
-
-  // If this is a call to a nested function on a function-context struct instance
-  if (
-    isFunctionContextStruct &&
-    instanceMethods &&
-    instanceMethods.has(methodName)
-  ) {
-    // Create a scope that includes the fields of the struct instance
-    const instanceScope = new Map(scope);
-    const instanceFields = getStructFields(receiverValue);
-    if (instanceFields) {
-      for (const [fieldName, fieldValue] of instanceFields) {
-        instanceScope.set(fieldName, fieldValue);
-      }
-    }
-
-    // Call the method function with the instance scope
-    const methodCallStr = argsStr
-      ? `${methodName}(${argsStr})`
-      : `${methodName}()`;
-
-    const rest = trimmed.slice(closeParenIndex + 1).trim();
-
-    const instanceCtx: InterpreterContext = {
-      scope: instanceScope,
-      typeMap: ctx.typeMap,
-      mutMap: ctx.mutMap,
-      uninitializedSet: ctx.uninitializedSet,
-      unmutUninitializedSet: ctx.unmutUninitializedSet,
-      visMap: ctx.visMap,
-    };
-
-    return callMethodAndHandleRest(
-      methodCallStr,
-      instanceCtx,
-      interpreter,
-      rest,
-      closeParenIndex,
-      trimmed,
-    );
-  }
-
-  // Handle regular method calls or global/function 'this' method calls
-  const isGlobalThis = receiverValue === GLOBAL_THIS_VALUE;
-  const isFunctionThis =
-    isThisKeywordLiteral && isStructInstance(receiverValue);
-  const shouldNotPrependReceiver = isGlobalThis || isFunctionThis;
-
-  const methodCallStr = shouldNotPrependReceiver
-    ? argsStr
-      ? `${methodName}(${argsStr})`
-      : `${methodName}()`
-    : argsStr
-      ? `${methodName}(${receiverValue}, ${argsStr})`
-      : `${methodName}(${receiverValue})`;
-
-  const rest = trimmed.slice(closeParenIndex + 1).trim();
-
-  return callMethodAndHandleRest(
-    methodCallStr,
-    ctx,
-    interpreter,
-    rest,
-    closeParenIndex,
-    trimmed,
   );
 }

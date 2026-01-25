@@ -1,7 +1,4 @@
-import {
-  isWhitespace,
-  matchWord,
-} from "./string-helpers";
+import { isWhitespace, matchWord } from "./string-helpers";
 import { parseLetDeclaration, validateVariableUsage } from "./parser-utils";
 
 interface VariableInfo {
@@ -60,4 +57,3 @@ export function createDeclarationParser(
     },
   };
 }
-

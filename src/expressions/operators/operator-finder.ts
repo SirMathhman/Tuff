@@ -5,12 +5,45 @@ import {
   isPositionInsideBrackets,
 } from "./operator-utils";
 
+function handleStringLiteralBeforeArrayIndex(
+  s: string,
+  beforeBracket: number,
+): boolean {
+  if (s[beforeBracket] === '"') {
+    let k = beforeBracket - 1;
+    let escapedCount = 0;
+    while (k >= 0) {
+      if (s[k] === "\\") {
+        escapedCount++;
+        k--;
+      } else if (s[k] === '"' && escapedCount % 2 === 0) {
+        return true;
+      } else {
+        escapedCount = 0;
+        k--;
+      }
+    }
+  }
+  return false;
+}
+
+function handleCharLiteralBeforeArrayIndex(
+  s: string,
+  beforeBracket: number,
+): boolean {
+  if (s[beforeBracket] === "'") {
+    if (beforeBracket >= 2 && s[beforeBracket - 2] === "'") {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function findArrayIndexOperator(
   s: string,
 ): { index: number } | undefined {
   for (let i = s.length - 1; i >= 1; i--) {
     if (s[i] === "]") {
-      // Find matching opening bracket
       let bracketDepth = 1;
       let j = i - 1;
       while (j >= 0 && bracketDepth > 0) {
@@ -20,7 +53,6 @@ export function findArrayIndexOperator(
         j--;
       }
       if (bracketDepth === 0) {
-        // Found matching [, check if it's array indexing (preceded by identifier/)/]/"/')
         const beforeBracket = j;
         if (beforeBracket >= 0) {
           const ch = s[beforeBracket];
@@ -34,29 +66,11 @@ export function findArrayIndexOperator(
             ) {
               return { index: j + 1 };
             }
-            // Handle string literals: closing quote
-            if (ch === '"') {
-              // Find matching opening quote, accounting for escapes
-              let k = beforeBracket - 1;
-              let escapedCount = 0;
-              while (k >= 0) {
-                if (s[k] === "\\") {
-                  escapedCount++;
-                  k--;
-                } else if (s[k] === '"' && escapedCount % 2 === 0) {
-                  return { index: j + 1 };
-                } else {
-                  escapedCount = 0;
-                  k--;
-                }
-              }
+            if (handleStringLiteralBeforeArrayIndex(s, beforeBracket)) {
+              return { index: j + 1 };
             }
-            // Handle char literals: closing quote
-            if (ch === "'") {
-              // For char literals, check simple pattern
-              if (beforeBracket >= 2 && s[beforeBracket - 2] === "'") {
-                return { index: j + 1 };
-              }
+            if (handleCharLiteralBeforeArrayIndex(s, beforeBracket)) {
+              return { index: j + 1 };
             }
           }
         }

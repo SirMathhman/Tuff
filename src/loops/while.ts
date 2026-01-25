@@ -2,6 +2,81 @@ import { isBreakException } from "./loop";
 import { findClosingParenthesis, parseLoopBody } from "./helpers";
 import type { HandlerParams } from "./types";
 
+function parseWhileCondition(
+  trimmed: string,
+): { conditionStr: string; bodyStartIdx: number } | undefined {
+  let idx = 5;
+  while (idx < trimmed.length && trimmed[idx] === " ") idx++;
+  if (idx >= trimmed.length || trimmed[idx] !== "(") return undefined;
+  const condEnd = findClosingParenthesis(trimmed, idx);
+  if (condEnd === -1) return undefined;
+  return {
+    conditionStr: trimmed.slice(idx + 1, condEnd),
+    bodyStartIdx: condEnd + 1,
+  };
+}
+
+interface WhileContext {
+  scope: Map<string, number>;
+  typeMap: Map<string, number>;
+  mutMap: Map<string, boolean>;
+  uninitializedSet: Set<string>;
+  unmutUninitializedSet: Set<string>;
+  interpreter: HandlerParams["interpreter"];
+}
+
+function callInterpreter(ctx: WhileContext, input: string): number {
+  return ctx.interpreter(
+    input,
+    ctx.scope,
+    ctx.typeMap,
+    ctx.mutMap,
+    ctx.uninitializedSet,
+    ctx.unmutUninitializedSet,
+  );
+}
+
+function executeWhileLoop(
+  conditionStr: string,
+  loopBody: string,
+  ctx: WhileContext,
+): void {
+  for (;;) {
+    if (callInterpreter(ctx, conditionStr) === 0) break;
+    try {
+      callInterpreter(ctx, loopBody);
+    } catch (e) {
+      if (isBreakException(e)) throw e;
+      throw e;
+    }
+  }
+}
+
+function handleAfterWhileExpression(
+  whileExprEnd: number,
+  trimmed: string,
+  ctx: WhileContext,
+): number {
+  const afterWhileExpr = trimmed.slice(whileExprEnd).trim();
+  return afterWhileExpr ? callInterpreter(ctx, afterWhileExpr) : 0;
+}
+
+function handleWhileLoopExecution(
+  conditionStr: string,
+  loopBody: string,
+  whileExprEnd: number,
+  trimmed: string,
+  ctx: WhileContext,
+): number {
+  try {
+    executeWhileLoop(conditionStr, loopBody, ctx);
+  } catch (e) {
+    if (isBreakException(e)) return e.value;
+    throw e;
+  }
+  return handleAfterWhileExpression(whileExprEnd, trimmed, ctx);
+}
+
 export function handleWhile(params: HandlerParams): number | undefined {
   const {
     s,
@@ -14,88 +89,24 @@ export function handleWhile(params: HandlerParams): number | undefined {
   } = params;
   const trimmed = s.trim();
   if (!trimmed.startsWith("while")) return undefined;
-
-  let idx = 5; // Position after "while"
-
-  // Skip whitespace after "while"
-  while (idx < trimmed.length && trimmed[idx] === " ") idx++;
-
-  if (idx >= trimmed.length || trimmed[idx] !== "(") return undefined;
-
-  const condEnd = findClosingParenthesis(trimmed, idx);
-  if (condEnd === -1) return undefined;
-
-  const conditionStr = trimmed.slice(idx + 1, condEnd);
-  idx = condEnd + 1;
-
-  const bodyResult = parseLoopBody(trimmed, idx);
+  const parsed = parseWhileCondition(trimmed);
+  if (!parsed) return undefined;
+  const { conditionStr, bodyStartIdx } = parsed;
+  const bodyResult = parseLoopBody(trimmed, bodyStartIdx);
   if (!bodyResult) return undefined;
-
-  const loopBody = bodyResult.body;
-  const whileExprEnd = bodyResult.nextIdx;
-
-  // Execute while loop: keep executing body while condition is true
-  try {
-    for (;;) {
-      const condition = interpreter(
-        conditionStr,
-        scope,
-        typeMap,
-        mutMap,
-        uninitializedSet,
-        unmutUninitializedSet,
-      );
-
-      if (condition === 0) break; // Exit loop if condition is false
-
-      try {
-        interpreter(
-          loopBody,
-          scope,
-          typeMap,
-          mutMap,
-          uninitializedSet,
-          unmutUninitializedSet,
-        );
-      } catch (e) {
-        if (isBreakException(e)) {
-          throw e; // Re-throw to be caught by outer handler
-        }
-        throw e;
-      }
-    }
-  } catch (e) {
-    if (isBreakException(e)) {
-      const afterWhileExpr = trimmed.slice(whileExprEnd).trim();
-
-      if (afterWhileExpr) {
-        return interpreter(
-          afterWhileExpr,
-          scope,
-          typeMap,
-          mutMap,
-          uninitializedSet,
-          unmutUninitializedSet,
-        );
-      }
-      return e.value;
-    }
-    throw e;
-  }
-
-  // Calculate what comes after the while loop
-  const afterWhileExpr = trimmed.slice(whileExprEnd).trim();
-
-  if (afterWhileExpr) {
-    return interpreter(
-      afterWhileExpr,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-    );
-  }
-
-  return 0;
+  const ctx: WhileContext = {
+    scope,
+    typeMap,
+    mutMap,
+    uninitializedSet,
+    unmutUninitializedSet,
+    interpreter,
+  };
+  return handleWhileLoopExecution(
+    conditionStr,
+    bodyResult.body,
+    bodyResult.nextIdx,
+    trimmed,
+    ctx,
+  );
 }

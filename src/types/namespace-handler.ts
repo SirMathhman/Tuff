@@ -16,6 +16,31 @@ function findBraceClose(rest: string): number {
   return -1;
 }
 
+function createAndPopulateEntityScope(
+  entityBody: string,
+  interpreter: Interpreter,
+): {
+  entityScope: Map<string, number>;
+  entityTypeMap: Map<string, number>;
+  entityMutMap: Map<string, boolean>;
+  entityVisMap: Map<string, boolean>;
+} {
+  const entityScope = new Map<string, number>();
+  const entityTypeMap = new Map<string, number>();
+  const entityMutMap = new Map<string, boolean>();
+  const entityVisMap = new Map<string, boolean>();
+  interpreter(
+    entityBody,
+    entityScope,
+    entityTypeMap,
+    entityMutMap,
+    new Set(),
+    new Set(),
+    entityVisMap,
+  );
+  return { entityScope, entityTypeMap, entityMutMap, entityVisMap };
+}
+
 export function createNamespacedDeclarationHandler(
   keyword: string,
   namespacer: (name: string) => string,
@@ -50,29 +75,11 @@ export function createNamespacedDeclarationHandler(
     ) => {
       const braceIndex = rest.indexOf("{");
       if (braceIndex === -1) return;
-
       const entityName = rest.slice(0, braceIndex).trim();
       if (!isValidIdentifier(entityName)) return;
-
       const entityBody = rest.slice(braceIndex + 1, closeIndex).trim();
-
-      // Create entity scope and execute body to populate it
-      const entityScope = new Map<string, number>();
-      const entityTypeMap = new Map<string, number>();
-      const entityMutMap = new Map<string, boolean>();
-      const entityVisMap = new Map<string, boolean>();
-
-      interpreter(
-        entityBody,
-        entityScope,
-        entityTypeMap,
-        entityMutMap,
-        new Set(),
-        new Set(),
-        entityVisMap,
-      );
-
-      // Store entity for later access
+      const { entityScope, entityTypeMap, entityMutMap, entityVisMap } =
+        createAndPopulateEntityScope(entityBody, interpreter);
       storage.set(
         entityName,
         entityScope,

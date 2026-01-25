@@ -28,7 +28,11 @@ export function isDigit(ch: string | undefined): ch is string {
 /**
  * Check if a word matches at a given position
  */
-export function matchWord(source: string, index: number, word: string): boolean {
+export function matchWord(
+  source: string,
+  index: number,
+  word: string,
+): boolean {
   if (index + word.length > source.length) {
     return false;
   }

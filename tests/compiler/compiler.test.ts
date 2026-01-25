@@ -65,8 +65,7 @@ describe("compiler - arithmetic", () => {
   });
 });
 
-describe("compiler - variables", () => {
-  // Positive tests
+describe("compiler - variables - basic", () => {
   test("supports simple variable declaration", () => {
     assertExecuteValid("let x = 3; x", 3);
   });
@@ -114,8 +113,9 @@ describe("compiler - variables", () => {
   test("supports type validation for I32 assignment", () => {
     assertExecuteValid("let x : I32 = 50; x", 50);
   });
+});
 
-  // Negative tests
+describe("compiler - variables - errors", () => {
   test("throws on duplicate variable declaration in same scope", () => {
     assertCompileInvalid("let x = 100; let x = 200; x");
   });

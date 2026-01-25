@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { interpret } from "../../src/utils/interpret";
 
-describe("interpret - control flow", () => {
+describe("interpret - control flow - basic", () => {
   it("supports boolean literal true", () => {
     expect(interpret("true")).toBe(1);
   });
@@ -45,7 +45,9 @@ describe("interpret - control flow", () => {
       interpret("let x : I32 = match (100) { case 100 => 3; case _ => 2; } x"),
     ).toBe(3);
   });
+});
 
+describe("interpret - control flow - loops", () => {
   it("supports loop expression with break", () => {
     expect(interpret("let x : I32 = loop { break 5; }; x")).toBe(5);
   });

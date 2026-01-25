@@ -1,67 +1,73 @@
-import type { Interpreter } from "../../expressions/handlers";
 import { getStructFields, isStructInstance } from "../../types/structs";
+import type { ScopeContext } from "../../types/interpreter";
+import { callInterpreter } from "../../types/interpreter";
 
-export function handleDestructuring(
-  pattern: string,
-  exprStr: string,
-  isPublic: boolean,
-  isMut: boolean,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  visMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpreter: Interpreter,
-): number {
-  // Parse destructuring pattern: { field1, field2, ... }
-  const fieldNames = pattern
+function parseDestructuringFieldNames(pattern: string): string[] {
+  return pattern
     .slice(1, -1)
     .trim()
     .split(",")
     .map((f) => f.trim())
     .filter((f) => f.length > 0);
+}
 
-  // Evaluate the struct value
-  const structValue = interpreter(
-    exprStr,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    visMap,
-  );
-
-  // Verify it's a struct instance
+function validateAndExtractStructFields(
+  structValue: number,
+): Map<string, number> {
   if (!isStructInstance(structValue)) {
     throw new Error(`cannot destructure non-struct value`);
   }
-
-  // Get struct fields
   const structFields = getStructFields(structValue);
   if (!structFields) {
     throw new Error(`invalid struct instance`);
   }
+  return structFields;
+}
 
-  // Assign each field to its own variable
+function assignDestructuredFields(
+  fieldNames: string[],
+  structFields: Map<string, number>,
+  isPublic: boolean,
+  isMut: boolean,
+  scope: Map<string, number>,
+  mutMap: Map<string, boolean>,
+  visMap: Map<string, boolean>,
+): void {
   for (const fieldName of fieldNames) {
     if (scope.has(fieldName)) {
       throw new Error(`variable '${fieldName}' already declared`);
     }
-
     const fieldValue = structFields.get(fieldName);
     if (fieldValue === undefined) {
       throw new Error(`struct has no field '${fieldName}'`);
     }
-
     scope.set(fieldName, fieldValue);
     if (isMut) {
       mutMap.set(fieldName, true);
     }
     visMap.set(fieldName, isPublic);
   }
+}
 
+export function handleDestructuring(
+  pattern: string,
+  exprStr: string,
+  isPublic: boolean,
+  isMut: boolean,
+  ctx: ScopeContext,
+): number {
+  const fieldNames = parseDestructuringFieldNames(pattern);
+  const structValue = callInterpreter(ctx, exprStr);
+  const structFields = validateAndExtractStructFields(structValue);
+  assignDestructuredFields(
+    fieldNames,
+    structFields,
+    isPublic,
+    isMut,
+    ctx.scope,
+    ctx.mutMap,
+    ctx.visMap,
+  );
   return structValue;
 }
 
