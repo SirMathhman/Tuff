@@ -7,7 +7,10 @@ import { handleUnaryOperation } from "../../expressions/operators/unary-operatio
 import { getModuleDeclarationHandler } from "../../types/modules";
 import { getObjectDeclarationHandler } from "../../types/objects";
 import type { FunctionCallParams } from "../function/function-call-params";
-import type { Interpreter, InterpreterContext } from "../../expressions/handlers";
+import type {
+  Interpreter,
+  InterpreterContext,
+} from "../../expressions/handlers";
 import { handleMatch } from "../../match";
 import { handleLoop, handleBreak, isBreakException } from "../../loops/loop";
 import { handleWhile } from "../../loops/while";

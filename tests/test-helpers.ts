@@ -1,5 +1,6 @@
 import { expect } from "bun:test";
 import { interpret, interpretAll } from "../src/utils/interpret";
+import { compile, execute } from "../src/compiler/compiler";
 
 /**
  * Assert that an interpretation is valid and returns the expected value.
@@ -11,19 +12,6 @@ export function assertInterpretValid(
   expectedValue: number,
 ): void {
   expect(interpret(code)).toBe(expectedValue);
-}
-
-/**
- * Assert that an interpretation is valid and satisfies a custom matcher.
- * @param code The code to interpret
- * @param matcher A function that receives the result and asserts expectations
- */
-export function assertInterpretWithMatcher(
-  code: string,
-  matcher: (result: number) => void,
-): void {
-  const result = interpret(code);
-  matcher(result);
 }
 
 /**
@@ -63,4 +51,14 @@ export function assertInterpretAllInvalid(
   nativeConfig?: Map<string[], string>,
 ): void {
   expect(() => interpretAll(entry, config, nativeConfig)).toThrow();
+}
+
+export function assertExecuteValid(source: string, expected: number): void {
+  const result = execute(source);
+  expect(result).toBe(expected);
+}
+
+// Test helper for compile-time validation errors
+export function assertCompileInvalid(source: string): void {
+  expect(() => compile(source)).toThrow();
 }

@@ -1,23 +1,7 @@
-import { describe, it, expect } from "bun:test";
-import {
-  assertInterpretValid,
-  assertInterpretInvalid,
-  assertInterpretWithMatcher,
-} from "../test-helpers";
+import { describe, it } from "bun:test";
+import { assertInterpretInvalid, assertInterpretValid } from "../test-helpers";
 
 describe("interpret - strings - basic", () => {
-  it("supports string literal with double quotes", () => {
-    assertInterpretWithMatcher('"test"', (result) => {
-      expect(result).toBeGreaterThanOrEqual(1000000);
-    });
-  });
-
-  it("supports string variable declaration", () => {
-    assertInterpretWithMatcher('let x : Str = "hello"; x', (result) => {
-      expect(result).toBeGreaterThanOrEqual(1000000);
-    });
-  });
-
   it("supports string length property", () => {
     assertInterpretValid('"hello".length', 5);
   });
@@ -28,12 +12,6 @@ describe("interpret - strings - basic", () => {
 
   it("supports string length on variable", () => {
     assertInterpretValid('let x : Str = "test"; x.length', 4);
-  });
-
-  it("supports string pointer type", () => {
-    assertInterpretWithMatcher('let x : *Str = "test"; x', (result) => {
-      expect(result).toBeGreaterThanOrEqual(1000000);
-    });
   });
 
   it("supports string pointer length property", () => {

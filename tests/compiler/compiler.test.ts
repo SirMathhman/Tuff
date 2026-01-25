@@ -1,15 +1,5 @@
-import { expect, describe, test } from "bun:test";
-import { compile, execute } from "../../src/compiler/compiler";
-
-function assertExecuteValid(source: string, expected: number): void {
-  const result = execute(source);
-  expect(result).toBe(expected);
-}
-
-// Test helper for compile-time validation errors
-function assertCompileInvalid(source: string): void {
-  expect(() => compile(source)).toThrow();
-}
+import { describe, test } from "bun:test";
+import { assertCompileInvalid, assertExecuteValid } from "../test-helpers";
 
 describe("compiler - arithmetic", () => {
   test("returns 0 for empty string", () => {
