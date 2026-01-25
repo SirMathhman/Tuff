@@ -3,6 +3,7 @@ import {
   isWhitespace,
   matchWord,
 } from "../../parsing/string-helpers";
+import { skipStructDeclaration } from "../../parsing/struct-helpers";
 
 /**
  * Skip whitespace in source starting at index
@@ -152,4 +153,17 @@ export function handleTypeDeclaration(
   while (i < source.length && source[i] !== ";") i++;
   if (i < source.length && source[i] === ";") i++;
   return { result: "", endIdx: i };
+}
+
+/**
+ * Handle struct declarations - skip them entirely as they're compile-time only
+ * e.g., "struct Point { x: I32, y: I32 }" gets stripped completely
+ */
+export function handleStructDeclaration(
+  source: string,
+  i: number,
+): { result: string; endIdx: number } | undefined {
+  const endIdx = skipStructDeclaration(source, i);
+  if (endIdx === -1) return undefined;
+  return { result: "", endIdx };
 }

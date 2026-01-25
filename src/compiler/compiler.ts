@@ -9,9 +9,10 @@ import {
   stripTypeAnnotationsAndValidate,
   convertStatementsToExpressions,
   transformCharLiterals,
-} from "./transforms/literal-transforms";
-import { transformStringIndexing } from "./transforms/string-transforms";
+} from "./transforms/syntax/literal-transforms";
+import { transformStringIndexing } from "./transforms/syntax/string-transforms";
 import { validateTypedArithmetic } from "./transforms/type-arithmetic-validation";
+import { transformStructInstantiation } from "./transforms/syntax/struct-transform";
 import { isWhitespace, isIdentifierChar } from "./parsing/string-helpers";
 
 function isAlphaNum(ch: string): boolean {
@@ -186,17 +187,21 @@ function createTuffCompiler(source: string) {
       // Validate typed arithmetic operations before removing type syntax
       validateTypedArithmetic(source);
 
-      // Pass 2: Transform control flow BEFORE removing braces
-      // (if/else/loop/while/for/match need their braces)
-      const transformed = transformControlFlow(source);
+      // Pass 2: Transform struct instantiation BEFORE removing braces
+      // (struct instantiation braces must not be stripped)
+      const withStructs = transformStructInstantiation(source);
 
-      // Pass 3: Strip Tuff syntax (let, mut, type annotations)
+      // Pass 3: Transform control flow BEFORE removing braces
+      // (if/else/loop/while/for/match need their braces)
+      const transformed = transformControlFlow(withStructs);
+
+      // Pass 4: Strip Tuff syntax (let, mut, type annotations, struct declarations)
       const js = removeTypeSyntax(transformed);
 
-      // Pass 4: Extract variables that need declaration
+      // Pass 5: Extract variables that need declaration
       const { expression, varDeclarations } = extractVarDeclarations(js);
 
-      // Pass 5: Transform literals
+      // Pass 6: Transform literals
       let transformedExpr = transformStringIndexing(expression, arrayVars);
       transformedExpr = transformCharLiterals(transformedExpr);
       transformedExpr = replaceBooleanLiterals(transformedExpr);

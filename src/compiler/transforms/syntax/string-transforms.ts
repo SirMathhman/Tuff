@@ -1,4 +1,4 @@
-import { isWhitespace, isIdentifierChar } from "../parsing/string-helpers";
+import { isWhitespace, isIdentifierChar } from "../../parsing/string-helpers";
 
 /**
  * Check if we're in string indexing context (not variable indexing)

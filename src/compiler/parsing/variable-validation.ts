@@ -5,6 +5,10 @@ import {
   isDigit,
   charAt,
 } from "./string-helpers";
+import {
+  skipStructDeclaration,
+  getStructBracePosition,
+} from "./struct-helpers";
 import { isKeyword } from "../keywords";
 
 interface VariableInfo {
@@ -93,6 +97,26 @@ function skipDeclaration(source: string, i: number, keyword: string): number {
   return -1;
 }
 
+function skipStructInstantiation(
+  source: string,
+  i: number,
+  _name: string,
+): number {
+  // Check if identifier is followed by '{'  (possibly with generics <...>)
+  const bracePos = getStructBracePosition(source, i);
+  if (bracePos === -1) return -1;
+
+  // Skip the struct body
+  let j = bracePos + 1; // Start after the opening brace
+  let braceDepth = 1;
+  while (j < source.length && braceDepth > 0) {
+    if (source[j] === "{") braceDepth++;
+    else if (source[j] === "}") braceDepth--;
+    j++;
+  }
+  return j;
+}
+
 function skipParentheses(source: string, i: number): number {
   if (source[i] !== "(") return -1;
   let parenDepth = 1;
@@ -114,6 +138,13 @@ function validateIdentifier(
   const nameStart = i;
   while (i < source.length && isIdentifierChar(source[i])) i++;
   const name = source.slice(nameStart, i);
+
+  // Check if this is a struct instantiation (skip validation of fields inside)
+  const structInstEnd = skipStructInstantiation(source, i, name);
+  if (structInstEnd !== -1) {
+    return structInstEnd;
+  }
+
   let nextIdx = i;
   while (nextIdx < source.length && isWhitespace(source[nextIdx])) nextIdx++;
   const nextChar = nextIdx < source.length ? source[nextIdx]! : "";
@@ -151,6 +182,11 @@ export function validateVariableUsage(
       continue;
     }
     newI = skipDeclaration(source, i, "fn");
+    if (newI !== -1) {
+      i = newI;
+      continue;
+    }
+    newI = skipStructDeclaration(source, i);
     if (newI !== -1) {
       i = newI;
       continue;

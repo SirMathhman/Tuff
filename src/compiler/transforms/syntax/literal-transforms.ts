@@ -2,9 +2,9 @@ import {
   isWhitespace,
   isIdentifierChar,
   isDigit,
-} from "../parsing/string-helpers";
-import { validateTypeConstraint } from "../validation/type-utils";
-import { getEscapeCode } from "../../utils/helpers/char-utils";
+} from "../../parsing/string-helpers";
+import { validateTypeConstraint } from "../../validation/type-utils";
+import { getEscapeCode } from "../../../utils/helpers/char-utils";
 
 /**
  * Transform char literals to their character codes
@@ -130,12 +130,32 @@ export { transformCharLiterals };
  * Check if colon at position i is a type annotation
  */
 function isTypeAnnotationColon(js: string, i: number): boolean {
-  let j = i - 1;
-  while (j >= 0 && isWhitespace(js[j])) j--;
-  const afterCloseParen = j >= 0 && js[j] === ")";
+  // Check what follows the colon
+  let j = i + 1;
+  while (j < js.length && isWhitespace(js[j])) j++;
+
+  // If followed by a digit, it's an object literal field value
+  if (j < js.length && js.charAt(j) >= "0" && js.charAt(j) <= "9") {
+    return false;
+  }
+
+  // If followed by a string literal (single or double quote), it's a value
+  if (j < js.length && (js[j] === '"' || js[j] === "'")) {
+    return false;
+  }
+
+  // If followed by an opening paren, it's likely a value expression like ({ ... })
+  if (j < js.length && js[j] === "(") {
+    return false;
+  }
+
+  // Check what precedes the colon - type annotations follow identifiers or )
+  let k = i - 1;
+  while (k >= 0 && isWhitespace(js[k])) k--;
+  const afterCloseParen = k >= 0 && js[k] === ")";
   const prevIsLetter =
-    j >= 0 &&
-    ((js[j]! >= "a" && js[j]! <= "z") || (js[j]! >= "A" && js[j]! <= "Z"));
+    k >= 0 &&
+    ((js[k]! >= "a" && js[k]! <= "z") || (js[k]! >= "A" && js[k]! <= "Z"));
   return afterCloseParen || prevIsLetter;
 }
 

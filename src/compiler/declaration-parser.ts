@@ -1,4 +1,5 @@
 import { isWhitespace, matchWord } from "./parsing/string-helpers";
+import { skipStructDeclaration } from "./parsing/struct-helpers";
 import {
   parseLetDeclaration,
   validateVariableUsage,
@@ -102,6 +103,12 @@ export function createDeclarationParser(
         if (matchWord(source, i, "type")) {
           const decl = parseTypeDeclaration(source, i);
           i = decl.nextIndex;
+          continue;
+        }
+
+        if (matchWord(source, i, "struct")) {
+          // Skip struct declarations
+          i = skipStructDeclaration(source, i);
           continue;
         }
 

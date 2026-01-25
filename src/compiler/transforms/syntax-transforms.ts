@@ -17,6 +17,7 @@ import {
   handleClosingBrace,
   handleLetDeclaration,
   handleTypeDeclaration,
+  handleStructDeclaration,
 } from "./helpers/brace-handlers";
 import { tryControlFlowTransform } from "./helpers/transform-helpers";
 import { transformIsOperator } from "./helpers/is-operator";
@@ -115,6 +116,14 @@ function tryProcessDeclarations(
       result: result + typeDecl.result,
       braceDepth,
       newIdx: typeDecl.endIdx,
+    };
+  const structDecl = handleStructDeclaration(src, i);
+  if (structDecl)
+    return {
+      processed: true,
+      result: result + structDecl.result,
+      braceDepth,
+      newIdx: structDecl.endIdx,
     };
   if (matchWord(src, i, "let")) {
     const { result: r, endIdx } = handleLetDeclaration(src, i);

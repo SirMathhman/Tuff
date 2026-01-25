@@ -29,16 +29,15 @@ describe("interpret - types - checking and aliases", () => {
 });
 
 describe("interpret - types - structs", () => {
-  // Struct syntax not supported in compiler
-  it("supports struct declaration and field access", () => {
-    assertInterpretValid(
+  itBoth("supports struct declaration and field access", (assertValid) => {
+    assertValid(
       "struct Wrapper { field : 100 } Wrapper { field : 100 }.field",
       100,
     );
   });
 
-  it("supports method calls on struct instances", () => {
-    assertInterpretValid(
+  itBoth("supports method calls on struct instances", (assertValid) => {
+    assertValid(
       "struct Point { x : 3, y : 4 } fn manhattan(this : Point) : I32 => this.x + this.y; let p = Point { x: 3, y: 4 }; p.manhattan()",
       7,
     );
