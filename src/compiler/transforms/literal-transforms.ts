@@ -122,7 +122,7 @@ export function replaceBooleanLiterals(js: string): string {
 }
 
 /**
- * Export char literal transformer
+ * Export transformers
  */
 export { transformCharLiterals };
 

@@ -10,6 +10,7 @@ import {
   convertStatementsToExpressions,
   transformCharLiterals,
 } from "./transforms/literal-transforms";
+import { transformStringIndexing } from "./transforms/string-transforms";
 
 interface VariableInfo {
   type: string | undefined;
@@ -40,7 +41,8 @@ function createTuffCompiler(source: string) {
       const { expression, varDeclarations } = extractVarDeclarations(js);
 
       // Pass 5: Transform literals
-      let transformedExpr = transformCharLiterals(expression);
+      let transformedExpr = transformStringIndexing(expression);
+      transformedExpr = transformCharLiterals(transformedExpr);
       transformedExpr = replaceBooleanLiterals(transformedExpr);
       transformedExpr = stripTypeAnnotationsAndValidate(transformedExpr);
 

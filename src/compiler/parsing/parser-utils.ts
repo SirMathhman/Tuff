@@ -30,7 +30,7 @@ const REFERENCE_DELIMITERS = new Set([
   ">",
   "=",
 ]);
-const SPECIAL_IDENTIFIERS = new Set(["true", "false", "_"]);
+const SPECIAL_IDENTIFIERS = new Set(["true", "false", "_", "length"]);
 
 function parseMutability(
   source: string,

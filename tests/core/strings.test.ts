@@ -1,92 +1,90 @@
-import { describe, it } from "bun:test";
-import { assertInterpretInvalid, assertInterpretValid } from "../test-helpers";
+import { describe } from "bun:test";
+import { itBoth } from "../test-helpers";
 
 describe("interpret - strings - basic", () => {
-  it("supports string length property", () => {
-    assertInterpretValid('"hello".length', 5);
+  itBoth("supports string length property", (assertValid) => {
+    assertValid('"hello".length', 5);
   });
 
-  it("supports string length for empty string", () => {
-    assertInterpretValid('"".length', 0);
+  itBoth("supports string length for empty string", (assertValid) => {
+    assertValid('"".length', 0);
   });
 
-  it("supports string length on variable", () => {
-    assertInterpretValid('let x : Str = "test"; x.length', 4);
+  itBoth("supports string length on variable", (assertValid) => {
+    assertValid('let x : Str = "test"; x.length', 4);
   });
 
-  it("supports string pointer length property", () => {
-    assertInterpretValid('let x : *Str = "test"; x.length', 4);
+  itBoth("supports string pointer length property", (assertValid) => {
+    assertValid('let x : *Str = "test"; x.length', 4);
   });
 });
 
 describe("interpret - strings - escaping", () => {
-  it("supports string with escaped characters", () => {
-    assertInterpretValid('"hello\\nworld".length', 11);
+  itBoth("supports string with escaped characters", (assertValid) => {
+    assertValid('"hello\\nworld".length', 11);
   });
 
-  it("supports string with escaped tab", () => {
-    assertInterpretValid('"tab\\there".length', 8);
+  itBoth("supports string with escaped tab", (assertValid) => {
+    assertValid('"tab\\there".length', 8);
   });
 
-  it("supports string with escaped quotes", () => {
-    const code = String.raw`"hello world".length`;
-    assertInterpretValid(code, 11);
+  itBoth("supports string with escaped quotes", (assertValid) => {
+    assertValid('"hello world".length', 11);
   });
 
-  it("supports string with escaped backslash", () => {
-    assertInterpretValid('"path\\\\to\\\\file".length', 12);
+  itBoth("supports string with escaped backslash", (assertValid) => {
+    assertValid('"path\\\\to\\\\file".length', 12);
   });
 
-  it("supports multiple strings in expression", () => {
-    assertInterpretValid('"a".length + "bb".length', 3);
+  itBoth("supports multiple strings in expression", (assertValid) => {
+    assertValid('"a".length + "bb".length', 3);
   });
 
-  it("supports string in variable and length access", () => {
-    assertInterpretValid(
-      'let msg : Str = "message"; let len = msg.length; len',
-      7,
-    );
+  itBoth("supports string in variable and length access", (assertValid) => {
+    assertValid('let msg : Str = "message"; let len = msg.length; len', 7);
   });
 });
 
 describe("interpret - strings - indexing", () => {
-  it("supports string indexing with literals", () => {
-    assertInterpretValid('"test"[0]', 116); // 't'
+  itBoth("supports string indexing with literals", (assertValid) => {
+    assertValid('"test"[0]', 116); // 't'
   });
 
-  it("supports string indexing at different positions", () => {
-    assertInterpretValid('"test"[1]', 101); // 'e'
+  itBoth("supports string indexing at different positions", (assertValid) => {
+    assertValid('"test"[1]', 101); // 'e'
   });
 
-  it("supports string indexing last character", () => {
-    assertInterpretValid('"test"[3]', 116); // 't'
+  itBoth("supports string indexing last character", (assertValid) => {
+    assertValid('"test"[3]', 116); // 't'
   });
 
-  it("supports string indexing on variable", () => {
-    assertInterpretValid('let x : Str = "hello"; x[0]', 104); // 'h'
+  itBoth("supports string indexing on variable", (assertValid) => {
+    assertValid('let x : Str = "hello"; x[0]', 104); // 'h'
   });
 
-  it("supports string indexing on pointer", () => {
-    assertInterpretValid('let x : *Str = "test"; x[0]', 116); // 't'
+  itBoth("supports string indexing on pointer", (assertValid) => {
+    assertValid('let x : *Str = "test"; x[0]', 116); // 't'
   });
 
-  it("supports string indexing with expression index", () => {
-    assertInterpretValid('"test"[1 + 1]', 115); // 's'
+  itBoth("supports string indexing with expression index", (assertValid) => {
+    assertValid('"test"[1 + 1]', 115); // 's'
+  });
+});
+
+describe("interpret - strings - indexing-special", () => {
+  itBoth("supports string indexing space character", (assertValid) => {
+    assertValid('"a b"[1]', 32); // ' '
   });
 
-  it("supports string indexing space character", () => {
-    assertInterpretValid('"a b"[1]', 32); // ' '
+  itBoth("supports string indexing with escaped characters", (assertValid) => {
+    assertValid('"a\\nb"[1]', 10); // '\n'
   });
 
-  it("supports string indexing with escaped characters", () => {
-    assertInterpretValid('"a\\nb"[1]', 10); // '\n'
+  itBoth("throws for string index out of bounds", (_, assertInvalid) => {
+    assertInvalid('"test"[4]');
   });
 
-  it("throws for string index out of bounds", () => {
-    assertInterpretInvalid('"test"[4]');
-  });
-
-  it("throws for string index negative", () => {
-    assertInterpretInvalid('"test"[-1]');
+  itBoth("throws for string index negative", (_, assertInvalid) => {
+    assertInvalid('"test"[-1]');
   });
 });
