@@ -2,13 +2,17 @@
 
 ## Project Overview
 
-Tuff is a typed expression interpreter written in TypeScript that evaluates expressions and returns numeric values. It supports functions, lambdas, structs, modules, arrays, type checking, and control flow.
+Tuff is a typed expression interpreter and compiler written in TypeScript that evaluates expressions and returns numeric values. It supports functions, lambdas, structs, modules, arrays, type checking, and control flow.
+
+**Dual execution modes**:
+- **Interpreter**: Direct evaluation via `interpretWithScope()` in [src/core/app.ts](../src/core/app.ts)
+- **Compiler**: Transpiles to JavaScript via `compile()` in [src/compiler/compiler.ts](../src/compiler/compiler.ts)
 
 ## Architecture & Design Patterns
 
 ### Interpreter Core
 
-- **Entry point**: [src/utils/interpret.ts](../src/utils/interpret.ts) → [src/app.ts](../src/app.ts) `interpretWithScope()`
+- **Entry point**: [src/utils/interpret.ts](../src/utils/interpret.ts) → [src/core/app.ts](../src/core/app.ts) `interpretWithScope()`
 - **Value system**: Everything evaluates to a `number` (primitive values, IDs for objects/functions/strings, 0 for no-ops)
 - **Handler pattern**: Functions return `undefined` when they can't handle input, allowing fall-through to next handler
 - **Scope tracking**: Uses 5 Maps + 2 Sets passed through all calls:
@@ -25,7 +29,18 @@ Tuff is a typed expression interpreter written in TypeScript that evaluates expr
 - **Handlers**: [src/handlers/](../src/handlers/) - specialized constructs (lambdas, method calls, etc.)
 - **Types**: [src/types/](../src/types/) - struct/module/namespace/type declarations
 - **Loops**: [src/loops/](../src/loops/) - for/while/loop constructs
-- Handlers in `app.ts` are tried in sequence; first to return non-undefined wins
+- **Compiler**: [src/compiler/](../src/compiler/) - Tuff→JavaScript transpiler with multi-pass transforms
+- Handlers in [src/core/app.ts](../src/core/app.ts) are tried in sequence; first to return non-undefined wins
+
+### Compiler Pipeline
+
+Multi-pass compilation in [src/compiler/compiler.ts](../src/compiler/compiler.ts):
+1. Parse declarations → track variables/types
+2. Transform control flow → `if`/`loop`/`match` to expressions
+3. Strip Tuff syntax → remove `let`/`mut`/type annotations
+4. Extract var declarations → hoist variables
+5. Transform literals → booleans, chars, strings
+6. Wrap in IIFE → `(function() { var x; return (...); })()`
 
 ## Critical Code Constraints
 
@@ -38,8 +53,14 @@ Tuff is a typed expression interpreter written in TypeScript that evaluates expr
 // NO null - use undefined
 { selector: "Literal[value=null]", message: "use undefined" }
 
+// NO classes - use functions with closures
+{ selector: "ClassDeclaration", message: "use functions" }
+
 // Max 200 lines per file (excluding comments/blanks)
 "max-lines": ["error", { max: 200, skipComments: true }]
+
+// Max 50 lines per function (excluding comments/blanks)
+"max-lines-per-function": ["error", { max: 50, skipComments: true }]
 ```
 
 ### Enforced by Custom Tools
@@ -56,15 +77,18 @@ When violating file limits, refactor into subdirectories grouped by feature.
 
 ## Testing Patterns
 
-Use Bun test framework. All tests follow this pattern:
+Use Bun test framework. **All tests run against both interpreter AND compiler** using `itBoth()` helper from [tests/test-helpers.ts](../tests/test-helpers.ts):
 
 ```typescript
-import { interpret } from "../../src/utils/interpret";
+import { itBoth } from "../test-helpers";
 
-expect(interpret("let x = 5; x + 3")).toBe(8);
+itBoth("description", (assertValid, assertInvalid) => {
+  assertValid("let x = 5; x + 3", 8);  // Tests both modes
+  assertInvalid("-100U8");              // Tests error cases
+});
 ```
 
-The `interpret()` function returns the final numeric value. Test files in [tests/](../tests/) mirror [src/](../src/) structure.
+For interpreter-only tests use `interpret()`, for multi-module use `interpretAll()`. Test files in [tests/](../tests/) mirror [src/](../src/) structure.
 
 ## Type System Specifics
 
@@ -93,11 +117,26 @@ out fn main() => 0;  // public function
 
 ## Key Development Workflows
 
+### Pre-commit Hooks (Husky)
+
+All commits automatically run ([.husky/pre-commit](.husky/pre-commit)):
+1. Tests with coverage (`bun test --coverage`)
+2. Copy-paste detection (`bun run cpd` - PMD with 60 token threshold)
+3. Format check (`bun run format` - Prettier)
+4. Lint and fix (`bun run lint:fix` - TypeScript + ESLint)
+5. Circular dependency check (`bun run check:circular` - madge)
+6. Directory structure validation (`bun run check:structure` - max 8 files/dir)
+7. Subdirectory dependency check (`bun run check:subdir-deps` - no cycles between src/ subdirs)
+8. Dependency graph generation (`bun run visualize` - creates docs/images/graph.svg)
+
+Pre-commit failure blocks the commit - fix issues before committing.
+
 ### Run Tests
 
 ```bash
 bun test                    # All tests
 bun test tests/core/        # Specific directory
+bun test --coverage         # With coverage report
 ```
 
 ### Linting & Formatting
@@ -128,7 +167,7 @@ bun run visualize           # Generate dependency graph
 ### Adding New Language Features
 
 1. Create handler function that returns `number | undefined`
-2. Add to `interpretWithScope()` call sequence in [src/app.ts](../src/app.ts)
+2. Add to `interpretWithScope()` call sequence in [src/core/app.ts](../src/core/app.ts)
 3. If declaration: use `makeDeclarationHandler()` from [src/declarations.ts](../src/declarations.ts)
 4. Add tests in [tests/](../tests/) following existing structure
 

@@ -1,7 +1,4 @@
-import {
-  isWhitespace,
-  isIdentifierChar,
-} from "../parsing/string-helpers";
+import { isWhitespace, isIdentifierChar } from "../parsing/string-helpers";
 
 /**
  * Check if we're in string indexing context (not variable indexing)
@@ -19,7 +16,10 @@ function isStringIndexingContext(source: string, bracketPos: number): boolean {
 /**
  * Extract and validate a string literal's content
  */
-function extractStringContent(source: string, startIdx: number): {
+function extractStringContent(
+  source: string,
+  startIdx: number,
+): {
   content: string;
   endIdx: number;
 } {
@@ -62,10 +62,7 @@ function extractStringContent(source: string, startIdx: number): {
 /**
  * Validate constant string index and return validated expression
  */
-function validateStringIndex(
-  indexExpr: string,
-  stringLength: number,
-): string {
+function validateStringIndex(indexExpr: string, stringLength: number): string {
   const indexNum = Number(indexExpr);
   if (Number.isFinite(indexNum) && indexNum === Math.floor(indexNum)) {
     if (indexNum < 0 || indexNum >= stringLength) {
@@ -117,7 +114,8 @@ function processStringIndexing(
 
   const indexExpr = source.slice(k + 1, bracketEnd).trim();
   const validExpr = validateStringIndex(indexExpr, content.length);
-  const stringWithIndex = source.slice(startPos, endIdx) + `.charCodeAt(${validExpr})`;
+  const stringWithIndex =
+    source.slice(startPos, endIdx) + `.charCodeAt(${validExpr})`;
   return { output: stringWithIndex, nextPos: bracketEnd + 1 };
 }
 
@@ -150,7 +148,12 @@ export function transformStringIndexing(source: string): string {
   while (i < source.length) {
     if (source[i] === '"') {
       const { content, endIdx } = extractStringContent(source, i);
-      const { output, nextPos } = processStringIndexing(source, i, content, endIdx);
+      const { output, nextPos } = processStringIndexing(
+        source,
+        i,
+        content,
+        endIdx,
+      );
       result += output;
       i = nextPos;
     } else if (source[i] === "'") {

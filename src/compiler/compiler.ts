@@ -11,6 +11,7 @@ import {
   transformCharLiterals,
 } from "./transforms/literal-transforms";
 import { transformStringIndexing } from "./transforms/string-transforms";
+import { validateTypedArithmetic } from "./transforms/type-arithmetic-validation";
 
 interface VariableInfo {
   type: string | undefined;
@@ -29,6 +30,9 @@ function createTuffCompiler(source: string) {
       // Pass 1: Parse variable declarations
       const parser = createDeclarationParser(source, variables);
       parser.parseDeclarations();
+
+      // Validate typed arithmetic operations before removing type syntax
+      validateTypedArithmetic(source);
 
       // Pass 2: Transform control flow BEFORE removing braces
       // (if/else/loop/while/for/match need their braces)

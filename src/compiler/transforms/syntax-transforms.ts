@@ -32,16 +32,19 @@ export function removeTypeSyntax(source: string): string {
   let parenDepth = 0;
 
   while (i < source.length) {
-    // Track parentheses depth to know if we're inside function calls/parens
+    // Track parentheses/function depth
     if (source[i] === "(") {
       parenDepth++;
     } else if (source[i] === ")") {
       parenDepth--;
     }
 
-    // Skip GROUPED EXPRESSION braces only when at paren depth 0
-    // (not inside function calls)
-    if ((source[i] === "{" || source[i] === "}") && parenDepth === 0) {
+    // Skip expression braces only when not inside other constructs and not control flow
+    if (
+      (source[i] === "{" || source[i] === "}") &&
+      parenDepth === 0 &&
+      !isProbablyControlFlowBrace(source, i, result)
+    ) {
       i++;
       continue;
     }
@@ -70,17 +73,37 @@ export function removeTypeSyntax(source: string): string {
     }
 
     result += source[i];
-    if (source[i] === "(" || source[i] === "{") {
-      // Recount to account for this character
-      parenDepth = 0;
-      for (let j = 0; j <= i; j++) {
-        if (source[j] === "(" || source[j] === "{") parenDepth++;
-        else if (source[j] === ")" || source[j] === "}") parenDepth--;
-      }
-    }
     i++;
   }
   return result;
+}
+
+/**
+ * Check if a brace at position i is probably part of control flow
+ */
+function isProbablyControlFlowBrace(
+  source: string,
+  pos: number,
+  resultSoFar: string,
+): boolean {
+  if (source[pos] !== "{") return false;
+
+  // Check if result ends with '(' which would mean this is a control flow brace
+  // e.g., "while(cond){" or "for(;;){"
+  const trimmed = resultSoFar.trimEnd();
+  if (trimmed.endsWith("(")) {
+    return true;
+  }
+
+  // Check if result ends with a control flow keyword
+  const keywords = ["while", "for", "if", "else", "match", "loop"];
+  for (const keyword of keywords) {
+    const pattern = keyword + "(";
+    if (trimmed.endsWith(pattern)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

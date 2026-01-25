@@ -30,7 +30,21 @@ const REFERENCE_DELIMITERS = new Set([
   ">",
   "=",
 ]);
-const SPECIAL_IDENTIFIERS = new Set(["true", "false", "_", "length"]);
+const SPECIAL_IDENTIFIERS = new Set([
+  "true",
+  "false",
+  "_",
+  "length",
+  // Type suffixes
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+]);
 
 function parseMutability(
   source: string,
