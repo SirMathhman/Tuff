@@ -38,7 +38,10 @@ function findImportedModules(code: string): string[] {
     }
 
     let moduleNameEnd = moduleNameStart;
-    while (moduleNameEnd < code.length && isIdentifierChar(code[moduleNameEnd])) {
+    while (
+      moduleNameEnd < code.length &&
+      isIdentifierChar(code[moduleNameEnd])
+    ) {
       moduleNameEnd++;
     }
 

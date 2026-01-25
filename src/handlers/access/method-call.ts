@@ -114,11 +114,11 @@ export function handleMethodCall(
 
   const receiverStr = trimmed.slice(0, dotIndex).trim();
 
-  // Check if receiver is a module or object name - if so, don't handle it here
-  if (
-    typeMap.has("__module__" + receiverStr) ||
-    typeMap.has("__object__" + receiverStr)
-  ) {
+  // Check if receiver is a module reference (module member access)
+  const isModuleRef = typeMap.has("__module__" + receiverStr);
+  
+  // Check if receiver is an object (struct instance)
+  if (typeMap.has("__object__" + receiverStr)) {
     return undefined;
   }
 
@@ -137,6 +137,24 @@ export function handleMethodCall(
   if (closeParenIndex === -1) return undefined;
 
   const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
+
+  // Handle module member access (e.g., temp.get() where temp is a module reference)
+  if (isModuleRef) {
+    const methodCallStr = argsStr
+      ? `${methodName}(${argsStr})`
+      : `${methodName}()`;
+
+    const rest = trimmed.slice(closeParenIndex + 1).trim();
+
+    return callMethodAndHandleRest(
+      methodCallStr,
+      ctx,
+      interpreter,
+      rest,
+      closeParenIndex,
+      trimmed,
+    );
+  }
 
   const receiverValue = interpreter(
     receiverStr,

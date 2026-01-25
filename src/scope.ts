@@ -28,12 +28,14 @@ export function handleVarDecl(
 
   if (!remaining.startsWith("let ")) return undefined;
 
-  // Handle import syntax: let { ... } from module;
+  // Handle import syntax: let { ... } from module; or let varName from module;
   if (remaining.includes(" from ")) {
     const fromIndex = remaining.indexOf(" from ");
     const beforeFrom = remaining.slice(4, fromIndex).trim();
+    
     if (beforeFrom.startsWith("{") && beforeFrom.endsWith("}")) {
-      // This is an import statement, skip it (functions should already be available)
+      // This is destructuring import: let { ... } from module;
+      // Skip it (functions should already be available)
       const semicolonIndex = remaining.indexOf(";");
       if (semicolonIndex !== -1) {
         const rest = remaining.slice(semicolonIndex + 1).trim();
@@ -50,6 +52,35 @@ export function handleVarDecl(
         }
       }
       return 0;
+    } else if (beforeFrom.length > 0) {
+      // This is module import: let varName from module;
+      // Store module reference as a special marker
+      const semicolonIndex = remaining.indexOf(";");
+      if (semicolonIndex !== -1) {
+        const afterFrom = remaining.slice(fromIndex + 6).trim();
+        const moduleNameEnd = afterFrom.indexOf(";");
+        const moduleName = afterFrom.slice(0, moduleNameEnd).trim();
+        
+        if (moduleName.length > 0 && beforeFrom.length > 0) {
+          // Store module reference: use special marker in typeMap
+          scope.set(beforeFrom, 1); // Placeholder value
+          typeMap.set("__module__" + beforeFrom, moduleName as unknown as number);
+          
+          const rest = remaining.slice(semicolonIndex + 1).trim();
+          if (rest) {
+            return interpreter(
+              rest,
+              scope,
+              typeMap,
+              mutMap,
+              uninitializedSet,
+              unmutUninitializedSet,
+              visMap,
+            );
+          }
+          return 0;
+        }
+      }
     }
   }
 
