@@ -85,4 +85,12 @@ describe("interpret - types", () => {
       ),
     ).toBe(3);
   });
+
+  it("supports type destructors on struct fields", () => {
+    expect(
+      interpret(
+        "let mut count = 0; fn drop(this : MyDroppable) => count += 1; type MyDroppable = I32 then drop; struct Wrapper { field : MyDroppable } { let temp : Wrapper = Wrapper { field : 100 }; } count",
+      ),
+    ).toBe(1);
+  });
 });
