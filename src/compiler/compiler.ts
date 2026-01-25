@@ -1,4 +1,4 @@
-import { DeclarationParser } from "./declaration-parser";
+import { createDeclarationParser } from "./declaration-parser";
 import {
   removeTypeSyntax,
   extractVarDeclarations,
@@ -6,6 +6,46 @@ import {
   stripTypeAnnotationsAndValidate,
   convertStatementsToExpressions,
 } from "./syntax-transforms";
+
+interface VariableInfo {
+  type: string | undefined;
+  mutable: boolean;
+  initialized: boolean;
+}
+
+/**
+ * Factory function to create a Tuff compiler
+ */
+function createTuffCompiler(source: string) {
+  const variables: Map<string, VariableInfo> = new Map();
+
+  return {
+    compile(): string {
+      // Pass 1: Parse variable declarations
+      const parser = createDeclarationParser(source, variables);
+      parser.parseDeclarations();
+
+      // Pass 2: Strip Tuff syntax
+      const js = removeTypeSyntax(source);
+
+      // Pass 3: Extract variables that need declaration
+      const { expression, varDeclarations } = extractVarDeclarations(js);
+
+      // Pass 4: Transform literals
+      let transformedExpr = replaceBooleanLiterals(expression);
+      transformedExpr = stripTypeAnnotationsAndValidate(transformedExpr);
+
+      // Convert semicolons to commas for eval (statements to expressions)
+      transformedExpr = convertStatementsToExpressions(transformedExpr);
+
+      // Wrap in a function with var declarations
+      const varDeclString =
+        varDeclarations.length > 0 ? `var ${varDeclarations.join(", ")};` : "";
+
+      return `(function() { ${varDeclString} return (${transformedExpr}); })()`;
+    },
+  };
+}
 
 /**
  * Compile Tuff source code to JavaScript string
@@ -21,49 +61,8 @@ export function compile(_source: string): string {
   }
 
   // Parse and compile the source
-  const compiler = new TuffCompiler(source);
+  const compiler = createTuffCompiler(source);
   return compiler.compile();
-}
-
-interface VariableInfo {
-  type: string | undefined;
-  mutable: boolean;
-  initialized: boolean;
-}
-
-class TuffCompiler {
-  private source: string;
-  private variables: Map<string, VariableInfo> = new Map();
-
-  constructor(source: string) {
-    this.source = source;
-  }
-
-  compile(): string {
-    // Pass 1: Parse variable declarations
-    const parser = new DeclarationParser(this.source, this.variables);
-    parser.parseDeclarations();
-
-    // Pass 2: Strip Tuff syntax
-    const js = removeTypeSyntax(this.source);
-
-    // Pass 3: Extract variables that need declaration
-    const { expression, varDeclarations } = extractVarDeclarations(js);
-
-    // Pass 4: Transform literals
-    let transformedExpr = replaceBooleanLiterals(expression);
-    transformedExpr = stripTypeAnnotationsAndValidate(transformedExpr);
-
-    // Convert semicolons to commas for eval (statements to expressions)
-    transformedExpr = convertStatementsToExpressions(transformedExpr);
-
-    // Wrap in a function with var declarations
-    const varDeclString = varDeclarations.length > 0
-      ? `var ${varDeclarations.join(", ")};`
-      : "";
-
-    return `(function() { ${varDeclString} return (${transformedExpr}); })()`;
-  }
 }
 
 /**

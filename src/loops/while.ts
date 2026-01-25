@@ -1,4 +1,4 @@
-import { BreakException } from "./loop";
+import { isBreakException } from "./loop";
 import { findClosingParenthesis, parseLoopBody } from "./helpers";
 import type { HandlerParams } from "./types";
 
@@ -58,14 +58,14 @@ export function handleWhile(params: HandlerParams): number | undefined {
           unmutUninitializedSet,
         );
       } catch (e) {
-        if (e instanceof BreakException) {
+        if (isBreakException(e)) {
           throw e; // Re-throw to be caught by outer handler
         }
         throw e;
       }
     }
   } catch (e) {
-    if (e instanceof BreakException) {
+    if (isBreakException(e)) {
       const afterWhileExpr = trimmed.slice(whileExprEnd).trim();
 
       if (afterWhileExpr) {

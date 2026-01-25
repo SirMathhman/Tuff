@@ -1,7 +1,7 @@
 import { handleVarDecl } from "./scope";
 import { evaluateGroupedExpressionsWithScope } from "./expressions/grouped-expressions";
 import { handleMatch } from "./match";
-import { handleLoop, BreakException, handleBreak } from "./loops/loop";
+import { handleLoop, isBreakException, handleBreak } from "./loops/loop";
 import { handleWhile } from "./loops/while";
 import { handleFor } from "./loops/for";
 import {
@@ -118,7 +118,7 @@ export function interpretWithScope(
       unmutUninitializedSet,
     });
   } catch (e) {
-    if (e instanceof BreakException) throw e;
+    if (isBreakException(e)) throw e;
   }
   result = handleIfExpression(
     s,

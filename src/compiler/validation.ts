@@ -43,9 +43,10 @@ export function isNumericLiteral(value: string): boolean {
   return i === value.length;
 }
 
-export function parseNumericLiteral(
-  value: string,
-): { numValue: bigint; suffix: string } {
+export function parseNumericLiteral(value: string): {
+  numValue: bigint;
+  suffix: string;
+} {
   // Parse numeric value, optionally with type suffix like U8 or I32
   let i = 0;
 

@@ -1,11 +1,18 @@
-import { StringHelpers } from "./string-helpers";
+import {
+  isWhitespace,
+  matchWord,
+  isIdentifierChar,
+  isDigit,
+  charAt,
+} from "./string-helpers";
 import { validateTypeConstraint } from "./type-utils";
 
 /**
  * Skip whitespace in source starting at index
  */
 function skipWhitespace(source: string, index: number): number {
-  while (index < source.length && StringHelpers.isWhitespace(source[index])) index++;
+  while (index < source.length && isWhitespace(source[index]))
+    index++;
   return index;
 }
 
@@ -22,19 +29,25 @@ export function removeTypeSyntax(source: string): string {
       continue;
     }
 
-    if (StringHelpers.matchWord(source, i, "let")) {
+    if (matchWord(source, i, "let")) {
       i = skipWhitespace(source, i + 3);
-      if (StringHelpers.matchWord(source, i, "mut")) i = skipWhitespace(source, i + 3);
+      if (matchWord(source, i, "mut"))
+        i = skipWhitespace(source, i + 3);
 
       const varStart = i;
-      while (i < source.length && StringHelpers.isIdentifierChar(source[i])) i++;
+      while (i < source.length && isIdentifierChar(source[i]))
+        i++;
       result += source.slice(varStart, i);
 
       i = skipWhitespace(source, i);
       if (i < source.length && source[i] === ":") {
         i++;
         i = skipWhitespace(source, i);
-        while (i < source.length && (StringHelpers.isIdentifierChar(source[i]) || source[i] === "*")) i++;
+        while (
+          i < source.length &&
+          (isIdentifierChar(source[i]) || source[i] === "*")
+        )
+          i++;
       }
       i = skipWhitespace(source, i);
       continue;
@@ -49,28 +62,34 @@ export function removeTypeSyntax(source: string): string {
 /**
  * Extract variables that need to be declared in JavaScript scope
  */
-export function extractVarDeclarations(
-  source: string,
-): { expression: string; varDeclarations: string[] } {
+export function extractVarDeclarations(source: string): {
+  expression: string;
+  varDeclarations: string[];
+} {
   const varDeclDecls = new Set<string>();
   let result = "";
   let i = 0;
 
   while (i < source.length) {
     const ch = source[i];
-    if (StringHelpers.isWhitespace(ch)) {
+    if (isWhitespace(ch)) {
       result += ch;
       i++;
       continue;
     }
 
-    if (StringHelpers.isIdentifierChar(ch) && !StringHelpers.isDigit(ch)) {
+    if (isIdentifierChar(ch) && !isDigit(ch)) {
       const nameStart = i;
-      while (i < source.length && StringHelpers.isIdentifierChar(source[i])) i++;
+      while (i < source.length && isIdentifierChar(source[i]))
+        i++;
       const name = source.slice(nameStart, i);
 
       const nextIdx = skipWhitespace(source, i);
-      if (nextIdx < source.length && source[nextIdx] === "=" && StringHelpers.charAt(source, nextIdx + 1) !== "=") {
+      if (
+        nextIdx < source.length &&
+        source[nextIdx] === "=" &&
+        charAt(source, nextIdx + 1) !== "="
+      ) {
         varDeclDecls.add(name);
         result += name;
         i = nextIdx;
@@ -94,7 +113,10 @@ export function convertStatementsToExpressions(source: string): string {
   let result = "";
   let i = source.length - 1;
 
-  while (i >= 0 && (source[i] === ";" || StringHelpers.isWhitespace(source[i]))) {
+  while (
+    i >= 0 &&
+    (source[i] === ";" || isWhitespace(source[i]))
+  ) {
     if (source[i] === ";") {
       i--;
       break;
@@ -105,8 +127,9 @@ export function convertStatementsToExpressions(source: string): string {
   let depth = 0;
   for (let j = 0; j <= i; j++) {
     if (source[j] === "{" || source[j] === "[" || source[j] === "(") depth++;
-    else if (source[j] === "}" || source[j] === "]" || source[j] === ")") depth--;
-    result += (source[j] === ";" && depth === 0) ? "," : source[j];
+    else if (source[j] === "}" || source[j] === "]" || source[j] === ")")
+      depth--;
+    result += source[j] === ";" && depth === 0 ? "," : source[j];
   }
 
   return result;
@@ -120,12 +143,18 @@ export function replaceBooleanLiterals(js: string): string {
   let i = 0;
 
   while (i < js.length) {
-    if (js.slice(i, i + 4) === "true" && (i === 0 || !StringHelpers.isIdentifierChar(js[i - 1]))
-        && (i + 4 >= js.length || !StringHelpers.isIdentifierChar(js[i + 4]))) {
+    if (
+      js.slice(i, i + 4) === "true" &&
+      (i === 0 || !isIdentifierChar(js[i - 1])) &&
+      (i + 4 >= js.length || !isIdentifierChar(js[i + 4]))
+    ) {
       result += "1";
       i += 4;
-    } else if (js.slice(i, i + 5) === "false" && (i === 0 || !StringHelpers.isIdentifierChar(js[i - 1]))
-        && (i + 5 >= js.length || !StringHelpers.isIdentifierChar(js[i + 5]))) {
+    } else if (
+      js.slice(i, i + 5) === "false" &&
+      (i === 0 || !isIdentifierChar(js[i - 1])) &&
+      (i + 5 >= js.length || !isIdentifierChar(js[i + 5]))
+    ) {
       result += "0";
       i += 5;
     } else {
@@ -146,22 +175,26 @@ export function stripTypeAnnotationsAndValidate(js: string): string {
 
   while (i < js.length) {
     let isNegative = false;
-    if (js[i] === "-" && i + 1 < js.length && StringHelpers.isDigit(js[i + 1])) {
+    if (
+      js[i] === "-" &&
+      i + 1 < js.length &&
+      isDigit(js[i + 1])
+    ) {
       isNegative = true;
       result += js[i];
       i++;
     }
 
-    if (i < js.length && StringHelpers.isDigit(js[i])) {
+    if (i < js.length && isDigit(js[i])) {
       const numStart = i;
-      while (i < js.length && StringHelpers.isDigit(js[i])) i++;
+      while (i < js.length && isDigit(js[i])) i++;
       const numStr = js.slice(numStart, i);
       const finalValue = isNegative ? -BigInt(numStr) : BigInt(numStr);
 
       if (i < js.length && (js[i] === "U" || js[i] === "I")) {
         const typeStart = i;
         i++;
-        while (i < js.length && StringHelpers.isDigit(js[i])) i++;
+        while (i < js.length && isDigit(js[i])) i++;
         validateTypeConstraint(js.slice(typeStart, i), finalValue);
       }
 
@@ -174,4 +207,3 @@ export function stripTypeAnnotationsAndValidate(js: string): string {
 
   return result;
 }
-

@@ -35,6 +35,16 @@ export default [
           message:
             "null is not allowed. Use undefined instead for consistency.",
         },
+        {
+          selector: "ClassDeclaration",
+          message:
+            "Classes are not allowed. Use functions with closures or factory functions instead.",
+        },
+        {
+          selector: "ClassExpression",
+          message:
+            "Classes are not allowed. Use functions with closures or factory functions instead.",
+        },
       ],
       "max-lines": [
         "error",

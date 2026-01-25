@@ -18,11 +18,23 @@ interface HandlerParams {
 }
 
 // Special error used to break out of a loop with a value
-class BreakException extends Error {
-  constructor(public value: number) {
-    super("break");
-  }
+function createBreakException(value: number): Error & { value: number } {
+  const error = new Error("break") as Error & { value: number };
+  error.value = value;
+  return error;
 }
+
+function isBreakException(err: unknown): err is Error & { value: number } {
+  return (
+    err instanceof Error &&
+    err.message === "break" &&
+    typeof (err as Error & { value?: unknown }).value === "number"
+  );
+}
+
+export { isBreakException };
+
+
 
 export function handleLoop(params: HandlerParams): number | undefined {
   const {
@@ -75,14 +87,14 @@ export function handleLoop(params: HandlerParams): number | undefined {
           unmutUninitializedSet,
         );
       } catch (e) {
-        if (e instanceof BreakException) {
+        if (isBreakException(e)) {
           throw e; // Re-throw to be caught by outer handler
         }
         throw e;
       }
     }
   } catch (e) {
-    if (e instanceof BreakException) {
+    if (isBreakException(e)) {
       // Calculate position after the loop body
       const loopExprEnd = trimmed.indexOf("{") + 1 + braceCloseIdx + 1;
       const afterLoopExpr = trimmed.slice(loopExprEnd).trim();
@@ -120,7 +132,7 @@ export function handleBreak(params: HandlerParams): void {
 
   if (afterBreak === "" || afterBreak === ";") {
     // break; or break (no value)
-    throw new BreakException(0);
+    throw createBreakException(0);
   }
 
   // Parse the value to break with
@@ -137,7 +149,6 @@ export function handleBreak(params: HandlerParams): void {
     uninitializedSet,
     unmutUninitializedSet,
   );
-  throw new BreakException(value);
+  throw createBreakException(value);
 }
 
-export { BreakException };
