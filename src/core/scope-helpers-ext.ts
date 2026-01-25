@@ -1,14 +1,14 @@
-import type { ScopeContext } from "./types/interpreter";
-import { callInterpreter } from "./types/interpreter";
+import type { ScopeContext } from "../types/interpreter";
+import { callInterpreter } from "../types/interpreter";
 import {
   handleDestructuring,
   isDestructuringPattern,
-} from "./handlers/variables/destructuring";
+} from "../handlers/variables/destructuring";
 import {
   handleUninitializedVariable,
   handleVariableInitialization,
-} from "./handlers/variables/declaration-helpers";
-import { findEqualIndex } from "./utils/scope-helpers";
+} from "../handlers/variables/declaration-helpers";
+import { findEqualIndex } from "../utils/scope-helpers";
 
 export interface ParseVarInitParams {
   remaining: string;

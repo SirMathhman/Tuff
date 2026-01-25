@@ -1,6 +1,6 @@
 import { extractTypedInfo } from "../../parser";
 import { functionDefs, setFunctionRef } from "../../functions";
-import { handleFunctionTypeAnnotation } from "../../function-type-handler";
+import { handleFunctionTypeAnnotation } from "../../core/function-type-handler";
 import { isFunctionType } from "../../utils/function/function-utils";
 import {
   getLastRegisteredLambdaName,

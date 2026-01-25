@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { interpretAll } from "../src/utils/interpret";
+import { describe, it } from "bun:test";
+import { assertInterpretAllValid } from "./test-helpers";
 
 describe("interpretAll - use statements", () => {
   it("executes main module with lib dependency via import", () => {
@@ -8,8 +8,7 @@ describe("interpretAll - use statements", () => {
       [["lib"], "out fn get() => 100;"],
     ]);
 
-    const result = interpretAll(["main"], config);
-    expect(result).toBe(100);
+    assertInterpretAllValid(["main"], config, 100);
   });
 
   it("handles function from lib module", () => {
@@ -18,8 +17,7 @@ describe("interpretAll - use statements", () => {
       [["lib"], "out fn add(a: I32, b: I32) => a + b;"],
     ]);
 
-    const result = interpretAll(["main"], config);
-    expect(result).toBe(7);
+    assertInterpretAllValid(["main"], config, 7);
   });
 });
 
@@ -30,8 +28,7 @@ describe("interpretAll - module references", () => {
       [["lib"], "out fn get() => 100;"],
     ]);
 
-    const result = interpretAll(["main"], config);
-    expect(result).toBe(100);
+    assertInterpretAllValid(["main"], config, 100);
   });
 
   it("executes module function with args via variable reference", () => {
@@ -40,8 +37,7 @@ describe("interpretAll - module references", () => {
       [["lib"], "out fn add(a: I32, b: I32) => a + b;"],
     ]);
 
-    const result = interpretAll(["main"], config);
-    expect(result).toBe(12);
+    assertInterpretAllValid(["main"], config, 12);
   });
 });
 
@@ -55,8 +51,7 @@ describe("interpretAll - struct and native imports", () => {
       [["lib"], "out struct Wrapper { x : I32 }"],
     ]);
 
-    const result = interpretAll(["main"], config);
-    expect(result).toBe(100);
+    assertInterpretAllValid(["main"], config, 100);
   });
 
   it("calls native function via extern declaration", () => {
@@ -67,8 +62,7 @@ describe("interpretAll - struct and native imports", () => {
       [["lib"], "export function get() { return 100; }"],
     ]);
 
-    const result = interpretAll(["main"], config, nativeConfig);
-    expect(result).toBe(100);
+    assertInterpretAllValid(["main"], config, 100, nativeConfig);
   });
 
   it("calls native function with parameters", () => {
@@ -82,7 +76,6 @@ describe("interpretAll - struct and native imports", () => {
       [["lib"], "export function add(a, b) { return a + b; }"],
     ]);
 
-    const result = interpretAll(["main"], config, nativeConfig);
-    expect(result).toBe(12);
+    assertInterpretAllValid(["main"], config, 12, nativeConfig);
   });
 });

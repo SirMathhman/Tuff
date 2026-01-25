@@ -1,5 +1,5 @@
-import { extractTypeSize } from "./type-utils";
-import { registerAnonymousFunction, setFunctionRef } from "./functions";
+import { extractTypeSize } from "../type-utils";
+import { registerAnonymousFunction, setFunctionRef } from "../functions";
 
 type FunctionDefinition = {
   params: Array<{ name: string; type: number; typeStr?: string }>;

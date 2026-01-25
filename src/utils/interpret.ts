@@ -1,10 +1,10 @@
-import { interpretWithScope } from "../app";
+import { interpretWithScope } from "../core/app";
 import {
   parseNativeModules,
   installNativeFunctions,
   cleanupNativeFunctions,
 } from "./native/native";
-import { isIdentifierChar } from "./char-utils";
+import { isIdentifierChar } from "./helpers/char-utils";
 
 export function interpret(input: string): number {
   return interpretWithScope(input, new Map(), new Map(), new Map());

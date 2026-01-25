@@ -9,7 +9,7 @@ import type { ScopeContext } from "./types/interpreter";
 import {
   parseVariableInit,
   processParsedDeclaration,
-} from "./scope-helpers-ext";
+} from "./core/scope-helpers-ext";
 
 function handleExternOrUse(
   remaining: string,

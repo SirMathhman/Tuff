@@ -1,8 +1,8 @@
-import { handleVarDecl } from "./scope";
-import { evaluateGroupedExpressionsWithScope } from "./expressions/grouped-expressions";
-import { handleIfExpression, type Interpreter } from "./expressions/handlers";
-import { handleBinaryOperation } from "./expressions/operators/binary-operation";
-import { parseTypedNumber } from "./parser";
+import { handleVarDecl } from "../scope";
+import { evaluateGroupedExpressionsWithScope } from "../expressions/grouped-expressions";
+import { handleIfExpression, type Interpreter } from "../expressions/handlers";
+import { handleBinaryOperation } from "../expressions/operators/binary-operation";
+import { parseTypedNumber } from "../parser";
 import {
   tryDeclarations,
   tryFunctionCalls,
@@ -12,9 +12,9 @@ import {
   tryControlFlow,
   tryAssignments,
   tryExpressions,
-} from "./utils/app-handlers";
-import { evaluateThisKeyword } from "./utils/this-keyword";
-import { createArrayFromLiteral } from "./utils/array";
+} from "../utils/helpers/app-handlers";
+import { evaluateThisKeyword } from "../utils/this-keyword";
+import { createArrayFromLiteral } from "../utils/array";
 
 function tryBasicHandlers(
   s: string,

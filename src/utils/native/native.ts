@@ -1,4 +1,4 @@
-import { isIdentifierChar } from "../char-utils";
+import { isIdentifierChar } from "../helpers/char-utils";
 
 function extractFunctionName(code: string, exportIndex: number): string {
   const funcNameStart = exportIndex + 16;

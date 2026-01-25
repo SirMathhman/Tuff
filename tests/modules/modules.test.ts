@@ -1,122 +1,116 @@
-import { describe, it, expect } from "bun:test";
-import { interpret } from "../../src/utils/interpret";
+import { describe, it } from "bun:test";
+import { assertInterpretValid, assertInterpretInvalid } from "../test-helpers";
 
 describe("interpret - modules - declarations", () => {
   it("supports module declaration with function", () => {
-    expect(
-      interpret("module Sample { out fn get() => 100; } Sample::get()"),
-    ).toBe(100);
+    assertInterpretValid(
+      "module Sample { out fn get() => 100; } Sample::get()",
+      100,
+    );
   });
 
   it("supports module with multiple functions", () => {
-    expect(
-      interpret(
-        "module Math { out fn add(a : I32, b : I32) : I32 => a + b; out fn sub(a : I32, b : I32) : I32 => a - b; } Math::add(10, 5)",
-      ),
-    ).toBe(15);
+    assertInterpretValid(
+      "module Math { out fn add(a : I32, b : I32) : I32 => a + b; out fn sub(a : I32, b : I32) : I32 => a - b; } Math::add(10, 5)",
+      15,
+    );
   });
 
   it("supports accessing second function from module", () => {
-    expect(
-      interpret(
-        "module Math { out fn add(a : I32, b : I32) : I32 => a + b; out fn sub(a : I32, b : I32) : I32 => a - b; } Math::sub(10, 5)",
-      ),
-    ).toBe(5);
+    assertInterpretValid(
+      "module Math { out fn add(a : I32, b : I32) : I32 => a + b; out fn sub(a : I32, b : I32) : I32 => a - b; } Math::sub(10, 5)",
+      5,
+    );
   });
 
   it("supports module with variable", () => {
-    expect(
-      interpret("module Config { out let PI : I32 = 314; } Config::PI"),
-    ).toBe(314);
+    assertInterpretValid(
+      "module Config { out let PI : I32 = 314; } Config::PI",
+      314,
+    );
   });
 
   it("supports module with function accessing module variable", () => {
-    expect(
-      interpret(
-        "module Data { let value : I32 = 42; out fn getValue() => value; } Data::getValue()",
-      ),
-    ).toBe(42);
+    assertInterpretValid(
+      "module Data { let value : I32 = 42; out fn getValue() => value; } Data::getValue()",
+      42,
+    );
   });
 
   it("supports nested module access in expressions", () => {
-    expect(interpret("module M { out fn get() => 50; } M::get() + 50")).toBe(
-      100,
-    );
+    assertInterpretValid("module M { out fn get() => 50; } M::get() + 50", 100);
   });
 });
 
 describe("interpret - modules - error handling", () => {
   it("throws when accessing non-existent module", () => {
-    expect(() => interpret("NonExistent::foo()")).toThrow();
+    assertInterpretInvalid("NonExistent::foo()");
   });
 
   it("throws when accessing non-existent member in module", () => {
-    expect(() =>
-      interpret("module Sample { out fn get() => 100; } Sample::missing()"),
-    ).toThrow();
+    assertInterpretInvalid(
+      "module Sample { out fn get() => 100; } Sample::missing()",
+    );
   });
 });
 
 describe("interpret - modules - objects", () => {
   it("supports object singleton with variable access", () => {
-    expect(
-      interpret("object MySingleton { out let x = 100; } MySingleton.x"),
-    ).toBe(100);
+    assertInterpretValid(
+      "object MySingleton { out let x = 100; } MySingleton.x",
+      100,
+    );
   });
 
   it("supports object singleton with multiple variables", () => {
-    expect(
-      interpret(
-        "object Config { out let mode = 42; out let timeout = 30; } Config.mode",
-      ),
-    ).toBe(42);
+    assertInterpretValid(
+      "object Config { out let mode = 42; out let timeout = 30; } Config.mode",
+      42,
+    );
   });
 
   it("supports object singleton with function", () => {
-    expect(
-      interpret("object Utils { out fn getValue() => 55; } Utils.getValue()"),
-    ).toBe(55);
+    assertInterpretValid(
+      "object Utils { out fn getValue() => 55; } Utils.getValue()",
+      55,
+    );
   });
 
   it("supports public object member with out keyword", () => {
-    expect(
-      interpret("object MySingleton { out let x = 100; } MySingleton.x"),
-    ).toBe(100);
+    assertInterpretValid(
+      "object MySingleton { out let x = 100; } MySingleton.x",
+      100,
+    );
   });
 });
 
 describe("interpret - modules - visibility", () => {
   it("throws when accessing private object member without out keyword", () => {
-    expect(() =>
-      interpret("object MySingleton { let x = 100; } MySingleton.x"),
-    ).toThrow("member 'x' of object 'MySingleton' is private");
+    assertInterpretInvalid("object MySingleton { let x = 100; } MySingleton.x");
   });
 
   it("supports public module member with out keyword", () => {
-    expect(
-      interpret("module Config { out let PORT = 8080; } Config::PORT"),
-    ).toBe(8080);
+    assertInterpretValid(
+      "module Config { out let PORT = 8080; } Config::PORT",
+      8080,
+    );
   });
 
   it("throws when accessing private module member without out keyword", () => {
-    expect(() =>
-      interpret("module Config { let PORT = 8080; } Config::PORT"),
-    ).toThrow("member 'PORT' of module 'Config' is private");
+    assertInterpretInvalid("module Config { let PORT = 8080; } Config::PORT");
   });
 
   it("allows accessing private members within same object", () => {
-    expect(
-      interpret(
-        "object Utils { let x = 10; out fn getX() => x; } Utils.getX()",
-      ),
-    ).toBe(10);
+    assertInterpretValid(
+      "object Utils { let x = 10; out fn getX() => x; } Utils.getX()",
+      10,
+    );
   });
 
   it("allows accessing private members within same module", () => {
-    expect(
-      interpret(
-        "module Data { let secret = 42; out fn reveal() => secret; } Data::reveal()",
-      ),
-    ).toBe(42);
+    assertInterpretValid(
+      "module Data { let secret = 42; out fn reveal() => secret; } Data::reveal()",
+      42,
+    );
   });
 });

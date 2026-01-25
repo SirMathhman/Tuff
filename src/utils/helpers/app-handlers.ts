@@ -1,25 +1,25 @@
-import { handleTypeDeclaration } from "../types/type-declarations";
-import { handleStructDeclaration } from "../types/structs";
-import { handleFunctionDeclaration } from "../functions";
-import { parseFunctionCall } from "../functions";
-import { handleMethodCall } from "../handlers/access/method-call";
-import { handleUnaryOperation } from "../expressions/operators/unary-operation";
-import { getModuleDeclarationHandler } from "../types/modules";
-import { getObjectDeclarationHandler } from "../types/objects";
-import type { FunctionCallParams } from "./function/function-call-params";
-import type { Interpreter, InterpreterContext } from "../expressions/handlers";
-import { handleMatch } from "../match";
-import { handleLoop, handleBreak, isBreakException } from "../loops/loop";
-import { handleWhile } from "../loops/while";
-import { handleFor } from "../loops/for";
-import { handleDereferenceAssignment } from "../handlers/variables/dereference-assignment";
-import { handleVarAssignment } from "../expressions/handlers";
-import { handleLambdaExpression } from "../handlers/functions/lambda-expressions";
+import { handleTypeDeclaration } from "../../types/type-declarations";
+import { handleStructDeclaration } from "../../types/structs";
+import { handleFunctionDeclaration } from "../../functions";
+import { parseFunctionCall } from "../../functions";
+import { handleMethodCall } from "../../handlers/access/method-call";
+import { handleUnaryOperation } from "../../expressions/operators/unary-operation";
+import { getModuleDeclarationHandler } from "../../types/modules";
+import { getObjectDeclarationHandler } from "../../types/objects";
+import type { FunctionCallParams } from "../function/function-call-params";
+import type { Interpreter, InterpreterContext } from "../../expressions/handlers";
+import { handleMatch } from "../../match";
+import { handleLoop, handleBreak, isBreakException } from "../../loops/loop";
+import { handleWhile } from "../../loops/while";
+import { handleFor } from "../../loops/for";
+import { handleDereferenceAssignment } from "../../handlers/variables/dereference-assignment";
+import { handleVarAssignment } from "../../expressions/handlers";
+import { handleLambdaExpression } from "../../handlers/functions/lambda-expressions";
 import {
   handleReferenceOperation,
   handleDereferenceOperation,
-} from "../handlers/access/pointer-operations";
-import { handleModuleAccess } from "../handlers/access/module-access";
+} from "../../handlers/access/pointer-operations";
+import { handleModuleAccess } from "../../handlers/access/module-access";
 
 type Params = FunctionCallParams;
 type LoopCtx = {
