@@ -53,4 +53,10 @@ describe("interpret - functions", () => {
       ),
     ).toBe(130);
   });
+
+  it("supports forward function references - function calling function declared later", () => {
+    expect(interpret("fn get0() => get1(); fn get1() => 100; get0()")).toBe(
+      100,
+    );
+  });
 });
