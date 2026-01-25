@@ -3,6 +3,7 @@ import { parseStructInstantiation } from "../types/structs";
 import type { Interpreter } from "./handlers";
 import { isValidIdentifier } from "../utils/identifier-utils";
 import { parseArrayLiteral } from "../utils/array";
+import { executeDropHandlers } from "./drop-handlers";
 
 function extractStructName(s: string): string | undefined {
   const angleEnd = s.indexOf(">");
@@ -173,10 +174,21 @@ export function evaluateGroupedExpressionsWithScope(
       cUninitializedSet,
       cUnmutUninitializedSet,
     );
+
     if (openChar === "{") {
       for (const [k, v] of cScope.entries()) if (scope.has(k)) scope.set(k, v);
       for (const [k, v] of cMutMap.entries())
         if (mutMap.has(k)) mutMap.set(k, v);
+
+      // Execute drop handlers for variables going out of scope
+      executeDropHandlers(
+        cScope,
+        scope,
+        cTypeMap,
+        typeMap,
+        mutMap,
+        interpreter,
+      );
     }
     const after = s.slice(closeIndex + 1).trim();
     if (

@@ -1,5 +1,5 @@
 import { isPositionInsideBrackets } from "./operator-utils";
-import { getStructField, isStructInstance } from "../types/structs";
+import { getStructField, isStructInstance } from "../../types/structs";
 import {
   getArrayElement,
   getArrayMetadata,
@@ -7,7 +7,7 @@ import {
   getStringLength,
   getStringCharCode,
   isStringInstance,
-} from "../utils/array";
+} from "../../utils/array";
 
 export function findComparisonOperator(
   s: string,

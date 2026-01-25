@@ -1,6 +1,6 @@
 import { findOperatorIndex, performBinaryOp } from "./operators";
-import { parseTypedNumber, extractTypedInfo } from "../parser";
-import type { Interpreter } from "./handlers";
+import { parseTypedNumber, extractTypedInfo } from "../../parser";
+import type { Interpreter } from "../handlers";
 
 export function handleBinaryOperation(
   s: string,

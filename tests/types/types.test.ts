@@ -69,4 +69,12 @@ describe("interpret - types", () => {
   it("supports forward type references - type declared after use", () => {
     expect(interpret("let x : Temp = 100; type Temp = I32; x")).toBe(100);
   });
+
+  it("supports type destructors with 'then' clause", () => {
+    expect(
+      interpret(
+        "let mut count = 0; fn drop(this : I32) => count += 1; type MyDroppable = I32 then drop; { let temp : MyDroppable = 100; } count",
+      ),
+    ).toBe(1);
+  });
 });

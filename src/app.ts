@@ -10,7 +10,7 @@ import {
   type Interpreter,
 } from "./expressions/handlers";
 import { handleDereferenceAssignment } from "./handlers/dereference-assignment";
-import { handleBinaryOperation } from "./expressions/binary-operation";
+import { handleBinaryOperation } from "./expressions/operators/binary-operation";
 import { parseTypedNumber } from "./parser";
 import {
   tryDeclarations,

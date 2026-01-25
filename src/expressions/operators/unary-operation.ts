@@ -1,4 +1,4 @@
-import type { Interpreter } from "./handlers";
+import type { Interpreter } from "../handlers";
 
 export function handleUnaryOperation(
   s: string,

@@ -51,7 +51,8 @@ export function handleVarDecl(
 
   let varName: string,
     varValue: number = 0,
-    vType = 0;
+    vType = 0,
+    typeName: string | undefined;
 
   if (eqIndex === -1) {
     const varPart = declStr.slice(4 + (isMut ? 4 : 0)).trim(),
@@ -59,6 +60,7 @@ export function handleVarDecl(
     if (colonIndexInVarPart === -1) return undefined;
     varName = varPart.slice(0, colonIndexInVarPart).trim();
     const typeStr = varPart.slice(colonIndexInVarPart + 1).trim();
+    typeName = typeStr;
 
     // Check if it's an array type
     if (isArrayTypeAnnotation(typeStr)) {
@@ -82,6 +84,7 @@ export function handleVarDecl(
 
     if (colonIndexInBeforeEq !== -1) {
       declaredTypeStr = beforeEq.slice(colonIndexInBeforeEq + 1).trim();
+      typeName = declaredTypeStr;
       isFunctionTypeAnnotation = isFunctionType(declaredTypeStr);
       isArrayTypeAnnotation_var = isArrayTypeAnnotation(declaredTypeStr);
     }
@@ -163,6 +166,11 @@ export function handleVarDecl(
   scope.set(varName, varValue);
   if (vType > 0) typeMap.set(varName, vType);
   else if (vType === -2) typeMap.set(varName, -2);
+
+  // Store type name for drop handler lookup
+  if (typeName) {
+    typeMap.set("__vartype__" + varName, typeName as unknown as number);
+  }
 
   if (isMut || eqIndex === -1) {
     mutMap.set(varName, true);

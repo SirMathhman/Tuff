@@ -3,7 +3,7 @@ import { handleStructDeclaration } from "../types/structs";
 import { handleFunctionDeclaration } from "../functions";
 import { parseFunctionCall } from "../functions";
 import { handleMethodCall } from "../handlers/method-call";
-import { handleUnaryOperation } from "../expressions/unary-operation";
+import { handleUnaryOperation } from "../expressions/operators/unary-operation";
 import { getModuleDeclarationHandler } from "../types/modules";
 import { getObjectDeclarationHandler } from "../types/objects";
 import type { FunctionCallParams } from "./function-call-params";

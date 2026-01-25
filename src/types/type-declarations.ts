@@ -16,7 +16,15 @@ export const handleTypeDeclaration = makeDeclarationHandler(
     if (eqIndex === -1) return;
 
     const aliasName = declStr.slice(0, eqIndex).trim();
-    const aliasType = declStr.slice(eqIndex + 1).trim();
+    let aliasType = declStr.slice(eqIndex + 1).trim();
+
+    // Check for drop handler syntax: "Type then dropFunc"
+    let dropHandler: string | undefined;
+    const thenIndex = aliasType.indexOf(" then ");
+    if (thenIndex !== -1) {
+      dropHandler = aliasType.slice(thenIndex + 6).trim();
+      aliasType = aliasType.slice(0, thenIndex).trim();
+    }
 
     // Check if it's a union type (contains |)
     if (aliasType.includes("|")) {
@@ -55,6 +63,11 @@ export const handleTypeDeclaration = makeDeclarationHandler(
         // Store the alias
         typeMap.set("__alias__" + aliasName, typeSize);
       }
+    }
+
+    // Store drop handler if present
+    if (dropHandler) {
+      typeMap.set("__drop__" + aliasName, dropHandler as unknown as number);
     }
   },
 );

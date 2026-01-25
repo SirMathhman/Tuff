@@ -1,7 +1,7 @@
-import { extractTypedInfo } from "../parser";
-import type { TypedInfo } from "../parser";
-import { validateUnsignedValue, extractTypeSize } from "../type-utils";
-import { getPointerTarget } from "../handlers/pointer-operations";
+import { extractTypedInfo } from "../../parser";
+import type { TypedInfo } from "../../parser";
+import { validateUnsignedValue, extractTypeSize } from "../../type-utils";
+import { getPointerTarget } from "../../handlers/pointer-operations";
 import {
   findFieldAccessOperator,
   findArrayIndexOperator,
