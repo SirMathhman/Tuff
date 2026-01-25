@@ -3,7 +3,10 @@ import {
   findEqualIndex,
   findDeclStringAndRestIndex,
 } from "./utils/scope-helpers";
-import { handleDestructuring, isDestructuringPattern } from "./handlers/variables/destructuring";
+import {
+  handleDestructuring,
+  isDestructuringPattern,
+} from "./handlers/variables/destructuring";
 import {
   handleUninitializedVariable,
   handleVariableInitialization,
@@ -24,6 +27,31 @@ export function handleVarDecl(
   const remaining = isPublic ? trimmed.slice(4).trim() : trimmed;
 
   if (!remaining.startsWith("let ")) return undefined;
+
+  // Handle import syntax: let { ... } from module;
+  if (remaining.includes(" from ")) {
+    const fromIndex = remaining.indexOf(" from ");
+    const beforeFrom = remaining.slice(4, fromIndex).trim();
+    if (beforeFrom.startsWith("{") && beforeFrom.endsWith("}")) {
+      // This is an import statement, skip it (functions should already be available)
+      const semicolonIndex = remaining.indexOf(";");
+      if (semicolonIndex !== -1) {
+        const rest = remaining.slice(semicolonIndex + 1).trim();
+        if (rest) {
+          return interpreter(
+            rest,
+            scope,
+            typeMap,
+            mutMap,
+            uninitializedSet,
+            unmutUninitializedSet,
+            visMap,
+          );
+        }
+      }
+      return 0;
+    }
+  }
 
   const { declStr, restIndex } = findDeclStringAndRestIndex(remaining);
   if (!declStr) return undefined;

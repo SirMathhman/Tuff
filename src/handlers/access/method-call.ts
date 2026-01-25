@@ -1,7 +1,13 @@
 import { isValidIdentifier } from "../../utils/identifier-utils";
-import { GLOBAL_THIS_VALUE, getInstanceMethods } from "../../utils/this-keyword";
+import {
+  GLOBAL_THIS_VALUE,
+  getInstanceMethods,
+} from "../../utils/this-keyword";
 import { isStructInstance, getStructFields } from "../../types/structs";
-import type { Interpreter, InterpreterContext } from "../../expressions/handlers";
+import type {
+  Interpreter,
+  InterpreterContext,
+} from "../../expressions/handlers";
 import { parseFunctionCall, findMatchingCloseParen } from "../../functions";
 
 function isWhitespace(ch: string | undefined): boolean {

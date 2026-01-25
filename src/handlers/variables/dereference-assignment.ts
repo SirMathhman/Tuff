@@ -1,4 +1,7 @@
-import { getPointerTarget, isPointerMutable } from "../access/pointer-operations";
+import {
+  getPointerTarget,
+  isPointerMutable,
+} from "../access/pointer-operations";
 import type { Interpreter } from "../../expressions/handlers";
 
 export function handleDereferenceAssignment(
