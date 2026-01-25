@@ -2,6 +2,7 @@ import { describe, it } from "bun:test";
 import { assertInterpretValid } from "../test-helpers";
 
 describe("interpret - types - checking and aliases", () => {
+  // 'is' operator not yet supported in compiler
   it("supports type check with 'is' operator", () => {
     assertInterpretValid("let temp : I32 = 100; temp is I32", 1);
   });
@@ -26,6 +27,7 @@ describe("interpret - types - checking and aliases", () => {
 });
 
 describe("interpret - types - structs", () => {
+  // Struct syntax not yet supported in compiler
   it("supports struct declaration and field access", () => {
     assertInterpretValid(
       "struct Wrapper { field : 100 } Wrapper { field : 100 }.field",
@@ -40,6 +42,7 @@ describe("interpret - types - structs", () => {
     );
   });
 
+  // Constructor 'this' returns not yet supported in compiler
   it("supports constructor functions that return struct-like objects", () => {
     assertInterpretValid(
       "fn Wrapper(field : I32) => this; Wrapper(100).field",
@@ -49,6 +52,7 @@ describe("interpret - types - structs", () => {
 });
 
 describe("interpret - types - arrays", () => {
+  // Array syntax not yet supported in compiler
   it("supports typed arrays with indexing", () => {
     assertInterpretValid(
       "let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]",
@@ -73,6 +77,7 @@ describe("interpret - types - arrays", () => {
 });
 
 describe("interpret - types - destructors", () => {
+  // Destructor syntax not yet supported in compiler
   it("supports type destructors with 'then' clause", () => {
     assertInterpretValid(
       "let mut count = 0; fn drop(this : I32) => count += 1; type MyDroppable = I32 then drop; { let temp : MyDroppable = 100; } count",

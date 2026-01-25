@@ -1,83 +1,89 @@
 import { describe, it } from "bun:test";
-import { assertInterpretValid, assertInterpretInvalid } from "../test-helpers";
+import { assertInterpretValid, assertInterpretInvalid, itBoth } from "../test-helpers";
 
 describe("interpret - variables - basic", () => {
-  it("supports simple variable declaration", () => {
-    assertInterpretValid("let x : I32 = 3; x", 3);
+  itBoth("supports simple variable declaration", (assertValid) => {
+    assertValid("let x : I32 = 3; x", 3);
   });
 
-  it("handles variable declarations in grouped expressions", () => {
-    assertInterpretValid("{ let x : I32 = 3; x }", 3);
+  itBoth("handles variable declarations in grouped expressions", (assertValid) => {
+    assertValid("{ let x : I32 = 3; x }", 3);
   });
 
+  // Compiler doesn't support nested braces in arithmetic expressions
   it("supports variable declarations with type annotations", () => {
     assertInterpretValid("(2 + { let x : I32 = 3; x }) * 4", 20);
   });
 
-  it("supports variable references in declarations", () => {
-    assertInterpretValid("let x : I32 = 100; let y : I32 = x; y", 100);
+  itBoth("supports variable references in declarations", (assertValid) => {
+    assertValid("let x : I32 = 100; let y : I32 = x; y", 100);
   });
 
-  it("supports variable declarations without type annotations", () => {
-    assertInterpretValid("let x = 100; let y = x; y", 100);
+  itBoth("supports variable declarations without type annotations", (assertValid) => {
+    assertValid("let x = 100; let y = x; y", 100);
   });
 
-  it("throws on duplicate variable declaration in same scope", () => {
-    assertInterpretInvalid("let x = 100; let x = 200; x");
+  itBoth("throws on duplicate variable declaration in same scope", (assertValid, assertInvalid) => {
+    assertInvalid("let x = 100; let x = 200; x");
   });
 });
 
 describe("interpret - variables - type coercion", () => {
-  it("allows narrower type assignment to wider type variable", () => {
-    assertInterpretValid("let x : U16 = 100U8; x", 100);
+  itBoth("allows narrower type assignment to wider type variable", (assertValid) => {
+    assertValid("let x : U16 = 100U8; x", 100);
   });
 
-  it("throws when assigning wider type to narrower type variable", () => {
-    assertInterpretInvalid("let x : U8 = 100U16; x");
+  itBoth("throws when assigning wider type to narrower type variable", (assertValid, assertInvalid) => {
+    assertInvalid("let x : U8 = 100U16; x");
   });
 
+  // Compiler doesn't track type widths for variable-to-variable assignments
   it("throws when assigning variable of wider type to narrower type variable", () => {
     assertInterpretInvalid("let x = 100U16; let y : U8 = x; y");
   });
 });
 
 describe("interpret - variables - mutable", () => {
-  it("supports mutable variable assignment", () => {
-    assertInterpretValid("let mut x = 0; x = 100; x", 100);
+  itBoth("supports mutable variable assignment", (assertValid) => {
+    assertValid("let mut x = 0; x = 100; x", 100);
   });
 
-  it("throws when reassigning immutable variable", () => {
-    assertInterpretInvalid("let x = 0; x = 100; x");
+  itBoth("throws when reassigning immutable variable", (assertValid, assertInvalid) => {
+    assertInvalid("let x = 0; x = 100; x");
   });
 
-  it("allows mutable variable reassignment inside grouped expressions", () => {
-    assertInterpretValid("let mut x = 0; { x = 100; } x", 100);
+  itBoth("allows mutable variable reassignment inside grouped expressions", (assertValid) => {
+    assertValid("let mut x = 0; { x = 100; } x", 100);
   });
 
+  // Compiler doesn't track scope boundaries for variable lifetime
   it("throws when variable is declared inside grouped expressions and used outside", () => {
     assertInterpretInvalid("{ let mut x = 0; } x = 100; x");
   });
 });
 
 describe("interpret - variables - uninitialized", () => {
+  // Compiler treats uninitialized variable assignment as immutable reassignment
   it("supports uninitialized variable declaration", () => {
     assertInterpretValid("let x : I32; x = 100; x", 100);
   });
 
-  it("throws when reassigning uninitialized variable without mut", () => {
-    assertInterpretInvalid("let x : I32; x = 10; x = 20; x");
+  itBoth("throws when reassigning uninitialized variable without mut", (assertValid, assertInvalid) => {
+    assertInvalid("let x : I32; x = 10; x = 20; x");
   });
 
-  it("supports mut uninitialized variable declaration", () => {
-    assertInterpretValid("let mut x : I32; x = 10; x = 20; x", 20);
+  itBoth("supports mut uninitialized variable declaration", (assertValid) => {
+    assertValid("let mut x : I32; x = 10; x = 20; x", 20);
   });
 
+  // Compiler doesn't track uninitialized variable tracking through branches
   it("supports variable assignment inside if-else branches", () => {
     assertInterpretValid("let x : I32; if (true) x = 10; else x = 20; x", 10);
   });
 });
 
 describe("interpret - variables - pointers", () => {
+  // Pointers are interpreter-only for now
   it("supports pointer creation and dereferencing", () => {
     assertInterpretValid("let x = 100; let y : *I32 = &x; *y", 100);
   });
@@ -106,10 +112,11 @@ describe("interpret - variables - pointers", () => {
 });
 
 describe("interpret - variables - this keyword", () => {
-  it("supports calling function via this.methodName() at global scope", () => {
-    assertInterpretValid("fn get() => 100; this.get()", 100);
+  itBoth("supports calling function via this.methodName() at global scope", (assertValid) => {
+    assertValid("fn get() => 100; this.get()", 100);
   });
 
+  // Compiler transforms this.method() to method(this) which breaks when function has params
   it("supports function with parameters called via this", () => {
     assertInterpretValid(
       "fn add(a : I32, b : I32) => a + b; this.add(10, 20)",
@@ -117,6 +124,7 @@ describe("interpret - variables - this keyword", () => {
     );
   });
 
+  // Compiler has issues with this.method() inside function bodies
   it("supports this in function returning value", () => {
     assertInterpretValid(
       "fn getValue() => 42; fn wrapper() => this.getValue(); wrapper()",
@@ -124,15 +132,15 @@ describe("interpret - variables - this keyword", () => {
     );
   });
 
-  it("supports function returning this with nested function", () => {
-    assertInterpretValid(
+  itBoth("supports function returning this with nested function", (assertValid) => {
+    assertValid(
       "fn Wrapper(value : I32) => { fn get() => value; this }; Wrapper(100).get()",
       100,
     );
   });
 
-  it("supports nested functions in function returning this", () => {
-    assertInterpretValid(
+  itBoth("supports nested functions in function returning this", (assertValid) => {
+    assertValid(
       "fn getAdder(a : I32) => { fn add(b : I32) => a + b; this }; getAdder(10).add(5)",
       15,
     );
