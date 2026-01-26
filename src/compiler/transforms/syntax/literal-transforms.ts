@@ -68,6 +68,7 @@ function transformCharLiterals(source: string): string {
  * Convert statements to expressions by replacing semicolons with commas
  * - Convert semicolons at top level (braceDepth=0) and inside parentheses
  * - Keep semicolons inside curly braces (control flow bodies)
+ * - Append 0 after trailing commas to ensure valid comma expressions
  */
 export function convertStatementsToExpressions(source: string): string {
   let result = "";
@@ -96,6 +97,13 @@ export function convertStatementsToExpressions(source: string): string {
     } else {
       result += ch;
     }
+  }
+
+  // If expression ends with a comma, append 0 to create a valid comma expression
+  // This handles cases like function declarations that should evaluate to 0
+  const trimmedResult = result.trimEnd();
+  if (trimmedResult.endsWith(",")) {
+    result = trimmedResult + "0";
   }
 
   return result;

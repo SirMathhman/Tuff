@@ -25,6 +25,13 @@ describe("functions - declarations", () => {
       assertValid("fn get0() => get1(); fn get1() => 100; get0()", 100);
     },
   );
+
+  itBoth(
+    "function declaration as expression evaluates to zero",
+    (assertValid) => {
+      assertValid("fn get() => 100;", 0);
+    },
+  );
 });
 
 describe("functions - lambdas", () => {
