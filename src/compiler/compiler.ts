@@ -34,6 +34,7 @@ import {
 import { clearVariableTypes } from "./parsing/parser-utils";
 import { validateFunctionCalls } from "./transforms/validation/function-call-validation";
 import { validateStructInstantiation } from "./transforms/validation/struct-instantiation-validation";
+import { validatePointerOperations } from "./transforms/validation/pointer-validation";
 
 const BUILTIN_METHODS = new Set(["charCodeAt", "length"]);
 
@@ -266,6 +267,9 @@ function createTuffCompiler(source: string) {
 
       // Validate struct instantiation fields against their declared types
       validateStructInstantiation(source);
+
+      // Validate pointer operations (type matching, mutability constraints)
+      validatePointerOperations(source, variables);
 
       // Build set of array variable names
       const arrayVars = new Set<string>();

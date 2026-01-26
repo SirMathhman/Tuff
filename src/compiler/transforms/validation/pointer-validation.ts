@@ -1,72 +1,106 @@
-import { isPointerTypeMutable } from "../../../handlers/access/pointer-operations";
+import { extractTypeSize } from "../../../type-utils";
+
+export interface VariableInfo {
+  type: string | undefined;
+  mutable: boolean;
+  initialized: boolean;
+  isArray?: boolean;
+}
 
 /**
- * Validate pointer operations in assignments
- * - Ensure *y = value only works if y is a mutable pointer (*mut)
- * - Ensure &x = value is not attempted (references are immutable)
+ * Validate pointer operations at compile time
+ * - Ensure pointer type assignments match variable types
+ * - Ensure *mut pointers are only created from mutable variables
  */
-export function validatePointerAssignments(source: string): void {
-  // Pattern: *variableName = ...;
-  // This is only valid if the variable is declared as *mut
-
+export function validatePointerOperations(
+  source: string,
+  variables: Map<string, VariableInfo>,
+): void {
   let i = 0;
   while (i < source.length) {
-    if (source[i] === "*" && shouldBeDereference(source, i)) {
-      // Found potential dereference in assignment
-      const varNameEnd = tryExtractVariableAfterDereference(source, i);
-      if (varNameEnd > i + 1) {
-        const varName = source.slice(i + 1, varNameEnd).trim();
+    // Look for let declarations with pointer types
+    if (source[i] === "l" && source.slice(i, i + 4) === "let ") {
+      const colonIdx = source.indexOf(":", i);
+      const eqIdx = source.indexOf("=", i);
+      const semiIdx = source.indexOf(";", i);
 
-        // Check if this is an assignment by looking ahead for =
-        let j = varNameEnd;
-        while (j < source.length && (source[j] === " " || source[j] === "\t")) {
-          j++;
-        }
+      if (colonIdx !== -1 && colonIdx < (eqIdx || semiIdx || source.length)) {
+        const typeStart = colonIdx + 1;
+        const typeEnd =
+          eqIdx !== -1 ? eqIdx : semiIdx !== -1 ? semiIdx : source.length;
+        const typeStr = source.slice(typeStart, typeEnd).trim();
 
-        // If we find =, check if this variable has *mut type
-        if (j < source.length && source[j] === "=") {
-          if (j + 1 < source.length && source[j + 1] !== "=") {
-            // This is an assignment to a dereferenced pointer
-            // We would need to track variable types to validate, but the
-            // interpreter validation is sufficient for now
+        // If this is a pointer type
+        if (typeStr.startsWith("*")) {
+          // Check if there's an initializer
+          if (eqIdx !== -1) {
+            const exprStart = eqIdx + 1;
+            const exprEnd = semiIdx !== -1 ? semiIdx : source.length;
+            const exprStr = source.slice(exprStart, exprEnd).trim();
+
+            // Pointer types require & operator (reference) or existing pointer
+            if (exprStr.startsWith("&")) {
+              // This is a reference operation - validate it
+              const refTarget = tryExtractVarFromReference(exprStr);
+              if (refTarget) {
+                // Validate variable exists and matches type
+                const baseType = typeStr.startsWith("*mut ")
+                  ? typeStr.slice(5).trim()
+                  : typeStr.slice(1).trim();
+
+                const varInfo = variables.get(refTarget);
+                if (!varInfo) {
+                  // Variable doesn't exist - will be caught by other validation
+                } else {
+                  // Check type compatibility
+                  const expectedTypeSize = extractTypeSize(baseType);
+                  const actualTypeSize = varInfo.type
+                    ? extractTypeSize(varInfo.type)
+                    : 0;
+                  if (
+                    expectedTypeSize !== 0 &&
+                    actualTypeSize !== 0 &&
+                    expectedTypeSize !== actualTypeSize
+                  ) {
+                    throw new Error(
+                      `type mismatch: cannot create pointer to '${refTarget}' of type ${varInfo.type}, expected ${baseType}`,
+                    );
+                  }
+
+                  // Check mutability for *mut
+                  if (typeStr.startsWith("*mut ") && !varInfo.mutable) {
+                    throw new Error(
+                      `cannot create mutable pointer to immutable variable '${refTarget}'`,
+                    );
+                  }
+                }
+              }
+            }
           }
         }
       }
+
+      i = semiIdx !== -1 ? semiIdx + 1 : source.length;
+    } else {
+      i++;
     }
-    i++;
   }
 }
 
-function shouldBeDereference(source: string, pos: number): boolean {
-  if (pos === 0) return true;
+function tryExtractVarFromReference(exprStr: string): string | undefined {
+  if (!exprStr.startsWith("&")) return undefined;
+  const afterAnd = exprStr.slice(1).trim();
 
-  const prevChar = source[pos - 1];
-  if (!prevChar) return true;
-  const derefPrecedingChars = new Set([";", ",", "(", "[", "{", "=", ":"]);
-  if (derefPrecedingChars.has(prevChar)) return true;
-
-  return prevChar === " " || prevChar === "\t";
-}
-
-function tryExtractVariableAfterDereference(
-  source: string,
-  derefPos: number,
-): number {
-  let i = derefPos + 1;
-  while (i < source.length && (source[i] === " " || source[i] === "\t")) {
+  // Extract identifier after &
+  let i = 0;
+  while (i < afterAnd.length) {
+    const ch = afterAnd[i];
+    if (!ch || !/[a-zA-Z0-9_]/.test(ch)) break;
     i++;
   }
 
-  const start = i;
-  while (i < source.length) {
-    const ch = source[i];
-    if (!ch) break;
-    const isIdChar = /[a-zA-Z0-9_]/.test(ch);
-    if (!isIdChar && ch !== "*") {
-      break;
-    }
-    i++;
+  if (i > 0) {
+    return afterAnd.slice(0, i);
   }
-
-  return i > start ? i : derefPos + 1;
+  return undefined;
 }
