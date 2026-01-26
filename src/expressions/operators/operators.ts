@@ -16,6 +16,10 @@ import {
   handleIndexingOp,
 } from "./op-helpers";
 
+function isPointerValue(value: number): boolean {
+  return getPointerTarget(value) !== undefined;
+}
+
 function performArithmeticOp(op: string, left: number, right: number): number {
   switch (op) {
     case "+":
@@ -182,6 +186,25 @@ export function performBinaryOp(
   leftStr?: string,
   scope?: Map<string, number>,
 ): number {
+  // Validate pointer arithmetic: scalar pointers cannot be used in arithmetic
+  if (
+    (op === "+" || op === "-" || op === "*" || op === "/") &&
+    isPointerValue(left)
+  ) {
+    const target = getPointerTarget(left);
+    if (target) {
+      // Check if target variable is an array or scalar type
+      const targetType = typeMap?.get(target) || 0;
+      // Scalar types are positive (e.g., 32 for I32, 8 for I8)
+      // If targetType > 0, it's a scalar - reject arithmetic
+      if (targetType > 0) {
+        throw new Error(
+          `cannot perform '${op}' on pointer to scalar type '${target}'`,
+        );
+      }
+    }
+  }
+
   const result = performOperationLogic({
     left,
     op,

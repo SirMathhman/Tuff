@@ -34,13 +34,26 @@ export function handleReferenceOperation(
   // Check if this is a reference operation: &varName
   if (!trimmed.startsWith("&")) return undefined;
 
-  const varName = trimmed.slice(1).trim();
+  const rest = trimmed.slice(1).trim();
 
-  // Validate that it's a valid identifier
-  if (!isValidIdentifier(varName)) return undefined;
+  // Reject double references: &&x
+  if (rest.startsWith("&")) {
+    throw new Error("invalid: cannot take reference of reference");
+  }
+
+  // Validate that it's a valid identifier (no expressions like &(100) or &(x+y))
+  if (!isValidIdentifier(rest)) {
+    throw new Error(
+      `invalid: can only take reference of variable names, got: &${rest}`,
+    );
+  }
+
+  const varName = rest;
 
   // Check if the variable exists in scope
-  if (!scope.has(varName)) return undefined;
+  if (!scope.has(varName)) {
+    throw new Error(`variable '${varName}' not found in scope`);
+  }
 
   // Inline createPointer and return a pointer to this variable
   // Mark the pointer as mutable if the variable is mutable
@@ -70,6 +83,8 @@ export function handleDereferenceOperation(
     if (targetVarName && scope.has(targetVarName)) {
       return scope.get(targetVarName)!;
     }
+    // If the value isn't a pointer, error
+    throw new Error(`cannot dereference non-pointer value '${operandStr}'`);
   }
 
   return undefined;

@@ -60,6 +60,44 @@ function findStructClosingBrace(trimmed: string, braceIndex: number): number {
   return closeIndex;
 }
 
+function evaluateStructField(
+  fieldName: string,
+  valueStr: string,
+  fieldTypes: Map<string, string> | undefined,
+  typeParamMap: Map<string, string> | undefined,
+  scope: Map<string, number>,
+  typeMap: Map<string, number>,
+  interpreter: Interpreter,
+): number {
+  // Validate type if provided
+  if (fieldTypes && typeParamMap && typeParamMap.size > 0) {
+    const fieldTypeStr = fieldTypes.get(fieldName);
+    if (fieldTypeStr) {
+      const resolvedType = typeParamMap.get(fieldTypeStr) || fieldTypeStr;
+      const firstChar = resolvedType[0];
+      const isIntType =
+        (firstChar === "I" || firstChar === "U") && resolvedType[1];
+      const isBoolType = resolvedType === "Bool";
+      if (isIntType || isBoolType) {
+        const inferredType = inferValueType(valueStr);
+        if (
+          inferredType &&
+          inferredType !== resolvedType &&
+          !(
+            (resolvedType.startsWith("I") || resolvedType.startsWith("U")) &&
+            (inferredType.startsWith("I") || inferredType.startsWith("U"))
+          )
+        ) {
+          throwFieldTypeMismatch(fieldName, resolvedType, inferredType);
+        }
+      }
+    }
+  }
+
+  // Evaluate field value
+  return interpreter(valueStr, scope, typeMap, new Map(), new Set(), new Set());
+}
+
 function parseFieldAssignments(
   fieldsStr: string,
   scope: Map<string, number>,
@@ -93,38 +131,14 @@ function parseFieldAssignments(
     const fieldName = assignment.slice(0, colonIndex).trim();
     const valueStr = assignment.slice(colonIndex + 1).trim();
 
-    // Validate type if we have field type definitions and type parameters
-    if (fieldTypes && typeParamMap && typeParamMap.size > 0) {
-      const fieldTypeStr = fieldTypes.get(fieldName);
-      if (fieldTypeStr) {
-        const resolvedType = typeParamMap.get(fieldTypeStr) || fieldTypeStr;
-
-        // Only validate if the resolved type is a basic built-in type
-        if (/^[IU]\d+$/.test(resolvedType) || resolvedType === "Bool") {
-          const inferredType = inferValueType(valueStr);
-
-          // Check type compatibility
-          if (
-            inferredType &&
-            inferredType !== resolvedType &&
-            !(
-              (resolvedType.startsWith("I") || resolvedType.startsWith("U")) &&
-              (inferredType.startsWith("I") || inferredType.startsWith("U"))
-            )
-          ) {
-            throwFieldTypeMismatch(fieldName, resolvedType, inferredType);
-          }
-        }
-      }
-    }
-
-    const value = interpreter(
+    const value = evaluateStructField(
+      fieldName,
       valueStr,
+      fieldTypes,
+      typeParamMap,
       scope,
       typeMap,
-      new Map(),
-      new Set(),
-      new Set(),
+      interpreter,
     );
     fieldValues.set(fieldName, value);
   }
