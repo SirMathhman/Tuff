@@ -18,3 +18,9 @@ The repo runs PMD CPD (copy/paste detection) as part of the pre-commit checks.
 
 - The current configuration uses `--minimum-tokens 35` and ignores identifiers/literals.
 - To keep CPD signal high at this threshold, common “plumbing” patterns are factored into shared helpers/types (for example: base handler params, scope-context builders, and loop context normalization).
+
+## Move semantics (droppable types)
+
+The compiler performs a lightweight validation pass to reject use-after-move for variables whose type alias is declared with a `then drop` clause (e.g. `type Temp = I32 then drop;`).
+
+This relies on the declaration parser correctly treating braced blocks (like `fn ... => { ... }`) as statement boundaries, even when they aren’t followed by a semicolon.
