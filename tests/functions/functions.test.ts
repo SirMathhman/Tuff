@@ -46,6 +46,13 @@ describe("functions - declarations", () => {
       assertInvalid("let empty = 0; fn empty() => {}");
     },
   );
+
+  itBoth(
+    "throws when function parameter shadows variable name",
+    (assertValid, assertInvalid) => {
+      assertInvalid("let temp = 0; fn pass(temp : I32) => temp;");
+    },
+  );
 });
 
 describe("functions - lambdas", () => {

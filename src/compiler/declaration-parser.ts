@@ -206,6 +206,41 @@ function handleFunctionDeclaration(
     );
   }
 
+  // Skip to opening paren
+  j = skipWhitespaceOnly(source, j);
+  if (j < source.length && source[j] === "(") {
+    const parenStart = j;
+    j++; // Skip opening paren
+    let parenDepth = 1;
+    let paramEnd = j;
+    while (j < source.length && parenDepth > 0) {
+      if (source[j] === "(") parenDepth++;
+      else if (source[j] === ")") {
+        parenDepth--;
+        if (parenDepth === 0) paramEnd = j;
+      }
+      j++;
+    }
+
+    // Extract and validate parameter names
+    const paramsStr = source.slice(parenStart + 1, paramEnd).trim();
+    if (paramsStr) {
+      // Parse parameter names (they appear before colons)
+      const paramParts = paramsStr.split(",");
+      for (const part of paramParts) {
+        const colonIdx = part.indexOf(":");
+        if (colonIdx !== -1) {
+          const paramName = part.slice(0, colonIdx).trim();
+          if (paramName && variables.has(paramName)) {
+            throw new Error(
+              `Parameter '${paramName}' shadows an existing variable`,
+            );
+          }
+        }
+      }
+    }
+  }
+
   // Skip to next statement
   return skipToNextStatement(source, j);
 }

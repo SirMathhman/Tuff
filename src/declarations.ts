@@ -30,6 +30,7 @@ export function makeDeclarationHandler(
     typeMap: Map<string, number>,
     visMap: Map<string, boolean>,
     isPublic: boolean,
+    scope?: Map<string, number>,
   ) => void,
 ) {
   return function handleDeclaration(
@@ -53,7 +54,7 @@ export function makeDeclarationHandler(
       return { handled: false, result: 0 };
     }
 
-    storeDecl(rest, closeIndex, ctx.typeMap, ctx.visMap, isPublic);
+    storeDecl(rest, closeIndex, ctx.typeMap, ctx.visMap, isPublic, ctx.scope);
 
     return {
       handled: true,

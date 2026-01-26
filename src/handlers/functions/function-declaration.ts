@@ -121,6 +121,7 @@ function processFunctionDeclaration(
   visMap: Map<string, boolean>,
   isPublic: boolean,
   functionDefs: Map<string, FnDef>,
+  scope?: Map<string, number>,
 ): void {
   const header = extractFunctionHeader(rest);
   if (!header) return;
@@ -133,6 +134,16 @@ function processFunctionDeclaration(
   const paramsStr = rest.slice(parenStart + 1, parenEnd).trim();
   const params = parseParameters(paramsStr, typeMap);
   if (!params) return;
+  // Validate parameters don't shadow existing variables
+  if (scope) {
+    for (const param of params) {
+      if (scope.has(param.name)) {
+        throw new Error(
+          `Parameter '${param.name}' shadows an existing variable`,
+        );
+      }
+    }
+  }
   const arrowIndex = rest.indexOf("=>", parenEnd);
   if (arrowIndex === -1) return;
   const returnTypeStr = rest.slice(parenEnd + 1, arrowIndex).trim();
@@ -168,6 +179,7 @@ export function createFunctionDeclarationHandler(
       typeMap: Map<string, number>,
       visMap: Map<string, boolean>,
       isPublic: boolean,
+      scope?: Map<string, number>,
     ) => {
       processFunctionDeclaration(
         rest,
@@ -176,6 +188,7 @@ export function createFunctionDeclarationHandler(
         visMap,
         isPublic,
         functionDefs,
+        scope,
       );
     },
   );
