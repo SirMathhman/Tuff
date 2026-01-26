@@ -7,9 +7,11 @@ import { isIdentifierChar, isWhitespace } from "./string-helpers";
  * - Type annotations (skipped)
  * - Nested parentheses in function types
  * - 'this' parameter (converted to 'thisVal')
+ * - Validates no duplicate parameter names
  */
 export function extractParamNamesFromRaw(rawParams: string): string[] {
   const params: string[] = [];
+  const seen = new Set<string>();
   let j = 1; // Skip opening (
   while (j < rawParams.length - 1) {
     if (isWhitespace(rawParams[j])) {
@@ -21,6 +23,10 @@ export function extractParamNamesFromRaw(rawParams: string): string[] {
       while (j < rawParams.length && isIdentifierChar(rawParams[j])) j++;
       let paramName = rawParams.slice(pStart, j);
       if (paramName === "this") paramName = "thisVal";
+      if (seen.has(paramName)) {
+        throw new Error(`duplicate parameter name: ${paramName}`);
+      }
+      seen.add(paramName);
       params.push(paramName);
       // Skip to comma or end, handling nested parentheses in function types
       let nestedParenDepth = 0;

@@ -32,6 +32,13 @@ describe("functions - declarations", () => {
       assertValid("fn get() => 100;", 0);
     },
   );
+
+  itBoth(
+    "throws on duplicate parameter names",
+    (assertValid, assertInvalid) => {
+      assertInvalid("fn doNothing(first : I32, first : I32) => {}");
+    },
+  );
 });
 
 describe("functions - lambdas", () => {
