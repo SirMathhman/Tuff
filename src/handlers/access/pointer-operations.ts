@@ -1,10 +1,22 @@
 import { isValidIdentifier } from "../../utils/identifier-utils";
+import { extractTypeSize } from "../../type-utils";
 
 // Global map to store pointer values (which reference variable names)
 const pointerMap = new Map<number, string>();
 // Track which pointers are mutable
 const mutablePointerMap = new Map<number, boolean>();
 let pointerCounter = 1000; // Pointer values start at 1000 to distinguish from regular values
+
+/**
+ * Check if a pointer type annotation includes the 'mut' keyword
+ * Examples: "*mut I32" -> true, "*I32" -> false, "*[I32]" -> false
+ */
+export function isPointerTypeMutable(typeAnnotation: string): boolean {
+  const trimmed = typeAnnotation.trim();
+  if (!trimmed.startsWith("*")) return false;
+  const afterStar = trimmed.slice(1).trim();
+  return afterStar.startsWith("mut ");
+}
 
 export function createPointer(
   varName: string,
@@ -28,6 +40,9 @@ export function handleReferenceOperation(
   s: string,
   scope: Map<string, number>,
   mutMap: Map<string, boolean> = new Map(),
+  pointerTypeIsMutable: boolean = false,
+  typeMap?: Map<string, number>,
+  pointerBaseType?: string,
 ): number | undefined {
   const trimmed = s.trim();
 
@@ -55,12 +70,32 @@ export function handleReferenceOperation(
     throw new Error(`variable '${varName}' not found in scope`);
   }
 
+  // For *mut pointers, target variable must be mutable
+  if (pointerTypeIsMutable) {
+    const targetIsMutable = mutMap.get(varName) ?? false;
+    if (!targetIsMutable) {
+      throw new Error(
+        `cannot create mutable pointer to immutable variable '${varName}'`,
+      );
+    }
+  }
+
+  // Validate type compatibility if pointer base type is specified
+  if (pointerBaseType && typeMap) {
+    const targetType = typeMap.get(varName);
+    const expectedType = extractTypeSize(pointerBaseType);
+    if (targetType !== undefined && targetType !== expectedType) {
+      throw new Error(
+        `cannot create pointer to '${varName}': type mismatch (expected ${pointerBaseType}, got variable of type ${targetType})`,
+      );
+    }
+  }
+
   // Inline createPointer and return a pointer to this variable
-  // Mark the pointer as mutable if the variable is mutable
-  const isMutable = mutMap.get(varName) ?? false;
+  // Pointer mutability is determined by the type annotation (*mut vs *)
   const pointerValue = pointerCounter++;
   pointerMap.set(pointerValue, varName);
-  mutablePointerMap.set(pointerValue, isMutable);
+  mutablePointerMap.set(pointerValue, pointerTypeIsMutable);
   return pointerValue;
 }
 

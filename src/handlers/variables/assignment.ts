@@ -2,6 +2,7 @@ import type { ScopeContext } from "../../types/interpreter";
 import { callInterpreter } from "../../types/interpreter";
 import { setArrayElement, isArrayInstance } from "../../utils/array";
 import { isValidIdentifier } from "../../utils/identifier-utils";
+import { getPointerTarget } from "../../handlers/access/pointer-operations";
 import {
   toScopeContext,
   type BaseHandlerParams,
@@ -28,13 +29,26 @@ function handleArrayElementAssignment(
   ctx: ScopeContext,
 ): number | undefined {
   const aa = parseArrayElemAssignment(lhs);
-  if (
-    !aa ||
-    !ctx.scope.has(aa.arrayVarName) ||
-    !ctx.mutMap.has(aa.arrayVarName)
-  )
-    return undefined;
-  const arrayId = ctx.scope.get(aa.arrayVarName)!;
+  if (!aa || !ctx.scope.has(aa.arrayVarName)) return undefined;
+
+  // Handle both direct array variables and pointers to arrays
+  let arrayId: number;
+  const varValue = ctx.scope.get(aa.arrayVarName)!;
+
+  if (isArrayInstance(varValue)) {
+    // Direct array variable
+    if (!ctx.mutMap.has(aa.arrayVarName)) return undefined;
+    arrayId = varValue;
+  } else {
+    // Could be a pointer to an array
+    const targetVarName = getPointerTarget(varValue);
+    if (!targetVarName || !ctx.scope.has(targetVarName)) return undefined;
+    const targetValue = ctx.scope.get(targetVarName)!;
+    if (!isArrayInstance(targetValue)) return undefined;
+    // For pointer to array, we need to modify the underlying array
+    arrayId = targetValue;
+  }
+
   if (!isArrayInstance(arrayId))
     throw new Error(`variable '${aa.arrayVarName}' is not an array`);
   const semiIdx = s.indexOf(";", eqIdx),
