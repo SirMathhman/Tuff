@@ -186,6 +186,30 @@ function handleModuleOrObjectDeclaration(
   return j;
 }
 
+function handleFunctionDeclaration(
+  source: string,
+  i: number,
+  variables: Map<string, VariableInfo>,
+): number {
+  let j = i + 2; // Skip "fn"
+  j = skipWhitespaceOnly(source, j);
+
+  // Get function name
+  const nameStart = j;
+  while (j < source.length && isIdentifierChar(source[j])) j++;
+  const fnName = source.slice(nameStart, j);
+
+  // Check if function name conflicts with a variable
+  if (fnName && variables.has(fnName)) {
+    throw new Error(
+      `Function name '${fnName}' conflicts with already declared variable`,
+    );
+  }
+
+  // Skip to next statement
+  return skipToNextStatement(source, j);
+}
+
 function parseDeclarationsImpl(
   source: string,
   variables: Map<string, VariableInfo>,
@@ -229,6 +253,11 @@ function parseDeclarationsImpl(
 
     if (matchWord(source, i, "let")) {
       i = handleLetDeclarationOrDestructuring(source, i, variables);
+      continue;
+    }
+
+    if (matchWord(source, i, "fn")) {
+      i = handleFunctionDeclaration(source, i, variables);
       continue;
     }
 

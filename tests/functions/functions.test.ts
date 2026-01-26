@@ -39,6 +39,13 @@ describe("functions - declarations", () => {
       assertInvalid("fn doNothing(first : I32, first : I32) => {}");
     },
   );
+
+  itBoth(
+    "throws when function name conflicts with variable name",
+    (assertValid, assertInvalid) => {
+      assertInvalid("let empty = 0; fn empty() => {}");
+    },
+  );
 });
 
 describe("functions - lambdas", () => {
