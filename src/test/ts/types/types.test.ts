@@ -75,15 +75,9 @@ describe("types - arrays", () => {
     ok("let array = [1, 2, 3]; array.init", 3);
   });
 
-  itBoth(
-    "supports array element mutation and retrieval",
-    (assertValid) => {
-      assertValid(
-        "let mut myArray = [0]; myArray[0] = 100; myArray[0]",
-        100,
-      );
-    },
-  );
+  itBoth("supports array element mutation and retrieval", (assertValid) => {
+    assertValid("let mut myArray = [0]; myArray[0] = 100; myArray[0]", 100);
+  });
 });
 
 // Destructor syntax not supported in compiler

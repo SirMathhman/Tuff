@@ -64,6 +64,13 @@ describe("pointer operations - mutable assignment", () => {
     ok("let mut x = 10; let p : *mut I32 = &x; *p = 99; *p", 99);
   });
 
+  itBoth("mutable pointer can be assigned to another variable", (ok) => {
+    ok(
+      "let mut x = 0; let y : *mut I32 = &x; let z = y; *z = 100; x",
+      100,
+    );
+  });
+
   itBoth("immutable pointer rejects dereferenced assignment", (_, bad) => {
     bad("let mut x = 100; let y : *I32 = &x; *y = 50; x");
   });
