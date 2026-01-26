@@ -181,6 +181,13 @@ describe("pointer operations - dangling references", () => {
       assertInvalid("fn get() => { let x = 100; &x }");
     },
   );
+
+  itBoth(
+    "throws when returning reference to local array from function",
+    (_ok, assertInvalid) => {
+      assertInvalid("fn get() => { let x = [100, 200]; &x }");
+    },
+  );
 });
 
 describe("pointer operations - limitations", () => {
