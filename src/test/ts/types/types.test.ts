@@ -80,24 +80,23 @@ describe("types - arrays", () => {
   });
 });
 
-// Destructor execution isn't supported in compiler
 describe("types - destructors", () => {
-  itInterpreter("supports type destructors with 'then' clause", (ok) => {
-    ok(
+  itBoth("supports type destructors with 'then' clause", (assertValid) => {
+    assertValid(
       "let mut count = 0; fn drop(this : I32) => count += 1; type MyDroppable = I32 then drop; { let temp : MyDroppable = 100; } count",
       1,
     );
   });
 
-  itInterpreter("supports type destructors on array elements", (ok) => {
-    ok(
+  itBoth("supports type destructors on array elements", (assertValid) => {
+    assertValid(
       "let mut count = 0; fn drop(this : I32) => count += 1; type MyDroppable = I32 then drop; { let temp : [MyDroppable; 3; 3] = [1, 2, 3]; } count",
       3,
     );
   });
 
-  itInterpreter("supports type destructors on struct fields", (ok) => {
-    ok(
+  itBoth("supports type destructors on struct fields", (assertValid) => {
+    assertValid(
       "let mut count = 0; fn drop(this : MyDroppable) => count += 1; type MyDroppable = I32 then drop; struct Wrapper { field : MyDroppable } { let temp : Wrapper = Wrapper { field : 100 }; } count",
       1,
     );

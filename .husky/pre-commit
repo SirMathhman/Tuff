@@ -3,8 +3,11 @@ export PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH"
 
 FAILED=0
 
+TEST_LOG="$(mktemp)"
+trap 'rm -f "$TEST_LOG"' EXIT
+
 # Run all checks and continue on failure
-bun test || FAILED=1
+bun test >"$TEST_LOG" 2>&1 || { tail -n 200 "$TEST_LOG"; FAILED=1; }
 bun ./tools/inline-check.ts --git-files-only || FAILED=1
 npm run cpd || FAILED=1
 bun run format || FAILED=1

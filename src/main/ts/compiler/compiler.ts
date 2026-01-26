@@ -34,6 +34,8 @@ import { validateFunctionCalls } from "./transforms/validation/function-call-val
 import { validateStructInstantiation } from "./transforms/validation/struct-instantiation-validation";
 import { validatePointerOperations } from "./transforms/validation/pointer-validation";
 import { findReceiverStart, collectLocalVariables } from "./compiler-utils";
+import { transformDestructorScopes } from "./transforms/destructors/destructor-scopes";
+import type { VariableInfo } from "./declaration-parser-helpers";
 
 const BUILTIN_METHODS = new Set(["charCodeAt", "length"]);
 
@@ -182,14 +184,6 @@ function transformMethodCalls(source: string): string {
   return result;
 }
 
-interface VariableInfo {
-  type: string | undefined;
-  mutable: boolean;
-  initialized: boolean;
-  isArray?: boolean;
-  isUninitialized?: boolean;
-}
-
 function preparePointerHandling(
   source: string,
   variables: Map<string, VariableInfo>,
@@ -232,7 +226,8 @@ function createTuffCompiler(source: string) {
       const withModules = transformModules(sourceWithWrappedPointers);
       const withStructs = transformStructInstantiation(withModules);
       const transformed = transformControlFlow(withStructs);
-      const js = removeTypeSyntax(transformed);
+      const withDestructors = transformDestructorScopes(transformed);
+      const js = removeTypeSyntax(withDestructors);
       const { expression, varDeclarations } = extractVarDeclarations(js);
       let expr = transformStringIndexing(expression, arrayVars);
       expr = transformCharLiterals(expr);

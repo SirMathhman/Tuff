@@ -26,6 +26,10 @@ const variableTypes = new Map<string, string>();
 
 const droppableTypes = new Set<string>();
 
+const dropHandlersByType = new Map<string, string>();
+
+const typeAliases = new Map<string, string>();
+
 export function addDroppableType(name: string): void {
   droppableTypes.add(name);
 }
@@ -36,6 +40,34 @@ export function isDroppableType(name: string): boolean {
 
 export function clearDroppableTypes(): void {
   droppableTypes.clear();
+}
+
+export function setDropHandler(typeName: string, fnName: string): void {
+  if (!fnName) return;
+  dropHandlersByType.set(typeName, fnName);
+}
+
+export function getDropHandler(typeName: string): string | undefined {
+  return dropHandlersByType.get(typeName);
+}
+
+export function clearDropHandlers(): void {
+  dropHandlersByType.clear();
+}
+
+export function setTypeAlias(typeName: string, targetType: string): void {
+  const key = typeName.trim();
+  const val = targetType.trim();
+  if (!key || !val) return;
+  typeAliases.set(key, val);
+}
+
+export function getTypeAlias(typeName: string): string | undefined {
+  return typeAliases.get(typeName.trim());
+}
+
+export function clearTypeAliases(): void {
+  typeAliases.clear();
 }
 
 export function getVariableType(name: string): string | undefined {
@@ -68,8 +100,30 @@ export function parseTypeDeclaration(
   i = parsed.endIdx;
   if (i < source.length && source[i] === ";") i++;
   addDeclaredType(typeName);
-  if (parsed.content.indexOf(" then ") !== -1) {
-    addDroppableType(typeName);
+
+  const eqIndex = parsed.content.indexOf("=");
+  if (eqIndex !== -1) {
+    let rhs = parsed.content.slice(eqIndex + 1).trim();
+
+    const thenIndex = rhs.indexOf(" then ");
+    if (thenIndex !== -1) {
+      const dropFnRaw = rhs.slice(thenIndex + 6).trim();
+      rhs = rhs.slice(0, thenIndex).trim();
+
+      addDroppableType(typeName);
+
+      // Only keep the leading identifier for the drop function name
+      let dropFn = "";
+      for (let k = 0; k < dropFnRaw.length; k++) {
+        const ch = dropFnRaw[k]!;
+        if (k === 0 && isDigit(ch)) break;
+        if (!isIdentifierChar(ch)) break;
+        dropFn += ch;
+      }
+      if (dropFn) setDropHandler(typeName, dropFn);
+    }
+
+    if (rhs) setTypeAlias(typeName, rhs);
   }
   return { nextIndex: i, typeName };
 }

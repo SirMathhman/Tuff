@@ -25,6 +25,14 @@ The compiler performs a lightweight validation pass to reject use-after-move for
 
 This relies on the declaration parser correctly treating braced blocks (like `fn ... => { ... }`) as statement boundaries, even when they aren’t followed by a semicolon.
 
+## Runtime destructor execution
+
+The compiler now also executes type destructors declared via `type Alias = Base then dropFn;` when leaving a plain braced scope block (`{ ... }`).
+
+- Calls the alias’s drop function for variables declared inside the scope.
+- If the variable is an array of a droppable element type, calls the drop function on each element.
+- If the variable is a struct whose fields are droppable aliases, calls the appropriate drop function for each droppable field.
+
 ## Functions
 
 Top-level functions with an empty braced body (e.g. `fn drop(this : I32) => {}`) are compiled to an expression that returns `0`.

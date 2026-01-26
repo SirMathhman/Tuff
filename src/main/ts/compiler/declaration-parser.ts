@@ -11,6 +11,8 @@ import {
   getVariableType,
   isDroppableType,
   clearDroppableTypes,
+  clearDropHandlers,
+  clearTypeAliases,
   clearVariableTypes,
   clearMovedVariables,
   markMovedVariable,
@@ -33,36 +35,10 @@ import {
   parseNameAndGenerics,
 } from "./parsing/declaration-helpers";
 import { parseFieldsDefinition } from "./parsing/field-parsing";
-interface VariableInfo {
-  type: string | undefined;
-  mutable: boolean;
-  initialized: boolean;
-  isArray?: boolean;
-  isUninitialized?: boolean;
-}
-function registerVariable(
-  varName: string,
-  typeAnnotation: string | undefined,
-  isMutable: boolean,
-  variables: Map<string, VariableInfo>,
-  isArray?: boolean,
-  hasInitializer?: boolean,
-  inferredType?: string,
-): void {
-  if (variables.has(varName)) {
-    throw new Error(`Variable '${varName}' already declared`);
-  }
-  const isUninitialized = hasInitializer === false;
-  // Use explicit type annotation if provided, otherwise use inferred type
-  const effectiveType = typeAnnotation || inferredType;
-  variables.set(varName, {
-    type: effectiveType,
-    mutable: isMutable,
-    initialized: !isUninitialized,
-    isArray,
-    isUninitialized,
-  });
-}
+import {
+  registerVariable,
+  type VariableInfo,
+} from "./declaration-parser-helpers";
 function handleForLoop(
   source: string,
   i: number,
@@ -281,6 +257,8 @@ export function createDeclarationParser(
       clearCompileStructDefs();
       clearVariableTypes();
       clearDroppableTypes();
+      clearDropHandlers();
+      clearTypeAliases();
       clearMovedVariables();
       parseDeclarationsImpl(source, variables);
     },
