@@ -9,8 +9,42 @@ import { registerAnonymousFunction } from "../../handlers/functions/anonymous-fu
 import { extractReturnTypeFromFunctionType } from "./function-utils";
 import { getLocalFunctionNames, setLocalFunctionNames } from "../scope-helpers";
 import { callInterpreter, type ScopeContext } from "../../types/interpreter";
+import {
+  validateGenericTypeConsistency,
+  getConcreteType,
+} from "../generics/generic-validation";
 
 type FnContext = ScopeContext;
+
+/**
+ * Validate generic type consistency for a function call
+ * Ensures all parameters using the same generic type get compatible arguments
+ */
+function validateGenericTypeConsistencyForCall(
+  fnDef: FnDef,
+  argParts: string[],
+  _actualFnName: string,
+): void {
+  if (!fnDef.generics || fnDef.generics.length === 0) {
+    return; // Not a generic function
+  }
+
+  const generics = fnDef.generics;
+  const typeMapping = new Map<string, string>(); // Maps generic param (e.g., "T") to concrete type
+
+  // Build type mapping from arguments
+  for (let i = 0; i < argParts.length && i < fnDef.params.length; i++) {
+    const argStr = argParts[i]!;
+    const param = fnDef.params[i]!;
+    const paramTypeStr = param.typeStr;
+
+    // Check if parameter type is a generic parameter
+    if (paramTypeStr && generics.includes(paramTypeStr)) {
+      const concreteType = getConcreteType(argStr);
+      validateGenericTypeConsistency(typeMapping, paramTypeStr, concreteType);
+    }
+  }
+}
 
 /**
  * Validate that an argument value is compatible with the expected parameter type
@@ -53,6 +87,10 @@ export function processArguments(
     throw new Error(
       `function ${actualFnName} expects ${fnDef.params.length} arguments, got ${argParts.length}`,
     );
+
+  // Validate generic type consistency
+  validateGenericTypeConsistencyForCall(fnDef, argParts, actualFnName);
+
   const args: number[] = [];
   for (let i = 0; i < argParts.length; i++) {
     const argStr = argParts[i]!;

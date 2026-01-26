@@ -1,7 +1,13 @@
-import { getCompileFunctionDefs } from "../function-defs-storage";
-import type { ParamInfo } from "../parsing/param-helpers";
-import { isNumericLiteral } from "../validation/validation";
+import {
+  getCompileFunctionDefs,
+  type CompileFunctionDef,
+} from "../function-defs-storage";
 import { isWhitespace, isIdentifierChar } from "../parsing/string-helpers";
+import { isNumericLiteral } from "../validation/validation";
+import {
+  validateGenericTypeConsistency,
+  getConcreteType,
+} from "../../utils/generics/generic-validation";
 
 /**
  * Check if a value's type is compatible with an expected type
@@ -32,15 +38,49 @@ function isTypeCompatible(value: string, expectedType: string): boolean {
 }
 
 /**
+ * Validate generic type consistency for a function call
+ * Maps generic type parameters to concrete types and ensures consistency
+ */
+function validateGenericTypeConsistencyForCall(
+  fnDefData: CompileFunctionDef,
+  args: string[],
+): void {
+  if (!fnDefData.generics || fnDefData.generics.length === 0) {
+    return; // Not a generic function
+  }
+
+  const { params, generics } = fnDefData;
+  const typeMapping = new Map<string, string>(); // Maps generic param (e.g., "T") to concrete type
+
+  // Build type mapping from arguments
+  for (let i = 0; i < args.length && i < params.length; i++) {
+    const arg = args[i]!.trim();
+    const param = params[i]!;
+    const paramType = param.type;
+
+    // Check if parameter type is a generic parameter
+    if (generics.includes(paramType)) {
+      const concreteType = getConcreteType(arg);
+      validateGenericTypeConsistency(typeMapping, paramType, concreteType);
+    }
+  }
+}
+
+/**
  * Validate a single function call for argument type compatibility
  */
 function validateFunctionCall(
   fnName: string,
   argsStr: string,
-  functionDefs: Map<string, ParamInfo[]>,
+  functionDefs: Map<string, CompileFunctionDef>,
 ): void {
-  const params = functionDefs.get(fnName);
-  if (!params || params.length === 0) {
+  const fnDefData = functionDefs.get(fnName);
+  if (!fnDefData) {
+    return; // No function definition to validate against
+  }
+
+  const params = fnDefData.params;
+  if (params.length === 0) {
     return; // No parameter info to validate
   }
 
@@ -60,6 +100,9 @@ function validateFunctionCall(
     return;
   }
 
+  // Validate generic type consistency
+  validateGenericTypeConsistencyForCall(fnDefData, args);
+
   // Validate each argument against its parameter type
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!.trim();
@@ -72,6 +115,11 @@ function validateFunctionCall(
 
     // Skip validation for function types (indicated by => in the type)
     if (param.type.includes("=>")) {
+      continue;
+    }
+
+    // Skip generic type parameters - they're handled above
+    if (fnDefData.generics && fnDefData.generics.includes(param.type)) {
       continue;
     }
 

@@ -58,6 +58,24 @@ export function charAt(source: string, index: number): string {
   return "";
 }
 
+/**
+ * Skip angle bracket pair and return position after closing >
+ * Returns startPos if not starting with <
+ */
+export function skipAngleBrackets(source: string, startPos: number): number {
+  if (startPos >= source.length || source[startPos] !== "<") {
+    return startPos;
+  }
+  let j = startPos + 1;
+  let angleDepth = 1;
+  while (j < source.length && angleDepth > 0) {
+    if (source[j] === "<") angleDepth++;
+    else if (source[j] === ">") angleDepth--;
+    j++;
+  }
+  return j;
+}
+
 export function readIdentifier(
   source: string,
   startIdx: number,

@@ -5,6 +5,7 @@ import {
   isDigit,
   charAt,
   readIdentifier,
+  skipAngleBrackets,
 } from "./parsing/string-helpers";
 import { skipStructDeclaration } from "./parsing/struct-helpers";
 import {
@@ -24,9 +25,6 @@ function isIdentifierStartChar(ch: string | undefined): ch is string {
   return ch !== undefined && isIdentifierChar(ch) && !isDigit(ch);
 }
 
-/**
- * Extract field names from destructuring pattern like { x, y, z }
- */
 function extractDestructuringFields(source: string, start: number): string[] {
   const fields: string[] = [];
   let i = start + 1; // Skip opening {
@@ -90,19 +88,15 @@ function handleForLoop(
         decl.isMutable,
         variables,
       );
-      i = decl.nextIndex;
-      return skipToNextStatement(source, i);
+      return skipToNextStatement(source, decl.nextIndex);
     }
   }
   return skipToNextStatement(source, i);
 }
 
 function skipToNextStatement(source: string, i: number): number {
-  while (i < source.length && source[i] !== ";") {
-    i++;
-  }
-  if (i < source.length) i++;
-  return i;
+  while (i < source.length && source[i] !== ";") i++;
+  return i < source.length ? i + 1 : i;
 }
 
 function skipWhitespaceOnly(source: string, i: number): number {
@@ -179,6 +173,28 @@ function handleModuleOrObjectDeclaration(
   return j;
 }
 
+/**
+ * Extract generic type parameters from function header
+ */
+function extractGenericParameters(
+  source: string,
+  startPos: number,
+): { generics: string[] | undefined; endPos: number } {
+  if (startPos >= source.length || source[startPos] !== "<") {
+    return { generics: undefined, endPos: startPos };
+  }
+
+  const angleStart = startPos;
+  const endPos = skipAngleBrackets(source, startPos);
+  const genericStr = source.slice(angleStart + 1, endPos - 1).trim();
+  return {
+    generics: genericStr
+      ? genericStr.split(",").map((p) => p.trim())
+      : undefined,
+    endPos,
+  };
+}
+
 function handleFunctionDeclaration(
   source: string,
   i: number,
@@ -187,20 +203,20 @@ function handleFunctionDeclaration(
   let j = i + 2; // Skip "fn"
   j = skipWhitespaceOnly(source, j);
 
-  // Get function name
   const parsedName = readIdentifier(source, j);
   const fnName = parsedName.name;
   j = parsedName.endIdx;
 
-  // Check if function name conflicts with a variable
+  j = skipWhitespaceOnly(source, j);
+  const { generics, endPos } = extractGenericParameters(source, j);
+  j = skipWhitespaceOnly(source, endPos);
+
   if (fnName && variables.has(fnName)) {
     throw new Error(
       "Function name '" + fnName + "' conflicts with already declared variable",
     );
   }
 
-  // Skip to opening paren
-  j = skipWhitespaceOnly(source, j);
   if (j < source.length && source[j] === "(") {
     const parenStart = j;
     j++; // Skip opening paren
@@ -215,21 +231,17 @@ function handleFunctionDeclaration(
       j++;
     }
 
-    // Extract and validate parameter names
     const paramsStr = source.slice(parenStart + 1, paramEnd).trim();
     if (paramsStr) {
       try {
-        // Extract parameter names and types
         const rawParamsStr = source.slice(parenStart, paramEnd + 1);
         const params = extractParamsWithTypes(rawParamsStr);
         if (fnName && params.length > 0) {
-          setCompileFunctionDef(fnName, params);
+          setCompileFunctionDef(fnName, params, generics);
         }
       } catch {
         // Silently continue if params can't be extracted
       }
-
-      // Validate parameter don't shadow existing variables
       validateParamReferences(
         paramsStr,
         fnName,
@@ -238,7 +250,6 @@ function handleFunctionDeclaration(
     }
   }
 
-  // Skip to next statement
   return skipToNextStatement(source, j);
 }
 

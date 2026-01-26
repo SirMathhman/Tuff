@@ -36,4 +36,13 @@ describe("generic functions", () => {
   itBoth("supports multiple generic function definitions", (ok) => {
     ok("fn id1<T>(x : T) => x; fn id2<U>(y : U) => y + 1; id2(49)", 50);
   });
+
+  itBoth(
+    "throws when generic function called with mismatched types for same parameter",
+    (_, assertInvalid) => {
+      assertInvalid(
+        "fn pass<T>(first : T, second : T) => first; pass(100, true)",
+      );
+    },
+  );
 });
