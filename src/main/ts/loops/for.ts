@@ -1,61 +1,116 @@
 import { isBreakException } from "./loop";
 import { findClosingParenthesis, parseLoopBody, skipSpaces } from "./helpers";
 import { getLoopCore, type HandlerParams, type LoopCore } from "./types";
-
-interface RangeInfo {
-  start: number;
-  end: number;
-}
-
-function parseRange(rangeStr: string): RangeInfo | undefined {
-  const trimmed = rangeStr.trim();
-  const dotsIdx = trimmed.indexOf("..");
-  if (dotsIdx === -1) return undefined;
-  const startStr = trimmed.slice(0, dotsIdx).trim();
-  const endStr = trimmed.slice(dotsIdx + 2).trim();
-  const start = Number(startStr);
-  const end = Number(endStr);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
-  return { start, end };
-}
-
-function extractLoopVarName(varDeclStr: string): string | undefined {
-  const declTokens: string[] = [];
-  let currentToken = "";
-  for (const ch of varDeclStr) {
-    if (ch === " " || ch === ":" || ch === "\t") {
-      if (currentToken) {
-        declTokens.push(currentToken);
-        currentToken = "";
-      }
-    } else {
-      currentToken += ch;
-    }
-  }
-  if (currentToken) declTokens.push(currentToken);
-  if (declTokens[0] === "let") {
-    return declTokens[1] === "mut" ? declTokens[2] : declTokens[1];
-  }
-  return undefined;
-}
-
-function findInKeywordPosition(trimmed: string, startIdx: number): number {
-  for (let i = startIdx; i < trimmed.length - 1; i++) {
-    if (
-      trimmed[i] === " " &&
-      trimmed[i + 1] === "i" &&
-      trimmed[i + 2] === "n" &&
-      (i + 3 >= trimmed.length ||
-        trimmed[i + 3] === " " ||
-        trimmed[i + 3] === "(")
-    ) {
-      return i + 1;
-    }
-  }
-  return -1;
-}
+import {
+  parseRange,
+  parseArrayIdentifier,
+  extractLoopVarName,
+  findInKeywordPosition,
+  type RangeInfo,
+  type ArrayInfo,
+} from "./for-parsing";
 
 type LoopContext = LoopCore;
+
+function createLoopScope(ctx: LoopContext): {
+  loopScope: Map<string, number>;
+  loopTypeMap: Map<string, number>;
+  loopMutMap: Map<string, boolean>;
+  loopUninitializedSet: Set<string>;
+  loopUnmutUninitializedSet: Set<string>;
+} {
+  return {
+    loopScope: new Map(ctx.scope),
+    loopTypeMap: new Map(ctx.typeMap),
+    loopMutMap: new Map(ctx.mutMap),
+    loopUninitializedSet: new Set(ctx.uninitializedSet),
+    loopUnmutUninitializedSet: new Set(ctx.unmutUninitializedSet),
+  };
+}
+
+function executeLoopIteration(
+  loopVarName: string,
+  value: number,
+  loopBody: string,
+  loopScope: Map<string, number>,
+  loopTypeMap: Map<string, number>,
+  loopMutMap: Map<string, boolean>,
+  loopUninitializedSet: Set<string>,
+  loopUnmutUninitializedSet: Set<string>,
+  ctx: LoopContext,
+): void {
+  loopScope.set(loopVarName, value);
+  try {
+    ctx.interpreter(
+      loopBody,
+      loopScope,
+      loopTypeMap,
+      loopMutMap,
+      loopUninitializedSet,
+      loopUnmutUninitializedSet,
+    );
+  } catch (e) {
+    if (isBreakException(e)) throw e;
+    throw e;
+  }
+}
+
+function updateOuterScope(
+  loopScope: Map<string, number>,
+  ctx: LoopContext,
+): void {
+  for (const [key, value] of loopScope.entries()) {
+    if (ctx.scope.has(key)) ctx.scope.set(key, value);
+  }
+}
+
+function executeGenericForLoop(
+  iterable: number[] | { start: number; end: number },
+  loopVarName: string,
+  loopBody: string,
+  ctx: LoopContext,
+): void {
+  const {
+    loopScope,
+    loopTypeMap,
+    loopMutMap,
+    loopUninitializedSet,
+    loopUnmutUninitializedSet,
+  } = createLoopScope(ctx);
+  loopMutMap.set(loopVarName, true);
+
+  if (Array.isArray(iterable)) {
+    for (const value of iterable) {
+      executeLoopIteration(
+        loopVarName,
+        value,
+        loopBody,
+        loopScope,
+        loopTypeMap,
+        loopMutMap,
+        loopUninitializedSet,
+        loopUnmutUninitializedSet,
+        ctx,
+      );
+    }
+  } else {
+    for (let i = iterable.start; i < iterable.end; i++) {
+      executeLoopIteration(
+        loopVarName,
+        i,
+        loopBody,
+        loopScope,
+        loopTypeMap,
+        loopMutMap,
+        loopUninitializedSet,
+        loopUnmutUninitializedSet,
+        ctx,
+      );
+    }
+  }
+
+  updateOuterScope(loopScope, ctx);
+}
 
 function executeForLoop(
   range: RangeInfo,
@@ -63,32 +118,16 @@ function executeForLoop(
   loopBody: string,
   ctx: LoopContext,
 ): void {
-  const loopScope = new Map(ctx.scope);
-  const loopTypeMap = new Map(ctx.typeMap);
-  const loopMutMap = new Map(ctx.mutMap);
-  const loopUninitializedSet = new Set(ctx.uninitializedSet);
-  const loopUnmutUninitializedSet = new Set(ctx.unmutUninitializedSet);
-  loopScope.set(loopVarName, range.start);
-  loopMutMap.set(loopVarName, true);
-  for (let i = range.start; i < range.end; i++) {
-    loopScope.set(loopVarName, i);
-    try {
-      ctx.interpreter(
-        loopBody,
-        loopScope,
-        loopTypeMap,
-        loopMutMap,
-        loopUninitializedSet,
-        loopUnmutUninitializedSet,
-      );
-    } catch (e) {
-      if (isBreakException(e)) throw e;
-      throw e;
-    }
-  }
-  for (const [key, value] of loopScope.entries()) {
-    if (ctx.scope.has(key)) ctx.scope.set(key, value);
-  }
+  executeGenericForLoop(range, loopVarName, loopBody, ctx);
+}
+
+function executeForArrayLoop(
+  arrayInfo: ArrayInfo,
+  loopVarName: string,
+  loopBody: string,
+  ctx: LoopContext,
+): void {
+  executeGenericForLoop(arrayInfo.values, loopVarName, loopBody, ctx);
 }
 
 function parseForLoopComponents(trimmed: string):
@@ -142,15 +181,22 @@ function handleAfterForExpression(
 }
 
 function handleForLoopExecution(
-  range: RangeInfo,
+  range: RangeInfo | undefined,
+  arrayInfo: ArrayInfo | undefined,
   loopVarName: string,
   loopBody: string,
   forExprEnd: number,
   trimmed: string,
   ctx: LoopContext,
-): number {
+): number | undefined {
   try {
-    executeForLoop(range, loopVarName, loopBody, ctx);
+    if (arrayInfo) {
+      executeForArrayLoop(arrayInfo, loopVarName, loopBody, ctx);
+    } else if (range) {
+      executeForLoop(range, loopVarName, loopBody, ctx);
+    } else {
+      return undefined;
+    }
   } catch (e) {
     if (isBreakException(e)) return e.value;
     throw e;
@@ -165,11 +211,30 @@ export function handleFor(params: HandlerParams): number | undefined {
   const { varDeclStr, rangeStr, loopBody, forExprEnd } = parsed;
   const loopVarName = extractLoopVarName(varDeclStr);
   if (!loopVarName) return undefined;
+
+  const ctx: LoopContext = getLoopCore(params);
+
+  // Try parsing as array first
+  const arrayInfo = parseArrayIdentifier(rangeStr, ctx.scope);
+  if (arrayInfo) {
+    return handleForLoopExecution(
+      undefined,
+      arrayInfo,
+      loopVarName,
+      loopBody,
+      forExprEnd,
+      trimmed,
+      ctx,
+    );
+  }
+
+  // Fall back to range parsing
   const range = parseRange(rangeStr);
   if (!range) return undefined;
-  const ctx: LoopContext = getLoopCore(params);
+
   return handleForLoopExecution(
     range,
+    undefined,
     loopVarName,
     loopBody,
     forExprEnd,

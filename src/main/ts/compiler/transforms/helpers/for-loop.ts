@@ -12,6 +12,19 @@ import {
 } from "../../parsing/parse-helpers";
 
 /**
+ * Check if a string is a valid identifier (array variable name)
+ */
+function isValidIdentifier(s: string): boolean {
+  const trimmed = s.trim();
+  if (trimmed.length === 0) return false;
+  if (!isIdentifierChar(trimmed[0]!) || isDigit(trimmed[0]!)) return false;
+  for (let i = 1; i < trimmed.length; i++) {
+    if (!isIdentifierChar(trimmed[i]!)) return false;
+  }
+  return true;
+}
+
+/**
  * Parse for-in loop range (start..end) values
  */
 function extractRangeValues(afterIn: string): { start: string; end: string } {
@@ -44,16 +57,18 @@ function extractRangeValues(afterIn: string): { start: string; end: string } {
 }
 
 /**
- * Parse for-in loop init to extract var name and range
+ * Parse for-in loop init to extract var name and range or array
  */
 function parseForInit(initContent: string): {
   varName: string;
-  start: string;
-  end: string;
+  start?: string;
+  end?: string;
+  arrayVar?: string;
 } {
   let varName = "";
-  let start = "0";
-  let end = "10";
+  let start: string | undefined;
+  let end: string | undefined;
+  let arrayVar: string | undefined;
 
   let inIdx = initContent.indexOf(" in ");
   let hasSpace = true;
@@ -77,16 +92,22 @@ function parseForInit(initContent: string): {
       varName = beforeIn.slice(nameStart, nameEnd);
     }
 
-    const range = extractRangeValues(afterIn);
-    start = range.start;
-    end = range.end;
+    // Check if afterIn is a simple identifier (array variable)
+    if (isValidIdentifier(afterIn) && !afterIn.includes("..")) {
+      arrayVar = afterIn;
+    } else {
+      // Parse as range
+      const range = extractRangeValues(afterIn);
+      start = range.start;
+      end = range.end;
+    }
   }
 
-  return { varName, start, end };
+  return { varName, start, end, arrayVar };
 }
 
 /**
- * Transform for (let x in start..end) expr
+ * Transform for (let x in start..end) expr or for (let x in array) expr
  */
 export function transformFor(
   source: string,
@@ -101,12 +122,23 @@ export function transformFor(
   );
   i = initEndIdx;
 
-  const { varName, start, end } = parseForInit(initContent);
+  const parsed = parseForInit(initContent);
+  const varName = parsed.varName;
   i = skipWhitespace(source, i);
   const { body, endIdx: bodyEndIdx } = parseBody(source, i);
   i = bodyEndIdx;
 
-  const result = `(function() { for(let __i_=${start}; __i_<${end}; __i_++) { let ${varName} = __i_; ${body}; } return 0; })()`;
+  let result: string;
+  if (parsed.arrayVar) {
+    // Array iteration: for each element in array
+    result = `(function() { for(let __i_=0; __i_<${parsed.arrayVar}.length; __i_++) { let ${varName} = ${parsed.arrayVar}[__i_]; ${body}; } return 0; })()`;
+  } else {
+    // Range iteration: from start to end
+    const start = parsed.start || "0";
+    const end = parsed.end || "10";
+    result = `(function() { for(let __i_=${start}; __i_<${end}; __i_++) { let ${varName} = __i_; ${body}; } return 0; })()`;
+  }
+
   return { result, endIdx: i };
 }
 

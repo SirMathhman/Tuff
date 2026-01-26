@@ -27,4 +27,11 @@ describe("control flow - loops", () => {
   itBoth("supports for-in loop with range", (assertValid) => {
     assertValid("let mut sum = 0; for (let mut i in 0..10) sum += i; sum", 45);
   });
+
+  itBoth("supports for-in loop with array iteration", (assertValid) => {
+    assertValid(
+      "let array = [1, 2, 3]; let mut sum = 0; for (let mut element in array) sum += element; sum",
+      6,
+    );
+  });
 });
