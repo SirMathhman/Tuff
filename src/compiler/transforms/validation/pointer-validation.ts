@@ -1,9 +1,15 @@
 import { extractTypeSize } from "../../../type-utils";
+import { isValidIdentifier } from "../../../utils/identifier-utils";
 import {
   isIdentifierChar,
   isIdentifierStartChar,
   isWhitespace,
 } from "../../parsing/string-helpers";
+import {
+  collectArrayInfo,
+  validateArrayIndexAccess,
+  type ArrayBoundsInfo,
+} from "./array-bounds-validation";
 
 export interface VariableInfo {
   type: string | undefined;
@@ -19,15 +25,25 @@ export interface VariableInfo {
  * - Ensure pointer assignments use references (&x), not direct values
  * - Ensure pointer assignments only reference addressable sources (variables)
  * - Validate dereferenced assignments (*p = value) for mutability
+ * - Validate array index bounds for constant indices
  */
 export function validatePointerOperations(
   source: string,
   variables: Map<string, VariableInfo>,
 ): void {
+  const boundsInfo: ArrayBoundsInfo = {
+    arrayLengths: new Map(),
+    pointerTargets: new Map(),
+  };
+
+  // First pass: collect array lengths and pointer targets
+  collectArrayInfo(source, boundsInfo);
+
+  // Second pass: validate pointer operations
   let i = 0;
   while (i < source.length) {
     if (source[i] === "l" && source.slice(i, i + 4) === "let ") {
-      validateLetDeclaration(source, i, variables);
+      validateLetDeclaration(source, i, variables, boundsInfo);
       const semiIdx = source.indexOf(";", i);
       i = semiIdx !== -1 ? semiIdx + 1 : source.length;
     } else if (source[i] === "*" && i + 1 < source.length) {
@@ -37,12 +53,16 @@ export function validatePointerOperations(
       i++;
     }
   }
+
+  // Third pass: validate array index access
+  validateArrayIndexAccess(source, boundsInfo);
 }
 
 function validateLetDeclaration(
   source: string,
   startIdx: number,
   variables: Map<string, VariableInfo>,
+  _boundsInfo: ArrayBoundsInfo,
 ): void {
   const semiIdx = source.indexOf(";", startIdx);
   const stmtEnd = semiIdx !== -1 ? semiIdx : source.length;
@@ -86,7 +106,7 @@ function validatePointerAssignment(
     }
   } else if (exprStr.startsWith('"') || exprStr.startsWith("'")) {
     // String literal - allowed for *Str pointers
-  } else if (isIdentifierLike(exprStr)) {
+  } else if (isValidIdentifier(exprStr)) {
     validateIdentifierAssignment(typeStr, exprStr, variables);
   }
 }
@@ -103,6 +123,15 @@ function validateReferenceTarget(
   const varInfo = variables.get(refTarget);
   if (!varInfo) {
     return;
+  }
+
+  // Bool requires exact type match - cannot create *Bool from untyped or numeric variable
+  if (baseType === "Bool") {
+    if (varInfo.type !== "Bool") {
+      throw new Error(
+        `type mismatch: cannot create pointer to '${refTarget}' of type ${varInfo.type || "unknown"}, expected Bool`,
+      );
+    }
   }
 
   const expectedTypeSize = extractTypeSize(baseType);
@@ -134,17 +163,22 @@ function validateIdentifierAssignment(
     return;
   }
 
-  if (sourceVar.type) {
-    if (sourceVar.type === "*") {
-      // Pointer type marker - allow
-    } else if (!sourceVar.type.startsWith("*")) {
-      throw new Error(
-        `cannot assign non-pointer value to pointer type ${typeStr}`,
-      );
-    }
-  } else {
+  const sourceType = sourceVar.type;
+  const isMutableTarget = typeStr.startsWith("*mut ");
+
+  // Check if source has a pointer type
+  if (!sourceType || (!sourceType.startsWith("*") && sourceType !== "*")) {
     throw new Error(
       `cannot assign non-pointer value to pointer type ${typeStr}`,
+    );
+  }
+
+  // Check mutability compatibility: cannot assign immutable pointer to mutable pointer type
+  const sourceIsMutable =
+    sourceType === "*" ? false : sourceType.startsWith("*mut ");
+  if (isMutableTarget && !sourceIsMutable) {
+    throw new Error(
+      `cannot assign immutable pointer '${varName}' to mutable pointer type ${typeStr}`,
     );
   }
 }
@@ -184,26 +218,19 @@ function validateDereferencedAssignment(
   }
 }
 
-function isIdentifierLike(str: string): boolean {
-  if (str.length === 0) return false;
-  if (!isIdentifierStartChar(str[0])) return false;
-  for (let i = 1; i < str.length; i++) {
-    if (!isIdentifierChar(str[i])) return false;
-  }
-  return true;
-}
-
 function tryExtractVarFromReference(exprStr: string): string | undefined {
   if (!exprStr.startsWith("&")) return undefined;
   const afterAnd = exprStr.slice(1).trim();
 
-  let i = 0;
+  // Must start with valid identifier start char (not a digit)
+  if (afterAnd.length === 0 || !isIdentifierStartChar(afterAnd[0])) {
+    return undefined;
+  }
+
+  let i = 1;
   while (i < afterAnd.length && isIdentifierChar(afterAnd[i])) {
     i++;
   }
 
-  if (i > 0) {
-    return afterAnd.slice(0, i);
-  }
-  return undefined;
+  return afterAnd.slice(0, i);
 }

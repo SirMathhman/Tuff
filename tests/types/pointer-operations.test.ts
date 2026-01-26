@@ -126,6 +126,50 @@ describe("pointer operations - invalid references", () => {
   });
 });
 
+describe("pointer operations - out of bounds", () => {
+  itBoth(
+    "throws on pointer array index out of bounds (negative)",
+    (_ok, assertInvalid) => {
+      assertInvalid("let array = [10, 20, 30]; let p : *[I32] = &array; p[-1]");
+    },
+  );
+
+  itBoth(
+    "throws on pointer array index out of bounds (too large)",
+    (_ok, assertInvalid) => {
+      assertInvalid("let array = [10, 20, 30]; let p : *[I32] = &array; p[10]");
+    },
+  );
+});
+
+describe("pointer operations - type constraints", () => {
+  itBoth(
+    "throws on pointer to non-addressable value (literal)",
+    (_ok, assertInvalid) => {
+      assertInvalid("let p : *I32 = &100");
+    },
+  );
+
+  itBoth("throws on pointer to array literal", (_ok, assertInvalid) => {
+    assertInvalid("let p : *[I32] = &[1, 2, 3]");
+  });
+
+  itBoth("throws on pointer type mismatch", (_ok, assertInvalid) => {
+    assertInvalid("let x = 100; let y : *Bool = &x");
+  });
+
+  itBoth(
+    "throws on assigning immutable pointer to mutable type",
+    (_ok, assertInvalid) => {
+      assertInvalid("let mut x = 100; let p : *I32 = &x; let q : *mut I32 = p");
+    },
+  );
+
+  itBoth("throws on double reference", (_ok, assertInvalid) => {
+    assertInvalid("let x = 100; let p : **I32 = &&x");
+  });
+});
+
 describe("pointer operations - limitations", () => {
   itInterpreter(
     "compiler cannot handle complex dereference expressions yet",
