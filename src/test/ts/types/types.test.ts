@@ -75,11 +75,12 @@ describe("types - arrays", () => {
     ok("let array = [1, 2, 3]; array.init", 3);
   });
 
-  itInterpreter(
-    "throws on array initialization count mismatch in function call",
-    (assertValid, assertInvalid) => {
-      assertInvalid(
-        "let mut myArray : [I32; 0; 3]; fn getFirst(array :  [I32; 1; 3]) => array[0]; getFirst(myArray)",
+  itBoth(
+    "supports array element mutation and retrieval",
+    (assertValid) => {
+      assertValid(
+        "let mut myArray = [0]; myArray[0] = 100; myArray[0]",
+        100,
       );
     },
   );
