@@ -120,4 +120,13 @@ describe("types - destructors", () => {
       );
     },
   );
+
+  itBoth(
+    "throws when passing same droppable variable to multiple parameters in one call",
+    (_ok, assertInvalid) => {
+      assertInvalid(
+        "fn drop(this : I32) => {} type Temp = I32 then drop; let x : Temp = 100; fn accept(first : Temp, second : Temp) => {} accept(x, x);",
+      );
+    },
+  );
 });
