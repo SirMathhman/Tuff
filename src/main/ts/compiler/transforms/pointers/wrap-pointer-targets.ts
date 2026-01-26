@@ -46,13 +46,9 @@ export function wrapPointerTargets(
   const handleLet = (startIdx: number, info: LetStatementInfo): void => {
     result += source.slice(lastIdx, startIdx);
 
-    const hasTypeAnnotation =
-      info.colonIdx < info.stmtEnd && source[info.colonIdx] === ":";
-
     if (
       targets.has(info.varName) &&
       !arrays.has(info.varName) &&
-      !hasTypeAnnotation &&
       info.eqIdx !== -1
     ) {
       result += wrapInitializationValue(

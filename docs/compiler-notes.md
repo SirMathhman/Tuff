@@ -24,3 +24,11 @@ The repo runs PMD CPD (copy/paste detection) as part of the pre-commit checks.
 The compiler performs a lightweight validation pass to reject use-after-move for variables whose type alias is declared with a `then drop` clause (e.g. `type Temp = I32 then drop;`).
 
 This relies on the declaration parser correctly treating braced blocks (like `fn ... => { ... }`) as statement boundaries, even when they aren’t followed by a semicolon.
+
+## Functions
+
+Top-level functions with an empty braced body (e.g. `fn drop(this : I32) => {}`) are compiled to an expression that returns `0`.
+
+## Pointers
+
+Pointer targets are wrapped to simulate references in JavaScript. This also applies when the target variable has a type annotation (e.g. `let x : I32 = 100; let p : *I32 = &x; *p`).

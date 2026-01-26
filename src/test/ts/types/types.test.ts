@@ -80,7 +80,7 @@ describe("types - arrays", () => {
   });
 });
 
-// Destructor syntax not supported in compiler
+// Destructor execution isn't supported in compiler
 describe("types - destructors", () => {
   itInterpreter("supports type destructors with 'then' clause", (ok) => {
     ok(
@@ -102,7 +102,9 @@ describe("types - destructors", () => {
       1,
     );
   });
+});
 
+describe("types - destructors - move semantics", () => {
   itBoth(
     "throws when using variable after move with destructor type alias",
     (_ok, assertInvalid) => {
@@ -126,6 +128,16 @@ describe("types - destructors", () => {
     (_ok, assertInvalid) => {
       assertInvalid(
         "fn drop(this : I32) => {} type Temp = I32 then drop; let x : Temp = 100; fn accept(first : Temp, second : Temp) => {} accept(x, x);",
+      );
+    },
+  );
+
+  itBoth(
+    "allows taking pointer to droppable alias and passing to base pointer param",
+    (ok) => {
+      ok(
+        "fn drop(this : I32) => {} type Temp = I32 then drop; let x : Temp = 100; fn accept(ptr : *I32) => *ptr; accept(&x)",
+        100,
       );
     },
   );

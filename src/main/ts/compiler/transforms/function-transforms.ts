@@ -166,6 +166,7 @@ function processFunctionDeclaration(
     body = body.slice(1, -1).trim();
   }
   body = replaceBoundThis(body);
+  if (body.trim() === "") body = "0";
 
   let i = bodyEnd;
   if (i < source.length && source[i] === "}") i++;
