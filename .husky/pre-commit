@@ -1,11 +1,22 @@
 #!/bin/bash
 export PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH"
-bun test\
-	&& bun ./tools/inline-check.ts --git-files-only\
-	&& npm run cpd\
-	&& bun run format\
-	&& bun run lint:fix\
-	&& bun run check:circular\
-	&& bun run check:structure\
-	&& bun run check:subdir-deps\
-	&& npm run visualize
+
+FAILED=0
+
+# Run all checks and continue on failure
+bun test || FAILED=1
+bun ./tools/inline-check.ts --git-files-only || FAILED=1
+npm run cpd || FAILED=1
+bun run format || FAILED=1
+bun run lint:fix || FAILED=1
+bun run check:circular || FAILED=1
+bun run check:structure || FAILED=1
+bun run check:subdir-deps || FAILED=1
+
+# Run visualize but don't fail on it
+npm run visualize > /dev/null 2>&1
+
+# Exit with failure if any check failed
+if [ $FAILED -eq 1 ]; then
+  exit 1
+fi
