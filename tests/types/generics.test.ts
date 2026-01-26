@@ -32,7 +32,9 @@ describe("generic structs", () => {
       142,
     );
   });
+});
 
+describe("generic structs - advanced", () => {
   itBoth("supports generic struct in expressions", (ok) => {
     ok(
       "struct Wrapper<T> { field : T } let w : Wrapper<I32> = Wrapper<I32> { field : 50 }; w.field * 2",
@@ -46,4 +48,19 @@ describe("generic structs", () => {
       15,
     );
   });
+
+  itBoth("supports generic struct with computation in fields", (ok) => {
+    ok(
+      "struct Calc<T> { value : T } let c : Calc<I32> = Calc<I32> { value : (3 + 4) }; c.value * 2",
+      14,
+    );
+  });
+
+  itBoth("supports generic struct field access in conditional", (ok) => {
+    ok(
+      "struct Maybe<T> { val : T } let m : Maybe<I32> = Maybe<I32> { val : 10 }; if (m.val > 5) 100 else 0",
+      100,
+    );
+  });
 });
+
