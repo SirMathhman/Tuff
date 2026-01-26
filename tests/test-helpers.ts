@@ -7,10 +7,7 @@ import { compile, evalImpl } from "../src/compiler/compiler";
  * @param code The code to interpret
  * @param expectedValue The expected result
  */
-function assertInterpretValid(
-  code: string,
-  expectedValue: number,
-): void {
+function assertInterpretValid(code: string, expectedValue: number): void {
   expect(interpret(code)).toBe(expectedValue);
 }
 
@@ -93,7 +90,9 @@ export function itBothRuntime(
   it("Interpreted: " + name, () =>
     fn(assertInterpretValid, assertInterpretInvalid),
   );
-  it("Compiled: " + name, () => fn(assertExecuteValid, assertExecuteInvalidRuntime));
+  it("Compiled: " + name, () =>
+    fn(assertExecuteValid, assertExecuteInvalidRuntime),
+  );
 }
 export function itInterpreter(
   name: string,
