@@ -41,15 +41,15 @@ function tryBasicHandlers(
   if (result !== undefined) return result;
   result = tryControlFlow(p);
   if (result !== undefined) return result;
-  result = handleIfExpression(
+  result = handleIfExpression({
     s,
     scope,
     typeMap,
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
-    interpretWithScope,
-  );
+    interpreter: interpretWithScope,
+  });
   return result;
 }
 

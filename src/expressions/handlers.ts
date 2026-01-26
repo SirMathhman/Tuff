@@ -28,45 +28,49 @@ function findElseClauseIndex(s: string, startIdx: number): number {
 }
 
 export function handleIfExpression(
-  s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpretWithScope: Interpreter,
+  p: {
+    s: string;
+    scope: Map<string, number>;
+    typeMap: Map<string, number>;
+    mutMap: Map<string, boolean>;
+    uninitializedSet: Set<string>;
+    unmutUninitializedSet: Set<string>;
+    interpreter: Interpreter;
+  },
 ): number | undefined {
-  if (s.indexOf("if ") !== 0) return undefined;
-  const cIdx = s.indexOf(")");
+  if (p.s.indexOf("if ") !== 0) return undefined;
+  const cIdx = p.s.indexOf(")");
   if (cIdx <= 0) return undefined;
-  const cond = interpretWithScope(
-    s.slice(4, cIdx),
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+  const cond = p.interpreter(
+    p.s.slice(4, cIdx),
+    p.scope,
+    p.typeMap,
+    p.mutMap,
+    p.uninitializedSet,
+    p.unmutUninitializedSet,
   );
-  const elseIdx = findElseClauseIndex(s, cIdx + 1);
-  const thenStr = s.slice(cIdx + 1, elseIdx > 0 ? elseIdx : s.length).trim(),
-    elseStr = elseIdx > 0 ? s.slice(elseIdx + 6).trim() : "";
+  const elseIdx = findElseClauseIndex(p.s, cIdx + 1);
+  const thenStr = p.s
+      .slice(cIdx + 1, elseIdx > 0 ? elseIdx : p.s.length)
+      .trim(),
+    elseStr = elseIdx > 0 ? p.s.slice(elseIdx + 6).trim() : "";
   return cond !== 0
-    ? interpretWithScope(
+    ? p.interpreter(
         thenStr,
-        scope,
-        typeMap,
-        mutMap,
-        uninitializedSet,
-        unmutUninitializedSet,
+        p.scope,
+        p.typeMap,
+        p.mutMap,
+        p.uninitializedSet,
+        p.unmutUninitializedSet,
       )
     : elseStr
-      ? interpretWithScope(
+      ? p.interpreter(
           elseStr,
-          scope,
-          typeMap,
-          mutMap,
-          uninitializedSet,
-          unmutUninitializedSet,
+          p.scope,
+          p.typeMap,
+          p.mutMap,
+          p.uninitializedSet,
+          p.unmutUninitializedSet,
         )
       : 0;
 }

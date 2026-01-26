@@ -19,6 +19,8 @@ function skipWhitespace(source: string, index: number): number {
   return index;
 }
 
+type TransformResult = { result: string; endIdx: number };
+
 /**
  * Find the end of an else-if chain
  */
@@ -52,7 +54,7 @@ export function transformIfElse(
   source: string,
   startIdx: number,
   transformControlFlow: (src: string) => string,
-): { result: string; endIdx: number } | undefined {
+): TransformResult | undefined {
   let i = skipWhitespace(source, startIdx + 2);
   if (i >= source.length || source[i] !== "(") return undefined;
 
@@ -161,7 +163,7 @@ function parseMatchCases(casesContent: string): string {
 export function transformMatch(
   source: string,
   startIdx: number,
-): { result: string; endIdx: number } | undefined {
+): TransformResult | undefined {
   let i = skipWhitespace(source, startIdx + 5);
   if (i >= source.length || source[i] !== "(") return undefined;
 
@@ -199,7 +201,7 @@ export function transformMatch(
 export function transformLoop(
   source: string,
   startIdx: number,
-): { result: string; endIdx: number } | undefined {
+): TransformResult | undefined {
   let i = skipWhitespace(source, startIdx + 4);
   if (i >= source.length || source[i] !== "{") return undefined;
 
@@ -224,7 +226,7 @@ export function transformLoop(
 export function transformWhile(
   source: string,
   startIdx: number,
-): { result: string; endIdx: number } | undefined {
+): TransformResult | undefined {
   let i = skipWhitespace(source, startIdx + 5);
   if (i >= source.length || source[i] !== "(") return undefined;
 

@@ -46,6 +46,19 @@ function buildLoopCtx(p: Params): LoopCtx {
   };
 }
 
+function toBaseHandlerParams(p: Params) {
+  return {
+    s: p.s,
+    scope: p.scope,
+    typeMap: p.typeMap,
+    mutMap: p.mutMap,
+    uninitializedSet: p.uninitializedSet,
+    unmutUninitializedSet: p.unmutUninitializedSet,
+    interpreter: p.interpreter,
+    visMap: p.visMap,
+  };
+}
+
 export function buildInterpreterParams(
   s: string,
   scope: Map<string, number>,
@@ -98,30 +111,13 @@ export function tryDeclarations(p: Params): number | undefined {
 }
 
 export function tryFunctionCalls(p: Params): number | undefined {
-  const method = handleMethodCall(
-    p.s,
-    p.typeMap,
-    p.scope,
-    p.mutMap,
-    p.uninitializedSet,
-    p.unmutUninitializedSet,
-    p.interpreter,
-  );
+  const method = handleMethodCall(toBaseHandlerParams(p));
   if (method !== undefined) return method;
   return parseFunctionCall(p);
 }
 
 export function tryUnaryOperation(p: Params): number | undefined {
-  return handleUnaryOperation({
-    s: p.s,
-    scope: p.scope,
-    typeMap: p.typeMap,
-    mutMap: p.mutMap,
-    uninitializedSet: p.uninitializedSet,
-    unmutUninitializedSet: p.unmutUninitializedSet,
-    interpreter: p.interpreter,
-    visMap: p.visMap,
-  });
+  return handleUnaryOperation(toBaseHandlerParams(p));
 }
 
 export function mightNeedBinaryOp(s: string): boolean {
@@ -164,26 +160,10 @@ export function tryControlFlow(p: Params): number | undefined {
 }
 
 export function tryAssignments(p: Params): number | undefined {
-  const result = handleDereferenceAssignment(
-    p.s,
-    p.scope,
-    p.typeMap,
-    p.mutMap,
-    p.uninitializedSet,
-    p.unmutUninitializedSet,
-    p.interpreter,
-  );
+  const base = toBaseHandlerParams(p);
+  const result = handleDereferenceAssignment(base);
   if (result !== undefined) return result;
-  return handleVarAssignment({
-    s: p.s,
-    scope: p.scope,
-    typeMap: p.typeMap,
-    mutMap: p.mutMap,
-    uninitializedSet: p.uninitializedSet,
-    unmutUninitializedSet: p.unmutUninitializedSet,
-    interpreter: p.interpreter,
-    visMap: p.visMap,
-  });
+  return handleVarAssignment(base);
 }
 
 export function tryExpressions(p: Params): number | undefined {
@@ -193,5 +173,9 @@ export function tryExpressions(p: Params): number | undefined {
   if (result !== undefined) return result;
   result = handleLambdaExpression(p.s, p.typeMap);
   if (result !== undefined) return result;
-  return handleModuleAccess(p.s, p.scope, p.typeMap, p.mutMap, p.interpreter);
+  return handleModuleAccess({
+    s: p.s,
+    typeMap: p.typeMap,
+    interpreter: p.interpreter,
+  });
 }

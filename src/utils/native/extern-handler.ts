@@ -1,4 +1,4 @@
-import type { StatementContext } from "../statement-context";
+import { interpretAfterSemicolon, type StatementContext } from "../statement-context";
 import { handleUseStatement } from "../use-statement";
 
 export function handleExternStatement(
@@ -14,18 +14,7 @@ export function handleExternStatement(
   if (remaining.startsWith("fn ")) {
     const semicolonIndex = remaining.indexOf(";");
     if (semicolonIndex !== -1) {
-      const rest = remaining.slice(semicolonIndex + 1).trim();
-      return rest
-        ? ctx.interpreter(
-            rest,
-            ctx.scope,
-            ctx.typeMap,
-            ctx.mutMap,
-            ctx.uninitializedSet,
-            ctx.unmutUninitializedSet,
-            ctx.visMap,
-          )
-        : 0;
+      return interpretAfterSemicolon(remaining, semicolonIndex, ctx);
     }
     return 0;
   }

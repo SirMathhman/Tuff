@@ -12,6 +12,7 @@ import {
   parseTypeDeclaration,
 } from "./parsing/parser-utils";
 import { extractParamsWithTypes } from "./parsing/param-helpers";
+import { parseBracedBlock } from "./parsing/parse-helpers";
 import {
   clearCompileFunctionDefs,
   setCompileFunctionDef,
@@ -120,14 +121,7 @@ function findMatchingCloseBrace(
   source: string,
   openBraceIndex: number,
 ): number {
-  let braceDepth = 1;
-  let i = openBraceIndex + 1;
-  while (i < source.length && braceDepth > 0) {
-    if (source[i] === "{") braceDepth++;
-    else if (source[i] === "}") braceDepth--;
-    i++;
-  }
-  return i;
+  return parseBracedBlock(source, openBraceIndex).endIdx;
 }
 
 function handleLetDeclarationOrDestructuring(

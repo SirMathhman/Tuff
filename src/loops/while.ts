@@ -1,6 +1,6 @@
 import { isBreakException } from "./loop";
 import { findClosingParenthesis, parseLoopBody } from "./helpers";
-import type { HandlerParams } from "./types";
+import { getLoopCore, type HandlerParams, type LoopCore } from "./types";
 
 function parseWhileCondition(
   trimmed: string,
@@ -16,14 +16,7 @@ function parseWhileCondition(
   };
 }
 
-interface WhileContext {
-  scope: Map<string, number>;
-  typeMap: Map<string, number>;
-  mutMap: Map<string, boolean>;
-  uninitializedSet: Set<string>;
-  unmutUninitializedSet: Set<string>;
-  interpreter: HandlerParams["interpreter"];
-}
+type WhileContext = LoopCore;
 
 function callInterpreter(ctx: WhileContext, input: string): number {
   return ctx.interpreter(
@@ -78,29 +71,21 @@ function handleWhileLoopExecution(
 }
 
 export function handleWhile(params: HandlerParams): number | undefined {
-  const {
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter,
-    uninitializedSet = new Set(),
-    unmutUninitializedSet = new Set(),
-  } = params;
-  const trimmed = s.trim();
+  const trimmed = params.s.trim();
   if (!trimmed.startsWith("while")) return undefined;
+  const core = getLoopCore(params);
   const parsed = parseWhileCondition(trimmed);
   if (!parsed) return undefined;
   const { conditionStr, bodyStartIdx } = parsed;
   const bodyResult = parseLoopBody(trimmed, bodyStartIdx);
   if (!bodyResult) return undefined;
   const ctx: WhileContext = {
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpreter,
+    scope: core.scope,
+    typeMap: core.typeMap,
+    mutMap: core.mutMap,
+    uninitializedSet: core.uninitializedSet,
+    unmutUninitializedSet: core.unmutUninitializedSet,
+    interpreter: core.interpreter,
   };
   return handleWhileLoopExecution(
     conditionStr,

@@ -1,4 +1,8 @@
-import type { Interpreter, InterpreterContext } from "../../types/interpreter";
+import type {
+  Interpreter,
+  InterpreterContext,
+  ScopeContext,
+} from "../../types/interpreter";
 
 type DeclarationHandler = (
   input: string,
@@ -18,3 +22,27 @@ export type FunctionCallParams = {
   moduleHandler?: DeclarationHandler;
   objectHandler?: DeclarationHandler;
 };
+
+export type BaseHandlerParams = Pick<
+  FunctionCallParams,
+  | "s"
+  | "scope"
+  | "typeMap"
+  | "mutMap"
+  | "uninitializedSet"
+  | "unmutUninitializedSet"
+  | "interpreter"
+  | "visMap"
+>;
+
+export function toScopeContext(p: BaseHandlerParams): ScopeContext {
+  return {
+    scope: p.scope,
+    typeMap: p.typeMap,
+    mutMap: p.mutMap,
+    uninitializedSet: p.uninitializedSet,
+    unmutUninitializedSet: p.unmutUninitializedSet,
+    visMap: p.visMap,
+    interpreter: p.interpreter,
+  };
+}

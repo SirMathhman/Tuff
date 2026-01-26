@@ -2,7 +2,7 @@ import {
   getPointerTarget,
   isPointerMutable,
 } from "../access/pointer-operations";
-import type { Interpreter } from "../../expressions/handlers";
+import type { BaseHandlerParams } from "../../utils/function/function-call-params";
 
 function findAssignmentOperator(trimmed: string): number {
   for (let i = 1; i < trimmed.length; i++) {
@@ -46,7 +46,7 @@ function handleRestAfterDereference(
   mutMap: Map<string, boolean>,
   uninitializedSet: Set<string>,
   unmutUninitializedSet: Set<string>,
-  interpretWithScope: Interpreter,
+  interpretWithScope: BaseHandlerParams["interpreter"],
 ): number {
   if (rest === "") return newValue;
   return interpretWithScope(
@@ -60,43 +60,46 @@ function handleRestAfterDereference(
 }
 
 export function handleDereferenceAssignment(
-  s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpretWithScope: Interpreter,
+  p: Pick<
+    BaseHandlerParams,
+    | "s"
+    | "scope"
+    | "typeMap"
+    | "mutMap"
+    | "uninitializedSet"
+    | "unmutUninitializedSet"
+    | "interpreter"
+  >,
 ): number | undefined {
-  const trimmed = s.trim();
+  const trimmed = p.s.trim();
   if (!trimmed.startsWith("*")) return undefined;
   const eqIdx = findAssignmentOperator(trimmed);
   if (eqIdx === -1) return undefined;
   const lhs = trimmed.slice(0, eqIdx).trim();
   const pointerVarName = lhs.slice(1).trim();
-  const validation = validateDereferenceTarget(lhs, pointerVarName, scope);
+  const validation = validateDereferenceTarget(lhs, pointerVarName, p.scope);
   if (!validation) return undefined;
   const { targetVarName } = validation;
   const semiIdx = trimmed.indexOf(";", eqIdx);
   if (semiIdx === -1) return undefined;
-  const newValue = interpretWithScope(
+  const newValue = p.interpreter(
     trimmed.slice(eqIdx + 1, semiIdx).trim(),
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+    p.scope,
+    p.typeMap,
+    p.mutMap,
+    p.uninitializedSet,
+    p.unmutUninitializedSet,
   );
-  scope.set(targetVarName, newValue);
+  p.scope.set(targetVarName, newValue);
   const rest = trimmed.slice(semiIdx + 1).trim();
   return handleRestAfterDereference(
     newValue,
     rest,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpretWithScope,
+    p.scope,
+    p.typeMap,
+    p.mutMap,
+    p.uninitializedSet,
+    p.unmutUninitializedSet,
+    p.interpreter,
   );
 }

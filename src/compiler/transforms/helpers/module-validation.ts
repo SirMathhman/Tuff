@@ -3,7 +3,7 @@ import {
   isWhitespace,
   matchWord,
 } from "../../parsing/string-helpers";
-import { parseModuleMemberWithPrivate } from "./module-member-parser";
+import { scanModuleBody } from "./module-member-parser";
 
 interface ModuleRegion {
   name: string;
@@ -26,26 +26,14 @@ function collectMembers(body: string): {
 } {
   const publicMembers: string[] = [];
   const privateMembers: string[] = [];
-  let i = 0;
-  while (i < body.length) {
-    i = skipWhitespace(body, i);
-    if (i >= body.length) break;
-
-    const result = parseModuleMemberWithPrivate(body, i);
-    if (result) {
-      if (result.memberName) {
-        if (result.isPublic) {
-          publicMembers.push(result.memberName);
-        } else {
-          privateMembers.push(result.memberName);
-        }
-      }
-      i = result.endIdx;
+  scanModuleBody(body, (result) => {
+    if (!result.memberName) return;
+    if (result.isPublic) {
+      publicMembers.push(result.memberName);
     } else {
-      while (i < body.length && body[i] !== ";") i++;
-      if (i < body.length) i++;
+      privateMembers.push(result.memberName);
     }
-  }
+  });
   return { publicMembers, privateMembers };
 }
 

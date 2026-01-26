@@ -1,4 +1,8 @@
-import type { StatementContext } from "./statement-context";
+import {
+  interpretAfterSemicolon,
+  interpretRest,
+  type StatementContext,
+} from "./statement-context";
 
 export function handleUseStatement(
   remaining: string,
@@ -10,18 +14,7 @@ export function handleUseStatement(
   const semicolonIndex = remaining.indexOf(";");
   if (semicolonIndex === -1) return undefined;
   if (beforeFrom.startsWith("{") && beforeFrom.endsWith("}")) {
-    const rest = remaining.slice(semicolonIndex + 1).trim();
-    return rest
-      ? ctx.interpreter(
-          rest,
-          ctx.scope,
-          ctx.typeMap,
-          ctx.mutMap,
-          ctx.uninitializedSet,
-          ctx.unmutUninitializedSet,
-          ctx.visMap,
-        )
-      : 0;
+    return interpretAfterSemicolon(remaining, semicolonIndex, ctx);
   }
   if (beforeFrom.length === 0) return undefined;
   const afterFrom = remaining.slice(fromIndex + 6).trim();
@@ -30,16 +23,5 @@ export function handleUseStatement(
   if (moduleName.length === 0) return undefined;
   ctx.scope.set(beforeFrom, 1);
   ctx.typeMap.set("__module__" + beforeFrom, moduleName as unknown as number);
-  const rest = remaining.slice(semicolonIndex + 1).trim();
-  return rest
-    ? ctx.interpreter(
-        rest,
-        ctx.scope,
-        ctx.typeMap,
-        ctx.mutMap,
-        ctx.uninitializedSet,
-        ctx.unmutUninitializedSet,
-        ctx.visMap,
-      )
-    : 0;
+  return interpretRest(remaining.slice(semicolonIndex + 1), ctx);
 }

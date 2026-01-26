@@ -10,7 +10,7 @@ function skipWS(source: string, index: number): number {
   return index;
 }
 
-interface ModuleMemberParseResult {
+export interface ModuleMemberParseResult {
   js: string;
   memberName?: string;
   isPublic: boolean;
@@ -18,12 +18,17 @@ interface ModuleMemberParseResult {
   endIdx: number;
 }
 
-function skipReturnTypeAndArrow(body: string, j: number): number {
+function skipOptionalTypeAnnotation(body: string, j: number): number {
   j = skipWS(body, j);
   if (j < body.length && body[j] === ":") {
     j++;
     while (j < body.length && body[j] !== "=" && body[j] !== ";") j++;
   }
+  return j;
+}
+
+function skipReturnTypeAndArrow(body: string, j: number): number {
+  j = skipOptionalTypeAnnotation(body, j);
   if (body.slice(j, j + 2) === "=>") j += 2;
   return skipWS(body, j);
 }
@@ -96,12 +101,7 @@ function parseVariableMember(
   const nameStart = j;
   while (j < body.length && isIdentifierChar(body[j])) j++;
   const varName = body.slice(nameStart, j);
-  j = skipWS(body, j);
-
-  if (j < body.length && body[j] === ":") {
-    j++;
-    while (j < body.length && body[j] !== "=" && body[j] !== ";") j++;
-  }
+  j = skipOptionalTypeAnnotation(body, j);
   j = skipWS(body, j);
 
   if (j < body.length && body[j] === "=") {
@@ -156,4 +156,25 @@ export function parseModuleMemberWithPrivate(
   }
 
   return undefined;
+}
+
+export function scanModuleBody(
+  body: string,
+  onMember: (result: ModuleMemberParseResult) => void,
+): void {
+  let i = 0;
+  while (i < body.length) {
+    i = skipWS(body, i);
+    if (i >= body.length) break;
+
+    const result = parseModuleMemberWithPrivate(body, i);
+    if (result) {
+      onMember(result);
+      i = result.endIdx;
+      continue;
+    }
+
+    while (i < body.length && body[i] !== ";") i++;
+    if (i < body.length) i++;
+  }
 }

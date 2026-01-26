@@ -10,8 +10,8 @@ import {
 } from "./utils/scope-helpers";
 import { handleNativeFunctionCall } from "./utils/native/native-call";
 import {
-  findMatchingCloseParen,
   extractFunctionName,
+  parseCallArgsAndRest,
 } from "./utils/function/function-helpers";
 import { parseArguments } from "./utils/function/parse-arguments";
 import {
@@ -97,10 +97,9 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
   if (!isValidIdentifier(fnName)) return undefined;
   const referencedFnName = getFunctionRef(fnName),
     actualFnName = referencedFnName || fnName;
-  const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
-  if (closeParenIndex === -1) return undefined;
-  const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
-  const rest = trimmed.slice(closeParenIndex + 1).trim();
+  const parsed = parseCallArgsAndRest(trimmed, parenIndex);
+  if (!parsed) return undefined;
+  const { argsStr, rest } = parsed;
   const nativeFunc =
     typeof globalThis !== "undefined"
       ? (globalThis as Record<string, unknown>)[`__native__${actualFnName}`]
@@ -124,4 +123,3 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
     hasNativeFunc,
   );
 }
-// test change

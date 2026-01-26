@@ -1,5 +1,6 @@
 import { isIdentifierChar, isWhitespace } from "../parsing/string-helpers";
 import { extractParamNamesFromRaw } from "../parsing/param-helpers";
+import { parseBracedBlock } from "../parsing/parse-helpers";
 
 function skipWhitespace(source: string, index: number): number {
   while (index < source.length && isWhitespace(source[index])) index++;
@@ -80,14 +81,7 @@ function findFunctionBodyEnd(source: string, bodyStart: number): number {
   }
 
   // Has braces, find matching closing brace
-  let braceDepth = 1;
-  let i = bodyStart + 1;
-  while (i < source.length && braceDepth > 0) {
-    if (source[i] === "{") braceDepth++;
-    else if (source[i] === "}") braceDepth--;
-    i++;
-  }
-  return i; // Position after closing brace
+  return parseBracedBlock(source, bodyStart).endIdx;
 }
 
 /**

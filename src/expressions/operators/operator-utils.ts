@@ -25,14 +25,7 @@ export function isIdentifierChar(ch: string): boolean {
 }
 
 export function isValidCharBeforeOperator(ch: string): boolean {
-  return (
-    (ch >= "0" && ch <= "9") ||
-    ch === ")" ||
-    ch === "}" ||
-    (ch >= "a" && ch <= "z") ||
-    (ch >= "A" && ch <= "Z") ||
-    ch === "_"
-  );
+  return isValidCharBeforeDot(ch);
 }
 export function isPositionInsideBrackets(s: string, pos: number): boolean {
   let depth = 0;

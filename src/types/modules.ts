@@ -1,25 +1,21 @@
 import type { Interpreter } from "../expressions/handlers";
 import { createNamespacedDeclarationHandler } from "./namespace-handler";
 
-// Global module storage: maps module name to its scope
-const modules = new Map<
-  string,
-  {
-    scope: Map<string, number>;
-    typeMap: Map<string, number>;
-    mutMap: Map<string, boolean>;
-    visMap: Map<string, boolean>;
-  }
->();
+export type NamespacedStoreEntry = {
+  scope: Map<string, number>;
+  typeMap: Map<string, number>;
+  mutMap: Map<string, boolean>;
+  visMap: Map<string, boolean>;
+};
 
-export function getModule(name: string):
-  | {
-      scope: Map<string, number>;
-      typeMap: Map<string, number>;
-      mutMap: Map<string, boolean>;
-      visMap: Map<string, boolean>;
-    }
-  | undefined {
+export function createNamespacedStore(): Map<string, NamespacedStoreEntry> {
+  return new Map<string, NamespacedStoreEntry>();
+}
+
+// Global module storage: maps module name to its scope
+const modules = createNamespacedStore();
+
+export function getModule(name: string): NamespacedStoreEntry | undefined {
   return modules.get(name);
 }
 

@@ -1,11 +1,6 @@
-import { isIdentifierChar, isWhitespace } from "../parsing/string-helpers";
-import { parseModuleMemberWithPrivate } from "./helpers/module-member-parser";
+import { isIdentifierChar } from "../parsing/string-helpers";
+import { scanModuleBody } from "./helpers/module-member-parser";
 import { findModuleRegions } from "./helpers/module-validation";
-
-function skipWhitespace(source: string, index: number): number {
-  while (index < source.length && isWhitespace(source[index])) index++;
-  return index;
-}
 
 /**
  * Replace variable references in member definitions with a new name
@@ -40,21 +35,10 @@ function transformModuleBody(body: string): {
 } {
   const members: string[] = [];
   const privateVars: Array<{ name: string; value: string }> = [];
-  let i = 0;
-  while (i < body.length) {
-    i = skipWhitespace(body, i);
-    if (i >= body.length) break;
-
-    const result = parseModuleMemberWithPrivate(body, i);
-    if (result) {
-      if (result.js) members.push(result.js);
-      if (result.privateVar) privateVars.push(result.privateVar);
-      i = result.endIdx;
-    } else {
-      while (i < body.length && body[i] !== ";") i++;
-      if (i < body.length) i++;
-    }
-  }
+  scanModuleBody(body, (result) => {
+    if (result.js) members.push(result.js);
+    if (result.privateVar) privateVars.push(result.privateVar);
+  });
   return { publicMembers: members.join(", "), privateVars };
 }
 

@@ -1,6 +1,9 @@
 import type { ScopeContext } from "../../types/interpreter";
 import { callInterpreter } from "../../types/interpreter";
-import type { FunctionCallParams } from "../../utils/function/function-call-params";
+import {
+  toScopeContext,
+  type BaseHandlerParams,
+} from "../../utils/function/function-call-params";
 
 function handleNegationOperator(
   s: string,
@@ -37,28 +40,8 @@ function handleUnaryMinusOperator(
   return -callInterpreter(ctx, op);
 }
 
-type UnaryOpParams = Pick<
-  FunctionCallParams,
-  | "s"
-  | "scope"
-  | "typeMap"
-  | "mutMap"
-  | "uninitializedSet"
-  | "unmutUninitializedSet"
-  | "interpreter"
-  | "visMap"
->;
-
-export function handleUnaryOperation(p: UnaryOpParams): number | undefined {
-  const ctx: ScopeContext = {
-    scope: p.scope,
-    typeMap: p.typeMap,
-    mutMap: p.mutMap,
-    uninitializedSet: p.uninitializedSet,
-    unmutUninitializedSet: p.unmutUninitializedSet,
-    visMap: p.visMap,
-    interpreter: p.interpreter,
-  };
+export function handleUnaryOperation(p: BaseHandlerParams): number | undefined {
+  const ctx: ScopeContext = toScopeContext(p);
   const negation = handleNegationOperator(p.s, ctx);
   if (negation !== undefined) return negation;
   return handleUnaryMinusOperator(p.s, ctx);

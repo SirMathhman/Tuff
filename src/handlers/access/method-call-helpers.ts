@@ -1,5 +1,5 @@
 import { isValidIdentifier } from "../../utils/identifier-utils";
-import { findMatchingCloseParen } from "../../utils/function/function-helpers";
+import { parseCallArgsAndRest } from "../../utils/function/function-helpers";
 
 function isWhitespace(ch: string | undefined): boolean {
   return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
@@ -72,10 +72,9 @@ export function parseMethodCall(trimmed: string): ParsedMethodCall | undefined {
   const receiverStr = trimmed.slice(0, dotIndex).trim();
   const methodName = extractMethodName(trimmed, dotIndex);
   if (!methodName) return undefined;
-  const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
-  if (closeParenIndex === -1) return undefined;
-  const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
-  const rest = trimmed.slice(closeParenIndex + 1).trim();
+  const parsed = parseCallArgsAndRest(trimmed, parenIndex);
+  if (!parsed) return undefined;
+  const { closeParenIndex, argsStr, rest } = parsed;
   return {
     dotIndex,
     parenIndex,

@@ -1,7 +1,7 @@
 import type { ScopeContext } from "../../types/interpreter";
 import { callInterpreter } from "../../types/interpreter";
 import { setArrayElement, isArrayInstance } from "../../utils/array";
-import type { FunctionCallParams } from "../../utils/function/function-call-params";
+import { toScopeContext, type BaseHandlerParams } from "../../utils/function/function-call-params";
 
 function parseArrayElemAssignment(
   lhs: string,
@@ -149,31 +149,11 @@ function evaluateAssignment(
   return { finalValue, semiIdx };
 }
 
-type VarAssignParams = Pick<
-  FunctionCallParams,
-  | "s"
-  | "scope"
-  | "typeMap"
-  | "mutMap"
-  | "uninitializedSet"
-  | "unmutUninitializedSet"
-  | "interpreter"
-  | "visMap"
->;
-
-export function handleVarAssignment(p: VarAssignParams): number | undefined {
+export function handleVarAssignment(p: BaseHandlerParams): number | undefined {
   const info = parseAssignmentInfo(p.s);
   if (!info) return undefined;
   const { eqIdx, isCompound, lhs, operator } = info;
-  const ctx: ScopeContext = {
-    scope: p.scope,
-    typeMap: p.typeMap,
-    mutMap: p.mutMap,
-    uninitializedSet: p.uninitializedSet,
-    unmutUninitializedSet: p.unmutUninitializedSet,
-    visMap: p.visMap,
-    interpreter: p.interpreter,
-  };
+  const ctx: ScopeContext = toScopeContext(p);
   const arrayResult = handleArrayElementAssignment(lhs, eqIdx, p.s, ctx);
   if (arrayResult !== undefined) return arrayResult;
   if (!p.scope.has(lhs)) return undefined;

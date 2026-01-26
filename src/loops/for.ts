@@ -1,6 +1,6 @@
 import { isBreakException } from "./loop";
 import { findClosingParenthesis, parseLoopBody } from "./helpers";
-import type { HandlerParams } from "./types";
+import { getLoopCore, type HandlerParams, type LoopCore } from "./types";
 
 interface RangeInfo {
   start: number;
@@ -55,14 +55,7 @@ function findInKeywordPosition(trimmed: string, startIdx: number): number {
   return -1;
 }
 
-interface LoopContext {
-  scope: Map<string, number>;
-  typeMap: Map<string, number>;
-  mutMap: Map<string, boolean>;
-  uninitializedSet: Set<string>;
-  unmutUninitializedSet: Set<string>;
-  interpreter: HandlerParams["interpreter"];
-}
+type LoopContext = LoopCore;
 
 function executeForLoop(
   range: RangeInfo,
@@ -166,16 +159,7 @@ function handleForLoopExecution(
 }
 
 export function handleFor(params: HandlerParams): number | undefined {
-  const {
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter,
-    uninitializedSet = new Set(),
-    unmutUninitializedSet = new Set(),
-  } = params;
-  const trimmed = s.trim();
+  const trimmed = params.s.trim();
   const parsed = parseForLoopComponents(trimmed);
   if (!parsed) return undefined;
   const { varDeclStr, rangeStr, loopBody, forExprEnd } = parsed;
@@ -183,14 +167,7 @@ export function handleFor(params: HandlerParams): number | undefined {
   if (!loopVarName) return undefined;
   const range = parseRange(rangeStr);
   if (!range) return undefined;
-  const ctx: LoopContext = {
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpreter,
-  };
+  const ctx: LoopContext = getLoopCore(params);
   return handleForLoopExecution(
     range,
     loopVarName,

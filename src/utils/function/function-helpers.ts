@@ -10,6 +10,17 @@ export function findMatchingCloseParen(s: string, openIndex: number): number {
   return -1;
 }
 
+export function parseCallArgsAndRest(
+  trimmed: string,
+  openParenIndex: number,
+): { closeParenIndex: number; argsStr: string; rest: string } | undefined {
+  const closeParenIndex = findMatchingCloseParen(trimmed, openParenIndex);
+  if (closeParenIndex === -1) return undefined;
+  const argsStr = trimmed.slice(openParenIndex + 1, closeParenIndex).trim();
+  const rest = trimmed.slice(closeParenIndex + 1).trim();
+  return { closeParenIndex, argsStr, rest };
+}
+
 export function extractFunctionName(s: string): {
   name: string;
   generics: string[];

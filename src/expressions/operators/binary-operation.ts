@@ -2,7 +2,7 @@ import { findOperatorIndex, performBinaryOp } from "./operators";
 import { parseTypedNumber, extractTypedInfo } from "../../parser";
 import type { ScopeContext } from "../../types/interpreter";
 import { callInterpreter } from "../../types/interpreter";
-import type { FunctionCallParams } from "../../utils/function/function-call-params";
+import { toScopeContext, type BaseHandlerParams } from "../../utils/function/function-call-params";
 
 function getRightOperand(s: string, opIndex: number, op: string): string {
   if (op === "is") return s.slice(opIndex + 3).trim();
@@ -98,30 +98,10 @@ function evaluateStandardBinaryOp(
   );
 }
 
-type BinaryOpParams = Pick<
-  FunctionCallParams,
-  | "s"
-  | "scope"
-  | "typeMap"
-  | "mutMap"
-  | "uninitializedSet"
-  | "unmutUninitializedSet"
-  | "interpreter"
-  | "visMap"
->;
-
-export function handleBinaryOperation(p: BinaryOpParams): number {
+export function handleBinaryOperation(p: BaseHandlerParams): number {
   const { index: opIndex, operator: op } = findOperatorIndex(p.s);
   if (opIndex === -1) return parseTypedNumber(p.s);
-  const ctx: ScopeContext = {
-    scope: p.scope,
-    typeMap: p.typeMap,
-    mutMap: p.mutMap,
-    uninitializedSet: p.uninitializedSet,
-    unmutUninitializedSet: p.unmutUninitializedSet,
-    visMap: p.visMap,
-    interpreter: p.interpreter,
-  };
+  const ctx: ScopeContext = toScopeContext(p);
   const leftStr = p.s.slice(0, opIndex).trim();
   const rightStr = getRightOperand(p.s, opIndex, op);
   const specialResult = handleSpecialOperators(op, leftStr, rightStr, ctx);

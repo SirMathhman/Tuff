@@ -1,21 +1,4 @@
-type Interpreter = (
-  input: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-) => number;
-
-interface HandlerParams {
-  s: string;
-  scope: Map<string, number>;
-  typeMap: Map<string, number>;
-  mutMap: Map<string, boolean>;
-  interpreter: Interpreter;
-  uninitializedSet?: Set<string>;
-  unmutUninitializedSet?: Set<string>;
-}
+import { getLoopCore, type HandlerParams } from "./types";
 
 function createBreakException(value: number): Error & { value: number } {
   const error = new Error("break") as Error & { value: number };
@@ -55,7 +38,7 @@ function executeInfiniteLoop(
   mutMap: Map<string, boolean>,
   uninitializedSet: Set<string>,
   unmutUninitializedSet: Set<string>,
-  interpreter: Interpreter,
+  interpreter: HandlerParams["interpreter"],
 ): void {
   for (;;) {
     try {
@@ -77,17 +60,9 @@ function executeInfiniteLoop(
 }
 
 export function handleLoop(params: HandlerParams): number | undefined {
-  const {
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter,
-    uninitializedSet = new Set(),
-    unmutUninitializedSet = new Set(),
-  } = params;
-  const trimmed = s.trim();
+  const trimmed = params.s.trim();
   if (!trimmed.startsWith("loop")) return undefined;
+  const core = getLoopCore(params);
   const afterLoop = trimmed.slice(4).trimStart();
   if (!afterLoop.startsWith("{")) return undefined;
   const braceCloseIdx = findLoopBodyBracesEnd(afterLoop);
@@ -96,25 +71,25 @@ export function handleLoop(params: HandlerParams): number | undefined {
   try {
     executeInfiniteLoop(
       loopBody,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
-      interpreter,
+      core.scope,
+      core.typeMap,
+      core.mutMap,
+      core.uninitializedSet,
+      core.unmutUninitializedSet,
+      core.interpreter,
     );
   } catch (e) {
     if (isBreakException(e)) {
       const loopExprEnd = trimmed.indexOf("{") + 1 + braceCloseIdx + 1;
       const afterLoopExpr = trimmed.slice(loopExprEnd).trim();
       if (afterLoopExpr) {
-        return interpreter(
+        return core.interpreter(
           afterLoopExpr,
-          scope,
-          typeMap,
-          mutMap,
-          uninitializedSet,
-          unmutUninitializedSet,
+          core.scope,
+          core.typeMap,
+          core.mutMap,
+          core.uninitializedSet,
+          core.unmutUninitializedSet,
         );
       }
       return e.value;
@@ -124,17 +99,10 @@ export function handleLoop(params: HandlerParams): number | undefined {
 }
 
 export function handleBreak(params: HandlerParams): void {
-  const {
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter,
-    uninitializedSet = new Set(),
-    unmutUninitializedSet = new Set(),
-  } = params;
-  const trimmed = s.trim();
+  const trimmed = params.s.trim();
   if (!trimmed.startsWith("break")) return;
+
+  const core = getLoopCore(params);
 
   const afterBreak = trimmed.slice(5).trim();
 
@@ -149,13 +117,13 @@ export function handleBreak(params: HandlerParams): void {
     valueStr = afterBreak.slice(0, afterBreak.indexOf(";")).trim();
   }
 
-  const value = interpreter(
+  const value = core.interpreter(
     valueStr,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+    core.scope,
+    core.typeMap,
+    core.mutMap,
+    core.uninitializedSet,
+    core.unmutUninitializedSet,
   );
   throw createBreakException(value);
 }

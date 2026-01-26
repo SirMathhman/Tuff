@@ -1,5 +1,16 @@
 import { isIdentifierChar } from "../helpers/char-utils";
 
+function findBraceBlockEnd(code: string, openBraceIndex: number): number {
+  let braceDepth = 1;
+  let i = openBraceIndex + 1;
+  while (i < code.length && braceDepth > 0) {
+    if (code[i] === "{") braceDepth++;
+    else if (code[i] === "}") braceDepth--;
+    i++;
+  }
+  return i;
+}
+
 function extractFunctionName(code: string, exportIndex: number): string {
   const funcNameStart = exportIndex + 16;
   let funcNameEnd = funcNameStart;
@@ -26,13 +37,7 @@ function extractArrowFunctionBody(code: string, parenEnd: number): string {
   let pos = bodyStart;
   while (pos < code.length && (code[pos] === " " || code[pos] === "\t")) pos++;
   if (code[pos] === "{") {
-    let braceDepth = 1;
-    let funcEnd = pos + 1;
-    while (funcEnd < code.length && braceDepth > 0) {
-      if (code[funcEnd] === "{") braceDepth++;
-      else if (code[funcEnd] === "}") braceDepth--;
-      funcEnd++;
-    }
+    const funcEnd = findBraceBlockEnd(code, pos);
     return code.slice(arrowStart - 8, funcEnd);
   } else {
     let funcEnd = code.indexOf(";", pos);
@@ -49,13 +54,7 @@ function extractRegularFunctionBody(
 ): string {
   const bodyStart = code.indexOf("{", parenEnd);
   if (bodyStart === -1) return "";
-  let braceDepth = 1;
-  let funcEnd = bodyStart + 1;
-  while (funcEnd < code.length && braceDepth > 0) {
-    if (code[funcEnd] === "{") braceDepth++;
-    else if (code[funcEnd] === "}") braceDepth--;
-    funcEnd++;
-  }
+  const funcEnd = findBraceBlockEnd(code, bodyStart);
   return code.slice(exportIndex + 7, funcEnd);
 }
 
