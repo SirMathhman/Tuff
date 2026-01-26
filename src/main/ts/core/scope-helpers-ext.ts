@@ -9,6 +9,8 @@ import {
   handleVariableInitialization,
 } from "../handlers/variables/declaration-helpers";
 import { findEqualIndex } from "../utils/scope-helpers";
+import { getTypeNameForVar } from "../expressions/drop-helpers";
+import { isValidIdentifier } from "../utils/identifier-utils";
 
 export interface ParseVarInitParams {
   remaining: string;
@@ -127,6 +129,21 @@ export function processParsedDeclaration(params: ProcessDeclParams): number {
     ctx.uninitializedSet.add(varName);
     if (!isMut) ctx.unmutUninitializedSet.add(varName);
   }
+
+  // Track move semantics: if RHS is a variable with destructor type, mark it as moved
+  if (eqIndex !== -1) {
+    let declStr = remaining.slice(0, restIndex).trimEnd();
+    if (declStr.endsWith(";")) declStr = declStr.slice(0, -1);
+    const rhsStr = declStr.slice(eqIndex + 1).trim();
+    if (isValidIdentifier(rhsStr) && ctx.scope.has(rhsStr)) {
+      const sourceTypeName = getTypeNameForVar(rhsStr, new Map(), ctx.typeMap);
+      if (sourceTypeName && ctx.typeMap.has("__drop__" + sourceTypeName)) {
+        if (!ctx.movedSet) ctx.movedSet = new Set();
+        ctx.movedSet.add(rhsStr);
+      }
+    }
+  }
+
   const rest = remaining.slice(restIndex).trim();
   return rest ? callInterpreter(ctx, rest) : varValue;
 }

@@ -8,6 +8,12 @@ import {
   parseLetDeclaration,
   validateVariableUsage,
   parseTypeDeclaration,
+  getVariableType,
+  isDroppableType,
+  clearDroppableTypes,
+  clearVariableTypes,
+  clearMovedVariables,
+  markMovedVariable,
 } from "./parsing/parser-utils";
 import { extractParamsWithTypes } from "./parsing/param-helpers";
 import {
@@ -106,6 +112,13 @@ function handleLetDeclarationOrDestructuring(
     decl.hasInitializer,
     decl.inferredType,
   );
+
+  if (decl.initializerVarName) {
+    const sourceType = getVariableType(decl.initializerVarName);
+    if (sourceType && isDroppableType(sourceType)) {
+      markMovedVariable(decl.initializerVarName);
+    }
+  }
   return decl.nextIndex;
 }
 function handleModuleOrObjectDeclaration(
@@ -266,6 +279,9 @@ export function createDeclarationParser(
     parseDeclarations() {
       clearCompileFunctionDefs();
       clearCompileStructDefs();
+      clearVariableTypes();
+      clearDroppableTypes();
+      clearMovedVariables();
       parseDeclarationsImpl(source, variables);
     },
   };

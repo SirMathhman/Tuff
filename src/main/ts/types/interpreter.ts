@@ -5,6 +5,7 @@ export interface InterpreterContext {
   uninitializedSet: Set<string>;
   unmutUninitializedSet: Set<string>;
   visMap: Map<string, boolean>;
+  movedSet?: Set<string>;
 }
 
 export type Interpreter = (
@@ -15,6 +16,7 @@ export type Interpreter = (
   uninitializedSet: Set<string>,
   unmutUninitializedSet: Set<string>,
   visMap?: Map<string, boolean>,
+  movedSet?: Set<string>,
 ) => number;
 
 export interface ScopeContext extends InterpreterContext {
@@ -30,5 +32,6 @@ export function callInterpreter(ctx: ScopeContext, input: string): number {
     ctx.uninitializedSet,
     ctx.unmutUninitializedSet,
     ctx.visMap,
+    ctx.movedSet,
   );
 }

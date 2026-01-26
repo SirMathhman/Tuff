@@ -19,6 +19,7 @@ export type FunctionCallParams = {
   unmutUninitializedSet: Set<string>;
   interpreter: Interpreter;
   visMap: Map<string, boolean>;
+  movedSet?: Set<string>;
   moduleHandler?: DeclarationHandler;
   objectHandler?: DeclarationHandler;
 };
@@ -33,6 +34,7 @@ export type BaseHandlerParams = Pick<
   | "unmutUninitializedSet"
   | "interpreter"
   | "visMap"
+  | "movedSet"
 >;
 
 export function toInterpreterContext(p: BaseHandlerParams): InterpreterContext {
@@ -43,6 +45,7 @@ export function toInterpreterContext(p: BaseHandlerParams): InterpreterContext {
     uninitializedSet: p.uninitializedSet,
     unmutUninitializedSet: p.unmutUninitializedSet,
     visMap: p.visMap,
+    movedSet: p.movedSet,
   };
 }
 

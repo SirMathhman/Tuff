@@ -1,4 +1,9 @@
-import { isWhitespace, matchWord, isIdentifierChar } from "./string-helpers";
+import {
+  isWhitespace,
+  matchWord,
+  isIdentifierChar,
+  isDigit,
+} from "./string-helpers";
 import {
   validateTypeAnnotation,
   inferValueType,
@@ -11,11 +16,27 @@ export {
   validateVariableUsage,
   isDeclaredType,
   addDeclaredType,
+  clearMovedVariables,
+  markMovedVariable,
 } from "./variable-validation";
 import { addDeclaredType } from "./variable-validation";
 
 // Track variable types for cross-variable assignment validation
 const variableTypes = new Map<string, string>();
+
+const droppableTypes = new Set<string>();
+
+export function addDroppableType(name: string): void {
+  droppableTypes.add(name);
+}
+
+export function isDroppableType(name: string): boolean {
+  return droppableTypes.has(name);
+}
+
+export function clearDroppableTypes(): void {
+  droppableTypes.clear();
+}
 
 export function getVariableType(name: string): string | undefined {
   return variableTypes.get(name);
@@ -47,7 +68,20 @@ export function parseTypeDeclaration(
   i = parsed.endIdx;
   if (i < source.length && source[i] === ";") i++;
   addDeclaredType(typeName);
+  if (parsed.content.indexOf(" then ") !== -1) {
+    addDroppableType(typeName);
+  }
   return { nextIndex: i, typeName };
+}
+
+function isSingleIdentifierToken(s: string): boolean {
+  if (s.length === 0) return false;
+  const first = s[0];
+  if (!first || !isIdentifierChar(first) || isDigit(first)) return false;
+  for (let i = 1; i < s.length; i++) {
+    if (!isIdentifierChar(s[i])) return false;
+  }
+  return true;
 }
 
 function parseMutability(
@@ -128,10 +162,17 @@ function processInitializer(
   isArray: boolean;
   hasInit: boolean;
   inferredType: string | undefined;
+  initializerVarName: string | undefined;
 } {
   let i = startIdx;
   if (i >= source.length || source[i] !== "=")
-    return { i, isArray: false, hasInit: false, inferredType: undefined };
+    return {
+      i,
+      isArray: false,
+      hasInit: false,
+      inferredType: undefined,
+      initializerVarName: undefined,
+    };
   i++;
   while (i < source.length && isWhitespace(source[i])) i++;
   const isArrayDetected = source[i] === "[";
@@ -148,16 +189,21 @@ function processInitializer(
     validateTypeAnnotation(value, typeAnnotation);
   }
   const type = inferValueType(value);
-  return { i, isArray: isArrayDetected, hasInit: true, inferredType: type };
+  return {
+    i,
+    isArray: isArrayDetected,
+    hasInit: true,
+    inferredType: type,
+    initializerVarName: isSingleIdentifierToken(trimmedValue)
+      ? trimmedValue
+      : undefined,
+  };
 }
 
 /**
  * Parse a single let declaration
  */
-export function parseLetDeclaration(
-  source: string,
-  startIndex: number,
-): {
+export type ParsedLetDeclaration = {
   nextIndex: number;
   varName: string;
   typeAnnotation?: string;
@@ -165,7 +211,13 @@ export function parseLetDeclaration(
   isArray?: boolean;
   hasInitializer?: boolean;
   inferredType?: string;
-} {
+  initializerVarName?: string;
+};
+
+export function parseLetDeclaration(
+  source: string,
+  startIndex: number,
+): ParsedLetDeclaration {
   let i = startIndex + 3;
   while (i < source.length && isWhitespace(source[i])) i++;
   const { isMutable, nextIndex: mutIndex } = parseMutability(source, i);
@@ -183,6 +235,7 @@ export function parseLetDeclaration(
     isArray: initArray,
     hasInit,
     inferredType,
+    initializerVarName,
   } = processInitializer(source, i, typeAnnotation);
   i = afterInit;
   const isArray =
@@ -200,5 +253,6 @@ export function parseLetDeclaration(
     isArray,
     hasInitializer: hasInit,
     inferredType,
+    initializerVarName,
   };
 }

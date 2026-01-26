@@ -102,4 +102,13 @@ describe("types - destructors", () => {
       1,
     );
   });
+
+  itBoth(
+    "throws when using variable after move with destructor type alias",
+    (_ok, assertInvalid) => {
+      assertInvalid(
+        "fn drop(this : I32) => {} type Temp = I32 then drop; let x : Temp = 100; let y = x; x",
+      );
+    },
+  );
 });

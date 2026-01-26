@@ -32,6 +32,7 @@ function tryBasicHandlers(
     p.uninitializedSet,
     p.unmutUninitializedSet,
     p.visMap,
+    p.movedSet,
   );
   if (result !== undefined) return result;
   result = tryControlFlow(p);
@@ -45,7 +46,13 @@ function tryAdvancedHandlers(
 ): number | undefined {
   let result = tryAssignments(p);
   if (result !== undefined) return result;
-  if (p.scope.has(p.s.trim())) return p.scope.get(p.s.trim())!;
+  const varName = p.s.trim();
+  if (p.scope.has(varName)) {
+    if (p.movedSet?.has(varName)) {
+      throw new Error(`variable '${varName}' has been moved`);
+    }
+    return p.scope.get(varName)!;
+  }
   result = tryFunctionCalls(p);
   if (result !== undefined) return result;
   result = tryExpressions(p);
@@ -64,6 +71,7 @@ function handleGroupedOrBinaryOp(
     | "unmutUninitializedSet"
     | "interpreter"
     | "visMap"
+    | "movedSet"
   >,
 ): number {
   if (!mightNeedBinaryOp(p.s)) return parseTypedNumber(p.s);
@@ -89,6 +97,7 @@ function handleGroupedOrBinaryOp(
         p.uninitializedSet,
         p.unmutUninitializedSet,
         p.visMap,
+        p.movedSet,
       );
   }
   return handleBinaryOperation(p);
@@ -102,6 +111,7 @@ export function interpretWithScope(
   uninitializedSet: Set<string> = new Set(),
   unmutUninitializedSet = new Set<string>(),
   visMap: Map<string, boolean> = new Map(),
+  movedSet: Set<string> = new Set(),
 ): number {
   const s = input.trim();
   if (s === "") return 0;
@@ -117,6 +127,7 @@ export function interpretWithScope(
     unmutUninitializedSet,
     interpreter: interpretWithScope as Interpreter,
     visMap,
+    movedSet,
   });
   let result = tryBasicHandlers(p);
   if (result !== undefined) return result;

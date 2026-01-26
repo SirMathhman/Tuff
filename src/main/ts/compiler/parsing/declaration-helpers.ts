@@ -47,8 +47,20 @@ export function extractDestructuringFields(
 }
 
 export function skipToNextStatement(source: string, i: number): number {
-  while (i < source.length && source[i] !== ";") i++;
-  return i < source.length ? i + 1 : i;
+  let idx = i;
+  while (idx < source.length) {
+    const ch = source[idx];
+    if (ch === ";") return idx + 1;
+    if (ch === "{") {
+      const block = parseBracedBlock(source, idx);
+      idx = block.endIdx;
+      // Optional semicolon after a braced block
+      if (idx < source.length && source[idx] === ";") return idx + 1;
+      return idx;
+    }
+    idx++;
+  }
+  return idx;
 }
 
 export function skipWhitespaceOnly(source: string, i: number): number {

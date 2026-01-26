@@ -22,6 +22,21 @@ interface VariableInfo {
 // Track declared type aliases
 const declaredTypes = new Set<string>();
 
+// Track moved variables (use-after-move is invalid)
+const movedVariables = new Set<string>();
+
+export function clearMovedVariables(): void {
+  movedVariables.clear();
+}
+
+export function markMovedVariable(name: string): void {
+  movedVariables.add(name);
+}
+
+export function isMovedVariable(name: string): boolean {
+  return movedVariables.has(name);
+}
+
 export function addDeclaredType(name: string): void {
   declaredTypes.add(name);
 }
@@ -61,6 +76,13 @@ const SPECIAL_IDENTIFIERS = new Set([
   "I64",
 ]);
 
+function skipMemberName(source: string, startIndex: number): number {
+  let i = startIndex;
+  while (i < source.length && isWhitespace(source[i])) i++;
+  while (i < source.length && isIdentifierChar(source[i])) i++;
+  return i;
+}
+
 function checkWriteAccess(
   name: string,
   variables: Map<string, VariableInfo>,
@@ -90,6 +112,9 @@ function checkReadAccess(
   name: string,
   variables: Map<string, VariableInfo>,
 ): void {
+  if (isMovedVariable(name)) {
+    throw new Error(`Variable '${name}' has been moved`);
+  }
   if (
     !variables.has(name) &&
     !isKeyword(name) &&
@@ -156,7 +181,7 @@ function validateIdentifier(
   const nextChar = nextIdx < source.length ? source[nextIdx]! : "";
   if (nextChar === "=" && charAt(source, nextIdx + 1) !== "=") {
     checkWriteAccess(name, variables);
-  } else if (REFERENCE_DELIMITERS.has(nextChar)) {
+  } else if (nextIdx >= source.length || REFERENCE_DELIMITERS.has(nextChar)) {
     checkReadAccess(name, variables);
   }
   return i;
@@ -230,12 +255,14 @@ export function validateVariableUsage(
       i++;
       continue;
     }
+    // Skip module access (identifiers after '::')
+    if (source[i] === ":" && charAt(source, i + 1) === ":") {
+      i = skipMemberName(source, i + 2);
+      continue;
+    }
     // Skip property access (identifiers after a dot)
     if (source[i] === ".") {
-      i++;
-      // Skip the property name
-      while (i < source.length && isWhitespace(source[i])) i++;
-      while (i < source.length && isIdentifierChar(source[i])) i++;
+      i = skipMemberName(source, i + 1);
       continue;
     }
     // Skip pointer dereference patterns

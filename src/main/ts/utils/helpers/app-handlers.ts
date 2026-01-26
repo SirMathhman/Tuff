@@ -55,6 +55,7 @@ function toBaseHandlerParams(p: Params) {
     unmutUninitializedSet: p.unmutUninitializedSet,
     interpreter: p.interpreter,
     visMap: p.visMap,
+    movedSet: p.movedSet,
   };
   return base;
 }
@@ -75,6 +76,7 @@ export function buildInterpreterParams(
     unmutUninitializedSet: p.unmutUninitializedSet,
     interpreter: p.interpreter,
     visMap,
+    movedSet: p.movedSet,
     moduleHandler: getModuleDeclarationHandler(p.interpreter),
     objectHandler: getObjectDeclarationHandler(p.interpreter),
   };

@@ -56,6 +56,7 @@ export function handleVarDecl(
   uninitializedSet: Set<string> = new Set(),
   unmutUninitializedSet: Set<string> = new Set(),
   visMap: Map<string, boolean> = new Map(),
+  movedSet: Set<string> = new Set(),
 ): number | undefined {
   const trimmed = s.trim(),
     isPublic = trimmed.startsWith("out ");
@@ -67,6 +68,7 @@ export function handleVarDecl(
     uninitializedSet,
     unmutUninitializedSet,
     visMap,
+    movedSet,
     interpreter,
   };
   // Inline handleExternOrUse
