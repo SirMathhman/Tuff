@@ -111,4 +111,13 @@ describe("types - destructors", () => {
       );
     },
   );
+
+  itBoth(
+    "throws when passing moved variable to function twice (droppable type)",
+    (_ok, assertInvalid) => {
+      assertInvalid(
+        "fn drop(this : I32) => {} type Temp = I32 then drop; let x : Temp = 100; fn accept(first : Temp) => {} accept(x); accept(x);",
+      );
+    },
+  );
 });

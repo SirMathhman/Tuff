@@ -13,6 +13,8 @@ import {
   validateGenericTypeConsistency,
   getConcreteType,
 } from "../generics/generic-validation";
+import { isValidIdentifier } from "../identifier-utils";
+import { getTypeNameForVar } from "../../expressions/drop-helpers";
 
 type FnContext = ScopeContext;
 
@@ -77,6 +79,49 @@ function validateArgumentType(
   }
 }
 
+function shouldMoveDroppableArg(params: {
+  argStr: string;
+  paramTypeStr: string | undefined;
+  ctx: FnContext;
+}): string | undefined {
+  const trimmedArg = params.argStr.trim();
+  const paramTypeStr = params.paramTypeStr;
+  if (!paramTypeStr) return undefined;
+  if (!isValidIdentifier(paramTypeStr)) return undefined;
+  if (!params.ctx.typeMap.has("__drop__" + paramTypeStr)) return undefined;
+  if (!isValidIdentifier(trimmedArg)) return undefined;
+  const argTypeName = getTypeNameForVar(trimmedArg, new Map(), params.ctx.typeMap);
+  if (argTypeName !== paramTypeStr) return undefined;
+  return trimmedArg;
+}
+
+function evalAndValidateNonFunctionArg(params: {
+  argStr: string;
+  paramType: number;
+  paramTypeStr: string | undefined;
+  paramName: string;
+  actualFnName: string;
+  ctx: FnContext;
+}): number {
+  const argValue = callInterpreter(params.ctx, params.argStr);
+  validateArgumentType(
+    argValue,
+    params.paramType,
+    params.paramTypeStr,
+    params.paramName,
+    params.actualFnName,
+  );
+
+  const movedVarName = shouldMoveDroppableArg({
+    argStr: params.argStr,
+    paramTypeStr: params.paramTypeStr,
+    ctx: params.ctx,
+  });
+  if (movedVarName) params.ctx.movedSet?.add(movedVarName);
+
+  return argValue;
+}
+
 export function processArguments(
   argParts: string[],
   fnDef: FnDef,
@@ -113,16 +158,16 @@ export function processArguments(
       args.push(1);
       setFunctionRef(`__arg_${i}`, anonResult.name);
     } else {
-      const argValue = callInterpreter(ctx, argStr);
-      // Validate argument type compatibility
-      validateArgumentType(
-        argValue,
-        paramType,
-        paramTypeStr,
-        paramName,
-        actualFnName,
+      args.push(
+        evalAndValidateNonFunctionArg({
+          argStr,
+          paramType,
+          paramTypeStr,
+          paramName,
+          actualFnName,
+          ctx,
+        }),
       );
-      args.push(argValue);
     }
   }
   return args;

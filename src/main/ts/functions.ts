@@ -89,6 +89,7 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
     unmutUninitializedSet,
     visMap,
     interpreter,
+    movedSet,
   } = p;
   const trimmed = s.trim();
   const parenIndex = trimmed.indexOf("(");
@@ -115,6 +116,7 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
     uninitializedSet,
     unmutUninitializedSet,
     visMap,
+    movedSet,
     interpreter,
   };
   return handleFunctionExecution(

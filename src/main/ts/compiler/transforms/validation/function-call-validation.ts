@@ -8,6 +8,10 @@ import {
   getConcreteType,
 } from "../../../utils/generics/generic-validation";
 import { isTypeCompatible } from "../type-compatibility";
+import {
+  getVariableType,
+  isDroppableType,
+} from "../../parsing/parser-utils";
 
 /**
  * Validate generic type consistency for a function call
@@ -38,6 +42,52 @@ function validateGenericTypeConsistencyForCall(
   }
 }
 
+function handleMoveOnDroppableArg(params: {
+  arg: string;
+  paramType: string;
+  fnDefData: CompileFunctionDef;
+  movedVars: Set<string>;
+}): void {
+  if (
+    !isDroppableType(params.paramType) ||
+    params.paramType.startsWith("*") ||
+    (params.fnDefData.generics && params.fnDefData.generics.includes(params.paramType))
+  ) {
+    return;
+  }
+
+  const argType = getVariableType(params.arg);
+  if (argType !== params.paramType) return;
+
+  if (params.movedVars.has(params.arg)) {
+    throw new Error(`Variable '${params.arg}' has been moved`);
+  }
+  params.movedVars.add(params.arg);
+}
+
+function validateNonVariableArgType(params: {
+  fnName: string;
+  arg: string;
+  param: CompileFunctionDef["params"][number];
+  fnDefData: CompileFunctionDef;
+}): void {
+  // Skip validation for function types (indicated by => in the type)
+  if (params.param.type.includes("=>")) {
+    return;
+  }
+
+  // Skip generic type parameters - they're handled by consistency check
+  if (params.fnDefData.generics && params.fnDefData.generics.includes(params.param.type)) {
+    return;
+  }
+
+  if (!isTypeCompatible(params.arg, params.param.type)) {
+    throw new Error(
+      `Function '${params.fnName}' parameter '${params.param.name}' expects type ${params.param.type}, but got ${params.arg}`,
+    );
+  }
+}
+
 /**
  * Validate a single function call for argument type compatibility
  */
@@ -45,6 +95,7 @@ function validateFunctionCall(
   fnName: string,
   argsStr: string,
   functionDefs: Map<string, CompileFunctionDef>,
+  movedVars: Set<string>,
 ): void {
   const fnDefData = functionDefs.get(fnName);
   if (!fnDefData) {
@@ -80,27 +131,19 @@ function validateFunctionCall(
     const arg = args[i]!.trim();
     const param = params[i]!;
 
-    // Don't validate variable references, parameter names, or identifiers
+    // Move semantics: passing a droppable variable by-value moves it
     if (isVariableReference(arg)) {
+      handleMoveOnDroppableArg({
+        arg,
+        paramType: param.type,
+        fnDefData,
+        movedVars,
+      });
+      // Don't validate variable references, parameter names, or identifiers
       continue;
     }
 
-    // Skip validation for function types (indicated by => in the type)
-    if (param.type.includes("=>")) {
-      continue;
-    }
-
-    // Skip generic type parameters - they're handled above
-    if (fnDefData.generics && fnDefData.generics.includes(param.type)) {
-      continue;
-    }
-
-    // Check type compatibility
-    if (!isTypeCompatible(arg, param.type)) {
-      throw new Error(
-        `Function '${fnName}' parameter '${param.name}' expects type ${param.type}, but got ${arg}`,
-      );
-    }
+    validateNonVariableArgType({ fnName, arg, param, fnDefData });
   }
 }
 
@@ -184,8 +227,24 @@ function trySkipFnDeclaration(source: string, i: number): number | undefined {
     i + 2 < source.length ? isWhitespace(source[i + 2]) : false;
   if (!isWhitespaceAfter) return undefined;
   let pos = i;
-  while (pos < source.length && source[pos] !== ";") pos++;
-  return pos + 1; // Skip the semicolon
+  while (pos < source.length) {
+    const ch = source[pos];
+    if (ch === ";") return pos + 1;
+    if (ch === "{") {
+      let depth = 1;
+      pos++;
+      while (pos < source.length && depth > 0) {
+        if (source[pos] === "{") depth++;
+        else if (source[pos] === "}") depth--;
+        pos++;
+      }
+      while (pos < source.length && isWhitespace(source[pos]!)) pos++;
+      if (pos < source.length && source[pos] === ";") return pos + 1;
+      return pos;
+    }
+    pos++;
+  }
+  return pos;
 }
 
 /**
@@ -196,6 +255,8 @@ export function validateFunctionCalls(source: string): void {
   if (functionDefs.size === 0) {
     return; // No function definitions to validate against
   }
+
+  const movedVars = new Set<string>();
 
   // Find all function calls and validate them
   let i = 0;
@@ -237,7 +298,7 @@ export function validateFunctionCalls(source: string): void {
           }
 
           const argsStr = source.slice(argsStart, j - 1); // Exclude closing paren
-          validateFunctionCall(fnName, argsStr, functionDefs);
+          validateFunctionCall(fnName, argsStr, functionDefs, movedVars);
         }
         i = j;
       } else {
