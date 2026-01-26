@@ -36,6 +36,37 @@ function callInterpreter(ctx: FnContext, input: string): number {
   );
 }
 
+/**
+ * Validate that an argument value is compatible with the expected parameter type
+ */
+function validateArgumentType(
+  argValue: number,
+  paramType: number,
+  paramTypeStr: string | undefined,
+  paramName: string,
+  actualFnName: string,
+): void {
+  // Type -2 is for function types, skip validation
+  if (paramType === -2) {
+    return;
+  }
+
+  // Type -3 is for struct types, skip validation
+  if (paramType === -3) {
+    return;
+  }
+
+  // 1 is the type code for Bool
+  if (paramTypeStr === "Bool" || paramType === 1) {
+    // Bool values must be 0 or 1
+    if (argValue !== 0 && argValue !== 1) {
+      throw new Error(
+        `Function '${actualFnName}' parameter '${paramName}' expects type Bool, but got value ${argValue}`,
+      );
+    }
+  }
+}
+
 export function processArguments(
   argParts: string[],
   fnDef: FnDef,
@@ -50,8 +81,10 @@ export function processArguments(
   for (let i = 0; i < argParts.length; i++) {
     const argStr = argParts[i]!;
     const paramType = fnDef.params[i]?.type;
+    const paramTypeStr = fnDef.params[i]?.typeStr;
+    const paramName = fnDef.params[i]?.name || `param${i}`;
+
     if (paramType === -2) {
-      const paramTypeStr = fnDef.params[i]?.typeStr;
       const inferredReturnType = paramTypeStr
         ? extractReturnTypeFromFunctionType(paramTypeStr, ctx.typeMap)
         : 0;
@@ -65,7 +98,10 @@ export function processArguments(
       args.push(1);
       setFunctionRef(`__arg_${i}`, anonResult.name);
     } else {
-      args.push(callInterpreter(ctx, argStr));
+      const argValue = callInterpreter(ctx, argStr);
+      // Validate argument type compatibility
+      validateArgumentType(argValue, paramType, paramTypeStr, paramName, actualFnName);
+      args.push(argValue);
     }
   }
   return args;

@@ -24,6 +24,7 @@ import {
 import { transformPointers } from "./transforms/pointer-transforms";
 import { isWhitespace, isIdentifierChar } from "./parsing/string-helpers";
 import { clearVariableTypes } from "./parsing/parser-utils";
+import { validateFunctionCalls } from "./transforms/function-call-validation";
 
 function isAlphaNum(ch: string): boolean {
   return (
@@ -258,6 +259,9 @@ function createTuffCompiler(source: string) {
       // Pass 1: Parse variable declarations
       const parser = createDeclarationParser(source, variables);
       parser.parseDeclarations();
+
+      // Validate function calls against declared parameter types
+      validateFunctionCalls(source);
 
       // Build set of array variable names
       const arrayVars = new Set<string>();

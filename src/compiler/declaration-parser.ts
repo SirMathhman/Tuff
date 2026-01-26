@@ -11,9 +11,23 @@ import {
   validateVariableUsage,
   parseTypeDeclaration,
 } from "./parsing/parser-utils";
+import { extractParamsWithTypes, type ParamInfo } from "./parsing/param-helpers";
 
 function isIdentifierStartChar(ch: string | undefined): ch is string {
   return ch !== undefined && isIdentifierChar(ch) && !isDigit(ch);
+}
+
+/**
+ * Store for function parameter type information
+ */
+const compileFunctionDefs = new Map<string, ParamInfo[]>();
+
+export function getCompileFunctionDefs(): Map<string, ParamInfo[]> {
+  return compileFunctionDefs;
+}
+
+export function clearCompileFunctionDefs(): void {
+  compileFunctionDefs.clear();
 }
 
 /**
@@ -225,6 +239,17 @@ function handleFunctionDeclaration(
     // Extract and validate parameter names
     const paramsStr = source.slice(parenStart + 1, paramEnd).trim();
     if (paramsStr) {
+      try {
+        // Extract parameter names and types
+        const rawParamsStr = source.slice(parenStart, paramEnd + 1);
+        const params = extractParamsWithTypes(rawParamsStr);
+        if (fnName && params.length > 0) {
+          compileFunctionDefs.set(fnName, params);
+        }
+      } catch {
+        // Silently continue if params can't be extracted
+      }
+
       // Parse parameter names (they appear before colons)
       const paramParts = paramsStr.split(",");
       for (const part of paramParts) {
@@ -311,6 +336,7 @@ export function createDeclarationParser(
 ) {
   return {
     parseDeclarations() {
+      clearCompileFunctionDefs();
       parseDeclarationsImpl(source, variables);
     },
   };

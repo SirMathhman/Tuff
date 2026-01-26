@@ -103,3 +103,12 @@ describe("functions - scope and methods", () => {
     );
   });
 });
+
+describe("functions - type validation", () => {
+  itBoth(
+    "throws when passing wrong type to function parameter",
+    (assertValid, assertInvalid) => {
+      assertInvalid("fn performNot(value : Bool) => !value; performNot(100)");
+    },
+  );
+});
