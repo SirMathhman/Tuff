@@ -2,7 +2,9 @@ import {
   isIdentifierChar,
   isWhitespace,
   matchWord,
+  readIdentifier,
 } from "../../parsing/string-helpers";
+import { parseBracedBlock } from "../../parsing/parse-helpers";
 import { scanModuleBody } from "./module-member-parser";
 
 interface ModuleRegion {
@@ -54,15 +56,13 @@ export function findModuleRegions(source: string): ModuleRegion[] {
       let j = i + keyword.length;
       j = skipWhitespace(source, j);
 
-      const nameStart = j;
-      while (j < source.length && isIdentifierChar(source[j])) j++;
-      const name = source.slice(nameStart, j);
+      const parsedName = readIdentifier(source, j);
+      const name = parsedName.name;
+      j = parsedName.endIdx;
       j = skipWhitespace(source, j);
 
       if (j < source.length && source[j] === "{") {
-        const bodyStart = j + 1;
-        const bodyEnd = findMatchingBrace(source, j);
-        const body = source.slice(bodyStart, bodyEnd - 1);
+        const { content: body, endIdx: bodyEnd } = parseBracedBlock(source, j);
         regions.push({
           name,
           type: isModule ? "module" : "object",
@@ -77,17 +77,6 @@ export function findModuleRegions(source: string): ModuleRegion[] {
     i++;
   }
   return regions;
-}
-
-function findMatchingBrace(source: string, start: number): number {
-  let depth = 1;
-  let i = start + 1;
-  while (i < source.length && depth > 0) {
-    if (source[i] === "{") depth++;
-    else if (source[i] === "}") depth--;
-    i++;
-  }
-  return i;
 }
 
 export function collectModuleMetadata(source: string): ModuleMetadata[] {

@@ -1,5 +1,6 @@
 import { isValidIdentifier } from "../../utils/identifier-utils";
 import { parseCallArgsAndRest } from "../../utils/function/function-helpers";
+import { isIdentifierChar } from "../../utils/helpers/char-utils";
 
 function isWhitespace(ch: string | undefined): boolean {
   return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
@@ -11,13 +12,7 @@ function isAlpha(ch: string | undefined): boolean {
 }
 
 function isAlphaNumeric(ch: string | undefined): boolean {
-  if (!ch) return false;
-  return (
-    (ch >= "a" && ch <= "z") ||
-    (ch >= "A" && ch <= "Z") ||
-    (ch >= "0" && ch <= "9") ||
-    ch === "_"
-  );
+  return isIdentifierChar(ch);
 }
 
 export function findMethodPattern(

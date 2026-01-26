@@ -35,7 +35,7 @@ export type BaseHandlerParams = Pick<
   | "visMap"
 >;
 
-export function toScopeContext(p: BaseHandlerParams): ScopeContext {
+export function toInterpreterContext(p: BaseHandlerParams): InterpreterContext {
   return {
     scope: p.scope,
     typeMap: p.typeMap,
@@ -43,6 +43,12 @@ export function toScopeContext(p: BaseHandlerParams): ScopeContext {
     uninitializedSet: p.uninitializedSet,
     unmutUninitializedSet: p.unmutUninitializedSet,
     visMap: p.visMap,
+  };
+}
+
+export function toScopeContext(p: BaseHandlerParams): ScopeContext {
+  return {
+    ...toInterpreterContext(p),
     interpreter: p.interpreter,
   };
 }

@@ -76,18 +76,5 @@ export function transformModules(source: string): string {
  * Transform module access :: to dot notation
  */
 export function transformModuleAccess(source: string): string {
-  let result = "";
-  let i = 0;
-
-  while (i < source.length) {
-    if (source.slice(i, i + 2) === "::") {
-      result += ".";
-      i += 2;
-    } else {
-      result += source[i];
-      i++;
-    }
-  }
-
-  return result;
+  return source.split("::").join(".");
 }

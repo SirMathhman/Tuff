@@ -41,21 +41,24 @@ function validateDereferenceTarget(
 function handleRestAfterDereference(
   newValue: number,
   rest: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpretWithScope: BaseHandlerParams["interpreter"],
+  ctx: Pick<
+    BaseHandlerParams,
+    | "scope"
+    | "typeMap"
+    | "mutMap"
+    | "uninitializedSet"
+    | "unmutUninitializedSet"
+    | "interpreter"
+  >,
 ): number {
   if (rest === "") return newValue;
-  return interpretWithScope(
+  return ctx.interpreter(
     rest,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+    ctx.scope,
+    ctx.typeMap,
+    ctx.mutMap,
+    ctx.uninitializedSet,
+    ctx.unmutUninitializedSet,
   );
 }
 
@@ -92,14 +95,5 @@ export function handleDereferenceAssignment(
   );
   p.scope.set(targetVarName, newValue);
   const rest = trimmed.slice(semiIdx + 1).trim();
-  return handleRestAfterDereference(
-    newValue,
-    rest,
-    p.scope,
-    p.typeMap,
-    p.mutMap,
-    p.uninitializedSet,
-    p.unmutUninitializedSet,
-    p.interpreter,
-  );
+  return handleRestAfterDereference(newValue, rest, p);
 }

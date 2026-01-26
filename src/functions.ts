@@ -50,17 +50,17 @@ function handleFunctionExecution(
   hasNativeFunc: boolean,
 ): number {
   if (hasNativeFunc) {
-    return handleNativeFunctionCall(
+    return handleNativeFunctionCall({
       actualFnName,
       argsStr,
       rest,
-      ctx.scope,
-      ctx.typeMap,
-      ctx.mutMap,
-      ctx.uninitializedSet,
-      ctx.unmutUninitializedSet,
-      ctx.interpreter,
-    );
+      scope: ctx.scope,
+      typeMap: ctx.typeMap,
+      mutMap: ctx.mutMap,
+      uninitializedSet: ctx.uninitializedSet,
+      unmutUninitializedSet: ctx.unmutUninitializedSet,
+      interpreter: ctx.interpreter,
+    });
   }
   // Inline executeDefinedFunction
   const fnDef = functionDefs.get(actualFnName)!;
@@ -87,6 +87,7 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
+    visMap,
     interpreter,
   } = p;
   const trimmed = s.trim();
@@ -113,6 +114,7 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
     mutMap,
     uninitializedSet,
     unmutUninitializedSet,
+    visMap,
     interpreter,
   };
   return handleFunctionExecution(

@@ -1,12 +1,9 @@
 import type { Interpreter } from "../expressions/handlers";
 import { createNamespacedDeclarationHandler } from "./namespace-handler";
 
-export type NamespacedStoreEntry = {
-  scope: Map<string, number>;
-  typeMap: Map<string, number>;
-  mutMap: Map<string, boolean>;
-  visMap: Map<string, boolean>;
-};
+import type { NamespacedSetter, NamespacedStoreEntry } from "./namespaced";
+
+export type { NamespacedSetter, NamespacedStoreEntry };
 
 export function createNamespacedStore(): Map<string, NamespacedStoreEntry> {
   return new Map<string, NamespacedStoreEntry>();
@@ -19,15 +16,15 @@ export function getModule(name: string): NamespacedStoreEntry | undefined {
   return modules.get(name);
 }
 
-export function setModule(
-  name: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  visMap: Map<string, boolean>,
-): void {
-  modules.set(name, { scope, typeMap, mutMap, visMap });
+export function createNamespacedSetter(
+  store: Map<string, NamespacedStoreEntry>,
+): NamespacedSetter {
+  return (name, scope, typeMap, mutMap, visMap): void => {
+    store.set(name, { scope, typeMap, mutMap, visMap });
+  };
 }
+
+export const setModule = createNamespacedSetter(modules);
 
 export function getModuleDeclarationHandler(interpreter: Interpreter) {
   return createNamespacedDeclarationHandler(

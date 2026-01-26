@@ -16,5 +16,5 @@ To avoid invalid JavaScript, the destructuring detector only triggers when a rea
 
 The repo runs PMD CPD (copy/paste detection) as part of the pre-commit checks.
 
-- The current configuration uses `--minimum-tokens 50` and ignores identifiers/literals.
+- The current configuration uses `--minimum-tokens 40` and ignores identifiers/literals.
 - To keep CPD signal high at this threshold, common “plumbing” patterns are factored into shared helpers/types (for example: base handler params, scope-context builders, and loop context normalization).

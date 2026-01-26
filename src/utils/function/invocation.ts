@@ -8,33 +8,9 @@ import {
 import { registerAnonymousFunction } from "../../handlers/functions/anonymous-functions";
 import { extractReturnTypeFromFunctionType } from "./function-utils";
 import { getLocalFunctionNames, setLocalFunctionNames } from "../scope-helpers";
+import { callInterpreter, type ScopeContext } from "../../types/interpreter";
 
-interface FnContext {
-  scope: Map<string, number>;
-  typeMap: Map<string, number>;
-  mutMap: Map<string, boolean>;
-  uninitializedSet: Set<string>;
-  unmutUninitializedSet: Set<string>;
-  interpreter: (
-    s: string,
-    scope: Map<string, number>,
-    typeMap: Map<string, number>,
-    mutMap: Map<string, boolean>,
-    uninitializedSet: Set<string>,
-    unmutUninitializedSet: Set<string>,
-  ) => number;
-}
-
-function callInterpreter(ctx: FnContext, input: string): number {
-  return ctx.interpreter(
-    input,
-    ctx.scope,
-    ctx.typeMap,
-    ctx.mutMap,
-    ctx.uninitializedSet,
-    ctx.unmutUninitializedSet,
-  );
-}
+type FnContext = ScopeContext;
 
 /**
  * Validate that an argument value is compatible with the expected parameter type

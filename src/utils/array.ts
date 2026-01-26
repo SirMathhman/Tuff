@@ -14,7 +14,7 @@ export interface ArrayType {
   capacity: number;
 }
 
-export function parseArrayType(typeStr: string): ArrayType | undefined {
+function parseArrayTypeParts(typeStr: string): string[] | undefined {
   const t = typeStr.trim();
   if (!t.startsWith("[") || !t.includes(";")) return undefined;
 
@@ -23,8 +23,12 @@ export function parseArrayType(typeStr: string): ArrayType | undefined {
 
   const inner = t.slice(1, closeIdx).trim();
   const parts = inner.split(";").map((p) => p.trim());
+  return parts.length === 3 ? parts : undefined;
+}
 
-  if (parts.length !== 3) return undefined;
+export function parseArrayType(typeStr: string): ArrayType | undefined {
+  const parts = parseArrayTypeParts(typeStr);
+  if (!parts) return undefined;
 
   const initialStr = parts[1];
   const capacityStr = parts[2];
@@ -50,14 +54,8 @@ export function extractArrayTypeInfo(
   const baseArrayType = parseArrayType(typeStr);
   if (!baseArrayType) return undefined;
 
-  const t = typeStr.trim();
-  const closeIdx = t.lastIndexOf("]");
-  if (closeIdx === -1) return undefined;
-
-  const inner = t.slice(1, closeIdx).trim();
-  const parts = inner.split(";");
-
-  if (parts.length !== 3) return undefined;
+  const parts = parseArrayTypeParts(typeStr);
+  if (!parts) return undefined;
 
   const elemTypeStr = parts[0]?.trim();
 

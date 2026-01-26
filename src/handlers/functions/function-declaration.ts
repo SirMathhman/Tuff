@@ -1,5 +1,5 @@
 import { extractTypeSize } from "../../type-utils";
-import { makeDeclarationHandler } from "../../declarations";
+import { makeDeclarationHandler, type StoreDecl } from "../../declarations";
 import { isValidIdentifier } from "../../utils/identifier-utils";
 import {
   isFunctionType,
@@ -8,17 +8,12 @@ import {
 } from "../../utils/function/function-utils";
 import { addLocalFunctionName } from "../../utils/scope-helpers";
 import { parseGenericParams } from "../../utils/generic-params";
+import type { FnDef } from "../../function-defs";
+import { findMatchingCloseBrace } from "../../utils/helpers/brace-utils";
 
 function isWhitespace(ch: string): boolean {
   return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
 }
-
-type FnDef = {
-  params: Array<{ name: string; type: number; typeStr?: string }>;
-  returnType: number;
-  body: string;
-  generics?: string[];
-};
 
 function findFunctionHeaderEnd(rest: string): number {
   const angleStart = rest.indexOf("<");
@@ -31,22 +26,13 @@ function findFunctionHeaderEnd(rest: string): number {
 }
 
 function findBraceClosedBody(rest: string, bodyStart: number): number {
-  let braceDepth = 0;
-  for (let i = bodyStart; i < rest.length; i++) {
-    if (rest[i] === "{") braceDepth++;
-    else if (rest[i] === "}") {
-      braceDepth--;
-      if (braceDepth === 0) {
-        let semiIndex = i + 1;
-        while (semiIndex < rest.length && isWhitespace(rest[semiIndex]!))
-          semiIndex++;
-        return semiIndex < rest.length && rest[semiIndex] === ";"
-          ? semiIndex
-          : -1;
-      }
-    }
-  }
-  return -1;
+  const closeIndex = findMatchingCloseBrace(rest, bodyStart);
+  if (closeIndex === -1) return -1;
+  let semiIndex = closeIndex + 1;
+  while (semiIndex < rest.length && isWhitespace(rest[semiIndex]!)) semiIndex++;
+  return semiIndex < rest.length && rest[semiIndex] === ";"
+    ? semiIndex
+    : closeIndex;
 }
 
 function findFunctionBodyEnd(rest: string, arrowIndex: number): number {
@@ -131,19 +117,15 @@ function processFunctionDeclaration(
   const { name: fnName, params: genericParams } =
     parseGenericParams(fnHeaderStr);
   if (!isValidIdentifier(fnName)) return;
+  if (scope?.has(fnName) === true) {
+    throwFunctionNameConflict(fnName);
+  }
   const paramsStr = rest.slice(parenStart + 1, parenEnd).trim();
   const params = parseParameters(paramsStr, typeMap);
   if (!params) return;
-  // Validate parameters don't shadow existing variables
-  if (scope) {
-    for (const param of params) {
-      if (scope.has(param.name)) {
-        throw new Error(
-          `Parameter '${param.name}' shadows an existing variable`,
-        );
-      }
-    }
-  }
+
+  validateNoDuplicateParamNames(params);
+  if (scope) validateParametersDontShadowVariables(params, scope);
   const arrowIndex = rest.indexOf("=>", parenEnd);
   if (arrowIndex === -1) return;
   const returnTypeStr = rest.slice(parenEnd + 1, arrowIndex).trim();
@@ -157,9 +139,55 @@ function processFunctionDeclaration(
   addLocalFunctionName(fnName);
 }
 
+function throwFunctionNameConflict(fnName: string): never {
+  const message = `Function name '${fnName}' conflicts with an existing variable`;
+  const err = new Error(message);
+  throw err;
+}
+
+function validateNoDuplicateParamNames(params: Array<{ name: string }>): void {
+  const seenParamNames = new Set<string>();
+  for (const param of params) {
+    if (seenParamNames.has(param.name)) {
+      throw new Error(`Duplicate parameter name: '${param.name}'`);
+    }
+    seenParamNames.add(param.name);
+  }
+}
+
+function validateParametersDontShadowVariables(
+  params: Array<{ name: string }>,
+  scope: Map<string, number>,
+): void {
+  for (const param of params) {
+    if (scope.has(param.name)) {
+      throw new Error(`Parameter '${param.name}' shadows an existing variable`);
+    }
+  }
+}
+
 export function createFunctionDeclarationHandler(
   functionDefs: Map<string, FnDef>,
 ) {
+  const storeDecl: StoreDecl = (
+    rest,
+    closeIndex,
+    typeMap,
+    visMap,
+    isPublic,
+    scope,
+  ) => {
+    processFunctionDeclaration(
+      rest,
+      closeIndex,
+      typeMap,
+      visMap,
+      isPublic,
+      functionDefs,
+      scope,
+    );
+  };
+
   return makeDeclarationHandler(
     "fn",
     (rest: string) => {
@@ -173,23 +201,6 @@ export function createFunctionDeclarationHandler(
       if (arrowIndex === -1) return -1;
       return findFunctionBodyEnd(rest, arrowIndex);
     },
-    (
-      rest: string,
-      closeIndex: number,
-      typeMap: Map<string, number>,
-      visMap: Map<string, boolean>,
-      isPublic: boolean,
-      scope?: Map<string, number>,
-    ) => {
-      processFunctionDeclaration(
-        rest,
-        closeIndex,
-        typeMap,
-        visMap,
-        isPublic,
-        functionDefs,
-        scope,
-      );
-    },
+    storeDecl,
   );
 }

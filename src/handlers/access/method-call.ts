@@ -8,6 +8,7 @@ import type {
   InterpreterContext,
 } from "../../expressions/handlers";
 import type { BaseHandlerParams } from "../../utils/function/function-call-params";
+import { toInterpreterContext } from "../../utils/function/function-call-params";
 import { parseFunctionCall } from "../../functions";
 import { parseMethodCall, buildMethodCallString } from "./method-call-helpers";
 
@@ -137,19 +138,15 @@ function evaluateReceiverAndHandleCall(
   rest: string,
   ctx: InterpreterContext,
   interpreter: Interpreter,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
 ): number | undefined {
   const receiverValue = interpreter(
     receiverStr,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+    ctx.scope,
+    ctx.typeMap,
+    ctx.mutMap,
+    ctx.uninitializedSet,
+    ctx.unmutUninitializedSet,
+    ctx.visMap,
   );
   return handleSpecialMethodCall(
     receiverStr,
@@ -159,7 +156,7 @@ function evaluateReceiverAndHandleCall(
     rest,
     ctx,
     interpreter,
-    scope,
+    ctx.scope,
   );
 }
 
@@ -170,14 +167,7 @@ export function handleMethodCall(p: BaseHandlerParams): number | undefined {
   if (p.typeMap.has("__object__" + parsed.receiverStr)) return undefined;
   const { receiverStr, methodName, argsStr, rest } = parsed;
   const isModuleRef = p.typeMap.has("__module__" + receiverStr);
-  const ctx: InterpreterContext = {
-    scope: p.scope,
-    typeMap: p.typeMap,
-    mutMap: p.mutMap,
-    uninitializedSet: p.uninitializedSet,
-    unmutUninitializedSet: p.unmutUninitializedSet,
-    visMap: p.visMap,
-  };
+  const ctx: InterpreterContext = toInterpreterContext(p);
   if (isModuleRef) {
     return handleModuleMethod(methodName, argsStr, rest, ctx, p.interpreter);
   }
@@ -188,10 +178,5 @@ export function handleMethodCall(p: BaseHandlerParams): number | undefined {
     rest,
     ctx,
     p.interpreter,
-    p.scope,
-    p.typeMap,
-    p.mutMap,
-    p.uninitializedSet,
-    p.unmutUninitializedSet,
   );
 }

@@ -73,16 +73,15 @@ function parseFunctionMember(
   const bodyStart = j;
   while (j < body.length && body[j] !== ";") j++;
   const fnBody = body.slice(bodyStart, j).trim();
-  if (j < body.length && body[j] === ";") j++;
-
+  const endIdx = j < body.length && body[j] === ";" ? j + 1 : j;
   if (!isPublic) {
-    return { js: "", memberName: fnName, isPublic: false, endIdx: j };
+    return { js: "", memberName: fnName, isPublic: false, endIdx };
   }
   return {
     js: `${fnName}: (${params}) => ${fnBody}`,
     memberName: fnName,
     isPublic: true,
-    endIdx: j,
+    endIdx,
   };
 }
 

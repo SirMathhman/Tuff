@@ -83,7 +83,8 @@ export function findArrayIndexOperator(
 export function findFieldAccessOperator(
   s: string,
 ): { index: number } | undefined {
-  for (let i = s.length - 1; i >= 1; i--) {
+  let i = s.length - 1;
+  while (i >= 1) {
     if (s[i] === ".") {
       const prev = s[i - 1];
       const next = s[i + 1];
@@ -125,6 +126,7 @@ export function findFieldAccessOperator(
         }
       }
     }
+    i--;
   }
   return undefined;
 }

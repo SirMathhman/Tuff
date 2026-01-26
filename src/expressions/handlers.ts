@@ -1,4 +1,9 @@
-import type { Interpreter, InterpreterContext } from "../types/interpreter";
+import {
+  callInterpreter,
+  type Interpreter,
+  type InterpreterContext,
+  type ScopeContext,
+} from "../types/interpreter";
 
 import { trackDepths } from "../utils/scope-helpers";
 export { handleVarAssignment } from "../handlers/variables/assignment";
@@ -27,48 +32,23 @@ function findElseClauseIndex(s: string, startIdx: number): number {
   return elseIdx;
 }
 
-export function handleIfExpression(p: {
-  s: string;
-  scope: Map<string, number>;
-  typeMap: Map<string, number>;
-  mutMap: Map<string, boolean>;
-  uninitializedSet: Set<string>;
-  unmutUninitializedSet: Set<string>;
-  interpreter: Interpreter;
-}): number | undefined {
+export function handleIfExpression(
+  p: {
+    s: string;
+  } & ScopeContext,
+): number | undefined {
   if (p.s.indexOf("if ") !== 0) return undefined;
   const cIdx = p.s.indexOf(")");
   if (cIdx <= 0) return undefined;
-  const cond = p.interpreter(
-    p.s.slice(4, cIdx),
-    p.scope,
-    p.typeMap,
-    p.mutMap,
-    p.uninitializedSet,
-    p.unmutUninitializedSet,
-  );
+  const cond = callInterpreter(p, p.s.slice(4, cIdx));
   const elseIdx = findElseClauseIndex(p.s, cIdx + 1);
   const thenStr = p.s
       .slice(cIdx + 1, elseIdx > 0 ? elseIdx : p.s.length)
       .trim(),
     elseStr = elseIdx > 0 ? p.s.slice(elseIdx + 6).trim() : "";
   return cond !== 0
-    ? p.interpreter(
-        thenStr,
-        p.scope,
-        p.typeMap,
-        p.mutMap,
-        p.uninitializedSet,
-        p.unmutUninitializedSet,
-      )
+    ? callInterpreter(p, thenStr)
     : elseStr
-      ? p.interpreter(
-          elseStr,
-          p.scope,
-          p.typeMap,
-          p.mutMap,
-          p.uninitializedSet,
-          p.unmutUninitializedSet,
-        )
+      ? callInterpreter(p, elseStr)
       : 0;
 }

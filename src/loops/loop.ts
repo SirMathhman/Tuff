@@ -33,22 +33,17 @@ function findLoopBodyBracesEnd(afterLoop: string): number {
 
 function executeInfiniteLoop(
   loopBody: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpreter: HandlerParams["interpreter"],
+  core: ReturnType<typeof getLoopCore>,
 ): void {
   for (;;) {
     try {
-      interpreter(
+      core.interpreter(
         loopBody,
-        scope,
-        typeMap,
-        mutMap,
-        uninitializedSet,
-        unmutUninitializedSet,
+        core.scope,
+        core.typeMap,
+        core.mutMap,
+        core.uninitializedSet,
+        core.unmutUninitializedSet,
       );
     } catch (e) {
       if (isBreakException(e)) {
@@ -69,15 +64,7 @@ export function handleLoop(params: HandlerParams): number | undefined {
   if (braceCloseIdx === -1) return undefined;
   const loopBody = afterLoop.slice(1, braceCloseIdx).trim();
   try {
-    executeInfiniteLoop(
-      loopBody,
-      core.scope,
-      core.typeMap,
-      core.mutMap,
-      core.uninitializedSet,
-      core.unmutUninitializedSet,
-      core.interpreter,
-    );
+    executeInfiniteLoop(loopBody, core);
   } catch (e) {
     if (isBreakException(e)) {
       const loopExprEnd = trimmed.indexOf("{") + 1 + braceCloseIdx + 1;

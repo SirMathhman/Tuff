@@ -1,19 +1,13 @@
 import type { Interpreter } from "../expressions/handlers";
-import { makeDeclarationHandler } from "../declarations";
+import { makeDeclarationHandler, type StoreDecl } from "../declarations";
 import { isValidIdentifier } from "../utils/identifier-utils";
+import type { NamespacedSetter, NamespacedStoreEntry } from "./namespaced";
+import { findMatchingCloseBrace } from "../utils/helpers/brace-utils";
 
 function findBraceClose(rest: string): number {
   const braceIndex = rest.indexOf("{");
   if (braceIndex === -1) return -1;
-  let braceDepth = 0;
-  for (let i = braceIndex; i < rest.length; i++) {
-    if (rest[i] === "{") braceDepth++;
-    else if (rest[i] === "}") {
-      braceDepth--;
-      if (braceDepth === 0) return i;
-    }
-  }
-  return -1;
+  return findMatchingCloseBrace(rest, braceIndex);
 }
 
 function createAndPopulateEntityScope(
@@ -45,49 +39,32 @@ export function createNamespacedDeclarationHandler(
   keyword: string,
   namespacer: (name: string) => string,
   storage: {
-    get: (name: string) =>
-      | {
-          scope: Map<string, number>;
-          typeMap: Map<string, number>;
-          mutMap: Map<string, boolean>;
-          visMap: Map<string, boolean>;
-        }
-      | undefined;
-    set: (
-      name: string,
-      scope: Map<string, number>,
-      typeMap: Map<string, number>,
-      mutMap: Map<string, boolean>,
-      visMap: Map<string, boolean>,
-    ) => void;
+    get: (name: string) => NamespacedStoreEntry | undefined;
+    set: NamespacedSetter;
   },
   interpreter: Interpreter,
 ) {
+  const storeNamespacedDeclaration: StoreDecl = (rest, closeIndex, typeMap) => {
+    const braceIndex = rest.indexOf("{");
+    if (braceIndex === -1) return;
+    const entityName = rest.slice(0, braceIndex).trim();
+    if (!isValidIdentifier(entityName)) return;
+    const entityBody = rest.slice(braceIndex + 1, closeIndex).trim();
+    const { entityScope, entityTypeMap, entityMutMap, entityVisMap } =
+      createAndPopulateEntityScope(entityBody, interpreter);
+    storage.set(
+      entityName,
+      entityScope,
+      entityTypeMap,
+      entityMutMap,
+      entityVisMap,
+    );
+    typeMap.set(namespacer(entityName), 1);
+  };
+
   return makeDeclarationHandler(
     keyword,
     findBraceClose,
-    (
-      rest: string,
-      closeIndex: number,
-      typeMap: Map<string, number>,
-      _visMap: Map<string, boolean>,
-      _isPublic: boolean,
-    ) => {
-      const braceIndex = rest.indexOf("{");
-      if (braceIndex === -1) return;
-      const entityName = rest.slice(0, braceIndex).trim();
-      if (!isValidIdentifier(entityName)) return;
-      const entityBody = rest.slice(braceIndex + 1, closeIndex).trim();
-      const { entityScope, entityTypeMap, entityMutMap, entityVisMap } =
-        createAndPopulateEntityScope(entityBody, interpreter);
-      storage.set(
-        entityName,
-        entityScope,
-        entityTypeMap,
-        entityMutMap,
-        entityVisMap,
-      );
-      typeMap.set(namespacer(entityName), 1);
-    },
+    storeNamespacedDeclaration,
   );
 }

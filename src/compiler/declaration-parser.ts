@@ -4,6 +4,7 @@ import {
   isIdentifierChar,
   isDigit,
   charAt,
+  readIdentifier,
 } from "./parsing/string-helpers";
 import { skipStructDeclaration } from "./parsing/struct-helpers";
 import {
@@ -163,9 +164,9 @@ function handleModuleOrObjectDeclaration(
   j = skipWhitespaceOnly(source, j);
 
   // Get name
-  const nameStart = j;
-  while (j < source.length && isIdentifierChar(source[j])) j++;
-  const name = source.slice(nameStart, j);
+  const parsedName = readIdentifier(source, j);
+  const name = parsedName.name;
+  j = parsedName.endIdx;
   j = skipWhitespaceOnly(source, j);
 
   // Skip to end of body

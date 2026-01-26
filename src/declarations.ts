@@ -21,17 +21,19 @@ export function handleDeclarationEnd(
   return 0;
 }
 
+export type StoreDecl = (
+  rest: string,
+  closeIndex: number,
+  typeMap: Map<string, number>,
+  visMap: Map<string, boolean>,
+  isPublic: boolean,
+  scope?: Map<string, number>,
+) => void;
+
 export function makeDeclarationHandler(
   keyword: string,
   getClosingIndex: (rest: string) => number,
-  storeDecl: (
-    rest: string,
-    closeIndex: number,
-    typeMap: Map<string, number>,
-    visMap: Map<string, boolean>,
-    isPublic: boolean,
-    scope?: Map<string, number>,
-  ) => void,
+  storeDecl: StoreDecl,
 ) {
   return function handleDeclaration(
     input: string,

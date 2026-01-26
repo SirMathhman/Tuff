@@ -160,40 +160,30 @@ function parseMatchCases(casesContent: string): string {
 /**
  * Transform match expression to IIFE with if-else chain
  */
-export function transformMatch(
+export const transformMatch = (
   source: string,
   startIdx: number,
-): TransformResult | undefined {
+): TransformResult | undefined => {
   let i = skipWhitespace(source, startIdx + 5);
   if (i >= source.length || source[i] !== "(") return undefined;
 
-  i++;
-  let depth = 1;
-  const valueStart = i;
-  while (i < source.length && depth > 0) {
-    if (source[i] === "(") depth++;
-    else if (source[i] === ")") depth--;
-    i++;
-  }
-  const matchValue = source.slice(valueStart, i - 1).trim();
-  i = skipWhitespace(source, i);
-
+  const { condition: matchValue, endIdx: matchValueEndIdx } = parseCondition(
+    source,
+    i,
+  );
+  i = skipWhitespace(source, matchValueEndIdx);
   if (i >= source.length || source[i] !== "{") return undefined;
 
-  i++;
-  depth = 1;
-  const casesStart = i;
-  while (i < source.length && depth > 0) {
-    if (source[i] === "{") depth++;
-    else if (source[i] === "}") depth--;
-    i++;
-  }
-  const casesContent = source.slice(casesStart, i - 1).trim();
+  const { content: casesContent, endIdx: casesEndIdx } = parseBracedBlock(
+    source,
+    i,
+  );
+  i = casesEndIdx;
   const casesCode = parseMatchCases(casesContent);
 
   const result = `(function() { let __match_expr = ${matchValue}; ${casesCode} return 0; })();`;
   return { result, endIdx: i };
-}
+};
 
 /**
  * Transform loop { ... } to IIFE with while and exception handling
@@ -205,15 +195,9 @@ export function transformLoop(
   let i = skipWhitespace(source, startIdx + 4);
   if (i >= source.length || source[i] !== "{") return undefined;
 
-  i++;
-  let depth = 1;
-  const bodyStart = i;
-  while (i < source.length && depth > 0) {
-    if (source[i] === "{") depth++;
-    else if (source[i] === "}") depth--;
-    i++;
-  }
-  let bodyContent = source.slice(bodyStart, i - 1).trim();
+  const { content, endIdx } = parseBracedBlock(source, i);
+  i = endIdx;
+  let bodyContent = content;
   bodyContent = transformBreakInLoop(bodyContent);
 
   const result = `(function() { let __break_value = 0; let __break_flag = false; while(!__break_flag) { try { ${bodyContent} } catch(__e__) { if (__e__ === "__break__") __break_flag = true; else throw __e__; } } return __break_value; })()`;

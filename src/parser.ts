@@ -37,33 +37,12 @@ function parseStringLiteral(s: string): number | undefined {
     if (content[i] === "\\") {
       if (i + 1 < content.length) {
         const escape = content[i + 1];
-        switch (escape) {
-          case "n":
-            result += "\n";
-            i += 2;
-            break;
-          case "t":
-            result += "\t";
-            i += 2;
-            break;
-          case "r":
-            result += "\r";
-            i += 2;
-            break;
-          case "\\":
-            result += "\\";
-            i += 2;
-            break;
-          case '"':
-            result += '"';
-            i += 2;
-            break;
-          case "'":
-            result += "'";
-            i += 2;
-            break;
-          default:
-            throw new Error(`unknown escape sequence: \\${escape}`);
+        if (escape) {
+          result += String.fromCharCode(getEscapeCode(escape));
+          i += 2;
+        } else {
+          result += content[i];
+          i++;
         }
       } else {
         result += content[i];
@@ -77,27 +56,43 @@ function parseStringLiteral(s: string): number | undefined {
   return createString(result);
 }
 
-export function scanNumericPrefix(s: string): number {
-  const len = s.length;
-  let i = 0;
-  if (s[i] === "+" || s[i] === "-") i++;
+function scanDigits(
+  s: string,
+  startIdx: number,
+): { endIdx: number; has: boolean } {
+  let i = startIdx;
   let hasDigits = false;
-  while (i < len) {
+  while (i < s.length) {
     const ch = s[i];
     if (ch && ch >= "0" && ch <= "9") {
       hasDigits = true;
       i++;
-    } else break;
+    } else {
+      break;
+    }
   }
+  return { endIdx: i, has: hasDigits };
+}
+
+function ensureFiniteNumber(n: number, source: string): number {
+  if (!Number.isFinite(n)) {
+    throw new Error(`invalid expression: ${source}`);
+  }
+  return n;
+}
+
+export function scanNumericPrefix(s: string): number {
+  const len = s.length;
+  let i = 0;
+  if (s[i] === "+" || s[i] === "-") i++;
+  const firstRun = scanDigits(s, i);
+  i = firstRun.endIdx;
+  let hasDigits = firstRun.has;
   if (i < len && s[i] === ".") {
     i++;
-    while (i < len) {
-      const ch = s[i];
-      if (ch && ch >= "0" && ch <= "9") {
-        hasDigits = true;
-        i++;
-      } else break;
-    }
+    const secondRun = scanDigits(s, i);
+    i = secondRun.endIdx;
+    hasDigits = hasDigits || secondRun.has;
   }
   return hasDigits ? i : 0;
 }
@@ -131,15 +126,12 @@ export function parseTypedNumber(s: string): number {
   if (Number.isFinite(b)) return b;
   const prefixEnd = scanNumericPrefix(s);
   if (prefixEnd === 0) {
-    const n = Number(s);
-    if (!Number.isFinite(n)) throw new Error(`invalid expression: ${s}`);
-    return n;
+    return ensureFiniteNumber(Number(s), s);
   }
   const n = Number(s.slice(0, prefixEnd)),
     suffix = s.slice(prefixEnd).trim(),
     typeSize = extractUnsignedSize(suffix);
   if (typeSize > 0 && n < 0) throw new Error("bad value");
   if (typeSize > 0) validateUnsignedValue(n, typeSize);
-  if (!Number.isFinite(n)) throw new Error(`invalid expression: ${s}`);
-  return n;
+  return ensureFiniteNumber(n, s);
 }

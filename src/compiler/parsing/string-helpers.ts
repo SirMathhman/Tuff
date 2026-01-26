@@ -48,3 +48,12 @@ export function charAt(source: string, index: number): string {
   }
   return "";
 }
+
+export function readIdentifier(
+  source: string,
+  startIdx: number,
+): { name: string; endIdx: number } {
+  let i = startIdx;
+  while (i < source.length && isIdentifierChar(source[i])) i++;
+  return { name: source.slice(startIdx, i), endIdx: i };
+}

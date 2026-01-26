@@ -23,18 +23,15 @@ import {
   handleDereferenceOperation,
 } from "../../handlers/access/pointer-operations";
 import { handleModuleAccess } from "../../handlers/access/module-access";
+import {
+  toInterpreterContext,
+  type BaseHandlerParams,
+} from "../function/function-call-params";
+import type { HandlerParams } from "../../loops/types";
 
 type Params = FunctionCallParams;
-type LoopCtx = {
-  s: string;
-  scope: Map<string, number>;
-  typeMap: Map<string, number>;
-  mutMap: Map<string, boolean>;
-  interpreter: Interpreter;
-  uninitializedSet: Set<string>;
-  unmutUninitializedSet: Set<string>;
-};
-function buildLoopCtx(p: Params): LoopCtx {
+
+function toLoopHandlerParams(p: Params): HandlerParams {
   return {
     s: p.s,
     scope: p.scope,
@@ -47,7 +44,7 @@ function buildLoopCtx(p: Params): LoopCtx {
 }
 
 function toBaseHandlerParams(p: Params) {
-  return {
+  const base: BaseHandlerParams = {
     s: p.s,
     scope: p.scope,
     typeMap: p.typeMap,
@@ -57,41 +54,32 @@ function toBaseHandlerParams(p: Params) {
     interpreter: p.interpreter,
     visMap: p.visMap,
   };
+  return base;
 }
 
 export function buildInterpreterParams(
-  s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpreter: Interpreter,
-  visMap: Map<string, boolean> = new Map(),
+  p: {
+    s: string;
+    interpreter: Interpreter;
+  } & Omit<InterpreterContext, "visMap"> & { visMap?: Map<string, boolean> },
 ): Params {
+  const visMap = p.visMap ?? new Map();
   return {
-    s,
-    typeMap,
-    scope,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
-    interpreter,
+    s: p.s,
+    typeMap: p.typeMap,
+    scope: p.scope,
+    mutMap: p.mutMap,
+    uninitializedSet: p.uninitializedSet,
+    unmutUninitializedSet: p.unmutUninitializedSet,
+    interpreter: p.interpreter,
     visMap,
-    moduleHandler: getModuleDeclarationHandler(interpreter),
-    objectHandler: getObjectDeclarationHandler(interpreter),
+    moduleHandler: getModuleDeclarationHandler(p.interpreter),
+    objectHandler: getObjectDeclarationHandler(p.interpreter),
   };
 }
 
 export function tryDeclarations(p: Params): number | undefined {
-  const ctx: InterpreterContext = {
-    scope: p.scope,
-    typeMap: p.typeMap,
-    mutMap: p.mutMap,
-    uninitializedSet: p.uninitializedSet,
-    unmutUninitializedSet: p.unmutUninitializedSet,
-    visMap: p.visMap,
-  };
+  const ctx: InterpreterContext = toInterpreterContext(toBaseHandlerParams(p));
 
   if (p.moduleHandler) {
     const m = p.moduleHandler(p.s, ctx, p.interpreter);
@@ -144,7 +132,7 @@ export function tryControlFlow(p: Params): number | undefined {
     p.interpreter(i, sc, tm, mm, p.uninitializedSet, p.unmutUninitializedSet),
   );
   if (result !== undefined) return result;
-  const ctx = buildLoopCtx(p);
+  const ctx = toLoopHandlerParams(p);
   result = handleLoop(ctx);
   if (result !== undefined) return result;
   result = handleWhile(ctx);

@@ -1,44 +1,48 @@
-import type { Interpreter } from "../../expressions/handlers";
 import { parseArguments } from "../function/parse-arguments";
+import type { BaseHandlerParams } from "../function/function-call-params";
 
 export function handleNativeFunctionCall(
-  actualFnName: string,
-  argsStr: string,
-  rest: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  uninitializedSet: Set<string>,
-  unmutUninitializedSet: Set<string>,
-  interpreter: Interpreter,
+  p: {
+    actualFnName: string;
+    argsStr: string;
+    rest: string;
+  } & Pick<
+    BaseHandlerParams,
+    | "scope"
+    | "typeMap"
+    | "mutMap"
+    | "uninitializedSet"
+    | "unmutUninitializedSet"
+    | "interpreter"
+  >,
 ): number {
   const nativeFunc =
     typeof globalThis !== "undefined"
-      ? (globalThis as Record<string, unknown>)[`__native__${actualFnName}`]
+      ? (globalThis as Record<string, unknown>)[`__native__${p.actualFnName}`]
       : undefined;
 
-  const argParts = parseArguments(argsStr);
+  const argParts = parseArguments(p.argsStr);
   const args: number[] = argParts.map((argStr) =>
-    interpreter(
+    p.interpreter(
       argStr,
-      scope,
-      typeMap,
-      mutMap,
-      uninitializedSet,
-      unmutUninitializedSet,
+      p.scope,
+      p.typeMap,
+      p.mutMap,
+      p.uninitializedSet,
+      p.unmutUninitializedSet,
     ),
   );
   const result = (nativeFunc as (...args: number[]) => number)(...args);
   if (typeof result !== "number") {
-    throw new Error(`native function ${actualFnName} must return a number`);
+    throw new Error(`native function ${p.actualFnName} must return a number`);
   }
-  if (rest === "") return result;
-  return interpreter(
-    result.toString() + rest,
-    scope,
-    typeMap,
-    mutMap,
-    uninitializedSet,
-    unmutUninitializedSet,
+  if (p.rest === "") return result;
+  return p.interpreter(
+    result.toString() + p.rest,
+    p.scope,
+    p.typeMap,
+    p.mutMap,
+    p.uninitializedSet,
+    p.unmutUninitializedSet,
   );
 }

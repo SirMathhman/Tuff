@@ -77,8 +77,12 @@ function checkWriteAccess(
       );
     }
   } else if (!isKeyword(name) && !SPECIAL_IDENTIFIERS.has(name)) {
-    throw new Error(`Variable '${name}' is not defined`);
+    throwVariableNotDefined(name);
   }
+}
+
+function throwVariableNotDefined(name: string): never {
+  throw new Error(`Variable '${name}' is not defined`);
 }
 
 function checkReadAccess(
@@ -91,7 +95,7 @@ function checkReadAccess(
     !SPECIAL_IDENTIFIERS.has(name) &&
     !isDeclaredType(name)
   ) {
-    throw new Error(`Variable '${name}' is not defined`);
+    throwVariableNotDefined(name);
   }
 }
 

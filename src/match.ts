@@ -55,21 +55,21 @@ function parseMatchValue(
   return { matchValue, restStartIdx: parenCloseIdx + 1 };
 }
 
-function processCaseMatch(
-  matchValue: number,
-  caseStr: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  interpreter: Interpreter,
-): number | undefined {
-  if (!caseStr || !caseStr.startsWith("case ")) return undefined;
-  const arrowIdx = caseStr.indexOf("=>");
+function processCaseMatch(p: {
+  matchValue: number;
+  caseStr: string;
+  scope: Map<string, number>;
+  typeMap: Map<string, number>;
+  mutMap: Map<string, boolean>;
+  interpreter: Interpreter;
+}): number | undefined {
+  if (!p.caseStr || !p.caseStr.startsWith("case ")) return undefined;
+  const arrowIdx = p.caseStr.indexOf("=>");
   if (arrowIdx === -1) return undefined;
-  const pattern = caseStr.slice(5, arrowIdx).trim(),
-    result = caseStr.slice(arrowIdx + 2).trim();
-  if (pattern === "_" || Number(pattern) === matchValue) {
-    return interpreter(result, scope, typeMap, mutMap);
+  const pattern = p.caseStr.slice(5, arrowIdx).trim(),
+    result = p.caseStr.slice(arrowIdx + 2).trim();
+  if (pattern === "_" || Number(pattern) === p.matchValue) {
+    return p.interpreter(result, p.scope, p.typeMap, p.mutMap);
   }
   return undefined;
 }
@@ -94,14 +94,14 @@ export function handleMatch(
   const caseBody = restStr.slice(1, braceCloseIdx).trim();
   const cases = caseBody.split(";").map((c) => c.trim());
   for (const caseStr of cases) {
-    const caseResult = processCaseMatch(
+    const caseResult = processCaseMatch({
       matchValue,
       caseStr,
       scope,
       typeMap,
       mutMap,
       interpreter,
-    );
+    });
     if (caseResult !== undefined) {
       const matchExprEnd = trimmed.indexOf("{") + 1 + braceCloseIdx + 1;
       const afterMatchExpr = trimmed.slice(matchExprEnd).trim();

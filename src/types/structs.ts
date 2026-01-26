@@ -1,5 +1,5 @@
 import type { Interpreter } from "../expressions/handlers";
-import { makeDeclarationHandler } from "../declarations";
+import { makeDeclarationHandler, type StoreDecl } from "../declarations";
 import { parseGenericParams } from "../utils/generic-params";
 
 // Global struct instance storage: maps instance ID to {fieldValues, typeParams}
@@ -15,40 +15,30 @@ export interface StructDefinition {
   generics?: string[];
 }
 
+const storeStructDeclaration: StoreDecl = (rest, closeIndex, typeMap) => {
+  const braceIndex = rest.indexOf("{");
+  const headerStr = rest.slice(0, braceIndex).trim();
+  const { name: structName, params: genericParams } =
+    parseGenericParams(headerStr);
+  const fieldsStr = rest.slice(braceIndex + 1, closeIndex).trim();
+
+  // Store struct definition
+  typeMap.set("__struct__" + structName, fieldsStr.length as unknown as number);
+  // Store field names as a comma-separated string
+  typeMap.set("__struct_fields__" + structName, fieldsStr as unknown as number);
+  // Store generic parameters if any
+  if (genericParams.length > 0) {
+    typeMap.set(
+      "__struct_generics__" + structName,
+      genericParams.join(",") as unknown as number,
+    );
+  }
+};
+
 export const handleStructDeclaration = makeDeclarationHandler(
   "struct",
   (rest: string) => rest.indexOf("}"),
-  (
-    rest: string,
-    closeIndex: number,
-    typeMap: Map<string, number>,
-    _visMap: Map<string, boolean>,
-    _isPublic: boolean,
-  ) => {
-    const braceIndex = rest.indexOf("{");
-    const headerStr = rest.slice(0, braceIndex).trim();
-    const { name: structName, params: genericParams } =
-      parseGenericParams(headerStr);
-    const fieldsStr = rest.slice(braceIndex + 1, closeIndex).trim();
-
-    // Store struct definition
-    typeMap.set(
-      "__struct__" + structName,
-      fieldsStr.length as unknown as number,
-    );
-    // Store field names as a comma-separated string
-    typeMap.set(
-      "__struct_fields__" + structName,
-      fieldsStr as unknown as number,
-    );
-    // Store generic parameters if any
-    if (genericParams.length > 0) {
-      typeMap.set(
-        "__struct_generics__" + structName,
-        genericParams.join(",") as unknown as number,
-      );
-    }
-  },
+  storeStructDeclaration,
 );
 
 function findStructClosingBrace(trimmed: string, braceIndex: number): number {

@@ -3,6 +3,7 @@ import {
   isWhitespace,
   matchWord,
 } from "../../parsing/string-helpers";
+import { parseBracedBlock } from "../../parsing/parse-helpers";
 import { skipStructDeclaration } from "../../parsing/struct-helpers";
 
 /**
@@ -131,36 +132,75 @@ export function isProbablyControlFlowBrace(
  * Handle opening braces with brace depth tracking
  * For expression braces (not control flow), convert { to (
  */
-export function handleOpeningBrace(
+type BraceHandleResult = {
+  result: string;
+  braceDepth: number;
+  handled: boolean;
+};
+
+function handleBraceInternal(p: {
+  source: string;
+  pos: number;
+  parenDepth: number;
+  braceDepth: number;
+  result: string;
+  kind: "open" | "close";
+}): BraceHandleResult | undefined {
+  const ch = p.source[p.pos];
+  if (p.kind === "open") {
+    if (ch !== "{") return undefined;
+
+    const isControlFlow = isProbablyControlFlowBrace(p.source, p.pos, p.result);
+    if (isControlFlow) {
+      return {
+        result: p.result + ch,
+        braceDepth: p.braceDepth + 1,
+        handled: true,
+      };
+    }
+
+    if (p.parenDepth > 0) {
+      return {
+        result: p.result + "(",
+        braceDepth: p.braceDepth,
+        handled: true,
+      };
+    }
+
+    return { result: p.result, braceDepth: p.braceDepth, handled: true };
+  }
+
+  if (ch !== "}") return undefined;
+  if (p.braceDepth > 0) {
+    return {
+      result: p.result + ch,
+      braceDepth: p.braceDepth - 1,
+      handled: true,
+    };
+  }
+
+  if (p.parenDepth > 0) {
+    return { result: p.result + ")", braceDepth: p.braceDepth, handled: true };
+  }
+
+  return { result: p.result, braceDepth: p.braceDepth, handled: true };
+}
+
+export const handleOpeningBrace = (
   source: string,
   pos: number,
   parenDepth: number,
   braceDepth: number,
   result: string,
-): { result: string; braceDepth: number; handled: boolean } | undefined {
-  if (source[pos] !== "{") return undefined;
-
-  const isControlFlow = isProbablyControlFlowBrace(source, pos, result);
-
-  // For control flow braces, keep them
-  if (isControlFlow) {
-    return {
-      result: result + source[pos],
-      braceDepth: braceDepth + 1,
-      handled: true,
-    };
-  }
-
-  // For expression braces, convert to parentheses (skip the brace, we'll add paren)
-  // If at top level, just skip. If inside parens, convert to (
-  if (parenDepth > 0) {
-    // Inside an expression like (2 + { ... }), convert { to (
-    return { result: result + "(", braceDepth, handled: true };
-  }
-
-  // Top level expression brace, just skip
-  return { result, braceDepth, handled: true };
-}
+): BraceHandleResult | undefined =>
+  handleBraceInternal({
+    source,
+    pos,
+    parenDepth,
+    braceDepth,
+    result,
+    kind: "open",
+  });
 
 /**
  * Handle closing braces with brace depth tracking
@@ -171,26 +211,15 @@ export function handleClosingBrace(
   parenDepth: number,
   braceDepth: number,
   result: string,
-): { result: string; braceDepth: number; handled: boolean } | undefined {
-  if (source[pos] !== "}") return undefined;
-
-  // If we're inside braces (braceDepth > 0), always keep the closing brace
-  if (braceDepth > 0) {
-    return {
-      result: result + source[pos],
-      braceDepth: braceDepth - 1,
-      handled: true,
-    };
-  }
-
-  // At brace depth 0 - this is an expression brace
-  // If inside parens, convert } to )
-  if (parenDepth > 0) {
-    return { result: result + ")", braceDepth, handled: true };
-  }
-
-  // Top level expression brace, just skip
-  return { result, braceDepth, handled: true };
+): BraceHandleResult | undefined {
+  return handleBraceInternal({
+    source,
+    pos,
+    parenDepth,
+    braceDepth,
+    result,
+    kind: "close",
+  });
 }
 
 /**
@@ -206,17 +235,10 @@ export function handleLetDeclaration(
 
   // Check for destructuring pattern: let { x, y } = ...
   if (source[i] === "{") {
-    // Find matching close brace
-    let braceDepth = 1;
-    let j = i + 1;
-    while (j < source.length && braceDepth > 0) {
-      if (source[j] === "{") braceDepth++;
-      else if (source[j] === "}") braceDepth--;
-      j++;
-    }
+    const { endIdx } = parseBracedBlock(source, i);
     // Keep the destructuring pattern as-is
-    result += source.slice(i, j);
-    i = j;
+    result += source.slice(i, endIdx);
+    i = endIdx;
   } else {
     // Regular variable declaration
     const varStart = i;
