@@ -3,15 +3,8 @@ import {
   isIdentifierChar,
   isDigit,
   charAt,
+  skipWhitespace,
 } from "../parsing/string-helpers";
-
-/**
- * Skip whitespace in source starting at index
- */
-function skipWhitespace(source: string, index: number): number {
-  while (index < source.length && isWhitespace(source[index])) index++;
-  return index;
-}
 
 /**
  * JS keywords to skip when extracting var declarations

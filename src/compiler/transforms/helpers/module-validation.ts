@@ -3,6 +3,7 @@ import {
   isWhitespace,
   matchWord,
   readIdentifier,
+  skipWhitespace,
 } from "../../parsing/string-helpers";
 import { parseBracedBlock } from "../../parsing/parse-helpers";
 import { scanModuleBody } from "./module-member-parser";
@@ -37,11 +38,6 @@ function collectMembers(body: string): {
     }
   });
   return { publicMembers, privateMembers };
-}
-
-function skipWhitespace(source: string, index: number): number {
-  while (index < source.length && isWhitespace(source[index])) index++;
-  return index;
 }
 
 export function findModuleRegions(source: string): ModuleRegion[] {

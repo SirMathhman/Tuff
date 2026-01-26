@@ -1,5 +1,5 @@
 import { isBreakException } from "./loop";
-import { findClosingParenthesis, parseLoopBody } from "./helpers";
+import { findClosingParenthesis, parseLoopBody, skipSpaces } from "./helpers";
 import { getLoopCore, type HandlerParams, type LoopCore } from "./types";
 
 interface RangeInfo {
@@ -101,14 +101,14 @@ function parseForLoopComponents(trimmed: string):
   | undefined {
   if (!trimmed.startsWith("for")) return undefined;
   let idx = 3;
-  while (idx < trimmed.length && trimmed[idx] === " ") idx++;
+  idx = skipSpaces(trimmed, idx);
   if (idx >= trimmed.length || trimmed[idx] !== "(") return undefined;
   idx++;
   const inIdx = findInKeywordPosition(trimmed, idx);
   if (inIdx === -1) return undefined;
   const varDeclStr = trimmed.slice(idx, inIdx).trim();
   idx = inIdx + 2;
-  while (idx < trimmed.length && trimmed[idx] === " ") idx++;
+  idx = skipSpaces(trimmed, idx);
   const rangeEnd = findClosingParenthesis(trimmed, idx - 1);
   if (rangeEnd === -1) return undefined;
   const rangeStr = trimmed.slice(idx, rangeEnd);

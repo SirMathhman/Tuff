@@ -128,6 +128,18 @@ function processVariableIndexing(
   bracketPos: number,
   arrayVars: Set<string>,
 ): { output: string; nextPos: number; skipped: boolean } {
+  function unclosedBracketResult(skipped: boolean): {
+    output: string;
+    nextPos: number;
+    skipped: boolean;
+  } {
+    return {
+      output: source[bracketPos]!,
+      nextPos: bracketPos + 1,
+      skipped,
+    };
+  }
+
   // Find the variable name before the bracket
   let varEnd = bracketPos - 1;
   while (varEnd >= 0 && isWhitespace(source[varEnd])) varEnd--;
@@ -138,13 +150,7 @@ function processVariableIndexing(
   // If it's an array variable, don't convert to charCodeAt
   if (arrayVars.has(varName)) {
     const bracketEnd = findIndexBracketEnd(source, bracketPos);
-    if (bracketEnd >= source.length) {
-      return {
-        output: source[bracketPos]!,
-        nextPos: bracketPos + 1,
-        skipped: true,
-      };
-    }
+    if (bracketEnd >= source.length) return unclosedBracketResult(true);
     return {
       output: source.slice(bracketPos, bracketEnd + 1),
       nextPos: bracketEnd + 1,
@@ -153,13 +159,7 @@ function processVariableIndexing(
   }
 
   const bracketEnd = findIndexBracketEnd(source, bracketPos);
-  if (bracketEnd >= source.length) {
-    return {
-      output: source[bracketPos]!,
-      nextPos: bracketPos + 1,
-      skipped: false,
-    };
-  }
+  if (bracketEnd >= source.length) return unclosedBracketResult(false);
 
   const indexExpr = source.slice(bracketPos + 1, bracketEnd).trim();
   return {

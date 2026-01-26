@@ -74,13 +74,20 @@ export function assertExecuteInvalidRuntime(source: string): void {
 type AssertValid = (source: string, expected: number) => void;
 type AssertInvalid = (source: string) => void;
 
+function itInterpreted(
+  name: string,
+  fn: (assertValid: AssertValid, assertInvalid: AssertInvalid) => void,
+): void {
+  it("Interpreted: " + name, () =>
+    fn(assertInterpretValid, assertInterpretInvalid),
+  );
+}
+
 export function itBoth(
   name: string,
   fn: (assertValid: AssertValid, assertInvalid: AssertInvalid) => void,
 ) {
-  it("Interpreted: " + name, () =>
-    fn(assertInterpretValid, assertInterpretInvalid),
-  );
+  itInterpreted(name, fn);
   it("Compiled: " + name, () => fn(assertExecuteValid, assertCompileInvalid));
 }
 
@@ -92,7 +99,5 @@ export function itInterpreter(
   name: string,
   fn: (assertValid: AssertValid, assertInvalid: AssertInvalid) => void,
 ) {
-  it("Interpreted: " + name, () =>
-    fn(assertInterpretValid, assertInterpretInvalid),
-  );
+  itInterpreted(name, fn);
 }

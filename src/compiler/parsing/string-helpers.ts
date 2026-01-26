@@ -6,6 +6,15 @@ export function isWhitespace(ch: string | undefined): ch is string {
 }
 
 /**
+ * Skip whitespace in source starting at index
+ */
+export function skipWhitespace(source: string, index: number): number {
+  let i = index;
+  while (i < source.length && isWhitespace(source[i])) i++;
+  return i;
+}
+
+/**
  * Check if character is valid for identifiers
  */
 export function isIdentifierChar(ch: string | undefined): ch is string {

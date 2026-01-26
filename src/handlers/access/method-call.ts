@@ -54,34 +54,39 @@ function handleModuleMethod(
   return callMethodAndHandleRest(methodCallStr, ctx, interpreter, rest);
 }
 
-function handleFunctionContextMethod(
-  methodName: string,
-  receiverValue: number,
-  argsStr: string,
-  rest: string,
-  ctx: InterpreterContext,
-  interpreter: Interpreter,
-  scope: Map<string, number>,
-): number | undefined {
-  const instanceScope = new Map(scope);
-  const instanceFields = getStructFields(receiverValue);
+function handleFunctionContextMethod(p: {
+  methodName: string;
+  receiverValue: number;
+  argsStr: string;
+  rest: string;
+  ctx: InterpreterContext;
+  interpreter: Interpreter;
+  scope: Map<string, number>;
+}): number | undefined {
+  const instanceScope = new Map(p.scope);
+  const instanceFields = getStructFields(p.receiverValue);
   if (instanceFields) {
     for (const [fieldName, fieldValue] of instanceFields) {
       instanceScope.set(fieldName, fieldValue);
     }
   }
-  const methodCallStr = argsStr
-    ? `${methodName}(${argsStr})`
-    : `${methodName}()`;
+  const methodCallStr = p.argsStr
+    ? `${p.methodName}(${p.argsStr})`
+    : `${p.methodName}()`;
   const instanceCtx: InterpreterContext = {
     scope: instanceScope,
-    typeMap: ctx.typeMap,
-    mutMap: ctx.mutMap,
-    uninitializedSet: ctx.uninitializedSet,
-    unmutUninitializedSet: ctx.unmutUninitializedSet,
-    visMap: ctx.visMap,
+    typeMap: p.ctx.typeMap,
+    mutMap: p.ctx.mutMap,
+    uninitializedSet: p.ctx.uninitializedSet,
+    unmutUninitializedSet: p.ctx.unmutUninitializedSet,
+    visMap: p.ctx.visMap,
   };
-  return callMethodAndHandleRest(methodCallStr, instanceCtx, interpreter, rest);
+  return callMethodAndHandleRest(
+    methodCallStr,
+    instanceCtx,
+    p.interpreter,
+    p.rest,
+  );
 }
 
 function shouldHandleFunctionContextMethod(
@@ -107,7 +112,7 @@ function handleSpecialMethodCall(
   scope: Map<string, number>,
 ): number | undefined {
   if (shouldHandleFunctionContextMethod(receiverValue, methodName)) {
-    return handleFunctionContextMethod(
+    return handleFunctionContextMethod({
       methodName,
       receiverValue,
       argsStr,
@@ -115,7 +120,7 @@ function handleSpecialMethodCall(
       ctx,
       interpreter,
       scope,
-    );
+    });
   }
   const isThisKeywordLiteral = receiverStr.trim() === "this";
   const isGlobalThis = receiverValue === GLOBAL_THIS_VALUE;

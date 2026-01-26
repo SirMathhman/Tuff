@@ -1,11 +1,10 @@
-import { isIdentifierChar, isWhitespace } from "../parsing/string-helpers";
+import {
+  isIdentifierChar,
+  isWhitespace,
+  skipWhitespace,
+} from "../parsing/string-helpers";
 import { extractParamNamesFromRaw } from "../parsing/param-helpers";
 import { parseBracedBlock } from "../parsing/parse-helpers";
-
-function skipWhitespace(source: string, index: number): number {
-  while (index < source.length && isWhitespace(source[index])) index++;
-  return index;
-}
 
 function extractFunctionParams(rawParams: string): string {
   return extractParamNamesFromRaw(rawParams).join(", ");

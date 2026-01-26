@@ -1,14 +1,9 @@
 import {
   isIdentifierChar,
-  isWhitespace,
   matchWord,
+  skipWhitespace,
 } from "../../parsing/string-helpers";
 import { extractParamNamesFromRaw } from "../../parsing/param-helpers";
-
-function skipWS(source: string, index: number): number {
-  while (index < source.length && isWhitespace(source[index])) index++;
-  return index;
-}
 
 export interface ModuleMemberParseResult {
   js: string;
@@ -19,7 +14,7 @@ export interface ModuleMemberParseResult {
 }
 
 function skipOptionalTypeAnnotation(body: string, j: number): number {
-  j = skipWS(body, j);
+  j = skipWhitespace(body, j);
   if (j < body.length && body[j] === ":") {
     j++;
     while (j < body.length && body[j] !== "=" && body[j] !== ";") j++;
@@ -30,7 +25,7 @@ function skipOptionalTypeAnnotation(body: string, j: number): number {
 function skipReturnTypeAndArrow(body: string, j: number): number {
   j = skipOptionalTypeAnnotation(body, j);
   if (body.slice(j, j + 2) === "=>") j += 2;
-  return skipWS(body, j);
+  return skipWhitespace(body, j);
 }
 
 function parseFunctionMember(
@@ -39,11 +34,11 @@ function parseFunctionMember(
   isPublic: boolean,
 ): ModuleMemberParseResult | undefined {
   j += 2;
-  j = skipWS(body, j);
+  j = skipWhitespace(body, j);
   const nameStart = j;
   while (j < body.length && isIdentifierChar(body[j])) j++;
   const fnName = body.slice(nameStart, j);
-  j = skipWS(body, j);
+  j = skipWhitespace(body, j);
 
   if (j < body.length && body[j] === "<") {
     let angleDepth = 1;
@@ -53,7 +48,7 @@ function parseFunctionMember(
       else if (body[j] === ">") angleDepth--;
       j++;
     }
-    j = skipWS(body, j);
+    j = skipWhitespace(body, j);
   }
 
   if (j >= body.length || body[j] !== "(") return undefined;
@@ -91,21 +86,21 @@ function parseVariableMember(
   isPublic: boolean,
 ): ModuleMemberParseResult | undefined {
   j += 3;
-  j = skipWS(body, j);
+  j = skipWhitespace(body, j);
   if (matchWord(body, j, "mut")) {
     j += 3;
-    j = skipWS(body, j);
+    j = skipWhitespace(body, j);
   }
 
   const nameStart = j;
   while (j < body.length && isIdentifierChar(body[j])) j++;
   const varName = body.slice(nameStart, j);
   j = skipOptionalTypeAnnotation(body, j);
-  j = skipWS(body, j);
+  j = skipWhitespace(body, j);
 
   if (j < body.length && body[j] === "=") {
     j++;
-    j = skipWS(body, j);
+    j = skipWhitespace(body, j);
     const valueStart = j;
     while (j < body.length && body[j] !== ";") j++;
     const value = body.slice(valueStart, j).trim();
@@ -137,13 +132,13 @@ export function parseModuleMemberWithPrivate(
   i: number,
 ): ModuleMemberParseResult | undefined {
   let j = i;
-  j = skipWS(body, j);
+  j = skipWhitespace(body, j);
 
   let isPublic = false;
   if (matchWord(body, j, "out")) {
     isPublic = true;
     j += 3;
-    j = skipWS(body, j);
+    j = skipWhitespace(body, j);
   }
 
   if (matchWord(body, j, "fn")) {
@@ -163,7 +158,7 @@ export function scanModuleBody(
 ): void {
   let i = 0;
   while (i < body.length) {
-    i = skipWS(body, i);
+    i = skipWhitespace(body, i);
     if (i >= body.length) break;
 
     const result = parseModuleMemberWithPrivate(body, i);

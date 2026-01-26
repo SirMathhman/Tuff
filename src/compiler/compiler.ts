@@ -26,18 +26,13 @@ import {
   validateModuleAccess,
 } from "./transforms/helpers/module-validation";
 import { transformPointers } from "./transforms/pointer-transforms";
-import { isWhitespace, isIdentifierChar } from "./parsing/string-helpers";
+import {
+  isWhitespace,
+  isIdentifierChar,
+  skipWhitespace,
+} from "./parsing/string-helpers";
 import { clearVariableTypes } from "./parsing/parser-utils";
 import { validateFunctionCalls } from "./transforms/function-call-validation";
-
-function isAlphaNum(ch: string): boolean {
-  return (
-    (ch >= "a" && ch <= "z") ||
-    (ch >= "A" && ch <= "Z") ||
-    (ch >= "0" && ch <= "9") ||
-    ch === "_"
-  );
-}
 
 const BUILTIN_METHODS = new Set(["charCodeAt", "length"]);
 
@@ -58,16 +53,15 @@ function findReceiverStart(result: string, isClosingParen: boolean): number {
       receiverStart--;
     }
     receiverStart++; // Move to the (
-    while (receiverStart > 0 && isAlphaNum(result.charAt(receiverStart - 1)))
+    while (
+      receiverStart > 0 &&
+      isIdentifierChar(result.charAt(receiverStart - 1))
+    )
       receiverStart--;
   } else {
     while (receiverStart > 0) {
       const charLeft = result.charAt(receiverStart - 1);
-      if (
-        charLeft === "." ||
-        (charLeft >= "0" && charLeft <= "9") ||
-        isAlphaNum(charLeft)
-      ) {
+      if (charLeft === "." || isIdentifierChar(charLeft)) {
         receiverStart--;
       } else {
         break;
@@ -120,13 +114,12 @@ function collectModuleNames(source: string): Set<string> {
       const name = source.slice(nameStart, i);
 
       // Skip whitespace
-      let j = i;
-      while (j < source.length && isWhitespace(source.charAt(j))) j++;
+      let j = skipWhitespace(source, i);
 
       // Check for = {
       if (j < source.length && source.charAt(j) === "=") {
         j++;
-        while (j < source.length && isWhitespace(source.charAt(j))) j++;
+        j = skipWhitespace(source, j);
         if (j < source.length && source.charAt(j) === "{") {
           moduleNames.add(name);
         }
@@ -171,7 +164,7 @@ function transformMethodCall(
   let methodName = "";
   let j = i + 1;
   const len = source.length;
-  while (j < len && isAlphaNum(source.charAt(j))) {
+  while (j < len && isIdentifierChar(source.charAt(j))) {
     methodName += source.charAt(j);
     j++;
   }
@@ -225,7 +218,7 @@ function transformMethodCalls(source: string): string {
     if (
       ch === "." &&
       result.length > 0 &&
-      (isAlphaNum(prevCh) || prevCh === "0" || prevCh === ")")
+      (isIdentifierChar(prevCh) || prevCh === ")")
     ) {
       const { newI, newResult } = transformMethodCall(
         source,

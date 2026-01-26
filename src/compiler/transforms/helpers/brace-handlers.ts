@@ -2,17 +2,13 @@ import {
   isIdentifierChar,
   isWhitespace,
   matchWord,
+  skipWhitespace,
 } from "../../parsing/string-helpers";
-import { parseBracedBlock } from "../../parsing/parse-helpers";
+import {
+  parseBracedBlock,
+  parseUntilSemicolon,
+} from "../../parsing/parse-helpers";
 import { skipStructDeclaration } from "../../parsing/struct-helpers";
-
-/**
- * Skip whitespace in source starting at index
- */
-function skipWhitespace(source: string, index: number): number {
-  while (index < source.length && isWhitespace(source[index])) index++;
-  return index;
-}
 
 /**
  * Check for control flow keywords before parentheses in trimmed string
@@ -276,8 +272,7 @@ export function handleTypeDeclaration(
   i: number,
 ): { result: string; endIdx: number } | undefined {
   if (!matchWord(source, i, "type")) return undefined;
-  // Skip to the semicolon
-  while (i < source.length && source[i] !== ";") i++;
+  i = parseUntilSemicolon(source, i).endIdx;
   if (i < source.length && source[i] === ";") i++;
   return { result: "", endIdx: i };
 }

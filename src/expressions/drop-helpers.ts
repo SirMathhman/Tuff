@@ -18,14 +18,12 @@ export function parseStructFieldTypes(
   fieldsStr: string,
 ): Map<string, string> | undefined {
   // Parse struct field definitions like "field1 : Type1, field2 : Type2"
-  const fields = fieldsStr
-    .split(",")
-    .map((f) => f.trim())
-    .filter((f) => f.length > 0);
-
   const fieldTypes = new Map<string, string>();
 
-  for (const field of fields) {
+  const parts = fieldsStr.split(",");
+  for (const part of parts) {
+    const field = part.trim();
+    if (!field) continue;
     const colonIndex = field.indexOf(":");
     if (colonIndex === -1) continue;
 

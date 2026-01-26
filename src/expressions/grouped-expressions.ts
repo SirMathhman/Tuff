@@ -10,6 +10,13 @@ import {
   extractStructName,
 } from "./skip-patterns";
 
+type GroupedEvalContext = {
+  scope: Map<string, number>;
+  typeMap: Map<string, number>;
+  mutMap: Map<string, boolean>;
+  interpreter: Interpreter;
+};
+
 function tryStructInstantiation(
   s: string,
   braceIndex: number,
@@ -55,23 +62,21 @@ function tryStructInstantiation(
   }
 }
 
-function processGroupedExpression(
-  s: string,
-  openIndex: number,
-  closeIndex: number,
-  openChar: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  interpreter: Interpreter,
-): string {
+function processGroupedExpression(p: {
+  s: string;
+  openIndex: number;
+  closeIndex: number;
+  openChar: string;
+  ctx: GroupedEvalContext;
+}): string {
+  const { s, openIndex, closeIndex, openChar, ctx } = p;
   const inside = s.slice(openIndex + 1, closeIndex);
-  const cScope = new Map(scope);
-  const cTypeMap = new Map(typeMap);
-  const cMutMap = new Map(mutMap);
+  const cScope = new Map(ctx.scope);
+  const cTypeMap = new Map(ctx.typeMap);
+  const cMutMap = new Map(ctx.mutMap);
   const cUninitializedSet = new Set<string>();
   const cUnmutUninitializedSet = new Set<string>();
-  const result = interpreter(
+  const result = ctx.interpreter(
     inside,
     cScope,
     cTypeMap,
@@ -80,9 +85,18 @@ function processGroupedExpression(
     cUnmutUninitializedSet,
   );
   if (openChar === "{") {
-    for (const [k, v] of cScope.entries()) if (scope.has(k)) scope.set(k, v);
-    for (const [k, v] of cMutMap.entries()) if (mutMap.has(k)) mutMap.set(k, v);
-    executeDropHandlers(cScope, scope, cTypeMap, typeMap, mutMap, interpreter);
+    for (const [k, v] of cScope.entries())
+      if (ctx.scope.has(k)) ctx.scope.set(k, v);
+    for (const [k, v] of cMutMap.entries())
+      if (ctx.mutMap.has(k)) ctx.mutMap.set(k, v);
+    executeDropHandlers(
+      cScope,
+      ctx.scope,
+      cTypeMap,
+      ctx.typeMap,
+      ctx.mutMap,
+      ctx.interpreter,
+    );
   }
   const after = s.slice(closeIndex + 1).trim();
   if (
@@ -102,98 +116,78 @@ function processGroupedExpression(
 function tryProcessGroup(
   s: string,
   pairs: Array<[string, string]>,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  interpreter: Interpreter,
+  ctx: GroupedEvalContext,
 ): string | undefined {
   for (const [openChar, closeChar] of pairs) {
     const openIndex = s.indexOf(openChar);
     if (openIndex === -1) continue;
     if (shouldSkipLambda(s, openIndex, openChar, closeChar)) continue;
     if (shouldSkipArrayIndexing(s, openIndex, openChar)) continue;
-    if (shouldSkipMatchOrStruct(s, openIndex, openChar, closeChar, typeMap))
+    if (shouldSkipMatchOrStruct(s, openIndex, openChar, closeChar, ctx.typeMap))
       continue;
     const closeIndex = findMatchingClose(s, openIndex, openChar, closeChar);
     if (closeIndex === -1) throw new Error(`unmatched opening ${openChar}`);
-    return processGroupedExpression(
+    return processGroupedExpression({
       s,
       openIndex,
       closeIndex,
       openChar,
-      scope,
-      typeMap,
-      mutMap,
-      interpreter,
-    );
+      ctx,
+    });
   }
   return undefined;
 }
 
 function checkAndProcessStruct(
   s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  interpreter: Interpreter,
+  ctx: GroupedEvalContext,
 ): string | undefined {
   const braceIndex = s.indexOf("{");
   if (braceIndex <= 0) return undefined;
   const structResult = tryStructInstantiation(
     s,
     braceIndex,
-    typeMap,
-    scope,
-    interpreter,
+    ctx.typeMap,
+    ctx.scope,
+    ctx.interpreter,
   );
   if (!structResult) return undefined;
-  return evaluateGroupedExpressionsWithScope(
-    structResult,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter,
-  );
+  return evaluateGroupedExpressionsWithScope({
+    s: structResult,
+    scope: ctx.scope,
+    typeMap: ctx.typeMap,
+    mutMap: ctx.mutMap,
+    interpreter: ctx.interpreter,
+  });
 }
 
 export function evaluateGroupedExpressionsWithScope(
-  s: string,
-  scope: Map<string, number>,
-  typeMap: Map<string, number>,
-  mutMap: Map<string, boolean>,
-  interpreter: Interpreter,
+  p: { s: string } & GroupedEvalContext,
 ): string {
-  const trimmed = s.trim();
-  if (trimmed.startsWith("match") && trimmed.includes("case ")) return s;
-  const structResult = checkAndProcessStruct(
-    s,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter,
-  );
+  const ctx: GroupedEvalContext = {
+    scope: p.scope,
+    typeMap: p.typeMap,
+    mutMap: p.mutMap,
+    interpreter: p.interpreter,
+  };
+  const trimmed = p.s.trim();
+  if (trimmed.startsWith("match") && trimmed.includes("case ")) return p.s;
+  const structResult = checkAndProcessStruct(p.s, ctx);
   if (structResult) return structResult;
   const pairs: Array<[string, string]> = [
     ["(", ")"],
     ["{", "}"],
     ["[", "]"],
   ];
-  const processed = tryProcessGroup(
-    s,
-    pairs,
-    scope,
-    typeMap,
-    mutMap,
-    interpreter,
-  );
+  const processed = tryProcessGroup(p.s, pairs, ctx);
   if (processed) {
-    return evaluateGroupedExpressionsWithScope(
-      processed,
-      scope,
-      typeMap,
-      mutMap,
-      interpreter,
-    );
+    return evaluateGroupedExpressionsWithScope({
+      s: processed,
+      scope: p.scope,
+      typeMap: p.typeMap,
+      mutMap: p.mutMap,
+      interpreter: p.interpreter,
+    });
   }
-  return s;
+  return p.s;
 }

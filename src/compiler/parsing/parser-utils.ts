@@ -43,8 +43,8 @@ export function parseTypeDeclaration(
   while (i < source.length && isIdentifierChar(source[i])) i++;
   const typeName = source.slice(nameStart, i);
   if (!typeName) throw new Error("Expected type name after type");
-  // Skip to semicolon
-  while (i < source.length && source[i] !== ";") i++;
+  const parsed = parseUntilSemicolon(source, i);
+  i = parsed.endIdx;
   if (i < source.length && source[i] === ";") i++;
   addDeclaredType(typeName);
   return { nextIndex: i, typeName };

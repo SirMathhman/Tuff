@@ -31,6 +31,12 @@ export function findClosingBrace(s: string, startIdx: number): number {
 
   return braceDepth === 0 ? idx : -1;
 }
+
+export function skipSpaces(s: string, startIdx: number): number {
+  let idx = startIdx;
+  while (idx < s.length && s[idx] === " ") idx++;
+  return idx;
+}
 export interface BodyParseResult {
   body: string;
   nextIdx: number;

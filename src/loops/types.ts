@@ -8,6 +8,7 @@ export interface HandlerParams {
   interpreter: Interpreter;
   uninitializedSet?: Set<string>;
   unmutUninitializedSet?: Set<string>;
+  visMap?: Map<string, boolean>;
 }
 
 export type LoopCore = {
@@ -17,6 +18,7 @@ export type LoopCore = {
   interpreter: Interpreter;
   uninitializedSet: Set<string>;
   unmutUninitializedSet: Set<string>;
+  visMap: Map<string, boolean>;
 };
 
 export function getLoopCore(params: HandlerParams): LoopCore {
@@ -27,5 +29,6 @@ export function getLoopCore(params: HandlerParams): LoopCore {
     interpreter: params.interpreter,
     uninitializedSet: params.uninitializedSet ?? new Set(),
     unmutUninitializedSet: params.unmutUninitializedSet ?? new Set(),
+    visMap: params.visMap ?? new Map(),
   };
 }

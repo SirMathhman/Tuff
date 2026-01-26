@@ -62,6 +62,7 @@ function handleGroupedOrBinaryOp(
     | "mutMap"
     | "uninitializedSet"
     | "unmutUninitializedSet"
+    | "interpreter"
     | "visMap"
   >,
 ): number {
@@ -72,13 +73,13 @@ function handleGroupedOrBinaryOp(
     (p.s.includes("(") || p.s.includes("{") || p.s.includes("[")) &&
     !isMatch
   ) {
-    const processed = evaluateGroupedExpressionsWithScope(
-      p.s,
-      p.scope,
-      p.typeMap,
-      p.mutMap,
-      interpretWithScope,
-    );
+    const processed = evaluateGroupedExpressionsWithScope({
+      s: p.s,
+      scope: p.scope,
+      typeMap: p.typeMap,
+      mutMap: p.mutMap,
+      interpreter: interpretWithScope,
+    });
     if (processed !== p.s)
       return interpretWithScope(
         processed,
@@ -87,18 +88,10 @@ function handleGroupedOrBinaryOp(
         p.mutMap,
         p.uninitializedSet,
         p.unmutUninitializedSet,
+        p.visMap,
       );
   }
-  return handleBinaryOperation({
-    s: p.s,
-    scope: p.scope,
-    typeMap: p.typeMap,
-    mutMap: p.mutMap,
-    uninitializedSet: p.uninitializedSet,
-    unmutUninitializedSet: p.unmutUninitializedSet,
-    interpreter: interpretWithScope as Interpreter,
-    visMap: p.visMap,
-  });
+  return handleBinaryOperation(p);
 }
 
 export function interpretWithScope(

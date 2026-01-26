@@ -3,20 +3,13 @@ import {
   isIdentifierChar,
   isDigit,
   matchWord,
+  skipWhitespace,
 } from "../../parsing/string-helpers";
 import {
   parseCondition,
   parseBody,
   parseUntilSemicolon,
 } from "../../parsing/parse-helpers";
-
-/**
- * Skip whitespace in source starting at index
- */
-function skipWhitespace(source: string, index: number): number {
-  while (index < source.length && isWhitespace(source[index])) index++;
-  return index;
-}
 
 /**
  * Parse for-in loop range (start..end) values

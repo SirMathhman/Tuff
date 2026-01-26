@@ -1,4 +1,8 @@
-import { isWhitespace, matchWord } from "../parsing/string-helpers";
+import {
+  isWhitespace,
+  matchWord,
+  skipWhitespace,
+} from "../parsing/string-helpers";
 import {
   parseCondition,
   parseBody,
@@ -10,14 +14,6 @@ import { transformFor, transformBreakInLoop } from "./helpers/for-loop";
 
 // Re-export for convenience
 export { transformFor };
-
-/**
- * Skip whitespace in source starting at index
- */
-function skipWhitespace(source: string, index: number): number {
-  while (index < source.length && isWhitespace(source[index])) index++;
-  return index;
-}
 
 type TransformResult = { result: string; endIdx: number };
 

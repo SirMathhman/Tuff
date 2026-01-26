@@ -4,25 +4,36 @@ import type { Interpreter } from "../../expressions/handlers";
 import { isValidIdentifier } from "../../utils/identifier-utils";
 import type { BaseHandlerParams } from "../../utils/function/function-call-params";
 
+function assertPublicMember(p: {
+  ownerType: "module" | "object";
+  ownerName: string;
+  memberName: string;
+  visMap: Map<string, boolean>;
+}): void {
+  const isPublic = p.visMap.get(p.memberName);
+  if (!isPublic) {
+    throw new Error(
+      `member '${p.memberName}' of ${p.ownerType} '${p.ownerName}' is private`,
+    );
+  }
+}
+
 function handleModuleFunctionCall(
   moduleName: string,
   memberStr: string,
   module: ReturnType<typeof getModule>,
   interpreter: Interpreter,
 ): number {
-  const fnName = memberStr.slice(0, memberStr.indexOf("(")).trim();
-  const isPublic = module!.visMap.get(fnName);
-  if (!isPublic) {
-    throw new Error(`member '${fnName}' of module '${moduleName}' is private`);
-  }
-  return interpreter(
+  return handleScopedFunctionCall({
+    ownerType: "module",
+    ownerName: moduleName,
     memberStr,
-    module!.scope,
-    module!.typeMap,
-    module!.mutMap,
-    new Set(),
-    new Set(),
-  );
+    visMap: module!.visMap,
+    scope: module!.scope,
+    typeMap: module!.typeMap,
+    mutMap: module!.mutMap,
+    interpreter,
+  });
 }
 
 function handleModuleVariableAccess(
@@ -33,12 +44,12 @@ function handleModuleVariableAccess(
   if (!module!.scope.has(memberStr)) {
     throw new Error(`module '${moduleName}' has no member '${memberStr}'`);
   }
-  const isPublic = module!.visMap.get(memberStr);
-  if (!isPublic) {
-    throw new Error(
-      `member '${memberStr}' of module '${moduleName}' is private`,
-    );
-  }
+  assertPublicMember({
+    ownerType: "module",
+    ownerName: moduleName,
+    memberName: memberStr,
+    visMap: module!.visMap,
+  });
   return module!.scope.get(memberStr);
 }
 
@@ -61,16 +72,40 @@ function handleObjectFunctionCall(
   obj: ReturnType<typeof getObject>,
   interpreter: Interpreter,
 ): number {
-  const fnName = memberStr.slice(0, memberStr.indexOf("(")).trim();
-  const isPublic = obj!.visMap.get(fnName);
-  if (!isPublic) {
-    throw new Error(`member '${fnName}' of object '${objectName}' is private`);
-  }
-  return interpreter(
+  return handleScopedFunctionCall({
+    ownerType: "object",
+    ownerName: objectName,
     memberStr,
-    obj!.scope,
-    obj!.typeMap,
-    obj!.mutMap,
+    visMap: obj!.visMap,
+    scope: obj!.scope,
+    typeMap: obj!.typeMap,
+    mutMap: obj!.mutMap,
+    interpreter,
+  });
+}
+
+function handleScopedFunctionCall(p: {
+  ownerType: "module" | "object";
+  ownerName: string;
+  memberStr: string;
+  visMap: Map<string, boolean>;
+  scope: Map<string, number>;
+  typeMap: Map<string, number>;
+  mutMap: Map<string, boolean>;
+  interpreter: Interpreter;
+}): number {
+  const fnName = p.memberStr.slice(0, p.memberStr.indexOf("(")).trim();
+  assertPublicMember({
+    ownerType: p.ownerType,
+    ownerName: p.ownerName,
+    memberName: fnName,
+    visMap: p.visMap,
+  });
+  return p.interpreter(
+    p.memberStr,
+    p.scope,
+    p.typeMap,
+    p.mutMap,
     new Set(),
     new Set(),
   );
@@ -84,12 +119,12 @@ function handleObjectVariableAccess(
   if (!obj!.scope.has(memberStr)) {
     throw new Error(`object '${objectName}' has no member '${memberStr}'`);
   }
-  const isPublic = obj!.visMap.get(memberStr);
-  if (!isPublic) {
-    throw new Error(
-      `member '${memberStr}' of object '${objectName}' is private`,
-    );
-  }
+  assertPublicMember({
+    ownerType: "object",
+    ownerName: objectName,
+    memberName: memberStr,
+    visMap: obj!.visMap,
+  });
   return obj!.scope.get(memberStr);
 }
 

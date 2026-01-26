@@ -1,12 +1,13 @@
 import { isBreakException } from "./loop";
-import { findClosingParenthesis, parseLoopBody } from "./helpers";
+import { findClosingParenthesis, parseLoopBody, skipSpaces } from "./helpers";
 import { getLoopCore, type HandlerParams, type LoopCore } from "./types";
+import { callInterpreter } from "../types/interpreter";
 
 function parseWhileCondition(
   trimmed: string,
 ): { conditionStr: string; bodyStartIdx: number } | undefined {
   let idx = 5;
-  while (idx < trimmed.length && trimmed[idx] === " ") idx++;
+  idx = skipSpaces(trimmed, idx);
   if (idx >= trimmed.length || trimmed[idx] !== "(") return undefined;
   const condEnd = findClosingParenthesis(trimmed, idx);
   if (condEnd === -1) return undefined;
@@ -17,17 +18,6 @@ function parseWhileCondition(
 }
 
 type WhileContext = LoopCore;
-
-function callInterpreter(ctx: WhileContext, input: string): number {
-  return ctx.interpreter(
-    input,
-    ctx.scope,
-    ctx.typeMap,
-    ctx.mutMap,
-    ctx.uninitializedSet,
-    ctx.unmutUninitializedSet,
-  );
-}
 
 function executeWhileLoop(
   conditionStr: string,
@@ -86,6 +76,7 @@ export function handleWhile(params: HandlerParams): number | undefined {
     uninitializedSet: core.uninitializedSet,
     unmutUninitializedSet: core.unmutUninitializedSet,
     interpreter: core.interpreter,
+    visMap: core.visMap,
   };
   return handleWhileLoopExecution(
     conditionStr,

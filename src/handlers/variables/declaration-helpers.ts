@@ -134,12 +134,16 @@ function handleTypedInit(
     return { varValue: result.varValue, vType: result.vType };
   }
   const result = inferValueAndType(exprStr, declaredTypeStr, ctx);
+  registerLastLambdaIfNeeded(varName, result.varValue);
+  return result;
+}
+
+function registerLastLambdaIfNeeded(varName: string, varValue: number): void {
   const registeredLambdaName = getLastRegisteredLambdaName();
-  if (registeredLambdaName && result.varValue === 1) {
+  if (registeredLambdaName && varValue === 1) {
     setFunctionRef(varName, registeredLambdaName);
     clearLastRegisteredLambdaName();
   }
-  return result;
 }
 
 function handleUntypedInit(
@@ -148,11 +152,7 @@ function handleUntypedInit(
   ctx: ScopeContext,
 ): { varValue: number; vType: number } {
   const result = inferValueAndType(exprStr, undefined, ctx);
-  const registeredLambdaName = getLastRegisteredLambdaName();
-  if (registeredLambdaName && result.varValue === 1) {
-    setFunctionRef(varName, registeredLambdaName);
-    clearLastRegisteredLambdaName();
-  }
+  registerLastLambdaIfNeeded(varName, result.varValue);
   return result;
 }
 

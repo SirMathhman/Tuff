@@ -1,4 +1,8 @@
-import { isIdentifierChar, isWhitespace } from "../parsing/string-helpers";
+import {
+  isIdentifierChar,
+  isWhitespace,
+  skipWhitespace,
+} from "../parsing/string-helpers";
 
 /**
  * Transform pointer operations for JavaScript execution.
@@ -19,11 +23,6 @@ function findIdentifierEnd(source: string, start: number): number {
   let i = start;
   while (i < source.length && isIdentifierChar(source[i])) i++;
   return i;
-}
-
-function skipWS(source: string, start: number): number {
-  while (start < source.length && isWhitespace(source[start])) start++;
-  return start;
 }
 
 function isDigit(ch: string): boolean {
@@ -59,7 +58,7 @@ function tryExtractPointerTarget(
   source: string,
   operatorPos: number,
 ): { varName: string; endIdx: number } | undefined {
-  const nextNonWS = skipWS(source, operatorPos + 1);
+  const nextNonWS = skipWhitespace(source, operatorPos + 1);
   const ch = source[nextNonWS];
   if (nextNonWS >= source.length || !ch || !isIdentifierStartChar(ch)) {
     return undefined;

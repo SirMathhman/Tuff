@@ -1,6 +1,7 @@
 import type { ScopeContext } from "../../types/interpreter";
 import { callInterpreter } from "../../types/interpreter";
 import { setArrayElement, isArrayInstance } from "../../utils/array";
+import { isValidIdentifier } from "../../utils/identifier-utils";
 import {
   toScopeContext,
   type BaseHandlerParams,
@@ -16,29 +17,7 @@ function parseArrayElemAssignment(
   const arrayVarName = lhs.slice(0, openIdx).trim(),
     indexExpr = lhs.slice(openIdx + 1, closeIdx).trim();
   if (!arrayVarName || !indexExpr) return undefined;
-  const first = arrayVarName[0];
-  if (
-    !first ||
-    !(
-      (first >= "a" && first <= "z") ||
-      (first >= "A" && first <= "Z") ||
-      first === "_"
-    )
-  )
-    return undefined;
-  for (let i = 1; i < arrayVarName.length; i++) {
-    const ch = arrayVarName[i];
-    if (
-      !ch ||
-      !(
-        (ch >= "a" && ch <= "z") ||
-        (ch >= "A" && ch <= "Z") ||
-        (ch >= "0" && ch <= "9") ||
-        ch === "_"
-      )
-    )
-      return undefined;
-  }
+  if (!isValidIdentifier(arrayVarName)) return undefined;
   return { arrayVarName, indexExpr };
 }
 

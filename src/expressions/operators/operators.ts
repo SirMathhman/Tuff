@@ -114,38 +114,39 @@ function resolvePointerValue(
   return scope.get(targetVar);
 }
 
-function performOperationLogic(
-  left: number,
-  op: string,
-  right: number,
-  rightStr: string,
-  typeMap?: Map<string, number>,
-  leftStr?: string,
-  scope?: Map<string, number>,
-): number {
-  const resolvedPointerValue = resolvePointerValue(left, scope);
-  switch (op) {
+function performOperationLogic(p: {
+  left: number;
+  op: string;
+  right: number;
+  rightStr: string;
+  typeMap?: Map<string, number>;
+  leftStr?: string;
+  scope?: Map<string, number>;
+}): number {
+  const resolvedPointerValue = resolvePointerValue(p.left, p.scope);
+  switch (p.op) {
     case ".":
-      return handleFieldAccessOp(left, rightStr, resolvedPointerValue);
+      return handleFieldAccessOp(p.left, p.rightStr, resolvedPointerValue);
     case "[":
-      return handleIndexingOp(left, right, resolvedPointerValue);
+      return handleIndexingOp(p.left, p.right, resolvedPointerValue);
     case "+":
     case "-":
     case "*":
     case "/":
-      return performArithmeticOp(op, left, right);
+      return performArithmeticOp(p.op, p.left, p.right);
     case "<":
     case ">":
     case "<=":
     case ">=":
     case "==":
     case "!=":
-      return performComparisonOp(op, left, right);
+      return performComparisonOp(p.op, p.left, p.right);
     case "&&":
-      return left !== 0 && right !== 0 ? 1 : 0;
+      return p.left !== 0 && p.right !== 0 ? 1 : 0;
     case "is": {
-      if (!typeMap || !leftStr) throw new Error("invalid 'is' operator usage");
-      return handleIsOperator(left, leftStr, rightStr, typeMap);
+      if (!p.typeMap || !p.leftStr)
+        throw new Error("invalid 'is' operator usage");
+      return handleIsOperator(p.left, p.leftStr, p.rightStr, p.typeMap);
     }
     default:
       return 0;
@@ -181,7 +182,7 @@ export function performBinaryOp(
   leftStr?: string,
   scope?: Map<string, number>,
 ): number {
-  const result = performOperationLogic(
+  const result = performOperationLogic({
     left,
     op,
     right,
@@ -189,7 +190,7 @@ export function performBinaryOp(
     typeMap,
     leftStr,
     scope,
-  );
+  });
   if (shouldValidateUnsigned(op, leftInfo, rightStr)) {
     const rightInfo = extractTypedInfo(rightStr);
     if (rightInfo.typeSize === leftInfo.typeSize)

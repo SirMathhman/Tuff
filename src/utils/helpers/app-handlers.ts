@@ -25,6 +25,7 @@ import {
 import { handleModuleAccess } from "../../handlers/access/module-access";
 import {
   toInterpreterContext,
+  toScopeContext,
   type BaseHandlerParams,
 } from "../function/function-call-params";
 import type { HandlerParams } from "../../loops/types";
@@ -40,6 +41,7 @@ function toLoopHandlerParams(p: Params): HandlerParams {
     interpreter: p.interpreter,
     uninitializedSet: p.uninitializedSet,
     unmutUninitializedSet: p.unmutUninitializedSet,
+    visMap: p.visMap,
   };
 }
 
@@ -128,9 +130,7 @@ export function mightNeedBinaryOp(s: string): boolean {
 }
 
 export function tryControlFlow(p: Params): number | undefined {
-  let result = handleMatch(p.s, p.scope, p.typeMap, p.mutMap, (i, sc, tm, mm) =>
-    p.interpreter(i, sc, tm, mm, p.uninitializedSet, p.unmutUninitializedSet),
-  );
+  let result = handleMatch({ s: p.s, ...toScopeContext(p) });
   if (result !== undefined) return result;
   const ctx = toLoopHandlerParams(p);
   result = handleLoop(ctx);

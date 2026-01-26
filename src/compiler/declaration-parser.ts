@@ -91,18 +91,10 @@ function handleForLoop(
         variables,
       );
       i = decl.nextIndex;
-      while (i < source.length && source[i] !== ";") {
-        i++;
-      }
-      if (i < source.length) i++;
-      return i;
+      return skipToNextStatement(source, i);
     }
   }
-  while (i < source.length && source[i] !== ";") {
-    i++;
-  }
-  if (i < source.length) i++;
-  return i;
+  return skipToNextStatement(source, i);
 }
 
 function skipToNextStatement(source: string, i: number): number {
@@ -196,14 +188,14 @@ function handleFunctionDeclaration(
   j = skipWhitespaceOnly(source, j);
 
   // Get function name
-  const nameStart = j;
-  while (j < source.length && isIdentifierChar(source[j])) j++;
-  const fnName = source.slice(nameStart, j);
+  const parsedName = readIdentifier(source, j);
+  const fnName = parsedName.name;
+  j = parsedName.endIdx;
 
   // Check if function name conflicts with a variable
   if (fnName && variables.has(fnName)) {
     throw new Error(
-      `Function name '${fnName}' conflicts with already declared variable`,
+      "Function name '" + fnName + "' conflicts with already declared variable",
     );
   }
 
@@ -260,9 +252,11 @@ function parseDeclarationsImpl(
     i = skipWhitespaceOnly(source, i);
     if (i >= source.length) break;
 
-    if (source[i] === "{" || source[i] === "}") {
-      i++;
-      continue;
+    switch (source[i]) {
+      case "{":
+      case "}":
+        i++;
+        continue;
     }
 
     if (matchWord(source, i, "for")) {
