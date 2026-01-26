@@ -11,6 +11,7 @@ import { parseGenericParams } from "../../utils/generic-params";
 import type { FnDef } from "../../function-defs";
 import { findMatchingCloseBrace } from "../../utils/helpers/brace-utils";
 import { isIdentifierChar } from "../../compiler/parsing/string-helpers";
+import { validateBodyForDanglingRefs } from "../../utils/validation/dangling-refs";
 
 function isWhitespace(ch: string): boolean {
   return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
@@ -172,57 +173,19 @@ function validateParametersDontShadowVariables(
   }
 }
 
-function checkLocalVarReferences(localVar: string, body: string): void {
-  let searchPos = 0;
-  while (true) {
-    const ampPos = body.indexOf("&" + localVar, searchPos);
-    if (ampPos === -1) break;
-
-    const afterVarPos = ampPos + 1 + localVar.length;
-    if (
-      afterVarPos < body.length &&
-      isAlphanumericOrUnderscore(body[afterVarPos]!)
-    ) {
-      searchPos = ampPos + 1;
-      continue;
-    }
-
-    throw new Error(
-      `cannot return reference to local variable '${localVar}': would create dangling pointer`,
-    );
-  }
-}
-
 function validateNoDanglingReferences(
   body: string,
   paramNames: Set<string>,
 ): void {
-  const trimmed = body.trim();
-  let idx = 0;
-
-  while (true) {
-    const letIdx = trimmed.indexOf("let ", idx);
-    if (letIdx === -1) break;
-
-    let start = letIdx + 4;
-    if (trimmed.startsWith("mut ", start)) start += 4;
-
-    while (start < trimmed.length && isWhitespace(trimmed[start]!)) start++;
-
-    let end = start;
-    while (end < trimmed.length && isAlphanumericOrUnderscore(trimmed[end]!)) {
-      end++;
-    }
-
-    if (start < end) {
-      const varName = trimmed.slice(start, end);
-      if (!paramNames.has(varName)) {
-        checkLocalVarReferences(varName, trimmed);
-      }
-    }
-
-    idx = end;
-  }
+  validateBodyForDanglingRefs(
+    body,
+    Array.from(paramNames),
+    isAlphanumericOrUnderscore,
+    isWhitespace,
+    (msg: string) => {
+      throw new Error(msg);
+    },
+  );
 }
 
 function isAlphanumericOrUnderscore(ch: string): boolean {

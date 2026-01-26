@@ -188,6 +188,13 @@ describe("pointer operations - dangling references", () => {
       assertInvalid("fn get() => { let x = [100, 200]; &x }");
     },
   );
+
+  itInterpreter(
+    "throws when returning reference to function parameter",
+    (_ok, assertInvalid) => {
+      assertInvalid("fn get(x : I32) => { &x }");
+    },
+  );
 });
 
 describe("pointer operations - limitations", () => {
