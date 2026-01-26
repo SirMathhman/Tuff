@@ -123,18 +123,28 @@ function processInitializer(
   source: string,
   startIdx: number,
   typeAnnotation: string | undefined,
-): { i: number; isArray: boolean; hasInit: boolean; inferredType: string | undefined } {
+): {
+  i: number;
+  isArray: boolean;
+  hasInit: boolean;
+  inferredType: string | undefined;
+} {
   let i = startIdx;
-  if (i >= source.length || source[i] !== "=") return { i, isArray: false, hasInit: false, inferredType: undefined };
+  if (i >= source.length || source[i] !== "=")
+    return { i, isArray: false, hasInit: false, inferredType: undefined };
   i++;
   while (i < source.length && isWhitespace(source[i])) i++;
   const isArrayDetected = source[i] === "[";
-  const { content: value, endIdx: valueEndIdx } = parseUntilSemicolon(source, i);
+  const { content: value, endIdx: valueEndIdx } = parseUntilSemicolon(
+    source,
+    i,
+  );
   i = valueEndIdx;
   const trimmedValue = value.trim();
   const sourceVarType = getVariableType(trimmedValue);
   if (typeAnnotation) {
-    if (sourceVarType) validateTypeSuffixCompatibility(sourceVarType, typeAnnotation);
+    if (sourceVarType)
+      validateTypeSuffixCompatibility(sourceVarType, typeAnnotation);
     validateTypeAnnotation(value, typeAnnotation);
   }
   const type = inferValueType(value);
@@ -162,12 +172,23 @@ export function parseLetDeclaration(
   i = mutIndex;
   const { name: varName, nextIndex: nameIndex } = parseVarName(source, i);
   i = nameIndex;
-  const { type: typeAnnotation, nextIndex: typeIndex } = parseTypeAnnotation(source, i);
+  const { type: typeAnnotation, nextIndex: typeIndex } = parseTypeAnnotation(
+    source,
+    i,
+  );
   i = typeIndex;
   while (i < source.length && isWhitespace(source[i])) i++;
-  const { i: afterInit, isArray: initArray, hasInit, inferredType } = processInitializer(source, i, typeAnnotation);
+  const {
+    i: afterInit,
+    isArray: initArray,
+    hasInit,
+    inferredType,
+  } = processInitializer(source, i, typeAnnotation);
   i = afterInit;
-  const isArray = initArray || (typeAnnotation?.startsWith("[") || typeAnnotation?.startsWith("*["));
+  const isArray =
+    initArray ||
+    typeAnnotation?.startsWith("[") ||
+    typeAnnotation?.startsWith("*[");
   if (i < source.length && source[i] === ";") i++;
   const effectiveType = typeAnnotation || inferredType;
   if (effectiveType) setVariableType(varName, effectiveType);

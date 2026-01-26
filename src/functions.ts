@@ -42,28 +42,6 @@ export {
 export const handleFunctionDeclaration =
   createFunctionDeclarationHandler(functionDefs);
 
-function executeDefinedFunction(
-  actualFnName: string,
-  argsStr: string,
-  rest: string,
-  ctx: FnContext,
-): number {
-  const fnDef = functionDefs.get(actualFnName)!;
-  const argParts = parseArguments(argsStr);
-  const args = processArguments(argParts, fnDef, actualFnName, ctx);
-  const mergedScope = createFunctionScope(fnDef, args, ctx);
-  const result = executeFunctionBody(fnDef, args, mergedScope, ctx);
-  if (rest === "") return result;
-  return ctx.interpreter(
-    result.toString() + rest,
-    ctx.scope,
-    ctx.typeMap,
-    ctx.mutMap,
-    ctx.uninitializedSet,
-    ctx.unmutUninitializedSet,
-  );
-}
-
 function handleFunctionExecution(
   actualFnName: string,
   argsStr: string,
@@ -84,7 +62,21 @@ function handleFunctionExecution(
       ctx.interpreter,
     );
   }
-  return executeDefinedFunction(actualFnName, argsStr, rest, ctx);
+  // Inline executeDefinedFunction
+  const fnDef = functionDefs.get(actualFnName)!;
+  const argParts = parseArguments(argsStr);
+  const args = processArguments(argParts, fnDef, actualFnName, ctx);
+  const mergedScope = createFunctionScope(fnDef, args, ctx);
+  const result = executeFunctionBody(fnDef, args, mergedScope, ctx);
+  if (rest === "") return result;
+  return ctx.interpreter(
+    result.toString() + rest,
+    ctx.scope,
+    ctx.typeMap,
+    ctx.mutMap,
+    ctx.uninitializedSet,
+    ctx.unmutUninitializedSet,
+  );
 }
 
 export function parseFunctionCall(p: FunctionCallParams): number | undefined {

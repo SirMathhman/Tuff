@@ -11,17 +11,6 @@ import {
   processParsedDeclaration,
 } from "./core/scope-helpers-ext";
 
-function handleExternOrUse(
-  remaining: string,
-  ctx: ScopeContext,
-): number | undefined {
-  if (remaining.startsWith("extern "))
-    return handleExternStatement(remaining.slice(7).trim(), ctx);
-  if (remaining.startsWith("use "))
-    return handleUseStatement(remaining.slice(4), ctx);
-  return undefined;
-}
-
 function parseVariableWithType(
   declStr: string,
   remaining: string,
@@ -80,8 +69,11 @@ export function handleVarDecl(
     visMap,
     interpreter,
   };
-  const externOrUse = handleExternOrUse(remaining, ctx);
-  if (externOrUse !== undefined) return externOrUse;
+  // Inline handleExternOrUse
+  if (remaining.startsWith("extern "))
+    return handleExternStatement(remaining.slice(7).trim(), ctx);
+  if (remaining.startsWith("use "))
+    return handleUseStatement(remaining.slice(4), ctx);
   if (!remaining.startsWith("let ")) return undefined;
   if (remaining.includes(" from "))
     return handleUseStatement(remaining.slice(4), ctx);
