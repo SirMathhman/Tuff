@@ -2,7 +2,7 @@ import {
   isIdentifierChar,
   isWhitespace,
   skipWhitespace,
-} from "../parsing/string-helpers";
+} from "../../parsing/string-helpers";
 
 /**
  * Transform pointer operations for JavaScript execution.
@@ -44,7 +44,27 @@ function isDerefContext(source: string, pos: number): boolean {
   if (i < 0) return true;
 
   const prevChar = source[i]!;
-  const derefPrecedingChars = new Set([";", ",", "(", "[", "{", "=", ":", ">"]);
+  const derefPrecedingChars = new Set([
+    ";",
+    ",",
+    "(",
+    "[",
+    "{",
+    "=",
+    ":",
+    ">",
+    "+",
+    "-",
+    "/",
+    "%",
+    "!",
+    "&",
+    "|",
+    "^",
+    "~",
+    "?",
+    "<",
+  ]);
   if (derefPrecedingChars.has(prevChar)) return true;
   if (isIdentifierChar(prevChar) || prevChar === ")") return false;
 
@@ -67,15 +87,45 @@ function tryExtractPointerTarget(
   return { varName: source.slice(nextNonWS, idEnd), endIdx: idEnd };
 }
 
+function shouldTransformBareVariable(
+  source: string,
+  varStart: number,
+  varEnd: number,
+): boolean {
+  const prevChar = varStart > 0 ? source[varStart - 1] : "";
+  const nextChar = varEnd < source.length ? source[varEnd] : "";
+
+  if (
+    prevChar === "&" ||
+    nextChar === "[" ||
+    nextChar === ":" ||
+    nextChar === "="
+  ) {
+    return false;
+  }
+
+  let j = varStart - 1;
+  while (j >= 0 && source[j] === " ") j--;
+  if (j >= 0 && source[j] === "=") {
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * Transform address-of operator (&x) and dereference (*y) to simple variable references
+ * When wrapped variables are provided, also transform bare variable references to array access
  */
-export function transformPointers(source: string): string {
+export function transformPointers(
+  source: string,
+  wrappedVars?: Set<string>,
+): string {
   let result = "";
   let i = 0;
+  const wrapped = wrappedVars || new Set<string>();
 
   while (i < source.length) {
-    // Handle &identifier (address-of) - just pass the value
     if (source[i] === "&" && i + 1 < source.length) {
       const target = tryExtractPointerTarget(source, i);
       if (target) {
@@ -85,7 +135,6 @@ export function transformPointers(source: string): string {
       }
     }
 
-    // Handle *identifier (dereference) - only when in dereference context
     if (
       source[i] === "*" &&
       i + 1 < source.length &&
@@ -93,8 +142,26 @@ export function transformPointers(source: string): string {
     ) {
       const target = tryExtractPointerTarget(source, i);
       if (target) {
-        result += target.varName;
+        result += target.varName + "[0]";
         i = target.endIdx;
+        continue;
+      }
+    }
+
+    if (isIdentifierStartChar(source[i]!)) {
+      let idEnd = i;
+      while (idEnd < source.length && isIdentifierChar(source[idEnd]!)) {
+        idEnd++;
+      }
+
+      const varName = source.slice(i, idEnd);
+
+      if (
+        wrapped.has(varName) &&
+        shouldTransformBareVariable(source, i, idEnd)
+      ) {
+        result += varName + "[0]";
+        i = idEnd;
         continue;
       }
     }

@@ -35,6 +35,13 @@ export function isDigit(ch: string | undefined): ch is string {
 }
 
 /**
+ * Check if character can start an identifier (not a digit)
+ */
+export function isIdentifierStartChar(ch: string | undefined): ch is string {
+  return ch !== undefined && isIdentifierChar(ch) && !isDigit(ch);
+}
+
+/**
  * Check if a word matches at a given position
  */
 export function matchWord(

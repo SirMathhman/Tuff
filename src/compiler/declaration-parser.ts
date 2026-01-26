@@ -41,13 +41,16 @@ function registerVariable(
   variables: Map<string, VariableInfo>,
   isArray?: boolean,
   hasInitializer?: boolean,
+  inferredType?: string,
 ): void {
   if (variables.has(varName)) {
     throw new Error(`Variable '${varName}' already declared`);
   }
   const isUninitialized = hasInitializer === false;
+  // Use explicit type annotation if provided, otherwise use inferred type
+  const effectiveType = typeAnnotation || inferredType;
   variables.set(varName, {
-    type: typeAnnotation,
+    type: effectiveType,
     mutable: isMutable,
     initialized: !isUninitialized,
     isArray,
@@ -101,6 +104,7 @@ function handleLetDeclarationOrDestructuring(
     variables,
     decl.isArray,
     decl.hasInitializer,
+    decl.inferredType,
   );
   return decl.nextIndex;
 }

@@ -25,79 +25,22 @@ import {
   collectModuleMetadata,
   validateModuleAccess,
 } from "./transforms/helpers/module-validation";
-import { transformPointers } from "./transforms/pointer-transforms";
-import {
-  isWhitespace,
-  isIdentifierChar,
-  skipWhitespace,
-} from "./parsing/string-helpers";
+import { transformPointers } from "./transforms/pointers/pointer-transforms";
+import { findPointerTargets } from "./transforms/pointers/pointer-target-identification";
+import { wrapPointerTargets } from "./transforms/pointers/wrap-pointer-targets";
+import { isIdentifierChar, skipWhitespace } from "./parsing/string-helpers";
 import { clearVariableTypes } from "./parsing/parser-utils";
 import { validateFunctionCalls } from "./transforms/validation/function-call-validation";
 import { validateStructInstantiation } from "./transforms/validation/struct-instantiation-validation";
 import { validatePointerOperations } from "./transforms/validation/pointer-validation";
+import { findReceiverStart, collectLocalVariables } from "./compiler-utils";
 
 const BUILTIN_METHODS = new Set(["charCodeAt", "length"]);
 
 // Map Tuff properties to JS equivalents
 const PROPERTY_ALIASES: Record<string, string> = {
-  init: "length", // Tuff's .init tracks initialized count, same as length for literals
+  init: "length",
 };
-
-function findReceiverStart(result: string, isClosingParen: boolean): number {
-  let receiverStart = result.length - 1;
-  if (isClosingParen) {
-    let depth = 1;
-    receiverStart--;
-    while (receiverStart >= 0 && depth > 0) {
-      const c = result.charAt(receiverStart);
-      if (c === ")") depth++;
-      else if (c === "(") depth--;
-      receiverStart--;
-    }
-    receiverStart++; // Move to the (
-    while (
-      receiverStart > 0 &&
-      isIdentifierChar(result.charAt(receiverStart - 1))
-    )
-      receiverStart--;
-  } else {
-    while (receiverStart > 0) {
-      const charLeft = result.charAt(receiverStart - 1);
-      if (charLeft === "." || isIdentifierChar(charLeft)) {
-        receiverStart--;
-      } else {
-        break;
-      }
-    }
-  }
-  return receiverStart;
-}
-
-/**
- * Simple method call transformer: 100.add(50) => add(100, 50)
- * Skips built-in methods like charCodeAt, length, init
- */
-function collectLocalVariables(source: string): Set<string> {
-  const localVars = new Set<string>();
-  let braceDepth = 0;
-  for (let i = 0; i < source.length; i++) {
-    const ch = source.charAt(i);
-    if (ch === "{") {
-      braceDepth++;
-    } else if (ch === "}") {
-      braceDepth--;
-    } else if (braceDepth > 0 && source.slice(i, i + 5) === "const") {
-      let j = i + 5;
-      while (j < source.length && isWhitespace(source.charAt(j))) j++;
-      const nameStart = j;
-      while (j < source.length && isIdentifierChar(source.charAt(j))) j++;
-      if (j > nameStart) {
-        localVars.add(source.slice(nameStart, j));
-      }
-    }
-  }
-  return localVars;
-}
 
 /**
  * Collect module/object names by looking for patterns like "Name = {"
@@ -247,82 +190,61 @@ interface VariableInfo {
   isUninitialized?: boolean;
 }
 
-/**
- * Factory function to create a Tuff compiler
- */
+function preparePointerHandling(
+  source: string,
+  variables: Map<string, VariableInfo>,
+): {
+  sourceWithWrappedPointers: string;
+  pointerTargets: Set<string>;
+  arrayVars: Set<string>;
+} {
+  validatePointerOperations(source, variables);
+  const arrayVars = new Set<string>();
+  for (const [name, info] of variables) {
+    if (info.isArray) arrayVars.add(name);
+  }
+  const pointerTargets = findPointerTargets(source);
+  let sourceWithWrappedPointers = source;
+  if (pointerTargets.size > 0) {
+    sourceWithWrappedPointers = wrapPointerTargets(
+      source,
+      pointerTargets,
+      arrayVars,
+    );
+  }
+  return { sourceWithWrappedPointers, pointerTargets, arrayVars };
+}
+
 function createTuffCompiler(source: string) {
   const variables: Map<string, VariableInfo> = new Map();
-
   return {
     compile(): string {
-      // Reset variable type tracking for each compilation
       clearVariableTypes();
-
-      // Pass 1: Parse variable declarations
       const parser = createDeclarationParser(source, variables);
       parser.parseDeclarations();
-
-      // Validate function calls against declared parameter types
       validateFunctionCalls(source);
-
-      // Validate struct instantiation fields against their declared types
       validateStructInstantiation(source);
-
-      // Validate pointer operations (type matching, mutability constraints)
-      validatePointerOperations(source, variables);
-
-      // Build set of array variable names
-      const arrayVars = new Set<string>();
-      for (const [name, info] of variables) {
-        if (info.isArray) arrayVars.add(name);
-      }
-
-      // Validate typed arithmetic operations before removing type syntax
-      validateTypedArithmetic(source);
-
-      const moduleMetadata = collectModuleMetadata(source);
-      validateModuleAccess(source, moduleMetadata);
-
-      // Pass 2: Transform modules and objects FIRST
-      const withModules = transformModules(source);
-
-      // Pass 3: Transform struct instantiation BEFORE removing braces
-      // (struct instantiation braces must not be stripped)
+      const { sourceWithWrappedPointers, pointerTargets, arrayVars } =
+        preparePointerHandling(source, variables);
+      validateTypedArithmetic(sourceWithWrappedPointers);
+      const moduleMetadata = collectModuleMetadata(sourceWithWrappedPointers);
+      validateModuleAccess(sourceWithWrappedPointers, moduleMetadata);
+      const withModules = transformModules(sourceWithWrappedPointers);
       const withStructs = transformStructInstantiation(withModules);
-
-      // Pass 4: Transform control flow BEFORE removing braces
-      // (if/else/loop/while/for/match need their braces)
       const transformed = transformControlFlow(withStructs);
-
-      // Pass 5: Strip Tuff syntax (let, mut, type annotations, struct declarations)
       const js = removeTypeSyntax(transformed);
-
-      // Pass 6: Extract variables that need declaration
       const { expression, varDeclarations } = extractVarDeclarations(js);
-
-      // Pass 7: Transform literals
-      let transformedExpr = transformStringIndexing(expression, arrayVars);
-      transformedExpr = transformCharLiterals(transformedExpr);
-      transformedExpr = replaceBooleanLiterals(transformedExpr);
-      transformedExpr = stripTypeAnnotationsAndValidate(transformedExpr);
-
-      // Transform :: to . for module access
-      transformedExpr = transformModuleAccess(transformedExpr);
-
-      // Transform pointer operations (&x, *y)
-      transformedExpr = transformPointers(transformedExpr);
-
-      // Transform method calls: 100.add(50) => add(100, 50)
-      transformedExpr = transformMethodCalls(transformedExpr);
-
-      // Convert semicolons to commas for eval (statements to expressions)
-      transformedExpr = convertStatementsToExpressions(transformedExpr);
-
-      // Wrap in a function with var declarations
+      let expr = transformStringIndexing(expression, arrayVars);
+      expr = transformCharLiterals(expr);
+      expr = replaceBooleanLiterals(expr);
+      expr = stripTypeAnnotationsAndValidate(expr);
+      expr = transformModuleAccess(expr);
+      expr = transformPointers(expr, pointerTargets);
+      expr = transformMethodCalls(expr);
+      expr = convertStatementsToExpressions(expr);
       const varDeclString =
         varDeclarations.length > 0 ? `var ${varDeclarations.join(", ")};` : "";
-
-      return `(function() { ${varDeclString} return (${transformedExpr}); })()`;
+      return `(function() { ${varDeclString} return (${expr}); })()`;
     },
   };
 }

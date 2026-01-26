@@ -71,10 +71,19 @@ export function parseNumericLiteral(value: string): {
 }
 
 /**
- * Infer the type of a value from its content (e.g., "100U16" -> "U16")
+ * Infer the type of a value from its content (e.g., "100U16" -> "U16", "&x" -> "*<type of x>")
  */
 export function inferValueType(value: string): string | undefined {
   const trimmed = value.trim();
+
+  // Check for reference operations: &identifier
+  if (trimmed.startsWith("&")) {
+    // This is a pointer type
+    // For now, we can't infer the full pointer type without knowing the referenced variable's type
+    // Return a marker that this is a pointer (actual type depends on the referenced variable)
+    return "*"; // This signals it's a pointer type
+  }
+
   if (!isNumericLiteral(trimmed)) return undefined;
   const { suffix } = parseNumericLiteral(trimmed);
   return suffix || undefined;
