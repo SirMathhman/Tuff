@@ -4,10 +4,10 @@
 
 Tuff is a typed expression language with **two execution modes**:
 
-1. **Interpreter**: `interpret()` → `interpretWithScope()` ([src/utils/interpret.ts](../src/utils/interpret.ts), [src/core/app.ts](../src/core/app.ts))
+1. **Interpreter**: `interpret()` → `interpretWithScope()` ([src/main/ts/utils/interpret.ts](../src/main/ts/utils/interpret.ts), [src/main/ts/core/app.ts](../src/main/ts/core/app.ts))
    - Handler chain: handlers return `number | undefined`; first non-`undefined` wins
    - State threaded via Maps/Sets (scope, types, mutability, visibility, uninitialized tracking)
-2. **Compiler**: `compile()/execute()` ([src/compiler/compiler.ts](../src/compiler/compiler.ts))
+2. **Compiler**: `compile()/execute()` ([src/main/ts/compiler/compiler.ts](../src/main/ts/compiler/compiler.ts))
    - Multi-pass string transformer: parse → validate → transform → strip syntax → hoist vars → literals → rewrites → wrap IIFE
    - Compiles Tuff → JavaScript IIFE, then `eval`
 
@@ -39,7 +39,23 @@ Tuff is a typed expression language with **two execution modes**:
 
 - **No regex literals or `RegExp()` constructor**: parse strings via char scanning helpers
 - **No class declarations/expressions**: use functions with closures or factory patterns
-- See [src/parser.ts](../src/parser.ts) and [src/compiler/parsing/string-helpers.ts](../src/compiler/parsing/string-helpers.ts) for examples
+- See [src/main/ts/parser.ts](../src/main/ts/parser.ts) and [src/main/ts/compiler/parsing/string-helpers.ts](../src/main/ts/compiler/parsing/string-helpers.ts) for examples
+
+## Repository Layout
+
+Tuff follows a Gradle-like layout:
+
+- Production code: `src/main/ts/`
+- Tests: `src/test/ts/`
+
+Update imports and scripts accordingly when moving files.
+
+## Code References
+
+1. **Interpreter**: `interpret()` → `interpretWithScope()` ([src/main/ts/utils/interpret.ts](../src/main/ts/utils/interpret.ts), [src/main/ts/core/app.ts](../src/main/ts/core/app.ts))
+2. **Compiler**: `compile()/execute()` ([src/main/ts/compiler/compiler.ts](../src/main/ts/compiler/compiler.ts))
+
+- See [src/main/ts/parser.ts](../src/main/ts/parser.ts) and [src/main/ts/compiler/parsing/string-helpers.ts](../src/main/ts/compiler/parsing/string-helpers.ts) for examples
 
 ### Error Handling
 
@@ -53,7 +69,7 @@ Tuff is a typed expression language with **two execution modes**:
 
 - `bun test` – run all tests
 - `bun test path/to/file.test.ts` – run single test file
-- **Prefer `itBoth()`**: tests interpreter + compiler together (see [tests/test-helpers.ts](../tests/test-helpers.ts))
+- **Prefer `itBoth()`**: tests interpreter + compiler together (see [src/test/ts/test-helpers.ts](../src/test/ts/test-helpers.ts))
 
 ### Lint & Format
 
