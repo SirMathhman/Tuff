@@ -42,10 +42,13 @@ export function handleReferenceOperation(
   // Check if the variable exists in scope
   if (!scope.has(varName)) return undefined;
 
-  // Create and return a pointer to this variable
+  // Inline createPointer and return a pointer to this variable
   // Mark the pointer as mutable if the variable is mutable
   const isMutable = mutMap.get(varName) ?? false;
-  return createPointer(varName, isMutable);
+  const pointerValue = pointerCounter++;
+  pointerMap.set(pointerValue, varName);
+  mutablePointerMap.set(pointerValue, isMutable);
+  return pointerValue;
 }
 
 export function handleDereferenceOperation(
