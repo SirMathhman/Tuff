@@ -1,7 +1,7 @@
-import { describe, it } from "bun:test";
-import { assertInterpretValid, itBoth } from "../test-helpers";
+import { describe } from "bun:test";
+import { itBoth, itInterpreter } from "../test-helpers";
 
-describe("interpret - types - checking and aliases", () => {
+describe("types - checking and aliases", () => {
   itBoth("supports type check with 'is' operator", (assertValid) => {
     assertValid("let temp : I32 = 100; temp is I32", 1);
   });
@@ -28,7 +28,7 @@ describe("interpret - types - checking and aliases", () => {
   );
 });
 
-describe("interpret - types - structs", () => {
+describe("types - structs", () => {
   itBoth("supports struct declaration and field access", (assertValid) => {
     assertValid(
       "struct Wrapper { field : 100 } Wrapper { field : 100 }.field",
@@ -44,15 +44,15 @@ describe("interpret - types - structs", () => {
   });
 
   // Constructor 'this' returns not supported in compiler
-  it("supports constructor functions that return struct-like objects", () => {
-    assertInterpretValid(
-      "fn Wrapper(field : I32) => this; Wrapper(100).field",
-      100,
-    );
-  });
+  itInterpreter(
+    "supports constructor functions that return struct-like objects",
+    (ok) => {
+      ok("fn Wrapper(field : I32) => this; Wrapper(100).field", 100);
+    },
+  );
 });
 
-describe("interpret - types - arrays", () => {
+describe("types - arrays", () => {
   itBoth("supports typed arrays with indexing", (assertValid) => {
     assertValid(
       "let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]",
@@ -71,30 +71,29 @@ describe("interpret - types - arrays", () => {
     assertValid("let array = [1, 2, 3]; array.length", 3);
   });
 
-  // .init tracks initialized count - not available on JS arrays
-  it("supports array init property", () => {
-    assertInterpretValid("let array = [1, 2, 3]; array.init", 3);
+  itBoth("supports array init property", (ok) => {
+    ok("let array = [1, 2, 3]; array.init", 3);
   });
 });
 
-describe("interpret - types - destructors", () => {
-  // Destructor syntax not supported in compiler
-  it("supports type destructors with 'then' clause", () => {
-    assertInterpretValid(
+// Destructor syntax not supported in compiler
+describe("types - destructors", () => {
+  itInterpreter("supports type destructors with 'then' clause", (ok) => {
+    ok(
       "let mut count = 0; fn drop(this : I32) => count += 1; type MyDroppable = I32 then drop; { let temp : MyDroppable = 100; } count",
       1,
     );
   });
 
-  it("supports type destructors on array elements", () => {
-    assertInterpretValid(
+  itInterpreter("supports type destructors on array elements", (ok) => {
+    ok(
       "let mut count = 0; fn drop(this : I32) => count += 1; type MyDroppable = I32 then drop; { let temp : [MyDroppable; 3; 3] = [1, 2, 3]; } count",
       3,
     );
   });
 
-  it("supports type destructors on struct fields", () => {
-    assertInterpretValid(
+  itInterpreter("supports type destructors on struct fields", (ok) => {
+    ok(
       "let mut count = 0; fn drop(this : MyDroppable) => count += 1; type MyDroppable = I32 then drop; struct Wrapper { field : MyDroppable } { let temp : Wrapper = Wrapper { field : 100 }; } count",
       1,
     );

@@ -13,7 +13,13 @@ import {
 import { transformStringIndexing } from "./transforms/syntax/string-transforms";
 import { validateTypedArithmetic } from "./transforms/type-arithmetic-validation";
 import { transformStructInstantiation } from "./transforms/syntax/struct-transform";
+import {
+  transformModules,
+  transformModuleAccess,
+} from "./transforms/module-transforms";
+import { transformPointers } from "./transforms/pointer-transforms";
 import { isWhitespace, isIdentifierChar } from "./parsing/string-helpers";
+import { clearVariableTypes } from "./parsing/parser-utils";
 
 function isAlphaNum(ch: string): boolean {
   return (
@@ -24,7 +30,12 @@ function isAlphaNum(ch: string): boolean {
   );
 }
 
-const BUILTIN_METHODS = new Set(["charCodeAt", "length", "init"]);
+const BUILTIN_METHODS = new Set(["charCodeAt", "length"]);
+
+// Map Tuff properties to JS equivalents
+const PROPERTY_ALIASES: Record<string, string> = {
+  init: "length", // Tuff's .init tracks initialized count, same as length for literals
+};
 
 function findReceiverStart(result: string, isClosingParen: boolean): number {
   let receiverStart = result.length - 1;
@@ -83,11 +94,46 @@ function collectLocalVariables(source: string): Set<string> {
   return localVars;
 }
 
+/**
+ * Collect module/object names by looking for patterns like "Name = {"
+ */
+function collectModuleNames(source: string): Set<string> {
+  const moduleNames = new Set<string>();
+  let i = 0;
+  while (i < source.length) {
+    // Look for identifier followed by = {
+    if (
+      isIdentifierChar(source.charAt(i)) &&
+      (i === 0 || !isIdentifierChar(source.charAt(i - 1)))
+    ) {
+      const nameStart = i;
+      while (i < source.length && isIdentifierChar(source.charAt(i))) i++;
+      const name = source.slice(nameStart, i);
+
+      // Skip whitespace
+      let j = i;
+      while (j < source.length && isWhitespace(source.charAt(j))) j++;
+
+      // Check for = {
+      if (j < source.length && source.charAt(j) === "=") {
+        j++;
+        while (j < source.length && isWhitespace(source.charAt(j))) j++;
+        if (j < source.length && source.charAt(j) === "{") {
+          moduleNames.add(name);
+        }
+      }
+    }
+    i++;
+  }
+  return moduleNames;
+}
+
 function transformMethodCall(
   source: string,
   i: number,
   result: string,
   localVars: Set<string>,
+  moduleNames: Set<string>,
 ): { newI: number; newResult: string } {
   let methodName = "";
   let j = i + 1;
@@ -98,6 +144,22 @@ function transformMethodCall(
   }
 
   if (BUILTIN_METHODS.has(methodName) || localVars.has(methodName)) {
+    return { newI: j - 1, newResult: result + "." + methodName };
+  }
+
+  // Check for property aliases (like .init -> .length)
+  if (PROPERTY_ALIASES[methodName]) {
+    return {
+      newI: j - 1,
+      newResult: result + "." + PROPERTY_ALIASES[methodName],
+    };
+  }
+
+  // Check if receiver is a module/object - if so, keep dot access
+  const isClosingResult = result.charAt(result.length - 1) === ")";
+  const receiverStartCheck = findReceiverStart(result, isClosingResult);
+  const receiverCheck = result.slice(receiverStartCheck).trim();
+  if (moduleNames.has(receiverCheck)) {
     return { newI: j - 1, newResult: result + "." + methodName };
   }
 
@@ -117,6 +179,15 @@ function transformMethodCall(
       if (depth > 0) args += c;
       j++;
     }
+
+    // Special case: if receiver is "this" or "thisVal", just call the method directly
+    // without passing anything as first arg (global scope function call)
+    const trimmedReceiver = receiver.trim();
+    if (trimmedReceiver === "this" || trimmedReceiver === "thisVal") {
+      const transformed = newResult + methodName + "(" + args + ")";
+      return { newI: j - 1, newResult: transformed };
+    }
+
     const transformed =
       newResult +
       methodName +
@@ -131,6 +202,7 @@ function transformMethodCall(
 
 function transformMethodCalls(source: string): string {
   const localVars = collectLocalVariables(source);
+  const moduleNames = collectModuleNames(source);
   let result = "";
   let i = 0;
   const len = source.length;
@@ -148,6 +220,7 @@ function transformMethodCalls(source: string): string {
         i,
         result,
         localVars,
+        moduleNames,
       );
       result = newResult;
       i = newI + 1;
@@ -164,6 +237,7 @@ interface VariableInfo {
   mutable: boolean;
   initialized: boolean;
   isArray?: boolean;
+  isUninitialized?: boolean;
 }
 
 /**
@@ -174,6 +248,9 @@ function createTuffCompiler(source: string) {
 
   return {
     compile(): string {
+      // Reset variable type tracking for each compilation
+      clearVariableTypes();
+
       // Pass 1: Parse variable declarations
       const parser = createDeclarationParser(source, variables);
       parser.parseDeclarations();
@@ -187,25 +264,34 @@ function createTuffCompiler(source: string) {
       // Validate typed arithmetic operations before removing type syntax
       validateTypedArithmetic(source);
 
-      // Pass 2: Transform struct instantiation BEFORE removing braces
-      // (struct instantiation braces must not be stripped)
-      const withStructs = transformStructInstantiation(source);
+      // Pass 2: Transform modules and objects FIRST
+      const withModules = transformModules(source);
 
-      // Pass 3: Transform control flow BEFORE removing braces
+      // Pass 3: Transform struct instantiation BEFORE removing braces
+      // (struct instantiation braces must not be stripped)
+      const withStructs = transformStructInstantiation(withModules);
+
+      // Pass 4: Transform control flow BEFORE removing braces
       // (if/else/loop/while/for/match need their braces)
       const transformed = transformControlFlow(withStructs);
 
-      // Pass 4: Strip Tuff syntax (let, mut, type annotations, struct declarations)
+      // Pass 5: Strip Tuff syntax (let, mut, type annotations, struct declarations)
       const js = removeTypeSyntax(transformed);
 
-      // Pass 5: Extract variables that need declaration
+      // Pass 6: Extract variables that need declaration
       const { expression, varDeclarations } = extractVarDeclarations(js);
 
-      // Pass 6: Transform literals
+      // Pass 7: Transform literals
       let transformedExpr = transformStringIndexing(expression, arrayVars);
       transformedExpr = transformCharLiterals(transformedExpr);
       transformedExpr = replaceBooleanLiterals(transformedExpr);
       transformedExpr = stripTypeAnnotationsAndValidate(transformedExpr);
+
+      // Transform :: to . for module access
+      transformedExpr = transformModuleAccess(transformedExpr);
+
+      // Transform pointer operations (&x, *y)
+      transformedExpr = transformPointers(transformedExpr);
 
       // Transform method calls: 100.add(50) => add(100, 50)
       transformedExpr = transformMethodCalls(transformedExpr);

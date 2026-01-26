@@ -1,7 +1,7 @@
 import { describe } from "bun:test";
 import { itBoth } from "../test-helpers";
 
-describe("interpret - control flow - loops", () => {
+describe("control flow - loops", () => {
   itBoth("supports loop expression with break", (assertValid) => {
     assertValid("let x : I32 = loop { break 5; }; x", 5);
   });

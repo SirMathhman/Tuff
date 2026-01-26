@@ -1,5 +1,9 @@
 import { isWhitespace, matchWord, isIdentifierChar } from "./string-helpers";
-import { validateTypeAnnotation } from "../validation/validation";
+import {
+  validateTypeAnnotation,
+  inferValueType,
+} from "../validation/validation";
+import { validateTypeSuffixCompatibility } from "../validation/type-utils";
 import { parseUntilSemicolon } from "./parse-helpers";
 
 // Re-export from variable-validation for consumers
@@ -9,6 +13,21 @@ export {
   addDeclaredType,
 } from "./variable-validation";
 import { addDeclaredType } from "./variable-validation";
+
+// Track variable types for cross-variable assignment validation
+const variableTypes = new Map<string, string>();
+
+export function getVariableType(name: string): string | undefined {
+  return variableTypes.get(name);
+}
+
+export function setVariableType(name: string, type: string): void {
+  variableTypes.set(name, type);
+}
+
+export function clearVariableTypes(): void {
+  variableTypes.clear();
+}
 
 /**
  * Parse a type declaration: type TypeName = TypeValue;
@@ -68,6 +87,18 @@ function parseTypeAnnotation(
   index++;
   while (index < source.length && isWhitespace(source[index])) index++;
   const typeStart = index;
+
+  // Handle pointer prefix: * or *mut
+  if (source[index] === "*") {
+    index++;
+    while (index < source.length && isWhitespace(source[index])) index++;
+    // Check for 'mut' after *
+    if (matchWord(source, index, "mut")) {
+      index += 3;
+      while (index < source.length && isWhitespace(source[index])) index++;
+    }
+  }
+
   // Handle array type: [Type; N; M]
   if (source[index] === "[") {
     let depth = 1;
@@ -100,6 +131,8 @@ export function parseLetDeclaration(
   typeAnnotation?: string;
   isMutable: boolean;
   isArray?: boolean;
+  hasInitializer?: boolean;
+  inferredType?: string;
 } {
   let i = startIndex + 3;
   while (i < source.length && isWhitespace(source[i])) i++;
@@ -114,7 +147,10 @@ export function parseLetDeclaration(
   i = typeIndex;
   while (i < source.length && isWhitespace(source[i])) i++;
   let isArray = false;
+  let hasInitializer = false;
+  let inferredType: string | undefined;
   if (i < source.length && source[i] === "=") {
+    hasInitializer = true;
     i++;
     while (i < source.length && isWhitespace(source[i])) i++;
     // Check if value starts with [ (array literal)
@@ -126,12 +162,44 @@ export function parseLetDeclaration(
       i,
     );
     i = valueEndIdx;
-    if (typeAnnotation) validateTypeAnnotation(value, typeAnnotation);
+
+    // Check if value is a variable reference with a known type
+    const trimmedValue = value.trim();
+    const sourceVarType = getVariableType(trimmedValue);
+
+    if (typeAnnotation) {
+      // Validate variable-to-variable type compatibility
+      if (sourceVarType) {
+        validateTypeSuffixCompatibility(sourceVarType, typeAnnotation);
+      }
+      validateTypeAnnotation(value, typeAnnotation);
+    }
+
+    // Infer the type from the value
+    inferredType = inferValueType(value);
   }
-  // Also check if type annotation indicates array: [Type; N] or [Type; N; M]
-  if (typeAnnotation && typeAnnotation.startsWith("[")) {
-    isArray = true;
+  // Check if type annotation indicates array: [Type; N] or [Type; N; M]
+  // Also check for pointer to array: *[Type]
+  if (typeAnnotation) {
+    if (typeAnnotation.startsWith("[") || typeAnnotation.startsWith("*[")) {
+      isArray = true;
+    }
   }
   if (i < source.length && source[i] === ";") i++;
-  return { nextIndex: i, varName, typeAnnotation, isMutable, isArray };
+
+  // Track the variable's type for future cross-variable assignments
+  const effectiveType = typeAnnotation || inferredType;
+  if (effectiveType) {
+    setVariableType(varName, effectiveType);
+  }
+
+  return {
+    nextIndex: i,
+    varName,
+    typeAnnotation,
+    isMutable,
+    isArray,
+    hasInitializer,
+    inferredType,
+  };
 }

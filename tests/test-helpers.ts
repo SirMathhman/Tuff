@@ -80,3 +80,11 @@ export function itBoth(
   );
   it("Compiled: " + name, () => fn(assertExecuteValid, assertCompileInvalid));
 }
+export function itInterpreter(
+  name: string,
+  fn: (assertValid: AssertValid, assertInvalid: AssertInvalid) => void,
+) {
+  it("Interpreted: " + name, () =>
+    fn(assertInterpretValid, assertInterpretInvalid),
+  );
+}

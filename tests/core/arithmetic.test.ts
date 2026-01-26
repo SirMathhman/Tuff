@@ -1,7 +1,7 @@
 import { describe } from "bun:test";
 import { itBoth } from "../test-helpers";
 
-describe("interpret - arithmetic - basic - types", () => {
+describe("arithmetic - basic - types", () => {
   itBoth("returns 0 for empty string", (assertValid) => {
     assertValid("", 0);
   });
@@ -32,7 +32,7 @@ describe("interpret - arithmetic - basic - types", () => {
   );
 });
 
-describe("interpret - arithmetic - basic - addition", () => {
+describe("arithmetic - basic - addition", () => {
   itBoth("parses simple addition with typed literals", (assertValid) => {
     assertValid("1U8 + 2U8", 3);
   });
@@ -67,7 +67,7 @@ describe("interpret - arithmetic - basic - addition", () => {
   });
 });
 
-describe("interpret - arithmetic - basic - precedence", () => {
+describe("arithmetic - basic - precedence", () => {
   itBoth(
     "respects operator precedence: multiplication before subtraction",
     (assertValid) => {
@@ -87,7 +87,7 @@ describe("interpret - arithmetic - basic - precedence", () => {
   });
 });
 
-describe("interpret - arithmetic - unary", () => {
+describe("arithmetic - unary", () => {
   itBoth(
     "supports logical not operator on boolean literal true",
     (assertValid) => {
@@ -115,7 +115,7 @@ describe("interpret - arithmetic - unary", () => {
   });
 });
 
-describe("interpret - arithmetic - unary - minus", () => {
+describe("arithmetic - unary - minus", () => {
   itBoth("supports unary minus on positive number", (assertValid) => {
     assertValid("-(5)", -5);
   });

@@ -1,0 +1,130 @@
+import { isIdentifierChar, isWhitespace, matchWord } from "../../parsing/string-helpers";
+import { extractParamNamesFromRaw } from "../../parsing/param-helpers";
+
+function skipWS(source: string, index: number): number {
+  while (index < source.length && isWhitespace(source[index])) index++;
+  return index;
+}
+
+interface ModuleMemberParseResult {
+  js: string;
+  privateVar?: { name: string; value: string };
+  endIdx: number;
+}
+
+function parseFunctionMember(
+  body: string,
+  j: number,
+  isPublic: boolean,
+): ModuleMemberParseResult | undefined {
+  j += 2;
+  j = skipWS(body, j);
+  const nameStart = j;
+  while (j < body.length && isIdentifierChar(body[j])) j++;
+  const fnName = body.slice(nameStart, j);
+  j = skipWS(body, j);
+
+  if (j < body.length && body[j] === "<") {
+    let angleDepth = 1;
+    j++;
+    while (j < body.length && angleDepth > 0) {
+      if (body[j] === "<") angleDepth++;
+      else if (body[j] === ">") angleDepth--;
+      j++;
+    }
+    j = skipWS(body, j);
+  }
+
+  if (j >= body.length || body[j] !== "(") return undefined;
+  const paramsStart = j;
+  let parenDepth = 1;
+  j++;
+  while (j < body.length && parenDepth > 0) {
+    if (body[j] === "(") parenDepth++;
+    else if (body[j] === ")") parenDepth--;
+    j++;
+  }
+  const params = extractParamNamesFromRaw(body.slice(paramsStart, j)).join(", ");
+
+  j = skipWS(body, j);
+  if (j < body.length && body[j] === ":") {
+    j++;
+    while (j < body.length && body[j] !== "=" && body[j] !== ";") j++;
+  }
+  if (body.slice(j, j + 2) === "=>") j += 2;
+  j = skipWS(body, j);
+
+  const bodyStart = j;
+  while (j < body.length && body[j] !== ";") j++;
+  const fnBody = body.slice(bodyStart, j).trim();
+  if (j < body.length && body[j] === ";") j++;
+
+  if (!isPublic) return { js: "", endIdx: j };
+  return { js: `${fnName}: (${params}) => ${fnBody}`, endIdx: j };
+}
+
+function parseVariableMember(
+  body: string,
+  j: number,
+  isPublic: boolean,
+): ModuleMemberParseResult | undefined {
+  j += 3;
+  j = skipWS(body, j);
+  if (matchWord(body, j, "mut")) {
+    j += 3;
+    j = skipWS(body, j);
+  }
+
+  const nameStart = j;
+  while (j < body.length && isIdentifierChar(body[j])) j++;
+  const varName = body.slice(nameStart, j);
+  j = skipWS(body, j);
+
+  if (j < body.length && body[j] === ":") {
+    j++;
+    while (j < body.length && body[j] !== "=" && body[j] !== ";") j++;
+  }
+  j = skipWS(body, j);
+
+  if (j < body.length && body[j] === "=") {
+    j++;
+    j = skipWS(body, j);
+    const valueStart = j;
+    while (j < body.length && body[j] !== ";") j++;
+    const value = body.slice(valueStart, j).trim();
+    if (j < body.length && body[j] === ";") j++;
+
+    if (!isPublic) {
+      return { js: "", privateVar: { name: varName, value }, endIdx: j };
+    }
+    return { js: `${varName}: ${value}`, endIdx: j };
+  }
+
+  if (j < body.length && body[j] === ";") j++;
+  return { js: "", endIdx: j };
+}
+
+export function parseModuleMemberWithPrivate(
+  body: string,
+  i: number,
+): ModuleMemberParseResult | undefined {
+  let j = i;
+  j = skipWS(body, j);
+
+  let isPublic = false;
+  if (matchWord(body, j, "out")) {
+    isPublic = true;
+    j += 3;
+    j = skipWS(body, j);
+  }
+
+  if (matchWord(body, j, "fn")) {
+    return parseFunctionMember(body, j, isPublic);
+  }
+
+  if (matchWord(body, j, "let")) {
+    return parseVariableMember(body, j, isPublic);
+  }
+
+  return undefined;
+}

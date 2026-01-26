@@ -16,8 +16,21 @@ function processIdentifier(
   while (i < source.length && isIdentifierChar(source[i])) i++;
   const identifier = source.slice(idStart, i);
 
-  // Don't treat control flow keywords as struct identifiers
-  const controlFlowKeywords = ["loop", "if", "while", "for", "match", "else"];
+  // Don't treat control flow keywords or declarations as struct identifiers
+  const controlFlowKeywords = [
+    "loop",
+    "if",
+    "while",
+    "for",
+    "match",
+    "else",
+    "let",
+    "fn",
+    "type",
+    "struct",
+    "module",
+    "object",
+  ];
   if (controlFlowKeywords.includes(identifier)) {
     return { newPos: i, isStruct: false, identifier };
   }

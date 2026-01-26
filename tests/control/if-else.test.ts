@@ -1,7 +1,7 @@
 import { describe } from "bun:test";
 import { itBoth } from "../test-helpers";
 
-describe("interpret - control flow - if-else", () => {
+describe("control flow - if-else", () => {
   itBoth("supports if-else expression with true condition", (assertValid) => {
     assertValid("if (true) 3 else 4", 3);
   });

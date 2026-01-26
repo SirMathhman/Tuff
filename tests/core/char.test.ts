@@ -1,7 +1,7 @@
 import { describe } from "bun:test";
 import { itBoth } from "../test-helpers";
 
-describe("interpret - char - basic", () => {
+describe("char - basic", () => {
   itBoth("supports char litBotheral witBothh single quotes", (assertValid) => {
     assertValid("'a'", 97);
   });
@@ -33,7 +33,7 @@ describe("interpret - char - basic", () => {
   );
 });
 
-describe("interpret - char - operations", () => {
+describe("char - operations", () => {
   itBoth("supports char in expressions", (assertValid) => {
     assertValid("'a' + 1", 98);
   });
@@ -59,7 +59,7 @@ describe("interpret - char - operations", () => {
   });
 });
 
-describe("interpret - char - escapes", () => {
+describe("char - escapes", () => {
   itBoth("supports escaped newline character", (assertValid) => {
     assertValid("'\\n'", 10);
   });

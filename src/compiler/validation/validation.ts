@@ -70,6 +70,16 @@ export function parseNumericLiteral(value: string): {
   return { numValue, suffix };
 }
 
+/**
+ * Infer the type of a value from its content (e.g., "100U16" -> "U16")
+ */
+export function inferValueType(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!isNumericLiteral(trimmed)) return undefined;
+  const { suffix } = parseNumericLiteral(trimmed);
+  return suffix || undefined;
+}
+
 export function validateTypeAnnotation(
   value: string,
   typeAnnotation: string,

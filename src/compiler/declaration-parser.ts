@@ -40,6 +40,7 @@ interface VariableInfo {
   mutable: boolean;
   initialized: boolean;
   isArray?: boolean;
+  isUninitialized?: boolean;
 }
 
 function registerVariable(
@@ -48,15 +49,18 @@ function registerVariable(
   isMutable: boolean,
   variables: Map<string, VariableInfo>,
   isArray?: boolean,
+  hasInitializer?: boolean,
 ): void {
   if (variables.has(varName)) {
     throw new Error(`Variable '${varName}' already declared`);
   }
+  const isUninitialized = hasInitializer === false;
   variables.set(varName, {
     type: typeAnnotation,
     mutable: isMutable,
-    initialized: true,
+    initialized: !isUninitialized,
     isArray,
+    isUninitialized,
   });
 }
 
@@ -132,7 +136,7 @@ function handleLetDeclarationOrDestructuring(
     const endBraceIdx = findMatchingCloseBrace(source, j);
     const fields = extractDestructuringFields(source, j);
     for (const field of fields) {
-      registerVariable(field, undefined, false, variables, false);
+      registerVariable(field, undefined, false, variables, false, true);
     }
     return skipToNextStatement(source, endBraceIdx);
   }
@@ -144,8 +148,42 @@ function handleLetDeclarationOrDestructuring(
     decl.isMutable,
     variables,
     decl.isArray,
+    decl.hasInitializer,
   );
   return decl.nextIndex;
+}
+
+function handleModuleOrObjectDeclaration(
+  source: string,
+  i: number,
+  keyword: string,
+  variables: Map<string, VariableInfo>,
+): number {
+  let j = i + keyword.length;
+  j = skipWhitespaceOnly(source, j);
+
+  // Get name
+  const nameStart = j;
+  while (j < source.length && isIdentifierChar(source[j])) j++;
+  const name = source.slice(nameStart, j);
+  j = skipWhitespaceOnly(source, j);
+
+  // Skip to end of body
+  if (j < source.length && source[j] === "{") {
+    j = findMatchingCloseBrace(source, j);
+  }
+
+  // Register module/object name as a variable (immutable, initialized)
+  if (name && !variables.has(name)) {
+    variables.set(name, {
+      type: keyword,
+      mutable: false,
+      initialized: true,
+      isArray: false,
+    });
+  }
+
+  return j;
 }
 
 function parseDeclarationsImpl(
@@ -176,6 +214,16 @@ function parseDeclarationsImpl(
 
     if (matchWord(source, i, "struct")) {
       i = skipStructDeclaration(source, i);
+      continue;
+    }
+
+    if (matchWord(source, i, "module")) {
+      i = handleModuleOrObjectDeclaration(source, i, "module", variables);
+      continue;
+    }
+
+    if (matchWord(source, i, "object")) {
+      i = handleModuleOrObjectDeclaration(source, i, "object", variables);
       continue;
     }
 

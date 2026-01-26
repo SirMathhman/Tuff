@@ -1,4 +1,5 @@
 import { isIdentifierChar, isWhitespace } from "../parsing/string-helpers";
+import { extractParamNamesFromRaw } from "../parsing/param-helpers";
 
 function skipWhitespace(source: string, index: number): number {
   while (index < source.length && isWhitespace(source[index])) index++;
@@ -6,35 +7,7 @@ function skipWhitespace(source: string, index: number): number {
 }
 
 function extractFunctionParams(rawParams: string): string {
-  let params = "";
-  let j = 1;
-  while (j < rawParams.length - 1) {
-    if (isWhitespace(rawParams[j])) {
-      j++;
-      continue;
-    }
-    if (isIdentifierChar(rawParams[j])) {
-      const pStart = j;
-      while (j < rawParams.length && isIdentifierChar(rawParams[j])) j++;
-      let paramName = rawParams.slice(pStart, j);
-      if (paramName === "this") paramName = "thisVal";
-      if (params) params += ", ";
-      params += paramName;
-      let nestedParenDepth = 0;
-      while (j < rawParams.length) {
-        if (rawParams[j] === "(") nestedParenDepth++;
-        else if (rawParams[j] === ")") {
-          if (nestedParenDepth === 0) break;
-          nestedParenDepth--;
-        } else if (rawParams[j] === "," && nestedParenDepth === 0) break;
-        j++;
-      }
-      if (j < rawParams.length && rawParams[j] === ",") j++;
-    } else {
-      j++;
-    }
-  }
-  return params;
+  return extractParamNamesFromRaw(rawParams).join(", ");
 }
 
 function replaceThisKeyword(body: string, replacement: string): string {
@@ -146,6 +119,18 @@ function extractFunctionHeader(
   while (i < source.length && isIdentifierChar(source[i])) i++;
   const fnName = source.slice(nameStart, i);
   i = skipWhitespace(source, i);
+
+  // Skip generic type parameters <T>, <A, B>, etc.
+  if (i < source.length && source[i] === "<") {
+    let angleDepth = 1;
+    i++;
+    while (i < source.length && angleDepth > 0) {
+      if (source[i] === "<") angleDepth++;
+      else if (source[i] === ">") angleDepth--;
+      i++;
+    }
+    i = skipWhitespace(source, i);
+  }
 
   const paramsStart = i;
   if (i < source.length && source[i] === "(") {

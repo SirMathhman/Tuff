@@ -1,7 +1,7 @@
 import { describe } from "bun:test";
 import { itBoth } from "../test-helpers";
 
-describe("interpret - control flow - booleans", () => {
+describe("control flow - booleans", () => {
   itBoth("supports boolean literal true", (assertValid) => {
     assertValid("true", 1);
   });

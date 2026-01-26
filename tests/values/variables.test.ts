@@ -1,11 +1,7 @@
-import { describe, it } from "bun:test";
-import {
-  assertInterpretValid,
-  assertInterpretInvalid,
-  itBoth,
-} from "../test-helpers";
+import { describe } from "bun:test";
+import { itBoth, itInterpreter } from "../test-helpers";
 
-describe("interpret - variables - basic", () => {
+describe("variables - basic", () => {
   itBoth("supports simple variable declaration", (assertValid) => {
     assertValid("let x : I32 = 3; x", 3);
   });
@@ -17,9 +13,8 @@ describe("interpret - variables - basic", () => {
     },
   );
 
-  // Compiler doesn't support nested braces in arithmetic expressions
-  it("supports variable declarations with type annotations", () => {
-    assertInterpretValid("(2 + { let x : I32 = 3; x }) * 4", 20);
+  itBoth("supports variable declarations with type annotations", (ok) => {
+    ok("(2 + { let x : I32 = 3; x }) * 4", 20);
   });
 
   itBoth("supports variable references in declarations", (assertValid) => {
@@ -41,7 +36,7 @@ describe("interpret - variables - basic", () => {
   );
 });
 
-describe("interpret - variables - type coercion", () => {
+describe("variables - type coercion", () => {
   itBoth(
     "allows narrower type assignment to wider type variable",
     (assertValid) => {
@@ -56,13 +51,15 @@ describe("interpret - variables - type coercion", () => {
     },
   );
 
-  // Compiler doesn't track type widths for variable-to-variable assignments
-  it("throws when assigning variable of wider type to narrower type variable", () => {
-    assertInterpretInvalid("let x = 100U16; let y : U8 = x; y");
-  });
+  itBoth(
+    "throws when assigning variable of wider type to narrower type variable",
+    (_, bad) => {
+      bad("let x = 100U16; let y : U8 = x; y");
+    },
+  );
 });
 
-describe("interpret - variables - mutable", () => {
+describe("variables - mutable", () => {
   itBoth("supports mutable variable assignment", (assertValid) => {
     assertValid("let mut x = 0; x = 100; x", 100);
   });
@@ -82,15 +79,17 @@ describe("interpret - variables - mutable", () => {
   );
 
   // Compiler doesn't track scope boundaries for variable lifetime
-  it("throws when variable is declared inside grouped expressions and used outside", () => {
-    assertInterpretInvalid("{ let mut x = 0; } x = 100; x");
-  });
+  itInterpreter(
+    "throws when variable is declared inside grouped expressions and used outside",
+    (_, bad) => {
+      bad("{ let mut x = 0; } x = 100; x");
+    },
+  );
 });
 
-describe("interpret - variables - uninitialized", () => {
-  // Compiler treats uninitialized variable assignment as immutable reassignment
-  it("supports uninitialized variable declaration", () => {
-    assertInterpretValid("let x : I32; x = 100; x", 100);
+describe("variables - uninitialized", () => {
+  itBoth("supports uninitialized variable declaration", (ok) => {
+    ok("let x : I32; x = 100; x", 100);
   });
 
   itBoth(
@@ -104,42 +103,41 @@ describe("interpret - variables - uninitialized", () => {
     assertValid("let mut x : I32; x = 10; x = 20; x", 20);
   });
 
-  // Compiler doesn't track uninitialized variable tracking through branches
-  it("supports variable assignment inside if-else branches", () => {
-    assertInterpretValid("let x : I32; if (true) x = 10; else x = 20; x", 10);
-  });
+  // Compiler doesn't track uninitialized variable assignments through control flow branches
+  itInterpreter(
+    "supports variable assignment inside if-else branches",
+    (ok) => {
+      ok("let x : I32; if (true) x = 10; else x = 20; x", 10);
+    },
+  );
 });
 
-describe("interpret - variables - pointers", () => {
-  // Pointers are interpreter-only for now
-  it("supports pointer creation and dereferencing", () => {
-    assertInterpretValid("let x = 100; let y : *I32 = &x; *y", 100);
+describe("variables - pointers", () => {
+  itBoth("supports pointer creation and dereferencing", (ok) => {
+    ok("let x = 100; let y : *I32 = &x; *y", 100);
   });
 
-  it("supports pointer dereferencing with modification", () => {
-    assertInterpretValid("let mut x = 100; let y : *I32 = &x; *y", 100);
+  itBoth("supports pointer dereferencing with modification", (ok) => {
+    ok("let mut x = 100; let y : *I32 = &x; *y", 100);
   });
 
-  it("supports chained pointer operations", () => {
-    assertInterpretValid("let x = 42; let p = &x; let pp : *I32 = p; *pp", 42);
+  itBoth("supports chained pointer operations", (ok) => {
+    ok("let x = 42; let p = &x; let pp : *I32 = p; *pp", 42);
   });
 
-  it("supports mutable pointer with dereferencing assignment", () => {
-    assertInterpretValid(
-      "let mut x = 100; let y : *mut I32 = &x; *y = 100; x",
-      100,
-    );
+  itBoth("supports mutable pointer with dereferencing assignment", (ok) => {
+    ok("let mut x = 100; let y : *mut I32 = &x; *y = 100; x", 100);
   });
 
-  it("supports pointer access to array elements", () => {
-    assertInterpretValid(
+  itBoth("supports pointer access to array elements", (ok) => {
+    ok(
       "let array = [1, 2, 3]; let slice : *[I32] = &array; slice[0] + slice[1] + slice[2]",
       6,
     );
   });
 });
 
-describe("interpret - variables - this keyword", () => {
+describe("variables - this keyword", () => {
   itBoth(
     "supports calling function via this.methodName() at global scope",
     (assertValid) => {
@@ -147,20 +145,12 @@ describe("interpret - variables - this keyword", () => {
     },
   );
 
-  // Compiler transforms this.method() to method(this) which breaks when function has params
-  it("supports function with parameters called via this", () => {
-    assertInterpretValid(
-      "fn add(a : I32, b : I32) => a + b; this.add(10, 20)",
-      30,
-    );
+  itBoth("supports function with parameters called via this", (ok) => {
+    ok("fn add(a : I32, b : I32) => a + b; this.add(10, 20)", 30);
   });
 
-  // Compiler has issues with this.method() inside function bodies
-  it("supports this in function returning value", () => {
-    assertInterpretValid(
-      "fn getValue() => 42; fn wrapper() => this.getValue(); wrapper()",
-      42,
-    );
+  itBoth("supports this in function returning value", (ok) => {
+    ok("fn getValue() => 42; fn wrapper() => this.getValue(); wrapper()", 42);
   });
 
   itBoth(

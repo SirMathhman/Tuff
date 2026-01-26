@@ -1,114 +1,103 @@
-import { describe, it } from "bun:test";
-import { assertInterpretValid, assertInterpretInvalid } from "../test-helpers";
+import { describe } from "bun:test";
+import { itBoth, itInterpreter } from "../test-helpers";
 
-describe("interpret - modules - declarations", () => {
-  it("supports module declaration with function", () => {
-    assertInterpretValid(
-      "module Sample { out fn get() => 100; } Sample::get()",
-      100,
-    );
+describe("modules - declarations", () => {
+  itBoth("supports module declaration with function", (ok) => {
+    ok("module Sample { out fn get() => 100; } Sample::get()", 100);
   });
 
-  it("supports module with multiple functions", () => {
-    assertInterpretValid(
+  itBoth("supports module with multiple functions", (ok) => {
+    ok(
       "module Math { out fn add(a : I32, b : I32) : I32 => a + b; out fn sub(a : I32, b : I32) : I32 => a - b; } Math::add(10, 5)",
       15,
     );
   });
 
-  it("supports accessing second function from module", () => {
-    assertInterpretValid(
+  itBoth("supports accessing second function from module", (ok) => {
+    ok(
       "module Math { out fn add(a : I32, b : I32) : I32 => a + b; out fn sub(a : I32, b : I32) : I32 => a - b; } Math::sub(10, 5)",
       5,
     );
   });
 
-  it("supports module with variable", () => {
-    assertInterpretValid(
-      "module Config { out let PI : I32 = 314; } Config::PI",
-      314,
-    );
+  itBoth("supports module with variable", (ok) => {
+    ok("module Config { out let PI : I32 = 314; } Config::PI", 314);
   });
 
-  it("supports module with function accessing module variable", () => {
-    assertInterpretValid(
+  itBoth("supports module with function accessing module variable", (ok) => {
+    ok(
       "module Data { let value : I32 = 42; out fn getValue() => value; } Data::getValue()",
       42,
     );
   });
 
-  it("supports nested module access in expressions", () => {
-    assertInterpretValid("module M { out fn get() => 50; } M::get() + 50", 100);
+  itBoth("supports nested module access in expressions", (ok) => {
+    ok("module M { out fn get() => 50; } M::get() + 50", 100);
   });
 });
 
-describe("interpret - modules - error handling", () => {
-  it("throws when accessing non-existent module", () => {
-    assertInterpretInvalid("NonExistent::foo()");
+describe("modules - error handling", () => {
+  itBoth("throws when accessing non-existent module", (_, bad) => {
+    bad("NonExistent::foo()");
   });
 
-  it("throws when accessing non-existent member in module", () => {
-    assertInterpretInvalid(
-      "module Sample { out fn get() => 100; } Sample::missing()",
-    );
-  });
+  // Compiler doesn't validate module member existence at compile time
+  itInterpreter(
+    "throws when accessing non-existent member in module",
+    (_, bad) => {
+      bad("module Sample { out fn get() => 100; } Sample::missing()");
+    },
+  );
 });
 
-describe("interpret - modules - objects", () => {
-  it("supports object singleton with variable access", () => {
-    assertInterpretValid(
-      "object MySingleton { out let x = 100; } MySingleton.x",
-      100,
-    );
+describe("modules - objects", () => {
+  itBoth("supports object singleton with variable access", (ok) => {
+    ok("object MySingleton { out let x = 100; } MySingleton.x", 100);
   });
 
-  it("supports object singleton with multiple variables", () => {
-    assertInterpretValid(
+  itBoth("supports object singleton with multiple variables", (ok) => {
+    ok(
       "object Config { out let mode = 42; out let timeout = 30; } Config.mode",
       42,
     );
   });
 
-  it("supports object singleton with function", () => {
-    assertInterpretValid(
-      "object Utils { out fn getValue() => 55; } Utils.getValue()",
-      55,
-    );
+  itBoth("supports object singleton with function", (ok) => {
+    ok("object Utils { out fn getValue() => 55; } Utils.getValue()", 55);
   });
 
-  it("supports public object member with out keyword", () => {
-    assertInterpretValid(
-      "object MySingleton { out let x = 100; } MySingleton.x",
-      100,
-    );
+  itBoth("supports public object member with out keyword", (ok) => {
+    ok("object MySingleton { out let x = 100; } MySingleton.x", 100);
   });
 });
 
-describe("interpret - modules - visibility", () => {
-  it("throws when accessing private object member without out keyword", () => {
-    assertInterpretInvalid("object MySingleton { let x = 100; } MySingleton.x");
+describe("modules - visibility", () => {
+  // Compiler doesn't validate object member visibility at compile time
+  itInterpreter(
+    "throws when accessing private object member without out keyword",
+    (_, bad) => {
+      bad("object MySingleton { let x = 100; } MySingleton.x");
+    },
+  );
+
+  itBoth("supports public module member with out keyword", (ok) => {
+    ok("module Config { out let PORT = 8080; } Config::PORT", 8080);
   });
 
-  it("supports public module member with out keyword", () => {
-    assertInterpretValid(
-      "module Config { out let PORT = 8080; } Config::PORT",
-      8080,
-    );
+  // Compiler doesn't validate module member visibility at compile time
+  itInterpreter(
+    "throws when accessing private module member without out keyword",
+    (_, bad) => {
+      bad("module Config { let PORT = 8080; } Config::PORT");
+    },
+  );
+
+  itBoth("allows accessing private members within same object", (ok) => {
+    ok("object Utils { let x = 10; out fn getX() => x; } Utils.getX()", 10);
   });
 
-  it("throws when accessing private module member without out keyword", () => {
-    assertInterpretInvalid("module Config { let PORT = 8080; } Config::PORT");
-  });
-
-  it("allows accessing private members within same object", () => {
-    assertInterpretValid(
-      "object Utils { let x = 10; out fn getX() => x; } Utils.getX()",
-      10,
-    );
-  });
-
-  it("allows accessing private members within same module", () => {
-    assertInterpretValid(
+  itBoth("allows accessing private members within same module", (ok) => {
+    ok(
       "module Data { let secret = 42; out fn reveal() => secret; } Data::reveal()",
       42,
     );

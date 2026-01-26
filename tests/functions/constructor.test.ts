@@ -1,7 +1,7 @@
 import { describe } from "bun:test";
 import { itBoth } from "../test-helpers";
 
-describe("interpret - constructor pattern", () => {
+describe("constructor pattern", () => {
   itBoth(
     "supports function returning this with nested function",
     (assertValid) => {

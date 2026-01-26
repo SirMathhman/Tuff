@@ -1,7 +1,7 @@
 import { describe } from "bun:test";
 import { itBoth } from "../test-helpers";
 
-describe("interpret - functions - declarations", () => {
+describe("functions - declarations", () => {
   itBoth("supports function declaration and calls", (assertValid) => {
     assertValid(
       "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",
@@ -27,7 +27,7 @@ describe("interpret - functions - declarations", () => {
   );
 });
 
-describe("interpret - functions - lambdas", () => {
+describe("functions - lambdas", () => {
   itBoth(
     "supports anonymous functions and lambda expressions",
     (assertValid) => {
@@ -50,7 +50,7 @@ describe("interpret - functions - lambdas", () => {
   });
 });
 
-describe("interpret - functions - scope and methods", () => {
+describe("functions - scope and methods", () => {
   itBoth(
     "supports function scope closure with mutable outer variable",
     (assertValid) => {

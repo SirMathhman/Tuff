@@ -1,7 +1,7 @@
 import { describe } from "bun:test";
 import { itBoth } from "../test-helpers";
 
-describe("interpret - strings - basic", () => {
+describe("strings - basic", () => {
   itBoth("supports string length property", (assertValid) => {
     assertValid('"hello".length', 5);
   });
@@ -19,7 +19,7 @@ describe("interpret - strings - basic", () => {
   });
 });
 
-describe("interpret - strings - escaping", () => {
+describe("strings - escaping", () => {
   itBoth("supports string with escaped characters", (assertValid) => {
     assertValid('"hello\\nworld".length', 11);
   });
@@ -45,7 +45,7 @@ describe("interpret - strings - escaping", () => {
   });
 });
 
-describe("interpret - strings - indexing", () => {
+describe("strings - indexing", () => {
   itBoth("supports string indexing with literals", (assertValid) => {
     assertValid('"test"[0]', 116); // 't'
   });
@@ -71,7 +71,7 @@ describe("interpret - strings - indexing", () => {
   });
 });
 
-describe("interpret - strings - indexing-special", () => {
+describe("strings - indexing-special", () => {
   itBoth("supports string indexing space character", (assertValid) => {
     assertValid('"a b"[1]', 32); // ' '
   });

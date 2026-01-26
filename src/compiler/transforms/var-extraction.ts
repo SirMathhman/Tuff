@@ -143,13 +143,15 @@ export function extractVarDeclarations(source: string): {
       continue;
     }
 
-    // Check for destructuring pattern at top level
+    // Check for destructuring pattern at top level: { x, y } = ...
     if (ch === "{" && braceDepth === 0) {
       const destruct = tryExtractDestructuringVars(source, i);
       if (destruct) {
+        // Extract the variable names
         destruct.vars.forEach((v) => varDeclDecls.add(v));
-        result += source[i];
-        i++;
+        // Copy the entire pattern { ... } = to result
+        result += source.slice(i, destruct.endIdx);
+        i = destruct.endIdx;
         continue;
       }
     }

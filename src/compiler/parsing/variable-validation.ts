@@ -15,6 +15,7 @@ interface VariableInfo {
   type: string | undefined;
   mutable: boolean;
   initialized: boolean;
+  isUninitialized?: boolean;
 }
 
 // Track declared type aliases
@@ -64,7 +65,13 @@ function checkWriteAccess(
   variables: Map<string, VariableInfo>,
 ): void {
   if (variables.has(name)) {
-    if (!variables.get(name)!.mutable) {
+    const varInfo = variables.get(name)!;
+    // Allow first assignment to uninitialized variables
+    if (varInfo.isUninitialized && !varInfo.initialized) {
+      varInfo.initialized = true;
+      return;
+    }
+    if (!varInfo.mutable) {
       throw new Error(
         `Variable '${name}' is immutable and cannot be reassigned`,
       );
@@ -171,6 +178,30 @@ export function validateVariableUsage(
       i++;
       continue;
     }
+    // Skip property access (identifiers after a dot)
+    if (source[i] === ".") {
+      i++;
+      // Skip the property name
+      while (i < source.length && isWhitespace(source[i])) i++;
+      while (i < source.length && isIdentifierChar(source[i])) i++;
+      continue;
+    }
+    // Skip pointer dereference patterns (*identifier =) - these write through pointer
+    // not to the variable itself
+    if (source[i] === "*") {
+      let j = i + 1;
+      while (j < source.length && isWhitespace(source[j])) j++;
+      if (
+        j < source.length &&
+        isIdentifierChar(source[j]) &&
+        !isDigit(source[j])
+      ) {
+        // This looks like a dereference
+        while (j < source.length && isIdentifierChar(source[j])) j++;
+        i = j;
+        continue;
+      }
+    }
     let newI = skipDeclaration(source, i, "let");
     if (newI !== -1) {
       i = newI;
@@ -182,6 +213,16 @@ export function validateVariableUsage(
       continue;
     }
     newI = skipDeclaration(source, i, "fn");
+    if (newI !== -1) {
+      i = newI;
+      continue;
+    }
+    newI = skipDeclaration(source, i, "module");
+    if (newI !== -1) {
+      i = newI;
+      continue;
+    }
+    newI = skipDeclaration(source, i, "object");
     if (newI !== -1) {
       i = newI;
       continue;

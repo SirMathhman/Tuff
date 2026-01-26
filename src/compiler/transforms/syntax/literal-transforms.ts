@@ -66,11 +66,14 @@ function transformCharLiterals(source: string): string {
 
 /**
  * Convert statements to expressions by replacing semicolons with commas
+ * - Convert semicolons at top level (braceDepth=0) and inside parentheses
+ * - Keep semicolons inside curly braces (control flow bodies)
  */
 export function convertStatementsToExpressions(source: string): string {
   let result = "";
   let i = source.length - 1;
 
+  // Skip trailing semicolons and whitespace
   while (i >= 0 && (source[i] === ";" || isWhitespace(source[i]))) {
     if (source[i] === ";") {
       i--;
@@ -79,12 +82,20 @@ export function convertStatementsToExpressions(source: string): string {
     i--;
   }
 
-  let depth = 0;
+  // Track both brace and overall depth
+  let braceDepth = 0;
   for (let j = 0; j <= i; j++) {
-    if (source[j] === "{" || source[j] === "[" || source[j] === "(") depth++;
-    else if (source[j] === "}" || source[j] === "]" || source[j] === ")")
-      depth--;
-    result += source[j] === ";" && depth === 0 ? "," : source[j];
+    const ch = source[j];
+    if (ch === "{") braceDepth++;
+    else if (ch === "}") braceDepth--;
+
+    // Convert semicolons to commas everywhere EXCEPT inside braces
+    // This handles both top level and nested expression parentheses
+    if (ch === ";" && braceDepth === 0) {
+      result += ",";
+    } else {
+      result += ch;
+    }
   }
 
   return result;
