@@ -1,48 +1,48 @@
-import { describe, it } from "bun:test";
-import { assertInterpretAllValid } from "./test-helpers";
+import { describe } from "bun:test";
+import { itAllBoth } from "./test-helpers";
 
 describe("interpretAll - use statements", () => {
-  it("executes main module with lib dependency via import", () => {
+  itAllBoth("executes main module with lib dependency via import", (assertValid) => {
     const config = new Map<string[], string>([
       [["main"], "use { get } from lib; get()"],
       [["lib"], "out fn get() => 100;"],
     ]);
 
-    assertInterpretAllValid(["main"], config, 100);
+    assertValid(["main"], config, 100);
   });
 
-  it("handles function from lib module", () => {
+  itAllBoth("handles function from lib module", (assertValid) => {
     const config = new Map<string[], string>([
       [["main"], "use { add } from lib; add(3, 4)"],
       [["lib"], "out fn add(a: I32, b: I32) => a + b;"],
     ]);
 
-    assertInterpretAllValid(["main"], config, 7);
+    assertValid(["main"], config, 7);
   });
 });
 
 describe("interpretAll - module references", () => {
-  it("executes module function via variable reference", () => {
+  itAllBoth("executes module function via variable reference", (assertValid) => {
     const config = new Map<string[], string>([
       [["main"], "let temp from lib; temp.get()"],
       [["lib"], "out fn get() => 100;"],
     ]);
 
-    assertInterpretAllValid(["main"], config, 100);
+    assertValid(["main"], config, 100);
   });
 
-  it("executes module function with args via variable reference", () => {
+  itAllBoth("executes module function with args via variable reference", (assertValid) => {
     const config = new Map<string[], string>([
       [["main"], "let math from lib; math.add(5, 7)"],
       [["lib"], "out fn add(a: I32, b: I32) => a + b;"],
     ]);
 
-    assertInterpretAllValid(["main"], config, 12);
+    assertValid(["main"], config, 12);
   });
 });
 
 describe("interpretAll - struct and native imports", () => {
-  it("uses struct type from module with destructuring", () => {
+  itAllBoth("uses struct type from module with destructuring", (assertValid) => {
     const config = new Map<string[], string>([
       [
         ["main"],
@@ -51,10 +51,10 @@ describe("interpretAll - struct and native imports", () => {
       [["lib"], "out struct Wrapper { x : I32 }"],
     ]);
 
-    assertInterpretAllValid(["main"], config, 100);
+    assertValid(["main"], config, 100);
   });
 
-  it("calls native function via extern declaration", () => {
+  itAllBoth("calls native function via extern declaration", (assertValid) => {
     const config = new Map<string[], string>([
       [["main"], "extern use { get } from lib; extern fn get() : I32; get()"],
     ]);
@@ -62,10 +62,10 @@ describe("interpretAll - struct and native imports", () => {
       [["lib"], "export function get() { return 100; }"],
     ]);
 
-    assertInterpretAllValid(["main"], config, 100, nativeConfig);
+    assertValid(["main"], config, 100, nativeConfig);
   });
 
-  it("calls native function with parameters", () => {
+  itAllBoth("calls native function with parameters", (assertValid) => {
     const config = new Map<string[], string>([
       [
         ["main"],
@@ -76,6 +76,6 @@ describe("interpretAll - struct and native imports", () => {
       [["lib"], "export function add(a, b) { return a + b; }"],
     ]);
 
-    assertInterpretAllValid(["main"], config, 12, nativeConfig);
+    assertValid(["main"], config, 12, nativeConfig);
   });
 });

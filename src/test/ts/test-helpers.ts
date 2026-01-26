@@ -1,6 +1,7 @@
 import { expect, test as it } from "bun:test";
 import { interpret, interpretAll } from "../../main/ts/utils/interpret";
 import { compile, evalImpl } from "../../main/ts/compiler/compiler";
+import { compileAll } from "../../main/ts/compiler/compile-all";
 
 /**
  * Assert that an interpretation is valid and returns the expected value.
@@ -71,8 +72,56 @@ export function assertExecuteInvalidRuntime(source: string): void {
   expect(() => evalImpl(compiled)).toThrow();
 }
 
+/**
+ * Assert that compileAll is valid and returns the expected value.
+ * @param entry The entry point module path
+ * @param sourceMap Module source code map
+ * @param expectedValue The expected result
+ * @param nativeMap Optional native module implementations
+ */
+export function assertCompileAllValid(
+  entry: string[],
+  sourceMap: Map<string[], string>,
+  expectedValue: number,
+  nativeMap?: Map<string[], string>,
+): void {
+  const bundled = compileAll(entry, sourceMap, nativeMap);
+  try {
+    const result = evalImpl(bundled);
+    expect(result).toBe(expectedValue);
+  } catch {
+    throw new Error("Failed to execute compiled bundled code: " + bundled);
+  }
+}
+
+/**
+ * Assert that compileAll throws an error at compile time.
+ * @param entry The entry point module path
+ * @param sourceMap Module source code map
+ * @param nativeMap Optional native module implementations
+ */
+export function assertCompileAllInvalid(
+  entry: string[],
+  sourceMap: Map<string[], string>,
+  nativeMap?: Map<string[], string>,
+): void {
+  expect(() => compileAll(entry, sourceMap, nativeMap)).toThrow();
+}
+
 type AssertValid = (source: string, expected: number) => void;
 type AssertInvalid = (source: string) => void;
+
+type AssertAllValid = (
+  entry: string[],
+  sourceMap: Map<string[], string>,
+  expected: number,
+  nativeMap?: Map<string[], string>,
+) => void;
+type AssertAllInvalid = (
+  entry: string[],
+  sourceMap: Map<string[], string>,
+  nativeMap?: Map<string[], string>,
+) => void;
 
 function itInterpreted(
   name: string,
@@ -89,6 +138,22 @@ export function itBoth(
 ) {
   itInterpreted(name, fn);
   it("Compiled: " + name, () => fn(assertExecuteValid, assertCompileInvalid));
+}
+
+/**
+ * Test helper for multi-module programs (use statements, extern, etc.)
+ * Tests both interpreted and compiled execution paths.
+ */
+export function itAllBoth(
+  name: string,
+  fn: (assertValid: AssertAllValid, assertInvalid: AssertAllInvalid) => void,
+) {
+  it("Interpreted: " + name, () =>
+    fn(assertInterpretAllValid, assertInterpretAllInvalid),
+  );
+  it("Compiled: " + name, () =>
+    fn(assertCompileAllValid, assertCompileAllInvalid),
+  );
 }
 
 /**

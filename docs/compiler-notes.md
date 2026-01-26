@@ -12,6 +12,15 @@ This pass also supports JS destructuring assignments like:
 
 To avoid invalid JavaScript, the destructuring detector only triggers when a real destructuring assignment is present (i.e. a closing `}` followed by `=`), and it ignores JS reserved words.
 
+## Multi-module bundling (`compileAll`)
+
+Tests that execute multiple modules (see `interpretAll`) use a small helper compiler entrypoint that merges multiple module sources into a single compilation unit.
+
+- Strips `use ... from ...;` and `extern ...` declarations (the compiler itself doesn’t parse these statements yet).
+- Treats `out` declarations in module sources as normal top-level declarations.
+- Supports module references like `let alias from lib; alias.get()` by rewriting the alias access to the member directly.
+- Prepends simple native JS shims (strips ESM `export` keywords) before evaluating the compiled IIFE.
+
 ## Dev checks
 
 The repo runs PMD CPD (copy/paste detection) as part of the pre-commit checks.
