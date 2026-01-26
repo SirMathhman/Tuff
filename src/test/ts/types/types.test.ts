@@ -74,6 +74,15 @@ describe("types - arrays", () => {
   itBoth("supports array init property", (ok) => {
     ok("let array = [1, 2, 3]; array.init", 3);
   });
+
+  itInterpreter(
+    "throws on array initialization count mismatch in function call",
+    (assertValid, assertInvalid) => {
+      assertInvalid(
+        "let mut myArray : [I32; 0; 3]; fn getFirst(array :  [I32; 1; 3]) => array[0]; getFirst(myArray)",
+      );
+    },
+  );
 });
 
 // Destructor syntax not supported in compiler
