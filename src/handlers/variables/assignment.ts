@@ -1,7 +1,10 @@
 import type { ScopeContext } from "../../types/interpreter";
 import { callInterpreter } from "../../types/interpreter";
 import { setArrayElement, isArrayInstance } from "../../utils/array";
-import { toScopeContext, type BaseHandlerParams } from "../../utils/function/function-call-params";
+import {
+  toScopeContext,
+  type BaseHandlerParams,
+} from "../../utils/function/function-call-params";
 
 function parseArrayElemAssignment(
   lhs: string,

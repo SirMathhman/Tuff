@@ -1,4 +1,7 @@
-import { interpretAfterSemicolon, type StatementContext } from "../statement-context";
+import {
+  interpretAfterSemicolon,
+  type StatementContext,
+} from "../statement-context";
 import { handleUseStatement } from "../use-statement";
 
 export function handleExternStatement(

@@ -27,17 +27,15 @@ function findElseClauseIndex(s: string, startIdx: number): number {
   return elseIdx;
 }
 
-export function handleIfExpression(
-  p: {
-    s: string;
-    scope: Map<string, number>;
-    typeMap: Map<string, number>;
-    mutMap: Map<string, boolean>;
-    uninitializedSet: Set<string>;
-    unmutUninitializedSet: Set<string>;
-    interpreter: Interpreter;
-  },
-): number | undefined {
+export function handleIfExpression(p: {
+  s: string;
+  scope: Map<string, number>;
+  typeMap: Map<string, number>;
+  mutMap: Map<string, boolean>;
+  uninitializedSet: Set<string>;
+  unmutUninitializedSet: Set<string>;
+  interpreter: Interpreter;
+}): number | undefined {
   if (p.s.indexOf("if ") !== 0) return undefined;
   const cIdx = p.s.indexOf(")");
   if (cIdx <= 0) return undefined;

@@ -2,7 +2,10 @@ import { findOperatorIndex, performBinaryOp } from "./operators";
 import { parseTypedNumber, extractTypedInfo } from "../../parser";
 import type { ScopeContext } from "../../types/interpreter";
 import { callInterpreter } from "../../types/interpreter";
-import { toScopeContext, type BaseHandlerParams } from "../../utils/function/function-call-params";
+import {
+  toScopeContext,
+  type BaseHandlerParams,
+} from "../../utils/function/function-call-params";
 
 function getRightOperand(s: string, opIndex: number, op: string): string {
   if (op === "is") return s.slice(opIndex + 3).trim();

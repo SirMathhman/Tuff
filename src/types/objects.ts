@@ -1,9 +1,6 @@
 import type { Interpreter } from "../expressions/handlers";
 import { createNamespacedDeclarationHandler } from "./namespace-handler";
-import {
-  createNamespacedStore,
-  type NamespacedStoreEntry,
-} from "./modules";
+import { createNamespacedStore, type NamespacedStoreEntry } from "./modules";
 
 // Global object storage: maps object name to its scope
 const objects = createNamespacedStore();

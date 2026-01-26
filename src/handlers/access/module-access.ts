@@ -120,7 +120,12 @@ export function handleModuleAccess(
     if (!p.typeMap.has("__module__" + moduleName)) return undefined;
     const module = getModule(moduleName);
     if (!module) return undefined;
-    return handleModuleMemberAccess(moduleName, memberStr, module, p.interpreter);
+    return handleModuleMemberAccess(
+      moduleName,
+      memberStr,
+      module,
+      p.interpreter,
+    );
   }
 
   if (dotIndex !== -1) {
