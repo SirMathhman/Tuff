@@ -8,10 +8,7 @@ import {
   getConcreteType,
 } from "../../../utils/generics/generic-validation";
 import { isTypeCompatible } from "../type-compatibility";
-import {
-  getVariableType,
-  isDroppableType,
-} from "../../parsing/parser-utils";
+import { getVariableType, isDroppableType } from "../../parsing/parser-utils";
 
 /**
  * Validate generic type consistency for a function call
@@ -51,7 +48,8 @@ function handleMoveOnDroppableArg(params: {
   if (
     !isDroppableType(params.paramType) ||
     params.paramType.startsWith("*") ||
-    (params.fnDefData.generics && params.fnDefData.generics.includes(params.paramType))
+    (params.fnDefData.generics &&
+      params.fnDefData.generics.includes(params.paramType))
   ) {
     return;
   }
@@ -77,7 +75,10 @@ function validateNonVariableArgType(params: {
   }
 
   // Skip generic type parameters - they're handled by consistency check
-  if (params.fnDefData.generics && params.fnDefData.generics.includes(params.param.type)) {
+  if (
+    params.fnDefData.generics &&
+    params.fnDefData.generics.includes(params.param.type)
+  ) {
     return;
   }
 

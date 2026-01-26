@@ -90,7 +90,11 @@ function shouldMoveDroppableArg(params: {
   if (!isValidIdentifier(paramTypeStr)) return undefined;
   if (!params.ctx.typeMap.has("__drop__" + paramTypeStr)) return undefined;
   if (!isValidIdentifier(trimmedArg)) return undefined;
-  const argTypeName = getTypeNameForVar(trimmedArg, new Map(), params.ctx.typeMap);
+  const argTypeName = getTypeNameForVar(
+    trimmedArg,
+    new Map(),
+    params.ctx.typeMap,
+  );
   if (argTypeName !== paramTypeStr) return undefined;
   return trimmedArg;
 }
