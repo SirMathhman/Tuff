@@ -1,4 +1,8 @@
-import { isIdentifierChar, isWhitespace, matchWord } from "../../parsing/string-helpers";
+import {
+  isIdentifierChar,
+  isWhitespace,
+  matchWord,
+} from "../../parsing/string-helpers";
 import { extractParamNamesFromRaw } from "../../parsing/param-helpers";
 
 function skipWS(source: string, index: number): number {
@@ -8,6 +12,8 @@ function skipWS(source: string, index: number): number {
 
 interface ModuleMemberParseResult {
   js: string;
+  memberName?: string;
+  isPublic: boolean;
   privateVar?: { name: string; value: string };
   endIdx: number;
 }
@@ -44,7 +50,9 @@ function parseFunctionMember(
     else if (body[j] === ")") parenDepth--;
     j++;
   }
-  const params = extractParamNamesFromRaw(body.slice(paramsStart, j)).join(", ");
+  const params = extractParamNamesFromRaw(body.slice(paramsStart, j)).join(
+    ", ",
+  );
 
   j = skipWS(body, j);
   if (j < body.length && body[j] === ":") {
@@ -59,8 +67,15 @@ function parseFunctionMember(
   const fnBody = body.slice(bodyStart, j).trim();
   if (j < body.length && body[j] === ";") j++;
 
-  if (!isPublic) return { js: "", endIdx: j };
-  return { js: `${fnName}: (${params}) => ${fnBody}`, endIdx: j };
+  if (!isPublic) {
+    return { js: "", memberName: fnName, isPublic: false, endIdx: j };
+  }
+  return {
+    js: `${fnName}: (${params}) => ${fnBody}`,
+    memberName: fnName,
+    isPublic: true,
+    endIdx: j,
+  };
 }
 
 function parseVariableMember(
@@ -95,13 +110,24 @@ function parseVariableMember(
     if (j < body.length && body[j] === ";") j++;
 
     if (!isPublic) {
-      return { js: "", privateVar: { name: varName, value }, endIdx: j };
+      return {
+        js: "",
+        memberName: varName,
+        isPublic: false,
+        privateVar: { name: varName, value },
+        endIdx: j,
+      };
     }
-    return { js: `${varName}: ${value}`, endIdx: j };
+    return {
+      js: `${varName}: ${value}`,
+      memberName: varName,
+      isPublic: true,
+      endIdx: j,
+    };
   }
 
   if (j < body.length && body[j] === ";") j++;
-  return { js: "", endIdx: j };
+  return { js: "", isPublic, endIdx: j };
 }
 
 export function parseModuleMemberWithPrivate(

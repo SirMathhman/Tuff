@@ -1,20 +1,10 @@
-import { isIdentifierChar, isWhitespace, matchWord } from "../parsing/string-helpers";
+import { isIdentifierChar, isWhitespace } from "../parsing/string-helpers";
 import { parseModuleMemberWithPrivate } from "./helpers/module-member-parser";
+import { findModuleRegions } from "./helpers/module-validation";
 
 function skipWhitespace(source: string, index: number): number {
   while (index < source.length && isWhitespace(source[index])) index++;
   return index;
-}
-
-function findMatchingBrace(source: string, start: number): number {
-  let depth = 1;
-  let i = start + 1;
-  while (i < source.length && depth > 0) {
-    if (source[i] === "{") depth++;
-    else if (source[i] === "}") depth--;
-    i++;
-  }
-  return i;
 }
 
 /**
@@ -72,51 +62,30 @@ function transformModuleBody(body: string): {
  * Transform module declarations to JS objects
  */
 export function transformModules(source: string): string {
+  const regions = findModuleRegions(source);
   let result = "";
-  let i = 0;
+  let cursor = 0;
 
-  while (i < source.length) {
-    const isModule = matchWord(source, i, "module");
-    const isObject = matchWord(source, i, "object");
+  for (const region of regions) {
+    result += source.slice(cursor, region.start);
+    const { publicMembers, privateVars } = transformModuleBody(region.body);
 
-    if (isModule || isObject) {
-      const keyword = isModule ? "module" : "object";
-      let j = i + keyword.length;
-      j = skipWhitespace(source, j);
-
-      const nameStart = j;
-      while (j < source.length && isIdentifierChar(source[j])) j++;
-      const name = source.slice(nameStart, j);
-      j = skipWhitespace(source, j);
-
-      if (j < source.length && source[j] === "{") {
-        const bodyStart = j + 1;
-        const bodyEnd = findMatchingBrace(source, j);
-        const body = source.slice(bodyStart, bodyEnd - 1);
-        const { publicMembers, privateVars } = transformModuleBody(body);
-
-        let transformedMembers = publicMembers;
-        for (const pv of privateVars) {
-          const prefixedName = `_${name}_${pv.name}`;
-          result += `let ${prefixedName} = ${pv.value}; `;
-          transformedMembers = replaceVariableInMembers(
-            transformedMembers,
-            pv.name,
-            prefixedName,
-          );
-        }
-
-        result += `${name} = { ${transformedMembers} };`;
-        i = bodyEnd;
-        continue;
-      }
+    let transformedMembers = publicMembers;
+    for (const pv of privateVars) {
+      const prefixedName = `_${region.name}_${pv.name}`;
+      result += `let ${prefixedName} = ${pv.value}; `;
+      transformedMembers = replaceVariableInMembers(
+        transformedMembers,
+        pv.name,
+        prefixedName,
+      );
     }
 
-    result += source[i];
-    i++;
+    result += `${region.name} = { ${transformedMembers} };`;
+    cursor = region.end;
   }
 
-  return result;
+  return result + source.slice(cursor);
 }
 
 /**

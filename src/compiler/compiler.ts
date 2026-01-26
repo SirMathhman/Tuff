@@ -13,10 +13,11 @@ import {
 import { transformStringIndexing } from "./transforms/syntax/string-transforms";
 import { validateTypedArithmetic } from "./transforms/type-arithmetic-validation";
 import { transformStructInstantiation } from "./transforms/syntax/struct-transform";
+import { transformModules, transformModuleAccess } from "./transforms/module-transforms";
 import {
-  transformModules,
-  transformModuleAccess,
-} from "./transforms/module-transforms";
+  collectModuleMetadata,
+  validateModuleAccess,
+} from "./transforms/helpers/module-validation";
 import { transformPointers } from "./transforms/pointer-transforms";
 import { isWhitespace, isIdentifierChar } from "./parsing/string-helpers";
 import { clearVariableTypes } from "./parsing/parser-utils";
@@ -263,6 +264,9 @@ function createTuffCompiler(source: string) {
 
       // Validate typed arithmetic operations before removing type syntax
       validateTypedArithmetic(source);
+
+      const moduleMetadata = collectModuleMetadata(source);
+      validateModuleAccess(source, moduleMetadata);
 
       // Pass 2: Transform modules and objects FIRST
       const withModules = transformModules(source);

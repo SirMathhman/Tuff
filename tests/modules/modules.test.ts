@@ -1,5 +1,5 @@
 import { describe } from "bun:test";
-import { itBoth, itBothRuntime, itInterpreter } from "../test-helpers";
+import { itBoth } from "../test-helpers";
 
 describe("modules - declarations", () => {
   itBoth("supports module declaration with function", (ok) => {
@@ -42,12 +42,9 @@ describe("modules - error handling", () => {
   });
 
   // Compiler doesn't validate module member existence at compile time
-  itBothRuntime(
-    "throws when accessing non-existent member in module",
-    (_, bad) => {
-      bad("module Sample { out fn get() => 100; } Sample::missing()");
-    },
-  );
+  itBoth("throws when accessing non-existent member in module", (_, bad) => {
+    bad("module Sample { out fn get() => 100; } Sample::missing()");
+  });
 });
 
 describe("modules - objects", () => {
@@ -73,7 +70,7 @@ describe("modules - objects", () => {
 
 describe("modules - visibility", () => {
   // Compiler doesn't validate object member visibility at compile time
-  itInterpreter(
+  itBoth(
     "throws when accessing private object member without out keyword",
     (_, bad) => {
       bad("object MySingleton { let x = 100; } MySingleton.x");
@@ -85,7 +82,7 @@ describe("modules - visibility", () => {
   });
 
   // Compiler doesn't validate module member visibility at compile time
-  itInterpreter(
+  itBoth(
     "throws when accessing private module member without out keyword",
     (_, bad) => {
       bad("module Config { let PORT = 8080; } Config::PORT");
