@@ -83,17 +83,11 @@ export function itBoth(
   );
   it("Compiled: " + name, () => fn(assertExecuteValid, assertCompileInvalid));
 }
-export function itBothRuntime(
-  name: string,
-  fn: (assertValid: AssertValid, assertInvalid: AssertInvalid) => void,
-) {
-  it("Interpreted: " + name, () =>
-    fn(assertInterpretValid, assertInterpretInvalid),
-  );
-  it("Compiled: " + name, () =>
-    fn(assertExecuteValid, assertExecuteInvalidRuntime),
-  );
-}
+
+/**
+ * Test helper for interpreter-only features. Use sparingly; prefer itBoth.
+ * This helper is only for features that genuinely don't have compiler support yet.
+ */
 export function itInterpreter(
   name: string,
   fn: (assertValid: AssertValid, assertInvalid: AssertInvalid) => void,

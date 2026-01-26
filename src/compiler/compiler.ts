@@ -13,7 +13,10 @@ import {
 import { transformStringIndexing } from "./transforms/syntax/string-transforms";
 import { validateTypedArithmetic } from "./transforms/type-arithmetic-validation";
 import { transformStructInstantiation } from "./transforms/syntax/struct-transform";
-import { transformModules, transformModuleAccess } from "./transforms/module-transforms";
+import {
+  transformModules,
+  transformModuleAccess,
+} from "./transforms/module-transforms";
 import {
   collectModuleMetadata,
   validateModuleAccess,

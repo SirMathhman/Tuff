@@ -115,14 +115,13 @@ export function collectModuleMetadata(source: string): ModuleMetadata[] {
 }
 
 function isIdentifierStartChar(ch: string): boolean {
-  return (
-    (ch >= "a" && ch <= "z") ||
-    (ch >= "A" && ch <= "Z") ||
-    ch === "_"
-  );
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || ch === "_";
 }
 
-function readIdentifierBackward(source: string, index: number): string | undefined {
+function readIdentifierBackward(
+  source: string,
+  index: number,
+): string | undefined {
   let i = index - 1;
   while (i >= 0 && isWhitespace(source[i])) i--;
   if (i < 0 || !isIdentifierChar(source[i])) return undefined;
@@ -134,7 +133,10 @@ function readIdentifierBackward(source: string, index: number): string | undefin
   return source.slice(start, end + 1);
 }
 
-function readIdentifierForward(source: string, index: number): string | undefined {
+function readIdentifierForward(
+  source: string,
+  index: number,
+): string | undefined {
   let i = index;
   while (i < source.length && isWhitespace(source[i])) i++;
   if (i >= source.length || !isIdentifierChar(source[i])) return undefined;
@@ -145,7 +147,11 @@ function readIdentifierForward(source: string, index: number): string | undefine
   return source.slice(start, i);
 }
 
-function skipQuotedString(source: string, index: number, quote: string): number {
+function skipQuotedString(
+  source: string,
+  index: number,
+  quote: string,
+): number {
   let i = index + 1;
   while (i < source.length) {
     if (source[i] === "\\") {
