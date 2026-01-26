@@ -5,11 +5,19 @@ import {
   isIdentifierStartChar,
   isWhitespace,
 } from "../../parsing/string-helpers";
+import { forEachLetStatement } from "../helpers/let-statement";
 import {
   collectArrayInfo,
   validateArrayIndexAccess,
   type ArrayBoundsInfo,
 } from "./array-bounds-validation";
+import {
+  throwCannotAssignNonPointerToPointerType,
+  throwCannotAssignToImmutablePointer,
+  throwCannotCreateMutablePointerToImmutableVariable,
+  throwInvalidReferenceTarget,
+  throwPointerTypeMismatch,
+} from "../../../utils/helpers/pointer-errors";
 
 export interface VariableInfo {
   type: string | undefined;
@@ -40,18 +48,17 @@ export function validatePointerOperations(
   collectArrayInfo(source, boundsInfo);
 
   // Second pass: validate pointer operations
+  forEachLetStatement(source, (startIdx) => {
+    validateLetDeclaration(source, startIdx, variables, boundsInfo);
+  });
+
+  // Validate dereferenced assignments (*p = value)
   let i = 0;
   while (i < source.length) {
-    if (source[i] === "l" && source.slice(i, i + 4) === "let ") {
-      validateLetDeclaration(source, i, variables, boundsInfo);
-      const semiIdx = source.indexOf(";", i);
-      i = semiIdx !== -1 ? semiIdx + 1 : source.length;
-    } else if (source[i] === "*" && i + 1 < source.length) {
+    if (source[i] === "*" && i + 1 < source.length) {
       validateDereferencedAssignment(source, i, variables);
-      i++;
-    } else {
-      i++;
     }
+    i++;
   }
 
   // Third pass: validate array index access
@@ -102,7 +109,7 @@ function validatePointerAssignment(
     if (refTarget) {
       validateReferenceTarget(typeStr, refTarget, variables);
     } else {
-      throw new Error(`invalid: can only take reference of variable names`);
+      throwInvalidReferenceTarget(exprStr.slice(1).trim());
     }
   } else if (exprStr.startsWith('"') || exprStr.startsWith("'")) {
     // String literal - allowed for *Str pointers
@@ -128,9 +135,7 @@ function validateReferenceTarget(
   // Bool requires exact type match - cannot create *Bool from untyped or numeric variable
   if (baseType === "Bool") {
     if (varInfo.type !== "Bool") {
-      throw new Error(
-        `type mismatch: cannot create pointer to '${refTarget}' of type ${varInfo.type || "unknown"}, expected Bool`,
-      );
+      throwPointerTypeMismatch(refTarget, varInfo.type, "Bool");
     }
   }
 
@@ -141,15 +146,11 @@ function validateReferenceTarget(
     actualTypeSize !== 0 &&
     expectedTypeSize !== actualTypeSize
   ) {
-    throw new Error(
-      `type mismatch: cannot create pointer to '${refTarget}' of type ${varInfo.type}, expected ${baseType}`,
-    );
+    throwPointerTypeMismatch(refTarget, varInfo.type, baseType);
   }
 
   if (typeStr.startsWith("*mut ") && !varInfo.mutable) {
-    throw new Error(
-      `cannot create mutable pointer to immutable variable '${refTarget}'`,
-    );
+    throwCannotCreateMutablePointerToImmutableVariable(refTarget);
   }
 }
 
@@ -168,9 +169,7 @@ function validateIdentifierAssignment(
 
   // Check if source has a pointer type
   if (!sourceType || (!sourceType.startsWith("*") && sourceType !== "*")) {
-    throw new Error(
-      `cannot assign non-pointer value to pointer type ${typeStr}`,
-    );
+    throwCannotAssignNonPointerToPointerType(typeStr);
   }
 
   // Check mutability compatibility: cannot assign immutable pointer to mutable pointer type
@@ -213,7 +212,7 @@ function validateDereferencedAssignment(
   const ptrVar = variables.get(ptrVarName);
   if (ptrVar && ptrVar.type && !ptrVar.type.startsWith("*mut ")) {
     if (ptrVar.type.startsWith("*")) {
-      throw new Error(`cannot assign to immutable pointer '${ptrVarName}'`);
+      throwCannotAssignToImmutablePointer(ptrVarName);
     }
   }
 }

@@ -104,7 +104,7 @@ function createProject(): Project {
 }
 
 function loadSourceFiles(project: Project): SourceFile[] {
-  project.addSourceFilesAtPaths(["src/**/*.ts", "tests/**/*.ts"]);
+  project.addSourceFilesAtPaths(["src/main/ts/**/*.ts", "src/test/ts/**/*.ts"]);
   return project.getSourceFiles();
 }
 

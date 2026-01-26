@@ -3,6 +3,7 @@ import {
   isPointerMutable,
 } from "../access/pointer-operations";
 import type { BaseHandlerParams } from "../../utils/function/function-call-params";
+import { throwCannotAssignToImmutablePointer } from "../../utils/helpers/pointer-errors";
 
 function findAssignmentOperator(trimmed: string): number {
   for (let i = 1; i < trimmed.length; i++) {
@@ -33,7 +34,7 @@ function validateDereferenceTarget(
   const targetVarName = getPointerTarget(pointerValue);
   if (!targetVarName || !scope.has(targetVarName)) return undefined;
   if (!isPointerMutable(pointerValue)) {
-    throw new Error(`cannot assign to immutable pointer`);
+    throwCannotAssignToImmutablePointer();
   }
   return { pointerValue, targetVarName };
 }

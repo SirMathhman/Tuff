@@ -22,6 +22,7 @@ import {
   isPointerTypeMutable,
   handleReferenceOperation,
 } from "../../handlers/access/pointer-operations";
+import { throwCannotAssignNonPointerToPointerType } from "../../utils/helpers/pointer-errors";
 
 export interface DeclurationResult {
   varName: string;
@@ -121,9 +122,7 @@ function inferPointerValue(
 
   const varValue = callInterpreter(ctx, exprStr);
   if (varValue < 1000 && varValue !== 0) {
-    throw new Error(
-      `cannot assign non-pointer value to pointer type '${declaredTypeStr}'`,
-    );
+    throwCannotAssignNonPointerToPointerType(declaredTypeStr);
   }
   return varValue;
 }

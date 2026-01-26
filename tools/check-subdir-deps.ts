@@ -201,10 +201,10 @@ function handleFailure(cycles: CircularDependency[]): void {
 }
 
 function main() {
-  const srcDir = "src";
+  const srcDir = "src/main/ts";
   const fullSrcPath = join(process.cwd(), srcDir);
 
-  // Get all directories at any depth in src
+  // Get all directories at any depth in src/main/ts
   const allDirs = getAllDirectories(fullSrcPath);
 
   if (allDirs.length === 0) {

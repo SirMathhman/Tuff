@@ -1,6 +1,6 @@
 import { expect, test as it } from "bun:test";
-import { interpret, interpretAll } from "../src/utils/interpret";
-import { compile, evalImpl } from "../src/compiler/compiler";
+import { interpret, interpretAll } from "../../main/ts/utils/interpret";
+import { compile, evalImpl } from "../../main/ts/compiler/compiler";
 
 /**
  * Assert that an interpretation is valid and returns the expected value.

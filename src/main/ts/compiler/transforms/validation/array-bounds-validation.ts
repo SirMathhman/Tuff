@@ -4,6 +4,10 @@ import {
   isIdentifierStartChar,
   isWhitespace,
 } from "../../parsing/string-helpers";
+import {
+  forEachLetStatement,
+  parseLetStatementInfo,
+} from "../helpers/let-statement";
 
 export interface ArrayBoundsInfo {
   arrayLengths: Map<string, number>;
@@ -17,49 +21,30 @@ export function collectArrayInfo(
   source: string,
   boundsInfo: ArrayBoundsInfo,
 ): void {
-  let i = 0;
-  while (i < source.length) {
-    if (source[i] === "l" && source.slice(i, i + 4) === "let ") {
-      i = collectArrayInfoFromLet(source, i, boundsInfo);
-    } else {
-      i++;
-    }
-  }
+  forEachLetStatement(source, (startIdx, info) => {
+    collectArrayInfoFromLetInfo(source, startIdx, info, boundsInfo);
+  });
 }
 
-function collectArrayInfoFromLet(
+function collectArrayInfoFromLetInfo(
   source: string,
-  startIdx: number,
+  _startIdx: number,
+  info: ReturnType<typeof parseLetStatementInfo>,
   boundsInfo: ArrayBoundsInfo,
-): number {
-  const semiIdx = source.indexOf(";", startIdx);
-  const stmtEnd = semiIdx !== -1 ? semiIdx : source.length;
-
-  // Extract variable name
-  let j = startIdx + 4; // Skip "let "
-  while (j < stmtEnd && isWhitespace(source[j])) j++;
-  if (source.slice(j, j + 4) === "mut ") j += 4;
-  while (j < stmtEnd && isWhitespace(source[j])) j++;
-
-  let nameEnd = j;
-  while (nameEnd < stmtEnd && isIdentifierChar(source[nameEnd])) nameEnd++;
-  const varName = source.slice(j, nameEnd);
-
-  // Find the = sign
-  const eqIdx = source.indexOf("=", nameEnd);
-  if (eqIdx === -1 || eqIdx >= stmtEnd) {
-    return semiIdx !== -1 ? semiIdx + 1 : source.length;
-  }
+): void {
+  if (!info || info.eqIdx === -1) return;
 
   // Check what comes after =
-  let valueStart = eqIdx + 1;
-  while (valueStart < stmtEnd && isWhitespace(source[valueStart])) valueStart++;
+  let valueStart = info.eqIdx + 1;
+  while (valueStart < info.stmtEnd && isWhitespace(source[valueStart])) {
+    valueStart++;
+  }
 
   // Check if it's an array literal
   if (source[valueStart] === "[") {
-    const arrayLength = countArrayElements(source, valueStart, stmtEnd);
+    const arrayLength = countArrayElements(source, valueStart, info.stmtEnd);
     if (arrayLength >= 0) {
-      boundsInfo.arrayLengths.set(varName, arrayLength);
+      boundsInfo.arrayLengths.set(info.varName, arrayLength);
     }
   }
 
@@ -67,15 +52,14 @@ function collectArrayInfoFromLet(
   if (source[valueStart] === "&") {
     const targetStart = valueStart + 1;
     let targetEnd = targetStart;
-    while (targetEnd < stmtEnd && isIdentifierChar(source[targetEnd]))
+    while (targetEnd < info.stmtEnd && isIdentifierChar(source[targetEnd])) {
       targetEnd++;
+    }
     const targetName = source.slice(targetStart, targetEnd);
     if (targetName && boundsInfo.arrayLengths.has(targetName)) {
-      boundsInfo.pointerTargets.set(varName, targetName);
+      boundsInfo.pointerTargets.set(info.varName, targetName);
     }
   }
-
-  return semiIdx !== -1 ? semiIdx + 1 : source.length;
 }
 
 function countArrayElements(

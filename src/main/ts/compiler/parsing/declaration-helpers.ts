@@ -1,7 +1,7 @@
 import {
   isWhitespace,
   isIdentifierChar,
-  isDigit,
+  isIdentifierStartChar,
   charAt,
   readIdentifier,
   skipAngleBrackets,
@@ -25,10 +25,6 @@ export function validateParamReferences(
       }
     }
   }
-}
-
-export function isIdentifierStartChar(ch: string | undefined): ch is string {
-  return ch !== undefined && isIdentifierChar(ch) && !isDigit(ch);
 }
 
 export function extractDestructuringFields(

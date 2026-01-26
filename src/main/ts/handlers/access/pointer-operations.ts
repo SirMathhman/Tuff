@@ -1,5 +1,9 @@
 import { isValidIdentifier } from "../../utils/identifier-utils";
 import { extractTypeSize } from "../../type-utils";
+import {
+  throwCannotCreateMutablePointerToImmutableVariable,
+  throwInvalidReferenceTarget,
+} from "../../utils/helpers/pointer-errors";
 
 // Global map to store pointer values (which reference variable names)
 const pointerMap = new Map<number, string>();
@@ -58,9 +62,7 @@ export function handleReferenceOperation(
 
   // Validate that it's a valid identifier (no expressions like &(100) or &(x+y))
   if (!isValidIdentifier(rest)) {
-    throw new Error(
-      `invalid: can only take reference of variable names, got: &${rest}`,
-    );
+    throwInvalidReferenceTarget(rest);
   }
 
   const varName = rest;
@@ -74,9 +76,7 @@ export function handleReferenceOperation(
   if (pointerTypeIsMutable) {
     const targetIsMutable = mutMap.get(varName) ?? false;
     if (!targetIsMutable) {
-      throw new Error(
-        `cannot create mutable pointer to immutable variable '${varName}'`,
-      );
+      throwCannotCreateMutablePointerToImmutableVariable(varName);
     }
   }
 
