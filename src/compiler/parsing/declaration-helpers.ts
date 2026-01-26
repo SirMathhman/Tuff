@@ -1,3 +1,13 @@
+import {
+  isWhitespace,
+  isIdentifierChar,
+  isDigit,
+  charAt,
+  readIdentifier,
+  skipAngleBrackets,
+} from "./string-helpers";
+import { parseBracedBlock } from "./parse-helpers";
+
 export function validateParamReferences(
   paramsStr: string,
   _fnName: string,
@@ -15,4 +25,83 @@ export function validateParamReferences(
       }
     }
   }
+}
+
+export function isIdentifierStartChar(ch: string | undefined): ch is string {
+  return ch !== undefined && isIdentifierChar(ch) && !isDigit(ch);
+}
+
+export function extractDestructuringFields(
+  source: string,
+  start: number,
+): string[] {
+  const fields: string[] = [];
+  let i = start + 1; // Skip opening {
+  while (i < source.length && source[i] !== "}") {
+    const ch = charAt(source, i);
+    if (isIdentifierStartChar(ch)) {
+      const fieldStart = i;
+      while (i < source.length && isIdentifierChar(charAt(source, i))) i++;
+      fields.push(source.slice(fieldStart, i));
+    } else {
+      i++;
+    }
+  }
+  return fields;
+}
+
+export function skipToNextStatement(source: string, i: number): number {
+  while (i < source.length && source[i] !== ";") i++;
+  return i < source.length ? i + 1 : i;
+}
+
+export function skipWhitespaceOnly(source: string, i: number): number {
+  while (i < source.length && isWhitespace(source[i])) i++;
+  return i;
+}
+
+export function findMatchingCloseBrace(
+  source: string,
+  openBraceIndex: number,
+): number {
+  return parseBracedBlock(source, openBraceIndex).endIdx;
+}
+
+/**
+ * Extract generic type parameters from function header
+ */
+export function extractGenericParameters(
+  source: string,
+  startPos: number,
+): { generics: string[] | undefined; endPos: number } {
+  if (startPos >= source.length || source[startPos] !== "<") {
+    return { generics: undefined, endPos: startPos };
+  }
+  const angleStart = startPos;
+  const endPos = skipAngleBrackets(source, startPos);
+  const genericStr = source.slice(angleStart + 1, endPos - 1).trim();
+  return {
+    generics: genericStr
+      ? genericStr.split(",").map((p) => p.trim())
+      : undefined,
+    endPos,
+  };
+}
+
+/**
+ * Parse name and generic parameters for a declaration (function or struct)
+ * Returns the name, final position after generics, and generic list
+ */
+export function parseNameAndGenerics(
+  source: string,
+  startPos: number,
+): { name: string; endPos: number; generics: string[] | undefined } {
+  let j = startPos;
+  const parsedName = readIdentifier(source, j);
+  const name = parsedName.name;
+  j = parsedName.endIdx;
+  j = skipWhitespaceOnly(source, j);
+  const { generics, endPos } = extractGenericParameters(source, j);
+  j = skipWhitespaceOnly(source, endPos);
+  return { name, endPos: j, generics };
 }

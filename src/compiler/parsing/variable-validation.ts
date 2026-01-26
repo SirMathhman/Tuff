@@ -4,6 +4,7 @@ import {
   isIdentifierChar,
   isDigit,
   charAt,
+  skipBracePair,
 } from "./string-helpers";
 import {
   skipStructDeclaration,
@@ -118,13 +119,7 @@ function skipStructInstantiation(
   if (bracePos === -1) return -1;
 
   // Skip the struct body
-  let j = bracePos + 1; // Start after the opening brace
-  let braceDepth = 1;
-  while (j < source.length && braceDepth > 0) {
-    if (source[j] === "{") braceDepth++;
-    else if (source[j] === "}") braceDepth--;
-    j++;
-  }
+  const j = skipBracePair(source, bracePos);
   return j;
 }
 

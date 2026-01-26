@@ -23,21 +23,15 @@ describe("control flow - match", () => {
     );
   });
 
-  itBoth(
-    "supports match with computation in matched value",
-    (assertValid) => {
-      assertValid(
-        "let x : I32 = match (10 + 5) { case 15 => 100; case _ => 50; } x",
-        100,
-      );
-    },
-  );
+  itBoth("supports match with computation in matched value", (assertValid) => {
+    assertValid(
+      "let x : I32 = match (10 + 5) { case 15 => 100; case _ => 50; } x",
+      100,
+    );
+  });
 
   itBoth("supports match with zero value", (assertValid) => {
-    assertValid(
-      "let x : I32 = match (0) { case 0 => 42; case _ => 1; } x",
-      42,
-    );
+    assertValid("let x : I32 = match (0) { case 0 => 42; case _ => 1; } x", 42);
   });
 
   itBoth("supports match with negative number case", (assertValid) => {

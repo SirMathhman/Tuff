@@ -1,5 +1,5 @@
-import { isDigit, isWhitespace } from "../parsing/string-helpers";
-import { getTypeRange } from "../validation/type-utils";
+import { isDigit, isWhitespace } from "../../parsing/string-helpers";
+import { getTypeRange } from "../../validation/type-utils";
 
 /**
  * Validate arithmetic operations with typed operands for overflow

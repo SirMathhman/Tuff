@@ -1,46 +1,32 @@
 import {
-  isWhitespace,
   matchWord,
-  isIdentifierChar,
-  isDigit,
-  charAt,
+  skipBracePair,
+  isWhitespace,
   readIdentifier,
-  skipAngleBrackets,
 } from "./parsing/string-helpers";
-import { skipStructDeclaration } from "./parsing/struct-helpers";
 import {
   parseLetDeclaration,
   validateVariableUsage,
   parseTypeDeclaration,
 } from "./parsing/parser-utils";
 import { extractParamsWithTypes } from "./parsing/param-helpers";
-import { parseBracedBlock } from "./parsing/parse-helpers";
 import {
   clearCompileFunctionDefs,
   setCompileFunctionDef,
 } from "./function-defs-storage";
-import { validateParamReferences } from "./parsing/declaration-helpers";
-
-function isIdentifierStartChar(ch: string | undefined): ch is string {
-  return ch !== undefined && isIdentifierChar(ch) && !isDigit(ch);
-}
-
-function extractDestructuringFields(source: string, start: number): string[] {
-  const fields: string[] = [];
-  let i = start + 1; // Skip opening {
-  while (i < source.length && source[i] !== "}") {
-    const ch = charAt(source, i);
-    if (isIdentifierStartChar(ch)) {
-      const fieldStart = i;
-      while (i < source.length && isIdentifierChar(charAt(source, i))) i++;
-      fields.push(source.slice(fieldStart, i));
-    } else {
-      i++;
-    }
-  }
-  return fields;
-}
-
+import {
+  clearCompileStructDefs,
+  setCompileStructDef,
+} from "./struct-defs-storage";
+import {
+  validateParamReferences,
+  extractDestructuringFields,
+  skipToNextStatement,
+  skipWhitespaceOnly,
+  findMatchingCloseBrace,
+  parseNameAndGenerics,
+} from "./parsing/declaration-helpers";
+import { parseFieldsDefinition } from "./parsing/field-parsing";
 interface VariableInfo {
   type: string | undefined;
   mutable: boolean;
@@ -48,7 +34,6 @@ interface VariableInfo {
   isArray?: boolean;
   isUninitialized?: boolean;
 }
-
 function registerVariable(
   varName: string,
   typeAnnotation: string | undefined,
@@ -69,7 +54,6 @@ function registerVariable(
     isUninitialized,
   });
 }
-
 function handleForLoop(
   source: string,
   i: number,
@@ -94,23 +78,6 @@ function handleForLoop(
   return skipToNextStatement(source, i);
 }
 
-function skipToNextStatement(source: string, i: number): number {
-  while (i < source.length && source[i] !== ";") i++;
-  return i < source.length ? i + 1 : i;
-}
-
-function skipWhitespaceOnly(source: string, i: number): number {
-  while (i < source.length && isWhitespace(source[i])) i++;
-  return i;
-}
-
-function findMatchingCloseBrace(
-  source: string,
-  openBraceIndex: number,
-): number {
-  return parseBracedBlock(source, openBraceIndex).endIdx;
-}
-
 function handleLetDeclarationOrDestructuring(
   source: string,
   i: number,
@@ -118,7 +85,6 @@ function handleLetDeclarationOrDestructuring(
 ): number {
   let j = i + 3;
   j = skipWhitespaceOnly(source, j);
-
   if (j < source.length && source[j] === "{") {
     const endBraceIdx = findMatchingCloseBrace(source, j);
     const fields = extractDestructuringFields(source, j);
@@ -127,7 +93,6 @@ function handleLetDeclarationOrDestructuring(
     }
     return skipToNextStatement(source, endBraceIdx);
   }
-
   const decl = parseLetDeclaration(source, i);
   registerVariable(
     decl.varName,
@@ -139,7 +104,6 @@ function handleLetDeclarationOrDestructuring(
   );
   return decl.nextIndex;
 }
-
 function handleModuleOrObjectDeclaration(
   source: string,
   i: number,
@@ -148,19 +112,13 @@ function handleModuleOrObjectDeclaration(
 ): number {
   let j = i + keyword.length;
   j = skipWhitespaceOnly(source, j);
-
-  // Get name
   const parsedName = readIdentifier(source, j);
   const name = parsedName.name;
   j = parsedName.endIdx;
   j = skipWhitespaceOnly(source, j);
-
-  // Skip to end of body
   if (j < source.length && source[j] === "{") {
     j = findMatchingCloseBrace(source, j);
   }
-
-  // Register module/object name as a variable (immutable, initialized)
   if (name && !variables.has(name)) {
     variables.set(name, {
       type: keyword,
@@ -169,30 +127,7 @@ function handleModuleOrObjectDeclaration(
       isArray: false,
     });
   }
-
   return j;
-}
-
-/**
- * Extract generic type parameters from function header
- */
-function extractGenericParameters(
-  source: string,
-  startPos: number,
-): { generics: string[] | undefined; endPos: number } {
-  if (startPos >= source.length || source[startPos] !== "<") {
-    return { generics: undefined, endPos: startPos };
-  }
-
-  const angleStart = startPos;
-  const endPos = skipAngleBrackets(source, startPos);
-  const genericStr = source.slice(angleStart + 1, endPos - 1).trim();
-  return {
-    generics: genericStr
-      ? genericStr.split(",").map((p) => p.trim())
-      : undefined,
-    endPos,
-  };
 }
 
 function handleFunctionDeclaration(
@@ -202,21 +137,17 @@ function handleFunctionDeclaration(
 ): number {
   let j = i + 2; // Skip "fn"
   j = skipWhitespaceOnly(source, j);
-
-  const parsedName = readIdentifier(source, j);
-  const fnName = parsedName.name;
-  j = parsedName.endIdx;
-
-  j = skipWhitespaceOnly(source, j);
-  const { generics, endPos } = extractGenericParameters(source, j);
-  j = skipWhitespaceOnly(source, endPos);
-
+  const {
+    name: fnName,
+    endPos: endAfterGenerics,
+    generics,
+  } = parseNameAndGenerics(source, j);
+  j = endAfterGenerics;
   if (fnName && variables.has(fnName)) {
     throw new Error(
       "Function name '" + fnName + "' conflicts with already declared variable",
     );
   }
-
   if (j < source.length && source[j] === "(") {
     const parenStart = j;
     j++; // Skip opening paren
@@ -230,7 +161,6 @@ function handleFunctionDeclaration(
       }
       j++;
     }
-
     const paramsStr = source.slice(parenStart + 1, paramEnd).trim();
     if (paramsStr) {
       try {
@@ -240,7 +170,7 @@ function handleFunctionDeclaration(
           setCompileFunctionDef(fnName, params, generics);
         }
       } catch {
-        // Silently continue if params can't be extracted
+        // Ignore param extraction errors - function will be validated elsewhere
       }
       validateParamReferences(
         paramsStr,
@@ -249,66 +179,75 @@ function handleFunctionDeclaration(
       );
     }
   }
-
   return skipToNextStatement(source, j);
 }
-
+function handleStructDeclaration(source: string, i: number): number {
+  let j = i + 6; // Skip "struct"
+  j = skipWhitespaceOnly(source, j);
+  const {
+    name: structName,
+    endPos: endAfterGenerics,
+    generics,
+  } = parseNameAndGenerics(source, j);
+  j = endAfterGenerics;
+  while (j < source.length && source[j] !== "{") j++;
+  if (j >= source.length) return j;
+  const fieldStart = j + 1;
+  j = skipBracePair(source, j) - 1;
+  const fieldsStr = source.slice(fieldStart, j).trim();
+  if (structName && fieldsStr) {
+    const fields = parseFieldsDefinition(fieldsStr);
+    if (fields.size > 0) {
+      setCompileStructDef(structName, fields, generics);
+    }
+  }
+  return j < source.length ? j + 1 : j;
+}
 function parseDeclarationsImpl(
   source: string,
   variables: Map<string, VariableInfo>,
 ): void {
   let i = 0;
-
   while (i < source.length) {
     i = skipWhitespaceOnly(source, i);
     if (i >= source.length) break;
-
     switch (source[i]) {
       case "{":
       case "}":
         i++;
         continue;
     }
-
     if (matchWord(source, i, "for")) {
       i = handleForLoop(source, i, variables);
       continue;
     }
-
     if (matchWord(source, i, "type")) {
       const decl = parseTypeDeclaration(source, i);
       i = decl.nextIndex;
       continue;
     }
-
     if (matchWord(source, i, "struct")) {
-      i = skipStructDeclaration(source, i);
+      i = handleStructDeclaration(source, i);
       continue;
     }
-
     if (matchWord(source, i, "module")) {
       i = handleModuleOrObjectDeclaration(source, i, "module", variables);
       continue;
     }
-
     if (matchWord(source, i, "object")) {
       i = handleModuleOrObjectDeclaration(source, i, "object", variables);
       continue;
     }
-
     if (matchWord(source, i, "let")) {
       i = handleLetDeclarationOrDestructuring(source, i, variables);
       continue;
     }
-
     if (matchWord(source, i, "fn")) {
       i = handleFunctionDeclaration(source, i, variables);
       continue;
     }
-
     i = skipToNextStatement(source, i);
   }
-
   validateVariableUsage(source, variables);
 }
 
@@ -322,6 +261,7 @@ export function createDeclarationParser(
   return {
     parseDeclarations() {
       clearCompileFunctionDefs();
+      clearCompileStructDefs();
       parseDeclarationsImpl(source, variables);
     },
   };

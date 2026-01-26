@@ -1,6 +1,9 @@
 import type { Interpreter } from "../expressions/handlers";
 import { makeDeclarationHandler, type StoreDecl } from "../declarations";
 import { parseGenericParams } from "../utils/generic-params";
+import { inferValueType } from "../utils/generics/type-inference";
+import { parseFieldsDefinition } from "../compiler/parsing/field-parsing";
+import { throwFieldTypeMismatch } from "../compiler/transforms/error-helpers";
 
 // Global struct instance storage: maps instance ID to {fieldValues, typeParams}
 // typeParams maps generic param names to concrete type names (e.g., {T: "I32"})
@@ -62,12 +65,26 @@ function parseFieldAssignments(
   scope: Map<string, number>,
   typeMap: Map<string, number>,
   interpreter: Interpreter,
+  structName?: string,
+  typeParamMap?: Map<string, string>,
 ): Map<string, number> {
   const fieldAssignments = fieldsStr
     .split(",")
     .map((f) => f.trim())
     .filter((f) => f.length > 0);
   const fieldValues = new Map<string, number>();
+
+  // Get struct field definitions if we need to validate types
+  let fieldTypes: Map<string, string> | undefined;
+  if (structName && typeParamMap && typeParamMap.size > 0) {
+    const fieldDefsStr = typeMap.get(
+      "__struct_fields__" + structName,
+    ) as unknown as string;
+    if (fieldDefsStr) {
+      fieldTypes = parseFieldsDefinition(fieldDefsStr);
+    }
+  }
+
   for (const assignment of fieldAssignments) {
     const colonIndex = assignment.indexOf(":");
     if (colonIndex === -1) {
@@ -75,6 +92,32 @@ function parseFieldAssignments(
     }
     const fieldName = assignment.slice(0, colonIndex).trim();
     const valueStr = assignment.slice(colonIndex + 1).trim();
+
+    // Validate type if we have field type definitions and type parameters
+    if (fieldTypes && typeParamMap && typeParamMap.size > 0) {
+      const fieldTypeStr = fieldTypes.get(fieldName);
+      if (fieldTypeStr) {
+        const resolvedType = typeParamMap.get(fieldTypeStr) || fieldTypeStr;
+
+        // Only validate if the resolved type is a basic built-in type
+        if (/^[IU]\d+$/.test(resolvedType) || resolvedType === "Bool") {
+          const inferredType = inferValueType(valueStr);
+
+          // Check type compatibility
+          if (
+            inferredType &&
+            inferredType !== resolvedType &&
+            !(
+              (resolvedType.startsWith("I") || resolvedType.startsWith("U")) &&
+              (inferredType.startsWith("I") || inferredType.startsWith("U"))
+            )
+          ) {
+            throwFieldTypeMismatch(fieldName, resolvedType, inferredType);
+          }
+        }
+      }
+    }
+
     const value = interpreter(
       valueStr,
       scope,
@@ -138,16 +181,18 @@ export function parseStructInstantiation(
     return undefined;
   }
   const fieldsStr = trimmed.slice(braceIndex + 1, closeIndex).trim();
+  const typeParamMap = extractTypeParameters(
+    concreteTypes,
+    structName,
+    typeMap,
+  );
   const fieldValues = parseFieldAssignments(
     fieldsStr,
     scope,
     typeMap,
     interpreter,
-  );
-  const typeParamMap = extractTypeParameters(
-    concreteTypes,
     structName,
-    typeMap,
+    typeParamMap,
   );
   return createStructInstance(structName, fieldValues, typeParamMap);
 }

@@ -64,3 +64,13 @@ describe("generic structs - advanced", () => {
   });
 });
 
+describe("generic structs - validation", () => {
+  itBoth(
+    "throws when field value type mismatches generic type parameter",
+    (_, bad) => {
+      bad(
+        "struct Wrapper<T> { value : T } let value = Wrapper<Bool> { value : 100 };",
+      );
+    },
+  );
+});

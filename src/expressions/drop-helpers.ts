@@ -1,3 +1,5 @@
+import { parseFieldsDefinition } from "../compiler/parsing/field-parsing";
+
 export function extractArrayElementType(
   arrayTypeStr: string,
 ): string | undefined {
@@ -18,20 +20,7 @@ export function parseStructFieldTypes(
   fieldsStr: string,
 ): Map<string, string> | undefined {
   // Parse struct field definitions like "field1 : Type1, field2 : Type2"
-  const fieldTypes = new Map<string, string>();
-
-  const parts = fieldsStr.split(",");
-  for (const part of parts) {
-    const field = part.trim();
-    if (!field) continue;
-    const colonIndex = field.indexOf(":");
-    if (colonIndex === -1) continue;
-
-    const fieldName = field.slice(0, colonIndex).trim();
-    const fieldType = field.slice(colonIndex + 1).trim();
-    fieldTypes.set(fieldName, fieldType);
-  }
-
+  const fieldTypes = parseFieldsDefinition(fieldsStr);
   return fieldTypes.size > 0 ? fieldTypes : undefined;
 }
 

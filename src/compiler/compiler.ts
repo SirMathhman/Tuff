@@ -15,7 +15,7 @@ import {
   transformCharLiterals,
 } from "./transforms/syntax/literal-transforms";
 import { transformStringIndexing } from "./transforms/syntax/string-transforms";
-import { validateTypedArithmetic } from "./transforms/type-arithmetic-validation";
+import { validateTypedArithmetic } from "./transforms/validation/type-arithmetic-validation";
 import { transformStructInstantiation } from "./transforms/syntax/struct-transform";
 import {
   transformModules,
@@ -32,7 +32,8 @@ import {
   skipWhitespace,
 } from "./parsing/string-helpers";
 import { clearVariableTypes } from "./parsing/parser-utils";
-import { validateFunctionCalls } from "./transforms/function-call-validation";
+import { validateFunctionCalls } from "./transforms/validation/function-call-validation";
+import { validateStructInstantiation } from "./transforms/validation/struct-instantiation-validation";
 
 const BUILTIN_METHODS = new Set(["charCodeAt", "length"]);
 
@@ -262,6 +263,9 @@ function createTuffCompiler(source: string) {
 
       // Validate function calls against declared parameter types
       validateFunctionCalls(source);
+
+      // Validate struct instantiation fields against their declared types
+      validateStructInstantiation(source);
 
       // Build set of array variable names
       const arrayVars = new Set<string>();

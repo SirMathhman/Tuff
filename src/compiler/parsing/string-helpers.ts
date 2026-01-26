@@ -84,3 +84,21 @@ export function readIdentifier(
   while (i < source.length && isIdentifierChar(source[i])) i++;
   return { name: source.slice(startIdx, i), endIdx: i };
 }
+
+/**
+ * Skip brace pairs and return position after closing }
+ * Assumes starting at the opening brace
+ */
+export function skipBracePair(source: string, startPos: number): number {
+  if (startPos >= source.length || source[startPos] !== "{") {
+    return startPos;
+  }
+  let j = startPos + 1;
+  let braceDepth = 1;
+  while (j < source.length && braceDepth > 0) {
+    if (source[j] === "{") braceDepth++;
+    else if (source[j] === "}") braceDepth--;
+    j++;
+  }
+  return j;
+}

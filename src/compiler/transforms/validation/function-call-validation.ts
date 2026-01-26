@@ -1,41 +1,13 @@
 import {
   getCompileFunctionDefs,
   type CompileFunctionDef,
-} from "../function-defs-storage";
-import { isWhitespace, isIdentifierChar } from "../parsing/string-helpers";
-import { isNumericLiteral } from "../validation/validation";
+} from "../../function-defs-storage";
+import { isWhitespace, isIdentifierChar } from "../../parsing/string-helpers";
 import {
   validateGenericTypeConsistency,
   getConcreteType,
-} from "../../utils/generics/generic-validation";
-
-/**
- * Check if a value's type is compatible with an expected type
- */
-function isTypeCompatible(value: string, expectedType: string): boolean {
-  const trimmed = value.trim();
-
-  // If the value is a numeric literal, check if it fits the type
-  if (isNumericLiteral(trimmed)) {
-    // For Bool type, check if value is 0 or 1 (or boolean-valued expressions)
-    if (expectedType === "Bool") {
-      return false; // numeric literals are not Bool
-    }
-
-    // For numeric types (I32, U8, etc.), a plain number without suffix is compatible
-    // This is a simplified check - ideally we'd validate the value is in range
-    if (expectedType.startsWith("I") || expectedType.startsWith("U")) {
-      return true; // Numbers can be assigned to numeric types
-    }
-  }
-
-  // If it's a boolean literal (true/false) and target is Bool, it's compatible
-  if ((trimmed === "true" || trimmed === "false") && expectedType === "Bool") {
-    return true;
-  }
-
-  return false;
-}
+} from "../../../utils/generics/generic-validation";
+import { isTypeCompatible } from "../type-compatibility";
 
 /**
  * Validate generic type consistency for a function call
