@@ -1,5 +1,5 @@
 import { describe } from "bun:test";
-import { itBoth, itInterpreter } from "../test-helpers";
+import { itBoth, itBothRuntime, itInterpreter } from "../test-helpers";
 
 describe("modules - declarations", () => {
   itBoth("supports module declaration with function", (ok) => {
@@ -42,7 +42,7 @@ describe("modules - error handling", () => {
   });
 
   // Compiler doesn't validate module member existence at compile time
-  itInterpreter(
+  itBothRuntime(
     "throws when accessing non-existent member in module",
     (_, bad) => {
       bad("module Sample { out fn get() => 100; } Sample::missing()");

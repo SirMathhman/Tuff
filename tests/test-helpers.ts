@@ -7,7 +7,7 @@ import { compile, evalImpl } from "../src/compiler/compiler";
  * @param code The code to interpret
  * @param expectedValue The expected result
  */
-export function assertInterpretValid(
+function assertInterpretValid(
   code: string,
   expectedValue: number,
 ): void {
@@ -18,7 +18,7 @@ export function assertInterpretValid(
  * Assert that an interpretation throws an error.
  * @param code The code to interpret
  */
-export function assertInterpretInvalid(code: string): void {
+function assertInterpretInvalid(code: string): void {
   expect(() => interpret(code)).toThrow();
 }
 
@@ -68,6 +68,12 @@ export function assertCompileInvalid(source: string): void {
   expect(() => compile(source)).toThrow();
 }
 
+// Test helper for runtime validation errors (compiles successfully but fails at runtime)
+export function assertExecuteInvalidRuntime(source: string): void {
+  const compiled = compile(source);
+  expect(() => evalImpl(compiled)).toThrow();
+}
+
 type AssertValid = (source: string, expected: number) => void;
 type AssertInvalid = (source: string) => void;
 
@@ -79,6 +85,15 @@ export function itBoth(
     fn(assertInterpretValid, assertInterpretInvalid),
   );
   it("Compiled: " + name, () => fn(assertExecuteValid, assertCompileInvalid));
+}
+export function itBothRuntime(
+  name: string,
+  fn: (assertValid: AssertValid, assertInvalid: AssertInvalid) => void,
+) {
+  it("Interpreted: " + name, () =>
+    fn(assertInterpretValid, assertInterpretInvalid),
+  );
+  it("Compiled: " + name, () => fn(assertExecuteValid, assertExecuteInvalidRuntime));
 }
 export function itInterpreter(
   name: string,
