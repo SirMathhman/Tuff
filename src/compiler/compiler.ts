@@ -1,5 +1,9 @@
 import { createDeclarationParser } from "./declaration-parser";
 import {
+  extractArguments,
+  checkMethodValidity,
+} from "./transforms/helpers/method-call-helpers";
+import {
   removeTypeSyntax,
   extractVarDeclarations,
   transformControlFlow,
@@ -133,6 +137,30 @@ function collectModuleNames(source: string): Set<string> {
   return moduleNames;
 }
 
+function handleMethodCallWithArgs(
+  methodName: string,
+  receiver: string,
+  args: string,
+  newResult: string,
+  j: number,
+): { newI: number; newResult: string } {
+  const trimmedReceiver = receiver.trim();
+  if (trimmedReceiver === "this" || trimmedReceiver === "thisVal") {
+    return {
+      newI: j - 1,
+      newResult: newResult + methodName + "(" + args + ")",
+    };
+  }
+  const combined =
+    newResult +
+    methodName +
+    "(" +
+    receiver +
+    (args.trim() ? ", " + args : "") +
+    ")";
+  return { newI: j - 1, newResult: combined };
+}
+
 function transformMethodCall(
   source: string,
   i: number,
@@ -148,23 +176,21 @@ function transformMethodCall(
     j++;
   }
 
-  if (BUILTIN_METHODS.has(methodName) || localVars.has(methodName)) {
+  const methodCheck = checkMethodValidity(
+    methodName,
+    result,
+    moduleNames,
+    BUILTIN_METHODS,
+    PROPERTY_ALIASES,
+    findReceiverStart,
+  );
+  if (methodCheck?.type === "builtin" || localVars.has(methodName)) {
     return { newI: j - 1, newResult: result + "." + methodName };
   }
-
-  // Check for property aliases (like .init -> .length)
-  if (PROPERTY_ALIASES[methodName]) {
-    return {
-      newI: j - 1,
-      newResult: result + "." + PROPERTY_ALIASES[methodName],
-    };
+  if (methodCheck?.type === "alias") {
+    return { newI: j - 1, newResult: result + "." + methodCheck.alias };
   }
-
-  // Check if receiver is a module/object - if so, keep dot access
-  const isClosingResult = result.charAt(result.length - 1) === ")";
-  const receiverStartCheck = findReceiverStart(result, isClosingResult);
-  const receiverCheck = result.slice(receiverStartCheck).trim();
-  if (moduleNames.has(receiverCheck)) {
+  if (methodCheck?.type === "property") {
     return { newI: j - 1, newResult: result + "." + methodName };
   }
 
@@ -174,33 +200,14 @@ function transformMethodCall(
     const receiverStart = findReceiverStart(result, isClosing);
     const receiver = result.slice(receiverStart);
     const newResult = result.slice(0, receiverStart);
-    j++;
-    let args = "";
-    let depth = 1;
-    while (j < len && depth > 0) {
-      const c = source.charAt(j);
-      if (c === "(") depth++;
-      else if (c === ")") depth--;
-      if (depth > 0) args += c;
-      j++;
-    }
-
-    // Special case: if receiver is "this" or "thisVal", just call the method directly
-    // without passing anything as first arg (global scope function call)
-    const trimmedReceiver = receiver.trim();
-    if (trimmedReceiver === "this" || trimmedReceiver === "thisVal") {
-      const transformed = newResult + methodName + "(" + args + ")";
-      return { newI: j - 1, newResult: transformed };
-    }
-
-    const transformed =
-      newResult +
-      methodName +
-      "(" +
-      receiver +
-      (args.trim() ? ", " + args : "") +
-      ")";
-    return { newI: j - 1, newResult: transformed };
+    const { args, nextIdx } = extractArguments(source, j, len);
+    return handleMethodCallWithArgs(
+      methodName,
+      receiver,
+      args,
+      newResult,
+      nextIdx,
+    );
   }
   return { newI: j - 1, newResult: result + "." + methodName };
 }

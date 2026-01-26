@@ -18,6 +18,16 @@ interface ModuleMemberParseResult {
   endIdx: number;
 }
 
+function skipReturnTypeAndArrow(body: string, j: number): number {
+  j = skipWS(body, j);
+  if (j < body.length && body[j] === ":") {
+    j++;
+    while (j < body.length && body[j] !== "=" && body[j] !== ";") j++;
+  }
+  if (body.slice(j, j + 2) === "=>") j += 2;
+  return skipWS(body, j);
+}
+
 function parseFunctionMember(
   body: string,
   j: number,
@@ -54,14 +64,7 @@ function parseFunctionMember(
     ", ",
   );
 
-  j = skipWS(body, j);
-  if (j < body.length && body[j] === ":") {
-    j++;
-    while (j < body.length && body[j] !== "=" && body[j] !== ";") j++;
-  }
-  if (body.slice(j, j + 2) === "=>") j += 2;
-  j = skipWS(body, j);
-
+  j = skipReturnTypeAndArrow(body, j);
   const bodyStart = j;
   while (j < body.length && body[j] !== ";") j++;
   const fnBody = body.slice(bodyStart, j).trim();

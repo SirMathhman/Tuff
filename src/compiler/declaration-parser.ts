@@ -11,23 +11,15 @@ import {
   validateVariableUsage,
   parseTypeDeclaration,
 } from "./parsing/parser-utils";
-import { extractParamsWithTypes, type ParamInfo } from "./parsing/param-helpers";
+import { extractParamsWithTypes } from "./parsing/param-helpers";
+import {
+  clearCompileFunctionDefs,
+  setCompileFunctionDef,
+} from "./function-defs-storage";
+import { validateParamReferences } from "./parsing/declaration-helpers";
 
 function isIdentifierStartChar(ch: string | undefined): ch is string {
   return ch !== undefined && isIdentifierChar(ch) && !isDigit(ch);
-}
-
-/**
- * Store for function parameter type information
- */
-const compileFunctionDefs = new Map<string, ParamInfo[]>();
-
-export function getCompileFunctionDefs(): Map<string, ParamInfo[]> {
-  return compileFunctionDefs;
-}
-
-export function clearCompileFunctionDefs(): void {
-  compileFunctionDefs.clear();
 }
 
 /**
@@ -244,25 +236,18 @@ function handleFunctionDeclaration(
         const rawParamsStr = source.slice(parenStart, paramEnd + 1);
         const params = extractParamsWithTypes(rawParamsStr);
         if (fnName && params.length > 0) {
-          compileFunctionDefs.set(fnName, params);
+          setCompileFunctionDef(fnName, params);
         }
       } catch {
         // Silently continue if params can't be extracted
       }
 
-      // Parse parameter names (they appear before colons)
-      const paramParts = paramsStr.split(",");
-      for (const part of paramParts) {
-        const colonIdx = part.indexOf(":");
-        if (colonIdx !== -1) {
-          const paramName = part.slice(0, colonIdx).trim();
-          if (paramName && variables.has(paramName)) {
-            throw new Error(
-              `Parameter '${paramName}' shadows an existing variable`,
-            );
-          }
-        }
-      }
+      // Validate parameter don't shadow existing variables
+      validateParamReferences(
+        paramsStr,
+        fnName,
+        variables as unknown as Map<string, Record<string, unknown>>,
+      );
     }
   }
 

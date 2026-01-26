@@ -183,6 +183,45 @@ function skipBlockComment(source: string, index: number): number {
   return i;
 }
 
+function validateModuleMemberAccess(
+  moduleName: string | undefined,
+  memberName: string | undefined,
+  moduleMap: Map<string, ModuleMetadata>,
+): void {
+  if (!moduleName || !memberName) return;
+  const moduleInfo = moduleMap.get(moduleName);
+  if (!moduleInfo) {
+    throw new Error(`module '${moduleName}' is not defined`);
+  }
+  if (!moduleInfo.publicMembers.has(memberName)) {
+    if (moduleInfo.privateMembers.has(memberName)) {
+      throw new Error(
+        `member '${memberName}' of module '${moduleName}' is private`,
+      );
+    }
+    throw new Error(`module '${moduleName}' has no member '${memberName}'`);
+  }
+}
+
+function validateObjectMemberAccess(
+  objectName: string | undefined,
+  memberName: string | undefined,
+  objectMap: Map<string, ModuleMetadata>,
+): void {
+  if (!objectName || !memberName) return;
+  const objectInfo = objectMap.get(objectName);
+  if (objectInfo) {
+    if (!objectInfo.publicMembers.has(memberName)) {
+      if (objectInfo.privateMembers.has(memberName)) {
+        throw new Error(
+          `member '${memberName}' of object '${objectName}' is private`,
+        );
+      }
+      throw new Error(`object '${objectName}' has no member '${memberName}'`);
+    }
+  }
+}
+
 export function validateModuleAccess(
   source: string,
   metadata: ModuleMetadata[],
@@ -217,43 +256,14 @@ export function validateModuleAccess(
     if (source[i] === ":" && source[i + 1] === ":") {
       const moduleName = readIdentifierBackward(source, i);
       const memberName = readIdentifierForward(source, i + 2);
-      if (moduleName && memberName) {
-        const moduleInfo = moduleMap.get(moduleName);
-        if (!moduleInfo) {
-          throw new Error(`module '${moduleName}' is not defined`);
-        }
-        if (!moduleInfo.publicMembers.has(memberName)) {
-          if (moduleInfo.privateMembers.has(memberName)) {
-            throw new Error(
-              `member '${memberName}' of module '${moduleName}' is private`,
-            );
-          }
-          throw new Error(
-            `module '${moduleName}' has no member '${memberName}'`,
-          );
-        }
-      }
+      validateModuleMemberAccess(moduleName, memberName, moduleMap);
       i += 2;
       continue;
     }
     if (source[i] === ".") {
       const objectName = readIdentifierBackward(source, i);
       const memberName = readIdentifierForward(source, i + 1);
-      if (objectName && memberName) {
-        const objectInfo = objectMap.get(objectName);
-        if (objectInfo) {
-          if (!objectInfo.publicMembers.has(memberName)) {
-            if (objectInfo.privateMembers.has(memberName)) {
-              throw new Error(
-                `member '${memberName}' of object '${objectName}' is private`,
-              );
-            }
-            throw new Error(
-              `object '${objectName}' has no member '${memberName}'`,
-            );
-          }
-        }
-      }
+      validateObjectMemberAccess(objectName, memberName, objectMap);
     }
     i++;
   }

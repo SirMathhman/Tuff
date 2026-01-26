@@ -80,9 +80,10 @@ export function processArguments(
   const args: number[] = [];
   for (let i = 0; i < argParts.length; i++) {
     const argStr = argParts[i]!;
-    const paramType = fnDef.params[i]?.type;
-    const paramTypeStr = fnDef.params[i]?.typeStr;
-    const paramName = fnDef.params[i]?.name || `param${i}`;
+    const param = fnDef.params[i];
+    const paramType = param?.type ?? 0;
+    const paramTypeStr = param?.typeStr;
+    const paramName = param?.name ?? `param${i}`;
 
     if (paramType === -2) {
       const inferredReturnType = paramTypeStr
@@ -100,7 +101,13 @@ export function processArguments(
     } else {
       const argValue = callInterpreter(ctx, argStr);
       // Validate argument type compatibility
-      validateArgumentType(argValue, paramType, paramTypeStr, paramName, actualFnName);
+      validateArgumentType(
+        argValue,
+        paramType,
+        paramTypeStr,
+        paramName,
+        actualFnName,
+      );
       args.push(argValue);
     }
   }

@@ -22,25 +22,19 @@ function handleExternOrUse(
   return undefined;
 }
 
-function parseDeclInfo(declStr: string): { isMut: boolean; eqIndex: number } {
-  const afterLet = declStr.slice(4),
-    colonIndex = afterLet.indexOf(":");
-  const beforeColon =
-    colonIndex !== -1 ? afterLet.slice(0, colonIndex) : afterLet;
-  return {
-    isMut: beforeColon.indexOf("mut ") !== -1,
-    eqIndex: findEqualIndex(declStr),
-  };
-}
-
-function processVariableDeclaration(
-  remaining: string,
+function parseVariableWithType(
   declStr: string,
+  remaining: string,
   restIndex: number,
   isPublic: boolean,
   ctx: ScopeContext,
 ): number {
-  const { isMut, eqIndex } = parseDeclInfo(declStr);
+  const afterLet = declStr.slice(4),
+    colonIndex = afterLet.indexOf(":");
+  const beforeColon =
+    colonIndex !== -1 ? afterLet.slice(0, colonIndex) : afterLet;
+  const isMut = beforeColon.indexOf("mut ") !== -1;
+  const eqIndex = findEqualIndex(declStr);
   const { result } = parseVariableInit({
     remaining,
     declStr,
@@ -93,11 +87,5 @@ export function handleVarDecl(
     return handleUseStatement(remaining.slice(4), ctx);
   const { declStr, restIndex } = findDeclStringAndRestIndex(remaining);
   if (!declStr) return undefined;
-  return processVariableDeclaration(
-    remaining,
-    declStr,
-    restIndex,
-    isPublic,
-    ctx,
-  );
+  return parseVariableWithType(declStr, remaining, restIndex, isPublic, ctx);
 }

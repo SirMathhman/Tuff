@@ -163,6 +163,59 @@ function validateIdentifier(
   return i;
 }
 
+function trySkipPatterns(
+  source: string,
+  i: number,
+  variables: Map<string, VariableInfo>,
+): number {
+  let newI = trySkipPointerDereference(source, i);
+  if (newI !== -1) return newI;
+  newI = trySkipDeclarations(source, i, [
+    "let",
+    "type",
+    "fn",
+    "module",
+    "object",
+  ]);
+  if (newI !== -1) return newI;
+  newI = skipStructDeclaration(source, i);
+  if (newI !== -1) return newI;
+  newI = skipParentheses(source, i);
+  if (newI !== -1) return newI;
+  newI = validateIdentifier(source, i, variables);
+  if (newI !== -1) return newI;
+  return -1;
+}
+
+/**
+ * Try to skip multiple declaration types
+ */
+function trySkipDeclarations(
+  source: string,
+  i: number,
+  declarations: string[],
+): number {
+  for (const decl of declarations) {
+    const newI = skipDeclaration(source, i, decl);
+    if (newI !== -1) return newI;
+  }
+  return -1;
+}
+
+/**
+ * Try to skip pointer dereference pattern
+ */
+function trySkipPointerDereference(source: string, i: number): number {
+  if (source[i] !== "*") return -1;
+  let j = i + 1;
+  while (j < source.length && isWhitespace(source[j])) j++;
+  if (j < source.length && isIdentifierChar(source[j]) && !isDigit(source[j])) {
+    while (j < source.length && isIdentifierChar(source[j])) j++;
+    return j;
+  }
+  return -1;
+}
+
 /**
  * Validate variable usage (assignments and references)
  */
@@ -186,58 +239,8 @@ export function validateVariableUsage(
       while (i < source.length && isIdentifierChar(source[i])) i++;
       continue;
     }
-    // Skip pointer dereference patterns (*identifier =) - these write through pointer
-    // not to the variable itself
-    if (source[i] === "*") {
-      let j = i + 1;
-      while (j < source.length && isWhitespace(source[j])) j++;
-      if (
-        j < source.length &&
-        isIdentifierChar(source[j]) &&
-        !isDigit(source[j])
-      ) {
-        // This looks like a dereference
-        while (j < source.length && isIdentifierChar(source[j])) j++;
-        i = j;
-        continue;
-      }
-    }
-    let newI = skipDeclaration(source, i, "let");
-    if (newI !== -1) {
-      i = newI;
-      continue;
-    }
-    newI = skipDeclaration(source, i, "type");
-    if (newI !== -1) {
-      i = newI;
-      continue;
-    }
-    newI = skipDeclaration(source, i, "fn");
-    if (newI !== -1) {
-      i = newI;
-      continue;
-    }
-    newI = skipDeclaration(source, i, "module");
-    if (newI !== -1) {
-      i = newI;
-      continue;
-    }
-    newI = skipDeclaration(source, i, "object");
-    if (newI !== -1) {
-      i = newI;
-      continue;
-    }
-    newI = skipStructDeclaration(source, i);
-    if (newI !== -1) {
-      i = newI;
-      continue;
-    }
-    newI = skipParentheses(source, i);
-    if (newI !== -1) {
-      i = newI;
-      continue;
-    }
-    newI = validateIdentifier(source, i, variables);
+    // Skip pointer dereference patterns
+    const newI = trySkipPatterns(source, i, variables);
     if (newI !== -1) {
       i = newI;
       continue;

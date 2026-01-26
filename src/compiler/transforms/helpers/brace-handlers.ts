@@ -14,6 +14,53 @@ function skipWhitespace(source: string, index: number): number {
 }
 
 /**
+ * Check for control flow keywords before parentheses in trimmed string
+ */
+function checkControlFlowKeywords(
+  trimmed: string,
+  keywordList: string[],
+): boolean {
+  for (const keyword of keywordList) {
+    const pattern = keyword + "(";
+    if (trimmed.endsWith(pattern)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Check what keyword precedes closing paren in trimmed string
+ */
+function checkKeywordBeforeClosingParen(trimmed: string): boolean {
+  // Scan back to find the matching ( and check what's before it
+  let depth = 1;
+  let i = trimmed.length - 2;
+  while (i >= 0 && depth > 0) {
+    if (trimmed[i] === ")") depth++;
+    else if (trimmed[i] === "(") depth--;
+    i--;
+  }
+  // Skip whitespace and check for control flow or function keyword
+  while (i >= 0 && isWhitespace(trimmed[i])) i--;
+
+  const keywords = ["while", "for", "if", "else", "match", "loop", "function"];
+  for (const keyword of keywords) {
+    const start = i - keyword.length + 1;
+    if (start >= 0) {
+      const word = trimmed.slice(start, i + 1);
+      if (
+        word === keyword &&
+        (start === 0 || !isIdentifierChar(trimmed[start - 1]))
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * Check if a brace at position i is probably part of control flow or function body
  */
 export function isProbablyControlFlowBrace(
@@ -48,51 +95,14 @@ export function isProbablyControlFlowBrace(
   }
 
   // Check if result ends with ')' preceded by control flow keyword + condition
-  // or function declaration. e.g., while(...), if (...), function()
-  if (trimmed.endsWith(")")) {
-    // Scan back to find the matching ( and check what's before it
-    let depth = 1;
-    let i = trimmed.length - 2;
-    while (i >= 0 && depth > 0) {
-      if (trimmed[i] === ")") depth++;
-      else if (trimmed[i] === "(") depth--;
-      i--;
-    }
-    // Now i points to just before the opening (
-    // Skip whitespace and check for control flow or function keyword
-    while (i >= 0 && isWhitespace(trimmed[i])) i--;
-
-    // Check what word is before the (
-    const keywords = [
-      "while",
-      "for",
-      "if",
-      "else",
-      "match",
-      "loop",
-      "function",
-    ];
-    for (const keyword of keywords) {
-      const start = i - keyword.length + 1;
-      if (start >= 0) {
-        const word = trimmed.slice(start, i + 1);
-        if (
-          word === keyword &&
-          (start === 0 || !isIdentifierChar(trimmed[start - 1]))
-        ) {
-          return true;
-        }
-      }
-    }
+  if (trimmed.endsWith(")") && checkKeywordBeforeClosingParen(trimmed)) {
+    return true;
   }
 
-  // Check if result ends with keyword followed by opening paren (legacy check)
+  // Check if result ends with keyword followed by opening paren
   const keywords = ["while", "for", "if", "else", "match", "loop"];
-  for (const keyword of keywords) {
-    const pattern = keyword + "(";
-    if (trimmed.endsWith(pattern)) {
-      return true;
-    }
+  if (checkControlFlowKeywords(trimmed, keywords)) {
+    return true;
   }
 
   // Check for 'try' block

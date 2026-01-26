@@ -3,12 +3,12 @@ import {
   isIdentifierChar,
   isDigit,
   matchWord,
-} from "../parsing/string-helpers";
+} from "../../parsing/string-helpers";
 import {
   parseCondition,
   parseBody,
   parseUntilSemicolon,
-} from "../parsing/parse-helpers";
+} from "../../parsing/parse-helpers";
 
 /**
  * Skip whitespace in source starting at index

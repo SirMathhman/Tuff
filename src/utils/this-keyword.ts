@@ -1,6 +1,6 @@
-import { getCurrentFunctionParams } from "../functions";
 import { getLocalFunctionNames } from "./scope-helpers";
 import { createStructInstance } from "../types/structs";
+import { currentFunctionParams } from "../function-defs";
 
 // Special marker to indicate this is the global/module scope
 export const GLOBAL_THIS_VALUE = -999999;
@@ -14,10 +14,9 @@ export const setInstanceMethods = (instanceId: number, methods: Set<string>) =>
 
 export function evaluateThisKeyword(scope: Map<string, number>): number {
   if (scope.has("this")) return scope.get("this")!;
-  const p = getCurrentFunctionParams();
-  if (p) {
+  if (currentFunctionParams) {
     const fv = new Map();
-    for (const x of p) fv.set(x.name, x.value);
+    for (const x of currentFunctionParams) fv.set(x.name, x.value);
 
     const instanceId = createStructInstance("__fn_constructor__", fv);
 

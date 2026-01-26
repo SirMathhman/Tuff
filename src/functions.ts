@@ -18,7 +18,6 @@ import {
   functionDefs,
   setFunctionRef,
   getFunctionRef,
-  getCurrentFunctionParams,
   setCurrentFunctionParams,
 } from "./function-defs";
 import {
@@ -37,68 +36,11 @@ export {
   addLocalFunctionName,
   setFunctionRef,
   getFunctionRef,
-  getCurrentFunctionParams,
   setCurrentFunctionParams,
 };
 
 export const handleFunctionDeclaration =
   createFunctionDeclarationHandler(functionDefs);
-
-function callInterpreter(ctx: FnContext, input: string): number {
-  return ctx.interpreter(
-    input,
-    ctx.scope,
-    ctx.typeMap,
-    ctx.mutMap,
-    ctx.uninitializedSet,
-    ctx.unmutUninitializedSet,
-  );
-}
-
-function validateAndParseFunctionCall(
-  trimmed: string,
-):
-  | { fnName: string; actualFnName: string; argsStr: string; rest: string }
-  | undefined {
-  const parenIndex = trimmed.indexOf("(");
-  if (parenIndex === -1) return undefined;
-  const fnNamePart = trimmed.slice(0, parenIndex).trim();
-  const { name: fnName } = extractFunctionName(fnNamePart);
-  if (!isValidIdentifier(fnName)) return undefined;
-  const referencedFnName = getFunctionRef(fnName),
-    actualFnName = referencedFnName || fnName;
-  const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
-  if (closeParenIndex === -1) return undefined;
-  return {
-    fnName,
-    actualFnName,
-    argsStr: trimmed.slice(parenIndex + 1, closeParenIndex).trim(),
-    rest: trimmed.slice(closeParenIndex + 1).trim(),
-  };
-}
-
-function checkNativeOrDefinedFunction(actualFnName: string): {
-  hasNativeFunc: boolean;
-  hasFnDef: boolean;
-} {
-  const nativeFunc =
-    typeof globalThis !== "undefined"
-      ? (globalThis as Record<string, unknown>)[`__native__${actualFnName}`]
-      : undefined;
-  return {
-    hasNativeFunc: typeof nativeFunc === "function",
-    hasFnDef: functionDefs.has(actualFnName),
-  };
-}
-
-function handleResultWithRest(
-  result: number,
-  rest: string,
-  ctx: FnContext,
-): number {
-  if (rest === "") return result;
-  return callInterpreter(ctx, result.toString() + rest);
-}
 
 function executeDefinedFunction(
   actualFnName: string,
@@ -111,7 +53,15 @@ function executeDefinedFunction(
   const args = processArguments(argParts, fnDef, actualFnName, ctx);
   const mergedScope = createFunctionScope(fnDef, args, ctx);
   const result = executeFunctionBody(fnDef, args, mergedScope, ctx);
-  return handleResultWithRest(result, rest, ctx);
+  if (rest === "") return result;
+  return ctx.interpreter(
+    result.toString() + rest,
+    ctx.scope,
+    ctx.typeMap,
+    ctx.mutMap,
+    ctx.uninitializedSet,
+    ctx.unmutUninitializedSet,
+  );
 }
 
 function handleFunctionExecution(
@@ -148,11 +98,23 @@ export function parseFunctionCall(p: FunctionCallParams): number | undefined {
     interpreter,
   } = p;
   const trimmed = s.trim();
-  const parsed = validateAndParseFunctionCall(trimmed);
-  if (!parsed) return undefined;
-  const { actualFnName, argsStr, rest } = parsed;
-  const { hasNativeFunc, hasFnDef } =
-    checkNativeOrDefinedFunction(actualFnName);
+  const parenIndex = trimmed.indexOf("(");
+  if (parenIndex === -1) return undefined;
+  const fnNamePart = trimmed.slice(0, parenIndex).trim();
+  const { name: fnName } = extractFunctionName(fnNamePart);
+  if (!isValidIdentifier(fnName)) return undefined;
+  const referencedFnName = getFunctionRef(fnName),
+    actualFnName = referencedFnName || fnName;
+  const closeParenIndex = findMatchingCloseParen(trimmed, parenIndex);
+  if (closeParenIndex === -1) return undefined;
+  const argsStr = trimmed.slice(parenIndex + 1, closeParenIndex).trim();
+  const rest = trimmed.slice(closeParenIndex + 1).trim();
+  const nativeFunc =
+    typeof globalThis !== "undefined"
+      ? (globalThis as Record<string, unknown>)[`__native__${actualFnName}`]
+      : undefined;
+  const hasNativeFunc = typeof nativeFunc === "function";
+  const hasFnDef = functionDefs.has(actualFnName);
   if (!hasNativeFunc && !hasFnDef) return undefined;
   const ctx: FnContext = {
     scope,

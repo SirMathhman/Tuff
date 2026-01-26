@@ -13,8 +13,9 @@ export const setFunctionRef = (varName: string, fnName: string) =>
 export const getFunctionRef = (varName: string) => functionRefs.get(varName);
 
 // Track current function context for 'this' support
-let currentFunctionParams: Array<{ name: string; value: number }> | undefined;
-export const getCurrentFunctionParams = () => currentFunctionParams;
+export let currentFunctionParams:
+  | Array<{ name: string; value: number }>
+  | undefined;
 export const setCurrentFunctionParams = (
   params: Array<{ name: string; value: number }> | undefined,
 ) => {

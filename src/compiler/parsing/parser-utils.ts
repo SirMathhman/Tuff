@@ -119,6 +119,28 @@ function parseTypeAnnotation(
   return { type, nextIndex: index };
 }
 
+function processInitializer(
+  source: string,
+  startIdx: number,
+  typeAnnotation: string | undefined,
+): { i: number; isArray: boolean; hasInit: boolean; inferredType: string | undefined } {
+  let i = startIdx;
+  if (i >= source.length || source[i] !== "=") return { i, isArray: false, hasInit: false, inferredType: undefined };
+  i++;
+  while (i < source.length && isWhitespace(source[i])) i++;
+  const isArrayDetected = source[i] === "[";
+  const { content: value, endIdx: valueEndIdx } = parseUntilSemicolon(source, i);
+  i = valueEndIdx;
+  const trimmedValue = value.trim();
+  const sourceVarType = getVariableType(trimmedValue);
+  if (typeAnnotation) {
+    if (sourceVarType) validateTypeSuffixCompatibility(sourceVarType, typeAnnotation);
+    validateTypeAnnotation(value, typeAnnotation);
+  }
+  const type = inferValueType(value);
+  return { i, isArray: isArrayDetected, hasInit: true, inferredType: type };
+}
+
 /**
  * Parse a single let declaration
  */
@@ -140,66 +162,22 @@ export function parseLetDeclaration(
   i = mutIndex;
   const { name: varName, nextIndex: nameIndex } = parseVarName(source, i);
   i = nameIndex;
-  const { type: typeAnnotation, nextIndex: typeIndex } = parseTypeAnnotation(
-    source,
-    i,
-  );
+  const { type: typeAnnotation, nextIndex: typeIndex } = parseTypeAnnotation(source, i);
   i = typeIndex;
   while (i < source.length && isWhitespace(source[i])) i++;
-  let isArray = false;
-  let hasInitializer = false;
-  let inferredType: string | undefined;
-  if (i < source.length && source[i] === "=") {
-    hasInitializer = true;
-    i++;
-    while (i < source.length && isWhitespace(source[i])) i++;
-    // Check if value starts with [ (array literal)
-    if (source[i] === "[") {
-      isArray = true;
-    }
-    const { content: value, endIdx: valueEndIdx } = parseUntilSemicolon(
-      source,
-      i,
-    );
-    i = valueEndIdx;
-
-    // Check if value is a variable reference with a known type
-    const trimmedValue = value.trim();
-    const sourceVarType = getVariableType(trimmedValue);
-
-    if (typeAnnotation) {
-      // Validate variable-to-variable type compatibility
-      if (sourceVarType) {
-        validateTypeSuffixCompatibility(sourceVarType, typeAnnotation);
-      }
-      validateTypeAnnotation(value, typeAnnotation);
-    }
-
-    // Infer the type from the value
-    inferredType = inferValueType(value);
-  }
-  // Check if type annotation indicates array: [Type; N] or [Type; N; M]
-  // Also check for pointer to array: *[Type]
-  if (typeAnnotation) {
-    if (typeAnnotation.startsWith("[") || typeAnnotation.startsWith("*[")) {
-      isArray = true;
-    }
-  }
+  const { i: afterInit, isArray: initArray, hasInit, inferredType } = processInitializer(source, i, typeAnnotation);
+  i = afterInit;
+  const isArray = initArray || (typeAnnotation?.startsWith("[") || typeAnnotation?.startsWith("*["));
   if (i < source.length && source[i] === ";") i++;
-
-  // Track the variable's type for future cross-variable assignments
   const effectiveType = typeAnnotation || inferredType;
-  if (effectiveType) {
-    setVariableType(varName, effectiveType);
-  }
-
+  if (effectiveType) setVariableType(varName, effectiveType);
   return {
     nextIndex: i,
     varName,
     typeAnnotation,
     isMutable,
     isArray,
-    hasInitializer,
+    hasInitializer: hasInit,
     inferredType,
   };
 }

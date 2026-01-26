@@ -1,5 +1,6 @@
-import { getCompileFunctionDefs, type ParamInfo } from "../declaration-parser";
-import { inferValueType, isNumericLiteral } from "../validation/validation";
+import { getCompileFunctionDefs } from "../function-defs-storage";
+import type { ParamInfo } from "../parsing/param-helpers";
+import { isNumericLiteral } from "../validation/validation";
 import { isWhitespace, isIdentifierChar } from "../parsing/string-helpers";
 
 /**
@@ -90,12 +91,16 @@ function isVariableReference(value: string): boolean {
   const trimmed = value.trim();
   // Simple heuristic: if it's a single identifier, it's likely a variable
   if (trimmed.length === 0) return false;
-  
+
   const firstChar = trimmed[0]!;
   // Identifiers must start with a letter or underscore, not a digit
-  if (!((firstChar >= "a" && firstChar <= "z") || 
-        (firstChar >= "A" && firstChar <= "Z") || 
-        firstChar === "_")) {
+  if (
+    !(
+      (firstChar >= "a" && firstChar <= "z") ||
+      (firstChar >= "A" && firstChar <= "Z") ||
+      firstChar === "_"
+    )
+  ) {
     return false;
   }
 
@@ -151,6 +156,19 @@ function parseArguments(argsStr: string): string[] {
 }
 
 /**
+ * Check if position is at start of function declaration and skip it
+ */
+function trySkipFnDeclaration(source: string, i: number): number | undefined {
+  if (source.slice(i, i + 2) !== "fn") return undefined;
+  const isWhitespaceAfter =
+    i + 2 < source.length ? isWhitespace(source[i + 2]) : false;
+  if (!isWhitespaceAfter) return undefined;
+  let pos = i;
+  while (pos < source.length && source[pos] !== ";") pos++;
+  return pos + 1; // Skip the semicolon
+}
+
+/**
  * Validate all function calls in the source code
  */
 export function validateFunctionCalls(source: string): void {
@@ -162,17 +180,10 @@ export function validateFunctionCalls(source: string): void {
   // Find all function calls and validate them
   let i = 0;
   while (i < source.length) {
-    // Skip function declarations - they contain parameter lists that shouldn't be validated
-    if (source.slice(i, i + 2) === "fn") {
-      const isWhitespaceAfter = i + 2 < source.length ? isWhitespace(source[i + 2]) : false;
-      if (isWhitespaceAfter) {
-        // Skip to the next semicolon to skip the entire function declaration
-        while (i < source.length && source[i] !== ";") {
-          i++;
-        }
-        i++; // Skip the semicolon
-        continue;
-      }
+    const skipped = trySkipFnDeclaration(source, i);
+    if (skipped !== undefined) {
+      i = skipped;
+      continue;
     }
 
     // Look for identifier followed by (
@@ -206,12 +217,7 @@ export function validateFunctionCalls(source: string): void {
           }
 
           const argsStr = source.slice(argsStart, j - 1); // Exclude closing paren
-          try {
-            validateFunctionCall(fnName, argsStr, functionDefs);
-          } catch (error) {
-            // Re-throw validation errors
-            throw error;
-          }
+          validateFunctionCall(fnName, argsStr, functionDefs);
         }
         i = j;
       } else {

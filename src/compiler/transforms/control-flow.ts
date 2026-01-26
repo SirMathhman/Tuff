@@ -6,7 +6,7 @@ import {
   parseBracedBlock,
   parseSingleExpression,
 } from "../parsing/parse-helpers";
-import { transformFor, transformBreakInLoop } from "./for-loop";
+import { transformFor, transformBreakInLoop } from "./helpers/for-loop";
 
 // Re-export for convenience
 export { transformFor };
