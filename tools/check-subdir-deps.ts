@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Subdirectory dependency validator
- * Ensures subdirectories in src don't have circular dependencies with each other
- * E.g., core should not depend on eval, and eval should not depend on core in a cycle
- * Exits with code 1 if circular subdirectory dependencies found
+ * Directory dependency validator
+ * Ensures all directories (at any depth) in src don't have circular dependencies
+ * Each directory is treated as a separate package (like Java packages)
+ * E.g., compiler/parsing and compiler are separate packages
+ * Exits with code 1 if circular dependencies found
  */
 
 import { execSync } from "child_process";
@@ -20,14 +21,31 @@ interface CircularDependency {
   path: string[];
 }
 
-function getSubdirectories(rootPath: string): string[] {
+function getAllDirectories(
+  rootPath: string,
+  basePath: string = "",
+): string[] {
   if (!existsSync(rootPath)) return [];
-  return readdirSync(rootPath, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
-    .map((entry) => entry.name);
+  const dirs: string[] = [];
+
+  const entries = readdirSync(rootPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() && !entry.name.startsWith(".")) {
+      const relPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+      dirs.push(relPath);
+      // Recursively add subdirectories
+      const subDirs = getAllDirectories(
+        join(rootPath, entry.name),
+        relPath,
+      );
+      dirs.push(...subDirs);
+    }
+  }
+
+  return dirs;
 }
 
-function getFileSubdirectory(
+function getFileDirectory(
   filePath: string,
   srcDir: string,
 ): string | undefined {
@@ -36,9 +54,10 @@ function getFileSubdirectory(
   const prefixIndex = normalized.indexOf(prefix);
   if (prefixIndex === -1) return undefined;
   const afterPrefix = normalized.slice(prefixIndex + prefix.length);
-  const slashIndex = afterPrefix.indexOf("/");
-  if (slashIndex === -1) return undefined;
-  return afterPrefix.slice(0, slashIndex);
+  // Get the directory part (everything except the filename)
+  const lastSlash = afterPrefix.lastIndexOf("/");
+  if (lastSlash === -1) return undefined;
+  return afterPrefix.slice(0, lastSlash);
 }
 
 function getMadgeDependencies(srcDir: string): DependencyGraph {
@@ -57,37 +76,37 @@ function getMadgeDependencies(srcDir: string): DependencyGraph {
   }
 }
 
-function buildSubdirectoryGraph(
+function buildDirectoryGraph(
   madgeDeps: DependencyGraph,
   srcDir: string,
-  subdirs: string[],
+  allDirs: string[],
 ): DependencyGraph {
-  const subdirGraph: DependencyGraph = {};
-  
-  // Initialize graph with all subdirectories
-  for (const subdir of subdirs) {
-    subdirGraph[subdir] = [];
+  const dirGraph: DependencyGraph = {};
+
+  // Initialize graph with all directories
+  for (const dir of allDirs) {
+    dirGraph[dir] = [];
   }
 
-  // Build subdirectory-level dependency graph
+  // Build directory-level dependency graph
   for (const [file, deps] of Object.entries(madgeDeps)) {
-    const fromSubdir = getFileSubdirectory(file, srcDir);
-    if (!fromSubdir) continue;
+    const fromDir = getFileDirectory(file, srcDir);
+    if (!fromDir) continue;
 
     for (const dep of deps) {
-      const toSubdir = getFileSubdirectory(dep, srcDir);
-      if (!toSubdir || toSubdir === fromSubdir) continue;
+      const toDir = getFileDirectory(dep, srcDir);
+      if (!toDir || toDir === fromDir) continue;
 
-      // Add edge if not already present (guard in case fromSubdir wasn't initialized)
-      const edges = subdirGraph[fromSubdir];
+      // Add edge if not already present
+      const edges = dirGraph[fromDir];
       if (!edges) continue;
-      if (!edges.includes(toSubdir)) {
-        edges.push(toSubdir);
+      if (!edges.includes(toDir)) {
+        edges.push(toDir);
       }
     }
   }
 
-  return subdirGraph;
+  return dirGraph;
 }
 
 function findCircularPaths(
@@ -155,27 +174,27 @@ function printCircularDependency(cycle: CircularDependency): void {
 }
 
 function printSuggestions(): void {
-  console.error("\n💡 How to fix circular subdirectory dependencies:\n");
+  console.error("\n💡 How to fix circular directory dependencies:\n");
   console.error("1. Identify the architectural boundary:");
   console.error("   - Determine which direction the dependency should flow");
-  console.error("   - Generally: utils/core ← parse ← eval\n");
+  console.error("   - Each directory (at any depth) is a separate package\n");
   console.error("2. Refactor to remove the cycle:");
-  console.error("   - Extract shared code to a common subdirectory (e.g., core or utils)");
+  console.error("   - Extract shared code to a common parent directory or sibling");
   console.error("   - Use dependency injection to invert the dependency");
   console.error("   - Split modules to separate concerns\n");
   console.error("3. Example fix:");
-  console.error("   - If eval depends on core, and core depends on eval:");
-  console.error("   - Extract the shared interface to core");
-  console.error("   - Pass implementation from eval to core via parameters\n");
+  console.error("   - If compiler/parsing depends on compiler/transforms,");
+  console.error("   - and compiler/transforms depends on compiler/parsing:");
+  console.error("   - Extract the shared interface to compiler/shared or compiler\n");
 }
 
 function handleSuccess(): void {
-  console.log("✓ No circular subdirectory dependencies found");
+  console.log("✓ No circular directory dependencies found");
   process.exit(0);
 }
 
 function handleFailure(cycles: CircularDependency[]): void {
-  console.error("\n❌ Circular subdirectory dependencies detected:");
+  console.error("\n❌ Circular directory dependencies detected:");
   cycles.forEach(printCircularDependency);
   printSuggestions();
   process.exit(1);
@@ -184,25 +203,25 @@ function handleFailure(cycles: CircularDependency[]): void {
 function main() {
   const srcDir = "src";
   const fullSrcPath = join(process.cwd(), srcDir);
-  
-  // Get all subdirectories in src
-  const subdirs = getSubdirectories(fullSrcPath);
-  
-  if (subdirs.length === 0) {
-    console.log("✓ No subdirectories to check");
+
+  // Get all directories at any depth in src
+  const allDirs = getAllDirectories(fullSrcPath);
+
+  if (allDirs.length === 0) {
+    console.log("✓ No directories to check");
     process.exit(0);
   }
 
-  console.log(`Checking subdirectory dependencies: ${subdirs.join(", ")}`);
+  console.log(`Checking directory dependencies: ${allDirs.join(", ")}`);
 
   // Get file-level dependencies from madge
   const madgeDeps = getMadgeDependencies(srcDir);
 
-  // Build subdirectory-level dependency graph
-  const subdirGraph = buildSubdirectoryGraph(madgeDeps, srcDir, subdirs);
+  // Build directory-level dependency graph
+  const dirGraph = buildDirectoryGraph(madgeDeps, srcDir, allDirs);
 
   // Find circular dependencies
-  const cycles = findAllCircularDependencies(subdirGraph);
+  const cycles = findAllCircularDependencies(dirGraph);
 
   if (cycles.length === 0) {
     handleSuccess();
