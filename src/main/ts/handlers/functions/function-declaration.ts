@@ -10,6 +10,7 @@ import { addLocalFunctionName } from "../../utils/scope-helpers";
 import { parseGenericParams } from "../../utils/generic-params";
 import type { FnDef } from "../../function-defs";
 import { findMatchingCloseBrace } from "../../utils/helpers/brace-utils";
+import { isIdentifierChar } from "../../compiler/parsing/string-helpers";
 
 function isWhitespace(ch: string): boolean {
   return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
@@ -132,6 +133,11 @@ function processFunctionDeclaration(
   const returnType = parseReturnType(returnTypeStr, typeMap);
   if (returnType === undefined) return;
   const body = rest.slice(arrowIndex + 2, closeIndex).trim();
+
+  // Validate that function body doesn't return references to local variables
+  const paramNames = new Set(params.map((p) => p.name));
+  validateNoDanglingReferences(body, paramNames);
+
   const fnDef: FnDef = { params, returnType, body };
   if (genericParams.length > 0) fnDef.generics = genericParams;
   functionDefs.set(fnName, fnDef);
@@ -164,6 +170,63 @@ function validateParametersDontShadowVariables(
       throw new Error(`Parameter '${param.name}' shadows an existing variable`);
     }
   }
+}
+
+function checkLocalVarReferences(localVar: string, body: string): void {
+  let searchPos = 0;
+  while (true) {
+    const ampPos = body.indexOf("&" + localVar, searchPos);
+    if (ampPos === -1) break;
+
+    const afterVarPos = ampPos + 1 + localVar.length;
+    if (
+      afterVarPos < body.length &&
+      isAlphanumericOrUnderscore(body[afterVarPos]!)
+    ) {
+      searchPos = ampPos + 1;
+      continue;
+    }
+
+    throw new Error(
+      `cannot return reference to local variable '${localVar}': would create dangling pointer`,
+    );
+  }
+}
+
+function validateNoDanglingReferences(
+  body: string,
+  paramNames: Set<string>,
+): void {
+  const trimmed = body.trim();
+  let idx = 0;
+
+  while (true) {
+    const letIdx = trimmed.indexOf("let ", idx);
+    if (letIdx === -1) break;
+
+    let start = letIdx + 4;
+    if (trimmed.startsWith("mut ", start)) start += 4;
+
+    while (start < trimmed.length && isWhitespace(trimmed[start]!)) start++;
+
+    let end = start;
+    while (end < trimmed.length && isAlphanumericOrUnderscore(trimmed[end]!)) {
+      end++;
+    }
+
+    if (start < end) {
+      const varName = trimmed.slice(start, end);
+      if (!paramNames.has(varName)) {
+        checkLocalVarReferences(varName, trimmed);
+      }
+    }
+
+    idx = end;
+  }
+}
+
+function isAlphanumericOrUnderscore(ch: string): boolean {
+  return isIdentifierChar(ch);
 }
 
 export function createFunctionDeclarationHandler(

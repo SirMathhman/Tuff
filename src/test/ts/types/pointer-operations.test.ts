@@ -65,10 +65,7 @@ describe("pointer operations - mutable assignment", () => {
   });
 
   itBoth("mutable pointer can be assigned to another variable", (ok) => {
-    ok(
-      "let mut x = 0; let y : *mut I32 = &x; let z = y; *z = 100; x",
-      100,
-    );
+    ok("let mut x = 0; let y : *mut I32 = &x; let z = y; *z = 100; x", 100);
   });
 
   itBoth("immutable pointer rejects dereferenced assignment", (_, bad) => {
@@ -175,6 +172,15 @@ describe("pointer operations - type constraints", () => {
   itBoth("throws on double reference", (_ok, assertInvalid) => {
     assertInvalid("let x = 100; let p : **I32 = &&x");
   });
+});
+
+describe("pointer operations - dangling references", () => {
+  itBoth(
+    "throws when returning reference to local variable from function",
+    (_ok, assertInvalid) => {
+      assertInvalid("fn get() => { let x = 100; &x }");
+    },
+  );
 });
 
 describe("pointer operations - limitations", () => {
