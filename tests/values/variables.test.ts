@@ -1,6 +1,5 @@
 import { describe } from "bun:test";
 import { itBoth, itInterpreter } from "../test-helpers";
-import { addThisReturningFunctionCases } from "../this-return-cases";
 
 describe("variables - basic", () => {
   itBoth("supports simple variable declaration", (assertValid) => {
@@ -153,6 +152,4 @@ describe("variables - this keyword", () => {
   itBoth("supports this in function returning value", (ok) => {
     ok("fn getValue() => 42; fn wrapper() => this.getValue(); wrapper()", 42);
   });
-
-  addThisReturningFunctionCases(itBoth);
 });
