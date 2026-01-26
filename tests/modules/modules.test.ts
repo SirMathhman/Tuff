@@ -41,7 +41,6 @@ describe("modules - error handling", () => {
     bad("NonExistent::foo()");
   });
 
-  // Compiler doesn't validate module member existence at compile time
   itBoth("throws when accessing non-existent member in module", (_, bad) => {
     bad("module Sample { out fn get() => 100; } Sample::missing()");
   });
@@ -69,7 +68,6 @@ describe("modules - objects", () => {
 });
 
 describe("modules - visibility", () => {
-  // Compiler doesn't validate object member visibility at compile time
   itBoth(
     "throws when accessing private object member without out keyword",
     (_, bad) => {
@@ -81,7 +79,6 @@ describe("modules - visibility", () => {
     ok("module Config { out let PORT = 8080; } Config::PORT", 8080);
   });
 
-  // Compiler doesn't validate module member visibility at compile time
   itBoth(
     "throws when accessing private module member without out keyword",
     (_, bad) => {
