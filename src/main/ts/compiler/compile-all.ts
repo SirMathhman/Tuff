@@ -39,7 +39,10 @@ function parseModuleRefStatement(
   return { alias, moduleName };
 }
 
-function rewriteModuleRefAccess(code: string, moduleRefs: Map<string, string>): string {
+function rewriteModuleRefAccess(
+  code: string,
+  moduleRefs: Map<string, string>,
+): string {
   if (moduleRefs.size === 0) return code;
 
   let result = "";
@@ -169,7 +172,8 @@ export function compileAll(
     if (normalized.cleaned.trim()) modulePieces.push(normalized.cleaned);
   }
 
-  const combinedTuff = "0;\n" + modulePieces.join("\n") + "\n" + normalizedMain.cleaned;
+  const combinedTuff =
+    "0;\n" + modulePieces.join("\n") + "\n" + normalizedMain.cleaned;
   const compiled = compile(combinedTuff);
 
   const nativePrelude: string[] = [];
