@@ -429,4 +429,10 @@ describe("interpret", () => {
     const result = interpret("let x = false; !x");
     expect(result).toBe(1);
   });
+  test('interpret("let generator : () => (Bool, I32) = 0..3; let result0 = generator(); let result1 = generator(); let result2 = generator(); result0[0] && result1[0] && !result2[0]") should return 1', () => {
+    const result = interpret(
+      "let generator : () => (Bool, I32) = 0..3; let result0 = generator(); let result1 = generator(); let result2 = generator(); result0[0] && result1[0] && !result2[0]",
+    );
+    expect(result).toBe(1);
+  });
 });

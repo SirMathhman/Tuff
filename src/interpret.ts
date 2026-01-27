@@ -400,7 +400,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         `Logical NOT operator requires boolean operand, but got ${exprResult.constraint?.typeStr || "numeric"}`,
       );
     }
-    const resultValue = typeof exprResult.value === "number" ? exprResult.value : 0;
+    const resultValue =
+      typeof exprResult.value === "number" ? exprResult.value : 0;
     return {
       value: resultValue === 0 ? 1 : 0,
       constraint: { minValue: 0, maxValue: 1, typeStr: "Bool", bitWidth: 1 },
@@ -1500,10 +1501,11 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     ) {
       const pos = fnEntry.generatorPosition;
       const end = fnEntry.rangeEnd;
-      const isValid = pos < end;
+      const element = pos + 1;
+      const hasNextAfterThis = element < end;
 
-      // Return current position before advancing
-      const returnValue = [isValid ? 1 : 0, pos + 1];
+      // Return (hasNextAfterThis, element)
+      const returnValue = [hasNextAfterThis ? 1 : 0, element];
       fnEntry.generatorPosition = pos + 1;
 
       return {
