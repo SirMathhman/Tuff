@@ -1,0 +1,22 @@
+// User created
+
+type Alloc<T> = *[T] then this.free;
+
+// Extension methods of Alloc<T>.
+fn realloc<T>(this : Alloc<T>, length : USize) : Option<Alloc<T>>;
+fn free<T>(this : Alloc<T>) : Void;
+
+// We have contracts, not interfaces or traits. But they do similar things.
+out contract Allocator {
+    fn alloc<T>(length : USize) : Option<Alloc<T>>;
+}
+
+// Native functions
+// You would make a native function written in JS or wrapping the C standard library
+module StandardLibrary {
+    extern fn alloc<T>(length : USize) : Option<Alloc<T>>;
+}
+
+out object DefaultAllocator : Allocator = {
+    let alloc = StandardLibrary::alloc;
+};

@@ -1,0 +1,18 @@
+use { GlobalAllocator } from memory;
+use { println } from console;
+
+// Dependency inject a file-module parameter.
+use { ArrayList } from collections { allocator : GlobalAllocator };
+
+
+let mut list = ArrayList<I32>();
+list.add(1).add(2).add(3);
+
+let mut result = "";
+
+// list implements Iterable<T>
+for (let mut element in list) {
+    result = result.concat(element.toString());
+}
+
+println(result);
