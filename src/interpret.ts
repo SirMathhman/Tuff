@@ -312,7 +312,18 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         
                         // Check exhaustiveness
                         const hasWildcard = cases.some(c => c.isWildcard);
-                        if (!hasWildcard) {
+                        const isBoolean = discriminantResult.constraint?.typeStr === 'Bool';
+                        
+                        let isExhaustive = hasWildcard;
+                        if (!isExhaustive && isBoolean) {
+                            // For booleans, if we have both true and false cases, it's exhaustive
+                            const patterns = cases.map(c => c.pattern);
+                            const hasTrue = patterns.includes('true');
+                            const hasFalse = patterns.includes('false');
+                            isExhaustive = hasTrue && hasFalse;
+                        }
+                        
+                        if (!isExhaustive) {
                             throw new Error('Non-exhaustive match: missing wildcard pattern `case _ => ...`');
                         }
                         
