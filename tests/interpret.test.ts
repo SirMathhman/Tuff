@@ -273,4 +273,9 @@ describe('interpret', () => {
         const result = interpret("let mut x = 0; if (true) { x = 3; } x");
         expect(result).toBe(3);
     });
+
+    test('interpret("let x = 10; let y = match (x) { case 10 => 2; case _ => 3; }; y") should return 2', () => {
+        const result = interpret("let x = 10; let y = match (x) { case 10 => 2; case _ => 3; }; y");
+        expect(result).toBe(2);
+    });
 });

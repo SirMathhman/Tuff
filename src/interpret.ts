@@ -86,6 +86,18 @@ function updateDepth(char: string, depth: number): number {
     return depth;
 }
 
+// Helper function to find the matched closing paren/brace starting from an opening position
+function findMatchedClosing(source: string, fromIndex: number): number {
+    let depth = 0;
+    for (let i = fromIndex; i < source.length; i++) {
+        depth = updateDepth(source[i] as string, depth);
+        if (depth === 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 const addresses: Map<number, string> = new Map();
 let nextAddress = 0x1000;
 
@@ -174,15 +186,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         const openParenIndex = source.indexOf('(');
         if (openParenIndex > -1) {
             // Find matched closing paren for condition
-            let depth = 0;
-            let closeParenIndex = -1;
-            for (let i = openParenIndex; i < source.length; i++) {
-                depth = updateDepth(source[i] as string, depth);
-                if (depth === 0) {
-                    closeParenIndex = i;
-                    break;
-                }
-            }
+            const closeParenIndex = findMatchedClosing(source, openParenIndex);
             
             if (closeParenIndex > -1) {
                 const conditionStr = source.substring(openParenIndex + 1, closeParenIndex).trim();
@@ -196,7 +200,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                 let elseIndex = -1;
                 
                 // Scan remainder for optional braces or single statement, identifying where 'else' keyword appears AT DEPTH 0
-                depth = 0;
+                let depth = 0;
                 for (let i = 0; i < remainder.length; i++) {
                     const char = remainder[i] as string;
                     
@@ -252,6 +256,66 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     } else {
                         // If condition is false and there's no else, return 0
                         return { value: 0, constraint: null };
+                    }
+                }
+            }
+        }
+    }
+
+    // Check for match (expr) { case pattern => value; ... }
+    if (source.startsWith('match')) {
+        const matchKeywordMatch = source.match(/^match\s*\(/);
+        if (matchKeywordMatch) {
+            // Find the opening paren after 'match'
+            const openParenIndex = source.indexOf('(', 5); // Start searching after 'match'
+            if (openParenIndex > -1) {
+                // Find matched closing paren
+                const closeParenIndex = findMatchedClosing(source, openParenIndex);
+                
+                if (closeParenIndex > -1) {
+                    const discriminantStr = source.substring(openParenIndex + 1, closeParenIndex).trim();
+                    let remainder = source.substring(closeParenIndex + 1).trim();
+                    
+                    // Expect { ... }
+                    if (remainder.startsWith('{') && remainder.endsWith('}')) {
+                        const bodyContent = remainder.substring(1, remainder.length - 1).trim();
+                        
+                        // Parse case patterns and values
+                        const discriminantResult = evaluate(discriminantStr, scope);
+                        const discriminantValue = discriminantResult.value;
+                        
+                        // Split by 'case' keyword
+                        const caseLines = bodyContent.split(/\bcase\b/).slice(1); // Skip the empty first element
+                        
+                        for (const caseLine of caseLines) {
+                            const trimmedCase = caseLine.trim();
+                            const arrowIndex = trimmedCase.indexOf('=>');
+                            if (arrowIndex > -1) {
+                                const patternStr = trimmedCase.substring(0, arrowIndex).trim();
+                                const valueStr = trimmedCase.substring(arrowIndex + 2).trim();
+                                
+                                // Remove trailing semicolon if present
+                                const valueStrClean = valueStr.endsWith(';') ? valueStr.slice(0, -1).trim() : valueStr;
+                                
+                                // Check if pattern matches
+                                let matches = false;
+                                if (patternStr === '_') {
+                                    // Wildcard always matches
+                                    matches = true;
+                                } else {
+                                    // Try to parse pattern as a literal
+                                    const patternResult = evaluate(patternStr, scope);
+                                    matches = patternResult.value === discriminantValue;
+                                }
+                                
+                                if (matches) {
+                                    return evaluate(valueStrClean, scope);
+                                }
+                            }
+                        }
+                        
+                        // No case matched (shouldn't happen if wildcard is present)
+                        throw new Error('No matching case in match expression');
                     }
                 }
             }
