@@ -68,10 +68,10 @@ export function interpret(source : string) : number {
             const leftConstraint = getTypeConstraint(leftStr);
             const rightConstraint = getTypeConstraint(rightStr);
             
-            // If both operands have type constraints, validate result
-            if (leftConstraint && rightConstraint) {
-                // Use left operand's constraint for the result
-                validateValueInConstraint(result, leftConstraint, source);
+            // If any operand has a type constraint, validate result
+            const constraintToUse = leftConstraint || rightConstraint;
+            if (constraintToUse) {
+                validateValueInConstraint(result, constraintToUse, source);
             }
             
             return result;

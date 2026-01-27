@@ -31,4 +31,7 @@ describe('interpret', () => {
     test('interpret("1U8 + 255U8") should throw error', () => {
         expect(() => interpret("1U8 + 255U8")).toThrow();
     });
+    test('interpret("1U8 + 255") should throw error', () => {
+        expect(() => interpret("1U8 + 255")).toThrow();
+    });
 });
