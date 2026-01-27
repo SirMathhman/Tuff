@@ -6,6 +6,15 @@ import { createPointer } from "./pointer-operations";
 const instanceCache = new Map<string, string>();
 let instanceCounter = 0;
 
+/**
+ * Reset the object instance cache and counter
+ * Should be called at the start of each interpret() to ensure instances are unique per call
+ */
+export function resetObjectInstanceCache(): void {
+  instanceCache.clear();
+  instanceCounter = 0;
+}
+
 function parseObjectName(
   trimmed: string,
 ): { name: string; afterName: string } | undefined {
@@ -39,11 +48,20 @@ function createOrGetInstance(
   typeMap: Map<string, number>,
   interpreter: BaseHandlerParams["interpreter"],
 ): string {
-  const instanceKey = `${objectName}::${fieldsStr}`;
+  // Create a unique instance each time, use field string as part of cache key
+  // This ensures object instantiations with different field values create different instances
+  const normalizedFieldsStr = fieldsStr
+    .split(",")
+    .map((f) => f.trim())
+    .join(",");
+  const instanceKey = `${objectName}::${normalizedFieldsStr}`;
+
+  // Only reuse instances with identical field configurations
   if (instanceCache.has(instanceKey)) {
     return instanceCache.get(instanceKey)!;
   }
 
+  // Create new instance for this configuration
   const instanceId = `__instance_${objectName}_${instanceCounter++}`;
   instanceCache.set(instanceKey, instanceId);
 

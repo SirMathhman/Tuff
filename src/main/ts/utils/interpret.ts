@@ -4,9 +4,11 @@ import {
   installNativeFunctions,
   cleanupNativeFunctions,
 } from "./native/native";
+import { resetObjectInstanceCache } from "../handlers/access/object-instantiation";
 import { isIdentifierChar } from "./helpers/char-utils";
 
 export function interpret(input: string): number {
+  resetObjectInstanceCache();
   return interpretWithScope(input, new Map(), new Map(), new Map());
 }
 
