@@ -50,9 +50,15 @@ function ensureVariableNotDefined(scope: Record<string, unknown>, varName: strin
     }
 }
 
-function ensureBoolOperand(result: EvaluationResult, operator: string, side: 'left' | 'right'): void {
+function ensureBoolOperand(result: EvaluationResult, operator: string | undefined, side: 'left' | 'right'): void {
     if (result.constraint?.typeStr !== 'Bool') {
-        throw new Error(`Logical operator ${operator} requires boolean operands, but ${side} side is ${result.constraint?.typeStr || 'numeric'}`);
+        throw new Error(`Logical operator ${operator || 'unknown'} requires boolean operands, but ${side} side is ${result.constraint?.typeStr || 'numeric'}`);
+    }
+}
+
+function ensureNumericOperand(result: EvaluationResult, operator: string | undefined, side: 'left' | 'right'): void {
+    if (result.constraint?.typeStr === 'Bool') {
+        throw new Error(`Arithmetic operator ${operator || 'unknown'} requires numeric operands, but ${side} side is Bool`);
     }
 }
 
@@ -251,6 +257,8 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             
             if (operator === '&&' || operator === '||') {
                 ensureBoolOperand(leftResult, operator, 'left');
+            } else {
+                ensureNumericOperand(leftResult, operator, 'left');
             }
 
             // Short-circuiting for logical operators
@@ -265,6 +273,8 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             
             if (operator === '&&' || operator === '||') {
                 ensureBoolOperand(rightResult, operator, 'right');
+            } else {
+                ensureNumericOperand(rightResult, operator, 'right');
             }
 
             let result: number;

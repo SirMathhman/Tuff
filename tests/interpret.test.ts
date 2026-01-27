@@ -139,4 +139,7 @@ describe('interpret', () => {
     test('interpret("let x = 0; x && true") should throw error', () => {
         expect(() => interpret("let x = 0; x && true")).toThrow();
     });
+    test('interpret("let x = 0; x + true") should throw error', () => {
+        expect(() => interpret("let x = 0; x + true")).toThrow();
+    });
 });
