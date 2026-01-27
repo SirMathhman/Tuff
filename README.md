@@ -1,5 +1,17 @@
 # tuff
 
+## Language features (interpreter)
+
+- Numeric types with bounds checking (e.g. `100U8`, `-5I32`)
+- Booleans (`true`/`false`) and boolean ops (`&&`, `||`)
+- `let` / `let mut` bindings and reassignment rules
+- Blocks `{ ... }`, `if` / `else`, `while`, `for (let mut i in a..b)`
+- Tuples `(a, b, ...)` and indexing `tuple[0]`
+- Zero-arg functions:
+	- Declaration: `fn get() : I32 => 100;`
+	- Call: `get()`
+	- Function values: `let f : () => I32 = fn get() : I32 => 100; f()`
+
 To install dependencies:
 
 ```bash

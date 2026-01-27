@@ -17,6 +17,13 @@ interface ScopeEntry {
 
 type Scope = Record<string, ScopeEntry>;
 
+interface ParsedFunction {
+    fnName: string;
+    params: string[];
+    returnConstraint: TypeConstraint | null;
+    body: string;
+}
+
 function getTypeConstraint(source: string): TypeConstraint | null {
     // Handle tuple types (I32, Bool)
     if (source.startsWith('(') && source.endsWith(')')) {
@@ -129,6 +136,24 @@ function findMatchedClosing(source: string, fromIndex: number): number {
     return -1;
 }
 
+function parseFunctionDefinition(source: string): ParsedFunction | null {
+    const fnMatch = source.match(/^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*(.*)$/);
+    if (!fnMatch) return null;
+    const [, fnNameRaw, paramsRaw, returnTypeRaw, bodyRaw] = fnMatch;
+    if (!fnNameRaw) return null;
+    const paramsRawSafe = paramsRaw || '';
+    const params = paramsRawSafe.trim()
+        ? paramsRawSafe.split(',').map(p => p.trim()).filter(p => p.length > 0)
+        : [];
+    const returnConstraint = returnTypeRaw ? getTypeConstraint(returnTypeRaw.trim()) : null;
+    return {
+        fnName: fnNameRaw,
+        params,
+        returnConstraint,
+        body: (bodyRaw || '').trim(),
+    };
+}
+
 function parseKeywordParen(source: string, keyword: string): { inner: string; after: string } | null {
     const keywordMatch = source.match(new RegExp(`^${keyword}\\s*\\(`));
     if (!keywordMatch) return null;
@@ -179,6 +204,8 @@ export function interpret(source : string, scope: Scope = {}) : number {
 interface EvaluationResult {
     value: number | number[];
     constraint: TypeConstraint | null;
+    functionBody?: string;
+    functionParams?: string[];
 }
 
 function evaluate(source: string, scope: Scope): EvaluationResult {
@@ -241,6 +268,16 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
             throw new Error(`Invalid pointer address ${addr} for ${varName || 'unknown'}`);
         }
         throw new Error(`Cannot dereference non-pointer type ${exprResult.constraint?.typeStr || 'numeric'} for expr: ${expr}`);
+    }
+
+    if (!source.includes(';')) {
+        const fnExpr = parseFunctionDefinition(source);
+        if (fnExpr) {
+            if (fnExpr.params.length > 0) {
+                throw new Error('Function parameters are not supported yet');
+            }
+            return { value: 0, constraint: fnExpr.returnConstraint, functionBody: fnExpr.body, functionParams: fnExpr.params };
+        }
     }
 
     // Check for if (cond) expr1 else expr2
@@ -627,11 +664,21 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
             ? existingVar.constraint || exprResult.constraint || getTypeConstraint('I32')
             : existingVar.constraint;
 
-        params.targetScope[varName] = { ...existingVar, value: newValue, isInitialized: true, constraint: finalConstraint };
+        const updatedEntry = {
+            ...existingVar,
+            value: newValue,
+            isInitialized: true,
+            constraint: finalConstraint,
+            functionBody: exprResult.functionBody ?? existingVar.functionBody,
+            functionParams: exprResult.functionParams ?? existingVar.functionParams,
+        };
+        params.targetScope[varName] = updatedEntry;
 
         if (params.outerScopeToSync && params.outerScopeToSync[varName]) {
             params.outerScopeToSync[varName].value = newValue;
             params.outerScopeToSync[varName].isInitialized = true;
+            params.outerScopeToSync[varName].functionBody = updatedEntry.functionBody;
+            params.outerScopeToSync[varName].functionParams = updatedEntry.functionParams;
         }
 
         return { result: { value: newValue, constraint: finalConstraint }, varName, newValue: typeof newValue === 'number' ? newValue : 0 };
@@ -735,13 +782,14 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
             }
             if (statement.startsWith('let ')) {
                 // Parse variable declaration: let [mut] x [: TYPE] [= EXPR]
-                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*(.+?))?(\s*=\s*(.*))?$/);
+                // Note: the type annotation may contain `=>` (e.g. `() => I32`), so avoid treating the `=` in `=>` as an initializer.
+                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*(.+?))?(?:\s*=\s*(?!>)(.*))?$/);
                 if (declMatch && declMatch[2]) {
                     const isMutable = !!declMatch[1];
                     const varName = declMatch[2];
                     const typeStr = declMatch[3]?.trim();
-                    const hasInitializer = !!declMatch[4];
-                    const expr = declMatch[5];
+                    const hasInitializer = declMatch[4] !== undefined;
+                    const expr = declMatch[4];
                     const explicitConstraint = typeStr ? getTypeConstraint(typeStr) : null;
                     
                     if (hasInitializer && expr !== undefined) {
@@ -766,7 +814,14 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
                         ensureVariableNotDefined(localScope, varName);
 
                         const finalConstraint = explicitConstraint || exprResult.constraint || getTypeConstraint("I32");
-                        localScope[varName] = { value: exprResult.value, constraint: finalConstraint, isMutable, isInitialized: true };
+                        localScope[varName] = {
+                            value: exprResult.value,
+                            constraint: finalConstraint,
+                            isMutable,
+                            isInitialized: true,
+                            functionBody: exprResult.functionBody,
+                            functionParams: exprResult.functionParams,
+                        };
                         
                         // IF this variable was in the original outer scope, update it there too
                         if (scope[varName]) {
@@ -810,6 +865,23 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
                 };
                 lastResult = { value: 0, constraint: null };
             } else {
+                const fnDecl = parseFunctionDefinition(statement);
+                if (fnDecl) {
+                    if (fnDecl.params.length > 0) {
+                        throw new Error('Function parameters are not supported yet');
+                    }
+                    ensureVariableNotDefined(localScope, fnDecl.fnName);
+                    localScope[fnDecl.fnName] = {
+                        value: 0,
+                        constraint: fnDecl.returnConstraint,
+                        isMutable: false,
+                        isInitialized: true,
+                        functionBody: fnDecl.body,
+                        functionParams: fnDecl.params,
+                    };
+                    lastResult = { value: 0, constraint: null };
+                    continue;
+                }
                 // Check for pointer assignment: *p = EXPR
                 const ptrAssignMatch = statement.match(/^\*(.*)\s*=\s*(.*)$/);
                 if (ptrAssignMatch && ptrAssignMatch[1] && ptrAssignMatch[2]) {
@@ -872,6 +944,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
             if (scopeVar && localScopeVar) {
                 scopeVar.value = localScopeVar.value;
                 scopeVar.isInitialized = localScopeVar.isInitialized;
+                scopeVar.functionBody = localScopeVar.functionBody;
+                scopeVar.functionParams = localScopeVar.functionParams;
             }
         }
 
