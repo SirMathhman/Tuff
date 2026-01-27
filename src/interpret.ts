@@ -2,6 +2,7 @@ interface TypeConstraint {
     minValue: number;
     maxValue: number;
     typeStr: string;
+    bitWidth?: number;
 }
 
 function getTypeConstraint(source: string): TypeConstraint | null {
@@ -25,7 +26,7 @@ function getTypeConstraint(source: string): TypeConstraint | null {
         return null;
     }
     
-    return { minValue, maxValue, typeStr: source.substring(source.match(/\d+$/)?.index || 0) };
+    return { minValue, maxValue, typeStr: source.substring(source.match(/\d+$/)?.index || 0), bitWidth };
 }
 
 function validateValueInConstraint(value: number, constraint: TypeConstraint, source: string): void {
@@ -69,7 +70,18 @@ export function interpret(source : string) : number {
             const rightConstraint = getTypeConstraint(rightStr);
             
             // If any operand has a type constraint, validate result
-            const constraintToUse = leftConstraint || rightConstraint;
+            let constraintToUse: TypeConstraint | null = null;
+            
+            if (leftConstraint && rightConstraint) {
+                // Both have constraints: use the wider one (larger bitwidth)
+                constraintToUse = (leftConstraint.bitWidth || 0) >= (rightConstraint.bitWidth || 0) 
+                    ? leftConstraint 
+                    : rightConstraint;
+            } else {
+                // One or none has constraint
+                constraintToUse = leftConstraint || rightConstraint;
+            }
+            
             if (constraintToUse) {
                 validateValueInConstraint(result, constraintToUse, source);
             }
