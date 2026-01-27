@@ -13,4 +13,8 @@ describe('interpret', () => {
     test('interpret("-100U8") should throw error', () => {
         expect(() => interpret("-100U8")).toThrow();
     });
+    test('interpret("-100I8") should return -100', () => {
+        const result = interpret("-100I8");
+        expect(result).toBe(-100);
+    });
 });
