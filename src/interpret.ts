@@ -385,6 +385,45 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         }
     }
 
+    // Check for for (let mut i in RANGE) body
+    if (source.startsWith('for')) {
+        const parsed = parseKeywordParen(source, 'for');
+        if (parsed) {
+            const headerStr = parsed.inner;
+            const bodyStr = parsed.after;
+            
+            // Parse "let mut i in 0..10"
+            const headerMatch = headerStr.match(/^let\s+(mut\s+)?(\w+)\s+in\s+(.+)$/);
+            if (headerMatch && headerMatch[2] && headerMatch[3]) {
+                const isMutable = !!headerMatch[1];
+                const loopVar = headerMatch[2];
+                const rangeStr = headerMatch[3].trim();
+                
+                // Parse range "0..10"
+                const rangeMatch = rangeStr.match(/^(\d+)\.\.(\d+)$/);
+                if (rangeMatch && rangeMatch[1] && rangeMatch[2]) {
+                    const start = parseInt(rangeMatch[1], 10);
+                    const end = parseInt(rangeMatch[2], 10);
+                    
+                    let lastResult: EvaluationResult = { value: 0, constraint: null };
+                    
+                    for (let i = start; i < end; i++) {
+                        scope[loopVar] = { 
+                            value: i, 
+                            constraint: getTypeConstraint("I32"), 
+                            isMutable: true,
+                            isInitialized: true 
+                        };
+                        lastResult = evaluate(bodyStr, scope);
+                    }
+                    
+                    delete scope[loopVar];
+                    return lastResult;
+                }
+            }
+        }
+    }
+
     const tryEvaluateAssignment = (params: {
         text: string;
         targetScope: Record<string, { value: number; constraint: TypeConstraint | null; isMutable?: boolean; isInitialized?: boolean }>;

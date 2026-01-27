@@ -300,4 +300,9 @@ describe('interpret', () => {
     test('interpret("let mut x = 0; while (100) x += 1; x") should throw error', () => {
         expect(() => interpret("let mut x = 0; while (100) x += 1; x")).toThrow();
     });
+
+    test('interpret("let mut sum = 0; for (let mut i in 0..10) sum += i; sum") should return 45', () => {
+        const result = interpret("let mut sum = 0; for (let mut i in 0..10) sum += i; sum");
+        expect(result).toBe(45);
+    });
 });
