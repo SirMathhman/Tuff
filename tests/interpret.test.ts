@@ -142,4 +142,8 @@ describe('interpret', () => {
     test('interpret("let x = 0; x + true") should throw error', () => {
         expect(() => interpret("let x = 0; x + true")).toThrow();
     });
+    test('interpret("let x = 100; let y = 200; x < y") should return 1', () => {
+        const result = interpret("let x = 100; let y = 200; x < y");
+        expect(result).toBe(1);
+    });
 });

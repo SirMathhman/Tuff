@@ -233,7 +233,11 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         return null;
     };
 
-    let operatorMatch = findOperator(/\s*(&&|\|\|)\s*/g);
+    let operatorMatch = findOperator(/\s*(<|<=|>|>=|==|!=)\s*/g);
+
+    if (!operatorMatch) {
+       operatorMatch = findOperator(/\s*(&&|\|\|)\s*/g);
+    }
 
     if (!operatorMatch) {
         operatorMatch = findOperator(/\s*([+\-])\s*/g);
@@ -273,7 +277,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             
             if (operator === '&&' || operator === '||') {
                 ensureBoolOperand(rightResult, operator, 'right');
-            } else {
+            } else if (operator === '+' || operator === '-' || operator === '*' || operator === '/') {
                 ensureNumericOperand(rightResult, operator, 'right');
             }
 
@@ -287,6 +291,30 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     break;
                 case '||':
                     result = (leftResult.value !== 0 || rightResult.value !== 0) ? 1 : 0;
+                    resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
+                    break;
+                case '<':
+                    result = leftResult.value < rightResult.value ? 1 : 0;
+                    resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
+                    break;
+                case '<=':
+                    result = leftResult.value <= rightResult.value ? 1 : 0;
+                    resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
+                    break;
+                case '>':
+                    result = leftResult.value > rightResult.value ? 1 : 0;
+                    resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
+                    break;
+                case '>=':
+                    result = leftResult.value >= rightResult.value ? 1 : 0;
+                    resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
+                    break;
+                case '==':
+                    result = leftResult.value === rightResult.value ? 1 : 0;
+                    resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
+                    break;
+                case '!=':
+                    result = leftResult.value !== rightResult.value ? 1 : 0;
                     resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
                     break;
                 case '+':
@@ -309,6 +337,9 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             }
             
             if (operator === '&&' || operator === '||') {
+                return { value: result, constraint: resultConstraint };
+            }
+            if (operator === '<' || operator === '<=' || operator === '>' || operator === '>=' || operator === '==' || operator === '!=') {
                 return { value: result, constraint: resultConstraint };
             }
 
