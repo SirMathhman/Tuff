@@ -1657,7 +1657,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       const pos = fnEntry.generatorPosition;
       const end = fnEntry.rangeEnd;
       const element = pos;
-      const hasNextAfterThis = (pos + 1) < end;
+      const hasNextAfterThis = pos + 1 < end;
 
       // Return (hasNextAfterThis, element) - 0-indexed
       const returnValue = [hasNextAfterThis ? 1 : 0, element];

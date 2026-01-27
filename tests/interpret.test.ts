@@ -467,4 +467,7 @@ describe("interpret", () => {
     );
     expect(result).toBe(-3);
   });
+  test('interpret("let get = 100; fn get() => 100;") should throw error', () => {
+    expect(() => interpret("let get = 100; fn get() => 100;")).toThrow();
+  });
 });
