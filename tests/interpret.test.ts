@@ -56,4 +56,8 @@ describe('interpret', () => {
         const result = interpret("2 * 3U8 + 4");
         expect(result).toBe(10);
     });
+    test('interpret("4 + 2 * 3U8") should return 10', () => {
+        const result = interpret("4 + 2 * 3U8");
+        expect(result).toBe(10);
+    });
 });
