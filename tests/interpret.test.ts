@@ -52,4 +52,8 @@ describe('interpret', () => {
     test('interpret("1 - 2U8") should throw error', () => {
         expect(() => interpret("1 - 2U8")).toThrow();
     });
+    test('interpret("2 * 3U8 + 4") should return 10', () => {
+        const result = interpret("2 * 3U8 + 4");
+        expect(result).toBe(10);
+    });
 });

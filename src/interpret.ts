@@ -37,7 +37,19 @@ function validateValueInConstraint(value: number, constraint: TypeConstraint, so
 
 export function interpret(source : string) : number {
     // Check if this is a binary operation
-    const operatorMatch = source.match(/\s*([+\-*/])\s*/);
+    // Find lowest precedence operator (+ or -) last to ensure left-to-right evaluation
+    const findOperator = (regex: RegExp) => {
+        const matches = [...source.matchAll(regex)];
+        return matches.length > 0 ? matches[matches.length - 1] : null;
+    };
+
+    let operatorMatch = findOperator(/\s*([+\-])\s*/g);
+    
+    // If no + or -, look for * or /
+    if (!operatorMatch) {
+        operatorMatch = findOperator(/\s*([*/])\s*/g);
+    }
+
     if (operatorMatch && operatorMatch.index !== undefined) {
         const operator = operatorMatch[1];
         const operatorStart = operatorMatch.index;
