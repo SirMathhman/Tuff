@@ -153,4 +153,7 @@ describe('interpret', () => {
     test('interpret("let x = 100; if (x) 3 else 5") should throw error', () => {
         expect(() => interpret("let x = 100; if (x) 3 else 5")).toThrow();
     });
+    test('interpret("if (true) 3 else true") should throw error', () => {
+        expect(() => interpret("if (true) 3 else true")).toThrow();
+    });
 });

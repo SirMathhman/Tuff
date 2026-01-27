@@ -97,10 +97,21 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             const conditionResult = evaluate(conditionStr, scope);
             ensureBoolOperand(conditionResult, 'if', 'condition');
             
+            const thenResult = evaluate(thenStr, scope);
+            const elseResult = evaluate(elseStr, scope);
+
+            // Ensure branch types are compatible
+            const thenType = thenResult.constraint?.typeStr || 'numeric';
+            const elseType = elseResult.constraint?.typeStr || 'numeric';
+
+            if (thenType !== elseType) {
+                throw new Error(`Type mismatch in if branches: then branch is ${thenType}, else branch is ${elseType}`);
+            }
+
             if (conditionResult.value !== 0) {
-                return evaluate(thenStr, scope);
+                return thenResult;
             } else {
-                return evaluate(elseStr, scope);
+                return elseResult;
             }
         }
     }
