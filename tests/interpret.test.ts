@@ -484,7 +484,15 @@ describe("interpret", () => {
     expect(result).toBe(1);
   });
   test('interpret("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias") should return 1', () => {
-    const result = interpret("type MyAlias = I32; let x : MyAlias = 100; x is MyAlias");
+    const result = interpret(
+      "type MyAlias = I32; let x : MyAlias = 100; x is MyAlias",
+    );
+    expect(result).toBe(1);
+  });
+  test('interpret("type MyAlias = I32; let x : MyAlias = 100; x is I32") should return 1', () => {
+    const result = interpret(
+      "type MyAlias = I32; let x : MyAlias = 100; x is I32",
+    );
     expect(result).toBe(1);
   });
 });

@@ -1144,7 +1144,9 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       }
       if (statement.startsWith("type ")) {
         // Parse type alias declaration: type NAME = TYPE;
-        const typeMatch = statement.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:;*)$/);
+        const typeMatch = statement.match(
+          /^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:;*)$/,
+        );
         if (typeMatch && typeMatch[1] && typeMatch[2]) {
           const aliasName = typeMatch[1];
           const aliasTarget = typeMatch[2].trim();
@@ -1168,7 +1170,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           const hasInitializer = declMatch[4] !== undefined;
           const expr = declMatch[4];
           // Resolve type aliases
-          const resolvedTypeStr = typeStr && typeAliases[typeStr] ? typeAliases[typeStr] : typeStr;
+          const resolvedTypeStr =
+            typeStr && typeAliases[typeStr] ? typeAliases[typeStr] : typeStr;
           const explicitConstraint = resolvedTypeStr
             ? getTypeConstraint(resolvedTypeStr)
             : null;
@@ -1527,9 +1530,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         // Check against the constraint's typeStr, or the originalType if it was set
         const leftEntry = scope[leftStr];
         const leftOriginalType = leftEntry?.originalType;
-        
+
         // Match if: expectedType matches actualType directly, OR expectedType matches the originalType (alias)
-        result = (actualType === expectedType || leftOriginalType === expectedType) ? 1 : 0;
+        result =
+          actualType === expectedType || leftOriginalType === expectedType
+            ? 1
+            : 0;
         resultConstraint = {
           minValue: 0,
           maxValue: 1,
