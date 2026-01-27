@@ -4,6 +4,7 @@ export PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH"
 FAILED=0
 
 # Helper function to run a gate and print success/failure
+# Does NOT exit early on failure - continues to next gate
 run_gate() {
   local gate_name="$1"
   shift
@@ -17,11 +18,9 @@ run_gate() {
     echo "$output"
     FAILED=1
   fi
-  
-  return $exit_code
 }
 
-# Run all checks
+# Run all checks in parallel to collect all errors
 run_gate "Tests" bun test
 run_gate "Inline check" bun ./tools/inline-check.ts --git-files-only
 run_gate "Copy/paste detection" npm run cpd
