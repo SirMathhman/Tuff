@@ -91,7 +91,12 @@ export function handleReferenceOperation(
     return undefined;
   }
 
-  if (!scope.has(varName)) {
+  // Check if varName is a variable, object, or module
+  const isVariable = scope.has(varName);
+  const isObject = typeMap?.has("__object__" + varName);
+  const isModule = typeMap?.has("__module__" + varName);
+  
+  if (!isVariable && !isObject && !isModule) {
     throw new Error(`variable '${varName}' not found in scope`);
   }
 

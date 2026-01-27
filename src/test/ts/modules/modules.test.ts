@@ -72,6 +72,10 @@ describe("modules - objects", () => {
       1,
     );
   });
+
+  itBoth("supports object reference equality comparison", (ok) => {
+    ok("object Wrapper {} &Wrapper == &Wrapper", 1);
+  });
 });
 
 describe("modules - visibility", () => {

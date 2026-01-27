@@ -112,8 +112,9 @@ function resolvePointerValue(
   if (!scope) return undefined;
   const targetVar = getPointerTarget(left);
   if (!targetVar) return undefined;
+  // If target is not in scope, just return undefined (could be object/module)
   if (!scope.has(targetVar)) {
-    throw new Error(`pointer target '${targetVar}' not found`);
+    return undefined;
   }
   return scope.get(targetVar);
 }

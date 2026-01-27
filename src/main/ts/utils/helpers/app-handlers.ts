@@ -157,7 +157,13 @@ export function tryAssignments(p: Params): number | undefined {
 }
 
 export function tryExpressions(p: Params): number | undefined {
-  let result = handleReferenceOperation(p.s, p.scope, p.mutMap);
+  let result = handleReferenceOperation(
+    p.s,
+    p.scope,
+    p.mutMap,
+    false,
+    p.typeMap,
+  );
   if (result !== undefined) return result;
   result = handleDereferenceOperation(p.s, p.scope);
   if (result !== undefined) return result;
