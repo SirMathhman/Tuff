@@ -291,4 +291,9 @@ describe('interpret', () => {
     test('interpret("let x = true; let y : Bool = match (x) { case true => 2; case false => 3; }; y") should throw error', () => {
         expect(() => interpret("let x = true; let y : Bool = match (x) { case true => 2; case false => 3; }; y")).toThrow();
     });
+
+    test('interpret("let mut x = 0; while (x < 10) x += 1; x") should return 10', () => {
+        const result = interpret("let mut x = 0; while (x < 10) x += 1; x");
+        expect(result).toBe(10);
+    });
 });

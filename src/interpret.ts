@@ -98,6 +98,19 @@ function findMatchedClosing(source: string, fromIndex: number): number {
     return -1;
 }
 
+function parseKeywordParen(source: string, keyword: string): { inner: string; after: string } | null {
+    const keywordMatch = source.match(new RegExp(`^${keyword}\\s*\\(`));
+    if (!keywordMatch) return null;
+    const openParenIndex = source.indexOf('(', keyword.length);
+    if (openParenIndex < 0) return null;
+    const closeParenIndex = findMatchedClosing(source, openParenIndex);
+    if (closeParenIndex < 0) return null;
+    return {
+        inner: source.substring(openParenIndex + 1, closeParenIndex).trim(),
+        after: source.substring(closeParenIndex + 1).trim(),
+    };
+}
+
 const addresses: Map<number, string> = new Map();
 let nextAddress = 0x1000;
 
@@ -182,15 +195,10 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
 
     // Check for if (cond) expr1 else expr2
     if (source.startsWith('if')) {
-        // Find opening paren
-        const openParenIndex = source.indexOf('(');
-        if (openParenIndex > -1) {
-            // Find matched closing paren for condition
-            const closeParenIndex = findMatchedClosing(source, openParenIndex);
-            
-            if (closeParenIndex > -1) {
-                const conditionStr = source.substring(openParenIndex + 1, closeParenIndex).trim();
-                const remainder = source.substring(closeParenIndex + 1).trim();
+        const parsed = parseKeywordParen(source, 'if');
+        if (parsed) {
+            const conditionStr = parsed.inner;
+            const remainder = parsed.after;
                 
                 // Now interpret remainder to find 'else'
                 // Remainder should be: THEN_BLOCK else ELSE_BLOCK
@@ -221,6 +229,12 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                 if (elseIndex > -1) {
                     thenStr = remainder.substring(0, elseIndex).trim();
                     elseStr = remainder.substring(elseIndex + 4).trim();
+
+                    // In `if (...) stmt; else ...`, the semicolon before `else` is a delimiter,
+                    // not part of the then-branch expression.
+                    if (thenStr.endsWith(';')) {
+                        thenStr = thenStr.slice(0, -1).trim();
+                    }
                     
                     const conditionResult = evaluate(conditionStr, scope);
                     ensureBoolOperand(conditionResult, 'if', 'condition');
@@ -258,23 +272,15 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         return { value: 0, constraint: null };
                     }
                 }
-            }
         }
     }
 
     // Check for match (expr) { case pattern => value; ... }
     if (source.startsWith('match')) {
-        const matchKeywordMatch = source.match(/^match\s*\(/);
-        if (matchKeywordMatch) {
-            // Find the opening paren after 'match'
-            const openParenIndex = source.indexOf('(', 5); // Start searching after 'match'
-            if (openParenIndex > -1) {
-                // Find matched closing paren
-                const closeParenIndex = findMatchedClosing(source, openParenIndex);
-                
-                if (closeParenIndex > -1) {
-                    const discriminantStr = source.substring(openParenIndex + 1, closeParenIndex).trim();
-                    let remainder = source.substring(closeParenIndex + 1).trim();
+        const parsed = parseKeywordParen(source, 'match');
+        if (parsed) {
+            const discriminantStr = parsed.inner;
+            let remainder = parsed.after;
                     
                     // Expect { ... }
                     if (remainder.startsWith('{') && remainder.endsWith('}')) {
@@ -345,10 +351,117 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         // No case matched (shouldn't happen if wildcard is present)
                         throw new Error('No matching case in match expression');
                     }
-                }
-            }
         }
     }
+
+    // Check for while (cond) body
+    if (source.startsWith('while')) {
+        const parsed = parseKeywordParen(source, 'while');
+        if (parsed) {
+            const conditionStr = parsed.inner;
+            const bodyStr = parsed.after;
+                    
+                    let lastResult: EvaluationResult = { value: 0, constraint: null };
+                    let iterations = 0;
+                    const maxIterations = 100000;
+                    
+                    while (iterations < maxIterations) {
+                        iterations++;
+                        const conditionResult = evaluate(conditionStr, scope);
+                        ensureBoolOperand(conditionResult, 'while', 'condition');
+                        
+                        if (conditionResult.value === 0) {
+                            break;
+                        }
+                        
+                        lastResult = evaluate(bodyStr, scope);
+                    }
+                    
+                    if (iterations >= maxIterations) {
+                        throw new Error('While loop exceeded maximum iterations (infinite loop detected)');
+                    }
+                    
+                    return lastResult;
+        }
+    }
+
+    const tryEvaluateAssignment = (params: {
+        text: string;
+        targetScope: Record<string, { value: number; constraint: TypeConstraint | null; isMutable?: boolean; isInitialized?: boolean }>;
+        outerScopeToSync?: Record<string, { value: number; constraint: TypeConstraint | null; isMutable?: boolean; isInitialized?: boolean }>;
+        allowPlainAssignment: boolean;
+        updateConstraint: boolean;
+        statementForErrors: string;
+        undefinedVarError: (varName: string) => string;
+    }): { result: EvaluationResult; varName: string; newValue: number } | null => {
+        const assignmentRegex = params.allowPlainAssignment
+            ? /^([a-zA-Z_]\w*)\s*(\+|-|\*|\/)?=\s*(.*)$/
+            : /^([a-zA-Z_]\w*)\s*(\+|-|\*|\/)=\s*(.*)$/;
+
+        const match = params.text.match(assignmentRegex);
+        if (!match || !match[1] || !match[3]) return null;
+
+        const varName = match[1];
+        const op = match[2];
+        const expr = match[3];
+        const existingVar = params.targetScope[varName];
+
+        if (!existingVar) {
+            throw new Error(params.undefinedVarError(varName));
+        }
+
+        if (!existingVar.isMutable && (existingVar.isInitialized || op)) {
+            throw new Error(`Cannot reassign immutable variable ${varName}.`);
+        }
+
+        if (op && !existingVar.isInitialized) {
+            throw new Error(`Cannot use compound assignment on uninitialized variable ${varName}.`);
+        }
+
+        const exprResult = evaluate(expr, params.targetScope);
+        let newValue = exprResult.value;
+
+        if (op) {
+            ensureNumericOperand({ value: existingVar.value, constraint: existingVar.constraint }, op, 'left');
+            ensureNumericOperand(exprResult, op, 'right');
+
+            switch (op) {
+                case '+':
+                    newValue = existingVar.value + exprResult.value;
+                    break;
+                case '-':
+                    newValue = existingVar.value - exprResult.value;
+                    break;
+                case '*':
+                    newValue = existingVar.value * exprResult.value;
+                    break;
+                case '/':
+                    if (exprResult.value === 0) throw new Error('Division by zero');
+                    newValue = Math.floor(existingVar.value / exprResult.value);
+                    break;
+            }
+        }
+
+        if (existingVar.constraint) {
+            validateValueInConstraint(newValue, existingVar.constraint, params.statementForErrors);
+            if (exprResult.constraint && !op) {
+                validateTypeMatch(exprResult.constraint, existingVar.constraint);
+            }
+        }
+
+        const finalConstraint = params.updateConstraint
+            ? existingVar.constraint || exprResult.constraint || getTypeConstraint('I32')
+            : existingVar.constraint;
+
+        params.targetScope[varName] = { ...existingVar, value: newValue, isInitialized: true, constraint: finalConstraint };
+
+        if (params.outerScopeToSync && params.outerScopeToSync[varName]) {
+            params.outerScopeToSync[varName].value = newValue;
+            params.outerScopeToSync[varName].isInitialized = true;
+        }
+
+        return { result: { value: newValue, constraint: finalConstraint }, varName, newValue };
+    };
     
     // Check for fully wrapped expression (parens or braces) logic has been moved to be handled last if nothing else matches?
     // Actually, handling it here is correct for nesting.
@@ -514,63 +627,18 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     }
                 }
 
-                // Check for reassignment: x [OP]= EXPR
-                const assignMatch = statement.match(/^([a-zA-Z_]\w*)\s*(\+|-|\*|\/)?=\s*(.*)$/);
-                if (assignMatch && assignMatch[1] && assignMatch[3]) {
-                    const varName = assignMatch[1];
-                    const op = assignMatch[2];
-                    const expr = assignMatch[3];
-                    const existingVar = localScope[varName];
-                    
-                    if (existingVar) {
-                        if (!existingVar.isMutable && (existingVar.isInitialized || op)) {
-                            throw new Error(`Cannot reassign immutable variable ${varName}.`);
-                        }
-                        
-                        if (op && !existingVar.isInitialized) {
-                            throw new Error(`Cannot use compound assignment on uninitialized variable ${varName}.`);
-                        }
-
-                        const exprResult = evaluate(expr, localScope);
-                        let newValue = exprResult.value;
-
-                        if (op) {
-                            ensureNumericOperand({ value: existingVar.value, constraint: existingVar.constraint }, op, 'left');
-                            ensureNumericOperand(exprResult, op, 'right');
-                            
-                            switch (op) {
-                                case '+': newValue = existingVar.value + exprResult.value; break;
-                                case '-': newValue = existingVar.value - exprResult.value; break;
-                                case '*': newValue = existingVar.value * exprResult.value; break;
-                                case '/': 
-                                    if (exprResult.value === 0) throw new Error("Division by zero");
-                                    newValue = Math.floor(existingVar.value / exprResult.value); 
-                                    break;
-                            }
-                        }
-
-                        if (existingVar.constraint) {
-                            validateValueInConstraint(newValue, existingVar.constraint, statement);
-                            // Strict type matching for anything that has a constraint (literals or variables)
-                            if (exprResult.constraint && !op) {
-                                validateTypeMatch(exprResult.constraint, existingVar.constraint);
-                            }
-                        }
-                        
-                        const finalConstraint = existingVar.constraint || exprResult.constraint || getTypeConstraint("I32");
-                        const updatedVar = { ...existingVar, value: newValue, isInitialized: true, constraint: finalConstraint };
-                        localScope[varName] = updatedVar;
-                        
-                        // IF this variable was in the original outer scope, update it there too
-                        if (scope[varName]) {
-                            scope[varName].value = newValue;
-                            scope[varName].isInitialized = true;
-                        }
-
-                        lastResult = { value: newValue, constraint: finalConstraint };
-                        continue;
-                    }
-                    throw new Error(`Cannot assign to undefined variable ${varName}`);
+                const assignment = tryEvaluateAssignment({
+                    text: statement,
+                    targetScope: localScope,
+                    outerScopeToSync: scope,
+                    allowPlainAssignment: true,
+                    updateConstraint: true,
+                    statementForErrors: statement,
+                    undefinedVarError: (varName) => `Cannot assign to undefined variable ${varName}`,
+                });
+                if (assignment) {
+                    lastResult = assignment.result;
+                    continue;
                 }
                 lastResult = evaluate(statement, localScope);
             }
@@ -588,6 +656,23 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
 
         return lastResult;
     }
+
+    const tryAssignmentOnSource = (allowPlainAssignment: boolean): EvaluationResult | null => {
+        const res = tryEvaluateAssignment({
+            text: source,
+            targetScope: scope,
+            allowPlainAssignment,
+            updateConstraint: false,
+            statementForErrors: source,
+            undefinedVarError: (varName) => `Cannot reassign undefined variable ${varName}`,
+        });
+        return res ? res.result : null;
+    };
+
+    // Quick check for COMPOUND reassignment: x [OP]= EXPR where OP is +, -, *, /
+    // This is needed for while loops and other constructs that call evaluate() directly
+    const compoundAssignmentResult = tryAssignmentOnSource(false);
+    if (compoundAssignmentResult) return compoundAssignmentResult;
 
     // Check if this is a binary operation
     // Find lowest precedence operator (+ or -) last to ensure left-to-right evaluation
@@ -743,6 +828,9 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             return { value: result, constraint: constraintToUse };
         }
     }
+
+    const assignmentResult = tryAssignmentOnSource(true);
+    if (assignmentResult) return assignmentResult;
     
     // Variable access in non-binary expression
     const scopeVar = scope[source];
