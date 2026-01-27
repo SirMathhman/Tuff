@@ -159,4 +159,7 @@ describe('interpret', () => {
     test('interpret("let test : Bool = if (true) 3 else 5; test") should throw error', () => {
         expect(() => interpret("let test : Bool = if (true) 3 else 5; test")).toThrow();
     });
+    test('interpret("let value = if (true) 3U8 else 5U8; value + 255U8") should throw error', () => {
+        expect(() => interpret("let value = if (true) 3U8 else 5U8; value + 255U8")).toThrow();
+    });
 });
