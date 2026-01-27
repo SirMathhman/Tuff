@@ -198,30 +198,35 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         }
     }
     
-    // Check if this is a block with statements (semicolons) NOT inside parentheses/braces at depth 0
+    // Check if this is a block with statements (semicolons or self-terminating blocks) NOT inside parentheses/braces at depth 0
     let depth = 0;
-    let semicolonIndex = -1;
+    const splitPoints: number[] = [];
     for (let i = 0; i < source.length; i++) {
-        const char = source[i];
-        if (char === undefined) break;
+        const char = source[i] as string;
+        const prevDepth = depth;
         depth = updateDepth(char, depth);
         if (char === ';' && depth === 0) {
-            semicolonIndex = i;
-            break;
+            splitPoints.push(i);
+        } else if (char === '}' && depth === 0 && prevDepth === 1 && i < source.length - 1) {
+            let next = i + 1;
+            while (next < source.length && /\s/.test(source[next] as string)) next++;
+            if (next < source.length) {
+                const nextChar = source[next];
+                const rest = source.substring(next);
+                if (nextChar !== ';' && !/[+\-*/&|<>=!]/.test(nextChar as string) && !rest.startsWith('else')) {
+                    splitPoints.push(i);
+                }
+            }
         }
     }
 
-    if (semicolonIndex !== -1) {
-        // Split by semicolons at depth 0
+    if (splitPoints.length > 0) {
         const statements: string[] = [];
         let start = 0;
-        let d = 0;
-        for (let i = 0; i < source.length; i++) {
-            d = updateDepth(source[i] as string, d);
-            if (source[i] === ';' && d === 0) {
-                statements.push(source.substring(start, i).trim());
-                start = i + 1;
-            }
+        for (const point of splitPoints) {
+            const isSemicolon = source[point] === ';';
+            statements.push(source.substring(start, isSemicolon ? point : point + 1).trim());
+            start = point + 1;
         }
         statements.push(source.substring(start).trim());
 

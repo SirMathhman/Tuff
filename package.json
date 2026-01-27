@@ -13,7 +13,7 @@
     "husky": "^9.1.7"
   },
   "scripts": {
-    "cpd": "pmd cpd src --language typescript --minimum-tokens 35",
+    "cpd": "pmd cpd src tests --language typescript --minimum-tokens 35 --ignore-literals --ignore-identifiers",
     "lint": "tsc --noEmit",
     "prepare": "husky"
   }

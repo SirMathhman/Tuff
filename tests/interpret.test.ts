@@ -235,4 +235,8 @@ describe('interpret', () => {
     test('interpret("let x = { let y = 100U16; y }; let z : U8 = x; z") should throw error', () => {
         expect(() => interpret("let x = { let y = 100U16; y }; let z : U8 = x; z")).toThrow();
     });
+    test('interpret("let x = 100; {} x") should return 100', () => {
+        const result = interpret("let x = 100; {} x");
+        expect(result).toBe(100);
+    });
 });
