@@ -268,4 +268,9 @@ describe('interpret', () => {
         const result = interpret("let mut x = if (false) 3 else if (true) 5 else 2; x");
         expect(result).toBe(5);
     });
+
+    test('interpret("let mut x = 0; if (true) { x = 3; } x") should return 3', () => {
+        const result = interpret("let mut x = 0; if (true) { x = 3; } x");
+        expect(result).toBe(3);
+    });
 });

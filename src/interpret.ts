@@ -240,6 +240,19 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     } else {
                         return evaluate(elseStr, scope);
                     }
+                } else {
+                    // No else clause - just if (cond) then
+                    thenStr = remainder.trim();
+                    
+                    const conditionResult = evaluate(conditionStr, scope);
+                    ensureBoolOperand(conditionResult, 'if', 'condition');
+                    
+                    if (conditionResult.value !== 0) {
+                        return evaluate(thenStr, scope);
+                    } else {
+                        // If condition is false and there's no else, return 0
+                        return { value: 0, constraint: null };
+                    }
                 }
             }
         }
