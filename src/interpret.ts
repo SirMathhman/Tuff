@@ -76,14 +76,14 @@ export function interpret(source : string, scope: Record<string, { value: number
         
         for (const statement of statements) {
             if (statement.startsWith('let ')) {
-                // Parse variable declaration: let x : U8 = 2
-                const declMatch = statement.match(/^let\s+([a-zA-Z_]\w*)\s*:\s*([UIF]\d+)\s*=\s*(.*)$/);
-                if (declMatch && declMatch[1] && declMatch[2] && declMatch[3]) {
+                // Parse variable declaration: let x : U8 = 2 or let x = 2
+                const declMatch = statement.match(/^let\s+([a-zA-Z_]\w*)\s*(?::\s*([UIF]\d+))?\s*=\s*(.*)$/);
+                if (declMatch && declMatch[1] && declMatch[3]) {
                     const varName = declMatch[1];
                     
                     const typeStr = declMatch[2];
                     const expr = declMatch[3];
-                    const constraint = getTypeConstraint(typeStr);
+                    const constraint = typeStr ? getTypeConstraint(typeStr) : null;
                     
                     // Create a "pending" scope for evaluating the initializer
                     // We want to pass a scope that already includes the name to detect shadowing

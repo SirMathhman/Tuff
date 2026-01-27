@@ -89,4 +89,8 @@ describe('interpret', () => {
         const result = interpret("let x : U16 = 10U8; x");
         expect(result).toBe(10);
     });
+    test('interpret("let x = 10U8; x") should return 10', () => {
+        const result = interpret("let x = 10U8; x");
+        expect(result).toBe(10);
+    });
 });
