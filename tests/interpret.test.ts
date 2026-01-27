@@ -445,4 +445,10 @@ describe("interpret", () => {
     const result = interpret("fn get() => { 100 }; get()");
     expect(result).toBe(100);
   });
+  test('interpret("let tuple : ((I32, I32), (I32, I32)) = ((1, 2), (3, 4)); tuple[0][0] + tuple[0][1] + tuple[1][0] + tuple[1][1]") should return 10', () => {
+    const result = interpret(
+      "let tuple : ((I32, I32), (I32, I32)) = ((1, 2), (3, 4)); tuple[0][0] + tuple[0][1] + tuple[1][0] + tuple[1][1]",
+    );
+    expect(result).toBe(10);
+  });
 });

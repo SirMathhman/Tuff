@@ -7,7 +7,7 @@ interface TypeConstraint {
 }
 
 interface ScopeEntry {
-  value: number | number[];
+  value: number | (number | number[])[];
   constraint: TypeConstraint | null;
   isMutable?: boolean;
   isInitialized?: boolean;
@@ -270,6 +270,39 @@ function evaluateUnaryOperand(
   return evaluate(expr, scope);
 }
 
+function getTupleElement(
+  tupleValue: number | (number | number[])[],
+  index: number,
+  constraint: TypeConstraint | null,
+  varName: string,
+): { value: number | (number | number[])[]; elementType: TypeConstraint | null } {
+  if (!Array.isArray(tupleValue)) {
+    throw new Error(
+      `${varName} is not a tuple (type: ${constraint?.typeStr || "unknown"}, value: ${JSON.stringify(tupleValue)})`,
+    );
+  }
+  if (index < 0 || index >= tupleValue.length) {
+    throw new Error(`Tuple index ${index} out of bounds for ${varName}`);
+  }
+  const elementType = constraint?.tupleTypes?.[index];
+  const elementValue = tupleValue[index];
+  if (elementValue === undefined) {
+    throw new Error(`Tuple element ${index} is undefined for ${varName}`);
+  }
+  return { value: elementValue, elementType: elementType || null };
+}
+
+function getTupleVarOrThrow(
+  scope: Scope,
+  varName: string,
+): ScopeEntry {
+  const tupleVar = scope[varName];
+  if (!tupleVar) {
+    throw new Error(`Variable ${varName} is not defined`);
+  }
+  return tupleVar;
+}
+
 function hasCommaAtDepth0(inner: string): boolean {
   let depth = 0;
   for (let i = 0; i < inner.length; i++) {
@@ -305,7 +338,7 @@ export function interpret(source: string, scope: Scope = {}): number {
 }
 
 interface EvaluationResult {
-  value: number | number[];
+  value: number | (number | number[])[];
   constraint: TypeConstraint | null;
   functionBody?: string;
   functionParams?: string[];
@@ -702,29 +735,44 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     }
   }
 
+  // Check for chained tuple indexing first: tuple[0][1]
+  const chainedIndexMatch = source.match(/^([a-zA-Z_]\w*)\[(\d+)\]\[(\d+)\]$/);
+  if (chainedIndexMatch && chainedIndexMatch[1] && chainedIndexMatch[2] && chainedIndexMatch[3]) {
+    const varName = chainedIndexMatch[1];
+    const tupleVar = getTupleVarOrThrow(scope, varName);
+    const index1 = parseInt(chainedIndexMatch[2], 10);
+    const index2 = parseInt(chainedIndexMatch[3], 10);
+    const { value: innerValue, elementType: outerType } = getTupleElement(
+      tupleVar.value,
+      index1,
+      tupleVar.constraint,
+      varName,
+    );
+    if (!Array.isArray(innerValue)) {
+      throw new Error(`${varName}[${index1}] is not a tuple`);
+    }
+    const { value: finalValue, elementType: innerElementType } = getTupleElement(
+      innerValue,
+      index2,
+      outerType,
+      `${varName}[${index1}]`,
+    );
+    return { value: finalValue, constraint: innerElementType };
+  }
+
   // Check for tuple indexing: myTuple[0]
   const indexMatch = source.match(/^([a-zA-Z_]\w*)\[(\d+)\]$/);
   if (indexMatch && indexMatch[1] && indexMatch[2]) {
     const varName = indexMatch[1];
+    const tupleVar = getTupleVarOrThrow(scope, varName);
     const index = parseInt(indexMatch[2], 10);
-    const tupleVar = scope[varName];
-    if (!tupleVar) {
-      throw new Error(`Variable ${varName} is not defined`);
-    }
-    if (Array.isArray(tupleVar.value)) {
-      if (index >= 0 && index < tupleVar.value.length) {
-        const elementType = tupleVar.constraint?.tupleTypes?.[index];
-        const elementValue = tupleVar.value[index];
-        if (elementValue === undefined) {
-          throw new Error(`Tuple element ${index} is undefined for ${varName}`);
-        }
-        return { value: elementValue, constraint: elementType || null };
-      }
-      throw new Error(`Tuple index ${index} out of bounds for ${varName}`);
-    }
-    throw new Error(
-      `${varName} is not a tuple (type: ${tupleVar.constraint?.typeStr || "unknown"}, value: ${JSON.stringify(tupleVar.value)})`,
+    const { value: elementValue, elementType } = getTupleElement(
+      tupleVar.value,
+      index,
+      tupleVar.constraint,
+      varName,
     );
+    return { value: elementValue, constraint: elementType };
   }
 
   // Check for tuple literals: (100, true)
@@ -752,14 +800,11 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       }
       if (currentPart.trim()) parts.push(currentPart.trim());
 
-      const values: number[] = [];
+      const values: (number | number[])[] = [];
       const constraints: TypeConstraint[] = [];
       for (const part of parts) {
         const result = evaluate(part, scope);
-        if (Array.isArray(result.value)) {
-          throw new Error("Nested tuples are not supported");
-        }
-        values.push(result.value);
+        values.push(result.value as (number | number[]));
         const elementConstraint = result.constraint || getTypeConstraint("I32");
         if (elementConstraint) {
           constraints.push(elementConstraint);
