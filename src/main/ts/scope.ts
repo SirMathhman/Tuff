@@ -58,9 +58,15 @@ export function handleVarDecl(
   visMap: Map<string, boolean> = new Map(),
   movedSet: Set<string> = new Set(),
 ): number | undefined {
-  const trimmed = s.trim(),
-    isPublic = trimmed.startsWith("out ");
-  const remaining = isPublic ? trimmed.slice(4).trim() : trimmed;
+  const trimmed = s.trim();
+  const isPublic = trimmed.startsWith("out ");
+  let remaining = isPublic ? trimmed.slice(4).trim() : trimmed;
+
+  // Handle 'in' keyword for instance parameters (currently just treated like a regular field)
+  if (remaining.startsWith("in ")) {
+    remaining = remaining.slice(3).trim();
+  }
+
   const ctx: ScopeContext = {
     scope,
     typeMap,

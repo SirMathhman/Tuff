@@ -23,6 +23,7 @@ import {
   handleDereferenceOperation,
 } from "../../handlers/access/pointer-operations";
 import { handleModuleAccess } from "../../handlers/access/module-access";
+import { handleObjectInstantiation } from "../../handlers/access/object-instantiation";
 import {
   toInterpreterContext,
   toScopeContext,
@@ -166,6 +167,13 @@ export function tryExpressions(p: Params): number | undefined {
   );
   if (result !== undefined) return result;
   result = handleDereferenceOperation(p.s, p.scope);
+  if (result !== undefined) return result;
+  result = handleObjectInstantiation({
+    s: p.s,
+    scope: p.scope,
+    typeMap: p.typeMap,
+    interpreter: p.interpreter,
+  });
   if (result !== undefined) return result;
   result = handleLambdaExpression(p.s, p.typeMap);
   if (result !== undefined) return result;

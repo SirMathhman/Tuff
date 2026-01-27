@@ -95,9 +95,18 @@ export function handleReferenceOperation(
   const isVariable = scope.has(varName);
   const isObject = typeMap?.has("__object__" + varName);
   const isModule = typeMap?.has("__module__" + varName);
-  
+
   if (!isVariable && !isObject && !isModule) {
     throw new Error(`variable '${varName}' not found in scope`);
+  }
+
+  // If the variable contains a pointer, return it directly
+  if (isVariable) {
+    const varValue = scope.get(varName);
+    if (varValue !== undefined && getPointerTarget(varValue) !== undefined) {
+      // Variable contains a pointer, return it directly
+      return varValue;
+    }
   }
 
   const shouldBeMutable = isExplicitlyMutable || pointerTypeIsMutable;

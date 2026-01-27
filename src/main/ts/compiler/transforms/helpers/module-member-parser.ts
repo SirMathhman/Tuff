@@ -135,9 +135,16 @@ export function parseModuleMemberWithPrivate(
   j = skipWhitespace(body, j);
 
   let isPublic = false;
+  // Handle 'out' keyword for public members
   if (matchWord(body, j, "out")) {
     isPublic = true;
     j += 3;
+    j = skipWhitespace(body, j);
+  }
+
+  // Handle 'in' keyword for instance parameters (skip it for now)
+  if (matchWord(body, j, "in")) {
+    j += 2;
     j = skipWhitespace(body, j);
   }
 
