@@ -26,7 +26,7 @@ function getTypeConstraint(source: string): TypeConstraint | null {
         return null;
     }
     
-    return { minValue, maxValue, typeStr: source.substring(source.match(/\d+$/)?.index || 0), bitWidth };
+    return { minValue, maxValue, typeStr: typePrefix + bitWidth.toString(), bitWidth };
 }
 
 function validateValueInConstraint(value: number, constraint: TypeConstraint, source: string): void {
@@ -120,8 +120,8 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         
                         if (explicitConstraint) {
                             validateValueInConstraint(exprResult.value, explicitConstraint, statement);
-                            // If it's a variable assignment, check strict type matching
-                            if (localScope[expr.trim()]) {
+                            // Strict type matching for anything that has a constraint (literals or variables)
+                            if (exprResult.constraint) {
                                 validateTypeMatch(exprResult.constraint, explicitConstraint);
                             }
                         }
@@ -155,8 +155,8 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         const exprResult = evaluate(expr, localScope);
                         if (existingVar.constraint) {
                             validateValueInConstraint(exprResult.value, existingVar.constraint, statement);
-                            // If it's a variable assignment, check strict type matching
-                            if (localScope[expr.trim()]) {
+                            // Strict type matching for anything that has a constraint (literals or variables)
+                            if (exprResult.constraint) {
                                 validateTypeMatch(exprResult.constraint, existingVar.constraint);
                             }
                         }

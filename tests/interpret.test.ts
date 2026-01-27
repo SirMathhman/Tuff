@@ -85,9 +85,8 @@ describe('interpret', () => {
     test('interpret("let x : U8 = 10 / ({ let x : U8 = 2; x } + 3); x") should throw error', () => {
         expect(() => interpret("let x : U8 = 10 / ({ let x : U8 = 2; x } + 3); x")).toThrow();
     });
-    test('interpret("let x : U16 = 10U8; x") should return 10', () => {
-        const result = interpret("let x : U16 = 10U8; x");
-        expect(result).toBe(10);
+    test('interpret("let x : U16 = 10U8; x") should throw error', () => {
+        expect(() => interpret("let x : U16 = 10U8; x")).toThrow();
     });
     test('interpret("let x = 10U8; x") should return 10', () => {
         const result = interpret("let x = 10U8; x");
@@ -114,5 +113,8 @@ describe('interpret', () => {
     test('interpret("let x : I32; x = 100; x") should return 100', () => {
         const result = interpret("let x : I32; x = 100; x");
         expect(result).toBe(100);
+    });
+    test('interpret("let x : U8; x = 100U16; x") should throw error', () => {
+        expect(() => interpret("let x : U8; x = 100U16; x")).toThrow();
     });
 });
