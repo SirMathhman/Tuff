@@ -11,6 +11,7 @@ let instanceCounter = 0;
  * Should be called at the start of each interpret() to ensure instances are unique per call
  */
 export function resetObjectInstanceCache(): void {
+  // console.log("Resetting object instance cache");
   instanceCache.clear();
   instanceCounter = 0;
 }

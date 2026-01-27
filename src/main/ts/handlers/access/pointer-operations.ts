@@ -87,8 +87,9 @@ export function handleReferenceOperation(
 
   const varName = rest.slice(0, i);
   const afterVar = rest.slice(i).trim();
-  if (afterVar.length > 0 && isBinaryOperator(afterVar)) {
-    return undefined;
+  if (afterVar.length > 0) {
+    if (afterVar.startsWith("{")) return undefined;
+    if (isBinaryOperator(afterVar)) return undefined;
   }
 
   // Check if varName is a variable, object, or module

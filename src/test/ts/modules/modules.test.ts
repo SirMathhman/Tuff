@@ -83,6 +83,16 @@ describe("modules - objects", () => {
       1,
     );
   });
+
+  itBoth(
+    "supports object instance with different field values are not equal",
+    (ok) => {
+      ok(
+        "object Wrapper { in let x : I32; } let first = &Wrapper { x : 2 }; let second = &Wrapper { x : 3 }; &first == &second",
+        0,
+      );
+    },
+  );
 });
 
 describe("modules - visibility", () => {
