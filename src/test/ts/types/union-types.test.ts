@@ -43,4 +43,9 @@ describe("union types - with generic structs/objects", () => {
     assertCompileInvalid(
       "struct Some<T> { field : T } object None<T> {} type Option<T> = Some<T> | None<T>; let value : Option<I32> = Some<I32> { field : 100 }; if (value is None<I32>) value.field else 200",
     ));
+
+  it("Compiled: rejects `if is` when accessing field that exists on broader type", () =>
+    assertCompileInvalid(
+      "struct Some<T> { wah : T } object None<T> {} type Option<T> = Some<T> | None<T>; let value : Option<I32> = Some<I32> { wah : 100 }; if (value is None<I32>) value.wah else 200",
+    ));
 });
