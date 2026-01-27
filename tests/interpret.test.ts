@@ -132,4 +132,8 @@ describe('interpret', () => {
         const result = interpret("let x : Bool = true; let y = false; x && y");
         expect(result).toBe(0);
     });
+    test('interpret("let x : Bool = true; let y = false; x || y") should return 1', () => {
+        const result = interpret("let x : Bool = true; let y = false; x || y");
+        expect(result).toBe(1);
+    });
 });
