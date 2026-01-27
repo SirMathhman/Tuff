@@ -74,7 +74,7 @@ function extractObjectMembers(body: string): Set<string> {
         i++;
         continue;
       }
-      
+
       i += skipKeywordLen;
       while (i < body.length && body[i] === " ") i++;
       // Skip 'mut' keyword if present (for let declarations)
@@ -105,7 +105,10 @@ function qualifyFieldReferencesInMethod(
   let result = "";
   let i = 0;
   while (i < method.length) {
-    if (isIdentifierChar(method[i]) && (i === 0 || !isIdentifierChar(method[i - 1]))) {
+    if (
+      isIdentifierChar(method[i]) &&
+      (i === 0 || !isIdentifierChar(method[i - 1]))
+    ) {
       const start = i;
       while (i < method.length && isIdentifierChar(method[i])) i++;
       const word = method.slice(start, i);
@@ -138,33 +141,33 @@ export function transformObjects(source: string): string {
   if (objectRegions.length === 0) {
     return source; // No objects to transform
   }
-  
+
   let result = "";
   let cursor = 0;
 
   for (const objectRegion of objectRegions) {
     result += source.slice(cursor, objectRegion.start);
-    
+
     // Extract public members from object body
     const fieldNames = extractObjectMembers(objectRegion.body);
-    
+
     // Transform method bodies to qualify field references in each method
     let qualifiedBody = objectRegion.body;
     let searchIdx = 0;
     while (searchIdx < qualifiedBody.length) {
       const methodIdx = qualifiedBody.indexOf("fn ", searchIdx);
       if (methodIdx === -1) break;
-      
+
       // Verify this is a method definition (not part of a larger word)
       if (methodIdx > 0 && isIdentifierChar(qualifiedBody[methodIdx - 1])) {
         searchIdx = methodIdx + 3;
         continue;
       }
-      
+
       // Find the method body (after => operator)
       const arrowIdx = qualifiedBody.indexOf("=>", methodIdx);
       if (arrowIdx === -1) break;
-      
+
       // Find where the method body ends (at semicolon or end of body)
       let endIdx = arrowIdx + 2;
       let bodyDepth = 0;
@@ -175,7 +178,7 @@ export function transformObjects(source: string): string {
         else if (ch === ";" && bodyDepth === 0) break;
         endIdx++;
       }
-      
+
       // Qualify field references in the method body
       const methodBody = qualifiedBody.slice(arrowIdx + 2, endIdx);
       const qualifiedMethodBody = qualifyFieldReferencesInMethod(
@@ -183,16 +186,16 @@ export function transformObjects(source: string): string {
         objectRegion.name,
         fieldNames,
       );
-      
+
       // Reconstruct with qualified method
       qualifiedBody =
         qualifiedBody.slice(0, arrowIdx + 2) +
         qualifiedMethodBody +
         qualifiedBody.slice(endIdx);
-      
+
       searchIdx = arrowIdx + 2 + qualifiedMethodBody.length;
     }
-    
+
     result += `object ${objectRegion.name} { ${qualifiedBody} }`;
     cursor = objectRegion.end;
   }

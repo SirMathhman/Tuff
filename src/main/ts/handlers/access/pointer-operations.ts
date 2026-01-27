@@ -1,4 +1,5 @@
 import { isValidIdentifier } from "../../utils/identifier-utils";
+import { isIdentifierChar } from "../../utils/helpers/char-utils";
 import { extractTypeSize } from "../../type-utils";
 import {
   throwCannotCreateMutablePointerToImmutableVariable,
@@ -9,7 +10,23 @@ import {
 const pointerMap = new Map<number, string>();
 // Track which pointers are mutable
 const mutablePointerMap = new Map<number, boolean>();
-let pointerCounter = 1000; // Pointer values start at 1000 to distinguish from regular values
+
+/**
+ * Compute a stable pointer ID based on variable name
+ * Uses a simple hash to ensure same variable always gets same ID
+ */
+function computePointerId(varName: string): number {
+  // Use a simple hash based on variable name characters
+  // Negative numbers to distinguish from regular values
+  let hash = 0;
+  for (let i = 0; i < varName.length; i++) {
+    hash = (hash << 5) - hash + varName.charCodeAt(i);
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  // Return a negative value (pointer addresses are typically negative in some representations)
+  // Add a base offset to avoid collisions with other negative values
+  return -(Math.abs(hash) + 100000);
+}
 
 /**
  * Check if a pointer type annotation includes the 'mut' keyword
@@ -26,7 +43,7 @@ export function createPointer(
   varName: string,
   isMutable: boolean = false,
 ): number {
-  const pointerValue = pointerCounter++;
+  const pointerValue = computePointerId(varName);
   pointerMap.set(pointerValue, varName);
   mutablePointerMap.set(pointerValue, isMutable);
   return pointerValue;
@@ -49,66 +66,94 @@ export function handleReferenceOperation(
   pointerBaseType?: string,
 ): number | undefined {
   const trimmed = s.trim();
-
-  // Check if this is a reference operation: &varName or &mut varName
   if (!trimmed.startsWith("&")) return undefined;
 
   let rest = trimmed.slice(1).trim();
-
-  // Reject double references: &&x
   if (rest.startsWith("&")) {
     throw new Error("invalid: cannot take reference of reference");
   }
 
-  // Check if this is a mutable reference (&mut varName)
   let isExplicitlyMutable = false;
   if (rest.startsWith("mut ")) {
     isExplicitlyMutable = true;
     rest = rest.slice(4).trim();
   }
 
-  // Validate that it's a valid identifier (no expressions like &(100) or &(x+y))
-  if (!isValidIdentifier(rest)) {
-    throwInvalidReferenceTarget(rest);
+  let i = 0;
+  while (i < rest.length && isIdentifierChar(rest[i])) {
+    i++;
+  }
+  if (i === 0) throwInvalidReferenceTarget(rest);
+
+  const varName = rest.slice(0, i);
+  const afterVar = rest.slice(i).trim();
+  if (afterVar.length > 0 && isBinaryOperator(afterVar)) {
+    return undefined;
   }
 
-  const varName = rest;
-
-  // Check if the variable exists in scope
   if (!scope.has(varName)) {
     throw new Error(`variable '${varName}' not found in scope`);
   }
 
-  // Determine if the pointer should be mutable:
-  // 1. If &mut syntax is used explicitly, it's mutable
-  // 2. Otherwise, use the type annotation parameter
   const shouldBeMutable = isExplicitlyMutable || pointerTypeIsMutable;
+  validateMutablePointer(shouldBeMutable, varName, mutMap);
+  validatePointerType(pointerBaseType, varName, typeMap);
 
-  // For *mut pointers, target variable must be mutable
-  if (shouldBeMutable) {
-    const targetIsMutable = mutMap.get(varName) ?? false;
-    if (!targetIsMutable) {
-      throwCannotCreateMutablePointerToImmutableVariable(varName);
-    }
-  }
-
-  // Validate type compatibility if pointer base type is specified
-  if (pointerBaseType && typeMap) {
-    const targetType = typeMap.get(varName);
-    const expectedType = extractTypeSize(pointerBaseType);
-    if (targetType !== undefined && targetType !== expectedType) {
-      throw new Error(
-        `cannot create pointer to '${varName}': type mismatch (expected ${pointerBaseType}, got variable of type ${targetType})`,
-      );
-    }
-  }
-
-  // Inline createPointer and return a pointer to this variable
-  // Pointer mutability is determined by either the &mut syntax or the type annotation
-  const pointerValue = pointerCounter++;
+  const pointerValue = computePointerId(varName);
   pointerMap.set(pointerValue, varName);
   mutablePointerMap.set(pointerValue, shouldBeMutable);
   return pointerValue;
+}
+
+function validateMutablePointer(
+  shouldBeMutable: boolean,
+  varName: string,
+  mutMap: Map<string, boolean>,
+): void {
+  if (!shouldBeMutable) return;
+  const targetIsMutable = mutMap.get(varName) ?? false;
+  if (!targetIsMutable) {
+    throwCannotCreateMutablePointerToImmutableVariable(varName);
+  }
+}
+
+function validatePointerType(
+  pointerBaseType: string | undefined,
+  varName: string,
+  typeMap: Map<string, number> | undefined,
+): void {
+  if (!pointerBaseType || !typeMap) return;
+  const targetType = typeMap.get(varName);
+  const expectedType = extractTypeSize(pointerBaseType);
+  if (targetType !== undefined && targetType !== expectedType) {
+    throw new Error(
+      `cannot create pointer to '${varName}': type mismatch (expected ${pointerBaseType}, got variable of type ${targetType})`,
+    );
+  }
+}
+
+function isBinaryOperator(str: string): boolean {
+  // Check if the string starts with a binary operator
+  const binaryOps = [
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "<",
+    ">",
+    "+",
+    "-",
+    "*",
+    "/",
+    "&&",
+    "||",
+    "is",
+    ".",
+  ];
+  for (const op of binaryOps) {
+    if (str.startsWith(op)) return true;
+  }
+  return false;
 }
 
 export function handleDereferenceOperation(

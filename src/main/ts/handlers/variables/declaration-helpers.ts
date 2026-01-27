@@ -21,6 +21,7 @@ import { callInterpreter } from "../../types/interpreter";
 import {
   isPointerTypeMutable,
   handleReferenceOperation,
+  getPointerTarget,
 } from "../../handlers/access/pointer-operations";
 import { throwCannotAssignNonPointerToPointerType } from "../../utils/helpers/pointer-errors";
 
@@ -121,7 +122,11 @@ function inferPointerValue(
   }
 
   const varValue = callInterpreter(ctx, exprStr);
-  if (varValue < 1000 && varValue !== 0) {
+  // Allow pointers (in pointerMap), strings (large ID values like 3000000+), or 0
+  // Reject small positive values (0-999) that aren't special IDs
+  const isPointer = getPointerTarget(varValue) !== undefined;
+  const isString = varValue >= 3000000; // String literal ID threshold
+  if (!isPointer && !isString && varValue > 0 && varValue < 1000) {
     throwCannotAssignNonPointerToPointerType(declaredTypeStr);
   }
   return varValue;

@@ -16,7 +16,7 @@ function extractMemberAccess(accessStr: string): string {
     i++;
   }
   if (i === 0) return accessStr; // No valid identifier
-  
+
   const memberName = accessStr.slice(0, i);
   // Check if it's a function call
   if (i < accessStr.length && accessStr[i] === "(") {
@@ -30,7 +30,7 @@ function extractMemberAccess(accessStr: string): string {
     }
     return accessStr.slice(0, j);
   }
-  
+
   return memberName;
 }
 

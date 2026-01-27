@@ -204,6 +204,20 @@ describe("pointer operations - dangling references", () => {
   );
 });
 
+describe("pointer operations - comparison", () => {
+  itBoth("distinguishes pointers to different variables", (ok) => {
+    ok("let x = 100; let y = 200; &x == &y", 0);
+  });
+
+  itBoth("identifies same pointer to same variable", (ok) => {
+    ok("let x = 100; let p = &x; let q = &x; p == q", 1);
+  });
+
+  itBoth("pointer comparison with different values", (ok) => {
+    ok("let x = 50; let y = 50; &x == &y", 0);
+  });
+});
+
 describe("pointer operations - limitations", () => {
   itInterpreter(
     "compiler cannot handle complex dereference expressions yet",
