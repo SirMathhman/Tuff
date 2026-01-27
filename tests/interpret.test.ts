@@ -190,4 +190,7 @@ describe('interpret', () => {
     test('interpret("let mut x : U8 = 250; x += 10") should throw error', () => {
         expect(() => interpret("let mut x : U8 = 250; x += 10")).toThrow();
     });
+    test('interpret("let mut x = true; x += 10; x") should throw error', () => {
+        expect(() => interpret("let mut x = true; x += 10; x")).toThrow();
+    });
 });
