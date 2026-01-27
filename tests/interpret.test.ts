@@ -305,4 +305,9 @@ describe('interpret', () => {
         const result = interpret("let mut sum = 0; for (let mut i in 0..10) sum += i; sum");
         expect(result).toBe(45);
     });
+
+    test('interpret("let myTuple : (I32, Bool) = (100, true); myTuple[0]") should return 100', () => {
+        const result = interpret("let myTuple : (I32, Bool) = (100, true); myTuple[0]");
+        expect(result).toBe(100);
+    });
 });

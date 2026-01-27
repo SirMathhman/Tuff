@@ -1,11 +1,31 @@
 interface TypeConstraint {
-    minValue: number;
-    maxValue: number;
+    minValue?: number;
+    maxValue?: number;
     typeStr: string;
     bitWidth?: number;
+    tupleTypes?: TypeConstraint[];
 }
 
+type Scope = Record<string, { value: number | number[], constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }>;
+
 function getTypeConstraint(source: string): TypeConstraint | null {
+    // Handle tuple types (I32, Bool)
+    if (source.startsWith('(') && source.endsWith(')')) {
+        const inner = source.substring(1, source.length - 1).trim();
+        const parts = inner.split(',').map(p => p.trim());
+        const tupleTypes: TypeConstraint[] = [];
+        for (const part of parts) {
+            const typeConstraint = getTypeConstraint(part);
+            if (!typeConstraint) return null;
+            tupleTypes.push(typeConstraint);
+        }
+        return {
+            minValue: 0,
+            maxValue: Number.MAX_SAFE_INTEGER,
+            typeStr: `(${parts.join(', ')})`,
+            tupleTypes
+        };
+    }
     if (source.startsWith('*')) {
         let isMutablePointer = false;
         let innerType = source.substring(1).trim();
@@ -51,8 +71,10 @@ function getTypeConstraint(source: string): TypeConstraint | null {
 }
 
 function validateValueInConstraint(value: number, constraint: TypeConstraint, source: string): void {
-    if (value < constraint.minValue || value > constraint.maxValue) {
-        throw new Error(`Value ${value} out of range for ${source}. Expected ${constraint.minValue}-${constraint.maxValue}.`);
+    if (constraint.minValue !== undefined && constraint.maxValue !== undefined) {
+        if (value < constraint.minValue || value > constraint.maxValue) {
+            throw new Error(`Value ${value} out of range for ${source}. Expected ${constraint.minValue}-${constraint.maxValue}.`);
+        }
     }
 }
 
@@ -111,6 +133,18 @@ function parseKeywordParen(source: string, keyword: string): { inner: string; af
     };
 }
 
+function hasCommaAtDepth0(inner: string): boolean {
+    let depth = 0;
+    for (let i = 0; i < inner.length; i++) {
+        const char = inner[i] as string;
+        depth = updateDepth(char, depth);
+        if (depth === 0 && char === ',') {
+            return true;
+        }
+    }
+    return false;
+}
+
 const addresses: Map<number, string> = new Map();
 let nextAddress = 0x1000;
 
@@ -123,18 +157,22 @@ function getAddressOf(varName: string): number {
     return addr;
 }
 
-export function interpret(source : string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }> = {}) : number {
+export function interpret(source : string, scope: Scope = {}) : number {
     addresses.clear();
     nextAddress = 0x1000;
-    return evaluate(source, scope).value;
+    const result = evaluate(source, scope);
+    if (Array.isArray(result.value)) {
+        throw new Error('Cannot return tuple value from top-level');
+    }
+    return result.value;
 }
 
 interface EvaluationResult {
-    value: number;
+    value: number | number[];
     constraint: TypeConstraint | null;
 }
 
-function evaluate(source: string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }>): EvaluationResult {
+function evaluate(source: string, scope: Record<string, { value: number | number[], constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }>): EvaluationResult {
     source = source.trim();
     if (source === 'true') {
         return { value: 1, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
@@ -176,6 +214,9 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         const expr = source.substring(1).trim();
         const exprResult = evaluate(expr, scope);
         if (exprResult.constraint?.typeStr.startsWith('*')) {
+            if (typeof exprResult.value !== 'number') {
+                throw new Error('Cannot dereference tuple');
+            }
             const addr = exprResult.value;
             const varName = addresses.get(addr);
             if (varName && scope[varName]) {
@@ -424,10 +465,81 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         }
     }
 
+    // Check for tuple indexing: myTuple[0]
+    const indexMatch = source.match(/^([a-zA-Z_]\w*)\[(\d+)\]$/);
+    if (indexMatch && indexMatch[1] && indexMatch[2]) {
+        const varName = indexMatch[1];
+        const index = parseInt(indexMatch[2], 10);
+        const tupleVar = scope[varName];
+        if (!tupleVar) {
+            throw new Error(`Variable ${varName} is not defined`);
+        }
+        if (Array.isArray(tupleVar.value)) {
+            if (index >= 0 && index < tupleVar.value.length) {
+                const elementType = tupleVar.constraint?.tupleTypes?.[index];
+                const elementValue = tupleVar.value[index];
+                if (elementValue === undefined) {
+                    throw new Error(`Tuple element ${index} is undefined for ${varName}`);
+                }
+                return { value: elementValue, constraint: elementType || null };
+            }
+            throw new Error(`Tuple index ${index} out of bounds for ${varName}`);
+        }
+        throw new Error(`${varName} is not a tuple (type: ${tupleVar.constraint?.typeStr || 'unknown'}, value: ${JSON.stringify(tupleVar.value)})`);
+    }
+
+    // Check for tuple literals: (100, true)
+    if (source.startsWith('(') && source.endsWith(')') && !getTypeConstraint(source)) {
+        const inner = source.substring(1, source.length - 1).trim();
+        // Check if this is a tuple literal (has comma at depth 0) vs wrapped expr (no comma at depth 0)
+        if (hasCommaAtDepth0(inner)) {
+            // Parse as tuple literal
+            const parts: string[] = [];
+            let currentPart = '';
+            let depth2 = 0;
+            for (let i = 0; i < inner.length; i++) {
+                const char = inner[i] as string;
+                if (char === ',' && depth2 === 0) {
+                    parts.push(currentPart.trim());
+                    currentPart = '';
+                } else {
+                    currentPart += char;
+                    depth2 = updateDepth(char, depth2);
+                }
+            }
+            if (currentPart.trim()) parts.push(currentPart.trim());
+
+            const values: number[] = [];
+            const constraints: TypeConstraint[] = [];
+            for (const part of parts) {
+                const result = evaluate(part, scope);
+                if (Array.isArray(result.value)) {
+                    throw new Error('Nested tuples are not supported');
+                }
+                values.push(result.value);
+                const elementConstraint = result.constraint || getTypeConstraint("I32");
+                if (elementConstraint) {
+                    constraints.push(elementConstraint);
+                }
+            }
+
+            const tupleType = `(${constraints.map(c => c.typeStr).join(', ')})`;
+            return {
+                value: values,
+                constraint: {
+                    minValue: 0,
+                    maxValue: Number.MAX_SAFE_INTEGER,
+                    typeStr: tupleType,
+                    tupleTypes: constraints
+                }
+            };
+        }
+    }
+
     const tryEvaluateAssignment = (params: {
         text: string;
-        targetScope: Record<string, { value: number; constraint: TypeConstraint | null; isMutable?: boolean; isInitialized?: boolean }>;
-        outerScopeToSync?: Record<string, { value: number; constraint: TypeConstraint | null; isMutable?: boolean; isInitialized?: boolean }>;
+        targetScope: Record<string, { value: number | number[]; constraint: TypeConstraint | null; isMutable?: boolean; isInitialized?: boolean }>;
+        outerScopeToSync?: Record<string, { value: number | number[]; constraint: TypeConstraint | null; isMutable?: boolean; isInitialized?: boolean }>;
         allowPlainAssignment: boolean;
         updateConstraint: boolean;
         statementForErrors: string;
@@ -466,15 +578,27 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
 
             switch (op) {
                 case '+':
+                    if (typeof existingVar.value !== 'number' || typeof exprResult.value !== 'number') {
+                        throw new Error('Cannot perform arithmetic on tuple');
+                    }
                     newValue = existingVar.value + exprResult.value;
                     break;
                 case '-':
+                    if (typeof existingVar.value !== 'number' || typeof exprResult.value !== 'number') {
+                        throw new Error('Cannot perform arithmetic on tuple');
+                    }
                     newValue = existingVar.value - exprResult.value;
                     break;
                 case '*':
+                    if (typeof existingVar.value !== 'number' || typeof exprResult.value !== 'number') {
+                        throw new Error('Cannot perform arithmetic on tuple');
+                    }
                     newValue = existingVar.value * exprResult.value;
                     break;
                 case '/':
+                    if (typeof existingVar.value !== 'number' || typeof exprResult.value !== 'number') {
+                        throw new Error('Cannot perform arithmetic on tuple');
+                    }
                     if (exprResult.value === 0) throw new Error('Division by zero');
                     newValue = Math.floor(existingVar.value / exprResult.value);
                     break;
@@ -482,7 +606,9 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         }
 
         if (existingVar.constraint) {
-            validateValueInConstraint(newValue, existingVar.constraint, params.statementForErrors);
+            if (typeof newValue === 'number') {
+                validateValueInConstraint(newValue, existingVar.constraint, params.statementForErrors);
+            }
             if (exprResult.constraint && !op) {
                 validateTypeMatch(exprResult.constraint, existingVar.constraint);
             }
@@ -499,7 +625,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             params.outerScopeToSync[varName].isInitialized = true;
         }
 
-        return { result: { value: newValue, constraint: finalConstraint }, varName, newValue };
+        return { result: { value: newValue, constraint: finalConstraint }, varName, newValue: typeof newValue === 'number' ? newValue : 0 };
     };
     
     // Check for fully wrapped expression (parens or braces) logic has been moved to be handled last if nothing else matches?
@@ -518,27 +644,38 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
     // Let's remove the second copy at the end of the file (lines 428ish in original)
     // and rely on one robust check.
     
-    // Consolidated wrap check
+    // Consolidated wrap check  - but skip for tuple literals
     if ((source.startsWith('(') && source.endsWith(')')) || (source.startsWith('{') && source.endsWith('}'))) {
         const startChar = source[0];
-        let depth = 0;
-        let isFullyWrapped = true;
-        for (let i = 0; i < source.length - 1; i++) {
-            const char = source[i];
-            if (char === undefined) break; 
-            depth = updateDepth(char, depth);
-            if (depth === 0) {
-                isFullyWrapped = false;
-                break;
-            }
-        }
-        // Only unwrap if it's NOT a complex statement block that we just handled with splitPoints?
-        // Wait, splitPoints logic COMES AFTER this in current flow.
         
-        if (isFullyWrapped) {
-            const inner = source.substring(1, source.length - 1).trim();
-            if (startChar === '{' && inner.length === 0) return { value: 0, constraint: null };
-            return evaluate(inner, scope);
+        // Special handling: if this looks like a tuple literal (has comma at depth 0 in parens),
+        // skip the wrap check and let tuple literal handler process it
+        let isTupleLiteral = false;
+        if (startChar === '(') {
+            const inner = source.substring(1, source.length - 1);
+            isTupleLiteral = hasCommaAtDepth0(inner);
+        }
+        
+        if (!isTupleLiteral) {
+            let depth = 0;
+            let isFullyWrapped = true;
+            for (let i = 0; i < source.length - 1; i++) {
+                const char = source[i] as string;
+                if (char === undefined) break; 
+                depth = updateDepth(char, depth);
+                if (depth === 0) {
+                    isFullyWrapped = false;
+                    break;
+                }
+            }
+            // Only unwrap if it's NOT a complex statement block that we just handled with splitPoints?
+            // Wait, splitPoints logic COMES AFTER this in current flow.
+            
+            if (isFullyWrapped) {
+                const inner = source.substring(1, source.length - 1).trim();
+                if (startChar === '{' && inner.length === 0) return { value: 0, constraint: null };
+                return evaluate(inner, scope);
+            }
         }
     }
     
@@ -589,11 +726,11 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             }
             if (statement.startsWith('let ')) {
                 // Parse variable declaration: let [mut] x [: TYPE] [= EXPR]
-                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([\w\*\s]+?))?(\s*=\s*(.*))?$/);
+                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*(.+?))?(\s*=\s*(.*))?$/);
                 if (declMatch && declMatch[2]) {
                     const isMutable = !!declMatch[1];
                     const varName = declMatch[2];
-                    const typeStr = declMatch[3];
+                    const typeStr = declMatch[3]?.trim();
                     const hasInitializer = !!declMatch[4];
                     const expr = declMatch[5];
                     const explicitConstraint = typeStr ? getTypeConstraint(typeStr) : null;
@@ -606,7 +743,10 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         const exprResult = evaluate(expr, initializerScope);
                         
                         if (explicitConstraint) {
-                            validateValueInConstraint(exprResult.value, explicitConstraint, statement);
+                            // Skip numeric validation for tuple types
+                            if (!explicitConstraint.tupleTypes && typeof exprResult.value === 'number') {
+                                validateValueInConstraint(exprResult.value, explicitConstraint, statement);
+                            }
                             // Strict type matching for anything that has a constraint (literals or variables)
                             if (exprResult.constraint) {
                                 validateTypeMatch(exprResult.constraint, explicitConstraint);
@@ -642,15 +782,21 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     const ptrResult = evaluate(ptrExpr, localScope);
                     
                     if (ptrResult.constraint?.typeStr.startsWith('*mut ')) {
+                        if (typeof ptrResult.value !== 'number') {
+                            throw new Error('Cannot dereference non-numeric pointer');
+                        }
                         const addr = ptrResult.value;
                         const varName = addresses.get(addr);
                         if (varName && localScope[varName]) {
                             const valResult = evaluate(valExpr, localScope);
+                            if (typeof valResult.value !== 'number') {
+                                throw new Error('Cannot assign tuple through pointer');
+                            }
                             const innerTypeStr = ptrResult.constraint.typeStr.substring(5); // skip '*mut '
                             const targetConstraint = getTypeConstraint(innerTypeStr);
                             
                             if (targetConstraint) {
-                                validateValueInConstraint(valResult.value, targetConstraint, statement);
+                                validateValueInConstraint(valResult.value as number, targetConstraint, statement);
                                 if (valResult.constraint) {
                                     validateTypeMatch(valResult.constraint, targetConstraint);
                                 }
@@ -818,15 +964,27 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
                     break;
                 case '+':
+                    if (typeof leftResult.value !== 'number' || typeof rightResult.value !== 'number') {
+                        throw new Error('Cannot perform arithmetic on tuple');
+                    }
                     result = leftResult.value + rightResult.value;
                     break;
                 case '-':
+                    if (typeof leftResult.value !== 'number' || typeof rightResult.value !== 'number') {
+                        throw new Error('Cannot perform arithmetic on tuple');
+                    }
                     result = leftResult.value - rightResult.value;
                     break;
                 case '*':
+                    if (typeof leftResult.value !== 'number' || typeof rightResult.value !== 'number') {
+                        throw new Error('Cannot perform arithmetic on tuple');
+                    }
                     result = leftResult.value * rightResult.value;
                     break;
                 case '/':
+                    if (typeof leftResult.value !== 'number' || typeof rightResult.value !== 'number') {
+                        throw new Error('Cannot perform arithmetic on tuple');
+                    }
                     if (rightResult.value === 0) {
                         throw new Error("Division by zero");
                     }
