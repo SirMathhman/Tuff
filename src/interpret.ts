@@ -35,9 +35,61 @@ function validateValueInConstraint(value: number, constraint: TypeConstraint, so
     }
 }
 
-export function interpret(source : string) : number {
+function updateDepth(char: string, depth: number): number {
+    if (char === '(' || char === '{') return depth + 1;
+    if (char === ')' || char === '}') return depth - 1;
+    return depth;
+}
+
+export function interpret(source : string, scope: Record<string, { value: number, constraint: TypeConstraint | null }> = {}) : number {
     source = source.trim();
     
+    // Check if this is a block with statements (semicolons) NOT inside parentheses/braces at depth 0
+    let depth = 0;
+    let semicolonIndex = -1;
+    for (let i = 0; i < source.length; i++) {
+        const char = source[i];
+        if (char === undefined) break;
+        depth = updateDepth(char, depth);
+        if (char === ';' && depth === 0) {
+            semicolonIndex = i;
+            break;
+        }
+    }
+
+    if (semicolonIndex !== -1) {
+        const statements = source.split(';').map(s => s.trim()).filter(s => s.length > 0);
+        let lastValue = NaN;
+        const localScope = { ...scope };
+        
+        for (const statement of statements) {
+            if (statement.startsWith('let ')) {
+                // Parse variable declaration: let x : U8 = 2
+                const declMatch = statement.match(/^let\s+([a-zA-Z_]\w*)\s*:\s*([UIF]\d+)\s*=\s*(.*)$/);
+                if (declMatch && declMatch[1] && declMatch[2] && declMatch[3]) {
+                    const varName = declMatch[1];
+                    const typeStr = declMatch[2];
+                    const expr = declMatch[3];
+                    const constraint = getTypeConstraint(typeStr);
+                    const value = interpret(expr, localScope);
+                    
+                    if (constraint) {
+                        validateValueInConstraint(value, constraint, statement);
+                    }
+                    
+                    localScope[varName] = { value, constraint };
+                    lastValue = value;
+                }
+            } else if (localScope[statement]) {
+                // Variable access
+                lastValue = localScope[statement].value;
+            } else {
+                lastValue = interpret(statement, localScope);
+            }
+        }
+        return lastValue;
+    }
+
     // Remove outermost parentheses or braces if they wrap the entire expression
     if ((source.startsWith('(') && source.endsWith(')')) || (source.startsWith('{') && source.endsWith('}'))) {
         const startChar = source[0];
@@ -45,15 +97,16 @@ export function interpret(source : string) : number {
         let depth = 0;
         let isFullyWrapped = true;
         for (let i = 0; i < source.length - 1; i++) {
-            if (source[i] === '(' || source[i] === '{') depth++;
-            else if (source[i] === ')' || source[i] === '}') depth--;
+            const char = source[i];
+            if (char === undefined) break;
+            depth = updateDepth(char, depth);
             if (depth === 0) {
                 isFullyWrapped = false;
                 break;
             }
         }
         if (isFullyWrapped) {
-            return interpret(source.substring(1, source.length - 1).trim());
+            return interpret(source.substring(1, source.length - 1).trim(), scope);
         }
     }
 
@@ -68,8 +121,9 @@ export function interpret(source : string) : number {
             const index = match.index;
             let depth = 0;
             for (let j = 0; j < index; j++) {
-                if (source[j] === '(' || source[j] === '{') depth++;
-                else if (source[j] === ')' || source[j] === '}') depth--;
+                const char = source[j];
+                if (char === undefined) break;
+                depth = updateDepth(char, depth);
             }
             if (depth === 0) return match;
         }
@@ -92,8 +146,8 @@ export function interpret(source : string) : number {
         const rightStr = source.substring(operatorEnd).trim();
         
         if (leftStr && rightStr) {
-            const left = interpret(leftStr);
-            const right = interpret(rightStr);
+            const left = interpret(leftStr, scope);
+            const right = interpret(rightStr, scope);
             
             let result: number;
             switch (operator) {
@@ -139,6 +193,12 @@ export function interpret(source : string) : number {
             
             return result;
         }
+    }
+    
+    // Variable access in non-binary expression
+    const scopeVar = scope[source];
+    if (scopeVar) {
+        return scopeVar.value;
     }
     
     // Single value parsing
