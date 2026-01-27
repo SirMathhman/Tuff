@@ -2,7 +2,6 @@ import {
   matchWord,
   skipBracePair,
   isWhitespace,
-  readIdentifier,
 } from "./parsing/string-helpers";
 import {
   parseLetDeclaration,
@@ -16,6 +15,7 @@ import {
   clearVariableTypes,
   clearMovedVariables,
   markMovedVariable,
+  addDeclaredType,
 } from "./parsing/parser-utils";
 import { extractParamsWithTypes } from "./parsing/param-helpers";
 import {
@@ -105,9 +105,8 @@ function handleModuleOrObjectDeclaration(
 ): number {
   let j = i + keyword.length;
   j = skipWhitespaceOnly(source, j);
-  const parsedName = readIdentifier(source, j);
-  const name = parsedName.name;
-  j = parsedName.endIdx;
+  const { name, endPos: endAfterGenerics } = parseNameAndGenerics(source, j);
+  j = endAfterGenerics;
   j = skipWhitespaceOnly(source, j);
   if (j < source.length && source[j] === "{") {
     j = findMatchingCloseBrace(source, j);
@@ -119,6 +118,7 @@ function handleModuleOrObjectDeclaration(
       initialized: true,
       isArray: false,
     });
+    addDeclaredType(name);
   }
   return j;
 }
@@ -192,6 +192,7 @@ function handleStructDeclaration(source: string, i: number): number {
     const fields = parseFieldsDefinition(fieldsStr);
     if (fields.size > 0) {
       setCompileStructDef(structName, fields, generics);
+      addDeclaredType(structName);
     }
   }
   return j < source.length ? j + 1 : j;

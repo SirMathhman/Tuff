@@ -1,4 +1,7 @@
-import { isWhitespace, matchWord, skipAngleBrackets } from "./string-helpers";
+import {
+  matchWord,
+  skipWhitespaceAndGenerics,
+} from "./string-helpers";
 
 /**
  * Skip a struct declaration from position i (at 'struct' keyword)
@@ -35,15 +38,7 @@ export function getStructBracePosition(
   source: string,
   identifierEnd: number,
 ): number {
-  let j = identifierEnd;
-  while (j < source.length && isWhitespace(source[j])) j++;
-
-  // Skip generics if present
-  if (j < source.length && source[j] === "<") {
-    j = skipAngleBrackets(source, j);
-    while (j < source.length && isWhitespace(source[j])) j++;
-  }
-
+  const j = skipWhitespaceAndGenerics(source, identifierEnd);
   // Check if followed by '{'
   return j < source.length && source[j] === "{" ? j : -1;
 }

@@ -24,8 +24,8 @@
 <!-- main/ts/compiler/compile&#45;all.ts&#45;&gt;main/ts/compiler/compiler.ts -->
 <g id="edge1" class="edge">
 <title>main/ts/compiler/compile&#45;all.ts&#45;&gt;main/ts/compiler/compiler.ts</title>
-<path fill="none" stroke="#757575" d="M5261.77,-479C4973.4,-479 4162.17,-479 4162.17,-479 4162.17,-479 4162.17,-446.06 4162.17,-446.06"/>
-<polygon fill="#757575" stroke="#757575" points="4165.67,-446.06 4162.17,-436.06 4158.67,-446.06 4165.67,-446.06"/>
+<path fill="none" stroke="#757575" d="M5261.85,-479C4977.27,-479 4184.33,-479 4184.33,-479 4184.33,-479 4184.33,-446.06 4184.33,-446.06"/>
+<polygon fill="#757575" stroke="#757575" points="4187.83,-446.06 4184.33,-436.06 4180.83,-446.06 4187.83,-446.06"/>
 </g>
 <!-- main/ts/compiler/parsing/string&#45;helpers.ts -->
 <g id="node3" class="node">
@@ -36,14 +36,14 @@
 <!-- main/ts/compiler/compile&#45;all.ts&#45;&gt;main/ts/compiler/parsing/string&#45;helpers.ts -->
 <g id="edge2" class="edge">
 <title>main/ts/compiler/compile&#45;all.ts&#45;&gt;main/ts/compiler/parsing/string&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M5261.89,-487C4937.23,-487 3934.33,-487 3934.33,-487 3934.33,-487 3934.33,-77 3934.33,-77 3934.33,-77 3569.3,-77 3569.3,-77"/>
-<polygon fill="#757575" stroke="#757575" points="3569.3,-73.5 3559.3,-77 3569.3,-80.5 3569.3,-73.5"/>
+<path fill="none" stroke="#757575" d="M5261.99,-487C4937.63,-487 3935.7,-487 3935.7,-487 3935.7,-487 3935.7,-77 3935.7,-77 3935.7,-77 3569.33,-77 3569.33,-77"/>
+<polygon fill="#757575" stroke="#757575" points="3569.33,-73.5 3559.33,-77 3569.33,-80.5 3569.33,-73.5"/>
 </g>
 <!-- main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/parsing/string&#45;helpers.ts -->
 <g id="edge8" class="edge">
 <title>main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/parsing/string&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M4020.32,-414C3981.15,-414 3944.42,-414 3944.42,-414 3944.42,-414 3944.42,-75 3944.42,-75 3944.42,-75 3569.24,-75 3569.24,-75"/>
-<polygon fill="#757575" stroke="#757575" points="3569.24,-71.5 3559.24,-75 3569.24,-78.5 3569.24,-71.5"/>
+<path fill="none" stroke="#757575" d="M4020.18,-414C3982.11,-414 3946.8,-414 3946.8,-414 3946.8,-414 3946.8,-75 3946.8,-75 3946.8,-75 3569.18,-75 3569.18,-75"/>
+<polygon fill="#757575" stroke="#757575" points="3569.18,-71.5 3559.18,-75 3569.18,-78.5 3569.18,-71.5"/>
 </g>
 <!-- main/ts/compiler/compiler&#45;utils.ts -->
 <g id="node4" class="node">
@@ -54,8 +54,8 @@
 <!-- main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/compiler&#45;utils.ts -->
 <g id="edge4" class="edge">
 <title>main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/compiler&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M4205.52,-432C4547.58,-432 5721,-432 5721,-432 5721,-432 5721,-151.36 5721,-151.36"/>
-<polygon fill="#757575" stroke="#757575" points="5724.5,-151.36 5721,-141.36 5717.5,-151.36 5724.5,-151.36"/>
+<path fill="none" stroke="#757575" d="M4205.72,-432C4554.26,-432 5766.17,-432 5766.17,-432 5766.17,-432 5766.17,-151.36 5766.17,-151.36"/>
+<polygon fill="#757575" stroke="#757575" points="5769.67,-151.36 5766.17,-141.36 5762.67,-151.36 5769.67,-151.36"/>
 </g>
 <!-- main/ts/compiler/declaration&#45;parser&#45;helpers.ts -->
 <g id="node5" class="node">
@@ -102,8 +102,8 @@
 <!-- main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/destructors/destructor&#45;scopes.ts -->
 <g id="edge9" class="edge">
 <title>main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/destructors/destructor&#45;scopes.ts</title>
-<path fill="none" stroke="#757575" d="M4020.3,-418C3958.11,-418 3887.5,-418 3887.5,-418 3887.5,-418 3887.5,-328.01 3887.5,-328.01"/>
-<polygon fill="#757575" stroke="#757575" points="3891,-328.01 3887.5,-318.01 3884,-328.01 3891,-328.01"/>
+<path fill="none" stroke="#757575" d="M4020.34,-418C3955.44,-418 3880.25,-418 3880.25,-418 3880.25,-418 3880.25,-328.01 3880.25,-328.01"/>
+<polygon fill="#757575" stroke="#757575" points="3883.75,-328.01 3880.25,-318.01 3876.75,-328.01 3883.75,-328.01"/>
 </g>
 <!-- main/ts/compiler/transforms/helpers/method&#45;call&#45;helpers.ts -->
 <g id="node9" class="node">
@@ -114,8 +114,8 @@
 <!-- main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/helpers/method&#45;call&#45;helpers.ts -->
 <g id="edge10" class="edge">
 <title>main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/helpers/method&#45;call&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M4205.7,-428C4453.52,-428 5112.67,-428 5112.67,-428 5112.67,-428 5112.67,-387.26 5112.67,-387.26"/>
-<polygon fill="#757575" stroke="#757575" points="5116.17,-387.26 5112.67,-377.26 5109.17,-387.26 5116.17,-387.26"/>
+<path fill="none" stroke="#757575" d="M4205.73,-428C4446.15,-428 5071,-428 5071,-428 5071,-428 5071,-387.26 5071,-387.26"/>
+<polygon fill="#757575" stroke="#757575" points="5074.5,-387.26 5071,-377.26 5067.5,-387.26 5074.5,-387.26"/>
 </g>
 <!-- main/ts/compiler/transforms/helpers/module&#45;validation.ts -->
 <g id="node10" class="node">
@@ -174,8 +174,8 @@
 <!-- main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/pointers/wrap&#45;pointer&#45;targets.ts -->
 <g id="edge15" class="edge">
 <title>main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/pointers/wrap&#45;pointer&#45;targets.ts</title>
-<path fill="none" stroke="#757575" d="M4205.64,-427C4427.5,-427 4971,-427 4971,-427 4971,-427 4971,-210 4971,-210"/>
-<polygon fill="#757575" stroke="#757575" points="4974.5,-210 4971,-200 4967.5,-210 4974.5,-210"/>
+<path fill="none" stroke="#757575" d="M4205.65,-427C4433.41,-427 5002.25,-427 5002.25,-427 5002.25,-427 5002.25,-210 5002.25,-210"/>
+<polygon fill="#757575" stroke="#757575" points="5005.75,-210 5002.25,-200 4998.75,-210 5005.75,-210"/>
 </g>
 <!-- main/ts/compiler/transforms/syntax&#45;transforms.ts -->
 <g id="node15" class="node">
@@ -198,8 +198,8 @@
 <!-- main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/syntax/literal&#45;transforms.ts -->
 <g id="edge17" class="edge">
 <title>main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/syntax/literal&#45;transforms.ts</title>
-<path fill="none" stroke="#757575" d="M4205.64,-434C4567.38,-434 5864.83,-434 5864.83,-434 5864.83,-434 5864.83,-210.01 5864.83,-210.01"/>
-<polygon fill="#757575" stroke="#757575" points="5868.33,-210.01 5864.83,-200.01 5861.33,-210.01 5868.33,-210.01"/>
+<path fill="none" stroke="#757575" d="M4205.61,-434C4560.36,-434 5813,-434 5813,-434 5813,-434 5813,-210.01 5813,-210.01"/>
+<polygon fill="#757575" stroke="#757575" points="5816.5,-210.01 5813,-200.01 5809.5,-210.01 5816.5,-210.01"/>
 </g>
 <!-- main/ts/compiler/transforms/syntax/string&#45;transforms.ts -->
 <g id="node17" class="node">
@@ -210,8 +210,8 @@
 <!-- main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/syntax/string&#45;transforms.ts -->
 <g id="edge18" class="edge">
 <title>main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/syntax/string&#45;transforms.ts</title>
-<path fill="none" stroke="#757575" d="M4205.63,-425C4355.49,-425 4634.5,-425 4634.5,-425 4634.5,-425 4634.5,-387.26 4634.5,-387.26"/>
-<polygon fill="#757575" stroke="#757575" points="4638,-387.26 4634.5,-377.26 4631,-387.26 4638,-387.26"/>
+<path fill="none" stroke="#757575" d="M4205.68,-425C4362.86,-425 4664.83,-425 4664.83,-425 4664.83,-425 4664.83,-387.26 4664.83,-387.26"/>
+<polygon fill="#757575" stroke="#757575" points="4668.33,-387.26 4664.83,-377.26 4661.33,-387.26 4668.33,-387.26"/>
 </g>
 <!-- main/ts/compiler/transforms/syntax/struct&#45;transform.ts -->
 <g id="node18" class="node">
@@ -222,8 +222,8 @@
 <!-- main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/syntax/struct&#45;transform.ts -->
 <g id="edge19" class="edge">
 <title>main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/syntax/struct&#45;transform.ts</title>
-<path fill="none" stroke="#757575" d="M4020.28,-416C3968.44,-416 3914.17,-416 3914.17,-416 3914.17,-416 3914.17,-188 3914.17,-188 3914.17,-188 3902.87,-188 3902.87,-188"/>
-<polygon fill="#757575" stroke="#757575" points="3902.87,-184.5 3892.87,-188 3902.87,-191.5 3902.87,-184.5"/>
+<path fill="none" stroke="#757575" d="M4020.1,-416C3980.43,-416 3943.1,-416 3943.1,-416 3943.1,-416 3943.1,-188 3943.1,-188 3943.1,-188 3902.65,-188 3902.65,-188"/>
+<polygon fill="#757575" stroke="#757575" points="3902.65,-184.5 3892.65,-188 3902.65,-191.5 3902.65,-184.5"/>
 </g>
 <!-- main/ts/compiler/transforms/validation/function&#45;call&#45;validation.ts -->
 <g id="node19" class="node">
@@ -270,8 +270,8 @@
 <!-- main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/validation/type&#45;arithmetic&#45;validation.ts -->
 <g id="edge23" class="edge">
 <title>main/ts/compiler/compiler.ts&#45;&gt;main/ts/compiler/transforms/validation/type&#45;arithmetic&#45;validation.ts</title>
-<path fill="none" stroke="#757575" d="M4067.5,-412.67C4067.5,-388.14 4067.5,-334 4067.5,-334 4067.5,-334 4684.75,-334 4684.75,-334 4684.75,-334 4684.75,-210.41 4684.75,-210.41"/>
-<polygon fill="#757575" stroke="#757575" points="4688.25,-210.41 4684.75,-200.41 4681.25,-210.41 4688.25,-210.41"/>
+<path fill="none" stroke="#757575" d="M4067.5,-412.78C4067.5,-387.89 4067.5,-332 4067.5,-332 4067.5,-332 4684.75,-332 4684.75,-332 4684.75,-332 4684.75,-210.24 4684.75,-210.24"/>
+<polygon fill="#757575" stroke="#757575" points="4688.25,-210.24 4684.75,-200.24 4681.25,-210.24 4688.25,-210.24"/>
 </g>
 <!-- main/ts/compiler/compiler&#45;utils.ts&#45;&gt;main/ts/compiler/parsing/string&#45;helpers.ts -->
 <g id="edge3" class="edge">
@@ -288,14 +288,14 @@
 <!-- main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/declaration&#45;parser&#45;helpers.ts -->
 <g id="edge24" class="edge">
 <title>main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/declaration&#45;parser&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M2876.33,-294.81C2876.33,-290.21 2876.33,-286 2876.33,-286 2876.33,-286 1196.67,-286 1196.67,-286 1196.67,-286 1196.67,-269.26 1196.67,-269.26"/>
-<polygon fill="#757575" stroke="#757575" points="1200.17,-269.26 1196.67,-259.26 1193.17,-269.26 1200.17,-269.26"/>
+<path fill="none" stroke="#757575" d="M2876.33,-294.92C2876.33,-291.67 2876.33,-289 2876.33,-289 2876.33,-289 1196.67,-289 1196.67,-289 1196.67,-289 1196.67,-269.28 1196.67,-269.28"/>
+<polygon fill="#757575" stroke="#757575" points="1200.17,-269.28 1196.67,-259.28 1193.17,-269.28 1200.17,-269.28"/>
 </g>
 <!-- main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/parsing/parser&#45;utils.ts -->
 <g id="edge29" class="edge">
 <title>main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/parsing/parser&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M2957,-294.55C2957,-281.06 2957,-261 2957,-261 2957,-261 3361,-261 3361,-261 3361,-261 3361,-260.83 3361,-260.83"/>
-<polygon fill="#757575" stroke="#757575" points="3364.5,-269.34 3361,-259.34 3357.5,-269.34 3364.5,-269.34"/>
+<path fill="none" stroke="#757575" d="M2957,-294.81C2957,-281.62 2957,-262 2957,-262 2957,-262 3361,-262 3361,-262 3361,-262 3361,-261.72 3361,-261.72"/>
+<polygon fill="#757575" stroke="#757575" points="3364.5,-269.2 3361,-259.2 3357.5,-269.2 3364.5,-269.2"/>
 </g>
 <!-- main/ts/compiler/function&#45;defs&#45;storage.ts -->
 <g id="node23" class="node">
@@ -306,8 +306,8 @@
 <!-- main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/function&#45;defs&#45;storage.ts -->
 <g id="edge25" class="edge">
 <title>main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/function&#45;defs&#45;storage.ts</title>
-<path fill="none" stroke="#757575" d="M2916.67,-294.77C2916.67,-285.81 2916.67,-275 2916.67,-275 2916.67,-275 1486.5,-275 1486.5,-275 1486.5,-275 1486.5,-269 1486.5,-269"/>
-<polygon fill="#757575" stroke="#757575" points="1490,-269 1486.5,-259 1483,-269 1490,-269"/>
+<path fill="none" stroke="#757575" d="M2916.67,-294.84C2916.67,-286.6 2916.67,-277 2916.67,-277 2916.67,-277 1486.5,-277 1486.5,-277 1486.5,-277 1486.5,-269.16 1486.5,-269.16"/>
+<polygon fill="#757575" stroke="#757575" points="1490,-269.16 1486.5,-259.16 1483,-269.16 1490,-269.16"/>
 </g>
 <!-- main/ts/compiler/parsing/declaration&#45;helpers.ts -->
 <g id="node24" class="node">
@@ -330,8 +330,8 @@
 <!-- main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/parsing/field&#45;parsing.ts -->
 <g id="edge27" class="edge">
 <title>main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/parsing/field&#45;parsing.ts</title>
-<path fill="none" stroke="#757575" d="M3037.67,-294.82C3037.67,-284.81 3037.67,-272 3037.67,-272 3037.67,-272 4181.25,-272 4181.25,-272 4181.25,-272 4181.25,-269.18 4181.25,-269.18"/>
-<polygon fill="#757575" stroke="#757575" points="4184.75,-269.18 4181.25,-259.18 4177.75,-269.18 4184.75,-269.18"/>
+<path fill="none" stroke="#757575" d="M3037.67,-294.77C3037.67,-285.46 3037.67,-274 3037.67,-274 3037.67,-274 4181.25,-274 4181.25,-274 4181.25,-274 4181.25,-269.2 4181.25,-269.2"/>
+<polygon fill="#757575" stroke="#757575" points="4184.75,-269.2 4181.25,-259.2 4177.75,-269.2 4184.75,-269.2"/>
 </g>
 <!-- main/ts/compiler/parsing/param&#45;helpers.ts -->
 <g id="node26" class="node">
@@ -354,8 +354,8 @@
 <!-- main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/struct&#45;defs&#45;storage.ts -->
 <g id="edge31" class="edge">
 <title>main/ts/compiler/declaration&#45;parser.ts&#45;&gt;main/ts/compiler/struct&#45;defs&#45;storage.ts</title>
-<path fill="none" stroke="#757575" d="M2997.33,-294.95C2997.33,-284.26 2997.33,-270 2997.33,-270 2997.33,-270 3657.83,-270 3657.83,-270 3657.83,-270 3657.83,-268.9 3657.83,-268.9"/>
-<polygon fill="#757575" stroke="#757575" points="3661.33,-269.01 3657.83,-259.01 3654.33,-269.01 3661.33,-269.01"/>
+<path fill="none" stroke="#757575" d="M2997.33,-294.88C2997.33,-284.52 2997.33,-271 2997.33,-271 2997.33,-271 3657.83,-271 3657.83,-271 3657.83,-271 3657.83,-269.25 3657.83,-269.25"/>
+<polygon fill="#757575" stroke="#757575" points="3661.33,-269.25 3657.83,-259.25 3654.33,-269.25 3661.33,-269.25"/>
 </g>
 <!-- main/ts/compiler/parsing/parser&#45;utils.ts&#45;&gt;main/ts/compiler/parsing/string&#45;helpers.ts -->
 <g id="edge38" class="edge">
@@ -648,8 +648,8 @@
 <!-- main/ts/compiler/transforms/validation/function&#45;call&#45;validation.ts&#45;&gt;main/ts/compiler/parsing/string&#45;helpers.ts -->
 <g id="edge98" class="edge">
 <title>main/ts/compiler/transforms/validation/function&#45;call&#45;validation.ts&#45;&gt;main/ts/compiler/parsing/string&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M3866.74,-358C3900.16,-358 3924.25,-358 3924.25,-358 3924.25,-358 3924.25,-78 3924.25,-78 3924.25,-78 3569.27,-78 3569.27,-78"/>
-<polygon fill="#757575" stroke="#757575" points="3569.27,-74.5 3559.27,-78 3569.27,-81.5 3569.27,-74.5"/>
+<path fill="none" stroke="#757575" d="M3866.65,-358C3897.47,-358 3919.33,-358 3919.33,-358 3919.33,-358 3919.33,-78 3919.33,-78 3919.33,-78 3569.26,-78 3569.26,-78"/>
+<polygon fill="#757575" stroke="#757575" points="3569.26,-74.5 3559.26,-78 3569.26,-81.5 3569.26,-74.5"/>
 </g>
 <!-- main/ts/compiler/transforms/validation/function&#45;call&#45;validation.ts&#45;&gt;main/ts/compiler/parsing/parser&#45;utils.ts -->
 <g id="edge97" class="edge">
@@ -684,8 +684,8 @@
 <!-- main/ts/compiler/transforms/validation/function&#45;call&#45;validation.ts&#45;&gt;main/ts/utils/generics/generic&#45;validation.ts -->
 <g id="edge100" class="edge">
 <title>main/ts/compiler/transforms/validation/function&#45;call&#45;validation.ts&#45;&gt;main/ts/utils/generics/generic&#45;validation.ts</title>
-<path fill="none" stroke="#757575" d="M3690.25,-353.78C3690.25,-344.12 3690.25,-332 3690.25,-332 3690.25,-332 4397.88,-332 4397.88,-332 4397.88,-332 4397.88,-328.06 4397.88,-328.06"/>
-<polygon fill="#757575" stroke="#757575" points="4401.38,-328.06 4397.88,-318.06 4394.38,-328.06 4401.38,-328.06"/>
+<path fill="none" stroke="#757575" d="M3690.25,-353.88C3690.25,-343.52 3690.25,-330 3690.25,-330 3690.25,-330 4397.88,-330 4397.88,-330 4397.88,-330 4397.88,-328.25 4397.88,-328.25"/>
+<polygon fill="#757575" stroke="#757575" points="4401.38,-328.25 4397.88,-318.25 4394.38,-328.25 4401.38,-328.25"/>
 </g>
 <!-- main/ts/compiler/transforms/validation/pointer&#45;validation.ts&#45;&gt;main/ts/compiler/parsing/string&#45;helpers.ts -->
 <g id="edge101" class="edge">
@@ -744,8 +744,8 @@
 <!-- main/ts/compiler/transforms/validation/pointer&#45;validation.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts -->
 <g id="edge106" class="edge">
 <title>main/ts/compiler/transforms/validation/pointer&#45;validation.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M5538.67,-259.2C5538.67,-267.81 5538.67,-278 5538.67,-278 5538.67,-278 7647.33,-278 7647.33,-278 7647.33,-278 7647.33,-92.25 7647.33,-92.25"/>
-<polygon fill="#757575" stroke="#757575" points="7650.83,-92.25 7647.33,-82.25 7643.83,-92.25 7650.83,-92.25"/>
+<path fill="none" stroke="#757575" d="M5639,-259.23C5639,-268.54 5639,-280 5639,-280 5639,-280 7647.33,-280 7647.33,-280 7647.33,-280 7647.33,-92.06 7647.33,-92.06"/>
+<polygon fill="#757575" stroke="#757575" points="7650.83,-92.06 7647.33,-82.06 7643.83,-92.06 7650.83,-92.06"/>
 </g>
 <!-- main/ts/compiler/transforms/validation/struct&#45;instantiation&#45;validation.ts&#45;&gt;main/ts/compiler/parsing/field&#45;parsing.ts -->
 <g id="edge107" class="edge">
@@ -756,8 +756,8 @@
 <!-- main/ts/compiler/transforms/validation/struct&#45;instantiation&#45;validation.ts&#45;&gt;main/ts/compiler/struct&#45;defs&#45;storage.ts -->
 <g id="edge108" class="edge">
 <title>main/ts/compiler/transforms/validation/struct&#45;instantiation&#45;validation.ts&#45;&gt;main/ts/compiler/struct&#45;defs&#45;storage.ts</title>
-<path fill="none" stroke="#757575" d="M4090.97,-367C3995.25,-367 3904.08,-367 3904.08,-367 3904.08,-367 3904.08,-247 3904.08,-247 3904.08,-247 3832.73,-247 3832.73,-247"/>
-<polygon fill="#757575" stroke="#757575" points="3832.73,-243.5 3822.73,-247 3832.73,-250.5 3832.73,-243.5"/>
+<path fill="none" stroke="#757575" d="M4090.92,-367C4010.9,-367 3939.4,-367 3939.4,-367 3939.4,-367 3939.4,-247 3939.4,-247 3939.4,-247 3832.72,-247 3832.72,-247"/>
+<polygon fill="#757575" stroke="#757575" points="3832.72,-243.5 3822.72,-247 3832.72,-250.5 3832.72,-243.5"/>
 </g>
 <!-- main/ts/compiler/transforms/error&#45;helpers.ts -->
 <g id="node38" class="node">
@@ -768,8 +768,8 @@
 <!-- main/ts/compiler/transforms/validation/struct&#45;instantiation&#45;validation.ts&#45;&gt;main/ts/compiler/transforms/error&#45;helpers.ts -->
 <g id="edge109" class="edge">
 <title>main/ts/compiler/transforms/validation/struct&#45;instantiation&#45;validation.ts&#45;&gt;main/ts/compiler/transforms/error&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M4482.62,-353.75C4482.62,-347.88 4482.62,-342 4482.62,-342 4482.62,-342 5908.5,-342 5908.5,-342 5908.5,-342 5908.5,-328.12 5908.5,-328.12"/>
-<polygon fill="#757575" stroke="#757575" points="5912,-328.12 5908.5,-318.12 5905,-328.12 5912,-328.12"/>
+<path fill="none" stroke="#757575" d="M4482.62,-353.8C4482.62,-346.7 4482.62,-339 4482.62,-339 4482.62,-339 5956.75,-339 5956.75,-339 5956.75,-339 5956.75,-328.23 5956.75,-328.23"/>
+<polygon fill="#757575" stroke="#757575" points="5960.25,-328.23 5956.75,-318.23 5953.25,-328.23 5960.25,-328.23"/>
 </g>
 <!-- main/ts/compiler/transforms/validation/struct&#45;instantiation&#45;validation.ts&#45;&gt;main/ts/compiler/transforms/type&#45;compatibility.ts -->
 <g id="edge110" class="edge">
@@ -984,8 +984,8 @@
 <!-- main/ts/compiler/transforms/type&#45;compatibility.ts&#45;&gt;main/ts/compiler/parsing/parser&#45;utils.ts -->
 <g id="edge91" class="edge">
 <title>main/ts/compiler/transforms/type&#45;compatibility.ts&#45;&gt;main/ts/compiler/parsing/parser&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M3990.67,-294.86C3990.67,-283.21 3990.67,-267 3990.67,-267 3990.67,-267 3543,-267 3543,-267 3543,-267 3543,-266.21 3543,-266.21"/>
-<polygon fill="#757575" stroke="#757575" points="3546.5,-269.07 3543,-259.07 3539.5,-269.07 3546.5,-269.07"/>
+<path fill="none" stroke="#757575" d="M3990.67,-294.74C3990.67,-283.42 3990.67,-268 3990.67,-268 3990.67,-268 3543,-268 3543,-268 3543,-268 3543,-267.12 3543,-267.12"/>
+<polygon fill="#757575" stroke="#757575" points="3546.5,-269.19 3543,-259.19 3539.5,-269.19 3546.5,-269.19"/>
 </g>
 <!-- main/ts/compiler/transforms/type&#45;compatibility.ts&#45;&gt;main/ts/compiler/validation/validation.ts -->
 <g id="edge93" class="edge">
@@ -1134,8 +1134,8 @@
 <!-- main/ts/expressions/grouped&#45;expressions.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts -->
 <g id="edge145" class="edge">
 <title>main/ts/expressions/grouped&#45;expressions.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M8060.42,-542C8032.19,-542 8011,-542 8011,-542 8011,-542 8011,-264 8011,-264 8011,-264 7711.75,-264 7711.75,-264 7711.75,-264 7711.75,-92.02 7711.75,-92.02"/>
-<polygon fill="#757575" stroke="#757575" points="7715.25,-92.02 7711.75,-82.02 7708.25,-92.02 7715.25,-92.02"/>
+<path fill="none" stroke="#757575" d="M8060.42,-542C8032.19,-542 8011,-542 8011,-542 8011,-542 8011,-265 8011,-265 8011,-265 7711.75,-265 7711.75,-265 7711.75,-265 7711.75,-92.08 7711.75,-92.08"/>
+<polygon fill="#757575" stroke="#757575" points="7715.25,-92.08 7711.75,-82.08 7708.25,-92.08 7715.25,-92.08"/>
 </g>
 <!-- main/ts/expressions/grouped&#45;expressions.ts&#45;&gt;main/ts/expressions/handlers.ts -->
 <g id="edge141" class="edge">
@@ -1290,8 +1290,8 @@
 <!-- main/ts/scope.ts&#45;&gt;main/ts/core/scope&#45;helpers&#45;ext.ts -->
 <g id="edge245" class="edge">
 <title>main/ts/scope.ts&#45;&gt;main/ts/core/scope&#45;helpers&#45;ext.ts</title>
-<path fill="none" stroke="#757575" d="M8422.17,-660C8191.95,-660 7353,-660 7353,-660 7353,-660 7353,-623.06 7353,-623.06"/>
-<polygon fill="#757575" stroke="#757575" points="7356.5,-623.06 7353,-613.06 7349.5,-623.06 7356.5,-623.06"/>
+<path fill="none" stroke="#757575" d="M8422.29,-660C8197.41,-660 7392.25,-660 7392.25,-660 7392.25,-660 7392.25,-623.06 7392.25,-623.06"/>
+<polygon fill="#757575" stroke="#757575" points="7395.75,-623.06 7392.25,-613.06 7388.75,-623.06 7395.75,-623.06"/>
 </g>
 <!-- main/ts/scope.ts&#45;&gt;main/ts/types/interpreter.ts -->
 <g id="edge247" class="edge">
@@ -1302,8 +1302,8 @@
 <!-- main/ts/scope.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts -->
 <g id="edge249" class="edge">
 <title>main/ts/scope.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M8422.11,-666C8161.79,-666 7112.33,-666 7112.33,-666 7112.33,-666 7112.33,-197 7112.33,-197 7112.33,-197 6820.68,-197 6820.68,-197"/>
-<polygon fill="#757575" stroke="#757575" points="6820.68,-193.5 6810.68,-197 6820.68,-200.5 6820.68,-193.5"/>
+<path fill="none" stroke="#757575" d="M8422.24,-666C8166.12,-666 7145.62,-666 7145.62,-666 7145.62,-666 7145.62,-197 7145.62,-197 7145.62,-197 6820.57,-197 6820.57,-197"/>
+<polygon fill="#757575" stroke="#757575" points="6820.57,-193.5 6810.57,-197 6820.57,-200.5 6820.57,-193.5"/>
 </g>
 <!-- main/ts/utils/native/extern&#45;handler.ts -->
 <g id="node106" class="node">
@@ -1398,8 +1398,8 @@
 <!-- main/ts/utils/helpers/app&#45;handlers.ts&#45;&gt;main/ts/expressions/operators/unary&#45;operation.ts -->
 <g id="edge285" class="edge">
 <title>main/ts/utils/helpers/app&#45;handlers.ts&#45;&gt;main/ts/expressions/operators/unary&#45;operation.ts</title>
-<path fill="none" stroke="#757575" d="M9833.69,-592C9855.71,-592 9872,-592 9872,-592 9872,-592 9872,-330 9872,-330 9872,-330 10046.75,-330 10046.75,-330 10046.75,-330 10046.75,-210.08 10046.75,-210.08"/>
-<polygon fill="#757575" stroke="#757575" points="10050.25,-210.08 10046.75,-200.08 10043.25,-210.08 10050.25,-210.08"/>
+<path fill="none" stroke="#757575" d="M9833.69,-592C9855.71,-592 9872,-592 9872,-592 9872,-592 9872,-327 9872,-327 9872,-327 10046.75,-327 10046.75,-327 10046.75,-327 10046.75,-210.31 10046.75,-210.31"/>
+<polygon fill="#757575" stroke="#757575" points="10050.25,-210.31 10046.75,-200.31 10043.25,-210.31 10050.25,-210.31"/>
 </g>
 <!-- main/ts/handlers/access/method&#45;call.ts -->
 <g id="node91" class="node">
@@ -1536,14 +1536,14 @@
 <!-- main/ts/utils/this&#45;keyword.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts -->
 <g id="edge317" class="edge">
 <title>main/ts/utils/this&#45;keyword.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M7787.75,-412.82C7787.75,-402.81 7787.75,-390 7787.75,-390 7787.75,-390 6700.25,-390 6700.25,-390 6700.25,-390 6700.25,-210.2 6700.25,-210.2"/>
-<polygon fill="#757575" stroke="#757575" points="6703.75,-210.2 6700.25,-200.2 6696.75,-210.2 6703.75,-210.2"/>
+<path fill="none" stroke="#757575" d="M7787.75,-412.77C7787.75,-403.81 7787.75,-393 7787.75,-393 7787.75,-393 6700.25,-393 6700.25,-393 6700.25,-393 6700.25,-210.08 6700.25,-210.08"/>
+<polygon fill="#757575" stroke="#757575" points="6703.75,-210.08 6700.25,-200.08 6696.75,-210.08 6703.75,-210.08"/>
 </g>
 <!-- main/ts/utils/this&#45;keyword.ts&#45;&gt;main/ts/types/structs.ts -->
 <g id="edge316" class="edge">
 <title>main/ts/utils/this&#45;keyword.ts&#45;&gt;main/ts/types/structs.ts</title>
-<path fill="none" stroke="#757575" d="M7878.75,-412.74C7878.75,-401.42 7878.75,-386 7878.75,-386 7878.75,-386 8490.5,-386 8490.5,-386 8490.5,-386 8490.5,-385.12 8490.5,-385.12"/>
-<polygon fill="#757575" stroke="#757575" points="8494,-387.19 8490.5,-377.19 8487,-387.19 8494,-387.19"/>
+<path fill="none" stroke="#757575" d="M7878.75,-412.88C7878.75,-402.52 7878.75,-389 7878.75,-389 7878.75,-389 8490.5,-389 8490.5,-389 8490.5,-389 8490.5,-387.25 8490.5,-387.25"/>
+<polygon fill="#757575" stroke="#757575" points="8494,-387.25 8490.5,-377.25 8487,-387.25 8494,-387.25"/>
 </g>
 <!-- main/ts/function&#45;defs.ts -->
 <g id="node82" class="node">
@@ -1566,8 +1566,8 @@
 <!-- main/ts/core/function&#45;type&#45;handler.ts&#45;&gt;main/ts/type&#45;utils.ts -->
 <g id="edge126" class="edge">
 <title>main/ts/core/function&#45;type&#45;handler.ts&#45;&gt;main/ts/type&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M6845.73,-487C6971.1,-487 7151.67,-487 7151.67,-487 7151.67,-487 7151.67,-33.25 7151.67,-33.25"/>
-<polygon fill="#757575" stroke="#757575" points="7155.17,-33.25 7151.67,-23.25 7148.17,-33.25 7155.17,-33.25"/>
+<path fill="none" stroke="#757575" d="M6845.66,-483C6957.01,-483 7107.25,-483 7107.25,-483 7107.25,-483 7107.25,-33.16 7107.25,-33.16"/>
+<polygon fill="#757575" stroke="#757575" points="7110.75,-33.16 7107.25,-23.16 7103.75,-33.16 7110.75,-33.16"/>
 </g>
 <!-- main/ts/core/function&#45;type&#45;handler.ts&#45;&gt;main/ts/functions.ts -->
 <g id="edge125" class="edge">
@@ -1578,14 +1578,14 @@
 <!-- main/ts/functions.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts -->
 <g id="edge175" class="edge">
 <title>main/ts/functions.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M7508.19,-412.74C7508.19,-385.82 7508.19,-322 7508.19,-322 7508.19,-322 7666,-322 7666,-322 7666,-322 7666,-92.29 7666,-92.29"/>
-<polygon fill="#757575" stroke="#757575" points="7669.5,-92.29 7666,-82.29 7662.5,-92.29 7669.5,-92.29"/>
+<path fill="none" stroke="#757575" d="M7507.57,-412.92C7507.57,-385.71 7507.57,-320 7507.57,-320 7507.57,-320 7666,-320 7666,-320 7666,-320 7666,-92.2 7666,-92.2"/>
+<polygon fill="#757575" stroke="#757575" points="7669.5,-92.2 7666,-82.2 7662.5,-92.2 7669.5,-92.2"/>
 </g>
 <!-- main/ts/functions.ts&#45;&gt;main/ts/utils/function/function&#45;call&#45;params.ts -->
 <g id="edge170" class="edge">
 <title>main/ts/functions.ts&#45;&gt;main/ts/utils/function/function&#45;call&#45;params.ts</title>
-<path fill="none" stroke="#757575" d="M7460.5,-412.94C7460.5,-406.2 7460.5,-399 7460.5,-399 7460.5,-399 9141,-399 9141,-399 9141,-399 9141,-151.08 9141,-151.08"/>
-<polygon fill="#757575" stroke="#757575" points="9144.5,-151.08 9141,-141.08 9137.5,-151.08 9144.5,-151.08"/>
+<path fill="none" stroke="#757575" d="M7470.62,-412.75C7470.62,-406.88 7470.62,-401 7470.62,-401 7470.62,-401 9141,-401 9141,-401 9141,-401 9141,-151.17 9141,-151.17"/>
+<polygon fill="#757575" stroke="#757575" points="9144.5,-151.17 9141,-141.17 9137.5,-151.17 9144.5,-151.17"/>
 </g>
 <!-- main/ts/functions.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts -->
 <g id="edge177" class="edge">
@@ -1596,8 +1596,8 @@
 <!-- main/ts/functions.ts&#45;&gt;main/ts/function&#45;defs.ts -->
 <g id="edge167" class="edge">
 <title>main/ts/functions.ts&#45;&gt;main/ts/function&#45;defs.ts</title>
-<path fill="none" stroke="#757575" d="M7506.75,-412.75C7506.75,-412.75 7506.75,-328.2 7506.75,-328.2"/>
-<polygon fill="#757575" stroke="#757575" points="7510.25,-328.2 7506.75,-318.2 7503.25,-328.2 7510.25,-328.2"/>
+<path fill="none" stroke="#757575" d="M7505.93,-412.75C7505.93,-412.75 7505.93,-328.2 7505.93,-328.2"/>
+<polygon fill="#757575" stroke="#757575" points="7509.43,-328.2 7505.93,-318.2 7502.43,-328.2 7509.43,-328.2"/>
 </g>
 <!-- main/ts/handlers/functions/anonymous&#45;functions.ts -->
 <g id="node83" class="node">
@@ -1608,8 +1608,8 @@
 <!-- main/ts/functions.ts&#45;&gt;main/ts/handlers/functions/anonymous&#45;functions.ts -->
 <g id="edge168" class="edge">
 <title>main/ts/functions.ts&#45;&gt;main/ts/handlers/functions/anonymous&#45;functions.ts</title>
-<path fill="none" stroke="#757575" d="M7379.08,-414C7274.9,-414 7085.75,-414 7085.75,-414 7085.75,-414 7085.75,-269.21 7085.75,-269.21"/>
-<polygon fill="#757575" stroke="#757575" points="7089.25,-269.21 7085.75,-259.21 7082.25,-269.21 7089.25,-269.21"/>
+<path fill="none" stroke="#757575" d="M7379.29,-414C7270.78,-414 7068,-414 7068,-414 7068,-414 7068,-269.21 7068,-269.21"/>
+<polygon fill="#757575" stroke="#757575" points="7071.5,-269.21 7068,-259.21 7064.5,-269.21 7071.5,-269.21"/>
 </g>
 <!-- main/ts/handlers/functions/function&#45;declaration.ts -->
 <g id="node84" class="node">
@@ -1620,8 +1620,8 @@
 <!-- main/ts/functions.ts&#45;&gt;main/ts/handlers/functions/function&#45;declaration.ts -->
 <g id="edge169" class="edge">
 <title>main/ts/functions.ts&#45;&gt;main/ts/handlers/functions/function&#45;declaration.ts</title>
-<path fill="none" stroke="#757575" d="M7420,-412.84C7420,-412.84 7420,-387.13 7420,-387.13"/>
-<polygon fill="#757575" stroke="#757575" points="7423.5,-387.13 7420,-377.13 7416.5,-387.13 7423.5,-387.13"/>
+<path fill="none" stroke="#757575" d="M7409.88,-412.84C7409.88,-412.84 7409.88,-387.13 7409.88,-387.13"/>
+<polygon fill="#757575" stroke="#757575" points="7413.38,-387.13 7409.88,-377.13 7406.38,-387.13 7413.38,-387.13"/>
 </g>
 <!-- main/ts/utils/function/function&#45;helpers.ts -->
 <g id="node85" class="node">
@@ -1632,8 +1632,8 @@
 <!-- main/ts/functions.ts&#45;&gt;main/ts/utils/function/function&#45;helpers.ts -->
 <g id="edge171" class="edge">
 <title>main/ts/functions.ts&#45;&gt;main/ts/utils/function/function&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M7502.44,-412.61C7502.44,-399.73 7502.44,-381 7502.44,-381 7502.44,-381 8279,-381 8279,-381 8279,-381 8279,-380.61 8279,-380.61"/>
-<polygon fill="#757575" stroke="#757575" points="8282.5,-387.09 8279,-377.09 8275.5,-387.09 8282.5,-387.09"/>
+<path fill="none" stroke="#757575" d="M7440.25,-412.86C7440.25,-401.21 7440.25,-385 7440.25,-385 7440.25,-385 8279,-385 8279,-385 8279,-385 8279,-384.21 8279,-384.21"/>
+<polygon fill="#757575" stroke="#757575" points="8282.5,-387.07 8279,-377.07 8275.5,-387.07 8282.5,-387.07"/>
 </g>
 <!-- main/ts/utils/function/function&#45;utils.ts -->
 <g id="node86" class="node">
@@ -1656,8 +1656,8 @@
 <!-- main/ts/functions.ts&#45;&gt;main/ts/utils/function/invocation.ts -->
 <g id="edge173" class="edge">
 <title>main/ts/functions.ts&#45;&gt;main/ts/utils/function/invocation.ts</title>
-<path fill="none" stroke="#757575" d="M7379.41,-416C7244.23,-416 6950.33,-416 6950.33,-416 6950.33,-416 6950.33,-387.21 6950.33,-387.21"/>
-<polygon fill="#757575" stroke="#757575" points="6953.83,-387.21 6950.33,-377.21 6946.83,-387.21 6953.83,-387.21"/>
+<path fill="none" stroke="#757575" d="M7379.27,-416C7249.71,-416 6976.75,-416 6976.75,-416 6976.75,-416 6976.75,-387.21 6976.75,-387.21"/>
+<polygon fill="#757575" stroke="#757575" points="6980.25,-387.21 6976.75,-377.21 6973.25,-387.21 6980.25,-387.21"/>
 </g>
 <!-- main/ts/utils/function/parse&#45;arguments.ts -->
 <g id="node88" class="node">
@@ -1668,8 +1668,8 @@
 <!-- main/ts/functions.ts&#45;&gt;main/ts/utils/function/parse&#45;arguments.ts -->
 <g id="edge174" class="edge">
 <title>main/ts/functions.ts&#45;&gt;main/ts/utils/function/parse&#45;arguments.ts</title>
-<path fill="none" stroke="#757575" d="M7509.62,-412.7C7509.62,-386.34 7509.62,-325 7509.62,-325 7509.62,-325 7730.17,-325 7730.17,-325 7730.17,-325 7730.17,-324.33 7730.17,-324.33"/>
-<polygon fill="#757575" stroke="#757575" points="7733.67,-328.32 7730.17,-318.32 7726.67,-328.32 7733.67,-328.32"/>
+<path fill="none" stroke="#757575" d="M7509.21,-412.74C7509.21,-385.82 7509.21,-322 7509.21,-322 7509.21,-322 7730.17,-322 7730.17,-322 7730.17,-322 7730.17,-321.61 7730.17,-321.61"/>
+<polygon fill="#757575" stroke="#757575" points="7733.67,-328.09 7730.17,-318.09 7726.67,-328.09 7733.67,-328.09"/>
 </g>
 <!-- main/ts/utils/native/native&#45;call.ts -->
 <g id="node89" class="node">
@@ -1680,14 +1680,14 @@
 <!-- main/ts/functions.ts&#45;&gt;main/ts/utils/native/native&#45;call.ts -->
 <g id="edge176" class="edge">
 <title>main/ts/functions.ts&#45;&gt;main/ts/utils/native/native&#45;call.ts</title>
-<path fill="none" stroke="#757575" d="M7511.06,-412.85C7511.06,-394.52 7511.06,-361 7511.06,-361 7511.06,-361 7623.29,-361 7623.29,-361"/>
-<polygon fill="#757575" stroke="#757575" points="7623.29,-364.5 7633.29,-361 7623.29,-357.5 7623.29,-364.5"/>
+<path fill="none" stroke="#757575" d="M7510.86,-412.85C7510.86,-394.52 7510.86,-361 7510.86,-361 7510.86,-361 7623.19,-361 7623.19,-361"/>
+<polygon fill="#757575" stroke="#757575" points="7623.19,-364.5 7633.19,-361 7623.19,-357.5 7623.19,-364.5"/>
 </g>
 <!-- main/ts/core/scope&#45;helpers&#45;ext.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts -->
 <g id="edge131" class="edge">
 <title>main/ts/core/scope&#45;helpers&#45;ext.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M7244.96,-595C7205.95,-595 7171.33,-595 7171.33,-595 7171.33,-595 7171.33,-66 7171.33,-66 7171.33,-66 7617.76,-66 7617.76,-66"/>
-<polygon fill="#757575" stroke="#757575" points="7617.76,-69.5 7627.76,-66 7617.76,-62.5 7617.76,-69.5"/>
+<path fill="none" stroke="#757575" d="M7244.86,-595C7207.99,-595 7175.88,-595 7175.88,-595 7175.88,-595 7175.88,-66 7175.88,-66 7175.88,-66 7617.91,-66 7617.91,-66"/>
+<polygon fill="#757575" stroke="#757575" points="7617.91,-69.5 7627.91,-66 7617.91,-62.5 7617.91,-69.5"/>
 </g>
 <!-- main/ts/expressions/drop&#45;helpers.ts -->
 <g id="node65" class="node">
@@ -1698,8 +1698,8 @@
 <!-- main/ts/core/scope&#45;helpers&#45;ext.ts&#45;&gt;main/ts/expressions/drop&#45;helpers.ts -->
 <g id="edge127" class="edge">
 <title>main/ts/core/scope&#45;helpers&#45;ext.ts&#45;&gt;main/ts/expressions/drop&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M7244.59,-607C6995.56,-607 6403.9,-607 6403.9,-607 6403.9,-607 6403.9,-328.28 6403.9,-328.28"/>
-<polygon fill="#757575" stroke="#757575" points="6407.4,-328.28 6403.9,-318.28 6400.4,-328.28 6407.4,-328.28"/>
+<path fill="none" stroke="#757575" d="M7244.58,-607C6975.42,-607 6298.2,-607 6298.2,-607 6298.2,-607 6298.2,-328.28 6298.2,-328.28"/>
+<polygon fill="#757575" stroke="#757575" points="6301.7,-328.28 6298.2,-318.28 6294.7,-328.28 6301.7,-328.28"/>
 </g>
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts -->
 <g id="node66" class="node">
@@ -1728,26 +1728,26 @@
 <!-- main/ts/core/scope&#45;helpers&#45;ext.ts&#45;&gt;main/ts/types/interpreter.ts -->
 <g id="edge130" class="edge">
 <title>main/ts/core/scope&#45;helpers&#45;ext.ts&#45;&gt;main/ts/types/interpreter.ts</title>
-<path fill="none" stroke="#757575" d="M7461.35,-607C7639.07,-607 7973,-607 7973,-607 7973,-607 7973,-283 7973,-283 7973,-283 9004,-283 9004,-283 9004,-283 9004,-92.23 9004,-92.23"/>
-<polygon fill="#757575" stroke="#757575" points="9007.5,-92.23 9004,-82.23 9000.5,-92.23 9007.5,-92.23"/>
+<path fill="none" stroke="#757575" d="M7461.35,-607C7639.07,-607 7973,-607 7973,-607 7973,-607 7973,-286 7973,-286 7973,-286 9004,-286 9004,-286 9004,-286 9004,-92.09 9004,-92.09"/>
+<polygon fill="#757575" stroke="#757575" points="9007.5,-92.09 9004,-82.09 9000.5,-92.09 9007.5,-92.09"/>
 </g>
 <!-- main/ts/core/scope&#45;helpers&#45;ext.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts -->
 <g id="edge132" class="edge">
 <title>main/ts/core/scope&#45;helpers&#45;ext.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M7244.77,-601C7188.77,-601 7132,-601 7132,-601 7132,-601 7132,-194 7132,-194 7132,-194 6820.67,-194 6820.67,-194"/>
-<polygon fill="#757575" stroke="#757575" points="6820.67,-190.5 6810.67,-194 6820.67,-197.5 6820.67,-190.5"/>
+<path fill="none" stroke="#757575" d="M7244.79,-601C7201.08,-601 7160.75,-601 7160.75,-601 7160.75,-601 7160.75,-194 7160.75,-194 7160.75,-194 6820.62,-194 6820.62,-194"/>
+<polygon fill="#757575" stroke="#757575" points="6820.62,-190.5 6810.62,-194 6820.62,-197.5 6820.62,-190.5"/>
 </g>
 <!-- main/ts/expressions/drop&#45;helpers.ts&#45;&gt;main/ts/compiler/parsing/field&#45;parsing.ts -->
 <g id="edge139" class="edge">
 <title>main/ts/expressions/drop&#45;helpers.ts&#45;&gt;main/ts/compiler/parsing/field&#45;parsing.ts</title>
-<path fill="none" stroke="#757575" d="M6306,-294.8C6306,-293.15 6306,-292 6306,-292 6306,-292 4332,-292 4332,-292 4332,-292 4332,-269.19 4332,-269.19"/>
-<polygon fill="#757575" stroke="#757575" points="4335.5,-269.19 4332,-259.19 4328.5,-269.19 4335.5,-269.19"/>
+<path fill="none" stroke="#757575" d="M6220,-318.12C6220,-328.48 6220,-342 6220,-342 6220,-342 4332,-342 4332,-342 4332,-342 4332,-269.09 4332,-269.09"/>
+<polygon fill="#757575" stroke="#757575" points="4335.5,-269.09 4332,-259.09 4328.5,-269.09 4335.5,-269.09"/>
 </g>
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/utils/helpers/pointer&#45;errors.ts -->
 <g id="edge223" class="edge">
 <title>main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/utils/helpers/pointer&#45;errors.ts</title>
-<path fill="none" stroke="#757575" d="M7199.33,-550C6975.06,-550 6584.5,-550 6584.5,-550 6584.5,-550 6584.5,-92.35 6584.5,-92.35"/>
-<polygon fill="#757575" stroke="#757575" points="6588,-92.35 6584.5,-82.35 6581,-92.35 6588,-92.35"/>
+<path fill="none" stroke="#757575" d="M7199.37,-549C6967.2,-549 6553.75,-549 6553.75,-549 6553.75,-549 6553.75,-92.33 6553.75,-92.33"/>
+<polygon fill="#757575" stroke="#757575" points="6557.25,-92.33 6553.75,-82.33 6550.25,-92.33 6557.25,-92.33"/>
 </g>
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/parser.ts -->
 <g id="edge219" class="edge">
@@ -1764,38 +1764,38 @@
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/core/function&#45;type&#45;handler.ts -->
 <g id="edge215" class="edge">
 <title>main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/core/function&#45;type&#45;handler.ts</title>
-<path fill="none" stroke="#757575" d="M7199.43,-542C7048.29,-542 6840,-542 6840,-542 6840,-542 6840,-505.06 6840,-505.06"/>
-<polygon fill="#757575" stroke="#757575" points="6843.5,-505.06 6840,-495.06 6836.5,-505.06 6843.5,-505.06"/>
+<path fill="none" stroke="#757575" d="M7221.88,-530.89C7221.88,-515.16 7221.88,-489 7221.88,-489 7221.88,-489 6855.67,-489 6855.67,-489"/>
+<polygon fill="#757575" stroke="#757575" points="6855.67,-485.5 6845.67,-489 6855.67,-492.5 6855.67,-485.5"/>
 </g>
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/functions.ts -->
 <g id="edge216" class="edge">
 <title>main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/functions.ts</title>
-<path fill="none" stroke="#757575" d="M7259.17,-530.6C7259.17,-500.38 7259.17,-423 7259.17,-423 7259.17,-423 7369.34,-423 7369.34,-423"/>
-<polygon fill="#757575" stroke="#757575" points="7369.34,-426.5 7379.34,-423 7369.34,-419.5 7369.34,-426.5"/>
+<path fill="none" stroke="#757575" d="M7266.62,-530.6C7266.62,-500.38 7266.62,-423 7266.62,-423 7266.62,-423 7369.46,-423 7369.46,-423"/>
+<polygon fill="#757575" stroke="#757575" points="7369.46,-426.5 7379.46,-423 7369.46,-419.5 7369.46,-426.5"/>
 </g>
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/types/interpreter.ts -->
 <g id="edge220" class="edge">
 <title>main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/types/interpreter.ts</title>
-<path fill="none" stroke="#757575" d="M7229.33,-530.93C7229.33,-496.15 7229.33,-395 7229.33,-395 7229.33,-395 9054.75,-395 9054.75,-395 9054.75,-395 9054.75,-92.05 9054.75,-92.05"/>
-<polygon fill="#757575" stroke="#757575" points="9058.25,-92.05 9054.75,-82.05 9051.25,-92.05 9058.25,-92.05"/>
+<path fill="none" stroke="#757575" d="M7244.25,-530.59C7244.25,-495.84 7244.25,-397 7244.25,-397 7244.25,-397 9054.75,-397 9054.75,-397 9054.75,-397 9054.75,-92.12 9054.75,-92.12"/>
+<polygon fill="#757575" stroke="#757575" points="9058.25,-92.12 9054.75,-82.12 9051.25,-92.12 9058.25,-92.12"/>
 </g>
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts -->
 <g id="edge224" class="edge">
 <title>main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M7199.26,-538C7166.64,-538 7141.83,-538 7141.83,-538 7141.83,-538 7141.83,-191 7141.83,-191 7141.83,-191 6820.52,-191 6820.52,-191"/>
-<polygon fill="#757575" stroke="#757575" points="6820.52,-187.5 6810.52,-191 6820.52,-194.5 6820.52,-187.5"/>
+<path fill="none" stroke="#757575" d="M7199.23,-540C7180.77,-540 7168.31,-540 7168.31,-540 7168.31,-540 7168.31,-191 7168.31,-191 7168.31,-191 6820.58,-191 6820.58,-191"/>
+<polygon fill="#757575" stroke="#757575" points="6820.58,-187.5 6810.58,-191 6820.58,-194.5 6820.58,-187.5"/>
 </g>
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/handlers/access/pointer&#45;operations.ts -->
 <g id="edge217" class="edge">
 <title>main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/handlers/access/pointer&#45;operations.ts</title>
-<path fill="none" stroke="#757575" d="M7199.23,-534C7188.12,-534 7181.17,-534 7181.17,-534 7181.17,-534 7181.17,-137 7181.17,-137 7181.17,-137 7738.09,-137 7738.09,-137"/>
-<polygon fill="#757575" stroke="#757575" points="7738.09,-140.5 7748.09,-137 7738.09,-133.5 7738.09,-140.5"/>
+<path fill="none" stroke="#757575" d="M7199.39,-535C7189.52,-535 7183.44,-535 7183.44,-535 7183.44,-535 7183.44,-137 7183.44,-137 7183.44,-137 7738.13,-137 7738.13,-137"/>
+<polygon fill="#757575" stroke="#757575" points="7738.13,-140.5 7748.13,-137 7738.13,-133.5 7738.13,-140.5"/>
 </g>
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/utils/function/function&#45;utils.ts -->
 <g id="edge222" class="edge">
 <title>main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/utils/function/function&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M7199.23,-546C6980.7,-546 6606.5,-546 6606.5,-546 6606.5,-546 6606.5,-151.07 6606.5,-151.07"/>
-<polygon fill="#757575" stroke="#757575" points="6610,-151.07 6606.5,-141.07 6603,-151.07 6610,-151.07"/>
+<path fill="none" stroke="#757575" d="M7199.27,-544C6980.22,-544 6604.5,-544 6604.5,-544 6604.5,-544 6604.5,-151.02 6604.5,-151.02"/>
+<polygon fill="#757575" stroke="#757575" points="6608,-151.02 6604.5,-141.02 6601,-151.02 6608,-151.02"/>
 </g>
 <!-- main/ts/handlers/variables/declaration&#45;helpers.ts&#45;&gt;main/ts/handlers/functions/lambda&#45;expressions.ts -->
 <g id="edge218" class="edge">
@@ -1872,8 +1872,8 @@
 <!-- main/ts/expressions/drop&#45;handlers.ts&#45;&gt;main/ts/expressions/drop&#45;helpers.ts -->
 <g id="edge134" class="edge">
 <title>main/ts/expressions/drop&#45;handlers.ts&#45;&gt;main/ts/expressions/drop&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M8061.67,-471.77C8061.67,-449.66 8061.67,-404 8061.67,-404 8061.67,-404 6409.6,-404 6409.6,-404 6409.6,-404 6409.6,-328.07 6409.6,-328.07"/>
-<polygon fill="#757575" stroke="#757575" points="6413.1,-328.07 6409.6,-318.07 6406.1,-328.07 6413.1,-328.07"/>
+<path fill="none" stroke="#757575" d="M8061.67,-471.92C8061.67,-450.08 8061.67,-405 8061.67,-405 8061.67,-405 6328.9,-405 6328.9,-405 6328.9,-405 6328.9,-328.19 6328.9,-328.19"/>
+<polygon fill="#757575" stroke="#757575" points="6332.4,-328.19 6328.9,-318.19 6325.4,-328.19 6332.4,-328.19"/>
 </g>
 <!-- main/ts/expressions/drop&#45;handlers.ts&#45;&gt;main/ts/types/structs.ts -->
 <g id="edge137" class="edge">
@@ -1890,8 +1890,8 @@
 <!-- main/ts/types/structs.ts&#45;&gt;main/ts/compiler/transforms/error&#45;helpers.ts -->
 <g id="edge263" class="edge">
 <title>main/ts/types/structs.ts&#45;&gt;main/ts/compiler/transforms/error&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M8504,-353.86C8504,-351.13 8504,-349 8504,-349 8504,-349 6167,-349 6167,-349 6167,-349 6167,-328.11 6167,-328.11"/>
-<polygon fill="#757575" stroke="#757575" points="6170.5,-328.11 6167,-318.11 6163.5,-328.11 6170.5,-328.11"/>
+<path fill="none" stroke="#757575" d="M8504,-353.86C8504,-351.13 8504,-349 8504,-349 8504,-349 6083.67,-349 6083.67,-349 6083.67,-349 6083.67,-328.11 6083.67,-328.11"/>
+<polygon fill="#757575" stroke="#757575" points="6087.17,-328.11 6083.67,-318.11 6080.17,-328.11 6087.17,-328.11"/>
 </g>
 <!-- main/ts/types/structs.ts&#45;&gt;main/ts/expressions/handlers.ts -->
 <g id="edge265" class="edge">
@@ -1920,8 +1920,8 @@
 <!-- main/ts/types/structs.ts&#45;&gt;main/ts/utils/generics/type&#45;inference.ts -->
 <g id="edge267" class="edge">
 <title>main/ts/types/structs.ts&#45;&gt;main/ts/utils/generics/type&#45;inference.ts</title>
-<path fill="none" stroke="#757575" d="M8565.83,-353.88C8565.83,-332.48 8565.83,-289 8565.83,-289 8565.83,-289 4540.17,-289 4540.17,-289 4540.17,-289 4540.17,-269.28 4540.17,-269.28"/>
-<polygon fill="#757575" stroke="#757575" points="4543.67,-269.28 4540.17,-259.28 4536.67,-269.28 4543.67,-269.28"/>
+<path fill="none" stroke="#757575" d="M8565.83,-353.69C8565.83,-332.91 8565.83,-292 8565.83,-292 8565.83,-292 4540.17,-292 4540.17,-292 4540.17,-292 4540.17,-269.19 4540.17,-269.19"/>
+<polygon fill="#757575" stroke="#757575" points="4543.67,-269.19 4540.17,-259.19 4536.67,-269.19 4543.67,-269.19"/>
 </g>
 <!-- main/ts/expressions/skip&#45;patterns.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts -->
 <g id="edge166" class="edge">
@@ -2028,8 +2028,8 @@
 <!-- main/ts/expressions/operators/op&#45;helpers.ts&#45;&gt;main/ts/types/structs.ts -->
 <g id="edge154" class="edge">
 <title>main/ts/expressions/operators/op&#45;helpers.ts&#45;&gt;main/ts/types/structs.ts</title>
-<path fill="none" stroke="#757575" d="M10670.75,-412.86C10670.75,-410.13 10670.75,-408 10670.75,-408 10670.75,-408 8620.5,-408 8620.5,-408 8620.5,-408 8620.5,-387.11 8620.5,-387.11"/>
-<polygon fill="#757575" stroke="#757575" points="8624,-387.11 8620.5,-377.11 8617,-387.11 8624,-387.11"/>
+<path fill="none" stroke="#757575" d="M10670.75,-412.91C10670.75,-410.67 10670.75,-409 10670.75,-409 10670.75,-409 8620.5,-409 8620.5,-409 8620.5,-409 8620.5,-387.39 8620.5,-387.39"/>
+<polygon fill="#757575" stroke="#757575" points="8624,-387.39 8620.5,-377.39 8617,-387.39 8624,-387.39"/>
 </g>
 <!-- main/ts/expressions/operators/operator&#45;utils.ts -->
 <g id="node78" class="node">
@@ -2052,8 +2052,8 @@
 <!-- main/ts/handlers/access/pointer&#45;operations.ts&#45;&gt;main/ts/type&#45;utils.ts -->
 <g id="edge192" class="edge">
 <title>main/ts/handlers/access/pointer&#45;operations.ts&#45;&gt;main/ts/type&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M7748.48,-129C7535.3,-129 7161.5,-129 7161.5,-129 7161.5,-129 7161.5,-33.2 7161.5,-33.2"/>
-<polygon fill="#757575" stroke="#757575" points="7165,-33.2 7161.5,-23.2 7158,-33.2 7165,-33.2"/>
+<path fill="none" stroke="#757575" d="M7748.16,-129C7532.78,-129 7153.19,-129 7153.19,-129 7153.19,-129 7153.19,-33.2 7153.19,-33.2"/>
+<polygon fill="#757575" stroke="#757575" points="7156.69,-33.2 7153.19,-23.2 7149.69,-33.2 7156.69,-33.2"/>
 </g>
 <!-- main/ts/handlers/access/pointer&#45;operations.ts&#45;&gt;main/ts/utils/helpers/pointer&#45;errors.ts -->
 <g id="edge193" class="edge">
@@ -2130,8 +2130,8 @@
 <!-- main/ts/handlers/functions/function&#45;declaration.ts&#45;&gt;main/ts/function&#45;defs.ts -->
 <g id="edge200" class="edge">
 <title>main/ts/handlers/functions/function&#45;declaration.ts&#45;&gt;main/ts/function&#45;defs.ts</title>
-<path fill="none" stroke="#757575" d="M7501.05,-369C7503.79,-369 7505.31,-369 7505.31,-369 7505.31,-369 7505.31,-328.26 7505.31,-328.26"/>
-<polygon fill="#757575" stroke="#757575" points="7508.81,-328.26 7505.31,-318.26 7501.81,-328.26 7508.81,-328.26"/>
+<path fill="none" stroke="#757575" d="M7501.29,-369C7502.17,-369 7502.64,-369 7502.64,-369 7502.64,-369 7502.64,-328.26 7502.64,-328.26"/>
+<polygon fill="#757575" stroke="#757575" points="7506.14,-328.26 7502.64,-318.26 7499.14,-328.26 7506.14,-328.26"/>
 </g>
 <!-- main/ts/handlers/functions/function&#45;declaration.ts&#45;&gt;main/ts/utils/function/function&#45;utils.ts -->
 <g id="edge202" class="edge">
@@ -2142,8 +2142,8 @@
 <!-- main/ts/handlers/functions/function&#45;declaration.ts&#45;&gt;main/ts/utils/generic&#45;params.ts -->
 <g id="edge203" class="edge">
 <title>main/ts/handlers/functions/function&#45;declaration.ts&#45;&gt;main/ts/utils/generic&#45;params.ts</title>
-<path fill="none" stroke="#757575" d="M7485.14,-353.91C7485.14,-346.02 7485.14,-337 7485.14,-337 7485.14,-337 8374,-337 8374,-337 8374,-337 8374,-328.2 8374,-328.2"/>
-<polygon fill="#757575" stroke="#757575" points="8377.5,-328.2 8374,-318.2 8370.5,-328.2 8377.5,-328.2"/>
+<path fill="none" stroke="#757575" d="M7485.14,-353.77C7485.14,-344.81 7485.14,-334 7485.14,-334 7485.14,-334 8374,-334 8374,-334 8374,-334 8374,-328 8374,-328"/>
+<polygon fill="#757575" stroke="#757575" points="8377.5,-328 8374,-318 8370.5,-328 8377.5,-328"/>
 </g>
 <!-- main/ts/utils/helpers/brace&#45;utils.ts -->
 <g id="node96" class="node">
@@ -2154,8 +2154,8 @@
 <!-- main/ts/handlers/functions/function&#45;declaration.ts&#45;&gt;main/ts/utils/helpers/brace&#45;utils.ts -->
 <g id="edge204" class="edge">
 <title>main/ts/handlers/functions/function&#45;declaration.ts&#45;&gt;main/ts/utils/helpers/brace&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M7487.79,-353.8C7487.79,-346.7 7487.79,-339 7487.79,-339 7487.79,-339 8859.83,-339 8859.83,-339 8859.83,-339 8859.83,-328.23 8859.83,-328.23"/>
-<polygon fill="#757575" stroke="#757575" points="8863.33,-328.23 8859.83,-318.23 8856.33,-328.23 8863.33,-328.23"/>
+<path fill="none" stroke="#757575" d="M7487.79,-353.91C7487.79,-346.02 7487.79,-337 7487.79,-337 7487.79,-337 8859.83,-337 8859.83,-337 8859.83,-337 8859.83,-328.2 8859.83,-328.2"/>
+<polygon fill="#757575" stroke="#757575" points="8863.33,-328.2 8859.83,-318.2 8856.33,-328.2 8863.33,-328.2"/>
 </g>
 <!-- main/ts/utils/validation/dangling&#45;refs.ts -->
 <g id="node97" class="node">
@@ -2184,26 +2184,26 @@
 <!-- main/ts/utils/function/invocation.ts&#45;&gt;main/ts/utils/generics/generic&#45;validation.ts -->
 <g id="edge279" class="edge">
 <title>main/ts/utils/function/invocation.ts&#45;&gt;main/ts/utils/generics/generic&#45;validation.ts</title>
-<path fill="none" stroke="#757575" d="M6780.75,-372C6511.29,-372 5836.67,-372 5836.67,-372 5836.67,-372 5836.67,-306 5836.67,-306 5836.67,-306 4632.53,-306 4632.53,-306"/>
-<polygon fill="#757575" stroke="#757575" points="4632.53,-302.5 4622.53,-306 4632.53,-309.5 4632.53,-302.5"/>
+<path fill="none" stroke="#757575" d="M6780.92,-372C6492.79,-372 5733.33,-372 5733.33,-372 5733.33,-372 5733.33,-306 5733.33,-306 5733.33,-306 4632.76,-306 4632.76,-306"/>
+<polygon fill="#757575" stroke="#757575" points="4632.76,-302.5 4622.76,-306 4632.76,-309.5 4632.76,-302.5"/>
 </g>
 <!-- main/ts/utils/function/invocation.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts -->
 <g id="edge280" class="edge">
 <title>main/ts/utils/function/invocation.ts&#45;&gt;main/ts/utils/identifier&#45;utils.ts</title>
-<path fill="none" stroke="#757575" d="M6999.29,-365C7059.5,-365 7122.17,-365 7122.17,-365 7122.17,-365 7122.17,-62 7122.17,-62 7122.17,-62 7617.76,-62 7617.76,-62"/>
-<polygon fill="#757575" stroke="#757575" points="7617.76,-65.5 7627.76,-62 7617.76,-58.5 7617.76,-65.5"/>
+<path fill="none" stroke="#757575" d="M6999.19,-365C7059.07,-365 7121.25,-365 7121.25,-365 7121.25,-365 7121.25,-62 7121.25,-62 7121.25,-62 7617.95,-62 7617.95,-62"/>
+<polygon fill="#757575" stroke="#757575" points="7617.95,-65.5 7627.95,-62 7617.95,-58.5 7617.95,-65.5"/>
 </g>
 <!-- main/ts/utils/function/invocation.ts&#45;&gt;main/ts/expressions/drop&#45;helpers.ts -->
 <g id="edge274" class="edge">
 <title>main/ts/utils/function/invocation.ts&#45;&gt;main/ts/expressions/drop&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M6780.8,-367C6640.63,-367 6415.3,-367 6415.3,-367 6415.3,-367 6415.3,-328.17 6415.3,-328.17"/>
-<polygon fill="#757575" stroke="#757575" points="6418.8,-328.16 6415.3,-318.17 6411.8,-328.17 6418.8,-328.16"/>
+<path fill="none" stroke="#757575" d="M6780.96,-367C6633.92,-367 6390.3,-367 6390.3,-367 6390.3,-367 6390.3,-328.17 6390.3,-328.17"/>
+<polygon fill="#757575" stroke="#757575" points="6393.8,-328.16 6390.3,-318.17 6386.8,-328.17 6393.8,-328.16"/>
 </g>
 <!-- main/ts/utils/function/invocation.ts&#45;&gt;main/ts/types/interpreter.ts -->
 <g id="edge277" class="edge">
 <title>main/ts/utils/function/invocation.ts&#45;&gt;main/ts/types/interpreter.ts</title>
-<path fill="none" stroke="#757575" d="M6890.25,-353.75C6890.25,-330.53 6890.25,-281 6890.25,-281 6890.25,-281 8971.5,-281 8971.5,-281 8971.5,-281 8971.5,-92.12 8971.5,-92.12"/>
-<polygon fill="#757575" stroke="#757575" points="8975,-92.12 8971.5,-82.12 8968,-92.12 8975,-92.12"/>
+<path fill="none" stroke="#757575" d="M6926.5,-353.68C6926.5,-330.87 6926.5,-283 6926.5,-283 6926.5,-283 8971.5,-283 8971.5,-283 8971.5,-283 8971.5,-92.23 8971.5,-92.23"/>
+<polygon fill="#757575" stroke="#757575" points="8975,-92.23 8971.5,-82.23 8968,-92.23 8975,-92.23"/>
 </g>
 <!-- main/ts/utils/function/invocation.ts&#45;&gt;main/ts/utils/scope&#45;helpers.ts -->
 <g id="edge281" class="edge">
@@ -2214,14 +2214,14 @@
 <!-- main/ts/utils/function/invocation.ts&#45;&gt;main/ts/function&#45;defs.ts -->
 <g id="edge275" class="edge">
 <title>main/ts/utils/function/invocation.ts&#45;&gt;main/ts/function&#45;defs.ts</title>
-<path fill="none" stroke="#757575" d="M6944.62,-353.55C6944.62,-340.06 6944.62,-320 6944.62,-320 6944.62,-320 7503.88,-320 7503.88,-320 7503.88,-320 7503.88,-319.83 7503.88,-319.83"/>
-<polygon fill="#757575" stroke="#757575" points="7507.38,-328.34 7503.88,-318.34 7500.38,-328.34 7507.38,-328.34"/>
+<path fill="none" stroke="#757575" d="M6954.5,-377.09C6954.5,-379.33 6954.5,-381 6954.5,-381 6954.5,-381 7504.29,-381 7504.29,-381 7504.29,-381 7504.29,-328.14 7504.29,-328.14"/>
+<polygon fill="#757575" stroke="#757575" points="7507.79,-328.14 7504.29,-318.14 7500.79,-328.14 7507.79,-328.14"/>
 </g>
 <!-- main/ts/utils/function/invocation.ts&#45;&gt;main/ts/handlers/functions/anonymous&#45;functions.ts -->
 <g id="edge276" class="edge">
 <title>main/ts/utils/function/invocation.ts&#45;&gt;main/ts/handlers/functions/anonymous&#45;functions.ts</title>
-<path fill="none" stroke="#757575" d="M6835.88,-353.75C6835.88,-353.75 6835.88,-269.2 6835.88,-269.2"/>
-<polygon fill="#757575" stroke="#757575" points="6839.38,-269.2 6835.88,-259.2 6832.38,-269.2 6839.38,-269.2"/>
+<path fill="none" stroke="#757575" d="M6854,-353.75C6854,-353.75 6854,-269.2 6854,-269.2"/>
+<polygon fill="#757575" stroke="#757575" points="6857.5,-269.2 6854,-259.2 6850.5,-269.2 6857.5,-269.2"/>
 </g>
 <!-- main/ts/utils/function/invocation.ts&#45;&gt;main/ts/utils/function/function&#45;utils.ts -->
 <g id="edge278" class="edge">
@@ -2388,8 +2388,8 @@
 <!-- main/ts/handlers/functions/lambda&#45;expressions.ts&#45;&gt;main/ts/handlers/functions/anonymous&#45;functions.ts -->
 <g id="edge209" class="edge">
 <title>main/ts/handlers/functions/lambda&#45;expressions.ts&#45;&gt;main/ts/handlers/functions/anonymous&#45;functions.ts</title>
-<path fill="none" stroke="#757575" d="M7288.85,-479C7185.4,-479 7069,-479 7069,-479 7069,-479 7069,-269.3 7069,-269.3"/>
-<polygon fill="#757575" stroke="#757575" points="7072.5,-269.3 7069,-259.3 7065.5,-269.3 7072.5,-269.3"/>
+<path fill="none" stroke="#757575" d="M7288.87,-477C7172.3,-477 7033.5,-477 7033.5,-477 7033.5,-477 7033.5,-269.2 7033.5,-269.2"/>
+<polygon fill="#757575" stroke="#757575" points="7037,-269.2 7033.5,-259.2 7030,-269.2 7037,-269.2"/>
 </g>
 <!-- main/ts/handlers/variables/dereference&#45;assignment.ts&#45;&gt;main/ts/utils/helpers/pointer&#45;errors.ts -->
 <g id="edge227" class="edge">
@@ -2556,8 +2556,8 @@
 <!-- main/ts/types/type&#45;declarations.ts&#45;&gt;main/ts/declarations.ts -->
 <g id="edge268" class="edge">
 <title>main/ts/types/type&#45;declarations.ts&#45;&gt;main/ts/declarations.ts</title>
-<path fill="none" stroke="#757575" d="M9951.75,-353.74C9951.75,-342.42 9951.75,-327 9951.75,-327 9951.75,-327 9663,-327 9663,-327 9663,-327 9663,-326.12 9663,-326.12"/>
-<polygon fill="#757575" stroke="#757575" points="9666.5,-328.19 9663,-318.19 9659.5,-328.19 9666.5,-328.19"/>
+<path fill="none" stroke="#757575" d="M9951.75,-353.57C9951.75,-341.62 9951.75,-325 9951.75,-325 9951.75,-325 9663,-325 9663,-325 9663,-325 9663,-324.33 9663,-324.33"/>
+<polygon fill="#757575" stroke="#757575" points="9666.5,-328.32 9663,-318.32 9659.5,-328.32 9666.5,-328.32"/>
 </g>
 <!-- main/ts/utils/interpret.ts -->
 <g id="node112" class="node">
@@ -2604,8 +2604,8 @@
 <!-- test/ts/control/booleans.test.ts -->
 <g id="node115" class="node">
 <title>test/ts/control/booleans.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M3855.83,-908C3855.83,-908 3676.17,-908 3676.17,-908 3672.33,-908 3668.5,-904.17 3668.5,-900.33 3668.5,-900.33 3668.5,-892.67 3668.5,-892.67 3668.5,-888.83 3672.33,-885 3676.17,-885 3676.17,-885 3855.83,-885 3855.83,-885 3859.67,-885 3863.5,-888.83 3863.5,-892.67 3863.5,-892.67 3863.5,-900.33 3863.5,-900.33 3863.5,-904.17 3859.67,-908 3855.83,-908"/>
-<text text-anchor="middle" x="3766" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/control/booleans.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M3730.83,-908C3730.83,-908 3551.17,-908 3551.17,-908 3547.33,-908 3543.5,-904.17 3543.5,-900.33 3543.5,-900.33 3543.5,-892.67 3543.5,-892.67 3543.5,-888.83 3547.33,-885 3551.17,-885 3551.17,-885 3730.83,-885 3730.83,-885 3734.67,-885 3738.5,-888.83 3738.5,-892.67 3738.5,-892.67 3738.5,-900.33 3738.5,-900.33 3738.5,-904.17 3734.67,-908 3730.83,-908"/>
+<text text-anchor="middle" x="3641" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/control/booleans.test.ts</text>
 </g>
 <!-- test/ts/test&#45;helpers.ts -->
 <g id="node116" class="node">
@@ -2616,8 +2616,8 @@
 <!-- test/ts/control/booleans.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge319" class="edge">
 <title>test/ts/control/booleans.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M3766,-884.92C3766,-865.86 3766,-830 3766,-830 3766,-830 5281.36,-830 5281.36,-830"/>
-<polygon fill="#757575" stroke="#757575" points="5281.36,-833.5 5291.36,-830 5281.36,-826.5 5281.36,-833.5"/>
+<path fill="none" stroke="#757575" d="M3641,-884.92C3641,-865.86 3641,-830 3641,-830 3641,-830 5281.33,-830 5281.33,-830"/>
+<polygon fill="#757575" stroke="#757575" points="5281.33,-833.5 5291.33,-830 5281.33,-826.5 5281.33,-833.5"/>
 </g>
 <!-- test/ts/test&#45;helpers.ts&#45;&gt;main/ts/compiler/compile&#45;all.ts -->
 <g id="edge331" class="edge">
@@ -2628,8 +2628,8 @@
 <!-- test/ts/test&#45;helpers.ts&#45;&gt;main/ts/compiler/compiler.ts -->
 <g id="edge332" class="edge">
 <title>test/ts/test&#45;helpers.ts&#45;&gt;main/ts/compiler/compiler.ts</title>
-<path fill="none" stroke="#757575" d="M5291.15,-828C5027.58,-828 4118.83,-828 4118.83,-828 4118.83,-828 4118.83,-446.14 4118.83,-446.14"/>
-<polygon fill="#757575" stroke="#757575" points="4122.33,-446.14 4118.83,-436.14 4115.33,-446.14 4122.33,-446.14"/>
+<path fill="none" stroke="#757575" d="M5291.48,-828C5034.51,-828 4163.17,-828 4163.17,-828 4163.17,-828 4163.17,-446.14 4163.17,-446.14"/>
+<polygon fill="#757575" stroke="#757575" points="4166.67,-446.14 4163.17,-436.14 4159.67,-446.14 4166.67,-446.14"/>
 </g>
 <!-- test/ts/test&#45;helpers.ts&#45;&gt;main/ts/utils/interpret.ts -->
 <g id="edge333" class="edge">
@@ -2640,194 +2640,206 @@
 <!-- test/ts/control/if&#45;else.test.ts -->
 <g id="node117" class="node">
 <title>test/ts/control/if&#45;else.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M4049.33,-908C4049.33,-908 3888.67,-908 3888.67,-908 3884.83,-908 3881,-904.17 3881,-900.33 3881,-900.33 3881,-892.67 3881,-892.67 3881,-888.83 3884.83,-885 3888.67,-885 3888.67,-885 4049.33,-885 4049.33,-885 4053.17,-885 4057,-888.83 4057,-892.67 4057,-892.67 4057,-900.33 4057,-900.33 4057,-904.17 4053.17,-908 4049.33,-908"/>
-<text text-anchor="middle" x="3969" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/control/if&#45;else.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M3924.33,-908C3924.33,-908 3763.67,-908 3763.67,-908 3759.83,-908 3756,-904.17 3756,-900.33 3756,-900.33 3756,-892.67 3756,-892.67 3756,-888.83 3759.83,-885 3763.67,-885 3763.67,-885 3924.33,-885 3924.33,-885 3928.17,-885 3932,-888.83 3932,-892.67 3932,-892.67 3932,-900.33 3932,-900.33 3932,-904.17 3928.17,-908 3924.33,-908"/>
+<text text-anchor="middle" x="3844" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/control/if&#45;else.test.ts</text>
 </g>
 <!-- test/ts/control/if&#45;else.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge320" class="edge">
 <title>test/ts/control/if&#45;else.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M4038.75,-884.97C4038.75,-866.42 4038.75,-832 4038.75,-832 4038.75,-832 5281.32,-832 5281.32,-832"/>
-<polygon fill="#757575" stroke="#757575" points="5281.32,-835.5 5291.32,-832 5281.32,-828.5 5281.32,-835.5"/>
+<path fill="none" stroke="#757575" d="M3906.67,-884.97C3906.67,-866.42 3906.67,-832 3906.67,-832 3906.67,-832 5281.31,-832 5281.31,-832"/>
+<polygon fill="#757575" stroke="#757575" points="5281.31,-835.5 5291.31,-832 5281.31,-828.5 5281.31,-835.5"/>
 </g>
 <!-- test/ts/control/loops.test.ts -->
 <g id="node118" class="node">
 <title>test/ts/control/loops.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M4240.83,-908C4240.83,-908 4083.17,-908 4083.17,-908 4079.33,-908 4075.5,-904.17 4075.5,-900.33 4075.5,-900.33 4075.5,-892.67 4075.5,-892.67 4075.5,-888.83 4079.33,-885 4083.17,-885 4083.17,-885 4240.83,-885 4240.83,-885 4244.67,-885 4248.5,-888.83 4248.5,-892.67 4248.5,-892.67 4248.5,-900.33 4248.5,-900.33 4248.5,-904.17 4244.67,-908 4240.83,-908"/>
-<text text-anchor="middle" x="4162" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/control/loops.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M4115.83,-908C4115.83,-908 3958.17,-908 3958.17,-908 3954.33,-908 3950.5,-904.17 3950.5,-900.33 3950.5,-900.33 3950.5,-892.67 3950.5,-892.67 3950.5,-888.83 3954.33,-885 3958.17,-885 3958.17,-885 4115.83,-885 4115.83,-885 4119.67,-885 4123.5,-888.83 4123.5,-892.67 4123.5,-892.67 4123.5,-900.33 4123.5,-900.33 4123.5,-904.17 4119.67,-908 4115.83,-908"/>
+<text text-anchor="middle" x="4037" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/control/loops.test.ts</text>
 </g>
 <!-- test/ts/control/loops.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge321" class="edge">
 <title>test/ts/control/loops.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M4227,-884.93C4227,-867.12 4227,-835 4227,-835 4227,-835 5281.43,-835 5281.43,-835"/>
-<polygon fill="#757575" stroke="#757575" points="5281.43,-838.5 5291.43,-835 5281.43,-831.5 5281.43,-838.5"/>
+<path fill="none" stroke="#757575" d="M4072,-884.93C4072,-867.12 4072,-835 4072,-835 4072,-835 5281.27,-835 5281.27,-835"/>
+<polygon fill="#757575" stroke="#757575" points="5281.27,-838.5 5291.27,-835 5281.27,-831.5 5281.27,-838.5"/>
 </g>
 <!-- test/ts/control/match.test.ts -->
 <g id="node119" class="node">
 <title>test/ts/control/match.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M4437.33,-908C4437.33,-908 4274.67,-908 4274.67,-908 4270.83,-908 4267,-904.17 4267,-900.33 4267,-900.33 4267,-892.67 4267,-892.67 4267,-888.83 4270.83,-885 4274.67,-885 4274.67,-885 4437.33,-885 4437.33,-885 4441.17,-885 4445,-888.83 4445,-892.67 4445,-892.67 4445,-900.33 4445,-900.33 4445,-904.17 4441.17,-908 4437.33,-908"/>
-<text text-anchor="middle" x="4356" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/control/match.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M4312.33,-908C4312.33,-908 4149.67,-908 4149.67,-908 4145.83,-908 4142,-904.17 4142,-900.33 4142,-900.33 4142,-892.67 4142,-892.67 4142,-888.83 4145.83,-885 4149.67,-885 4149.67,-885 4312.33,-885 4312.33,-885 4316.17,-885 4320,-888.83 4320,-892.67 4320,-892.67 4320,-900.33 4320,-900.33 4320,-904.17 4316.17,-908 4312.33,-908"/>
+<text text-anchor="middle" x="4231" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/control/match.test.ts</text>
 </g>
 <!-- test/ts/control/match.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge322" class="edge">
 <title>test/ts/control/match.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M4356,-884.74C4356,-867.4 4356,-837 4356,-837 4356,-837 5281.26,-837 5281.26,-837"/>
-<polygon fill="#757575" stroke="#757575" points="5281.26,-840.5 5291.26,-837 5281.26,-833.5 5281.26,-840.5"/>
+<path fill="none" stroke="#757575" d="M4262.75,-884.74C4262.75,-867.4 4262.75,-837 4262.75,-837 4262.75,-837 5281.14,-837 5281.14,-837"/>
+<polygon fill="#757575" stroke="#757575" points="5281.14,-840.5 5291.14,-837 5281.14,-833.5 5281.14,-840.5"/>
 </g>
 <!-- test/ts/core/arithmetic.test.ts -->
 <g id="node120" class="node">
 <title>test/ts/core/arithmetic.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M4639.83,-908C4639.83,-908 4470.17,-908 4470.17,-908 4466.33,-908 4462.5,-904.17 4462.5,-900.33 4462.5,-900.33 4462.5,-892.67 4462.5,-892.67 4462.5,-888.83 4466.33,-885 4470.17,-885 4470.17,-885 4639.83,-885 4639.83,-885 4643.67,-885 4647.5,-888.83 4647.5,-892.67 4647.5,-892.67 4647.5,-900.33 4647.5,-900.33 4647.5,-904.17 4643.67,-908 4639.83,-908"/>
-<text text-anchor="middle" x="4555" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/core/arithmetic.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M4514.83,-908C4514.83,-908 4345.17,-908 4345.17,-908 4341.33,-908 4337.5,-904.17 4337.5,-900.33 4337.5,-900.33 4337.5,-892.67 4337.5,-892.67 4337.5,-888.83 4341.33,-885 4345.17,-885 4345.17,-885 4514.83,-885 4514.83,-885 4518.67,-885 4522.5,-888.83 4522.5,-892.67 4522.5,-892.67 4522.5,-900.33 4522.5,-900.33 4522.5,-904.17 4518.67,-908 4514.83,-908"/>
+<text text-anchor="middle" x="4430" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/core/arithmetic.test.ts</text>
 </g>
 <!-- test/ts/core/arithmetic.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge323" class="edge">
 <title>test/ts/core/arithmetic.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M4621.5,-884.86C4621.5,-868.06 4621.5,-839 4621.5,-839 4621.5,-839 5281.33,-839 5281.33,-839"/>
-<polygon fill="#757575" stroke="#757575" points="5281.33,-842.5 5291.33,-839 5281.33,-835.5 5281.33,-842.5"/>
+<path fill="none" stroke="#757575" d="M4430,-884.86C4430,-868.06 4430,-839 4430,-839 4430,-839 5281.18,-839 5281.18,-839"/>
+<polygon fill="#757575" stroke="#757575" points="5281.18,-842.5 5291.18,-839 5281.18,-835.5 5281.18,-842.5"/>
 </g>
 <!-- test/ts/core/char.test.ts -->
 <g id="node121" class="node">
 <title>test/ts/core/char.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M4810.33,-908C4810.33,-908 4673.67,-908 4673.67,-908 4669.83,-908 4666,-904.17 4666,-900.33 4666,-900.33 4666,-892.67 4666,-892.67 4666,-888.83 4669.83,-885 4673.67,-885 4673.67,-885 4810.33,-885 4810.33,-885 4814.17,-885 4818,-888.83 4818,-892.67 4818,-892.67 4818,-900.33 4818,-900.33 4818,-904.17 4814.17,-908 4810.33,-908"/>
-<text text-anchor="middle" x="4742" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/core/char.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M4685.33,-908C4685.33,-908 4548.67,-908 4548.67,-908 4544.83,-908 4541,-904.17 4541,-900.33 4541,-900.33 4541,-892.67 4541,-892.67 4541,-888.83 4544.83,-885 4548.67,-885 4548.67,-885 4685.33,-885 4685.33,-885 4689.17,-885 4693,-888.83 4693,-892.67 4693,-892.67 4693,-900.33 4693,-900.33 4693,-904.17 4689.17,-908 4685.33,-908"/>
+<text text-anchor="middle" x="4617" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/core/char.test.ts</text>
 </g>
 <!-- test/ts/core/char.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge324" class="edge">
 <title>test/ts/core/char.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M4742,-884.94C4742,-868.94 4742,-842 4742,-842 4742,-842 5281.48,-842 5281.48,-842"/>
-<polygon fill="#757575" stroke="#757575" points="5281.48,-845.5 5291.48,-842 5281.48,-838.5 5281.48,-845.5"/>
+<path fill="none" stroke="#757575" d="M4636.67,-884.94C4636.67,-868.94 4636.67,-842 4636.67,-842 4636.67,-842 5281.46,-842 5281.46,-842"/>
+<polygon fill="#757575" stroke="#757575" points="5281.46,-845.5 5291.46,-842 5281.46,-838.5 5281.46,-845.5"/>
 </g>
 <!-- test/ts/core/strings.test.ts -->
 <g id="node122" class="node">
 <title>test/ts/core/strings.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M4994.33,-908C4994.33,-908 4843.67,-908 4843.67,-908 4839.83,-908 4836,-904.17 4836,-900.33 4836,-900.33 4836,-892.67 4836,-892.67 4836,-888.83 4839.83,-885 4843.67,-885 4843.67,-885 4994.33,-885 4994.33,-885 4998.17,-885 5002,-888.83 5002,-892.67 5002,-892.67 5002,-900.33 5002,-900.33 5002,-904.17 4998.17,-908 4994.33,-908"/>
-<text text-anchor="middle" x="4919" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/core/strings.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M4869.33,-908C4869.33,-908 4718.67,-908 4718.67,-908 4714.83,-908 4711,-904.17 4711,-900.33 4711,-900.33 4711,-892.67 4711,-892.67 4711,-888.83 4714.83,-885 4718.67,-885 4718.67,-885 4869.33,-885 4869.33,-885 4873.17,-885 4877,-888.83 4877,-892.67 4877,-892.67 4877,-900.33 4877,-900.33 4877,-904.17 4873.17,-908 4869.33,-908"/>
+<text text-anchor="middle" x="4794" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/core/strings.test.ts</text>
 </g>
 <!-- test/ts/core/strings.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge325" class="edge">
 <title>test/ts/core/strings.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M4986.5,-884.85C4986.5,-869.38 4986.5,-844 4986.5,-844 4986.5,-844 5281.37,-844 5281.37,-844"/>
-<polygon fill="#757575" stroke="#757575" points="5281.37,-847.5 5291.37,-844 5281.37,-840.5 5281.37,-847.5"/>
+<path fill="none" stroke="#757575" d="M4794,-884.85C4794,-869.38 4794,-844 4794,-844 4794,-844 5281.5,-844 5281.5,-844"/>
+<polygon fill="#757575" stroke="#757575" points="5281.5,-847.5 5291.5,-844 5281.5,-840.5 5281.5,-847.5"/>
 </g>
 <!-- test/ts/functions/constructor.test.ts -->
 <g id="node123" class="node">
 <title>test/ts/functions/constructor.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M5232.33,-908C5232.33,-908 5027.67,-908 5027.67,-908 5023.83,-908 5020,-904.17 5020,-900.33 5020,-900.33 5020,-892.67 5020,-892.67 5020,-888.83 5023.83,-885 5027.67,-885 5027.67,-885 5232.33,-885 5232.33,-885 5236.17,-885 5240,-888.83 5240,-892.67 5240,-892.67 5240,-900.33 5240,-900.33 5240,-904.17 5236.17,-908 5232.33,-908"/>
-<text text-anchor="middle" x="5130" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/functions/constructor.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M5107.33,-908C5107.33,-908 4902.67,-908 4902.67,-908 4898.83,-908 4895,-904.17 4895,-900.33 4895,-900.33 4895,-892.67 4895,-892.67 4895,-888.83 4898.83,-885 4902.67,-885 4902.67,-885 5107.33,-885 5107.33,-885 5111.17,-885 5115,-888.83 5115,-892.67 5115,-892.67 5115,-900.33 5115,-900.33 5115,-904.17 5111.17,-908 5107.33,-908"/>
+<text text-anchor="middle" x="5005" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/functions/constructor.test.ts</text>
 </g>
 <!-- test/ts/functions/constructor.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge326" class="edge">
 <title>test/ts/functions/constructor.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M5176.33,-884.79C5176.33,-869.87 5176.33,-846 5176.33,-846 5176.33,-846 5281.28,-846 5281.28,-846"/>
-<polygon fill="#757575" stroke="#757575" points="5281.28,-849.5 5291.28,-846 5281.28,-842.5 5281.28,-849.5"/>
+<path fill="none" stroke="#757575" d="M5093,-884.79C5093,-869.87 5093,-846 5093,-846 5093,-846 5281.32,-846 5281.32,-846"/>
+<polygon fill="#757575" stroke="#757575" points="5281.32,-849.5 5291.32,-846 5281.32,-842.5 5281.32,-849.5"/>
 </g>
 <!-- test/ts/functions/functions.test.ts -->
 <g id="node124" class="node">
 <title>test/ts/functions/functions.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M5458.33,-908C5458.33,-908 5265.67,-908 5265.67,-908 5261.83,-908 5258,-904.17 5258,-900.33 5258,-900.33 5258,-892.67 5258,-892.67 5258,-888.83 5261.83,-885 5265.67,-885 5265.67,-885 5458.33,-885 5458.33,-885 5462.17,-885 5466,-888.83 5466,-892.67 5466,-892.67 5466,-900.33 5466,-900.33 5466,-904.17 5462.17,-908 5458.33,-908"/>
-<text text-anchor="middle" x="5362" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/functions/functions.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M5333.33,-908C5333.33,-908 5140.67,-908 5140.67,-908 5136.83,-908 5133,-904.17 5133,-900.33 5133,-900.33 5133,-892.67 5133,-892.67 5133,-888.83 5136.83,-885 5140.67,-885 5140.67,-885 5333.33,-885 5333.33,-885 5337.17,-885 5341,-888.83 5341,-892.67 5341,-892.67 5341,-900.33 5341,-900.33 5341,-904.17 5337.17,-908 5333.33,-908"/>
+<text text-anchor="middle" x="5237" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/functions/functions.test.ts</text>
 </g>
 <!-- test/ts/functions/functions.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge327" class="edge">
 <title>test/ts/functions/functions.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M5362,-884.84C5362,-884.84 5362,-859.13 5362,-859.13"/>
-<polygon fill="#757575" stroke="#757575" points="5365.5,-859.13 5362,-849.13 5358.5,-859.13 5365.5,-859.13"/>
+<path fill="none" stroke="#757575" d="M5316.25,-884.84C5316.25,-884.84 5316.25,-859.13 5316.25,-859.13"/>
+<polygon fill="#757575" stroke="#757575" points="5319.75,-859.13 5316.25,-849.13 5312.75,-859.13 5319.75,-859.13"/>
 </g>
 <!-- test/ts/functions/generic&#45;functions.test.ts -->
 <g id="node125" class="node">
 <title>test/ts/functions/generic&#45;functions.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M5733.83,-908C5733.83,-908 5492.17,-908 5492.17,-908 5488.33,-908 5484.5,-904.17 5484.5,-900.33 5484.5,-900.33 5484.5,-892.67 5484.5,-892.67 5484.5,-888.83 5488.33,-885 5492.17,-885 5492.17,-885 5733.83,-885 5733.83,-885 5737.67,-885 5741.5,-888.83 5741.5,-892.67 5741.5,-892.67 5741.5,-900.33 5741.5,-900.33 5741.5,-904.17 5737.67,-908 5733.83,-908"/>
-<text text-anchor="middle" x="5613" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/functions/generic&#45;functions.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M5608.83,-908C5608.83,-908 5367.17,-908 5367.17,-908 5363.33,-908 5359.5,-904.17 5359.5,-900.33 5359.5,-900.33 5359.5,-892.67 5359.5,-892.67 5359.5,-888.83 5363.33,-885 5367.17,-885 5367.17,-885 5608.83,-885 5608.83,-885 5612.67,-885 5616.5,-888.83 5616.5,-892.67 5616.5,-892.67 5616.5,-900.33 5616.5,-900.33 5616.5,-904.17 5612.67,-908 5608.83,-908"/>
+<text text-anchor="middle" x="5488" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/functions/generic&#45;functions.test.ts</text>
 </g>
 <!-- test/ts/functions/generic&#45;functions.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge328" class="edge">
 <title>test/ts/functions/generic&#45;functions.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M5592.83,-884.79C5592.83,-869.87 5592.83,-846 5592.83,-846 5592.83,-846 5442.51,-846 5442.51,-846"/>
-<polygon fill="#757575" stroke="#757575" points="5442.51,-842.5 5432.51,-846 5442.51,-849.5 5442.51,-842.5"/>
+<path fill="none" stroke="#757575" d="M5396,-884.84C5396,-884.84 5396,-859.13 5396,-859.13"/>
+<polygon fill="#757575" stroke="#757575" points="5399.5,-859.13 5396,-849.13 5392.5,-859.13 5399.5,-859.13"/>
 </g>
 <!-- test/ts/interpret&#45;all.test.ts -->
 <g id="node126" class="node">
 <title>test/ts/interpret&#45;all.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M5916.33,-908C5916.33,-908 5767.67,-908 5767.67,-908 5763.83,-908 5760,-904.17 5760,-900.33 5760,-900.33 5760,-892.67 5760,-892.67 5760,-888.83 5763.83,-885 5767.67,-885 5767.67,-885 5916.33,-885 5916.33,-885 5920.17,-885 5924,-888.83 5924,-892.67 5924,-892.67 5924,-900.33 5924,-900.33 5924,-904.17 5920.17,-908 5916.33,-908"/>
-<text text-anchor="middle" x="5842" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/interpret&#45;all.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M5791.33,-908C5791.33,-908 5642.67,-908 5642.67,-908 5638.83,-908 5635,-904.17 5635,-900.33 5635,-900.33 5635,-892.67 5635,-892.67 5635,-888.83 5638.83,-885 5642.67,-885 5642.67,-885 5791.33,-885 5791.33,-885 5795.17,-885 5799,-888.83 5799,-892.67 5799,-892.67 5799,-900.33 5799,-900.33 5799,-904.17 5795.17,-908 5791.33,-908"/>
+<text text-anchor="middle" x="5717" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/interpret&#45;all.test.ts</text>
 </g>
 <!-- test/ts/interpret&#45;all.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge329" class="edge">
 <title>test/ts/interpret&#45;all.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M5784.25,-884.89C5784.25,-869.16 5784.25,-843 5784.25,-843 5784.25,-843 5442.68,-843 5442.68,-843"/>
-<polygon fill="#757575" stroke="#757575" points="5442.68,-839.5 5432.68,-843 5442.68,-846.5 5442.68,-839.5"/>
+<path fill="none" stroke="#757575" d="M5643,-884.79C5643,-869.87 5643,-846 5643,-846 5643,-846 5442.55,-846 5442.55,-846"/>
+<polygon fill="#757575" stroke="#757575" points="5442.55,-842.5 5432.55,-846 5442.55,-849.5 5442.55,-842.5"/>
 </g>
 <!-- test/ts/modules/modules.test.ts -->
 <g id="node127" class="node">
 <title>test/ts/modules/modules.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M6137.83,-908C6137.83,-908 5950.17,-908 5950.17,-908 5946.33,-908 5942.5,-904.17 5942.5,-900.33 5942.5,-900.33 5942.5,-892.67 5942.5,-892.67 5942.5,-888.83 5946.33,-885 5950.17,-885 5950.17,-885 6137.83,-885 6137.83,-885 6141.67,-885 6145.5,-888.83 6145.5,-892.67 6145.5,-892.67 6145.5,-900.33 6145.5,-900.33 6145.5,-904.17 6141.67,-908 6137.83,-908"/>
-<text text-anchor="middle" x="6044" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/modules/modules.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M6012.83,-908C6012.83,-908 5825.17,-908 5825.17,-908 5821.33,-908 5817.5,-904.17 5817.5,-900.33 5817.5,-900.33 5817.5,-892.67 5817.5,-892.67 5817.5,-888.83 5821.33,-885 5825.17,-885 5825.17,-885 6012.83,-885 6012.83,-885 6016.67,-885 6020.5,-888.83 6020.5,-892.67 6020.5,-892.67 6020.5,-900.33 6020.5,-900.33 6020.5,-904.17 6016.67,-908 6012.83,-908"/>
+<text text-anchor="middle" x="5919" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/modules/modules.test.ts</text>
 </g>
 <!-- test/ts/modules/modules.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge330" class="edge">
 <title>test/ts/modules/modules.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M6044,-884.73C6044,-868.44 6044,-841 6044,-841 6044,-841 5442.74,-841 5442.74,-841"/>
-<polygon fill="#757575" stroke="#757575" points="5442.74,-837.5 5432.74,-841 5442.74,-844.5 5442.74,-837.5"/>
+<path fill="none" stroke="#757575" d="M5855.25,-884.89C5855.25,-869.16 5855.25,-843 5855.25,-843 5855.25,-843 5442.67,-843 5442.67,-843"/>
+<polygon fill="#757575" stroke="#757575" points="5442.67,-839.5 5432.67,-843 5442.67,-846.5 5442.67,-839.5"/>
 </g>
 <!-- test/ts/types/destructuring.test.ts -->
 <g id="node128" class="node">
 <title>test/ts/types/destructuring.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M6366.33,-908C6366.33,-908 6171.67,-908 6171.67,-908 6167.83,-908 6164,-904.17 6164,-900.33 6164,-900.33 6164,-892.67 6164,-892.67 6164,-888.83 6167.83,-885 6171.67,-885 6171.67,-885 6366.33,-885 6366.33,-885 6370.17,-885 6374,-888.83 6374,-892.67 6374,-892.67 6374,-900.33 6374,-900.33 6374,-904.17 6370.17,-908 6366.33,-908"/>
-<text text-anchor="middle" x="6269" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/types/destructuring.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M6241.33,-908C6241.33,-908 6046.67,-908 6046.67,-908 6042.83,-908 6039,-904.17 6039,-900.33 6039,-900.33 6039,-892.67 6039,-892.67 6039,-888.83 6042.83,-885 6046.67,-885 6046.67,-885 6241.33,-885 6241.33,-885 6245.17,-885 6249,-888.83 6249,-892.67 6249,-892.67 6249,-900.33 6249,-900.33 6249,-904.17 6245.17,-908 6241.33,-908"/>
+<text text-anchor="middle" x="6144" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/types/destructuring.test.ts</text>
 </g>
 <!-- test/ts/types/destructuring.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge334" class="edge">
 <title>test/ts/types/destructuring.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M6170,-884.94C6170,-867.89 6170,-838 6170,-838 6170,-838 5442.64,-838 5442.64,-838"/>
-<polygon fill="#757575" stroke="#757575" points="5442.64,-834.5 5432.64,-838 5442.64,-841.5 5442.64,-834.5"/>
+<path fill="none" stroke="#757575" d="M6128.33,-884.73C6128.33,-868.44 6128.33,-841 6128.33,-841 6128.33,-841 5442.72,-841 5442.72,-841"/>
+<polygon fill="#757575" stroke="#757575" points="5442.72,-837.5 5432.72,-841 5442.72,-844.5 5442.72,-837.5"/>
 </g>
 <!-- test/ts/types/generics.test.ts -->
 <g id="node129" class="node">
 <title>test/ts/types/generics.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M6567.83,-908C6567.83,-908 6400.17,-908 6400.17,-908 6396.33,-908 6392.5,-904.17 6392.5,-900.33 6392.5,-900.33 6392.5,-892.67 6392.5,-892.67 6392.5,-888.83 6396.33,-885 6400.17,-885 6400.17,-885 6567.83,-885 6567.83,-885 6571.67,-885 6575.5,-888.83 6575.5,-892.67 6575.5,-892.67 6575.5,-900.33 6575.5,-900.33 6575.5,-904.17 6571.67,-908 6567.83,-908"/>
-<text text-anchor="middle" x="6484" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/types/generics.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M6442.83,-908C6442.83,-908 6275.17,-908 6275.17,-908 6271.33,-908 6267.5,-904.17 6267.5,-900.33 6267.5,-900.33 6267.5,-892.67 6267.5,-892.67 6267.5,-888.83 6271.33,-885 6275.17,-885 6275.17,-885 6442.83,-885 6442.83,-885 6446.67,-885 6450.5,-888.83 6450.5,-892.67 6450.5,-892.67 6450.5,-900.33 6450.5,-900.33 6450.5,-904.17 6446.67,-908 6442.83,-908"/>
+<text text-anchor="middle" x="6359" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/types/generics.test.ts</text>
 </g>
 <!-- test/ts/types/generics.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge335" class="edge">
 <title>test/ts/types/generics.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M6398.2,-884.83C6398.2,-867.25 6398.2,-836 6398.2,-836 6398.2,-836 5442.81,-836 5442.81,-836"/>
-<polygon fill="#757575" stroke="#757575" points="5442.81,-832.5 5432.81,-836 5442.81,-839.5 5442.81,-832.5"/>
+<path fill="none" stroke="#757575" d="M6359.6,-884.94C6359.6,-867.89 6359.6,-838 6359.6,-838 6359.6,-838 5442.55,-838 5442.55,-838"/>
+<polygon fill="#757575" stroke="#757575" points="5442.55,-834.5 5432.55,-838 5442.55,-841.5 5442.55,-834.5"/>
 </g>
 <!-- test/ts/types/pointer&#45;operations.test.ts -->
 <g id="node130" class="node">
 <title>test/ts/types/pointer&#45;operations.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M6826.83,-908C6826.83,-908 6601.17,-908 6601.17,-908 6597.33,-908 6593.5,-904.17 6593.5,-900.33 6593.5,-900.33 6593.5,-892.67 6593.5,-892.67 6593.5,-888.83 6597.33,-885 6601.17,-885 6601.17,-885 6826.83,-885 6826.83,-885 6830.67,-885 6834.5,-888.83 6834.5,-892.67 6834.5,-892.67 6834.5,-900.33 6834.5,-900.33 6834.5,-904.17 6830.67,-908 6826.83,-908"/>
-<text text-anchor="middle" x="6714" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/types/pointer&#45;operations.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M6701.83,-908C6701.83,-908 6476.17,-908 6476.17,-908 6472.33,-908 6468.5,-904.17 6468.5,-900.33 6468.5,-900.33 6468.5,-892.67 6468.5,-892.67 6468.5,-888.83 6472.33,-885 6476.17,-885 6476.17,-885 6701.83,-885 6701.83,-885 6705.67,-885 6709.5,-888.83 6709.5,-892.67 6709.5,-892.67 6709.5,-900.33 6709.5,-900.33 6709.5,-904.17 6705.67,-908 6701.83,-908"/>
+<text text-anchor="middle" x="6589" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/types/pointer&#45;operations.test.ts</text>
 </g>
 <!-- test/ts/types/pointer&#45;operations.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge336" class="edge">
 <title>test/ts/types/pointer&#45;operations.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M6602.5,-884.85C6602.5,-866.52 6602.5,-833 6602.5,-833 6602.5,-833 5442.7,-833 5442.7,-833"/>
-<polygon fill="#757575" stroke="#757575" points="5442.7,-829.5 5432.7,-833 5442.7,-836.5 5442.7,-829.5"/>
+<path fill="none" stroke="#757575" d="M6488.75,-884.83C6488.75,-867.25 6488.75,-836 6488.75,-836 6488.75,-836 5442.91,-836 5442.91,-836"/>
+<polygon fill="#757575" stroke="#757575" points="5442.91,-832.5 5432.91,-836 5442.91,-839.5 5442.91,-832.5"/>
 </g>
 <!-- test/ts/types/types.test.ts -->
 <g id="node131" class="node">
 <title>test/ts/types/types.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M7009.33,-908C7009.33,-908 6860.67,-908 6860.67,-908 6856.83,-908 6853,-904.17 6853,-900.33 6853,-900.33 6853,-892.67 6853,-892.67 6853,-888.83 6856.83,-885 6860.67,-885 6860.67,-885 7009.33,-885 7009.33,-885 7013.17,-885 7017,-888.83 7017,-892.67 7017,-892.67 7017,-900.33 7017,-900.33 7017,-904.17 7013.17,-908 7009.33,-908"/>
-<text text-anchor="middle" x="6935" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/types/types.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M6884.33,-908C6884.33,-908 6735.67,-908 6735.67,-908 6731.83,-908 6728,-904.17 6728,-900.33 6728,-900.33 6728,-892.67 6728,-892.67 6728,-888.83 6731.83,-885 6735.67,-885 6735.67,-885 6884.33,-885 6884.33,-885 6888.17,-885 6892,-888.83 6892,-892.67 6892,-892.67 6892,-900.33 6892,-900.33 6892,-904.17 6888.17,-908 6884.33,-908"/>
+<text text-anchor="middle" x="6810" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/types/types.test.ts</text>
 </g>
 <!-- test/ts/types/types.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
 <g id="edge337" class="edge">
 <title>test/ts/types/types.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M6901.67,-884.79C6901.67,-865.95 6901.67,-831 6901.67,-831 6901.67,-831 5442.66,-831 5442.66,-831"/>
-<polygon fill="#757575" stroke="#757575" points="5442.66,-827.5 5432.66,-831 5442.66,-834.5 5442.66,-827.5"/>
+<path fill="none" stroke="#757575" d="M6786.75,-884.85C6786.75,-866.52 6786.75,-833 6786.75,-833 6786.75,-833 5442.65,-833 5442.65,-833"/>
+<polygon fill="#757575" stroke="#757575" points="5442.65,-829.5 5432.65,-833 5442.65,-836.5 5442.65,-829.5"/>
+</g>
+<!-- test/ts/types/union&#45;types.test.ts -->
+<g id="node132" class="node">
+<title>test/ts/types/union&#45;types.test.ts</title>
+<path fill="none" stroke="#c6c5fe" d="M7104.33,-908C7104.33,-908 6917.67,-908 6917.67,-908 6913.83,-908 6910,-904.17 6910,-900.33 6910,-900.33 6910,-892.67 6910,-892.67 6910,-888.83 6913.83,-885 6917.67,-885 6917.67,-885 7104.33,-885 7104.33,-885 7108.17,-885 7112,-888.83 7112,-892.67 7112,-892.67 7112,-900.33 7112,-900.33 7112,-904.17 7108.17,-908 7104.33,-908"/>
+<text text-anchor="middle" x="7011" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/types/union&#45;types.test.ts</text>
+</g>
+<!-- test/ts/types/union&#45;types.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
+<g id="edge338" class="edge">
+<title>test/ts/types/union&#45;types.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
+<path fill="none" stroke="#757575" d="M6932.25,-884.79C6932.25,-865.95 6932.25,-831 6932.25,-831 6932.25,-831 5442.52,-831 5442.52,-831"/>
+<polygon fill="#757575" stroke="#757575" points="5442.52,-827.5 5432.52,-831 5442.52,-834.5 5442.52,-827.5"/>
 </g>
 <!-- test/ts/values/variables.test.ts -->
-<g id="node132" class="node">
+<g id="node133" class="node">
 <title>test/ts/values/variables.test.ts</title>
-<path fill="none" stroke="#c6c5fe" d="M7220.83,-908C7220.83,-908 7043.17,-908 7043.17,-908 7039.33,-908 7035.5,-904.17 7035.5,-900.33 7035.5,-900.33 7035.5,-892.67 7035.5,-892.67 7035.5,-888.83 7039.33,-885 7043.17,-885 7043.17,-885 7220.83,-885 7220.83,-885 7224.67,-885 7228.5,-888.83 7228.5,-892.67 7228.5,-892.67 7228.5,-900.33 7228.5,-900.33 7228.5,-904.17 7224.67,-908 7220.83,-908"/>
-<text text-anchor="middle" x="7132" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/values/variables.test.ts</text>
+<path fill="none" stroke="#c6c5fe" d="M7315.83,-908C7315.83,-908 7138.17,-908 7138.17,-908 7134.33,-908 7130.5,-904.17 7130.5,-900.33 7130.5,-900.33 7130.5,-892.67 7130.5,-892.67 7130.5,-888.83 7134.33,-885 7138.17,-885 7138.17,-885 7315.83,-885 7315.83,-885 7319.67,-885 7323.5,-888.83 7323.5,-892.67 7323.5,-892.67 7323.5,-900.33 7323.5,-900.33 7323.5,-904.17 7319.67,-908 7315.83,-908"/>
+<text text-anchor="middle" x="7227" y="-892.8" font-family="Arial" font-size="14.00" fill="#c6c5fe">test/ts/values/variables.test.ts</text>
 </g>
 <!-- test/ts/values/variables.test.ts&#45;&gt;test/ts/test&#45;helpers.ts -->
-<g id="edge338" class="edge">
+<g id="edge339" class="edge">
 <title>test/ts/values/variables.test.ts&#45;&gt;test/ts/test&#45;helpers.ts</title>
-<path fill="none" stroke="#757575" d="M7052.25,-884.88C7052.25,-865.34 7052.25,-828 7052.25,-828 7052.25,-828 5442.74,-828 5442.74,-828"/>
-<polygon fill="#757575" stroke="#757575" points="5442.74,-824.5 5432.74,-828 5442.74,-831.5 5442.74,-824.5"/>
+<path fill="none" stroke="#757575" d="M7138.06,-884.88C7138.06,-865.34 7138.06,-828 7138.06,-828 7138.06,-828 5442.72,-828 5442.72,-828"/>
+<polygon fill="#757575" stroke="#757575" points="5442.72,-824.5 5432.72,-828 5442.72,-831.5 5442.72,-824.5"/>
 </g>
 </g>
 </svg>

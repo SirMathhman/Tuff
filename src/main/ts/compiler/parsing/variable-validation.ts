@@ -5,6 +5,7 @@ import {
   isDigit,
   charAt,
   skipBracePair,
+  skipWhitespaceAndGenericsWithDetection,
 } from "./string-helpers";
 import {
   skipStructDeclaration,
@@ -174,6 +175,16 @@ function validateIdentifier(
   const structInstEnd = skipStructInstantiation(source, i, name);
   if (structInstEnd !== -1) {
     return structInstEnd;
+  }
+
+  // Check if followed by whitespace and generics (like Some<I32>)
+  const { endPos: j, hadGenerics } = skipWhitespaceAndGenericsWithDetection(
+    source,
+    i,
+  );
+  // If we found generics, treat as type reference
+  if (hadGenerics) {
+    return j;
   }
 
   let nextIdx = i;

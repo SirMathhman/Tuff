@@ -83,6 +83,38 @@ export function skipAngleBrackets(source: string, startPos: number): number {
   return j;
 }
 
+/**
+ * Skip whitespace and generic parameters if present
+ * Used to skip over type parameters like <T> or <I32>
+ */
+export function skipWhitespaceAndGenerics(
+  source: string,
+  startPos: number,
+): number {
+  const { endPos } = skipWhitespaceAndGenericsWithDetection(source, startPos);
+  return endPos;
+}
+
+/**
+ * Skip whitespace and generic parameters if present
+ * Used to skip over type parameters like <T> or <I32>
+ * Returns both the new position and whether generics were actually skipped
+ */
+export function skipWhitespaceAndGenericsWithDetection(
+  source: string,
+  startPos: number,
+): { endPos: number; hadGenerics: boolean } {
+  let j = startPos;
+  while (j < source.length && isWhitespace(source[j])) j++;
+  let hadGenerics = false;
+  if (j < source.length && source[j] === "<") {
+    j = skipAngleBrackets(source, j);
+    while (j < source.length && isWhitespace(source[j])) j++;
+    hadGenerics = true;
+  }
+  return { endPos: j, hadGenerics };
+}
+
 export function readIdentifier(
   source: string,
   startIdx: number,

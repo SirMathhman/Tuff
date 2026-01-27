@@ -2,12 +2,14 @@ import {
   isWhitespace,
   matchWord,
   isIdentifierChar,
+  skipWhitespaceAndGenerics,
 } from "../../parsing/string-helpers";
 
 /**
  * Transform 'is' type check operator to 1 (true)
  * Type checking happens at compile time, so runtime is always true
  * e.g., "x is I32" -> "1" (whole expression becomes 1)
+ * e.g., "x is Some<I32>" -> "1" (skips generics too)
  */
 export function transformIsOperator(source: string): string {
   const out: string[] = [];
@@ -31,6 +33,8 @@ export function transformIsOperator(source: string): string {
       while (j < source.length && isWhitespace(source[j])) j++;
       // Skip the type name
       while (j < source.length && isIdentifierChar(source[j])) j++;
+      // Skip generic type parameters if present
+      j = skipWhitespaceAndGenerics(source, j);
       // Replace with 1 (true)
       out.push("1");
       i = j;

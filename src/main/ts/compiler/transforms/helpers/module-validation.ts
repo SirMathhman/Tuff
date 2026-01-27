@@ -4,6 +4,7 @@ import {
   matchWord,
   readIdentifier,
   skipWhitespace,
+  skipWhitespaceAndGenerics,
 } from "../../parsing/string-helpers";
 import { parseBracedBlock } from "../../parsing/parse-helpers";
 import { scanModuleBody } from "./module-member-parser";
@@ -55,7 +56,9 @@ export function findModuleRegions(source: string): ModuleRegion[] {
       const parsedName = readIdentifier(source, j);
       const name = parsedName.name;
       j = parsedName.endIdx;
-      j = skipWhitespace(source, j);
+
+      // Skip generic parameters if present
+      j = skipWhitespaceAndGenerics(source, j);
 
       if (j < source.length && source[j] === "{") {
         const { content: body, endIdx: bodyEnd } = parseBracedBlock(source, j);
