@@ -406,6 +406,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         lastResult = { value: newValue, constraint: finalConstraint };
                         continue;
                     }
+                    throw new Error(`Cannot assign to undefined variable ${varName}`);
                 }
                 lastResult = evaluate(statement, localScope);
             }
@@ -429,7 +430,9 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             }
         }
         if (isFullyWrapped) {
-            return evaluate(source.substring(1, source.length - 1).trim(), scope);
+            const inner = source.substring(1, source.length - 1).trim();
+            if (startChar === '{' && inner.length === 0) return { value: 0, constraint: null };
+            return evaluate(inner, scope);
         }
     }
 
@@ -592,6 +595,11 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
     const scopeVar = scope[source];
     if (scopeVar) {
         return { value: scopeVar.value, constraint: scopeVar.constraint };
+    }
+    
+    // If it looks like an identifier but isn't in scope, throw error
+    if (/^[a-zA-Z_]\w*$/.test(source)) {
+        throw new Error(`Variable ${source} is not defined in the current scope.`);
     }
     
     // Single value parsing
