@@ -400,4 +400,7 @@ describe("interpret", () => {
       interpret("let func = () => 100; let temp : Bool = func();"),
     ).toThrow();
   });
+  test('interpret("let something = 100; something()") should throw error', () => {
+    expect(() => interpret("let something = 100; something()")).toThrow();
+  });
 });
