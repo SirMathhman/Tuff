@@ -41,7 +41,7 @@ function updateDepth(char: string, depth: number): number {
     return depth;
 }
 
-export function interpret(source : string, scope: Record<string, { value: number, constraint: TypeConstraint | null }> = {}) : number {
+export function interpret(source : string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean }> = {}) : number {
     return evaluate(source, scope).value;
 }
 
@@ -50,7 +50,7 @@ interface EvaluationResult {
     constraint: TypeConstraint | null;
 }
 
-function evaluate(source: string, scope: Record<string, { value: number, constraint: TypeConstraint | null }>): EvaluationResult {
+function evaluate(source: string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean }>): EvaluationResult {
     source = source.trim();
     
     // Check if this is a block with statements (semicolons) NOT inside parentheses/braces at depth 0
@@ -89,17 +89,18 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                 continue;
             }
             if (statement.startsWith('let ')) {
-                // Parse variable declaration: let x : U8 = 2 or let x = 2
-                const declMatch = statement.match(/^let\s+([a-zA-Z_]\w*)\s*(?::\s*([UIF]\d+))?\s*=\s*(.*)$/);
-                if (declMatch && declMatch[1] && declMatch[3]) {
-                    const varName = declMatch[1];
-                    const typeStr = declMatch[2];
-                    const expr = declMatch[3];
+                // Parse variable declaration: let [mut] x [: TYPE] = EXPR
+                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([UIF]\d+))?\s*=\s*(.*)$/);
+                if (declMatch && declMatch[2] && declMatch[4]) {
+                    const isMutable = !!declMatch[1];
+                    const varName = declMatch[2];
+                    const typeStr = declMatch[3];
+                    const expr = declMatch[4];
                     const explicitConstraint = typeStr ? getTypeConstraint(typeStr) : null;
                     
                     // Create a "pending" scope for evaluating the initializer
                     const initializerScope = { ...localScope };
-                    initializerScope[varName] = { value: NaN, constraint: null }; // Placeholder
+                    initializerScope[varName] = { value: NaN, constraint: null, isMutable }; // Placeholder
                     
                     const exprResult = evaluate(expr, initializerScope);
                     
@@ -119,10 +120,32 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     }
 
                     const finalConstraint = explicitConstraint || exprResult.constraint;
-                    localScope[varName] = { value: exprResult.value, constraint: finalConstraint };
+                    localScope[varName] = { value: exprResult.value, constraint: finalConstraint, isMutable };
                     lastResult = exprResult;
                 }
             } else {
+                // Check for reassignment: x = EXPR
+                const assignMatch = statement.match(/^([a-zA-Z_]\w*)\s*=\s*(.*)$/);
+                if (assignMatch && assignMatch[1] && assignMatch[2]) {
+                    const varName = assignMatch[1];
+                    const expr = assignMatch[2];
+                    const existingVar = localScope[varName];
+                    
+                    if (existingVar) {
+                        if (!existingVar.isMutable) {
+                            throw new Error(`Cannot reassign immutable variable ${varName}.`);
+                        }
+                        
+                        const exprResult = evaluate(expr, localScope);
+                        if (existingVar.constraint) {
+                            validateValueInConstraint(exprResult.value, existingVar.constraint, statement);
+                        }
+                        
+                        localScope[varName] = { ...existingVar, value: exprResult.value };
+                        lastResult = exprResult;
+                        continue;
+                    }
+                }
                 lastResult = evaluate(statement, localScope);
             }
         }
