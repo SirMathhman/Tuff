@@ -172,13 +172,12 @@ function findMatchedClosing(source: string, fromIndex: number): number {
   return -1;
 }
 
-function parseFunctionDefinition(source: string): ParsedFunction | null {
-  const fnMatch = source.match(
-    /^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*(.*)$/,
-  );
-  if (!fnMatch) return null;
-  const [, fnNameRaw, paramsRaw, returnTypeRaw, bodyRaw] = fnMatch;
-  if (!fnNameRaw) return null;
+function buildParsedFunction(
+  fnName: string,
+  paramsRaw: string | undefined,
+  returnTypeRaw: string | undefined,
+  bodyRaw: string | undefined,
+): ParsedFunction {
   const paramsRawSafe = paramsRaw || "";
   const params = paramsRawSafe.trim()
     ? paramsRawSafe
@@ -190,11 +189,39 @@ function parseFunctionDefinition(source: string): ParsedFunction | null {
     ? getTypeConstraint(returnTypeRaw.trim())
     : null;
   return {
-    fnName: fnNameRaw,
+    fnName,
     params,
     returnConstraint,
     body: (bodyRaw || "").trim(),
   };
+}
+
+function parseFunctionDefinition(source: string): ParsedFunction | null {
+  // Try matching named function: fn name() : Type => body
+  const fnMatch = source.match(
+    /^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*(.*)$/,
+  );
+  if (fnMatch) {
+    const [, fnNameRaw, paramsRaw, returnTypeRaw, bodyRaw] = fnMatch;
+    if (!fnNameRaw) return null;
+    return buildParsedFunction(fnNameRaw, paramsRaw, returnTypeRaw, bodyRaw);
+  }
+
+  // Try matching anonymous function: () : Type => body
+  const anonMatch = source.match(
+    /^\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*(.*)$/,
+  );
+  if (anonMatch) {
+    const [, paramsRaw, returnTypeRaw, bodyRaw] = anonMatch;
+    return buildParsedFunction(
+      "__anonymous__",
+      paramsRaw,
+      returnTypeRaw,
+      bodyRaw,
+    );
+  }
+
+  return null;
 }
 
 function parseKeywordParen(
