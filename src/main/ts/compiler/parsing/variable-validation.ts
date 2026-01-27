@@ -32,6 +32,10 @@ export function clearMovedVariables(): void {
   movedVariables.clear();
 }
 
+export function clearDeclaredTypes(): void {
+  declaredTypes.clear();
+}
+
 export function markMovedVariable(name: string): void {
   movedVariables.add(name);
 }

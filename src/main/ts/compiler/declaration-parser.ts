@@ -6,6 +6,7 @@ import {
   clearTypeAliases,
   clearVariableTypes,
   clearMovedVariables,
+  clearDeclaredTypes,
   parseLetDeclaration,
 } from "./parsing/parser-utils";
 import { clearCompileFunctionDefs } from "./storage/function-defs-storage";
@@ -84,6 +85,7 @@ export function createDeclarationParser(
       clearDropHandlers();
       clearTypeAliases();
       clearMovedVariables();
+      clearDeclaredTypes();
       parseDeclarationsImpl(source, variables);
     },
   };

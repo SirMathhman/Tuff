@@ -12,4 +12,8 @@ describe("contracts", () => {
       assertValid("contract MyContract {}", 0);
     },
   );
+
+  itBoth("throws on duplicate contract declaration", (_assertValid, assertInvalid) => {
+    assertInvalid("contract Empty {} contract Empty {}");
+  });
 });

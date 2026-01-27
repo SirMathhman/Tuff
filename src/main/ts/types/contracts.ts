@@ -7,6 +7,11 @@ const storeContractDeclaration: StoreDecl = (rest, closeIndex, typeMap) => {
     rest.slice(0, braceIndex).trim(),
   );
 
+  // Check for duplicate contract declaration
+  if (typeMap.has("__contract__" + contractName)) {
+    throw new Error(`Duplicate contract declaration: ${contractName}`);
+  }
+
   // Store contract definition
   typeMap.set("__contract__" + contractName, 1 as unknown as number);
 };

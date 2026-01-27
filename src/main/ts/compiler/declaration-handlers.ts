@@ -5,6 +5,7 @@ import {
   isDroppableType,
   markMovedVariable,
   addDeclaredType,
+  isDeclaredType,
   parseTypeDeclaration,
 } from "./parsing/parser-utils";
 import { extractParamsWithTypes } from "./parsing/param-helpers";
@@ -204,6 +205,11 @@ function handleDeclarationBody(
   if (j >= source.length) return j;
   const fieldStart = j + 1;
   j = skipBracePair(source, j) - (isStruct ? 1 : -1);
+
+  if (name && isDeclaredType(name)) {
+    throw new Error(`Duplicate declaration of type '${name}'`);
+  }
+
   if (isStruct) {
     const fieldsStr = source.slice(fieldStart, j).trim();
     if (name && fieldsStr) {

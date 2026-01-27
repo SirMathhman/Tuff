@@ -16,6 +16,7 @@ export {
   validateVariableUsage,
   isDeclaredType,
   addDeclaredType,
+  clearDeclaredTypes,
   clearMovedVariables,
   markMovedVariable,
 } from "./variable-validation";
