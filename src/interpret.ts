@@ -197,6 +197,39 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             }
         }
     }
+
+    // Single block handling: { statements }
+    if (source.startsWith('{') && source.endsWith('}')) {
+        let depth = 0;
+        let isTopLevelBlock = true;
+        for (let i = 0; i < source.length - 1; i++) {
+            depth = updateDepth(source[i] as string, depth);
+            if (depth === 0) {
+                isTopLevelBlock = false;
+                break;
+            }
+        }
+        if (isTopLevelBlock) {
+            const inner = source.substring(1, source.length - 1).trim();
+            // Evaluate inner content as a list of statements, but allow it to update outer scope
+            // We need a subtle change: split inner into statements AND evaluate them in order
+            // If inner is empty, return 0
+            if (inner.length === 0) return { value: 0, constraint: null };
+            
+            // To support outer scope mutation, we evaluate the inner content
+            // However, evaluate(inner, scope) will create its own localScope if it finds semicolons.
+            // This is actually what we want for block-scoping.
+            // But if we want mutation to propagate out of the block, 
+            // the block implementation needs to be careful.
+            // Current block splitting logic creates a localScope = { ...scope }.
+            
+            // We need a way to let blocks modify the outer scope.
+            // Let's modify the block eval logic to copy changed values back to outer scope
+            // OR change how localScope works.
+            
+            return evaluate(inner, scope);
+        }
+    }
     
     // Check if this is a block with statements (semicolons or self-terminating blocks) NOT inside parentheses/braces at depth 0
     let depth = 0;
@@ -269,6 +302,13 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
 
                         const finalConstraint = explicitConstraint || exprResult.constraint || getTypeConstraint("I32");
                         localScope[varName] = { value: exprResult.value, constraint: finalConstraint, isMutable, isInitialized: true };
+                        
+                        // IF this variable was in the original outer scope, update it there too
+                        if (scope[varName]) {
+                            scope[varName].value = exprResult.value;
+                            scope[varName].isInitialized = true;
+                        }
+
                         lastResult = exprResult;
                     } else {
                         // Declaration without initializer
@@ -354,7 +394,15 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         }
                         
                         const finalConstraint = existingVar.constraint || exprResult.constraint || getTypeConstraint("I32");
-                        localScope[varName] = { ...existingVar, value: newValue, isInitialized: true, constraint: finalConstraint };
+                        const updatedVar = { ...existingVar, value: newValue, isInitialized: true, constraint: finalConstraint };
+                        localScope[varName] = updatedVar;
+                        
+                        // IF this variable was in the original outer scope, update it there too
+                        if (scope[varName]) {
+                            scope[varName].value = newValue;
+                            scope[varName].isInitialized = true;
+                        }
+
                         lastResult = { value: newValue, constraint: finalConstraint };
                         continue;
                     }
