@@ -373,6 +373,12 @@ describe("interpret", () => {
     );
     expect(result).toBe(7);
   });
+  test('interpret("fn add(this : I32, second : I32) : I32 => this + second; 3.add(4)") should return 7', () => {
+    const result = interpret(
+      "fn add(this : I32, second : I32) : I32 => this + second; 3.add(4)",
+    );
+    expect(result).toBe(7);
+  });
   test('interpret("fn get() : I32 => 100;") should return 0', () => {
     const result = interpret("fn get() : I32 => 100;");
     expect(result).toBe(0);

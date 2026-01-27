@@ -1585,7 +1585,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   let operatorMatch = findOperator(/\s*(<|<=|>|>=|==|!=)\s*/g);
 
   if (!operatorMatch) {
-    operatorMatch = findOperator(/\s*(is)\s+/g);
+    operatorMatch = findOperator(/(?:^|\s)(is)\s+/g);
   }
 
   if (!operatorMatch) {
@@ -1849,6 +1849,106 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   if (assignmentResult) return assignmentResult;
 
   // Variable access in non-binary expression
+  const invokeFunction = (
+    fnName: string,
+    fnEntry: ScopeEntry | undefined,
+    argResults: EvaluationResult[],
+    callSource: string,
+  ): EvaluationResult => {
+    if (!fnEntry?.functionBody) {
+      throw new Error(`Function ${fnName} is not defined`);
+    }
+
+    const paramNames = fnEntry.functionParams || [];
+    const paramTypes = fnEntry.functionParamTypes || [];
+    if (argResults.length !== paramNames.length) {
+      throw new Error(
+        `Function ${fnName} expects ${paramNames.length} arguments but got ${argResults.length}`,
+      );
+    }
+
+    const invocationScope = { ...scope };
+    for (let i = 0; i < paramNames.length; i++) {
+      const paramName = paramNames[i];
+      if (!paramName) {
+        throw new Error(`Missing parameter name for function ${fnName}`);
+      }
+      const paramTypeStr = paramTypes[i];
+      const argResult = argResults[i];
+      if (!argResult) {
+        throw new Error(`Missing argument for parameter ${paramName}`);
+      }
+      const paramConstraint = paramTypeStr
+        ? getTypeConstraint(paramTypeStr)
+        : null;
+
+      if (paramConstraint) {
+        if (typeof argResult.value === "number") {
+          validateValueInConstraint(argResult.value, paramConstraint, callSource);
+        }
+        if (argResult.constraint) {
+          validateTypeMatch(argResult.constraint, paramConstraint);
+        }
+      }
+
+      invocationScope[paramName] = {
+        value: argResult.value,
+        constraint: paramConstraint || argResult.constraint,
+        isMutable: false,
+        isInitialized: true,
+        originalType: paramTypeStr,
+      };
+    }
+
+    const fnResult = evaluate(fnEntry.functionBody, invocationScope);
+    // Sync back mutable captured variables to the original scope
+    for (const varName in scope) {
+      const originalVar = scope[varName];
+      const modifiedVar = invocationScope[varName];
+      if (originalVar && modifiedVar && originalVar.isMutable && varName !== fnName) {
+        originalVar.value = modifiedVar.value;
+        originalVar.isInitialized = modifiedVar.isInitialized;
+      }
+    }
+    if (fnEntry.constraint && typeof fnResult.value === "number") {
+      validateValueInConstraint(fnResult.value, fnEntry.constraint, callSource);
+    }
+    return fnResult;
+  };
+
+  const methodCallMatch = source.match(/^(.+)\.([a-zA-Z_]\w*)\s*\((.*)\)$/);
+  if (methodCallMatch) {
+    const receiverStr = methodCallMatch[1]?.trim();
+    const methodName = methodCallMatch[2];
+    const argsRaw = methodCallMatch[3] || "";
+    if (!receiverStr || !methodName) {
+      throw new Error(`Invalid method call syntax: ${source}`);
+    }
+
+    const receiverResult = evaluate(receiverStr, scope);
+    const fnEntry = scope[methodName];
+
+    if (
+      fnEntry?.isGenerator &&
+      fnEntry.rangeStart !== undefined &&
+      fnEntry.rangeEnd !== undefined &&
+      fnEntry.generatorPosition !== undefined
+    ) {
+      throw new Error(`Generator ${methodName} cannot be called as a method`);
+    }
+
+    const paramNames = fnEntry?.functionParams || [];
+    if (paramNames[0] !== "this") {
+      throw new Error(
+        `Method call requires first parameter this for function ${methodName}`,
+      );
+    }
+
+    const argExprs = parseArguments(argsRaw);
+    const argResults = [receiverResult, ...argExprs.map((arg) => evaluate(arg, scope))];
+    return invokeFunction(methodName, fnEntry, argResults, source);
+  }
+
   const functionCallMatch = source.match(/^([a-zA-Z_]\w*)\s*\((.*)\)$/);
   if (functionCallMatch) {
     const fnNameRaw = functionCallMatch[1];
@@ -1885,67 +1985,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       };
     }
 
-    if (fnEntry?.functionBody) {
-      const paramNames = fnEntry.functionParams || [];
-      const paramTypes = fnEntry.functionParamTypes || [];
-      if (argExprs.length !== paramNames.length) {
-        throw new Error(
-          `Function ${fnName} expects ${paramNames.length} arguments but got ${argExprs.length}`,
-        );
-      }
-
-      const invocationScope = { ...scope };
-      for (let i = 0; i < paramNames.length; i++) {
-        const paramName = paramNames[i];
-        if (!paramName) {
-          throw new Error(`Missing parameter name for function ${fnName}`);
-        }
-        const paramTypeStr = paramTypes[i];
-        const argExpr = argExprs[i] || "";
-        const argResult = evaluate(argExpr, scope);
-        const paramConstraint = paramTypeStr
-          ? getTypeConstraint(paramTypeStr)
-          : null;
-
-        if (paramConstraint) {
-          if (typeof argResult.value === "number") {
-            validateValueInConstraint(argResult.value, paramConstraint, source);
-          }
-          if (argResult.constraint) {
-            validateTypeMatch(argResult.constraint, paramConstraint);
-          }
-        }
-
-        invocationScope[paramName] = {
-          value: argResult.value,
-          constraint: paramConstraint || argResult.constraint,
-          isMutable: false,
-          isInitialized: true,
-          originalType: paramTypeStr,
-        };
-      }
-
-      const fnResult = evaluate(fnEntry.functionBody, invocationScope);
-      // Sync back mutable captured variables to the original scope
-      for (const varName in scope) {
-        const originalVar = scope[varName];
-        const modifiedVar = invocationScope[varName];
-        if (
-          originalVar &&
-          modifiedVar &&
-          originalVar.isMutable &&
-          varName !== fnName
-        ) {
-          originalVar.value = modifiedVar.value;
-          originalVar.isInitialized = modifiedVar.isInitialized;
-        }
-      }
-      if (fnEntry.constraint && typeof fnResult.value === "number") {
-        validateValueInConstraint(fnResult.value, fnEntry.constraint, source);
-      }
-      return fnResult;
-    }
-    throw new Error(`Function ${fnName} is not defined`);
+    const argResults = argExprs.map((arg) => evaluate(arg, scope));
+    return invokeFunction(fnName, fnEntry, argResults, source);
   }
   const scopeVar = scope[source];
   if (scopeVar) {
