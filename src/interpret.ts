@@ -38,12 +38,15 @@ function validateValueInConstraint(value: number, constraint: TypeConstraint, so
 export function interpret(source : string) : number {
     // Check if this is a binary operation
     const operatorMatch = source.match(/\s*([+\-*/])\s*/);
-    if (operatorMatch) {
+    if (operatorMatch && operatorMatch.index !== undefined) {
         const operator = operatorMatch[1];
-        const parts = source.split(operatorMatch[0]);
-        if (parts.length >= 2 && parts[0] && parts[1]) {
-            const leftStr = parts[0].trim();
-            const rightStr = parts[1].trim();
+        const operatorStart = operatorMatch.index;
+        const operatorEnd = operatorStart + operatorMatch[0].length;
+        
+        const leftStr = source.substring(0, operatorStart).trim();
+        const rightStr = source.substring(operatorEnd).trim();
+        
+        if (leftStr && rightStr) {
             const left = interpret(leftStr);
             const right = interpret(rightStr);
             

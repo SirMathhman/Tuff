@@ -41,4 +41,8 @@ describe('interpret', () => {
     test('interpret("1U8 + 65535U16") should throw error', () => {
         expect(() => interpret("1U8 + 65535U16")).toThrow();
     });
+    test('interpret("1U8 + 2U16 + 3U32") should return 6', () => {
+        const result = interpret("1U8 + 2U16 + 3U32");
+        expect(result).toBe(6);
+    });
 });
