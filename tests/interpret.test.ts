@@ -479,4 +479,8 @@ describe("interpret", () => {
   test('interpret("fn get() => 100; let x : Bool = get();") should throw error', () => {
     expect(() => interpret("fn get() => 100; let x : Bool = get();")).toThrow();
   });
+  test('interpret("let x = 100; x is I32") should return 1', () => {
+    const result = interpret("let x = 100; x is I32");
+    expect(result).toBe(1);
+  });
 });

@@ -1420,6 +1420,10 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   let operatorMatch = findOperator(/\s*(<|<=|>|>=|==|!=)\s*/g);
 
   if (!operatorMatch) {
+    operatorMatch = findOperator(/\s*(is)\s+/g);
+  }
+
+  if (!operatorMatch) {
     operatorMatch = findOperator(/\s*(&&|\|\|)\s*/g);
   }
 
@@ -1473,7 +1477,9 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         };
       }
 
-      const rightResult = evaluate(rightStr, scope);
+      // For `is` operator, don't evaluate rightStr as an expression - it's a type name
+      const rightResult =
+        operator === "is" ? { value: 0, constraint: null } : evaluate(rightStr, scope);
 
       if (operator === "&&" || operator === "||") {
         ensureBoolOperand(rightResult, operator, "right");
@@ -1484,125 +1490,143 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         operator === "/"
       ) {
         ensureNumericOperand(rightResult, operator, "right");
+      } else if (operator !== "is") {
+        // For `is` operator, rightStr is a type name, not an expression to evaluate
+        // so we skip the operand check
       }
 
       let result: number;
       let resultConstraint: TypeConstraint | null = null;
 
-      switch (operator) {
-        case "&&":
-          result = leftResult.value !== 0 && rightResult.value !== 0 ? 1 : 0;
-          resultConstraint = {
-            minValue: 0,
-            maxValue: 1,
-            typeStr: "Bool",
-            bitWidth: 1,
-          };
-          break;
-        case "||":
-          result = leftResult.value !== 0 || rightResult.value !== 0 ? 1 : 0;
-          resultConstraint = {
-            minValue: 0,
-            maxValue: 1,
-            typeStr: "Bool",
-            bitWidth: 1,
-          };
-          break;
-        case "<":
-          result = leftResult.value < rightResult.value ? 1 : 0;
-          resultConstraint = {
-            minValue: 0,
-            maxValue: 1,
-            typeStr: "Bool",
-            bitWidth: 1,
-          };
-          break;
-        case "<=":
-          result = leftResult.value <= rightResult.value ? 1 : 0;
-          resultConstraint = {
-            minValue: 0,
-            maxValue: 1,
-            typeStr: "Bool",
-            bitWidth: 1,
-          };
-          break;
-        case ">":
-          result = leftResult.value > rightResult.value ? 1 : 0;
-          resultConstraint = {
-            minValue: 0,
-            maxValue: 1,
-            typeStr: "Bool",
-            bitWidth: 1,
-          };
-          break;
-        case ">=":
-          result = leftResult.value >= rightResult.value ? 1 : 0;
-          resultConstraint = {
-            minValue: 0,
-            maxValue: 1,
-            typeStr: "Bool",
-            bitWidth: 1,
-          };
-          break;
-        case "==":
-          result = leftResult.value === rightResult.value ? 1 : 0;
-          resultConstraint = {
-            minValue: 0,
-            maxValue: 1,
-            typeStr: "Bool",
-            bitWidth: 1,
-          };
-          break;
-        case "!=":
-          result = leftResult.value !== rightResult.value ? 1 : 0;
-          resultConstraint = {
-            minValue: 0,
-            maxValue: 1,
-            typeStr: "Bool",
-            bitWidth: 1,
-          };
-          break;
-        case "+":
-          if (
-            typeof leftResult.value !== "number" ||
-            typeof rightResult.value !== "number"
-          ) {
-            throw new Error("Cannot perform arithmetic on tuple");
-          }
-          result = leftResult.value + rightResult.value;
-          break;
-        case "-":
-          if (
-            typeof leftResult.value !== "number" ||
-            typeof rightResult.value !== "number"
-          ) {
-            throw new Error("Cannot perform arithmetic on tuple");
-          }
-          result = leftResult.value - rightResult.value;
-          break;
-        case "*":
-          if (
-            typeof leftResult.value !== "number" ||
-            typeof rightResult.value !== "number"
-          ) {
-            throw new Error("Cannot perform arithmetic on tuple");
-          }
-          result = leftResult.value * rightResult.value;
-          break;
-        case "/":
-          if (
-            typeof leftResult.value !== "number" ||
-            typeof rightResult.value !== "number"
-          ) {
-            throw new Error("Cannot perform arithmetic on tuple");
-          }
-          if (rightResult.value === 0) {
-            throw new Error("Division by zero");
-          }
-          result = Math.floor(leftResult.value / rightResult.value);
-          break;
-        default:
-          return { value: NaN, constraint: null };
+      // For `is` operator, we don't need rightResult so handle it specially
+      if (operator === "is") {
+        const expectedType = rightStr.trim();
+        const actualType = leftResult.constraint?.typeStr;
+        result = actualType === expectedType ? 1 : 0;
+        resultConstraint = {
+          minValue: 0,
+          maxValue: 1,
+          typeStr: "Bool",
+          bitWidth: 1,
+        };
+      } else {
+        const rightResult = evaluate(rightStr, scope);
+
+        switch (operator) {
+          case "&&":
+            result = leftResult.value !== 0 && rightResult.value !== 0 ? 1 : 0;
+            resultConstraint = {
+              minValue: 0,
+              maxValue: 1,
+              typeStr: "Bool",
+              bitWidth: 1,
+            };
+            break;
+          case "||":
+            result = leftResult.value !== 0 || rightResult.value !== 0 ? 1 : 0;
+            resultConstraint = {
+              minValue: 0,
+              maxValue: 1,
+              typeStr: "Bool",
+              bitWidth: 1,
+            };
+            break;
+          case "<":
+            result = leftResult.value < rightResult.value ? 1 : 0;
+            resultConstraint = {
+              minValue: 0,
+              maxValue: 1,
+              typeStr: "Bool",
+              bitWidth: 1,
+            };
+            break;
+          case "<=":
+            result = leftResult.value <= rightResult.value ? 1 : 0;
+            resultConstraint = {
+              minValue: 0,
+              maxValue: 1,
+              typeStr: "Bool",
+              bitWidth: 1,
+            };
+            break;
+          case ">":
+            result = leftResult.value > rightResult.value ? 1 : 0;
+            resultConstraint = {
+              minValue: 0,
+              maxValue: 1,
+              typeStr: "Bool",
+              bitWidth: 1,
+            };
+            break;
+          case ">=":
+            result = leftResult.value >= rightResult.value ? 1 : 0;
+            resultConstraint = {
+              minValue: 0,
+              maxValue: 1,
+              typeStr: "Bool",
+              bitWidth: 1,
+            };
+            break;
+          case "==":
+            result = leftResult.value === rightResult.value ? 1 : 0;
+            resultConstraint = {
+              minValue: 0,
+              maxValue: 1,
+              typeStr: "Bool",
+              bitWidth: 1,
+            };
+            break;
+          case "!=":
+            result = leftResult.value !== rightResult.value ? 1 : 0;
+            resultConstraint = {
+              minValue: 0,
+              maxValue: 1,
+              typeStr: "Bool",
+              bitWidth: 1,
+            };
+            break;
+          case "+":
+            if (
+              typeof leftResult.value !== "number" ||
+              typeof rightResult.value !== "number"
+            ) {
+              throw new Error("Cannot perform arithmetic on tuple");
+            }
+            result = leftResult.value + rightResult.value;
+            break;
+          case "-":
+            if (
+              typeof leftResult.value !== "number" ||
+              typeof rightResult.value !== "number"
+            ) {
+              throw new Error("Cannot perform arithmetic on tuple");
+            }
+            result = leftResult.value - rightResult.value;
+            break;
+          case "*":
+            if (
+              typeof leftResult.value !== "number" ||
+              typeof rightResult.value !== "number"
+            ) {
+              throw new Error("Cannot perform arithmetic on tuple");
+            }
+            result = leftResult.value * rightResult.value;
+            break;
+          case "/":
+            if (
+              typeof leftResult.value !== "number" ||
+              typeof rightResult.value !== "number"
+            ) {
+              throw new Error("Cannot perform arithmetic on tuple");
+            }
+            if (rightResult.value === 0) {
+              throw new Error("Division by zero");
+            }
+            result = Math.floor(leftResult.value / rightResult.value);
+            break;
+          default:
+            return { value: NaN, constraint: null };
+        }
       }
 
       if (operator === "&&" || operator === "||") {
@@ -1614,7 +1638,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         operator === ">" ||
         operator === ">=" ||
         operator === "==" ||
-        operator === "!="
+        operator === "!=" ||
+        operator === "is"
       ) {
         return { value: result, constraint: resultConstraint };
       }
