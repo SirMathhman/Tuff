@@ -28,4 +28,7 @@ describe('interpret', () => {
         const result = interpret("1 + 2");
         expect(result).toBe(3);
     });
+    test('interpret("1U8 + 255U8") should throw error', () => {
+        expect(() => interpret("1U8 + 255U8")).toThrow();
+    });
 });
