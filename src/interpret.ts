@@ -50,13 +50,13 @@ function ensureVariableNotDefined(scope: Record<string, unknown>, varName: strin
     }
 }
 
-function ensureBoolOperand(result: EvaluationResult, operator: string | undefined, side: 'left' | 'right'): void {
+function ensureBoolOperand(result: EvaluationResult, operator: string | undefined, side: string): void {
     if (result.constraint?.typeStr !== 'Bool') {
         throw new Error(`Logical operator ${operator || 'unknown'} requires boolean operands, but ${side} side is ${result.constraint?.typeStr || 'numeric'}`);
     }
 }
 
-function ensureNumericOperand(result: EvaluationResult, operator: string | undefined, side: 'left' | 'right'): void {
+function ensureNumericOperand(result: EvaluationResult, operator: string | undefined, side: string): void {
     if (result.constraint?.typeStr === 'Bool') {
         throw new Error(`Arithmetic operator ${operator || 'unknown'} requires numeric operands, but ${side} side is Bool`);
     }
@@ -84,6 +84,25 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
     }
     if (source === 'false') {
         return { value: 0, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
+    }
+
+    // Check for if (cond) expr1 else expr2
+    if (source.startsWith('if')) {
+        const ifMatch = source.match(/^if\s*\((.*)\)\s*({[^{}]*}|[^{};]*)\s*else\s*({[^{}]*}|[^{};]*)$/);
+        if (ifMatch) {
+            const conditionStr = ifMatch[1]?.trim() || '';
+            const thenStr = ifMatch[2]?.trim() || '';
+            const elseStr = ifMatch[3]?.trim() || '';
+            
+            const conditionResult = evaluate(conditionStr, scope);
+            ensureBoolOperand(conditionResult, 'if', 'condition');
+            
+            if (conditionResult.value !== 0) {
+                return evaluate(thenStr, scope);
+            } else {
+                return evaluate(elseStr, scope);
+            }
+        }
     }
     
     // Check if this is a block with statements (semicolons) NOT inside parentheses/braces at depth 0

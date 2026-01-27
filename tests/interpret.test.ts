@@ -146,4 +146,8 @@ describe('interpret', () => {
         const result = interpret("let x = 100; let y = 200; x < y");
         expect(result).toBe(1);
     });
+    test('interpret("let x = true; if (x) 3 else 5") should return 3', () => {
+        const result = interpret("let x = true; if (x) 3 else 5");
+        expect(result).toBe(3);
+    });
 });
