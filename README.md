@@ -7,6 +7,7 @@
 - `let` / `let mut` bindings and reassignment rules
 - Blocks `{ ... }`, `if` / `else`, `while`, `for (let mut i in a..b)`
 - Tuples `(a, b, ...)` and indexing `tuple[0]`
+- References (`&`, `&mut`, `*`) with borrow rules
 - Functions:
   - Declaration: `fn get() : I32 => 100;`
   - Parameters: `fn pass(value : I32) => value; pass(100)`

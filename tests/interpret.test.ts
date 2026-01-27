@@ -219,12 +219,21 @@ describe("interpret", () => {
     const result = interpret("let x = 100; let y : *I32 = &x; *y");
     expect(result).toBe(100);
   });
+  test('interpret("let x = 1; let y = &x; let z = &x; *y + *z") should return 2', () => {
+    const result = interpret("let x = 1; let y = &x; let z = &x; *y + *z");
+    expect(result).toBe(2);
+  });
   test('interpret("let x = 100; let y = &x; let z = &y; **z") should return 100', () => {
     const result = interpret("let x = 100; let y = &x; let z = &y; **z");
     expect(result).toBe(100);
   });
   test('interpret("let x = 100; *x") should throw error', () => {
     expect(() => interpret("let x = 100; *x")).toThrow();
+  });
+  test('interpret("let x = 1; let y = &mut x; let z = &mut x; *y + *z") should throw error', () => {
+    expect(() =>
+      interpret("let x = 1; let y = &mut x; let z = &mut x; *y + *z"),
+    ).toThrow();
   });
   test('interpret("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x") should return 100', () => {
     const result = interpret(

@@ -14,7 +14,7 @@
     "prettier": "^3.8.1"
   },
   "scripts": {
-    "cpd": "pmd cpd src tests --language typescript --minimum-tokens 35 --ignore-literals --ignore-identifiers",
+    "cpd": "pmd cpd src tests --language typescript --minimum-tokens 35 --ignore-identifiers",
     "lint": "tsc --noEmit",
     "format": "prettier . --write",
     "prepare": "husky"

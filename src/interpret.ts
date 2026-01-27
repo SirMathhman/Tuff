@@ -14,6 +14,8 @@ interface ScopeEntry {
   functionBody?: string;
   functionParams?: string[];
   functionParamTypes?: (string | undefined)[];
+  referenceTarget?: string;
+  referenceMutable?: boolean;
   isGenerator?: boolean;
   rangeStart?: number;
   rangeEnd?: number;
@@ -165,6 +167,23 @@ function updateDepth(char: string, depth: number): number {
   if (char === "(" || char === "{") return depth + 1;
   if (char === ")" || char === "}") return depth - 1;
   return depth;
+}
+
+function hasTopLevelOperator(source: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i] as string;
+    depth = updateDepth(char, depth);
+    if (depth !== 0) continue;
+    const rest = source.substring(i);
+    if (i > 0 && "+-*/".includes(char)) return true;
+    if (rest.startsWith("&&") || rest.startsWith("||")) return true;
+    if (rest.startsWith("<=") || rest.startsWith(">=")) return true;
+    if (rest.startsWith("==") || rest.startsWith("!=")) return true;
+    if (i > 0 && (char === "<" || char === ">")) return true;
+    if (rest.startsWith("is ") || rest.startsWith("is\t")) return true;
+  }
+  return false;
 }
 
 // Helper function to find the matched closing paren/brace starting from an opening position
@@ -431,6 +450,49 @@ function hasCommaAtDepth0(inner: string): boolean {
 
 const addresses: Map<number, string> = new Map();
 let nextAddress = 0x1000;
+const borrowState: Map<
+  string,
+  { immutableCount: number; mutableCount: number }
+> = new Map();
+
+function getBorrowInfo(varName: string): {
+  immutableCount: number;
+  mutableCount: number;
+} {
+  return borrowState.get(varName) || { immutableCount: 0, mutableCount: 0 };
+}
+
+function addBorrow(varName: string, isMutable: boolean): void {
+  const info = getBorrowInfo(varName);
+  const hasConflict = isMutable
+    ? info.mutableCount > 0 || info.immutableCount > 0
+    : info.mutableCount > 0;
+  if (hasConflict) {
+    const message = `Cannot take ${isMutable ? "mutable" : "immutable"} reference to ${varName} while it is ${isMutable ? "already borrowed" : "mutably borrowed"}`;
+    throw new Error(message);
+  }
+  if (isMutable) {
+    info.mutableCount = 1;
+  } else {
+    info.immutableCount += 1;
+  }
+  borrowState.set(varName, info);
+}
+
+function releaseBorrow(entry: ScopeEntry | undefined): void {
+  if (!entry?.referenceTarget) return;
+  const info = getBorrowInfo(entry.referenceTarget);
+  if (entry.referenceMutable) {
+    info.mutableCount = Math.max(0, info.mutableCount - 1);
+  } else {
+    info.immutableCount = Math.max(0, info.immutableCount - 1);
+  }
+  if (info.mutableCount === 0 && info.immutableCount === 0) {
+    borrowState.delete(entry.referenceTarget);
+  } else {
+    borrowState.set(entry.referenceTarget, info);
+  }
+}
 
 function getAddressOf(varName: string): number {
   for (const [addr, name] of addresses.entries()) {
@@ -443,6 +505,7 @@ function getAddressOf(varName: string): number {
 
 export function interpret(source: string, scope: Scope = {}): number {
   addresses.clear();
+  borrowState.clear();
   nextAddress = 0x1000;
   const result = evaluate(source, scope);
   if (Array.isArray(result.value)) {
@@ -457,6 +520,8 @@ interface EvaluationResult {
   functionBody?: string;
   functionParams?: string[];
   functionParamTypes?: (string | undefined)[];
+  referenceTarget?: string;
+  referenceMutable?: boolean;
 }
 
 function evaluate(source: string, scope: Scope): EvaluationResult {
@@ -503,6 +568,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
             (isMutableRequest ? "mut " : "") +
             (innerConstraint?.typeStr || "numeric"),
         },
+        referenceTarget: varName,
+        referenceMutable: isMutableRequest,
       };
     }
     throw new Error(`Cannot take address of undefined variable ${varName}`);
@@ -510,34 +577,39 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
   // Check for pointer dereference: *y
   if (source.startsWith("*") && !getTypeConstraint(source)) {
-    const exprResult = evaluateUnaryOperand(source, "*", scope);
-    if (exprResult.constraint?.typeStr.startsWith("*")) {
-      if (typeof exprResult.value !== "number") {
-        throw new Error("Cannot dereference tuple");
-      }
-      const addr = exprResult.value;
-      const varName = addresses.get(addr);
-      if (varName && scope[varName]) {
-        const targetVar = scope[varName];
-        if (!targetVar.isInitialized) {
-          throw new Error(
-            `Dereferenced pointer points to uninitialized variable ${varName}`,
-          );
+    const rest = source.substring(1).trim();
+    if (hasTopLevelOperator(rest)) {
+      // Let binary operator parsing handle expressions like "*y + *z"
+    } else {
+      const exprResult = evaluateUnaryOperand(source, "*", scope);
+      if (exprResult.constraint?.typeStr.startsWith("*")) {
+        if (typeof exprResult.value !== "number") {
+          throw new Error("Cannot dereference tuple");
         }
-        const isMut = exprResult.constraint.typeStr.startsWith("*mut ");
-        const innerTypeStr = exprResult.constraint.typeStr.substring(
-          isMut ? 5 : 1,
+        const addr = exprResult.value;
+        const varName = addresses.get(addr);
+        if (varName && scope[varName]) {
+          const targetVar = scope[varName];
+          if (!targetVar.isInitialized) {
+            throw new Error(
+              `Dereferenced pointer points to uninitialized variable ${varName}`,
+            );
+          }
+          const isMut = exprResult.constraint.typeStr.startsWith("*mut ");
+          const innerTypeStr = exprResult.constraint.typeStr.substring(
+            isMut ? 5 : 1,
+          );
+          const targetConstraint = getTypeConstraint(innerTypeStr);
+          return { value: targetVar.value, constraint: targetConstraint };
+        }
+        throw new Error(
+          `Invalid pointer address ${addr} for ${varName || "unknown"}`,
         );
-        const targetConstraint = getTypeConstraint(innerTypeStr);
-        return { value: targetVar.value, constraint: targetConstraint };
       }
       throw new Error(
-        `Invalid pointer address ${addr} for ${varName || "unknown"}`,
+        `Cannot dereference non-pointer type ${exprResult.constraint?.typeStr || "numeric"} for expr: ${source.substring(1).trim()}`,
       );
     }
-    throw new Error(
-      `Cannot dereference non-pointer type ${exprResult.constraint?.typeStr || "numeric"} for expr: ${source.substring(1).trim()}`,
-    );
   }
 
   // Check for logical NOT: !x
@@ -1066,7 +1138,15 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       functionParams: exprResult.functionParams ?? existingVar.functionParams,
       functionParamTypes:
         exprResult.functionParamTypes ?? existingVar.functionParamTypes,
+      referenceTarget: exprResult.referenceTarget ?? undefined,
+      referenceMutable: exprResult.referenceMutable ?? undefined,
     };
+    if (existingVar.referenceTarget) {
+      releaseBorrow(existingVar);
+    }
+    if (updatedEntry.referenceTarget) {
+      addBorrow(updatedEntry.referenceTarget, !!updatedEntry.referenceMutable);
+    }
     params.targetScope[varName] = updatedEntry;
 
     if (params.outerScopeToSync && params.outerScopeToSync[varName]) {
@@ -1373,6 +1453,13 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
             localScope[varName] = scopeEntry;
 
+            if (scopeEntry.referenceTarget) {
+              addBorrow(
+                scopeEntry.referenceTarget,
+                !!scopeEntry.referenceMutable,
+              );
+            }
+
             // IF this variable was in the original outer scope, update it there too
             if (scope[varName]) {
               scope[varName].value = exprResult.value;
@@ -1524,6 +1611,10 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       const varName = declaredVars[i];
       if (!varName) continue;
       runDropHookFor(varName);
+      if (localScope[varName]) {
+        releaseBorrow(localScope[varName]);
+        delete localScope[varName];
+      }
     }
 
     // Propagate any changes from localScope back to scope for ALL variables that exist in both
@@ -1884,7 +1975,11 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
       if (paramConstraint) {
         if (typeof argResult.value === "number") {
-          validateValueInConstraint(argResult.value, paramConstraint, callSource);
+          validateValueInConstraint(
+            argResult.value,
+            paramConstraint,
+            callSource,
+          );
         }
         if (argResult.constraint) {
           validateTypeMatch(argResult.constraint, paramConstraint);
@@ -1905,7 +2000,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     for (const varName in scope) {
       const originalVar = scope[varName];
       const modifiedVar = invocationScope[varName];
-      if (originalVar && modifiedVar && originalVar.isMutable && varName !== fnName) {
+      if (
+        originalVar &&
+        modifiedVar &&
+        originalVar.isMutable &&
+        varName !== fnName
+      ) {
         originalVar.value = modifiedVar.value;
         originalVar.isInitialized = modifiedVar.isInitialized;
       }
@@ -1945,7 +2045,10 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     }
 
     const argExprs = parseArguments(argsRaw);
-    const argResults = [receiverResult, ...argExprs.map((arg) => evaluate(arg, scope))];
+    const argResults = [
+      receiverResult,
+      ...argExprs.map((arg) => evaluate(arg, scope)),
+    ];
     return invokeFunction(methodName, fnEntry, argResults, source);
   }
 
@@ -1990,7 +2093,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   }
   const scopeVar = scope[source];
   if (scopeVar) {
-    return { value: scopeVar.value, constraint: scopeVar.constraint };
+    return {
+      value: scopeVar.value,
+      constraint: scopeVar.constraint,
+      referenceTarget: scopeVar.referenceTarget,
+      referenceMutable: scopeVar.referenceMutable,
+    };
   }
 
   // If it looks like an identifier but isn't in scope, throw error
