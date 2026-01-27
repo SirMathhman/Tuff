@@ -275,7 +275,10 @@ function getTupleElement(
   index: number,
   constraint: TypeConstraint | null,
   varName: string,
-): { value: number | (number | number[])[]; elementType: TypeConstraint | null } {
+): {
+  value: number | (number | number[])[];
+  elementType: TypeConstraint | null;
+} {
   if (!Array.isArray(tupleValue)) {
     throw new Error(
       `${varName} is not a tuple (type: ${constraint?.typeStr || "unknown"}, value: ${JSON.stringify(tupleValue)})`,
@@ -292,10 +295,7 @@ function getTupleElement(
   return { value: elementValue, elementType: elementType || null };
 }
 
-function getTupleVarOrThrow(
-  scope: Scope,
-  varName: string,
-): ScopeEntry {
+function getTupleVarOrThrow(scope: Scope, varName: string): ScopeEntry {
   const tupleVar = scope[varName];
   if (!tupleVar) {
     throw new Error(`Variable ${varName} is not defined`);
@@ -440,6 +440,22 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       constraint: { minValue: 0, maxValue: 1, typeStr: "Bool", bitWidth: 1 },
     };
   }
+  
+    // Check for unary minus (non-literal) like `-x`
+    if (source.trim().startsWith("-")) {
+      const rest = source.trim().substring(1).trim();
+      if (rest && !/^\d/.test(rest)) {
+        const operandResult = evaluate(rest, scope);
+        if (typeof operandResult.value !== "number") {
+          throw new Error("Unary minus can only be applied to numeric expressions");
+        }
+        const negated = -operandResult.value;
+        if (operandResult.constraint) {
+          validateValueInConstraint(negated, operandResult.constraint, source);
+        }
+        return { value: negated, constraint: operandResult.constraint };
+      }
+    }
 
   if (!source.includes(";")) {
     const fnExpr = parseFunctionDefinition(source);
@@ -737,7 +753,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
   // Check for chained tuple indexing first: tuple[0][1]
   const chainedIndexMatch = source.match(/^([a-zA-Z_]\w*)\[(\d+)\]\[(\d+)\]$/);
-  if (chainedIndexMatch && chainedIndexMatch[1] && chainedIndexMatch[2] && chainedIndexMatch[3]) {
+  if (
+    chainedIndexMatch &&
+    chainedIndexMatch[1] &&
+    chainedIndexMatch[2] &&
+    chainedIndexMatch[3]
+  ) {
     const varName = chainedIndexMatch[1];
     const tupleVar = getTupleVarOrThrow(scope, varName);
     const index1 = parseInt(chainedIndexMatch[2], 10);
@@ -751,12 +772,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     if (!Array.isArray(innerValue)) {
       throw new Error(`${varName}[${index1}] is not a tuple`);
     }
-    const { value: finalValue, elementType: innerElementType } = getTupleElement(
-      innerValue,
-      index2,
-      outerType,
-      `${varName}[${index1}]`,
-    );
+    const { value: finalValue, elementType: innerElementType } =
+      getTupleElement(innerValue, index2, outerType, `${varName}[${index1}]`);
     return { value: finalValue, constraint: innerElementType };
   }
 
@@ -804,7 +821,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       const constraints: TypeConstraint[] = [];
       for (const part of parts) {
         const result = evaluate(part, scope);
-        values.push(result.value as (number | number[]));
+        values.push(result.value as number | number[]);
         const elementConstraint = result.constraint || getTypeConstraint("I32");
         if (elementConstraint) {
           constraints.push(elementConstraint);

@@ -451,4 +451,8 @@ describe("interpret", () => {
     );
     expect(result).toBe(10);
   });
+  test('interpret("let x = 100; -x") should return -100', () => {
+    const result = interpret("let x = 100; -x");
+    expect(result).toBe(-100);
+  });
 });
