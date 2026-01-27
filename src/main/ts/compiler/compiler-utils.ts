@@ -1,4 +1,12 @@
 import { isWhitespace, isIdentifierChar } from "./parsing/string-helpers";
+import { validatePointerOperations } from "./transforms/validation/pointer-validation";
+import { forEachLetStatement } from "./transforms/helpers/let-statement";
+import {
+  findPointerTargets,
+  findPointerVars,
+} from "./transforms/pointers/pointer-target-identification";
+import { wrapPointerTargets } from "./transforms/pointers/wrap-pointer-targets";
+import type { VariableInfo } from "./declaration-parser-helpers";
 
 export function findReceiverStart(
   result: string,
@@ -53,4 +61,44 @@ export function collectLocalVariables(source: string): Set<string> {
     }
   }
   return localVars;
+}
+
+export function preparePointerHandling(
+  source: string,
+  variables: Map<string, VariableInfo>,
+): {
+  sourceWithWrappedPointers: string;
+  pointerTargets: Set<string>;
+  arrayVars: Set<string>;
+} {
+  validatePointerOperations(source, variables);
+  const arrayVars = new Set<string>();
+  for (const [name, info] of variables) {
+    if (info.isArray) arrayVars.add(name);
+  }
+
+  const declaredVars = new Set<string>();
+  forEachLetStatement(source, (_startIdx, info) => {
+    if (info.varName) declaredVars.add(info.varName);
+  });
+  const pointerVars = findPointerVars(source);
+  const pointerTargets = findPointerTargets(source, declaredVars, pointerVars);
+
+  // Treat pointer vars as already-array-backed values for wrapping purposes.
+  // EXCEPT for string pointers which should use charCodeAt for indexing.
+  for (const name of pointerVars) {
+    const info = variables.get(name);
+    if (info?.type === "*Str") continue;
+    arrayVars.add(name);
+  }
+
+  let sourceWithWrappedPointers = source;
+  if (pointerTargets.size > 0) {
+    sourceWithWrappedPointers = wrapPointerTargets(
+      source,
+      pointerTargets,
+      arrayVars,
+    );
+  }
+  return { sourceWithWrappedPointers, pointerTargets, arrayVars };
 }

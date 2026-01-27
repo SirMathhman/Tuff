@@ -1,5 +1,6 @@
 import { handleTypeDeclaration } from "../../types/type-declarations";
 import { handleStructDeclaration } from "../../types/structs";
+import { handleContractDeclaration } from "../../types/contracts";
 import { handleFunctionDeclaration } from "../../functions";
 import { parseFunctionCall } from "../../functions";
 import { handleMethodCall } from "../../handlers/access/method-call";
@@ -98,6 +99,8 @@ export function tryDeclarations(p: Params): number | undefined {
   if (t.handled) return t.result;
   const s = handleStructDeclaration(p.s, ctx, p.interpreter);
   if (s.handled) return s.result;
+  const c = handleContractDeclaration(p.s, ctx, p.interpreter);
+  if (c.handled) return c.result;
   const f = handleFunctionDeclaration(p.s, ctx, p.interpreter);
   if (f.handled) return f.result;
   return undefined;

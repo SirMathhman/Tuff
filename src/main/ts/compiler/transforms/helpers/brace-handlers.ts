@@ -8,7 +8,10 @@ import {
   parseBracedBlock,
   parseUntilSemicolon,
 } from "../../parsing/parse-helpers";
-import { skipStructDeclaration } from "../../parsing/struct-helpers";
+import {
+  skipStructDeclaration,
+  skipContractDeclaration,
+} from "../../parsing/struct-helpers";
 
 /**
  * Check for control flow keywords before parentheses in trimmed string
@@ -286,6 +289,18 @@ export function handleStructDeclaration(
   i: number,
 ): { result: string; endIdx: number } | undefined {
   const endIdx = skipStructDeclaration(source, i);
+  if (endIdx === -1) return undefined;
+  return { result: "", endIdx };
+}
+/**
+ * Handle contract declarations - skip them entirely as they're compile-time only
+ * e.g., "contract Empty {}" gets stripped completely
+ */
+export function handleContractDeclaration(
+  source: string,
+  i: number,
+): { result: string; endIdx: number } | undefined {
+  const endIdx = skipContractDeclaration(source, i);
   if (endIdx === -1) return undefined;
   return { result: "", endIdx };
 }

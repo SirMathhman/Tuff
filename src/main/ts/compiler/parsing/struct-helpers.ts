@@ -1,11 +1,15 @@
 import { matchWord, skipWhitespaceAndGenerics } from "./string-helpers";
 
 /**
- * Skip a struct declaration from position i (at 'struct' keyword)
- * Returns the position after the closing brace
+ * Generic function to skip a declaration with braces
+ * Works for struct, contract, and similar declarations
  */
-export function skipStructDeclaration(source: string, i: number): number {
-  if (!matchWord(source, i, "struct")) return -1;
+function skipDeclarationWithBraces(
+  source: string,
+  i: number,
+  keyword: string,
+): number {
+  if (!matchWord(source, i, keyword)) return -1;
 
   // Skip to the closing brace
   let braceDepth = 0;
@@ -24,6 +28,22 @@ export function skipStructDeclaration(source: string, i: number): number {
     i++;
   }
   return i;
+}
+
+/**
+ * Skip a struct declaration from position i (at 'struct' keyword)
+ * Returns the position after the closing brace
+ */
+export function skipStructDeclaration(source: string, i: number): number {
+  return skipDeclarationWithBraces(source, i, "struct");
+}
+
+/**
+ * Skip a contract declaration from position i (at 'contract' keyword)
+ * Returns the position after the closing brace
+ */
+export function skipContractDeclaration(source: string, i: number): number {
+  return skipDeclarationWithBraces(source, i, "contract");
 }
 
 /**

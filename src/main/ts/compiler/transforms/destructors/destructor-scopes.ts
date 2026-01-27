@@ -8,7 +8,7 @@ import {
   isDroppableType,
   parseLetDeclaration,
 } from "../../parsing/parser-utils";
-import { getCompileStructDefs } from "../../struct-defs-storage";
+import { getCompileStructDefs } from "../../storage/struct-defs-storage";
 import { isProbablyControlFlowBrace } from "../helpers/brace-handlers";
 import {
   findMatchingCloseBrace,

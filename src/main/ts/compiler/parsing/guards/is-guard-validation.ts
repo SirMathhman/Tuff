@@ -7,7 +7,7 @@ import {
   skipBracePair,
 } from "../string-helpers";
 import { parseCondition } from "../parse-helpers";
-import { getCompileStructDefs } from "../../struct-defs-storage";
+import { getCompileStructDefs } from "../../storage/struct-defs-storage";
 
 export function validateIsGuardFieldAccess(
   source: string,

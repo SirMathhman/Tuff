@@ -1,4 +1,4 @@
-import type { ParamInfo } from "./parsing/param-helpers";
+import type { ParamInfo } from "../parsing/param-helpers";
 
 export type CompileFunctionDef = {
   params: ParamInfo[];

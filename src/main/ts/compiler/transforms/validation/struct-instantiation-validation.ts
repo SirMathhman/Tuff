@@ -1,4 +1,4 @@
-import { getCompileStructDefs } from "../../struct-defs-storage";
+import { getCompileStructDefs } from "../../storage/struct-defs-storage";
 import { getConcreteType } from "../../../utils/generics/generic-validation";
 import { isTypeCompatible } from "../type-compatibility";
 import { throwFieldTypeMismatch } from "../error-helpers";

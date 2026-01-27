@@ -1,6 +1,6 @@
-import { isIdentifierChar } from "../parsing/string-helpers";
-import { scanModuleBody } from "./helpers/module-member-parser";
-import { findModuleRegions } from "./helpers/module-validation";
+import { isIdentifierChar } from "../../parsing/string-helpers";
+import { scanModuleBody } from "../helpers/module-member-parser";
+import { findModuleRegions } from "../helpers/module-validation";
 
 /**
  * Replace variable references in member definitions with a new name

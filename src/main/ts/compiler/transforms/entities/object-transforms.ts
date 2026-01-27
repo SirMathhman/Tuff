@@ -1,5 +1,5 @@
-import { isIdentifierChar } from "../parsing/string-helpers";
-import { findMatchingCloseBrace } from "../../utils/helpers/brace-utils";
+import { isIdentifierChar } from "../../parsing/string-helpers";
+import { findMatchingCloseBrace } from "../../../utils/helpers/brace-utils";
 
 interface ObjectRegion {
   start: number;

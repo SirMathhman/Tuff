@@ -1,7 +1,7 @@
 import {
   getCompileFunctionDefs,
   type CompileFunctionDef,
-} from "../../function-defs-storage";
+} from "../../storage/function-defs-storage";
 import { isWhitespace, isIdentifierChar } from "../../parsing/string-helpers";
 import {
   validateGenericTypeConsistency,
