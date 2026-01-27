@@ -473,4 +473,7 @@ describe("interpret", () => {
   test('interpret("fn doNothing(x : I32, x : I32) => 100;") should throw error', () => {
     expect(() => interpret("fn doNothing(x : I32, x : I32) => 100;")).toThrow();
   });
+  test('interpret("fn get() : Bool => 100;") should throw error', () => {
+    expect(() => interpret("fn get() : Bool => 100;")).toThrow();
+  });
 });
