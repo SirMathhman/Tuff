@@ -8,9 +8,9 @@
 - Blocks `{ ... }`, `if` / `else`, `while`, `for (let mut i in a..b)`
 - Tuples `(a, b, ...)` and indexing `tuple[0]`
 - Zero-arg functions:
-	- Declaration: `fn get() : I32 => 100;`
-	- Call: `get()`
-	- Function values: `let f : () => I32 = fn get() : I32 => 100; f()`
+  - Declaration: `fn get() : I32 => 100;`
+  - Call: `get()`
+  - Function values: `let f : () => I32 = fn get() : I32 => 100; f()`
 
 To install dependencies:
 

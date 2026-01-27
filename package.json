@@ -10,11 +10,13 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "prettier": "^3.8.1"
   },
   "scripts": {
     "cpd": "pmd cpd src tests --language typescript --minimum-tokens 35 --ignore-literals --ignore-identifiers",
     "lint": "tsc --noEmit",
+    "format": "prettier . --write",
     "prepare": "husky"
   }
 }
