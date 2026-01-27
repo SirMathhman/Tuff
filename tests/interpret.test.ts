@@ -120,4 +120,8 @@ describe('interpret', () => {
     test('interpret("let x : I32; x = 100; x = 200; x") should throw error', () => {
         expect(() => interpret("let x : I32; x = 100; x = 200; x")).toThrow();
     });
+    test('interpret("let mut x : I32; x = 100; x = 200; x") should return 200', () => {
+        const result = interpret("let mut x : I32; x = 100; x = 200; x");
+        expect(result).toBe(200);
+    });
 });
