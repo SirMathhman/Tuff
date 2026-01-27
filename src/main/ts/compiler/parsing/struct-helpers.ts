@@ -1,7 +1,4 @@
-import {
-  matchWord,
-  skipWhitespaceAndGenerics,
-} from "./string-helpers";
+import { matchWord, skipWhitespaceAndGenerics } from "./string-helpers";
 
 /**
  * Skip a struct declaration from position i (at 'struct' keyword)

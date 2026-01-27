@@ -89,10 +89,7 @@ describe("functions - scope and methods", () => {
   itBoth(
     "supports function scope closure with explicit Void return type",
     (assertValid) => {
-      assertValid(
-        "let mut x = 0; fn add() : Void => x += 1; add(); x",
-        1,
-      );
+      assertValid("let mut x = 0; fn add() : Void => x += 1; add(); x", 1);
     },
   );
 

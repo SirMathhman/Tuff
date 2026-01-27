@@ -123,7 +123,7 @@ function validatePropertyAccessInRange(
     }
     const after = found + varName.length;
     if (after < end && source[after] === ".") {
-      let fieldStart = after + 1;
+      const fieldStart = after + 1;
       if (fieldStart >= end || !isIdentifierChar(source[fieldStart])) {
         idx = found + 1;
         continue;
