@@ -14,6 +14,7 @@
   },
   "scripts": {
     "cpd": "pmd cpd src --language typescript --minimum-tokens 35",
+    "lint": "tsc --noEmit",
     "prepare": "husky"
   }
 }

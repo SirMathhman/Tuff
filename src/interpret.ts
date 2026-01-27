@@ -1,4 +1,27 @@
 export function interpret(source : string) : number {
+    // Check if this is a binary operation
+    const operatorMatch = source.match(/\s*([+\-*/])\s*/);
+    if (operatorMatch) {
+        const operator = operatorMatch[1];
+        const parts = source.split(operatorMatch[0]);
+        if (parts.length >= 2 && parts[0] && parts[1]) {
+            const left = interpret(parts[0].trim());
+            const right = interpret(parts[1].trim());
+            
+            switch (operator) {
+                case '+':
+                    return left + right;
+                case '-':
+                    return left - right;
+                case '*':
+                    return left * right;
+                case '/':
+                    return Math.floor(left / right);
+            }
+        }
+    }
+    
+    // Single value parsing
     // Check if there's a type suffix (letters and/or digits after the number)
     const hasSuffix = /[A-Za-z]+\d*$/.test(source.replace(/^-?\d+/, ''));
     const isNegative = source.startsWith('-');
@@ -20,7 +43,7 @@ export function interpret(source : string) : number {
     // Validate range based on type suffix
     if (hasSuffix) {
         const typeMatch = source.match(/([UIF])(\d+)$/);
-        if (typeMatch) {
+        if (typeMatch && typeMatch[1] && typeMatch[2]) {
             const typePrefix = typeMatch[1];
             const bitWidth = parseInt(typeMatch[2], 10);
             
