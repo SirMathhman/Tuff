@@ -395,4 +395,9 @@ describe("interpret", () => {
     const result = interpret("let func = () => 100; func()");
     expect(result).toBe(100);
   });
+  test('interpret("let func = () => 100; let temp : Bool = func();") should throw error', () => {
+    expect(() =>
+      interpret("let func = () => 100; let temp : Bool = func();"),
+    ).toThrow();
+  });
 });
