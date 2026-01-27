@@ -49,4 +49,7 @@ describe('interpret', () => {
         const result = interpret("2 + 3 - 4I8");
         expect(result).toBe(1);
     });
+    test('interpret("1 - 2U8") should throw error', () => {
+        expect(() => interpret("1 - 2U8")).toThrow();
+    });
 });
