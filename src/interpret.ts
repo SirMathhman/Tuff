@@ -170,34 +170,77 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
 
     // Check for if (cond) expr1 else expr2
     if (source.startsWith('if')) {
-        // Allow semicolons in the branches by using non-greedy match .*? instead of [^{};]*
-        const ifMatch = source.match(/^if\s*\((.*)\)\s*({[^{}]*}|.*?)\s*else\s*({[^{}]*}|.*)$/);
-        if (ifMatch) {
-            const conditionStr = ifMatch[1]?.trim() || '';
-            const thenStr = ifMatch[2]?.trim() || '';
-            const elseStr = ifMatch[3]?.trim() || '';
-            
-            const conditionResult = evaluate(conditionStr, scope);
-            ensureBoolOperand(conditionResult, 'if', 'condition');
-            
-            // Re-evaluate both branches but discard result to check types
-            // This is a naive type-checker; real implementation would be better.
-            const thenResult = evaluate(thenStr, { ...scope });
-            const elseResult = evaluate(elseStr, { ...scope });
-
-            // Ensure branch types are compatible
-            const thenType = thenResult.constraint?.typeStr || 'numeric';
-            const elseType = elseResult.constraint?.typeStr || 'numeric';
-
-            if (thenType !== elseType) {
-                throw new Error(`Type mismatch in if branches: then branch is ${thenType}, else branch is ${elseType}`);
+        // Find opening paren
+        const openParenIndex = source.indexOf('(');
+        if (openParenIndex > -1) {
+            // Find matched closing paren for condition
+            let depth = 0;
+            let closeParenIndex = -1;
+            for (let i = openParenIndex; i < source.length; i++) {
+                depth = updateDepth(source[i] as string, depth);
+                if (depth === 0) {
+                    closeParenIndex = i;
+                    break;
+                }
             }
+            
+            if (closeParenIndex > -1) {
+                const conditionStr = source.substring(openParenIndex + 1, closeParenIndex).trim();
+                const remainder = source.substring(closeParenIndex + 1).trim();
+                
+                // Now interpret remainder to find 'else'
+                // Remainder should be: THEN_BLOCK else ELSE_BLOCK
+                
+                let thenStr = '';
+                let elseStr = '';
+                let elseIndex = -1;
+                
+                // Scan remainder for optional braces or single statement, identifying where 'else' keyword appears AT DEPTH 0
+                depth = 0;
+                for (let i = 0; i < remainder.length; i++) {
+                    const char = remainder[i] as string;
+                    
+                    // If we hit 'else' at depth 0, we found the split
+                    if (depth === 0 && remainder.substring(i).startsWith('else')) {
+                         // Verify it's a whole word 'else' (followed by space or { or nothing?)
+                         // Usually followed by space or if or {
+                         const nextChar = remainder[i + 4];
+                         if (!nextChar || /\s|{/.test(nextChar)) {
+                             elseIndex = i;
+                             break;
+                         }
+                    }
+                    
+                    depth = updateDepth(char, depth);
+                }
+                
+                if (elseIndex > -1) {
+                    thenStr = remainder.substring(0, elseIndex).trim();
+                    elseStr = remainder.substring(elseIndex + 4).trim();
+                    
+                    const conditionResult = evaluate(conditionStr, scope);
+                    ensureBoolOperand(conditionResult, 'if', 'condition');
+                    
+                    // Re-evaluate both branches but discard result to check types
+                    // This is a naive type-checker; real implementation would be better.
+                    const thenResult = evaluate(thenStr, { ...scope });
+                    const elseResult = evaluate(elseStr, { ...scope });
 
-            if (conditionResult.value !== 0) {
-                // Now evaluate the branch that actually runs with the REAL scope
-                return evaluate(thenStr, scope);
-            } else {
-                return evaluate(elseStr, scope);
+                    // Ensure branch types are compatible
+                    const thenType = thenResult.constraint?.typeStr || 'numeric';
+                    const elseType = elseResult.constraint?.typeStr || 'numeric';
+
+                    if (thenType !== elseType) {
+                        throw new Error(`Type mismatch in if branches: then branch is ${thenType}, else branch is ${elseType}`);
+                    }
+
+                    if (conditionResult.value !== 0) {
+                        // Now evaluate the branch that actually runs with the REAL scope
+                        return evaluate(thenStr, scope);
+                    } else {
+                        return evaluate(elseStr, scope);
+                    }
+                }
             }
         }
     }
