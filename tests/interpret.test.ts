@@ -60,4 +60,7 @@ describe('interpret', () => {
         const result = interpret("4 + 2 * 3U8");
         expect(result).toBe(10);
     });
+    test('interpret("30U8 * 30U8") should throw error', () => {
+        expect(() => interpret("30U8 * 30U8")).toThrow();
+    });
 });
