@@ -156,4 +156,7 @@ describe('interpret', () => {
     test('interpret("if (true) 3 else true") should throw error', () => {
         expect(() => interpret("if (true) 3 else true")).toThrow();
     });
+    test('interpret("let test : Bool = if (true) 3 else 5; test") should throw error', () => {
+        expect(() => interpret("let test : Bool = if (true) 3 else 5; test")).toThrow();
+    });
 });
