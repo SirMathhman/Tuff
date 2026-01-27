@@ -196,4 +196,8 @@ describe('interpret', () => {
     test('interpret("let mut x = 0; x += true; x") should throw error', () => {
         expect(() => interpret("let mut x = 0; x += true; x")).toThrow();
     });
+    test('interpret("let y = 10 / (5 - 3); let mut x = 0; x += y; x") should return 5', () => {
+        const result = interpret("let y = 10 / (5 - 3); let mut x = 0; x += y; x");
+        expect(result).toBe(5);
+    });
 });
