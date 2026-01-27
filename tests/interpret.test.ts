@@ -327,4 +327,7 @@ describe('interpret', () => {
         const result = interpret("fn get() : I32 => 100;");
         expect(result).toBe(0);
     });
+    test('interpret("fn get() : I32 => 100; fn get() : I32 => 100;") should throw error', () => {
+        expect(() => interpret("fn get() : I32 => 100; fn get() : I32 => 100;")).toThrow();
+    });
 });
