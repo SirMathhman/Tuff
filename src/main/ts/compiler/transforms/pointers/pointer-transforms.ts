@@ -79,7 +79,7 @@ function tryExtractPointerTarget(
   operatorPos: number,
 ): { varName: string; endIdx: number } | undefined {
   let nextNonWS = skipWhitespace(source, operatorPos + 1);
-  
+
   // Skip 'mut' keyword if present (&mut varName or *mut varName)
   if (
     source.slice(nextNonWS, nextNonWS + 3) === "mut" &&
@@ -88,7 +88,7 @@ function tryExtractPointerTarget(
   ) {
     nextNonWS = skipWhitespace(source, nextNonWS + 3);
   }
-  
+
   const ch = source[nextNonWS];
   if (nextNonWS >= source.length || !ch || !isIdentifierStartChar(ch)) {
     return undefined;

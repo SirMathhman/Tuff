@@ -21,6 +21,7 @@ import {
   transformModules,
   transformModuleAccess,
 } from "./transforms/module-transforms";
+import { transformObjects } from "./transforms/object-transforms";
 import {
   collectModuleMetadata,
   validateModuleAccess,
@@ -223,7 +224,8 @@ function createTuffCompiler(source: string) {
       validateTypedArithmetic(sourceWithWrappedPointers);
       const moduleMetadata = collectModuleMetadata(sourceWithWrappedPointers);
       validateModuleAccess(sourceWithWrappedPointers, moduleMetadata);
-      const withModules = transformModules(sourceWithWrappedPointers);
+      const withObjects = transformObjects(sourceWithWrappedPointers);
+      const withModules = transformModules(withObjects);
       const withStructs = transformStructInstantiation(withModules);
       const transformed = transformControlFlow(withStructs);
       const withDestructors = transformDestructorScopes(transformed);

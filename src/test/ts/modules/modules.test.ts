@@ -65,6 +65,13 @@ describe("modules - objects", () => {
   itBoth("supports public object member with out keyword", (ok) => {
     ok("object MySingleton { out let x = 100; } MySingleton.x", 100);
   });
+
+  itBoth("supports object method modifying mutable state", (ok) => {
+    ok(
+      "object Wrapper { out let mut counter = 0; out fn add() => counter += 1; } Wrapper.add(); Wrapper.counter",
+      1,
+    );
+  });
 });
 
 describe("modules - visibility", () => {

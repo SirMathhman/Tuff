@@ -2,7 +2,37 @@ import { getModule } from "../../types/modules";
 import { getObject } from "../../types/objects";
 import type { Interpreter } from "../../expressions/handlers";
 import { isValidIdentifier } from "../../utils/identifier-utils";
+import { isIdentifierChar } from "../../compiler/parsing/string-helpers";
 import type { BaseHandlerParams } from "../../utils/function/function-call-params";
+
+/**
+ * Extract the valid member access portion from a string like "counter; Wrapper.counter"
+ * Handles both field access (identifier) and function calls (identifier + parentheses)
+ */
+function extractMemberAccess(accessStr: string): string {
+  let i = 0;
+  // First, extract the identifier
+  while (i < accessStr.length && isIdentifierChar(accessStr[i]!)) {
+    i++;
+  }
+  if (i === 0) return accessStr; // No valid identifier
+  
+  const memberName = accessStr.slice(0, i);
+  // Check if it's a function call
+  if (i < accessStr.length && accessStr[i] === "(") {
+    // Find matching closing paren
+    let parenDepth = 1;
+    let j = i + 1;
+    while (j < accessStr.length && parenDepth > 0) {
+      if (accessStr[j] === "(") parenDepth++;
+      else if (accessStr[j] === ")") parenDepth--;
+      j++;
+    }
+    return accessStr.slice(0, j);
+  }
+  
+  return memberName;
+}
 
 function assertPublicMember(p: {
   ownerType: "module" | "object";
@@ -165,7 +195,9 @@ export function handleModuleAccess(
 
   if (dotIndex !== -1) {
     const objectName = trimmed.slice(0, dotIndex).trim();
-    const memberStr = trimmed.slice(dotIndex + 1).trim();
+    const afterObjectAndDot = trimmed.slice(dotIndex + 1).trim();
+    // Only use extractMemberAccess for objects to handle statement boundaries
+    const memberStr = extractMemberAccess(afterObjectAndDot);
     if (!isValidIdentifier(objectName)) return undefined;
     if (!p.typeMap.has("__object__" + objectName)) return undefined;
     const obj = getObject(objectName);
