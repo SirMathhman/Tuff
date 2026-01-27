@@ -74,6 +74,9 @@ export function interpret(source : string) : number {
                     result = left * right;
                     break;
                 case '/':
+                    if (right === 0) {
+                        throw new Error("Division by zero");
+                    }
                     result = Math.floor(left / right);
                     break;
                 default:

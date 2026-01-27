@@ -63,4 +63,7 @@ describe('interpret', () => {
     test('interpret("30U8 * 30U8") should throw error', () => {
         expect(() => interpret("30U8 * 30U8")).toThrow();
     });
+    test('interpret("10 / 0") should throw error', () => {
+        expect(() => interpret("10 / 0")).toThrow();
+    });
 });
