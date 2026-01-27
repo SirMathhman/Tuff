@@ -296,4 +296,8 @@ describe('interpret', () => {
         const result = interpret("let mut x = 0; while (x < 10) x += 1; x");
         expect(result).toBe(10);
     });
+
+    test('interpret("let mut x = 0; while (100) x += 1; x") should throw error', () => {
+        expect(() => interpret("let mut x = 0; while (100) x += 1; x")).toThrow();
+    });
 });
