@@ -13,7 +13,7 @@ interface ScopeEntry {
   isInitialized?: boolean;
   functionBody?: string;
   functionParams?: string[];
-  functionParamTypes?: string[];
+  functionParamTypes?: (string | undefined)[];
   isGenerator?: boolean;
   rangeStart?: number;
   rangeEnd?: number;
@@ -26,6 +26,7 @@ type Scope = Record<string, ScopeEntry>;
 interface ParsedFunction {
   fnName: string;
   params: string[];
+  paramTypes: (string | undefined)[];
   returnConstraint: TypeConstraint | null;
   body: string;
 }
@@ -178,6 +179,61 @@ function findMatchedClosing(source: string, fromIndex: number): number {
   return -1;
 }
 
+function splitCommaSeparated(source: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i] as string;
+    if (char === "," && depth === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+    depth = updateDepth(char, depth);
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function parseParamList(paramsRaw: string): {
+  names: string[];
+  types: (string | undefined)[];
+} {
+  const trimmed = paramsRaw.trim();
+  if (!trimmed) return { names: [], types: [] };
+  const parts = splitCommaSeparated(trimmed);
+  const names: string[] = [];
+  const types: (string | undefined)[] = [];
+  const seen = new Set<string>();
+
+  for (const part of parts) {
+    const colonIndex = part.indexOf(":");
+    const name = (colonIndex >= 0 ? part.slice(0, colonIndex) : part).trim();
+    const type =
+      colonIndex >= 0 ? part.slice(colonIndex + 1).trim() : undefined;
+
+    if (!name) {
+      throw new Error("Invalid parameter name in function definition");
+    }
+    if (seen.has(name)) {
+      throw new Error(`Duplicate parameter name ${name}`);
+    }
+    seen.add(name);
+    names.push(name);
+    types.push(type && type.length > 0 ? type : undefined);
+  }
+
+  return { names, types };
+}
+
+function parseArguments(argsRaw: string): string[] {
+  const trimmed = argsRaw.trim();
+  if (!trimmed) return [];
+  return splitCommaSeparated(trimmed);
+}
+
 function buildParsedFunction(
   fnName: string,
   paramsRaw: string | undefined,
@@ -185,18 +241,14 @@ function buildParsedFunction(
   bodyRaw: string | undefined,
 ): ParsedFunction {
   const paramsRawSafe = paramsRaw || "";
-  const params = paramsRawSafe.trim()
-    ? paramsRawSafe
-        .split(",")
-        .map((p) => p.trim())
-        .filter((p) => p.length > 0)
-    : [];
+  const parsedParams = parseParamList(paramsRawSafe);
   const returnConstraint = returnTypeRaw
     ? getTypeConstraint(returnTypeRaw.trim())
     : null;
   return {
     fnName,
-    params,
+    params: parsedParams.names,
+    paramTypes: parsedParams.types,
     returnConstraint,
     body: (bodyRaw || "").trim(),
   };
@@ -404,6 +456,7 @@ interface EvaluationResult {
   constraint: TypeConstraint | null;
   functionBody?: string;
   functionParams?: string[];
+  functionParamTypes?: (string | undefined)[];
 }
 
 function evaluate(source: string, scope: Scope): EvaluationResult {
@@ -524,14 +577,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   if (!source.includes(";")) {
     const fnExpr = parseFunctionDefinition(source);
     if (fnExpr) {
-      if (fnExpr.params.length > 0) {
-        throw new Error("Function parameters are not supported yet");
-      }
       return {
         value: 0,
         constraint: fnExpr.returnConstraint,
         functionBody: fnExpr.body,
         functionParams: fnExpr.params,
+        functionParamTypes: fnExpr.paramTypes,
       };
     }
   }
@@ -1013,6 +1064,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       constraint: finalConstraint,
       functionBody: exprResult.functionBody ?? existingVar.functionBody,
       functionParams: exprResult.functionParams ?? existingVar.functionParams,
+      functionParamTypes:
+        exprResult.functionParamTypes ?? existingVar.functionParamTypes,
     };
     params.targetScope[varName] = updatedEntry;
 
@@ -1022,6 +1075,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       params.outerScopeToSync[varName].functionBody = updatedEntry.functionBody;
       params.outerScopeToSync[varName].functionParams =
         updatedEntry.functionParams;
+      params.outerScopeToSync[varName].functionParamTypes =
+        updatedEntry.functionParamTypes;
     }
 
     return {
@@ -1310,6 +1365,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
                 isInitialized: true,
                 functionBody: exprResult.functionBody,
                 functionParams: exprResult.functionParams,
+                functionParamTypes: exprResult.functionParamTypes,
                 originalType: originalTypeStr, // Store the alias name
               };
               lastResult = exprResult;
@@ -1354,18 +1410,10 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           throw new Error(`Invalid function name in declaration: ${statement}`);
         }
         const fnName = fnNameRaw;
-        const paramsStr = (paramsRaw || "").trim();
-        let functionParamNames: string[] = [];
-        let functionParamTypes: string[] = [];
-        if (paramsStr.length > 0) {
-          // Minimal support for drop hooks: `this : TypeName`
-          const thisParamMatch = paramsStr.match(/^this\s*:\s*([a-zA-Z_]\w*)$/);
-          if (!thisParamMatch || !thisParamMatch[1]) {
-            throw new Error("Function parameters are not supported yet");
-          }
-          functionParamNames = ["this"];
-          functionParamTypes = [thisParamMatch[1]];
-        }
+        const paramsStr = paramsRaw || "";
+        const parsedParams = parseParamList(paramsStr);
+        const functionParamNames = parsedParams.names;
+        const functionParamTypes = parsedParams.types;
         const returnTypeStr = returnTypeRaw?.trim();
         const body = (bodyRaw || "").trim();
         const returnConstraint = returnTypeStr
@@ -1396,9 +1444,6 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       } else {
         const fnDecl = parseFunctionDefinition(statement);
         if (fnDecl) {
-          if (fnDecl.params.length > 0) {
-            throw new Error("Function parameters are not supported yet");
-          }
           ensureVariableNotDefined(localScope, fnDecl.fnName);
           localScope[fnDecl.fnName] = {
             value: 0,
@@ -1407,6 +1452,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
             isInitialized: true,
             functionBody: fnDecl.body,
             functionParams: fnDecl.params,
+            functionParamTypes: fnDecl.paramTypes,
           };
           lastResult = { value: 0, constraint: null };
           continue;
@@ -1803,7 +1849,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   if (assignmentResult) return assignmentResult;
 
   // Variable access in non-binary expression
-  const functionCallMatch = source.match(/^([a-zA-Z_]\w*)\s*\(\s*\)$/);
+  const functionCallMatch = source.match(/^([a-zA-Z_]\w*)\s*\((.*)\)$/);
   if (functionCallMatch) {
     const fnNameRaw = functionCallMatch[1];
     if (!fnNameRaw) {
@@ -1811,6 +1857,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     }
     const fnName = fnNameRaw;
     const fnEntry = scope[fnName];
+    const argsRaw = functionCallMatch[2] || "";
+    const argExprs = parseArguments(argsRaw);
 
     // Check if this is a range generator
     if (
@@ -1819,6 +1867,9 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       fnEntry.rangeEnd !== undefined &&
       fnEntry.generatorPosition !== undefined
     ) {
+      if (argExprs.length > 0) {
+        throw new Error(`Generator ${fnName} does not take arguments`);
+      }
       const pos = fnEntry.generatorPosition;
       const end = fnEntry.rangeEnd;
       const element = pos;
@@ -1835,7 +1886,45 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     }
 
     if (fnEntry?.functionBody) {
+      const paramNames = fnEntry.functionParams || [];
+      const paramTypes = fnEntry.functionParamTypes || [];
+      if (argExprs.length !== paramNames.length) {
+        throw new Error(
+          `Function ${fnName} expects ${paramNames.length} arguments but got ${argExprs.length}`,
+        );
+      }
+
       const invocationScope = { ...scope };
+      for (let i = 0; i < paramNames.length; i++) {
+        const paramName = paramNames[i];
+        if (!paramName) {
+          throw new Error(`Missing parameter name for function ${fnName}`);
+        }
+        const paramTypeStr = paramTypes[i];
+        const argExpr = argExprs[i] || "";
+        const argResult = evaluate(argExpr, scope);
+        const paramConstraint = paramTypeStr
+          ? getTypeConstraint(paramTypeStr)
+          : null;
+
+        if (paramConstraint) {
+          if (typeof argResult.value === "number") {
+            validateValueInConstraint(argResult.value, paramConstraint, source);
+          }
+          if (argResult.constraint) {
+            validateTypeMatch(argResult.constraint, paramConstraint);
+          }
+        }
+
+        invocationScope[paramName] = {
+          value: argResult.value,
+          constraint: paramConstraint || argResult.constraint,
+          isMutable: false,
+          isInitialized: true,
+          originalType: paramTypeStr,
+        };
+      }
+
       const fnResult = evaluate(fnEntry.functionBody, invocationScope);
       // Sync back mutable captured variables to the original scope
       for (const varName in scope) {

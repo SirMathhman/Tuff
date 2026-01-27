@@ -363,6 +363,10 @@ describe("interpret", () => {
     const result = interpret("fn get() : I32 => 100; get()");
     expect(result).toBe(100);
   });
+  test('interpret("fn pass(value : I32) => value; pass(100)") should return 100', () => {
+    const result = interpret("fn pass(value : I32) => value; pass(100)");
+    expect(result).toBe(100);
+  });
   test('interpret("fn get() : I32 => 100;") should return 0', () => {
     const result = interpret("fn get() : I32 => 100;");
     expect(result).toBe(0);
