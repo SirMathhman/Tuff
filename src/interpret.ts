@@ -303,6 +303,60 @@ function getTupleVarOrThrow(scope: Scope, varName: string): ScopeEntry {
   return tupleVar;
 }
 
+function executeGeneratorLoop(
+  scope: Scope,
+  loopVar: string,
+  bodyStr: string,
+  element: number | (number | number[])[],
+  convertTo0Indexed: boolean,
+): EvaluationResult {
+  let loopValue: number;
+  if (typeof element === "number") {
+    loopValue = convertTo0Indexed ? element - 1 : element;
+  } else {
+    loopValue = 0;
+  }
+  scope[loopVar] = {
+    value: loopValue,
+    constraint: getTypeConstraint("I32"),
+    isMutable: true,
+    isInitialized: true,
+  };
+  return evaluate(bodyStr, scope);
+}
+
+function executeGeneratorCallLoop(
+  scope: Scope,
+  loopVar: string,
+  bodyStr: string,
+  rangeStr: string,
+  convertTo0Indexed: boolean,
+): EvaluationResult {
+  let lastResult: EvaluationResult = { value: 0, constraint: null };
+  while (true) {
+    try {
+      const genResult = evaluate(rangeStr + "()", scope);
+      if (Array.isArray(genResult.value) && genResult.value.length >= 2) {
+        const hasNext = genResult.value[0];
+        const element = genResult.value[1];
+        
+        if (element !== undefined) {
+          lastResult = executeGeneratorLoop(scope, loopVar, bodyStr, element, convertTo0Indexed);
+        }
+
+        if (hasNext === 0) {
+          break;
+        }
+      } else {
+        break;
+      }
+    } catch (e) {
+      break;
+    }
+  }
+  return lastResult;
+}
+
 function hasCommaAtDepth0(inner: string): boolean {
   let depth = 0;
   for (let i = 0; i < inner.length; i++) {
@@ -440,22 +494,24 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       constraint: { minValue: 0, maxValue: 1, typeStr: "Bool", bitWidth: 1 },
     };
   }
-  
-    // Check for unary minus (non-literal) like `-x`
-    if (source.trim().startsWith("-")) {
-      const rest = source.trim().substring(1).trim();
-      if (rest && !/^\d/.test(rest)) {
-        const operandResult = evaluate(rest, scope);
-        if (typeof operandResult.value !== "number") {
-          throw new Error("Unary minus can only be applied to numeric expressions");
-        }
-        const negated = -operandResult.value;
-        if (operandResult.constraint) {
-          validateValueInConstraint(negated, operandResult.constraint, source);
-        }
-        return { value: negated, constraint: operandResult.constraint };
+
+  // Check for unary minus (non-literal) like `-x`
+  if (source.trim().startsWith("-")) {
+    const rest = source.trim().substring(1).trim();
+    if (rest && !/^\d/.test(rest)) {
+      const operandResult = evaluate(rest, scope);
+      if (typeof operandResult.value !== "number") {
+        throw new Error(
+          "Unary minus can only be applied to numeric expressions",
+        );
       }
+      const negated = -operandResult.value;
+      if (operandResult.constraint) {
+        validateValueInConstraint(negated, operandResult.constraint, source);
+      }
+      return { value: negated, constraint: operandResult.constraint };
     }
+  }
 
   if (!source.includes(";")) {
     const fnExpr = parseFunctionDefinition(source);
@@ -708,42 +764,18 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           return lastResult;
         }
 
-        // Try as generator function variable
+        // Try as generator function variable or callable identifier
         const generatorVar = scope[rangeStr];
+
         if (generatorVar?.isGenerator) {
-          while (true) {
-            // Call the generator
-            const genResult = evaluate(rangeStr + "()", scope);
-            if (Array.isArray(genResult.value) && genResult.value.length >= 2) {
-              const hasNext = genResult.value[0];
-              const element = genResult.value[1];
+          lastResult = executeGeneratorCallLoop(scope, loopVar, bodyStr, rangeStr, true);
+          delete scope[loopVar];
+          return lastResult;
+        }
 
-              // Assign element to loop variable (convert from generator element to loop value)
-              let loopValue: number;
-              if (typeof element === "number") {
-                // Generator returns 1-indexed values, convert to 0-indexed for loop
-                loopValue = element - 1;
-              } else {
-                // Fallback: shouldn't happen for valid generators
-                loopValue = 0;
-              }
-              scope[loopVar] = {
-                value: loopValue,
-                constraint: getTypeConstraint("I32"),
-                isMutable: true,
-                isInitialized: true,
-              };
-              lastResult = evaluate(bodyStr, scope);
-
-              // If no next, break
-              if (hasNext === 0) {
-                break;
-              }
-            } else {
-              break;
-            }
-          }
-
+        // Try as user-defined generator function (any callable that returns (Bool, I32))
+        if (generatorVar?.functionBody !== undefined || /^[a-zA-Z_]\w*$/.test(rangeStr)) {
+          lastResult = executeGeneratorCallLoop(scope, loopVar, bodyStr, rangeStr, false);
           delete scope[loopVar];
           return lastResult;
         }
@@ -1189,7 +1221,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         }
       } else if (statement.startsWith("fn ")) {
         const fnMatch = statement.match(
-          /^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*(.*)$/,
+          /^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*([\s\S]*)$/,
         );
         if (!fnMatch) {
           throw new Error(`Invalid function declaration: ${statement}`);

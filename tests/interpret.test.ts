@@ -455,4 +455,16 @@ describe("interpret", () => {
     const result = interpret("let x = 100; -x");
     expect(result).toBe(-100);
   });
+
+  test('interpret("fn get() => {let x = 100; x}; get()") should return 100', () => {
+    const result = interpret("fn get() => {let x = 100; x}; get()");
+    expect(result).toBe(100);
+  });
+
+  test("interpret(user-defined generator in for-loop) should return -3", () => {
+    const result = interpret(
+      "let mut count = -1; let mut isPositive = false; fn myGenerator() : (Bool, I32) => { count += 1; isPositive = !isPositive; let value = if (isPositive) count else -count; if (count == 5) (false, value) else (true, value) } let mut sum = 0; for (let mut i in myGenerator) { sum += i; } sum",
+    );
+    expect(result).toBe(-3);
+  });
 });
