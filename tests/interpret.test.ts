@@ -193,4 +193,7 @@ describe('interpret', () => {
     test('interpret("let mut x = true; x += 10; x") should throw error', () => {
         expect(() => interpret("let mut x = true; x += 10; x")).toThrow();
     });
+    test('interpret("let mut x = 0; x += true; x") should throw error', () => {
+        expect(() => interpret("let mut x = 0; x += true; x")).toThrow();
+    });
 });
