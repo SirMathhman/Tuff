@@ -403,4 +403,10 @@ describe("interpret", () => {
   test('interpret("let something = 100; something()") should throw error', () => {
     expect(() => interpret("let something = 100; something()")).toThrow();
   });
+  test('interpret("fn get() => (100, 200); let result = get(); result[0] + result[1]") should return 300', () => {
+    const result = interpret(
+      "fn get() => (100, 200); let result = get(); result[0] + result[1]",
+    );
+    expect(result).toBe(300);
+  });
 });
