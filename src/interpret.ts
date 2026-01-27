@@ -1197,7 +1197,11 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       delete localScope[varName];
     };
 
-    for (let statementIndex = 0; statementIndex < statements.length; statementIndex++) {
+    for (
+      let statementIndex = 0;
+      statementIndex < statements.length;
+      statementIndex++
+    ) {
       const statement = statements[statementIndex] || "";
       if (statement.length === 0) {
         lastResult = { value: 0, constraint: null };
@@ -1320,9 +1324,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
             }
 
             // Simple last-use drop: if this var is never referenced again, drop now.
-            const remainder = statements
-              .slice(statementIndex + 1)
-              .join("; ");
+            const remainder = statements.slice(statementIndex + 1).join("; ");
             if (!new RegExp(`\\b${varName}\\b`).test(remainder)) {
               runDropHookFor(varName);
             }
