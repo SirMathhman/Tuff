@@ -80,10 +80,14 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         }
         statements.push(source.substring(start).trim());
 
-        let lastResult: EvaluationResult = { value: NaN, constraint: null };
+        let lastResult: EvaluationResult = { value: 0, constraint: null };
         const localScope = { ...scope };
         
         for (const statement of statements) {
+            if (statement.length === 0) {
+                lastResult = { value: 0, constraint: null };
+                continue;
+            }
             if (statement.startsWith('let ')) {
                 // Parse variable declaration: let x : U8 = 2 or let x = 2
                 const declMatch = statement.match(/^let\s+([a-zA-Z_]\w*)\s*(?::\s*([UIF]\d+))?\s*=\s*(.*)$/);

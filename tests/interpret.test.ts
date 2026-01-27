@@ -100,4 +100,8 @@ describe('interpret', () => {
     test('interpret("let x = 10U8; let y : U16 = x; y") should throw error', () => {
         expect(() => interpret("let x = 10U8; let y : U16 = x; y")).toThrow();
     });
+    test('interpret("let x = 100;") should return 0', () => {
+        const result = interpret("let x = 100;");
+        expect(result).toBe(0);
+    });
 });
