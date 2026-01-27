@@ -117,4 +117,7 @@ describe('interpret', () => {
     test('interpret("let x : U8; x = 100U16; x") should throw error', () => {
         expect(() => interpret("let x : U8; x = 100U16; x")).toThrow();
     });
+    test('interpret("let x : I32; x = 100; x = 200; x") should throw error', () => {
+        expect(() => interpret("let x : I32; x = 100; x = 200; x")).toThrow();
+    });
 });
