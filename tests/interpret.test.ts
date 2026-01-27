@@ -10,4 +10,7 @@ describe('interpret', () => {
         const result = interpret("100U8");
         expect(result).toBe(100);
     });
+    test('interpret("-100U8") should throw error', () => {
+        expect(() => interpret("-100U8")).toThrow();
+    });
 });
