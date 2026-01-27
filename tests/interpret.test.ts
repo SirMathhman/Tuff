@@ -318,4 +318,9 @@ describe('interpret', () => {
     test('interpret("let mut myTuple = (100, true); myTuple = (true, 100); myTuple[0]") should throw error', () => {
         expect(() => interpret("let mut myTuple = (100, true); myTuple = (true, 100); myTuple[0]")).toThrow();
     });
+
+    test('interpret("fn get() : I32 => 100; get()") should return 100', () => {
+        const result = interpret("fn get() : I32 => 100; get()");
+        expect(result).toBe(100);
+    });
 });

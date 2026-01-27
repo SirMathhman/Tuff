@@ -6,7 +6,16 @@ interface TypeConstraint {
     tupleTypes?: TypeConstraint[];
 }
 
-type Scope = Record<string, { value: number | number[], constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }>;
+interface ScopeEntry {
+    value: number | number[];
+    constraint: TypeConstraint | null;
+    isMutable?: boolean;
+    isInitialized?: boolean;
+    functionBody?: string;
+    functionParams?: string[];
+}
+
+type Scope = Record<string, ScopeEntry>;
 
 function getTypeConstraint(source: string): TypeConstraint | null {
     // Handle tuple types (I32, Bool)
@@ -172,7 +181,7 @@ interface EvaluationResult {
     constraint: TypeConstraint | null;
 }
 
-function evaluate(source: string, scope: Record<string, { value: number | number[], constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }>): EvaluationResult {
+function evaluate(source: string, scope: Scope): EvaluationResult {
     source = source.trim();
     if (source === 'true') {
         return { value: 1, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
@@ -538,8 +547,8 @@ function evaluate(source: string, scope: Record<string, { value: number | number
 
     const tryEvaluateAssignment = (params: {
         text: string;
-        targetScope: Record<string, { value: number | number[]; constraint: TypeConstraint | null; isMutable?: boolean; isInitialized?: boolean }>;
-        outerScopeToSync?: Record<string, { value: number | number[]; constraint: TypeConstraint | null; isMutable?: boolean; isInitialized?: boolean }>;
+        targetScope: Scope;
+        outerScopeToSync?: Scope;
         allowPlainAssignment: boolean;
         updateConstraint: boolean;
         statementForErrors: string;
@@ -773,6 +782,33 @@ function evaluate(source: string, scope: Record<string, { value: number | number
                         lastResult = { value: 0, constraint: null };
                     }
                 }
+            } else if (statement.startsWith('fn ')) {
+                const fnMatch = statement.match(/^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*(.*)$/);
+                if (!fnMatch) {
+                    throw new Error(`Invalid function declaration: ${statement}`);
+                }
+                const [, fnNameRaw, paramsRaw, returnTypeRaw, bodyRaw] = fnMatch;
+                if (!fnNameRaw) {
+                    throw new Error(`Invalid function name in declaration: ${statement}`);
+                }
+                const fnName = fnNameRaw;
+                const paramsStr = (paramsRaw || '').trim();
+                if (paramsStr.length > 0) {
+                    throw new Error('Function parameters are not supported yet');
+                }
+                const returnTypeStr = returnTypeRaw?.trim();
+                const body = (bodyRaw || '').trim();
+                const returnConstraint = returnTypeStr ? getTypeConstraint(returnTypeStr) : null;
+                ensureVariableNotDefined(localScope, fnName);
+                localScope[fnName] = {
+                    value: 0,
+                    constraint: returnConstraint,
+                    isMutable: false,
+                    isInitialized: true,
+                    functionBody: body,
+                    functionParams: []
+                };
+                lastResult = { value: 0, constraint: null };
             } else {
                 // Check for pointer assignment: *p = EXPR
                 const ptrAssignMatch = statement.match(/^\*(.*)\s*=\s*(.*)$/);
@@ -1030,6 +1066,24 @@ function evaluate(source: string, scope: Record<string, { value: number | number
     if (assignmentResult) return assignmentResult;
     
     // Variable access in non-binary expression
+    const functionCallMatch = source.match(/^([a-zA-Z_]\w*)\s*\(\s*\)$/);
+    if (functionCallMatch) {
+        const fnNameRaw = functionCallMatch[1];
+        if (!fnNameRaw) {
+            throw new Error(`Invalid function call syntax: ${source}`);
+        }
+        const fnName = fnNameRaw;
+        const fnEntry = scope[fnName];
+        if (fnEntry?.functionBody) {
+            const invocationScope = { ...scope };
+            const fnResult = evaluate(fnEntry.functionBody, invocationScope);
+            if (fnEntry.constraint && typeof fnResult.value === 'number') {
+                validateValueInConstraint(fnResult.value, fnEntry.constraint, source);
+            }
+            return fnResult;
+        }
+        throw new Error(`Function ${fnName} is not defined`);
+    }
     const scopeVar = scope[source];
     if (scopeVar) {
         return { value: scopeVar.value, constraint: scopeVar.constraint };
