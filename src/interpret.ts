@@ -17,6 +17,7 @@ interface ScopeEntry {
   rangeStart?: number;
   rangeEnd?: number;
   generatorPosition?: number;
+  originalType?: string; // Stores the alias name if a type alias was used
 }
 
 type Scope = Record<string, ScopeEntry>;
@@ -1134,11 +1135,25 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
     let lastResult: EvaluationResult = { value: 0, constraint: null };
     const localScope = { ...scope };
+    const typeAliases: { [key: string]: string } = {};
 
     for (const statement of statements) {
       if (statement.length === 0) {
         lastResult = { value: 0, constraint: null };
         continue;
+      }
+      if (statement.startsWith("type ")) {
+        // Parse type alias declaration: type NAME = TYPE;
+        const typeMatch = statement.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:;*)$/);
+        if (typeMatch && typeMatch[1] && typeMatch[2]) {
+          const aliasName = typeMatch[1];
+          const aliasTarget = typeMatch[2].trim();
+          typeAliases[aliasName] = aliasTarget;
+          lastResult = { value: 0, constraint: null };
+          continue;
+        } else {
+          throw new Error(`Invalid type alias declaration: ${statement}`);
+        }
       }
       if (statement.startsWith("let ")) {
         // Parse variable declaration: let [mut] x [: TYPE] [= EXPR]
@@ -1152,9 +1167,13 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           const typeStr = declMatch[3]?.trim();
           const hasInitializer = declMatch[4] !== undefined;
           const expr = declMatch[4];
-          const explicitConstraint = typeStr
-            ? getTypeConstraint(typeStr)
+          // Resolve type aliases
+          const resolvedTypeStr = typeStr && typeAliases[typeStr] ? typeAliases[typeStr] : typeStr;
+          const explicitConstraint = resolvedTypeStr
+            ? getTypeConstraint(resolvedTypeStr)
             : null;
+          // Store the original/alias name for type checking
+          const originalTypeStr = typeStr;
 
           if (hasInitializer && expr !== undefined) {
             // Create a "pending" scope for evaluating the initializer
@@ -1217,6 +1236,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
                 isInitialized: true,
                 functionBody: exprResult.functionBody,
                 functionParams: exprResult.functionParams,
+                originalType: originalTypeStr, // Store the alias name
               };
               lastResult = exprResult;
             }
@@ -1479,7 +1499,9 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
       // For `is` operator, don't evaluate rightStr as an expression - it's a type name
       const rightResult =
-        operator === "is" ? { value: 0, constraint: null } : evaluate(rightStr, scope);
+        operator === "is"
+          ? { value: 0, constraint: null }
+          : evaluate(rightStr, scope);
 
       if (operator === "&&" || operator === "||") {
         ensureBoolOperand(rightResult, operator, "right");
@@ -1502,7 +1524,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       if (operator === "is") {
         const expectedType = rightStr.trim();
         const actualType = leftResult.constraint?.typeStr;
-        result = actualType === expectedType ? 1 : 0;
+        // Check against the constraint's typeStr, or the originalType if it was set
+        const leftEntry = scope[leftStr];
+        const leftOriginalType = leftEntry?.originalType;
+        
+        // Match if: expectedType matches actualType directly, OR expectedType matches the originalType (alias)
+        result = (actualType === expectedType || leftOriginalType === expectedType) ? 1 : 0;
         resultConstraint = {
           minValue: 0,
           maxValue: 1,
