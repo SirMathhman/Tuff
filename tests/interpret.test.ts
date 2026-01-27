@@ -413,4 +413,8 @@ describe("interpret", () => {
     const result = interpret("let x = 100; fn get() => x; get()");
     expect(result).toBe(100);
   });
+  test('interpret("let mut x = 0; fn add() : Void => x += 1; add(); x") should return 1', () => {
+    const result = interpret("let mut x = 0; fn add() : Void => x += 1; add(); x");
+    expect(result).toBe(1);
+  });
 });

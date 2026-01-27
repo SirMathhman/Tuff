@@ -1430,6 +1430,20 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     if (fnEntry?.functionBody) {
       const invocationScope = { ...scope };
       const fnResult = evaluate(fnEntry.functionBody, invocationScope);
+      // Sync back mutable captured variables to the original scope
+      for (const varName in scope) {
+        const originalVar = scope[varName];
+        const modifiedVar = invocationScope[varName];
+        if (
+          originalVar &&
+          modifiedVar &&
+          originalVar.isMutable &&
+          varName !== fnName
+        ) {
+          originalVar.value = modifiedVar.value;
+          originalVar.isInitialized = modifiedVar.isInitialized;
+        }
+      }
       if (fnEntry.constraint && typeof fnResult.value === "number") {
         validateValueInConstraint(fnResult.value, fnEntry.constraint, source);
       }
