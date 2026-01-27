@@ -7,13 +7,18 @@ interface TypeConstraint {
 
 function getTypeConstraint(source: string): TypeConstraint | null {
     if (source.startsWith('*')) {
-        const innerType = source.substring(1);
+        let isMutablePointer = false;
+        let innerType = source.substring(1).trim();
+        if (innerType.startsWith('mut ')) {
+            isMutablePointer = true;
+            innerType = innerType.substring(4).trim();
+        }
         const innerConstraint = getTypeConstraint(innerType);
         if (innerConstraint) {
             return {
                 minValue: 0,
                 maxValue: Number.MAX_SAFE_INTEGER,
-                typeStr: '*' + innerConstraint.typeStr,
+                typeStr: '*' + (isMutablePointer ? 'mut ' : '') + innerConstraint.typeStr,
                 bitWidth: innerConstraint.bitWidth
             };
         }
@@ -113,11 +118,20 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         return { value: 0, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
     }
 
-    // Check for pointer reference: &x
+    // Check for pointer reference: &x or &mut x
     if (source.startsWith('&')) {
-        const varName = source.substring(1).trim();
+        let isMutableRequest = false;
+        let varName = source.substring(1).trim();
+        if (varName.startsWith('mut ')) {
+            isMutableRequest = true;
+            varName = varName.substring(4).trim();
+        }
+        
         const existingVar = scope[varName];
         if (existingVar) {
+            if (isMutableRequest && !existingVar.isMutable) {
+                throw new Error(`Cannot take mutable reference to immutable variable ${varName}`);
+            }
             const addr = getAddressOf(varName);
             const innerConstraint = existingVar.constraint || getTypeConstraint("I32");
             return {
@@ -125,7 +139,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                 constraint: {
                     minValue: 0,
                     maxValue: Number.MAX_SAFE_INTEGER,
-                    typeStr: '*' + (innerConstraint?.typeStr || 'numeric')
+                    typeStr: '*' + (isMutableRequest ? 'mut ' : '') + (innerConstraint?.typeStr || 'numeric')
                 }
             };
         }
@@ -144,7 +158,8 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                 if (!targetVar.isInitialized) {
                     throw new Error(`Dereferenced pointer points to uninitialized variable ${varName}`);
                 }
-                const innerTypeStr = exprResult.constraint.typeStr.substring(1);
+                const isMut = exprResult.constraint.typeStr.startsWith('*mut ');
+                const innerTypeStr = exprResult.constraint.typeStr.substring(isMut ? 5 : 1);
                 const targetConstraint = getTypeConstraint(innerTypeStr);
                 return { value: targetVar.value, constraint: targetConstraint };
             }
@@ -220,7 +235,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             }
             if (statement.startsWith('let ')) {
                 // Parse variable declaration: let [mut] x [: TYPE] [= EXPR]
-                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([\w\*]+))?(\s*=\s*(.*))?$/);
+                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([\w\*\s]+?))?(\s*=\s*(.*))?$/);
                 if (declMatch && declMatch[2]) {
                     const isMutable = !!declMatch[1];
                     const varName = declMatch[2];
@@ -258,6 +273,38 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     }
                 }
             } else {
+                // Check for pointer assignment: *p = EXPR
+                const ptrAssignMatch = statement.match(/^\*(.*)\s*=\s*(.*)$/);
+                if (ptrAssignMatch && ptrAssignMatch[1] && ptrAssignMatch[2]) {
+                    const ptrExpr = ptrAssignMatch[1].trim();
+                    const valExpr = ptrAssignMatch[2].trim();
+                    const ptrResult = evaluate(ptrExpr, localScope);
+                    
+                    if (ptrResult.constraint?.typeStr.startsWith('*mut ')) {
+                        const addr = ptrResult.value;
+                        const varName = addresses.get(addr);
+                        if (varName && localScope[varName]) {
+                            const valResult = evaluate(valExpr, localScope);
+                            const innerTypeStr = ptrResult.constraint.typeStr.substring(5); // skip '*mut '
+                            const targetConstraint = getTypeConstraint(innerTypeStr);
+                            
+                            if (targetConstraint) {
+                                validateValueInConstraint(valResult.value, targetConstraint, statement);
+                                if (valResult.constraint) {
+                                    validateTypeMatch(valResult.constraint, targetConstraint);
+                                }
+                            }
+                            
+                            localScope[varName].value = valResult.value;
+                            localScope[varName].isInitialized = true;
+                            lastResult = valResult;
+                            continue;
+                        }
+                    } else if (ptrResult.constraint?.typeStr.startsWith('*')) {
+                        throw new Error(`Cannot assign through non-mutable pointer type ${ptrResult.constraint.typeStr}`);
+                    }
+                }
+
                 // Check for reassignment: x [OP]= EXPR
                 const assignMatch = statement.match(/^([a-zA-Z_]\w*)\s*(\+|-|\*|\/)?=\s*(.*)$/);
                 if (assignMatch && assignMatch[1] && assignMatch[3]) {

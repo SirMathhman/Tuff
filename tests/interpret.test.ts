@@ -218,4 +218,8 @@ describe('interpret', () => {
     test('interpret("let x = 100; *x") should throw error', () => {
         expect(() => interpret("let x = 100; *x")).toThrow();
     });
+    test('interpret("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x") should return 100', () => {
+        const result = interpret("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x");
+        expect(result).toBe(100);
+    });
 });
