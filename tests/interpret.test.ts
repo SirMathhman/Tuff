@@ -162,4 +162,29 @@ describe('interpret', () => {
     test('interpret("let value = if (true) 3U8 else 5U8; value + 255U8") should throw error', () => {
         expect(() => interpret("let value = if (true) 3U8 else 5U8; value + 255U8")).toThrow();
     });
+    test('interpret("let mut x = 0; x += 10; x") should return 10', () => {
+        const result = interpret("let mut x = 0; x += 10; x");
+        expect(result).toBe(10);
+    });
+    test('interpret("let mut x = 100; x -= 30; x") should return 70', () => {
+        const result = interpret("let mut x = 100; x -= 30; x");
+        expect(result).toBe(70);
+    });
+    test('interpret("let mut x = 10; x *= 3; x") should return 30', () => {
+        const result = interpret("let mut x = 10; x *= 3; x");
+        expect(result).toBe(30);
+    });
+    test('interpret("let mut x = 30; x /= 3; x") should return 10', () => {
+        const result = interpret("let mut x = 30; x /= 3; x");
+        expect(result).toBe(10);
+    });
+    test('interpret("let x = 0; x += 10") should throw error', () => {
+        expect(() => interpret("let x = 0; x += 10")).toThrow();
+    });
+    test('interpret("let mut x : U8; x += 10") should throw error', () => {
+        expect(() => interpret("let mut x : U8; x += 10")).toThrow();
+    });
+    test('interpret("let mut x : U8 = 250; x += 10") should throw error', () => {
+        expect(() => interpret("let mut x : U8 = 250; x += 10")).toThrow();
+    });
 });

@@ -191,29 +191,51 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     }
                 }
             } else {
-                // Check for reassignment: x = EXPR
-                const assignMatch = statement.match(/^([a-zA-Z_]\w*)\s*=\s*(.*)$/);
-                if (assignMatch && assignMatch[1] && assignMatch[2]) {
+                // Check for reassignment: x [OP]= EXPR
+                const assignMatch = statement.match(/^([a-zA-Z_]\w*)\s*(\+|-|\*|\/)?=\s*(.*)$/);
+                if (assignMatch && assignMatch[1] && assignMatch[3]) {
                     const varName = assignMatch[1];
-                    const expr = assignMatch[2];
+                    const op = assignMatch[2];
+                    const expr = assignMatch[3];
                     const existingVar = localScope[varName];
                     
                     if (existingVar) {
-                        if (!existingVar.isMutable && existingVar.isInitialized) {
+                        if (!existingVar.isMutable && (existingVar.isInitialized || op)) {
                             throw new Error(`Cannot reassign immutable variable ${varName}.`);
                         }
                         
+                        if (op && !existingVar.isInitialized) {
+                            throw new Error(`Cannot use compound assignment on uninitialized variable ${varName}.`);
+                        }
+
                         const exprResult = evaluate(expr, localScope);
+                        let newValue = exprResult.value;
+
+                        if (op) {
+                            ensureNumericOperand({ value: existingVar.value, constraint: existingVar.constraint }, op, 'left');
+                            ensureNumericOperand(exprResult, op, 'right');
+                            
+                            switch (op) {
+                                case '+': newValue = existingVar.value + exprResult.value; break;
+                                case '-': newValue = existingVar.value - exprResult.value; break;
+                                case '*': newValue = existingVar.value * exprResult.value; break;
+                                case '/': 
+                                    if (exprResult.value === 0) throw new Error("Division by zero");
+                                    newValue = Math.floor(existingVar.value / exprResult.value); 
+                                    break;
+                            }
+                        }
+
                         if (existingVar.constraint) {
-                            validateValueInConstraint(exprResult.value, existingVar.constraint, statement);
+                            validateValueInConstraint(newValue, existingVar.constraint, statement);
                             // Strict type matching for anything that has a constraint (literals or variables)
-                            if (exprResult.constraint) {
+                            if (exprResult.constraint && !op) {
                                 validateTypeMatch(exprResult.constraint, existingVar.constraint);
                             }
                         }
                         
-                        localScope[varName] = { ...existingVar, value: exprResult.value, isInitialized: true, constraint: existingVar.constraint || exprResult.constraint };
-                        lastResult = exprResult;
+                        localScope[varName] = { ...existingVar, value: newValue, isInitialized: true, constraint: existingVar.constraint || exprResult.constraint };
+                        lastResult = { value: newValue, constraint: existingVar.constraint || exprResult.constraint };
                         continue;
                     }
                 }
