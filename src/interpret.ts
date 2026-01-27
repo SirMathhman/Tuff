@@ -50,6 +50,12 @@ function ensureVariableNotDefined(scope: Record<string, unknown>, varName: strin
     }
 }
 
+function ensureBoolOperand(result: EvaluationResult, operator: string, side: 'left' | 'right'): void {
+    if (result.constraint?.typeStr !== 'Bool') {
+        throw new Error(`Logical operator ${operator} requires boolean operands, but ${side} side is ${result.constraint?.typeStr || 'numeric'}`);
+    }
+}
+
 function updateDepth(char: string, depth: number): number {
     if (char === '(' || char === '{') return depth + 1;
     if (char === ')' || char === '}') return depth - 1;
@@ -243,6 +249,10 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         if (leftStr && rightStr) {
             const leftResult = evaluate(leftStr, scope);
             
+            if (operator === '&&' || operator === '||') {
+                ensureBoolOperand(leftResult, operator, 'left');
+            }
+
             // Short-circuiting for logical operators
             if (operator === '&&' && leftResult.value === 0) {
                 return { value: 0, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
@@ -253,6 +263,10 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
 
             const rightResult = evaluate(rightStr, scope);
             
+            if (operator === '&&' || operator === '||') {
+                ensureBoolOperand(rightResult, operator, 'right');
+            }
+
             let result: number;
             let resultConstraint: TypeConstraint | null = null;
 

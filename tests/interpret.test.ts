@@ -136,4 +136,7 @@ describe('interpret', () => {
         const result = interpret("let x : Bool = true; let y = false; x || y");
         expect(result).toBe(1);
     });
+    test('interpret("let x = 0; x && true") should throw error', () => {
+        expect(() => interpret("let x = 0; x && true")).toThrow();
+    });
 });
