@@ -1,4 +1,0 @@
-export struct Some<T> { value : T }
-export object None<T> {}
-
-export type Option<T> = Some<T> | None<T>;

@@ -1,5 +1,0 @@
-extern use {} from string;
-
-// Mutable pointer to a string.
-extern fn concat(this : *mut *Str, other : **Str) : *Str;
-extern fn toString(this : *I32) => *Str;

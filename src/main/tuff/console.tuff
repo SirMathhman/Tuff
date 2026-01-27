@@ -1,3 +1,0 @@
-extern use { println } from console;
-
-extern fn println(line : *Str);
