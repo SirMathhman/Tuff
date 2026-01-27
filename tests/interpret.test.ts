@@ -419,11 +419,11 @@ describe("interpret", () => {
     );
     expect(result).toBe(1);
   });
-  test('interpret("let generator : () => (Bool, I32) = 0..3; let result0 = generator(); let result1 = generator(); let result2 = generator(); result0[1] + result1[1] + result2[1]") should return 6', () => {
+  test('interpret("let generator : () => (Bool, I32) = 0..3; let result0 = generator(); let result1 = generator(); let result2 = generator(); result0[1] + result1[1] + result2[1]") should return 3', () => {
     const result = interpret(
       "let generator : () => (Bool, I32) = 0..3; let result0 = generator(); let result1 = generator(); let result2 = generator(); result0[1] + result1[1] + result2[1]",
     );
-    expect(result).toBe(6);
+    expect(result).toBe(3);
   });
   test('interpret("let x = false; !x") should return 1', () => {
     const result = interpret("let x = false; !x");

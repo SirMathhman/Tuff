@@ -339,9 +339,15 @@ function executeGeneratorCallLoop(
       if (Array.isArray(genResult.value) && genResult.value.length >= 2) {
         const hasNext = genResult.value[0];
         const element = genResult.value[1];
-        
+
         if (element !== undefined) {
-          lastResult = executeGeneratorLoop(scope, loopVar, bodyStr, element, convertTo0Indexed);
+          lastResult = executeGeneratorLoop(
+            scope,
+            loopVar,
+            bodyStr,
+            element,
+            convertTo0Indexed,
+          );
         }
 
         if (hasNext === 0) {
@@ -768,14 +774,29 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         const generatorVar = scope[rangeStr];
 
         if (generatorVar?.isGenerator) {
-          lastResult = executeGeneratorCallLoop(scope, loopVar, bodyStr, rangeStr, true);
+          lastResult = executeGeneratorCallLoop(
+            scope,
+            loopVar,
+            bodyStr,
+            rangeStr,
+            false,
+          );
           delete scope[loopVar];
           return lastResult;
         }
 
         // Try as user-defined generator function (any callable that returns (Bool, I32))
-        if (generatorVar?.functionBody !== undefined || /^[a-zA-Z_]\w*$/.test(rangeStr)) {
-          lastResult = executeGeneratorCallLoop(scope, loopVar, bodyStr, rangeStr, false);
+        if (
+          generatorVar?.functionBody !== undefined ||
+          /^[a-zA-Z_]\w*$/.test(rangeStr)
+        ) {
+          lastResult = executeGeneratorCallLoop(
+            scope,
+            loopVar,
+            bodyStr,
+            rangeStr,
+            false,
+          );
           delete scope[loopVar];
           return lastResult;
         }
@@ -1635,10 +1656,10 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     ) {
       const pos = fnEntry.generatorPosition;
       const end = fnEntry.rangeEnd;
-      const element = pos + 1;
-      const hasNextAfterThis = element < end;
+      const element = pos;
+      const hasNextAfterThis = (pos + 1) < end;
 
-      // Return (hasNextAfterThis, element)
+      // Return (hasNextAfterThis, element) - 0-indexed
       const returnValue = [hasNextAfterThis ? 1 : 0, element];
       fnEntry.generatorPosition = pos + 1;
 
