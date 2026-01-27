@@ -200,4 +200,11 @@ describe('interpret', () => {
         const result = interpret("let y = 10 / (5 - 3); let mut x = 0; x += y; x");
         expect(result).toBe(5);
     });
+    test('interpret("let x = 100; let y : U16 = x; y") should throw error', () => {
+        expect(() => interpret("let x = 100; let y : U16 = x; y")).toThrow();
+    });
+    test('interpret("let x = 100; let y : I32 = x; y") should return 100', () => {
+        const result = interpret("let x = 100; let y : I32 = x; y");
+        expect(result).toBe(100);
+    });
 });

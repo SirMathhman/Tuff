@@ -180,7 +180,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         // Re-check if it was already in localScope (to prevent multiple lets of same name in same block)
                         ensureVariableNotDefined(localScope, varName);
 
-                        const finalConstraint = explicitConstraint || exprResult.constraint;
+                        const finalConstraint = explicitConstraint || exprResult.constraint || getTypeConstraint("I32");
                         localScope[varName] = { value: exprResult.value, constraint: finalConstraint, isMutable, isInitialized: true };
                         lastResult = exprResult;
                     } else {
@@ -234,8 +234,9 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                             }
                         }
                         
-                        localScope[varName] = { ...existingVar, value: newValue, isInitialized: true, constraint: existingVar.constraint || exprResult.constraint };
-                        lastResult = { value: newValue, constraint: existingVar.constraint || exprResult.constraint };
+                        const finalConstraint = existingVar.constraint || exprResult.constraint || getTypeConstraint("I32");
+                        localScope[varName] = { ...existingVar, value: newValue, isInitialized: true, constraint: finalConstraint };
+                        lastResult = { value: newValue, constraint: finalConstraint };
                         continue;
                     }
                 }
