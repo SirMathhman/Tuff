@@ -1,5 +1,6 @@
-import { describe } from "bun:test";
+import { describe, it } from "bun:test";
 import { itBoth } from "../test-helpers";
+import { assertExecuteValid } from "../test-helpers";
 
 describe("control flow - loops", () => {
   itBoth("supports loop expression with break", (assertValid) => {
@@ -34,4 +35,10 @@ describe("control flow - loops", () => {
       6,
     );
   });
+
+  it("Compiled: supports for-in loop with variable range bounds", () =>
+    assertExecuteValid(
+      "let x = 0; let y = 10; let mut sum = 0; for (let mut i in x..y) sum += i; sum",
+      45,
+    ));
 });
