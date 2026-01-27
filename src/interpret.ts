@@ -42,6 +42,15 @@ function updateDepth(char: string, depth: number): number {
 }
 
 export function interpret(source : string, scope: Record<string, { value: number, constraint: TypeConstraint | null }> = {}) : number {
+    return evaluate(source, scope).value;
+}
+
+interface EvaluationResult {
+    value: number;
+    constraint: TypeConstraint | null;
+}
+
+function evaluate(source: string, scope: Record<string, { value: number, constraint: TypeConstraint | null }>): EvaluationResult {
     source = source.trim();
     
     // Check if this is a block with statements (semicolons) NOT inside parentheses/braces at depth 0
@@ -71,7 +80,7 @@ export function interpret(source : string, scope: Record<string, { value: number
         }
         statements.push(source.substring(start).trim());
 
-        let lastValue = NaN;
+        let lastResult: EvaluationResult = { value: NaN, constraint: null };
         const localScope = { ...scope };
         
         for (const statement of statements) {
@@ -80,20 +89,24 @@ export function interpret(source : string, scope: Record<string, { value: number
                 const declMatch = statement.match(/^let\s+([a-zA-Z_]\w*)\s*(?::\s*([UIF]\d+))?\s*=\s*(.*)$/);
                 if (declMatch && declMatch[1] && declMatch[3]) {
                     const varName = declMatch[1];
-                    
                     const typeStr = declMatch[2];
                     const expr = declMatch[3];
-                    const constraint = typeStr ? getTypeConstraint(typeStr) : null;
+                    const explicitConstraint = typeStr ? getTypeConstraint(typeStr) : null;
                     
                     // Create a "pending" scope for evaluating the initializer
-                    // We want to pass a scope that already includes the name to detect shadowing
                     const initializerScope = { ...localScope };
                     initializerScope[varName] = { value: NaN, constraint: null }; // Placeholder
                     
-                    const value = interpret(expr, initializerScope);
+                    const exprResult = evaluate(expr, initializerScope);
                     
-                    if (constraint) {
-                        validateValueInConstraint(value, constraint, statement);
+                    if (explicitConstraint) {
+                        validateValueInConstraint(exprResult.value, explicitConstraint, statement);
+                        // If it's a variable assignment, check strict type matching
+                        if (localScope[expr.trim()] && exprResult.constraint) {
+                             if (exprResult.constraint.typeStr !== explicitConstraint.typeStr) {
+                                  throw new Error(`Type mismatch: cannot assign ${exprResult.constraint.typeStr} to ${explicitConstraint.typeStr}`);
+                             }
+                        }
                     }
                     
                     // Re-check if it was already in localScope (to prevent multiple lets of same name in same block)
@@ -101,17 +114,15 @@ export function interpret(source : string, scope: Record<string, { value: number
                         throw new Error(`Variable ${varName} is already defined.`);
                     }
 
-                    localScope[varName] = { value, constraint };
-                    lastValue = value;
+                    const finalConstraint = explicitConstraint || exprResult.constraint;
+                    localScope[varName] = { value: exprResult.value, constraint: finalConstraint };
+                    lastResult = exprResult;
                 }
-            } else if (localScope[statement]) {
-                // Variable access
-                lastValue = localScope[statement].value;
             } else {
-                lastValue = interpret(statement, localScope);
+                lastResult = evaluate(statement, localScope);
             }
         }
-        return lastValue;
+        return lastResult;
     }
 
     // Remove outermost parentheses or braces if they wrap the entire expression
@@ -130,7 +141,7 @@ export function interpret(source : string, scope: Record<string, { value: number
             }
         }
         if (isFullyWrapped) {
-            return interpret(source.substring(1, source.length - 1).trim(), scope);
+            return evaluate(source.substring(1, source.length - 1).trim(), scope);
         }
     }
 
@@ -170,33 +181,33 @@ export function interpret(source : string, scope: Record<string, { value: number
         const rightStr = source.substring(operatorEnd).trim();
         
         if (leftStr && rightStr) {
-            const left = interpret(leftStr, scope);
-            const right = interpret(rightStr, scope);
+            const leftResult = evaluate(leftStr, scope);
+            const rightResult = evaluate(rightStr, scope);
             
             let result: number;
             switch (operator) {
                 case '+':
-                    result = left + right;
+                    result = leftResult.value + rightResult.value;
                     break;
                 case '-':
-                    result = left - right;
+                    result = leftResult.value - rightResult.value;
                     break;
                 case '*':
-                    result = left * right;
+                    result = leftResult.value * rightResult.value;
                     break;
                 case '/':
-                    if (right === 0) {
+                    if (rightResult.value === 0) {
                         throw new Error("Division by zero");
                     }
-                    result = Math.floor(left / right);
+                    result = Math.floor(leftResult.value / rightResult.value);
                     break;
                 default:
-                    return NaN;
+                    return { value: NaN, constraint: null };
             }
             
             // Infer type constraint from operands
-            const leftConstraint = getTypeConstraint(leftStr);
-            const rightConstraint = getTypeConstraint(rightStr);
+            const leftConstraint = leftResult.constraint;
+            const rightConstraint = rightResult.constraint;
             
             // If any operand has a type constraint, validate result
             let constraintToUse: TypeConstraint | null = null;
@@ -215,14 +226,14 @@ export function interpret(source : string, scope: Record<string, { value: number
                 validateValueInConstraint(result, constraintToUse, source);
             }
             
-            return result;
+            return { value: result, constraint: constraintToUse };
         }
     }
     
     // Variable access in non-binary expression
     const scopeVar = scope[source];
     if (scopeVar) {
-        return scopeVar.value;
+        return { value: scopeVar.value, constraint: scopeVar.constraint };
     }
     
     // Single value parsing
@@ -240,17 +251,17 @@ export function interpret(source : string, scope: Record<string, { value: number
     
     // Extract numeric part at the start
     const match = source.match(/^-?\d+/);
-    if (!match) return NaN;
+    if (!match) return { value: NaN, constraint: null };
     
     const value = parseInt(match[0], 10);
-    
+    const constraint = getTypeConstraint(source);
+
     // Validate range based on type suffix
     if (hasSuffix) {
-        const constraint = getTypeConstraint(source);
         if (constraint) {
             validateValueInConstraint(value, constraint, source);
         }
     }
     
-    return value;
+    return { value, constraint };
 }
