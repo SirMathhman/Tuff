@@ -36,11 +36,42 @@ function validateValueInConstraint(value: number, constraint: TypeConstraint, so
 }
 
 export function interpret(source : string) : number {
+    source = source.trim();
+    
+    // Remove outermost parentheses if they wrap the entire expression
+    if (source.startsWith('(') && source.endsWith(')')) {
+        let depth = 0;
+        let isFullyWrapped = true;
+        for (let i = 0; i < source.length - 1; i++) {
+            if (source[i] === '(') depth++;
+            else if (source[i] === ')') depth--;
+            if (depth === 0) {
+                isFullyWrapped = false;
+                break;
+            }
+        }
+        if (isFullyWrapped) {
+            return interpret(source.substring(1, source.length - 1).trim());
+        }
+    }
+
     // Check if this is a binary operation
     // Find lowest precedence operator (+ or -) last to ensure left-to-right evaluation
     const findOperator = (regex: RegExp) => {
-        const matches = [...source.matchAll(regex)];
-        return matches.length > 0 ? matches[matches.length - 1] : null;
+        const matches = Array.from(source.matchAll(regex));
+        // Only return matches that are at depth 0
+        for (let i = matches.length - 1; i >= 0; i--) {
+            const match = matches[i];
+            if (!match || match.index === undefined) continue;
+            const index = match.index;
+            let depth = 0;
+            for (let j = 0; j < index; j++) {
+                if (source[j] === '(') depth++;
+                else if (source[j] === ')') depth--;
+            }
+            if (depth === 0) return match;
+        }
+        return null;
     };
 
     let operatorMatch = findOperator(/\s*([+\-])\s*/g);

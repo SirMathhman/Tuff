@@ -66,4 +66,8 @@ describe('interpret', () => {
     test('interpret("10 / 0") should throw error', () => {
         expect(() => interpret("10 / 0")).toThrow();
     });
+    test('interpret("10 / (2 + 3)") should return 2', () => {
+        const result = interpret("10 / (2 + 3)");
+        expect(result).toBe(2);
+    });
 });
