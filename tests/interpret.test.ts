@@ -207,4 +207,12 @@ describe('interpret', () => {
         const result = interpret("let x = 100; let y : I32 = x; y");
         expect(result).toBe(100);
     });
+    test('interpret("let x = 100; let y : *I32 = &x; *y") should return 100', () => {
+        const result = interpret("let x = 100; let y : *I32 = &x; *y");
+        expect(result).toBe(100);
+    });
+    test('interpret("let x = 100; let y = &x; let z = &y; **z") should return 100', () => {
+        const result = interpret("let x = 100; let y = &x; let z = &y; **z");
+        expect(result).toBe(100);
+    });
 });

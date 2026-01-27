@@ -6,6 +6,19 @@ interface TypeConstraint {
 }
 
 function getTypeConstraint(source: string): TypeConstraint | null {
+    if (source.startsWith('*')) {
+        const innerType = source.substring(1);
+        const innerConstraint = getTypeConstraint(innerType);
+        if (innerConstraint) {
+            return {
+                minValue: 0,
+                maxValue: Number.MAX_SAFE_INTEGER,
+                typeStr: '*' + innerConstraint.typeStr,
+                bitWidth: innerConstraint.bitWidth
+            };
+        }
+        return null; // Ensure we return null if inner type is invalid
+    }
     if (source.endsWith('Bool')) {
         return { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
     }
@@ -68,7 +81,21 @@ function updateDepth(char: string, depth: number): number {
     return depth;
 }
 
+const addresses: Map<number, string> = new Map();
+let nextAddress = 0x1000;
+
+function getAddressOf(varName: string): number {
+    for (const [addr, name] of addresses.entries()) {
+        if (name === varName) return addr;
+    }
+    const addr = nextAddress++;
+    addresses.set(addr, varName);
+    return addr;
+}
+
 export function interpret(source : string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }> = {}) : number {
+    addresses.clear();
+    nextAddress = 0x1000;
     return evaluate(source, scope).value;
 }
 
@@ -84,6 +111,46 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
     }
     if (source === 'false') {
         return { value: 0, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
+    }
+
+    // Check for pointer reference: &x
+    if (source.startsWith('&')) {
+        const varName = source.substring(1).trim();
+        const existingVar = scope[varName];
+        if (existingVar) {
+            const addr = getAddressOf(varName);
+            const innerConstraint = existingVar.constraint || getTypeConstraint("I32");
+            return {
+                value: addr,
+                constraint: {
+                    minValue: 0,
+                    maxValue: Number.MAX_SAFE_INTEGER,
+                    typeStr: '*' + (innerConstraint?.typeStr || 'numeric')
+                }
+            };
+        }
+        throw new Error(`Cannot take address of undefined variable ${varName}`);
+    }
+
+    // Check for pointer dereference: *y
+    if (source.startsWith('*') && !getTypeConstraint(source)) {
+        const expr = source.substring(1).trim();
+        const exprResult = evaluate(expr, scope);
+        if (exprResult.constraint?.typeStr.startsWith('*')) {
+            const addr = exprResult.value;
+            const varName = addresses.get(addr);
+            if (varName && scope[varName]) {
+                const targetVar = scope[varName];
+                if (!targetVar.isInitialized) {
+                    throw new Error(`Dereferenced pointer points to uninitialized variable ${varName}`);
+                }
+                const innerTypeStr = exprResult.constraint.typeStr.substring(1);
+                const targetConstraint = getTypeConstraint(innerTypeStr);
+                return { value: targetVar.value, constraint: targetConstraint };
+            }
+            throw new Error(`Invalid pointer address ${addr} for ${varName || 'unknown'}`);
+        }
+        throw new Error(`Cannot dereference non-pointer type ${exprResult.constraint?.typeStr || 'numeric'} for expr: ${expr}`);
     }
 
     // Check for if (cond) expr1 else expr2
@@ -153,7 +220,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             }
             if (statement.startsWith('let ')) {
                 // Parse variable declaration: let [mut] x [: TYPE] [= EXPR]
-                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([a-zA-Z]\w*))?(\s*=\s*(.*))?$/);
+                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([\w\*]+))?(\s*=\s*(.*))?$/);
                 if (declMatch && declMatch[2]) {
                     const isMutable = !!declMatch[1];
                     const varName = declMatch[2];
