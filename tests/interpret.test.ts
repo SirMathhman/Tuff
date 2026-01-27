@@ -409,4 +409,8 @@ describe("interpret", () => {
     );
     expect(result).toBe(300);
   });
+  test('interpret("let x = 100; fn get() => x; get()") should return 100', () => {
+    const result = interpret("let x = 100; fn get() => x; get()");
+    expect(result).toBe(100);
+  });
 });
