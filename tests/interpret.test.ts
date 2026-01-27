@@ -232,4 +232,7 @@ describe('interpret', () => {
         const result = interpret("let x = { let y = 100; y }; x");
         expect(result).toBe(100);
     });
+    test('interpret("let x = { let y = 100U16; y }; let z : U8 = x; z") should throw error', () => {
+        expect(() => interpret("let x = { let y = 100U16; y }; let z : U8 = x; z")).toThrow();
+    });
 });
