@@ -35,13 +35,25 @@ function validateValueInConstraint(value: number, constraint: TypeConstraint, so
     }
 }
 
+function validateTypeMatch(exprConstraint: TypeConstraint | null, targetConstraint: TypeConstraint | null): void {
+    if (exprConstraint && targetConstraint && exprConstraint.typeStr !== targetConstraint.typeStr) {
+        throw new Error(`Type mismatch: cannot assign ${exprConstraint.typeStr} to ${targetConstraint.typeStr}`);
+    }
+}
+
+function ensureVariableNotDefined(scope: Record<string, unknown>, varName: string): void {
+    if (scope[varName] !== undefined) {
+        throw new Error(`Variable ${varName} is already defined.`);
+    }
+}
+
 function updateDepth(char: string, depth: number): number {
     if (char === '(' || char === '{') return depth + 1;
     if (char === ')' || char === '}') return depth - 1;
     return depth;
 }
 
-export function interpret(source : string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean }> = {}) : number {
+export function interpret(source : string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }> = {}) : number {
     return evaluate(source, scope).value;
 }
 
@@ -50,7 +62,7 @@ interface EvaluationResult {
     constraint: TypeConstraint | null;
 }
 
-function evaluate(source: string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean }>): EvaluationResult {
+function evaluate(source: string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }>): EvaluationResult {
     source = source.trim();
     
     // Check if this is a block with statements (semicolons) NOT inside parentheses/braces at depth 0
@@ -89,39 +101,43 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                 continue;
             }
             if (statement.startsWith('let ')) {
-                // Parse variable declaration: let [mut] x [: TYPE] = EXPR
-                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([UIF]\d+))?\s*=\s*(.*)$/);
-                if (declMatch && declMatch[2] && declMatch[4]) {
+                // Parse variable declaration: let [mut] x [: TYPE] [= EXPR]
+                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([UIF]\d+))?(\s*=\s*(.*))?$/);
+                if (declMatch && declMatch[2]) {
                     const isMutable = !!declMatch[1];
                     const varName = declMatch[2];
                     const typeStr = declMatch[3];
-                    const expr = declMatch[4];
+                    const hasInitializer = !!declMatch[4];
+                    const expr = declMatch[5];
                     const explicitConstraint = typeStr ? getTypeConstraint(typeStr) : null;
                     
-                    // Create a "pending" scope for evaluating the initializer
-                    const initializerScope = { ...localScope };
-                    initializerScope[varName] = { value: NaN, constraint: null, isMutable }; // Placeholder
-                    
-                    const exprResult = evaluate(expr, initializerScope);
-                    
-                    if (explicitConstraint) {
-                        validateValueInConstraint(exprResult.value, explicitConstraint, statement);
-                        // If it's a variable assignment, check strict type matching
-                        if (localScope[expr.trim()] && exprResult.constraint) {
-                             if (exprResult.constraint.typeStr !== explicitConstraint.typeStr) {
-                                  throw new Error(`Type mismatch: cannot assign ${exprResult.constraint.typeStr} to ${explicitConstraint.typeStr}`);
-                             }
+                    if (hasInitializer && expr !== undefined) {
+                        // Create a "pending" scope for evaluating the initializer
+                        const initializerScope = { ...localScope };
+                        initializerScope[varName] = { value: NaN, constraint: null, isMutable, isInitialized: false }; // Placeholder
+                        
+                        const exprResult = evaluate(expr, initializerScope);
+                        
+                        if (explicitConstraint) {
+                            validateValueInConstraint(exprResult.value, explicitConstraint, statement);
+                            // If it's a variable assignment, check strict type matching
+                            if (localScope[expr.trim()]) {
+                                validateTypeMatch(exprResult.constraint, explicitConstraint);
+                            }
                         }
-                    }
-                    
-                    // Re-check if it was already in localScope (to prevent multiple lets of same name in same block)
-                    if (localScope[varName] !== undefined) {
-                        throw new Error(`Variable ${varName} is already defined.`);
-                    }
+                        
+                        // Re-check if it was already in localScope (to prevent multiple lets of same name in same block)
+                        ensureVariableNotDefined(localScope, varName);
 
-                    const finalConstraint = explicitConstraint || exprResult.constraint;
-                    localScope[varName] = { value: exprResult.value, constraint: finalConstraint, isMutable };
-                    lastResult = exprResult;
+                        const finalConstraint = explicitConstraint || exprResult.constraint;
+                        localScope[varName] = { value: exprResult.value, constraint: finalConstraint, isMutable, isInitialized: true };
+                        lastResult = exprResult;
+                    } else {
+                        // Declaration without initializer
+                        ensureVariableNotDefined(localScope, varName);
+                        localScope[varName] = { value: NaN, constraint: explicitConstraint, isMutable, isInitialized: false };
+                        lastResult = { value: 0, constraint: null };
+                    }
                 }
             } else {
                 // Check for reassignment: x = EXPR
@@ -132,16 +148,20 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     const existingVar = localScope[varName];
                     
                     if (existingVar) {
-                        if (!existingVar.isMutable) {
+                        if (!existingVar.isMutable && existingVar.isInitialized) {
                             throw new Error(`Cannot reassign immutable variable ${varName}.`);
                         }
                         
                         const exprResult = evaluate(expr, localScope);
                         if (existingVar.constraint) {
                             validateValueInConstraint(exprResult.value, existingVar.constraint, statement);
+                            // If it's a variable assignment, check strict type matching
+                            if (localScope[expr.trim()]) {
+                                validateTypeMatch(exprResult.constraint, existingVar.constraint);
+                            }
                         }
                         
-                        localScope[varName] = { ...existingVar, value: exprResult.value };
+                        localScope[varName] = { ...existingVar, value: exprResult.value, isInitialized: true, constraint: existingVar.constraint || exprResult.constraint };
                         lastResult = exprResult;
                         continue;
                     }

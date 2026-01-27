@@ -111,4 +111,8 @@ describe('interpret', () => {
     test('interpret("let x = 0; x = 100; x") should throw error', () => {
         expect(() => interpret("let x = 0; x = 100; x")).toThrow();
     });
+    test('interpret("let x : I32; x = 100; x") should return 100', () => {
+        const result = interpret("let x : I32; x = 100; x");
+        expect(result).toBe(100);
+    });
 });
