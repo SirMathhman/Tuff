@@ -45,4 +45,8 @@ describe('interpret', () => {
         const result = interpret("1U8 + 2U16 + 3U32");
         expect(result).toBe(6);
     });
+    test('interpret("2 + 3 - 4I8") should return 1', () => {
+        const result = interpret("2 + 3 - 4I8");
+        expect(result).toBe(1);
+    });
 });
