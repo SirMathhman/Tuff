@@ -150,4 +150,7 @@ describe('interpret', () => {
         const result = interpret("let x = true; if (x) 3 else 5");
         expect(result).toBe(3);
     });
+    test('interpret("let x = 100; if (x) 3 else 5") should throw error', () => {
+        expect(() => interpret("let x = 100; if (x) 3 else 5")).toThrow();
+    });
 });
