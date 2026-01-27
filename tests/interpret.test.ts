@@ -38,4 +38,7 @@ describe('interpret', () => {
         const result = interpret("1U8 + 255U16");
         expect(result).toBe(256);
     });
+    test('interpret("1U8 + 65535U16") should throw error', () => {
+        expect(() => interpret("1U8 + 65535U16")).toThrow();
+    });
 });
