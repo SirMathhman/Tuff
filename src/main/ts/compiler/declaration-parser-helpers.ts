@@ -4,6 +4,8 @@ export interface VariableInfo {
   initialized: boolean;
   isArray?: boolean;
   isUninitialized?: boolean;
+  isOut?: boolean;
+  isParameter?: boolean;
 }
 
 export function registerVariable(
@@ -14,6 +16,8 @@ export function registerVariable(
   isArray?: boolean,
   hasInitializer?: boolean,
   inferredType?: string,
+  isOut?: boolean,
+  isParameter?: boolean,
 ): void {
   if (variables.has(varName)) {
     throw new Error(`Variable '${varName}' already declared`);
@@ -26,5 +30,7 @@ export function registerVariable(
     initialized: !isUninitialized,
     isArray,
     isUninitialized,
+    isOut,
+    isParameter,
   });
 }

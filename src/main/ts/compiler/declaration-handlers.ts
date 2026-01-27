@@ -18,12 +18,14 @@ import {
   skipWhitespaceOnly,
   findMatchingCloseBrace,
   parseNameAndGenerics,
+  extractFunctionBody,
 } from "./parsing/declaration-helpers";
 import { parseFieldsDefinition } from "./parsing/field-parsing";
 import {
   registerVariable,
   type VariableInfo,
 } from "./declaration-parser-helpers";
+import { validateVariableUsage } from "./parsing/variable-validation";
 
 export function handleLetDeclarationOrDestructuring(
   source: string,
@@ -118,6 +120,7 @@ export function handleFunctionDeclaration(
       j++;
     }
     const paramsStr = source.slice(parenStart + 1, paramEnd).trim();
+    const { body, endPos } = extractFunctionBody(source, j);
     if (paramsStr) {
       processFnParams(
         source,
@@ -127,8 +130,10 @@ export function handleFunctionDeclaration(
         generics,
         paramsStr,
         variables,
+        body,
       );
     }
+    return endPos;
   }
   return skipToNextStatement(source, j);
 }
@@ -141,15 +146,38 @@ function processFnParams(
   generics: string[] | undefined,
   paramsStr: string,
   variables: Map<string, VariableInfo>,
+  body?: string,
 ) {
   try {
     const rawParamsStr = source.slice(parenStart, paramEnd + 1);
     const params = extractParamsWithTypes(rawParamsStr);
-    if (fnName && params.length > 0) {
+    if (fnName && params.length > 0)
       setCompileFunctionDef(fnName, params, generics);
+    if (body) {
+      const bodyVars = new Map(variables);
+      for (const p of params) {
+        const isMut = p.type.startsWith("*mut") || p.type.includes(" mut ");
+        registerVariable(
+          p.name,
+          p.type,
+          isMut,
+          bodyVars,
+          false,
+          true,
+          undefined,
+          p.isOut,
+          true,
+        );
+      }
+      validateVariableUsage(body, bodyVars);
     }
-  } catch {
-    // Ignore param extraction errors - function will be validated elsewhere
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      (e.message.includes("marked 'out'") ||
+        e.message.includes("without 'out'"))
+    )
+      throw e;
   }
   validateParamReferences(
     paramsStr,

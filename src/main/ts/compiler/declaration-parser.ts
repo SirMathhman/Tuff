@@ -63,7 +63,18 @@ function parseDeclarationsImpl(
       i = handleForLoop(source, i, variables);
       continue;
     }
+
+    // Capture the state before processing the keyword
+    const startIdx = i;
     const result = processDeclarationKeyword(source, i, variables);
+
+    // If it was a function declaration, we might want to validate its body with local variables
+    if (result !== -1 && matchWord(source, startIdx, "fn")) {
+      // We need to extract the body and local params to validate it
+      // This is a bit complex here because declaration-handlers already advanced i
+      // But we can do it inside processFnParams or handleFunctionDeclaration.
+    }
+
     i = result !== -1 ? result : skipToNextStatement(source, i);
   }
   validateVariableUsage(source, variables);

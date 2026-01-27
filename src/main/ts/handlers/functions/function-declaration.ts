@@ -66,15 +66,30 @@ function extractFunctionHeader(
 function parseParameters(
   paramsStr: string,
   typeMap: Map<string, number>,
-): Array<{ name: string; type: number; typeStr?: string }> | undefined {
-  const params: Array<{ name: string; type: number; typeStr?: string }> = [];
+):
+  | Array<{ name: string; type: number; typeStr?: string; isOut?: boolean }>
+  | undefined {
+  const params: Array<{
+    name: string;
+    type: number;
+    typeStr?: string;
+    isOut?: boolean;
+  }> = [];
   if (!paramsStr) return params;
   const paramParts = splitParametersRespectingParens(paramsStr);
   for (const param of paramParts) {
     const colonIndex = param.indexOf(":");
     if (colonIndex === -1) return undefined;
     const paramName = param.slice(0, colonIndex).trim();
-    const paramTypeStr = param.slice(colonIndex + 1).trim();
+    let paramTypeStr = param.slice(colonIndex + 1).trim();
+    let isOut = false;
+    if (paramTypeStr.startsWith("out ")) {
+      isOut = true;
+      paramTypeStr = paramTypeStr.slice(4).trim();
+    } else if (paramTypeStr === "out") {
+      isOut = true;
+      paramTypeStr = "";
+    }
     if (!isValidIdentifier(paramName)) return undefined;
     let paramType = extractTypeSize(paramTypeStr);
     if (paramType === 0 && typeMap.has("__alias__" + paramTypeStr))
@@ -83,7 +98,12 @@ function parseParameters(
     if (paramType === 0 && typeMap.has("__struct__" + paramTypeStr))
       paramType = -3;
     if (paramType === 0) paramType = 32;
-    params.push({ name: paramName, type: paramType, typeStr: paramTypeStr });
+    params.push({
+      name: paramName,
+      type: paramType,
+      typeStr: paramTypeStr,
+      isOut,
+    });
   }
   return params;
 }

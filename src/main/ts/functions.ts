@@ -66,8 +66,14 @@ function handleFunctionExecution(
   const fnDef = functionDefs.get(actualFnName)!;
   const argParts = parseArguments(argsStr);
   const args = processArguments(argParts, fnDef, actualFnName, ctx);
-  const mergedScope = createFunctionScope(fnDef, args, ctx);
-  const result = executeFunctionBody(fnDef, args, mergedScope, ctx);
+  const { mergedScope, mergedVisMap } = createFunctionScope(fnDef, args, ctx);
+  const result = executeFunctionBody(
+    fnDef,
+    args,
+    mergedScope,
+    ctx,
+    mergedVisMap,
+  );
   if (rest === "") return result;
   return ctx.interpreter(
     result.toString() + rest,
@@ -76,6 +82,7 @@ function handleFunctionExecution(
     ctx.mutMap,
     ctx.uninitializedSet,
     ctx.unmutUninitializedSet,
+    ctx.visMap,
   );
 }
 

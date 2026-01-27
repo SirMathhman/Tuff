@@ -3,6 +3,7 @@ import { isIdentifierChar, isWhitespace } from "./string-helpers";
 export type ParamInfo = {
   name: string;
   type: string;
+  isOut?: boolean;
 };
 
 /**
@@ -48,7 +49,7 @@ function parseParamName(
  */
 function parseParams<T>(
   rawParams: string,
-  onParam: (name: string, typeStr: string | undefined) => T,
+  onParam: (name: string, typeStr: string | undefined, isOut: boolean) => T,
 ): T[] {
   const results: T[] = [];
   const seen = new Set<string>();
@@ -73,10 +74,22 @@ function parseParams<T>(
       while (j < rawParams.length && isWhitespace(rawParams[j])) j++;
 
       let typeStr: string | undefined;
+      let isOut = false;
       // Expect colon
       if (j < rawParams.length && rawParams[j] === ":") {
         j++;
         while (j < rawParams.length && isWhitespace(rawParams[j])) j++;
+
+        // Check for 'out' keyword
+        if (
+          rawParams.slice(j, j + 4) === "out " ||
+          (rawParams.slice(j, j + 3) === "out" &&
+            (j + 3 >= rawParams.length || !isIdentifierChar(rawParams[j + 3])))
+        ) {
+          isOut = true;
+          j += 3;
+          while (j < rawParams.length && isWhitespace(rawParams[j])) j++;
+        }
 
         // Extract type
         const typeStart = j;
@@ -87,7 +100,7 @@ function parseParams<T>(
         j = skipToNextParam(rawParams, j);
       }
 
-      results.push(onParam(paramName, typeStr));
+      results.push(onParam(paramName, typeStr, isOut));
     } else {
       j++;
     }
@@ -114,8 +127,9 @@ export function extractParamNamesFromRaw(rawParams: string): string[] {
  * Returns an array of parameter information including names and types.
  */
 export function extractParamsWithTypes(rawParams: string): ParamInfo[] {
-  return parseParams(rawParams, (name, type) => ({
+  return parseParams(rawParams, (name, type, isOut) => ({
     name,
     type: type || "",
+    isOut,
   }));
 }

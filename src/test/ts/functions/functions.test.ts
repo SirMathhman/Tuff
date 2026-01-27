@@ -111,6 +111,27 @@ describe("functions - scope and methods", () => {
   });
 });
 
+describe("functions - out keyword", () => {
+  itBoth(
+    "supports out keyword for pointer modification in interpreter and compiler",
+    (assertValid) => {
+      assertValid(
+        "let mut x = 0; fn accept(value : out *mut I32) => *value = 100; accept(&x); x",
+        100,
+      );
+    },
+  );
+
+  itBoth(
+    "throws when modifying pointer without out keyword in interpreter and compiler",
+    (_assertValid, assertInvalid) => {
+      assertInvalid(
+        "let mut x = 0; fn accept(value : *mut I32) => *value = 100; accept(&x); x",
+      );
+    },
+  );
+});
+
 describe("functions - type validation", () => {
   itBoth(
     "throws when passing wrong type to function parameter",

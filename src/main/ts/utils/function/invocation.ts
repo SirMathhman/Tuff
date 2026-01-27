@@ -99,31 +99,51 @@ function shouldMoveDroppableArg(params: {
   return trimmedArg;
 }
 
-function evalAndValidateNonFunctionArg(params: {
-  argStr: string;
-  paramType: number;
-  paramTypeStr: string | undefined;
-  paramName: string;
-  actualFnName: string;
-  ctx: FnContext;
-}): number {
-  const argValue = callInterpreter(params.ctx, params.argStr);
-  validateArgumentType(
-    argValue,
-    params.paramType,
-    params.paramTypeStr,
-    params.paramName,
-    params.actualFnName,
+import {
+  isPointerTypeMutable,
+  handleReferenceOperation,
+} from "../../handlers/access/pointer-operations";
+
+function handlePointerArg(argStr: string, typeStr: string, ctx: FnContext) {
+  if (!argStr.trim().startsWith("&")) return undefined;
+  const strippedType = typeStr.slice(1).trim();
+  const typeWithoutMut = strippedType.startsWith("mut ")
+    ? strippedType.slice(4).trim()
+    : strippedType;
+  return handleReferenceOperation(
+    argStr,
+    ctx.scope,
+    ctx.mutMap,
+    isPointerTypeMutable(typeStr),
+    ctx.typeMap,
+    typeWithoutMut,
   );
+}
 
-  const movedVarName = shouldMoveDroppableArg({
-    argStr: params.argStr,
-    paramTypeStr: params.paramTypeStr,
-    ctx: params.ctx,
+function evalAndValidateNonFunctionArg(
+  argStr: string,
+  param: { type: number; typeStr?: string; name: string },
+  actualFnName: string,
+  ctx: FnContext,
+): number {
+  const val =
+    (param.typeStr?.startsWith("*") &&
+      handlePointerArg(argStr, param.typeStr, ctx)) ||
+    callInterpreter(ctx, argStr);
+  validateArgumentType(
+    val,
+    param.type,
+    param.typeStr,
+    param.name,
+    actualFnName,
+  );
+  const movedIdx = shouldMoveDroppableArg({
+    argStr,
+    paramTypeStr: param.typeStr,
+    ctx,
   });
-  if (movedVarName) params.ctx.movedSet?.add(movedVarName);
-
-  return argValue;
+  if (movedIdx) ctx.movedSet?.add(movedIdx);
+  return val;
 }
 
 export function processArguments(
@@ -163,14 +183,12 @@ export function processArguments(
       setFunctionRef(`__arg_${i}`, anonResult.name);
     } else {
       args.push(
-        evalAndValidateNonFunctionArg({
+        evalAndValidateNonFunctionArg(
           argStr,
-          paramType,
-          paramTypeStr,
-          paramName,
+          { type: paramType, typeStr: paramTypeStr, name: paramName },
           actualFnName,
           ctx,
-        }),
+        ),
       );
     }
   }
@@ -181,9 +199,10 @@ export function createFunctionScope(
   fnDef: FnDef,
   args: number[],
   ctx: FnContext,
-): Map<string, number> {
+): { mergedScope: Map<string, number>; mergedVisMap: Map<string, boolean> } {
   const fnScope = new Map<string, boolean>(ctx.mutMap),
     fnVarMap = new Map<string, number>();
+  const mergedVisMap = new Map(ctx.visMap);
   for (let i = 0; i < fnDef.params.length; i++) {
     const paramName = fnDef.params[i]?.name,
       paramType = fnDef.params[i]?.type,
@@ -196,11 +215,15 @@ export function createFunctionScope(
       // Parameter is mutable if its type is *mut (mutable pointer)
       const isMutableParam = paramTypeStr && paramTypeStr.startsWith("*mut ");
       fnScope.set(paramName, isMutableParam ? true : false);
+      mergedVisMap.set(
+        "__out_capability__" + paramName,
+        fnDef.params[i]?.isOut ?? false,
+      );
     }
   }
   const mergedScope = new Map(ctx.scope);
   for (const [k, v] of fnVarMap) mergedScope.set(k, v);
-  return mergedScope;
+  return { mergedScope, mergedVisMap };
 }
 
 export function executeFunctionBody(
@@ -208,6 +231,7 @@ export function executeFunctionBody(
   args: number[],
   mergedScope: Map<string, number>,
   ctx: FnContext,
+  mergedVisMap: Map<string, boolean>,
 ): number {
   const paramsList = fnDef.params.map((p, i) => ({
     name: p.name,
@@ -216,13 +240,22 @@ export function executeFunctionBody(
   setCurrentFunctionParams(paramsList);
   const prevLocalFns = getLocalFunctionNames();
   setLocalFunctionNames(new Set());
+
+  const mergedMutMap = new Map(ctx.mutMap);
+  const mergedTypeMap = new Map(ctx.typeMap);
+  for (const p of fnDef.params) {
+    mergedMutMap.set(p.name, p.typeStr?.startsWith("*mut ") ?? false);
+    mergedTypeMap.set(p.name, p.type);
+  }
+
   const result = ctx.interpreter(
     fnDef.body,
     mergedScope,
-    ctx.typeMap,
-    ctx.mutMap,
+    mergedTypeMap,
+    mergedMutMap,
     ctx.uninitializedSet,
     ctx.unmutUninitializedSet,
+    mergedVisMap,
   );
   setCurrentFunctionParams(undefined);
   setLocalFunctionNames(prevLocalFns);

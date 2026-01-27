@@ -27,6 +27,7 @@ function validateDereferenceTarget(
   lhs: string,
   pointerVarName: string,
   scope: Map<string, number>,
+  visMap?: Map<string, boolean>,
 ): { pointerValue: number; targetVarName: string } | undefined {
   if (!lhs.startsWith("*")) return undefined;
   if (!scope.has(pointerVarName)) return undefined;
@@ -36,6 +37,19 @@ function validateDereferenceTarget(
   if (!isPointerMutable(pointerValue)) {
     throwCannotAssignToImmutablePointer();
   }
+
+  // Check if pointer parameter has 'out' capability
+  // We use visMap to store parameter capabilities during function calls
+  // with a special prefix to distinguish from module visibility
+  if (visMap && visMap.has("__out_capability__" + pointerVarName)) {
+    const hasOut = visMap.get("__out_capability__" + pointerVarName);
+    if (!hasOut) {
+      throw new Error(
+        `Pointer parameter '${pointerVarName}' must be marked 'out' to allow modification of its target`,
+      );
+    }
+  }
+
   return { pointerValue, targetVarName };
 }
 
@@ -50,6 +64,7 @@ function handleRestAfterDereference(
     | "uninitializedSet"
     | "unmutUninitializedSet"
     | "interpreter"
+    | "visMap"
   >,
 ): number {
   if (rest === "") return newValue;
@@ -60,6 +75,7 @@ function handleRestAfterDereference(
     ctx.mutMap,
     ctx.uninitializedSet,
     ctx.unmutUninitializedSet,
+    ctx.visMap,
   );
 }
 
@@ -73,6 +89,7 @@ export function handleDereferenceAssignment(
     | "uninitializedSet"
     | "unmutUninitializedSet"
     | "interpreter"
+    | "visMap"
   >,
 ): number | undefined {
   const trimmed = p.s.trim();
@@ -81,20 +98,29 @@ export function handleDereferenceAssignment(
   if (eqIdx === -1) return undefined;
   const lhs = trimmed.slice(0, eqIdx).trim();
   const pointerVarName = lhs.slice(1).trim();
-  const validation = validateDereferenceTarget(lhs, pointerVarName, p.scope);
+  const validation = validateDereferenceTarget(
+    lhs,
+    pointerVarName,
+    p.scope,
+    p.visMap,
+  );
   if (!validation) return undefined;
   const { targetVarName } = validation;
   const semiIdx = trimmed.indexOf(";", eqIdx);
-  if (semiIdx === -1) return undefined;
+
   const newValue = p.interpreter(
-    trimmed.slice(eqIdx + 1, semiIdx).trim(),
+    semiIdx === -1
+      ? trimmed.slice(eqIdx + 1).trim()
+      : trimmed.slice(eqIdx + 1, semiIdx).trim(),
     p.scope,
     p.typeMap,
     p.mutMap,
     p.uninitializedSet,
     p.unmutUninitializedSet,
+    p.visMap,
   );
   p.scope.set(targetVarName, newValue);
+  if (semiIdx === -1) return newValue;
   const rest = trimmed.slice(semiIdx + 1).trim();
   return handleRestAfterDereference(newValue, rest, p);
 }

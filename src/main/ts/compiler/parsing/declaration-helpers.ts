@@ -113,3 +113,27 @@ export function parseNameAndGenerics(
   j = skipWhitespaceOnly(source, endPos);
   return { name, endPos: j, generics };
 }
+
+export function extractFunctionBody(
+  source: string,
+  startPos: number,
+): { body: string | undefined; endPos: number } {
+  let bodyStart = startPos;
+  while (bodyStart < source.length && isWhitespace(source[bodyStart]))
+    bodyStart++;
+  if (bodyStart >= source.length) return { body: undefined, endPos: bodyStart };
+  if (source[bodyStart] === "=" && source[bodyStart + 1] === ">") {
+    let bodyEnd = bodyStart + 2;
+    while (bodyEnd < source.length && isWhitespace(source[bodyEnd])) bodyEnd++;
+    const exprEnd = skipToNextStatement(source, bodyEnd);
+    return { body: source.slice(bodyEnd, exprEnd).trim(), endPos: exprEnd };
+  }
+  if (source[bodyStart] === "{") {
+    const blockEnd = findMatchingCloseBrace(source, bodyStart);
+    return {
+      body: source.slice(bodyStart + 1, blockEnd).trim(),
+      endPos: blockEnd + 1,
+    };
+  }
+  return { body: undefined, endPos: bodyStart };
+}

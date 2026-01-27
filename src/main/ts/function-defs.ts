@@ -1,5 +1,10 @@
 export type FnDef = {
-  params: Array<{ name: string; type: number; typeStr?: string }>;
+  params: Array<{
+    name: string;
+    type: number;
+    typeStr?: string;
+    isOut?: boolean;
+  }>;
   returnType: number;
   body: string;
   generics?: string[];

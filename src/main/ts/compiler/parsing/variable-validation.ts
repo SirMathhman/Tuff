@@ -6,6 +6,7 @@ import {
   charAt,
   skipBracePair,
   skipWhitespaceAndGenericsWithDetection,
+  readIdentifier,
 } from "./string-helpers";
 import {
   skipStructDeclaration,
@@ -20,6 +21,8 @@ interface VariableInfo {
   mutable: boolean;
   initialized: boolean;
   isUninitialized?: boolean;
+  isOut?: boolean;
+  isParameter?: boolean;
 }
 
 // Track declared type aliases
@@ -197,7 +200,7 @@ function trySkipPatterns(
   i: number,
   variables: Map<string, VariableInfo>,
 ): number {
-  let newI = trySkipPointerDereference(source, i);
+  let newI = trySkipPointerDereference(source, i, variables);
   if (newI !== -1) return newI;
   newI = trySkipDeclarations(source, i, [
     "let",
@@ -234,12 +237,39 @@ function trySkipDeclarations(
 /**
  * Try to skip pointer dereference pattern
  */
-function trySkipPointerDereference(source: string, i: number): number {
+function trySkipPointerDereference(
+  source: string,
+  i: number,
+  variables: Map<string, VariableInfo>,
+): number {
   if (source[i] !== "*") return -1;
   let j = i + 1;
   while (j < source.length && isWhitespace(source[j])) j++;
   if (j < source.length && isIdentifierChar(source[j]) && !isDigit(source[j])) {
-    while (j < source.length && isIdentifierChar(source[j])) j++;
+    const { name, endIdx } = readIdentifier(source, j);
+    j = endIdx;
+
+    // Check if this is a dereference assignment (*p = ...)
+    let k = j;
+    while (k < source.length && isWhitespace(source[k])) k++;
+    if (
+      k < source.length &&
+      source[k] === "=" &&
+      charAt(source, k + 1) !== "="
+    ) {
+      if (variables.has(name)) {
+        const varInfo = variables.get(name)!;
+        if (
+          varInfo.isParameter &&
+          varInfo.type?.includes("*") &&
+          !varInfo.isOut
+        ) {
+          throw new Error(
+            `Cannot modify target of pointer parameter '${name}' without 'out' keyword`,
+          );
+        }
+      }
+    }
     return j;
   }
   return -1;
