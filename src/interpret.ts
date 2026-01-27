@@ -13,6 +13,10 @@ interface ScopeEntry {
   isInitialized?: boolean;
   functionBody?: string;
   functionParams?: string[];
+  isGenerator?: boolean;
+  rangeStart?: number;
+  rangeEnd?: number;
+  generatorPosition?: number;
 }
 
 type Scope = Record<string, ScopeEntry>;
@@ -237,6 +241,23 @@ function parseKeywordParen(
   return {
     inner: source.substring(openParenIndex + 1, closeParenIndex).trim(),
     after: source.substring(closeParenIndex + 1).trim(),
+  };
+}
+
+function tryCreateGeneratorEntry(source: string): ScopeEntry | null {
+  const rangeMatch = source.match(/^(\d+)\.\.(\d+)$/);
+  if (!rangeMatch || !rangeMatch[1] || !rangeMatch[2]) return null;
+  const start = parseInt(rangeMatch[1], 10);
+  const end = parseInt(rangeMatch[2], 10);
+  return {
+    value: 0,
+    constraint: getTypeConstraint("() => (Bool, I32)"),
+    isMutable: true,
+    isInitialized: true,
+    isGenerator: true,
+    rangeStart: start,
+    rangeEnd: end,
+    generatorPosition: start,
   };
 }
 
@@ -989,26 +1010,45 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
             // Re-check if it was already in localScope (to prevent multiple lets of same name in same block)
             ensureVariableNotDefined(localScope, varName);
 
-            const finalConstraint =
-              explicitConstraint ||
-              exprResult.constraint ||
-              getTypeConstraint("I32");
-            localScope[varName] = {
-              value: exprResult.value,
-              constraint: finalConstraint,
-              isMutable,
-              isInitialized: true,
-              functionBody: exprResult.functionBody,
-              functionParams: exprResult.functionParams,
-            };
+            let scopeEntry: ScopeEntry;
+
+            // Check if this is a range generator assignment
+            const isRangeGenerator =
+              explicitConstraint?.typeStr === "() => (Bool, I32)" &&
+              expr.match(/^\d+\.\.\d+$/) &&
+              tryCreateGeneratorEntry(expr) !== null;
+
+            if (isRangeGenerator) {
+              const generatorEntry = tryCreateGeneratorEntry(expr);
+              scopeEntry = {
+                ...generatorEntry!,
+                isMutable,
+                constraint: explicitConstraint,
+              };
+              lastResult = { value: 0, constraint: null };
+            } else {
+              const finalConstraint =
+                explicitConstraint ||
+                exprResult.constraint ||
+                getTypeConstraint("I32");
+              scopeEntry = {
+                value: exprResult.value,
+                constraint: finalConstraint,
+                isMutable,
+                isInitialized: true,
+                functionBody: exprResult.functionBody,
+                functionParams: exprResult.functionParams,
+              };
+              lastResult = exprResult;
+            }
+
+            localScope[varName] = scopeEntry;
 
             // IF this variable was in the original outer scope, update it there too
             if (scope[varName]) {
               scope[varName].value = exprResult.value;
               scope[varName].isInitialized = true;
             }
-
-            lastResult = exprResult;
           } else {
             // Declaration without initializer
             ensureVariableNotDefined(localScope, varName);
@@ -1427,6 +1467,28 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     }
     const fnName = fnNameRaw;
     const fnEntry = scope[fnName];
+
+    // Check if this is a range generator
+    if (
+      fnEntry?.isGenerator &&
+      fnEntry.rangeStart !== undefined &&
+      fnEntry.rangeEnd !== undefined &&
+      fnEntry.generatorPosition !== undefined
+    ) {
+      const pos = fnEntry.generatorPosition;
+      const end = fnEntry.rangeEnd;
+      const isValid = pos < end;
+
+      // Return current position before advancing
+      const returnValue = [isValid ? 1 : 0, pos + 1];
+      fnEntry.generatorPosition = pos + 1;
+
+      return {
+        value: returnValue,
+        constraint: getTypeConstraint("(Bool, I32)"),
+      };
+    }
+
     if (fnEntry?.functionBody) {
       const invocationScope = { ...scope };
       const fnResult = evaluate(fnEntry.functionBody, invocationScope);

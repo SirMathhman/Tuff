@@ -414,7 +414,15 @@ describe("interpret", () => {
     expect(result).toBe(100);
   });
   test('interpret("let mut x = 0; fn add() : Void => x += 1; add(); x") should return 1', () => {
-    const result = interpret("let mut x = 0; fn add() : Void => x += 1; add(); x");
+    const result = interpret(
+      "let mut x = 0; fn add() : Void => x += 1; add(); x",
+    );
     expect(result).toBe(1);
+  });
+  test('interpret("let generator : () => (Bool, I32) = 0..3; let result0 = generator(); let result1 = generator(); let result2 = generator(); result0[1] + result1[1] + result2[1]") should return 6', () => {
+    const result = interpret(
+      "let generator : () => (Bool, I32) = 0..3; let result0 = generator(); let result1 = generator(); let result2 = generator(); result0[1] + result1[1] + result2[1]",
+    );
+    expect(result).toBe(6);
   });
 });
