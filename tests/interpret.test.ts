@@ -314,4 +314,8 @@ describe('interpret', () => {
     test('interpret("let myTuple : (I32, Bool) = (true, 100); myTuple[0]") should throw error', () => {
         expect(() => interpret("let myTuple : (I32, Bool) = (true, 100); myTuple[0]")).toThrow();
     });
+
+    test('interpret("let mut myTuple = (100, true); myTuple = (true, 100); myTuple[0]") should throw error', () => {
+        expect(() => interpret("let mut myTuple = (100, true); myTuple = (true, 100); myTuple[0]")).toThrow();
+    });
 });
