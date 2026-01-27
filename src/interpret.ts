@@ -221,7 +221,11 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         return null;
     };
 
-    let operatorMatch = findOperator(/\s*([+\-])\s*/g);
+    let operatorMatch = findOperator(/\s*(&&|\|\|)\s*/g);
+
+    if (!operatorMatch) {
+        operatorMatch = findOperator(/\s*([+\-])\s*/g);
+    }
     
     // If no + or -, look for * or /
     if (!operatorMatch) {
@@ -238,10 +242,29 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
         
         if (leftStr && rightStr) {
             const leftResult = evaluate(leftStr, scope);
+            
+            // Short-circuiting for logical operators
+            if (operator === '&&' && leftResult.value === 0) {
+                return { value: 0, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
+            }
+            if (operator === '||' && leftResult.value === 1) {
+                return { value: 1, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
+            }
+
             const rightResult = evaluate(rightStr, scope);
             
             let result: number;
+            let resultConstraint: TypeConstraint | null = null;
+
             switch (operator) {
+                case '&&':
+                    result = (leftResult.value !== 0 && rightResult.value !== 0) ? 1 : 0;
+                    resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
+                    break;
+                case '||':
+                    result = (leftResult.value !== 0 || rightResult.value !== 0) ? 1 : 0;
+                    resultConstraint = { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
+                    break;
                 case '+':
                     result = leftResult.value + rightResult.value;
                     break;
@@ -261,6 +284,10 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                     return { value: NaN, constraint: null };
             }
             
+            if (operator === '&&' || operator === '||') {
+                return { value: result, constraint: resultConstraint };
+            }
+
             // Infer type constraint from operands
             const leftConstraint = leftResult.constraint;
             const rightConstraint = rightResult.constraint;
