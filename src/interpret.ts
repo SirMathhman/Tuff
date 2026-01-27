@@ -13,6 +13,7 @@ interface ScopeEntry {
   isInitialized?: boolean;
   functionBody?: string;
   functionParams?: string[];
+  functionParamTypes?: string[];
   isGenerator?: boolean;
   rangeStart?: number;
   rangeEnd?: number;
@@ -1136,21 +1137,86 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     let lastResult: EvaluationResult = { value: 0, constraint: null };
     const localScope = { ...scope };
     const typeAliases: { [key: string]: string } = {};
+    const dropHooks: { [typeName: string]: string } = {};
+    const declaredVars: string[] = [];
+    const droppedVars = new Set<string>();
 
-    for (const statement of statements) {
+    const runDropHookFor = (varName: string) => {
+      if (!varName) return;
+      if (droppedVars.has(varName)) return;
+      const entry = localScope[varName];
+      if (!entry || !entry.isInitialized) return;
+
+      const typeName = entry.originalType;
+      if (!typeName) return;
+      const dropFnName = dropHooks[typeName];
+      if (!dropFnName) return;
+
+      const dropFnEntry = localScope[dropFnName];
+      if (!dropFnEntry?.functionBody) {
+        throw new Error(
+          `Drop hook ${dropFnName} is not defined for type ${typeName}`,
+        );
+      }
+
+      const paramName = dropFnEntry.functionParams?.[0];
+      const paramType = dropFnEntry.functionParamTypes?.[0];
+      if (paramName !== "this" || paramType !== typeName) {
+        throw new Error(
+          `Drop hook ${dropFnName} must take parameter this : ${typeName}`,
+        );
+      }
+
+      const invocationScope = { ...localScope };
+      invocationScope[paramName] = {
+        value: entry.value,
+        constraint: entry.constraint,
+        isMutable: false,
+        isInitialized: true,
+        originalType: entry.originalType,
+      };
+
+      evaluate(dropFnEntry.functionBody, invocationScope);
+
+      // Sync back mutable captured variables to localScope
+      for (const key in localScope) {
+        const originalVar = localScope[key];
+        const modifiedVar = invocationScope[key];
+        if (
+          originalVar &&
+          modifiedVar &&
+          originalVar.isMutable &&
+          key !== dropFnName
+        ) {
+          originalVar.value = modifiedVar.value;
+          originalVar.isInitialized = modifiedVar.isInitialized;
+        }
+      }
+
+      droppedVars.add(varName);
+      delete localScope[varName];
+    };
+
+    for (let statementIndex = 0; statementIndex < statements.length; statementIndex++) {
+      const statement = statements[statementIndex] || "";
       if (statement.length === 0) {
         lastResult = { value: 0, constraint: null };
         continue;
       }
       if (statement.startsWith("type ")) {
         // Parse type alias declaration: type NAME = TYPE;
+        // Supports: `type Name = I32` and `type Name = I32 then dropFn`
         const typeMatch = statement.match(
-          /^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:;*)$/,
+          /^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?(?:;*)$/,
         );
         if (typeMatch && typeMatch[1] && typeMatch[2]) {
           const aliasName = typeMatch[1];
           const aliasTarget = typeMatch[2].trim();
+          const dropFnName = typeMatch[3]?.trim();
           typeAliases[aliasName] = aliasTarget;
+          if (dropFnName) {
+            dropHooks[aliasName] = dropFnName;
+          }
           lastResult = { value: 0, constraint: null };
           continue;
         } else {
@@ -1210,6 +1276,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
             // Re-check if it was already in localScope (to prevent multiple lets of same name in same block)
             ensureVariableNotDefined(localScope, varName);
+            declaredVars.push(varName);
 
             let scopeEntry: ScopeEntry;
 
@@ -1251,14 +1318,24 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
               scope[varName].value = exprResult.value;
               scope[varName].isInitialized = true;
             }
+
+            // Simple last-use drop: if this var is never referenced again, drop now.
+            const remainder = statements
+              .slice(statementIndex + 1)
+              .join("; ");
+            if (!new RegExp(`\\b${varName}\\b`).test(remainder)) {
+              runDropHookFor(varName);
+            }
           } else {
             // Declaration without initializer
             ensureVariableNotDefined(localScope, varName);
+            declaredVars.push(varName);
             localScope[varName] = {
               value: NaN,
               constraint: explicitConstraint,
               isMutable,
               isInitialized: false,
+              originalType: originalTypeStr,
             };
             lastResult = { value: 0, constraint: null };
           }
@@ -1276,8 +1353,16 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         }
         const fnName = fnNameRaw;
         const paramsStr = (paramsRaw || "").trim();
+        let functionParamNames: string[] = [];
+        let functionParamTypes: string[] = [];
         if (paramsStr.length > 0) {
-          throw new Error("Function parameters are not supported yet");
+          // Minimal support for drop hooks: `this : TypeName`
+          const thisParamMatch = paramsStr.match(/^this\s*:\s*([a-zA-Z_]\w*)$/);
+          if (!thisParamMatch || !thisParamMatch[1]) {
+            throw new Error("Function parameters are not supported yet");
+          }
+          functionParamNames = ["this"];
+          functionParamTypes = [thisParamMatch[1]];
         }
         const returnTypeStr = returnTypeRaw?.trim();
         const body = (bodyRaw || "").trim();
@@ -1302,7 +1387,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           isMutable: false,
           isInitialized: true,
           functionBody: body,
-          functionParams: [],
+          functionParams: functionParamNames,
+          functionParamTypes: functionParamTypes,
         };
         lastResult = { value: 0, constraint: null };
       } else {
@@ -1385,6 +1471,13 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       }
     }
 
+    // Run drop hooks for variables declared in this statement block that are going out of scope.
+    for (let i = declaredVars.length - 1; i >= 0; i--) {
+      const varName = declaredVars[i];
+      if (!varName) continue;
+      runDropHookFor(varName);
+    }
+
     // Propagate any changes from localScope back to scope for ALL variables that exist in both
     for (const key in scope) {
       const scopeVar = scope[key];
@@ -1394,6 +1487,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         scopeVar.isInitialized = localScopeVar.isInitialized;
         scopeVar.functionBody = localScopeVar.functionBody;
         scopeVar.functionParams = localScopeVar.functionParams;
+        scopeVar.functionParamTypes = localScopeVar.functionParamTypes;
       }
     }
 

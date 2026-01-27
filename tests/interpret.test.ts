@@ -501,4 +501,11 @@ describe("interpret", () => {
     );
     expect(result).toBe(1);
   });
+
+  test('interpret("drop hook via type alias then drop") should return 1', () => {
+    const result = interpret(
+      "let mut counter = 0; fn drop(this : Droppable) : Void => counter +=1; type Droppable = I32 then drop; let temp : Droppable = 0; counter",
+    );
+    expect(result).toBe(1);
+  });
 });
