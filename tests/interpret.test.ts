@@ -246,4 +246,7 @@ describe('interpret', () => {
     test('interpret("{ let mut x = 0; } x = 100; x") should throw error', () => {
         expect(() => interpret("{ let mut x = 0; } x = 100; x")).toThrow();
     });
+    test('interpret("let x = 0; { let x = 1; } x") should throw error', () => {
+        expect(() => interpret("let x = 0; { let x = 1; } x")).toThrow();
+    });
 });
