@@ -78,4 +78,8 @@ describe('interpret', () => {
         const result = interpret("10 / ({ let x : U8 = 2; x } + 3)");
         expect(result).toBe(2);
     });
+    test('interpret("let y : U8 = 10 / ({ let x : U8 = 2; x } + 3); y") should return 2', () => {
+        const result = interpret("let y : U8 = 10 / ({ let x : U8 = 2; x } + 3); y");
+        expect(result).toBe(2);
+    });
 });

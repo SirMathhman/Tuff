@@ -58,7 +58,19 @@ export function interpret(source : string, scope: Record<string, { value: number
     }
 
     if (semicolonIndex !== -1) {
-        const statements = source.split(';').map(s => s.trim()).filter(s => s.length > 0);
+        // Split by semicolons at depth 0
+        const statements: string[] = [];
+        let start = 0;
+        let d = 0;
+        for (let i = 0; i < source.length; i++) {
+            d = updateDepth(source[i] as string, d);
+            if (source[i] === ';' && d === 0) {
+                statements.push(source.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+        statements.push(source.substring(start).trim());
+
         let lastValue = NaN;
         const localScope = { ...scope };
         
