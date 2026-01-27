@@ -10,6 +10,7 @@
 - Functions:
   - Declaration: `fn get() : I32 => 100;`
   - Parameters: `fn pass(value : I32) => value; pass(100)`
+  - Multiple parameters: `fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)`
   - Call: `get()`
   - Function values: `let f : () => I32 = fn get() : I32 => 100; f()`
 
