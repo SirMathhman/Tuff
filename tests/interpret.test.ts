@@ -287,4 +287,8 @@ describe('interpret', () => {
         const result = interpret("let x = true; let y = match (x) { case true => 2; case false => 3; }; y");
         expect(result).toBe(2);
     });
+
+    test('interpret("let x = true; let y : Bool = match (x) { case true => 2; case false => 3; }; y") should throw error', () => {
+        expect(() => interpret("let x = true; let y : Bool = match (x) { case true => 2; case false => 3; }; y")).toThrow();
+    });
 });
