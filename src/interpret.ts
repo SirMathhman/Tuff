@@ -1262,7 +1262,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           ? getTypeConstraint(returnTypeStr)
           : null;
         ensureVariableNotDefined(localScope, fnName);
-        
+
         // Quick type check for return type: if body is a bare number and return type is Bool, error
         if (returnConstraint && returnConstraint.typeStr === "Bool") {
           const isNumericLiteral = /^-?\d+$/.test(body);
@@ -1272,7 +1272,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
             );
           }
         }
-        
+
         localScope[fnName] = {
           value: 0,
           constraint: returnConstraint,

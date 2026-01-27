@@ -476,4 +476,7 @@ describe("interpret", () => {
   test('interpret("fn get() : Bool => 100;") should throw error', () => {
     expect(() => interpret("fn get() : Bool => 100;")).toThrow();
   });
+  test('interpret("fn get() => 100; let x : Bool = get();") should throw error', () => {
+    expect(() => interpret("fn get() => 100; let x : Bool = get();")).toThrow();
+  });
 });
