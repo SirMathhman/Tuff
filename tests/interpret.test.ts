@@ -124,4 +124,8 @@ describe('interpret', () => {
         const result = interpret("let mut x : I32; x = 100; x = 200; x");
         expect(result).toBe(200);
     });
+    test('interpret("let x : Bool = true; x") should return 1', () => {
+        const result = interpret("let x : Bool = true; x");
+        expect(result).toBe(1);
+    });
 });

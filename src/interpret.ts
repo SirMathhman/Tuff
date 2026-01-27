@@ -6,6 +6,9 @@ interface TypeConstraint {
 }
 
 function getTypeConstraint(source: string): TypeConstraint | null {
+    if (source.endsWith('Bool')) {
+        return { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 };
+    }
     const typeMatch = source.match(/([UIF])(\d+)$/);
     if (!typeMatch || !typeMatch[1] || !typeMatch[2]) {
         return null;
@@ -64,6 +67,12 @@ interface EvaluationResult {
 
 function evaluate(source: string, scope: Record<string, { value: number, constraint: TypeConstraint | null, isMutable?: boolean, isInitialized?: boolean }>): EvaluationResult {
     source = source.trim();
+    if (source === 'true') {
+        return { value: 1, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
+    }
+    if (source === 'false') {
+        return { value: 0, constraint: { minValue: 0, maxValue: 1, typeStr: 'Bool', bitWidth: 1 } };
+    }
     
     // Check if this is a block with statements (semicolons) NOT inside parentheses/braces at depth 0
     let depth = 0;
@@ -102,7 +111,7 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             }
             if (statement.startsWith('let ')) {
                 // Parse variable declaration: let [mut] x [: TYPE] [= EXPR]
-                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([UIF]\d+))?(\s*=\s*(.*))?$/);
+                const declMatch = statement.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([a-zA-Z]\w*))?(\s*=\s*(.*))?$/);
                 if (declMatch && declMatch[2]) {
                     const isMutable = !!declMatch[1];
                     const varName = declMatch[2];
