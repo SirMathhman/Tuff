@@ -330,4 +330,7 @@ describe('interpret', () => {
     test('interpret("fn get() : I32 => 100; fn get() : I32 => 100;") should throw error', () => {
         expect(() => interpret("fn get() : I32 => 100; fn get() : I32 => 100;")).toThrow();
     });
+    test('interpret("fn get() : I32 => 100; let temp : Bool = get()") should throw error', () => {
+        expect(() => interpret("fn get() : I32 => 100; let temp : Bool = get()")).toThrow();
+    });
 });
