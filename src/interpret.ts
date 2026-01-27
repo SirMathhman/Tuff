@@ -24,19 +24,22 @@ export function interpret(source : string) : number {
             const typePrefix = typeMatch[1];
             const bitWidth = parseInt(typeMatch[2], 10);
             
+            let minValue: number, maxValue: number;
+            
             if (typePrefix === 'U') {
                 // Unsigned range: 0 to 2^bitWidth - 1
-                const maxValue = Math.pow(2, bitWidth) - 1;
-                if (value < 0 || value > maxValue) {
-                    throw new Error(`Value ${value} out of range for ${source}. Expected 0-${maxValue}.`);
-                }
+                minValue = 0;
+                maxValue = Math.pow(2, bitWidth) - 1;
             } else if (typePrefix === 'I') {
                 // Signed range: -(2^(bitWidth-1)) to 2^(bitWidth-1) - 1
-                const maxValue = Math.pow(2, bitWidth - 1) - 1;
-                const minValue = -Math.pow(2, bitWidth - 1);
-                if (value < minValue || value > maxValue) {
-                    throw new Error(`Value ${value} out of range for ${source}. Expected ${minValue}-${maxValue}.`);
-                }
+                maxValue = Math.pow(2, bitWidth - 1) - 1;
+                minValue = -Math.pow(2, bitWidth - 1);
+            } else {
+                return value;
+            }
+            
+            if (value < minValue || value > maxValue) {
+                throw new Error(`Value ${value} out of range for ${source}. Expected ${minValue}-${maxValue}.`);
             }
         }
     }
