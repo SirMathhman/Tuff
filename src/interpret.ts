@@ -80,15 +80,27 @@ export function interpret(source : string, scope: Record<string, { value: number
                 const declMatch = statement.match(/^let\s+([a-zA-Z_]\w*)\s*:\s*([UIF]\d+)\s*=\s*(.*)$/);
                 if (declMatch && declMatch[1] && declMatch[2] && declMatch[3]) {
                     const varName = declMatch[1];
+                    
                     const typeStr = declMatch[2];
                     const expr = declMatch[3];
                     const constraint = getTypeConstraint(typeStr);
-                    const value = interpret(expr, localScope);
+                    
+                    // Create a "pending" scope for evaluating the initializer
+                    // We want to pass a scope that already includes the name to detect shadowing
+                    const initializerScope = { ...localScope };
+                    initializerScope[varName] = { value: NaN, constraint: null }; // Placeholder
+                    
+                    const value = interpret(expr, initializerScope);
                     
                     if (constraint) {
                         validateValueInConstraint(value, constraint, statement);
                     }
                     
+                    // Re-check if it was already in localScope (to prevent multiple lets of same name in same block)
+                    if (localScope[varName] !== undefined) {
+                        throw new Error(`Variable ${varName} is already defined.`);
+                    }
+
                     localScope[varName] = { value, constraint };
                     lastValue = value;
                 }
