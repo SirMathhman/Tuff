@@ -229,7 +229,7 @@ export function handleFor(params: HandlerParams): number | undefined {
   }
 
   // Fall back to range parsing
-  const range = parseRange(rangeStr);
+  const range = parseRange(rangeStr, ctx.scope);
   if (!range) return undefined;
 
   return handleForLoopExecution(

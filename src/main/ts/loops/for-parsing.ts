@@ -10,15 +10,42 @@ export interface ArrayInfo {
   values: number[];
 }
 
-export function parseRange(rangeStr: string): RangeInfo | undefined {
+export function parseRange(
+  rangeStr: string,
+  scope?: Map<string, number>,
+): RangeInfo | undefined {
   const trimmed = rangeStr.trim();
   const dotsIdx = trimmed.indexOf("..");
   if (dotsIdx === -1) return undefined;
   const startStr = trimmed.slice(0, dotsIdx).trim();
   const endStr = trimmed.slice(dotsIdx + 2).trim();
-  const start = Number(startStr);
-  const end = Number(endStr);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
+
+  let start: number;
+  let end: number;
+
+  // Try to parse as number first, then as variable from scope
+  const startNum = Number(startStr);
+  if (Number.isFinite(startNum)) {
+    start = startNum;
+  } else if (scope) {
+    const scopeVal = scope.get(startStr);
+    if (scopeVal === undefined || !Number.isFinite(scopeVal)) return undefined;
+    start = scopeVal;
+  } else {
+    return undefined;
+  }
+
+  const endNum = Number(endStr);
+  if (Number.isFinite(endNum)) {
+    end = endNum;
+  } else if (scope) {
+    const scopeVal = scope.get(endStr);
+    if (scopeVal === undefined || !Number.isFinite(scopeVal)) return undefined;
+    end = scopeVal;
+  } else {
+    return undefined;
+  }
+
   return { start, end };
 }
 
