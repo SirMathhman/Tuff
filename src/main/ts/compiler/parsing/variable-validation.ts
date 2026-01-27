@@ -12,6 +12,8 @@ import {
   getStructBracePosition,
 } from "./struct-helpers";
 import { isKeyword } from "../keywords";
+import { parseCondition } from "./parse-helpers";
+import { validateIsGuardFieldAccess } from "./guards/is-guard-validation";
 
 interface VariableInfo {
   type: string | undefined;
@@ -149,18 +151,6 @@ function skipStructInstantiation(
   return j;
 }
 
-function skipParentheses(source: string, i: number): number {
-  if (source[i] !== "(") return -1;
-  let parenDepth = 1;
-  i++;
-  while (i < source.length && parenDepth > 0) {
-    if (source[i] === "(") parenDepth++;
-    else if (source[i] === ")") parenDepth--;
-    i++;
-  }
-  return i;
-}
-
 function validateIdentifier(
   source: string,
   i: number,
@@ -215,7 +205,7 @@ function trySkipPatterns(
   if (newI !== -1) return newI;
   newI = skipStructDeclaration(source, i);
   if (newI !== -1) return newI;
-  newI = skipParentheses(source, i);
+  newI = trySkipParentheses(source, i);
   if (newI !== -1) return newI;
   newI = validateIdentifier(source, i, variables);
   if (newI !== -1) return newI;
@@ -251,6 +241,16 @@ function trySkipPointerDereference(source: string, i: number): number {
   return -1;
 }
 
+function trySkipParentheses(source: string, i: number): number {
+  if (source[i] !== "(") return -1;
+  try {
+    const { endIdx } = parseCondition(source, i);
+    return endIdx;
+  } catch {
+    return -1;
+  }
+}
+
 /**
  * Validate variable usage (assignments and references)
  */
@@ -263,6 +263,11 @@ export function validateVariableUsage(
     while (i < source.length && isWhitespace(source[i])) i++;
     if (i >= source.length) break;
     if (source[i] === "{" || source[i] === "}") {
+      i++;
+      continue;
+    }
+    if (matchWord(source, i, "if")) {
+      validateIsGuardFieldAccess(source, i);
       i++;
       continue;
     }

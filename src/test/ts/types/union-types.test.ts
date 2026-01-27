@@ -1,5 +1,5 @@
-import { describe } from "bun:test";
-import { itBoth } from "../test-helpers";
+import { describe, it } from "bun:test";
+import { itBoth, assertCompileInvalid } from "../test-helpers";
 
 describe("union types - with generic structs/objects", () => {
   itBoth(
@@ -31,4 +31,16 @@ describe("union types - with generic structs/objects", () => {
       );
     },
   );
+
+  itBoth("supports `if is` with custom fallback", (assertValid) => {
+    assertValid(
+      "struct Some<T> { field : T } object None<T> {} type Option<T> = Some<T> | None<T>; let value : Option<I32> = Some<I32> { field : 100 }; if (value is Some<I32>) value.field else 200",
+      100,
+    );
+  });
+
+  it("Compiled: rejects `if is` when branch uses wrong constructor", () =>
+    assertCompileInvalid(
+      "struct Some<T> { field : T } object None<T> {} type Option<T> = Some<T> | None<T>; let value : Option<I32> = Some<I32> { field : 100 }; if (value is None<I32>) value.field else 200",
+    ));
 });
