@@ -17,4 +17,7 @@ describe('interpret', () => {
         const result = interpret("-100I8");
         expect(result).toBe(-100);
     });
+    test('interpret("256U8") should throw error', () => {
+        expect(() => interpret("256U8")).toThrow();
+    });
 });

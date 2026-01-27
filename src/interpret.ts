@@ -11,7 +11,35 @@ export function interpret(source : string) : number {
         throw new Error(`Negative number not allowed with unsigned type suffix: ${source}`);
     }
     
-    // Extract numeric part at the start, ignoring type suffixes
+    // Extract numeric part at the start
     const match = source.match(/^-?\d+/);
-    return match ? parseInt(match[0], 10) : NaN;
+    if (!match) return NaN;
+    
+    const value = parseInt(match[0], 10);
+    
+    // Validate range based on type suffix
+    if (hasSuffix) {
+        const typeMatch = source.match(/([UIF])(\d+)$/);
+        if (typeMatch) {
+            const typePrefix = typeMatch[1];
+            const bitWidth = parseInt(typeMatch[2], 10);
+            
+            if (typePrefix === 'U') {
+                // Unsigned range: 0 to 2^bitWidth - 1
+                const maxValue = Math.pow(2, bitWidth) - 1;
+                if (value < 0 || value > maxValue) {
+                    throw new Error(`Value ${value} out of range for ${source}. Expected 0-${maxValue}.`);
+                }
+            } else if (typePrefix === 'I') {
+                // Signed range: -(2^(bitWidth-1)) to 2^(bitWidth-1) - 1
+                const maxValue = Math.pow(2, bitWidth - 1) - 1;
+                const minValue = -Math.pow(2, bitWidth - 1);
+                if (value < minValue || value > maxValue) {
+                    throw new Error(`Value ${value} out of range for ${source}. Expected ${minValue}-${maxValue}.`);
+                }
+            }
+        }
+    }
+    
+    return value;
 }
