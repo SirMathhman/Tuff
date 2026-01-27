@@ -170,7 +170,8 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
 
     // Check for if (cond) expr1 else expr2
     if (source.startsWith('if')) {
-        const ifMatch = source.match(/^if\s*\((.*)\)\s*({[^{}]*}|[^{};]*)\s*else\s*({[^{}]*}|[^{};]*)$/);
+        // Allow semicolons in the branches by using non-greedy match .*? instead of [^{};]*
+        const ifMatch = source.match(/^if\s*\((.*)\)\s*({[^{}]*}|.*?)\s*else\s*({[^{}]*}|.*)$/);
         if (ifMatch) {
             const conditionStr = ifMatch[1]?.trim() || '';
             const thenStr = ifMatch[2]?.trim() || '';
@@ -179,8 +180,10 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             const conditionResult = evaluate(conditionStr, scope);
             ensureBoolOperand(conditionResult, 'if', 'condition');
             
-            const thenResult = evaluate(thenStr, scope);
-            const elseResult = evaluate(elseStr, scope);
+            // Re-evaluate both branches but discard result to check types
+            // This is a naive type-checker; real implementation would be better.
+            const thenResult = evaluate(thenStr, { ...scope });
+            const elseResult = evaluate(elseStr, { ...scope });
 
             // Ensure branch types are compatible
             const thenType = thenResult.constraint?.typeStr || 'numeric';
@@ -191,56 +194,69 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
             }
 
             if (conditionResult.value !== 0) {
-                return thenResult;
+                // Now evaluate the branch that actually runs with the REAL scope
+                return evaluate(thenStr, scope);
             } else {
-                return elseResult;
+                return evaluate(elseStr, scope);
             }
         }
     }
-
-    // Single block handling: { statements }
-    if (source.startsWith('{') && source.endsWith('}')) {
+    
+    // Check for fully wrapped expression (parens or braces) logic has been moved to be handled last if nothing else matches?
+    // Actually, handling it here is correct for nesting.
+    // The previous implementation had it here AND at the end.
+    // The previous implementation was:
+    // 1. Check constants/pointers/if
+    // 2. Check blocks (braces specifically)
+    // 3. Check splits (semicolons)
+    // 4. (Recursively called on parts)
+    
+    // BUT there was ALSO a check at the end "Remove outermost ... if isFullyWrapped".
+    // This seems redundant if we check it here?
+    // Actually, we should check it BEFORE checking for splits if it wraps the WHOLE string and wasn't picked up by "if" or "let".
+    
+    // Let's remove the second copy at the end of the file (lines 428ish in original)
+    // and rely on one robust check.
+    
+    // Consolidated wrap check
+    if ((source.startsWith('(') && source.endsWith(')')) || (source.startsWith('{') && source.endsWith('}'))) {
+        const startChar = source[0];
         let depth = 0;
-        let isTopLevelBlock = true;
+        let isFullyWrapped = true;
         for (let i = 0; i < source.length - 1; i++) {
-            depth = updateDepth(source[i] as string, depth);
+            const char = source[i];
+            if (char === undefined) break; 
+            depth = updateDepth(char, depth);
             if (depth === 0) {
-                isTopLevelBlock = false;
+                isFullyWrapped = false;
                 break;
             }
         }
-        if (isTopLevelBlock) {
+        // Only unwrap if it's NOT a complex statement block that we just handled with splitPoints?
+        // Wait, splitPoints logic COMES AFTER this in current flow.
+        
+        if (isFullyWrapped) {
             const inner = source.substring(1, source.length - 1).trim();
-            // Evaluate inner content as a list of statements, but allow it to update outer scope
-            // We need a subtle change: split inner into statements AND evaluate them in order
-            // If inner is empty, return 0
-            if (inner.length === 0) return { value: 0, constraint: null };
-            
-            // To support outer scope mutation, we evaluate the inner content
-            // However, evaluate(inner, scope) will create its own localScope if it finds semicolons.
-            // This is actually what we want for block-scoping.
-            // But if we want mutation to propagate out of the block, 
-            // the block implementation needs to be careful.
-            // Current block splitting logic creates a localScope = { ...scope }.
-            
-            // We need a way to let blocks modify the outer scope.
-            // Let's modify the block eval logic to copy changed values back to outer scope
-            // OR change how localScope works.
-            
+            if (startChar === '{' && inner.length === 0) return { value: 0, constraint: null };
             return evaluate(inner, scope);
         }
     }
     
     // Check if this is a block with statements (semicolons or self-terminating blocks) NOT inside parentheses/braces at depth 0
-    let depth = 0;
+    let splitDepth = 0;
     const splitPoints: number[] = [];
     for (let i = 0; i < source.length; i++) {
         const char = source[i] as string;
-        const prevDepth = depth;
-        depth = updateDepth(char, depth);
-        if (char === ';' && depth === 0) {
-            splitPoints.push(i);
-        } else if (char === '}' && depth === 0 && prevDepth === 1 && i < source.length - 1) {
+        const prevDepth = splitDepth;
+        splitDepth = updateDepth(char, splitDepth);
+        if (char === ';' && splitDepth === 0) {
+             let next = i + 1;
+             while (next < source.length && /\s/.test(source[next] as string)) next++;
+             const rest = source.substring(next);
+             if (!rest.startsWith('else')) {
+                 splitPoints.push(i);
+             }
+        } else if (char === '}' && splitDepth === 0 && prevDepth === 1 && i < source.length - 1) {
             let next = i + 1;
             while (next < source.length && /\s/.test(source[next] as string)) next++;
             if (next < source.length) {
@@ -411,29 +427,18 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                 lastResult = evaluate(statement, localScope);
             }
         }
-        return lastResult;
-    }
-
-    // Remove outermost parentheses or braces if they wrap the entire expression
-    if ((source.startsWith('(') && source.endsWith(')')) || (source.startsWith('{') && source.endsWith('}'))) {
-        const startChar = source[0];
-        const endChar = startChar === '(' ? ')' : '}';
-        let depth = 0;
-        let isFullyWrapped = true;
-        for (let i = 0; i < source.length - 1; i++) {
-            const char = source[i];
-            if (char === undefined) break;
-            depth = updateDepth(char, depth);
-            if (depth === 0) {
-                isFullyWrapped = false;
-                break;
+        
+        // Propagate any changes from localScope back to scope for ALL variables that exist in both
+        for (const key in scope) {
+            const scopeVar = scope[key];
+            const localScopeVar = localScope[key];
+            if (scopeVar && localScopeVar) {
+                scopeVar.value = localScopeVar.value;
+                scopeVar.isInitialized = localScopeVar.isInitialized;
             }
         }
-        if (isFullyWrapped) {
-            const inner = source.substring(1, source.length - 1).trim();
-            if (startChar === '{' && inner.length === 0) return { value: 0, constraint: null };
-            return evaluate(inner, scope);
-        }
+
+        return lastResult;
     }
 
     // Check if this is a binary operation
