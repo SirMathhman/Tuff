@@ -337,4 +337,8 @@ describe('interpret', () => {
         const result = interpret("let func : () => I32 = fn get() : I32 => 100; func()");
         expect(result).toBe(100);
     });
+    test('interpret("let func = fn get() : I32 => 100; func()") should return 100', () => {
+        const result = interpret("let func = fn get() : I32 => 100; func()");
+        expect(result).toBe(100);
+    });
 });
