@@ -6,7 +6,9 @@ import { createPointer } from "./pointer-operations";
 const instanceCache = new Map<string, string>();
 let instanceCounter = 0;
 
-function parseObjectName(trimmed: string): { name: string; afterName: string } | undefined {
+function parseObjectName(
+  trimmed: string,
+): { name: string; afterName: string } | undefined {
   let i = 0;
   while (i < trimmed.length && isIdentifierChar(trimmed[i])) {
     i++;

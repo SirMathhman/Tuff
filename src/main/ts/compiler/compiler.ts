@@ -17,6 +17,7 @@ import {
 import { transformStringIndexing } from "./transforms/syntax/string-transforms";
 import { validateTypedArithmetic } from "./transforms/validation/type-arithmetic-validation";
 import { transformStructInstantiation } from "./transforms/syntax/struct-transform";
+import { transformObjectInstantiations } from "./transforms/syntax/object-instance-transform";
 import {
   transformModules,
   transformModuleAccess,
@@ -27,7 +28,10 @@ import {
   validateModuleAccess,
 } from "./transforms/helpers/module-validation";
 import { transformPointers } from "./transforms/pointers/pointer-transforms";
-import { findPointerTargets } from "./transforms/pointers/pointer-target-identification";
+import {
+  findPointerTargets,
+  findPointerVars,
+} from "./transforms/pointers/pointer-target-identification";
 import { wrapPointerTargets } from "./transforms/pointers/wrap-pointer-targets";
 import { isIdentifierChar, skipWhitespace } from "./parsing/string-helpers";
 import { clearVariableTypes } from "./parsing/parser-utils";
@@ -36,6 +40,7 @@ import { validateStructInstantiation } from "./transforms/validation/struct-inst
 import { validatePointerOperations } from "./transforms/validation/pointer-validation";
 import { findReceiverStart, collectLocalVariables } from "./compiler-utils";
 import { transformDestructorScopes } from "./transforms/destructors/destructor-scopes";
+import { forEachLetStatement } from "./transforms/helpers/let-statement";
 import type { VariableInfo } from "./declaration-parser-helpers";
 
 const BUILTIN_METHODS = new Set(["charCodeAt", "length"]);
@@ -198,7 +203,22 @@ function preparePointerHandling(
   for (const [name, info] of variables) {
     if (info.isArray) arrayVars.add(name);
   }
-  const pointerTargets = findPointerTargets(source);
+
+  const declaredVars = new Set<string>();
+  forEachLetStatement(source, (_startIdx, info) => {
+    if (info.varName) declaredVars.add(info.varName);
+  });
+  const pointerVars = findPointerVars(source);
+  const pointerTargets = findPointerTargets(source, declaredVars, pointerVars);
+
+  // Treat pointer vars as already-array-backed values for wrapping purposes.
+  // EXCEPT for string pointers which should use charCodeAt for indexing.
+  for (const name of pointerVars) {
+    const info = variables.get(name);
+    if (info?.type === "*Str") continue;
+    arrayVars.add(name);
+  }
+
   let sourceWithWrappedPointers = source;
   if (pointerTargets.size > 0) {
     sourceWithWrappedPointers = wrapPointerTargets(
@@ -224,9 +244,19 @@ function createTuffCompiler(source: string) {
       validateTypedArithmetic(sourceWithWrappedPointers);
       const moduleMetadata = collectModuleMetadata(sourceWithWrappedPointers);
       validateModuleAccess(sourceWithWrappedPointers, moduleMetadata);
+
+      const objectNames = new Set<string>();
+      for (const meta of moduleMetadata) {
+        if (meta.type === "object") objectNames.add(meta.name);
+      }
+
       const withObjects = transformObjects(sourceWithWrappedPointers);
       const withModules = transformModules(withObjects);
-      const withStructs = transformStructInstantiation(withModules);
+      const objectInst = transformObjectInstantiations(
+        withModules,
+        objectNames,
+      );
+      const withStructs = transformStructInstantiation(objectInst.source);
       const transformed = transformControlFlow(withStructs);
       const withDestructors = transformDestructorScopes(transformed);
       const js = removeTypeSyntax(withDestructors);
@@ -241,7 +271,12 @@ function createTuffCompiler(source: string) {
       expr = convertStatementsToExpressions(expr);
       const varDeclString =
         varDeclarations.length > 0 ? `var ${varDeclarations.join(", ")};` : "";
-      return `(function() { ${varDeclString} return (${expr}); })()`;
+
+      const runtime = objectInst.needsRuntime
+        ? "var __tuffObjectInstanceCache = new Map(); function __tuffObjectInstance(key) { var v = __tuffObjectInstanceCache.get(key); if (v !== undefined) return v; v = [0]; __tuffObjectInstanceCache.set(key, v); return v; }"
+        : "";
+
+      return `(function() { ${varDeclString} ${runtime} return (${expr}); })()`;
     },
   };
 }

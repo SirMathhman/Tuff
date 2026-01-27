@@ -1,5 +1,5 @@
 import { describe } from "bun:test";
-import { itBoth, itInterpreter } from "../test-helpers";
+import { itBoth } from "../test-helpers";
 
 describe("modules - declarations", () => {
   itBoth("supports module declaration with function", (ok) => {
@@ -77,7 +77,7 @@ describe("modules - objects", () => {
     ok("object Wrapper {} &Wrapper == &Wrapper", 1);
   });
 
-  itInterpreter("supports object instance reference equality", (ok) => {
+  itBoth("supports object instance reference equality", (ok) => {
     ok(
       "object Wrapper { in let x : I32; } let first = &Wrapper { x : 2 }; let second = &Wrapper { x : 2 }; &first == &second",
       1,
