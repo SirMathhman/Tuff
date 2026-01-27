@@ -109,6 +109,13 @@ export function parseNameAndGenerics(
   const name = parsedName.name;
   j = parsedName.endIdx;
   j = skipWhitespaceOnly(source, j);
+  if (j < source.length && source[j] === "[") {
+    const captureEnd = source.indexOf("]", j);
+    if (captureEnd !== -1) {
+      j = captureEnd + 1;
+      j = skipWhitespaceOnly(source, j);
+    }
+  }
   const { generics, endPos } = extractGenericParameters(source, j);
   j = skipWhitespaceOnly(source, endPos);
   return { name, endPos: j, generics };

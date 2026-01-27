@@ -60,7 +60,17 @@ function extractFunctionHeader(
   }
   const parenStart = rest.indexOf("(");
   if (parenStart === -1) return undefined;
-  return { fnHeaderStr: rest.slice(0, parenStart).trim(), parenStart };
+  let fnHeaderStr = rest.slice(0, parenStart).trim();
+  const captureStart = fnHeaderStr.indexOf("[");
+  if (captureStart !== -1) {
+    const captureEnd = fnHeaderStr.indexOf("]", captureStart);
+    if (captureEnd !== -1) {
+      fnHeaderStr =
+        fnHeaderStr.slice(0, captureStart) +
+        fnHeaderStr.slice(captureEnd + 1).trim();
+    }
+  }
+  return { fnHeaderStr, parenStart };
 }
 
 function parseParameters(

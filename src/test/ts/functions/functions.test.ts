@@ -94,6 +94,13 @@ describe("functions - scope and methods", () => {
   );
 
   itBoth(
+    "supports explicit closure capture syntax with reference",
+    (assertValid) => {
+      assertValid("let x = 100; fn get[&x]() => x; get()", 100);
+    },
+  );
+
+  itBoth(
     "supports method call syntax with receiver as this parameter",
     (assertValid) => {
       assertValid(

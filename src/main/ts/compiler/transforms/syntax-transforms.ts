@@ -35,11 +35,22 @@ function processFnDeclLine(
   const nameStart = j;
   while (j < source.length && isIdentifierChar(source[j])) j++;
   const fnName = source.slice(nameStart, j);
+  while (j < source.length && isWhitespace(source[j])) j++;
+  if (j < source.length && source[j] === "[") {
+    j = source.indexOf("]", j);
+    if (j !== -1) j++;
+  }
   while (j < source.length && source[j] !== ";") j++;
   const fnDef = source.slice(i + 2, j).trim();
+  let fnDefAfterName = fnDef.slice(fnName.length).trim();
+  if (fnDefAfterName.startsWith("[")) {
+    const captureEnd = fnDefAfterName.indexOf("]");
+    if (captureEnd !== -1) {
+      fnDefAfterName = fnDefAfterName.slice(captureEnd + 1).trim();
+    }
+  }
   return {
-    declaration:
-      "const " + fnName + " = " + fnDef.slice(fnName.length).trim() + ";",
+    declaration: "const " + fnName + " = " + fnDefAfterName + ";",
     newIdx: j + 1,
   };
 }

@@ -102,6 +102,24 @@ function isTopLevelFunction(source: string, fnStart: number): boolean {
   return true; // No unclosed braces before this function
 }
 
+function skipMatchingPair(
+  source: string,
+  startIdx: number,
+  openChar: string,
+  closeChar: string,
+): number {
+  if (startIdx >= source.length || source[startIdx] !== openChar)
+    return startIdx;
+  let i = startIdx + 1;
+  let depth = 1;
+  while (i < source.length && depth > 0) {
+    if (source[i] === openChar) depth++;
+    else if (source[i] === closeChar) depth--;
+    i++;
+  }
+  return skipWhitespace(source, i);
+}
+
 function extractFunctionHeader(
   source: string,
   startIdx: number,
@@ -112,19 +130,8 @@ function extractFunctionHeader(
   while (i < source.length && isIdentifierChar(source[i])) i++;
   const fnName = source.slice(nameStart, i);
   i = skipWhitespace(source, i);
-
-  // Skip generic type parameters <T>, <A, B>, etc.
-  if (i < source.length && source[i] === "<") {
-    let angleDepth = 1;
-    i++;
-    while (i < source.length && angleDepth > 0) {
-      if (source[i] === "<") angleDepth++;
-      else if (source[i] === ">") angleDepth--;
-      i++;
-    }
-    i = skipWhitespace(source, i);
-  }
-
+  i = skipMatchingPair(source, i, "[", "]");
+  i = skipMatchingPair(source, i, "<", ">");
   const paramsStart = i;
   if (i < source.length && source[i] === "(") {
     let parenCount = 1;
