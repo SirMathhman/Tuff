@@ -284,33 +284,50 @@ function evaluate(source: string, scope: Record<string, { value: number, constra
                         const discriminantResult = evaluate(discriminantStr, scope);
                         const discriminantValue = discriminantResult.value;
                         
-                        // Split by 'case' keyword
+                        // Split by 'case' keyword and parse all cases
                         const caseLines = bodyContent.split(/\bcase\b/).slice(1); // Skip the empty first element
                         
+                        // Parse case patterns
+                        interface CasePattern {
+                            pattern: string;
+                            value: string;
+                            isWildcard: boolean;
+                        }
+                        
+                        const cases: CasePattern[] = [];
                         for (const caseLine of caseLines) {
                             const trimmedCase = caseLine.trim();
                             const arrowIndex = trimmedCase.indexOf('=>');
                             if (arrowIndex > -1) {
                                 const patternStr = trimmedCase.substring(0, arrowIndex).trim();
                                 const valueStr = trimmedCase.substring(arrowIndex + 2).trim();
-                                
-                                // Remove trailing semicolon if present
                                 const valueStrClean = valueStr.endsWith(';') ? valueStr.slice(0, -1).trim() : valueStr;
-                                
-                                // Check if pattern matches
-                                let matches = false;
-                                if (patternStr === '_') {
-                                    // Wildcard always matches
-                                    matches = true;
-                                } else {
-                                    // Try to parse pattern as a literal
-                                    const patternResult = evaluate(patternStr, scope);
-                                    matches = patternResult.value === discriminantValue;
-                                }
-                                
-                                if (matches) {
-                                    return evaluate(valueStrClean, scope);
-                                }
+                                cases.push({
+                                    pattern: patternStr,
+                                    value: valueStrClean,
+                                    isWildcard: patternStr === '_'
+                                });
+                            }
+                        }
+                        
+                        // Check exhaustiveness
+                        const hasWildcard = cases.some(c => c.isWildcard);
+                        if (!hasWildcard) {
+                            throw new Error('Non-exhaustive match: missing wildcard pattern `case _ => ...`');
+                        }
+                        
+                        // Find and execute the matching case
+                        for (const casePattern of cases) {
+                            let matches = false;
+                            if (casePattern.isWildcard) {
+                                matches = true;
+                            } else {
+                                const patternResult = evaluate(casePattern.pattern, scope);
+                                matches = patternResult.value === discriminantValue;
+                            }
+                            
+                            if (matches) {
+                                return evaluate(casePattern.value, scope);
                             }
                         }
                         

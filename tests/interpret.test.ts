@@ -278,4 +278,8 @@ describe('interpret', () => {
         const result = interpret("let x = 10; let y = match (x) { case 10 => 2; case _ => 3; }; y");
         expect(result).toBe(2);
     });
+
+    test('interpret("let x = 10; let y = match (x) { case 10 => 2; }; y") should throw error', () => {
+        expect(() => interpret("let x = 10; let y = match (x) { case 10 => 2; }; y")).toThrow();
+    });
 });
