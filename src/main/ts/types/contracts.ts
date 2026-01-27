@@ -1,5 +1,6 @@
 import { makeDeclarationHandler, type StoreDecl } from "../declarations";
 import { parseGenericParams } from "../utils/generic-params";
+import { findMatchingCloseBrace } from "../utils/helpers/brace-utils";
 
 const storeContractDeclaration: StoreDecl = (rest, closeIndex, typeMap) => {
   const braceIndex = rest.indexOf("{");
@@ -18,6 +19,10 @@ const storeContractDeclaration: StoreDecl = (rest, closeIndex, typeMap) => {
 
 export const handleContractDeclaration = makeDeclarationHandler(
   "contract",
-  (rest: string) => rest.indexOf("}"),
+  (rest: string) => {
+    const braceIndex = rest.indexOf("{");
+    if (braceIndex === -1) return -1;
+    return findMatchingCloseBrace(rest, braceIndex);
+  },
   storeContractDeclaration,
 );

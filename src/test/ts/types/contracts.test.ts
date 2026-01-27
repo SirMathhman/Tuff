@@ -13,7 +13,14 @@ describe("contracts", () => {
     },
   );
 
-  itBoth("throws on duplicate contract declaration", (_assertValid, assertInvalid) => {
-    assertInvalid("contract Empty {} contract Empty {}");
+  itBoth(
+    "throws on duplicate contract declaration",
+    (_assertValid, assertInvalid) => {
+      assertInvalid("contract Empty {} contract Empty {}");
+    },
+  );
+
+  itBoth("supports contract with function signature", (assertValid) => {
+    assertValid("contract Empty { fn get() : I32; }", 0);
   });
 });
