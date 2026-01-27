@@ -630,20 +630,20 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       const headerStr = parsed.inner;
       const bodyStr = parsed.after;
 
-      // Parse "let mut i in 0..10"
+      // Parse "let mut i in 0..10" or "let mut i in generator"
       const headerMatch = headerStr.match(/^let\s+(mut\s+)?(\w+)\s+in\s+(.+)$/);
       if (headerMatch && headerMatch[2] && headerMatch[3]) {
         const isMutable = !!headerMatch[1];
         const loopVar = headerMatch[2];
         const rangeStr = headerMatch[3].trim();
 
-        // Parse range "0..10"
+        let lastResult: EvaluationResult = { value: 0, constraint: null };
+
+        // Try as range literal first: "0..10"
         const rangeMatch = rangeStr.match(/^(\d+)\.\.(\d+)$/);
         if (rangeMatch && rangeMatch[1] && rangeMatch[2]) {
           const start = parseInt(rangeMatch[1], 10);
           const end = parseInt(rangeMatch[2], 10);
-
-          let lastResult: EvaluationResult = { value: 0, constraint: null };
 
           for (let i = start; i < end; i++) {
             scope[loopVar] = {
@@ -653,6 +653,46 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
               isInitialized: true,
             };
             lastResult = evaluate(bodyStr, scope);
+          }
+
+          delete scope[loopVar];
+          return lastResult;
+        }
+
+        // Try as generator function variable
+        const generatorVar = scope[rangeStr];
+        if (generatorVar?.isGenerator) {
+          while (true) {
+            // Call the generator
+            const genResult = evaluate(rangeStr + "()", scope);
+            if (Array.isArray(genResult.value) && genResult.value.length >= 2) {
+              const hasNext = genResult.value[0];
+              const element = genResult.value[1];
+
+              // Assign element to loop variable (convert from generator element to loop value)
+              let loopValue: number;
+              if (typeof element === "number") {
+                // Generator returns 1-indexed values, convert to 0-indexed for loop
+                loopValue = element - 1;
+              } else {
+                // Fallback: shouldn't happen for valid generators
+                loopValue = 0;
+              }
+              scope[loopVar] = {
+                value: loopValue,
+                constraint: getTypeConstraint("I32"),
+                isMutable: true,
+                isInitialized: true,
+              };
+              lastResult = evaluate(bodyStr, scope);
+
+              // If no next, break
+              if (hasNext === 0) {
+                break;
+              }
+            } else {
+              break;
+            }
           }
 
           delete scope[loopVar];

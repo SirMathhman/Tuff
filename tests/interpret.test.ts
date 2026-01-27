@@ -435,4 +435,14 @@ describe("interpret", () => {
     );
     expect(result).toBe(1);
   });
+  test('interpret("let range : () => (Bool, I32) = 0..10; let mut sum = 0; for (let mut i in range) sum += i; sum") should return 45', () => {
+    const result = interpret(
+      "let range : () => (Bool, I32) = 0..10; let mut sum = 0; for (let mut i in range) sum += i; sum",
+    );
+    expect(result).toBe(45);
+  });
+  test('interpret("fn get() => { 100 }; get()") should return 100', () => {
+    const result = interpret("fn get() => { 100 }; get()");
+    expect(result).toBe(100);
+  });
 });
