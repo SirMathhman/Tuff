@@ -219,7 +219,12 @@ function validateDereferencedAssignment(
 
 function tryExtractVarFromReference(exprStr: string): string | undefined {
   if (!exprStr.startsWith("&")) return undefined;
-  const afterAnd = exprStr.slice(1).trim();
+  let afterAnd = exprStr.slice(1).trim();
+
+  // Strip 'mut' keyword if present (&mut varName)
+  if (afterAnd.startsWith("mut ")) {
+    afterAnd = afterAnd.slice(4).trim();
+  }
 
   // Must start with valid identifier start char (not a digit)
   if (afterAnd.length === 0 || !isIdentifierStartChar(afterAnd[0])) {

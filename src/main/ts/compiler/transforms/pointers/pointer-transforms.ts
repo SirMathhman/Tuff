@@ -78,7 +78,17 @@ function tryExtractPointerTarget(
   source: string,
   operatorPos: number,
 ): { varName: string; endIdx: number } | undefined {
-  const nextNonWS = skipWhitespace(source, operatorPos + 1);
+  let nextNonWS = skipWhitespace(source, operatorPos + 1);
+  
+  // Skip 'mut' keyword if present (&mut varName or *mut varName)
+  if (
+    source.slice(nextNonWS, nextNonWS + 3) === "mut" &&
+    nextNonWS + 3 < source.length &&
+    isWhitespace(source[nextNonWS + 3]!)
+  ) {
+    nextNonWS = skipWhitespace(source, nextNonWS + 3);
+  }
+  
   const ch = source[nextNonWS];
   if (nextNonWS >= source.length || !ch || !isIdentifierStartChar(ch)) {
     return undefined;

@@ -107,6 +107,13 @@ describe("pointer operations - edge cases", () => {
     ok("fn deref(p : *I32) => *p; let x = 55; deref(&x)", 55);
   });
 
+  itInterpreter("mutable pointer in function parameter with modification", (ok) => {
+    ok(
+      "fn deref(p : *mut I32) => *p; let mut x = 101; deref(&mut x)",
+      101,
+    );
+  });
+
   itBoth("pointer in function return type", (ok) => {
     ok("let x = 77; fn getPtr() => &x; let p : *I32 = getPtr(); *p", 77);
   });

@@ -187,12 +187,15 @@ export function createFunctionScope(
   for (let i = 0; i < fnDef.params.length; i++) {
     const paramName = fnDef.params[i]?.name,
       paramType = fnDef.params[i]?.type,
+      paramTypeStr = fnDef.params[i]?.typeStr,
       paramValue = args[i];
     if (paramName && paramValue !== undefined) {
       if (paramType === -2)
         setFunctionRef(paramName, getFunctionRef(`__arg_${i}`) || "");
       fnVarMap.set(paramName, paramValue);
-      fnScope.set(paramName, false);
+      // Parameter is mutable if its type is *mut (mutable pointer)
+      const isMutableParam = paramTypeStr && paramTypeStr.startsWith("*mut ");
+      fnScope.set(paramName, isMutableParam ? true : false);
     }
   }
   const mergedScope = new Map(ctx.scope);

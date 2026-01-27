@@ -50,14 +50,21 @@ export function handleReferenceOperation(
 ): number | undefined {
   const trimmed = s.trim();
 
-  // Check if this is a reference operation: &varName
+  // Check if this is a reference operation: &varName or &mut varName
   if (!trimmed.startsWith("&")) return undefined;
 
-  const rest = trimmed.slice(1).trim();
+  let rest = trimmed.slice(1).trim();
 
   // Reject double references: &&x
   if (rest.startsWith("&")) {
     throw new Error("invalid: cannot take reference of reference");
+  }
+
+  // Check if this is a mutable reference (&mut varName)
+  let isExplicitlyMutable = false;
+  if (rest.startsWith("mut ")) {
+    isExplicitlyMutable = true;
+    rest = rest.slice(4).trim();
   }
 
   // Validate that it's a valid identifier (no expressions like &(100) or &(x+y))
@@ -72,8 +79,13 @@ export function handleReferenceOperation(
     throw new Error(`variable '${varName}' not found in scope`);
   }
 
+  // Determine if the pointer should be mutable:
+  // 1. If &mut syntax is used explicitly, it's mutable
+  // 2. Otherwise, use the type annotation parameter
+  const shouldBeMutable = isExplicitlyMutable || pointerTypeIsMutable;
+
   // For *mut pointers, target variable must be mutable
-  if (pointerTypeIsMutable) {
+  if (shouldBeMutable) {
     const targetIsMutable = mutMap.get(varName) ?? false;
     if (!targetIsMutable) {
       throwCannotCreateMutablePointerToImmutableVariable(varName);
@@ -92,10 +104,10 @@ export function handleReferenceOperation(
   }
 
   // Inline createPointer and return a pointer to this variable
-  // Pointer mutability is determined by the type annotation (*mut vs *)
+  // Pointer mutability is determined by either the &mut syntax or the type annotation
   const pointerValue = pointerCounter++;
   pointerMap.set(pointerValue, varName);
-  mutablePointerMap.set(pointerValue, pointerTypeIsMutable);
+  mutablePointerMap.set(pointerValue, shouldBeMutable);
   return pointerValue;
 }
 
