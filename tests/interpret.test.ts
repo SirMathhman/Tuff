@@ -215,4 +215,7 @@ describe('interpret', () => {
         const result = interpret("let x = 100; let y = &x; let z = &y; **z");
         expect(result).toBe(100);
     });
+    test('interpret("let x = 100; *x") should throw error', () => {
+        expect(() => interpret("let x = 100; *x")).toThrow();
+    });
 });
