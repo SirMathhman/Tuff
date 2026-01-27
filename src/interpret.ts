@@ -261,6 +261,15 @@ function tryCreateGeneratorEntry(source: string): ScopeEntry | null {
   };
 }
 
+function evaluateUnaryOperand(
+  source: string,
+  operator: string,
+  scope: Scope,
+): EvaluationResult {
+  const expr = source.substring(operator.length).trim();
+  return evaluate(expr, scope);
+}
+
 function hasCommaAtDepth0(inner: string): boolean {
   let depth = 0;
   for (let i = 0; i < inner.length; i++) {
@@ -353,8 +362,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
   // Check for pointer dereference: *y
   if (source.startsWith("*") && !getTypeConstraint(source)) {
-    const expr = source.substring(1).trim();
-    const exprResult = evaluate(expr, scope);
+    const exprResult = evaluateUnaryOperand(source, "*", scope);
     if (exprResult.constraint?.typeStr.startsWith("*")) {
       if (typeof exprResult.value !== "number") {
         throw new Error("Cannot dereference tuple");
@@ -380,8 +388,23 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       );
     }
     throw new Error(
-      `Cannot dereference non-pointer type ${exprResult.constraint?.typeStr || "numeric"} for expr: ${expr}`,
+      `Cannot dereference non-pointer type ${exprResult.constraint?.typeStr || "numeric"} for expr: ${source.substring(1).trim()}`,
     );
+  }
+
+  // Check for logical NOT: !x
+  if (source.startsWith("!")) {
+    const exprResult = evaluateUnaryOperand(source, "!", scope);
+    if (exprResult.constraint?.typeStr !== "Bool") {
+      throw new Error(
+        `Logical NOT operator requires boolean operand, but got ${exprResult.constraint?.typeStr || "numeric"}`,
+      );
+    }
+    const resultValue = typeof exprResult.value === "number" ? exprResult.value : 0;
+    return {
+      value: resultValue === 0 ? 1 : 0,
+      constraint: { minValue: 0, maxValue: 1, typeStr: "Bool", bitWidth: 1 },
+    };
   }
 
   if (!source.includes(";")) {

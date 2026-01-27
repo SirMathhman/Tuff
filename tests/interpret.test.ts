@@ -425,4 +425,8 @@ describe("interpret", () => {
     );
     expect(result).toBe(6);
   });
+  test('interpret("let x = false; !x") should return 1', () => {
+    const result = interpret("let x = false; !x");
+    expect(result).toBe(1);
+  });
 });
