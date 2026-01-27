@@ -31,10 +31,10 @@ run_gate "Circular dependencies" bun run check:circular
 run_gate "Directory structure" bun run check:structure
 run_gate "Subdirectory dependencies" bun run check:subdir-deps
 
-# Run visualize but don't fail on it
-npm run visualize >/dev/null 2>&1
-
 # Exit with failure if any check failed
 if [ $FAILED -eq 1 ]; then
   exit 1
 fi
+
+# Run visualize only if all gates pass
+npm run visualize >/dev/null 2>&1
