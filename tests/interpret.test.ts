@@ -168,4 +168,9 @@ describe('interpret', () => {
       'Invalid number: x = 256'
     );
   });
+
+  it('supports Bool type and boolean literals', () => {
+    expect(interpret('let temp : Bool = true; temp')).toBe(1);
+    expect(interpret('let temp : Bool = false; temp')).toBe(0);
+  });
 });

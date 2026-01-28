@@ -14,6 +14,7 @@ const typeRanges: Record<string, [number, number]> = {
   I8: [-128, 127],
   I16: [-32768, 32767],
   I32: [-2147483648, 2147483647],
+  Bool: [0, 1],
 };
 
 const typeOrdering: Record<string, number> = {
@@ -23,6 +24,7 @@ const typeOrdering: Record<string, number> = {
   I8: 10,
   I16: 11,
   I32: 12,
+  Bool: 100,
 };
 
 type Result = {
@@ -53,6 +55,13 @@ function getWidestType(types: (string | undefined)[]): string | undefined {
 }
 
 function parseTypedNumber(input: string): Result {
+  if (input === 'true') {
+    return { value: 1, type: 'Bool', isInitialized: true };
+  }
+  if (input === 'false') {
+    return { value: 0, type: 'Bool', isInitialized: true };
+  }
+
   // Match numeric part followed by optional type suffix
   const match = input.match(/^(-?\d+(?:\.\d+)?)\s*([A-Za-z]\w*)?$/);
 
@@ -355,10 +364,11 @@ function tokenizeExpression(
   const operators: string[] = [];
 
   for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
     if (i % 2 === 0) {
-      operands.push(resolveOperand(tokens[i], variables));
+      operands.push(resolveOperand(token, variables));
     } else {
-      operators.push(tokens[i]);
+      operators.push(token);
     }
   }
 
