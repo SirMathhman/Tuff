@@ -1,0 +1,59 @@
+// Example: Trait system and generic programming
+// This is a placeholder - not yet compilable until the compiler is fully implemented
+
+trait Drawable {
+  fn draw() -> void
+}
+
+trait Area {
+  fn area() -> f64
+}
+
+struct Circle {
+  radius: f64
+}
+
+struct Rectangle {
+  width: f64
+  height: f64
+}
+
+impl Drawable for Circle {
+  fn draw() -> void {
+    println("Drawing a circle")
+  }
+}
+
+impl Area for Circle {
+  fn area() -> f64 {
+    3.14159 * (radius * radius)
+  }
+}
+
+impl Drawable for Rectangle {
+  fn draw() -> void {
+    println("Drawing a rectangle")
+  }
+}
+
+impl Area for Rectangle {
+  fn area() -> f64 {
+    width * height
+  }
+}
+
+// Generic function working with any type implementing Area
+fn print_area<T: Area>(shape: T) -> void {
+  println("Area: " + string(shape.area()))
+}
+
+fn main() {
+  let circle = Circle { radius: 5.0 }
+  let rect = Rectangle { width: 4.0, height: 6.0 }
+
+  circle.draw()
+  print_area(circle)
+
+  rect.draw()
+  print_area(rect)
+}

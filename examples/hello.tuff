@@ -1,0 +1,6 @@
+// Example: Hello, World! in Tuff
+// This is a placeholder - not yet compilable until the compiler is fully implemented
+
+fn main() {
+  println("Hello, World!")
+}
