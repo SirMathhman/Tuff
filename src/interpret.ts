@@ -308,7 +308,8 @@ function resolveMatchAt(
 
     const remaining = body.substring(bodyIdx);
     if (!remaining.startsWith('case') && remaining.trim() === '') break;
-    if (!remaining.startsWith('case')) throw new Error('Expected case in match body');
+    if (!remaining.startsWith('case'))
+      throw new Error('Expected case in match body');
 
     bodyIdx += 4;
     bodyIdx = skipWhitespace(body, bodyIdx);
@@ -336,7 +337,10 @@ function resolveMatchAt(
     if (body[bodyIdx] === ';') bodyIdx++;
 
     let patternMatch = patternStr === '_';
-    if (!patternMatch && parseTypedNumber(patternStr).value === matchVal.value) {
+    if (
+      !patternMatch &&
+      parseTypedNumber(patternStr).value === matchVal.value
+    ) {
       patternMatch = true;
     }
 
