@@ -6,7 +6,7 @@ This is an evolving specification of the Tuff language syntax and semantics. Fea
 
 **Tuff code is guaranteed to never panic or crash at runtime.** This is a fundamental language design goal, not an optional feature. The language prevents panics through:
 
-- No `null` pointer dereferences (enforced via optional types `T?`)
+- No `null` pointer dereferences (enforced via `Option<T>` types)
 - No array out-of-bounds access (runtime checked)
 - No arithmetic overflow/underflow panics (wrapping semantics or runtime checks)
 - No invalid type casts (compile-time verified)
@@ -146,27 +146,26 @@ fn greet(name: *Str) {
 }
 ```
 
-Functions can have default parameters and optional returns. Optional returns (using `T?`) are the primary error handling mechanism:
+Functions can have default parameters and optional returns. Optional returns (using `Option<T>`) are the primary error handling mechanism:
 
 ```tuff
 fn power(base: i32, exp: i32 = 2) -> i32 {
   // ...
 }
 
-fn maybe_divide(a: i32, b: i32) -> i32? {
+fn maybeDivide(a: i32, b: i32) -> Option<i32> {
   if b == 0 {
-    null  // Represents division failure
+    None  // Represents division failure
   } else {
-    a / b
+    Some(a / b)
   }
 }
 
 // Caller must handle the optional return
-let result = maybe_divide(10, 2)
-if result != null {
-  print("Result: " + string(result))
-} else {
-  print("Division failed")
+let result = maybeDivide(10, 2)
+match result {
+  Some(value) => print("Result: " + string(value)),
+  None => print("Division failed"),
 }
 ```
 
@@ -231,7 +230,7 @@ match result {
 ```tuff
 type UserId = u64
 type Handler = fn(*Str) -> void
-type Maybe<T> = T | null
+type Maybe<T> = Option<T>
 ```
 
 ### Generics
@@ -368,12 +367,12 @@ println(value: *Str) -> void
 
 // Type conversion
 string(value: any) -> String  // Converts any type to owned String
-number(value: *Str) -> i32?
+number(value: *Str) -> Option<i32>
 
 // Collections
 len(array: T[]) -> u64
 push<T>(mut array: T[], item: T) -> void
-pop<T>(mut array: T[]) -> T?
+pop<T>(mut array: T[]) -> Option<T>
 ```
 
 ## Module System (Planned)
@@ -394,12 +393,12 @@ fn main() {
 
 Tuff enforces a no-panic policy through explicit error handling patterns:
 
-### Optional Types (`T?`)
+### Optional Types (`Option<T>`)
 Used when an operation may fail with no additional error information:
 
 ```tuff
-fn parseInt(s: *Str) -> i32? {
-  // Returns null if parsing fails
+fn parseInt(s: *Str) -> Option<i32> {
+  // Returns None if parsing fails, Some(value) otherwise
 }
 ```
 
@@ -414,6 +413,7 @@ enum Result<T> {
 
 fn readFile(path: *Str) -> Result<String> {
   // Returns Ok(contents) or Err(error_message)
+  // Use match to handle both Success and Failure cases
 }
 ```
 
@@ -422,9 +422,22 @@ Propagates errors up the call stack safely:
 
 ```tuff
 fn processFile(path: *Str) -> Result<i32> {
-  let contents = readFile(path)?  // Unwrap or propagate error
+  let contents = readFile(path)?     // Unwrap or propagate error
   let count = countLines(contents)?
   Ok(count)
+}
+
+// Alternative with explicit pattern matching:
+fn processFileAlt(path: *Str) -> Result<i32> {
+  match readFile(path) {
+    Ok(contents) => {
+      match countLines(contents) {
+        Ok(count) => Ok(count),
+        Err(e) => Err(e),
+      }
+    },
+    Err(e) => Err(e),
+  }
 }
 ```
 

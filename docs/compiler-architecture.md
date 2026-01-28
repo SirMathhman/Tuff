@@ -222,7 +222,7 @@ class SymbolTable {
 
 Tuff code is **guaranteed to never panic at runtime**. This is enforced through analyzer checks:
 
-1. **Null Checking**: Dereferences and method calls on nullable types (`T?`) are flagged as errors. All potential null values must be explicitly handled with `if` checks or matches.
+1. **Null Checking**: Dereferences and method calls on `Option<T>` values are flagged as errors. All `Option<T>` values must be explicitly handled with pattern matching.
 
 2. **Array Bounds**: Array indexing is checked at compile-time where possible. Out-of-bounds accesses in unknown dimensions are wrapped with runtime bounds checks in generated code.
 
@@ -232,7 +232,7 @@ Tuff code is **guaranteed to never panic at runtime**. This is enforced through 
 
 5. **Arithmetic Safety**: Integer overflow/underflow is handled via wrapping semantics or explicit checked operations, never causing panics.
 
-6. **Error Propagation**: Functions that can fail return `Result<T>` or `T?` types, forcing callers to handle errors explicitly.
+6. **Error Propagation**: Functions that can fail return `Result<T>` or `Option<T>` types, forcing callers to handle errors explicitly.
 
 These checks are performed during the **Analyzer phase**, so any code that compiles is guaranteed crash-free at runtime.
 
@@ -312,7 +312,7 @@ Tuff types map to TypeScript:
 | `*Str` | `string` (borrowed) |
 | `String` | `string` (owned) |
 | `T[]` | `T[]` |
-| `T?` (nullable) | `T \| undefined` |
+| `Option<T>` | `T \| undefined \| null` |
 | `T \| U` (union) | `T \| U` |
 | `struct { ... }` | `interface { ... }` |
 | `enum { ... }` | TypeScript enum or tagged union |
