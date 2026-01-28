@@ -17,6 +17,6 @@ export default [
     rules: {
       'max-lines-per-function': ['error', { max: 50 }],
       'max-depth': ['error', 2],
-    }
+    },
   },
 ];

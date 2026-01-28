@@ -3,10 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "check": "pnpm run check:test && pnpm run cpd && pnpm run check:lint",
-    "check:test": "bun test",
-    "check:lint": "pnpm run lint",
-    "cpd": "/mnt/c/Tools/pmd-bin-7.18.0/bin/pmd cpd src tests --language typescript --minimum-tokens 35 --format markdown",
+    "check": "pnpm run test && pnpm run cpd && pnpm run lint",
+    "cpd": "pmd cpd src tests --language typescript --minimum-tokens 35 --format markdown",
     "format": "prettier --write .",
     "lint": "tsc --noEmit && eslint .",
     "prepare": "husky",
