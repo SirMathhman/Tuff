@@ -25,7 +25,12 @@ const typeOrdering: Record<string, number> = {
   I32: 12,
 };
 
-type Result = { value: number; type?: string; isMutable?: boolean };
+type Result = {
+  value: number;
+  type?: string;
+  isMutable?: boolean;
+  isInitialized?: boolean;
+};
 type Variables = Map<string, Result>;
 
 function getWidestType(types: (string | undefined)[]): string | undefined {
@@ -151,6 +156,9 @@ function interpretInternal(
     const letAnnotatedMatch = resolved.match(
       /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)\s*=\s*(.+)$/
     );
+    const letNoInitMatch = resolved.match(
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)$/
+    );
     const letInferredMatch = resolved.match(
       /^let\s+(mut\s+)?([A-Za-z]\w*)\s*=\s*(.+)$/
     );
@@ -164,6 +172,15 @@ function interpretInternal(
         letAnnotatedMatch[4],
         letAnnotatedMatch[3],
         !!letAnnotatedMatch[1]
+      );
+    } else if (letNoInitMatch) {
+      result = handleLetStatement(
+        resolved,
+        variables,
+        letNoInitMatch[2],
+        undefined,
+        letNoInitMatch[3],
+        !!letNoInitMatch[1]
       );
     } else if (letInferredMatch) {
       result = handleLetStatement(
@@ -230,7 +247,7 @@ function handleLetStatement(
   statement: string,
   variables: Variables,
   name: string,
-  expr: string,
+  expr?: string,
   type?: string,
   isMutable?: boolean
 ): Result {
@@ -238,12 +255,19 @@ function handleLetStatement(
     throw new Error('Variable already declared: ' + name);
   }
 
-  const res = interpretInternal(expr, variables);
-  const finalType = type || res.type;
+  let value = 0;
+  let finalType = type;
+  let isInitialized = false;
 
-  validateTypeCompatibility(type, res, statement);
+  if (expr) {
+    const res = interpretInternal(expr, variables);
+    finalType = type || res.type;
+    validateTypeCompatibility(type, res, statement);
+    value = res.value;
+    isInitialized = true;
+  }
 
-  const variable = { value: res.value, type: finalType, isMutable };
+  const variable = { value, type: finalType, isMutable, isInitialized };
   variables.set(name, variable);
   return variable;
 }
@@ -259,7 +283,7 @@ function handleAssignmentStatement(
   }
 
   const variable = variables.get(name)!;
-  if (!variable.isMutable) {
+  if (!variable.isMutable && variable.isInitialized) {
     throw new Error('Cannot assign to immutable variable: ' + name);
   }
 
@@ -268,6 +292,7 @@ function handleAssignmentStatement(
   validateTypeCompatibility(variable.type, res, statement);
 
   variable.value = res.value;
+  variable.isInitialized = true;
   return variable;
 }
 

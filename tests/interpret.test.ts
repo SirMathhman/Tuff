@@ -142,4 +142,8 @@ describe('interpret', () => {
       'Variable already declared: x'
     );
   });
+
+  it('supports declarations without initializers and delayed initialization', () => {
+    expect(interpret('let x : U8; x = 100; x')).toBe(100);
+  });
 });
