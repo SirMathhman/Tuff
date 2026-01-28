@@ -2436,7 +2436,6 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       throw new Error(`Invalid method call syntax: ${source}`);
     }
 
-    const receiverResult = evaluate(receiverStr, scope);
     const fnEntry = scope[methodName];
 
     if (
@@ -2449,13 +2448,26 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     }
 
     const paramNames = fnEntry?.functionParams || [];
+    const argExprs = parseArguments(argsRaw);
+
+    if (receiverStr === "this") {
+      if (paramNames[0] !== "this") {
+        const argResults = argExprs.map((arg) => evaluate(arg, scope));
+        return invokeFunction(methodName, fnEntry, argResults, source);
+      }
+      throw new Error(
+        `Cannot use this as a method receiver for function ${methodName}`,
+      );
+    }
+
+    const receiverResult = evaluate(receiverStr, scope);
+
     if (paramNames[0] !== "this") {
       throw new Error(
         `Method call requires first parameter this for function ${methodName}`,
       );
     }
 
-    const argExprs = parseArguments(argsRaw);
     const argResults = [
       receiverResult,
       ...argExprs.map((arg) => evaluate(arg, scope)),

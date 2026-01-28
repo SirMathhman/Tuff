@@ -625,4 +625,9 @@ describe("interpret", () => {
     );
     expect(result).toBe(100);
   });
+
+  test('interpret("this method call for plain function") should return 100', () => {
+    const result = interpret("fn get() => 100; this.get()");
+    expect(result).toBe(100);
+  });
 });
