@@ -166,7 +166,9 @@ function interpretInternal(
     const letAnnotatedMatch = statement.match(
       /^let\s+([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)\s*=\s*(.+)$/
     );
-    const letInferredMatch = statement.match(/^let\s+([A-Za-z]\w*)\s*=\s*(.+)$/);
+    const letInferredMatch = statement.match(
+      /^let\s+([A-Za-z]\w*)\s*=\s*(.+)$/
+    );
 
     if (letAnnotatedMatch) {
       result = handleLetStatement(

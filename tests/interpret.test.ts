@@ -113,4 +113,10 @@ describe('interpret', () => {
   it('supports inferred let declarations', () => {
     expect(interpret('(4 + { let x = 2U8; let y : U16 = x; y }) * 3')).toBe(18);
   });
+
+  it('rejects narrowing assignment from an inferred variable', () => {
+    expect(() =>
+      interpret('(4 + { let x = 2U16; let y : U8 = x; y }) * 3')
+    ).toThrow('Invalid type: let y : U8 = x');
+  });
 });
