@@ -23,7 +23,7 @@
   },
   "husky": {
     "hooks": {
-      "pre-commit": "pnpm lint-staged"
+      "pre-commit": "pnpm typecheck && pnpm lint-staged"
     }
   },
   "devDependencies": {
