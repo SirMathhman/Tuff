@@ -21,11 +21,6 @@
       "pnpm format"
     ]
   },
-  "husky": {
-    "hooks": {
-      "pre-commit": "pnpm typecheck && pnpm lint-staged"
-    }
-  },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^25.1.0",
