@@ -11,6 +11,7 @@
 - Struct fields and literals: `struct Point { x : I32; y : I32; } let p : Point = Point { 3, 4 }; p.x`
   - Struct name functions cannot return `this`: `struct Wrapper {} fn Wrapper() => this;` (invalid)
 - References (`&`, `&mut`, `*`) with borrow rules
+  - Field references: `let ref : *I32 = &(value.field); *ref`
 - Functions:
   - Declaration: `fn get() : I32 => 100;`
   - Parameters: `fn pass(value : I32) => value; pass(100)`

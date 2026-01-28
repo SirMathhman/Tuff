@@ -565,13 +565,134 @@ function hasCommaAtDepth0(inner: string): boolean {
   return false;
 }
 
-const addresses: Map<number, string> = new Map();
+const addresses: Map<number, string | { varName: string; fieldName: string }> =
+  new Map();
 let nextAddress = 0x1000;
 const borrowState: Map<
   string,
   { immutableCount: number; mutableCount: number }
 > = new Map();
 const structScopes: Map<string, StructDefinition>[] = [];
+
+function assertMutableReferenceAllowed(
+  varName: string,
+  isMutableRequest: boolean,
+  isMutable: boolean | undefined,
+): void {
+  if (isMutableRequest && !isMutable) {
+    throw new Error(
+      `Cannot take mutable reference to immutable variable ${varName}`,
+    );
+  }
+}
+
+function getStructFieldDefinition(
+  scope: Scope,
+  structVarName: string,
+  fieldName: string,
+): {
+  structVar: ScopeEntry;
+  structType: string;
+  fieldDef: StructField;
+} {
+  const structVar = scope[structVarName];
+  if (!structVar) {
+    throwUndefinedAddressTarget(structVarName);
+  }
+  if (Array.isArray(structVar.value) || typeof structVar.value !== "object") {
+    throwNotStruct(structVarName);
+  }
+  const structType = structVar.constraint?.typeStr;
+  if (!structType) {
+    throwNotStruct(structVarName);
+  }
+  const structDef = resolveStructDefinition(structType);
+  if (!structDef) {
+    throw new Error(`Struct ${structType} is not defined`);
+  }
+  const fieldDef = structDef.fields.find((field) => field.name === fieldName);
+  if (!fieldDef) {
+    throw new Error(`Struct ${structType} has no field ${fieldName}`);
+  }
+  return { structVar, structType, fieldDef };
+}
+
+function getPointerInnerConstraint(ptrResult: EvaluationResult): {
+  innerTypeStr: string;
+  targetConstraint: TypeConstraint | null;
+} {
+  const isMut = ptrResult.constraint?.typeStr.startsWith("*mut ") ?? false;
+  const innerTypeStr = ptrResult.constraint
+    ? ptrResult.constraint.typeStr.substring(isMut ? 5 : 1)
+    : "I32";
+  const targetConstraint = getTypeConstraint(innerTypeStr);
+  return { innerTypeStr, targetConstraint };
+}
+
+function validatePointerAssignmentValue(
+  valResult: EvaluationResult,
+  ptrResult: EvaluationResult,
+  statement: string,
+): void {
+  if (typeof valResult.value !== "number") {
+    throw new Error("Cannot assign tuple through pointer");
+  }
+  const { targetConstraint } = getPointerInnerConstraint(ptrResult);
+  if (targetConstraint) {
+    validateValueInConstraint(
+      valResult.value as number,
+      targetConstraint,
+      statement,
+    );
+    if (valResult.constraint) {
+      validateTypeMatch(valResult.constraint, targetConstraint);
+    }
+  }
+}
+
+function throwUndefinedAddressTarget(varName: string): never {
+  throw new Error(`Cannot take address of undefined variable ${varName}`);
+}
+
+function buildPointerResult(
+  addr: number,
+  isMutableRequest: boolean,
+  innerConstraint: TypeConstraint | null,
+  referenceTarget: string,
+): EvaluationResult {
+  return {
+    value: addr,
+    constraint: {
+      minValue: 0,
+      maxValue: Number.MAX_SAFE_INTEGER,
+      typeStr:
+        "*" +
+        (isMutableRequest ? "mut " : "") +
+        (innerConstraint?.typeStr || "numeric"),
+    },
+    referenceTarget,
+    referenceMutable: isMutableRequest,
+  };
+}
+
+function ensureInitializedForDeref(
+  targetVar: ScopeEntry,
+  varName: string,
+): void {
+  if (!targetVar.isInitialized) {
+    throwPointerDerefError("uninitialized", varName);
+  }
+}
+
+function throwPointerDerefError(reason: string, varName: string): never {
+  throw new Error(
+    `Dereferenced pointer points to ${reason} variable ${varName}`,
+  );
+}
+
+function throwUndefinedDerefTarget(varName: string): never {
+  throwPointerDerefError("undefined", varName);
+}
 
 function getBorrowInfo(varName: string): {
   immutableCount: number;
@@ -618,6 +739,21 @@ function getAddressOf(varName: string): number {
   }
   const addr = nextAddress++;
   addresses.set(addr, varName);
+  return addr;
+}
+
+function getAddressOfField(varName: string, fieldName: string): number {
+  for (const [addr, name] of addresses.entries()) {
+    if (
+      typeof name === "object" &&
+      name.varName === varName &&
+      name.fieldName === fieldName
+    ) {
+      return addr;
+    }
+  }
+  const addr = nextAddress++;
+  addresses.set(addr, { varName, fieldName });
   return addr;
 }
 
@@ -676,6 +812,50 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       varName = varName.substring(4).trim();
     }
 
+    if (varName.startsWith("(") && varName.endsWith(")")) {
+      const inner = varName.substring(1, varName.length - 1).trim();
+      if (!hasCommaAtDepth0(inner)) {
+        let depth = 0;
+        let isFullyWrapped = true;
+        for (let i = 0; i < varName.length - 1; i++) {
+          const char = varName[i] as string;
+          depth = updateDepth(char, depth);
+          if (depth === 0) {
+            isFullyWrapped = false;
+            break;
+          }
+        }
+        if (isFullyWrapped) {
+          varName = inner;
+        }
+      }
+    }
+
+    const fieldMatch = varName.match(/^([a-zA-Z_]\w*)\.([a-zA-Z_]\w*)$/);
+    if (fieldMatch && fieldMatch[1] && fieldMatch[2]) {
+      const structVarName = fieldMatch[1];
+      const fieldName = fieldMatch[2];
+      const { structVar, fieldDef } = getStructFieldDefinition(
+        scope,
+        structVarName,
+        fieldName,
+      );
+      assertMutableReferenceAllowed(
+        structVarName,
+        isMutableRequest,
+        structVar.isMutable,
+      );
+      const addr = getAddressOfField(structVarName, fieldName);
+      const innerConstraint = resolveTypeConstraint(fieldDef.type);
+      addBorrow(structVarName, isMutableRequest);
+      return buildPointerResult(
+        addr,
+        isMutableRequest,
+        innerConstraint,
+        structVarName,
+      );
+    }
+
     // Special handling for &this - create a pointer to the scope
     if (varName === "this") {
       return {
@@ -692,29 +872,22 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
     const existingVar = scope[varName];
     if (existingVar) {
-      if (isMutableRequest && !existingVar.isMutable) {
-        throw new Error(
-          `Cannot take mutable reference to immutable variable ${varName}`,
-        );
-      }
+      assertMutableReferenceAllowed(
+        varName,
+        isMutableRequest,
+        existingVar.isMutable,
+      );
       const addr = getAddressOf(varName);
       const innerConstraint =
         existingVar.constraint || getTypeConstraint("I32");
-      return {
-        value: addr,
-        constraint: {
-          minValue: 0,
-          maxValue: Number.MAX_SAFE_INTEGER,
-          typeStr:
-            "*" +
-            (isMutableRequest ? "mut " : "") +
-            (innerConstraint?.typeStr || "numeric"),
-        },
-        referenceTarget: varName,
-        referenceMutable: isMutableRequest,
-      };
+      return buildPointerResult(
+        addr,
+        isMutableRequest,
+        innerConstraint,
+        varName,
+      );
     }
-    throw new Error(`Cannot take address of undefined variable ${varName}`);
+    throwUndefinedAddressTarget(varName);
   }
 
   // Check for pointer dereference: *y
@@ -729,23 +902,30 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           throw new Error("Cannot dereference tuple");
         }
         const addr = exprResult.value;
-        const varName = addresses.get(addr);
-        if (varName && scope[varName]) {
-          const targetVar = scope[varName];
-          if (!targetVar.isInitialized) {
-            throw new Error(
-              `Dereferenced pointer points to uninitialized variable ${varName}`,
-            );
-          }
-          const isMut = exprResult.constraint.typeStr.startsWith("*mut ");
-          const innerTypeStr = exprResult.constraint.typeStr.substring(
-            isMut ? 5 : 1,
-          );
-          const targetConstraint = getTypeConstraint(innerTypeStr);
+        const addressTarget = addresses.get(addr);
+        if (typeof addressTarget === "string" && scope[addressTarget]) {
+          const targetVar = scope[addressTarget];
+          ensureInitializedForDeref(targetVar, addressTarget);
+          const { targetConstraint } = getPointerInnerConstraint(exprResult);
           return { value: targetVar.value, constraint: targetConstraint };
         }
+        if (addressTarget && typeof addressTarget === "object") {
+          const targetVar = scope[addressTarget.varName];
+          if (!targetVar) {
+            throwUndefinedDerefTarget(addressTarget.varName);
+          }
+          const structValue = targetVar.value as Record<string, RuntimeValue>;
+          const fieldValue = structValue[addressTarget.fieldName];
+          if (fieldValue === undefined) {
+            throw new Error(
+              `Struct ${addressTarget.varName} field ${addressTarget.fieldName} is undefined`,
+            );
+          }
+          const { targetConstraint } = getPointerInnerConstraint(exprResult);
+          return { value: fieldValue, constraint: targetConstraint };
+        }
         throw new Error(
-          `Invalid pointer address ${addr} for ${varName || "unknown"}`,
+          `Invalid pointer address ${addr} for ${addressTarget || "unknown"}`,
         );
       }
       throw new Error(
@@ -1836,28 +2016,33 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
               throw new Error("Cannot dereference non-numeric pointer");
             }
             const addr = ptrResult.value;
-            const varName = addresses.get(addr);
-            if (varName && localScope[varName]) {
+            const addressTarget = addresses.get(addr);
+            if (
+              typeof addressTarget === "string" &&
+              localScope[addressTarget]
+            ) {
               const valResult = evaluate(valExpr, localScope);
-              if (typeof valResult.value !== "number") {
-                throw new Error("Cannot assign tuple through pointer");
-              }
-              const innerTypeStr = ptrResult.constraint.typeStr.substring(5); // skip '*mut '
-              const targetConstraint = getTypeConstraint(innerTypeStr);
-
-              if (targetConstraint) {
-                validateValueInConstraint(
-                  valResult.value as number,
-                  targetConstraint,
-                  statement,
+              validatePointerAssignmentValue(valResult, ptrResult, statement);
+              localScope[addressTarget].value = valResult.value;
+              localScope[addressTarget].isInitialized = true;
+              lastResult = valResult;
+              continue;
+            }
+            if (addressTarget && typeof addressTarget === "object") {
+              const valResult = evaluate(valExpr, localScope);
+              validatePointerAssignmentValue(valResult, ptrResult, statement);
+              const targetVar = localScope[addressTarget.varName];
+              if (!targetVar || typeof targetVar.value !== "object") {
+                throw new Error(
+                  `Cannot assign through pointer to undefined struct ${addressTarget.varName}`,
                 );
-                if (valResult.constraint) {
-                  validateTypeMatch(valResult.constraint, targetConstraint);
-                }
               }
-
-              localScope[varName].value = valResult.value;
-              localScope[varName].isInitialized = true;
+              const structValue = targetVar.value as Record<
+                string,
+                RuntimeValue
+              >;
+              structValue[addressTarget.fieldName] = valResult.value;
+              targetVar.isInitialized = true;
               lastResult = valResult;
               continue;
             }
@@ -2372,27 +2557,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         }
 
         // Handle regular struct field access
-        if (
-          Array.isArray(scopeVar.value) ||
-          typeof scopeVar.value !== "object"
-        ) {
-          throwNotStruct(basePart);
-        }
-        const structType = scopeVar.constraint?.typeStr;
-        if (!structType) {
-          throwNotStruct(basePart);
-        }
-        const structDef = resolveStructDefinition(structType);
-        if (!structDef) {
-          throw new Error(`Struct ${structType} is not defined`);
-        }
-        const fieldDef = structDef.fields.find(
-          (field) => field.name === fieldName,
+        const { structVar, structType, fieldDef } = getStructFieldDefinition(
+          scope,
+          basePart,
+          fieldName,
         );
-        if (!fieldDef) {
-          throw new Error(`Struct ${structType} has no field ${fieldName}`);
-        }
-        const structValue = scopeVar.value as Record<string, RuntimeValue>;
+        const structValue = structVar.value as Record<string, RuntimeValue>;
         const fieldValue = structValue[fieldName];
         if (fieldValue === undefined) {
           throw new Error(

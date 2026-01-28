@@ -571,6 +571,13 @@ describe("interpret", () => {
     const result = interpret("struct Wrapper {} fn Wrapper() => 100;");
     expect(result).toBe(0);
   });
+
+  test('interpret("address-of struct field") should return 100', () => {
+    const result = interpret(
+      "struct Wrapper { field : I32 } let value = Wrapper { 100 }; let ref : *I32 = &(value.field); *ref",
+    );
+    expect(result).toBe(100);
+  });
   test('interpret("let x : MyAlias = 100; type MyAlias = I32; x is MyAlias") should return 1', () => {
     const result = interpret(
       "let x : MyAlias = 100; type MyAlias = I32; x is MyAlias",
