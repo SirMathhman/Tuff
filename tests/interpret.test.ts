@@ -162,4 +162,10 @@ describe('interpret', () => {
       'Use of uninitialized variable: x'
     );
   });
+
+  it('rejects out-of-range values during delayed initialization', () => {
+    expect(() => interpret('let x : U8; x = 256; x')).toThrow(
+      'Invalid number: x = 256'
+    );
+  });
 });
