@@ -274,6 +274,24 @@ describe('interpret', () => {
     it('supports basic zero-argument functions', () => {
       expect(interpret('fn get() : I32 => 100; get()')).toBe(100);
     });
+
+    it('supports typed parameters', () => {
+      expect(interpret('fn add(a: I32, b: I32) : I32 => a + b; add(1, 2)')).toBe(
+        3
+      );
+    });
+
+    it('supports block bodies', () => {
+      expect(interpret('fn get() : I32 => { let x = 1; x + 1 }; get()')).toBe(2);
+    });
+
+    it('supports calls inside expressions', () => {
+      expect(interpret('fn get() : I32 => 100; get() + 1')).toBe(101);
+    });
+
+    it('supports first-class function values', () => {
+      expect(interpret('fn get() : I32 => 100; let f = get; f()')).toBe(100);
+    });
   });
 
   describe('pointers', () => {

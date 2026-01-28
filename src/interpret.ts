@@ -215,7 +215,9 @@ function parseFunctionParameters(paramsStr: string): FunctionParameter[] {
   if (!paramsStr.trim()) return [];
   const parts = splitTopLevelCommas(paramsStr);
   return parts.map((part) => {
-    const match = part.match(/^([A-Za-z]\w*)(?:\s*:\s*([A-Za-z]\w*(?:\[[^\]]+\])?))?$/);
+    const match = part.match(
+      /^([A-Za-z]\w*)(?:\s*:\s*([A-Za-z]\w*(?:\[[^\]]+\])?))?$/
+    );
     if (!match) {
       throw new Error('Invalid function parameter: ' + part);
     }
@@ -897,7 +899,12 @@ function invokeFunction(
 ): Result {
   if (args.length !== fnValue.params.length) {
     throw new Error(
-      'Argument count mismatch for function ' + fnValue.name + ': expected ' + fnValue.params.length + ', got ' + args.length
+      'Argument count mismatch for function ' +
+        fnValue.name +
+        ': expected ' +
+        fnValue.params.length +
+        ', got ' +
+        args.length
     );
   }
 
@@ -906,7 +913,11 @@ function invokeFunction(
     const param = fnValue.params[i];
     const res = interpretInternal(args[i], variables);
     if (param.type) {
-      validateTypeCompatibility(param.type, res, 'Function ' + fnValue.name + ' parameter ' + param.name);
+      validateTypeCompatibility(
+        param.type,
+        res,
+        'Function ' + fnValue.name + ' parameter ' + param.name
+      );
     }
     callEnv.set(param.name, {
       value: res.value,
@@ -918,7 +929,11 @@ function invokeFunction(
 
   const result = interpretInternal(fnValue.body, callEnv);
   if (fnValue.returnType) {
-    validateTypeCompatibility(fnValue.returnType, result, 'Function ' + fnValue.name + ' return');
+    validateTypeCompatibility(
+      fnValue.returnType,
+      result,
+      'Function ' + fnValue.name + ' return'
+    );
   }
   return result;
 }
@@ -1061,7 +1076,7 @@ function tokenizeExpression(
   operators: string[];
 } {
   const tokens = expr.match(
-    /([&*]*[A-Za-z]\w*(?:\[\d+\])?|-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
+    /([&*]*[A-Za-z]\w*(?:\[\d+\])?(?:\([^()]*\))?|-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
   );
 
   if (!tokens || tokens.length === 0) {
