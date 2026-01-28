@@ -329,14 +329,18 @@ function ensureValidStructDeclaration(source: string): void {
   }
 }
 
-function registerStructDeclaration(source: string): void {
+function registerStructDeclaration(
+  source: string,
+  localDefinedStructs?: Set<string>,
+): void {
   ensureValidStructDeclaration(source);
   const parsed = parseStructDeclaration(source);
-  if (parsed && definedStructs.has(parsed.name)) {
-    throw new Error(`Struct ${parsed.name} already defined`);
-  }
   if (parsed) {
-    definedStructs.add(parsed.name);
+    const structSet = localDefinedStructs || definedStructs;
+    if (structSet.has(parsed.name)) {
+      throw new Error(`Struct ${parsed.name} already defined`);
+    }
+    structSet.add(parsed.name);
   }
 }
 
@@ -1304,6 +1308,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     const dropHooks: { [typeName: string]: string } = {};
     const declaredVars: string[] = [];
     const droppedVars = new Set<string>();
+    const localDefinedStructs = new Set<string>();
 
     const runDropHookFor = (varName: string) => {
       if (!varName) return;
@@ -1392,7 +1397,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         }
       }
       if (statement.startsWith("struct ")) {
-        registerStructDeclaration(statement);
+        registerStructDeclaration(statement, localDefinedStructs);
         lastResult = { value: 0, constraint: null };
         continue;
       }
