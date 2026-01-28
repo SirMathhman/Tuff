@@ -7,8 +7,7 @@
     "skipLibCheck": true,
     "strict": true,
     "outDir": "dist",
-    "rootDir": "src",
-    "types": ["vitest/globals"]
+    "types": ["bun:test"]
   },
   "include": ["src", "test"]
 }
