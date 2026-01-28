@@ -909,81 +909,99 @@ pop<T>(mut array: T[]) => Option<T>
 
 ## FFI (Foreign Function Interface)
 
-Tuff can interop with C/LLVM targets via `extern` declarations.
+Tuff can interop with C/LLVM targets via `extern` declarations. **Note:** Unsafe code is always written in C/C++; Tuff itself has no `unsafe` keyword.
+
+### extern use vs extern fn
+
+- **`extern use`**: Imports function declarations from a native library (header)
+- **`extern fn`**: Declares a function binding to a C function (compiler can't read native headers)
 
 ### C Declarations
 
-Use `extern use` to import external functions:
+Use `extern use` to import and `extern fn` to declare:
 
 ```tuff
+// Import from native stdlib
 extern use { malloc, free, realloc } from stdlib
 
-extern fn malloc(size: USize) => *mut Void | 0
+// Declare the function signature for the compiler
+extern fn malloc(size: USize) => *mut [Void; 0; ?] | 0
 extern fn free(ptr: *mut Void) => Void
 ```
 
-The return type can be a union with `0` (null) to model C's nullable pointers:
+The `| 0` union represents **null**: when an FFI function returns a pointer or null, check if the result is non-zero:
 
 ```tuff
 let ptr = malloc(100)
 if (ptr == 0) {
   print("Memory allocation failed")
 } else {
-  // ptr is proven non-null inside this block
+  // ptr is proven non-null inside this block (type is refined)
 }
+```
+
+### Type Size (Native Code Only)
+
+When compiling to native code, `sizeof<T>()` is a built-in function (not `extern fn`):
+
+```tuff
+// Built-in function (only available in native compilation)
+let size = sizeof<MyStruct>()   // Returns SizeOf<MyStruct> (type-level value)
+let count: USize = 10
+let total = sizeof<T>() * count  // Type: SizeOf<T> * USize
+```
+
+The type of `sizeof<T>()` is `SizeOf<T>`, a type-level representation of the size. Arithmetic with it (`sizeof<T>() * count`) produces `SizeOf<T> * USize`, which can be cast to `USize` for `malloc`:
+
+```tuff
+let bytes: USize = (sizeof<MyStruct>() * 100) as USize
+let ptr = malloc(bytes)
 ```
 
 ### Custom Allocator Pattern
 
-You can define allocator abstractions that safely manage heap memory. Using type aliases with destructors:
+You can define allocator abstractions using type aliases with `then free` destructor:
 
 ```tuff
-type Alloc<T> = *mut T then free
+// Fully-typed allocator: pointer to uninitialized array with capacity L
+type AllocArray<T, L: USize> = *mut [T; 0; L] then free
 
-out fn new<T>() => Option<Alloc<T>> => {
-  let ptr = malloc(sizeof<T>()) as *mut T
+out fn allocArray<T, L: USize>(length: L) => Option<AllocArray<T, L>> => {
+  let bytes = (sizeof<T>() * length) as USize
+  let ptr = malloc(bytes) as *mut [T; 0; L]
   if (ptr == 0) {
-    None<Alloc<T>>
+    None<AllocArray<T, L>>
   } else {
-    Some<Alloc<T>> { value: ptr }
+    Some<AllocArray<T, L>> { value: ptr }
   }
 }
 ```
 
-The `then free` destructor ensures memory is freed when the allocated value is dropped.
+When `AllocArray<T, L>` is dropped, the `then free` destructor calls `free(ptr)`. If the array was initialized (elements are not `unset`), their destructors run **before** `free` is called.
 
-### Type Size and Alignment
+### Uninitialized (Unset) Memory
 
-Compile-time type information is available via special functions:
+You can create references to uninitialized memory using `*unset T`:
 
 ```tuff
-extern fn sizeof<T>() => USize
-extern fn alignof<T>() => USize
+let x: I32  // Declared but not initialized (on stack)
+let y: *unset I32 = &x  // Pointer to uninitialized I32
 
-// Use in allocation:
-let count: USize = 100
-let size = sizeof<MyStruct>() * count
-let ptr = malloc(size) as *mut MyStruct
+// Initialization
+*y = 42  // Now x is initialized
+let z: *I32 = y  // Type refinement: y is now provably initialized
 ```
 
-### Partial Initialization with Allocators
-
-When allocating arrays, you start with `Init = 0` (uninitialized):
+In an allocated array, `*mut [T; 0; L]` means the array starts with `Init = 0`, so all elements are `unset`:
 
 ```tuff
-type AllocArray<T, L: USize> = *mut [T; 0; L] then free
-
-out fn allocArray<T, L: USize>(length: L) => Option<AllocArray<T, L>> => {
-  let ptr = malloc(sizeof<T>() * length) as *mut [T; 0; L]
-  if (ptr == 0) None else Some { value: ptr }
-}
-
-// Initialize elements in order:
 let arr: AllocArray<I32, 10> = allocArray<I32, 10>(10)
-arr[0] = 1
-arr[1] = 2
-// ...
-arr[9] = 10  // Now arr has Init = 10, fully initialized
+// arr[0] through arr[9] are unset (uninitialized)
+
+arr[0] = 1    // Advances Init to 1
+arr[1] = 2    // Advances Init to 2
+// ... must initialize in order ...
+arr[9] = 10   // Now Init = 10, array is fully initialized
 ```
 
 ### Moving Stack to Heap
@@ -991,15 +1009,17 @@ arr[9] = 10  // Now arr has Init = 10, fully initialized
 You can move a stack-allocated value to the heap:
 
 ```tuff
-out fn moveToHeap<T>(stackPtr: *T) => Option<*T then free> => {
-  new<T>().map((heap: *T then free) => {
-    *heap = *stackPtr
-    heap
+out fn moveToHeap<T>(stackPtr: *T) => Option<*mut [T; 0; 1] then free> => {
+  allocArray<T, 1>().map((heap: *mut [T; 0; 1] then free) => {
+    *heap = *stackPtr   // Copy stack value to heap
+    heap                // Return heap-allocated value
   })
 }
 ```
 
-The `.map()` operator is discussed in the Error Handling section below.
+The `.map()` operator applies a transformation; if the `Option` is `Some`, it calls the closure with the contained value.
+
+The `.map()` operator is discussed more in the Error Handling section below.
 
 ## Module System (Planned)
 
