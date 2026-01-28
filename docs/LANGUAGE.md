@@ -35,8 +35,8 @@ Examples:
 
 ```tuff
 struct PersonInfo {  // PascalCase for struct
-  firstName: string  // camelCase for field
-  lastName: string
+  firstName: *Str    // camelCase for field (borrowed)
+  lastName: *Str
 }
 
 enum NetworkStatus {  // PascalCase for enum
@@ -79,8 +79,39 @@ Tuff includes the following primitive types:
 | `f32` | 32-bit float | IEEE 754 single | `3.14_f32` |
 | `f64` | 64-bit float | IEEE 754 double | `3.14` |
 | `bool` | 1-bit | `true` or `false` | `false` |
-| `string` | UTF-8 | Variable | `"hello"` |
+| `*Str` | UTF-8 slice | Variable | `"hello"` (borrowed string) |
+| `String` | UTF-8 owned | Variable | Allocated string |
 | `void` | N/A | None | Implicit return |
+
+### String Types: *Str vs String
+
+Tuff distinguishes between **borrowed** and **owned** strings:
+
+| Type | Use Case | Allocation | Lifetime |
+|------|----------|-----------|----------|
+| `*Str` | Function parameters, string slices | No (borrowed) | Caller owns memory |
+| `String` | Return values, owned strings | Yes (heap allocated) | Type owns memory |
+
+This is similar to Rust's `&str` vs `String`:
+
+```tuff
+let owned: String = "Hello, World!"  // Owned string allocated on heap
+
+fn print_name(name: *Str) {          // Parameter takes borrowed reference
+  print("Name: " + name)
+}
+
+let name: String = "Alice"
+print_name(name)                      // name is not consumed (borrowed)
+
+fn get_greeting() -> String {        // Returns owned string
+  "Hello"
+}
+
+let greeting = get_greeting()        // greeting owns the returned string
+```
+
+When passing strings to functions, use `*Str` for parameters. When storing or returning strings, use `String`.
 
 ### Variables
 
@@ -109,7 +140,7 @@ fn add(a: i32, b: i32) -> i32 {
   a + b
 }
 
-fn greet(name: string) {
+fn greet(name: *Str) {
   // Implicit return of void
   print("Hello, " + name)
 }
@@ -150,7 +181,7 @@ struct Point {
 }
 
 struct Person {
-  pub name: string  // Public field
+  pub name: String  // Public field (owned)
   age: i32          // Private field
 }
 
@@ -199,7 +230,7 @@ match result {
 
 ```tuff
 type UserId = u64
-type Handler = fn(string) -> void
+type Handler = fn(*Str) -> void
 type Maybe<T> = T | null
 ```
 
@@ -232,7 +263,7 @@ struct Circle {
 
 impl Drawable for Circle {
   fn draw() -> void {
-    print("Drawing circle with radius " + string(radius))
+    print("Drawing circle with radius " + string(radius))  // string() converts to String
   }
 }
 ```
@@ -332,12 +363,12 @@ Common functions will be available in the standard library:
 
 ```tuff
 // Printing
-print(value: string) -> void
-println(value: string) -> void
+print(value: *Str) -> void
+println(value: *Str) -> void
 
 // Type conversion
-string(value: any) -> string
-number(value: string) -> i32?
+string(value: any) -> String  // Converts any type to owned String
+number(value: *Str) -> i32?
 
 // Collections
 len(array: T[]) -> u64
@@ -367,7 +398,7 @@ Tuff enforces a no-panic policy through explicit error handling patterns:
 Used when an operation may fail with no additional error information:
 
 ```tuff
-fn parse_int(s: string) -> i32? {
+fn parseInt(s: *Str) -> i32? {
   // Returns null if parsing fails
 }
 ```
@@ -378,10 +409,10 @@ Used to return either a value or detailed error information:
 ```tuff
 enum Result<T> {
   Ok(T),
-  Err(string),
+  Err(*Str),
 }
 
-fn read_file(path: string) -> Result<string> {
+fn readFile(path: *Str) -> Result<String> {
   // Returns Ok(contents) or Err(error_message)
 }
 ```
@@ -390,9 +421,9 @@ fn read_file(path: string) -> Result<string> {
 Propagates errors up the call stack safely:
 
 ```tuff
-fn process_file(path: string) -> Result<i32> {
-  let contents = read_file(path)?  // Unwrap or propagate error
-  let count = count_lines(contents)?
+fn processFile(path: *Str) -> Result<i32> {
+  let contents = readFile(path)?  // Unwrap or propagate error
+  let count = countLines(contents)?
   Ok(count)
 }
 ```

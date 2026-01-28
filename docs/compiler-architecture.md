@@ -309,7 +309,8 @@ Tuff types map to TypeScript:
 |-----------|-----------|
 | `i32`, `i64`, `u32`, `u64`, `f32`, `f64` | `number` |
 | `bool` | `boolean` |
-| `string` | `string` |
+| `*Str` | `string` (borrowed) |
+| `String` | `string` (owned) |
 | `T[]` | `T[]` |
 | `T?` (nullable) | `T \| undefined` |
 | `T \| U` (union) | `T \| U` |
