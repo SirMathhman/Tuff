@@ -132,5 +132,8 @@ describe('interpret', () => {
     expect(() => interpret('let x = 0; x = 1')).toThrow(
       'Cannot assign to immutable variable: x'
     );
+    expect(() => interpret('let x = 0; x = 1; x')).toThrow(
+      'Cannot assign to immutable variable: x'
+    );
   });
 });
