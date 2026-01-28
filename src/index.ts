@@ -23,32 +23,43 @@ export function interpret(input: string): number {
     if (suffix && /^[u]/.test(suffix)) {
       throw new Error('invalid suffix');
     }
-    // If there's an unsigned suffix starting with uppercase U, enforce rules
-    if (suffix && /^[U]/.test(suffix)) {
-      // If the suffix is U<width> (e.g., U8), enforce width bounds
-      const m2 = suffix.match(/^U(\d+)$/);
-      if (m2) {
-        const width = Number(m2[1]);
-        if (!Number.isInteger(width) || width <= 0) {
-          throw new Error('invalid suffix');
-        }
-        if (!Number.isInteger(n)) {
-          throw new Error('unsigned literal must be integer');
-        }
-        const max = Math.pow(2, width) - 1;
+
+    // If there's a suffix, it must be one of the supported forms: U8/U16/U32/U64 or I8/I16/I32/I64
+    if (suffix) {
+      const m2 = suffix.match(/^([UI])(\d+)$/);
+      if (!m2) {
+        throw new Error('invalid suffix');
+      }
+      const kind = m2[1];
+      const width = Number(m2[2]);
+      const allowedWidths = new Set([8, 16, 32, 64]);
+      if (!allowedWidths.has(width)) {
+        throw new Error('invalid suffix');
+      }
+
+      if (!Number.isInteger(n)) {
+        throw new Error(
+          kind === 'U' ? 'unsigned literal must be integer' : 'signed literal must be integer'
+        );
+      }
+
+      if (kind === 'U') {
         if (n < 0) {
           throw new Error('unsigned literal cannot be negative');
         }
+        const max = Math.pow(2, width) - 1;
         if (n > max) {
           throw new Error('unsigned literal out of range');
         }
       } else {
-        // Fallback: if no width provided, still disallow negative numbers
-        if (n < 0) {
-          throw new Error('unsigned literal cannot be negative');
+        const min = -Math.pow(2, width - 1);
+        const max = Math.pow(2, width - 1) - 1;
+        if (n < min || n > max) {
+          throw new Error('signed literal out of range');
         }
       }
     }
+
     return Number.isFinite(n) ? n : 0;
   }
   return 0;

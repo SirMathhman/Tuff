@@ -31,3 +31,26 @@ test('interpret throws for unsigned overflow (U8)', () => {
 test('interpret accepts max unsigned U8', () => {
   expect(interpret('255U8')).toBe(255);
 });
+
+test('interpret accepts max unsigned U16', () => {
+  expect(interpret('65535U16')).toBe(65535);
+});
+
+test('interpret rejects unsigned overflow U16', () => {
+  expect(() => interpret('65536U16')).toThrow('unsigned literal out of range');
+});
+
+test('interpret accepts signed I8 bounds', () => {
+  expect(interpret('127I8')).toBe(127);
+  expect(interpret('-128I8')).toBe(-128);
+});
+
+test('interpret rejects signed I8 overflow', () => {
+  expect(() => interpret('128I8')).toThrow('signed literal out of range');
+  expect(() => interpret('-129I8')).toThrow('signed literal out of range');
+});
+
+test('interpret rejects unsupported suffixes and invalid widths', () => {
+  expect(() => interpret('100XYZ')).toThrow('invalid suffix');
+  expect(() => interpret('100U7')).toThrow('invalid suffix');
+});
