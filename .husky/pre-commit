@@ -1,2 +1,2 @@
 #!/usr/bin/env sh
-pnpm typecheck && pnpm lint-staged
+pnpm run cpd && pnpm typecheck && pnpm lint-staged

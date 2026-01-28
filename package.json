@@ -12,6 +12,7 @@
     "lint": "eslint 'src/**/*.{ts,tsx}' --ext .ts",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
     "test": "jest",
+    "cpd": "pmd cpd --minimum-tokens 35 -d src,tests -l typescript -f text",
     "prepare": "husky install"
   },
 
