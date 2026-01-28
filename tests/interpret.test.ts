@@ -516,4 +516,36 @@ describe('interpret', () => {
       );
     });
   });
+
+  describe('type aliases', () => {
+    it('supports type alias definitions and usage', () => {
+      expect(
+        interpret(
+          'type MyAlias = I32; let result : MyAlias = 100; result is I32 && result is MyAlias'
+        )
+      ).toBe(1);
+    });
+
+    it('type alias resolves to base type in type checking', () => {
+      expect(
+        interpret(
+          'type MyNum = I32; let x : MyNum = 42; x is I32'
+        )
+      ).toBe(1);
+    });
+
+    it('supports multiple type aliases', () => {
+      expect(
+        interpret(
+          'type Num1 = I32; type Num2 = I32; let x : Num1 = 10; let y : Num2 = 20; x is I32 && y is I32'
+        )
+      ).toBe(1);
+    });
+
+    it('rejects undefined type alias', () => {
+      expect(() => interpret('let x : UndefinedType = 100')).toThrow(
+        'Unknown type: UndefinedType'
+      );
+    });
+  });
 });

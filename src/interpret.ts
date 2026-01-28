@@ -58,6 +58,7 @@ type StructInstance = {
 type Result = {
   value:
     | number
+    | string
     | Result
     | Result[]
     | FunctionValue
@@ -137,7 +138,11 @@ function asNumber(
 }
 
 export function interpret(input: string): number {
-  return asNumber(interpretInternal(input).value);
+  const result = interpretInternal(input);
+  if (typeof result.value === 'string') {
+    throw new Error('Cannot convert type name to number: ' + result.value);
+  }
+  return asNumber(result.value);
 }
 
 type ArrayTypeInfo = {
@@ -662,6 +667,17 @@ function interpretInternal(
 
   for (const statement of statements) {
     const trimmedStatement = statement.trim();
+    const typeAliasMatch = trimmedStatement.match(
+      /^type\s+([A-Za-z]\w*)\s*=\s*(.+)$/
+    );
+    if (typeAliasMatch) {
+      result = handleTypeAlias(
+        variables,
+        typeAliasMatch[1],
+        typeAliasMatch[2]
+      );
+      continue;
+    }
     const structMatch = trimmedStatement.match(
       /^struct\s+([A-Za-z]\w*)\s*\{([\s\S]*)\}$/
     );
@@ -826,6 +842,9 @@ function validateTypeCompatibility(
 
   if (targetType && targetType in typeRanges) {
     const [min, max] = typeRanges[targetType];
+    if (typeof sourceResult.value === 'string') {
+      throw new Error('Invalid number: ' + statement);
+    }
     const val = asNumber(sourceResult.value);
     if (val < min || val > max) {
       throw new Error('Invalid number: ' + statement);
@@ -865,6 +884,26 @@ function handleFunctionDefinition(
   return variable;
 }
 
+function handleTypeAlias(
+  variables: Variables,
+  name: string,
+  underlyingType: string
+): Result {
+  if (variables.has(name)) {
+    throw new Error('Type alias already declared: ' + name);
+  }
+  // Resolve the underlying type in case the alias points to another alias
+  const resolvedType = resolveTypeAlias(underlyingType.trim(), variables);
+  const variable = {
+    value: resolvedType,
+    type: 'TypeAlias',
+    isMutable: false,
+    isInitialized: true,
+  };
+  variables.set(name, variable);
+  return variable;
+}
+
 function handleStructDefinition(
   statement: string,
   variables: Variables,
@@ -886,6 +925,27 @@ function handleStructDefinition(
   return variable;
 }
 
+function validateResolvedType(
+  type: string,
+  resolvedType: string,
+  variables: Variables
+): void {
+  // Check if the original type is valid (could be alias, array, pointer, struct, or base type)
+  if (
+    !isArrayType(resolvedType) &&
+    !String(resolvedType).startsWith('*') &&
+    !(resolvedType in typeRanges) &&
+    resolvedType !== 'Bool'
+  ) {
+    // It's not a base type or array or pointer. Check if it's a known struct or type alias
+    const isKnownAlias = type !== resolvedType; // It resolved to something different
+    const isKnownStruct = variables.has(resolvedType) && variables.get(resolvedType)?.type === 'StructDef';
+    if (!isKnownAlias && !isKnownStruct) {
+      throw new Error('Unknown type: ' + type);
+    }
+  }
+}
+
 function handleLetStatement(
   statement: string,
   variables: Variables,
@@ -898,8 +958,16 @@ function handleLetStatement(
     throw new Error('Variable already declared: ' + name);
   }
 
-  if (expr && isArrayType(type)) {
-    const info = parseArrayType(type);
+  // Resolve type alias if present
+  const resolvedType: string | undefined = type ? resolveTypeAlias(type, variables) : undefined;
+
+  // Validate type exists if provided
+  if (type && resolvedType) {
+    validateResolvedType(type, resolvedType, variables);
+  }
+
+  if (expr && isArrayType(resolvedType)) {
+    const info = parseArrayType(resolvedType);
     if (!info) {
       throw new Error('Invalid array type: ' + statement);
     }
@@ -914,8 +982,8 @@ function handleLetStatement(
     return variable;
   }
 
-  if (!expr && isArrayType(type)) {
-    const info = parseArrayType(type);
+  if (!expr && isArrayType(resolvedType)) {
+    const info = parseArrayType(resolvedType);
     if (!info) {
       throw new Error('Invalid array type: ' + statement);
     }
@@ -925,7 +993,7 @@ function handleLetStatement(
     }
     const variable = {
       value: elements,
-      type,
+      type: resolvedType,
       isMutable,
       isInitialized: true,
     };
@@ -934,19 +1002,20 @@ function handleLetStatement(
   }
 
   let value:
+    | string
     | number
     | Result
     | Result[]
     | FunctionValue
     | StructDef
     | StructInstance = 0;
-  let finalType = type;
+  let finalType = resolvedType;
   let isInitialized = false;
 
   if (expr) {
     const res = interpretInternal(expr, variables);
-    finalType = type || res.type;
-    validateTypeCompatibility(type, res, statement);
+    finalType = resolvedType || res.type;
+    validateTypeCompatibility(resolvedType, res, statement);
     value = res.value;
     isInitialized = true;
   }
@@ -1031,6 +1100,9 @@ function handleAssignmentStatement(
       throw new Error(
         'Use of uninitialized variable in compound assignment: ' + name
       );
+    }
+    if (typeof variable.value === 'string' || typeof res.value === 'string') {
+      throw new Error('Cannot apply operator to type name');
     }
     res = {
       value: applyOperator(
@@ -1144,12 +1216,49 @@ function applyOperator(
   }
 }
 
-function applyIsOperator(result: Result, typeName: string): boolean {
-  if (!result.type) {
-    // Untyped values are compatible with any numeric type
-    return typeName in typeRanges || typeName === 'Bool';
+function resolveTypeAlias(
+  typeName: string,
+  variables: Variables
+): string {
+  if (!variables.has(typeName)) {
+    return typeName;
   }
-  return result.type === typeName;
+  const entry = variables.get(typeName);
+  if (entry && entry.type === 'TypeAlias' && typeof entry.value === 'string') {
+    // Recursively resolve in case of chained aliases
+    return resolveTypeAlias(entry.value, variables);
+  }
+  return typeName;
+}
+
+function applyIsOperator(
+  result: Result,
+  typeName: string,
+  variables: Variables
+): boolean {
+  const resolvedTypeName = resolveTypeAlias(typeName, variables);
+  const resolvedResultType = result.type
+    ? resolveTypeAlias(result.type, variables)
+    : result.type;
+
+  if (!resolvedResultType) {
+    // Untyped values are compatible with any numeric type or Bool
+    return resolvedTypeName in typeRanges || resolvedTypeName === 'Bool';
+  }
+  return resolvedResultType === resolvedTypeName;
+}
+
+function isTypeNameOperand(name: string, variables: Variables): boolean {
+  // Check if it's a base type
+  if (name in typeRanges || name === 'Bool') {
+    return true;
+  }
+  // Check if it's a known type alias or struct name
+  if (variables.has(name)) {
+    const entry = variables.get(name)!;
+    return entry.type === 'TypeAlias' || entry.type === 'StructDef';
+  }
+  return false;
 }
 
 function resolveOperand(
@@ -1284,6 +1393,11 @@ function resolveOperand(
     trimmed !== 'true' &&
     trimmed !== 'false'
   ) {
+    // Check if it's a type name (base type or type alias or struct)
+    if (isTypeNameOperand(trimmed, variables)) {
+      // It's a type name being used as an operand
+      return { value: trimmed, type: 'TypeName', isInitialized: true };
+    }
     throw new Error('Use of uninitialized variable: ' + trimmed);
   }
   return parseTypedNumber(trimmed);
@@ -1323,9 +1437,10 @@ function tokenizeExpression(
   return { operands, operators };
 }
 
-function applyPrecedenceLevel(
-  level: string[],
+function applyOperatorToValues(
+  op: string,
   values: (
+    | string
     | number
     | Result
     | Result[]
@@ -1333,39 +1448,100 @@ function applyPrecedenceLevel(
     | StructDef
     | StructInstance
   )[],
-  currentOperators: string[]
+  operandTypes: (string | undefined)[] | undefined,
+  i: number,
+  variables: Variables
+): void {
+  if (op === 'is' && variables && operandTypes) {
+    // Special handling for 'is' operator
+    // Create a Result object from the left operand with its type
+    const leftResult: Result = {
+      value: values[i],
+      type: operandTypes[i],
+    };
+    const rightTypeName = (values[i + 1] as unknown) as string;
+    const isMatch = applyIsOperator(leftResult, rightTypeName, variables);
+    values[i] = isMatch ? 1 : 0;
+  } else {
+    if (typeof values[i] === 'string' || typeof values[i + 1] === 'string') {
+      throw new Error('Cannot apply operator to type name');
+    }
+    const leftVal = values[i] as Exclude<typeof values[number], string>;
+    const rightVal = values[i + 1] as Exclude<typeof values[number], string>;
+    values[i] = applyOperator(asNumber(leftVal), op, asNumber(rightVal));
+  }
+}
+
+function cleanupValueArrays(
+  values: (
+    | string
+    | number
+    | Result
+    | Result[]
+    | FunctionValue
+    | StructDef
+    | StructInstance
+  )[],
+  currentOperators: string[],
+  operandTypes: (string | undefined)[] | undefined,
+  i: number
+): void {
+  values.splice(i + 1, 1);
+  currentOperators.splice(i, 1);
+  if (operandTypes) {
+    operandTypes.splice(i + 1, 1);
+  }
+}
+
+function applyPrecedenceLevel(
+  level: string[],
+  values: (
+    | string
+    | number
+    | Result
+    | Result[]
+    | FunctionValue
+    | StructDef
+    | StructInstance
+  )[],
+  currentOperators: string[],
+  operandTypes?: (string | undefined)[],
+  variables?: Variables
 ): void {
   for (let i = 0; i < currentOperators.length; ) {
     const op = currentOperators[i];
     if (level.includes(op)) {
-      values[i] = applyOperator(
-        asNumber(values[i]),
-        op,
-        asNumber(values[i + 1])
-      );
-      values.splice(i + 1, 1);
-      currentOperators.splice(i, 1);
+      applyOperatorToValues(op, values, operandTypes, i, variables ?? new Map());
+      cleanupValueArrays(values, currentOperators, operandTypes, i);
     } else {
       i++;
     }
   }
 }
 
-function evaluateExpression(expr: string, variables: Variables): Result {
-  // Handle 'is' operator specially
-  const isMatch = expr.match(/^(.+?)\s+is\s+([A-Za-z]\w*)$/);
-  if (isMatch) {
-    const leftExpr = isMatch[1].trim();
-    const typeName = isMatch[2].trim();
-    const leftResult = interpretInternal(leftExpr, variables);
-    const isTypeMatch = applyIsOperator(leftResult, typeName);
-    return { value: isTypeMatch ? 1 : 0, type: 'Bool' };
+function getOperandTypeForValidation(operand: Result, operatorAfter: string | undefined, operatorBefore: string | undefined): string | undefined {
+  // If the next operator is 'is', keep None (to track that this is part of 'is')
+  if (operatorAfter === 'is') {
+    return 'PartOfIs';
   }
+  // If this operand is right after 'is', it's a type name and doesn't matter
+  if (operatorBefore === 'is') {
+    return 'PartOfIs';
+  }
+  return operand.type;
+}
 
+function evaluateExpression(expr: string, variables: Variables): Result {
   const { operands, operators } = tokenizeExpression(expr, variables);
 
-  // Collect all types from operands
-  const types = operands.map((op) => op.type);
+  // Collect all types from operands, excluding those used with 'is' operator
+  // because 'is' converts any value to Bool
+  const relevantTypes = operands.map((op, i) =>
+    getOperandTypeForValidation(op, operators[i], operators[i - 1])
+  );
+
+  // Filter out 'PartOfIs' markers and TypeName from the types list for validation
+  const types = relevantTypes.filter((t) => t !== 'PartOfIs' && t !== 'TypeName');
 
   // Arithmetic operators (+) are not supported for Bool type,
   // but logical operators (||, &&) are.
@@ -1382,6 +1558,7 @@ function evaluateExpression(expr: string, variables: Variables): Result {
     throw new Error('Arithmetic operators not supported for Bool: ' + expr);
   }
   if (hasLogical && types.some((t) => t !== 'Bool')) {
+    // 'undefined' types (untyped numbers) are not compatible with logical operators
     throw new Error('Logical operators only supported for Bool: ' + expr);
   }
   if (hasComparison && hasBool) {
@@ -1393,11 +1570,13 @@ function evaluateExpression(expr: string, variables: Variables): Result {
   }
 
   // Determine the widest type
+  const hasIs = operators.some((op) => op === 'is');
   const resultType =
-    hasLogical || hasComparison ? 'Bool' : getWidestType(types);
+    hasLogical || hasComparison || hasIs ? 'Bool' : getWidestType(types);
 
   // Evaluate with operator precedence (* and / before + and -, etc)
   const values: (
+    | string
     | number
     | Result
     | Result[]
@@ -1405,19 +1584,20 @@ function evaluateExpression(expr: string, variables: Variables): Result {
     | StructDef
     | StructInstance
   )[] = operands.map((op) => op.value);
+  const operandTypes = operands.map((op) => op.type);
   const currentOperators = [...operators];
 
   // Operator precedence passes
   const precedenceLevels = [
     ['*', '/'],
     ['+', '-'],
-    ['<', '<=', '>', '>=', '==', '!='],
+    ['<', '<=', '>', '>=', '==', '!=', 'is'],
     ['&&'],
     ['||'],
   ];
 
   for (const level of precedenceLevels) {
-    applyPrecedenceLevel(level, values, currentOperators);
+    applyPrecedenceLevel(level, values, currentOperators, operandTypes, variables);
   }
 
   const resultValue = values[0];
@@ -1425,6 +1605,9 @@ function evaluateExpression(expr: string, variables: Variables): Result {
   // Validate result is within valid range for the result type
   if (resultType && resultType in typeRanges) {
     const [min, max] = typeRanges[resultType];
+    if (typeof resultValue === 'string') {
+      throw new Error('Invalid expression: ' + expr);
+    }
     const val = asNumber(resultValue);
     if (val < min || val > max) {
       throw new Error('Invalid expression: ' + expr);
