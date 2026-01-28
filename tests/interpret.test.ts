@@ -598,4 +598,12 @@ describe("interpret", () => {
       ),
     ).toThrow(/moved/);
   });
+
+  test('interpret("moved value in tuple") should throw error', () => {
+    expect(() =>
+      interpret(
+        "fn drop(this : Temp) => {} type Temp = I32 then drop; let temp : Temp = 100; (temp, temp)",
+      ),
+    ).toThrow();
+  });
 });
