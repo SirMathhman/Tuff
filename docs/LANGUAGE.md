@@ -52,7 +52,7 @@ fn calculateDistance(p1: Point, p2: Point) -> F64 {  // camelCase for function
   // ...
 }
 
-type Result<T> = T | null  // PascalCase for type alias
+type Maybe<T> = Option<T>  // PascalCase for type alias
 ```
 
 ## Core Language Features
@@ -72,11 +72,13 @@ Tuff includes the following primitive types:
 
 | Type | Size | Range | Example |
 |------|------|-------|---------|
-| `I32` | 32-bit | -2^31 to 2^31-1 | `42_i32` |
-| `I64` | 64-bit | -2^63 to 2^63-1 | `1000_i64` |
-| `U32` | 32-bit unsigned | 0 to 2^32-1 | `42_u32` |
-| `U64` | 64-bit unsigned | 0 to 2^64-1 | `1000_u64` |
-| `F32` | 32-bit float | IEEE 754 single | `3.14_f32` |
+| `U8` | 8-bit unsigned | 0 to 255 | `255_U8` |
+| `I32` | 32-bit | -2^31 to 2^31-1 | `42_I32` |
+| `I64` | 64-bit | -2^63 to 2^63-1 | `1000_I64` |
+| `U32` | 32-bit unsigned | 0 to 2^32-1 | `42_U32` |
+| `U64` | 64-bit unsigned | 0 to 2^64-1 | `1000_U64` |
+| `USize` | pointer-sized unsigned | platform-dependent | `0_USize` |
+| `F32` | 32-bit float | IEEE 754 single | `3.14_F32` |
 | `F64` | 64-bit float | IEEE 754 double | `3.14` |
 | `Bool` | 1-bit | `true` or `false` | `false` |
 | `*Str` | UTF-8 slice | Variable | `"hello"` (borrowed string) |
@@ -163,9 +165,9 @@ fn maybeDivide(a: I32, b: I32) -> Option<I32> {
 
 // Caller must handle the optional return
 let result = maybeDivide(10, 2)
-match result {
-  Some(value) => print("Result: " + string(value)),
-  None => print("Division failed"),
+match (result) {
+  case Some(value) => print("Result: " + string(value)),
+  case None => print("Division failed"),
 }
 ```
 
@@ -202,7 +204,7 @@ enum Color {
 
 enum Result<T> {
   Ok(T),
-  Err(string),
+  Err(*Str),
 }
 ```
 
@@ -265,6 +267,16 @@ impl Drawable for Circle {
     print("Drawing circle with radius " + string(radius))  // string() converts to String
   }
 }
+
+### Contracts (Planned)
+
+`contract` is like a trait used to specify required behavior (method signatures). It is commonly used alongside refinement types to express safety preconditions:
+
+```tuff
+contract Sized {
+  fn size() -> USize
+}
+```
 ```
 
 ### Access Control
@@ -283,13 +295,30 @@ fn private_function() { }
 Explicit type conversion with `as`:
 
 ```tuff
-let x = 42_i32
-let y = x as F64  // 42.0_f64
+let x = 42_I32
+let y = x as F64  // 42.0_F64
 ```
 
 ### Refinement Types
 
-Refinement types encode constraints on values at the type level to prevent runtime panics. A refinement type has the syntax `Type <condition>`, where `condition` is a predicate that the value must satisfy.
+Refinement types encode constraints on values at the type level to prevent runtime panics.
+
+A refinement type is written by attaching one or more predicates to a base type, for example:
+
+- `USize < this.size()`
+- `I32 > 0 & I32 < 100`
+
+Use `&` as an intersection operator to combine multiple constraints.
+
+Predicates may reference:
+- The value being constrained (by name, e.g. `idx: USize < len(arr)`)
+- The receiver (`this`) inside contracts/traits (e.g. `USize < this.size()`)
+
+For readability, predicates on non-scalar types are often written with `where`:
+
+```tuff
+fn first<T>(arr: T[] where len(arr) > 0) -> T { ... }
+```
 
 #### Type Narrowing with Control Flow
 
@@ -367,7 +396,7 @@ Match expressions (with parenthesized value) can narrow types within each case:
 ```tuff
 match (score) {
   case 0..50 => {
-    // score: I32 > 0 & I32 <= 50
+    // score: I32 >= 0 & I32 <= 50
     print("Fail")
   }
   case 51..100 => {
@@ -375,7 +404,7 @@ match (score) {
     print("Pass")
   }
   case _ => {
-    // score: I32 > 100
+    // score: I32 < 0 | I32 > 100
     print("Excellent")
   }
 }
@@ -433,7 +462,9 @@ fn safeIndex<T, L: USize>(
 
 #### Arithmetic Overflow Prevention
 
-Refinement types prevent arithmetic overflow by constraining operands. For example, with `U8` (range 0-255), adding two values requires proof of no overflow:
+Refinement types prevent arithmetic overflow by constraining operands. For example, with `U8` (range 0-255), adding two values requires proof of no overflow.
+
+`Max<T>` is a compile-time constant that evaluates to the maximum value representable by integer type `T` (e.g. `Max<U8> == 255`).
 
 ```tuff
 // Invalid: x + y could overflow U8
@@ -444,7 +475,7 @@ let z = x + y  // ✗ Error: no proof that x + y <= 255
 // Valid: explicitly prove the sum won't overflow
 let x: U8 = read<U8>()
 let y: U8 = read<U8>()
-let z = if (x <= 255 - y) x + y else 0  // ✓ OK: constraint x + y <= 255 is satisfied
+let z = if (x <= Max<U8> - y) x + y else 0  // ✓ OK: constraint x + y <= Max<U8> is satisfied
 ```
 
 Similar refinement constraints apply to other operations:
@@ -476,7 +507,7 @@ a & b, a | b, a ^ b, a << b, a >> b
 
 ```tuff
 -value     // Negation
-!Bool      // Logical NOT
+!value     // Logical NOT (Bool)
 ```
 
 ### Array Access and Member Access
@@ -486,6 +517,8 @@ items[0]           // Array indexing
 point.x            // Struct field access
 container.first()  // Method call
 ```
+
+Array indexing requires a proof that the index is in bounds (via refinement types); otherwise it is a compile-time error.
 
 ### Conditionals
 
@@ -537,7 +570,7 @@ string(value: any) -> String  // Converts any type to owned String
 number(value: *Str) -> Option<I32>
 
 // Collections
-len(array: T[]) -> U64
+len(array: T[]) -> USize
 push<T>(mut array: T[], item: T) -> Void
 pop<T>(mut array: T[]) -> Option<T>
 ```
@@ -596,14 +629,14 @@ fn processFile(path: *Str) -> Result<I32> {
 
 // Alternative with explicit pattern matching:
 fn processFileAlt(path: *Str) -> Result<I32> {
-  match readFile(path) {
-    Ok(contents) => {
-      match countLines(contents) {
-        Ok(count) => Ok(count),
-        Err(e) => Err(e),
+  match (readFile(path)) {
+    case Ok(contents) => {
+      match (countLines(contents)) {
+        case Ok(count) => Ok(count),
+        case Err(e) => Err(e),
       }
     },
-    Err(e) => Err(e),
+    case Err(e) => Err(e),
   }
 }
 ```
@@ -625,7 +658,7 @@ This ensures errors are always handled explicitly rather than causing panics.
 
 ### vs. Rust
 - Less strict ownership (closer to TypeScript defaults)
-- Automatic null handling vs. explicit `Option<T>`
+- No implicit nulls; explicit `Option<T>`
 - Simpler trait system (no variance, fewer rules)
 - **Same guarantee**: Both provide crash-free execution by design
 
