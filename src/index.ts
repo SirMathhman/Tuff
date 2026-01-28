@@ -4,10 +4,18 @@ export function add(a: number, b: number): number {
 
 /**
  * Interpret the given input string and produce a numeric result.
- * This is currently a stub implementation that always returns 0.
- * TODO: implement the full interpreter logic.
+ * This function supports numeric literals (integers and decimals).
+ * - Empty input returns 0
+ * - Numeric input (e.g., "100", "-3.14") returns that numeric value
+ * - Otherwise returns 0 (stub behavior)
  */
 export function interpret(input: string): number {
-  // stub: return a predictable number for now
+  const s = input.trim();
+  if (s === '') return 0;
+  // accept optional leading +/-, integers or decimals (no exponent)
+  if (/^[+-]?\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
   return 0;
 }
