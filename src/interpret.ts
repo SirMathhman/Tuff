@@ -203,6 +203,26 @@ function findIfEndIndex(input: string, start: number): number {
   return end === -1 ? input.length : end + 1;
 }
 
+function checkBranchCompatibility(
+  t1: string | undefined,
+  t2: string | undefined,
+  errorMessage: string
+): void {
+  if ((t1 === 'Bool') !== (t2 === 'Bool')) {
+    throw new Error(errorMessage);
+  }
+
+  if (t1 !== 'Bool' && t1 !== 'Empty' && t2 !== 'Empty') {
+    const isU1 = t1 && t1.startsWith('U');
+    const isU2 = t2 && t2.startsWith('U');
+    const isI1 = t1 && t1.startsWith('I');
+    const isI2 = t2 && t2.startsWith('I');
+    if ((isU1 && isI2) || (isI1 && isU2)) {
+      throw new Error(errorMessage);
+    }
+  }
+}
+
 function resolveIfAt(
   resolved: string,
   start: number,
@@ -240,19 +260,7 @@ function resolveIfAt(
 
   const t1 = res1.type;
   const t2 = res2.type;
-  if ((t1 === 'Bool') !== (t2 === 'Bool')) {
-    throw new Error('Mismatched branch types in if-else');
-  }
-
-  if (t1 !== 'Bool' && t1 !== 'Empty' && t2 !== 'Empty') {
-    const isU1 = t1 && t1.startsWith('U');
-    const isU2 = t2 && t2.startsWith('U');
-    const isI1 = t1 && t1.startsWith('I');
-    const isI2 = t2 && t2.startsWith('I');
-    if ((isU1 && isI2) || (isI1 && isU2)) {
-      throw new Error('Mismatched branch types in if-else');
-    }
-  }
+  checkBranchCompatibility(t1, t2, 'Mismatched branch types in if-else');
 
   const res = cond.value !== 0 ? res1 : res2;
   const resultType = getWidestType([t1, t2]);
@@ -262,6 +270,105 @@ function resolveIfAt(
   return {
     next: resolved.substring(0, start) + valueStr + resolved.substring(elseEnd),
     end: elseEnd,
+  };
+}
+
+function resolveMatchAt(
+  resolved: string,
+  start: number,
+  variables: Variables
+): { next: string; end: number } {
+  let i = skipWhitespace(resolved, start + 5);
+  if (resolved[i] !== '(') throw new Error('Expected ( after match');
+  const condEnd = findBalanced(resolved, i, '(', ')');
+  if (condEnd === -1) throw new Error('Unbalanced ( in match condition');
+
+  const matchVal = interpretInternal(
+    resolved.substring(i + 1, condEnd),
+    variables
+  );
+
+  i = skipWhitespace(resolved, condEnd + 1);
+  if (resolved[i] !== '{') throw new Error('Expected { after match expression');
+  const bodyStart = i;
+  const bodyEnd = findBalanced(resolved, i, '{', '}');
+  if (bodyEnd === -1) throw new Error('Unbalanced { in match body');
+
+  const body = resolved.substring(bodyStart + 1, bodyEnd);
+
+  let bodyIdx = 0;
+  let finalResult: Result | undefined;
+  let matched = false;
+  const branchResults: Result[] = [];
+  const dryRunVarsBefore = cloneVariables(variables);
+
+  while (bodyIdx < body.length) {
+    bodyIdx = skipWhitespace(body, bodyIdx);
+    if (bodyIdx >= body.length) break;
+
+    const remaining = body.substring(bodyIdx);
+    if (!remaining.startsWith('case') && remaining.trim() === '') break;
+    if (!remaining.startsWith('case')) throw new Error('Expected case in match body');
+
+    bodyIdx += 4;
+    bodyIdx = skipWhitespace(body, bodyIdx);
+
+    const arrowIdx = body.indexOf('=>', bodyIdx);
+    if (arrowIdx === -1) throw new Error('Expected => after case pattern');
+
+    const patternStr = body.substring(bodyIdx, arrowIdx).trim();
+    bodyIdx = arrowIdx + 2;
+
+    let resultEnd = findNextBoundary(body, bodyIdx, (c, d, txt, idx) => {
+      if (d === 0) {
+        if (c === ';') return true;
+        if (txt.substring(idx).startsWith('case')) return true;
+      }
+      return false;
+    });
+
+    if (resultEnd === -1) {
+      resultEnd = body.length;
+    }
+
+    const resultExpr = body.substring(bodyIdx, resultEnd).trim();
+    bodyIdx = resultEnd;
+    if (body[bodyIdx] === ';') bodyIdx++;
+
+    let patternMatch = patternStr === '_';
+    if (!patternMatch && parseTypedNumber(patternStr).value === matchVal.value) {
+      patternMatch = true;
+    }
+
+    if (!matched && patternMatch) {
+      matched = true;
+      finalResult = interpretInternal(resultExpr, variables);
+      branchResults.push(finalResult);
+    } else {
+      const dryRes = interpretInternal(resultExpr, new Map(dryRunVarsBefore));
+      branchResults.push(dryRes);
+    }
+  }
+
+  if (!matched) {
+    throw new Error('No match found and no wildcard provided');
+  }
+
+  const t1 = branchResults[0].type;
+  for (const res of branchResults) {
+    checkBranchCompatibility(t1, res.type, 'Mismatched branch types in match');
+  }
+
+  const resultType = getWidestType(branchResults.map((r) => r.type));
+  const valueStr =
+    finalResult!.type === 'Empty'
+      ? ''
+      : finalResult!.value.toString() + (resultType || '');
+
+  return {
+    next:
+      resolved.substring(0, start) + valueStr + resolved.substring(bodyEnd + 1),
+    end: bodyEnd + 1,
   };
 }
 
@@ -293,12 +400,15 @@ function resolveStatement(statement: string, variables: Variables): string {
 
   while (true) {
     const ifMatch = resolved.match(/\bif\b/);
+    const matchMatch = resolved.match(/\bmatch\b/);
     const parenIndex = resolved.indexOf('(');
     const braceIndex = resolved.indexOf('{');
 
     const ifIndex = ifMatch ? ifMatch.index! : -1;
+    const matchIndex = matchMatch ? matchMatch.index! : -1;
     const items = [
       { type: 'if', index: ifIndex },
+      { type: 'match', index: matchIndex },
       { type: 'paren', index: parenIndex },
       { type: 'brace', index: braceIndex },
     ].filter((item) => item.index !== -1);
@@ -310,6 +420,10 @@ function resolveStatement(statement: string, variables: Variables): string {
 
     if (first.type === 'if') {
       resolved = resolveIfAt(resolved, first.index, variables).next;
+      continue;
+    }
+    if (first.type === 'match') {
+      resolved = resolveMatchAt(resolved, first.index, variables).next;
       continue;
     }
     resolved = resolveGroupAt(resolved, first.index, variables).next;

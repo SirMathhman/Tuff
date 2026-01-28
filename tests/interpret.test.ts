@@ -243,4 +243,58 @@ describe('interpret', () => {
       'Logical operators only supported for Bool: true && 1'
     );
   });
+
+  describe('match expressions', () => {
+    it('supports basic matching with literals', () => {
+      expect(interpret('match (100) { case 100 => 1; case 200 => 2; case _ => 3; }')).toBe(1);
+      expect(interpret('match (200) { case 100 => 1; case 200 => 2; case _ => 3; }')).toBe(2);
+    });
+
+    it('supports type suffixes in patterns', () => {
+      expect(interpret('match (100U8) { case 100U8 => 1; case _ => 2; }')).toBe(1);
+      expect(interpret('match (100U8) { case 100I32 => 1; case _ => 2; }')).toBe(1);
+    });
+
+    it('supports wildcard matching', () => {
+      expect(interpret('match (300) { case 100 => 1; case 200 => 2; case _ => 3; }')).toBe(3);
+    });
+
+    it('supports match expressions with side effects in branches', () => {
+      expect(interpret('let mut x = 0; match (1) { case 1 => x = 10; case _ => x = 20; }; x')).toBe(10);
+      expect(interpret('let mut x = 0; match (2) { case 1 => x = 10; case _ => x = 20; }; x')).toBe(20);
+    });
+
+    it('only executes the matched branch', () => {
+      expect(interpret('let mut x = 0; match (1) { case 1 => 1; case _ => x = 10; }; x')).toBe(0);
+    });
+
+    it('can be used in assignments', () => {
+      expect(interpret('let x = match (100) { case 100 => 1; case _ => 2; }; x')).toBe(1);
+    });
+
+    it('supports complex expressions in branches', () => {
+      expect(interpret('match (100) { case 100 => 1 + 2 * 3; case _ => 0; }')).toBe(7);
+    });
+
+    it('requires at least one branch to match', () => {
+      expect(() => interpret('match (100) { case 200 => 1; }')).toThrow('No match found and no wildcard provided');
+    });
+
+    it('enforces type compatibility between branches', () => {
+      expect(() => interpret('match (100) { case 100 => 1; case _ => true; }')).toThrow('Mismatched branch types in match');
+      expect(() => interpret('match (100) { case 100 => 1U8; case _ => 1I8; }')).toThrow('Mismatched branch types in match');
+    });
+
+    it('supports nested match expressions', () => {
+      const code =
+        'match (1) {\n' +
+        '  case 1 => match (2) {\n' +
+        '    case 2 => 10;\n' +
+        '    case _ => 20;\n' +
+        '  };\n' +
+        '  case _ => 30;\n' +
+        '}';
+      expect(interpret(code)).toBe(10);
+    });
+  });
 });
