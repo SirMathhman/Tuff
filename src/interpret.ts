@@ -16,6 +16,34 @@ const typeRanges: Record<string, [number, number]> = {
   I32: [-2147483648, 2147483647],
 };
 
+const typeOrdering: Record<string, number> = {
+  U8: 0,
+  U16: 1,
+  U32: 2,
+  I8: 10,
+  I16: 11,
+  I32: 12,
+};
+
+function getWidestType(types: (string | undefined)[]): string | undefined {
+  let maxOrder = -1;
+  let maxType: string | undefined;
+
+  for (const type of types) {
+    if (!type) continue;
+
+    const order = typeOrdering[type];
+    if (order === undefined) continue;
+
+    if (order > maxOrder) {
+      maxOrder = order;
+      maxType = type;
+    }
+  }
+
+  return maxType;
+}
+
 function parseTypedNumber(input: string): { value: number; type?: string } {
   // Match numeric part followed by optional type suffix
   const match = input.match(/^(-?\d+(?:\.\d+)?)\s*([A-Za-z]\w*)?$/);
@@ -114,14 +142,17 @@ function tokenizeExpression(expr: string): {
 function evaluateExpression(expr: string): number {
   const { operands, operators } = tokenizeExpression(expr);
 
-  // Determine the result type (type of first operand)
-  const resultType = operands[0].type;
+  // Collect all types from operands
+  const types = operands.map((op) => op.type);
 
-  // Validate all typed operands match the result type
-  for (const operand of operands) {
-    if (operand.type && operand.type !== resultType) {
-      throw new Error('Invalid expression: ' + expr);
-    }
+  // Determine the widest type
+  const resultType = getWidestType(types);
+
+  // Validate we're not mixing unsigned and signed types
+  const hasUnsigned = types.some((t) => t && t.startsWith('U'));
+  const hasSigned = types.some((t) => t && t.startsWith('I'));
+  if (hasUnsigned && hasSigned) {
+    throw new Error('Invalid expression: ' + expr);
   }
 
   // Evaluate left to right

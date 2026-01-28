@@ -47,4 +47,8 @@ describe('interpret', () => {
       'Invalid expression: 1U8 + 65535U16'
     );
   });
+
+  it('allows different unsigned type suffixes when result fits widest type', () => {
+    expect(interpret('1U8 + 255U16')).toBe(256);
+  });
 });
