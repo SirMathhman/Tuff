@@ -637,4 +637,11 @@ describe("interpret", () => {
     );
     expect(result).toBe(100);
   });
+
+  test('interpret("nested function returned and invoked") should return 100', () => {
+    const result = interpret(
+      "fn outer() : () => I32 => { fn inner() => 100; inner }; outer()()",
+    );
+    expect(result).toBe(100);
+  });
 });

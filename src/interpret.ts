@@ -297,7 +297,7 @@ function buildParsedFunction(
 function parseFunctionDefinition(source: string): ParsedFunction | null {
   // Try matching named function: fn name() : Type => body
   const fnMatch = source.match(
-    /^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*(.*)$/,
+    /^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),=>]+))?\s*=>\s*(.*)$/,
   );
   if (fnMatch) {
     const [, fnNameRaw, paramsRaw, returnTypeRaw, bodyRaw] = fnMatch;
@@ -307,7 +307,7 @@ function parseFunctionDefinition(source: string): ParsedFunction | null {
 
   // Try matching anonymous function: () : Type => body
   const anonMatch = source.match(
-    /^\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*(.*)$/,
+    /^\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),=>]+))?\s*=>\s*(.*)$/,
   );
   if (anonMatch) {
     const [, paramsRaw, returnTypeRaw, bodyRaw] = anonMatch;
@@ -1761,7 +1761,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         }
       } else if (statement.startsWith("fn ")) {
         const fnMatch = statement.match(
-          /^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),]+))?\s*=>\s*([\s\S]*)$/,
+          /^fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([\w\*\s\(\),=>]+))?\s*=>\s*([\s\S]*)$/,
         );
         if (!fnMatch) {
           throw new Error(`Invalid function declaration: ${statement}`);
@@ -2475,6 +2475,46 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     return invokeFunction(methodName, fnEntry, argResults, source);
   }
 
+  if (source.endsWith(")")) {
+    let depth = 0;
+    let openIndex = -1;
+    for (let i = source.length - 1; i >= 0; i--) {
+      const char = source[i];
+      if (char === ")") depth++;
+      if (char === "(") depth--;
+      if (depth === 0) {
+        openIndex = i;
+        break;
+      }
+    }
+
+    if (openIndex > 0) {
+      const baseExpr = source.substring(0, openIndex).trim();
+      const argsRaw = source.substring(openIndex + 1, source.length - 1);
+
+      if (baseExpr && !/^[a-zA-Z_]\w*$/.test(baseExpr)) {
+        const baseResult = evaluate(baseExpr, scope);
+        if (!baseResult.functionBody) {
+          throw new Error(`Cannot call non-function result of ${baseExpr}`);
+        }
+
+        const tempEntry: ScopeEntry = {
+          value: baseResult.value,
+          constraint: baseResult.constraint,
+          functionBody: baseResult.functionBody,
+          functionParams: baseResult.functionParams,
+          functionParamTypes: baseResult.functionParamTypes,
+          isMutable: false,
+          isInitialized: true,
+        };
+
+        const argExprs = parseArguments(argsRaw);
+        const argResults = argExprs.map((arg) => evaluate(arg, scope));
+        return invokeFunction("<callable>", tempEntry, argResults, source);
+      }
+    }
+  }
+
   const functionCallMatch = source.match(/^([a-zA-Z_]\w*)\s*\((.*)\)$/);
   if (functionCallMatch) {
     const fnNameRaw = functionCallMatch[1];
@@ -2526,6 +2566,9 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     return {
       value: scopeVar.value,
       constraint: scopeVar.constraint,
+      functionBody: scopeVar.functionBody,
+      functionParams: scopeVar.functionParams,
+      functionParamTypes: scopeVar.functionParamTypes,
       referenceTarget: scopeVar.referenceTarget,
       referenceMutable: scopeVar.referenceMutable,
     };
