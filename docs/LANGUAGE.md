@@ -146,6 +146,15 @@ fn greet(name: *Str) {
   // Implicit return of Void
   print("Hello, " + name)
 }
+
+// Expression-bodied functions
+fn get() => 100
+```
+
+Lambdas use the same arrow syntax:
+
+```tuff
+let f: () => I32 = () => 100
 ```
 
 Functions can have default parameters and optional returns. Optional returns (using `Option<T>`) are the primary error handling mechanism:
@@ -168,6 +177,30 @@ let result = maybeDivide(10, 2)
 match (result) {
   case Some(value) => print("Result: " + string(value)),
   case None => print("Division failed"),
+}
+```
+
+### Option Types
+
+`Option<T>` represents either a value (`Some<T>`) or the absence of a value (`None<T>`).
+
+One way to model it is:
+
+```tuff
+struct Some<T> { value: T }
+object None<T> { }
+
+type Option<T> = Some<T> | None<T>
+```
+
+You can narrow and destructure using `is`:
+
+```tuff
+let value: Option<I32> = getOption<I32>()
+if (value is Some<I32> { value: destructuredValue }) {
+  print("Got: " + string(destructuredValue))
+} else {
+  print("No value")
 }
 ```
 
@@ -268,6 +301,8 @@ impl Drawable for Circle {
   }
 }
 
+```
+
 ### Contracts (Planned)
 
 `contract` is like a trait used to specify required behavior (method signatures). It is commonly used alongside refinement types to express safety preconditions:
@@ -275,6 +310,45 @@ impl Drawable for Circle {
 ```tuff
 contract Sized {
   fn size() -> USize
+}
+```
+
+### Objects (Singletons, Planned)
+
+Objects are singletons. They are guaranteed to initialize exactly once and can hold state.
+
+The `out` keyword is equivalent to exported/public visibility.
+
+```tuff
+out object MySingleton {
+  let mut counter = 0
+
+  out fn add() => counter += 1
+}
+```
+
+If an object is generic, a distinct singleton instance exists for each type-parameter instantiation:
+
+```tuff
+object None<T> { }
+
+assert &None<I32> != &None<*Str>
+assert &None<I32> == &None<I32>
+```
+
+Objects can also declare injected dependencies using `in` (a DI-style pattern):
+
+```tuff
+out object MyController {
+  in let myService: UserService
+
+  fn getUsersSync() -> *[User] => {
+      // ... map Result/Option to HTTP codes
+      case _ => {
+        // ...
+      }
+    }
+  }
 }
 ```
 ```
@@ -297,6 +371,21 @@ Explicit type conversion with `as`:
 ```tuff
 let x = 42_I32
 let y = x as F64  // 42.0_F64
+```
+
+### Destructors (Planned)
+
+Types may define a destructor by implementing `drop`. Destructors run when a value goes out of scope (or is otherwise dropped).
+
+```tuff
+fn drop(temp: MyType) => {
+  // ... cleanup
+}
+
+type MyType = I32
+
+let value: MyType = 100
+// value is dropped at end of scope
 ```
 
 ### Refinement Types
@@ -487,6 +576,15 @@ By encoding these constraints, **Tuff guarantees that no arithmetic operation wi
 
 ## Expressions
 
+Blocks can be expressions. The value of a block is the value of its last expression:
+
+```tuff
+let x = {
+  let y = 100
+  y
+}
+```
+
 ### Binary Operators
 
 ```tuff
@@ -519,6 +617,54 @@ container.first()  // Method call
 ```
 
 Array indexing requires a proof that the index is in bounds (via refinement types); otherwise it is a compile-time error.
+
+### Closures and Function Pointers (Planned)
+
+Closure types use arrow syntax:
+
+- `() => R` is a closure type.
+- `*() => R` is a function-pointer type (no captured environment).
+
+Closures can have different capture modes (inspired by Rust):
+
+- `(*) => R` is like Rust `Fn` (captures by shared reference)
+- `(*mut) => R` is like Rust `FnMut` (captures by mutable reference)
+- `() => R` is like Rust `FnOnce` (captures by move/consume)
+
+Captures are declared in square brackets:
+
+```tuff
+let socket = createSocket()
+
+// Capture by move
+fn byMove[socket]() => { }
+
+// Capture by shared reference
+fn byRef[&socket]() => { }
+
+// Capture by mutable reference
+fn byMut[&mut socket]() => { }
+```
+
+#### Methods, `this`, and Method Pointers (Planned)
+
+Methods may implicitly capture `this`.
+
+```tuff
+fn Point(x: I32, y: I32) => {
+  fn manhattan() => x + y  // Implicit &this
+  this
+}
+
+let point = Point(3, 4)
+
+let manhattanPtr: *(*Point) => I32 = Point::manhattan
+let manhattanClosure: (*) => I32 = point.manhattan
+
+// Syntactic sugar
+manhattanPtr(&point)
+point.manhattan()
+```
 
 ### Conditionals
 
@@ -587,6 +733,22 @@ use math as m
 fn main() {
   let v = m::sqrt(16.0)
 }
+```
+
+### Modules vs Objects
+
+Modules group declarations, but they cannot hold runtime state or perform stateful operations. If you need state or side effects, use an `object` instead.
+
+```tuff
+module MyModule {
+  // Compile-time constant
+  out let myConstant = 1
+
+  // Pure function (no captured environment)
+  out fn get() => 100
+}
+
+let pointer: *() => I32 = MyModule::get
 ```
 
 ## Error Handling
