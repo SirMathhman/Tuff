@@ -152,4 +152,8 @@ describe('interpret', () => {
       'Cannot assign to immutable variable: x'
     );
   });
+
+  it('supports multiple assignments to a mutable variable with delayed initialization', () => {
+    expect(interpret('let mut x : U8; x = 100; x = 10; x')).toBe(10);
+  });
 });
