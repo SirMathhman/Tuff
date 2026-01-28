@@ -8,6 +8,7 @@
 - Blocks `{ ... }`, `if` / `else`, `while`, `for (let mut i in a..b)`
 - Tuples `(a, b, ...)` and indexing `tuple[0]`
 - Struct declarations (empty): `struct Empty {}`
+- Struct fields and literals: `struct Point { x : I32; y : I32; } let p : Point = Point { 3, 4 }; p.x`
 - References (`&`, `&mut`, `*`) with borrow rules
 - Functions:
   - Declaration: `fn get() : I32 => 100;`

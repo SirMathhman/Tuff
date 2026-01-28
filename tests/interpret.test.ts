@@ -534,6 +534,12 @@ describe("interpret", () => {
   test('interpret("struct Copied { x : I32; x : I32; }") should throw error', () => {
     expect(() => interpret("struct Copied { x : I32; x : I32; }")).toThrow();
   });
+  test('interpret("struct Point { x : I32; y : I32; } let point : Point = Point { 3, 4 }; point.x") should return 3', () => {
+    const result = interpret(
+      "struct Point { x : I32; y : I32; } let point : Point = Point { 3, 4 }; point.x",
+    );
+    expect(result).toBe(3);
+  });
   test('interpret("let x : MyAlias = 100; type MyAlias = I32; x is MyAlias") should return 1', () => {
     const result = interpret(
       "let x : MyAlias = 100; type MyAlias = I32; x is MyAlias",

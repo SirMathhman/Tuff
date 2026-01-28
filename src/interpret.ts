@@ -6,8 +6,10 @@ interface TypeConstraint {
   tupleTypes?: TypeConstraint[];
 }
 
+type RuntimeValue = number | (number | number[])[] | Record<string, unknown>;
+
 interface ScopeEntry {
-  value: number | (number | number[])[];
+  value: RuntimeValue;
   constraint: TypeConstraint | null;
   isMutable?: boolean;
   isInitialized?: boolean;
@@ -31,6 +33,16 @@ interface ParsedFunction {
   paramTypes: (string | undefined)[];
   returnConstraint: TypeConstraint | null;
   body: string;
+}
+
+interface StructField {
+  name: string;
+  type: string;
+}
+
+interface StructDefinition {
+  name: string;
+  fields: StructField[];
 }
 
 function getTypeConstraint(source: string): TypeConstraint | null {
@@ -137,6 +149,14 @@ function ensureVariableNotDefined(
   if (scope[varName] !== undefined) {
     throw new Error(`Variable ${varName} is already defined.`);
   }
+}
+
+function throwUndefinedVariable(varName: string): never {
+  throw new Error(`Variable ${varName} is not defined in the current scope.`);
+}
+
+function throwNotStruct(varName: string): never {
+  throw new Error(`Variable ${varName} is not a struct`);
 }
 
 function ensureBoolOperand(
@@ -317,9 +337,7 @@ function parseKeywordParen(
   };
 }
 
-function parseStructDeclaration(
-  source: string,
-): { name: string; fields?: { name: string; type: string }[] } | null {
+function parseStructDeclaration(source: string): StructDefinition | null {
   // Match: struct Name { ... }
   const structMatch = source.match(
     /^struct\s+([a-zA-Z_]\w*)\s*\{(.*)\}\s*;?$/s,
@@ -341,7 +359,7 @@ function parseStructDeclaration(
   }
 
   // Parse fields: fieldName : Type; fieldName : Type;
-  const fields: { name: string; type: string }[] = [];
+  const fields: StructField[] = [];
   const fieldStrings = body.split(";").filter((s) => s.trim());
 
   for (const fieldStr of fieldStrings) {
@@ -373,18 +391,45 @@ function ensureValidStructDeclaration(source: string): void {
   }
 }
 
-function registerStructDeclaration(
-  source: string,
-  localDefinedStructs?: Set<string>,
-): void {
+function getCurrentStructScope(): Map<string, StructDefinition> {
+  if (structScopes.length === 0) {
+    structScopes.push(new Map());
+  }
+  return structScopes[structScopes.length - 1] as Map<string, StructDefinition>;
+}
+
+function resolveStructDefinition(name: string): StructDefinition | null {
+  for (let i = structScopes.length - 1; i >= 0; i--) {
+    const scope = structScopes[i];
+    const def = scope?.get(name);
+    if (def) return def;
+  }
+  return null;
+}
+
+function getStructConstraint(name: string): TypeConstraint {
+  return { typeStr: name };
+}
+
+function resolveTypeConstraint(
+  typeStr: string | undefined,
+): TypeConstraint | null {
+  if (!typeStr) return null;
+  return (
+    getTypeConstraint(typeStr) ||
+    (resolveStructDefinition(typeStr) ? getStructConstraint(typeStr) : null)
+  );
+}
+
+function registerStructDeclaration(source: string): void {
   ensureValidStructDeclaration(source);
   const parsed = parseStructDeclaration(source);
   if (parsed) {
-    const structSet = localDefinedStructs || definedStructs;
-    if (structSet.has(parsed.name)) {
+    const structScope = getCurrentStructScope();
+    if (structScope.has(parsed.name)) {
       throw new Error(`Struct ${parsed.name} already defined`);
     }
-    structSet.add(parsed.name);
+    structScope.set(parsed.name, parsed);
   }
 }
 
@@ -415,12 +460,12 @@ function evaluateUnaryOperand(
 }
 
 function getTupleElement(
-  tupleValue: number | (number | number[])[],
+  tupleValue: RuntimeValue,
   index: number,
   constraint: TypeConstraint | null,
   varName: string,
 ): {
-  value: number | (number | number[])[];
+  value: RuntimeValue;
   elementType: TypeConstraint | null;
 } {
   if (!Array.isArray(tupleValue)) {
@@ -525,7 +570,7 @@ const borrowState: Map<
   string,
   { immutableCount: number; mutableCount: number }
 > = new Map();
-const definedStructs: Set<string> = new Set();
+const structScopes: Map<string, StructDefinition>[] = [];
 
 function getBorrowInfo(varName: string): {
   immutableCount: number;
@@ -578,17 +623,18 @@ function getAddressOf(varName: string): number {
 export function interpret(source: string, scope: Scope = {}): number {
   addresses.clear();
   borrowState.clear();
-  definedStructs.clear();
+  structScopes.length = 0;
+  structScopes.push(new Map());
   nextAddress = 0x1000;
   const result = evaluate(source, scope);
-  if (Array.isArray(result.value)) {
-    throw new Error("Cannot return tuple value from top-level");
+  if (Array.isArray(result.value) || typeof result.value !== "number") {
+    throw new Error("Cannot return non-numeric value from top-level");
   }
   return result.value;
 }
 
 interface EvaluationResult {
-  value: number | (number | number[])[];
+  value: RuntimeValue;
   constraint: TypeConstraint | null;
   functionBody?: string;
   functionParams?: string[];
@@ -600,8 +646,11 @@ interface EvaluationResult {
 function evaluate(source: string, scope: Scope): EvaluationResult {
   source = source.trim();
   if (source.startsWith("struct ")) {
-    registerStructDeclaration(source);
-    return { value: 0, constraint: null };
+    const parsedStruct = parseStructDeclaration(source);
+    if (parsedStruct) {
+      registerStructDeclaration(source);
+      return { value: 0, constraint: null };
+    }
   }
   if (source === "true") {
     return {
@@ -1096,6 +1145,49 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     }
   }
 
+  // Check for struct literal: Name { a, b }
+  const structLiteralMatch = source.match(/^([a-zA-Z_]\w*)\s*\{([\s\S]*)\}$/);
+  if (structLiteralMatch && structLiteralMatch[1] !== undefined) {
+    const structName = structLiteralMatch[1];
+    const structBody = structLiteralMatch[2]?.trim() ?? "";
+    const structDef = resolveStructDefinition(structName);
+    if (!structDef) {
+      throw new Error(`Unknown struct type ${structName}`);
+    }
+
+    const valueParts =
+      structBody.length > 0 ? splitCommaSeparated(structBody) : [];
+
+    if (valueParts.length !== structDef.fields.length) {
+      throw new Error(
+        `Struct ${structName} expects ${structDef.fields.length} values but got ${valueParts.length}`,
+      );
+    }
+
+    const structValue: Record<string, RuntimeValue> = {};
+    for (let i = 0; i < structDef.fields.length; i++) {
+      const field = structDef.fields[i];
+      const expr = valueParts[i];
+      if (!field || expr === undefined) continue;
+      const exprResult = evaluate(expr, scope);
+      const fieldConstraint = resolveTypeConstraint(field.type);
+
+      if (fieldConstraint && typeof exprResult.value === "number") {
+        validateValueInConstraint(exprResult.value, fieldConstraint, expr);
+      }
+      if (fieldConstraint && exprResult.constraint) {
+        validateTypeMatch(exprResult.constraint, fieldConstraint);
+      }
+
+      structValue[field.name] = exprResult.value;
+    }
+
+    return {
+      value: structValue,
+      constraint: getStructConstraint(structName),
+    };
+  }
+
   const tryEvaluateAssignment = (params: {
     text: string;
     targetScope: Scope;
@@ -1293,6 +1385,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         const inner = source.substring(1, source.length - 1).trim();
         if (startChar === "{" && inner.length === 0)
           return { value: 0, constraint: null };
+        if (startChar === "{") {
+          structScopes.push(new Map());
+          const result = evaluate(inner, scope);
+          structScopes.pop();
+          return result;
+        }
         return evaluate(inner, scope);
       }
     }
@@ -1352,7 +1450,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     const dropHooks: { [typeName: string]: string } = {};
     const declaredVars: string[] = [];
     const droppedVars = new Set<string>();
-    const localDefinedStructs = new Set<string>();
+    structScopes.push(new Map());
 
     const runDropHookFor = (varName: string) => {
       if (!varName) return;
@@ -1441,7 +1539,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         }
       }
       if (statement.startsWith("struct ")) {
-        registerStructDeclaration(statement, localDefinedStructs);
+        registerStructDeclaration(statement);
         lastResult = { value: 0, constraint: null };
         continue;
       }
@@ -1460,9 +1558,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           // Resolve type aliases
           const resolvedTypeStr =
             typeStr && typeAliases[typeStr] ? typeAliases[typeStr] : typeStr;
-          const explicitConstraint = resolvedTypeStr
-            ? getTypeConstraint(resolvedTypeStr)
-            : null;
+          const explicitConstraint = resolveTypeConstraint(resolvedTypeStr);
           // Store the original/alias name for type checking
           const originalTypeStr = typeStr;
 
@@ -1713,6 +1809,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       }
     }
 
+    structScopes.pop();
     return lastResult;
   }
 
@@ -2052,9 +2149,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       if (!argResult) {
         throw new Error(`Missing argument for parameter ${paramName}`);
       }
-      const paramConstraint = paramTypeStr
-        ? getTypeConstraint(paramTypeStr)
-        : null;
+      const paramConstraint = resolveTypeConstraint(paramTypeStr);
 
       if (paramConstraint) {
         if (typeof argResult.value === "number") {
@@ -2098,6 +2193,40 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     }
     return fnResult;
   };
+
+  const fieldAccessMatch = source.match(/^([a-zA-Z_]\w*)\.([a-zA-Z_]\w*)$/);
+  if (fieldAccessMatch && fieldAccessMatch[1] && fieldAccessMatch[2]) {
+    const varName = fieldAccessMatch[1];
+    const fieldName = fieldAccessMatch[2];
+    const scopeVar = scope[varName];
+    if (!scopeVar) {
+      throwUndefinedVariable(varName);
+    }
+    if (Array.isArray(scopeVar.value) || typeof scopeVar.value !== "object") {
+      throwNotStruct(varName);
+    }
+    const structType = scopeVar.constraint?.typeStr;
+    if (!structType) {
+      throwNotStruct(varName);
+    }
+    const structDef = resolveStructDefinition(structType);
+    if (!structDef) {
+      throw new Error(`Struct ${structType} is not defined`);
+    }
+    const fieldDef = structDef.fields.find((field) => field.name === fieldName);
+    if (!fieldDef) {
+      throw new Error(`Struct ${structType} has no field ${fieldName}`);
+    }
+    const structValue = scopeVar.value as Record<string, RuntimeValue>;
+    const fieldValue = structValue[fieldName];
+    if (fieldValue === undefined) {
+      throw new Error(`Struct ${structType} field ${fieldName} is undefined`);
+    }
+    return {
+      value: fieldValue,
+      constraint: resolveTypeConstraint(fieldDef.type),
+    };
+  }
 
   const methodCallMatch = source.match(/^(.+)\.([a-zA-Z_]\w*)\s*\((.*)\)$/);
   if (methodCallMatch) {
@@ -2186,7 +2315,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
   // If it looks like an identifier but isn't in scope, throw error
   if (/^[a-zA-Z_]\w*$/.test(source)) {
-    throw new Error(`Variable ${source} is not defined in the current scope.`);
+    throwUndefinedVariable(source);
   }
 
   // Single value parsing
