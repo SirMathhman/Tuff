@@ -1,6 +1,6 @@
 // Test utilities and helpers for Tuff compiler tests
 
-import { describe, it, expect } from "bun:test"
+import { expect } from "bun:test"
 
 /**
  * Test fixture for compiler testing
@@ -23,9 +23,9 @@ export function defineFixture(fixture: TestFixture): TestFixture {
  * Assert that code produces an error during a specific phase
  */
 export function expectCompileError(
-  code: string,
-  phase: "lexing" | "parsing" | "analysis",
-  errorPattern: RegExp | string,
+  _code: string,
+  _phase: "lexing" | "parsing" | "analysis",
+  _errorPattern: RegExp | string,
 ): void {
   // Placeholder: will be implemented with actual compiler
   expect(true).toBe(true)
@@ -34,7 +34,7 @@ export function expectCompileError(
 /**
  * Assert that code compiles successfully
  */
-export function expectCompileSuccess(code: string): void {
+export function expectCompileSuccess(_code: string): void {
   // Placeholder: will be implemented with actual compiler
   expect(true).toBe(true)
 }

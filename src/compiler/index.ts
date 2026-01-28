@@ -1,10 +1,11 @@
 // Stage 0: TypeScript
 // Compiler pipeline orchestration
 
-import type { LexerOutput } from "../lexer/types"
+import type { LexerOutput, Token } from "../lexer/types"
 import type { ParserOutput } from "../parser"
 import type { AnalyzerOutput } from "../analyzer"
 import type { CodegenOutput, CodegenOptions } from "../codegen"
+import type { Program } from "../ast"
 
 /**
  * Complete compiler pipeline output
@@ -35,9 +36,9 @@ export interface Compiler {
    * Individual phase execution for testing/debugging
    */
   lex(source: string): LexerOutput
-  parse(tokens: ReturnType<any>[]): ParserOutput
-  analyze(ast: any): AnalyzerOutput
-  generate(ast: any, analysis: AnalyzerOutput, options?: CodegenOptions): CodegenOutput
+  parse(tokens: Token[]): ParserOutput
+  analyze(ast: Program): AnalyzerOutput
+  generate(ast: Program, analysis: AnalyzerOutput, options?: CodegenOptions): CodegenOutput
 }
 
 /**

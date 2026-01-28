@@ -13,12 +13,38 @@ export type { Parser, ParserOutput, ParseError } from "./parser"
 export * from "./ast"
 
 // Analyzer exports
-export type { Symbol, TypeInfo, AnalysisError, AnalyzerOutput } from "./analyzer"
-export { ErrorCode, SymbolTable } from "./analyzer"
+export type {
+  Symbol,
+  TypeInfo,
+  AnalysisError,
+  AnalyzerOutput,
+  SymbolTableState,
+} from "./analyzer"
+export {
+  ErrorCode,
+  createSymbolTable,
+  pushScope,
+  popScope,
+  defineSymbol,
+  lookupSymbol,
+  lookupLocalSymbol,
+} from "./analyzer"
 
 // Codegen exports
-export type { CodeGenerator, CodegenOutput, CodegenOptions } from "./codegen"
-export { EmissionContext } from "./codegen"
+export type {
+  CodeGenerator,
+  CodegenOutput,
+  CodegenOptions,
+  EmissionContextState,
+} from "./codegen"
+export {
+  createEmissionContext,
+  write,
+  writeLine,
+  increaseIndent,
+  decreaseIndent,
+  getOutput,
+} from "./codegen"
 
 // Compiler exports
 export type { Compiler, CompileOutput, CompilerOptions } from "./compiler"

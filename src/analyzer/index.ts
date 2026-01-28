@@ -39,36 +39,48 @@ export type TypeKind =
 /**
  * Symbol table with scope hierarchy
  */
-export class SymbolTable {
-  private scopes: Map<string, Symbol>[] = [new Map()]
+export interface SymbolTableState {
+  readonly scopes: ReadonlyArray<ReadonlyMap<string, Symbol>>
+}
 
-  pushScope(): void {
-    this.scopes.push(new Map())
-  }
+export function createSymbolTable(): SymbolTableState {
+  return { scopes: [new Map()] }
+}
 
-  popScope(): void {
-    if (this.scopes.length > 1) {
-      this.scopes.pop()
-    }
-  }
+export function pushScope(table: SymbolTableState): SymbolTableState {
+  return { scopes: [...table.scopes, new Map()] }
+}
 
-  define(symbol: Symbol): void {
-    const currentScope = this.scopes[this.scopes.length - 1]
-    currentScope.set(symbol.name, symbol)
+export function popScope(table: SymbolTableState): SymbolTableState {
+  if (table.scopes.length > 1) {
+    return { scopes: table.scopes.slice(0, -1) }
   }
+  return table
+}
 
-  lookup(name: string): Symbol | undefined {
-    for (let i = this.scopes.length - 1; i >= 0; i--) {
-      const symbol = this.scopes[i].get(name)
-      if (symbol) return symbol
-    }
-    return undefined
-  }
+export function defineSymbol(table: SymbolTableState, symbol: Symbol): SymbolTableState {
+  if (table.scopes.length === 0) return table
+  const scopes = [...table.scopes]
+  const currentScope = new Map(scopes[scopes.length - 1])
+  currentScope.set(symbol.name, symbol)
+  scopes[scopes.length - 1] = currentScope as ReadonlyMap<string, Symbol>
+  return { scopes }
+}
 
-  lookupLocal(name: string): Symbol | undefined {
-    const currentScope = this.scopes[this.scopes.length - 1]
-    return currentScope.get(name)
+export function lookupSymbol(table: SymbolTableState, name: string): Symbol | undefined {
+  for (let i = table.scopes.length - 1; i >= 0; i--) {
+    const symbol = table.scopes[i].get(name)
+    if (symbol) return symbol
   }
+  return undefined
+}
+
+export function lookupLocalSymbol(
+  table: SymbolTableState,
+  name: string,
+): Symbol | undefined {
+  if (table.scopes.length === 0) return undefined
+  return table.scopes[table.scopes.length - 1].get(name)
 }
 
 /**
@@ -96,7 +108,7 @@ export enum ErrorCode {
  */
 export interface AnalyzerOutput {
   ast: Program
-  symbolTable: SymbolTable
+  symbolTable: SymbolTableState
   typeMap: Map<string, TypeInfo>
   errors: AnalysisError[]
 }

@@ -33,34 +33,35 @@ export interface CodeGenerator {
 /**
  * Emission context for code generation
  */
-export class EmissionContext {
-  private indent = 0
-  private output = ""
+export interface EmissionContextState {
+  readonly indent: number
+  readonly output: string
+}
 
-  write(text: string): void {
-    this.output += text
-  }
+export function createEmissionContext(): EmissionContextState {
+  return { indent: 0, output: "" }
+}
 
-  writeLine(text: string = ""): void {
-    this.output += "  ".repeat(this.indent) + text + "\n"
-  }
+export function write(context: EmissionContextState, text: string): EmissionContextState {
+  return { ...context, output: context.output + text }
+}
 
-  increaseIndent(): void {
-    this.indent++
-  }
+export function writeLine(context: EmissionContextState, text = ""): EmissionContextState {
+  const indented = "  ".repeat(context.indent) + text + "\n"
+  return { ...context, output: context.output + indented }
+}
 
-  decreaseIndent(): void {
-    if (this.indent > 0) {
-      this.indent--
-    }
-  }
+export function increaseIndent(context: EmissionContextState): EmissionContextState {
+  return { ...context, indent: context.indent + 1 }
+}
 
-  getOutput(): string {
-    return this.output
+export function decreaseIndent(context: EmissionContextState): EmissionContextState {
+  return {
+    ...context,
+    indent: context.indent > 0 ? context.indent - 1 : 0,
   }
+}
 
-  clear(): void {
-    this.output = ""
-    this.indent = 0
-  }
+export function getOutput(context: EmissionContextState): string {
+  return context.output
 }
