@@ -23,6 +23,7 @@ interface ScopeEntry {
   rangeEnd?: number;
   generatorPosition?: number;
   originalType?: string; // Stores the alias name if a type alias was used
+  isMovedBefore?: boolean; // Track if value has been moved
 }
 
 type Scope = Record<string, ScopeEntry>;
@@ -1606,6 +1607,20 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
               }
             }
 
+            // Check if expr is a simple variable reference with a drop hook
+            // If so, mark it as moved
+            if (
+              /^[a-zA-Z_]\w*$/.test(expr) &&
+              localScope[expr] &&
+              !localScope[expr].isMovedBefore
+            ) {
+              const exprVar = localScope[expr];
+              const exprTypeName = exprVar.originalType;
+              if (exprTypeName && dropHooks[exprTypeName]) {
+                localScope[expr].isMovedBefore = true;
+              }
+            }
+
             // Re-check if it was already in localScope (to prevent multiple lets of same name in same block)
             ensureVariableNotDefined(localScope, varName);
             declaredVars.push(varName);
@@ -2348,6 +2363,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   }
   const scopeVar = scope[source];
   if (scopeVar) {
+    // Check if variable has been moved
+    if (scopeVar.isMovedBefore) {
+      throw new Error(
+        "Variable " + source + " was moved and cannot be accessed",
+      );
+    }
     return {
       value: scopeVar.value,
       constraint: scopeVar.constraint,

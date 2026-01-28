@@ -590,4 +590,12 @@ describe("interpret", () => {
     const result = interpret("let x = 100; let temp : *This = &this; temp.x");
     expect(result).toBe(100);
   });
+
+  test('interpret("moved value with drop hook") should throw error', () => {
+    expect(() =>
+      interpret(
+        "fn drop(this : Temp) => {} type Temp = I32 then drop; let temp : Temp = 100; let value = temp; temp",
+      ),
+    ).toThrow(/moved/);
+  });
 });
