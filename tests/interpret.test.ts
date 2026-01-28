@@ -611,4 +611,12 @@ describe("interpret", () => {
     const result = interpret("let mut x = 0; this.x = 100; x");
     expect(result).toBe(100);
   });
+
+  test(
+    'interpret("function returning this with field access") should return 100',
+    () => {
+      const result = interpret("fn Wrapper(field : I32) => this; Wrapper(100).field");
+      expect(result).toBe(100);
+    },
+  );
 });

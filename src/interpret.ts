@@ -642,6 +642,7 @@ interface EvaluationResult {
   functionParamTypes?: (string | undefined)[];
   referenceTarget?: string;
   referenceMutable?: boolean;
+  thisScope?: Scope; // Scope when this value represents `this`
 }
 
 function evaluate(source: string, scope: Scope): EvaluationResult {
@@ -2210,7 +2211,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   if (assignmentResult) return assignmentResult;
 
   // Variable access in non-binary expression
-  const invokeFunction = (
+    const invokeFunction = (
     fnName: string,
     fnEntry: ScopeEntry | undefined,
     argResults: EvaluationResult[],
@@ -2263,7 +2264,24 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       };
     }
 
+    // Add `this` as a marker that can be returned
+    invocationScope["__this_marker__"] = {
+      value: 0,
+      constraint: null,
+    };
+
     const fnResult = evaluate(fnEntry.functionBody, invocationScope);
+
+    // If the function body is just "this" and returns, attach the invocationScope
+    // This allows Func(...).field  to work by looking up field in the parameters
+    if (
+      fnEntry.functionBody.trim() === "this" &&
+      fnResult.value === 0 &&
+      fnResult.thisScope
+    ) {
+      // Already has thisScope attached from the this evaluation, keep it
+    }
+
     // Sync back mutable captured variables to the original scope
     for (const varName in scope) {
       const originalVar = scope[varName];
@@ -2284,67 +2302,118 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     return fnResult;
   };
 
+  // Handle field access (both simple like x.field and complex like Func().field)
+  // Find the last . at depth 0 that looks like field access (not a method call with parens)
+  let lastFieldDot = -1;
+  let depth = 0;
+  for (let i = source.length - 1; i >= 0; i--) {
+    const char = source[i];
+    if (char === ")" || char === "]" || char === "}") depth++;
+    if (char === "(" || char === "[" || char === "{") depth--;
+    if (char === "." && depth === 0) {
+      // Check that this doesn't look like a method call (no parens after field name)
+      const afterDot = source.substring(i + 1);
+      if (!/\w+\s*\(/.test(afterDot)) {
+        lastFieldDot = i;
+        break;
+      }
+    }
+  }
+
+  if (lastFieldDot > 0 && lastFieldDot < source.length - 1) {
+    const basePart = source.substring(0, lastFieldDot);
+    const fieldName = source.substring(lastFieldDot + 1);
+
+    if (!/^[a-zA-Z_]\w*$/.test(fieldName)) {
+      // Not a valid field name, continue to other parsing
+    } else {
+      // Helper function to access field in a scope
+      const accessScopeField = (targetScope: Scope) => {
+        const targetVar = targetScope[fieldName];
+        if (!targetVar) {
+          throwUndefinedVariable(fieldName);
+        }
+        return {
+          value: targetVar.value,
+          constraint: targetVar.constraint,
+        };
+      };
+
+      // Special handling for `this.field`
+      if (basePart === "this") {
+        return accessScopeField(scope);
+      }
+
+      // Simple identifier check (for x.field patterns)
+      if (/^[a-zA-Z_]\w*$/.test(basePart)) {
+        const scopeVar = scope[basePart];
+        if (!scopeVar) {
+          throwUndefinedVariable(basePart);
+        }
+
+        // Handle field access through a pointer to `this`
+        if (
+          scopeVar.constraint?.typeStr.startsWith("*") &&
+          scopeVar.constraint?.typeStr.includes("This") &&
+          typeof scopeVar.value === "number" &&
+          scopeVar.value === -1
+        ) {
+          return accessScopeField(scope);
+        }
+
+        // Handle regular struct field access
+        if (Array.isArray(scopeVar.value) || typeof scopeVar.value !== "object") {
+          throwNotStruct(basePart);
+        }
+        const structType = scopeVar.constraint?.typeStr;
+        if (!structType) {
+          throwNotStruct(basePart);
+        }
+        const structDef = resolveStructDefinition(structType);
+        if (!structDef) {
+          throw new Error(`Struct ${structType} is not defined`);
+        }
+        const fieldDef = structDef.fields.find((field) => field.name === fieldName);
+        if (!fieldDef) {
+          throw new Error(`Struct ${structType} has no field ${fieldName}`);
+        }
+        const structValue = scopeVar.value as Record<string, RuntimeValue>;
+        const fieldValue = structValue[fieldName];
+        if (fieldValue === undefined) {
+          throw new Error(`Struct ${structType} field ${fieldName} is undefined`);
+        }
+        return {
+          value: fieldValue,
+          constraint: resolveTypeConstraint(fieldDef.type),
+        };
+      } else {
+        // Complex expression like Wrapper(100).field
+        // Evaluate the base expression first
+        const baseResult = evaluate(basePart, scope);
+
+        // If the result has thisScope attached (from a function returning this), use it
+        if (baseResult.thisScope) {
+          return accessScopeField(baseResult.thisScope);
+        }
+
+        // Otherwise, error
+        throw new Error(
+          `Cannot access field \`${fieldName}\` on result of \`${basePart}\``,
+        );
+      }
+    }
+  }
+
   const fieldAccessMatch = source.match(/^([a-zA-Z_]\w*)\.([a-zA-Z_]\w*)$/);
   if (fieldAccessMatch && fieldAccessMatch[1] && fieldAccessMatch[2]) {
     const varName = fieldAccessMatch[1];
     const fieldName = fieldAccessMatch[2];
 
-    // Helper function to access scope field
-    const accessScopeField = () => {
-      const targetVar = scope[fieldName];
-      if (!targetVar) {
-        throwUndefinedVariable(fieldName);
-      }
-      return {
-        value: targetVar.value,
-        constraint: targetVar.constraint,
-      };
-    };
-
-    // Special handling for `this` - access scope variables as fields
-    if (varName === "this") {
-      return accessScopeField();
-    }
-
-    const scopeVar = scope[varName];
-    if (!scopeVar) {
-      throwUndefinedVariable(varName);
-    }
-
-    // Handle field access through a pointer to `this`
-    if (
-      scopeVar.constraint?.typeStr.startsWith("*") &&
-      scopeVar.constraint?.typeStr.includes("This") &&
-      typeof scopeVar.value === "number" &&
-      scopeVar.value === -1
-    ) {
-      return accessScopeField();
-    }
-
-    if (Array.isArray(scopeVar.value) || typeof scopeVar.value !== "object") {
-      throwNotStruct(varName);
-    }
-    const structType = scopeVar.constraint?.typeStr;
-    if (!structType) {
-      throwNotStruct(varName);
-    }
-    const structDef = resolveStructDefinition(structType);
-    if (!structDef) {
-      throw new Error(`Struct ${structType} is not defined`);
-    }
-    const fieldDef = structDef.fields.find((field) => field.name === fieldName);
-    if (!fieldDef) {
-      throw new Error(`Struct ${structType} has no field ${fieldName}`);
-    }
-    const structValue = scopeVar.value as Record<string, RuntimeValue>;
-    const fieldValue = structValue[fieldName];
-    if (fieldValue === undefined) {
-      throw new Error(`Struct ${structType} field ${fieldName} is undefined`);
-    }
-    return {
-      value: fieldValue,
-      constraint: resolveTypeConstraint(fieldDef.type),
-    };
+    // This case is now handled by the general field access code above
+    // Keep this check for backwards compatibility, but delegate to existing code
+    throw new Error(
+      `Field access pattern '${source}' should have been handled by general field access code`,
+    );
   }
 
   const methodCallMatch = source.match(/^(.+)\.([a-zA-Z_]\w*)\s*\((.*)\)$/);
@@ -2422,6 +2491,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     const argResults = argExprs.map((arg) => evaluate(arg, scope));
     return invokeFunction(fnName, fnEntry, argResults, source);
   }
+
   const scopeVar = scope[source];
   if (scopeVar) {
     // Check if variable has been moved
@@ -2435,6 +2505,16 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       constraint: scopeVar.constraint,
       referenceTarget: scopeVar.referenceTarget,
       referenceMutable: scopeVar.referenceMutable,
+    };
+  }
+
+  // Special handling for `this` keyword when used standalone (only if __this_marker__ is in scope)
+  // This must come after the regular scope check, so regular `this` parameters work
+  if (source === "this" && scope["__this_marker__"]) {
+    return {
+      value: 0,
+      constraint: null,
+      thisScope: scope,
     };
   }
 
