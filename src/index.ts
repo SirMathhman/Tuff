@@ -23,9 +23,31 @@ export function interpret(input: string): number {
     if (suffix && /^[u]/.test(suffix)) {
       throw new Error('invalid suffix');
     }
-    // If there's an unsigned suffix starting with uppercase U, negative values are invalid
-    if (suffix && /^[U]/.test(suffix) && n < 0) {
-      throw new Error('unsigned literal cannot be negative');
+    // If there's an unsigned suffix starting with uppercase U, enforce rules
+    if (suffix && /^[U]/.test(suffix)) {
+      // If the suffix is U<width> (e.g., U8), enforce width bounds
+      const m2 = suffix.match(/^U(\d+)$/);
+      if (m2) {
+        const width = Number(m2[1]);
+        if (!Number.isInteger(width) || width <= 0) {
+          throw new Error('invalid suffix');
+        }
+        if (!Number.isInteger(n)) {
+          throw new Error('unsigned literal must be integer');
+        }
+        const max = Math.pow(2, width) - 1;
+        if (n < 0) {
+          throw new Error('unsigned literal cannot be negative');
+        }
+        if (n > max) {
+          throw new Error('unsigned literal out of range');
+        }
+      } else {
+        // Fallback: if no width provided, still disallow negative numbers
+        if (n < 0) {
+          throw new Error('unsigned literal cannot be negative');
+        }
+      }
     }
     return Number.isFinite(n) ? n : 0;
   }

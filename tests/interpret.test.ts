@@ -23,3 +23,11 @@ test('interpret throws for negative values with unsigned suffixes', () => {
 test('interpret rejects lowercase unsigned suffix', () => {
   expect(() => interpret('100u8')).toThrow('invalid suffix');
 });
+
+test('interpret throws for unsigned overflow (U8)', () => {
+  expect(() => interpret('256U8')).toThrow('unsigned literal out of range');
+});
+
+test('interpret accepts max unsigned U8', () => {
+  expect(interpret('255U8')).toBe(255);
+});
