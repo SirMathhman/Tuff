@@ -339,7 +339,7 @@ When you assign a concrete type to a contract-typed variable, the compiler **imp
 let vehicle: Vehicle = car
 
 // Desugars to:
-let vehicle: Vehicle = car.intoVehicle(car, allocator)
+let vehicle: Vehicle = car.intoVehicle(car, new)
 ```
 
 The desugaring is:
@@ -347,14 +347,14 @@ The desugaring is:
 ```tuff
 implicit fn intoVehicle<T>(
   this: T,
-  allocator: <U>(*U) => (*U then drop)
+  new: <U>(*U) => (*U then drop)
 ) => Vehicle => {
-  let ref: (*T then drop) = allocator(&this)
+  let ref: (*T then drop) = new(&this)
   
   // Vehicle is a fat pointer: {ref, vtable}
   Vehicle {
-    ref: ref,
-    VTable { goto: |()| => T::goto(ref) }
+    ref,
+    vehicle : VTable { goto: T::goto }
   }
 }
 ```
@@ -366,7 +366,7 @@ The contract type itself becomes a fat pointer holding:
 Calling methods on `vehicle: Vehicle` uses the vtable:
 
 ```tuff
-vehicle.goto()  // Calls vtable.goto(vehicle.ref)
+vehicle.goto()  // Calls vehicle.vtable.goto(vehicle.ref)
 ```
 
 #### Generic Bounds on Contracts
@@ -404,8 +404,8 @@ fn Truck(model: *Str) => Truck {
   out fn drive() => { print("Truck driving") }
   out fn repair() => { print("Truck repaired") }
 
-  with Drivable
-  with Maintainable
+  with Drivable;
+  with Maintainable;
 }
 ```
 
@@ -417,9 +417,9 @@ Contracts can use refinements to codify safety requirements:
 
 ```tuff
 contract List<T> {
-  fn size() => USize
-  fn get(index: USize < this.size()) => T
-  fn set(index: USize < this.size(), value: T) => Void
+  fn size() => USize;
+  fn get(index: USize < this.size()) => T;
+  fn set(index: USize < this.size(), value: T) => Void;
 }
 ```
 
@@ -907,6 +907,100 @@ push<T>(mut array: T[], item: T) => Void
 pop<T>(mut array: T[]) => Option<T>
 ```
 
+## FFI (Foreign Function Interface)
+
+Tuff can interop with C/LLVM targets via `extern` declarations.
+
+### C Declarations
+
+Use `extern use` to import external functions:
+
+```tuff
+extern use { malloc, free, realloc } from stdlib
+
+extern fn malloc(size: USize) => *mut Void | 0
+extern fn free(ptr: *mut Void) => Void
+```
+
+The return type can be a union with `0` (null) to model C's nullable pointers:
+
+```tuff
+let ptr = malloc(100)
+if (ptr == 0) {
+  print("Memory allocation failed")
+} else {
+  // ptr is proven non-null inside this block
+}
+```
+
+### Custom Allocator Pattern
+
+You can define allocator abstractions that safely manage heap memory. Using type aliases with destructors:
+
+```tuff
+type Alloc<T> = *mut T then free
+
+out fn new<T>() => Option<Alloc<T>> => {
+  let ptr = malloc(sizeof<T>()) as *mut T
+  if (ptr == 0) {
+    None<Alloc<T>>
+  } else {
+    Some<Alloc<T>> { value: ptr }
+  }
+}
+```
+
+The `then free` destructor ensures memory is freed when the allocated value is dropped.
+
+### Type Size and Alignment
+
+Compile-time type information is available via special functions:
+
+```tuff
+extern fn sizeof<T>() => USize
+extern fn alignof<T>() => USize
+
+// Use in allocation:
+let count: USize = 100
+let size = sizeof<MyStruct>() * count
+let ptr = malloc(size) as *mut MyStruct
+```
+
+### Partial Initialization with Allocators
+
+When allocating arrays, you start with `Init = 0` (uninitialized):
+
+```tuff
+type AllocArray<T, L: USize> = *mut [T; 0; L] then free
+
+out fn allocArray<T, L: USize>(length: L) => Option<AllocArray<T, L>> => {
+  let ptr = malloc(sizeof<T>() * length) as *mut [T; 0; L]
+  if (ptr == 0) None else Some { value: ptr }
+}
+
+// Initialize elements in order:
+let arr: AllocArray<I32, 10> = allocArray<I32, 10>(10)
+arr[0] = 1
+arr[1] = 2
+// ...
+arr[9] = 10  // Now arr has Init = 10, fully initialized
+```
+
+### Moving Stack to Heap
+
+You can move a stack-allocated value to the heap:
+
+```tuff
+out fn moveToHeap<T>(stackPtr: *T) => Option<*T then free> => {
+  new<T>().map((heap: *T then free) => {
+    *heap = *stackPtr
+    heap
+  })
+}
+```
+
+The `.map()` operator is discussed in the Error Handling section below.
+
 ## Module System (Planned)
 
 Import and use modules:
@@ -974,6 +1068,74 @@ if (result is Ok<String> { value: contents }) {
 } else if (result is Err<*Str> { error: msg }) {
   print("Error: " + msg)
 }
+```
+
+### Monadic Operations on Option and Result
+
+`Option<T>` and `Result<T, E>` support functional composition via these methods:
+
+#### `map<T, U>(f: (T) => U) => Option<U>`
+
+Transforms the value inside the container:
+
+```tuff
+let x: Option<I32> = Some<I32> { value: 5 }
+let doubled = x.map((n: I32) => n * 2)  // Some(10)
+
+let none: Option<I32> = None<I32>
+let stillNone = none.map((n: I32) => n * 2)  // None
+```
+
+#### `flatMap<T, U>(f: (T) => Option<U>) => Option<U>`
+
+Chains operations that return `Option`:
+
+```tuff
+fn safeDivide(a: I32, b: I32) => Option<I32> {
+  if (b == 0) None else Some<I32> { value: a / b }
+}
+
+let result: Option<I32> = Some<I32> { value: 10 }
+  .flatMap((n: I32) => safeDivide(n, 2))  // Some(5)
+  .flatMap((n: I32) => safeDivide(n, 0))  // None
+```
+
+#### `filter<T>(pred: (T) => Bool) => Option<T>`
+
+Keeps the value only if it satisfies a predicate:
+
+```tuff
+let x: Option<I32> = Some<I32> { value: 15 }
+let positive = x.filter((n: I32) => n > 0)  // Some(15)
+let even = x.filter((n: I32) => n % 2 == 0)  // None
+```
+
+#### `getOrElse<T>(default: T) => T`
+
+Extracts the value or returns a default:
+
+```tuff
+let x: Option<I32> = None<I32>
+let value = x.getOrElse(0)  // 0
+```
+
+#### `Result` Operations
+
+`Result<T, E>` has similar operations:
+
+```tuff
+let result: Result<I32, *Str> = Ok<I32> { value: 42 }
+
+// Map success
+let doubled = result.map((n: I32) => n * 2)  // Ok(84)
+
+// FlatMap for chained operations
+let result2: Result<I32, *Str> = result.flatMap((n: I32) => {
+  if (n > 50) Ok<I32> { value: n } else Err<*Str> { error: "too small" }
+})
+
+// Handle both cases
+let output = result.mapError((*Str e) => "Error: " + e).getOrElse(0)
 ```
 
 ### The `?` Operator (Planned)
