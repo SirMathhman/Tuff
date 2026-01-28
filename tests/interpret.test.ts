@@ -294,6 +294,38 @@ describe('interpret', () => {
         )
       ).toBe(7);
     });
+
+    it('supports accessing individual fields', () => {
+      expect(
+        interpret(
+          'struct Point { x : I32; y : I32; } let p : Point = Point { 1, 2 }; p.x'
+        )
+      ).toBe(1);
+    });
+
+    it('supports struct field arithmetic', () => {
+      expect(
+        interpret(
+          'struct Pair { a : I32; b : I32; } let p : Pair = Pair { 10, 20 }; p.a + p.b'
+        )
+      ).toBe(30);
+    });
+
+    it('rejects struct literals with wrong arity', () => {
+      expect(() =>
+        interpret(
+          'struct Point { x : I32; y : I32; } let p : Point = Point { 1 }; p.x'
+        )
+      ).toThrow('Invalid struct literal');
+    });
+
+    it('rejects access to unknown struct fields', () => {
+      expect(() =>
+        interpret(
+          'struct Point { x : I32; y : I32; } let p : Point = Point { 1, 2 }; p.z'
+        )
+      ).toThrow('Unknown field: z');
+    });
   });
 
   describe('functions', () => {
