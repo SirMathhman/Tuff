@@ -1216,6 +1216,67 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     varName: string;
     newValue: number;
   } | null => {
+    // Handle this.fieldName = value first
+    if (params.allowPlainAssignment) {
+      const thisFieldMatch = params.text.match(/^this\.([a-zA-Z_]\w*)\s*=\s*(.*)$/);
+      if (thisFieldMatch && thisFieldMatch[1] && thisFieldMatch[2]) {
+        const fieldName = thisFieldMatch[1];
+        const expr = thisFieldMatch[2];
+
+        if (!params.targetScope[fieldName]) {
+          throw new Error(`Cannot assign to undefined field ${fieldName}`);
+        }
+
+        const targetVar = params.targetScope[fieldName];
+        if (!targetVar.isMutable) {
+          throw new Error(`Cannot assign to immutable field ${fieldName}.`);
+        }
+
+        const exprResult = evaluate(expr, params.targetScope);
+        let newValue = exprResult.value;
+
+        if (targetVar.constraint) {
+          if (typeof newValue === "number") {
+            validateValueInConstraint(
+              newValue,
+              targetVar.constraint,
+              params.statementForErrors,
+            );
+          }
+          if (exprResult.constraint) {
+            validateTypeMatch(exprResult.constraint, targetVar.constraint);
+          }
+        }
+
+        const finalConstraint = targetVar.constraint ||
+          exprResult.constraint ||
+          getTypeConstraint("I32");
+
+        const updatedEntry = {
+          ...targetVar,
+          value: newValue,
+          isInitialized: true,
+          constraint: finalConstraint,
+          functionBody: exprResult.functionBody ?? targetVar.functionBody,
+          functionParams: exprResult.functionParams ?? targetVar.functionParams,
+          functionParamTypes: exprResult.functionParamTypes ?? targetVar.functionParamTypes,
+        };
+
+        params.targetScope[fieldName] = updatedEntry;
+
+        if (params.outerScopeToSync && params.outerScopeToSync[fieldName]) {
+          params.outerScopeToSync[fieldName].value = newValue;
+          params.outerScopeToSync[fieldName].isInitialized = true;
+        }
+
+        return {
+          result: { value: newValue, constraint: finalConstraint },
+          varName: fieldName,
+          newValue: typeof newValue === "number" ? newValue : 0,
+        };
+      }
+    }
+
     const assignmentRegex = params.allowPlainAssignment
       ? /^([a-zA-Z_]\w*)\s*(\+|-|\*|\/)?=\s*(.*)$/
       : /^([a-zA-Z_]\w*)\s*(\+|-|\*|\/)=\s*(.*)$/;
