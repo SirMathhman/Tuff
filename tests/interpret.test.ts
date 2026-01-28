@@ -276,6 +276,9 @@ describe('interpret', () => {
       expect(() =>
         interpret('let x = match (100) { case 300 => 1; case 200 => 2; }; x')
       ).toThrow('No match found and no wildcard provided');
+      expect(() => interpret('let x = match (100) {}; x')).toThrow(
+        'No match found and no wildcard provided'
+      );
     });
 
     it('supports match expressions with side effects in branches', () => {
