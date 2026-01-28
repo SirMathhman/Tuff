@@ -51,4 +51,8 @@ describe('interpret', () => {
   it('allows different unsigned type suffixes when result fits widest type', () => {
     expect(interpret('1U8 + 255U16')).toBe(256);
   });
+
+  it('evaluates multiple operands with mixed types and untyped numbers', () => {
+    expect(interpret('1U8 + 2 + 3U16')).toBe(6);
+  });
 });
