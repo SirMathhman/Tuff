@@ -7,7 +7,7 @@ This is an evolving specification of the Tuff language syntax and semantics. Fea
 **Tuff code is guaranteed to never panic or crash at runtime.** This is a fundamental language design goal, not an optional feature. The language prevents panics through:
 
 - No `null` pointer dereferences (enforced via `Option<T>` types)
-- No array out-of-bounds access (runtime checked)
+- No array out-of-bounds access (compile-time verified via refinement types)
 - No arithmetic overflow/underflow panics (wrapping semantics or runtime checks)
 - No invalid type casts (compile-time verified)
 - No unwinding from failed assertions in release mode
@@ -286,6 +286,64 @@ Explicit type conversion with `as`:
 let x = 42_i32
 let y = x as F64  // 42.0_f64
 ```
+
+### Refinement Types
+
+Refinement types encode constraints on values at the type level to prevent runtime panics. A refinement type has the syntax `Type <condition>`, where `condition` is a predicate that the value must satisfy.
+
+Refinement types are particularly important for collection access operations. For example:
+
+```tuff
+contract List<T> {
+  fn size() -> USize
+  fn get(index: USize < this.size()) -> T
+  fn set(index: USize < this.size(), value: T) -> Void
+  fn remove(index: USize < this.size()) -> T
+}
+```
+
+In this contract, `get`, `set`, and `remove` all require an `index` that is proven to be less than the list size. The refinement `USize < this.size()` means:
+- Type: `USize` (unsigned 64-bit integer)
+- Constraint: the value must be less than `this.size()`
+
+Refinement types prevent out-of-bounds array access at compile time by requiring proof that the index is valid:
+
+```tuff
+let arr = [1, 2, 3]
+let x = arr.get(0)              // ✓ OK: literal 0 is provably < 3
+let i: USize = 1
+let y = arr.get(i)              // ✓ OK: after bounds check
+let j: USize = getUserInput()
+let z = arr.get(j)              // ✗ Error: no proof that j < arr.size()
+
+// Must use conditional to provide proof:
+if j < arr.size() {
+  let z = arr.get(j)            // ✓ OK: bounds check provides proof
+}
+```
+
+Other common refinement types include:
+
+```tuff
+// Positive numbers
+fn divide(a: I32, b: I32 > 0) -> I32 {
+  a / b
+}
+
+// Non-empty collections
+fn first<T>(arr: T[] where len(arr) > 0) -> T {
+  arr[0]
+}
+
+// Numeric ranges
+fn gradePercentage(p: I32 where p >= 0 && p <= 100) -> *Str {
+  if p >= 90 { "A" }
+  else if p >= 80 { "B" }
+  // ...
+}
+```
+
+By encoding bounds and constraints in refinement types, **Tuff guarantees that no array access will panic or crash at runtime**, fulfilling the core no-panic guarantee.
 
 ## Expressions
 
