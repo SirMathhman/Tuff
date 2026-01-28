@@ -28,7 +28,7 @@ const typeOrdering: Record<string, number> = {
 };
 
 type Result = {
-  value: number;
+  value: number | Result;
   type?: string;
   isMutable?: boolean;
   isInitialized?: boolean;
@@ -93,8 +93,15 @@ function parseTypedNumber(input: string): Result {
   return { value, type: typeSuffix };
 }
 
+function asNumber(value: number | Result): number {
+  if (typeof value === 'object') {
+    throw new Error('Expected numeric value, found pointer');
+  }
+  return value;
+}
+
 export function interpret(input: string): number {
-  return interpretInternal(input).value;
+  return asNumber(interpretInternal(input).value);
 }
 
 function splitStatements(input: string): string[] {
@@ -208,6 +215,18 @@ function checkBranchCompatibility(
   t2: string | undefined,
   errorMessage: string
 ): void {
+  if (t1?.startsWith('*') || t2?.startsWith('*')) {
+    if (!t1?.startsWith('*') || !t2?.startsWith('*')) {
+      throw new Error(errorMessage);
+    }
+    const b1 = t1.substring(1);
+    const b2 = t2.substring(1);
+    if (b1 !== 'Untyped' && b2 !== 'Untyped' && b1 !== b2) {
+      throw new Error(errorMessage);
+    }
+    return;
+  }
+
   if ((t1 === 'Bool') !== (t2 === 'Bool')) {
     throw new Error(errorMessage);
   }
@@ -452,10 +471,10 @@ function interpretInternal(
     const resolved = resolveStatement(statement, variables);
 
     const letAnnotatedMatch = resolved.match(
-      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)\s*=\s*(.+)$/
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([*]*[A-Za-z]\w*)\s*=\s*(.+)$/
     );
     const letNoInitMatch = resolved.match(
-      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)$/
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([*]*[A-Za-z]\w*)$/
     );
     const letInferredMatch = resolved.match(
       /^let\s+(mut\s+)?([A-Za-z]\w*)\s*=\s*(.+)$/
@@ -516,6 +535,14 @@ function validateTypeCompatibility(
   sourceResult: Result,
   statement: string
 ): void {
+  if (targetType?.startsWith('*') && sourceResult.type?.startsWith('*')) {
+    const targetBase = targetType.substring(1);
+    const sourceBase = sourceResult.type.substring(1);
+    if (sourceBase === 'Untyped' || targetBase === 'Untyped') return;
+    if (targetBase === sourceBase) return;
+    throw new Error('Invalid type: ' + statement);
+  }
+
   if (
     targetType &&
     sourceResult.type &&
@@ -538,7 +565,8 @@ function validateTypeCompatibility(
 
   if (targetType && targetType in typeRanges) {
     const [min, max] = typeRanges[targetType];
-    if (sourceResult.value < min || sourceResult.value > max) {
+    const val = asNumber(sourceResult.value);
+    if (val < min || val > max) {
       throw new Error('Invalid number: ' + statement);
     }
   }
@@ -556,7 +584,7 @@ function handleLetStatement(
     throw new Error('Variable already declared: ' + name);
   }
 
-  let value = 0;
+  let value: number | Result = 0;
   let finalType = type;
   let isInitialized = false;
 
@@ -598,7 +626,7 @@ function handleAssignmentStatement(
       );
     }
     res = {
-      value: applyOperator(variable.value, operator, res.value),
+      value: applyOperator(asNumber(variable.value), operator, asNumber(res.value)),
       type: getWidestType([variable.type, res.type]),
     };
   }
@@ -661,6 +689,30 @@ function applyOperator(
 
 function resolveOperand(token: string, variables: Variables): Result {
   const trimmed = token.trim();
+  if (trimmed.startsWith('&')) {
+    const name = trimmed.substring(1);
+    if (!variables.has(name)) {
+      throw new Error('Cannot take address of undeclared variable: ' + name);
+    }
+    const variable = variables.get(name)!;
+    return {
+      value: variable,
+      type: '*' + (variable.type || 'Untyped'),
+      isInitialized: true,
+    };
+  }
+  if (trimmed.startsWith('*')) {
+    const name = trimmed.substring(1);
+    const variable = resolveOperand(name, variables);
+    if (!variable.type?.startsWith('*')) {
+      throw new Error('Cannot dereference non-pointer type');
+    }
+    const pointedTo = variable.value as Result;
+    if (pointedTo.isInitialized === false) {
+      throw new Error('Use of uninitialized memory at: ' + trimmed);
+    }
+    return pointedTo;
+  }
   if (variables.has(trimmed)) {
     const variable = variables.get(trimmed)!;
     if (variable.isInitialized === false) {
@@ -679,7 +731,7 @@ function tokenizeExpression(
   operators: string[];
 } {
   const tokens = expr.match(
-    /(-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|[A-Za-z]\w*|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
+    /([&*]*[A-Za-z]\w*|-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
   );
 
   if (!tokens || tokens.length === 0) {
@@ -707,13 +759,17 @@ function tokenizeExpression(
 
 function applyPrecedenceLevel(
   level: string[],
-  values: number[],
+  values: (number | Result)[],
   currentOperators: string[]
 ): void {
   for (let i = 0; i < currentOperators.length; ) {
     const op = currentOperators[i];
     if (level.includes(op)) {
-      values[i] = applyOperator(values[i], op, values[i + 1]);
+      values[i] = applyOperator(
+        asNumber(values[i]),
+        op,
+        asNumber(values[i + 1])
+      );
       values.splice(i + 1, 1);
       currentOperators.splice(i, 1);
     } else {
@@ -758,7 +814,7 @@ function evaluateExpression(expr: string, variables: Variables): Result {
     hasLogical || hasComparison ? 'Bool' : getWidestType(types);
 
   // Evaluate with operator precedence (* and / before + and -, etc)
-  const values = operands.map((op) => op.value);
+  const values: (number | Result)[] = operands.map((op) => op.value);
   const currentOperators = [...operators];
 
   // Operator precedence passes
@@ -779,7 +835,8 @@ function evaluateExpression(expr: string, variables: Variables): Result {
   // Validate result is within valid range for the result type
   if (resultType && resultType in typeRanges) {
     const [min, max] = typeRanges[resultType];
-    if (resultValue < min || resultValue > max) {
+    const val = asNumber(resultValue);
+    if (val < min || val > max) {
       throw new Error('Invalid expression: ' + expr);
     }
   }

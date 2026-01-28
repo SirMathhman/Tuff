@@ -260,6 +260,39 @@ describe('interpret', () => {
     expect(interpret('let x = 100; let y = 200; x < y')).toBe(1);
   });
 
+  describe('pointers', () => {
+    it('supports address-of and dereference', () => {
+      expect(interpret('let x = 100; let y : *Untyped = &x; *y')).toBe(100);
+      expect(interpret('let x : I32 = 42; let y : *I32 = &x; *y')).toBe(42);
+    });
+
+    it('supports re-assignment of the pointed-to variable', () => {
+      expect(interpret('let mut x = 1; let y = &x; x = 2; *y')).toBe(2);
+    });
+
+    it('rejects dereferencing non-pointer types', () => {
+      expect(() => interpret('let x = 100; *x')).toThrow(
+        'Cannot dereference non-pointer type'
+      );
+    });
+
+    it('rejects taking address of undeclared variable', () => {
+      expect(() => interpret('&z')).toThrow(
+        'Cannot take address of undeclared variable: z'
+      );
+    });
+
+    it('rejects dereferencing uninitialized memory', () => {
+      expect(() => interpret('let x : I32; let y = &x; *y')).toThrow(
+        'Use of uninitialized memory at: *y'
+      );
+    });
+
+    it('supports nested pointers', () => {
+      expect(interpret('let x = 100; let y = &x; let z = &y; **z')).toBe(100);
+    });
+  });
+
   describe('match expressions', () => {
     it('supports basic matching with literals', () => {
       expect(
