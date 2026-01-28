@@ -136,4 +136,10 @@ describe('interpret', () => {
       'Cannot assign to immutable variable: x'
     );
   });
+
+  it('rejects shadowing of variables in inner scopes', () => {
+    expect(() => interpret('let x = 0; let y = { let x = 0; x }; y')).toThrow(
+      'Variable already declared: x'
+    );
+  });
 });

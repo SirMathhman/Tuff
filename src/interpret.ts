@@ -80,27 +80,117 @@ function parseTypedNumber(input: string): Result {
 }
 
 export function interpret(input: string): number {
-  let trimmed = input.trim();
+  return interpretInternal(input).value;
+}
 
-  // Resolve grouped expressions (parentheses or curly braces) from innermost to outermost
-  while (trimmed.includes('(') || trimmed.includes('{')) {
+function splitStatements(input: string): string[] {
+  const statements: string[] = [];
+  let currentArray = '';
+  let depth = 0;
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (char === '{') depth++;
+    if (char === '}') depth--;
+
+    if (char === ';' && depth === 0) {
+      statements.push(currentArray.trim());
+      currentArray = '';
+    } else {
+      currentArray += char;
+    }
+  }
+
+  if (currentArray.trim()) {
+    statements.push(currentArray.trim());
+  }
+
+  return statements;
+}
+
+function resolveStatement(statement: string, variables: Variables): string {
+  let resolved = statement;
+
+  while (resolved.includes('(') || resolved.includes('{')) {
     // Look for innermost grouping that contains no other grouping symbols
-    const match = trimmed.match(/(\([^(){}]+\)|\{[^(){}]+\})/);
+    const match = resolved.match(/(\([^(){}]+\)|\{[^(){}]+\})/);
     if (!match) break;
 
     const group = match[0];
     const subExpr = group.substring(1, group.length - 1);
+    const isBlock = group.startsWith('{');
 
-    const res = interpretInternal(subExpr);
-    // Construct replacement string with value and optional type suffix
+    // Cloned map for blocks ensures shadowing is caught and locals don't leak,
+    // but re-assignments to shared objects persist.
+    const res = interpretInternal(
+      subExpr,
+      isBlock ? new Map(variables) : variables
+    );
+
     const replacement = res.value.toString() + (res.type || '');
-    trimmed =
-      trimmed.substring(0, match.index) +
+    resolved =
+      resolved.substring(0, match.index) +
       replacement +
-      trimmed.substring(match.index! + match[0].length);
+      resolved.substring(match.index! + match[0].length);
   }
 
-  return interpretInternal(trimmed).value;
+  return resolved;
+}
+
+function interpretInternal(
+  input: string,
+  variables: Variables = new Map()
+): Result {
+  const statements = splitStatements(input);
+
+  let result: Result | undefined;
+
+  for (const statement of statements) {
+    const resolved = resolveStatement(statement, variables);
+
+    const letAnnotatedMatch = resolved.match(
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)\s*=\s*(.+)$/
+    );
+    const letInferredMatch = resolved.match(
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*=\s*(.+)$/
+    );
+    const assignmentMatch = resolved.match(/^([A-Za-z]\w*)\s*=\s*(.+)$/);
+
+    if (letAnnotatedMatch) {
+      result = handleLetStatement(
+        resolved,
+        variables,
+        letAnnotatedMatch[2],
+        letAnnotatedMatch[4],
+        letAnnotatedMatch[3],
+        !!letAnnotatedMatch[1]
+      );
+    } else if (letInferredMatch) {
+      result = handleLetStatement(
+        resolved,
+        variables,
+        letInferredMatch[2],
+        letInferredMatch[3],
+        undefined,
+        !!letInferredMatch[1]
+      );
+    } else if (assignmentMatch) {
+      result = handleAssignmentStatement(
+        resolved,
+        variables,
+        assignmentMatch[1],
+        assignmentMatch[2]
+      );
+    } else {
+      result = evaluateStatement(resolved, variables);
+    }
+  }
+
+  if (!result) {
+    throw new Error('Empty expression');
+  }
+
+  return result;
 }
 
 function validateTypeCompatibility(
@@ -186,63 +276,6 @@ function evaluateStatement(statement: string, variables: Variables): Result {
     return evaluateExpression(statement, variables);
   }
   return resolveOperand(statement, variables);
-}
-
-function interpretInternal(
-  input: string,
-  variables: Variables = new Map()
-): Result {
-  const statements = input
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-
-  let result: Result | undefined;
-
-  for (const statement of statements) {
-    const letAnnotatedMatch = statement.match(
-      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)\s*=\s*(.+)$/
-    );
-    const letInferredMatch = statement.match(
-      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*=\s*(.+)$/
-    );
-    const assignmentMatch = statement.match(/^([A-Za-z]\w*)\s*=\s*(.+)$/);
-
-    if (letAnnotatedMatch) {
-      result = handleLetStatement(
-        statement,
-        variables,
-        letAnnotatedMatch[2],
-        letAnnotatedMatch[4],
-        letAnnotatedMatch[3],
-        !!letAnnotatedMatch[1]
-      );
-    } else if (letInferredMatch) {
-      result = handleLetStatement(
-        statement,
-        variables,
-        letInferredMatch[2],
-        letInferredMatch[3],
-        undefined,
-        !!letInferredMatch[1]
-      );
-    } else if (assignmentMatch) {
-      result = handleAssignmentStatement(
-        statement,
-        variables,
-        assignmentMatch[1],
-        assignmentMatch[2]
-      );
-    } else {
-      result = evaluateStatement(statement, variables);
-    }
-  }
-
-  if (!result) {
-    throw new Error('Empty expression');
-  }
-
-  return result;
 }
 
 function applyOperator(
