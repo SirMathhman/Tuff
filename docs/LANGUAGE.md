@@ -234,11 +234,6 @@ enum Color {
   Green,
   Blue,
 }
-
-enum Result<T> {
-  Ok(T),
-  Err(*Str),
-}
 ```
 
 ### Pattern Matching
@@ -765,17 +760,28 @@ fn parseInt(s: *Str) -> Option<I32> {
 ```
 
 ### Result Types (Planned)
-Used to return either a value or detailed error information:
+
+Used to return either a value or detailed error information. `Result<T, X>` represents either success (`Ok<T>`) or failure (`Err<X>`):
 
 ```tuff
-enum Result<T> {
-  Ok(T),
-  Err(*Str),
+struct Ok<T> { value: T }
+struct Err<X> { error: X }
+
+type Result<T, X> = Ok<T> | Err<X>
+```
+
+You can narrow and destructure using `is`:
+
+```tuff
+fn readFile(path: *Str) -> Result<String, *Str> {
+  // Returns Ok(contents) or Err(error_message)
 }
 
-fn readFile(path: *Str) -> Result<String> {
-  // Returns Ok(contents) or Err(error_message)
-  // Use match to handle both Success and Failure cases
+let result = readFile(path)
+if (result is Ok<String> { value: contents }) {
+  print("File: " + contents)
+} else if (result is Err<*Str> { error: msg }) {
+  print("Error: " + msg)
 }
 ```
 
