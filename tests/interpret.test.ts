@@ -93,4 +93,10 @@ describe('interpret', () => {
       18
     );
   });
+
+  it('rejects re-declaring variables in the same block', () => {
+    expect(() =>
+      interpret('(4 + { let x : I32 = 2; let x : I32 = 100; x }) * 3')
+    ).toThrow('Variable already declared: x');
+  });
 });

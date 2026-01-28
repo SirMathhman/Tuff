@@ -112,6 +112,10 @@ function handleLetStatement(
   const type = match[2];
   const expr = match[3];
 
+  if (variables.has(name)) {
+    throw new Error('Variable already declared: ' + name);
+  }
+
   const res = interpretInternal(expr, variables);
   if (type in typeRanges) {
     const [min, max] = typeRanges[type];
