@@ -291,6 +291,17 @@ describe('interpret', () => {
     it('supports nested pointers', () => {
       expect(interpret('let x = 100; let y = &x; let z = &y; **z')).toBe(100);
     });
+
+    it('supports assignment via mutable pointers', () => {
+      expect(
+        interpret('let mut x = 0; let y : *mut I32 = &x; *y = 100; x')
+      ).toBe(100);
+    });
+
+    it('rejects assignment via immutable pointers', () => {
+      expect(() => interpret('let mut x = 0; let y : *I32 = &x; *y = 100; x'))
+        .toThrow('Cannot assign through immutable pointer');
+    });
   });
 
   describe('match expressions', () => {

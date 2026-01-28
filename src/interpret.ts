@@ -219,9 +219,12 @@ function checkBranchCompatibility(
     if (!t1?.startsWith('*') || !t2?.startsWith('*')) {
       throw new Error(errorMessage);
     }
-    const b1 = t1.substring(1);
-    const b2 = t2.substring(1);
+    const b1 = t1.substring(1).replace('mut ', '');
+    const b2 = t2.substring(1).replace('mut ', '');
     if (b1 !== 'Untyped' && b2 !== 'Untyped' && b1 !== b2) {
+      throw new Error(errorMessage);
+    }
+    if (t1.includes('mut') !== t2.includes('mut')) {
       throw new Error(errorMessage);
     }
     return;
@@ -471,16 +474,16 @@ function interpretInternal(
     const resolved = resolveStatement(statement, variables);
 
     const letAnnotatedMatch = resolved.match(
-      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([*]*[A-Za-z]\w*)\s*=\s*(.+)$/
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([*]*(?:mut\s+)?[A-Za-z]\w*)\s*=\s*(.+)$/
     );
     const letNoInitMatch = resolved.match(
-      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([*]*[A-Za-z]\w*)$/
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([*]*(?:mut\s+)?[A-Za-z]\w*)$/
     );
     const letInferredMatch = resolved.match(
       /^let\s+(mut\s+)?([A-Za-z]\w*)\s*=\s*(.+)$/
     );
     const assignmentMatch = resolved.match(
-      /^([A-Za-z]\w*)\s*(\+|-|\*|\/)?=\s*(.+)$/
+      /^(\*+[A-Za-z]\w*|[A-Za-z]\w*)\s*(\+|-|\*|\/)?=\s*(.+)$/
     );
 
     if (letAnnotatedMatch) {
@@ -536,11 +539,20 @@ function validateTypeCompatibility(
   statement: string
 ): void {
   if (targetType?.startsWith('*') && sourceResult.type?.startsWith('*')) {
-    const targetBase = targetType.substring(1);
-    const sourceBase = sourceResult.type.substring(1);
-    if (sourceBase === 'Untyped' || targetBase === 'Untyped') return;
-    if (targetBase === sourceBase) return;
-    throw new Error('Invalid type: ' + statement);
+    const tBase = targetType.substring(1).replace('mut ', '');
+    const sBase = sourceResult.type.substring(1).replace('mut ', '');
+    const tIsMut = targetType.includes('mut');
+    const sIsMut = sourceResult.type.includes('mut');
+    const isBaseCompatible =
+      tBase === 'Untyped' || sBase === 'Untyped' || tBase === sBase;
+
+    if (!isBaseCompatible) {
+      throw new Error('Invalid type: ' + statement);
+    }
+    if (tIsMut && !sIsMut) {
+      throw new Error('Cannot assign immutable pointer to mutable pointer type');
+    }
+    return;
   }
 
   if (
@@ -608,13 +620,25 @@ function handleAssignmentStatement(
   expr: string,
   operator?: string
 ): Result {
-  if (!variables.has(name)) {
-    throw new Error('Cannot assign to undeclared variable: ' + name);
-  }
-
-  const variable = variables.get(name)!;
-  if (!variable.isMutable && variable.isInitialized) {
-    throw new Error('Cannot assign to immutable variable: ' + name);
+  let variable: Result;
+  if (name.startsWith('*')) {
+    const ptrStr = name.substring(1).trim();
+    const ptr = resolveOperand(ptrStr, variables, true);
+    if (!ptr.type?.startsWith('*')) {
+      throw new Error('Cannot dereference non-pointer type');
+    }
+    if (!ptr.type.includes('mut')) {
+      throw new Error('Cannot assign through immutable pointer');
+    }
+    variable = ptr.value as Result;
+  } else {
+    if (!variables.has(name)) {
+      throw new Error('Cannot assign to undeclared variable: ' + name);
+    }
+    variable = variables.get(name)!;
+    if (!variable.isMutable && variable.isInitialized) {
+      throw new Error('Cannot assign to immutable variable: ' + name);
+    }
   }
 
   let res = interpretInternal(expr, variables);
@@ -626,7 +650,11 @@ function handleAssignmentStatement(
       );
     }
     res = {
-      value: applyOperator(asNumber(variable.value), operator, asNumber(res.value)),
+      value: applyOperator(
+        asNumber(variable.value),
+        operator,
+        asNumber(res.value)
+      ),
       type: getWidestType([variable.type, res.type]),
     };
   }
@@ -687,35 +715,40 @@ function applyOperator(
   }
 }
 
-function resolveOperand(token: string, variables: Variables): Result {
+function resolveOperand(
+  token: string,
+  variables: Variables,
+  failIfUninitialized = true
+): Result {
   const trimmed = token.trim();
   if (trimmed.startsWith('&')) {
-    const name = trimmed.substring(1);
+    const name = trimmed.substring(1).trim();
     if (!variables.has(name)) {
       throw new Error('Cannot take address of undeclared variable: ' + name);
     }
     const variable = variables.get(name)!;
     return {
       value: variable,
-      type: '*' + (variable.type || 'Untyped'),
+      type:
+        '*' + (variable.isMutable ? 'mut ' : '') + (variable.type || 'Untyped'),
       isInitialized: true,
     };
   }
   if (trimmed.startsWith('*')) {
-    const name = trimmed.substring(1);
-    const variable = resolveOperand(name, variables);
+    const name = trimmed.substring(1).trim();
+    const variable = resolveOperand(name, variables, failIfUninitialized);
     if (!variable.type?.startsWith('*')) {
       throw new Error('Cannot dereference non-pointer type');
     }
     const pointedTo = variable.value as Result;
-    if (pointedTo.isInitialized === false) {
+    if (failIfUninitialized && pointedTo.isInitialized === false) {
       throw new Error('Use of uninitialized memory at: ' + trimmed);
     }
     return pointedTo;
   }
   if (variables.has(trimmed)) {
     const variable = variables.get(trimmed)!;
-    if (variable.isInitialized === false) {
+    if (failIfUninitialized && variable.isInitialized === false) {
       throw new Error('Use of uninitialized variable: ' + trimmed);
     }
     return variable;
