@@ -249,6 +249,17 @@ describe('interpret', () => {
     );
   });
 
+  it('supports comparison operators', () => {
+    expect(interpret('100 < 200')).toBe(1);
+    expect(interpret('200 < 100')).toBe(0);
+    expect(interpret('100 <= 100')).toBe(1);
+    expect(interpret('100 > 50')).toBe(1);
+    expect(interpret('50 >= 50')).toBe(1);
+    expect(interpret('100 == 100')).toBe(1);
+    expect(interpret('100 != 200')).toBe(1);
+    expect(interpret('let x = 100; let y = 200; x < y')).toBe(1);
+  });
+
   describe('match expressions', () => {
     it('supports basic matching with literals', () => {
       expect(

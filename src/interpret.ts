@@ -615,7 +615,7 @@ function evaluateStatement(statement: string, variables: Variables): Result {
   if (!trimmed) {
     return { value: 0, type: 'Empty', isInitialized: false };
   }
-  if (/[+\-*/]|\|\||&&/.test(trimmed)) {
+  if (/[+\-*/]|\|\||&&|<|>|==|!=/.test(trimmed)) {
     return evaluateExpression(trimmed, variables);
   }
   return resolveOperand(trimmed, variables);
@@ -642,6 +642,18 @@ function applyOperator(
       return resultValue || nextOperand ? 1 : 0;
     case '&&':
       return resultValue && nextOperand ? 1 : 0;
+    case '<':
+      return resultValue < nextOperand ? 1 : 0;
+    case '<=':
+      return resultValue <= nextOperand ? 1 : 0;
+    case '>':
+      return resultValue > nextOperand ? 1 : 0;
+    case '>=':
+      return resultValue >= nextOperand ? 1 : 0;
+    case '==':
+      return resultValue === nextOperand ? 1 : 0;
+    case '!=':
+      return resultValue !== nextOperand ? 1 : 0;
     default:
       throw new Error('Unknown operator: ' + op);
   }
@@ -667,7 +679,7 @@ function tokenizeExpression(
   operators: string[];
 } {
   const tokens = expr.match(
-    /(-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|[A-Za-z]\w*|\|\||&&|[+\-*/])/g
+    /(-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|[A-Za-z]\w*|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
   );
 
   if (!tokens || tokens.length === 0) {
@@ -718,8 +730,13 @@ function evaluateExpression(expr: string, variables: Variables): Result {
 
   // Arithmetic operators (+) are not supported for Bool type,
   // but logical operators (||, &&) are.
-  const hasLogical = operators.some((op) => op === '||' || op === '&&');
-  const hasArithmetic = operators.some((op) => /[+\-*/]/.test(op));
+  const logicalOps = ['||', '&&'];
+  const comparisonOps = ['<', '<=', '>', '>=', '==', '!='];
+  const arithmeticOps = ['+', '-', '*', '/'];
+
+  const hasLogical = operators.some((op) => logicalOps.includes(op));
+  const hasComparison = operators.some((op) => comparisonOps.includes(op));
+  const hasArithmetic = operators.some((op) => arithmeticOps.includes(op));
   const hasBool = types.some((t) => t === 'Bool');
 
   if (hasBool && hasArithmetic) {
@@ -728,16 +745,30 @@ function evaluateExpression(expr: string, variables: Variables): Result {
   if (hasLogical && types.some((t) => t !== 'Bool')) {
     throw new Error('Logical operators only supported for Bool: ' + expr);
   }
+  if (hasComparison && hasBool) {
+    // Only == and != are allowed for Bool
+    const onlyRefEquality = operators.every((op) => op === '==' || op === '!=');
+    if (!onlyRefEquality) {
+      throw new Error('Comparison operators not supported for Bool: ' + expr);
+    }
+  }
 
   // Determine the widest type
-  const resultType = hasLogical ? 'Bool' : getWidestType(types);
+  const resultType =
+    hasLogical || hasComparison ? 'Bool' : getWidestType(types);
 
   // Evaluate with operator precedence (* and / before + and -, etc)
   const values = operands.map((op) => op.value);
   const currentOperators = [...operators];
 
   // Operator precedence passes
-  const precedenceLevels = [['*', '/'], ['+', '-'], ['&&'], ['||']];
+  const precedenceLevels = [
+    ['*', '/'],
+    ['+', '-'],
+    ['<', '<=', '>', '>=', '==', '!='],
+    ['&&'],
+    ['||'],
+  ];
 
   for (const level of precedenceLevels) {
     applyPrecedenceLevel(level, values, currentOperators);
