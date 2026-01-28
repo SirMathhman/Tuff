@@ -1,13 +1,20 @@
 /**
  * Interpret the given input string and return a numeric result.
  *
- * Note: This is a stubbed implementation and should be replaced with real logic.
+ * Supports numeric literals with optional type suffixes (e.g., "100U8", "42I32").
  */
 export function interpret(input: string): number {
-  // Simple numeric interpretation for now: parse as number
-  const value = Number(input);
+  // Match numeric part followed by optional type suffix
+  const match = input.match(/^(-?\d+(?:\.\d+)?)\s*([A-Za-z]\w*)?$/);
+  
+  if (!match) {
+    throw new Error(`Invalid number: ${input}`);
+  }
+
+  const value = Number(match[1]);
   if (Number.isNaN(value)) {
     throw new Error(`Invalid number: ${input}`);
   }
+
   return value;
 }
