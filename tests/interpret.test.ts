@@ -132,6 +132,10 @@ describe('interpret', () => {
     expect(interpret('let mut x = 0; { x = 1; }; x')).toBe(1);
   });
 
+  it('supports empty blocks', () => {
+    expect(interpret('let mut x = 0; {} x')).toBe(0);
+  });
+
   it('rejects re-assignment to immutable variables', () => {
     expect(() => interpret('let x = 0; x = 1')).toThrow(
       'Cannot assign to immutable variable: x'

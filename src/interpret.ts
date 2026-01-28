@@ -127,6 +127,12 @@ function substituteResult(
   res: Result,
   match: RegExpMatchArray
 ): string {
+  if (res.type === 'Empty') {
+    return (
+      resolved.substring(0, match.index) +
+      resolved.substring(match.index! + match[0].length)
+    );
+  }
   const replacement = res.value.toString() + (res.type || '');
   return (
     resolved.substring(0, match.index) +
@@ -139,7 +145,7 @@ function resolveInnermostGrouping(
   resolved: string,
   variables: Variables
 ): string | null {
-  const match = resolved.match(/(\([^(){}]+\)|\{[^(){}]+\})/);
+  const match = resolved.match(/(\([^(){}]*\)|\{[^(){}]*\})/);
   if (!match) return null;
 
   const group = match[0];
@@ -242,6 +248,10 @@ function interpretInternal(
   variables: Variables = new Map()
 ): Result {
   const statements = splitStatements(input);
+
+  if (statements.length === 0) {
+    return { value: 0, type: 'Empty', isInitialized: false };
+  }
 
   let result: Result | undefined;
 
@@ -392,10 +402,14 @@ function handleAssignmentStatement(
 }
 
 function evaluateStatement(statement: string, variables: Variables): Result {
-  if (/[+\-*/]|\|\||&&/.test(statement)) {
-    return evaluateExpression(statement, variables);
+  const trimmed = statement.trim();
+  if (!trimmed) {
+    return { value: 0, type: 'Empty', isInitialized: false };
   }
-  return resolveOperand(statement, variables);
+  if (/[+\-*/]|\|\||&&/.test(trimmed)) {
+    return evaluateExpression(trimmed, variables);
+  }
+  return resolveOperand(trimmed, variables);
 }
 
 function applyOperator(
@@ -425,14 +439,15 @@ function applyOperator(
 }
 
 function resolveOperand(token: string, variables: Variables): Result {
-  if (variables.has(token)) {
-    const variable = variables.get(token)!;
+  const trimmed = token.trim();
+  if (variables.has(trimmed)) {
+    const variable = variables.get(trimmed)!;
     if (variable.isInitialized === false) {
-      throw new Error('Use of uninitialized variable: ' + token);
+      throw new Error('Use of uninitialized variable: ' + trimmed);
     }
     return variable;
   }
-  return parseTypedNumber(token);
+  return parseTypedNumber(trimmed);
 }
 
 function tokenizeExpression(
