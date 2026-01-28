@@ -27,8 +27,21 @@ const typeOrdering: Record<string, number> = {
   Bool: 100,
 };
 
+type FunctionParameter = {
+  name: string;
+  type?: string;
+};
+
+type FunctionValue = {
+  name: string;
+  params: FunctionParameter[];
+  body: string;
+  returnType?: string;
+  env: Variables;
+};
+
 type Result = {
-  value: number | Result | Result[];
+  value: number | Result | Result[] | FunctionValue;
   type?: string;
   isMutable?: boolean;
   isInitialized?: boolean;
@@ -93,7 +106,7 @@ function parseTypedNumber(input: string): Result {
   return { value, type: typeSuffix };
 }
 
-function asNumber(value: number | Result | Result[]): number {
+function asNumber(value: number | Result | Result[] | FunctionValue): number {
   if (typeof value === 'object') {
     throw new Error('Expected numeric value, found non-numeric type');
   }
@@ -136,7 +149,10 @@ function buildArrayLiteral(
   }
   const inner = trimmed.substring(1, trimmed.length - 1).trim();
   const parts = inner
-    ? inner.split(',').map((part) => part.trim()).filter((part) => part.length)
+    ? inner
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length)
     : [];
 
   if (parts.length !== arrayType.initialized) {
@@ -169,6 +185,42 @@ function buildArrayLiteral(
       ']',
     isInitialized: true,
   };
+}
+
+function splitTopLevelCommas(input: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (char === '(' || char === '{' || char === '[') {
+      depth++;
+    } else if (char === ')' || char === '}' || char === ']') {
+      depth--;
+    }
+    if (char === ',' && depth === 0) {
+      parts.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) {
+    parts.push(current.trim());
+  }
+  return parts.filter((part) => part.length > 0);
+}
+
+function parseFunctionParameters(paramsStr: string): FunctionParameter[] {
+  if (!paramsStr.trim()) return [];
+  const parts = splitTopLevelCommas(paramsStr);
+  return parts.map((part) => {
+    const match = part.match(/^([A-Za-z]\w*)(?:\s*:\s*([A-Za-z]\w*(?:\[[^\]]+\])?))?$/);
+    if (!match) {
+      throw new Error('Invalid function parameter: ' + part);
+    }
+    return { name: match[1], type: match[2] };
+  });
 }
 
 function splitStatements(input: string): string[] {
@@ -491,10 +543,24 @@ function resolveGroupAt(
 function resolveStatement(statement: string, variables: Variables): string {
   let resolved = statement.trim();
 
+  const findNonCallParenIndex = (input: string): number => {
+    for (let j = 0; j < input.length; j++) {
+      if (input[j] !== '(') continue;
+      const before = input.substring(0, j);
+      const match = before.match(/([A-Za-z]\w*)\s*$/);
+      if (match) {
+        // Looks like a function call; don't resolve this paren group here.
+        continue;
+      }
+      return j;
+    }
+    return -1;
+  };
+
   while (true) {
     const ifMatch = resolved.match(/\bif\b/);
     const matchMatch = resolved.match(/\bmatch\b/);
-    const parenIndex = resolved.indexOf('(');
+    const parenIndex = findNonCallParenIndex(resolved);
     const braceIndex = resolved.indexOf('{');
 
     const ifIndex = ifMatch ? ifMatch.index! : -1;
@@ -538,7 +604,22 @@ function interpretInternal(
   let result: Result | undefined;
 
   for (const statement of statements) {
-    const resolved = resolveStatement(statement, variables);
+    const trimmedStatement = statement.trim();
+    const fnMatch = trimmedStatement.match(
+      /^fn\s+([A-Za-z]\w*)\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*(.+)$/
+    );
+    if (fnMatch) {
+      result = handleFunctionDefinition(
+        trimmedStatement,
+        variables,
+        fnMatch[1],
+        fnMatch[2],
+        fnMatch[3],
+        fnMatch[4]
+      );
+      continue;
+    }
+    const resolved = resolveStatement(trimmedStatement, variables);
 
     const letAnnotatedMatch = resolved.match(
       /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*((?:\[[^\]]+\]|[*]*(?:mut\s+)?[A-Za-z]\w*))\s*=\s*(.+)$/
@@ -660,6 +741,38 @@ function validateTypeCompatibility(
   }
 }
 
+function handleFunctionDefinition(
+  statement: string,
+  variables: Variables,
+  name: string,
+  paramsStr: string,
+  returnType: string | undefined,
+  body: string
+): Result {
+  if (variables.has(name)) {
+    throw new Error('Function already declared: ' + name);
+  }
+
+  const params = parseFunctionParameters(paramsStr);
+  const env = cloneVariables(variables);
+  const functionValue: FunctionValue = {
+    name,
+    params,
+    body: body.trim(),
+    returnType: returnType?.trim(),
+    env,
+  };
+
+  const variable = {
+    value: functionValue,
+    type: 'Function',
+    isMutable: false,
+    isInitialized: true,
+  };
+  variables.set(name, variable);
+  return variable;
+}
+
 function handleLetStatement(
   statement: string,
   variables: Variables,
@@ -707,7 +820,7 @@ function handleLetStatement(
     return variable;
   }
 
-  let value: number | Result | Result[] = 0;
+  let value: number | Result | Result[] | FunctionValue = 0;
   let finalType = type;
   let isInitialized = false;
 
@@ -775,6 +888,39 @@ function handleAssignmentStatement(
   variable.value = res.value;
   variable.isInitialized = true;
   return variable;
+}
+
+function invokeFunction(
+  fnValue: FunctionValue,
+  args: string[],
+  variables: Variables
+): Result {
+  if (args.length !== fnValue.params.length) {
+    throw new Error(
+      'Argument count mismatch for function ' + fnValue.name + ': expected ' + fnValue.params.length + ', got ' + args.length
+    );
+  }
+
+  const callEnv = cloneVariables(fnValue.env);
+  for (let i = 0; i < args.length; i++) {
+    const param = fnValue.params[i];
+    const res = interpretInternal(args[i], variables);
+    if (param.type) {
+      validateTypeCompatibility(param.type, res, 'Function ' + fnValue.name + ' parameter ' + param.name);
+    }
+    callEnv.set(param.name, {
+      value: res.value,
+      type: param.type || res.type,
+      isMutable: false,
+      isInitialized: true,
+    });
+  }
+
+  const result = interpretInternal(fnValue.body, callEnv);
+  if (fnValue.returnType) {
+    validateTypeCompatibility(fnValue.returnType, result, 'Function ' + fnValue.name + ' return');
+  }
+  return result;
 }
 
 function evaluateStatement(statement: string, variables: Variables): Result {
@@ -854,6 +1000,24 @@ function resolveOperand(
     }
     return element;
   }
+  const funcCallMatch = trimmed.match(/^([A-Za-z]\w*)\((.*)\)$/);
+  if (funcCallMatch) {
+    const name = funcCallMatch[1];
+    const argString = funcCallMatch[2].trim();
+    if (!variables.has(name)) {
+      throw new Error('Function not found: ' + name);
+    }
+    const variable = variables.get(name)!;
+    if (!variable.isInitialized) {
+      throw new Error('Use of uninitialized function: ' + name);
+    }
+    const fnValue = variable.value as FunctionValue;
+    if (!fnValue || typeof fnValue.body !== 'string') {
+      throw new Error('Cannot call non-function: ' + name);
+    }
+    const args = argString ? splitTopLevelCommas(argString) : [];
+    return invokeFunction(fnValue, args, variables);
+  }
   if (trimmed.startsWith('&')) {
     const name = trimmed.substring(1).trim();
     if (!variables.has(name)) {
@@ -925,7 +1089,7 @@ function tokenizeExpression(
 
 function applyPrecedenceLevel(
   level: string[],
-  values: (number | Result | Result[])[],
+  values: (number | Result | Result[] | FunctionValue)[],
   currentOperators: string[]
 ): void {
   for (let i = 0; i < currentOperators.length; ) {
@@ -980,7 +1144,9 @@ function evaluateExpression(expr: string, variables: Variables): Result {
     hasLogical || hasComparison ? 'Bool' : getWidestType(types);
 
   // Evaluate with operator precedence (* and / before + and -, etc)
-  const values: (number | Result | Result[])[] = operands.map((op) => op.value);
+  const values: (number | Result | Result[] | FunctionValue)[] = operands.map(
+    (op) => op.value
+  );
   const currentOperators = [...operators];
 
   // Operator precedence passes

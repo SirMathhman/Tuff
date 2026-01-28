@@ -270,6 +270,12 @@ describe('interpret', () => {
     });
   });
 
+  describe('functions', () => {
+    it('supports basic zero-argument functions', () => {
+      expect(interpret('fn get() : I32 => 100; get()')).toBe(100);
+    });
+  });
+
   describe('pointers', () => {
     it('supports address-of and dereference', () => {
       expect(interpret('let x = 100; let y : *Untyped = &x; *y')).toBe(100);
