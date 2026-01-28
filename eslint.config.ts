@@ -16,6 +16,13 @@ export default [
     },
     rules: {
       'max-depth': ['error', 2],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'TemplateLiteral',
+          message: 'Template literals are not allowed. Use string concatenation instead.',
+        },
+      ],
     },
   },
 ];
