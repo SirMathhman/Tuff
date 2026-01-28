@@ -19,6 +19,42 @@ This guarantee makes Tuff suitable for:
 - Embedded and real-time systems
 - Any application requiring predictable, crash-free execution
 
+## Naming Conventions
+
+Tuff follows the same naming conventions as C, Java, and TypeScript:
+
+| Category | Convention | Examples |
+|----------|-----------|----------|
+| **Types** (struct, enum, trait, type alias) | `PascalCase` | `Point`, `Color`, `Result<T>`, `UserId` |
+| **Functions** | `camelCase` | `add`, `greet`, `calculateTotal`, `parseInput` |
+| **Variables** | `camelCase` | `x`, `myValue`, `currentIndex`, `tempName` |
+| **Constants** | `UPPER_SNAKE_CASE` | `PI`, `MAX_SIZE`, `HTTP_TIMEOUT` |
+| **Module/File names** | `snake_case` | `math.tuff`, `http_client.tuff`, `ui_helpers.tuff` |
+
+Examples:
+
+```tuff
+struct PersonInfo {  // PascalCase for struct
+  firstName: string  // camelCase for field
+  lastName: string
+}
+
+enum NetworkStatus {  // PascalCase for enum
+  Connected,
+  Disconnected,
+}
+
+const MAX_RETRIES: i32 = 3  // UPPER_SNAKE_CASE for constant
+
+fn calculateDistance(p1: Point, p2: Point) -> f64 {  // camelCase for function
+  let dx = p2.x - p1.x  // camelCase for variable
+  let dy = p2.y - p1.y
+  // ...
+}
+
+type Result<T> = T | null  // PascalCase for type alias
+```
+
 ## Core Language Features
 
 ### Comments
