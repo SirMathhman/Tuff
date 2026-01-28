@@ -127,7 +127,12 @@ describe('interpret', () => {
   it('supports mutable variables and re-assignment', () => {
     expect(interpret('let mut x = 0; x = 1; x')).toBe(1);
   });
-
+  it('supports compound assignment operators', () => {
+    expect(interpret('let mut x = 1; x += 2; x')).toBe(3);
+    expect(interpret('let mut x = 10; x -= 2; x')).toBe(8);
+    expect(interpret('let mut x = 3; x *= 4; x')).toBe(12);
+    expect(interpret('let mut x = 20; x /= 5; x')).toBe(4);
+  });
   it('allows re-assignment to outer scope mutable variables from inner blocks', () => {
     expect(interpret('let mut x = 0; { x = 1; }; x')).toBe(1);
   });

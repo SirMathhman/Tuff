@@ -460,7 +460,9 @@ function interpretInternal(
     const letInferredMatch = resolved.match(
       /^let\s+(mut\s+)?([A-Za-z]\w*)\s*=\s*(.+)$/
     );
-    const assignmentMatch = resolved.match(/^([A-Za-z]\w*)\s*=\s*(.+)$/);
+    const assignmentMatch = resolved.match(
+      /^([A-Za-z]\w*)\s*(\+|-|\*|\/)?=\s*(.+)$/
+    );
 
     if (letAnnotatedMatch) {
       result = handleLetStatement(
@@ -494,6 +496,7 @@ function interpretInternal(
         resolved,
         variables,
         assignmentMatch[1],
+        assignmentMatch[3],
         assignmentMatch[2]
       );
     } else {
@@ -574,7 +577,8 @@ function handleAssignmentStatement(
   statement: string,
   variables: Variables,
   name: string,
-  expr: string
+  expr: string,
+  operator?: string
 ): Result {
   if (!variables.has(name)) {
     throw new Error('Cannot assign to undeclared variable: ' + name);
@@ -585,7 +589,19 @@ function handleAssignmentStatement(
     throw new Error('Cannot assign to immutable variable: ' + name);
   }
 
-  const res = interpretInternal(expr, variables);
+  let res = interpretInternal(expr, variables);
+
+  if (operator) {
+    if (!variable.isInitialized) {
+      throw new Error(
+        'Use of uninitialized variable in compound assignment: ' + name
+      );
+    }
+    res = {
+      value: applyOperator(variable.value, operator, res.value),
+      type: getWidestType([variable.type, res.type]),
+    };
+  }
 
   validateTypeCompatibility(variable.type, res, statement);
 
