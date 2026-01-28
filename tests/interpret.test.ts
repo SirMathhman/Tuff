@@ -260,6 +260,16 @@ describe('interpret', () => {
     expect(interpret('let x = 100; let y = 200; x < y')).toBe(1);
   });
 
+  describe('arrays', () => {
+    it('supports array literals and indexing', () => {
+      expect(
+        interpret(
+          'let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]'
+        )
+      ).toBe(6);
+    });
+  });
+
   describe('pointers', () => {
     it('supports address-of and dereference', () => {
       expect(interpret('let x = 100; let y : *Untyped = &x; *y')).toBe(100);
@@ -299,8 +309,9 @@ describe('interpret', () => {
     });
 
     it('rejects assignment via immutable pointers', () => {
-      expect(() => interpret('let mut x = 0; let y : *I32 = &x; *y = 100; x'))
-        .toThrow('Cannot assign through immutable pointer');
+      expect(() =>
+        interpret('let mut x = 0; let y : *I32 = &x; *y = 100; x')
+      ).toThrow('Cannot assign through immutable pointer');
     });
   });
 

@@ -28,7 +28,7 @@ const typeOrdering: Record<string, number> = {
 };
 
 type Result = {
-  value: number | Result;
+  value: number | Result | Result[];
   type?: string;
   isMutable?: boolean;
   isInitialized?: boolean;
@@ -93,15 +93,82 @@ function parseTypedNumber(input: string): Result {
   return { value, type: typeSuffix };
 }
 
-function asNumber(value: number | Result): number {
+function asNumber(value: number | Result | Result[]): number {
   if (typeof value === 'object') {
-    throw new Error('Expected numeric value, found pointer');
+    throw new Error('Expected numeric value, found non-numeric type');
   }
   return value;
 }
 
 export function interpret(input: string): number {
   return asNumber(interpretInternal(input).value);
+}
+
+type ArrayTypeInfo = {
+  baseType: string;
+  initialized: number;
+  length: number;
+};
+
+function parseArrayType(type: string): ArrayTypeInfo | null {
+  const match = type.match(/^\[\s*([A-Za-z]\w*)\s*;\s*(\d+)\s*;\s*(\d+)\s*\]$/);
+  if (!match) return null;
+  return {
+    baseType: match[1],
+    initialized: Number(match[2]),
+    length: Number(match[3]),
+  };
+}
+
+function isArrayType(type: string | undefined): type is string {
+  return !!type && type.trim().startsWith('[');
+}
+
+function buildArrayLiteral(
+  expr: string,
+  arrayType: ArrayTypeInfo,
+  variables: Variables,
+  statement: string
+): Result {
+  const trimmed = expr.trim();
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
+    throw new Error('Invalid array literal: ' + statement);
+  }
+  const inner = trimmed.substring(1, trimmed.length - 1).trim();
+  const parts = inner
+    ? inner.split(',').map((part) => part.trim()).filter((part) => part.length)
+    : [];
+
+  if (parts.length !== arrayType.initialized) {
+    throw new Error('Invalid array literal: ' + statement);
+  }
+  if (arrayType.initialized > arrayType.length) {
+    throw new Error('Invalid array type: ' + statement);
+  }
+
+  const elements: Result[] = [];
+  for (const part of parts) {
+    const res = interpretInternal(part, variables);
+    validateTypeCompatibility(arrayType.baseType, res, statement);
+    elements.push(res);
+  }
+
+  while (elements.length < arrayType.length) {
+    elements.push({ value: 0, type: arrayType.baseType, isInitialized: false });
+  }
+
+  return {
+    value: elements,
+    type:
+      '[' +
+      arrayType.baseType +
+      '; ' +
+      arrayType.initialized +
+      '; ' +
+      arrayType.length +
+      ']',
+    isInitialized: true,
+  };
 }
 
 function splitStatements(input: string): string[] {
@@ -112,8 +179,8 @@ function splitStatements(input: string): string[] {
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
     const oldDepth = depth;
-    if (char === '{' || char === '(') depth++;
-    else if (char === '}' || char === ')') depth--;
+    if (char === '{' || char === '(' || char === '[') depth++;
+    else if (char === '}' || char === ')' || char === ']') depth--;
 
     const isSemicolonSplit = char === ';' && depth === 0;
     const isBraceSplit = char === '}' && depth === 0 && oldDepth === 1;
@@ -474,10 +541,10 @@ function interpretInternal(
     const resolved = resolveStatement(statement, variables);
 
     const letAnnotatedMatch = resolved.match(
-      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([*]*(?:mut\s+)?[A-Za-z]\w*)\s*=\s*(.+)$/
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*((?:\[[^\]]+\]|[*]*(?:mut\s+)?[A-Za-z]\w*))\s*=\s*(.+)$/
     );
     const letNoInitMatch = resolved.match(
-      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([*]*(?:mut\s+)?[A-Za-z]\w*)$/
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*((?:\[[^\]]+\]|[*]*(?:mut\s+)?[A-Za-z]\w*))$/
     );
     const letInferredMatch = resolved.match(
       /^let\s+(mut\s+)?([A-Za-z]\w*)\s*=\s*(.+)$/
@@ -538,6 +605,13 @@ function validateTypeCompatibility(
   sourceResult: Result,
   statement: string
 ): void {
+  if (isArrayType(targetType) && isArrayType(sourceResult.type)) {
+    if (targetType !== sourceResult.type) {
+      throw new Error('Invalid type: ' + statement);
+    }
+    return;
+  }
+
   if (targetType?.startsWith('*') && sourceResult.type?.startsWith('*')) {
     const tBase = targetType.substring(1).replace('mut ', '');
     const sBase = sourceResult.type.substring(1).replace('mut ', '');
@@ -550,7 +624,9 @@ function validateTypeCompatibility(
       throw new Error('Invalid type: ' + statement);
     }
     if (tIsMut && !sIsMut) {
-      throw new Error('Cannot assign immutable pointer to mutable pointer type');
+      throw new Error(
+        'Cannot assign immutable pointer to mutable pointer type'
+      );
     }
     return;
   }
@@ -596,7 +672,42 @@ function handleLetStatement(
     throw new Error('Variable already declared: ' + name);
   }
 
-  let value: number | Result = 0;
+  if (expr && isArrayType(type)) {
+    const info = parseArrayType(type);
+    if (!info) {
+      throw new Error('Invalid array type: ' + statement);
+    }
+    const arrResult = buildArrayLiteral(expr, info, variables, statement);
+    const variable = {
+      value: arrResult.value,
+      type: arrResult.type,
+      isMutable,
+      isInitialized: true,
+    };
+    variables.set(name, variable);
+    return variable;
+  }
+
+  if (!expr && isArrayType(type)) {
+    const info = parseArrayType(type);
+    if (!info) {
+      throw new Error('Invalid array type: ' + statement);
+    }
+    const elements: Result[] = [];
+    while (elements.length < info.length) {
+      elements.push({ value: 0, type: info.baseType, isInitialized: false });
+    }
+    const variable = {
+      value: elements,
+      type,
+      isMutable,
+      isInitialized: false,
+    };
+    variables.set(name, variable);
+    return variable;
+  }
+
+  let value: number | Result | Result[] = 0;
   let finalType = type;
   let isInitialized = false;
 
@@ -721,6 +832,28 @@ function resolveOperand(
   failIfUninitialized = true
 ): Result {
   const trimmed = token.trim();
+  const arrayMatch = trimmed.match(/^([A-Za-z]\w*)\[(\d+)\]$/);
+  if (arrayMatch) {
+    const name = arrayMatch[1];
+    const index = Number(arrayMatch[2]);
+    if (!variables.has(name)) {
+      throw new Error('Use of uninitialized variable: ' + name);
+    }
+    const variable = variables.get(name)!;
+    if (!isArrayType(variable.type)) {
+      throw new Error('Cannot index non-array type');
+    }
+    const info = parseArrayType(variable.type);
+    if (!info || index < 0 || index >= info.length) {
+      throw new Error('Array index out of bounds: ' + trimmed);
+    }
+    const elements = variable.value as Result[];
+    const element = elements[index];
+    if (failIfUninitialized && element.isInitialized === false) {
+      throw new Error('Use of uninitialized array element: ' + trimmed);
+    }
+    return element;
+  }
   if (trimmed.startsWith('&')) {
     const name = trimmed.substring(1).trim();
     if (!variables.has(name)) {
@@ -764,7 +897,7 @@ function tokenizeExpression(
   operators: string[];
 } {
   const tokens = expr.match(
-    /([&*]*[A-Za-z]\w*|-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
+    /([&*]*[A-Za-z]\w*(?:\[\d+\])?|-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
   );
 
   if (!tokens || tokens.length === 0) {
@@ -792,7 +925,7 @@ function tokenizeExpression(
 
 function applyPrecedenceLevel(
   level: string[],
-  values: (number | Result)[],
+  values: (number | Result | Result[])[],
   currentOperators: string[]
 ): void {
   for (let i = 0; i < currentOperators.length; ) {
@@ -847,7 +980,7 @@ function evaluateExpression(expr: string, variables: Variables): Result {
     hasLogical || hasComparison ? 'Bool' : getWidestType(types);
 
   // Evaluate with operator precedence (* and / before + and -, etc)
-  const values: (number | Result)[] = operands.map((op) => op.value);
+  const values: (number | Result | Result[])[] = operands.map((op) => op.value);
   const currentOperators = [...operators];
 
   // Operator precedence passes
