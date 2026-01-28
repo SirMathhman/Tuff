@@ -2462,6 +2462,26 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
     const receiverResult = evaluate(receiverStr, scope);
 
+    const receiverScopeEntry = receiverResult.thisScope?.[methodName];
+    if (receiverScopeEntry?.functionBody) {
+      const receiverParamNames = receiverScopeEntry.functionParams || [];
+      const receiverArgs = argExprs.map((arg) => evaluate(arg, scope));
+      if (receiverParamNames[0] === "this") {
+        return invokeFunction(
+          methodName,
+          receiverScopeEntry,
+          [receiverResult, ...receiverArgs],
+          source,
+        );
+      }
+      return invokeFunction(
+        methodName,
+        receiverScopeEntry,
+        receiverArgs,
+        source,
+      );
+    }
+
     if (paramNames[0] !== "this") {
       throw new Error(
         `Method call requires first parameter this for function ${methodName}`,
