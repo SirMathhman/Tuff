@@ -117,6 +117,23 @@ function handleLetStatement(
   }
 
   const res = interpretInternal(expr, variables);
+
+  // Reject narrowing and mixed signed/unsigned assignments
+  if (res.type && type in typeOrdering && res.type in typeOrdering) {
+    const targetIsUnsigned = type.startsWith('U');
+    const sourceIsSigned = res.type.startsWith('I');
+    const targetIsSigned = type.startsWith('I');
+    const sourceIsUnsigned = res.type.startsWith('U');
+
+    if (
+      typeOrdering[res.type] > typeOrdering[type] ||
+      (targetIsUnsigned && sourceIsSigned) ||
+      (targetIsSigned && sourceIsUnsigned)
+    ) {
+      throw new Error('Invalid type: ' + statement);
+    }
+  }
+
   if (type in typeRanges) {
     const [min, max] = typeRanges[type];
     if (res.value < min || res.value > max) {

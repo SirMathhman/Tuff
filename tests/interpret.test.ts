@@ -103,4 +103,10 @@ describe('interpret', () => {
   it('supports assigning a smaller typed value to a larger type', () => {
     expect(interpret('(4 + { let x : U16 = 2U8; x }) * 3')).toBe(18);
   });
+
+  it('rejects assigning a larger typed value to a smaller type', () => {
+    expect(() => interpret('(4 + { let x : U8 = 2U16; x }) * 3')).toThrow(
+      'Invalid type: let x : U8 = 2U16'
+    );
+  });
 });
