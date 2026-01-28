@@ -56,7 +56,13 @@ type StructInstance = {
 };
 
 type Result = {
-  value: number | Result | Result[] | FunctionValue | StructDef | StructInstance;
+  value:
+    | number
+    | Result
+    | Result[]
+    | FunctionValue
+    | StructDef
+    | StructInstance;
   type?: string;
   isMutable?: boolean;
   isInitialized?: boolean;
@@ -122,13 +128,7 @@ function parseTypedNumber(input: string): Result {
 }
 
 function asNumber(
-  value:
-    | number
-    | Result
-    | Result[]
-    | FunctionValue
-    | StructDef
-    | StructInstance
+  value: number | Result | Result[] | FunctionValue | StructDef | StructInstance
 ): number {
   if (typeof value === 'object') {
     throw new Error('Expected numeric value, found non-numeric type');
@@ -1100,7 +1100,7 @@ function evaluateStatement(statement: string, variables: Variables): Result {
   if (!trimmed) {
     return { value: 0, type: 'Empty', isInitialized: false };
   }
-  if (/[+\-*/]|\|\||&&|<|>|==|!=/.test(trimmed)) {
+  if (/[+\-*/]|\|\||&&|<|>|==|!=| is /.test(trimmed)) {
     return evaluateExpression(trimmed, variables);
   }
   return resolveOperand(trimmed, variables);
@@ -1142,6 +1142,14 @@ function applyOperator(
     default:
       throw new Error('Unknown operator: ' + op);
   }
+}
+
+function applyIsOperator(result: Result, typeName: string): boolean {
+  if (!result.type) {
+    // Untyped values are compatible with any numeric type
+    return typeName in typeRanges || typeName === 'Bool';
+  }
+  return result.type === typeName;
 }
 
 function resolveOperand(
@@ -1269,6 +1277,15 @@ function resolveOperand(
     }
     return variable;
   }
+  // Check if it looks like a variable name before trying to parse as number
+  // (but exclude boolean keywords and type names)
+  if (
+    /^[A-Za-z]\w*$/.test(trimmed) &&
+    trimmed !== 'true' &&
+    trimmed !== 'false'
+  ) {
+    throw new Error('Use of uninitialized variable: ' + trimmed);
+  }
   return parseTypedNumber(trimmed);
 }
 
@@ -1280,7 +1297,7 @@ function tokenizeExpression(
   operators: string[];
 } {
   const tokens = expr.match(
-    /([&*]*[A-Za-z]\w*(?:\.[A-Za-z]\w*)?(?:\[\d+\])?(?:\([^()]*\))?|-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
+    /([&*]*[A-Za-z]\w*(?:\.[A-Za-z]\w*)?(?:\[\d+\])?(?:\([^()]*\))?|-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|\|\||&&| is |<=|>=|==|!=|[+\-*/<>])/g
   );
 
   if (!tokens || tokens.length === 0) {
@@ -1295,7 +1312,7 @@ function tokenizeExpression(
     if (i % 2 === 0) {
       operands.push(resolveOperand(token, variables));
     } else {
-      operators.push(token);
+      operators.push(token.trim());
     }
   }
 
@@ -1308,7 +1325,14 @@ function tokenizeExpression(
 
 function applyPrecedenceLevel(
   level: string[],
-  values: (number | Result | Result[] | FunctionValue | StructDef | StructInstance)[],
+  values: (
+    | number
+    | Result
+    | Result[]
+    | FunctionValue
+    | StructDef
+    | StructInstance
+  )[],
   currentOperators: string[]
 ): void {
   for (let i = 0; i < currentOperators.length; ) {
@@ -1328,6 +1352,16 @@ function applyPrecedenceLevel(
 }
 
 function evaluateExpression(expr: string, variables: Variables): Result {
+  // Handle 'is' operator specially
+  const isMatch = expr.match(/^(.+?)\s+is\s+([A-Za-z]\w*)$/);
+  if (isMatch) {
+    const leftExpr = isMatch[1].trim();
+    const typeName = isMatch[2].trim();
+    const leftResult = interpretInternal(leftExpr, variables);
+    const isTypeMatch = applyIsOperator(leftResult, typeName);
+    return { value: isTypeMatch ? 1 : 0, type: 'Bool' };
+  }
+
   const { operands, operators } = tokenizeExpression(expr, variables);
 
   // Collect all types from operands

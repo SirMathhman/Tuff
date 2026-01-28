@@ -496,4 +496,24 @@ describe('interpret', () => {
       expect(interpret(code)).toBe(10);
     });
   });
+
+  describe('type checking', () => {
+    it('supports is operator for type checking', () => {
+      expect(interpret('let result = 100; result is I32')).toBe(1);
+    });
+
+    it('returns 0 when type does not match', () => {
+      expect(interpret('let result = 100U8; result is I32')).toBe(0);
+    });
+
+    it('supports is with typed variables', () => {
+      expect(interpret('let x : I32 = 42; x is I32')).toBe(1);
+    });
+
+    it('rejects is with undefined variables', () => {
+      expect(() => interpret('unknown is I32')).toThrow(
+        'Use of uninitialized variable: unknown'
+      );
+    });
+  });
 });
