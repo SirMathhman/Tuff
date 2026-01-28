@@ -8,7 +8,7 @@ This is an evolving specification of the Tuff language syntax and semantics. Fea
 
 - No `null` pointer dereferences (enforced via `Option<T>` types)
 - No array out-of-bounds access (compile-time verified via refinement types)
-- No arithmetic overflow/underflow panics (wrapping semantics or runtime checks)
+- No arithmetic overflow/underflow panics (compile-time verified via refinement types)
 - No invalid type casts (compile-time verified)
 - No unwinding from failed assertions in release mode
 - Explicit error handling via `Result<T>` or optional returns
@@ -343,7 +343,30 @@ fn gradePercentage(p: I32 where p >= 0 && p <= 100) -> *Str {
 }
 ```
 
-By encoding bounds and constraints in refinement types, **Tuff guarantees that no array access will panic or crash at runtime**, fulfilling the core no-panic guarantee.
+### Arithmetic Overflow Prevention
+
+Refinement types also prevent arithmetic overflow by constraining operands:
+
+```tuff
+// Invalid: x + y could overflow U8
+let x: U8 = read<U8>()
+let y: U8 = read<U8>()
+let z = x + y  // ✗ Error: no proof that x + y <= 255
+
+// Valid: explicitly prove the sum won't overflow
+let x: U8 = read<U8>()
+let y: U8 = read<U8>()
+let z = if (x <= 255 - y) x + y else 0  // ✓ OK: bounds check proves x + y <= 255
+```
+
+For `U8` (range 0-255), adding two values `x + y` requires the refinement constraint `x + y <= 255`, which mathematically simplifies to `x <= 255 - y`. By checking this condition before performing the addition, the compiler can prove no overflow will occur.
+
+Similar refinement constraints apply to other arithmetic operations:
+- **Subtraction**: `a - b` requires `a >= b` on unsigned integers to prevent underflow
+- **Multiplication**: `a * b` requires `a * b <= Max<T>` to prevent overflow
+- **Division**: `a / b` requires `b != 0` to prevent division by zero
+
+By encoding these constraints, **Tuff guarantees that no arithmetic operation will panic, overflow, or produce undefined behavior at runtime**.
 
 ## Expressions
 
