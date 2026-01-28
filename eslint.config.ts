@@ -1,7 +1,6 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import noInnerFunctions from './eslint-rules/no-inner-functions';
 
 export default [
   {
@@ -15,15 +14,9 @@ export default [
       globals: globals.browser,
       parser: tseslint.parser,
     },
-    plugins: {
-      customRules: {
-        rules: {
-          'no-inner-functions': noInnerFunctions,
-        },
-      },
-    },
     rules: {
-      'customRules/no-inner-functions': 'error',
-    },
+      'max-lines-per-function': ['error', { max: 50 }],
+      'max-depth': ['error', 2],
+    }
   },
 ];
