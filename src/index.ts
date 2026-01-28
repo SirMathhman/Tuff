@@ -19,8 +19,12 @@ export function interpret(input: string): number {
   if (m) {
     const n = Number(m[1]);
     const suffix = m[2];
-    // If there's an unsigned suffix (starts with U or u), negative values are invalid
-    if (suffix && /^[Uu]/.test(suffix) && n < 0) {
+    // Reject lowercase 'u' suffixes (invalid usage)
+    if (suffix && /^[u]/.test(suffix)) {
+      throw new Error('invalid suffix');
+    }
+    // If there's an unsigned suffix starting with uppercase U, negative values are invalid
+    if (suffix && /^[U]/.test(suffix) && n < 0) {
       throw new Error('unsigned literal cannot be negative');
     }
     return Number.isFinite(n) ? n : 0;
