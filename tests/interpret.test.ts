@@ -109,4 +109,8 @@ describe('interpret', () => {
       'Invalid type: let x : U8 = 2U16'
     );
   });
+
+  it('supports inferred let declarations', () => {
+    expect(interpret('(4 + { let x = 2U8; let y : U16 = x; y }) * 3')).toBe(18);
+  });
 });

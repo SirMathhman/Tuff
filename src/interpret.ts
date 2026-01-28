@@ -105,21 +105,20 @@ export function interpret(input: string): number {
 
 function handleLetStatement(
   statement: string,
-  match: RegExpMatchArray,
-  variables: Variables
+  variables: Variables,
+  name: string,
+  expr: string,
+  type?: string
 ): Result {
-  const name = match[1];
-  const type = match[2];
-  const expr = match[3];
-
   if (variables.has(name)) {
     throw new Error('Variable already declared: ' + name);
   }
 
   const res = interpretInternal(expr, variables);
+  const finalType = type || res.type;
 
-  // Reject narrowing and mixed signed/unsigned assignments
-  if (res.type && type in typeOrdering && res.type in typeOrdering) {
+  // Reject narrowing and mixed signed/unsigned assignments if target type is explicit
+  if (type && res.type && type in typeOrdering && res.type in typeOrdering) {
     const targetIsUnsigned = type.startsWith('U');
     const sourceIsSigned = res.type.startsWith('I');
     const targetIsSigned = type.startsWith('I');
@@ -134,13 +133,13 @@ function handleLetStatement(
     }
   }
 
-  if (type in typeRanges) {
-    const [min, max] = typeRanges[type];
+  if (finalType && finalType in typeRanges) {
+    const [min, max] = typeRanges[finalType];
     if (res.value < min || res.value > max) {
       throw new Error('Invalid number: ' + statement);
     }
   }
-  const variable = { value: res.value, type };
+  const variable = { value: res.value, type: finalType };
   variables.set(name, variable);
   return variable;
 }
@@ -164,12 +163,26 @@ function interpretInternal(
   let result: Result | undefined;
 
   for (const statement of statements) {
-    const letMatch = statement.match(
+    const letAnnotatedMatch = statement.match(
       /^let\s+([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)\s*=\s*(.+)$/
     );
+    const letInferredMatch = statement.match(/^let\s+([A-Za-z]\w*)\s*=\s*(.+)$/);
 
-    if (letMatch) {
-      result = handleLetStatement(statement, letMatch, variables);
+    if (letAnnotatedMatch) {
+      result = handleLetStatement(
+        statement,
+        variables,
+        letAnnotatedMatch[1],
+        letAnnotatedMatch[3],
+        letAnnotatedMatch[2]
+      );
+    } else if (letInferredMatch) {
+      result = handleLetStatement(
+        statement,
+        variables,
+        letInferredMatch[1],
+        letInferredMatch[2]
+      );
     } else {
       result = evaluateStatement(statement, variables);
     }
