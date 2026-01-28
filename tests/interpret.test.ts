@@ -540,6 +540,13 @@ describe("interpret", () => {
     );
     expect(result).toBe(0);
   });
+  test('interpret("struct Point { x : I32; y : I32; } let point : Point = Point {};") should throw error', () => {
+    expect(() =>
+      interpret(
+        "struct Point { x : I32; y : I32; } let point : Point = Point {};",
+      ),
+    ).toThrow();
+  });
   test('interpret("struct Point { x : I32; y : I32; } let point : Point = Point { 3, 4 }; point.x") should return 3', () => {
     const result = interpret(
       "struct Point { x : I32; y : I32; } let point : Point = Point { 3, 4 }; point.x",
