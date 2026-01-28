@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "prepare": "husky"
   },
   "devDependencies": {
     "typescript": "^5.2.2",
@@ -11,5 +12,9 @@
     "@types/bun": "latest"
   },
   "module": "index.ts",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "eslint": "^9.39.2",
+    "husky": "^9.1.7"
+  }
 }
