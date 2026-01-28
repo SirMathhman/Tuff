@@ -2462,24 +2462,22 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
 
     const receiverResult = evaluate(receiverStr, scope);
 
-    const receiverScopeEntry = receiverResult.thisScope?.[methodName];
-    if (receiverScopeEntry?.functionBody) {
-      const receiverParamNames = receiverScopeEntry.functionParams || [];
-      const receiverArgs = argExprs.map((arg) => evaluate(arg, scope));
-      if (receiverParamNames[0] === "this") {
-        return invokeFunction(
-          methodName,
-          receiverScopeEntry,
-          [receiverResult, ...receiverArgs],
-          source,
-        );
+    if (receiverResult.thisScope) {
+      const scopedFnEntry = receiverResult.thisScope[methodName];
+      if (!scopedFnEntry?.functionBody) {
+        throw new Error(`Function ${methodName} is not defined`);
       }
-      return invokeFunction(
-        methodName,
-        receiverScopeEntry,
-        receiverArgs,
-        source,
-      );
+      const scopedParamNames = scopedFnEntry.functionParams || [];
+      const scopedArgExprs = parseArguments(argsRaw);
+      if (scopedParamNames[0] === "this") {
+        const argResults = [
+          receiverResult,
+          ...scopedArgExprs.map((arg) => evaluate(arg, scope)),
+        ];
+        return invokeFunction(methodName, scopedFnEntry, argResults, source);
+      }
+      const argResults = scopedArgExprs.map((arg) => evaluate(arg, scope));
+      return invokeFunction(methodName, scopedFnEntry, argResults, source);
     }
 
     if (paramNames[0] !== "this") {

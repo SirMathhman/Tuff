@@ -645,9 +645,9 @@ describe("interpret", () => {
     expect(result).toBe(100);
   });
 
-  test('interpret("returned this scope method call") should return 100', () => {
+  test('interpret("return this with inner function call") should return 100', () => {
     const result = interpret(
-      "fn outer() : () => I32 => { fn inner() => 100; this }; outer().inner()",
+      "fn outer() : outer => { fn inner() => 100; this }; outer().inner()",
     );
     expect(result).toBe(100);
   });

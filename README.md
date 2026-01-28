@@ -19,7 +19,7 @@
   - Calling plain functions via `this`: `fn get() => 100; this.get()`
   - Nested functions: `fn outer() => { fn inner() => 100; inner() }; outer()`
   - Calling returned functions: `fn outer() : () => I32 => { fn inner() => 100; inner }; outer()()`
-  - Calling functions from returned `this`: `fn outer() : () => I32 => { fn inner() => 100; this }; outer().inner()`
+  - Calling functions from returned `this`: `fn outer() : outer => { fn inner() => 100; this }; outer().inner()`
   - Call: `get()`
   - Function values: `let f : () => I32 = fn get() : I32 => 100; f()`
 
