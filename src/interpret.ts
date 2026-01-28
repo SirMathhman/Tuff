@@ -216,7 +216,7 @@ function parseFunctionParameters(paramsStr: string): FunctionParameter[] {
   const parts = splitTopLevelCommas(paramsStr);
   return parts.map((part) => {
     const match = part.match(
-      /^([A-Za-z]\w*)(?:\s*:\s*([A-Za-z]\w*(?:\[[^\]]+\])?))?$/
+      /^([A-Za-z]\w*)(?:\s*:\s*((?:\[[^\]]+\]|[*]*(?:mut\s+)?[A-Za-z]\w*)))?$/
     );
     if (!match) {
       throw new Error('Invalid function parameter: ' + part);
@@ -633,7 +633,7 @@ function interpretInternal(
       /^let\s+(mut\s+)?([A-Za-z]\w*)\s*=\s*(.+)$/
     );
     const assignmentMatch = resolved.match(
-      /^(\*+[A-Za-z]\w*|[A-Za-z]\w*)\s*(\+|-|\*|\/)?=\s*(.+)$/
+      /^(\*+[A-Za-z]\w*|[A-Za-z]\w*(?:\[\d+\])?)\s*(\+|-|\*|\/)?=\s*(.+)$/
     );
 
     if (letAnnotatedMatch) {
@@ -689,7 +689,16 @@ function validateTypeCompatibility(
   statement: string
 ): void {
   if (isArrayType(targetType) && isArrayType(sourceResult.type)) {
-    if (targetType !== sourceResult.type) {
+    const targetInfo = parseArrayType(targetType);
+    const sourceInfo = parseArrayType(sourceResult.type);
+    if (!targetInfo || !sourceInfo) {
+      throw new Error('Invalid type: ' + statement);
+    }
+    const sameLayout =
+      targetInfo.baseType === sourceInfo.baseType &&
+      targetInfo.length === sourceInfo.length;
+    const enoughInitialized = sourceInfo.initialized >= targetInfo.initialized;
+    if (!sameLayout || !enoughInitialized) {
       throw new Error('Invalid type: ' + statement);
     }
     return;
@@ -816,7 +825,7 @@ function handleLetStatement(
       value: elements,
       type,
       isMutable,
-      isInitialized: false,
+      isInitialized: true,
     };
     variables.set(name, variable);
     return variable;
@@ -846,6 +855,46 @@ function handleAssignmentStatement(
   expr: string,
   operator?: string
 ): Result {
+  const arrayLhsMatch = name.match(/^([A-Za-z]\w*)\[(\d+)\]$/);
+  if (arrayLhsMatch) {
+    const arrayName = arrayLhsMatch[1];
+    const index = Number(arrayLhsMatch[2]);
+    if (!variables.has(arrayName)) {
+      throw new Error('Cannot assign to undeclared variable: ' + arrayName);
+    }
+    const arrayVar = variables.get(arrayName)!;
+    if (!arrayVar.isMutable) {
+      throw new Error('Cannot assign to immutable variable: ' + arrayName);
+    }
+    if (!isArrayType(arrayVar.type)) {
+      throw new Error('Cannot index non-array type');
+    }
+    const info = parseArrayType(arrayVar.type);
+    if (!info || index < 0 || index >= info.length) {
+      throw new Error('Array index out of bounds: ' + name);
+    }
+    if (operator) {
+      throw new Error('Compound assignment not supported for array elements');
+    }
+
+    const res = interpretInternal(expr, variables);
+    validateTypeCompatibility(info.baseType, res, statement);
+
+    const elements = arrayVar.value as Result[];
+    const element = elements[index];
+    element.value = res.value;
+    element.type = info.baseType;
+    element.isInitialized = true;
+
+    const initializedCount = elements.reduce(
+      (count, el) => count + (el.isInitialized ? 1 : 0),
+      0
+    );
+    arrayVar.type =
+      '[' + info.baseType + '; ' + initializedCount + '; ' + info.length + ']';
+    return element;
+  }
+
   let variable: Result;
   if (name.startsWith('*')) {
     const ptrStr = name.substring(1).trim();

@@ -268,6 +268,22 @@ describe('interpret', () => {
         )
       ).toBe(6);
     });
+
+    it('tracks initialized element count via assignment', () => {
+      expect(
+        interpret(
+          'let mut array : [I32; 0; 3]; array[0] = 100; fn accept(param : [I32; 1; 3]) : I32 => param[0]; accept(array)'
+        )
+      ).toBe(100);
+    });
+
+    it('rejects passing arrays with insufficient initialized elements', () => {
+      expect(() =>
+        interpret(
+          'let mut array : [I32; 0; 3]; fn accept(param : [I32; 1; 3]) : I32 => param[0]; accept(array)'
+        )
+      ).toThrow();
+    });
   });
 
   describe('functions', () => {
@@ -276,13 +292,15 @@ describe('interpret', () => {
     });
 
     it('supports typed parameters', () => {
-      expect(interpret('fn add(a: I32, b: I32) : I32 => a + b; add(1, 2)')).toBe(
-        3
-      );
+      expect(
+        interpret('fn add(a: I32, b: I32) : I32 => a + b; add(1, 2)')
+      ).toBe(3);
     });
 
     it('supports block bodies', () => {
-      expect(interpret('fn get() : I32 => { let x = 1; x + 1 }; get()')).toBe(2);
+      expect(interpret('fn get() : I32 => { let x = 1; x + 1 }; get()')).toBe(
+        2
+      );
     });
 
     it('supports calls inside expressions', () => {
