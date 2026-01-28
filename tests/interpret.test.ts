@@ -11,3 +11,7 @@ test('interpret returns 0 for arbitrary input (stub)', () => {
 test('interpret parses integer numeric literals', () => {
   expect(interpret('100')).toBe(100);
 });
+
+test('interpret parses integer numeric literals with unsigned suffixes', () => {
+  expect(interpret('100U8')).toBe(100);
+});

@@ -4,17 +4,20 @@ export function add(a: number, b: number): number {
 
 /**
  * Interpret the given input string and produce a numeric result.
- * This function supports numeric literals (integers and decimals).
+ * This function supports numeric literals (integers and decimals), optionally
+ * followed by a type suffix such as `U8` (unsigned 8-bit). Examples:
  * - Empty input returns 0
  * - Numeric input (e.g., "100", "-3.14") returns that numeric value
+ * - Numeric with suffix (e.g., "100U8") returns the numeric value, ignoring the suffix
  * - Otherwise returns 0 (stub behavior)
  */
 export function interpret(input: string): number {
   const s = input.trim();
   if (s === '') return 0;
-  // accept optional leading +/-, integers or decimals (no exponent)
-  if (/^[+-]?\d+(\.\d+)?$/.test(s)) {
-    const n = Number(s);
+  // match a numeric prefix (integer or decimal) optionally followed by an alphabetic suffix + optional digits
+  const m = s.match(/^([+-]?\d+(?:\.\d+)?)(?:[A-Za-z]+\d*)?$/);
+  if (m) {
+    const n = Number(m[1]);
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
