@@ -15,3 +15,7 @@ test('interpret parses integer numeric literals', () => {
 test('interpret parses integer numeric literals with unsigned suffixes', () => {
   expect(interpret('100U8')).toBe(100);
 });
+
+test('interpret throws for negative values with unsigned suffixes', () => {
+  expect(() => interpret('-100U8')).toThrow('unsigned literal cannot be negative');
+});

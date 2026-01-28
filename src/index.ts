@@ -14,10 +14,15 @@ export function add(a: number, b: number): number {
 export function interpret(input: string): number {
   const s = input.trim();
   if (s === '') return 0;
-  // match a numeric prefix (integer or decimal) optionally followed by an alphabetic suffix + optional digits
-  const m = s.match(/^([+-]?\d+(?:\.\d+)?)(?:[A-Za-z]+\d*)?$/);
+  // match a numeric prefix (integer or decimal) and capture an optional alphabetic suffix + optional digits
+  const m = s.match(/^([+-]?\d+(?:\.\d+)?)(?:([A-Za-z]+\d*))?$/);
   if (m) {
     const n = Number(m[1]);
+    const suffix = m[2];
+    // If there's an unsigned suffix (starts with U or u), negative values are invalid
+    if (suffix && /^[Uu]/.test(suffix) && n < 0) {
+      throw new Error('unsigned literal cannot be negative');
+    }
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
