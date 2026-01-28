@@ -27,6 +27,14 @@ describe('interpret', () => {
   });
 
   it('rejects expression result out of range for U8', () => {
-    expect(() => interpret('1U8 + 255U8')).toThrow('Invalid expression: 1U8 + 255U8');
+    expect(() => interpret('1U8 + 255U8')).toThrow(
+      'Invalid expression: 1U8 + 255U8'
+    );
+  });
+
+  it('rejects mixing typed and untyped operands', () => {
+    expect(() => interpret('1U8 + 255')).toThrow(
+      'Invalid expression: 1U8 + 255'
+    );
   });
 });

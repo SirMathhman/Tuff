@@ -21,7 +21,7 @@ function parseTypedNumber(input: string): { value: number; type?: string } {
   const match = input.match(/^(-?\d+(?:\.\d+)?)\s*([A-Za-z]\w*)?$/);
 
   if (!match) {
-    throw new Error(`Invalid number: ${input}`);
+    throw new Error('Invalid number: ' + input);
   }
 
   const number = match[1];
@@ -29,19 +29,19 @@ function parseTypedNumber(input: string): { value: number; type?: string } {
 
   // Negative numbers cannot have unsigned type suffixes
   if (number.startsWith('-') && typeSuffix && typeSuffix.startsWith('U')) {
-    throw new Error(`Invalid number: ${input}`);
+    throw new Error('Invalid number: ' + input);
   }
 
   const value = Number(number);
   if (Number.isNaN(value)) {
-    throw new Error(`Invalid number: ${input}`);
+    throw new Error('Invalid number: ' + input);
   }
 
   // Check if value is within valid range for the type suffix
   if (typeSuffix && typeSuffix in typeRanges) {
     const [min, max] = typeRanges[typeSuffix];
     if (value < min || value > max) {
-      throw new Error(`Invalid number: ${input}`);
+      throw new Error('Invalid number: ' + input);
     }
   }
 
@@ -77,17 +77,18 @@ function applyOperator(
       }
       return Math.floor(result / nextOperand);
     default:
-      throw new Error(`Unknown operator: ${op}`);
+      throw new Error('Unknown operator: ' + op);
   }
 }
 
-function tokenizeExpression(
-  expr: string
-): { operands: { value: number; type?: string }[]; operators: string[] } {
+function tokenizeExpression(expr: string): {
+  operands: { value: number; type?: string }[];
+  operators: string[];
+} {
   const tokens = expr.match(/(-?\d+(?:\.\d+)?[A-Za-z]\w*|[+\-*/])/g);
 
   if (!tokens || tokens.length === 0) {
-    throw new Error(`Invalid expression: ${expr}`);
+    throw new Error('Invalid expression: ' + expr);
   }
 
   const operands: { value: number; type?: string }[] = [];
@@ -104,7 +105,7 @@ function tokenizeExpression(
   }
 
   if (operands.length !== operators.length + 1) {
-    throw new Error(`Invalid expression: ${expr}`);
+    throw new Error('Invalid expression: ' + expr);
   }
 
   return { operands, operators };
@@ -116,6 +117,16 @@ function evaluateExpression(expr: string): number {
   // Determine the result type (type of first operand)
   const resultType = operands[0].type;
 
+  // Validate that all operands have consistent typing
+  for (const operand of operands) {
+    if (
+      (resultType === undefined && operand.type !== undefined) ||
+      (resultType !== undefined && operand.type === undefined)
+    ) {
+      throw new Error('Invalid expression: ' + expr);
+    }
+  }
+
   // Evaluate left to right
   let result = operands[0].value;
   for (let i = 0; i < operators.length; i++) {
@@ -126,7 +137,7 @@ function evaluateExpression(expr: string): number {
   if (resultType && resultType in typeRanges) {
     const [min, max] = typeRanges[resultType];
     if (result < min || result > max) {
-      throw new Error(`Invalid expression: ${expr}`);
+      throw new Error('Invalid expression: ' + expr);
     }
   }
 
