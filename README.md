@@ -17,6 +17,7 @@
   - Method call with `this`: `fn add(this : I32, second : I32) : I32 => this + second; 3.add(4)`
   - Scope fields via `this`: `let x = 100; this.x` and wrappers like `fn Wrapper() => { let field = 100; this }; Wrapper().field`
   - Calling plain functions via `this`: `fn get() => 100; this.get()`
+  - Nested functions: `fn outer() => { fn inner() => 100; inner() }; outer()`
   - Call: `get()`
   - Function values: `let f : () => I32 = fn get() : I32 => 100; f()`
 

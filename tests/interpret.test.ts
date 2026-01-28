@@ -630,4 +630,11 @@ describe("interpret", () => {
     const result = interpret("fn get() => 100; this.get()");
     expect(result).toBe(100);
   });
+
+  test('interpret("nested function inside function") should return 100', () => {
+    const result = interpret(
+      "fn outer() => { fn inner() => 100; inner() }; outer()",
+    );
+    expect(result).toBe(100);
+  });
 });
