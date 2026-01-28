@@ -155,10 +155,26 @@ function evaluateExpression(expr: string): number {
     throw new Error('Invalid expression: ' + expr);
   }
 
-  // Evaluate left to right
-  let result = operands[0].value;
-  for (let i = 0; i < operators.length; i++) {
-    result = applyOperator(result, operators[i], operands[i + 1].value);
+  // Evaluate with operator precedence (* and / before + and -)
+  const values = operands.map((op) => op.value);
+  const currentOperators = [...operators];
+
+  // First pass: multiplication and division
+  for (let i = 0; i < currentOperators.length; ) {
+    const op = currentOperators[i];
+    if (op === '*' || op === '/') {
+      values[i] = applyOperator(values[i], op, values[i + 1]);
+      values.splice(i + 1, 1);
+      currentOperators.splice(i, 1);
+    } else {
+      i++;
+    }
+  }
+
+  // Second pass: addition and subtraction
+  let result = values[0];
+  for (let i = 0; i < currentOperators.length; i++) {
+    result = applyOperator(result, currentOperators[i], values[i + 1]);
   }
 
   // Validate result is within valid range for the result type

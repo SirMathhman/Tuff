@@ -59,4 +59,12 @@ describe('interpret', () => {
   it('evaluates multiple addition and subtraction with signed types', () => {
     expect(interpret('2I8 + 3I8 - 4I8')).toBe(1);
   });
+
+  it('evaluates expression with multiplication and subtraction', () => {
+    expect(interpret('2I8 * 3I8 - 4I8')).toBe(2);
+  });
+
+  it('respects operator precedence (* before +)', () => {
+    expect(interpret('1I8 + 2I8 * 3I8')).toBe(7);
+  });
 });
