@@ -15,6 +15,7 @@
   - Parameters: `fn pass(value : I32) => value; pass(100)`
   - Multiple parameters: `fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)`
   - Method call with `this`: `fn add(this : I32, second : I32) : I32 => this + second; 3.add(4)`
+  - Scope fields via `this`: `let x = 100; this.x` and wrappers like `fn Wrapper() => { let field = 100; this }; Wrapper().field`
   - Call: `get()`
   - Function values: `let f : () => I32 = fn get() : I32 => 100; f()`
 

@@ -612,11 +612,17 @@ describe("interpret", () => {
     expect(result).toBe(100);
   });
 
-  test(
-    'interpret("function returning this with field access") should return 100',
-    () => {
-      const result = interpret("fn Wrapper(field : I32) => this; Wrapper(100).field");
-      expect(result).toBe(100);
-    },
-  );
+  test('interpret("function returning this with field access") should return 100', () => {
+    const result = interpret(
+      "fn Wrapper(field : I32) => this; Wrapper(100).field",
+    );
+    expect(result).toBe(100);
+  });
+
+  test('interpret("block returning this with field access") should return 100', () => {
+    const result = interpret(
+      "fn Wrapper() => { let field = 100; this }; Wrapper().field",
+    );
+    expect(result).toBe(100);
+  });
 });

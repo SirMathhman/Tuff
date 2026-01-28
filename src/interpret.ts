@@ -1219,7 +1219,9 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   } | null => {
     // Handle this.fieldName = value first
     if (params.allowPlainAssignment) {
-      const thisFieldMatch = params.text.match(/^this\.([a-zA-Z_]\w*)\s*=\s*(.*)$/);
+      const thisFieldMatch = params.text.match(
+        /^this\.([a-zA-Z_]\w*)\s*=\s*(.*)$/,
+      );
       if (thisFieldMatch && thisFieldMatch[1] && thisFieldMatch[2]) {
         const fieldName = thisFieldMatch[1];
         const expr = thisFieldMatch[2];
@@ -1249,7 +1251,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           }
         }
 
-        const finalConstraint = targetVar.constraint ||
+        const finalConstraint =
+          targetVar.constraint ||
           exprResult.constraint ||
           getTypeConstraint("I32");
 
@@ -1260,7 +1263,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           constraint: finalConstraint,
           functionBody: exprResult.functionBody ?? targetVar.functionBody,
           functionParams: exprResult.functionParams ?? targetVar.functionParams,
-          functionParamTypes: exprResult.functionParamTypes ?? targetVar.functionParamTypes,
+          functionParamTypes:
+            exprResult.functionParamTypes ?? targetVar.functionParamTypes,
         };
 
         params.targetScope[fieldName] = updatedEntry;
@@ -2211,7 +2215,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   if (assignmentResult) return assignmentResult;
 
   // Variable access in non-binary expression
-    const invokeFunction = (
+  const invokeFunction = (
     fnName: string,
     fnEntry: ScopeEntry | undefined,
     argResults: EvaluationResult[],
@@ -2362,7 +2366,10 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         }
 
         // Handle regular struct field access
-        if (Array.isArray(scopeVar.value) || typeof scopeVar.value !== "object") {
+        if (
+          Array.isArray(scopeVar.value) ||
+          typeof scopeVar.value !== "object"
+        ) {
           throwNotStruct(basePart);
         }
         const structType = scopeVar.constraint?.typeStr;
@@ -2373,14 +2380,18 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         if (!structDef) {
           throw new Error(`Struct ${structType} is not defined`);
         }
-        const fieldDef = structDef.fields.find((field) => field.name === fieldName);
+        const fieldDef = structDef.fields.find(
+          (field) => field.name === fieldName,
+        );
         if (!fieldDef) {
           throw new Error(`Struct ${structType} has no field ${fieldName}`);
         }
         const structValue = scopeVar.value as Record<string, RuntimeValue>;
         const fieldValue = structValue[fieldName];
         if (fieldValue === undefined) {
-          throw new Error(`Struct ${structType} field ${fieldName} is undefined`);
+          throw new Error(
+            `Struct ${structType} field ${fieldName} is undefined`,
+          );
         }
         return {
           value: fieldValue,
@@ -2514,7 +2525,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     return {
       value: 0,
       constraint: null,
-      thisScope: scope,
+      thisScope: { ...scope },
     };
   }
 
