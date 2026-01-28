@@ -585,4 +585,9 @@ describe("interpret", () => {
     );
     expect(result).toBe(5);
   });
+
+  test('interpret("pointer to this with field access") should return 100', () => {
+    const result = interpret("let x = 100; let temp : *This = &this; temp.x");
+    expect(result).toBe(100);
+  });
 });

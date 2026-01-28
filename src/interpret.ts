@@ -674,6 +674,20 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
       varName = varName.substring(4).trim();
     }
 
+    // Special handling for &this - create a pointer to the scope
+    if (varName === "this") {
+      return {
+        value: -1, // Special address for "the scope itself"
+        constraint: {
+          minValue: -1,
+          maxValue: -1,
+          typeStr: "*" + (isMutableRequest ? "mut " : "") + "This",
+        },
+        referenceTarget: "this",
+        referenceMutable: isMutableRequest,
+      };
+    }
+
     const existingVar = scope[varName];
     if (existingVar) {
       if (isMutableRequest && !existingVar.isMutable) {
@@ -2199,8 +2213,8 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
     const varName = fieldAccessMatch[1];
     const fieldName = fieldAccessMatch[2];
 
-    // Special handling for `this` - access scope variables as fields
-    if (varName === "this") {
+    // Helper function to access scope field
+    const accessScopeField = () => {
       const targetVar = scope[fieldName];
       if (!targetVar) {
         throwUndefinedVariable(fieldName);
@@ -2209,12 +2223,28 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         value: targetVar.value,
         constraint: targetVar.constraint,
       };
+    };
+
+    // Special handling for `this` - access scope variables as fields
+    if (varName === "this") {
+      return accessScopeField();
     }
 
     const scopeVar = scope[varName];
     if (!scopeVar) {
       throwUndefinedVariable(varName);
     }
+
+    // Handle field access through a pointer to `this`
+    if (
+      scopeVar.constraint?.typeStr.startsWith("*") &&
+      scopeVar.constraint?.typeStr.includes("This") &&
+      typeof scopeVar.value === "number" &&
+      scopeVar.value === -1
+    ) {
+      return accessScopeField();
+    }
+
     if (Array.isArray(scopeVar.value) || typeof scopeVar.value !== "object") {
       throwNotStruct(varName);
     }
