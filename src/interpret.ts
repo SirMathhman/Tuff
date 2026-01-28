@@ -2198,6 +2198,19 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
   if (fieldAccessMatch && fieldAccessMatch[1] && fieldAccessMatch[2]) {
     const varName = fieldAccessMatch[1];
     const fieldName = fieldAccessMatch[2];
+
+    // Special handling for `this` - access scope variables as fields
+    if (varName === "this") {
+      const targetVar = scope[fieldName];
+      if (!targetVar) {
+        throwUndefinedVariable(fieldName);
+      }
+      return {
+        value: targetVar.value,
+        constraint: targetVar.constraint,
+      };
+    }
+
     const scopeVar = scope[varName];
     if (!scopeVar) {
       throwUndefinedVariable(varName);
