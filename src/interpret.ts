@@ -124,10 +124,7 @@ function handleLetStatement(
   return variable;
 }
 
-function evaluateStatement(
-  statement: string,
-  variables: Variables
-): Result {
+function evaluateStatement(statement: string, variables: Variables): Result {
   if (/[+\-*/]/.test(statement)) {
     return evaluateExpression(statement, variables);
   }
@@ -186,10 +183,7 @@ function applyOperator(
   }
 }
 
-function resolveOperand(
-  token: string,
-  variables: Variables
-): Result {
+function resolveOperand(token: string, variables: Variables): Result {
   if (variables.has(token)) {
     return variables.get(token)!;
   }
@@ -229,10 +223,7 @@ function tokenizeExpression(
   return { operands, operators };
 }
 
-function evaluateExpression(
-  expr: string,
-  variables: Variables
-): Result {
+function evaluateExpression(expr: string, variables: Variables): Result {
   const { operands, operators } = tokenizeExpression(expr, variables);
 
   // Collect all types from operands
@@ -267,7 +258,11 @@ function evaluateExpression(
   // Second pass: addition and subtraction
   let resultValue = values[0];
   for (let i = 0; i < currentOperators.length; i++) {
-    resultValue = applyOperator(resultValue, currentOperators[i], values[i + 1]);
+    resultValue = applyOperator(
+      resultValue,
+      currentOperators[i],
+      values[i + 1]
+    );
   }
 
   // Validate result is within valid range for the result type

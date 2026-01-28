@@ -87,4 +87,10 @@ describe('interpret', () => {
   it('supports multiple let declarations and variable usage in expressions', () => {
     expect(interpret('{ let x : U8 = 10; let y : U8 = 20; x + y }')).toBe(30);
   });
+
+  it('supports using previously defined variables in new let declarations', () => {
+    expect(interpret('(4 + { let x : I32 = 2; let y : I32 = x; y }) * 3')).toBe(
+      18
+    );
+  });
 });
