@@ -67,4 +67,8 @@ describe('interpret', () => {
   it('respects operator precedence (* before +)', () => {
     expect(interpret('1I8 + 2I8 * 3I8')).toBe(7);
   });
+
+  it('respects operator precedence for untyped numbers', () => {
+    expect(interpret('4 + 2 * 3')).toBe(10);
+  });
 });
