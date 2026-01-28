@@ -2,6 +2,23 @@
 
 This is an evolving specification of the Tuff language syntax and semantics. Features are organized by implementation priority.
 
+## Core Guarantee: No Panics
+
+**Tuff code is guaranteed to never panic or crash at runtime.** This is a fundamental language design goal, not an optional feature. The language prevents panics through:
+
+- No `null` pointer dereferences (enforced via optional types `T?`)
+- No array out-of-bounds access (runtime checked)
+- No arithmetic overflow/underflow panics (wrapping semantics or runtime checks)
+- No invalid type casts (compile-time verified)
+- No unwinding from failed assertions in release mode
+- Explicit error handling via `Result<T>` or optional returns
+
+This guarantee makes Tuff suitable for:
+- Mission-critical systems that cannot tolerate crashes
+- Long-running services that must be highly reliable
+- Embedded and real-time systems
+- Any application requiring predictable, crash-free execution
+
 ## Core Language Features
 
 ### Comments
@@ -62,7 +79,7 @@ fn greet(name: string) {
 }
 ```
 
-Functions can have default parameters and optional returns:
+Functions can have default parameters and optional returns. Optional returns (using `T?`) are the primary error handling mechanism:
 
 ```tuff
 fn power(base: i32, exp: i32 = 2) -> i32 {
@@ -71,10 +88,18 @@ fn power(base: i32, exp: i32 = 2) -> i32 {
 
 fn maybe_divide(a: i32, b: i32) -> i32? {
   if b == 0 {
-    null
+    null  // Represents division failure
   } else {
     a / b
   }
+}
+
+// Caller must handle the optional return
+let result = maybe_divide(10, 2)
+if result != null {
+  print("Result: " + string(result))
+} else {
+  print("Division failed")
 }
 ```
 
@@ -298,13 +323,52 @@ fn main() {
 }
 ```
 
+## Error Handling
+
+Tuff enforces a no-panic policy through explicit error handling patterns:
+
+### Optional Types (`T?`)
+Used when an operation may fail with no additional error information:
+
+```tuff
+fn parse_int(s: string) -> i32? {
+  // Returns null if parsing fails
+}
+```
+
+### Result Types (Planned)
+Used to return either a value or detailed error information:
+
+```tuff
+enum Result<T> {
+  Ok(T),
+  Err(string),
+}
+
+fn read_file(path: string) -> Result<string> {
+  // Returns Ok(contents) or Err(error_message)
+}
+```
+
+### The `?` Operator (Planned)
+Propagates errors up the call stack safely:
+
+```tuff
+fn process_file(path: string) -> Result<i32> {
+  let contents = read_file(path)?  // Unwrap or propagate error
+  let count = count_lines(contents)?
+  Ok(count)
+}
+```
+
+This ensures errors are always handled explicitly rather than causing panics.
+
 ## Planned Features
 
 - Ownership and borrowing system
 - Lifetime annotations
-- Unsafe blocks for low-level operations
 - Closures and higher-order functions
-- Error handling with `?` operator
+- Result type with `?` operator for richer error handling
 - Decorators/attributes
 - Macros
 - Async/await (future)
@@ -316,16 +380,19 @@ fn main() {
 - Less strict ownership (closer to TypeScript defaults)
 - Automatic null handling vs. explicit `Option<T>`
 - Simpler trait system (no variance, fewer rules)
+- **Same guarantee**: Both provide crash-free execution by design
 
 ### vs. TypeScript
 - Explicit types (less inference, more clarity)
 - Performance-oriented (compile to native, not JS)
-- Memory safety by default (eventually)
+- **Better reliability**: No panics or uncaught exceptions at runtime
+- Stricter null safety (no accidental nulls)
 
 ### vs. Kotlin
 - Compilation to native code, not JVM
 - More focus on performance/systems programming
 - Stricter null safety options
+- **Native guarantee**: No reliance on JVM error handling
 
 ## Type Inference Limitations
 

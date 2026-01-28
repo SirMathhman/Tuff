@@ -26,6 +26,7 @@ Our **incremental component-by-component** approach is safer:
 - All language features specified in [LANGUAGE.md](./LANGUAGE.md) fully implemented
 - Extensive test suite (50+ test cases per phase)
 - Compiler can compile moderately complex programs
+- **No-Panic Guarantee**: Analyzer enforces compile-time checks ensuring all Tuff code is crash-free at runtime
 - **Deliverable**: `tuff --version 0.1.0` - self-compiling for basic programs
 
 ### Stage 1a: Lexer Rewrite (Month 5)

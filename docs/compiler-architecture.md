@@ -216,6 +216,25 @@ class SymbolTable {
 - **Binary operations**: Both operands must be compatible
 - **Generic instantiation**: Type arguments must satisfy bounds
 - **Null safety**: Null can only be assigned to nullable types
+- **No-panic guarantee**: Enforced through compile-time checks that prevent runtime errors
+
+### Enforcing the No-Panic Guarantee
+
+Tuff code is **guaranteed to never panic at runtime**. This is enforced through analyzer checks:
+
+1. **Null Checking**: Dereferences and method calls on nullable types (`T?`) are flagged as errors. All potential null values must be explicitly handled with `if` checks or matches.
+
+2. **Array Bounds**: Array indexing is checked at compile-time where possible. Out-of-bounds accesses in unknown dimensions are wrapped with runtime bounds checks in generated code.
+
+3. **Type Safety**: All type mismatches are caught at compile-time. No invalid casts, invalid enum variants, or incorrect field accesses reach runtime.
+
+4. **Exhaustive Matching**: `match` expressions must be exhaustive (cover all cases) to ensure no paths lead to undefined behavior.
+
+5. **Arithmetic Safety**: Integer overflow/underflow is handled via wrapping semantics or explicit checked operations, never causing panics.
+
+6. **Error Propagation**: Functions that can fail return `Result<T>` or `T?` types, forcing callers to handle errors explicitly.
+
+These checks are performed during the **Analyzer phase**, so any code that compiles is guaranteed crash-free at runtime.
 
 ### Error Codes
 
