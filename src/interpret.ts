@@ -317,6 +317,18 @@ function parseKeywordParen(
   };
 }
 
+function parseStructDeclaration(source: string): { name: string } | null {
+  const structMatch = source.match(/^struct\s+([a-zA-Z_]\w*)\s*\{\s*\}\s*;?$/);
+  if (!structMatch || !structMatch[1]) return null;
+  return { name: structMatch[1] };
+}
+
+function ensureValidStructDeclaration(source: string): void {
+  if (!parseStructDeclaration(source)) {
+    throw new Error(`Invalid struct declaration: ${source}`);
+  }
+}
+
 function tryCreateGeneratorEntry(source: string): ScopeEntry | null {
   const rangeMatch = source.match(/^(\d+)\.\.(\d+)$/);
   if (!rangeMatch || !rangeMatch[1] || !rangeMatch[2]) return null;
@@ -526,6 +538,10 @@ interface EvaluationResult {
 
 function evaluate(source: string, scope: Scope): EvaluationResult {
   source = source.trim();
+  if (source.startsWith("struct ")) {
+    ensureValidStructDeclaration(source);
+    return { value: 0, constraint: null };
+  }
   if (source === "true") {
     return {
       value: 1,
@@ -1361,6 +1377,11 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         } else {
           throw new Error(`Invalid type alias declaration: ${statement}`);
         }
+      }
+      if (statement.startsWith("struct ")) {
+        ensureValidStructDeclaration(statement);
+        lastResult = { value: 0, constraint: null };
+        continue;
       }
       if (statement.startsWith("let ")) {
         // Parse variable declaration: let [mut] x [: TYPE] [= EXPR]

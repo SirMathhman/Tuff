@@ -520,6 +520,10 @@ describe("interpret", () => {
     );
     expect(result).toBe(1);
   });
+  test('interpret("struct Empty {}") should return 0', () => {
+    const result = interpret("struct Empty {}");
+    expect(result).toBe(0);
+  });
   test('interpret("let x : MyAlias = 100; type MyAlias = I32; x is MyAlias") should return 1', () => {
     const result = interpret(
       "let x : MyAlias = 100; type MyAlias = I32; x is MyAlias",
