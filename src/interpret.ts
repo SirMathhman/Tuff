@@ -85,7 +85,7 @@ function tokenizeExpression(expr: string): {
   operands: { value: number; type?: string }[];
   operators: string[];
 } {
-  const tokens = expr.match(/(-?\d+(?:\.\d+)?[A-Za-z]\w*|[+\-*/])/g);
+  const tokens = expr.match(/(-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|[+\-*/])/g);
 
   if (!tokens || tokens.length === 0) {
     throw new Error('Invalid expression: ' + expr);
@@ -116,16 +116,6 @@ function evaluateExpression(expr: string): number {
 
   // Determine the result type (type of first operand)
   const resultType = operands[0].type;
-
-  // Validate that all operands have consistent typing
-  for (const operand of operands) {
-    if (
-      (resultType === undefined && operand.type !== undefined) ||
-      (resultType !== undefined && operand.type === undefined)
-    ) {
-      throw new Error('Invalid expression: ' + expr);
-    }
-  }
 
   // Evaluate left to right
   let result = operands[0].value;

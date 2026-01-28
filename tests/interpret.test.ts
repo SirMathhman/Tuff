@@ -32,7 +32,11 @@ describe('interpret', () => {
     );
   });
 
-  it('rejects mixing typed and untyped operands', () => {
+  it('allows mixing typed and untyped operands when result fits', () => {
+    expect(interpret('1U8 + 254')).toBe(255);
+  });
+
+  it('rejects result out of range when mixing typed and untyped operands', () => {
     expect(() => interpret('1U8 + 255')).toThrow(
       'Invalid expression: 1U8 + 255'
     );
