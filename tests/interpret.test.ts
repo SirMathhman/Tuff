@@ -200,9 +200,14 @@ describe('interpret', () => {
     expect(interpret('if (true) { 10 } else { 20 }')).toBe(10);
     expect(interpret('if (false) 1 else if (false) 2 else 3')).toBe(3);
     expect(interpret('let x : U8; if (true) x = 1; else x = 2; x')).toBe(1);
-    expect(interpret('let x : U8; if (true) { x = 1; } else { x = 2; } x')).toBe(
-      1
-    );
+    expect(
+      interpret('let x : U8; if (true) { x = 1; } else { x = 2; } x')
+    ).toBe(1);
+    expect(
+      interpret(
+        'let x : U8; if (false) x = 1; else if (false) x = 2; else x = 3; x'
+      )
+    ).toBe(3);
   });
 
   it('rejects mismatched branch types in if-else expressions', () => {
