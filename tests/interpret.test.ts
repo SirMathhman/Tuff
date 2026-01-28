@@ -79,4 +79,12 @@ describe('interpret', () => {
   it('supports curly braces for grouping', () => {
     expect(interpret('(4 + { 2 }) * 3')).toBe(18);
   });
+
+  it('supports let declarations in block expressions', () => {
+    expect(interpret('(4 + { let x : I32 = 2; x }) * 3')).toBe(18);
+  });
+
+  it('supports multiple let declarations and variable usage in expressions', () => {
+    expect(interpret('{ let x : U8 = 10; let y : U8 = 20; x + y }')).toBe(30);
+  });
 });

@@ -25,6 +25,9 @@ const typeOrdering: Record<string, number> = {
   I32: 12,
 };
 
+type Result = { value: number; type?: string };
+type Variables = Map<string, Result>;
+
 function getWidestType(types: (string | undefined)[]): string | undefined {
   let maxOrder = -1;
   let maxType: string | undefined;
@@ -44,7 +47,7 @@ function getWidestType(types: (string | undefined)[]): string | undefined {
   return maxType;
 }
 
-function parseTypedNumber(input: string): { value: number; type?: string } {
+function parseTypedNumber(input: string): Result {
   // Match numeric part followed by optional type suffix
   const match = input.match(/^(-?\d+(?:\.\d+)?)\s*([A-Za-z]\w*)?$/);
 
@@ -81,10 +84,13 @@ export function interpret(input: string): number {
 
   // Resolve grouped expressions (parentheses or curly braces) from innermost to outermost
   while (trimmed.includes('(') || trimmed.includes('{')) {
-    const match = trimmed.match(/\(([^()]+)\)|\{([^{}]+)\}/);
+    // Look for innermost grouping that contains no other grouping symbols
+    const match = trimmed.match(/(\([^(){}]+\)|\{[^(){}]+\})/);
     if (!match) break;
 
-    const subExpr = match[1] || match[2];
+    const group = match[0];
+    const subExpr = group.substring(1, group.length - 1);
+
     const res = interpretInternal(subExpr);
     // Construct replacement string with value and optional type suffix
     const replacement = res.value.toString() + (res.type || '');
@@ -97,58 +103,121 @@ export function interpret(input: string): number {
   return interpretInternal(trimmed).value;
 }
 
-function interpretInternal(input: string): { value: number; type?: string } {
-  const trimmed = input.trim();
+function handleLetStatement(
+  statement: string,
+  match: RegExpMatchArray,
+  variables: Variables
+): Result {
+  const name = match[1];
+  const type = match[2];
+  const expr = match[3];
 
-  // Check if input contains operators
-  if (/[+\-*/]/.test(trimmed)) {
-    return evaluateExpression(trimmed);
+  const res = interpretInternal(expr, variables);
+  if (type in typeRanges) {
+    const [min, max] = typeRanges[type];
+    if (res.value < min || res.value > max) {
+      throw new Error('Invalid number: ' + statement);
+    }
+  }
+  const variable = { value: res.value, type };
+  variables.set(name, variable);
+  return variable;
+}
+
+function evaluateStatement(
+  statement: string,
+  variables: Variables
+): Result {
+  if (/[+\-*/]/.test(statement)) {
+    return evaluateExpression(statement, variables);
+  }
+  return resolveOperand(statement, variables);
+}
+
+function interpretInternal(
+  input: string,
+  variables: Variables = new Map()
+): Result {
+  const statements = input
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  let result: Result | undefined;
+
+  for (const statement of statements) {
+    const letMatch = statement.match(
+      /^let\s+([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)\s*=\s*(.+)$/
+    );
+
+    if (letMatch) {
+      result = handleLetStatement(statement, letMatch, variables);
+    } else {
+      result = evaluateStatement(statement, variables);
+    }
   }
 
-  return parseTypedNumber(trimmed);
+  if (!result) {
+    throw new Error('Empty expression');
+  }
+
+  return result;
 }
 
 function applyOperator(
-  result: number,
+  resultValue: number,
   op: string,
   nextOperand: number
 ): number {
   switch (op) {
     case '+':
-      return result + nextOperand;
+      return resultValue + nextOperand;
     case '-':
-      return result - nextOperand;
+      return resultValue - nextOperand;
     case '*':
-      return result * nextOperand;
+      return resultValue * nextOperand;
     case '/':
       if (nextOperand === 0) {
         throw new Error('Division by zero');
       }
-      return Math.floor(result / nextOperand);
+      return Math.floor(resultValue / nextOperand);
     default:
       throw new Error('Unknown operator: ' + op);
   }
 }
 
-function tokenizeExpression(expr: string): {
-  operands: { value: number; type?: string }[];
+function resolveOperand(
+  token: string,
+  variables: Variables
+): Result {
+  if (variables.has(token)) {
+    return variables.get(token)!;
+  }
+  return parseTypedNumber(token);
+}
+
+function tokenizeExpression(
+  expr: string,
+  variables: Variables
+): {
+  operands: Result[];
   operators: string[];
 } {
-  const tokens = expr.match(/(-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|[+\-*/])/g);
+  const tokens = expr.match(
+    /(-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|[A-Za-z]\w*|[+\-*/])/g
+  );
 
   if (!tokens || tokens.length === 0) {
     throw new Error('Invalid expression: ' + expr);
   }
 
-  const operands: { value: number; type?: string }[] = [];
+  const operands: Result[] = [];
   const operators: string[] = [];
 
   for (let i = 0; i < tokens.length; i++) {
     if (i % 2 === 0) {
-      // Even indices should be operands
-      operands.push(parseTypedNumber(tokens[i]));
+      operands.push(resolveOperand(tokens[i], variables));
     } else {
-      // Odd indices should be operators
       operators.push(tokens[i]);
     }
   }
@@ -160,8 +229,11 @@ function tokenizeExpression(expr: string): {
   return { operands, operators };
 }
 
-function evaluateExpression(expr: string): { value: number; type?: string } {
-  const { operands, operators } = tokenizeExpression(expr);
+function evaluateExpression(
+  expr: string,
+  variables: Variables
+): Result {
+  const { operands, operators } = tokenizeExpression(expr, variables);
 
   // Collect all types from operands
   const types = operands.map((op) => op.type);
@@ -193,18 +265,18 @@ function evaluateExpression(expr: string): { value: number; type?: string } {
   }
 
   // Second pass: addition and subtraction
-  let result = values[0];
+  let resultValue = values[0];
   for (let i = 0; i < currentOperators.length; i++) {
-    result = applyOperator(result, currentOperators[i], values[i + 1]);
+    resultValue = applyOperator(resultValue, currentOperators[i], values[i + 1]);
   }
 
   // Validate result is within valid range for the result type
   if (resultType && resultType in typeRanges) {
     const [min, max] = typeRanges[resultType];
-    if (result < min || result > max) {
+    if (resultValue < min || resultValue > max) {
       throw new Error('Invalid expression: ' + expr);
     }
   }
 
-  return { value: result, type: resultType };
+  return { value: resultValue, type: resultType };
 }
