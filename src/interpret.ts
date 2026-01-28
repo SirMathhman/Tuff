@@ -117,6 +117,13 @@ function evaluateExpression(expr: string): number {
   // Determine the result type (type of first operand)
   const resultType = operands[0].type;
 
+  // Validate all typed operands match the result type
+  for (const operand of operands) {
+    if (operand.type && operand.type !== resultType) {
+      throw new Error('Invalid expression: ' + expr);
+    }
+  }
+
   // Evaluate left to right
   let result = operands[0].value;
   for (let i = 0; i < operators.length; i++) {

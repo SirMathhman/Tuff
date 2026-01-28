@@ -20,7 +20,8 @@ export default [
         'error',
         {
           selector: 'TemplateLiteral',
-          message: 'Template literals are not allowed due to CPD false flags. Use string concatenation instead.',
+          message:
+            'Template literals are not allowed due to CPD false flags. Use string concatenation instead.',
         },
       ],
     },

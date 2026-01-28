@@ -41,4 +41,10 @@ describe('interpret', () => {
       'Invalid expression: 1U8 + 255'
     );
   });
+
+  it('rejects expressions with mismatched type suffixes', () => {
+    expect(() => interpret('1U8 + 65535U16')).toThrow(
+      'Invalid expression: 1U8 + 65535U16'
+    );
+  });
 });
