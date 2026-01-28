@@ -79,12 +79,12 @@ function parseTypedNumber(input: string): { value: number; type?: string } {
 export function interpret(input: string): number {
   let trimmed = input.trim();
 
-  // Resolve parentheses from innermost to outermost
-  while (trimmed.includes('(')) {
-    const match = trimmed.match(/\(([^()]+)\)/);
+  // Resolve grouped expressions (parentheses or curly braces) from innermost to outermost
+  while (trimmed.includes('(') || trimmed.includes('{')) {
+    const match = trimmed.match(/\(([^()]+)\)|\{([^{}]+)\}/);
     if (!match) break;
 
-    const subExpr = match[1];
+    const subExpr = match[1] || match[2];
     const res = interpretInternal(subExpr);
     // Construct replacement string with value and optional type suffix
     const replacement = res.value.toString() + (res.type || '');

@@ -75,4 +75,8 @@ describe('interpret', () => {
   it('supports parentheses to override precedence', () => {
     expect(interpret('(4 + 2) * 3')).toBe(18);
   });
+
+  it('supports curly braces for grouping', () => {
+    expect(interpret('(4 + { 2 }) * 3')).toBe(18);
+  });
 });
