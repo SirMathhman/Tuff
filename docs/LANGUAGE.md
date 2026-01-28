@@ -46,7 +46,7 @@ enum NetworkStatus {  // PascalCase for enum
 
 const MAX_RETRIES: I32 = 3  // UPPER_SNAKE_CASE for constant
 
-fn calculateDistance(p1: Point, p2: Point) -> F64 {  // camelCase for function
+fn calculateDistance(p1: Point, p2: Point) => F64 {  // camelCase for function
   let dx = p2.x - p1.x  // camelCase for variable
   let dy = p2.y - p1.y
   // ...
@@ -106,7 +106,7 @@ fn print_name(name: *Str) {          // Parameter takes borrowed reference
 let name: String = "Alice"
 print_name(name)                      // name is not consumed (borrowed)
 
-fn get_greeting() -> String {        // Returns owned string
+fn get_greeting() => String {        // Returns owned string
   "Hello"
 }
 
@@ -138,7 +138,7 @@ const PI: F64 = 3.14159
 Functions are declared with `fn`:
 
 ```tuff
-fn add(a: I32, b: I32) -> I32 {
+fn add(a: I32, b: I32) => I32 {
   a + b
 }
 
@@ -160,11 +160,11 @@ let f: () => I32 = () => 100
 Functions can have default parameters and optional returns. Optional returns (using `Option<T>`) are the primary error handling mechanism:
 
 ```tuff
-fn power(base: I32, exp: I32 = 2) -> I32 {
+fn power(base: I32, exp: I32 = 2) => I32 {
   // ...
 }
 
-fn maybeDivide(a: I32, b: I32) -> Option<I32> {
+fn maybeDivide(a: I32, b: I32) => Option<I32> {
   if b == 0 {
     None  // Represents division failure
   } else {
@@ -259,7 +259,7 @@ match (result) {
 
 ```tuff
 type UserId = U64
-type Handler = fn(*Str) -> Void
+type Handler = fn(*Str) => Void
 type Maybe<T> = Option<T>
 ```
 
@@ -268,7 +268,7 @@ type Maybe<T> = Option<T>
 Functions and types support generic parameters:
 
 ```tuff
-fn identity<T>(value: T) -> T {
+fn identity<T>(value: T) => T {
   value
 }
 
@@ -283,7 +283,7 @@ Traits define shared behavior:
 
 ```tuff
 trait Drawable {
-  fn draw() -> Void
+  fn draw() => Void
 }
 
 struct Circle {
@@ -291,57 +291,248 @@ struct Circle {
 }
 
 impl Drawable for Circle {
-  fn draw() -> Void {
+  fn draw() => Void {
     print("Drawing circle with radius " + string(radius))  // string() converts to String
   }
 }
 
 ```
 
-### Contracts (Planned)
+### Contracts
 
-`contract` is like a trait used to specify required behavior (method signatures). It is commonly used alongside refinement types to express safety preconditions:
+Contracts define required behavior via method signatures. They enable both **static (compile-time)** and **dynamic (runtime) dispatch**, similar to interfaces in Java or traits in Rust.
+
+#### Contract Definition
 
 ```tuff
+contract Vehicle {
+  fn goto() => Void
+}
+
 contract Sized {
-  fn size() -> USize
+  fn size() => USize
 }
 ```
 
-### Objects (Singletons, Planned)
+#### Static Implementation (Compile-Time Dispatch)
 
-Objects are singletons. They are guaranteed to initialize exactly once and can hold state.
+Use `with Contract` syntax to statically implement a contract. The compiler inlines implementations, incurring no runtime overhead:
 
-The `out` keyword is equivalent to exported/public visibility.
+```tuff
+fn Car(model: *Str) => Car {
+  out fn goto() => {
+    print("Car " + model + " driving")
+  }
+
+  with Vehicle
+}
+
+let car = Car("Toyota")
+car.goto()  // ✓ Compiles; calls Car::goto directly (static dispatch)
+```
+
+#### Dynamic Implementation (Runtime Dispatch via VTables)
+
+When you assign a concrete type to a contract-typed variable, the compiler **implicitly** generates a vtable and wraps the value:
+
+```tuff
+let vehicle: Vehicle = car
+
+// Desugars to:
+let vehicle: Vehicle = car.intoVehicle(car, allocator)
+```
+
+The desugaring is:
+
+```tuff
+implicit fn intoVehicle<T>(
+  this: T,
+  allocator: <U>(*U) => (*U then drop)
+) => Vehicle => {
+  let ref: (*T then drop) = allocator(&this)
+  
+  // Vehicle is a fat pointer: {ref, vtable}
+  Vehicle {
+    ref: ref,
+    VTable { goto: |()| => T::goto(ref) }
+  }
+}
+```
+
+The contract type itself becomes a fat pointer holding:
+- A type-erased pointer to the concrete value (`ref: *T`)
+- A virtual method table (vtable) with function pointers for each method
+
+Calling methods on `vehicle: Vehicle` uses the vtable:
+
+```tuff
+vehicle.goto()  // Calls vtable.goto(vehicle.ref)
+```
+
+#### Generic Bounds on Contracts
+
+You can constrain type parameters to any concrete type that implements a contract:
+
+```tuff
+fn operate<T: Vehicle>(v: T) => Void {
+  v.goto()  // Static dispatch; T has goto
+}
+
+let car = Car("Honda")
+operate(car)  // ✓ OK; Car implements Vehicle
+
+let vehicle: Vehicle = car
+operate(vehicle)  // ✓ OK; Vehicle is subtype of Vehicle
+```
+
+When you pass a contract-typed value to a generic expecting a `T: Vehicle`, it's dynamically dispatched (the vtable call happens, then the generic receives the result).
+
+#### Multiple Contracts and Subtyping
+
+A type can implement multiple contracts:
+
+```tuff
+contract Drivable {
+  fn drive() => Void
+}
+
+contract Maintainable {
+  fn repair() => Void
+}
+
+fn Truck(model: *Str) => Truck {
+  out fn drive() => { print("Truck driving") }
+  out fn repair() => { print("Truck repaired") }
+
+  with Drivable
+  with Maintainable
+}
+```
+
+Contracts are **subtypes** of each other if one is implemented in terms of the other (or manually declared); the compiler determines subtyping relationships.
+
+#### Refinement Types in Contracts
+
+Contracts can use refinements to codify safety requirements:
+
+```tuff
+contract List<T> {
+  fn size() => USize
+  fn get(index: USize < this.size()) => T
+  fn set(index: USize < this.size(), value: T) => Void
+}
+```
+
+When calling `list.get(idx)`, the compiler requires proof that `idx < list.size()` before the call succeeds (static dispatch) or defers to runtime checks (dynamic dispatch on contract-typed values).
+
+#### Object Singletons vs Contract Implementations
+
+**Objects** are singletons (one instance per type parameter); **contracts** are abstractions (many implementations). They are orthogonal concepts:
+
+```tuff
+// A contract
+contract Logger {
+  fn log(msg: *Str) => Void
+}
+
+// An object (singleton)
+out object ConsoleLogger {
+  out fn log(msg: *Str) => {
+    print(msg)
+  }
+
+  with Logger
+}
+
+// A struct with contract
+struct FileLogger {
+  path: *Str
+}
+
+impl Logger for FileLogger {
+  fn log(msg: *Str) => {
+    // Write to file
+  }
+}
+```
+
+### Objects (Singletons)
+
+**Objects** are singletons: the runtime guarantees exactly one instance per type-parameter instantiation. They are fully initialized before any code can access them.
+
+The `out` keyword marks items as exported/public:
 
 ```tuff
 out object MySingleton {
   let mut counter = 0
 
-  out fn add() => counter += 1
+  out fn add() => {
+    counter += 1
+  }
 }
+
+MySingleton.add()  // Accesses the global singleton
 ```
 
-If an object is generic, a distinct singleton instance exists for each type-parameter instantiation:
+#### Generic Objects
+
+If an object is generic, a distinct singleton exists for each type instantiation:
 
 ```tuff
 object None<T> { }
 
-assert &None<I32> != &None<*Str>
-assert &None<I32> == &None<I32>
+// These are different singletons
+assert &None<I32> != &None<*Str>      // Different instances
+assert &None<I32> == &None<I32>       // Same instance each call
 ```
 
-Objects can also declare injected dependencies using `in` (a DI-style pattern):
+#### Dependency Injection Pattern
+
+Objects can declare injected dependencies using `in`:
 
 ```tuff
 out object MyController {
   in let myService: UserService
 
-  fn getUsersSync() -> *[User] => {
-      // ... map Result/Option to HTTP codes
-      case _ => {
-        // ...
+  out fn handleRequest() => Result<Response, Error> {
+    match (myService.getUsers()) {
+      case Ok<[User]> { value: users } => {
+        Ok<Response> { value: Response::fromUsers(users) }
       }
+      case Err<Error> { error: e } => {
+        Err<Error> { error: e }
+      }
+    }
+  }
+}
+```
+
+The `in` dependencies are injected at initialization time. The compiler ensures all injected types are available before the object initializes.
+
+#### Objects Implementing Contracts
+
+Objects can implement contracts, making them suitable as dependencies:
+
+```tuff
+contract UserService {
+  fn getUsers() => Result<[User], Error>
+}
+
+out object DefaultUserService {
+  out fn getUsers() => Result<[User], Error> {
+    // Fetch from database
+  }
+
+  with UserService
+}
+
+// DI wires it up:
+out object MyApp {
+  in let service: UserService
+
+  out fn start() => Void {
+    match (service.getUsers()) {
+      // ...
     }
   }
 }
@@ -401,7 +592,7 @@ Predicates may reference:
 For readability, predicates on non-scalar types are often written with `where`:
 
 ```tuff
-fn first<T>(arr: T[] where len(arr) > 0) -> T { ... }
+fn first<T>(arr: T[] where len(arr) > 0) => T { ... }
 ```
 
 #### Type Narrowing with Control Flow
@@ -429,10 +620,10 @@ Refinement types prevent out-of-bounds array access at compile time by requiring
 
 ```tuff
 contract List<T> {
-  fn size() -> USize
-  fn get(index: USize < this.size()) -> T
-  fn set(index: USize < this.size(), value: T) -> Void
-  fn remove(index: USize < this.size()) -> T
+  fn size() => USize
+  fn get(index: USize < this.size()) => T
+  fn set(index: USize < this.size(), value: T) => Void
+  fn remove(index: USize < this.size()) => T
 }
 ```
 
@@ -498,17 +689,17 @@ match (score) {
 
 ```tuff
 // Positive numbers
-fn divide(a: I32, b: I32 > 0) -> I32 {
+fn divide(a: I32, b: I32 > 0) => I32 {
   a / b
 }
 
 // Non-empty collections
-fn first<T>(arr: T[] where len(arr) > 0) -> T {
+fn first<T>(arr: T[] where len(arr) > 0) => T {
   arr[0]
 }
 
 // Intersection of constraints
-fn gradePercentage(p: I32 > 0 & I32 < 100) -> *Str {
+fn gradePercentage(p: I32 > 0 & I32 < 100) => *Str {
   if p >= 90 { "A" }
   else if p >= 80 { "B" }
   // ...
@@ -518,7 +709,7 @@ fn gradePercentage(p: I32 > 0 & I32 < 100) -> *Str {
 type PercentageScore = I32 > 0 & I32 < 100
 type ValidIndex<N> = USize < N
 
-fn safeScore(score: PercentageScore) -> Void {
+fn safeScore(score: PercentageScore) => Void {
   print("Valid score: " + string(score))
 }
 ```
@@ -528,7 +719,7 @@ fn safeScore(score: PercentageScore) -> Void {
 Refinements can constrain generic type parameters:
 
 ```tuff
-fn minSafe<T: I32 > 0>(a: T, b: T) -> T {
+fn minSafe<T: I32 > 0>(a: T, b: T) => T {
   if a < b { a } else { b }
 }
 ```
@@ -539,7 +730,7 @@ Stack arrays can use refinement type parameters for bounds:
 fn safeIndex<T, L: USize>(
   arr: [T; _; L],
   idx: USize < L
-) -> T {
+) => T {
   arr[idx]
 }
 ```
@@ -703,17 +894,17 @@ Common functions will be available in the standard library:
 
 ```tuff
 // Printing
-print(value: *Str) -> Void
-println(value: *Str) -> Void
+print(value: *Str) => Void
+println(value: *Str) => Void
 
 // Type conversion
-string(value: any) -> String  // Converts any type to owned String
-number(value: *Str) -> Option<I32>
+string(value: any) => String  // Converts any type to owned String
+number(value: *Str) => Option<I32>
 
 // Collections
-len(array: T[]) -> USize
-push<T>(mut array: T[], item: T) -> Void
-pop<T>(mut array: T[]) -> Option<T>
+len(array: T[]) => USize
+push<T>(mut array: T[], item: T) => Void
+pop<T>(mut array: T[]) => Option<T>
 ```
 
 ## Module System (Planned)
@@ -754,7 +945,7 @@ Tuff enforces a no-panic policy through explicit error handling patterns:
 Used when an operation may fail with no additional error information:
 
 ```tuff
-fn parseInt(s: *Str) -> Option<I32> {
+fn parseInt(s: *Str) => Option<I32> {
   // Returns None if parsing fails, Some(value) otherwise
 }
 ```
@@ -773,7 +964,7 @@ type Result<T, X> = Ok<T> | Err<X>
 You can narrow and destructure using `is`:
 
 ```tuff
-fn readFile(path: *Str) -> Result<String, *Str> {
+fn readFile(path: *Str) => Result<String, *Str> {
   // Returns Ok(contents) or Err(error_message)
 }
 
@@ -789,14 +980,14 @@ if (result is Ok<String> { value: contents }) {
 Propagates errors up the call stack safely:
 
 ```tuff
-fn processFile(path: *Str) -> Result<I32> {
+fn processFile(path: *Str) => Result<I32> {
   let contents = readFile(path)?     // Unwrap or propagate error
   let count = countLines(contents)?
   Ok(count)
 }
 
 // Alternative with explicit pattern matching:
-fn processFileAlt(path: *Str) -> Result<I32> {
+fn processFileAlt(path: *Str) => Result<I32> {
   match (readFile(path)) {
     case Ok(contents) => {
       match (countLines(contents)) {
