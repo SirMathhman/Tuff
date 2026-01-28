@@ -55,4 +55,8 @@ describe('interpret', () => {
   it('evaluates multiple operands with mixed types and untyped numbers', () => {
     expect(interpret('1U8 + 2 + 3U16')).toBe(6);
   });
+
+  it('evaluates multiple addition and subtraction with signed types', () => {
+    expect(interpret('2I8 + 3I8 - 4I8')).toBe(1);
+  });
 });
