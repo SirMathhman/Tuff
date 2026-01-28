@@ -173,4 +173,9 @@ describe('interpret', () => {
     expect(interpret('let temp : Bool = true; temp')).toBe(1);
     expect(interpret('let temp : Bool = false; temp')).toBe(0);
   });
+
+  it('rejects assigning Bool to an integer type', () => {
+    expect(() => interpret('let temp = true; let other : I32 = temp; other'))
+      .toThrow('Invalid type: let other : I32 = temp');
+  });
 });
