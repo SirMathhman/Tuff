@@ -158,9 +158,19 @@ function resolveFlatIfExpression(
   resolved: string,
   variables: Variables
 ): string | null {
-  const match = resolved.match(
-    /\bif\s+([A-Za-z0-9]+)\s+([A-Za-z0-9]+)\s+else\s+([A-Za-z0-9]+)/
+  const operand =
+    '(?:-?\\d+(?:\\.\\d+)?(?:[A-Za-z]\\w*)?|\\b(?!if\\b|else\\b)[A-Za-z]\\w*)';
+  const ifRegex = new RegExp(
+    '\\bif\\s+(' +
+      operand +
+      ')\\s+(' +
+      operand +
+      ')\\s+else\\s+(' +
+      operand +
+      ')'
   );
+
+  const match = resolved.match(ifRegex);
   if (!match) return null;
 
   const cond = resolveOperand(match[1], variables);

@@ -190,6 +190,7 @@ describe('interpret', () => {
     expect(interpret('let test : U8 = if (true) 2 else 3; test')).toBe(2);
     expect(interpret('let test : U8 = if (false) 2 else 3; test')).toBe(3);
     expect(interpret('if (true) { 10 } else { 20 }')).toBe(10);
+    expect(interpret('if (false) 1 else if (false) 2 else 3')).toBe(3);
   });
 
   it('rejects mismatched branch types in if-else expressions', () => {
@@ -199,8 +200,9 @@ describe('interpret', () => {
   });
 
   it('rejects assigning numeric if-else result to Bool', () => {
-    expect(() => interpret('let result : Bool = if (true) 2 else 3; result'))
-      .toThrow('Invalid number: let result : Bool = 2');
+    expect(() =>
+      interpret('let result : Bool = if (true) 2 else 3; result')
+    ).toThrow('Invalid number: let result : Bool = 2');
   });
 
   it('supports logical operators on Bool values', () => {
