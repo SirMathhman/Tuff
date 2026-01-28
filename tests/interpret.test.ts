@@ -10,7 +10,11 @@ describe('interpret', () => {
     expect(interpret('100U8')).toBe(100);
   });
 
-  it('rejects negative numbers with type suffix', () => {
+  it('rejects negative numbers with unsigned type suffix', () => {
     expect(() => interpret('-100U8')).toThrow('Invalid number: -100U8');
+  });
+
+  it('parses negative integer with signed I8 type suffix', () => {
+    expect(interpret('-100I8')).toBe(-100);
   });
 });
