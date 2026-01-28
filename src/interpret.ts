@@ -327,7 +327,11 @@ function applyOperator(
 
 function resolveOperand(token: string, variables: Variables): Result {
   if (variables.has(token)) {
-    return variables.get(token)!;
+    const variable = variables.get(token)!;
+    if (variable.isInitialized === false) {
+      throw new Error('Use of uninitialized variable: ' + token);
+    }
+    return variable;
   }
   return parseTypedNumber(token);
 }

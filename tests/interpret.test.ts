@@ -156,4 +156,10 @@ describe('interpret', () => {
   it('supports multiple assignments to a mutable variable with delayed initialization', () => {
     expect(interpret('let mut x : U8; x = 100; x = 10; x')).toBe(10);
   });
+
+  it('rejects reading from an uninitialized variable', () => {
+    expect(() => interpret('let x : U8; x')).toThrow(
+      'Use of uninitialized variable: x'
+    );
+  });
 });
