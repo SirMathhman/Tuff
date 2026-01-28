@@ -198,4 +198,13 @@ describe('interpret', () => {
     expect(interpret('false && true || true')).toBe(1);
     expect(interpret('false && (true || true)')).toBe(0);
   });
+
+  it('rejects logical operators on non-boolean types', () => {
+    expect(() => interpret('1 || 2')).toThrow(
+      'Logical operators only supported for Bool: 1 || 2'
+    );
+    expect(() => interpret('true && 1')).toThrow(
+      'Logical operators only supported for Bool: true && 1'
+    );
+  });
 });

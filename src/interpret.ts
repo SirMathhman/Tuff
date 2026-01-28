@@ -415,7 +415,7 @@ function evaluateExpression(expr: string, variables: Variables): Result {
   if (hasBool && hasArithmetic) {
     throw new Error('Arithmetic operators not supported for Bool: ' + expr);
   }
-  if (!hasBool && hasLogical) {
+  if (hasLogical && types.some((t) => t !== 'Bool')) {
     throw new Error('Logical operators only supported for Bool: ' + expr);
   }
 
