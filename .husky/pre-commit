@@ -1,0 +1,4 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+bun test && npm run fmt && npm run dedupe && npm run lint

@@ -21,9 +21,10 @@
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
-    "lint:fix": "eslint src tests --fix"
+    "lint:fix": "eslint src tests --fix",
+    "fmt": "eslint src tests --fix",
+    "dedupe": "/mnt/c/Tools/pmd-bin-7.18.0/bin/pmd cpd src tests --language typescript --minimum-tokens 35"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/bun": "latest",
     "@types/eslint": "^8.56.0",
@@ -31,6 +32,7 @@
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
     "eslint": "^8.56.0",
+    "husky": "^9.1.7",
     "typescript": "^5.3.0"
   }
 }
