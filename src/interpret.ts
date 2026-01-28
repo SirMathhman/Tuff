@@ -16,7 +16,7 @@ const typeRanges: Record<string, [number, number]> = {
   I32: [-2147483648, 2147483647],
 };
 
-function parseTypedNumber(input: string): number {
+function parseTypedNumber(input: string): { value: number; type?: string } {
   // Match numeric part followed by optional type suffix
   const match = input.match(/^(-?\d+(?:\.\d+)?)\s*([A-Za-z]\w*)?$/);
 
@@ -45,7 +45,7 @@ function parseTypedNumber(input: string): number {
     }
   }
 
-  return value;
+  return { value, type: typeSuffix };
 }
 
 export function interpret(input: string): number {
@@ -56,10 +56,14 @@ export function interpret(input: string): number {
     return evaluateExpression(trimmed);
   }
 
-  return parseTypedNumber(trimmed);
+  return parseTypedNumber(trimmed).value;
 }
 
-function applyOperator(result: number, op: string, nextOperand: number): number {
+function applyOperator(
+  result: number,
+  op: string,
+  nextOperand: number
+): number {
   switch (op) {
     case '+':
       return result + nextOperand;
@@ -77,16 +81,16 @@ function applyOperator(result: number, op: string, nextOperand: number): number 
   }
 }
 
-function evaluateExpression(expr: string): number {
-  // Tokenize the expression: split by operators while preserving them
+function tokenizeExpression(
+  expr: string
+): { operands: { value: number; type?: string }[]; operators: string[] } {
   const tokens = expr.match(/(-?\d+(?:\.\d+)?[A-Za-z]\w*|[+\-*/])/g);
 
   if (!tokens || tokens.length === 0) {
     throw new Error(`Invalid expression: ${expr}`);
   }
 
-  // Extract operands and operators
-  const operands: number[] = [];
+  const operands: { value: number; type?: string }[] = [];
   const operators: string[] = [];
 
   for (let i = 0; i < tokens.length; i++) {
@@ -103,10 +107,27 @@ function evaluateExpression(expr: string): number {
     throw new Error(`Invalid expression: ${expr}`);
   }
 
+  return { operands, operators };
+}
+
+function evaluateExpression(expr: string): number {
+  const { operands, operators } = tokenizeExpression(expr);
+
+  // Determine the result type (type of first operand)
+  const resultType = operands[0].type;
+
   // Evaluate left to right
-  let result = operands[0];
+  let result = operands[0].value;
   for (let i = 0; i < operators.length; i++) {
-    result = applyOperator(result, operators[i], operands[i + 1]);
+    result = applyOperator(result, operators[i], operands[i + 1].value);
+  }
+
+  // Validate result is within valid range for the result type
+  if (resultType && resultType in typeRanges) {
+    const [min, max] = typeRanges[resultType];
+    if (result < min || result > max) {
+      throw new Error(`Invalid expression: ${expr}`);
+    }
   }
 
   return result;

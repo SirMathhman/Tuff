@@ -25,4 +25,8 @@ describe('interpret', () => {
   it('evaluates simple addition with type suffixes', () => {
     expect(interpret('1U8 + 2U8')).toBe(3);
   });
+
+  it('rejects expression result out of range for U8', () => {
+    expect(() => interpret('1U8 + 255U8')).toThrow('Invalid expression: 1U8 + 255U8');
+  });
 });
