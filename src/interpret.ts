@@ -317,10 +317,54 @@ function parseKeywordParen(
   };
 }
 
-function parseStructDeclaration(source: string): { name: string } | null {
-  const structMatch = source.match(/^struct\s+([a-zA-Z_]\w*)\s*\{\s*\}\s*;?$/);
-  if (!structMatch || !structMatch[1]) return null;
-  return { name: structMatch[1] };
+function parseStructDeclaration(
+  source: string,
+): { name: string; fields?: { name: string; type: string }[] } | null {
+  // Match: struct Name { ... }
+  const structMatch = source.match(
+    /^struct\s+([a-zA-Z_]\w*)\s*\{(.*)\}\s*;?$/s,
+  );
+  if (
+    !structMatch ||
+    structMatch[1] === undefined ||
+    structMatch[2] === undefined
+  ) {
+    return null;
+  }
+
+  const name = structMatch[1];
+  const body = structMatch[2].trim();
+
+  // Handle empty struct
+  if (body === "") {
+    return { name, fields: [] };
+  }
+
+  // Parse fields: fieldName : Type; fieldName : Type;
+  const fields: { name: string; type: string }[] = [];
+  const fieldStrings = body.split(";").filter((s) => s.trim());
+
+  for (const fieldStr of fieldStrings) {
+    const fieldMatch = fieldStr.trim().match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
+    if (
+      !fieldMatch ||
+      fieldMatch[1] === undefined ||
+      fieldMatch[2] === undefined
+    ) {
+      return null; // Invalid field syntax
+    }
+    const fieldName = fieldMatch[1];
+    const fieldType = fieldMatch[2].trim();
+
+    // Check for duplicate field names
+    if (fields.some((f) => f.name === fieldName)) {
+      throw new Error(`Duplicate field name '${fieldName}' in struct ${name}`);
+    }
+
+    fields.push({ name: fieldName, type: fieldType });
+  }
+
+  return { name, fields };
 }
 
 function ensureValidStructDeclaration(source: string): void {

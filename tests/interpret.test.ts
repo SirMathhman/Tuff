@@ -531,8 +531,8 @@ describe("interpret", () => {
     const result = interpret("{ struct Empty {} } struct Empty {}");
     expect(result).toBe(0);
   });
-  test('interpret("struct Copied { x : I32; y : I32;}") should throw error', () => {
-    expect(() => interpret("struct Copied { x : I32; y : I32;}")).toThrow();
+  test('interpret("struct Copied { x : I32; x : I32; }") should throw error', () => {
+    expect(() => interpret("struct Copied { x : I32; x : I32; }")).toThrow();
   });
   test('interpret("let x : MyAlias = 100; type MyAlias = I32; x is MyAlias") should return 1', () => {
     const result = interpret(
