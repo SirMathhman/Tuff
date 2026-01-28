@@ -185,4 +185,17 @@ describe('interpret', () => {
       'Arithmetic operators not supported for Bool: true + false'
     );
   });
+
+  it('supports logical operators on Bool values', () => {
+    expect(interpret('true || false')).toBe(1);
+    expect(interpret('true && false')).toBe(0);
+    expect(interpret('true && true')).toBe(1);
+    expect(interpret('false || false')).toBe(0);
+  });
+
+  it('respects logical operator precedence (&& before ||)', () => {
+    expect(interpret('true || false && false')).toBe(1);
+    expect(interpret('false && true || true')).toBe(1);
+    expect(interpret('false && (true || true)')).toBe(0);
+  });
 });

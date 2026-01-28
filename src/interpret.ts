@@ -306,7 +306,7 @@ function handleAssignmentStatement(
 }
 
 function evaluateStatement(statement: string, variables: Variables): Result {
-  if (/[+\-*/]/.test(statement)) {
+  if (/[+\-*/]|\|\||&&/.test(statement)) {
     return evaluateExpression(statement, variables);
   }
   return resolveOperand(statement, variables);
@@ -329,6 +329,10 @@ function applyOperator(
         throw new Error('Division by zero');
       }
       return Math.floor(resultValue / nextOperand);
+    case '||':
+      return resultValue || nextOperand ? 1 : 0;
+    case '&&':
+      return resultValue && nextOperand ? 1 : 0;
     default:
       throw new Error('Unknown operator: ' + op);
   }
@@ -353,7 +357,7 @@ function tokenizeExpression(
   operators: string[];
 } {
   const tokens = expr.match(
-    /(-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|[A-Za-z]\w*|[+\-*/])/g
+    /(-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|[A-Za-z]\w*|\|\||&&|[+\-*/])/g
   );
 
   if (!tokens || tokens.length === 0) {
@@ -379,35 +383,14 @@ function tokenizeExpression(
   return { operands, operators };
 }
 
-function evaluateExpression(expr: string, variables: Variables): Result {
-  const { operands, operators } = tokenizeExpression(expr, variables);
-
-  // Collect all types from operands
-  const types = operands.map((op) => op.type);
-
-  // Arithmetic operators are not supported for Bool type
-  if (types.some((t) => t === 'Bool')) {
-    throw new Error('Arithmetic operators not supported for Bool: ' + expr);
-  }
-
-  // Determine the widest type
-  const resultType = getWidestType(types);
-
-  // Validate we're not mixing unsigned and signed types
-  const hasUnsigned = types.some((t) => t && t.startsWith('U'));
-  const hasSigned = types.some((t) => t && t.startsWith('I'));
-  if (hasUnsigned && hasSigned) {
-    throw new Error('Invalid expression: ' + expr);
-  }
-
-  // Evaluate with operator precedence (* and / before + and -)
-  const values = operands.map((op) => op.value);
-  const currentOperators = [...operators];
-
-  // First pass: multiplication and division
+function applyPrecedenceLevel(
+  level: string[],
+  values: number[],
+  currentOperators: string[]
+): void {
   for (let i = 0; i < currentOperators.length; ) {
     const op = currentOperators[i];
-    if (op === '*' || op === '/') {
+    if (level.includes(op)) {
       values[i] = applyOperator(values[i], op, values[i + 1]);
       values.splice(i + 1, 1);
       currentOperators.splice(i, 1);
@@ -415,16 +398,42 @@ function evaluateExpression(expr: string, variables: Variables): Result {
       i++;
     }
   }
+}
 
-  // Second pass: addition and subtraction
-  let resultValue = values[0];
-  for (let i = 0; i < currentOperators.length; i++) {
-    resultValue = applyOperator(
-      resultValue,
-      currentOperators[i],
-      values[i + 1]
-    );
+function evaluateExpression(expr: string, variables: Variables): Result {
+  const { operands, operators } = tokenizeExpression(expr, variables);
+
+  // Collect all types from operands
+  const types = operands.map((op) => op.type);
+
+  // Arithmetic operators (+) are not supported for Bool type,
+  // but logical operators (||, &&) are.
+  const hasLogical = operators.some((op) => op === '||' || op === '&&');
+  const hasArithmetic = operators.some((op) => /[+\-*/]/.test(op));
+  const hasBool = types.some((t) => t === 'Bool');
+
+  if (hasBool && hasArithmetic) {
+    throw new Error('Arithmetic operators not supported for Bool: ' + expr);
   }
+  if (!hasBool && hasLogical) {
+    throw new Error('Logical operators only supported for Bool: ' + expr);
+  }
+
+  // Determine the widest type
+  const resultType = hasLogical ? 'Bool' : getWidestType(types);
+
+  // Evaluate with operator precedence (* and / before + and -, etc)
+  const values = operands.map((op) => op.value);
+  const currentOperators = [...operators];
+
+  // Operator precedence passes
+  const precedenceLevels = [['*', '/'], ['+', '-'], ['&&'], ['||']];
+
+  for (const level of precedenceLevels) {
+    applyPrecedenceLevel(level, values, currentOperators);
+  }
+
+  const resultValue = values[0];
 
   // Validate result is within valid range for the result type
   if (resultType && resultType in typeRanges) {
