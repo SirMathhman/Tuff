@@ -208,20 +208,20 @@ enum Result<T> {
 
 ### Pattern Matching
 
-Match expressions provide exhaustive pattern matching:
+Match expressions provide exhaustive pattern matching with parenthesized values and `case` keywords:
 
 ```tuff
-match value {
-  0 => "zero",
-  1 | 2 => "small",
-  3..10 => "medium",
-  _ => "other",
+match (value) {
+  case 0 => "zero",
+  case 1 | 2 => "small",
+  case 3..10 => "medium",
+  case _ => "other",
 }
 
 // With bindings
-match result {
-  Result::Ok(value) => print("Success: " + value),
-  Result::Err(msg) => print("Error: " + msg),
+match (result) {
+  case Result::Ok(value) => print("Success: " + value),
+  case Result::Err(msg) => print("Error: " + msg),
 }
 ```
 
@@ -291,7 +291,28 @@ let y = x as F64  // 42.0_f64
 
 Refinement types encode constraints on values at the type level to prevent runtime panics. A refinement type has the syntax `Type <condition>`, where `condition` is a predicate that the value must satisfy.
 
-Refinement types are particularly important for collection access operations. For example:
+#### Type Narrowing with Control Flow
+
+When you use conditionals, the compiler tracks refinements within each branch:
+
+```tuff
+let x: I32 = read<I32>()
+if (x > 100) {
+  // Within this block, x is provably I32 > 100
+  let a = x - 50  // Safe, result is > 50
+} else if (x > 50) {
+  // Within this block, x is provably I32 > 50 & I32 <= 100
+  let b = x / 2   // Safe
+} else {
+  // Within this block, x is provably I32 <= 50
+  let c = -x      // Safe for negation
+}
+// After the if/else, x is still typed as I32 (refinement is local to branches)
+```
+
+#### Array Access with Refinements
+
+Refinement types prevent out-of-bounds array access at compile time by requiring proof that the index is valid:
 
 ```tuff
 contract List<T> {
@@ -302,11 +323,7 @@ contract List<T> {
 }
 ```
 
-In this contract, `get`, `set`, and `remove` all require an `index` that is proven to be less than the list size. The refinement `USize < this.size()` means:
-- Type: `USize` (unsigned 64-bit integer)
-- Constraint: the value must be less than `this.size()`
-
-Refinement types prevent out-of-bounds array access at compile time by requiring proof that the index is valid:
+Example usage:
 
 ```tuff
 let arr = [1, 2, 3]
@@ -317,12 +334,54 @@ let j: USize = getUserInput()
 let z = arr.get(j)              // ✗ Error: no proof that j < arr.size()
 
 // Must use conditional to provide proof:
-if j < arr.size() {
+if (j < arr.size()) {
   let z = arr.get(j)            // ✓ OK: bounds check provides proof
 }
 ```
 
-Other common refinement types include:
+#### Partially Initialized Arrays
+
+Array types track initialization state with the syntax `[T; Init; Length]`:
+- `T`: element type
+- `Init`: number of initialized elements (0-indexed)
+- `Length`: total capacity
+
+Elements must be initialized in order:
+
+```tuff
+let mut arr: [I32; 0; 3]        // 0 initialized, capacity 3
+arr[0] = 100                     // ✓ OK: initializing next element
+arr[1] = 200                     // ✓ OK: continuing in order
+arr[2] = 300                     // ✓ OK: now fully initialized
+
+let mut arr2: [I32; 0; 3]
+arr2[1] = 100                    // ✗ Error: must initialize arr2[0] first
+```
+
+This ordering guarantee ensures that at any point, elements `0..Init` are all valid and safe for iteration.
+
+#### Pattern Matching with Refinements
+
+Match expressions (with parenthesized value) can narrow types within each case:
+
+```tuff
+match (score) {
+  case 0..50 => {
+    // score: I32 > 0 & I32 <= 50
+    print("Fail")
+  }
+  case 51..100 => {
+    // score: I32 > 50 & I32 <= 100
+    print("Pass")
+  }
+  case _ => {
+    // score: I32 > 100
+    print("Excellent")
+  }
+}
+```
+
+#### Other Common Refinements
 
 ```tuff
 // Positive numbers
@@ -335,17 +394,46 @@ fn first<T>(arr: T[] where len(arr) > 0) -> T {
   arr[0]
 }
 
-// Numeric ranges
-fn gradePercentage(p: I32 where p >= 0 && p <= 100) -> *Str {
+// Intersection of constraints
+fn gradePercentage(p: I32 > 0 & I32 < 100) -> *Str {
   if p >= 90 { "A" }
   else if p >= 80 { "B" }
   // ...
 }
+
+// Type aliases for complex refinements
+type PercentageScore = I32 > 0 & I32 < 100
+type ValidIndex<N> = USize < N
+
+fn safeScore(score: PercentageScore) -> Void {
+  print("Valid score: " + string(score))
+}
 ```
 
-### Arithmetic Overflow Prevention
+#### Refinements in Trait Bounds
 
-Refinement types also prevent arithmetic overflow by constraining operands:
+Refinements can constrain generic type parameters:
+
+```tuff
+fn minSafe<T: I32 > 0>(a: T, b: T) -> T {
+  if a < b { a } else { b }
+}
+```
+
+Stack arrays can use refinement type parameters for bounds:
+
+```tuff
+fn safeIndex<T, L: USize>(
+  arr: [T; _; L],
+  idx: USize < L
+) -> T {
+  arr[idx]
+}
+```
+
+#### Arithmetic Overflow Prevention
+
+Refinement types prevent arithmetic overflow by constraining operands. For example, with `U8` (range 0-255), adding two values requires proof of no overflow:
 
 ```tuff
 // Invalid: x + y could overflow U8
@@ -356,15 +444,13 @@ let z = x + y  // ✗ Error: no proof that x + y <= 255
 // Valid: explicitly prove the sum won't overflow
 let x: U8 = read<U8>()
 let y: U8 = read<U8>()
-let z = if (x <= 255 - y) x + y else 0  // ✓ OK: bounds check proves x + y <= 255
+let z = if (x <= 255 - y) x + y else 0  // ✓ OK: constraint x + y <= 255 is satisfied
 ```
 
-For `U8` (range 0-255), adding two values `x + y` requires the refinement constraint `x + y <= 255`, which mathematically simplifies to `x <= 255 - y`. By checking this condition before performing the addition, the compiler can prove no overflow will occur.
-
-Similar refinement constraints apply to other arithmetic operations:
-- **Subtraction**: `a - b` requires `a >= b` on unsigned integers to prevent underflow
-- **Multiplication**: `a * b` requires `a * b <= Max<T>` to prevent overflow
-- **Division**: `a / b` requires `b != 0` to prevent division by zero
+Similar refinement constraints apply to other operations:
+- **Subtraction**: `a - b` requires `a >= b` on unsigned integers
+- **Multiplication**: `a * b` requires `a * b <= Max<T>`
+- **Division**: `a / b` requires `b != 0`
 
 By encoding these constraints, **Tuff guarantees that no arithmetic operation will panic, overflow, or produce undefined behavior at runtime**.
 
