@@ -99,4 +99,8 @@ describe('interpret', () => {
       interpret('(4 + { let x : I32 = 2; let x : I32 = 100; x }) * 3')
     ).toThrow('Variable already declared: x');
   });
+
+  it('supports assigning a smaller typed value to a larger type', () => {
+    expect(interpret('(4 + { let x : U16 = 2U8; x }) * 3')).toBe(18);
+  });
 });
