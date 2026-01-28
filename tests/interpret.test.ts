@@ -175,7 +175,14 @@ describe('interpret', () => {
   });
 
   it('rejects assigning Bool to an integer type', () => {
-    expect(() => interpret('let temp = true; let other : I32 = temp; other'))
-      .toThrow('Invalid type: let other : I32 = temp');
+    expect(() =>
+      interpret('let temp = true; let other : I32 = temp; other')
+    ).toThrow('Invalid type: let other : I32 = temp');
+  });
+
+  it('rejects arithmetic operators on Bool values', () => {
+    expect(() => interpret('true + false')).toThrow(
+      'Arithmetic operators not supported for Bool: true + false'
+    );
   });
 });

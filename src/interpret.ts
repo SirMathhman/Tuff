@@ -385,6 +385,11 @@ function evaluateExpression(expr: string, variables: Variables): Result {
   // Collect all types from operands
   const types = operands.map((op) => op.type);
 
+  // Arithmetic operators are not supported for Bool type
+  if (types.some((t) => t === 'Bool')) {
+    throw new Error('Arithmetic operators not supported for Bool: ' + expr);
+  }
+
   // Determine the widest type
   const resultType = getWidestType(types);
 
