@@ -25,7 +25,7 @@ const typeOrdering: Record<string, number> = {
   I32: 12,
 };
 
-type Result = { value: number; type?: string };
+type Result = { value: number; type?: string; isMutable?: boolean };
 type Variables = Map<string, Result>;
 
 function getWidestType(types: (string | undefined)[]): string | undefined {
@@ -103,12 +103,46 @@ export function interpret(input: string): number {
   return interpretInternal(trimmed).value;
 }
 
+function validateTypeCompatibility(
+  targetType: string | undefined,
+  sourceResult: Result,
+  statement: string
+): void {
+  if (
+    targetType &&
+    sourceResult.type &&
+    targetType in typeOrdering &&
+    sourceResult.type in typeOrdering
+  ) {
+    const targetIsUnsigned = targetType.startsWith('U');
+    const sourceIsSigned = sourceResult.type.startsWith('I');
+    const targetIsSigned = targetType.startsWith('I');
+    const sourceIsUnsigned = sourceResult.type.startsWith('U');
+
+    if (
+      typeOrdering[sourceResult.type] > typeOrdering[targetType] ||
+      (targetIsUnsigned && sourceIsSigned) ||
+      (targetIsSigned && sourceIsUnsigned)
+    ) {
+      throw new Error('Invalid type: ' + statement);
+    }
+  }
+
+  if (targetType && targetType in typeRanges) {
+    const [min, max] = typeRanges[targetType];
+    if (sourceResult.value < min || sourceResult.value > max) {
+      throw new Error('Invalid number: ' + statement);
+    }
+  }
+}
+
 function handleLetStatement(
   statement: string,
   variables: Variables,
   name: string,
   expr: string,
-  type?: string
+  type?: string,
+  isMutable?: boolean
 ): Result {
   if (variables.has(name)) {
     throw new Error('Variable already declared: ' + name);
@@ -117,30 +151,33 @@ function handleLetStatement(
   const res = interpretInternal(expr, variables);
   const finalType = type || res.type;
 
-  // Reject narrowing and mixed signed/unsigned assignments if target type is explicit
-  if (type && res.type && type in typeOrdering && res.type in typeOrdering) {
-    const targetIsUnsigned = type.startsWith('U');
-    const sourceIsSigned = res.type.startsWith('I');
-    const targetIsSigned = type.startsWith('I');
-    const sourceIsUnsigned = res.type.startsWith('U');
+  validateTypeCompatibility(type, res, statement);
 
-    if (
-      typeOrdering[res.type] > typeOrdering[type] ||
-      (targetIsUnsigned && sourceIsSigned) ||
-      (targetIsSigned && sourceIsUnsigned)
-    ) {
-      throw new Error('Invalid type: ' + statement);
-    }
-  }
-
-  if (finalType && finalType in typeRanges) {
-    const [min, max] = typeRanges[finalType];
-    if (res.value < min || res.value > max) {
-      throw new Error('Invalid number: ' + statement);
-    }
-  }
-  const variable = { value: res.value, type: finalType };
+  const variable = { value: res.value, type: finalType, isMutable };
   variables.set(name, variable);
+  return variable;
+}
+
+function handleAssignmentStatement(
+  statement: string,
+  variables: Variables,
+  name: string,
+  expr: string
+): Result {
+  if (!variables.has(name)) {
+    throw new Error('Cannot assign to undeclared variable: ' + name);
+  }
+
+  const variable = variables.get(name)!;
+  if (!variable.isMutable) {
+    throw new Error('Cannot assign to immutable variable: ' + name);
+  }
+
+  const res = interpretInternal(expr, variables);
+
+  validateTypeCompatibility(variable.type, res, statement);
+
+  variable.value = res.value;
   return variable;
 }
 
@@ -164,26 +201,37 @@ function interpretInternal(
 
   for (const statement of statements) {
     const letAnnotatedMatch = statement.match(
-      /^let\s+([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)\s*=\s*(.+)$/
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)\s*=\s*(.+)$/
     );
     const letInferredMatch = statement.match(
-      /^let\s+([A-Za-z]\w*)\s*=\s*(.+)$/
+      /^let\s+(mut\s+)?([A-Za-z]\w*)\s*=\s*(.+)$/
     );
+    const assignmentMatch = statement.match(/^([A-Za-z]\w*)\s*=\s*(.+)$/);
 
     if (letAnnotatedMatch) {
       result = handleLetStatement(
         statement,
         variables,
-        letAnnotatedMatch[1],
+        letAnnotatedMatch[2],
+        letAnnotatedMatch[4],
         letAnnotatedMatch[3],
-        letAnnotatedMatch[2]
+        !!letAnnotatedMatch[1]
       );
     } else if (letInferredMatch) {
       result = handleLetStatement(
         statement,
         variables,
-        letInferredMatch[1],
-        letInferredMatch[2]
+        letInferredMatch[2],
+        letInferredMatch[3],
+        undefined,
+        !!letInferredMatch[1]
+      );
+    } else if (assignmentMatch) {
+      result = handleAssignmentStatement(
+        statement,
+        variables,
+        assignmentMatch[1],
+        assignmentMatch[2]
       );
     } else {
       result = evaluateStatement(statement, variables);

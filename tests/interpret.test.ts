@@ -123,4 +123,14 @@ describe('interpret', () => {
   it('supports complex expressions with let and blocks returning a result', () => {
     expect(interpret('let y : U8 = (4 + { let x = 2U8; x }) * 3; y')).toBe(18);
   });
+
+  it('supports mutable variables and re-assignment', () => {
+    expect(interpret('let mut x = 0; x = 1; x')).toBe(1);
+  });
+
+  it('rejects re-assignment to immutable variables', () => {
+    expect(() => interpret('let x = 0; x = 1')).toThrow(
+      'Cannot assign to immutable variable: x'
+    );
+  });
 });
