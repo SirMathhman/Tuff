@@ -71,4 +71,8 @@ describe('interpret', () => {
   it('respects operator precedence for untyped numbers', () => {
     expect(interpret('4 + 2 * 3')).toBe(10);
   });
+
+  it('supports parentheses to override precedence', () => {
+    expect(interpret('(4 + 2) * 3')).toBe(18);
+  });
 });

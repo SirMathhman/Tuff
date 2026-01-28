@@ -77,6 +77,27 @@ function parseTypedNumber(input: string): { value: number; type?: string } {
 }
 
 export function interpret(input: string): number {
+  let trimmed = input.trim();
+
+  // Resolve parentheses from innermost to outermost
+  while (trimmed.includes('(')) {
+    const match = trimmed.match(/\(([^()]+)\)/);
+    if (!match) break;
+
+    const subExpr = match[1];
+    const res = interpretInternal(subExpr);
+    // Construct replacement string with value and optional type suffix
+    const replacement = res.value.toString() + (res.type || '');
+    trimmed =
+      trimmed.substring(0, match.index) +
+      replacement +
+      trimmed.substring(match.index! + match[0].length);
+  }
+
+  return interpretInternal(trimmed).value;
+}
+
+function interpretInternal(input: string): { value: number; type?: string } {
   const trimmed = input.trim();
 
   // Check if input contains operators
@@ -84,7 +105,7 @@ export function interpret(input: string): number {
     return evaluateExpression(trimmed);
   }
 
-  return parseTypedNumber(trimmed).value;
+  return parseTypedNumber(trimmed);
 }
 
 function applyOperator(
@@ -139,7 +160,7 @@ function tokenizeExpression(expr: string): {
   return { operands, operators };
 }
 
-function evaluateExpression(expr: string): number {
+function evaluateExpression(expr: string): { value: number; type?: string } {
   const { operands, operators } = tokenizeExpression(expr);
 
   // Collect all types from operands
@@ -185,5 +206,5 @@ function evaluateExpression(expr: string): number {
     }
   }
 
-  return result;
+  return { value: result, type: resultType };
 }
