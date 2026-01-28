@@ -3,8 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "test": "bun test",
-    "prepare": "husky"
+    "lint": "eslint .",
+    "prepare": "husky",
+    "test": "bun test"
   },
   "devDependencies": {
     "typescript": "^5.2.2",
@@ -14,7 +15,11 @@
   "module": "index.ts",
   "type": "module",
   "dependencies": {
+    "@eslint/js": "^9.39.2",
     "eslint": "^9.39.2",
-    "husky": "^9.1.7"
+    "globals": "^17.2.0",
+    "husky": "^9.1.7",
+    "jiti": "^2.6.1",
+    "typescript-eslint": "^8.54.0"
   }
 }
