@@ -9,6 +9,7 @@
 - Tuples `(a, b, ...)` and indexing `tuple[0]`
 - Struct declarations (empty): `struct Empty {}`
 - Struct fields and literals: `struct Point { x : I32; y : I32; } let p : Point = Point { 3, 4 }; p.x`
+  - Struct name functions cannot return `this`: `struct Wrapper {} fn Wrapper() => this;` (invalid)
 - References (`&`, `&mut`, `*`) with borrow rules
 - Functions:
   - Declaration: `fn get() : I32 => 100;`

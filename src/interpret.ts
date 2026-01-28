@@ -1782,6 +1782,12 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
           : null;
         ensureVariableNotDefined(localScope, fnName);
 
+        if (resolveStructDefinition(fnName) && body.trim() === "this") {
+          throw new Error(
+            `Function ${fnName} cannot return this when a struct ${fnName} exists`,
+          );
+        }
+
         // Quick type check for return type: if body is a bare number and return type is Bool, error
         if (returnConstraint && returnConstraint.typeStr === "Bool") {
           const isNumericLiteral = /^-?\d+$/.test(body);

@@ -560,6 +560,17 @@ describe("interpret", () => {
     );
     expect(result).toBe(3);
   });
+
+  test('interpret("struct Wrapper {} fn Wrapper() => this;") should throw error', () => {
+    expect(() => interpret("struct Wrapper {} fn Wrapper() => this;")).toThrow(
+      /Wrapper/,
+    );
+  });
+
+  test('interpret("struct Wrapper {} fn Wrapper() => 100;") should return 0', () => {
+    const result = interpret("struct Wrapper {} fn Wrapper() => 100;");
+    expect(result).toBe(0);
+  });
   test('interpret("let x : MyAlias = 100; type MyAlias = I32; x is MyAlias") should return 1', () => {
     const result = interpret(
       "let x : MyAlias = 100; type MyAlias = I32; x is MyAlias",
