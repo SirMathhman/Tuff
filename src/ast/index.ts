@@ -25,11 +25,11 @@ export type TypeAnnotation =
 
 export interface PrimitiveType extends ASTNode {
   readonly kind: "PrimitiveType"
-  readonly name: "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool" | "string" | "void"
+  readonly name: "I32" | "I64" | "U32" | "U64" | "F32" | "F64" | "Bool" | "string" | "Void"
 }
 
 export function createPrimitiveType(
-  name: "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "bool" | "string" | "void",
+  name: "I32" | "I64" | "U32" | "U64" | "F32" | "F64" | "Bool" | "string" | "Void",
   location: SourceLocation,
 ): PrimitiveType {
   return { kind: "PrimitiveType", name, location }

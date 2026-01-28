@@ -2,48 +2,48 @@
 // This is a placeholder - not yet compilable until the compiler is fully implemented
 
 trait Drawable {
-  fn draw() -> void
+  fn draw() -> Void
 }
 
 trait Area {
-  fn area() -> f64
+  fn area() -> F64
 }
 
 struct Circle {
-  radius: f64
+  radius: F64
 }
 
 struct Rectangle {
-  width: f64
-  height: f64
+  width: F64
+  height: F64
 }
 
 impl Drawable for Circle {
-  fn draw() -> void {
+  fn draw() -> Void {
     println("Drawing a circle")
   }
 }
 
 impl Area for Circle {
-  fn area() -> f64 {
+  fn area() -> F64 {
     3.14159 * (radius * radius)
   }
 }
 
 impl Drawable for Rectangle {
-  fn draw() -> void {
+  fn draw() -> Void {
     println("Drawing a rectangle")
   }
 }
 
 impl Area for Rectangle {
-  fn area() -> f64 {
+  fn area() -> F64 {
     width * height
   }
 }
 
 // Generic function working with any type implementing Area
-fn print_area<T: Area>(shape: T) -> void {
+fn print_area<T: Area>(shape: T) -> Void {
   println("Area: " + string(shape.area()))
 }
 

@@ -1,7 +1,7 @@
 // Example: Fibonacci sequence with pattern matching
 // This is a placeholder - not yet compilable until the compiler is fully implemented
 
-fn fibonacci(n: u32) -> u32 {
+fn fibonacci(n: U32) -> U32 {
   match n {
     0 => 0,
     1 => 1,
@@ -10,12 +10,12 @@ fn fibonacci(n: u32) -> u32 {
 }
 
 struct Point {
-  x: f64
-  y: f64
+  x: F64
+  y: F64
 }
 
 impl Point {
-  fn distance_from_origin(self) -> f64 {
+  fn distance_from_origin(self) -> F64 {
     let sum = (self.x * self.x) + (self.y * self.y)
     sqrt(sum)  // sqrt from std library
   }

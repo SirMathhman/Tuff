@@ -1,8 +1,7 @@
-# Find and Replace Skill
-
-## Overview
-
-This skill provides a command-line tool for performing regex-based find and replace operations across files and directories. It's useful for bulk refactoring, pattern updates, and consistent text replacements throughout the codebase.
+---
+name: find-and-replace
+description: This skill provides a command-line tool for performing regex-based find and replace operations across files and directories. It's useful for bulk refactoring, pattern updates, and consistent text replacements throughout the codebase.
+---
 
 ## Tool Location
 

@@ -49,7 +49,7 @@ TypeScript Output (.ts)
 ### Input
 
 ```
-let x: i32 = 42;
+let x: I32 = 42;
 ```
 
 ### Output
@@ -59,7 +59,7 @@ Token[] {
   { type: TokenType.Let, value: "let", location: { start: {0,0}, end: {0,3} } },
   { type: TokenType.Identifier, value: "x", location: { start: {0,4}, end: {0,5} } },
   { type: TokenType.Colon, value: ":", location: { start: {0,5}, end: {0,6} } },
-  { type: TokenType.Identifier, value: "i32", location: { start: {0,7}, end: {0,10} } },
+  { type: TokenType.Identifier, value: "I32", location: { start: {0,7}, end: {0,10} } },
   { type: TokenType.Eq, value: "=", location: { start: {0,11}, end: {0,12} } },
   { type: TokenType.IntLiteral, value: "42", location: { start: {0,13}, end: {0,15} } },
   { type: TokenType.Semicolon, value: ";", location: { start: {0,15}, end: {0,16} } },
@@ -108,7 +108,7 @@ Program {
   statements: [
     VariableDeclaration {
       name: "x",
-      type: ReferenceType { name: "i32" },
+      type: ReferenceType { name: "I32" },
       initializer: NumberLiteral { value: 42, isFloat: false },
       isMutable: false,
     }
@@ -307,8 +307,8 @@ Tuff types map to TypeScript:
 
 | Tuff Type | TypeScript |
 |-----------|-----------|
-| `i32`, `i64`, `u32`, `u64`, `f32`, `f64` | `number` |
-| `bool` | `boolean` |
+| `I32`, `I64`, `U32`, `U64`, `F32`, `F64` | `number` |
+| `Bool` | `boolean` |
 | `*Str` | `string` (borrowed) |
 | `String` | `string` (owned) |
 | `T[]` | `T[]` |

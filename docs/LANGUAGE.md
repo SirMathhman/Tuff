@@ -44,9 +44,9 @@ enum NetworkStatus {  // PascalCase for enum
   Disconnected,
 }
 
-const MAX_RETRIES: i32 = 3  // UPPER_SNAKE_CASE for constant
+const MAX_RETRIES: I32 = 3  // UPPER_SNAKE_CASE for constant
 
-fn calculateDistance(p1: Point, p2: Point) -> f64 {  // camelCase for function
+fn calculateDistance(p1: Point, p2: Point) -> F64 {  // camelCase for function
   let dx = p2.x - p1.x  // camelCase for variable
   let dy = p2.y - p1.y
   // ...
@@ -72,16 +72,16 @@ Tuff includes the following primitive types:
 
 | Type | Size | Range | Example |
 |------|------|-------|---------|
-| `i32` | 32-bit | -2^31 to 2^31-1 | `42_i32` |
-| `i64` | 64-bit | -2^63 to 2^63-1 | `1000_i64` |
-| `u32` | 32-bit unsigned | 0 to 2^32-1 | `42_u32` |
-| `u64` | 64-bit unsigned | 0 to 2^64-1 | `1000_u64` |
-| `f32` | 32-bit float | IEEE 754 single | `3.14_f32` |
-| `f64` | 64-bit float | IEEE 754 double | `3.14` |
-| `bool` | 1-bit | `true` or `false` | `false` |
+| `I32` | 32-bit | -2^31 to 2^31-1 | `42_i32` |
+| `I64` | 64-bit | -2^63 to 2^63-1 | `1000_i64` |
+| `U32` | 32-bit unsigned | 0 to 2^32-1 | `42_u32` |
+| `U64` | 64-bit unsigned | 0 to 2^64-1 | `1000_u64` |
+| `F32` | 32-bit float | IEEE 754 single | `3.14_f32` |
+| `F64` | 64-bit float | IEEE 754 double | `3.14` |
+| `Bool` | 1-bit | `true` or `false` | `false` |
 | `*Str` | UTF-8 slice | Variable | `"hello"` (borrowed string) |
 | `String` | UTF-8 owned | Variable | Allocated string |
-| `void` | N/A | None | Implicit return |
+| `Void` | N/A | None | Implicit return |
 
 ### String Types: *Str vs String
 
@@ -118,8 +118,8 @@ When passing strings to functions, use `*Str` for parameters. When storing or re
 Variables are declared with `let` (immutable) or `let mut` (mutable):
 
 ```tuff
-let x: i32 = 42
-let mut y = 0  // Type inferred as i32
+let x: I32 = 42
+let mut y = 0  // Type inferred as I32
 y = 1
 ```
 
@@ -128,7 +128,7 @@ y = 1
 Constants use `const` and must have explicit types:
 
 ```tuff
-const PI: f64 = 3.14159
+const PI: F64 = 3.14159
 ```
 
 ### Functions
@@ -136,12 +136,12 @@ const PI: f64 = 3.14159
 Functions are declared with `fn`:
 
 ```tuff
-fn add(a: i32, b: i32) -> i32 {
+fn add(a: I32, b: I32) -> I32 {
   a + b
 }
 
 fn greet(name: *Str) {
-  // Implicit return of void
+  // Implicit return of Void
   print("Hello, " + name)
 }
 ```
@@ -149,11 +149,11 @@ fn greet(name: *Str) {
 Functions can have default parameters and optional returns. Optional returns (using `Option<T>`) are the primary error handling mechanism:
 
 ```tuff
-fn power(base: i32, exp: i32 = 2) -> i32 {
+fn power(base: I32, exp: I32 = 2) -> I32 {
   // ...
 }
 
-fn maybeDivide(a: i32, b: i32) -> Option<i32> {
+fn maybeDivide(a: I32, b: I32) -> Option<I32> {
   if b == 0 {
     None  // Represents division failure
   } else {
@@ -175,13 +175,13 @@ Structs group related data:
 
 ```tuff
 struct Point {
-  x: f64
-  y: f64
+  x: F64
+  y: F64
 }
 
 struct Person {
   pub name: String  // Public field (owned)
-  age: i32          // Private field
+  age: I32          // Private field
 }
 
 // Construction
@@ -228,8 +228,8 @@ match result {
 ### Type Aliases
 
 ```tuff
-type UserId = u64
-type Handler = fn(*Str) -> void
+type UserId = U64
+type Handler = fn(*Str) -> Void
 type Maybe<T> = Option<T>
 ```
 
@@ -253,15 +253,15 @@ Traits define shared behavior:
 
 ```tuff
 trait Drawable {
-  fn draw() -> void
+  fn draw() -> Void
 }
 
 struct Circle {
-  radius: f64
+  radius: F64
 }
 
 impl Drawable for Circle {
-  fn draw() -> void {
+  fn draw() -> Void {
     print("Drawing circle with radius " + string(radius))  // string() converts to String
   }
 }
@@ -284,7 +284,7 @@ Explicit type conversion with `as`:
 
 ```tuff
 let x = 42_i32
-let y = x as f64  // 42.0_f64
+let y = x as F64  // 42.0_f64
 ```
 
 ## Expressions
@@ -309,7 +309,7 @@ a & b, a | b, a ^ b, a << b, a >> b
 
 ```tuff
 -value     // Negation
-!bool      // Logical NOT
+!Bool      // Logical NOT
 ```
 
 ### Array Access and Member Access
@@ -362,16 +362,16 @@ Common functions will be available in the standard library:
 
 ```tuff
 // Printing
-print(value: *Str) -> void
-println(value: *Str) -> void
+print(value: *Str) -> Void
+println(value: *Str) -> Void
 
 // Type conversion
 string(value: any) -> String  // Converts any type to owned String
-number(value: *Str) -> Option<i32>
+number(value: *Str) -> Option<I32>
 
 // Collections
-len(array: T[]) -> u64
-push<T>(mut array: T[], item: T) -> void
+len(array: T[]) -> U64
+push<T>(mut array: T[], item: T) -> Void
 pop<T>(mut array: T[]) -> Option<T>
 ```
 
@@ -397,7 +397,7 @@ Tuff enforces a no-panic policy through explicit error handling patterns:
 Used when an operation may fail with no additional error information:
 
 ```tuff
-fn parseInt(s: *Str) -> Option<i32> {
+fn parseInt(s: *Str) -> Option<I32> {
   // Returns None if parsing fails, Some(value) otherwise
 }
 ```
@@ -421,14 +421,14 @@ fn readFile(path: *Str) -> Result<String> {
 Propagates errors up the call stack safely:
 
 ```tuff
-fn processFile(path: *Str) -> Result<i32> {
+fn processFile(path: *Str) -> Result<I32> {
   let contents = readFile(path)?     // Unwrap or propagate error
   let count = countLines(contents)?
   Ok(count)
 }
 
 // Alternative with explicit pattern matching:
-fn processFileAlt(path: *Str) -> Result<i32> {
+fn processFileAlt(path: *Str) -> Result<I32> {
   match readFile(path) {
     Ok(contents) => {
       match countLines(contents) {
@@ -485,7 +485,7 @@ Tuff uses **limited type inference**:
 
 ```tuff
 // ✓ OK - return type inferred from expressions
-fn double(x: i32) {
+fn double(x: I32) {
   x * 2
 }
 
@@ -495,5 +495,5 @@ fn triple(x) {
 }
 
 // ✓ OK - type inferred from assignment
-let nums = [1, 2, 3]  // inferred as i32[]
+let nums = [1, 2, 3]  // inferred as I32[]
 ```
