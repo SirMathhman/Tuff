@@ -329,6 +329,17 @@ function ensureValidStructDeclaration(source: string): void {
   }
 }
 
+function registerStructDeclaration(source: string): void {
+  ensureValidStructDeclaration(source);
+  const parsed = parseStructDeclaration(source);
+  if (parsed && definedStructs.has(parsed.name)) {
+    throw new Error(`Struct ${parsed.name} already defined`);
+  }
+  if (parsed) {
+    definedStructs.add(parsed.name);
+  }
+}
+
 function tryCreateGeneratorEntry(source: string): ScopeEntry | null {
   const rangeMatch = source.match(/^(\d+)\.\.(\d+)$/);
   if (!rangeMatch || !rangeMatch[1] || !rangeMatch[2]) return null;
@@ -466,6 +477,7 @@ const borrowState: Map<
   string,
   { immutableCount: number; mutableCount: number }
 > = new Map();
+const definedStructs: Set<string> = new Set();
 
 function getBorrowInfo(varName: string): {
   immutableCount: number;
@@ -518,6 +530,7 @@ function getAddressOf(varName: string): number {
 export function interpret(source: string, scope: Scope = {}): number {
   addresses.clear();
   borrowState.clear();
+  definedStructs.clear();
   nextAddress = 0x1000;
   const result = evaluate(source, scope);
   if (Array.isArray(result.value)) {
@@ -539,7 +552,7 @@ interface EvaluationResult {
 function evaluate(source: string, scope: Scope): EvaluationResult {
   source = source.trim();
   if (source.startsWith("struct ")) {
-    ensureValidStructDeclaration(source);
+    registerStructDeclaration(source);
     return { value: 0, constraint: null };
   }
   if (source === "true") {
@@ -1379,7 +1392,7 @@ function evaluate(source: string, scope: Scope): EvaluationResult {
         }
       }
       if (statement.startsWith("struct ")) {
-        ensureValidStructDeclaration(statement);
+        registerStructDeclaration(statement);
         lastResult = { value: 0, constraint: null };
         continue;
       }

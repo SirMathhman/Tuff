@@ -524,6 +524,9 @@ describe("interpret", () => {
     const result = interpret("struct Empty {}");
     expect(result).toBe(0);
   });
+  test('interpret("struct Empty {} struct Empty {}") should throw error', () => {
+    expect(() => interpret("struct Empty {} struct Empty {}")).toThrow();
+  });
   test('interpret("let x : MyAlias = 100; type MyAlias = I32; x is MyAlias") should return 1', () => {
     const result = interpret(
       "let x : MyAlias = 100; type MyAlias = I32; x is MyAlias",
