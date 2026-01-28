@@ -146,4 +146,10 @@ describe('interpret', () => {
   it('supports declarations without initializers and delayed initialization', () => {
     expect(interpret('let x : U8; x = 100; x')).toBe(100);
   });
+
+  it('rejects second assignment to an immutable variable after delayed initialization', () => {
+    expect(() => interpret('let x : U8; x = 100; x = 10; x')).toThrow(
+      'Cannot assign to immutable variable: x'
+    );
+  });
 });
