@@ -122,30 +122,83 @@ function splitStatements(input: string): string[] {
   return statements;
 }
 
+function substituteResult(
+  resolved: string,
+  res: Result,
+  match: RegExpMatchArray
+): string {
+  const replacement = res.value.toString() + (res.type || '');
+  return (
+    resolved.substring(0, match.index) +
+    replacement +
+    resolved.substring(match.index! + match[0].length)
+  );
+}
+
+function resolveInnermostGrouping(
+  resolved: string,
+  variables: Variables
+): string | null {
+  const match = resolved.match(/(\([^(){}]+\)|\{[^(){}]+\})/);
+  if (!match) return null;
+
+  const group = match[0];
+  const subExpr = group.substring(1, group.length - 1);
+  const isBlock = group.startsWith('{');
+
+  const res = interpretInternal(
+    subExpr,
+    isBlock ? new Map(variables) : variables
+  );
+
+  return substituteResult(resolved, res, match);
+}
+
+function resolveFlatIfExpression(
+  resolved: string,
+  variables: Variables
+): string | null {
+  const match = resolved.match(
+    /\bif\s+([A-Za-z0-9]+)\s+([A-Za-z0-9]+)\s+else\s+([A-Za-z0-9]+)/
+  );
+  if (!match) return null;
+
+  const cond = resolveOperand(match[1], variables);
+  if (cond.type !== 'Bool') {
+    throw new Error('If condition must be Bool');
+  }
+
+  const res1 = resolveOperand(match[2], variables);
+  const res2 = resolveOperand(match[3], variables);
+
+  const resultType = getWidestType([res1.type, res2.type]);
+  const finalRes = cond.value !== 0 ? res1 : res2;
+  const result = { value: finalRes.value, type: resultType };
+
+  return substituteResult(resolved, result, match);
+}
+
 function resolveStatement(statement: string, variables: Variables): string {
   let resolved = statement;
 
-  while (resolved.includes('(') || resolved.includes('{')) {
-    // Look for innermost grouping that contains no other grouping symbols
-    const match = resolved.match(/(\([^(){}]+\)|\{[^(){}]+\})/);
-    if (!match) break;
+  while (
+    resolved.includes('(') ||
+    resolved.includes('{') ||
+    /\bif\b/.test(resolved)
+  ) {
+    const nextGroup = resolveInnermostGrouping(resolved, variables);
+    if (nextGroup !== null) {
+      resolved = nextGroup;
+      continue;
+    }
 
-    const group = match[0];
-    const subExpr = group.substring(1, group.length - 1);
-    const isBlock = group.startsWith('{');
+    const nextIf = resolveFlatIfExpression(resolved, variables);
+    if (nextIf !== null) {
+      resolved = nextIf;
+      continue;
+    }
 
-    // Cloned map for blocks ensures shadowing is caught and locals don't leak,
-    // but re-assignments to shared objects persist.
-    const res = interpretInternal(
-      subExpr,
-      isBlock ? new Map(variables) : variables
-    );
-
-    const replacement = res.value.toString() + (res.type || '');
-    resolved =
-      resolved.substring(0, match.index) +
-      replacement +
-      resolved.substring(match.index! + match[0].length);
+    break;
   }
 
   return resolved;

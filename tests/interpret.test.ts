@@ -186,6 +186,12 @@ describe('interpret', () => {
     );
   });
 
+  it('supports if-else expressions', () => {
+    expect(interpret('let test : U8 = if (true) 2 else 3; test')).toBe(2);
+    expect(interpret('let test : U8 = if (false) 2 else 3; test')).toBe(3);
+    expect(interpret('if (true) { 10 } else { 20 }')).toBe(10);
+  });
+
   it('supports logical operators on Bool values', () => {
     expect(interpret('true || false')).toBe(1);
     expect(interpret('true && false')).toBe(0);
