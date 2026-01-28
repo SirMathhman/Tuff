@@ -104,15 +104,18 @@ function splitStatements(input: string): string[] {
 
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
-    if (char === '{') depth++;
-    if (char === '}') depth--;
+    depth += char === '{' ? 1 : 0;
+    depth -= char === '}' ? 1 : 0;
 
-    if (char === ';' && depth === 0) {
+    const isSplit = char === ';' && depth === 0;
+    const isFollowedByElse = isSplit && /^\s*else\b/.test(input.substring(i + 1));
+
+    if (isSplit && !isFollowedByElse) {
       statements.push(currentArray.trim());
       currentArray = '';
-    } else {
-      currentArray += char;
+      continue;
     }
+    currentArray += char;
   }
 
   if (currentArray.trim()) {
@@ -122,122 +125,175 @@ function splitStatements(input: string): string[] {
   return statements;
 }
 
-function substituteResult(
-  resolved: string,
-  res: Result,
-  match: RegExpMatchArray
-): string {
-  if (res.type === 'Empty') {
-    return (
-      resolved.substring(0, match.index) +
-      resolved.substring(match.index! + match[0].length)
-    );
-  }
-  const replacement = res.value.toString() + (res.type || '');
-  return (
-    resolved.substring(0, match.index) +
-    replacement +
-    resolved.substring(match.index! + match[0].length)
+function findBalanced(
+  input: string,
+  start: number,
+  open: string,
+  close: string
+): number {
+  return findNextBoundary(
+    input,
+    start + 1,
+    (c, d) => d === 0 && c === close
   );
 }
 
-function resolveInnermostGrouping(
-  resolved: string,
-  variables: Variables
-): string | null {
-  const match = resolved.match(/(\([^(){}]*\)|\{[^(){}]*\})/);
-  if (!match) return null;
-
-  const group = match[0];
-  const subExpr = group.substring(1, group.length - 1);
-  const isBlock = group.startsWith('{');
-
-  const res = interpretInternal(
-    subExpr,
-    isBlock ? new Map(variables) : variables
-  );
-
-  return substituteResult(resolved, res, match);
+function skipWhitespace(input: string, index: number): number {
+  let i = index;
+  while (i < input.length && /\s/.test(input[i])) i++;
+  return i;
 }
 
-function resolveFlatIfExpression(
-  resolved: string,
-  variables: Variables
-): string | null {
-  const operand =
-    '(?:-?\\d+(?:\\.\\d+)?(?:[A-Za-z]\\w*)?|\\b(?!if\\b|else\\b)[A-Za-z]\\w*)';
-  const ifRegex = new RegExp(
-    '\\bif\\s+(' +
-      operand +
-      ')\\s+(' +
-      operand +
-      ')\\s+else\\s+(' +
-      operand +
-      ')'
-  );
-
-  const match = resolved.match(ifRegex);
-  if (!match) return null;
-
-  const cond = resolveOperand(match[1], variables);
-  if (cond.type !== 'Bool') {
-    throw new Error('If condition must be Bool');
+function cloneVariables(variables: Variables): Variables {
+  const clone = new Map<string, Result>();
+  for (const [key, val] of variables) {
+    clone.set(key, { ...val });
   }
+  return clone;
+}
 
-  const res1 = resolveOperand(match[2], variables);
-  const res2 = resolveOperand(match[3], variables);
+function findNextBoundary(
+  input: string,
+  start: number,
+  condition: (char: string, depth: number, input: string, index: number) => boolean
+): number {
+  let depth = 0;
+  for (let j = start; j < input.length; j++) {
+    const char = input[j];
+    if (condition(char, depth, input, j)) return j;
+    if (char === '{' || char === '(') depth++;
+    else if (char === '}' || char === ')') depth--;
+  }
+  return -1;
+}
+
+function findElseIndex(input: string, start: number): number {
+  return findNextBoundary(
+    input,
+    start,
+    (c, d, i, idx) => d === 0 && i.substring(idx).startsWith('else')
+  );
+}
+
+function findIfEndIndex(input: string, start: number): number {
+  const end = findNextBoundary(
+    input,
+    start,
+    (c, d) => d === 0 && (c === '}' || c === ')')
+  );
+  return end === -1 ? input.length : end;
+}
+
+function resolveIfAt(
+  resolved: string,
+  start: number,
+  variables: Variables
+): { next: string; end: number } {
+  let i = skipWhitespace(resolved, start + 2);
+  if (resolved[i] !== '(') throw new Error('Expected ( after if');
+  const condEnd = findBalanced(resolved, i, '(', ')');
+  if (condEnd === -1) throw new Error('Unbalanced ( in if condition');
+
+  const cond = interpretInternal(resolved.substring(i + 1, condEnd), variables);
+  if (cond.type !== 'Bool') throw new Error('If condition must be Bool');
+
+  i = skipWhitespace(resolved, condEnd + 1);
+  const thenStart = i;
+  const thenEnd = findElseIndex(resolved, thenStart);
+  if (thenEnd === -1) throw new Error('Expected else after if branch');
+
+  const elseStart = skipWhitespace(resolved, thenEnd + 4);
+  const elseEnd = findIfEndIndex(resolved, elseStart);
+
+  const thenBranch = resolved.substring(thenStart, thenEnd).trim();
+  const elseBranch = resolved.substring(elseStart, elseEnd).trim();
+
+  let res1: Result;
+  let res2: Result;
+  const dryRunVarsBefore = cloneVariables(variables);
+  if (cond.value !== 0) {
+    res1 = interpretInternal(thenBranch, new Map(variables));
+    res2 = interpretInternal(elseBranch, new Map(dryRunVarsBefore));
+  } else {
+    res1 = interpretInternal(thenBranch, new Map(dryRunVarsBefore));
+    res2 = interpretInternal(elseBranch, new Map(variables));
+  }
 
   const t1 = res1.type;
   const t2 = res2.type;
-
-  // Enforce type compatibility between branches
-  const isBool1 = t1 === 'Bool';
-  const isBool2 = t2 === 'Bool';
-
-  if (isBool1 !== isBool2) {
+  if ((t1 === 'Bool') !== (t2 === 'Bool')) {
     throw new Error('Mismatched branch types in if-else');
   }
 
-  // If numeric, check signed/unsigned mixing
-  if (!isBool1) {
+  if (t1 !== 'Bool' && t1 !== 'Empty' && t2 !== 'Empty') {
     const isU1 = t1 && t1.startsWith('U');
     const isU2 = t2 && t2.startsWith('U');
     const isI1 = t1 && t1.startsWith('I');
     const isI2 = t2 && t2.startsWith('I');
-
     if ((isU1 && isI2) || (isI1 && isU2)) {
       throw new Error('Mismatched branch types in if-else');
     }
   }
 
+  const res = cond.value !== 0 ? res1 : res2;
   const resultType = getWidestType([t1, t2]);
-  const finalRes = cond.value !== 0 ? res1 : res2;
-  const result = { value: finalRes.value, type: resultType };
+  const valueStr =
+    res.type === 'Empty' ? '' : res.value.toString() + (resultType || '');
 
-  return substituteResult(resolved, result, match);
+  return {
+    next: resolved.substring(0, start) + valueStr + resolved.substring(elseEnd),
+    end: elseEnd,
+  };
+}
+
+function resolveGroupAt(
+  resolved: string,
+  start: number,
+  variables: Variables
+): { next: string; end: number } {
+  const open = resolved[start];
+  const close = open === '(' ? ')' : '}';
+  const end = findBalanced(resolved, start, open, close);
+  if (end === -1) throw new Error('Unbalanced ' + open);
+
+  const res = interpretInternal(
+    resolved.substring(start + 1, end),
+    open === '{' ? new Map(variables) : variables
+  );
+  const valueStr =
+    res.type === 'Empty' ? '' : res.value.toString() + (res.type || '');
+
+  return {
+    next: resolved.substring(0, start) + valueStr + resolved.substring(end + 1),
+    end: end + 1,
+  };
 }
 
 function resolveStatement(statement: string, variables: Variables): string {
-  let resolved = statement;
+  let resolved = statement.trim();
 
-  while (
-    resolved.includes('(') ||
-    resolved.includes('{') ||
-    /\bif\b/.test(resolved)
-  ) {
-    const nextGroup = resolveInnermostGrouping(resolved, variables);
-    if (nextGroup !== null) {
-      resolved = nextGroup;
+  while (true) {
+    const ifMatch = resolved.match(/\bif\b/);
+    const parenIndex = resolved.indexOf('(');
+    const braceIndex = resolved.indexOf('{');
+
+    const ifIndex = ifMatch ? ifMatch.index! : -1;
+    const items = [
+      { type: 'if', index: ifIndex },
+      { type: 'paren', index: parenIndex },
+      { type: 'brace', index: braceIndex },
+    ].filter((item) => item.index !== -1);
+
+    if (items.length === 0) break;
+
+    items.sort((a, b) => a.index - b.index);
+    const first = items[0];
+
+    if (first.type === 'if') {
+      resolved = resolveIfAt(resolved, first.index, variables).next;
       continue;
     }
-
-    const nextIf = resolveFlatIfExpression(resolved, variables);
-    if (nextIf !== null) {
-      resolved = nextIf;
-      continue;
-    }
-
-    break;
+    resolved = resolveGroupAt(resolved, first.index, variables).next;
   }
 
   return resolved;
