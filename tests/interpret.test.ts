@@ -198,6 +198,11 @@ describe('interpret', () => {
     );
   });
 
+  it('rejects assigning numeric if-else result to Bool', () => {
+    expect(() => interpret('let result : Bool = if (true) 2 else 3; result'))
+      .toThrow('Invalid number: let result : Bool = 2');
+  });
+
   it('supports logical operators on Bool values', () => {
     expect(interpret('true || false')).toBe(1);
     expect(interpret('true && false')).toBe(0);
