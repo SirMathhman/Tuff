@@ -119,4 +119,8 @@ describe('interpret', () => {
       interpret('(4 + { let x = 2U16; let y : U8 = x; y }) * 3')
     ).toThrow('Invalid type: let y : U8 = x');
   });
+
+  it('supports complex expressions with let and blocks returning a result', () => {
+    expect(interpret('let y : U8 = (4 + { let x = 2U8; x }) * 3; y')).toBe(18);
+  });
 });
