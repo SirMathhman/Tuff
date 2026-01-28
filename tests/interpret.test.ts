@@ -21,4 +21,8 @@ describe('interpret', () => {
   it('rejects value out of range for U8', () => {
     expect(() => interpret('256U8')).toThrow('Invalid number: 256U8');
   });
+
+  it('evaluates simple addition with type suffixes', () => {
+    expect(interpret('1U8 + 2U8')).toBe(3);
+  });
 });

@@ -2,6 +2,7 @@
  * Interpret the given input string and return a numeric result.
  *
  * Supports numeric literals with optional type suffixes (e.g., "100U8", "42I32").
+ * Also supports simple arithmetic expressions (e.g., "1U8 + 2U8").
  * Negative numbers cannot have unsigned type suffixes (U8, U16, etc.).
  * Values must be within the valid range for their type suffix.
  */
@@ -15,7 +16,7 @@ const typeRanges: Record<string, [number, number]> = {
   I32: [-2147483648, 2147483647],
 };
 
-export function interpret(input: string): number {
+function parseTypedNumber(input: string): number {
   // Match numeric part followed by optional type suffix
   const match = input.match(/^(-?\d+(?:\.\d+)?)\s*([A-Za-z]\w*)?$/);
 
@@ -45,4 +46,68 @@ export function interpret(input: string): number {
   }
 
   return value;
+}
+
+export function interpret(input: string): number {
+  const trimmed = input.trim();
+
+  // Check if input contains operators
+  if (/[+\-*/]/.test(trimmed)) {
+    return evaluateExpression(trimmed);
+  }
+
+  return parseTypedNumber(trimmed);
+}
+
+function applyOperator(result: number, op: string, nextOperand: number): number {
+  switch (op) {
+    case '+':
+      return result + nextOperand;
+    case '-':
+      return result - nextOperand;
+    case '*':
+      return result * nextOperand;
+    case '/':
+      if (nextOperand === 0) {
+        throw new Error('Division by zero');
+      }
+      return Math.floor(result / nextOperand);
+    default:
+      throw new Error(`Unknown operator: ${op}`);
+  }
+}
+
+function evaluateExpression(expr: string): number {
+  // Tokenize the expression: split by operators while preserving them
+  const tokens = expr.match(/(-?\d+(?:\.\d+)?[A-Za-z]\w*|[+\-*/])/g);
+
+  if (!tokens || tokens.length === 0) {
+    throw new Error(`Invalid expression: ${expr}`);
+  }
+
+  // Extract operands and operators
+  const operands: number[] = [];
+  const operators: string[] = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    if (i % 2 === 0) {
+      // Even indices should be operands
+      operands.push(parseTypedNumber(tokens[i]));
+    } else {
+      // Odd indices should be operators
+      operators.push(tokens[i]);
+    }
+  }
+
+  if (operands.length !== operators.length + 1) {
+    throw new Error(`Invalid expression: ${expr}`);
+  }
+
+  // Evaluate left to right
+  let result = operands[0];
+  for (let i = 0; i < operators.length; i++) {
+    result = applyOperator(result, operators[i], operands[i + 1]);
+  }
+
+  return result;
 }
