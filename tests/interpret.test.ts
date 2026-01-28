@@ -192,6 +192,12 @@ describe('interpret', () => {
     expect(interpret('if (true) { 10 } else { 20 }')).toBe(10);
   });
 
+  it('rejects mismatched branch types in if-else expressions', () => {
+    expect(() => interpret('if (true) 2 else true')).toThrow(
+      'Mismatched branch types in if-else'
+    );
+  });
+
   it('supports logical operators on Bool values', () => {
     expect(interpret('true || false')).toBe(1);
     expect(interpret('true && false')).toBe(0);

@@ -171,7 +171,30 @@ function resolveFlatIfExpression(
   const res1 = resolveOperand(match[2], variables);
   const res2 = resolveOperand(match[3], variables);
 
-  const resultType = getWidestType([res1.type, res2.type]);
+  const t1 = res1.type;
+  const t2 = res2.type;
+
+  // Enforce type compatibility between branches
+  const isBool1 = t1 === 'Bool';
+  const isBool2 = t2 === 'Bool';
+
+  if (isBool1 !== isBool2) {
+    throw new Error('Mismatched branch types in if-else');
+  }
+
+  // If numeric, check signed/unsigned mixing
+  if (!isBool1) {
+    const isU1 = t1 && t1.startsWith('U');
+    const isU2 = t2 && t2.startsWith('U');
+    const isI1 = t1 && t1.startsWith('I');
+    const isI2 = t2 && t2.startsWith('I');
+
+    if ((isU1 && isI2) || (isI1 && isU2)) {
+      throw new Error('Mismatched branch types in if-else');
+    }
+  }
+
+  const resultType = getWidestType([t1, t2]);
   const finalRes = cond.value !== 0 ? res1 : res2;
   const result = { value: finalRes.value, type: resultType };
 
