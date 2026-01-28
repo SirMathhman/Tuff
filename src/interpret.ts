@@ -5,9 +5,9 @@
  */
 export function interpret(input: string): number {
   // Simple numeric interpretation for now: parse as number
-  const value = Number(input)
+  const value = Number(input);
   if (Number.isNaN(value)) {
-    throw new Error(`Invalid number: ${input}`)
+    throw new Error(`Invalid number: ${input}`);
   }
-  return value
+  return value;
 }
