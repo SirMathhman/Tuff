@@ -17,4 +17,8 @@ describe('interpret', () => {
   it('parses negative integer with signed I8 type suffix', () => {
     expect(interpret('-100I8')).toBe(-100);
   });
+
+  it('rejects value out of range for U8', () => {
+    expect(() => interpret('256U8')).toThrow('Invalid number: 256U8');
+  });
 });
