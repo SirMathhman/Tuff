@@ -286,6 +286,16 @@ describe('interpret', () => {
     });
   });
 
+  describe('structs', () => {
+    it('supports struct definitions, literals, and field access', () => {
+      expect(
+        interpret(
+          'struct Point { x : I32; y : I32; } let point : Point = Point { 3, 4 }; point.x + point.y'
+        )
+      ).toBe(7);
+    });
+  });
+
   describe('functions', () => {
     it('supports basic zero-argument functions', () => {
       expect(interpret('fn get() : I32 => 100; get()')).toBe(100);

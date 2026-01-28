@@ -28,4 +28,9 @@ accept(array) // => 100
 // Functions
 fn get() : I32 => 100;
 get() // => 100
+
+// Structs
+struct Point { x : I32; y : I32; }
+let point : Point = Point { 3, 4 };
+point.x + point.y // => 7
 ```

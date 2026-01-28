@@ -40,8 +40,23 @@ type FunctionValue = {
   env: Variables;
 };
 
+type StructField = {
+  name: string;
+  type: string;
+};
+
+type StructDef = {
+  name: string;
+  fields: StructField[];
+};
+
+type StructInstance = {
+  typeName: string;
+  fields: Record<string, Result>;
+};
+
 type Result = {
-  value: number | Result | Result[] | FunctionValue;
+  value: number | Result | Result[] | FunctionValue | StructDef | StructInstance;
   type?: string;
   isMutable?: boolean;
   isInitialized?: boolean;
@@ -106,7 +121,15 @@ function parseTypedNumber(input: string): Result {
   return { value, type: typeSuffix };
 }
 
-function asNumber(value: number | Result | Result[] | FunctionValue): number {
+function asNumber(
+  value:
+    | number
+    | Result
+    | Result[]
+    | FunctionValue
+    | StructDef
+    | StructInstance
+): number {
   if (typeof value === 'object') {
     throw new Error('Expected numeric value, found non-numeric type');
   }
@@ -187,28 +210,42 @@ function buildArrayLiteral(
   };
 }
 
-function splitTopLevelCommas(input: string): string[] {
+function splitTopLevel(input: string, delimiter: string): string[] {
   const parts: string[] = [];
   let depth = 0;
   let current = '';
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
-    if (char === '(' || char === '{' || char === '[') {
-      depth++;
-    } else if (char === ')' || char === '}' || char === ']') {
-      depth--;
-    }
-    if (char === ',' && depth === 0) {
-      parts.push(current.trim());
+    if (char === '(' || char === '{' || char === '[') depth++;
+    else if (char === ')' || char === '}' || char === ']') depth--;
+    if (char === delimiter && depth === 0) {
+      if (current.trim()) parts.push(current.trim());
       current = '';
       continue;
     }
     current += char;
   }
-  if (current.trim()) {
-    parts.push(current.trim());
-  }
+  if (current.trim()) parts.push(current.trim());
   return parts.filter((part) => part.length > 0);
+}
+
+function splitTopLevelCommas(input: string): string[] {
+  return splitTopLevel(input, ',');
+}
+
+function splitTopLevelSemicolons(input: string): string[] {
+  return splitTopLevel(input, ';');
+}
+
+function parseStructFields(fieldsStr: string): StructField[] {
+  const parts = splitTopLevelSemicolons(fieldsStr);
+  return parts.map((part) => {
+    const match = part.match(/^([A-Za-z]\w*)\s*:\s*([A-Za-z]\w*)$/);
+    if (!match) {
+      throw new Error('Invalid struct field: ' + part);
+    }
+    return { name: match[1], type: match[2] };
+  });
 }
 
 function parseFunctionParameters(paramsStr: string): FunctionParameter[] {
@@ -545,6 +582,24 @@ function resolveGroupAt(
 function resolveStatement(statement: string, variables: Variables): string {
   let resolved = statement.trim();
 
+  const isStructTypeName = (name: string): boolean => {
+    const entry = variables.get(name);
+    return !!entry && entry.type === 'StructDef';
+  };
+
+  const findNonStructBraceIndex = (input: string): number => {
+    for (let j = 0; j < input.length; j++) {
+      if (input[j] !== '{') continue;
+      const before = input.substring(0, j);
+      const match = before.match(/([A-Za-z]\w*)\s*$/);
+      if (match && isStructTypeName(match[1])) {
+        continue;
+      }
+      return j;
+    }
+    return -1;
+  };
+
   const findNonCallParenIndex = (input: string): number => {
     for (let j = 0; j < input.length; j++) {
       if (input[j] !== '(') continue;
@@ -563,7 +618,7 @@ function resolveStatement(statement: string, variables: Variables): string {
     const ifMatch = resolved.match(/\bif\b/);
     const matchMatch = resolved.match(/\bmatch\b/);
     const parenIndex = findNonCallParenIndex(resolved);
-    const braceIndex = resolved.indexOf('{');
+    const braceIndex = findNonStructBraceIndex(resolved);
 
     const ifIndex = ifMatch ? ifMatch.index! : -1;
     const matchIndex = matchMatch ? matchMatch.index! : -1;
@@ -607,6 +662,18 @@ function interpretInternal(
 
   for (const statement of statements) {
     const trimmedStatement = statement.trim();
+    const structMatch = trimmedStatement.match(
+      /^struct\s+([A-Za-z]\w*)\s*\{([\s\S]*)\}$/
+    );
+    if (structMatch) {
+      result = handleStructDefinition(
+        trimmedStatement,
+        variables,
+        structMatch[1],
+        structMatch[2]
+      );
+      continue;
+    }
     const fnMatch = trimmedStatement.match(
       /^fn\s+([A-Za-z]\w*)\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*(.+)$/
     );
@@ -704,6 +771,20 @@ function validateTypeCompatibility(
     return;
   }
 
+  const targetTypeStr = targetType || '';
+  const hasSameType =
+    targetTypeStr && sourceResult.type && targetTypeStr === sourceResult.type;
+  if (
+    hasSameType &&
+    !isArrayType(targetTypeStr) &&
+    targetTypeStr[0] !== '*' &&
+    !(targetTypeStr in typeOrdering) &&
+    targetTypeStr !== 'Function' &&
+    targetTypeStr !== 'StructDef'
+  ) {
+    return;
+  }
+
   if (targetType?.startsWith('*') && sourceResult.type?.startsWith('*')) {
     const tBase = targetType.substring(1).replace('mut ', '');
     const sBase = sourceResult.type.substring(1).replace('mut ', '');
@@ -784,6 +865,27 @@ function handleFunctionDefinition(
   return variable;
 }
 
+function handleStructDefinition(
+  statement: string,
+  variables: Variables,
+  name: string,
+  fieldsStr: string
+): Result {
+  if (variables.has(name)) {
+    throw new Error('Struct already declared: ' + name);
+  }
+  const fields = parseStructFields(fieldsStr);
+  const def: StructDef = { name, fields };
+  const variable = {
+    value: def,
+    type: 'StructDef',
+    isMutable: false,
+    isInitialized: true,
+  };
+  variables.set(name, variable);
+  return variable;
+}
+
 function handleLetStatement(
   statement: string,
   variables: Variables,
@@ -831,7 +933,13 @@ function handleLetStatement(
     return variable;
   }
 
-  let value: number | Result | Result[] | FunctionValue = 0;
+  let value:
+    | number
+    | Result
+    | Result[]
+    | FunctionValue
+    | StructDef
+    | StructInstance = 0;
   let finalType = type;
   let isInitialized = false;
 
@@ -1042,14 +1150,61 @@ function resolveOperand(
   failIfUninitialized = true
 ): Result {
   const trimmed = token.trim();
+  const getVariableOrThrow = (name: string): Result => {
+    if (!variables.has(name)) {
+      throw new Error('Use of uninitialized variable: ' + name);
+    }
+    return variables.get(name)!;
+  };
+  const fieldMatch = trimmed.match(/^([A-Za-z]\w*)\.([A-Za-z]\w*)$/);
+  if (fieldMatch) {
+    const name = fieldMatch[1];
+    const fieldName = fieldMatch[2];
+    const variable = getVariableOrThrow(name);
+    if (!variable.type || variable.type in typeOrdering) {
+      throw new Error('Cannot access field on non-struct type');
+    }
+    const instance = variable.value as StructInstance;
+    const field = instance.fields[fieldName];
+    if (!field) {
+      throw new Error('Unknown field: ' + fieldName);
+    }
+    if (failIfUninitialized && field.isInitialized === false) {
+      throw new Error('Use of uninitialized field: ' + trimmed);
+    }
+    return field;
+  }
+  const structLiteralMatch = trimmed.match(/^([A-Za-z]\w*)\s*\{([\s\S]*)\}$/);
+  if (structLiteralMatch) {
+    const structName = structLiteralMatch[1];
+    const inner = structLiteralMatch[2].trim();
+    const defVar = variables.get(structName);
+    if (!defVar || defVar.type !== 'StructDef') {
+      throw new Error('Unknown struct: ' + structName);
+    }
+    const def = defVar.value as StructDef;
+    const values = inner ? splitTopLevelCommas(inner) : [];
+    if (values.length !== def.fields.length) {
+      throw new Error('Invalid struct literal: ' + trimmed);
+    }
+    const fields: Record<string, Result> = {};
+    for (let i = 0; i < def.fields.length; i++) {
+      const field = def.fields[i];
+      const res = interpretInternal(values[i], variables);
+      validateTypeCompatibility(field.type, res, trimmed);
+      fields[field.name] = res;
+    }
+    return {
+      value: { typeName: structName, fields },
+      type: structName,
+      isInitialized: true,
+    };
+  }
   const arrayMatch = trimmed.match(/^([A-Za-z]\w*)\[(\d+)\]$/);
   if (arrayMatch) {
     const name = arrayMatch[1];
     const index = Number(arrayMatch[2]);
-    if (!variables.has(name)) {
-      throw new Error('Use of uninitialized variable: ' + name);
-    }
-    const variable = variables.get(name)!;
+    const variable = getVariableOrThrow(name);
     if (!isArrayType(variable.type)) {
       throw new Error('Cannot index non-array type');
     }
@@ -1125,7 +1280,7 @@ function tokenizeExpression(
   operators: string[];
 } {
   const tokens = expr.match(
-    /([&*]*[A-Za-z]\w*(?:\[\d+\])?(?:\([^()]*\))?|-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
+    /([&*]*[A-Za-z]\w*(?:\.[A-Za-z]\w*)?(?:\[\d+\])?(?:\([^()]*\))?|-?\d+(?:\.\d+)?(?:[A-Za-z]\w*)?|\|\||&&|<=|>=|==|!=|[+\-*/<>])/g
   );
 
   if (!tokens || tokens.length === 0) {
@@ -1153,7 +1308,7 @@ function tokenizeExpression(
 
 function applyPrecedenceLevel(
   level: string[],
-  values: (number | Result | Result[] | FunctionValue)[],
+  values: (number | Result | Result[] | FunctionValue | StructDef | StructInstance)[],
   currentOperators: string[]
 ): void {
   for (let i = 0; i < currentOperators.length; ) {
@@ -1208,9 +1363,14 @@ function evaluateExpression(expr: string, variables: Variables): Result {
     hasLogical || hasComparison ? 'Bool' : getWidestType(types);
 
   // Evaluate with operator precedence (* and / before + and -, etc)
-  const values: (number | Result | Result[] | FunctionValue)[] = operands.map(
-    (op) => op.value
-  );
+  const values: (
+    | number
+    | Result
+    | Result[]
+    | FunctionValue
+    | StructDef
+    | StructInstance
+  )[] = operands.map((op) => op.value);
   const currentOperators = [...operators];
 
   // Operator precedence passes
