@@ -104,18 +104,34 @@ function splitStatements(input: string): string[] {
 
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
-    depth += char === '{' ? 1 : 0;
-    depth -= char === '}' ? 1 : 0;
+    const oldDepth = depth;
+    if (char === '{' || char === '(') depth++;
+    else if (char === '}' || char === ')') depth--;
 
-    const isSplit = char === ';' && depth === 0;
-    const isFollowedByElse = isSplit && /^\s*else\b/.test(input.substring(i + 1));
+    const isSemicolonSplit = char === ';' && depth === 0;
+    const isBraceSplit = char === '}' && depth === 0 && oldDepth === 1;
 
-    if (isSplit && !isFollowedByElse) {
-      statements.push(currentArray.trim());
-      currentArray = '';
+    const isSplit = isSemicolonSplit || isBraceSplit;
+    if (!isSplit) {
+      currentArray += char;
       continue;
     }
-    currentArray += char;
+
+    const rest = input.substring(i + 1);
+    const isFollowedByElse = /^\s*else\b/.test(rest);
+    const isFollowedByOp = isBraceSplit && /^\s*([+\-*/]|\|\||&&)/.test(rest);
+
+    if (isFollowedByElse || isFollowedByOp) {
+      currentArray += char;
+      continue;
+    }
+
+    if (isBraceSplit) currentArray += char;
+    if (currentArray.trim()) {
+      statements.push(currentArray.trim());
+    }
+    currentArray = '';
+    continue;
   }
 
   if (currentArray.trim()) {
@@ -131,11 +147,7 @@ function findBalanced(
   open: string,
   close: string
 ): number {
-  return findNextBoundary(
-    input,
-    start + 1,
-    (c, d) => d === 0 && c === close
-  );
+  return findNextBoundary(input, start + 1, (c, d) => d === 0 && c === close);
 }
 
 function skipWhitespace(input: string, index: number): number {
@@ -155,7 +167,12 @@ function cloneVariables(variables: Variables): Variables {
 function findNextBoundary(
   input: string,
   start: number,
-  condition: (char: string, depth: number, input: string, index: number) => boolean
+  condition: (
+    char: string,
+    depth: number,
+    input: string,
+    index: number
+  ) => boolean
 ): number {
   let depth = 0;
   for (let j = start; j < input.length; j++) {
@@ -176,12 +193,14 @@ function findElseIndex(input: string, start: number): number {
 }
 
 function findIfEndIndex(input: string, start: number): number {
-  const end = findNextBoundary(
-    input,
-    start,
-    (c, d) => d === 0 && (c === '}' || c === ')')
-  );
-  return end === -1 ? input.length : end;
+  const idx = skipWhitespace(input, start);
+  const char = input[idx];
+  if (idx >= input.length || (char !== '{' && char !== '(')) {
+    return input.length;
+  }
+
+  const end = findBalanced(input, idx, char, char === '{' ? '}' : ')');
+  return end === -1 ? input.length : end + 1;
 }
 
 function resolveIfAt(
