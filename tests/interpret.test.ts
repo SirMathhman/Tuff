@@ -82,3 +82,7 @@ test('interpret throws when sum overflows wider type in mixed-width addition', (
 test('interpret supports chained addition', () => {
   expect(interpret('1U8 + 2U8 + 3U8')).toBe(6);
 });
+
+test('interpret supports chained addition with mixed suffixes and widths', () => {
+  expect(interpret('1U8 + 2 + 1000U16')).toBe(1003);
+});
