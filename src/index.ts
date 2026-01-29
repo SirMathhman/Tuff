@@ -481,7 +481,14 @@ export function compile(input: string): string {
 
   // Process the final statement as a return expression
   if (stmts.length > 0) {
-    const lastStmt = stmts[stmts.length - 1];
+    let lastStmt = stmts[stmts.length - 1];
+
+    // Check if this is a comparison and wrap it to convert bool to number
+    // Comparison operators: ==, !=, <, >, <=, >=
+    if (/==|!=|<|>|<=|>=/.test(lastStmt)) {
+      lastStmt = '(' + lastStmt + ' ? 1 : 0)';
+    }
+
     jsCode += 'return ' + lastStmt + ';';
   } else {
     jsCode = 'return 0;';

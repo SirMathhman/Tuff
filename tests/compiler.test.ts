@@ -136,6 +136,40 @@ describe('compiler: let statements', () => {
   });
 });
 
+describe('compiler: comparisons', () => {
+  test('compile handles equality', () => {
+    assertValid('5 == 5', 1);
+  });
+
+  test('compile handles inequality for equal values', () => {
+    assertValid('5 != 5', 0);
+  });
+
+  test('compile handles inequality for different values', () => {
+    assertValid('5 != 3', 1);
+  });
+
+  test('compile handles less than', () => {
+    assertValid('3 < 5', 1);
+  });
+
+  test('compile handles greater than', () => {
+    assertValid('5 > 3', 1);
+  });
+
+  test('compile handles less than or equal', () => {
+    assertValid('5 <= 5', 1);
+  });
+
+  test('compile handles greater than or equal', () => {
+    assertValid('5 >= 3', 1);
+  });
+
+  test('compile comparisons with variables', () => {
+    assertValid('let x = 5; let y = 3; x > y', 1);
+  });
+});
+
 describe('compiler: error handling', () => {
   test('compile rejects unmatched opening parenthesis', () => {
     assertInvalid('(1 + 2');
