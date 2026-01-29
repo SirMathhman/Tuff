@@ -20,7 +20,8 @@ export function interpret(input: string): number {
     | { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean }
     | { kind: 'Void' }
     | { kind: 'Array'; elementType: Suffix; length: number; initializedCount: number }
-    | { kind: 'Generic'; name: string };
+    | { kind: 'Generic'; name: string }
+    | { kind: 'Tuple'; elements: Suffix[] };
 
   type TypedResult = {
     value: number;
@@ -30,6 +31,7 @@ export function interpret(input: string): number {
     structFields?: Map<string, TypedResult>;
     arrayElements?: Array<TypedResult | undefined>;
     arrayInitializedCount?: number;
+    tupleElements?: TypedResult[];
     maxValue?: number;
   };
   type Context = Map<string, TypedResult & { mutable: boolean; initialized: boolean }>;
@@ -72,6 +74,9 @@ export function interpret(input: string): number {
     if (suffix.kind === 'Ptr') return 'Ptr<' + suffixKind(suffix.pointsTo) + '>';
     if (suffix.kind === 'Void') return 'Void';
     if (suffix.kind === 'Generic') return suffix.name;
+    if (suffix.kind === 'Tuple') {
+      return '(' + suffix.elements.map(suffixKind).join(', ') + ')';
+    }
     if (suffix.kind === 'Array') {
       if (suffix.length < 0 || suffix.initializedCount < 0) {
         return '[' + suffixKind(suffix.elementType) + ']';
@@ -101,6 +106,19 @@ export function interpret(input: string): number {
       return;
     }
 
+    if (target.kind === 'Tuple') {
+      if (!source || source.kind !== 'Tuple') {
+        throw new Error('cannot convert non-tuple to tuple type');
+      }
+      if (source.elements.length !== target.elements.length) {
+        throw new Error('tuple length mismatch');
+      }
+      for (let i = 0; i < target.elements.length; i++) {
+        validateNarrowing(source.elements[i], target.elements[i]);
+      }
+      return;
+    }
+
     if (target.kind === 'Array') {
       if (!source || source.kind !== 'Array') {
         throw new Error('cannot convert non-array to array type');
@@ -117,6 +135,10 @@ export function interpret(input: string): number {
 
     if (source && source.kind === 'Generic') {
       return;
+    }
+
+    if (source && source.kind === 'Tuple') {
+      throw new Error('cannot convert tuple to non-tuple type');
     }
 
     if (source && source.kind === 'Array') {
@@ -230,6 +252,12 @@ export function interpret(input: string): number {
 
   function resolveArrayElement(varName: string, index: number, context: Context): TypedResult {
     const varInfo = ensureVariable(varName, context);
+    if (varInfo.tupleElements) {
+      if (index < 0 || index >= varInfo.tupleElements.length) {
+        throw new Error('tuple index out of bounds');
+      }
+      return varInfo.tupleElements[index];
+    }
     let elements = varInfo.arrayElements;
     if (!elements && varInfo.suffix?.kind === 'Ptr' && varInfo.suffix.pointsTo.kind === 'Array') {
       const targetVar = ensureVariable(varInfo.refersTo || '', context);
@@ -246,6 +274,31 @@ export function interpret(input: string): number {
       throw new Error('array element not initialized');
     }
     return element;
+  }
+
+  function splitTopLevelComma(input: string): string[] {
+    const parts: string[] = [];
+    let current = '';
+    let depthParen = 0;
+    let depthBracket = 0;
+    let depthBrace = 0;
+    for (let i = 0; i < input.length; i++) {
+      const ch = input[i];
+      if (ch === '(') depthParen++;
+      if (ch === ')') depthParen--;
+      if (ch === '[') depthBracket++;
+      if (ch === ']') depthBracket--;
+      if (ch === '{') depthBrace++;
+      if (ch === '}') depthBrace--;
+      if (ch === ',' && depthParen === 0 && depthBracket === 0 && depthBrace === 0) {
+        if (current.trim()) parts.push(current.trim());
+        current = '';
+        continue;
+      }
+      current += ch;
+    }
+    if (current.trim()) parts.push(current.trim());
+    return parts;
   }
 
   function tryParseSuffix(typeStr: string): Suffix | undefined {
@@ -271,6 +324,22 @@ export function interpret(input: string): number {
       const elementType = tryParseSuffix(elementTypeStr);
       if (!elementType) return undefined;
       return { kind: 'Array', elementType, length: -1, initializedCount: -1 };
+    }
+
+    // Parse tuple type: (I32, Bool)
+    const tupleMatch = typeStr.match(/^\((.*)\)$/);
+    if (tupleMatch) {
+      const inner = tupleMatch[1].trim();
+      if (!inner) return undefined;
+      const parts = splitTopLevelComma(inner);
+      if (parts.length < 2) return undefined;
+      const elements: Suffix[] = [];
+      for (const part of parts) {
+        const elementType = tryParseSuffix(part);
+        if (!elementType) return undefined;
+        elements.push(elementType);
+      }
+      return { kind: 'Tuple', elements };
     }
 
     const typeMatch = typeStr.match(/^([UI])(\d+)$/);
@@ -778,6 +847,27 @@ export function interpret(input: string): number {
       return ifResult;
     }
 
+    // Check for tuple literal: (expr1, expr2, ...)
+    const trimmedExpr = expr.trim();
+    if (trimmedExpr.startsWith('(') && trimmedExpr.endsWith(')')) {
+      const inner = trimmedExpr.substring(1, trimmedExpr.length - 1);
+      const parts = splitTopLevelComma(inner);
+      if (parts.length > 1) {
+        const tupleElements: TypedResult[] = [];
+        const elementTypes: Suffix[] = [];
+        for (const part of parts) {
+          const elementValue = processExprWithContext(part, context, functions, structs);
+          tupleElements.push(elementValue);
+          elementTypes.push(elementValue.suffix || { kind: 'I', width: 32 });
+        }
+        return {
+          value: 0,
+          tupleElements,
+          suffix: { kind: 'Tuple', elements: elementTypes },
+        };
+      }
+    }
+
     // Check for array indexing: arrayName[index]
     const arrayIndexRegex = /^([a-zA-Z_]\w*)\s*\[\s*([+-]?\d+)\s*\]$/;
     const arrayIndexMatch = expr.trim().match(arrayIndexRegex);
@@ -1215,6 +1305,7 @@ export function interpret(input: string): number {
         let structFields: Map<string, TypedResult> | undefined;
         let arrayElements: Array<TypedResult | undefined> | undefined;
         let arrayInitializedCount: number | undefined;
+        let tupleElements: TypedResult[] | undefined;
 
         if (varExprStr !== undefined) {
           const varValueObj = processExprWithContext(varExprStr, context, functions, structs);
@@ -1232,6 +1323,7 @@ export function interpret(input: string): number {
           structFields = varValueObj.structFields;
           arrayElements = varValueObj.arrayElements;
           arrayInitializedCount = varValueObj.arrayInitializedCount;
+          tupleElements = varValueObj.tupleElements;
           initialized = true;
         }
 
@@ -1340,6 +1432,7 @@ export function interpret(input: string): number {
           structFields: structFields,
           arrayElements: arrayElements,
           arrayInitializedCount: arrayInitializedCount,
+          tupleElements: tupleElements,
           maxValue: maxValue,
         };
         context.set(varName, varInfo);

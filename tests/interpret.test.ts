@@ -73,6 +73,14 @@ test('interpret supports USize type', () => {
   expect(interpret('let x : USize = 100USize; x')).toBe(100);
 });
 
+test('interpret supports tuple indexing', () => {
+  expect(
+    interpret(
+      'let myTuple : (I32, Bool) = (100, true); if (myTuple[1]) myTuple[0] else -1'
+    )
+  ).toBe(100);
+});
+
 test('interpret supports generic identity function', () => {
   expect(interpret('fn pass<T>(value : T) => value; pass(100)')).toBe(100);
 });
