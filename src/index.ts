@@ -12,12 +12,22 @@ export function interpretAll(
     deps: string[];
     externDeps: Array<{ module: string; names: string[] }>;
     externLets: Array<{ name: string; type: string }>;
-    externFns: Array<{ name: string; returnType: string; params: string }>;
+    externFns: Array<{
+      name: string;
+      generics: string;
+      returnType: string;
+      params: string;
+    }>;
   } {
     const deps: string[] = [];
     const externDeps: Array<{ module: string; names: string[] }> = [];
     const externLetsList: Array<{ name: string; type: string }> = [];
-    const externFnsList: Array<{ name: string; returnType: string; params: string }> = [];
+    const externFnsList: Array<{
+      name: string;
+      generics: string;
+      returnType: string;
+      params: string;
+    }> = [];
 
     const useRegex = /use\s*\{\s*[^}]*\s*\}\s*from\s+([a-zA-Z_]\w*)\s*;?/g;
 
@@ -46,13 +56,15 @@ export function interpretAll(
       externLetMatch = externLetRegex.exec(source);
     }
 
-    const externFnRegex = /extern\s+fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([^;]+))?;?/g;
+    const externFnRegex =
+      /extern\s+fn\s+([a-zA-Z_]\w*)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^;]+))?;?/g;
     let externFnMatch = externFnRegex.exec(source);
     while (externFnMatch) {
       externFnsList.push({
         name: externFnMatch[1],
-        params: externFnMatch[2].trim(),
-        returnType: externFnMatch[3] ? externFnMatch[3].trim() : 'I32',
+        generics: externFnMatch[2] ? externFnMatch[2].trim() : '',
+        params: externFnMatch[3].trim(),
+        returnType: externFnMatch[4] ? externFnMatch[4].trim() : 'I32',
       });
       externFnMatch = externFnRegex.exec(source);
     }
@@ -131,7 +143,12 @@ export function interpretAll(
   const parts: string[] = [];
   const externUses: Array<{ module: string; names: string[] }> = [];
   const externLets: Array<{ name: string; type: string }> = [];
-  const externFns: Array<{ name: string; returnType: string; params: string }> = [];
+  const externFns: Array<{
+    name: string;
+    generics: string;
+    returnType: string;
+    params: string;
+  }> = [];
 
   function appendCode(code: string): void {
     if (!code) return;
@@ -204,6 +221,7 @@ export function interpretAll(
     const signature = [
       'fn ',
       externFn.name,
+      externFn.generics,
       '(',
       externFn.params,
       ') : ',
