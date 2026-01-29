@@ -224,6 +224,10 @@ test('interpret evaluates block with assignment', () => {
   expect(interpret('let mut x = 0; { x = 1; } x')).toBe(1);
 });
 
+test('interpret keeps block-scoped variables from leaking', () => {
+  expect(() => interpret('{ let mut x = 0 }; x = 1; x')).toThrow('undefined variable');
+});
+
 test('interpret rejects numeric values for Bool type', () => {
   expect(() => interpret('let x : Bool = 1;')).toThrow();
   expect(() => interpret('let x : Bool; x = 1;')).toThrow();

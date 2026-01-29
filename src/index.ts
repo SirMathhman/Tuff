@@ -438,7 +438,9 @@ export function interpret(input: string): number {
         sawBlockReplacement = true;
         // Update parent context with changes from block
         for (const [key, value] of blockResult.context) {
-          context.set(key, value);
+          if (!blockResult.declaredInThisBlock.has(key) && context.has(key)) {
+            context.set(key, value);
+          }
         }
       } else {
         // Regular expression - recursively process through brackets
@@ -474,7 +476,7 @@ export function interpret(input: string): number {
   function processBlock(
     blockContent: string,
     parentContext: Context
-  ): { result: TypedResult; context: Context } {
+  ): { result: TypedResult; context: Context; declaredInThisBlock: Set<string> } {
     const context = new Map(parentContext);
     const declaredInThisBlock = new Set<string>();
 
@@ -613,14 +615,14 @@ export function interpret(input: string): number {
     }
 
     if (!hasTrailingExpression || !finalExpr.trim()) {
-      return { result: { value: 0 }, context };
+      return { result: { value: 0 }, context, declaredInThisBlock };
     }
 
     if (lastProcessedValue) {
-      return { result: lastProcessedValue, context };
+      return { result: lastProcessedValue, context, declaredInThisBlock };
     }
 
-    return { result: processExprWithContext(finalExpr, context), context };
+    return { result: processExprWithContext(finalExpr, context), context, declaredInThisBlock };
   }
 
   // Check for top-level code (which can be a single expression or multiple statements)
