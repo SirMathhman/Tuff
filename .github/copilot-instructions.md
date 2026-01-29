@@ -2,8 +2,9 @@
 
 ## Repo shape
 
-- Interpreter + CLI live in `src/index.ts` (single-file, ~3k LOC; most logic is inside `interpret()`).
-- The DSL spec is the test suite, especially `tests/interpret.test.ts` (many tests assert exact error messages).
+- Interpreter + compiler live in `src/index.ts` (single-file, ~4.4k LOC; most logic is inside `interpret()` and `compile()`).
+- The DSL spec is the test suite (originally `tests/interpret.test.ts`, now split by feature into ~20 files like `variables.test.ts`, `pointers.test.ts`, etc.).
+- Tests assert exact behavior and error messages for BOTH interpreter and compiler using `assertValid(code, expected)` / `assertInvalid(code)` from `tests/utils.ts`.
 - The CLI runner (`pnpm start` / `pnpm dev`) executes `bun ./src/index.ts`, which loads `src/index.tuff` and prints `interpret(...)`.
 - For DSL syntax and semantics overview, see [TUTORIAL.md](../TUTORIAL.md).
 
@@ -21,6 +22,13 @@
 - Typecheck/build: `pnpm typecheck` / `pnpm build`
 - Lint/format: `pnpm lint` and `pnpm format`
 
+## Test organization
+
+- Tests are split by feature into separate files: `variables.test.ts`, `pointers.test.ts`, `functions.test.ts`, etc.
+- **Critical**: All tests use `assertValid(code, expected)` or `assertInvalid(code)` from `tests/utils.ts` to validate BOTH interpreter (`interpret()`) AND compiler (`compile()` + `execute()`) produce identical results.
+- When writing tests, always use these utilities instead of calling `interpret()` directly.
+- Python scripts in `scripts/` help with test file reorganization (e.g., `split_tests_v2.py`).
+
 ## Interpreter mental model (read `src/index.ts`)
 
 - Entry: `interpret(input: string): number` strips comments then evaluates by calling `processBlock(...)`.
@@ -31,6 +39,13 @@
   - `processBlock()` splits `;`-terminated statements, enforces block scoping, and merges outer vars via `mergeBlockContext()`.
   - `processExprWithContext()` handles higher-level constructs (blocks `{...}`, `if (...) ... else ...`, tuples, arrays, structs, calls) then falls back to `evaluateExpression()`.
   - `evaluateExpression()` does operator precedence + type validation (Bool isolation, overflow/range checks for numeric suffixes).
+
+## Compiler architecture
+
+- Entry: `compile(input: string): string` produces C code, `execute(input: string): number` compiles and runs it via `gcc`.
+- C codegen strategy: similar parsing to interpreter but emits C statements/expressions instead of evaluating.
+- Type system maps to C: `I32` → `int32_t`, `Bool` → `int`, pointers → `*`, arrays → stack arrays.
+- Functions compile to C functions; generics are monomorphized at callsites.
 
 ## DSL sharp edges (tests cover these)
 
