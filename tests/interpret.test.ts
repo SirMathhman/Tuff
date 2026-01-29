@@ -70,6 +70,12 @@ test('interpret rejects assigning void function result', () => {
   ).toThrow('void function cannot return a value');
 });
 
+test('interpret rejects assigning inferred void function result', () => {
+  expect(() => interpret('fn outer() => {} let value = outer(); value')).toThrow(
+    'void function cannot return a value'
+  );
+});
+
 test('interpret rejects array element type mismatch', () => {
   expect(() => interpret('let array : [I32; 1; 1] = [true]; array[0]')).toThrow();
 });

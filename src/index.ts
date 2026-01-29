@@ -1782,7 +1782,11 @@ export function interpret(input: string): number {
       });
     }
 
-    const bodyResult = processBlock(fnDef.body, fnContext, functions, structs);
+    let bodyContent = fnDef.body;
+    if (bodyContent.startsWith('{') && bodyContent.endsWith('}')) {
+      bodyContent = bodyContent.substring(1, bodyContent.length - 1);
+    }
+    const bodyResult = processBlock(bodyContent, fnContext, functions, structs);
     const returnValue = bodyResult.result;
 
     mergeBlockContext(bodyResult, context);
@@ -1794,6 +1798,10 @@ export function interpret(input: string): number {
     let resolvedReturnType = fnDef.returnType;
     if (resolvedReturnType && resolvedReturnType.kind === 'Generic') {
       resolvedReturnType = genericMap.get(resolvedReturnType.name);
+    }
+
+    if (!resolvedReturnType && !bodyResult.hasTrailingExpression) {
+      resolvedReturnType = { kind: 'Void' };
     }
 
     if (resolvedReturnType) {
@@ -2291,7 +2299,12 @@ export function interpret(input: string): number {
     parentContext: Context,
     functions: FunctionTable,
     structs: StructTable
-  ): { result: RuntimeValue; context: Context; declaredInThisBlock: Set<string> } {
+  ): {
+    result: RuntimeValue;
+    context: Context;
+    declaredInThisBlock: Set<string>;
+    hasTrailingExpression: boolean;
+  } {
     const context = new Map(parentContext);
     const declaredInThisBlock = new Set<string>();
 
@@ -3060,12 +3073,12 @@ export function interpret(input: string): number {
 
     if (!hasTrailingExpression || !finalExpr.trim()) {
       callDropFunctions();
-      return { result: { value: 0 }, context, declaredInThisBlock };
+      return { result: { value: 0 }, context, declaredInThisBlock, hasTrailingExpression };
     }
 
     if (lastProcessedValue) {
       callDropFunctions();
-      return { result: lastProcessedValue, context, declaredInThisBlock };
+      return { result: lastProcessedValue, context, declaredInThisBlock, hasTrailingExpression };
     }
 
     callDropFunctions();
@@ -3073,6 +3086,7 @@ export function interpret(input: string): number {
       result: processExprWithContext(finalExpr, context, functions, structs),
       context,
       declaredInThisBlock,
+      hasTrailingExpression,
     };
   }
 
