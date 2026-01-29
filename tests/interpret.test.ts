@@ -126,3 +126,9 @@ test('interpret supports variable declarations within braces', () => {
 test('interpret supports multiple variable declarations within braces', () => {
   expect(interpret('(4 + { let x : U8 = 2; let y : U8 = x; y }) * 3')).toBe(18);
 });
+
+test('interpret supports top-level variable declarations', () => {
+  expect(
+    interpret('let z : U8 = (4 + { let x : U8 = 2; let y : U8 = x; y }) * 3; z')
+  ).toBe(18);
+});

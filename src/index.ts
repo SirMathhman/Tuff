@@ -154,64 +154,133 @@ export function interpret(input: string): number {
     return result;
   }
 
-  // handle parentheses and curly braces: recursively evaluate innermost expressions
-  let expr = s;
-  // process both () and {} as grouping, treating them equivalently
-  while (expr.includes('(') || expr.includes('{')) {
-    const innermost = expr.match(/[({]([^(){}]+)[)})]/);
-    if (!innermost) throw new Error('mismatched parentheses or braces');
+  // Helper to process an expression recursively through brackets and let blocks
+  function processExprWithContext(expr: string, context: Map<string, number>): number {
+    let e = expr;
 
-    const content = innermost[1];
-    let result: number;
-
-    // check if this is a block with variable declarations
-    if (content.includes('let ')) {
-      // parse variable declarations: let x : TYPE = value; ...
-      const context = new Map<string, number>();
-      const statements = content
-        .split(';')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-
-      let finalExpr = '';
-      for (const stmt of statements) {
-        if (stmt.startsWith('let ')) {
-          // parse: let x : U8 = 2
-          const m = stmt.match(/^let\s+([a-zA-Z_]\w*)\s*:\s*([UI]\d+)\s*=\s*(.+)$/);
-          if (!m) throw new Error('invalid let statement');
-          const varName = m[1];
-          const varType = m[2];
-          const varExprStr = m[3].trim();
-
-          // evaluate the initialization expression in current context
-          const varValue = evaluateExpression(varExprStr, context);
-
-          // validate against the type
-          const typeMatch = varType.match(/^([UI])(\d+)$/);
-          if (typeMatch) {
-            const kind = typeMatch[1] as 'U' | 'I';
-            const width = Number(typeMatch[2]);
-            validateValueAgainstSuffix(varValue, kind, width);
-          }
-
-          context.set(varName, varValue);
-        } else {
-          // treat as final expression
-          finalExpr = stmt;
+    // Handle parentheses and braces recursively
+    while (e.includes('(') || e.includes('{')) {
+      // Find the first opening bracket and its matching closing bracket
+      let openPos = -1;
+      let openChar = '';
+      let closeChar = '';
+      for (let i = 0; i < e.length; i++) {
+        if (e[i] === '(' || e[i] === '{') {
+          openPos = i;
+          openChar = e[i];
+          closeChar = e[i] === '(' ? ')' : '}';
+          break;
         }
       }
 
-      result = evaluateExpression(finalExpr, context);
-    } else {
-      result = evaluateExpression(content);
+      if (openPos === -1) break;
+
+      // Find matching closing bracket
+      let depth = 1;
+      let closePos = -1;
+      for (let i = openPos + 1; i < e.length; i++) {
+        if (e[i] === openChar) {
+          depth++;
+        } else if (e[i] === closeChar) {
+          depth--;
+          if (depth === 0) {
+            closePos = i;
+            break;
+          }
+        }
+      }
+
+      if (closePos === -1) throw new Error('mismatched parentheses or braces');
+
+      const content = e.substring(openPos + 1, closePos);
+      let result: number;
+
+      // Check if this is a block with variable declarations (must start with 'let')
+      if (content.trim().startsWith('let ')) {
+        result = processLetBlock(content, context);
+      } else {
+        // Regular expression - recursively process through brackets
+        result = processExprWithContext(content, context);
+      }
+
+      e = e.substring(0, openPos) + result.toString() + e.substring(closePos + 1);
     }
 
-    expr = expr.replace(innermost[0], result.toString());
+    return evaluateExpression(e, context);
   }
 
-  // evaluate final expression with fallback for non-numeric input
+  // Helper to process a let block and return the final expression result
+  function processLetBlock(blockContent: string, parentContext: Map<string, number>): number {
+    const context = new Map(parentContext);
+
+    // Split by ';' but respect bracket boundaries
+    const statements: string[] = [];
+    let currentStmt = '';
+    let bracketDepth = 0;
+
+    for (let i = 0; i < blockContent.length; i++) {
+      const ch = blockContent[i];
+      if (ch === '(' || ch === '{') {
+        bracketDepth++;
+        currentStmt += ch;
+      } else if (ch === ')' || ch === '}') {
+        bracketDepth--;
+        currentStmt += ch;
+      } else if (ch === ';' && bracketDepth === 0) {
+        // Real statement boundary
+        if (currentStmt.trim()) {
+          statements.push(currentStmt.trim());
+        }
+        currentStmt = '';
+      } else {
+        currentStmt += ch;
+      }
+    }
+
+    // Add final statement
+    if (currentStmt.trim()) {
+      statements.push(currentStmt.trim());
+    }
+
+    let finalExpr = '';
+    for (const stmt of statements) {
+      if (stmt.startsWith('let ')) {
+        // parse: let x : U8 = 2
+        const m = stmt.match(/^let\s+([a-zA-Z_]\w*)\s*:\s*([UI]\d+)\s*=\s*(.+)$/);
+        if (!m) throw new Error('invalid let statement');
+        const varName = m[1];
+        const varType = m[2];
+        const varExprStr = m[3].trim();
+
+        // evaluate the initialization expression with potential brackets/nested lets
+        const varValue = processExprWithContext(varExprStr, context);
+
+        // validate against the type
+        const typeMatch = varType.match(/^([UI])(\d+)$/);
+        if (typeMatch) {
+          const kind = typeMatch[1] as 'U' | 'I';
+          const width = Number(typeMatch[2]);
+          validateValueAgainstSuffix(varValue, kind, width);
+        }
+
+        context.set(varName, varValue);
+      } else {
+        // treat as final expression
+        finalExpr = stmt;
+      }
+    }
+
+    return processExprWithContext(finalExpr, context);
+  }
+
+  // Check for top-level variable declarations
+  if (s.startsWith('let ')) {
+    return processLetBlock(s, new Map());
+  }
+
+  // Evaluate the expression (non-let) using the new recursive handler
   try {
-    return evaluateExpression(expr);
+    return processExprWithContext(s, new Map());
   } catch (e) {
     if (
       e instanceof Error &&
