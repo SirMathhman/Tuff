@@ -136,11 +136,12 @@ export function interpret(input: string): number {
     return result;
   }
 
-  // handle parentheses: recursively evaluate innermost parentheses
+  // handle parentheses and curly braces: recursively evaluate innermost expressions
   let expr = s;
-  while (expr.includes('(')) {
-    const innermost = expr.match(/\(([^()]+)\)/);
-    if (!innermost) throw new Error('mismatched parentheses');
+  // process both () and {} as grouping, treating them equivalently
+  while (expr.includes('(') || expr.includes('{')) {
+    const innermost = expr.match(/[({]([^(){}]+)[)})]/);
+    if (!innermost) throw new Error('mismatched parentheses or braces');
     const result = evaluateExpression(innermost[1]);
     expr = expr.replace(innermost[0], result.toString());
   }
