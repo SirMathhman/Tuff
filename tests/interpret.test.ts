@@ -614,3 +614,9 @@ test('interpret rejects this.x when variable does not exist', () => {
 test('interpret allows assignment through this.x notation', () => {
   expect(interpret('let mut x = 0; this.x = 100; x')).toBe(100);
 });
+
+test('interpret rejects assignment through this.x when variable is immutable', () => {
+  expect(() => interpret('let x = 0; this.x = 100; x')).toThrow(
+    'cannot assign to immutable variable'
+  );
+});
