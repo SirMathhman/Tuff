@@ -66,3 +66,7 @@ test('interpret adds mixed literal and U8 literal', () => {
 test('interpret adds mixed U8 literal and plain literal', () => {
   expect(interpret('1U8 + 2')).toBe(3);
 });
+
+test('interpret throws when sum overflows operand type (U8)', () => {
+  expect(() => interpret('1U8 + 255')).toThrow('unsigned literal out of range');
+});

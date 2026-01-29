@@ -15,8 +15,30 @@ export function interpret(input: string): number {
   const s = input.trim();
   if (s === '') return 0;
 
+  // helper to validate a value against a suffix kind/width
+  function validateValueAgainstSuffix(val: number, kind: 'U' | 'I', width: number) {
+    if (!Number.isInteger(val)) {
+      throw new Error(
+        kind === 'U' ? 'unsigned literal must be integer' : 'signed literal must be integer'
+      );
+    }
+    if (kind === 'U') {
+      if (val < 0) throw new Error('unsigned literal cannot be negative');
+      const max = Math.pow(2, width) - 1;
+      if (val > max) throw new Error('unsigned literal out of range');
+    } else {
+      const min = -Math.pow(2, width - 1);
+      const max = Math.pow(2, width - 1) - 1;
+      if (val < min || val > max) throw new Error('signed literal out of range');
+    }
+  }
+
   // helper to parse a single literal token and validate suffixes
-  function parseLiteralToken(token: string): number {
+  // returns { value, suffix } where suffix is undefined or { kind, width }
+  function parseLiteralToken(token: string): {
+    value: number;
+    suffix?: { kind: 'U' | 'I'; width: number };
+  } {
     const t = token.trim();
     const m = t.match(/^([+-]?\d+(?:\.\d+)?)(?:([A-Za-z]+\d*))?$/);
     if (!m) throw new Error('invalid literal');
@@ -30,29 +52,17 @@ export function interpret(input: string): number {
     if (suffix) {
       const m2 = suffix.match(/^([UI])(\d+)$/);
       if (!m2) throw new Error('invalid suffix');
-      const kind = m2[1];
+      const kind = m2[1] as 'U' | 'I';
       const width = Number(m2[2]);
       const allowedWidths = new Set([8, 16, 32, 64]);
       if (!allowedWidths.has(width)) throw new Error('invalid suffix');
 
-      if (!Number.isInteger(n)) {
-        throw new Error(
-          kind === 'U' ? 'unsigned literal must be integer' : 'signed literal must be integer'
-        );
-      }
+      validateValueAgainstSuffix(n, kind, width);
 
-      if (kind === 'U') {
-        if (n < 0) throw new Error('unsigned literal cannot be negative');
-        const max = Math.pow(2, width) - 1;
-        if (n > max) throw new Error('unsigned literal out of range');
-      } else {
-        const min = -Math.pow(2, width - 1);
-        const max = Math.pow(2, width - 1) - 1;
-        if (n < min || n > max) throw new Error('signed literal out of range');
-      }
+      return { value: Number.isFinite(n) ? n : 0, suffix: { kind, width } };
     }
 
-    return Number.isFinite(n) ? n : 0;
+    return { value: Number.isFinite(n) ? n : 0 };
   }
 
   // support simple addition: <literal> + <literal>
@@ -60,12 +70,18 @@ export function interpret(input: string): number {
   if (parts.length === 2) {
     const a = parseLiteralToken(parts[0]);
     const b = parseLiteralToken(parts[1]);
-    return a + b;
+    const sum = a.value + b.value;
+
+    // if either operand had a suffix, ensure the sum fits within that operand's type
+    if (a.suffix) validateValueAgainstSuffix(sum, a.suffix.kind, a.suffix.width);
+    if (b.suffix) validateValueAgainstSuffix(sum, b.suffix.kind, b.suffix.width);
+
+    return sum;
   }
 
   // fallback: single literal — non-numeric inputs return 0 (preserve previous behavior)
   try {
-    return parseLiteralToken(s);
+    return parseLiteralToken(s).value;
   } catch (e) {
     if (e instanceof Error && e.message === 'invalid literal') {
       return 0;
