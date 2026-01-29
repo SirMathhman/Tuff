@@ -106,3 +106,7 @@ test('interpret respects operator precedence (multiplication before addition)', 
 test('interpret supports division operator', () => {
   expect(interpret('10 / 2')).toBe(5);
 });
+
+test('interpret throws on division by zero', () => {
+  expect(() => interpret('10 / 0')).toThrow('division by zero');
+});

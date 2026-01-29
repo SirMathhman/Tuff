@@ -85,6 +85,9 @@ export function interpret(input: string): number {
     // first pass: handle multiplication and division (higher precedence)
     for (let i = 0; i < operators.length; i++) {
       if (operators[i] === '*' || operators[i] === '/') {
+        if (operators[i] === '/' && operands[i + 1].value === 0) {
+          throw new Error('division by zero');
+        }
         const result =
           operators[i] === '*'
             ? operands[i].value * operands[i + 1].value
