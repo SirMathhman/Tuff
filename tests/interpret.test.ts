@@ -728,3 +728,7 @@ test('interpret supports method-style calls with mutable pointer this', () => {
 test('interpret supports singleton pointer identity equality', () => {
   expect(interpret('object MySingleton {} &MySingleton == &MySingleton')).toBe(1);
 });
+
+test('interpret distinguishes pointers to different variables', () => {
+  expect(interpret('let x = 0; let y = 0; &x == &y')).toBe(0);
+});

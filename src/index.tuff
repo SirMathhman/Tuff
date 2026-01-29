@@ -1,0 +1,2 @@
+object MySingleton { let value = 42; }
+MySingleton.value

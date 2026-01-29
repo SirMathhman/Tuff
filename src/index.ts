@@ -2782,3 +2782,22 @@ export function interpret(input: string): number {
     throw e;
   }
 }
+
+// Main REPL entry point
+if (require.main === module) {
+  const fs = require('fs');
+  const path = require('path');
+
+  try {
+    const tuffFile = path.join(__dirname, 'index.tuff');
+    const code = fs.readFileSync(tuffFile, 'utf-8');
+    const result = interpret(code);
+    console.log(result);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.message);
+      process.exit(1);
+    }
+    throw error;
+  }
+}
