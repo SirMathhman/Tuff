@@ -31,12 +31,16 @@ export function interpret(input: string): number {
     refersTo?: string;
     refersToFn?: string;
     boundThis?: RuntimeValue;
+    boundThisRef?: string;
+    boundThisFieldKeys?: string[];
     structName?: string;
     structFields?: Map<string, RuntimeValue>;
     arrayElements?: Array<RuntimeValue | undefined>;
     arrayInitializedCount?: number;
     tupleElements?: RuntimeValue[];
     maxValue?: number;
+    mutable?: boolean;
+    initialized?: boolean;
   };
 
   type Context = Map<
@@ -604,12 +608,16 @@ export function interpret(input: string): number {
       refersTo: value.refersTo,
       refersToFn: value.refersToFn,
       boundThis: value.boundThis,
+      boundThisRef: value.boundThisRef,
+      boundThisFieldKeys: value.boundThisFieldKeys,
       structName: value.structName,
       structFields: value.structFields,
       arrayElements: value.arrayElements,
       arrayInitializedCount: value.arrayInitializedCount,
       tupleElements: value.tupleElements,
       maxValue: value.maxValue,
+      mutable: value.mutable,
+      initialized: value.initialized,
     };
   }
 
@@ -618,8 +626,8 @@ export function interpret(input: string): number {
   ): RuntimeValue & { mutable: boolean; initialized: boolean } {
     return {
       ...snapshotRuntimeValue(value),
-      mutable: false,
-      initialized: true,
+      mutable: value.mutable ?? false,
+      initialized: value.initialized ?? true,
     };
   }
 
@@ -632,6 +640,25 @@ export function interpret(input: string): number {
       derived.set(key, snapshotContextValue(value));
     }
     return derived;
+  }
+
+  function updateThisFieldsInContext(
+    targetName: string,
+    fieldKeys: string[],
+    sourceContext: Context,
+    targetContext: Context
+  ): void {
+    const targetVar = targetContext.get(targetName);
+    if (targetVar?.type?.kind === 'This' && targetVar.structFields) {
+      const updatedFields = new Map(targetVar.structFields);
+      for (const key of fieldKeys) {
+        const updatedValue = sourceContext.get(key);
+        if (updatedValue) {
+          updatedFields.set(key, snapshotRuntimeValue(updatedValue));
+        }
+      }
+      targetContext.set(targetName, { ...targetVar, structFields: updatedFields });
+    }
   }
 
   function buildThisFunctionValue(
@@ -648,7 +675,12 @@ export function interpret(input: string): number {
     }
     const fnValue = buildFunctionPointerValue(fieldName, functions);
     if (bound) {
-      return { ...fnValue, boundThis: snapshotRuntimeValue(baseValue) };
+      const keys = baseValue.structFields ? Array.from(baseValue.structFields.keys()) : [];
+      return {
+        ...fnValue,
+        boundThis: snapshotRuntimeValue(baseValue),
+        boundThisFieldKeys: keys,
+      };
     }
     return fnValue;
   }
@@ -656,9 +688,15 @@ export function interpret(input: string): number {
   function buildBoundThisFunctionValue(
     baseValue: RuntimeValue,
     fieldName: string,
-    functions: FunctionTable
+    functions: FunctionTable,
+    boundThisRef?: string
   ): RuntimeValue | null {
-    return buildThisFunctionValue(baseValue, fieldName, functions, true);
+    const fnValue = buildThisFunctionValue(baseValue, fieldName, functions, true);
+    if (!fnValue) return null;
+    if (boundThisRef) {
+      return { ...fnValue, boundThisRef };
+    }
+    return fnValue;
   }
 
   function buildUnboundFunctionPointerValue(
@@ -1418,6 +1456,8 @@ export function interpret(input: string): number {
     // use it to derive the context for the call
     let effectiveArgs = args;
     let derivedContext = context;
+    let thisBindingName: string | undefined;
+    let thisBindingFieldKeys: string[] | undefined;
     if (
       args.length === fnDef.params.length + 1 &&
       args[0].type?.kind === 'Ptr' &&
@@ -1429,6 +1469,8 @@ export function interpret(input: string): number {
         const targetVar = context.get(ptrArg.refersTo);
         if (targetVar?.type?.kind === 'This' && targetVar.structFields) {
           derivedContext = buildContextFromThisValue(targetVar, context);
+          thisBindingName = ptrArg.refersTo;
+          thisBindingFieldKeys = Array.from(targetVar.structFields.keys());
         }
       }
       effectiveArgs = args.slice(1);
@@ -1487,6 +1529,10 @@ export function interpret(input: string): number {
     const returnValue = bodyResult.result;
 
     mergeBlockContext(bodyResult, context);
+
+    if (thisBindingName && thisBindingFieldKeys) {
+      updateThisFieldsInContext(thisBindingName, thisBindingFieldKeys, derivedContext, context);
+    }
 
     let resolvedReturnType = fnDef.returnType;
     if (resolvedReturnType && resolvedReturnType.kind === 'Generic') {
@@ -1644,7 +1690,8 @@ export function interpret(input: string): number {
       const boundFunctionValue = buildBoundThisFunctionValue(
         snapshotRuntimeValue(varInfo),
         fieldName,
-        functions
+        functions,
+        varName
       );
       if (boundFunctionValue) {
         return boundFunctionValue;
@@ -1754,7 +1801,18 @@ export function interpret(input: string): number {
           if (baseValue.type?.kind === 'This') {
             const derivedContext = buildContextFromThisValue(baseValue, context);
             const args = parseCallArguments(argsStr, derivedContext, functions, structs);
-            return executeFunctionCallWithArgs(fnName, args, derivedContext, functions, structs);
+            const result = executeFunctionCallWithArgs(
+              fnName,
+              args,
+              derivedContext,
+              functions,
+              structs
+            );
+            if (baseExpr.match(/^[a-zA-Z_]\w*$/) && baseValue.structFields) {
+              const fieldKeys = Array.from(baseValue.structFields.keys());
+              updateThisFieldsInContext(baseExpr, fieldKeys, derivedContext, context);
+            }
+            return result;
           }
         } else {
           let receiverArg = baseValue;
@@ -1791,6 +1849,7 @@ export function interpret(input: string): number {
       const nameOrVar = callMatch[1];
       let fnName = nameOrVar;
       let boundThis: RuntimeValue | undefined;
+      let boundThisInfo: RuntimeValue | undefined;
 
       // Check if this is a function pointer variable
       if (!functions.has(nameOrVar) && context.has(nameOrVar)) {
@@ -1798,6 +1857,7 @@ export function interpret(input: string): number {
         if (varInfo?.refersToFn) {
           fnName = varInfo.refersToFn;
           boundThis = varInfo.boundThis;
+          boundThisInfo = varInfo;
         }
       }
 
@@ -1806,7 +1866,19 @@ export function interpret(input: string): number {
       }
       if (boundThis) {
         const derivedContext = buildContextFromThisValue(boundThis, context);
-        return executeFunctionCall(fnName, callMatch[2], derivedContext, functions, structs);
+        const result = executeFunctionCall(
+          fnName,
+          callMatch[2],
+          derivedContext,
+          functions,
+          structs
+        );
+        if (boundThisInfo?.boundThisRef && boundThis.structFields) {
+          const fieldKeys =
+            boundThisInfo.boundThisFieldKeys || Array.from(boundThis.structFields.keys());
+          updateThisFieldsInContext(boundThisInfo.boundThisRef, fieldKeys, derivedContext, context);
+        }
+        return result;
       }
       return executeFunctionCall(fnName, callMatch[2], context, functions, structs);
     }
@@ -2098,6 +2170,55 @@ export function interpret(input: string): number {
           statements.splice(stmtIndex + 1, 0, remainder);
         }
         continue;
+      } else if (stmt.startsWith('object ')) {
+        const nameMatch = stmt.match(/^object\s+([a-zA-Z_]\w*)\s*/);
+        if (!nameMatch) {
+          throw new Error('invalid object declaration');
+        }
+        const objectName = nameMatch[1];
+        if (declaredInThisBlock.has(objectName)) {
+          throw new Error('variable already declared: ' + objectName);
+        }
+        const braceStart = stmt.indexOf('{');
+        const braceEnd = stmt.lastIndexOf('}');
+        if (braceStart === -1 || braceEnd === -1 || braceEnd < braceStart) {
+          throw new Error('invalid object declaration');
+        }
+        const body = stmt.substring(braceStart + 1, braceEnd);
+        let remainder = stmt.substring(braceEnd + 1).trim();
+        if (remainder.startsWith(';')) {
+          remainder = remainder.substring(1).trim();
+        }
+        const objectContext = new Map<
+          string,
+          RuntimeValue & { mutable: boolean; initialized: boolean }
+        >();
+        const objectResult = processBlock(body, objectContext, functions, structs);
+
+        const fields = new Map<string, RuntimeValue>();
+        for (const [key, value] of objectResult.context) {
+          if (!value.initialized) {
+            continue;
+          }
+          fields.set(key, snapshotRuntimeValue(value));
+        }
+
+        context.set(objectName, {
+          value: 0,
+          type: { kind: 'This' },
+          mutable: false,
+          initialized: true,
+          structName: objectName,
+          structFields: fields,
+        });
+        declaredInThisBlock.add(objectName);
+
+        if (remainder) {
+          statements.splice(stmtIndex + 1, 0, remainder);
+        }
+
+        finalExpr = '';
+        lastProcessedValue = undefined;
       } else if (stmt.startsWith('let ')) {
         // parse: let [mut] x [: Type] [= expr]
         // Type can be: U8, I32, Bool, *I32, *U16, etc.

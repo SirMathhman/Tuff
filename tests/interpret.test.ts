@@ -697,6 +697,18 @@ test('interpret supports returning this from inner function and reusing it', () 
   ).toBe(100);
 });
 
+test('interpret supports singleton objects', () => {
+  expect(interpret('object MySingleton { let value = 100; } MySingleton.value')).toBe(100);
+});
+
+test('interpret supports singleton object methods updating state', () => {
+  expect(
+    interpret(
+      'object MySingleton { let mut counter = 0; fn add() => counter += 1; } MySingleton.add(); MySingleton.counter'
+    )
+  ).toBe(1);
+});
+
 test('interpret allows functions to return this scope values', () => {
   expect(interpret('fn Wrap(x : I32) => this; Wrap(100).x')).toBe(100);
 });
