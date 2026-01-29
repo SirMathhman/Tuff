@@ -11,3 +11,7 @@ export function readContent() {
 
   return fs.readFileSync('README.md', 'utf-8');
 }
+
+export function println(content: string): void {
+  console.log(content);
+}
