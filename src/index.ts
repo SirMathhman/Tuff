@@ -199,10 +199,9 @@ export function interpret(input: string): number {
       const content = e.substring(openPos + 1, closePos);
       let res: TypedResult;
 
-      // Check if this is a block with variable declarations (must start with 'let')
-      if (content.trim().startsWith('let ')) {
-        const val = processLetBlock(content, context);
-        res = { value: val };
+      // Check if this is a block with expressions or assignments
+      if (openChar === '{') {
+        res = processBlock(content, context);
       } else {
         // Regular expression - recursively process through brackets
         res = processExprWithContext(content, context);
@@ -218,8 +217,8 @@ export function interpret(input: string): number {
     return evaluateExpression(e, context);
   }
 
-  // Helper to process a let block and return the final expression result
-  function processLetBlock(blockContent: string, parentContext: Context): number {
+  // Helper to process a code block and return the final expression result
+  function processBlock(blockContent: string, parentContext: Context): TypedResult {
     const context = new Map(parentContext);
     const declaredInThisBlock = new Set<string>();
 
@@ -253,6 +252,7 @@ export function interpret(input: string): number {
     }
 
     let finalExpr = '';
+    let lastProcessedValue: TypedResult | undefined;
     for (const stmt of statements) {
       if (stmt.startsWith('let ')) {
         // parse: let [mut] x [: U8] = 2
@@ -286,17 +286,22 @@ export function interpret(input: string): number {
           }
         }
 
-        context.set(varName, {
+        const varInfo = {
           value: varValue,
           suffix: declaredSuffix || valSuffix,
           mutable: isMutable,
-        });
+        };
+        context.set(varName, varInfo);
         declaredInThisBlock.add(varName);
+
+        finalExpr = '';
+        lastProcessedValue = undefined;
       } else if (stmt.includes('=') && !stmt.startsWith('let ')) {
         // assignment: x = 100
         const m = stmt.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
         if (!m) {
           finalExpr = stmt;
+          lastProcessedValue = undefined;
           continue;
         }
         const varName = m[1];
@@ -321,35 +326,31 @@ export function interpret(input: string): number {
           validateValueAgainstSuffix(newValue, varInfo.suffix.kind, varInfo.suffix.width);
         }
 
-        context.set(varName, { ...varInfo, value: newValue });
-        finalExpr = stmt; // in case it's the last one
+        const updatedVarInfo = { ...varInfo, value: newValue };
+        context.set(varName, updatedVarInfo);
+        finalExpr = stmt;
+        lastProcessedValue = updatedVarInfo;
       } else {
         // treat as final expression
         finalExpr = stmt;
+        lastProcessedValue = undefined;
       }
     }
 
     if (!finalExpr.trim()) {
-      return 0;
+      return { value: 0 };
     }
 
-    // if the last statement was an assignment, return its value
-    if (finalExpr.includes('=') && !finalExpr.startsWith('let ')) {
-      const varName = finalExpr.split('=')[0].trim();
-      return context.get(varName)!.value;
+    if (lastProcessedValue) {
+      return lastProcessedValue;
     }
 
-    return processExprWithContext(finalExpr, context).value;
+    return processExprWithContext(finalExpr, context);
   }
 
-  // Check for top-level variable declarations
-  if (s.startsWith('let ')) {
-    return processLetBlock(s, new Map());
-  }
-
-  // Evaluate the expression (non-let) using the new recursive handler
+  // Check for top-level code (which can be a single expression or multiple statements)
   try {
-    return processExprWithContext(s, new Map()).value;
+    return processBlock(s, new Map()).value;
   } catch (e) {
     if (
       e instanceof Error &&
