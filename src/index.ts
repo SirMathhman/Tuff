@@ -19,7 +19,7 @@ export function interpret(input: string): number {
     | { kind: 'U' | 'I' | 'Bool'; width: number }
     | { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean }
     | { kind: 'Void' }
-    | { kind: 'Array'; elementType: Suffix; length: number };
+    | { kind: 'Array'; elementType: Suffix; length: number; initializedCount: number };
 
   type TypedResult = {
     value: number;
@@ -27,7 +27,8 @@ export function interpret(input: string): number {
     refersTo?: string;
     structName?: string;
     structFields?: Map<string, TypedResult>;
-    arrayElements?: TypedResult[];
+    arrayElements?: Array<TypedResult | undefined>;
+    arrayInitializedCount?: number;
   };
   type Context = Map<string, TypedResult & { mutable: boolean; initialized: boolean }>;
 
@@ -67,8 +68,17 @@ export function interpret(input: string): number {
   function suffixKind(suffix: Suffix): string {
     if (suffix.kind === 'Ptr') return 'Ptr<' + suffixKind(suffix.pointsTo) + '>';
     if (suffix.kind === 'Void') return 'Void';
-    if (suffix.kind === 'Array')
-      return '[' + suffixKind(suffix.elementType) + '; ' + suffix.length + ']';
+    if (suffix.kind === 'Array') {
+      return (
+        '[' +
+        suffixKind(suffix.elementType) +
+        '; ' +
+        suffix.initializedCount +
+        '; ' +
+        suffix.length +
+        ']'
+      );
+    }
     return suffix.kind + suffix.width;
   }
 
@@ -86,6 +96,9 @@ export function interpret(input: string): number {
       }
       if (source.length !== target.length) {
         throw new Error('array length mismatch');
+      }
+      if (source.initializedCount < target.initializedCount) {
+        throw new Error('array initialized count mismatch');
       }
       validateNarrowing(source.elementType, target.elementType);
       return;
@@ -203,10 +216,11 @@ export function interpret(input: string): number {
     const arrayMatch = typeStr.match(/^\[(.+?);\s*(\d+);\s*(\d+)\]$/);
     if (arrayMatch) {
       const elementTypeStr = arrayMatch[1].trim();
+      const initializedCount = Number(arrayMatch[2]);
       const length = Number(arrayMatch[3]);
       const elementType = tryParseSuffix(elementTypeStr);
       if (!elementType) return undefined;
-      return { kind: 'Array', elementType, length };
+      return { kind: 'Array', elementType, length, initializedCount };
     }
 
     const typeMatch = typeStr.match(/^([UI])(\d+)$/);
@@ -721,7 +735,11 @@ export function interpret(input: string): number {
       if (index < 0 || index >= varInfo.arrayElements.length) {
         throw new Error('array index out of bounds');
       }
-      return varInfo.arrayElements[index];
+      const element = varInfo.arrayElements[index];
+      if (!element) {
+        throw new Error('array element not initialized');
+      }
+      return element;
     }
 
     // Check for array literal: [elem1, elem2, ...]
@@ -744,7 +762,13 @@ export function interpret(input: string): number {
       return {
         value: 0,
         arrayElements: elements,
-        suffix: { kind: 'Array', elementType, length: elements.length },
+        arrayInitializedCount: elements.length,
+        suffix: {
+          kind: 'Array',
+          elementType,
+          length: elements.length,
+          initializedCount: elements.length,
+        },
       };
     }
 
@@ -843,6 +867,10 @@ export function interpret(input: string): number {
           suffix: param.type,
           mutable: false,
           initialized: true,
+          structName: arg.structName,
+          structFields: arg.structFields,
+          arrayElements: arg.arrayElements,
+          arrayInitializedCount: arg.arrayInitializedCount,
         });
       }
 
@@ -1105,7 +1133,8 @@ export function interpret(input: string): number {
 
         let structName: string | undefined;
         let structFields: Map<string, TypedResult> | undefined;
-        let arrayElements: TypedResult[] | undefined;
+        let arrayElements: Array<TypedResult | undefined> | undefined;
+        let arrayInitializedCount: number | undefined;
 
         if (varExprStr !== undefined) {
           const varValueObj = processExprWithContext(varExprStr, context, functions, structs);
@@ -1118,6 +1147,7 @@ export function interpret(input: string): number {
           structName = varValueObj.structName;
           structFields = varValueObj.structFields;
           arrayElements = varValueObj.arrayElements;
+          arrayInitializedCount = varValueObj.arrayInitializedCount;
           initialized = true;
         }
 
@@ -1154,7 +1184,13 @@ export function interpret(input: string): number {
               if (arrayElements.length !== declaredSuffix.length) {
                 throw new Error('array length mismatch');
               }
+              if (arrayElements.length !== declaredSuffix.initializedCount) {
+                throw new Error('array initialized count mismatch');
+              }
               for (const element of arrayElements) {
+                if (!element) {
+                  throw new Error('array element not initialized');
+                }
                 const elementSuffix = element.suffix || { kind: 'I', width: 32 };
                 validateNarrowing(elementSuffix, declaredSuffix.elementType);
                 if (
@@ -1173,6 +1209,23 @@ export function interpret(input: string): number {
           }
         }
 
+        if (!initialized && declaredSuffix?.kind === 'Array') {
+          if (declaredSuffix.initializedCount > 0) {
+            throw new Error('array requires initializer');
+          }
+          arrayElements = new Array(declaredSuffix.length).fill(undefined);
+          arrayInitializedCount = 0;
+        }
+
+        if (
+          initialized &&
+          declaredSuffix?.kind === 'Array' &&
+          arrayElements &&
+          arrayInitializedCount === undefined
+        ) {
+          arrayInitializedCount = arrayElements.length;
+        }
+
         const varInfo = {
           value: varValue,
           suffix: declaredSuffix || valSuffix || { kind: 'I', width: 32 },
@@ -1182,6 +1235,7 @@ export function interpret(input: string): number {
           structName: structName,
           structFields: structFields,
           arrayElements: arrayElements,
+          arrayInitializedCount: arrayInitializedCount,
         };
         context.set(varName, varInfo);
         declaredInThisBlock.add(varName);
@@ -1240,6 +1294,26 @@ export function interpret(input: string): number {
         lastProcessedValue = undefined;
       } else if (stmt.includes('=') && !stmt.startsWith('let ')) {
         // assignment: x = 100 or compound: x += 1, x -= 2, x *= 3, x /= 4 or *y = 100
+        const recordAssignment = (
+          varName: string,
+          updatedVarInfo: TypedResult & { mutable: boolean; initialized: boolean }
+        ) => {
+          context.set(varName, updatedVarInfo);
+          if (!declaredInThisBlock.has(varName) && parentContext.has(varName)) {
+            parentContext.set(varName, updatedVarInfo);
+          }
+          finalExpr = stmt;
+          lastProcessedValue = updatedVarInfo;
+        };
+
+        const ensureMutableVar = (varName: string) => {
+          const varInfo = ensureVariable(varName, context);
+          if (!varInfo.mutable && varInfo.initialized) {
+            throw new Error('cannot assign to immutable variable: ' + varName);
+          }
+          return varInfo;
+        };
+
         // First check if it's a dereferenced pointer assignment (*y = ...)
         const derefMatch = stmt.match(/^\*([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
         if (derefMatch) {
@@ -1279,14 +1353,74 @@ export function interpret(input: string): number {
           }
 
           const updatedTargetInfo = { ...targetVarInfo, value: newValue, initialized: true };
-          context.set(targetVarName, updatedTargetInfo);
-          if (!declaredInThisBlock.has(targetVarName) && parentContext.has(targetVarName)) {
-            parentContext.set(targetVarName, updatedTargetInfo);
-          }
-
-          finalExpr = stmt;
-          lastProcessedValue = updatedTargetInfo;
+          recordAssignment(targetVarName, updatedTargetInfo);
         } else {
+          // Array element assignment: array[index] = value or array[index] += value
+          const arrayAssignMatch = stmt.match(
+            /^([a-zA-Z_]\w*)\s*\[\s*(\d+)\s*\]\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
+          );
+          if (arrayAssignMatch) {
+            const varName = arrayAssignMatch[1];
+            const index = Number(arrayAssignMatch[2]);
+            const op = arrayAssignMatch[3];
+            const varExprStr = arrayAssignMatch[4].trim();
+
+            const varInfo = ensureMutableVar(varName);
+            if (varInfo.suffix?.kind !== 'Array') {
+              throw new Error('variable ' + varName + ' is not an array');
+            }
+            const arrayLength = varInfo.suffix.length;
+            const elements = varInfo.arrayElements || new Array(arrayLength).fill(undefined);
+            if (index < 0 || index >= elements.length) {
+              throw new Error('array index out of bounds');
+            }
+
+            const currentElement = elements[index];
+            if (op !== '=' && !currentElement) {
+              throw new Error('array element not initialized');
+            }
+
+            const currentValue = currentElement ? currentElement.value : 0;
+            const newValueObj = evaluateAssignmentValue(
+              currentValue,
+              op,
+              varExprStr,
+              context,
+              functions,
+              structs
+            );
+
+            const newValue = newValueObj.value;
+            const newValSuffix = newValueObj.suffix || { kind: 'I', width: 32 };
+            const elementType = varInfo.suffix.elementType;
+            validateNarrowing(newValSuffix, elementType);
+            if (
+              elementType.kind !== 'Ptr' &&
+              elementType.kind !== 'Array' &&
+              'width' in elementType
+            ) {
+              validateValueAgainstSuffix(newValue, elementType.kind, elementType.width);
+            }
+
+            elements[index] = { value: newValue, suffix: newValSuffix };
+            const existingInitCount =
+              varInfo.arrayInitializedCount ?? elements.filter((e) => e !== undefined).length;
+            const newInitCount = currentElement ? existingInitCount : existingInitCount + 1;
+            const updatedSuffix = {
+              ...varInfo.suffix,
+              initializedCount: newInitCount,
+            };
+
+            const updatedVarInfo = {
+              ...varInfo,
+              suffix: updatedSuffix,
+              arrayElements: elements,
+              arrayInitializedCount: newInitCount,
+              initialized: true,
+            };
+            recordAssignment(varName, updatedVarInfo);
+            continue;
+          }
           // Regular variable assignment
           const m = stmt.match(/^([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
           if (!m) {
@@ -1298,10 +1432,7 @@ export function interpret(input: string): number {
           const op = m[2];
           const varExprStr = m[3].trim();
 
-          const varInfo = ensureVariable(varName, context);
-          if (!varInfo.mutable && varInfo.initialized) {
-            throw new Error('cannot assign to immutable variable: ' + varName);
-          }
+          const varInfo = ensureMutableVar(varName);
 
           if (op !== '=' && varInfo.suffix?.kind === 'Bool') {
             throw new Error('cannot perform arithmetic on booleans');
@@ -1327,12 +1458,7 @@ export function interpret(input: string): number {
           }
 
           const updatedVarInfo = { ...varInfo, value: newValue, initialized: true };
-          context.set(varName, updatedVarInfo);
-          if (!declaredInThisBlock.has(varName) && parentContext.has(varName)) {
-            parentContext.set(varName, updatedVarInfo);
-          }
-          finalExpr = stmt;
-          lastProcessedValue = updatedVarInfo;
+          recordAssignment(varName, updatedVarInfo);
         }
       } else {
         // treat as final expression

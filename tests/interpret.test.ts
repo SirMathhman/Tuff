@@ -60,6 +60,22 @@ test('interpret rejects array element type mismatch', () => {
   expect(() => interpret('let array : [I32; 1; 1] = [true]; array[0]')).toThrow();
 });
 
+test('interpret allows assigning into uninitialized arrays before passing', () => {
+  expect(
+    interpret(
+      'let mut array : [I32; 0; 3]; array[0] = 100; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)'
+    )
+  ).toBe(100);
+});
+
+test('interpret rejects passing arrays with insufficient initialized elements', () => {
+  expect(() =>
+    interpret(
+      'let mut array : [I32; 0; 3]; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)'
+    )
+  ).toThrow();
+});
+
 test('interpret rejects calling a non-function variable', () => {
   expect(() => interpret('let x = 100; x()')).toThrow('function not found: x');
 });
