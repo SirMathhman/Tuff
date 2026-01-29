@@ -44,6 +44,12 @@ test('interpret rejects struct instantiation with missing fields', () => {
   ).toThrow();
 });
 
+test('interpret rejects access to non-existent struct field', () => {
+  expect(() =>
+    interpret('struct Wrapper { x : I32; } let value = Wrapper { 100 }; value.y')
+  ).toThrow();
+});
+
 test('interpret rejects calling a non-function variable', () => {
   expect(() => interpret('let x = 100; x()')).toThrow('function not found: x');
 });
