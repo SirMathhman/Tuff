@@ -186,6 +186,44 @@ test('interpret supports Bool type and true/false literals', () => {
   expect(interpret('let x : Bool = false; x')).toBe(0);
 });
 
+test('interpret evaluates conditional expressions in initializers', () => {
+  expect(interpret('let x : U8 = if (true) 2 else 3; x')).toBe(2);
+});
+
+test('interpret rejects non-boolean if conditions', () => {
+  expect(() => interpret('if (100) 3 else 5')).toThrow('if condition must be boolean');
+});
+
+test('interpret rejects mismatched if branches', () => {
+  expect(() => interpret('if (true) true else 5')).toThrow('if branches must match types');
+});
+
+test('interpret rejects bool declarations with numeric iff branches', () => {
+  expect(() => interpret('let x : Bool = if (true) 5 else 5;')).toThrow(
+    'cannot convert numeric type to Bool'
+  );
+});
+
+test('interpret allows widening iff results when matching declared suffix', () => {
+  expect(interpret('let x : U16 = if (true) 5U16 else 5U8; x')).toBe(5);
+});
+
+test('interpret rejects narrowing iff results against declared width', () => {
+  expect(() => interpret('let x : U8 = if (true) 5U16 else 5U8;')).toThrow();
+});
+
+test('interpret evaluates chained if/else-if expressions', () => {
+  expect(interpret('if (false) 2 else if (false) 3 else 4')).toBe(4);
+});
+
+test('interpret evaluates empty block expressions', () => {
+  expect(interpret('let mut x = 0; {} x')).toBe(0);
+});
+
+test('interpret evaluates block with assignment', () => {
+  expect(interpret('let mut x = 0; { x = 1; } x')).toBe(1);
+});
+
 test('interpret rejects numeric values for Bool type', () => {
   expect(() => interpret('let x : Bool = 1;')).toThrow();
   expect(() => interpret('let x : Bool; x = 1;')).toThrow();

@@ -262,9 +262,137 @@ export function interpret(input: string): number {
     return { value: finalResult, suffix: finalSuffix || widestSuffix };
   }
 
+  function evaluateIfExpression(expr: string, context: Context): TypedResult | null {
+    const trimmed = expr.trim();
+    if (!trimmed.startsWith('if')) {
+      return null;
+    }
+
+    let cursor = 2;
+    while (cursor < trimmed.length && /\s/.test(trimmed[cursor])) {
+      cursor++;
+    }
+    if (cursor >= trimmed.length || trimmed[cursor] !== '(') {
+      throw new Error('expected "(" after "if"');
+    }
+
+    let conditionStart = cursor + 1;
+    let depth = 1;
+    let conditionEnd = -1;
+    for (let i = conditionStart; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (ch === '(') {
+        depth++;
+      } else if (ch === ')') {
+        depth--;
+        if (depth === 0) {
+          conditionEnd = i;
+          break;
+        }
+      }
+    }
+
+    if (conditionEnd === -1) {
+      throw new Error('condition missing closing parenthesis');
+    }
+
+    const conditionExpr = trimmed.substring(conditionStart, conditionEnd).trim();
+    if (!conditionExpr) {
+      throw new Error('if condition cannot be empty');
+    }
+
+    const isIdentifierChar = (ch: string | undefined) =>
+      ch !== undefined && /[A-Za-z0-9_]/.test(ch);
+
+    let depthParen = 0;
+    let depthBrace = 0;
+    let pendingIfs = 0;
+    let elseIndex = -1;
+    for (let i = conditionEnd + 1; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (ch === '(') {
+        depthParen++;
+        continue;
+      }
+      if (ch === ')') {
+        if (depthParen > 0) depthParen--;
+        continue;
+      }
+      if (ch === '{') {
+        depthBrace++;
+        continue;
+      }
+      if (ch === '}') {
+        if (depthBrace > 0) depthBrace--;
+        continue;
+      }
+
+      if (depthParen === 0 && depthBrace === 0) {
+        if (
+          trimmed.startsWith('if', i) &&
+          !isIdentifierChar(trimmed[i - 1]) &&
+          !isIdentifierChar(trimmed[i + 2])
+        ) {
+          pendingIfs++;
+          i += 1;
+          continue;
+        }
+        if (
+          trimmed.startsWith('else', i) &&
+          !isIdentifierChar(trimmed[i - 1]) &&
+          !isIdentifierChar(trimmed[i + 4])
+        ) {
+          if (pendingIfs > 0) {
+            pendingIfs--;
+            i += 3;
+            continue;
+          }
+          elseIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (elseIndex === -1) {
+      throw new Error('else keyword missing');
+    }
+
+    const trueBranch = trimmed.substring(conditionEnd + 1, elseIndex).trim();
+    if (!trueBranch) {
+      throw new Error('if true branch cannot be empty');
+    }
+
+    const falseBranch = trimmed.substring(elseIndex + 4).trim();
+    if (!falseBranch) {
+      throw new Error('if false branch cannot be empty');
+    }
+
+    const conditionResult = processExprWithContext(conditionExpr, context);
+    if (conditionResult.suffix?.kind !== 'Bool') {
+      throw new Error('if condition must be boolean');
+    }
+    const trueResult = processExprWithContext(trueBranch, context);
+    const falseResult = processExprWithContext(falseBranch, context);
+
+    const normalizedSuffix = (res: TypedResult): Suffix => res.suffix || { kind: 'I', width: 32 };
+    const trueSuffix = normalizedSuffix(trueResult);
+    const falseSuffix = normalizedSuffix(falseResult);
+    if (trueSuffix.kind !== falseSuffix.kind) {
+      throw new Error('if branches must match types');
+    }
+
+    return conditionResult.value !== 0 ? trueResult : falseResult;
+  }
+
   // Helper to process an expression recursively through brackets and let blocks
   function processExprWithContext(expr: string, context: Context): TypedResult {
+    const ifResult = evaluateIfExpression(expr, context);
+    if (ifResult !== null) {
+      return ifResult;
+    }
+
     let e = expr;
+    let sawBlockReplacement = false;
 
     // Handle parentheses and braces recursively
     while (e.includes('(') || e.includes('{')) {
@@ -305,7 +433,13 @@ export function interpret(input: string): number {
 
       // Check if this is a block with expressions or assignments
       if (openChar === '{') {
-        res = processBlock(content, context);
+        const blockResult = processBlock(content, context);
+        res = blockResult.result;
+        sawBlockReplacement = true;
+        // Update parent context with changes from block
+        for (const [key, value] of blockResult.context) {
+          context.set(key, value);
+        }
       } else {
         // Regular expression - recursively process through brackets
         res = processExprWithContext(content, context);
@@ -322,11 +456,25 @@ export function interpret(input: string): number {
       e = e.substring(0, openPos) + replacement + e.substring(closePos + 1);
     }
 
-    return evaluateExpression(e, context);
+    try {
+      return evaluateExpression(e, context);
+    } catch (err) {
+      if (sawBlockReplacement && err instanceof Error && err.message === 'invalid expression') {
+        const trimmed = e.trim();
+        const match = trimmed.match(/^(true|false|[+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)\s+(.+)$/);
+        if (match) {
+          return evaluateExpression(match[2], context);
+        }
+      }
+      throw err;
+    }
   }
 
-  // Helper to process a code block and return the final expression result
-  function processBlock(blockContent: string, parentContext: Context): TypedResult {
+  // Helper to process a code block and return the final expression result along with updated context
+  function processBlock(
+    blockContent: string,
+    parentContext: Context
+  ): { result: TypedResult; context: Context } {
     const context = new Map(parentContext);
     const declaredInThisBlock = new Set<string>();
 
@@ -452,6 +600,9 @@ export function interpret(input: string): number {
 
         const updatedVarInfo = { ...varInfo, value: newValue, initialized: true };
         context.set(varName, updatedVarInfo);
+        if (!declaredInThisBlock.has(varName) && parentContext.has(varName)) {
+          parentContext.set(varName, updatedVarInfo);
+        }
         finalExpr = stmt;
         lastProcessedValue = updatedVarInfo;
       } else {
@@ -462,19 +613,19 @@ export function interpret(input: string): number {
     }
 
     if (!hasTrailingExpression || !finalExpr.trim()) {
-      return { value: 0 };
+      return { result: { value: 0 }, context };
     }
 
     if (lastProcessedValue) {
-      return lastProcessedValue;
+      return { result: lastProcessedValue, context };
     }
 
-    return processExprWithContext(finalExpr, context);
+    return { result: processExprWithContext(finalExpr, context), context };
   }
 
   // Check for top-level code (which can be a single expression or multiple statements)
   try {
-    return processBlock(s, new Map()).value;
+    return processBlock(s, new Map()).result.value;
   } catch (e) {
     if (
       e instanceof Error &&
