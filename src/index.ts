@@ -65,8 +65,8 @@ export function interpret(input: string): number {
     return { value: Number.isFinite(n) ? n : 0 };
   }
 
-  // support chained addition/subtraction: <literal> [+|-] <literal> [+|-] ...
-  const tokens = s.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+-])/g);
+  // support arithmetic with +, -, * operators (left-to-right, * has higher precedence)
+  const tokens = s.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*])/g);
   if (tokens && tokens.length >= 3 && tokens.length % 2 === 1) {
     // must have odd count: literal, op, literal, op, ..., literal
     const operands: Array<{ value: number; suffix?: { kind: 'U' | 'I'; width: number } }> = [];
@@ -82,7 +82,18 @@ export function interpret(input: string): number {
       }
     }
 
-    // compute result left to right
+    // first pass: handle multiplication (higher precedence)
+    for (let i = 0; i < operators.length; i++) {
+      if (operators[i] === '*') {
+        const result = operands[i].value * operands[i + 1].value;
+        operands[i] = { value: result };
+        operands.splice(i + 1, 1);
+        operators.splice(i, 1);
+        i--; // re-check this position in case of consecutive multiplies
+      }
+    }
+
+    // second pass: handle addition and subtraction (left to right)
     let result = operands[0].value;
     for (let i = 0; i < operators.length; i++) {
       const op = operators[i];
@@ -90,11 +101,13 @@ export function interpret(input: string): number {
       result = op === '+' ? result + nextVal : result - nextVal;
     }
 
-    // find the widest suffix among all operands (if any)
-    let widestSuffix = operands.find((op) => op.suffix)?.suffix;
-    for (const op of operands) {
-      if (op.suffix && (!widestSuffix || op.suffix.width > widestSuffix.width)) {
-        widestSuffix = op.suffix;
+    // find the widest suffix among all original operands (if any)
+    let widestSuffix: { kind: 'U' | 'I'; width: number } | undefined;
+    // re-parse to get original operands with suffixes
+    for (let i = 0; i < tokens.length; i += 2) {
+      const parsed = parseLiteralToken(tokens[i]);
+      if (parsed.suffix && (!widestSuffix || parsed.suffix.width > widestSuffix.width)) {
+        widestSuffix = parsed.suffix;
       }
     }
 

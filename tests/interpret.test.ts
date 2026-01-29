@@ -94,3 +94,7 @@ test('interpret throws when chained sum overflows the widest type', () => {
 test('interpret supports addition and subtraction', () => {
   expect(interpret('2U8 + 3U8 - 4U8')).toBe(1);
 });
+
+test('interpret supports multiplication with operator precedence', () => {
+  expect(interpret('2 * 3 - 4')).toBe(2);
+});
