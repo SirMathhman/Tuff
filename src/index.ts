@@ -2789,7 +2789,25 @@ if (require.main === module) {
   const path = require('path');
 
   try {
-    const tuffFile = path.join(__dirname, 'index.tuff');
+    // Look for index.tuff starting from project root (process.cwd())
+    const candidates = [
+      path.join(process.cwd(), 'src', 'index.tuff'),
+      path.join(__dirname, 'index.tuff'),
+      path.join(__dirname, '..', '..', 'src', 'index.tuff'),
+    ];
+
+    let tuffFile: string | undefined;
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        tuffFile = candidate;
+        break;
+      }
+    }
+
+    if (!tuffFile) {
+      throw new Error('index.tuff not found');
+    }
+
     const code = fs.readFileSync(tuffFile, 'utf-8');
     const result = interpret(code);
     console.log(result);
