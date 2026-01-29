@@ -76,6 +76,12 @@ test('interpret rejects assigning inferred void function result', () => {
   );
 });
 
+test('interpret rejects assigning implicit void from block with inner fn', () => {
+  expect(() =>
+    interpret('fn outer() => { fn inner() => {} } let value = outer(); value')
+  ).toThrow('void function cannot return a value');
+});
+
 test('interpret rejects array element type mismatch', () => {
   expect(() => interpret('let array : [I32; 1; 1] = [true]; array[0]')).toThrow();
 });

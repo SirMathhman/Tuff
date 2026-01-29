@@ -2331,7 +2331,7 @@ export function interpret(input: string): number {
       }
     }
 
-    const hasTrailingExpression = !!currentStmt.trim();
+    let hasTrailingExpression = !!currentStmt.trim();
     if (hasTrailingExpression) {
       statements.push(currentStmt.trim());
     }
@@ -3070,6 +3070,10 @@ export function interpret(input: string): number {
         }
       }
     };
+
+    if (hasTrailingExpression && !finalExpr.trim() && !lastProcessedValue) {
+      hasTrailingExpression = false;
+    }
 
     if (!hasTrailingExpression || !finalExpr.trim()) {
       callDropFunctions();
