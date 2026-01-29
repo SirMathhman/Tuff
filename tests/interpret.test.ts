@@ -122,3 +122,7 @@ test('interpret supports curly braces as grouping operators', () => {
 test('interpret supports variable declarations within braces', () => {
   expect(interpret('(4 + { let x : U8 = 2; x }) * 3')).toBe(18);
 });
+
+test('interpret supports multiple variable declarations within braces', () => {
+  expect(interpret('(4 + { let x : U8 = 2; let y : U8 = x; y }) * 3')).toBe(18);
+});
