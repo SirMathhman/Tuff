@@ -657,6 +657,14 @@ test('interpret allows returned this to capture parameters', () => {
   ).toBe(7);
 });
 
+test('interpret allows using function name as return type alias', () => {
+  expect(
+    interpret(
+      'fn outer(x : I32, y : I32) => { fn inner() => x + y; this } let myOuter : outer = outer(3, 4); myOuter.inner()'
+    )
+  ).toBe(7);
+});
+
 test('interpret allows functions to return this scope values', () => {
   expect(interpret('fn Wrap(x : I32) => this; Wrap(100).x')).toBe(100);
 });
