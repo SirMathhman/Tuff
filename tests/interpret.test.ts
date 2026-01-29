@@ -248,6 +248,14 @@ test('interpret rejects compound assignment with boolean rhs', () => {
   );
 });
 
+test('interpret allows compound assignment for mutable variables', () => {
+  expect(interpret('let mut x = 10; x += 1; x')).toBe(11);
+});
+
+test('interpret rejects compound assignment for immutable variables', () => {
+  expect(() => interpret('let x = 10; x += 1; x')).toThrow('cannot assign to immutable variable');
+});
+
 test('interpret rejects numeric values for Bool type', () => {
   expect(() => interpret('let x : Bool = 1;')).toThrow();
   expect(() => interpret('let x : Bool; x = 1;')).toThrow();
