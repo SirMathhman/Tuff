@@ -62,3 +62,7 @@ test('interpret adds two U8 literals', () => {
 test('interpret adds mixed literal and U8 literal', () => {
   expect(interpret('1 + 2U8')).toBe(3);
 });
+
+test('interpret adds mixed U8 literal and plain literal', () => {
+  expect(interpret('1U8 + 2')).toBe(3);
+});
