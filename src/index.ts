@@ -116,7 +116,7 @@ export function interpret(input: string): number {
 
   function evaluateExpression(expr: string, context: Context = new Map()): TypedResult {
     const tokens = expr.match(
-      /true|false|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/])|([a-zA-Z_]\w*)/g
+      /true|false|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/<>])|([a-zA-Z_]\w*)/g
     );
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -148,46 +148,70 @@ export function interpret(input: string): number {
       }
     }
 
-    // first pass: handle multiplication and division (higher precedence)
-    for (let i = 0; i < operators.length; i++) {
-      if (operators[i] === '*' || operators[i] === '/') {
-        if (operators[i] === '/' && operands[i + 1].value === 0) {
-          throw new Error('division by zero');
+    // Helper to apply operators of a certain precedence
+    function applyPass(
+      ops: string[],
+      handler: (left: number, op: string, right: number) => number | TypedResult
+    ) {
+      const targetOps = new Set(ops);
+      for (let i = 0; i < operators.length; i++) {
+        if (targetOps.has(operators[i])) {
+          const res = handler(operands[i].value, operators[i], operands[i + 1].value);
+          if (typeof res === 'number') {
+            operands[i] = { value: res };
+          } else {
+            operands[i] = res;
+          }
+          operands.splice(i + 1, 1);
+          operators.splice(i, 1);
+          i--;
         }
-        const result =
-          operators[i] === '*'
-            ? operands[i].value * operands[i + 1].value
-            : operands[i].value / operands[i + 1].value;
-        operands[i] = { value: result };
-        operands.splice(i + 1, 1);
-        operators.splice(i, 1);
-        i--;
       }
     }
 
+    // first pass: handle multiplication and division (higher precedence)
+    applyPass(['*', '/'], (left, op, right) => {
+      if (op === '/' && right === 0) {
+        throw new Error('division by zero');
+      }
+      return op === '*' ? left * right : left / right;
+    });
+
     // second pass: handle addition and subtraction (left to right)
-    let result = operands[0].value;
-    for (let i = 0; i < operators.length; i++) {
-      const op = operators[i];
-      const nextVal = operands[i + 1].value;
-      result = op === '+' ? result + nextVal : result - nextVal;
-    }
+    applyPass(['+', '-'], (left, op, right) => {
+      return op === '+' ? left + right : left - right;
+    });
+
+    // third pass: handle comparison operators (<, >)
+    let isBooleanResult = false;
+    applyPass(['<', '>'], (left, op, right) => {
+      isBooleanResult = true;
+      const res = op === '<' ? left < right : left > right;
+      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+    });
+
+    const finalResult = operands[0].value;
+    const finalSuffix = operands[0].suffix;
 
     // find the widest suffix among all original operands (if any)
     let widestSuffix: Suffix | undefined;
     for (let i = 0; i < tokens.length; i += 2) {
       const op = resolveOperand(tokens[i], context);
-      if (op.suffix && (!widestSuffix || op.suffix.width > widestSuffix.width)) {
+      if (
+        op.suffix &&
+        op.suffix.kind !== 'Bool' &&
+        (!widestSuffix || op.suffix.width > widestSuffix.width)
+      ) {
         widestSuffix = op.suffix;
       }
     }
 
-    // validate against the widest type
-    if (widestSuffix) {
-      validateValueAgainstSuffix(result, widestSuffix.kind, widestSuffix.width);
+    // validate against the widest type if it's not a boolean result
+    if (widestSuffix && !isBooleanResult) {
+      validateValueAgainstSuffix(finalResult, widestSuffix.kind, widestSuffix.width);
     }
 
-    return { value: result, suffix: widestSuffix };
+    return { value: finalResult, suffix: finalSuffix || widestSuffix };
   }
 
   // Helper to process an expression recursively through brackets and let blocks

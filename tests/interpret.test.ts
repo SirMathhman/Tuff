@@ -207,6 +207,11 @@ test('interpret rejects arithmetic operations on boolean variables', () => {
   );
 });
 
+test('interpret supports less-than comparison operator', () => {
+  expect(interpret('let x = 0; let y = 1; x < y')).toBe(1);
+  expect(interpret('let x = 1; let y = 0; x < y')).toBe(0);
+});
+
 test('interpret rejects narrowing conversions when assigning variables', () => {
   expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
 });
