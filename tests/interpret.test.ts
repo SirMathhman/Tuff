@@ -70,6 +70,12 @@ test('interpret rejects copying arrays', () => {
   ).toThrow();
 });
 
+test('interpret supports slice pointer indexing', () => {
+  expect(
+    interpret('let array = [1, 2, 3]; let slice : *[I32] = &array; slice[0] + slice[1] + slice[2]')
+  ).toBe(6);
+});
+
 test('interpret handles array indexing bounds', () => {
   expect(interpret('let array = [1, 2, 3]; array[1]')).toBe(2);
   expect(() => interpret('let array = [1, 2, 3]; array[-1]')).toThrow();

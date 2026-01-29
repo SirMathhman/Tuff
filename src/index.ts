@@ -69,6 +69,9 @@ export function interpret(input: string): number {
     if (suffix.kind === 'Ptr') return 'Ptr<' + suffixKind(suffix.pointsTo) + '>';
     if (suffix.kind === 'Void') return 'Void';
     if (suffix.kind === 'Array') {
+      if (suffix.length < 0 || suffix.initializedCount < 0) {
+        return '[' + suffixKind(suffix.elementType) + ']';
+      }
       return (
         '[' +
         suffixKind(suffix.elementType) +
@@ -94,10 +97,10 @@ export function interpret(input: string): number {
       if (!source || source.kind !== 'Array') {
         throw new Error('cannot convert non-array to array type');
       }
-      if (source.length !== target.length) {
+      if (target.length >= 0 && source.length !== target.length) {
         throw new Error('array length mismatch');
       }
-      if (source.initializedCount < target.initializedCount) {
+      if (target.initializedCount >= 0 && source.initializedCount < target.initializedCount) {
         throw new Error('array initialized count mismatch');
       }
       validateNarrowing(source.elementType, target.elementType);
@@ -208,6 +211,26 @@ export function interpret(input: string): number {
     };
   }
 
+  function resolveArrayElement(varName: string, index: number, context: Context): TypedResult {
+    const varInfo = ensureVariable(varName, context);
+    let elements = varInfo.arrayElements;
+    if (!elements && varInfo.suffix?.kind === 'Ptr' && varInfo.suffix.pointsTo.kind === 'Array') {
+      const targetVar = ensureVariable(varInfo.refersTo || '', context);
+      elements = targetVar.arrayElements;
+    }
+    if (!elements) {
+      throw new Error('variable ' + varName + ' is not an array');
+    }
+    if (index < 0 || index >= elements.length) {
+      throw new Error('array index out of bounds');
+    }
+    const element = elements[index];
+    if (!element) {
+      throw new Error('array element not initialized');
+    }
+    return element;
+  }
+
   function tryParseSuffix(typeStr: string): Suffix | undefined {
     if (typeStr === 'Bool') return { kind: 'Bool', width: 1 };
     if (typeStr === 'Void') return { kind: 'Void' };
@@ -221,6 +244,15 @@ export function interpret(input: string): number {
       const elementType = tryParseSuffix(elementTypeStr);
       if (!elementType) return undefined;
       return { kind: 'Array', elementType, length, initializedCount };
+    }
+
+    // Parse array slice type: [I32]
+    const sliceMatch = typeStr.match(/^\[([^;]+)\]$/);
+    if (sliceMatch) {
+      const elementTypeStr = sliceMatch[1].trim();
+      const elementType = tryParseSuffix(elementTypeStr);
+      if (!elementType) return undefined;
+      return { kind: 'Array', elementType, length: -1, initializedCount: -1 };
     }
 
     const typeMatch = typeStr.match(/^([UI])(\d+)$/);
@@ -311,6 +343,12 @@ export function interpret(input: string): number {
     if (token === 'true' || token === 'false') {
       return parseLiteralToken(token);
     }
+    const arrayIndexTokenMatch = token.match(/^([a-zA-Z_]\w*)\s*\[\s*([+-]?\d+)\s*\]$/);
+    if (arrayIndexTokenMatch) {
+      const varName = arrayIndexTokenMatch[1];
+      const index = Number(arrayIndexTokenMatch[2]);
+      return resolveArrayElement(varName, index, context);
+    }
     // Handle dereference operator
     if (token.startsWith('*')) {
       const ptrVar = ensurePointer(token.substring(1), context);
@@ -368,7 +406,7 @@ export function interpret(input: string): number {
 
   function evaluateExpression(expr: string, context: Context = new Map()): TypedResult {
     const tokens = expr.match(
-      /true|false|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
+      /true|false|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
     );
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -728,18 +766,7 @@ export function interpret(input: string): number {
     if (arrayIndexMatch) {
       const varName = arrayIndexMatch[1];
       const index = Number(arrayIndexMatch[2]);
-      const varInfo = ensureVariable(varName, context);
-      if (!varInfo.arrayElements) {
-        throw new Error('variable ' + varName + ' is not an array');
-      }
-      if (index < 0 || index >= varInfo.arrayElements.length) {
-        throw new Error('array index out of bounds');
-      }
-      const element = varInfo.arrayElements[index];
-      if (!element) {
-        throw new Error('array element not initialized');
-      }
-      return element;
+      return resolveArrayElement(varName, index, context);
     }
 
     // Check for array literal: [elem1, elem2, ...]
