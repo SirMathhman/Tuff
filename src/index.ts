@@ -292,6 +292,10 @@ export function interpret(input: string): number {
       }
     }
 
+    if (!finalExpr.trim()) {
+      return 0;
+    }
+
     return processExprWithContext(finalExpr, context).value;
   }
 
