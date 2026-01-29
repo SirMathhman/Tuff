@@ -197,6 +197,16 @@ test('interpret rejects reassignment to immutable variables even if initially un
   );
 });
 
+test('interpret rejects arithmetic operations on boolean literals', () => {
+  expect(() => interpret('true + false')).toThrow('cannot perform arithmetic on booleans');
+});
+
+test('interpret rejects arithmetic operations on boolean variables', () => {
+  expect(() => interpret('let x : Bool = true; x + 1')).toThrow(
+    'cannot perform arithmetic on booleans'
+  );
+});
+
 test('interpret rejects narrowing conversions when assigning variables', () => {
   expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
 });

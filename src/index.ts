@@ -137,7 +137,11 @@ export function interpret(input: string): number {
     for (let i = 0; i < tokens.length; i++) {
       if (i % 2 === 0) {
         // even indices are operands (literals or variables)
-        operands.push(resolveOperand(tokens[i], context));
+        const opResult = resolveOperand(tokens[i], context);
+        if (tokens.length > 1 && opResult.suffix?.kind === 'Bool') {
+          throw new Error('cannot perform arithmetic on booleans');
+        }
+        operands.push(opResult);
       } else {
         // odd indices are operators
         operators.push(tokens[i]);
