@@ -69,6 +69,12 @@ test('interpret enforces numeric type constraints in declarations', () => {
   expect(() => interpret('let x : I32 < 10 = 20; x')).toThrow();
 });
 
+test('interpret supports type aliases and is operator', () => {
+  expect(
+    interpret('type MyAlias = I32; let temp : MyAlias = 100; temp is I32 && temp is MyAlias')
+  ).toBe(1);
+});
+
 test('interpret supports USize type', () => {
   expect(interpret('let x : USize = 100USize; x')).toBe(100);
 });

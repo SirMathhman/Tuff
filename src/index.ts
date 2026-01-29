@@ -45,6 +45,9 @@ export function interpret(input: string): number {
   type FunctionTable = Map<string, FunctionDef>;
   type StructInfo = { fields: Array<{ name: string; type: Suffix }> };
   type StructTable = Map<string, StructInfo>;
+  type TypeAliasTable = Map<string, Suffix>;
+
+  const typeAliases: TypeAliasTable = new Map();
 
   // helper to validate a value against a suffix kind/width
   function validateValueAgainstSuffix(val: number, kind: 'U' | 'I' | 'Bool', width: number) {
@@ -301,7 +304,20 @@ export function interpret(input: string): number {
     return parts;
   }
 
+  function resolveTypeAlias(name: string, seen: Set<string> = new Set()): Suffix | undefined {
+    if (!typeAliases.has(name)) return undefined;
+    if (seen.has(name)) {
+      throw new Error('cyclic type alias: ' + name);
+    }
+    seen.add(name);
+    const alias = typeAliases.get(name);
+    if (!alias) return undefined;
+    return alias;
+  }
+
   function tryParseSuffix(typeStr: string): Suffix | undefined {
+    const alias = resolveTypeAlias(typeStr.trim());
+    if (alias) return alias;
     if (typeStr === 'Bool') return { kind: 'Bool', width: 1 };
     if (typeStr === 'Void') return { kind: 'Void' };
     if (typeStr === 'USize') return { kind: 'U', width: 64 };
@@ -493,7 +509,7 @@ export function interpret(input: string): number {
 
   function evaluateExpression(expr: string, context: Context = new Map()): TypedResult {
     const tokens = expr.match(
-      /true|false|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
+      /true|false|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
     );
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -515,10 +531,25 @@ export function interpret(input: string): number {
     for (let i = 1; i < tokens.length; i += 2) {
       operators.push(tokens[i]);
     }
+    const originalOperators = [...operators];
     const hasArithmeticOps = operators.some((op) => ['+', '-', '*', '/'].includes(op));
+    const getPrevOperator = (tokenIndex: number, ops: string[]) => {
+      const operatorIndex = tokenIndex / 2 - 1;
+      return operatorIndex >= 0 ? ops[operatorIndex] : undefined;
+    };
 
     for (let i = 0; i < tokens.length; i += 2) {
       // even indices are operands (literals or variables)
+      const prevOp = getPrevOperator(i, operators);
+      if (prevOp === 'is') {
+        const typeToken = tokens[i].trim();
+        const typeSuffix = tryParseSuffix(typeToken);
+        if (!typeSuffix) {
+          throw new Error('invalid type in is expression');
+        }
+        operands.push({ value: 0, suffix: typeSuffix });
+        continue;
+      }
       const opResult = resolveOperand(tokens[i], context);
       if (opResult.structFields) {
         throw new Error('cannot use struct value in expression');
@@ -562,6 +593,34 @@ export function interpret(input: string): number {
       }
     }
 
+    function typeEquals(leftType: Suffix, rightType: Suffix): boolean {
+      if (leftType.kind !== rightType.kind) return false;
+      if (leftType.kind === 'Ptr' && rightType.kind === 'Ptr') {
+        return typeEquals(leftType.pointsTo, rightType.pointsTo);
+      }
+      if (leftType.kind === 'Array' && rightType.kind === 'Array') {
+        return (
+          leftType.length === rightType.length &&
+          leftType.initializedCount === rightType.initializedCount &&
+          typeEquals(leftType.elementType, rightType.elementType)
+        );
+      }
+      if (leftType.kind === 'Tuple' && rightType.kind === 'Tuple') {
+        if (leftType.elements.length !== rightType.elements.length) return false;
+        for (let i = 0; i < leftType.elements.length; i++) {
+          if (!typeEquals(leftType.elements[i], rightType.elements[i])) return false;
+        }
+        return true;
+      }
+      if (leftType.kind === 'Generic' && rightType.kind === 'Generic') {
+        return leftType.name === rightType.name;
+      }
+      if ('width' in leftType && 'width' in rightType) {
+        return leftType.kind === rightType.kind && leftType.width === rightType.width;
+      }
+      return true;
+    }
+
     // first pass: handle multiplication and division (higher precedence)
     applyPass(['*', '/'], (left, op, right) => {
       if (op === '/' && right.value === 0) {
@@ -588,7 +647,19 @@ export function interpret(input: string): number {
       return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
     });
 
-    // fourth pass: handle equality operators (==, !=)
+    // fourth pass: handle type checks (is)
+    applyPass(['is'], (left, _op, right) => {
+      const leftType = left.suffix || { kind: 'I', width: 32 };
+      const rightType = right.suffix;
+      if (!rightType) {
+        throw new Error('invalid type in is expression');
+      }
+      isBooleanResult = true;
+      const res = typeEquals(leftType, rightType);
+      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+    });
+
+    // fifth pass: handle equality operators (==, !=)
     applyPass(['==', '!='], (left, op, right) => {
       validateComparable(left, right, true);
       isBooleanResult = true;
@@ -623,6 +694,10 @@ export function interpret(input: string): number {
     // find the widest suffix among all original operands (if any)
     let widestSuffix: Suffix | undefined;
     for (let i = 0; i < tokens.length; i += 2) {
+      const prevOp = getPrevOperator(i, originalOperators);
+      if (prevOp === 'is') {
+        continue;
+      }
       const op = resolveOperand(tokens[i], context);
       if (
         op.suffix &&
@@ -1181,6 +1256,19 @@ export function interpret(input: string): number {
     let lastProcessedValue: TypedResult | undefined;
     for (let stmtIndex = 0; stmtIndex < statements.length; stmtIndex++) {
       const stmt = statements[stmtIndex];
+      if (stmt.startsWith('type ')) {
+        const typeMatch = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+        if (!typeMatch) throw new Error('invalid type alias');
+        const aliasName = typeMatch[1];
+        if (typeAliases.has(aliasName)) {
+          throw new Error('type alias already defined: ' + aliasName);
+        }
+        const aliasTypeStr = typeMatch[2].trim();
+        const aliasSuffix = tryParseSuffix(aliasTypeStr);
+        if (!aliasSuffix) throw new Error('invalid type alias');
+        typeAliases.set(aliasName, aliasSuffix);
+        continue;
+      }
       if (stmt.startsWith('fn ')) {
         const fnMatch = stmt.match(
           /^fn\s+([a-zA-Z_]\w*)\s*(?:<\s*([^>]+)\s*>)?\s*\(\s*(.*?)\s*\)\s*(?::\s*([^=]+?))?\s*=>\s*(.+)$/
