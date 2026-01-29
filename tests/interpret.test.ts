@@ -110,3 +110,7 @@ test('interpret supports division operator', () => {
 test('interpret throws on division by zero', () => {
   expect(() => interpret('10 / 0')).toThrow('division by zero');
 });
+
+test('interpret supports parenthesized expressions', () => {
+  expect(interpret('(4 + 2) * 3')).toBe(18);
+});

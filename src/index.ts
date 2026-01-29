@@ -65,10 +65,22 @@ export function interpret(input: string): number {
     return { value: Number.isFinite(n) ? n : 0 };
   }
 
-  // support arithmetic with +, -, *, / operators (left-to-right, * and / have higher precedence)
-  const tokens = s.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/])/g);
-  if (tokens && tokens.length >= 3 && tokens.length % 2 === 1) {
-    // must have odd count: literal, op, literal, op, ..., literal
+  // helper to evaluate an expression (after parentheses are resolved)
+  function evaluateExpression(expr: string): number {
+    const tokens = expr.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/])/g);
+    if (!tokens || tokens.length === 0) {
+      throw new Error('invalid expression');
+    }
+
+    if (tokens.length === 1) {
+      // single operand
+      return parseLiteralToken(tokens[0]).value;
+    }
+
+    if (tokens.length < 3 || tokens.length % 2 === 0) {
+      throw new Error('invalid expression');
+    }
+
     const operands: Array<{ value: number; suffix?: { kind: 'U' | 'I'; width: number } }> = [];
     const operators: string[] = [];
 
@@ -95,7 +107,7 @@ export function interpret(input: string): number {
         operands[i] = { value: result };
         operands.splice(i + 1, 1);
         operators.splice(i, 1);
-        i--; // re-check this position in case of consecutive * or /
+        i--;
       }
     }
 
@@ -109,7 +121,6 @@ export function interpret(input: string): number {
 
     // find the widest suffix among all original operands (if any)
     let widestSuffix: { kind: 'U' | 'I'; width: number } | undefined;
-    // re-parse to get original operands with suffixes
     for (let i = 0; i < tokens.length; i += 2) {
       const parsed = parseLiteralToken(tokens[i]);
       if (parsed.suffix && (!widestSuffix || parsed.suffix.width > widestSuffix.width)) {
@@ -125,11 +136,23 @@ export function interpret(input: string): number {
     return result;
   }
 
-  // fallback: single literal — non-numeric inputs return 0 (preserve previous behavior)
+  // handle parentheses: recursively evaluate innermost parentheses
+  let expr = s;
+  while (expr.includes('(')) {
+    const innermost = expr.match(/\(([^()]+)\)/);
+    if (!innermost) throw new Error('mismatched parentheses');
+    const result = evaluateExpression(innermost[1]);
+    expr = expr.replace(innermost[0], result.toString());
+  }
+
+  // evaluate final expression with fallback for non-numeric input
   try {
-    return parseLiteralToken(s).value;
+    return evaluateExpression(expr);
   } catch (e) {
-    if (e instanceof Error && e.message === 'invalid literal') {
+    if (
+      e instanceof Error &&
+      (e.message === 'invalid literal' || e.message === 'invalid expression')
+    ) {
       return 0;
     }
     throw e;
