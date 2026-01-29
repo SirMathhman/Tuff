@@ -139,12 +139,12 @@ export function interpret(input: string): number {
     for (let i = 1; i < tokens.length; i += 2) {
       operators.push(tokens[i]);
     }
-    const hasAnyLogicalOps = operators.some((op) => op === '||' || op === '&&');
+    const hasArithmeticOps = operators.some((op) => ['+', '-', '*', '/'].includes(op));
 
     for (let i = 0; i < tokens.length; i += 2) {
       // even indices are operands (literals or variables)
       const opResult = resolveOperand(tokens[i], context);
-      if (tokens.length > 1 && opResult.suffix?.kind === 'Bool' && !hasAnyLogicalOps) {
+      if (tokens.length > 1 && opResult.suffix?.kind === 'Bool' && hasArithmeticOps) {
         throw new Error('cannot perform arithmetic on booleans');
       }
       operands.push(opResult);
@@ -171,6 +171,18 @@ export function interpret(input: string): number {
       }
     }
 
+    // Helper to validate operand types for comparison/equality
+    function validateComparable(left: TypedResult, right: TypedResult, isEquality: boolean) {
+      const leftKind = left.suffix?.kind || 'Numeric';
+      const rightKind = right.suffix?.kind || 'Numeric';
+      if ((leftKind === 'Bool') !== (rightKind === 'Bool')) {
+        throw new Error('cannot compare different types');
+      }
+      if (!isEquality && leftKind === 'Bool') {
+        throw new Error('cannot compare different types');
+      }
+    }
+
     // first pass: handle multiplication and division (higher precedence)
     applyPass(['*', '/'], (left, op, right) => {
       if (op === '/' && right.value === 0) {
@@ -187,6 +199,7 @@ export function interpret(input: string): number {
     // third pass: handle comparison operators (<, <=, >, >=)
     let isBooleanResult = false;
     applyPass(['<', '<=', '>', '>='], (left, op, right) => {
+      validateComparable(left, right, false);
       isBooleanResult = true;
       let res = false;
       if (op === '<') res = left.value < right.value;
@@ -198,6 +211,7 @@ export function interpret(input: string): number {
 
     // fourth pass: handle equality operators (==, !=)
     applyPass(['==', '!='], (left, op, right) => {
+      validateComparable(left, right, true);
       isBooleanResult = true;
       const res = op === '==' ? left.value === right.value : left.value !== right.value;
       return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };

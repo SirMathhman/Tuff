@@ -238,6 +238,10 @@ test('interpret supports logical AND operator', () => {
   expect(interpret('true && true')).toBe(1);
 });
 
+test('interpret rejects equality comparison between different types (number and bool)', () => {
+  expect(() => interpret('100 == true')).toThrow('cannot compare different types');
+});
+
 test('interpret rejects logical operators on numeric types', () => {
   expect(() => interpret('let x = 10U8; let y = 20U8; x || y')).toThrow(
     'logical operators only supported for booleans'
