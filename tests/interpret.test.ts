@@ -86,3 +86,7 @@ test('interpret supports chained addition', () => {
 test('interpret supports chained addition with mixed suffixes and widths', () => {
   expect(interpret('1U8 + 2 + 1000U16')).toBe(1003);
 });
+
+test('interpret throws when chained sum overflows the widest type', () => {
+  expect(() => interpret('1U8 + 1 + 254')).toThrow('unsigned literal out of range');
+});
