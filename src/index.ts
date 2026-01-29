@@ -2,21 +2,57 @@ export function add(a: number, b: number): number {
   return a + b;
 }
 
-export function interpretAll(_inputs: string[], _config: Map<string[], string>): number {
-  // Process inputs by looking them up in the config map
-  for (const input of _inputs) {
-    // Look for a matching key in the config map
-    for (const [key, value] of _config) {
-      if (key.length === 1 && key[0] === input) {
-        // Found a matching entry, interpret the value
-        if (value === '') {
-          return 0;
-        }
-        return interpret(value);
-      }
+export function interpretAll(inputs: string[], config: Map<string[], string>): number {
+  function extractUseStatements(source: string): { code: string; deps: string[] } {
+    const deps: string[] = [];
+    const useRegex = /use\s*\{\s*[^}]*\s*\}\s*from\s+([a-zA-Z_]\w*)\s*;?/g;
+    let match = useRegex.exec(source);
+    while (match) {
+      deps.push(match[1]);
+      match = useRegex.exec(source);
+    }
+    const code = source.replace(useRegex, '').trim();
+    return { code, deps };
+  }
+
+  const moduleMap = new Map<string, string>();
+  for (const [key, value] of config) {
+    if (key.length > 0) {
+      moduleMap.set(key[0], value);
     }
   }
-  return 0;
+
+  const visited = new Set<string>();
+  let combined = '';
+
+  function appendCode(code: string): void {
+    if (!code) return;
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    combined += trimmed;
+    if (!combined.endsWith(';')) {
+      combined += ';';
+    }
+  }
+
+  function includeModule(name: string): void {
+    if (visited.has(name)) return;
+    visited.add(name);
+    const raw = moduleMap.get(name);
+    if (raw === undefined) return;
+    const extracted = extractUseStatements(raw);
+    for (const dep of extracted.deps) {
+      includeModule(dep);
+    }
+    appendCode(extracted.code);
+  }
+
+  for (const input of inputs) {
+    includeModule(input);
+  }
+
+  if (!combined.trim()) return 0;
+  return interpret(combined);
 }
 
 /**
