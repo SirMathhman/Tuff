@@ -89,7 +89,7 @@ export function interpret(input: string): number {
     }
 
     if (source && source.kind === 'Bool') {
-      return;
+      throw new Error('cannot convert Bool to numeric type');
     }
 
     const effectiveSource = source;
@@ -639,11 +639,11 @@ export function interpret(input: string): number {
       const returnValue = bodyResult.result;
 
       if (fnDef.returnType) {
-        // Validate return type
-        validateNarrowing(returnValue.suffix, fnDef.returnType);
         if (returnValue.suffix?.kind === 'Bool' && fnDef.returnType.kind !== 'Bool') {
           throw new Error('cannot return boolean value from non-bool function');
         }
+        // Validate return type
+        validateNarrowing(returnValue.suffix, fnDef.returnType);
         if (
           fnDef.returnType.kind !== 'Ptr' &&
           fnDef.returnType.kind !== 'Void' &&
@@ -803,16 +803,21 @@ export function interpret(input: string): number {
         const fnBody = fnMatch[4].trim();
 
         const params: Array<{ name: string; type: Suffix }> = [];
+        const paramNames = new Set<string>();
         if (paramsStr.trim()) {
           const paramParts = paramsStr.split(',').map((p) => p.trim());
           for (const paramPart of paramParts) {
             const paramMatch = paramPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
             if (!paramMatch) throw new Error('invalid parameter');
             const paramName = paramMatch[1];
+            if (paramNames.has(paramName)) {
+              throw new Error('duplicate parameter name: ' + paramName);
+            }
             const paramType = paramMatch[2].trim();
 
             const paramSuffix = tryParseSuffix(paramType);
             if (!paramSuffix) throw new Error('invalid parameter type: ' + paramType);
+            paramNames.add(paramName);
             params.push({ name: paramName, type: paramSuffix });
           }
         }
@@ -849,6 +854,9 @@ export function interpret(input: string): number {
 
         if (varExprStr !== undefined) {
           const varValueObj = processExprWithContext(varExprStr, context, functions);
+          if (varValueObj.suffix?.kind === 'Void') {
+            throw new Error('void function cannot return a value');
+          }
           varValue = varValueObj.value;
           valSuffix = varValueObj.suffix;
           refersTo = varValueObj.refersTo;
