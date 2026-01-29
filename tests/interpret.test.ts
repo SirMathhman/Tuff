@@ -602,3 +602,7 @@ test('interpret supports drop functions for type aliases', () => {
     )
   ).toBe(100);
 });
+
+test('interpret accesses variables through this.x notation', () => {
+  expect(interpret('let x = 100; this.x')).toBe(100);
+});

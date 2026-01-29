@@ -1049,12 +1049,18 @@ export function interpret(input: string): number {
       };
     }
 
-    // Check for struct field access through variable: variableName.fieldName
+    // Check for struct field access through variable: variableName.fieldName or this.variableName
     const fieldAccessRegex = /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)$/;
     const fieldAccessMatch = expr.trim().match(fieldAccessRegex);
     if (fieldAccessMatch) {
       const varName = fieldAccessMatch[1];
       const fieldName = fieldAccessMatch[2];
+
+      // Special case: this.x refers to variable x in the current scope
+      if (varName === 'this') {
+        return ensureVariable(fieldName, context);
+      }
+
       const varInfo = ensureVariable(varName, context);
       if (!varInfo.structFields) {
         throw new Error('variable ' + varName + ' is not a struct');
