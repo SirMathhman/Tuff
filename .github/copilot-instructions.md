@@ -6,6 +6,12 @@
 - The CLI runner (`pnpm start` / `pnpm dev`) executes `bun ./src/index.ts`, which loads `src/index.tuff` and prints `interpret(...)`.
 - For DSL syntax and semantics overview, see [TUTORIAL.md](../TUTORIAL.md).
 
+## Skills and utilities
+- Reusable skills and utilities are located in `.github/skills/`.
+- Each skill provides specialized functionality with documentation.
+- When working on tasks that require code extraction, refactoring, or file manipulation, check `.github/skills/copy-and-paste/` for the copy-paste utility and its documentation.
+- Read skill documentation in the relevant `SKILL.md` file before using to understand capabilities and best practices.
+
 ## Fast workflows
 - Dev: `pnpm dev` (nodemon watches `src/**/*.ts` and `*.tuff`; runs `bun ./src/index.ts`)
 - Tests: `pnpm test` (Jest via `@swc/jest`)

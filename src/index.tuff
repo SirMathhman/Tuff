@@ -11,4 +11,7 @@ fn interpret(input : *Str) : I32 => {
     0
 }
 
-interpret("100")
+use { Map } from lib;
+let map = Map();
+
+// interpret("100")
