@@ -12,6 +12,10 @@ test('interpret parses integer numeric literals', () => {
   expect(interpret('100')).toBe(100);
 });
 
+test('interpret ignores struct declarations', () => {
+  expect(interpret('struct Empty {}')).toBe(0);
+});
+
 test('interpret parses integer numeric literals with unsigned suffixes', () => {
   expect(interpret('100U8')).toBe(100);
 });

@@ -833,6 +833,11 @@ export function interpret(input: string): number {
           returnType: returnSuffix,
           body: fnBody,
         });
+      } else if (stmt.startsWith('struct ')) {
+        if (!/^struct\s+[a-zA-Z_]\w*\s*\{\s*\}$/.test(stmt)) {
+          throw new Error('invalid struct declaration');
+        }
+        continue;
       } else if (stmt.startsWith('let ')) {
         // parse: let [mut] x [: Type] [= expr]
         // Type can be: U8, I32, Bool, *I32, *U16, etc.
