@@ -80,6 +80,19 @@ test('interpretAll supports generic extern native functions', () => {
   expect(interpretAll(['main'], config, nativeConfig)).toBe(100);
 });
 
+test('interpretAll reports missing native exports with context', () => {
+  const config = new Map([
+    [
+      ['main'],
+      'extern use { resizeArray } from lib; extern fn resizeArray<T>(ptr : *mut [T], length : USize) : *mut [T]; 0',
+    ],
+  ]);
+  const nativeConfig = new Map([[['lib'], 'export function createArray<T>() { return 0; }']]);
+  expect(() => interpretAll(['main'], config, nativeConfig)).toThrow(
+    'native export not found: resizeArray. Cause: extern use references a native export that does not exist. Fix: export resizeArray from lib.ts or remove it. Context: module lib.'
+  );
+});
+
 test('interpretAll allows unused void native functions', () => {
   const config = new Map([
     [

@@ -198,6 +198,19 @@ export function interpretAll(
 
   const externValueByName = new Map<string, string>();
   const externFnByName = new Map<string, NativeFunctionDef>();
+  const buildMissingNativeExportMessage = (exportName: string, moduleName: string): string => {
+    return (
+      'native export not found: ' +
+      exportName +
+      '. Cause: extern use references a native export that does not exist. Fix: export ' +
+      exportName +
+      ' from ' +
+      moduleName +
+      '.ts or remove it. Context: module ' +
+      moduleName +
+      '.'
+    );
+  };
   for (const externUse of externUses) {
     const nativeSource = nativeModuleMap.get(externUse.module);
     if (!nativeSource) {
@@ -215,7 +228,7 @@ export function interpretAll(
         externFnByName.set(name, fnValue);
         continue;
       }
-      throw new Error('native export not found: ' + name);
+      throw new Error(buildMissingNativeExportMessage(name, externUse.module));
     }
   }
 
