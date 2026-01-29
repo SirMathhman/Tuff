@@ -2,6 +2,11 @@ export function add(a: number, b: number): number {
   return a + b;
 }
 
+export function interpretAll(_inputs: string[], _config: Map<string[], string>): number {
+  // Stub implementation
+  return 0;
+}
+
 /**
  * Interpret the given input string and produce a numeric result.
  * This function supports numeric literals (integers and decimals), optionally
