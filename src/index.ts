@@ -1246,6 +1246,7 @@ export function interpret(input: string): number {
         type: resolvedParamType,
         mutable: false,
         initialized: true,
+        refersTo: arg.refersTo,
         structName: arg.structName,
         structFields: arg.structFields,
         arrayElements: arg.arrayElements,
@@ -1437,7 +1438,27 @@ export function interpret(input: string): number {
         if (!functions.has(fnName)) {
           throw new Error('function not found: ' + fnName);
         }
-        const args = [baseValue, ...parseCallArguments(argsStr, context, functions, structs)];
+        const fnDef = functions.get(fnName);
+        if (!fnDef) throw new Error('function not found: ' + fnName);
+
+        let receiverArg = baseValue;
+        if (fnDef.params[0]?.type.kind === 'Ptr') {
+          if (baseExpr.match(/^[a-zA-Z_]\w*$/)) {
+            receiverArg = {
+              value: 0,
+              type: {
+                kind: 'Ptr',
+                pointsTo: baseValue.type || { kind: 'I', width: 32 },
+                mutable: fnDef.params[0].type.mutable,
+              },
+              refersTo: baseExpr,
+            };
+          } else {
+            throw new Error('cannot take reference to non-variable receiver');
+          }
+        }
+
+        const args = [receiverArg, ...parseCallArguments(argsStr, context, functions, structs)];
         return executeFunctionCallWithArgs(fnName, args, context, functions, structs);
       }
     }
@@ -1655,7 +1676,14 @@ export function interpret(input: string): number {
             }
             const paramType = paramMatch[2].trim();
 
-            let paramSuffix = tryParseSuffix(paramType);
+            let paramSuffix: Type | undefined;
+            if (paramType.startsWith('*mut ')) {
+              paramSuffix = parsePointerSuffix(paramType.substring(5).trim(), true);
+            } else if (paramType.startsWith('*')) {
+              paramSuffix = parsePointerSuffix(paramType.substring(1).trim(), false);
+            } else {
+              paramSuffix = tryParseSuffix(paramType);
+            }
             if (!paramSuffix && generics.includes(paramType)) {
               paramSuffix = { kind: 'Generic', name: paramType };
             }
