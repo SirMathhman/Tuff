@@ -54,3 +54,7 @@ test('interpret rejects unsupported suffixes and invalid widths', () => {
   expect(() => interpret('100XYZ')).toThrow('invalid suffix');
   expect(() => interpret('100U7')).toThrow('invalid suffix');
 });
+
+test('interpret adds two U8 literals', () => {
+  expect(interpret('1U8 + 2U8')).toBe(3);
+});

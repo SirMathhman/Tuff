@@ -14,28 +14,26 @@ export function add(a: number, b: number): number {
 export function interpret(input: string): number {
   const s = input.trim();
   if (s === '') return 0;
-  // match a numeric prefix (integer or decimal) and capture an optional alphabetic suffix + optional digits
-  const m = s.match(/^([+-]?\d+(?:\.\d+)?)(?:([A-Za-z]+\d*))?$/);
-  if (m) {
+
+  // helper to parse a single literal token and validate suffixes
+  function parseLiteralToken(token: string): number {
+    const t = token.trim();
+    const m = t.match(/^([+-]?\d+(?:\.\d+)?)(?:([A-Za-z]+\d*))?$/);
+    if (!m) throw new Error('invalid literal');
     const n = Number(m[1]);
     const suffix = m[2];
-    // Reject lowercase 'u' suffixes (invalid usage)
+
     if (suffix && /^[u]/.test(suffix)) {
       throw new Error('invalid suffix');
     }
 
-    // If there's a suffix, it must be one of the supported forms: U8/U16/U32/U64 or I8/I16/I32/I64
     if (suffix) {
       const m2 = suffix.match(/^([UI])(\d+)$/);
-      if (!m2) {
-        throw new Error('invalid suffix');
-      }
+      if (!m2) throw new Error('invalid suffix');
       const kind = m2[1];
       const width = Number(m2[2]);
       const allowedWidths = new Set([8, 16, 32, 64]);
-      if (!allowedWidths.has(width)) {
-        throw new Error('invalid suffix');
-      }
+      if (!allowedWidths.has(width)) throw new Error('invalid suffix');
 
       if (!Number.isInteger(n)) {
         throw new Error(
@@ -44,23 +42,34 @@ export function interpret(input: string): number {
       }
 
       if (kind === 'U') {
-        if (n < 0) {
-          throw new Error('unsigned literal cannot be negative');
-        }
+        if (n < 0) throw new Error('unsigned literal cannot be negative');
         const max = Math.pow(2, width) - 1;
-        if (n > max) {
-          throw new Error('unsigned literal out of range');
-        }
+        if (n > max) throw new Error('unsigned literal out of range');
       } else {
         const min = -Math.pow(2, width - 1);
         const max = Math.pow(2, width - 1) - 1;
-        if (n < min || n > max) {
-          throw new Error('signed literal out of range');
-        }
+        if (n < min || n > max) throw new Error('signed literal out of range');
       }
     }
 
     return Number.isFinite(n) ? n : 0;
   }
-  return 0;
+
+  // support simple addition: <literal> + <literal>
+  const parts = s.split(/\s*\+\s*/);
+  if (parts.length === 2) {
+    const a = parseLiteralToken(parts[0]);
+    const b = parseLiteralToken(parts[1]);
+    return a + b;
+  }
+
+  // fallback: single literal — non-numeric inputs return 0 (preserve previous behavior)
+  try {
+    return parseLiteralToken(s);
+  } catch (e) {
+    if (e instanceof Error && e.message === 'invalid literal') {
+      return 0;
+    }
+    throw e;
+  }
 }
