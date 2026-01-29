@@ -980,7 +980,14 @@ export function interpret(input: string): number {
     applyPass(['==', '!='], (left, op, right) => {
       validateComparable(left, right, true);
       isBooleanResult = true;
-      const res = op === '==' ? left.value === right.value : left.value !== right.value;
+      let res: boolean;
+      // For pointer comparisons, check refersTo for identity
+      if (left.type?.kind === 'Ptr' && right.type?.kind === 'Ptr') {
+        res = left.refersTo === right.refersTo;
+      } else {
+        res = left.value === right.value;
+      }
+      if (op === '!=') res = !res;
       return { value: res ? 1 : 0, type: { kind: 'Bool', width: 1 } };
     });
 
