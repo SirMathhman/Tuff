@@ -29,4 +29,3 @@ export function assertInvalid(code: string): void {
     execute(code);
   }).toThrow();
 }
-

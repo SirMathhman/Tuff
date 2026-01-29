@@ -148,4 +148,3 @@ test('interpret throws when sum overflows operand type (U8)', () => {
 test('interpret allows sum with mixed widths using wider type (U8 + U16)', () => {
   expect(interpret('1U8 + 255U16')).toBe(256);
 });
-

@@ -393,6 +393,45 @@ export function compile(input: string): string {
   // Handle boolean literals
   code = code.replace(/\btrue\b/g, '1').replace(/\bfalse\b/g, '0');
 
+  // Handle numeric literals with type suffixes (e.g., 100U8, -128I8)
+  code = code.replace(/-?\b\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)\b/g, (match) => {
+    // Parse the numeric suffix
+    const suffixMatch = match.match(/(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)$/);
+    if (!suffixMatch) return match;
+
+    const suffix = suffixMatch[0];
+    const numStr = match.slice(0, -suffix.length);
+    const num = parseInt(numStr, 10);
+
+    // Validate range based on suffix
+    const ranges: Record<string, [number, number]> = {
+      U8: [0, 255],
+      U16: [0, 65535],
+      U32: [0, 4294967295],
+      U64: [0, 18446744073709551615],
+      USize: [0, 18446744073709551615],
+      I8: [-128, 127],
+      I16: [-32768, 32767],
+      I32: [-2147483648, 2147483647],
+      I64: [-9223372036854775808, 9223372036854775807],
+    };
+
+    const [min, max] = ranges[suffix];
+    if (num < min || num > max) {
+      // Return an invalid token to trigger compile error
+      // We use a marker that the validator will reject
+      return '__OVERFLOW__';
+    }
+
+    // Return the number without suffix
+    return numStr;
+  });
+
+  // Check for overflow markers
+  if (code.includes('__OVERFLOW__')) {
+    return '';
+  }
+
   // Try to handle simple expressions - if it parses as a valid expression, wrap it
   // Very basic validation: just ensure it doesn't contain invalid tokens
   const invalidTokens = /[{}()[\];:,]/; // These suggest complex statements we can't handle simply

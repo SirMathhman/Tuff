@@ -72,6 +72,36 @@ describe('compiler: operator precedence', () => {
   });
 });
 
+describe('compiler: numeric type suffixes', () => {
+  test('compile handles U8 suffix', () => {
+    assertValid('100U8', 100);
+  });
+
+  test('compile handles I8 suffix', () => {
+    assertValid('127I8', 127);
+  });
+
+  test('compile handles negative I8 suffix', () => {
+    assertValid('-128I8', -128);
+  });
+
+  test('compile handles U16 suffix', () => {
+    assertValid('65535U16', 65535);
+  });
+
+  test('compile rejects U8 overflow', () => {
+    assertInvalid('256U8');
+  });
+
+  test('compile rejects I8 overflow', () => {
+    assertInvalid('128I8');
+  });
+
+  test('compile rejects I8 underflow', () => {
+    assertInvalid('-129I8');
+  });
+});
+
 describe('compiler: error handling', () => {
   test('compile rejects unmatched opening parenthesis', () => {
     assertInvalid('(1 + 2');
