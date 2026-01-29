@@ -571,15 +571,16 @@ export function interpret(input: string): number {
         finalExpr = '';
         lastProcessedValue = undefined;
       } else if (stmt.includes('=') && !stmt.startsWith('let ')) {
-        // assignment: x = 100
-        const m = stmt.match(/^([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+        // assignment: x = 100 or compound: x += 1, x -= 2, x *= 3, x /= 4
+        const m = stmt.match(/^([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
         if (!m) {
           finalExpr = stmt;
           lastProcessedValue = undefined;
           continue;
         }
         const varName = m[1];
-        const varExprStr = m[2].trim();
+        const op = m[2];
+        const varExprStr = m[3].trim();
 
         if (!context.has(varName)) {
           throw new Error(`undefined variable: ${varName}`);
@@ -590,7 +591,13 @@ export function interpret(input: string): number {
           throw new Error(`cannot assign to immutable variable: ${varName}`);
         }
 
-        const newValueObj = processExprWithContext(varExprStr, context);
+        let valueToAssign: string = varExprStr;
+        if (op !== '=') {
+          // Compound assignment: construct binary expression
+          valueToAssign = `${varInfo.value}${op[0]} ${varExprStr}`;
+        }
+
+        const newValueObj = processExprWithContext(valueToAssign, context);
         const newValue = newValueObj.value;
         const newValSuffix = newValueObj.suffix;
 
