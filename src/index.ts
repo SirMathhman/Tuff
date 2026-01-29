@@ -3,7 +3,19 @@ export function add(a: number, b: number): number {
 }
 
 export function interpretAll(_inputs: string[], _config: Map<string[], string>): number {
-  // Stub implementation
+  // Process inputs by looking them up in the config map
+  for (const input of _inputs) {
+    // Look for a matching key in the config map
+    for (const [key, value] of _config) {
+      if (key.length === 1 && key[0] === input) {
+        // Found a matching entry, interpret the value
+        if (value === '') {
+          return 0;
+        }
+        return interpret(value);
+      }
+    }
+  }
   return 0;
 }
 
