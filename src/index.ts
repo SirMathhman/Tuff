@@ -12,10 +12,12 @@ export function interpretAll(
     deps: string[];
     externDeps: Array<{ module: string; names: string[] }>;
     externLets: Array<{ name: string; type: string }>;
+    externFns: Array<{ name: string; returnType: string; params: string }>;
   } {
     const deps: string[] = [];
     const externDeps: Array<{ module: string; names: string[] }> = [];
     const externLetsList: Array<{ name: string; type: string }> = [];
+    const externFnsList: Array<{ name: string; returnType: string; params: string }> = [];
 
     const useRegex = /use\s*\{\s*[^}]*\s*\}\s*from\s+([a-zA-Z_]\w*)\s*;?/g;
 
@@ -44,16 +46,32 @@ export function interpretAll(
       externLetMatch = externLetRegex.exec(source);
     }
 
+    const externFnRegex = /extern\s+fn\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)\s*(?::\s*([^;]+))?;?/g;
+    let externFnMatch = externFnRegex.exec(source);
+    while (externFnMatch) {
+      externFnsList.push({
+        name: externFnMatch[1],
+        params: externFnMatch[2].trim(),
+        returnType: externFnMatch[3] ? externFnMatch[3].trim() : 'I32',
+      });
+      externFnMatch = externFnRegex.exec(source);
+    }
+
     const code = sourceWithoutExtern
       .replace(externUseRegex, '')
       .replace(externLetRegex, '')
+      .replace(externFnRegex, '')
       .replace(useRegex, '')
       .trim();
-    return { code, deps, externDeps, externLets: externLetsList };
+    return { code, deps, externDeps, externLets: externLetsList, externFns: externFnsList };
   }
 
-  function parseNativeExports(source: string): Map<string, string> {
-    const exports = new Map<string, string>();
+  function parseNativeExports(source: string): {
+    constExports: Map<string, string>;
+    fnExports: Map<string, string>;
+  } {
+    const constExports = new Map<string, string>();
+    const fnExports = new Map<string, string>();
     const tsMorph = require('ts-morph');
     const project = new tsMorph.Project({ useInMemoryFileSystem: true });
     const sourceFile = project.createSourceFile('native.ts', source, { overwrite: true });
@@ -67,10 +85,32 @@ export function interpretAll(
         if (!initializer) {
           throw new Error('native export missing initializer: ' + name);
         }
-        exports.set(name, initializer.getText().trim());
+        constExports.set(name, initializer.getText().trim());
       }
     }
-    return exports;
+    const fnDeclarations = sourceFile.getFunctions();
+    for (const fnDecl of fnDeclarations) {
+      if (!fnDecl.isExported()) continue;
+      const name = fnDecl.getName();
+      if (!name) continue;
+      const body = fnDecl.getBody();
+      if (!body) {
+        throw new Error('native function missing body: ' + name);
+      }
+      const returnStatements = body
+        .getStatements()
+        .filter((stmt: any) => stmt.getKindName() === 'ReturnStatement');
+      if (returnStatements.length !== 1) {
+        throw new Error('native function must have single return: ' + name);
+      }
+      const returnStmt = returnStatements[0];
+      const expr = returnStmt.getExpression();
+      if (!expr) {
+        throw new Error('native function return missing value: ' + name);
+      }
+      fnExports.set(name, expr.getText().trim());
+    }
+    return { constExports, fnExports };
   }
 
   const moduleMap = new Map<string, string>();
@@ -91,6 +131,7 @@ export function interpretAll(
   const parts: string[] = [];
   const externUses: Array<{ module: string; names: string[] }> = [];
   const externLets: Array<{ name: string; type: string }> = [];
+  const externFns: Array<{ name: string; returnType: string; params: string }> = [];
 
   function appendCode(code: string): void {
     if (!code) return;
@@ -112,6 +153,7 @@ export function interpretAll(
     }
     externUses.push(...extracted.externDeps);
     externLets.push(...extracted.externLets);
+    externFns.push(...extracted.externFns);
     appendCode(extracted.code);
   }
 
@@ -119,9 +161,10 @@ export function interpretAll(
     includeModule(input);
   }
 
-  if (!parts.length && externLets.length === 0) return 0;
+  if (!parts.length && externLets.length === 0 && externFns.length === 0) return 0;
 
   const externValueByName = new Map<string, string>();
+  const externFnByName = new Map<string, string>();
   for (const externUse of externUses) {
     const nativeSource = nativeModuleMap.get(externUse.module);
     if (!nativeSource) {
@@ -129,11 +172,17 @@ export function interpretAll(
     }
     const nativeExports = parseNativeExports(nativeSource);
     for (const name of externUse.names) {
-      const value = nativeExports.get(name);
-      if (!value) {
-        throw new Error('native export not found: ' + name);
+      const constValue = nativeExports.constExports.get(name);
+      const fnValue = nativeExports.fnExports.get(name);
+      if (constValue) {
+        externValueByName.set(name, constValue);
+        continue;
       }
-      externValueByName.set(name, value);
+      if (fnValue) {
+        externFnByName.set(name, fnValue);
+        continue;
+      }
+      throw new Error('native export not found: ' + name);
     }
   }
 
@@ -146,6 +195,21 @@ export function interpretAll(
     externPreludeParts.push(
       ['let ', externLet.name, ' : ', externLet.type, ' = ', value, ';'].join('')
     );
+  }
+  for (const externFn of externFns) {
+    const fnBody = externFnByName.get(externFn.name);
+    if (!fnBody) {
+      throw new Error('native export not found: ' + externFn.name);
+    }
+    const signature = [
+      'fn ',
+      externFn.name,
+      '(',
+      externFn.params,
+      ') : ',
+      externFn.returnType,
+    ].join('');
+    externPreludeParts.push([signature, ' => ', fnBody, ';'].join(''));
   }
 
   let combined = '';

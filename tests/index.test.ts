@@ -48,3 +48,14 @@ test('interpretAll supports extern native bindings', () => {
   const nativeConfig = new Map([[['lib'], 'export const myConst = 100;']]);
   expect(interpretAll(['main'], config, nativeConfig)).toBe(100);
 });
+
+test('interpretAll supports extern native functions', () => {
+  const config = new Map([
+    [
+      ['main'],
+      'extern use { get } from lib; extern fn get() : I32; get()',
+    ],
+  ]);
+  const nativeConfig = new Map([[['lib'], 'export function get() { return 100; }']]);
+  expect(interpretAll(['main'], config, nativeConfig)).toBe(100);
+});
