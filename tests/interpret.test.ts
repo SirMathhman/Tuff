@@ -81,6 +81,12 @@ test('interpret supports generic structs', () => {
   ).toBe(100);
 });
 
+test('interpret supports generic structs with type checking', () => {
+  expect(
+    interpret('struct Wrapper<T> { field : T; } let wrapper = Wrapper<Bool> { true }; wrapper.field is I32')
+  ).toBe(0);
+});
+
 test('interpret supports USize type', () => {
   expect(interpret('let x : USize = 100USize; x')).toBe(100);
 });
