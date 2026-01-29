@@ -1,5 +1,5 @@
 type NativeFunctionDef = {
-  kind: 'return-expr' | 'new-array';
+  kind: 'return-expr' | 'new-array' | 'void';
   expr: string;
   paramNames: string[];
 };
@@ -120,15 +120,20 @@ export function interpretAll(
       const returnStatements = body
         .getStatements()
         .filter((stmt: any) => stmt.getKindName() === 'ReturnStatement');
+      const paramNames = fnDecl.getParameters().map((param: any) => param.getName());
+      if (returnStatements.length === 0) {
+        fnExports.set(name, { kind: 'void', expr: '', paramNames });
+        continue;
+      }
       if (returnStatements.length !== 1) {
         throw new Error('native function must have single return: ' + name);
       }
       const returnStmt = returnStatements[0];
       const expr = returnStmt.getExpression();
       if (!expr) {
-        throw new Error('native function return missing value: ' + name);
+        fnExports.set(name, { kind: 'void', expr: '', paramNames });
+        continue;
       }
-      const paramNames = fnDecl.getParameters().map((param: any) => param.getName());
       const kind = expr.getKindName() === 'NewExpression' ? 'new-array' : 'return-expr';
       fnExports.set(name, { kind, expr: expr.getText().trim(), paramNames });
     }
@@ -2112,6 +2117,10 @@ export function interpret(input: string): number {
         arrayElements: elements,
         arrayInitializedCount: 0,
       };
+    }
+
+    if (nativeFn.kind === 'void') {
+      return { value: 0, type: { kind: 'Void' } };
     }
 
     const literalResult = parseLiteralToken(nativeFn.expr);

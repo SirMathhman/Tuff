@@ -79,3 +79,19 @@ test('interpretAll supports generic extern native functions', () => {
   const nativeConfig = new Map([[['lib'], 'export function get<T>() { return 100; }']]);
   expect(interpretAll(['main'], config, nativeConfig)).toBe(100);
 });
+
+test('interpretAll allows unused void native functions', () => {
+  const config = new Map([
+    [
+      ['main'],
+      'extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; 0',
+    ],
+  ]);
+  const nativeConfig = new Map([
+    [
+      ['lib'],
+      'export function createArray<T>(length: number) { return new Array<T>(length); }\nexport function println(content: string) { console.log(content); }',
+    ],
+  ]);
+  expect(interpretAll(['main'], config, nativeConfig)).toBe(0);
+});
