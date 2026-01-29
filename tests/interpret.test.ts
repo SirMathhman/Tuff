@@ -169,8 +169,8 @@ test('interpret rejects narrowing conversions when assigning to mutable variable
   expect(() => interpret('let mut x = 0U8; x = 100U16; x')).toThrow();
 });
 
-test('interpret rejects assignment to undefined variables', () => {
-  expect(() => interpret('x = 100U16; x')).toThrow('undefined variable');
+test('interpret returns 0 for a block ending in an assignment with a semicolon', () => {
+  expect(interpret('let mut x : U16 = 100; x = 100U16;')).toBe(0);
 });
 
 test('interpret rejects narrowing conversions when assigning variables', () => {

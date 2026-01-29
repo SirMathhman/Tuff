@@ -246,8 +246,9 @@ export function interpret(input: string): number {
       }
     }
 
+    const hasTrailingExpression = !!currentStmt.trim();
     // Add final statement
-    if (currentStmt.trim()) {
+    if (hasTrailingExpression) {
       statements.push(currentStmt.trim());
     }
 
@@ -337,7 +338,7 @@ export function interpret(input: string): number {
       }
     }
 
-    if (!finalExpr.trim()) {
+    if (!hasTrailingExpression || !finalExpr.trim()) {
       return { value: 0 };
     }
 
