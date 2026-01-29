@@ -116,7 +116,7 @@ export function interpret(input: string): number {
 
   function evaluateExpression(expr: string, context: Context = new Map()): TypedResult {
     const tokens = expr.match(
-      /true|false|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/<>])|([a-zA-Z_]\w*)/g
+      /true|false|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
     );
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -182,11 +182,22 @@ export function interpret(input: string): number {
       return op === '+' ? left + right : left - right;
     });
 
-    // third pass: handle comparison operators (<, >)
+    // third pass: handle comparison operators (<, <=, >, >=)
     let isBooleanResult = false;
-    applyPass(['<', '>'], (left, op, right) => {
+    applyPass(['<', '<=', '>', '>='], (left, op, right) => {
       isBooleanResult = true;
-      const res = op === '<' ? left < right : left > right;
+      let res = false;
+      if (op === '<') res = left < right;
+      else if (op === '<=') res = left <= right;
+      else if (op === '>') res = left > right;
+      else if (op === '>=') res = left >= right;
+      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+    });
+
+    // fourth pass: handle equality operators (==, !=)
+    applyPass(['==', '!='], (left, op, right) => {
+      isBooleanResult = true;
+      const res = op === '==' ? left === right : left !== right;
       return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
     });
 

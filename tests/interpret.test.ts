@@ -212,6 +212,21 @@ test('interpret supports less-than comparison operator', () => {
   expect(interpret('let x = 1; let y = 0; x < y')).toBe(0);
 });
 
+test('interpret supports all comparison operators', () => {
+  expect(interpret('1 < 2')).toBe(1);
+  expect(interpret('2 < 1')).toBe(0);
+  expect(interpret('1 <= 1')).toBe(1);
+  expect(interpret('1 <= 0')).toBe(0);
+  expect(interpret('2 > 1')).toBe(1);
+  expect(interpret('1 > 2')).toBe(0);
+  expect(interpret('1 >= 1')).toBe(1);
+  expect(interpret('0 >= 1')).toBe(0);
+  expect(interpret('1 == 1')).toBe(1);
+  expect(interpret('1 == 2')).toBe(0);
+  expect(interpret('1 != 2')).toBe(1);
+  expect(interpret('1 != 1')).toBe(0);
+});
+
 test('interpret rejects narrowing conversions when assigning variables', () => {
   expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
 });
