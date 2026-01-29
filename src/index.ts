@@ -1,6 +1,5 @@
 type NativeFunctionDef = {
-  kind: 'return-expr' | 'new-array' | 'void';
-  expr: string;
+  fn: any; // Dynamically created function
   paramNames: string[];
 };
 
@@ -97,48 +96,37 @@ export function interpretAll(
     const tsMorph = require('ts-morph');
     const project = new tsMorph.Project({ useInMemoryFileSystem: true });
     const sourceFile = project.createSourceFile('native.ts', source, { overwrite: true });
-    const statements = sourceFile.getVariableStatements();
-    for (const statement of statements) {
-      if (!statement.isExported()) continue;
-      const declarations = statement.getDeclarations();
-      for (const declaration of declarations) {
-        const name = declaration.getName();
-        const initializer = declaration.getInitializer();
-        if (!initializer) {
-          throw new Error('native export missing initializer: ' + name);
+
+    // Transpile TS to JS
+    const emitOutput = sourceFile.getEmitOutput();
+    const jsCode = emitOutput.getOutputFiles()[0]?.getText() || '';
+
+    // Execute the JS to extract exports
+    const wrapped = ['const exports = {};', jsCode, 'return exports;'].join('\n');
+
+    try {
+      const getExports = new Function(wrapped);
+      const exportsObj = getExports();
+
+      // Collect const exports
+      for (const [key, value] of Object.entries(exportsObj)) {
+        if (typeof value !== 'function') {
+          constExports.set(key, String(value));
         }
-        constExports.set(name, initializer.getText().trim());
       }
+
+      // Collect function exports with their actual function references
+      for (const [key, value] of Object.entries(exportsObj)) {
+        if (typeof value === 'function') {
+          const fn = value as any;
+          const paramNames = Array.from({ length: fn.length }, (_, i) => 'arg' + i);
+          fnExports.set(key, { fn, paramNames });
+        }
+      }
+    } catch (err) {
+      throw new Error('failed to execute native code: ' + (err as Error).message);
     }
-    const fnDeclarations = sourceFile.getFunctions();
-    for (const fnDecl of fnDeclarations) {
-      if (!fnDecl.isExported()) continue;
-      const name = fnDecl.getName();
-      if (!name) continue;
-      const body = fnDecl.getBody();
-      if (!body) {
-        throw new Error('native function missing body: ' + name);
-      }
-      const returnStatements = body
-        .getStatements()
-        .filter((stmt: any) => stmt.getKindName() === 'ReturnStatement');
-      const paramNames = fnDecl.getParameters().map((param: any) => param.getName());
-      if (returnStatements.length === 0) {
-        fnExports.set(name, { kind: 'void', expr: '', paramNames });
-        continue;
-      }
-      if (returnStatements.length !== 1) {
-        throw new Error('native function must have single return: ' + name);
-      }
-      const returnStmt = returnStatements[0];
-      const expr = returnStmt.getExpression();
-      if (!expr) {
-        fnExports.set(name, { kind: 'void', expr: '', paramNames });
-        continue;
-      }
-      const kind = expr.getKindName() === 'NewExpression' ? 'new-array' : 'return-expr';
-      fnExports.set(name, { kind, expr: expr.getText().trim(), paramNames });
-    }
+
     return { constExports, fnExports };
   }
 
@@ -2157,6 +2145,30 @@ export function interpret(input: string): number {
     };
   }
 
+  function inferTypeFromValue(value: any): Type {
+    if (typeof value === 'boolean') {
+      return { kind: 'Bool', width: 1 };
+    }
+    if (typeof value === 'number') {
+      return { kind: 'I', width: 32 };
+    }
+    if (typeof value === 'string') {
+      return { kind: 'Str' };
+    }
+    if (Array.isArray(value)) {
+      const elementType: any =
+        value.length > 0 ? inferTypeFromValue(value[0]) : { kind: 'I', width: 32 };
+      return {
+        kind: 'Array',
+        elementType,
+        length: value.length,
+        initializedCount: value.length,
+      } as Type;
+    }
+    // Default to I32 for unknown types
+    return { kind: 'I', width: 32 };
+  }
+
   function executeNativeFunction(
     nativeFn: NativeFunctionDef,
     args: RuntimeValue[],
@@ -2164,51 +2176,57 @@ export function interpret(input: string): number {
     explicitTypeArgs?: Type[],
     returnTypeStr?: string
   ): RuntimeValue {
-    const resolveParamValue = (name: string): number => {
-      const index = nativeFn.paramNames.indexOf(name);
-      if (index < 0) {
-        throw new Error('native function missing parameter: ' + name);
-      }
-      return args[index]?.value ?? 0;
-    };
+    // Convert RuntimeValue args to plain JS values
+    const jsArgs = args.map((arg) => arg.value);
 
-    if (nativeFn.kind === 'new-array') {
-      const expr = nativeFn.expr;
-      const lengthMatch = expr.match(/^new\s+Array(?:<[^>]+>)?\s*\((.+)\)$/);
-      if (!lengthMatch) {
-        throw new Error('native function unsupported: ' + expr);
+    // Call the actual native function
+    let result: any;
+    try {
+      result = nativeFn.fn(...jsArgs);
+    } catch (err) {
+      throw new Error('native function execution failed: ' + (err as Error).message);
+    }
+
+    // Handle array results
+    if (Array.isArray(result)) {
+      const pointerIsMutable = returnTypeStr?.startsWith('*mut ') ?? false;
+
+      // Determine element type from explicit type args, array contents, or default
+      let elementType: Type;
+      if (explicitTypeArgs && explicitTypeArgs.length > 0) {
+        elementType = explicitTypeArgs[0];
+      } else if (result.length > 0) {
+        elementType = inferTypeFromValue(result[0]);
+      } else {
+        elementType = { kind: 'I', width: 32 };
       }
-      const lengthExpr = lengthMatch[1].trim();
-      const lengthValue = /^[0-9]+$/.test(lengthExpr)
-        ? Number(lengthExpr)
-        : resolveParamValue(lengthExpr);
-      const elementType =
-        explicitTypeArgs && explicitTypeArgs.length > 0
-          ? explicitTypeArgs[0]
-          : ({ kind: 'I', width: 32 } as Type);
-      const elements = new Array<RuntimeValue | undefined>(lengthValue).fill(undefined);
+
+      // For arrays from native code, uninitialized slots should be undefined.
+      // Only wrap values that are not undefined.
+      const elements: Array<RuntimeValue | undefined> = result.map((v) =>
+        v !== undefined ? { value: v, type: inferTypeFromValue(v) } : undefined
+      );
+
+      const initializedCount = result.filter((v: any) => v !== undefined).length;
+
       const arrayType: Type = {
         kind: 'Array',
         elementType,
-        length: lengthValue,
-        initializedCount: 0,
+        length: result.length,
+        initializedCount,
       };
-      const arrayName = ['$native_array_', nativeArrayCounter++].join('');
 
-      // Determine if the pointer to array should be mutable based on the declared return type
-      let pointerIsMutable = false;
-      if (returnTypeStr) {
-        pointerIsMutable = returnTypeStr.startsWith('*mut ');
-      }
-
+      // Store array in context
+      const arrayName = '$native_array_' + nativeArrayCounter++;
       context.set(arrayName, {
         value: 0,
         type: arrayType,
         mutable: pointerIsMutable,
         initialized: true,
         arrayElements: elements,
-        arrayInitializedCount: 0,
+        arrayInitializedCount: initializedCount,
       });
+
       return {
         value: 0,
         type: { kind: 'Ptr', pointsTo: arrayType, mutable: pointerIsMutable },
@@ -2216,15 +2234,12 @@ export function interpret(input: string): number {
       };
     }
 
-    if (nativeFn.kind === 'void') {
-      return { value: 0, type: { kind: 'Void' } };
-    }
-
-    const literalResult = parseLiteralToken(nativeFn.expr);
+    // Handle non-array results
+    const resultType = inferTypeFromValue(result);
     return {
-      value: literalResult.value,
-      type: literalResult.type,
-      stringValue: literalResult.stringValue,
+      value: result,
+      type: resultType,
+      stringValue: typeof result === 'string' ? result : undefined,
     };
   }
 
@@ -3350,7 +3365,6 @@ export function interpret(input: string): number {
             const varExprStr = arrayAssignMatch[4].trim();
 
             let varInfo = ensureVariable(varName, context);
-            let isPointerToMutableArray = false;
             let targetArrayVarName = varName;
 
             // Check if this is a pointer to a mutable array
@@ -3359,7 +3373,6 @@ export function interpret(input: string): number {
               varInfo.type.pointsTo.kind === 'Array' &&
               varInfo.type.mutable
             ) {
-              isPointerToMutableArray = true;
               // Resolve the actual array from the pointer
               if (varInfo.refersTo) {
                 const targetVar = context.get(varInfo.refersTo);
