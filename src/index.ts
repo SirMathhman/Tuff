@@ -20,7 +20,13 @@ export function interpret(input: string): number {
     | { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean }
     | { kind: 'Void' };
 
-  type TypedResult = { value: number; suffix?: Suffix; refersTo?: string };
+  type TypedResult = {
+    value: number;
+    suffix?: Suffix;
+    refersTo?: string;
+    structName?: string;
+    structFields?: Map<string, TypedResult>;
+  };
   type Context = Map<string, TypedResult & { mutable: boolean; initialized: boolean }>;
 
   type FunctionDef = {
@@ -29,6 +35,8 @@ export function interpret(input: string): number {
     body: string;
   };
   type FunctionTable = Map<string, FunctionDef>;
+  type StructInfo = { fields: Array<{ name: string; type: Suffix }> };
+  type StructTable = Map<string, StructInfo>;
 
   // helper to validate a value against a suffix kind/width
   function validateValueAgainstSuffix(val: number, kind: 'U' | 'I' | 'Bool', width: number) {
@@ -188,22 +196,70 @@ export function interpret(input: string): number {
     return { kind: 'Ptr', pointsTo: pointeeSuffix, mutable };
   }
 
+  function parseStructFieldType(typeExpression: string): Suffix | undefined {
+    const trimmed = typeExpression.trim();
+    if (trimmed === 'Bool') return { kind: 'Bool', width: 1 };
+    if (trimmed === 'Void') return { kind: 'Void' };
+    if (trimmed.startsWith('*mut ')) {
+      return parsePointerSuffix(trimmed.substring(5).trim(), true);
+    }
+    if (trimmed.startsWith('*')) {
+      return parsePointerSuffix(trimmed.substring(1).trim(), false);
+    }
+    return tryParseSuffix(trimmed);
+  }
+
   function evaluateAssignmentValue(
     currentValue: number,
     op: string,
     rhs: string,
     context: Context,
-    functions: FunctionTable
+    functions: FunctionTable,
+    structs: StructTable
   ): TypedResult {
     let valueToAssign = rhs;
     if (op !== '=') {
       valueToAssign = currentValue + op[0] + ' ' + rhs;
     }
-    const newValueObj = processExprWithContext(valueToAssign, context, functions);
+    const newValueObj = processExprWithContext(valueToAssign, context, functions, structs);
     if (newValueObj.suffix?.kind === 'Bool') {
       throw new Error('cannot perform arithmetic on booleans');
     }
     return newValueObj;
+  }
+
+  function splitStructArgs(argStr: string): string[] {
+    const parts: string[] = [];
+    let current = '';
+    let depth = 0;
+    for (let i = 0; i < argStr.length; i++) {
+      const ch = argStr[i];
+      if ((ch === '(' || ch === '{' || ch === '[') && depth >= 0) {
+        depth++;
+        current += ch;
+        continue;
+      }
+      if ((ch === ')' || ch === '}' || ch === ']') && depth > 0) {
+        depth--;
+        current += ch;
+        continue;
+      }
+      if ((ch === ';' || ch === ',') && depth === 0) {
+        if (current.trim()) {
+          parts.push(current.trim());
+        }
+        current = '';
+        continue;
+      }
+      current += ch;
+    }
+    if (current.trim()) {
+      parts.push(current.trim());
+    }
+    if (!parts.length && argStr.trim()) {
+      parts.push(argStr.trim());
+    }
+    return parts;
   }
 
   // helper to evaluate an expression with optional variable context
@@ -295,6 +351,9 @@ export function interpret(input: string): number {
     for (let i = 0; i < tokens.length; i += 2) {
       // even indices are operands (literals or variables)
       const opResult = resolveOperand(tokens[i], context);
+      if (opResult.structFields) {
+        throw new Error('cannot use struct value in expression');
+      }
       if (tokens.length > 1 && opResult.suffix?.kind === 'Bool' && hasArithmeticOps) {
         throw new Error('cannot perform arithmetic on booleans');
       }
@@ -421,10 +480,66 @@ export function interpret(input: string): number {
     return { value: finalResult, suffix: finalSuffix || widestSuffix };
   }
 
+  function evaluateStructLiteralAccess(
+    expr: string,
+    context: Context,
+    functions: FunctionTable,
+    structs: StructTable
+  ): TypedResult | null {
+    const trimmed = expr.trim();
+    const structRegex = /^([a-zA-Z_]\w*)\s*\{\s*([\s\S]*?)\s*\}\s*(?:\.\s*([a-zA-Z_]\w*))?$/;
+    const match = trimmed.match(structRegex);
+    if (!match) return null;
+    const structName = match[1];
+    const structDef = structs.get(structName);
+    if (!structDef) throw new Error('struct not defined: ' + structName);
+    const argsBody = match[2];
+    const memberName = match[3];
+    const argParts = splitStructArgs(argsBody);
+    if (argParts.length !== structDef.fields.length) {
+      throw new Error(
+        'struct ' +
+          structName +
+          ' expects ' +
+          structDef.fields.length +
+          ' values, got ' +
+          argParts.length
+      );
+    }
+    const fieldValues = new Map<string, TypedResult>();
+    for (let i = 0; i < structDef.fields.length; i++) {
+      const fieldDef = structDef.fields[i];
+      const exprPart = argParts[i];
+      const fieldValue = processExprWithContext(exprPart, context, functions, structs);
+      validateNarrowing(fieldValue.suffix, fieldDef.type);
+      if (
+        fieldDef.type.kind !== 'Ptr' &&
+        fieldDef.type.kind !== 'Void' &&
+        'width' in fieldDef.type
+      ) {
+        validateValueAgainstSuffix(fieldValue.value, fieldDef.type.kind, fieldDef.type.width);
+      }
+      fieldValues.set(fieldDef.name, fieldValue);
+    }
+    if (memberName) {
+      const memberValue = fieldValues.get(memberName);
+      if (!memberValue) {
+        throw new Error('struct ' + structName + ' has no field: ' + memberName);
+      }
+      return memberValue;
+    }
+    return {
+      value: 0,
+      structName,
+      structFields: fieldValues,
+    };
+  }
+
   function evaluateIfExpression(
     expr: string,
     context: Context,
-    _functions: FunctionTable
+    _functions: FunctionTable,
+    structs: StructTable
   ): TypedResult | null {
     const trimmed = expr.trim();
     if (!trimmed.startsWith('if')) {
@@ -530,12 +645,12 @@ export function interpret(input: string): number {
       throw new Error('if false branch cannot be empty');
     }
 
-    const conditionResult = processExprWithContext(conditionExpr, context, _functions);
+    const conditionResult = processExprWithContext(conditionExpr, context, _functions, structs);
     if (conditionResult.suffix?.kind !== 'Bool') {
       throw new Error('if condition must be boolean');
     }
-    const trueResult = processExprWithContext(trueBranch, context, _functions);
-    const falseResult = processExprWithContext(falseBranch, context, _functions);
+    const trueResult = processExprWithContext(trueBranch, context, _functions, structs);
+    const falseResult = processExprWithContext(falseBranch, context, _functions, structs);
 
     const normalizedSuffix = (res: TypedResult): Suffix => res.suffix || { kind: 'I', width: 32 };
     const trueSuffix = normalizedSuffix(trueResult);
@@ -551,11 +666,38 @@ export function interpret(input: string): number {
   function processExprWithContext(
     expr: string,
     context: Context,
-    functions: FunctionTable
+    functions: FunctionTable,
+    structs: StructTable
   ): TypedResult {
-    const ifResult = evaluateIfExpression(expr, context, functions);
+    const structResult = evaluateStructLiteralAccess(expr, context, functions, structs);
+    if (structResult) {
+      return structResult;
+    }
+    const ifResult = evaluateIfExpression(expr, context, functions, structs);
     if (ifResult !== null) {
       return ifResult;
+    }
+
+    // Check for struct field access through variable: variableName.fieldName
+    const fieldAccessRegex = /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)$/;
+    const fieldAccessMatch = expr.trim().match(fieldAccessRegex);
+    if (fieldAccessMatch) {
+      const varName = fieldAccessMatch[1];
+      const fieldName = fieldAccessMatch[2];
+      if (!context.has(varName)) {
+        throw new Error('undefined variable: ' + varName);
+      }
+      const varInfo = context.get(varName)!;
+      if (!varInfo.structFields) {
+        throw new Error('variable ' + varName + ' is not a struct');
+      }
+      const fieldValue = varInfo.structFields.get(fieldName);
+      if (!fieldValue) {
+        throw new Error(
+          'struct ' + (varInfo.structName || 'unknown') + ' has no field: ' + fieldName
+        );
+      }
+      return fieldValue;
     }
 
     // Check for function calls: name() or name(arg1, arg2, ...)
@@ -600,7 +742,7 @@ export function interpret(input: string): number {
 
         // Evaluate each argument
         for (const argPart of argParts) {
-          const argValue = processExprWithContext(argPart, context, functions);
+          const argValue = processExprWithContext(argPart, context, functions, structs);
           args.push(argValue);
         }
       }
@@ -638,7 +780,7 @@ export function interpret(input: string): number {
       }
 
       // Evaluate function body
-      const bodyResult = processBlock(fnDef.body, fnContext, functions);
+      const bodyResult = processBlock(fnDef.body, fnContext, functions, structs);
       const returnValue = bodyResult.result;
 
       if (fnDef.returnType) {
@@ -705,7 +847,7 @@ export function interpret(input: string): number {
 
       // Check if this is a block with expressions or assignments
       if (openChar === '{') {
-        const blockResult = processBlock(content, context, functions);
+        const blockResult = processBlock(content, context, functions, structs);
         res = blockResult.result;
         sawBlockReplacement = true;
         // Update parent context with changes from block
@@ -716,7 +858,7 @@ export function interpret(input: string): number {
         }
       } else {
         // Regular parenthesization - just evaluate the contents
-        res = processExprWithContext(content, context, functions);
+        res = processExprWithContext(content, context, functions, structs);
       }
 
       let replacement = res.value.toString();
@@ -752,7 +894,8 @@ export function interpret(input: string): number {
   function processBlock(
     blockContent: string,
     parentContext: Context,
-    functions: FunctionTable
+    functions: FunctionTable,
+    structs: StructTable
   ): { result: TypedResult; context: Context; declaredInThisBlock: Set<string> } {
     const context = new Map(parentContext);
     const declaredInThisBlock = new Set<string>();
@@ -771,7 +914,6 @@ export function interpret(input: string): number {
         bracketDepth--;
         currentStmt += ch;
       } else if (ch === ';' && bracketDepth === 0) {
-        // Real statement boundary
         if (currentStmt.trim()) {
           statements.push(currentStmt.trim());
         }
@@ -782,7 +924,6 @@ export function interpret(input: string): number {
     }
 
     const hasTrailingExpression = !!currentStmt.trim();
-    // Add final statement
     if (hasTrailingExpression) {
       statements.push(currentStmt.trim());
     }
@@ -790,7 +931,8 @@ export function interpret(input: string): number {
     const structNames = new Set<string>();
     let finalExpr = '';
     let lastProcessedValue: TypedResult | undefined;
-    for (const stmt of statements) {
+    for (let stmtIndex = 0; stmtIndex < statements.length; stmtIndex++) {
+      const stmt = statements[stmtIndex];
       if (stmt.startsWith('fn ')) {
         const fnMatch = stmt.match(
           /^fn\s+([a-zA-Z_]\w*)\s*\(\s*(.*?)\s*\)\s*(?::\s*([^=]+?))?\s*=>\s*(.+)$/
@@ -838,20 +980,41 @@ export function interpret(input: string): number {
           body: fnBody,
         });
       } else if (stmt.startsWith('struct ')) {
-        const handleStruct = (structStmt: string) => {
-          const trimmed = structStmt.trim();
-          if (!trimmed) return;
-          const structMatch = trimmed.match(/^struct\s+([a-zA-Z_]\w*)\s*\{\s*\}$/);
+        let remainder = stmt;
+        while (remainder.startsWith('struct ')) {
+          const structMatch = remainder.match(
+            /^struct\s+([a-zA-Z_]\w*)\s*\{\s*([\s\S]*?)\s*\}\s*(?:;\s*)?/
+          );
           if (!structMatch) throw new Error('invalid struct declaration');
           const structName = structMatch[1];
-          if (structNames.has(structName)) {
+          if (structs.has(structName) || structNames.has(structName)) {
             throw new Error('struct already defined: ' + structName);
           }
           structNames.add(structName);
-        };
-        const parts = stmt.split(/(?=struct\s+)/);
-        for (const part of parts) {
-          handleStruct(part);
+          const fieldNames = new Set<string>();
+          const fieldDefs: Array<{ name: string; type: Suffix }> = [];
+          const fields = structMatch[2].split(';');
+          for (const field of fields) {
+            const fieldTrimmed = field.trim();
+            if (!fieldTrimmed) continue;
+            const fieldMatch = fieldTrimmed.match(/^([a-zA-Z_]\w*)\s*:\s*([\s\S]+)$/);
+            if (!fieldMatch) throw new Error('invalid struct field: ' + fieldTrimmed);
+            const fieldName = fieldMatch[1];
+            if (fieldNames.has(fieldName)) {
+              throw new Error('duplicate struct field: ' + fieldName);
+            }
+            const fieldType = parseStructFieldType(fieldMatch[2]);
+            if (!fieldType) {
+              throw new Error('invalid struct field type: ' + fieldMatch[2].trim());
+            }
+            fieldNames.add(fieldName);
+            fieldDefs.push({ name: fieldName, type: fieldType });
+          }
+          structs.set(structName, { fields: fieldDefs });
+          remainder = remainder.substring(structMatch[0].length).trim();
+        }
+        if (remainder) {
+          statements.splice(stmtIndex + 1, 0, remainder);
         }
         continue;
       } else if (stmt.startsWith('let ')) {
@@ -873,14 +1036,19 @@ export function interpret(input: string): number {
         let initialized = false;
         let refersTo: string | undefined;
 
+        let structName: string | undefined;
+        let structFields: Map<string, TypedResult> | undefined;
+
         if (varExprStr !== undefined) {
-          const varValueObj = processExprWithContext(varExprStr, context, functions);
+          const varValueObj = processExprWithContext(varExprStr, context, functions, structs);
           if (varValueObj.suffix?.kind === 'Void') {
             throw new Error('void function cannot return a value');
           }
           varValue = varValueObj.value;
           valSuffix = varValueObj.suffix;
           refersTo = varValueObj.refersTo;
+          structName = varValueObj.structName;
+          structFields = varValueObj.structFields;
           initialized = true;
         }
 
@@ -916,6 +1084,8 @@ export function interpret(input: string): number {
           mutable: isMutable,
           initialized: initialized,
           refersTo: refersTo,
+          structName: structName,
+          structFields: structFields,
         };
         context.set(varName, varInfo);
         declaredInThisBlock.add(varName);
@@ -952,13 +1122,13 @@ export function interpret(input: string): number {
 
         // Execute while loop
         while (true) {
-          const condObj = processExprWithContext(conditionExpr, context, functions);
+          const condObj = processExprWithContext(conditionExpr, context, functions, structs);
           if (condObj.suffix?.kind !== 'Bool') {
             throw new Error('while condition must be boolean');
           }
           if (!condObj.value) break; // condition is false
           // Execute body as a block statement to update context
-          const bodyBlockResult = processBlock(bodyExpr, context, functions);
+          const bodyBlockResult = processBlock(bodyExpr, context, functions, structs);
           // Merge changes from body back into current context
           for (const [key, value] of bodyBlockResult.context) {
             if (context.has(key)) {
@@ -997,7 +1167,8 @@ export function interpret(input: string): number {
             op,
             varExprStr,
             context,
-            functions
+            functions,
+            structs
           );
           const newValue = newValueObj.value;
           const newValSuffix = newValueObj.suffix;
@@ -1045,7 +1216,8 @@ export function interpret(input: string): number {
             op,
             varExprStr,
             context,
-            functions
+            functions,
+            structs
           );
           const newValue = newValueObj.value;
           const newValSuffix = newValueObj.suffix;
@@ -1082,7 +1254,7 @@ export function interpret(input: string): number {
     }
 
     return {
-      result: processExprWithContext(finalExpr, context, functions),
+      result: processExprWithContext(finalExpr, context, functions, structs),
       context,
       declaredInThisBlock,
     };
@@ -1091,7 +1263,8 @@ export function interpret(input: string): number {
   // Check for top-level code (which can be a single expression or multiple statements)
   try {
     const functions: FunctionTable = new Map();
-    return processBlock(s, new Map(), functions).result.value;
+    const structs: StructTable = new Map();
+    return processBlock(s, new Map(), functions, structs).result.value;
   } catch (e) {
     if (
       e instanceof Error &&

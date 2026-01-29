@@ -1,68 +1,82 @@
 # GitHub Copilot Instructions — Tuff ⚡️
 
 ## Purpose
-Provide brief, actionable guidance for AI coding agents working in this repository so they can be productive immediately.
+Tuff is a **TypeScript DSL interpreter** that parses and evaluates a custom language with typed numeric literals, variables, control flow, and type safety. AI agents should understand its type system and recursive evaluation architecture.
 
 ---
 
-## Quickstart (essential commands) ✅
-- Install deps: `pnpm install`
-- Run tests: `pnpm test` (Jest with `ts-jest` preset; tests live under `tests/`)
-- Type-check only: `pnpm typecheck` (runs `tsc --noEmit`)
-- Build for production: `pnpm build` (`tsc` → outputs to `dist/`)
-- Run dev without build: `pnpm dev` (`ts-node src/index.ts`)
-- Lint: `pnpm lint` (ESLint flat config in `eslint.config.cjs`)
-- Format: `pnpm format` (Prettier)
+## Quickstart 🚀
+- Install: `pnpm install`
+- Test: `pnpm test` (Jest + ts-jest; tests in `tests/`)
+- Dev: `pnpm dev` (ts-node, no build needed)
+- Build: `pnpm build` (`tsc` → `dist/`)
+- Lint/format: `pnpm lint --fix` and `pnpm format`
+- Type-check: `pnpm typecheck`
 
 ---
 
-## High-level architecture & intent 💡
-- This is a single-package TypeScript library/project.
-- Source: `src/` (rootDir in `tsconfig.json`). Compiled output written to `dist/` (outDir).
-- `package.json` points `main` to `dist/index.js` and `types` to `dist/index.d.ts`.
-- Tests reside in `tests/` and use `ts-jest` so they run directly against TypeScript sources.
-- Keep the code focused, small and export-focused. Example: `src/index.ts` exports `add(a: number, b: number): number`.
+## Core Architecture 💡
+The heart of Tuff is the **`interpret(input: string): number`** function (`src/index.ts`). It evaluates a domain-specific language supporting:
+
+### Type System
+- **Suffixed numeric types**: `U8`, `U16`, `U32`, `U64` (unsigned) and `I8`, `I16`, `I32`, `I64` (signed)
+- **Bool type**: `true`/`false` (values 0/1, not convertible to/from numbers)
+- **Type narrowing**: Assigning a wider type to narrower target throws error (e.g., `100U16` → `U8`)
+- **Untyped literals default to I32**: e.g., `let x = 100;` infers `I32` not `U8`
+
+### Evaluation Features
+- **Operator precedence**: `*/` before `+-` before comparisons before `&&` before `||`
+- **Variable scoping**: `let x = 1;` in blocks doesn't leak; contexts merge on exit
+- **Mutability**: `let mut x = 0; x = 5;` allowed; immutable `let x = 0; x = 5;` throws
+- **Control flow**: `if (bool_expr) expr1 else expr2` and `while (bool_expr) body` with type validation
+- **Compound ops**: `x += 1`, `x -= 1`, `x *= 2`, `x /= 2` (forbidden on Bools)
+
+### Recursive Evaluation Pattern
+- `processExprWithContext()` — top-level entry; handles `if`, parentheses, braces, blocks
+- `processBlock()` — statement processing; separates declarations, assignments, loops, final expression
+- `evaluateExpression()` — core operator evaluation with precedence handling
+
+**Key insight**: Type validation happens _during_ evaluation, not before. Check `tests/interpret.test.ts` for 100+ edge cases.
 
 ---
 
-## Developer workflows & patterns 🔧
-- When adding runtime code, put it under `src/` and export from `src/index.ts` if it should be part of the public API.
-- Add unit tests to `tests/` using the same import path pattern as existing tests, e.g.:
-  - `import { add } from '../src/index';`
-- Prefer pure, small functions with explicit TypeScript types (project is `strict: true`).
-- Use `pnpm dev` for quick manual testing; run `pnpm build` before `pnpm start` in production flows.
+## Developer Workflows 🔧
+- **Adding behavior**: Extend `interpret()` directly (no separate modules needed).
+- **Testing edge cases**: Each test in `tests/interpret.test.ts` documents a validation rule. Before modifying type or operator logic, read nearby tests.
+- **Strict mode**: `tsconfig.json` enforces `strict: true`; all types explicit. Function signatures must declare return types.
+- **Quick iteration**: `pnpm dev` runs `ts-node src/index.ts` directly without rebuild.
 
 ---
 
-## Linting, formatting & pre-commit hooks 🧹
-- ESLint configuration: `eslint.config.cjs` (flat config using `@typescript-eslint` + `prettier`).
-- Ignore `dist` and `node_modules` in linting.
-- Husky + lint-staged are configured: pre-commit runs `pnpm lint --fix` and `pnpm format` on staged `src/**/*.{ts,tsx}`.
-- Important: **Always commit final changes _without_ using `--no-verify`.** Respect pre-commit hooks — fix any errors reported by Husky or lint-staged before committing.
+## Common Patterns & Gotchas ⚠️
+- **Type suffix case-sensitivity**: `U8` valid, `u8` throws `invalid suffix`.
+- **Bool isolation**: `true && 100` → error; `1 == 1` → Bool (1), `100 == 100` → Bool (1).
+- **Default type**: Bare `100` in `let x = 100;` is `I32`, not unsigned; `let x = 100U8;` is `U8`.
+- **Operator precedence**: Multiplication binds tighter than addition; use parens to override.
+- **Empty blocks return 0**: `{ let x = 1; }` evaluates to 0; trailing expressions matter: `{ let x = 1; x }` → 1.
+- **While loops don't return values**: `while (x < 10) x += 1;` is a statement; capture result after: `let mut x = 0; while (x < 10) x += 1; x`.
 
 ---
 
-## Tests & CI notes 🧪
-- Jest preset: `ts-jest`; test root is `tests/` (see `jest.config.cjs`).
-- Use `pnpm test` or `npx jest -t "pattern"` to run specific tests.
-- No GitHub Actions CI workflow is present in the repo — add one if you expect remote runs.
+## Testing & CI 🧪
+- Jest uses `@swc/jest` (faster than ts-jest); run with `pnpm test`.
+- Filter tests: `pnpm test -- -t "interprets addition"` or `pnpm test interpret.test.ts`.
+- Tests import directly from `../src/index` (no build needed).
+- No GitHub Actions workflow in repo; add if automated testing on push needed.
 
 ---
 
-## Common pitfalls & tips ⚠️
-- Remember to run `pnpm build` before relying on `dist/` (e.g., `node dist/index.js`).
-- Type-checking is enforced by `pnpm typecheck` — use it when making type-heavy changes.
-- ESLint warns on unused vars; arguments prefixed with `_` are ignored by rule (`argsIgnorePattern: '^_'`).
+## Linting & Pre-commit 🧹
+- ESLint (flat config, `@typescript-eslint` + `prettier`) enforces Prettier formatting.
+- Husky + lint-staged auto-fix on commit; **always commit without `--no-verify`** and fix errors before committing.
+- Unused variable warnings ignored if prefixed with `_` (e.g., `_unused`).
 
 ---
 
-## Files to check when making changes 🔍
-- `README.md` — high-level project overview and quick commands
-- `src/` — source code
-- `tests/` — unit tests
-- `tsconfig.json` — compiler options (target, module, rootDir, outDir)
-- `jest.config.cjs` — test runner config
-- `eslint.config.cjs` — linting rules
-- `package.json` — scripts and devDependencies
+## Key Files 🗂️
+- `src/index.ts` — `add()` stub + 800-line `interpret()` implementation with type system and recursive evaluation
+- `tests/interpret.test.ts` — 100+ test cases defining type/operator/control-flow rules and edge cases
+- `tsconfig.json` — strict mode, ES2020 target, CommonJS output
+- `jest.config.cjs` — SWC transformer (faster than ts-jest), `tests/` root
 
 ---

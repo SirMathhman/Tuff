@@ -22,6 +22,22 @@ test('interpret rejects duplicate struct declarations', () => {
   ).toThrow('struct already defined: Empty');
 });
 
+test('interpret rejects duplicate struct fields', () => {
+  expect(() =>
+    interpret('struct Empty { x : I32; x : I32; }')
+  ).toThrow('duplicate struct field: x');
+});
+
+test('interpret allows structs with multiple fields', () => {
+  expect(interpret('struct Point { x : I32; y : I32; }')).toBe(0);
+});
+
+test('interpret accesses struct field through variable', () => {
+  expect(
+    interpret('struct Wrapper { x : I32; } let value : Wrapper = Wrapper { 100 }; value.x')
+  ).toBe(100);
+});
+
 test('interpret rejects calling a non-function variable', () => {
   expect(() => interpret('let x = 100; x()')).toThrow('function not found: x');
 });
