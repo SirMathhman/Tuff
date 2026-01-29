@@ -16,6 +16,16 @@ test('interpret ignores struct declarations', () => {
   expect(interpret('struct Empty {}')).toBe(0);
 });
 
+test('interpret rejects duplicate struct declarations', () => {
+  expect(() =>
+    interpret('struct Empty {} struct Empty {}')
+  ).toThrow('struct already defined: Empty');
+});
+
+test('interpret rejects calling a non-function variable', () => {
+  expect(() => interpret('let x = 100; x()')).toThrow('function not found: x');
+});
+
 test('interpret parses integer numeric literals with unsigned suffixes', () => {
   expect(interpret('100U8')).toBe(100);
 });

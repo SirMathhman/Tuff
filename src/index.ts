@@ -561,6 +561,9 @@ export function interpret(input: string): number {
     // Check for function calls: name() or name(arg1, arg2, ...)
     const functionCallRegex = /^([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/;
     const callMatch = expr.trim().match(functionCallRegex);
+    if (callMatch && !functions.has(callMatch[1])) {
+      throw new Error('function not found: ' + callMatch[1]);
+    }
     if (callMatch && functions.has(callMatch[1])) {
       const fnName = callMatch[1];
       const argsStr = callMatch[2];
@@ -784,6 +787,7 @@ export function interpret(input: string): number {
       statements.push(currentStmt.trim());
     }
 
+    const structNames = new Set<string>();
     let finalExpr = '';
     let lastProcessedValue: TypedResult | undefined;
     for (const stmt of statements) {
@@ -834,8 +838,20 @@ export function interpret(input: string): number {
           body: fnBody,
         });
       } else if (stmt.startsWith('struct ')) {
-        if (!/^struct\s+[a-zA-Z_]\w*\s*\{\s*\}$/.test(stmt)) {
-          throw new Error('invalid struct declaration');
+        const handleStruct = (structStmt: string) => {
+          const trimmed = structStmt.trim();
+          if (!trimmed) return;
+          const structMatch = trimmed.match(/^struct\s+([a-zA-Z_]\w*)\s*\{\s*\}$/);
+          if (!structMatch) throw new Error('invalid struct declaration');
+          const structName = structMatch[1];
+          if (structNames.has(structName)) {
+            throw new Error('struct already defined: ' + structName);
+          }
+          structNames.add(structName);
+        };
+        const parts = stmt.split(/(?=struct\s+)/);
+        for (const part of parts) {
+          handleStruct(part);
         }
         continue;
       } else if (stmt.startsWith('let ')) {
