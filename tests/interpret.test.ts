@@ -60,6 +60,10 @@ test('interpret rejects array element type mismatch', () => {
   expect(() => interpret('let array : [I32; 1; 1] = [true]; array[0]')).toThrow();
 });
 
+test('interpret rejects array initializer with too few elements', () => {
+  expect(() => interpret('let array : [I32; 3; 3] = [1, 2]')).toThrow();
+});
+
 test('interpret allows assigning into uninitialized arrays before passing', () => {
   expect(
     interpret(
