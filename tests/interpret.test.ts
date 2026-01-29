@@ -58,3 +58,7 @@ test('interpret rejects unsupported suffixes and invalid widths', () => {
 test('interpret adds two U8 literals', () => {
   expect(interpret('1U8 + 2U8')).toBe(3);
 });
+
+test('interpret adds mixed literal and U8 literal', () => {
+  expect(interpret('1 + 2U8')).toBe(3);
+});
