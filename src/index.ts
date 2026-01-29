@@ -374,6 +374,30 @@ export function buildReplInputs(rootDir: string): {
 }
 
 /**
+ * Compile Tuff code to JavaScript.
+ * Takes a Tuff program as input and returns transpiled JavaScript code.
+ * @param input - Tuff source code
+ * @returns JavaScript code
+ */
+export function compile(input: string): string {
+  // TODO: Implement compilation to JavaScript
+  // For now, stub returns empty string
+  return '';
+}
+
+/**
+ * Execute compiled JavaScript code.
+ * Takes JavaScript code as input and executes it, returning a numeric result.
+ * @param jsCode - JavaScript code to execute
+ * @returns Numeric result from execution
+ */
+export function execute(jsCode: string): number {
+  // TODO: Implement execution using Function or eval
+  // For now, stub returns 0
+  return 0;
+}
+
+/**
  * Interpret the given input string and produce a numeric result.
  * This function supports numeric literals (integers and decimals), optionally
  * followed by a type suffix such as `U8` (unsigned 8-bit). Examples:
