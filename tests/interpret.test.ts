@@ -732,3 +732,13 @@ test('interpret supports singleton pointer identity equality', () => {
 test('interpret distinguishes pointers to different variables', () => {
   expect(interpret('let x = 0; let y = 0; &x == &y')).toBe(0);
 });
+
+test('interpret supports char literals and returns UTF-8 code', () => {
+  expect(interpret("let x : Char = 'a'; x")).toBe(97);
+});
+
+test('interpret supports various char literals', () => {
+  expect(interpret("'A'")).toBe(65);
+  expect(interpret("'z'")).toBe(122);
+  expect(interpret("'0'")).toBe(48);
+});

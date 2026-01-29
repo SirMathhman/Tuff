@@ -1,2 +1,1 @@
-object MySingleton { let value = 42; }
-MySingleton.value
+let x : Char = 'a'; x

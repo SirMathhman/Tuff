@@ -23,6 +23,7 @@ export function interpret(input: string): number {
     | { kind: 'Generic'; name: string }
     | { kind: 'Tuple'; elements: Type[] }
     | { kind: 'This' }
+    | { kind: 'Char' }
     | { kind: 'FnPtr'; paramTypes: Type[]; returnType: Type };
 
   type RuntimeValue = {
@@ -110,6 +111,9 @@ export function interpret(input: string): number {
     }
     if (suffix.kind === 'This') {
       return 'This';
+    }
+    if (suffix.kind === 'Char') {
+      return 'Char';
     }
     if (suffix.kind === 'FnPtr') {
       const paramStrs = suffix.paramTypes.map((p) => suffixKind(p));
@@ -324,6 +328,14 @@ export function interpret(input: string): number {
     if (t === 'true') return { value: 1, type: { kind: 'Bool', width: 1 } };
     if (t === 'false') return { value: 0, type: { kind: 'Bool', width: 1 } };
 
+    // Check for char literals: 'a', 'A', etc.
+    const charMatch = t.match(/^'(.)'\s*$/);
+    if (charMatch) {
+      const char = charMatch[1];
+      const charCode = char.charCodeAt(0);
+      return { value: charCode, type: { kind: 'Char' } };
+    }
+
     const m = t.match(/^([+-]?\d+(?:\.\d+)?)(?:([A-Za-z]+\d*))?$/);
     if (!m) throw new Error('invalid literal');
     const n = Number(m[1]);
@@ -473,6 +485,7 @@ export function interpret(input: string): number {
     if (alias) return alias;
     if (trimmed === 'Bool') return { kind: 'Bool', width: 1 };
     if (trimmed === 'Void') return { kind: 'Void' };
+    if (trimmed === 'Char') return { kind: 'Char' };
     if (trimmed === 'This') return { kind: 'This' };
     if (trimmed === 'USize') return { kind: 'U', width: 64 };
 
@@ -854,7 +867,7 @@ export function interpret(input: string): number {
     functions: FunctionTable
   ): RuntimeValue {
     const tokens = expr.match(
-      /true|false|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
+      /true|false|'.'|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
     );
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
