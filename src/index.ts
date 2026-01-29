@@ -197,11 +197,32 @@ export function interpret(input: string): number {
       if (!source || source.kind !== 'FnPtr') {
         throw new Error('cannot convert non-function to function pointer type');
       }
-      if (source.paramTypes.length !== target.paramTypes.length) {
+      // Allow conversion from closure (N params) to function pointer with explicit context (N+1 params)
+      // where the extra first param is *This
+      let sourceOffset = 0;
+      let targetOffset = 0;
+      if (
+        target.paramTypes.length === source.paramTypes.length + 1 &&
+        target.paramTypes[0].kind === 'Ptr' &&
+        target.paramTypes[0].pointsTo.kind === 'This'
+      ) {
+        // Skip the first *This param in target when comparing
+        targetOffset = 1;
+      } else if (source.paramTypes.length !== target.paramTypes.length) {
         throw new Error('function pointer parameter length mismatch');
       }
-      for (let i = 0; i < target.paramTypes.length; i++) {
-        if (!typeEqualsForValidation(source.paramTypes[i], target.paramTypes[i])) {
+      const effectiveTargetParams = target.paramTypes.length - targetOffset;
+      const effectiveSourceParams = source.paramTypes.length - sourceOffset;
+      if (effectiveSourceParams !== effectiveTargetParams) {
+        throw new Error('function pointer parameter length mismatch');
+      }
+      for (let i = 0; i < effectiveSourceParams; i++) {
+        if (
+          !typeEqualsForValidation(
+            source.paramTypes[i + sourceOffset],
+            target.paramTypes[i + targetOffset]
+          )
+        ) {
           throw new Error('function pointer parameter type mismatch');
         }
       }
@@ -443,15 +464,17 @@ export function interpret(input: string): number {
   }
 
   function tryParseSuffix(typeStr: string): Type | undefined {
-    const alias = resolveTypeAlias(typeStr.trim());
+    const trimmed = typeStr.trim();
+    const alias = resolveTypeAlias(trimmed);
     if (alias) return alias;
-    if (typeStr === 'Bool') return { kind: 'Bool', width: 1 };
-    if (typeStr === 'Void') return { kind: 'Void' };
-    if (typeStr === 'This') return { kind: 'This' };
-    if (typeStr === 'USize') return { kind: 'U', width: 64 };
+    if (trimmed === 'Bool') return { kind: 'Bool', width: 1 };
+    if (trimmed === 'Void') return { kind: 'Void' };
+    if (trimmed === 'This') return { kind: 'This' };
+    if (trimmed === 'USize') return { kind: 'U', width: 64 };
 
-    // Parse function pointer type: (param1, param2, ...) => returnType
-    const fnPtrMatch = typeStr.match(/^\s*\((.*?)\)\s*=>\s*(.+)$/);
+    // Parse function pointer type with optional leading *: *?(param1, param2, ...) => returnType
+    // The leading * is optional and just indicates "function pointer" explicitly
+    const fnPtrMatch = trimmed.match(/^\s*\*?\s*\((.*?)\)\s*=>\s*(.+)$/);
     if (fnPtrMatch) {
       const paramsStr = fnPtrMatch[1].trim();
       const returnTypeStr = fnPtrMatch[2].trim();
@@ -460,7 +483,18 @@ export function interpret(input: string): number {
       if (paramsStr) {
         const paramParts = splitTopLevelComma(paramsStr);
         for (const paramPart of paramParts) {
-          const paramType = tryParseSuffix(paramPart.trim());
+          let paramType: Type | undefined;
+          const paramTrimmed = paramPart.trim();
+          // Handle pointer params like *outer where outer is assumed to be This
+          if (paramTrimmed.startsWith('*')) {
+            const pointeeStr = paramTrimmed.substring(1).trim();
+            const pointeeType = tryParseSuffix(pointeeStr);
+            if (pointeeType) {
+              paramType = { kind: 'Ptr', pointsTo: pointeeType, mutable: false };
+            }
+          } else {
+            paramType = tryParseSuffix(paramTrimmed);
+          }
           if (!paramType) return undefined;
           paramTypes.push(paramType);
         }
@@ -516,9 +550,16 @@ export function interpret(input: string): number {
     }
 
     // Parse generic type parameter (e.g., T, U, V)
-    const genericMatch = typeStr.match(/^([A-Z][a-zA-Z0-9_]*)$/);
+    const genericMatch = trimmed.match(/^([A-Z][a-zA-Z0-9_]*)$/);
     if (genericMatch) {
       return { kind: 'Generic', name: genericMatch[1] };
+    }
+
+    // Lowercase identifiers (like function names) are treated as This
+    // This allows `let x : outer = outer(...)` where outer returns this
+    const lowercaseIdentMatch = trimmed.match(/^([a-z][a-zA-Z0-9_]*)$/);
+    if (lowercaseIdentMatch) {
+      return { kind: 'This' };
     }
 
     return undefined;
@@ -593,10 +634,11 @@ export function interpret(input: string): number {
     return derived;
   }
 
-  function buildBoundThisFunctionValue(
+  function buildThisFunctionValue(
     baseValue: RuntimeValue,
     fieldName: string,
-    functions: FunctionTable
+    functions: FunctionTable,
+    bound: boolean = false
   ): RuntimeValue | null {
     if (baseValue.type?.kind !== 'This') {
       return null;
@@ -605,7 +647,26 @@ export function interpret(input: string): number {
       return null;
     }
     const fnValue = buildFunctionPointerValue(fieldName, functions);
-    return { ...fnValue, boundThis: snapshotRuntimeValue(baseValue) };
+    if (bound) {
+      return { ...fnValue, boundThis: snapshotRuntimeValue(baseValue) };
+    }
+    return fnValue;
+  }
+
+  function buildBoundThisFunctionValue(
+    baseValue: RuntimeValue,
+    fieldName: string,
+    functions: FunctionTable
+  ): RuntimeValue | null {
+    return buildThisFunctionValue(baseValue, fieldName, functions, true);
+  }
+
+  function buildUnboundFunctionPointerValue(
+    baseValue: RuntimeValue,
+    fieldName: string,
+    functions: FunctionTable
+  ): RuntimeValue | null {
+    return buildThisFunctionValue(baseValue, fieldName, functions, false);
   }
 
   function evaluateAssignmentValue(
@@ -1353,9 +1414,34 @@ export function interpret(input: string): number {
     const fnDef = functions.get(fnName);
     if (!fnDef) throw new Error('function not found: ' + fnName);
 
-    if (args.length !== fnDef.params.length) {
+    // Handle closure-style calls: if we have one extra argument that's a *This pointer,
+    // use it to derive the context for the call
+    let effectiveArgs = args;
+    let derivedContext = context;
+    if (
+      args.length === fnDef.params.length + 1 &&
+      args[0].type?.kind === 'Ptr' &&
+      args[0].type.pointsTo.kind === 'This'
+    ) {
+      // The first arg is a pointer to This - use its target as context
+      const ptrArg = args[0];
+      if (ptrArg.refersTo) {
+        const targetVar = context.get(ptrArg.refersTo);
+        if (targetVar?.type?.kind === 'This' && targetVar.structFields) {
+          derivedContext = buildContextFromThisValue(targetVar, context);
+        }
+      }
+      effectiveArgs = args.slice(1);
+    }
+
+    if (effectiveArgs.length !== fnDef.params.length) {
       throw new Error(
-        'function ' + fnName + ' expects ' + fnDef.params.length + ' arguments, got ' + args.length
+        'function ' +
+          fnName +
+          ' expects ' +
+          fnDef.params.length +
+          ' arguments, got ' +
+          effectiveArgs.length
       );
     }
 
@@ -1372,11 +1458,11 @@ export function interpret(input: string): number {
     };
 
     const fnContext = new Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>(
-      context
+      derivedContext
     );
     for (let i = 0; i < fnDef.params.length; i++) {
       const param = fnDef.params[i];
-      const arg = args[i];
+      const arg = effectiveArgs[i];
 
       const resolvedParamType = resolveGenericType(param.type, arg);
       validateNarrowing(arg.type, resolvedParamType);
@@ -1551,6 +1637,10 @@ export function interpret(input: string): number {
 
       const varInfo = ensureVariable(varName, context);
 
+      if (fieldName === 'this' && varInfo.type?.kind === 'This') {
+        return snapshotRuntimeValue(varInfo);
+      }
+
       const boundFunctionValue = buildBoundThisFunctionValue(
         snapshotRuntimeValue(varInfo),
         fieldName,
@@ -1577,12 +1667,28 @@ export function interpret(input: string): number {
       return fieldValue;
     }
 
+    // Check for :: member access (unbound function pointer extraction): expr::fieldName
+    const colonColonMatch = expr.trim().match(/^(.+)::([a-zA-Z_]\w*)$/);
+    if (colonColonMatch) {
+      const baseExpr = colonColonMatch[1].trim();
+      const fieldName = colonColonMatch[2];
+      const baseValue = processExprWithContext(baseExpr, context, functions, structs);
+      const unboundFnPtr = buildUnboundFunctionPointerValue(baseValue, fieldName, functions);
+      if (unboundFnPtr) {
+        return unboundFnPtr;
+      }
+      throw new Error('cannot access ' + fieldName + ' via :: on non-This type');
+    }
+
     // Check for field access on expression results: expr.fieldName
     const exprFieldMatch = expr.trim().match(/^(.+)\s*\.\s*([a-zA-Z_]\w*)$/);
     if (exprFieldMatch) {
       const baseExpr = exprFieldMatch[1].trim();
       const fieldName = exprFieldMatch[2];
       const baseValue = processExprWithContext(baseExpr, context, functions, structs);
+      if (fieldName === 'this' && baseValue.type?.kind === 'This') {
+        return baseValue;
+      }
       const boundFunctionValue = buildBoundThisFunctionValue(baseValue, fieldName, functions);
       if (boundFunctionValue) {
         return boundFunctionValue;
@@ -2037,19 +2143,22 @@ export function interpret(input: string): number {
             declaredSuffix = { kind: 'Bool', width: 1 };
           } else if (normalizedVarType.startsWith('*mut ')) {
             declaredSuffix = parsePointerSuffix(normalizedVarType.substring(5).trim(), true);
-          } else if (normalizedVarType.startsWith('*')) {
-            declaredSuffix = parsePointerSuffix(normalizedVarType.substring(1).trim(), false);
           } else if (normalizedVarType.startsWith('[')) {
             declaredSuffix = tryParseSuffix(normalizedVarType);
           } else {
-            // Try parsing as function pointer type or other general types
+            // Try parsing as function pointer type or other general types first
             declaredSuffix = tryParseSuffix(normalizedVarType);
             if (!declaredSuffix) {
-              const typeMatch = normalizedVarType.match(/^([UI])(\d+)$/);
-              if (typeMatch) {
-                const kind = typeMatch[1] as 'U' | 'I';
-                const width = Number(typeMatch[2]);
-                declaredSuffix = { kind, width };
+              // If that failed and it starts with *, try as pointer type
+              if (normalizedVarType.startsWith('*')) {
+                declaredSuffix = parsePointerSuffix(normalizedVarType.substring(1).trim(), false);
+              } else {
+                const typeMatch = normalizedVarType.match(/^([UI])(\d+)$/);
+                if (typeMatch) {
+                  const kind = typeMatch[1] as 'U' | 'I';
+                  const width = Number(typeMatch[2]);
+                  declaredSuffix = { kind, width };
+                }
               }
             }
           }
