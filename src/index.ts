@@ -247,27 +247,55 @@ export function interpretAll(
 export function buildReplInputs(rootDir: string): {
   inputs: string[];
   config: Map<string[], string>;
+  nativeConfig: Map<string[], string>;
 } {
   const fs = require('fs');
   const path = require('path');
   const srcDir = path.join(rootDir, 'src');
-  const indexPath = path.join(srcDir, 'index.tuff');
-  const libPath = path.join(srcDir, 'lib.tuff');
 
-  if (!fs.existsSync(indexPath)) {
-    throw new Error('index.tuff not found');
+  if (!fs.existsSync(srcDir)) {
+    throw new Error('src directory not found');
   }
 
-  const indexCode = fs.readFileSync(indexPath, 'utf-8');
   const config = new Map<string[], string>();
-  config.set(['index'], indexCode);
+  const nativeConfig = new Map<string[], string>();
 
-  if (fs.existsSync(libPath)) {
-    const libCode = fs.readFileSync(libPath, 'utf-8');
-    config.set(['lib'], libCode);
+  const collectFiles = (dir: string): void => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        collectFiles(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith('.tuff') && !entry.name.endsWith('.ts')) continue;
+      const relPath = path.relative(srcDir, fullPath);
+      const segments = relPath.split(path.sep);
+      const fileName = segments[segments.length - 1];
+      const baseName = fileName.replace(/\.(tuff|ts)$/, '');
+      const key = segments.slice(0, -1).concat(baseName);
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      if (entry.name.endsWith('.tuff')) {
+        config.set(key, content);
+      } else {
+        nativeConfig.set(key, content);
+      }
+    }
+  };
+
+  collectFiles(srcDir);
+
+  if (!config.has(['index'])) {
+    const hasIndex = Array.from(config.keys()).some(
+      (key) => key.length === 1 && key[0] === 'index'
+    );
+    if (!hasIndex) {
+      throw new Error('index.tuff not found');
+    }
   }
 
-  return { inputs: ['index'], config };
+  return { inputs: ['index'], config, nativeConfig };
 }
 
 /**
@@ -3292,7 +3320,7 @@ export function interpret(input: string): number {
 if (require.main === module) {
   try {
     const replInputs = buildReplInputs(process.cwd());
-    const result = interpretAll(replInputs.inputs, replInputs.config, new Map());
+    const result = interpretAll(replInputs.inputs, replInputs.config, replInputs.nativeConfig);
     console.log(result);
   } catch (error) {
     if (error instanceof Error) {

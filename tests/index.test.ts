@@ -15,27 +15,36 @@ test('interpretAll supports explicit generic call syntax', () => {
   expect(interpretAll(['main'], config, new Map())).toBe(100);
 });
 
-test('buildReplInputs loads index and lib modules', () => {
+test('buildReplInputs loads src tree for repl', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tuff-repl-'));
   const srcDir = path.join(tempDir, 'src');
-  fs.mkdirSync(srcDir, { recursive: true });
+  fs.mkdirSync(path.join(srcDir, 'foo', 'bar'), { recursive: true });
   fs.writeFileSync(
     path.join(srcDir, 'index.tuff'),
     'use { pass } from lib; pass<I32>(100)'
   );
   fs.writeFileSync(path.join(srcDir, 'lib.tuff'), 'fn pass<T>(value : T) => value;');
+  fs.writeFileSync(path.join(srcDir, 'foo', 'bar', 'something.tuff'), '100');
+  fs.writeFileSync(path.join(srcDir, 'native.ts'), 'export const myConst = 7;');
 
   const replInputs = buildReplInputs(tempDir);
   expect(replInputs.inputs).toEqual(['index']);
 
   const modules = new Map<string, string>();
   for (const [key, value] of replInputs.config) {
-    modules.set(key[0], value);
+    modules.set(key.join('/'), value);
   }
   expect(modules.get('index')).toBe('use { pass } from lib; pass<I32>(100)');
   expect(modules.get('lib')).toBe('fn pass<T>(value : T) => value;');
+  expect(modules.get('foo/bar/something')).toBe('100');
 
-  expect(interpretAll(replInputs.inputs, replInputs.config, new Map())).toBe(100);
+  const nativeModules = new Map<string, string>();
+  for (const [key, value] of replInputs.nativeConfig) {
+    nativeModules.set(key.join('/'), value);
+  }
+  expect(nativeModules.get('native')).toBe('export const myConst = 7;');
+
+  expect(interpretAll(replInputs.inputs, replInputs.config, replInputs.nativeConfig)).toBe(100);
 });
 
 test('interpretAll supports extern native bindings', () => {
