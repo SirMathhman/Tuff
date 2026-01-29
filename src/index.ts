@@ -2,17 +2,65 @@ export function add(a: number, b: number): number {
   return a + b;
 }
 
-export function interpretAll(inputs: string[], config: Map<string[], string>): number {
-  function extractUseStatements(source: string): { code: string; deps: string[] } {
+export function interpretAll(
+  inputs: string[],
+  config: Map<string[], string>,
+  nativeConfig: Map<string[], string>
+): number {
+  function extractUseStatements(source: string): {
+    code: string;
+    deps: string[];
+    externDeps: Array<{ module: string; names: string[] }>;
+    externLets: Array<{ name: string; type: string }>;
+  } {
     const deps: string[] = [];
+    const externDeps: Array<{ module: string; names: string[] }> = [];
+    const externLetsList: Array<{ name: string; type: string }> = [];
+
     const useRegex = /use\s*\{\s*[^}]*\s*\}\s*from\s+([a-zA-Z_]\w*)\s*;?/g;
-    let match = useRegex.exec(source);
+
+    const externUseRegex = /extern\s+use\s*\{\s*([^}]+)\s*\}\s*from\s+([a-zA-Z_]\w*)\s*;?/g;
+    let externMatch = externUseRegex.exec(source);
+    while (externMatch) {
+      const rawNames = externMatch[1]
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean);
+      externDeps.push({ module: externMatch[2], names: rawNames });
+      externMatch = externUseRegex.exec(source);
+    }
+
+    const sourceWithoutExtern = source.replace(externUseRegex, '');
+    let match = useRegex.exec(sourceWithoutExtern);
     while (match) {
       deps.push(match[1]);
-      match = useRegex.exec(source);
+      match = useRegex.exec(sourceWithoutExtern);
     }
-    const code = source.replace(useRegex, '').trim();
-    return { code, deps };
+
+    const externLetRegex = /extern\s+let\s+([a-zA-Z_]\w*)\s*:\s*([^;]+);?/g;
+    let externLetMatch = externLetRegex.exec(source);
+    while (externLetMatch) {
+      externLetsList.push({ name: externLetMatch[1], type: externLetMatch[2].trim() });
+      externLetMatch = externLetRegex.exec(source);
+    }
+
+    const code = sourceWithoutExtern
+      .replace(externUseRegex, '')
+      .replace(externLetRegex, '')
+      .replace(useRegex, '')
+      .trim();
+    return { code, deps, externDeps, externLets: externLetsList };
+  }
+
+  function parseNativeExports(source: string): Map<string, string> {
+    const exports = new Map<string, string>();
+    const exportRegex = /export\s+const\s+([a-zA-Z_]\w*)\s*=\s*([^;]+);?/g;
+    let match = exportRegex.exec(source);
+    while (match) {
+      exports.set(match[1], match[2].trim());
+      match = exportRegex.exec(source);
+    }
+    return exports;
   }
 
   const moduleMap = new Map<string, string>();
@@ -22,8 +70,17 @@ export function interpretAll(inputs: string[], config: Map<string[], string>): n
     }
   }
 
+  const nativeModuleMap = new Map<string, string>();
+  for (const [key, value] of nativeConfig) {
+    if (key.length > 0) {
+      nativeModuleMap.set(key[0], value);
+    }
+  }
+
   const visited = new Set<string>();
   const parts: string[] = [];
+  const externUses: Array<{ module: string; names: string[] }> = [];
+  const externLets: Array<{ name: string; type: string }> = [];
 
   function appendCode(code: string): void {
     if (!code) return;
@@ -43,6 +100,8 @@ export function interpretAll(inputs: string[], config: Map<string[], string>): n
     for (const dep of extracted.deps) {
       includeModule(dep);
     }
+    externUses.push(...extracted.externDeps);
+    externLets.push(...extracted.externLets);
     appendCode(extracted.code);
   }
 
@@ -50,10 +109,37 @@ export function interpretAll(inputs: string[], config: Map<string[], string>): n
     includeModule(input);
   }
 
-  if (!parts.length) return 0;
+  if (!parts.length && externLets.length === 0) return 0;
+
+  const externValueByName = new Map<string, string>();
+  for (const externUse of externUses) {
+    const nativeSource = nativeModuleMap.get(externUse.module);
+    if (!nativeSource) {
+      throw new Error('native module not found: ' + externUse.module);
+    }
+    const nativeExports = parseNativeExports(nativeSource);
+    for (const name of externUse.names) {
+      const value = nativeExports.get(name);
+      if (!value) {
+        throw new Error('native export not found: ' + name);
+      }
+      externValueByName.set(name, value);
+    }
+  }
+
+  const externPreludeParts: string[] = [];
+  for (const externLet of externLets) {
+    const value = externValueByName.get(externLet.name);
+    if (!value) {
+      throw new Error('native export not found: ' + externLet.name);
+    }
+    externPreludeParts.push(
+      ['let ', externLet.name, ' : ', externLet.type, ' = ', value, ';'].join('')
+    );
+  }
 
   let combined = '';
-  for (const part of parts) {
+  for (const part of externPreludeParts.concat(parts)) {
     if (!combined) {
       combined = part;
       continue;
@@ -3114,7 +3200,7 @@ export function interpret(input: string): number {
 if (require.main === module) {
   try {
     const replInputs = buildReplInputs(process.cwd());
-    const result = interpretAll(replInputs.inputs, replInputs.config);
+    const result = interpretAll(replInputs.inputs, replInputs.config, new Map());
     console.log(result);
   } catch (error) {
     if (error instanceof Error) {

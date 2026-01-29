@@ -12,7 +12,7 @@ test('interpretAll supports explicit generic call syntax', () => {
     [['main'], 'use { pass } from lib; pass<I32>(100)'],
     [['lib'], 'fn pass<T>(value : T) => value;'],
   ]);
-  expect(interpretAll(['main'], config)).toBe(100);
+  expect(interpretAll(['main'], config, new Map())).toBe(100);
 });
 
 test('buildReplInputs loads index and lib modules', () => {
@@ -35,5 +35,16 @@ test('buildReplInputs loads index and lib modules', () => {
   expect(modules.get('index')).toBe('use { pass } from lib; pass<I32>(100)');
   expect(modules.get('lib')).toBe('fn pass<T>(value : T) => value;');
 
-  expect(interpretAll(replInputs.inputs, replInputs.config)).toBe(100);
+  expect(interpretAll(replInputs.inputs, replInputs.config, new Map())).toBe(100);
+});
+
+test('interpretAll supports extern native bindings', () => {
+  const config = new Map([
+    [
+      ['main'],
+      'extern use { myConst } from lib; extern let myConst : I32; myConst',
+    ],
+  ]);
+  const nativeConfig = new Map([[['lib'], 'export const myConst = 100;']]);
+  expect(interpretAll(['main'], config, nativeConfig)).toBe(100);
 });
