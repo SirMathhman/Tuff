@@ -605,6 +605,10 @@ export function interpret(input: string): number {
         const newValue = newValueObj.value;
         const newValSuffix = newValueObj.suffix;
 
+        if (newValSuffix?.kind === 'Bool') {
+          throw new Error('cannot perform arithmetic on booleans');
+        }
+
         // validate against original type
         if (varInfo.suffix) {
           validateNarrowing(newValSuffix, varInfo.suffix);

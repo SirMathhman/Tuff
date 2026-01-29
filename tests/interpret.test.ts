@@ -242,6 +242,12 @@ test('interpret rejects compound assignment to boolean variables', () => {
   );
 });
 
+test('interpret rejects compound assignment with boolean rhs', () => {
+  expect(() => interpret('let mut x = 0; x += true;')).toThrow(
+    'cannot perform arithmetic on booleans'
+  );
+});
+
 test('interpret rejects numeric values for Bool type', () => {
   expect(() => interpret('let x : Bool = 1;')).toThrow();
   expect(() => interpret('let x : Bool; x = 1;')).toThrow();
