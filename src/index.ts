@@ -81,7 +81,10 @@ export function interpret(input: string): number {
     return parseLiteralToken(token);
   }
 
-  function evaluateExpression(expr: string, context: Map<string, number> = new Map()): number {
+  function evaluateExpression(
+    expr: string,
+    context: Map<string, number> = new Map()
+  ): { value: number; suffix?: { kind: 'U' | 'I'; width: number } } {
     const tokens = expr.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/])|([a-zA-Z_]\w*)/g);
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -89,7 +92,7 @@ export function interpret(input: string): number {
 
     if (tokens.length === 1) {
       // single operand (literal or variable)
-      return resolveOperand(tokens[0], context).value;
+      return resolveOperand(tokens[0], context);
     }
 
     if (tokens.length < 3 || tokens.length % 2 === 0) {
@@ -151,11 +154,14 @@ export function interpret(input: string): number {
       validateValueAgainstSuffix(result, widestSuffix.kind, widestSuffix.width);
     }
 
-    return result;
+    return { value: result, suffix: widestSuffix };
   }
 
   // Helper to process an expression recursively through brackets and let blocks
-  function processExprWithContext(expr: string, context: Map<string, number>): number {
+  function processExprWithContext(
+    expr: string,
+    context: Map<string, number>
+  ): { value: number; suffix?: { kind: 'U' | 'I'; width: number } } {
     let e = expr;
 
     // Handle parentheses and braces recursively
@@ -193,17 +199,22 @@ export function interpret(input: string): number {
       if (closePos === -1) throw new Error('mismatched parentheses or braces');
 
       const content = e.substring(openPos + 1, closePos);
-      let result: number;
+      let res: { value: number; suffix?: { kind: 'U' | 'I'; width: number } };
 
       // Check if this is a block with variable declarations (must start with 'let')
       if (content.trim().startsWith('let ')) {
-        result = processLetBlock(content, context);
+        const val = processLetBlock(content, context);
+        res = { value: val };
       } else {
         // Regular expression - recursively process through brackets
-        result = processExprWithContext(content, context);
+        res = processExprWithContext(content, context);
       }
 
-      e = e.substring(0, openPos) + result.toString() + e.substring(closePos + 1);
+      let replacement = res.value.toString();
+      if (res.suffix) {
+        replacement += `${res.suffix.kind}${res.suffix.width}`;
+      }
+      e = e.substring(0, openPos) + replacement + e.substring(closePos + 1);
     }
 
     return evaluateExpression(e, context);
@@ -253,7 +264,9 @@ export function interpret(input: string): number {
         const varExprStr = m[3].trim();
 
         // evaluate the initialization expression with potential brackets/nested lets
-        const varValue = processExprWithContext(varExprStr, context);
+        const varValueObj = processExprWithContext(varExprStr, context);
+        const varValue = varValueObj.value;
+        const valSuffix = varValueObj.suffix;
 
         // validate against the type only if specified
         if (varType) {
@@ -261,6 +274,13 @@ export function interpret(input: string): number {
           if (typeMatch) {
             const kind = typeMatch[1] as 'U' | 'I';
             const width = Number(typeMatch[2]);
+
+            if (valSuffix && valSuffix.width > width) {
+              throw new Error(
+                `narrowing conversion from ${valSuffix.kind}${valSuffix.width} to ${kind}${width}`
+              );
+            }
+
             validateValueAgainstSuffix(varValue, kind, width);
           }
         }
@@ -272,7 +292,7 @@ export function interpret(input: string): number {
       }
     }
 
-    return processExprWithContext(finalExpr, context);
+    return processExprWithContext(finalExpr, context).value;
   }
 
   // Check for top-level variable declarations
@@ -282,7 +302,7 @@ export function interpret(input: string): number {
 
   // Evaluate the expression (non-let) using the new recursive handler
   try {
-    return processExprWithContext(s, new Map());
+    return processExprWithContext(s, new Map()).value;
   } catch (e) {
     if (
       e instanceof Error &&

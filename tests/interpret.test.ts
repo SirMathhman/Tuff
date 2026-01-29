@@ -140,3 +140,7 @@ test('interpret supports variable declarations without type annotations', () => 
 test('interpret supports variable declarations with suffix in initializer', () => {
   expect(interpret('let x : U16 = 18U8; x')).toBe(18);
 });
+
+test('interpret rejects narrowing conversions in variable declarations', () => {
+  expect(() => interpret('let x : U8 = 18U16; x')).toThrow();
+});
