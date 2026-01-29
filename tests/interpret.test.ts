@@ -647,6 +647,10 @@ test('interpret allows returning inner functions from blocks', () => {
   expect(interpret('fn outer() => { fn inner() => 100; inner } outer()()')).toBe(100);
 });
 
+test('interpret allows returning this with inner function', () => {
+  expect(interpret('fn outer() => { fn inner() => 100; this } outer().inner()')).toBe(100);
+});
+
 test('interpret allows functions to return this scope values', () => {
   expect(interpret('fn Wrap(x : I32) => this; Wrap(100).x')).toBe(100);
 });

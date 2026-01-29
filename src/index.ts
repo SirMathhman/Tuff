@@ -1571,29 +1571,37 @@ export function interpret(input: string): number {
         const fnDef = functions.get(fnName);
         if (!fnDef) throw new Error('function not found: ' + fnName);
 
-        let receiverArg = baseValue;
-        if (fnDef.params[0]?.type.kind === 'Ptr') {
-          if (baseExpr.match(/^[a-zA-Z_]\w*$/)) {
-            const receiverVar = ensureVariable(baseExpr, context);
-            if (fnDef.params[0].type.mutable && !receiverVar.mutable) {
-              throw new Error('cannot take mutable reference to immutable variable');
-            }
-            receiverArg = {
-              value: 0,
-              type: {
-                kind: 'Ptr',
-                pointsTo: receiverVar.type || { kind: 'I', width: 32 },
-                mutable: fnDef.params[0].type.mutable,
-              },
-              refersTo: baseExpr,
-            };
-          } else {
-            throw new Error('cannot take reference to non-variable receiver');
+        const hasThisParam = fnDef.params[0]?.name === 'this';
+        if (!hasThisParam) {
+          if (baseValue.type?.kind === 'This') {
+            const args = parseCallArguments(argsStr, context, functions, structs);
+            return executeFunctionCallWithArgs(fnName, args, context, functions, structs);
           }
-        }
+        } else {
+          let receiverArg = baseValue;
+          if (fnDef.params[0]?.type.kind === 'Ptr') {
+            if (baseExpr.match(/^[a-zA-Z_]\w*$/)) {
+              const receiverVar = ensureVariable(baseExpr, context);
+              if (fnDef.params[0].type.mutable && !receiverVar.mutable) {
+                throw new Error('cannot take mutable reference to immutable variable');
+              }
+              receiverArg = {
+                value: 0,
+                type: {
+                  kind: 'Ptr',
+                  pointsTo: receiverVar.type || { kind: 'I', width: 32 },
+                  mutable: fnDef.params[0].type.mutable,
+                },
+                refersTo: baseExpr,
+              };
+            } else {
+              throw new Error('cannot take reference to non-variable receiver');
+            }
+          }
 
-        const args = [receiverArg, ...parseCallArguments(argsStr, context, functions, structs)];
-        return executeFunctionCallWithArgs(fnName, args, context, functions, structs);
+          const args = [receiverArg, ...parseCallArguments(argsStr, context, functions, structs)];
+          return executeFunctionCallWithArgs(fnName, args, context, functions, structs);
+        }
       }
     }
 
