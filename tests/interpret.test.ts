@@ -69,6 +69,10 @@ test('interpret enforces numeric type constraints in declarations', () => {
   expect(() => interpret('let x : I32 < 10 = 20; x')).toThrow();
 });
 
+test('interpret supports USize type', () => {
+  expect(interpret('let x : USize = 100USize; x')).toBe(100);
+});
+
 test('interpret supports generic identity function', () => {
   expect(interpret('fn pass<T>(value : T) => value; pass(100)')).toBe(100);
 });

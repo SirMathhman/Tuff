@@ -178,6 +178,11 @@ export function interpret(input: string): number {
     }
 
     if (suffix) {
+      if (suffix === 'USize') {
+        const width = 64;
+        validateValueAgainstSuffix(n, 'U', width);
+        return { value: Number.isFinite(n) ? n : 0, suffix: { kind: 'U', width } };
+      }
       const m2 = suffix.match(/^([UI])(\d+)$/);
       if (!m2) throw new Error('invalid suffix');
       const kind = m2[1] as 'U' | 'I';
@@ -246,6 +251,7 @@ export function interpret(input: string): number {
   function tryParseSuffix(typeStr: string): Suffix | undefined {
     if (typeStr === 'Bool') return { kind: 'Bool', width: 1 };
     if (typeStr === 'Void') return { kind: 'Void' };
+    if (typeStr === 'USize') return { kind: 'U', width: 64 };
 
     // Parse array type: [I32; init; length]
     const arrayMatch = typeStr.match(/^\[(.+?);\s*(\d+);\s*(\d+)\]$/);
