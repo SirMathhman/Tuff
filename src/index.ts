@@ -380,21 +380,53 @@ export function buildReplInputs(rootDir: string): {
  * @returns JavaScript code
  */
 export function compile(input: string): string {
-  // TODO: Implement compilation to JavaScript
-  // For now, stub returns empty string
-  return '';
+  // Strip comments using simple regex (handles most cases)
+  let code = input
+    .replace(/\/\/.*$/gm, '') // strip line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '') // strip block comments
+    .trim();
+
+  if (!code) {
+    return 'return 0;';
+  }
+
+  // Handle boolean literals
+  code = code.replace(/\btrue\b/g, '1').replace(/\bfalse\b/g, '0');
+
+  // Try to handle simple expressions - if it parses as a valid expression, wrap it
+  // Very basic validation: just ensure it doesn't contain invalid tokens
+  const invalidTokens = /[{}()[\];:,]/; // These suggest complex statements we can't handle simply
+  if (invalidTokens.test(code)) {
+    // For now, return empty string to indicate compile failure
+    // The execute function will handle this
+    return '';
+  }
+
+  // Wrap the expression in a return statement
+  return 'return ' + code + ';';
 }
 
 /**
- * Execute compiled JavaScript code.
- * Takes JavaScript code as input and executes it, returning a numeric result.
- * @param jsCode - JavaScript code to execute
+ * Execute Tuff code by compiling it to JavaScript and running it.
+ * Takes Tuff source code as input, compiles it, and executes it.
+ * @param input - Tuff source code to execute
  * @returns Numeric result from execution
  */
-export function execute(jsCode: string): number {
-  // TODO: Implement execution using Function or eval
-  // For now, stub returns 0
-  return 0;
+export function execute(input: string): number {
+  const jsCode = compile(input);
+  if (!jsCode) {
+    // Compilation failed (e.g., unsupported syntax)
+    throw new Error('Failed to compile code');
+  }
+
+  try {
+    const fn = new Function(jsCode);
+    const result = fn();
+    return typeof result === 'number' ? Math.floor(result) : 0;
+  } catch (e) {
+    // If execution fails, re-throw the error
+    throw e;
+  }
 }
 
 /**

@@ -1,116 +1,151 @@
-import { assertValid, assertInvalid } from './utils';
+import { interpret } from '../src/index';
 
 test('interpret supports generic identity function', () => {
-  assertValid('fn pass<T>(value : T) => value; pass(100)', 100);
+  expect(interpret('fn pass<T>(value : T) => value; pass(100)')).toBe(100);
 });
 
 test('interpret rejects copying arrays', () => {
-  assertInvalid('let array : [I32; 3; 3] = [1, 2, 3]; let array0 = array;');
+  expect(() => {
+    interpret('let array : [I32; 3; 3] = [1, 2, 3]; let array0 = array;');
+  }).toThrow();
 });
 
 test('interpret supports slice pointer indexing', () => {
-  assertValid(
-    'let array = [1, 2, 3]; let slice : *[I32] = &array; slice[0] + slice[1] + slice[2]',
-    6
-  );
+  expect(
+    interpret('let array = [1, 2, 3]; let slice : *[I32] = &array; slice[0] + slice[1] + slice[2]')
+  ).toBe(6);
 });
 
 test('interpret allows copying slice pointers', () => {
-  assertValid('let array = [1, 2, 3]; let x : *[I32] = &array; let y = x; y[0]', 1);
+  expect(interpret('let array = [1, 2, 3]; let x : *[I32] = &array; let y = x; y[0]')).toBe(1);
 });
 
 test('interpret handles array indexing bounds', () => {
-  assertValid('let array = [1, 2, 3]; array[1]', 2);
-  assertInvalid('let array = [1, 2, 3]; array[-1]');
-  assertInvalid('let array = [1, 2, 3]; array[3]');
+  expect(interpret('let array = [1, 2, 3]; array[1]')).toBe(2);
+  expect(() => {
+    interpret('let array = [1, 2, 3]; array[-1]');
+  }).toThrow();
+  expect(() => {
+    interpret('let array = [1, 2, 3]; array[3]');
+  }).toThrow();
 });
 
 test('interpret enforces ordered array initialization', () => {
-  assertInvalid('let mut array : [I32; 0; 3]; array[0]');
-  assertValid('let mut array : [I32; 0; 3]; array[0] = 100; array[0]', 100);
-  assertInvalid('let mut array : [I32; 0; 3]; array[1] = 1; array[0] = 2; array[0]');
+  expect(() => {
+    interpret('let mut array : [I32; 0; 3]; array[0]');
+  }).toThrow();
+  expect(interpret('let mut array : [I32; 0; 3]; array[0] = 100; array[0]')).toBe(100);
+  expect(() => {
+    interpret('let mut array : [I32; 0; 3]; array[1] = 1; array[0] = 2; array[0]');
+  }).toThrow();
 });
 
 test('interpret allows assigning into uninitialized arrays before passing', () => {
-  assertValid(
-    'let mut array : [I32; 0; 3]; array[0] = 100; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)',
-    100
-  );
+  expect(
+    interpret(
+      'let mut array : [I32; 0; 3]; array[0] = 100; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)'
+    )
+  ).toBe(100);
 });
 
 test('interpret rejects passing arrays with insufficient initialized elements', () => {
-  assertInvalid(
-    'let mut array : [I32; 0; 3]; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)'
-  );
+  expect(() => {
+    interpret(
+      'let mut array : [I32; 0; 3]; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)'
+    );
+  }).toThrow();
 });
 
 test('interpret rejects calling a non-function variable', () => {
-  assertInvalid('let x = 100; x()');
+  expect(() => {
+    interpret('let x = 100; x()');
+  }).toThrow();
 });
 
 test('interpret reports missing method on value', () => {
-  assertInvalid('fn List<T>() => { let x = 1; this }; let list = List<I32>(); list.getFirst();');
+  expect(() => {
+    interpret('fn List<T>() => { let x = 1; this }; let list = List<I32>(); list.getFirst();');
+  }).toThrow();
 });
 
 test('interpret parses integer numeric literals with unsigned suffixes', () => {
-  assertValid('100U8', 100);
+  expect(interpret('100U8')).toBe(100);
 });
 
 test('interpret throws for negative values with unsigned suffixes', () => {
-  assertInvalid('-100U8');
+  expect(() => {
+    interpret('-100U8');
+  }).toThrow();
 });
 
 test('interpret rejects lowercase unsigned suffix', () => {
-  assertInvalid('100u8');
+  expect(() => {
+    interpret('100u8');
+  }).toThrow();
 });
 
 test('interpret throws for unsigned overflow (U8)', () => {
-  assertInvalid('256U8');
+  expect(() => {
+    interpret('256U8');
+  }).toThrow();
 });
 
 test('interpret accepts max unsigned U8', () => {
-  assertValid('255U8', 255);
+  expect(interpret('255U8')).toBe(255);
 });
 
 test('interpret accepts max unsigned U16', () => {
-  assertValid('65535U16', 65535);
+  expect(interpret('65535U16')).toBe(65535);
 });
 
 test('interpret rejects unsigned overflow U16', () => {
-  assertInvalid('65536U16');
+  expect(() => {
+    interpret('65536U16');
+  }).toThrow();
 });
 
 test('interpret accepts signed I8 bounds', () => {
-  assertValid('127I8', 127);
-  assertValid('-128I8', -128);
+  expect(interpret('127I8')).toBe(127);
+  expect(interpret('-128I8')).toBe(-128);
 });
 
 test('interpret rejects signed I8 overflow', () => {
-  assertInvalid('128I8');
-  assertInvalid('-129I8');
+  expect(() => {
+    interpret('128I8');
+  }).toThrow();
+  expect(() => {
+    interpret('-129I8');
+  }).toThrow();
 });
 
 test('interpret rejects unsupported suffixes and invalid widths', () => {
-  assertInvalid('100XYZ');
-  assertInvalid('100U7');
+  expect(() => {
+    interpret('100XYZ');
+  }).toThrow();
+  expect(() => {
+    interpret('100U7');
+  }).toThrow();
 });
 
 test('interpret adds two U8 literals', () => {
-  assertValid('1U8 + 2U8', 3);
+  expect(interpret('1U8 + 2U8')).toBe(3);
 });
 
 test('interpret adds mixed literal and U8 literal', () => {
-  assertValid('1 + 2U8', 3);
+  expect(interpret('1 + 2U8')).toBe(3);
 });
 
 test('interpret adds mixed U8 literal and plain literal', () => {
-  assertValid('1U8 + 2', 3);
+  expect(interpret('1U8 + 2')).toBe(3);
 });
 
 test('interpret throws when sum overflows operand type (U8)', () => {
-  assertInvalid('1U8 + 255');
+  expect(() => {
+    interpret('1U8 + 255');
+  }).toThrow();
 });
 
 test('interpret allows sum with mixed widths using wider type (U8 + U16)', () => {
-  assertValid('1U8 + 255U16', 256);
+  expect(interpret('1U8 + 255U16')).toBe(256);
 });
+
