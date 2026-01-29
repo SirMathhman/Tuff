@@ -350,7 +350,8 @@ export function buildReplInputs(rootDir: string): {
       const content = fs.readFileSync(fullPath, 'utf-8');
       if (entry.name.endsWith('.tuff')) {
         config.set(key, content);
-      } else {
+      } else if (entry.name !== 'index.ts') {
+        // Skip index.ts to avoid loading the interpreter source as a native module
         nativeConfig.set(key, content);
       }
     }
@@ -2464,13 +2465,32 @@ export function interpret(input: string): number {
     }
 
     // Check for method-style calls: expr.methodName(args...)
+    // Need to be careful not to match dots inside bracket expressions
     const methodCallMatch = expr.trim().match(/^(.+)\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/);
     if (methodCallMatch) {
       const baseExpr = methodCallMatch[1].trim();
       const fnName = methodCallMatch[2];
       const argsStr = methodCallMatch[3];
 
-      if (baseExpr !== 'this') {
+      // Check if base expression has balanced brackets
+      let bracketDepth = 0;
+      let isBalanced = true;
+      for (let i = 0; i < baseExpr.length; i++) {
+        if (baseExpr[i] === '(' || baseExpr[i] === '[' || baseExpr[i] === '{') {
+          bracketDepth++;
+        } else if (baseExpr[i] === ')' || baseExpr[i] === ']' || baseExpr[i] === '}') {
+          bracketDepth--;
+          if (bracketDepth < 0) {
+            isBalanced = false;
+            break;
+          }
+        }
+      }
+      if (bracketDepth !== 0) {
+        isBalanced = false;
+      }
+
+      if (isBalanced && baseExpr !== 'this') {
         const baseValue = processExprWithContext(baseExpr, context, functions, structs);
         if (!functions.has(fnName)) {
           throw new Error('function not found: ' + fnName);
@@ -2615,7 +2635,26 @@ export function interpret(input: string): number {
         }
       }
 
-      if (closePos === -1) throw new Error('mismatched parentheses or braces');
+      if (closePos === -1) {
+        const start = Math.max(0, openPos - 20);
+        const end = Math.min(e.length, openPos + 30);
+        const context = e.substring(start, end);
+        const pointerPos = openPos - start;
+        throw new Error(
+          'mismatched ' +
+            openChar +
+            (openChar === '(' ? ')' : '}') +
+            ': unmatched ' +
+            openChar +
+            ' at position ' +
+            openPos +
+            '\n  ' +
+            context +
+            '\n  ' +
+            ' '.repeat(pointerPos) +
+            '^'
+        );
+      }
 
       const content = e.substring(openPos + 1, closePos);
       let res: RuntimeValue;

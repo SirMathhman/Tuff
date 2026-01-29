@@ -808,3 +808,28 @@ test('interpret accesses .length property on dereferenced strings', () => {
   expect(interpret('let x : *Str = "hello"; x.length')).toBe(5);
   expect(interpret('let x : *Str = ""; x.length')).toBe(0);
 });
+
+test('interpret handles block comments with braces inside', () => {
+  expect(interpret('let x = 1; /* { } */ x + 1')).toBe(2);
+});
+
+test('interpret handles function calls within function bodies', () => {
+  expect(interpret(
+    'fn helper(x : I32) => x + 1; fn caller() => { helper(5) }; caller()'
+  )).toBe(6);
+});
+
+test('interpret handles nested this calls in function bodies', () => {
+  expect(
+    interpret('fn inner() => 100; fn outer() => { inner() }; outer()')
+  ).toBe(100);
+});
+
+test('interpret handles function calls with this.method() inside arguments', () => {
+  // This test ensures that set(this.size()) is not misparsed as a method call on set()
+  expect(
+    interpret('fn List() => { fn set(x : I32) => { 100 } fn size() => 50; ' +
+      'fn add(element : I32) => { set(this.size()) } ' +
+      'this }; List().add(5)')
+  ).toBe(100);
+});

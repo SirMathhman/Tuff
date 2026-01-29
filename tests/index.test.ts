@@ -119,3 +119,28 @@ test('interpretAll handles native createArray without copying arrays', () => {
   );
   expect(interpretAll(['main'], config, nativeConfig)).toBe(0);
 });
+
+test('buildReplInputs should not load index.ts as a native module', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tuff-native-'));
+  const srcDir = path.join(tempDir, 'src');
+  fs.mkdirSync(srcDir, { recursive: true });
+  // Create a minimal index.tuff
+  fs.writeFileSync(path.join(srcDir, 'index.tuff'), '100');
+  // Create index.ts (simulating the interpreter source file)
+  fs.writeFileSync(
+    path.join(srcDir, 'index.ts'),
+    'export function interpret() { if (true) { return 0; } return 1; }'
+  );
+  // Create lib.ts (actual native module)
+  fs.writeFileSync(path.join(srcDir, 'lib.ts'), 'export const x = 7;');
+
+  const replInputs = buildReplInputs(tempDir);
+  // Verify index.ts is not in nativeConfig and lib.ts is present
+  const nativeKeys = Array.from(replInputs.nativeConfig.keys());
+  const hasIndex = nativeKeys.some((key) => key.length === 1 && key[0] === 'index');
+  const hasLib = nativeKeys.some((key) => key.length === 1 && key[0] === 'lib');
+  expect(hasIndex).toBe(false);
+  expect(hasLib).toBe(true);
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});

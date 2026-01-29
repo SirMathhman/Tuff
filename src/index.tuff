@@ -1,17 +1,15 @@
-fn interpret(input : *Str) : I32 => {
-    fn stripComments(source : *Str) => {
-        let out = "";
-        let i = 0;
-        let inLineComment = false;
-        let inBlockComment = false;
-        let inString = false;
-        let inChar = false;
+// Example demonstrating method calls with nested function calls
+fn Math() => {
+    fn square(x : I32) => x * x;
+    
+    fn add(x : I32) => {
+        square(this.getValue())
     }
-
-    0
+    
+    fn getValue() => 5;
+    
+    this
 }
 
-use { Map } from lib;
-let map = Map();
+Math().add(0)
 
-// interpret("100")
