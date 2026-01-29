@@ -56,10 +56,28 @@ test('interpret supports variable declarations without type annotations', () => 
   expect(interpret('let x = 18; x')).toBe(18);
 });
 
+test('interpret rejects narrowing conversions when assigning variables', () => {
+  expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
+});
+
+test('interpret treats un-suffixed numeric variables as I32 and rejects narrowing', () => {
+  expect(() => interpret('let x = 100; let y : U8 = x; y')).toThrow();
+});
+
+test('interpret treats un-suffixed numeric variables as I32 and allows assignment to I32', () => {
+  expect(interpret('let x = 100; let y : I32 = x; y')).toBe(100);
+});
+
 test('interpret supports variable declarations with suffix in initializer', () => {
   expect(interpret('let x : U16 = 18U8; x')).toBe(18);
 });
 
 test('interpret rejects narrowing conversions in variable declarations', () => {
   expect(() => interpret('let x : U8 = 18U16; x')).toThrow();
+});
+
+test('interpret rejects reassignment to immutable variables even if initially uninitialized', () => {
+  expect(() => interpret('let x : U8; x = 100; x = 200; x')).toThrow(
+    'cannot assign to immutable variable'
+  );
 });

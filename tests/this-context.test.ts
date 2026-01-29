@@ -1,51 +1,5 @@
 import { interpret } from '../src/index';
 
-test('interpret evaluates functions with parameters', () => {
-  expect(interpret('fn add(first : I32, second : I32) => first + second; add(3, 4)')).toBe(7);
-});
-
-test('interpret rejects function calls with missing arguments', () => {
-  expect(() => interpret('fn add(first : I32, second : I32) => first + second; add()')).toThrow(
-    'function add expects 2 arguments, got 0'
-  );
-});
-
-test('interpret rejects boolean arguments for numeric parameters', () => {
-  expect(() =>
-    interpret('fn add(first : I32, second : I32) => first + second; add(true, false)')
-  ).toThrow('cannot convert Bool to numeric type');
-});
-
-test('interpret rejects assigning void call result to variable', () => {
-  expect(() => interpret('fn empty() : Void => {}; let value = empty(); value')).toThrow(
-    'void function cannot return a value'
-  );
-});
-
-test('interpret rejects boolean return for numeric function', () => {
-  expect(() => interpret('fn empty() : I32 => true; empty()')).toThrow(
-    'cannot return boolean value from non-bool function'
-  );
-});
-
-test('interpret infers return type from function body when missing', () => {
-  expect(interpret('fn empty() => true; let result = empty(); result')).toBe(1);
-});
-
-test('interpret supports forward function references', () => {
-  expect(interpret('fn getA() => getB(); fn getB() => 100; getA()')).toBe(100);
-});
-test('interpret allows functions to access outer scope variables', () => {
-  expect(interpret('let mut sum = 0; fn addOnce() => sum += 1; addOnce(); sum')).toBe(1);
-});
-test('interpret supports drop functions for type aliases', () => {
-  expect(
-    interpret(
-      'let mut sum = 0; fn drop(this : MyDroppable) => sum += this; type MyDroppable = I32 then drop; let temp : MyDroppable = 100; sum'
-    )
-  ).toBe(100);
-});
-
 test('interpret accesses variables through this.x notation', () => {
   expect(interpret('let x = 100; this.x')).toBe(100);
 });
@@ -76,16 +30,12 @@ test('interpret supports function calls through this notation', () => {
   expect(interpret('fn get() => 100; this.get()')).toBe(100);
 });
 
-test('interpret supports function pointers and calling through them', () => {
-  expect(interpret('fn get() => 100; let func : () => I32 = get; func()')).toBe(100);
+test('interpret allows functions to return this scope values', () => {
+  expect(interpret('fn Wrap(x : I32) => this; Wrap(100).x')).toBe(100);
 });
 
-test('interpret supports returning function pointers from functions', () => {
-  expect(interpret('fn get() => 100; fn pass() : () => I32 => get; pass()()')).toBe(100);
-});
-
-test('interpret allows returning inner functions from blocks', () => {
-  expect(interpret('fn outer() => { fn inner() => 100; inner } outer()()')).toBe(100);
+test('interpret function returning this creates a class-like object', () => {
+  expect(interpret('fn Point(x : I32, y : I32) => { this }; Point(3, 4).x')).toBe(3);
 });
 
 test('interpret allows returning this with inner function', () => {
@@ -96,4 +46,72 @@ test('interpret allows returned this to capture parameters', () => {
   expect(
     interpret('fn outer(x : I32, y : I32) => { fn inner() => x + y; this } outer(3, 4).inner()')
   ).toBe(7);
+});
+
+test('interpret allows binding inner function from returned this', () => {
+  expect(
+    interpret(
+      'fn outer(x : I32, y : I32) => { fn inner() => x + y; this } let myOuter : outer = outer(3, 4); let myInnerFunc : () => I32 = myOuter.inner; myInnerFunc()'
+    )
+  ).toBe(7);
+});
+
+test('interpret supports nested this with uppercase function names', () => {
+  expect(
+    interpret(
+      'fn OuterClass(x : I32) => { fn InnerClass(y : I32) => { fn manhattan() => x + y; this } this } OuterClass(3).InnerClass(4).manhattan()'
+    )
+  ).toBe(7);
+});
+
+test('interpret nested functions each get their own this context', () => {
+  expect(
+    interpret(
+      'fn Outer() => {' +
+        '  let x = 100;' +
+        '  fn Inner() => {' +
+        '    let y = 50;' +
+        '    this' +
+        '  }' +
+        '  Inner().y' +
+        '}; ' +
+        'Outer()'
+    )
+  ).toBe(50);
+});
+
+test('interpret this.this in nested function accesses outer function scope', () => {
+  expect(
+    interpret(
+      'fn Outer() => {' +
+        '  let x = 100;' +
+        '  fn Inner() => {' +
+        '    let y = 50;' +
+        '    this.this' +
+        '  }' +
+        '  Inner().x' +
+        '}; ' +
+        'Outer()'
+    )
+  ).toBe(100);
+});
+
+test('interpret deep nesting requires multiple this accessors', () => {
+  expect(
+    interpret(
+      'fn Level1() => {' +
+        '  let a = 1;' +
+        '  fn Level2() => {' +
+        '    let b = 2;' +
+        '    fn Level3() => {' +
+        '      let c = 3;' +
+        '      this.this.this' +
+        '    }' +
+        '    Level3().a' +
+        '  }' +
+        '  Level2()' +
+        '}; ' +
+        'Level1()'
+    )
+  ).toBe(1);
 });

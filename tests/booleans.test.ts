@@ -37,6 +37,27 @@ test('interpret supports Bool type and true/false literals', () => {
   expect(interpret('let x : Bool = false; x')).toBe(0);
 });
 
+test('interpret rejects arithmetic operations on boolean literals', () => {
+  expect(() => interpret('true + false')).toThrow('cannot perform arithmetic on booleans');
+});
+
+test('interpret rejects arithmetic operations on boolean variables', () => {
+  expect(() => interpret('let x : Bool = true; x + 1')).toThrow(
+    'cannot perform arithmetic on booleans'
+  );
+});
+
+test('interpret supports logical OR operator', () => {
+  expect(interpret('true || false')).toBe(1);
+  expect(interpret('false || false')).toBe(0);
+  expect(interpret('let x = true; let y = false; x || y')).toBe(1);
+});
+
+test('interpret supports logical AND operator', () => {
+  expect(interpret('true && false')).toBe(0);
+  expect(interpret('true && true')).toBe(1);
+});
+
 test('interpret evaluates conditional expressions in initializers', () => {
   expect(interpret('let x : U8 = if (true) 2 else 3; x')).toBe(2);
 });

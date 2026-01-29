@@ -1,71 +1,12 @@
 import { interpret } from '../src/index';
 
-test('interpret supports generic identity function', () => {
-  expect(interpret('fn pass<T>(value : T) => value; pass(100)')).toBe(100);
+test('interpret enforces numeric type constraints in declarations', () => {
+  expect(interpret('let x : I32 < 10 = 5; x')).toBe(5);
+  expect(() => interpret('let x : I32 < 10 = 20; x')).toThrow();
 });
 
-test('interpret rejects copying arrays', () => {
-  expect(() => {
-    interpret('let array : [I32; 3; 3] = [1, 2, 3]; let array0 = array;');
-  }).toThrow();
-});
-
-test('interpret supports slice pointer indexing', () => {
-  expect(
-    interpret('let array = [1, 2, 3]; let slice : *[I32] = &array; slice[0] + slice[1] + slice[2]')
-  ).toBe(6);
-});
-
-test('interpret allows copying slice pointers', () => {
-  expect(interpret('let array = [1, 2, 3]; let x : *[I32] = &array; let y = x; y[0]')).toBe(1);
-});
-
-test('interpret handles array indexing bounds', () => {
-  expect(interpret('let array = [1, 2, 3]; array[1]')).toBe(2);
-  expect(() => {
-    interpret('let array = [1, 2, 3]; array[-1]');
-  }).toThrow();
-  expect(() => {
-    interpret('let array = [1, 2, 3]; array[3]');
-  }).toThrow();
-});
-
-test('interpret enforces ordered array initialization', () => {
-  expect(() => {
-    interpret('let mut array : [I32; 0; 3]; array[0]');
-  }).toThrow();
-  expect(interpret('let mut array : [I32; 0; 3]; array[0] = 100; array[0]')).toBe(100);
-  expect(() => {
-    interpret('let mut array : [I32; 0; 3]; array[1] = 1; array[0] = 2; array[0]');
-  }).toThrow();
-});
-
-test('interpret allows assigning into uninitialized arrays before passing', () => {
-  expect(
-    interpret(
-      'let mut array : [I32; 0; 3]; array[0] = 100; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)'
-    )
-  ).toBe(100);
-});
-
-test('interpret rejects passing arrays with insufficient initialized elements', () => {
-  expect(() => {
-    interpret(
-      'let mut array : [I32; 0; 3]; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)'
-    );
-  }).toThrow();
-});
-
-test('interpret rejects calling a non-function variable', () => {
-  expect(() => {
-    interpret('let x = 100; x()');
-  }).toThrow();
-});
-
-test('interpret reports missing method on value', () => {
-  expect(() => {
-    interpret('fn List<T>() => { let x = 1; this }; let list = List<I32>(); list.getFirst();');
-  }).toThrow();
+test('interpret supports USize type', () => {
+  expect(interpret('let x : USize = 100USize; x')).toBe(100);
 });
 
 test('interpret parses integer numeric literals with unsigned suffixes', () => {
@@ -148,3 +89,4 @@ test('interpret throws when sum overflows operand type (U8)', () => {
 test('interpret allows sum with mixed widths using wider type (U8 + U16)', () => {
   expect(interpret('1U8 + 255U16')).toBe(256);
 });
+

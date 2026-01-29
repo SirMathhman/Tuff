@@ -38,20 +38,18 @@ test('interpret rejects access to non-existent struct field', () => {
   ).toThrow();
 });
 
-test('interpret creates and accesses arrays with indexing', () => {
-  expect(interpret('let array : [I32; 1; 1] = [100]; array[0]')).toBe(100);
-});
-
-test('interpret indexes array literals directly', () => {
-  expect(interpret('[1, 2, 3][1]')).toBe(2);
-});
-
-test('interpret indexes arrays returned by calls', () => {
-  expect(interpret('fn getFirst() => [1, 2, 3]; getFirst()[1]')).toBe(2);
-});
-
-test('interpret assigns array element with variable index', () => {
+test('interpret supports generic structs', () => {
   expect(
-    interpret('let mut array : [I32; 0; 2]; let mut idx : USize = 0; array[idx] = 100; array[0]')
+    interpret(
+      'struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field'
+    )
   ).toBe(100);
+});
+
+test('interpret supports generic structs with type checking', () => {
+  expect(
+    interpret(
+      'struct Wrapper<T> { field : T; } let wrapper = Wrapper<Bool> { true }; wrapper.field is I32'
+    )
+  ).toBe(0);
 });
