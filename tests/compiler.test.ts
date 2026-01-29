@@ -255,9 +255,8 @@ describe('compiler: block expressions', () => {
   });
 
   test('compile handles nested blocks', () => {
-      assertValid('{ let x = 5; { let y = 10; x + y } }', 15);
+    assertValid('{ let x = 5; { let y = 10; x + y } }', 15);
   });
-
 });
 describe('compiler: error handling', () => {
   test('compile rejects unmatched opening parenthesis', () => {

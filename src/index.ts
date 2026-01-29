@@ -386,6 +386,8 @@ export function compile(input: string): string {
     .replace(/\/\*[\s\S]*?\*\//g, '') // strip block comments
     .trim();
 
+  const originalCode = code;
+
   if (!code) {
     return 'return 0;';
   }
@@ -470,19 +472,36 @@ export function compile(input: string): string {
   // Handle let statements and track mutability
   const mutableVars = new Set<string>();
   const definedVars = new Set<string>();
+  const varTypes = new Map<string, ExprType>();
   let jsCode = '';
   // Replace inline blocks with IIFEs
   code = replaceInlineBlocks(code);
 
   // Split by semicolons while preserving the rest
-  const stmts = code
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s);
+  const stmts = splitStatements(code);
+  const stmtsOriginal = splitStatements(originalCode);
 
   // Process all statements except the last
   for (let i = 0; i < stmts.length - 1; i++) {
     const stmt = stmts[i];
+    const stmtOriginal = stmtsOriginal[i] || stmt;
+
+    const whileMatchOriginal = stmtOriginal.match(/^while\s*\((.+)\)\s*(.+)$/);
+    if (whileMatchOriginal) {
+      const conditionOriginal = whileMatchOriginal[1].trim();
+      const whileMatch = stmt.match(/^while\s*\((.+)\)\s*(.+)$/);
+      const condition = whileMatch ? whileMatch[1].trim() : conditionOriginal;
+      const body = whileMatch ? whileMatch[2].trim() : whileMatchOriginal[2].trim();
+
+      ensureWhileConditionBool(conditionOriginal, varTypes);
+
+      const whileResult = buildWhileLoop(condition, body);
+      jsCode += whileResult.loopCode;
+      if (whileResult.trailing) {
+        jsCode += whileResult.trailing + '; ';
+      }
+      continue;
+    }
 
     // Check if this is a let statement
     const letMatch = stmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*[\w<>]+)?\s*=\s*(.+)$/);
@@ -490,32 +509,33 @@ export function compile(input: string): string {
       const isMutable = !!letMatch[1];
       const varName = letMatch[2];
       const varValue = letMatch[3];
+      const varValueOriginal = stmtOriginal.match(
+        /^let\s+(mut\s+)?(\w+)\s*(?::\s*[\w<>]+)?\s*=\s*(.+)$/
+      );
+      const valueForType = varValueOriginal ? varValueOriginal[3] : varValue;
 
       if (isMutable) {
         mutableVars.add(varName);
       }
 
       definedVars.add(varName);
+      varTypes.set(varName, detectExprTypeSimple(valueForType, varTypes));
 
       // Check if varValue references undefined variables
-      checkUndefinedVars(varValue, definedVars);
+      checkUndefinedVars(valueForType, definedVars);
 
       jsCode += 'let ' + varName + ' = ' + varValue + '; ';
     } else {
       // Check if this is an assignment
-      const assignMatch = stmt.match(/^(\w+)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+      const assignMatch = stmt.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
       if (assignMatch) {
         const varName = assignMatch[1];
         const operator = assignMatch[2];
         const value = assignMatch[3];
+        const valueOriginalMatch = stmtOriginal.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
+        const valueOriginal = valueOriginalMatch ? valueOriginalMatch[3] : value;
 
-        // Verify variable is mutable
-        if (operator === '=' && !mutableVars.has(varName)) {
-          throw new Error('cannot assign to immutable variable');
-        }
-
-        // Check if value references undefined variables
-        checkUndefinedVars(value, definedVars);
+        validateAssignment(varName, operator, valueOriginal, mutableVars, definedVars, varTypes);
 
         jsCode += varName + ' ' + operator + ' ' + value + '; ';
       } else {
@@ -528,6 +548,65 @@ export function compile(input: string): string {
   // Process the final statement as a return expression
   if (stmts.length > 0) {
     let lastStmt = stmts[stmts.length - 1];
+    const lastStmtOriginal = stmtsOriginal[stmtsOriginal.length - 1] || lastStmt;
+
+    const lastWhileOriginal = lastStmtOriginal.match(/^while\s*\((.+)\)\s*(.+)$/);
+    if (lastWhileOriginal) {
+      const conditionOriginal = lastWhileOriginal[1].trim();
+      const lastWhile = lastStmt.match(/^while\s*\((.+)\)\s*(.+)$/);
+      const condition = lastWhile ? lastWhile[1].trim() : conditionOriginal;
+      const body = lastWhile ? lastWhile[2].trim() : lastWhileOriginal[2].trim();
+
+      ensureWhileConditionBool(conditionOriginal, varTypes);
+
+      const lastWhileResult = buildWhileLoop(condition, body);
+      jsCode += lastWhileResult.loopCode;
+
+      if (lastWhileResult.trailing) {
+        lastStmt = lastWhileResult.trailing;
+      } else {
+        jsCode += 'return 0;';
+        return jsCode;
+      }
+    }
+
+    const lastLetOriginal = lastStmtOriginal.match(
+      /^let\s+(mut\s+)?(\w+)\s*(?::\s*[\w<>]+)?\s*=\s*(.+)$/
+    );
+    if (lastLetOriginal) {
+      const isMutable = !!lastLetOriginal[1];
+      const varName = lastLetOriginal[2];
+      const varValueOriginal = lastLetOriginal[3];
+      const lastLet = lastStmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*[\w<>]+)?\s*=\s*(.+)$/);
+      const varValue = lastLet ? lastLet[3] : varValueOriginal;
+
+      if (isMutable) {
+        mutableVars.add(varName);
+      }
+
+      definedVars.add(varName);
+      varTypes.set(varName, detectExprTypeSimple(varValueOriginal, varTypes));
+      checkUndefinedVars(varValueOriginal, definedVars);
+
+      jsCode += 'let ' + varName + ' = ' + varValue + '; ';
+      jsCode += 'return 0;';
+      return jsCode;
+    }
+
+    const lastAssignOriginal = lastStmtOriginal.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
+    if (lastAssignOriginal) {
+      const varName = lastAssignOriginal[1];
+      const operator = lastAssignOriginal[2];
+      const valueOriginal = lastAssignOriginal[3];
+      const lastAssign = lastStmt.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
+      const value = lastAssign ? lastAssign[3] : valueOriginal;
+
+      validateAssignment(varName, operator, valueOriginal, mutableVars, definedVars, varTypes);
+
+      jsCode += varName + ' ' + operator + ' ' + value + '; ';
+      jsCode += 'return 0;';
+      return jsCode;
+    }
 
     // Handle if/else expressions by converting to ternary operators
     lastStmt = convertIfElseToTernary(lastStmt);
@@ -569,6 +648,107 @@ export function compile(input: string): string {
  * Find and replace all inline block expressions with IIFEs.
  * Only processes complete blocks and returns the modified code.
  */
+type ExprType = 'Bool' | 'Numeric' | 'Unknown';
+
+function detectExprTypeSimple(expr: string, varTypes: Map<string, ExprType>): ExprType {
+  const trimmed = expr.trim();
+  if (!trimmed) return 'Unknown';
+
+  if (/\btrue\b|\bfalse\b/.test(trimmed)) {
+    return 'Bool';
+  }
+
+  if (/==|!=|<|>|<=|>=|&&|\|\||!/.test(trimmed)) {
+    return 'Bool';
+  }
+
+  const identMatch = trimmed.match(/^\w+$/);
+  if (identMatch) {
+    return varTypes.get(trimmed) || 'Unknown';
+  }
+
+  return 'Numeric';
+}
+
+function splitStatements(source: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let braceDepth = 0;
+  let parenDepth = 0;
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === '{') braceDepth++;
+    if (ch === '}') braceDepth--;
+    if (ch === '(') parenDepth++;
+    if (ch === ')') parenDepth--;
+
+    if (ch === ';' && braceDepth === 0 && parenDepth === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function ensureWhileConditionBool(condition: string, varTypes: Map<string, ExprType>): void {
+  if (detectExprTypeSimple(condition, varTypes) !== 'Bool') {
+    throw new Error('while condition must be boolean');
+  }
+}
+
+function buildWhileLoop(condition: string, body: string): { loopCode: string; trailing: string } {
+  if (body.startsWith('{')) {
+    let braceDepth = 0;
+    let endIndex = -1;
+    for (let j = 0; j < body.length; j++) {
+      if (body[j] === '{') braceDepth++;
+      if (body[j] === '}') braceDepth--;
+      if (braceDepth === 0) {
+        endIndex = j;
+        break;
+      }
+    }
+
+    const blockBody = endIndex >= 0 ? body.slice(0, endIndex + 1) : body;
+    const trailing = endIndex >= 0 ? body.slice(endIndex + 1).trim() : '';
+    return { loopCode: 'while (' + condition + ') ' + blockBody + ' ', trailing };
+  }
+
+  return { loopCode: 'while (' + condition + ') { ' + body + '; } ', trailing: '' };
+}
+
+function validateAssignment(
+  varName: string,
+  operator: string,
+  valueOriginal: string,
+  mutableVars: Set<string>,
+  definedVars: Set<string>,
+  varTypes: Map<string, ExprType>
+): void {
+  if (!definedVars.has(varName)) {
+    throw new Error('undefined variable');
+  }
+
+  if (!mutableVars.has(varName)) {
+    throw new Error('cannot assign to immutable variable');
+  }
+
+  checkUndefinedVars(valueOriginal, definedVars);
+
+  if (operator !== '=') {
+    const varType = varTypes.get(varName);
+    const valueType = detectExprTypeSimple(valueOriginal, varTypes);
+    if (varType === 'Bool' || valueType === 'Bool') {
+      throw new Error('cannot perform arithmetic on booleans');
+    }
+  }
+}
+
 function replaceInlineBlocks(code: string): string {
   // For now, disable this while we debug the infinite loop issue
   return code;
