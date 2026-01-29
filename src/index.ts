@@ -12,7 +12,67 @@ export function add(a: number, b: number): number {
  * - Otherwise returns 0 (stub behavior)
  */
 export function interpret(input: string): number {
-  const s = input.trim();
+  function stripComments(source: string): string {
+    let out = '';
+    let i = 0;
+    let inLineComment = false;
+    let inBlockComment = false;
+    let inString = false;
+    let inChar = false;
+    while (i < source.length) {
+      const ch = source[i];
+      const next = i + 1 < source.length ? source[i + 1] : '';
+
+      if (inLineComment) {
+        if (ch === '\n') {
+          inLineComment = false;
+          out += ch;
+        }
+        i++;
+        continue;
+      }
+
+      if (inBlockComment) {
+        if (ch === '*' && next === '/') {
+          inBlockComment = false;
+          i += 2;
+          continue;
+        }
+        i++;
+        continue;
+      }
+
+      if (!inString && !inChar && ch === '/' && next === '/') {
+        inLineComment = true;
+        i += 2;
+        continue;
+      }
+      if (!inString && !inChar && ch === '/' && next === '*') {
+        inBlockComment = true;
+        i += 2;
+        continue;
+      }
+
+      if (!inChar && ch === '"') {
+        inString = !inString;
+        out += ch;
+        i++;
+        continue;
+      }
+      if (!inString && ch === "'") {
+        inChar = !inChar;
+        out += ch;
+        i++;
+        continue;
+      }
+
+      out += ch;
+      i++;
+    }
+    return out;
+  }
+
+  const s = stripComments(input).trim();
   if (s === '') return 0;
 
   type Type =
@@ -1730,6 +1790,31 @@ export function interpret(input: string): number {
       };
     }
 
+    // Helper to evaluate .length property on values
+    function evaluateLengthProperty(
+      value: RuntimeValue,
+      valueContext?: Context
+    ): RuntimeValue | null {
+      if (value.type?.kind === 'Str' && value.stringValue !== undefined) {
+        return { value: value.stringValue.length, type: { kind: 'U', width: 64 } };
+      }
+      if (value.type?.kind === 'Ptr' && value.type.pointsTo.kind === 'Str') {
+        if (value.stringValue !== undefined) {
+          return { value: value.stringValue.length, type: { kind: 'U', width: 64 } };
+        }
+        if (value.refersTo && valueContext) {
+          const targetVar = valueContext.get(value.refersTo);
+          if (targetVar && targetVar.stringValue !== undefined) {
+            return { value: targetVar.stringValue.length, type: { kind: 'U', width: 64 } };
+          }
+        }
+      }
+      if (value.type?.kind === 'Array') {
+        return { value: value.type.length, type: { kind: 'U', width: 64 } };
+      }
+      return null;
+    }
+
     // Check for struct field access through variable: variableName.fieldName or this.variableName
     const fieldAccessRegex = /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)$/;
     const fieldAccessMatch = expr.trim().match(fieldAccessRegex);
@@ -1743,6 +1828,15 @@ export function interpret(input: string): number {
       }
 
       const varInfo = ensureVariable(varName, context);
+
+      // Handle special .length property for strings and arrays
+      if (fieldName === 'length') {
+        const lengthResult = evaluateLengthProperty(varInfo, context);
+        if (lengthResult !== null) {
+          return lengthResult;
+        }
+        throw new Error('cannot access .length on non-string/non-array type');
+      }
 
       if (fieldName === 'this' && varInfo.type?.kind === 'This') {
         return snapshotRuntimeValue(varInfo);
@@ -1794,6 +1888,16 @@ export function interpret(input: string): number {
       const baseExpr = exprFieldMatch[1].trim();
       const fieldName = exprFieldMatch[2];
       const baseValue = processExprWithContext(baseExpr, context, functions, structs);
+
+      // Handle special .length property for strings and arrays
+      if (fieldName === 'length') {
+        const lengthResult = evaluateLengthProperty(baseValue, context);
+        if (lengthResult !== null) {
+          return lengthResult;
+        }
+        throw new Error('cannot access .length on non-string/non-array type');
+      }
+
       if (fieldName === 'this' && baseValue.type?.kind === 'This') {
         return baseValue;
       }

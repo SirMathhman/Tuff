@@ -751,3 +751,22 @@ test('interpret supports string indexing with different positions', () => {
   expect(interpret('let x : *Str = "hello"; x[1]')).toBe(101); // 'e'
   expect(interpret('let x : *Str = "hello"; x[4]')).toBe(111); // 'o'
 });
+
+test('interpret ignores line comments', () => {
+  expect(interpret('let x = 1; // comment\n x + 1')).toBe(2);
+});
+
+test('interpret ignores block comments', () => {
+  expect(interpret('let x = 1; /* comment */ x + 2')).toBe(3);
+});
+
+test('interpret keeps comment markers inside strings', () => {
+  expect(interpret('let x : *Str = "//not a comment"; x[0]')).toBe(47);
+  expect(interpret('let x : *Str = "/*not*/"; x[0]')).toBe(47);
+});
+
+test('interpret accesses .length property on dereferenced strings', () => {
+  expect(interpret('let x : *Str = "test"; x.length')).toBe(4);
+  expect(interpret('let x : *Str = "hello"; x.length')).toBe(5);
+  expect(interpret('let x : *Str = ""; x.length')).toBe(0);
+});
