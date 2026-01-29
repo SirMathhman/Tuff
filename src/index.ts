@@ -45,7 +45,7 @@ export function interpret(input: string): number {
   };
 
   type FunctionTable = Map<string, FunctionDef>;
-  type StructInfo = { fields: Array<{ name: string; type: Type }> };
+  type StructInfo = { fields: Array<{ name: string; type: Type }>; typeParams?: string[] };
   type StructTable = Map<string, StructInfo>;
   type TypeAliasTable = Map<string, Type>;
 
@@ -366,6 +366,13 @@ export function interpret(input: string): number {
       const width = Number(typeMatch[2]);
       return { kind, width };
     }
+
+    // Parse generic type parameter (e.g., T, U, V)
+    const genericMatch = typeStr.match(/^([A-Z][a-zA-Z0-9_]*)$/);
+    if (genericMatch) {
+      return { kind: 'Generic', name: genericMatch[1] };
+    }
+
     return undefined;
   }
 
@@ -733,14 +740,40 @@ export function interpret(input: string): number {
     structs: StructTable
   ): RuntimeValue | null {
     const trimmed = expr.trim();
-    const structRegex = /^([a-zA-Z_]\w*)\s*\{\s*([\s\S]*?)\s*\}\s*(?:\.\s*([a-zA-Z_]\w*))?$/;
+    const structRegex =
+      /^([a-zA-Z_]\w*)(?:\s*<\s*([^>]+)\s*>)?\s*\{\s*([\s\S]*?)\s*\}\s*(?:\.\s*([a-zA-Z_]\w*))?$/;
     const match = trimmed.match(structRegex);
     if (!match) return null;
     const structName = match[1];
+    const typeArgsStr = match[2];
+    const argsBody = match[3];
+    const memberName = match[4];
+
     const structDef = structs.get(structName);
     if (!structDef) throw new Error('struct not defined: ' + structName);
-    const argsBody = match[2];
-    const memberName = match[3];
+
+    // Parse type arguments and create a type parameter substitution map
+    const typeSubstitution = new Map<string, Type>();
+    if (typeArgsStr) {
+      const typeArgs = typeArgsStr.split(',').map((s) => s.trim());
+      if (!structDef.typeParams || typeArgs.length !== structDef.typeParams.length) {
+        throw new Error(
+          'struct ' +
+            structName +
+            ' expects ' +
+            (structDef.typeParams?.length || 0) +
+            ' type arguments'
+        );
+      }
+      for (let i = 0; i < typeArgs.length; i++) {
+        const typeArg = parseStructFieldType(typeArgs[i]);
+        if (!typeArg) throw new Error('invalid type argument: ' + typeArgs[i]);
+        typeSubstitution.set(structDef.typeParams[i], typeArg);
+      }
+    } else if (structDef.typeParams && structDef.typeParams.length > 0) {
+      throw new Error('struct ' + structName + ' requires type arguments');
+    }
+
     const argParts = splitStructArgs(argsBody);
     if (argParts.length !== structDef.fields.length) {
       throw new Error(
@@ -757,13 +790,24 @@ export function interpret(input: string): number {
       const fieldDef = structDef.fields[i];
       const exprPart = argParts[i];
       const fieldValue = processExprWithContext(exprPart, context, functions, structs);
-      validateNarrowing(fieldValue.suffix, fieldDef.type);
+
+      // Resolve field type with generic substitution
+      let resolvedFieldType = fieldDef.type;
+      if (fieldDef.type.kind === 'Generic' && typeSubstitution.has(fieldDef.type.name)) {
+        resolvedFieldType = typeSubstitution.get(fieldDef.type.name)!;
+      }
+
+      validateNarrowing(fieldValue.suffix, resolvedFieldType);
       if (
-        fieldDef.type.kind !== 'Ptr' &&
-        fieldDef.type.kind !== 'Void' &&
-        'width' in fieldDef.type
+        resolvedFieldType.kind !== 'Ptr' &&
+        resolvedFieldType.kind !== 'Void' &&
+        'width' in resolvedFieldType
       ) {
-        validateValueAgainstSuffix(fieldValue.value, fieldDef.type.kind, fieldDef.type.width);
+        validateValueAgainstSuffix(
+          fieldValue.value,
+          resolvedFieldType.kind,
+          resolvedFieldType.width
+        );
       }
       fieldValues.set(fieldDef.name, fieldValue);
     }
@@ -1341,17 +1385,21 @@ export function interpret(input: string): number {
         let remainder = stmt;
         while (remainder.startsWith('struct ')) {
           const structMatch = remainder.match(
-            /^struct\s+([a-zA-Z_]\w*)\s*\{\s*([\s\S]*?)\s*\}\s*(?:;\s*)?/
+            /^struct\s+([a-zA-Z_]\w*)(?:\s*<\s*([^>]+)\s*>)?\s*\{\s*([\s\S]*?)\s*\}\s*(?:;\s*)?/
           );
           if (!structMatch) throw new Error('invalid struct declaration');
           const structName = structMatch[1];
+          const typeParamsStr = structMatch[2];
+          const typeParams = typeParamsStr
+            ? typeParamsStr.split(',').map((p) => p.trim())
+            : undefined;
           if (structs.has(structName) || structNames.has(structName)) {
             throw new Error('struct already defined: ' + structName);
           }
           structNames.add(structName);
           const fieldNames = new Set<string>();
           const fieldDefs: Array<{ name: string; type: Type }> = [];
-          const fields = structMatch[2].split(';');
+          const fields = structMatch[3].split(';');
           for (const field of fields) {
             const fieldTrimmed = field.trim();
             if (!fieldTrimmed) continue;
@@ -1368,7 +1416,7 @@ export function interpret(input: string): number {
             fieldNames.add(fieldName);
             fieldDefs.push({ name: fieldName, type: fieldType });
           }
-          structs.set(structName, { fields: fieldDefs });
+          structs.set(structName, { fields: fieldDefs, typeParams });
           remainder = remainder.substring(structMatch[0].length).trim();
         }
         if (remainder) {

@@ -75,6 +75,12 @@ test('interpret supports type aliases and is operator', () => {
   ).toBe(1);
 });
 
+test('interpret supports generic structs', () => {
+  expect(
+    interpret('struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field')
+  ).toBe(100);
+});
+
 test('interpret supports USize type', () => {
   expect(interpret('let x : USize = 100USize; x')).toBe(100);
 });
