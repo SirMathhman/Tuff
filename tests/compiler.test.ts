@@ -170,6 +170,36 @@ describe('compiler: comparisons', () => {
   });
 });
 
+describe('compiler: boolean operators', () => {
+  test('compile handles logical AND true', () => {
+    assertValid('true && true', 1);
+  });
+
+  test('compile handles logical AND with one false', () => {
+    assertValid('true && false', 0);
+  });
+
+  test('compile handles logical OR true', () => {
+    assertValid('false || true', 1);
+  });
+
+  test('compile handles logical OR both false', () => {
+    assertValid('false || false', 0);
+  });
+
+  test('compile handles boolean operators with comparisons', () => {
+    assertValid('5 > 3 && 2 < 4', 1);
+  });
+
+  test('compile handles AND/OR chaining', () => {
+    assertValid('true && true && false', 0);
+  });
+
+  test('compile handles OR with multiple values', () => {
+    assertValid('false || false || true', 1);
+  });
+});
+
 describe('compiler: error handling', () => {
   test('compile rejects unmatched opening parenthesis', () => {
     assertInvalid('(1 + 2');
@@ -179,4 +209,3 @@ describe('compiler: error handling', () => {
     assertInvalid('x');
   });
 });
-

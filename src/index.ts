@@ -504,10 +504,21 @@ export function compile(input: string): string {
     // Check for undefined variables in final expression
     checkUndefinedVars(lastStmt, definedVars);
 
-    // Check if this is a comparison and wrap it to convert bool to number
+    // Check if this is a comparison or boolean operator and wrap to convert bool to number
     // Comparison operators: ==, !=, <, >, <=, >=
-    if (/==|!=|<|>|<=|>=/.test(lastStmt)) {
-      lastStmt = '(' + lastStmt + ' ? 1 : 0)';
+    // Boolean operators: &&, ||, !
+    const hasBoolOp = /==|!=|<|>|<=|>=|&&|\|\||!/.test(lastStmt);
+
+    if (hasBoolOp) {
+      // For NOT operator, we need special handling as it's unary
+      // Convert !expr to (expr ? 0 : 1)
+      lastStmt = lastStmt.replace(/!(\w+)/g, '($1 ? 0 : 1)');
+      lastStmt = lastStmt.replace(/!\(([^)]+)\)/g, '($1 ? 0 : 1)');
+
+      // Wrap the whole expression if it contains comparison or logical operators
+      if (/==|!=|<|>|<=|>=|&&|\|\|/.test(lastStmt)) {
+        lastStmt = '(' + lastStmt + ' ? 1 : 0)';
+      }
     }
 
     jsCode += 'return ' + lastStmt + ';';
