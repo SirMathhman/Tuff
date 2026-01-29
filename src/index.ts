@@ -30,6 +30,7 @@ export function interpret(input: string): number {
     type?: Type;
     refersTo?: string;
     refersToFn?: string;
+    boundThis?: RuntimeValue;
     structName?: string;
     structFields?: Map<string, RuntimeValue>;
     arrayElements?: Array<RuntimeValue | undefined>;
@@ -112,6 +113,16 @@ export function interpret(input: string): number {
       return '(' + paramStrs.join(', ') + ') => ' + returnStr;
     }
     return suffix.kind + suffix.width;
+  }
+
+  function buildFunctionPointerValue(fnName: string, functions: FunctionTable): RuntimeValue {
+    const fnDef = functions.get(fnName);
+    if (!fnDef) {
+      throw new Error('function not found: ' + fnName);
+    }
+    const returnType = fnDef.returnType || { kind: 'I', width: 32 };
+    const paramTypes = fnDef.params.map((param) => param.type);
+    return { value: 0, type: { kind: 'FnPtr', paramTypes, returnType }, refersToFn: fnName };
   }
 
   function typeEqualsForValidation(leftType: Type, rightType: Type): boolean {
@@ -551,6 +562,7 @@ export function interpret(input: string): number {
       type: value.type,
       refersTo: value.refersTo,
       refersToFn: value.refersToFn,
+      boundThis: value.boundThis,
       structName: value.structName,
       structFields: value.structFields,
       arrayElements: value.arrayElements,
@@ -579,6 +591,21 @@ export function interpret(input: string): number {
       derived.set(key, snapshotContextValue(value));
     }
     return derived;
+  }
+
+  function buildBoundThisFunctionValue(
+    baseValue: RuntimeValue,
+    fieldName: string,
+    functions: FunctionTable
+  ): RuntimeValue | null {
+    if (baseValue.type?.kind !== 'This') {
+      return null;
+    }
+    if (!functions.has(fieldName)) {
+      return null;
+    }
+    const fnValue = buildFunctionPointerValue(fieldName, functions);
+    return { ...fnValue, boundThis: snapshotRuntimeValue(baseValue) };
   }
 
   function evaluateAssignmentValue(
@@ -712,10 +739,7 @@ export function interpret(input: string): number {
       // variable reference
       if (!context.has(token)) {
         if (functions.has(token)) {
-          const fnDef = functions.get(token);
-          const returnType = fnDef?.returnType || { kind: 'I', width: 32 };
-          const paramTypes = fnDef ? fnDef.params.map((param) => param.type) : [];
-          return { value: 0, type: { kind: 'FnPtr', paramTypes, returnType }, refersToFn: token };
+          return buildFunctionPointerValue(token, functions);
         }
         throw new Error('undefined variable: ' + token);
       }
@@ -1527,6 +1551,15 @@ export function interpret(input: string): number {
 
       const varInfo = ensureVariable(varName, context);
 
+      const boundFunctionValue = buildBoundThisFunctionValue(
+        snapshotRuntimeValue(varInfo),
+        fieldName,
+        functions
+      );
+      if (boundFunctionValue) {
+        return boundFunctionValue;
+      }
+
       // Special case: if varInfo is a pointer to This, dereference and access variable
       if (varInfo.type?.kind === 'Ptr' && varInfo.type.pointsTo.kind === 'This') {
         return ensureVariable(fieldName, context);
@@ -1550,6 +1583,10 @@ export function interpret(input: string): number {
       const baseExpr = exprFieldMatch[1].trim();
       const fieldName = exprFieldMatch[2];
       const baseValue = processExprWithContext(baseExpr, context, functions, structs);
+      const boundFunctionValue = buildBoundThisFunctionValue(baseValue, fieldName, functions);
+      if (boundFunctionValue) {
+        return boundFunctionValue;
+      }
 
       if (baseValue.type?.kind === 'Ptr' && baseValue.type.pointsTo.kind === 'This') {
         return ensureVariable(fieldName, context);
@@ -1575,6 +1612,16 @@ export function interpret(input: string): number {
       } else if (!calleeExpr.match(/^[a-zA-Z_]\w*$/)) {
         const calleeValue = processExprWithContext(calleeExpr, context, functions, structs);
         if (calleeValue.refersToFn) {
+          if (calleeValue.boundThis) {
+            const derivedContext = buildContextFromThisValue(calleeValue.boundThis, context);
+            return executeFunctionCall(
+              calleeValue.refersToFn,
+              argsStr,
+              derivedContext,
+              functions,
+              structs
+            );
+          }
           return executeFunctionCall(calleeValue.refersToFn, argsStr, context, functions, structs);
         }
         throw new Error('function not found: ' + calleeExpr);
@@ -1637,17 +1684,23 @@ export function interpret(input: string): number {
     if (callMatch) {
       const nameOrVar = callMatch[1];
       let fnName = nameOrVar;
+      let boundThis: RuntimeValue | undefined;
 
       // Check if this is a function pointer variable
       if (!functions.has(nameOrVar) && context.has(nameOrVar)) {
         const varInfo = context.get(nameOrVar);
         if (varInfo?.refersToFn) {
           fnName = varInfo.refersToFn;
+          boundThis = varInfo.boundThis;
         }
       }
 
       if (!functions.has(fnName)) {
         throw new Error('function not found: ' + fnName);
+      }
+      if (boundThis) {
+        const derivedContext = buildContextFromThisValue(boundThis, context);
+        return executeFunctionCall(fnName, callMatch[2], derivedContext, functions, structs);
       }
       return executeFunctionCall(fnName, callMatch[2], context, functions, structs);
     }
@@ -1963,6 +2016,7 @@ export function interpret(input: string): number {
         let arrayInitializedCount: number | undefined;
         let tupleElements: RuntimeValue[] | undefined;
         let refersToFn: string | undefined;
+        let boundThis: RuntimeValue | undefined;
 
         // First, try to parse the declared type
         let declaredSuffix: Type | undefined;
@@ -2025,6 +2079,8 @@ export function interpret(input: string): number {
               varValue = varValueObj.value;
               valSuffix = varValueObj.type;
               refersTo = varValueObj.refersTo;
+              refersToFn = varValueObj.refersToFn;
+              boundThis = varValueObj.boundThis;
               initialized = true;
             }
           } else {
@@ -2033,6 +2089,8 @@ export function interpret(input: string): number {
             varValue = varValueObj.value;
             valSuffix = varValueObj.type;
             refersTo = varValueObj.refersTo;
+            refersToFn = varValueObj.refersToFn;
+            boundThis = varValueObj.boundThis;
             initialized = true;
           }
         } else if (varExprStr !== undefined) {
@@ -2044,11 +2102,13 @@ export function interpret(input: string): number {
           varValue = varValueObj.value;
           valSuffix = varValueObj.type;
           refersTo = varValueObj.refersTo;
+          refersToFn = varValueObj.refersToFn;
           structName = varValueObj.structName;
           structFields = varValueObj.structFields;
           arrayElements = varValueObj.arrayElements;
           arrayInitializedCount = varValueObj.arrayInitializedCount;
           tupleElements = varValueObj.tupleElements;
+          boundThis = varValueObj.boundThis;
           initialized = true;
         }
 
@@ -2124,6 +2184,7 @@ export function interpret(input: string): number {
           initialized: initialized,
           refersTo: refersTo,
           refersToFn: refersToFn,
+          boundThis: boundThis,
           structName: structName,
           structFields: structFields,
           arrayElements: arrayElements,
