@@ -37,10 +37,7 @@ test('buildReplInputs loads src tree for repl', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tuff-repl-'));
   const srcDir = path.join(tempDir, 'src');
   fs.mkdirSync(path.join(srcDir, 'foo', 'bar'), { recursive: true });
-  fs.writeFileSync(
-    path.join(srcDir, 'index.tuff'),
-    'use { pass } from lib; pass<I32>(100)'
-  );
+  fs.writeFileSync(path.join(srcDir, 'index.tuff'), 'use { pass } from lib; pass<I32>(100)');
   fs.writeFileSync(path.join(srcDir, 'lib.tuff'), 'fn pass<T>(value : T) => value;');
   fs.writeFileSync(path.join(srcDir, 'foo', 'bar', 'something.tuff'), '100');
   fs.writeFileSync(path.join(srcDir, 'native.ts'), 'export const myConst = 7;');
@@ -67,22 +64,14 @@ test('buildReplInputs loads src tree for repl', () => {
 
 test('interpretAll supports extern native bindings', () => {
   const config = new Map([
-    [
-      ['main'],
-      'extern use { myConst } from lib; extern let myConst : I32; myConst',
-    ],
+    [['main'], 'extern use { myConst } from lib; extern let myConst : I32; myConst'],
   ]);
   const nativeConfig = new Map([[['lib'], 'export const myConst = 100;']]);
   expect(interpretAll(['main'], config, nativeConfig)).toBe(100);
 });
 
 test('interpretAll supports extern native functions', () => {
-  const config = new Map([
-    [
-      ['main'],
-      'extern use { get } from lib; extern fn get() : I32; get()',
-    ],
-  ]);
+  const config = new Map([[['main'], 'extern use { get } from lib; extern fn get() : I32; get()']]);
   const nativeConfig = new Map([[['lib'], 'export function get() { return 100; }']]);
   expect(interpretAll(['main'], config, nativeConfig)).toBe(100);
 });

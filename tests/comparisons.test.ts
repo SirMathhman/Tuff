@@ -37,4 +37,3 @@ test('interpret rejects non-boolean while conditions', () => {
     'while condition must be boolean'
   );
 });
-

@@ -7,15 +7,13 @@ test('interpret rejects assigning inferred void function result', () => {
 });
 
 test('interpret rejects assigning implicit void from block with inner fn', () => {
-  expect(() =>
-    interpret('fn outer() => { fn inner() => {} } let value = outer(); value')
-  ).toThrow('void function cannot return a value');
+  expect(() => interpret('fn outer() => { fn inner() => {} } let value = outer(); value')).toThrow(
+    'void function cannot return a value'
+  );
 });
 
 test('interpret allows consecutive fn declarations without semicolons', () => {
-  expect(
-    interpret('fn outer() => {\nfn a() => 1\nfn b() => 2\nb()\n} outer()')
-  ).toBe(2);
+  expect(interpret('fn outer() => {\nfn a() => 1\nfn b() => 2\nb()\n} outer()')).toBe(2);
 });
 
 test('interpret rejects array element type mismatch', () => {
@@ -45,17 +43,20 @@ test('interpret supports forward type alias references', () => {
 
 test('interpret supports generic structs', () => {
   expect(
-    interpret('struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field')
+    interpret(
+      'struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field'
+    )
   ).toBe(100);
 });
 
 test('interpret supports generic structs with type checking', () => {
   expect(
-    interpret('struct Wrapper<T> { field : T; } let wrapper = Wrapper<Bool> { true }; wrapper.field is I32')
+    interpret(
+      'struct Wrapper<T> { field : T; } let wrapper = Wrapper<Bool> { true }; wrapper.field is I32'
+    )
   ).toBe(0);
 });
 
 test('interpret supports USize type', () => {
   expect(interpret('let x : USize = 100USize; x')).toBe(100);
 });
-

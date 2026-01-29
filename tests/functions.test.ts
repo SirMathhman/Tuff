@@ -67,14 +67,13 @@ test('interpret calls void functions and treats result as 0', () => {
 });
 
 test('interpret rejects bool function results assigned to numeric', () => {
-  expect(() =>
-    interpret('fn empty() => true; let result : I32 = empty(); result')
-  ).toThrow('cannot convert Bool to numeric type');
+  expect(() => interpret('fn empty() => true; let result : I32 = empty(); result')).toThrow(
+    'cannot convert Bool to numeric type'
+  );
 });
 
 test('interpret rejects duplicate function definitions', () => {
-  expect(() =>
-    interpret('fn empty() : Void => {}; fn empty() : Void => {};')
-  ).toThrow('function already defined: empty');
+  expect(() => interpret('fn empty() : Void => {}; fn empty() : Void => {};')).toThrow(
+    'function already defined: empty'
+  );
 });
-

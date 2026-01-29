@@ -7,14 +7,14 @@ module.exports = {
       {
         jsc: {
           parser: {
-            syntax: 'typescript'
+            syntax: 'typescript',
           },
-          target: 'es2020'
+          target: 'es2020',
         },
         module: {
-          type: 'commonjs'
-        }
-      }
-    ]
-  }
+          type: 'commonjs',
+        },
+      },
+    ],
+  },
 };

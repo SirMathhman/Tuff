@@ -50,4 +50,3 @@ test('interpret supports logical AND operator', () => {
 test('interpret rejects equality comparison between different types (number and bool)', () => {
   expect(() => interpret('100 == true')).toThrow('cannot compare different types');
 });
-

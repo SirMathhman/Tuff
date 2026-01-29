@@ -35,4 +35,3 @@ test('interpret distinguishes pointers to different variables', () => {
 test('interpret supports char literals and returns UTF-8 code', () => {
   expect(interpret("let x : Char = 'a'; x")).toBe(97);
 });
-

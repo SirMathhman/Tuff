@@ -78,4 +78,3 @@ test('interpret evaluates block with assignment', () => {
 test('interpret keeps block-scoped variables from leaking', () => {
   expect(() => interpret('{ let mut x = 0 }; x = 1; x')).toThrow('undefined variable');
 });
-

@@ -6,12 +6,12 @@ module.exports = [
       parser: require('@typescript-eslint/parser'),
       parserOptions: {
         project: './tsconfig.json',
-        tsconfigRootDir: __dirname
-      }
+        tsconfigRootDir: __dirname,
+      },
     },
     plugins: {
       '@typescript-eslint': require('@typescript-eslint/eslint-plugin'),
-      prettier: require('eslint-plugin-prettier')
+      prettier: require('eslint-plugin-prettier'),
     },
     rules: {
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
@@ -20,10 +20,10 @@ module.exports = [
         'error',
         {
           selector: 'TemplateLiteral',
-          message: 'Template literals are disallowed; use string concatenation instead.'
-        }
-      ]
+          message: 'Template literals are disallowed; use string concatenation instead.',
+        },
+      ],
     },
-    ignores: ['dist', 'node_modules']
-  }
+    ignores: ['dist', 'node_modules'],
+  },
 ];

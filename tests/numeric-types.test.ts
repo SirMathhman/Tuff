@@ -5,9 +5,7 @@ test('interpret supports generic identity function', () => {
 });
 
 test('interpret rejects copying arrays', () => {
-  expect(() =>
-    interpret('let array : [I32; 3; 3] = [1, 2, 3]; let array0 = array;')
-  ).toThrow();
+  expect(() => interpret('let array : [I32; 3; 3] = [1, 2, 3]; let array0 = array;')).toThrow();
 });
 
 test('interpret supports slice pointer indexing', () => {
@@ -17,9 +15,7 @@ test('interpret supports slice pointer indexing', () => {
 });
 
 test('interpret allows copying slice pointers', () => {
-  expect(
-    interpret('let array = [1, 2, 3]; let x : *[I32] = &array; let y = x; y[0]')
-  ).toBe(1);
+  expect(interpret('let array = [1, 2, 3]; let x : *[I32] = &array; let y = x; y[0]')).toBe(1);
 });
 
 test('interpret handles array indexing bounds', () => {
@@ -60,9 +56,7 @@ test('interpret rejects calling a non-function variable', () => {
 
 test('interpret reports missing method on value', () => {
   expect(() =>
-    interpret(
-      'fn List<T>() => { let x = 1; this }; let list = List<I32>(); list.getFirst();'
-    )
+    interpret('fn List<T>() => { let x = 1; this }; let list = List<I32>(); list.getFirst();')
   ).toThrow(
     'function not found: getFirst. Cause: call references an undefined function. Reason: functions must be declared before use. Fix: define fn getFirst(...) or correct the call. Context: method call list.getFirst().'
   );
@@ -130,4 +124,3 @@ test('interpret throws when sum overflows operand type (U8)', () => {
 test('interpret allows sum with mixed widths using wider type (U8 + U16)', () => {
   expect(interpret('1U8 + 255U16')).toBe(256);
 });
-

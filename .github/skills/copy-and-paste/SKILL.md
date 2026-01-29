@@ -17,6 +17,7 @@ This skill provides a Python utility (`copy_paste.py`) that enables programmatic
 ## Core Functionality
 
 The `copy_paste()` function accepts:
+
 - **source_path** (str): Path to the file to copy from
 - **dest_path** (str): Path to the file to copy to
 - **source_line** (int): 1-based line number in source file (where copying starts)
@@ -26,15 +27,17 @@ The `copy_paste()` function accepts:
 ## Usage
 
 ### Python API
+
 ```python
 from copy_paste import copy_paste
 
-# Copy 3 lines starting from line 10 in source.txt, 
+# Copy 3 lines starting from line 10 in source.txt,
 # insert at line 5 in dest.txt
 copy_paste("source.txt", "dest.txt", 10, 3, 5)
 ```
 
 ### Command Line
+
 ```bash
 python copy_paste.py source.txt dest.txt 10 3 5
 ```
@@ -50,15 +53,19 @@ python copy_paste.py source.txt dest.txt 10 3 5
 ## Example Scenarios
 
 **Scenario 1**: Extract a function from one file and add it to another
+
 ```bash
 python copy_paste.py utils.py main.py 50 8 15
 ```
+
 Copies 8 lines starting from line 50 of utils.py, inserts at line 15 of main.py.
 
 **Scenario 2**: Duplicate configuration from one file to another
+
 ```bash
 python copy_paste.py config1.json config2.json 1 20 100
 ```
+
 Copies first 20 lines of config1.json, inserts at line 100 of config2.json.
 
 ## Error Cases

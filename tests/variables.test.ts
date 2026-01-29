@@ -63,4 +63,3 @@ test('interpret supports variable declarations with suffix in initializer', () =
 test('interpret rejects narrowing conversions in variable declarations', () => {
   expect(() => interpret('let x : U8 = 18U16; x')).toThrow();
 });
-

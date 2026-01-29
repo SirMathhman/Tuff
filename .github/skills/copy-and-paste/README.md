@@ -55,6 +55,7 @@ python copy_paste.py file1.py file2.py 50 1 101
 ## Error Handling
 
 The utility validates:
+
 - Both files exist
 - Line numbers are valid (1-based)
 - Source line range doesn't exceed file length

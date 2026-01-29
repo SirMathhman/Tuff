@@ -5,15 +5,15 @@ test('interpret ignores struct declarations', () => {
 });
 
 test('interpret rejects duplicate struct declarations', () => {
-  expect(() =>
-    interpret('struct Empty {} struct Empty {}')
-  ).toThrow('struct already defined: Empty');
+  expect(() => interpret('struct Empty {} struct Empty {}')).toThrow(
+    'struct already defined: Empty'
+  );
 });
 
 test('interpret rejects duplicate struct fields', () => {
-  expect(() =>
-    interpret('struct Empty { x : I32; x : I32; }')
-  ).toThrow('duplicate struct field: x');
+  expect(() => interpret('struct Empty { x : I32; x : I32; }')).toThrow(
+    'duplicate struct field: x'
+  );
 });
 
 test('interpret allows structs with multiple fields', () => {
@@ -39,9 +39,7 @@ test('interpret rejects access to non-existent struct field', () => {
 });
 
 test('interpret creates and accesses arrays with indexing', () => {
-  expect(
-    interpret('let array : [I32; 1; 1] = [100]; array[0]')
-  ).toBe(100);
+  expect(interpret('let array : [I32; 1; 1] = [100]; array[0]')).toBe(100);
 });
 
 test('interpret indexes array literals directly', () => {
@@ -54,9 +52,6 @@ test('interpret indexes arrays returned by calls', () => {
 
 test('interpret assigns array element with variable index', () => {
   expect(
-    interpret(
-      'let mut array : [I32; 0; 2]; let mut idx : USize = 0; array[idx] = 100; array[0]'
-    )
+    interpret('let mut array : [I32; 0; 2]; let mut idx : USize = 0; array[idx] = 100; array[0]')
   ).toBe(100);
 });
-

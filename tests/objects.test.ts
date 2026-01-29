@@ -39,4 +39,3 @@ test('interpret supports returning this from inner function and reusing it', () 
     )
   ).toBe(100);
 });
-

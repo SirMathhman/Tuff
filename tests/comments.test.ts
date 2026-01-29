@@ -16,4 +16,3 @@ test('interpret ignores line comments', () => {
 test('interpret ignores block comments', () => {
   expect(interpret('let x = 1; /* comment */ x + 2')).toBe(3);
 });
-

@@ -1,15 +1,13 @@
 import { interpret } from '../src/index';
 
 test('interpret evaluates functions with parameters', () => {
-  expect(
-    interpret('fn add(first : I32, second : I32) => first + second; add(3, 4)')
-  ).toBe(7);
+  expect(interpret('fn add(first : I32, second : I32) => first + second; add(3, 4)')).toBe(7);
 });
 
 test('interpret rejects function calls with missing arguments', () => {
-  expect(() =>
-    interpret('fn add(first : I32, second : I32) => first + second; add()')
-  ).toThrow('function add expects 2 arguments, got 0');
+  expect(() => interpret('fn add(first : I32, second : I32) => first + second; add()')).toThrow(
+    'function add expects 2 arguments, got 0'
+  );
 });
 
 test('interpret rejects boolean arguments for numeric parameters', () => {
@@ -19,9 +17,9 @@ test('interpret rejects boolean arguments for numeric parameters', () => {
 });
 
 test('interpret rejects assigning void call result to variable', () => {
-  expect(() =>
-    interpret('fn empty() : Void => {}; let value = empty(); value')
-  ).toThrow('void function cannot return a value');
+  expect(() => interpret('fn empty() : Void => {}; let value = empty(); value')).toThrow(
+    'void function cannot return a value'
+  );
 });
 
 test('interpret rejects boolean return for numeric function', () => {
@@ -79,9 +77,7 @@ test('interpret supports function calls through this notation', () => {
 });
 
 test('interpret supports function pointers and calling through them', () => {
-  expect(
-    interpret('fn get() => 100; let func : () => I32 = get; func()')
-  ).toBe(100);
+  expect(interpret('fn get() => 100; let func : () => I32 = get; func()')).toBe(100);
 });
 
 test('interpret supports returning function pointers from functions', () => {
@@ -101,4 +97,3 @@ test('interpret allows returned this to capture parameters', () => {
     interpret('fn outer(x : I32, y : I32) => { fn inner() => x + y; this } outer(3, 4).inner()')
   ).toBe(7);
 });
-
