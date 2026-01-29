@@ -1,5 +1,20 @@
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/tests']
+  roots: ['<rootDir>/tests'],
+  transform: {
+    '^.+\\.(t|j)sx?$': [
+      '@swc/jest',
+      {
+        jsc: {
+          parser: {
+            syntax: 'typescript'
+          },
+          target: 'es2020'
+        },
+        module: {
+          type: 'commonjs'
+        }
+      }
+    ]
+  }
 };
