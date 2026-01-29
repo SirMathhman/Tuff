@@ -1,1 +1,14 @@
-let x : *Str = "test"; let y : Char = x[0]; y
+fn interpret(input : *Str) : I32 => {
+    fn stripComments(source : *Str) => {
+        let out = "";
+        let i = 0;
+        let inLineComment = false;
+        let inBlockComment = false;
+        let inString = false;
+        let inChar = false;
+    }
+
+    0
+}
+
+interpret("100")

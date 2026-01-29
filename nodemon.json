@@ -1,0 +1,7 @@
+{
+  "watch": ["src"],
+  "ext": "ts,tuff",
+  "ignore": ["dist", "tests"],
+  "exec": "bun ./src/index.ts",
+  "delay": 500
+}
