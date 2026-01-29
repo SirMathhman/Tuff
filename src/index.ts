@@ -15,10 +15,20 @@ export function interpret(input: string): number {
   const s = input.trim();
   if (s === '') return 0;
 
-  type TypedResult = { value: number; suffix?: Suffix };
+  type Suffix =
+    | { kind: 'U' | 'I' | 'Bool'; width: number }
+    | { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean }
+    | { kind: 'Void' };
+
+  type TypedResult = { value: number; suffix?: Suffix; refersTo?: string };
   type Context = Map<string, TypedResult & { mutable: boolean; initialized: boolean }>;
 
-  type Suffix = { kind: 'U' | 'I' | 'Bool'; width: number };
+  type FunctionDef = {
+    params: Array<{ name: string; type: Suffix }>;
+    returnType?: Suffix;
+    body: string;
+  };
+  type FunctionTable = Map<string, FunctionDef>;
 
   // helper to validate a value against a suffix kind/width
   function validateValueAgainstSuffix(val: number, kind: 'U' | 'I' | 'Bool', width: number) {
@@ -44,7 +54,33 @@ export function interpret(input: string): number {
     }
   }
 
+  function suffixKind(suffix: Suffix): string {
+    if (suffix.kind === 'Ptr') return 'Ptr<' + suffixKind(suffix.pointsTo) + '>';
+    if (suffix.kind === 'Void') return 'Void';
+    return suffix.kind + suffix.width;
+  }
+
   function validateNarrowing(source: Suffix | undefined, target: Suffix) {
+    if (target.kind === 'Void') {
+      if (source && source.kind !== 'Void') {
+        throw new Error('void function cannot return a value');
+      }
+      return;
+    }
+
+    if (target.kind === 'Ptr') {
+      if (!source || source.kind !== 'Ptr') {
+        throw new Error('cannot convert non-pointer to pointer type');
+      }
+      // Validate pointee types match
+      validateNarrowing(source.pointsTo, target.pointsTo);
+      return;
+    }
+
+    if (source && source.kind === 'Ptr') {
+      throw new Error('cannot convert pointer to non-pointer type');
+    }
+
     if (target.kind === 'Bool') {
       if (!source || source.kind !== 'Bool') {
         throw new Error('cannot convert numeric type to Bool');
@@ -53,17 +89,20 @@ export function interpret(input: string): number {
     }
 
     if (source && source.kind === 'Bool') {
-      // Allow Bool to be converted to numeric types?
-      // Rust doesn't allow implicit bool to int conversion.
-      // But the test case just asks for x : Bool = true; x => 1.
       return;
     }
 
     const effectiveSource = source;
-    if (effectiveSource && effectiveSource.width > target.width) {
-      throw new Error(
-        `narrowing conversion from ${effectiveSource.kind}${effectiveSource.width} to ${target.kind}${target.width}`
-      );
+    const sourceIsNumeric = effectiveSource && 'width' in effectiveSource;
+    const targetIsNumeric = 'width' in target;
+    if (sourceIsNumeric && targetIsNumeric && (effectiveSource as any).width > target.width) {
+      const message = [
+        'narrowing conversion from ',
+        suffixKind(effectiveSource),
+        ' to ',
+        suffixKind(target),
+      ].join('');
+      throw new Error(message);
     }
   }
 
@@ -99,15 +138,127 @@ export function interpret(input: string): number {
     return { value: Number.isFinite(n) ? n : 0 };
   }
 
+  function ensureVariable(
+    name: string,
+    context: Context
+  ): TypedResult & { mutable: boolean; initialized: boolean; refersTo?: string } {
+    if (!context.has(name)) {
+      throw new Error('undefined variable: ' + name);
+    }
+    return context.get(name)!;
+  }
+
+  function ensurePointer(
+    name: string,
+    context: Context
+  ): TypedResult & {
+    suffix: { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean };
+    refersTo: string;
+  } {
+    const ptrVar = ensureVariable(name, context);
+    if (ptrVar.suffix?.kind !== 'Ptr') {
+      throw new Error('cannot dereference non-pointer type');
+    }
+    if (!ptrVar.refersTo) {
+      throw new Error('pointer does not refer to a variable');
+    }
+    return ptrVar as TypedResult & {
+      suffix: { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean };
+      refersTo: string;
+    };
+  }
+
+  function tryParseSuffix(typeStr: string): Suffix | undefined {
+    if (typeStr === 'Bool') return { kind: 'Bool', width: 1 };
+    if (typeStr === 'Void') return { kind: 'Void' };
+    const typeMatch = typeStr.match(/^([UI])(\d+)$/);
+    if (typeMatch) {
+      const kind = typeMatch[1] as 'U' | 'I';
+      const width = Number(typeMatch[2]);
+      return { kind, width };
+    }
+    return undefined;
+  }
+
+  function parsePointerSuffix(typeStr: string, mutable: boolean): Suffix | undefined {
+    const pointeeSuffix = tryParseSuffix(typeStr);
+    if (!pointeeSuffix || pointeeSuffix.kind === 'Void') {
+      return undefined;
+    }
+    return { kind: 'Ptr', pointsTo: pointeeSuffix, mutable };
+  }
+
+  function evaluateAssignmentValue(
+    currentValue: number,
+    op: string,
+    rhs: string,
+    context: Context,
+    functions: FunctionTable
+  ): TypedResult {
+    let valueToAssign = rhs;
+    if (op !== '=') {
+      valueToAssign = currentValue + op[0] + ' ' + rhs;
+    }
+    const newValueObj = processExprWithContext(valueToAssign, context, functions);
+    if (newValueObj.suffix?.kind === 'Bool') {
+      throw new Error('cannot perform arithmetic on booleans');
+    }
+    return newValueObj;
+  }
+
   // helper to evaluate an expression with optional variable context
   function resolveOperand(token: string, context: Context): TypedResult {
     if (token === 'true' || token === 'false') {
       return parseLiteralToken(token);
     }
+    // Handle dereference operator
+    if (token.startsWith('*')) {
+      const ptrVar = ensurePointer(token.substring(1), context);
+      const pointedVar = ensureVariable(ptrVar.refersTo, context);
+      return {
+        value: pointedVar.value,
+        suffix: ptrVar.suffix.pointsTo,
+      };
+    }
+    // Handle mutable reference operator
+    if (token.startsWith('&mut ')) {
+      const varName = token.substring(5).trim();
+      const var_ = ensureVariable(varName, context);
+      if (!var_.mutable) {
+        throw new Error('cannot take mutable reference to immutable variable');
+      }
+
+      // Check for existing mutable borrow to the same variable
+      for (const [, ptrVar] of context) {
+        if (
+          ptrVar.suffix?.kind === 'Ptr' &&
+          ptrVar.refersTo === varName &&
+          (ptrVar.suffix as any).mutable
+        ) {
+          throw new Error('cannot have multiple mutable references to the same variable');
+        }
+      }
+
+      return {
+        value: 0, // value is not used for pointers
+        suffix: { kind: 'Ptr', pointsTo: var_.suffix || { kind: 'I', width: 32 }, mutable: true },
+        refersTo: varName,
+      };
+    }
+    // Handle immutable reference operator
+    if (token.startsWith('&')) {
+      const varName = token.substring(1);
+      const var_ = ensureVariable(varName, context);
+      return {
+        value: 0, // value is not used for pointers
+        suffix: { kind: 'Ptr', pointsTo: var_.suffix || { kind: 'I', width: 32 }, mutable: false },
+        refersTo: varName,
+      };
+    }
     if (/^[a-zA-Z_]/.test(token)) {
       // variable reference
       if (!context.has(token)) {
-        throw new Error(`undefined variable: ${token}`);
+        throw new Error('undefined variable: ' + token);
       }
       return context.get(token)!;
     }
@@ -117,7 +268,7 @@ export function interpret(input: string): number {
 
   function evaluateExpression(expr: string, context: Context = new Map()): TypedResult {
     const tokens = expr.match(
-      /true|false|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
+      /true|false|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
     );
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -248,21 +399,33 @@ export function interpret(input: string): number {
       if (
         op.suffix &&
         op.suffix.kind !== 'Bool' &&
-        (!widestSuffix || op.suffix.width > widestSuffix.width)
+        op.suffix.kind !== 'Ptr' &&
+        (!widestSuffix ||
+          ('width' in op.suffix &&
+            'width' in widestSuffix &&
+            (op.suffix as any).width > (widestSuffix as any).width))
       ) {
         widestSuffix = op.suffix;
       }
     }
 
-    // validate against the widest type if it's not a boolean result
-    if (widestSuffix && !isBooleanResult) {
-      validateValueAgainstSuffix(finalResult, widestSuffix.kind, widestSuffix.width);
+    // validate against the widest type if it's not a boolean result and it's numeric
+    if (widestSuffix && !isBooleanResult && 'width' in widestSuffix) {
+      validateValueAgainstSuffix(
+        finalResult,
+        widestSuffix.kind as 'U' | 'I' | 'Bool',
+        (widestSuffix as any).width
+      );
     }
 
     return { value: finalResult, suffix: finalSuffix || widestSuffix };
   }
 
-  function evaluateIfExpression(expr: string, context: Context): TypedResult | null {
+  function evaluateIfExpression(
+    expr: string,
+    context: Context,
+    _functions: FunctionTable
+  ): TypedResult | null {
     const trimmed = expr.trim();
     if (!trimmed.startsWith('if')) {
       return null;
@@ -367,12 +530,12 @@ export function interpret(input: string): number {
       throw new Error('if false branch cannot be empty');
     }
 
-    const conditionResult = processExprWithContext(conditionExpr, context);
+    const conditionResult = processExprWithContext(conditionExpr, context, _functions);
     if (conditionResult.suffix?.kind !== 'Bool') {
       throw new Error('if condition must be boolean');
     }
-    const trueResult = processExprWithContext(trueBranch, context);
-    const falseResult = processExprWithContext(falseBranch, context);
+    const trueResult = processExprWithContext(trueBranch, context, _functions);
+    const falseResult = processExprWithContext(falseBranch, context, _functions);
 
     const normalizedSuffix = (res: TypedResult): Suffix => res.suffix || { kind: 'I', width: 32 };
     const trueSuffix = normalizedSuffix(trueResult);
@@ -385,10 +548,116 @@ export function interpret(input: string): number {
   }
 
   // Helper to process an expression recursively through brackets and let blocks
-  function processExprWithContext(expr: string, context: Context): TypedResult {
-    const ifResult = evaluateIfExpression(expr, context);
+  function processExprWithContext(
+    expr: string,
+    context: Context,
+    functions: FunctionTable
+  ): TypedResult {
+    const ifResult = evaluateIfExpression(expr, context, functions);
     if (ifResult !== null) {
       return ifResult;
+    }
+
+    // Check for function calls: name() or name(arg1, arg2, ...)
+    const functionCallRegex = /^([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/;
+    const callMatch = expr.trim().match(functionCallRegex);
+    if (callMatch && functions.has(callMatch[1])) {
+      const fnName = callMatch[1];
+      const argsStr = callMatch[2];
+      const fnDef = functions.get(fnName);
+      if (!fnDef) throw new Error('function not found: ' + fnName);
+
+      // Parse arguments
+      const args: TypedResult[] = [];
+      if (argsStr.trim()) {
+        // Split arguments by commas (respecting brackets)
+        const argParts: string[] = [];
+        let currentArg = '';
+        let bracketDepth = 0;
+        for (let i = 0; i < argsStr.length; i++) {
+          const ch = argsStr[i];
+          if ((ch === '(' || ch === '{') && bracketDepth === 0) {
+            bracketDepth++;
+            currentArg += ch;
+          } else if ((ch === ')' || ch === '}') && bracketDepth > 0) {
+            bracketDepth--;
+            currentArg += ch;
+          } else if (ch === ',' && bracketDepth === 0) {
+            if (currentArg.trim()) {
+              argParts.push(currentArg.trim());
+            }
+            currentArg = '';
+          } else {
+            currentArg += ch;
+          }
+        }
+        if (currentArg.trim()) {
+          argParts.push(currentArg.trim());
+        }
+
+        // Evaluate each argument
+        for (const argPart of argParts) {
+          const argValue = processExprWithContext(argPart, context, functions);
+          args.push(argValue);
+        }
+      }
+
+      // Validate argument count
+      if (args.length !== fnDef.params.length) {
+        throw new Error(
+          'function ' +
+            fnName +
+            ' expects ' +
+            fnDef.params.length +
+            ' arguments, got ' +
+            args.length
+        );
+      }
+
+      // Create function call context with parameters
+      const fnContext = new Map<string, TypedResult & { mutable: boolean; initialized: boolean }>();
+      for (let i = 0; i < fnDef.params.length; i++) {
+        const param = fnDef.params[i];
+        const arg = args[i];
+
+        // Validate argument type
+        validateNarrowing(arg.suffix, param.type);
+        if (param.type.kind !== 'Ptr' && 'width' in param.type) {
+          validateValueAgainstSuffix(arg.value, param.type.kind, param.type.width);
+        }
+
+        fnContext.set(param.name, {
+          value: arg.value,
+          suffix: param.type,
+          mutable: false,
+          initialized: true,
+        });
+      }
+
+      // Evaluate function body
+      const bodyResult = processBlock(fnDef.body, fnContext, functions);
+      const returnValue = bodyResult.result;
+
+      if (fnDef.returnType) {
+        // Validate return type
+        validateNarrowing(returnValue.suffix, fnDef.returnType);
+        if (returnValue.suffix?.kind === 'Bool' && fnDef.returnType.kind !== 'Bool') {
+          throw new Error('cannot return boolean value from non-bool function');
+        }
+        if (
+          fnDef.returnType.kind !== 'Ptr' &&
+          fnDef.returnType.kind !== 'Void' &&
+          'width' in fnDef.returnType
+        ) {
+          validateValueAgainstSuffix(
+            returnValue.value,
+            fnDef.returnType.kind,
+            fnDef.returnType.width
+          );
+        }
+      }
+
+      return { value: returnValue.value, suffix: fnDef.returnType || returnValue.suffix };
     }
 
     let e = expr;
@@ -433,7 +702,7 @@ export function interpret(input: string): number {
 
       // Check if this is a block with expressions or assignments
       if (openChar === '{') {
-        const blockResult = processBlock(content, context);
+        const blockResult = processBlock(content, context, functions);
         res = blockResult.result;
         sawBlockReplacement = true;
         // Update parent context with changes from block
@@ -443,16 +712,20 @@ export function interpret(input: string): number {
           }
         }
       } else {
-        // Regular expression - recursively process through brackets
-        res = processExprWithContext(content, context);
+        // Regular parenthesization - just evaluate the contents
+        res = processExprWithContext(content, context, functions);
       }
 
       let replacement = res.value.toString();
       if (res.suffix) {
         if (res.suffix.kind === 'Bool') {
           replacement = res.value === 1 ? 'true' : 'false';
-        } else {
-          replacement += `${res.suffix.kind}${res.suffix.width}`;
+        } else if (res.suffix.kind === 'Ptr') {
+          // For pointers, we store the reference variable name, don't change the representation
+          // The value is already the variable index or reference
+          replacement = res.value.toString();
+        } else if ('width' in res.suffix) {
+          replacement += res.suffix.kind + res.suffix.width;
         }
       }
       e = e.substring(0, openPos) + replacement + e.substring(closePos + 1);
@@ -475,7 +748,8 @@ export function interpret(input: string): number {
   // Helper to process a code block and return the final expression result along with updated context
   function processBlock(
     blockContent: string,
-    parentContext: Context
+    parentContext: Context,
+    functions: FunctionTable
   ): { result: TypedResult; context: Context; declaredInThisBlock: Set<string> } {
     const context = new Map(parentContext);
     const declaredInThisBlock = new Set<string>();
@@ -513,16 +787,56 @@ export function interpret(input: string): number {
     let finalExpr = '';
     let lastProcessedValue: TypedResult | undefined;
     for (const stmt of statements) {
-      if (stmt.startsWith('let ')) {
-        // parse: let [mut] x [: U8|Bool] [= 2|true]
-        const m = stmt.match(
-          /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([UI]\d+|Bool))?(?:\s*=\s*(.+))?$/
+      if (stmt.startsWith('fn ')) {
+        const fnMatch = stmt.match(
+          /^fn\s+([a-zA-Z_]\w*)\s*\(\s*(.*?)\s*\)\s*(?::\s*([^=]+?))?\s*=>\s*(.+)$/
         );
+        if (!fnMatch) throw new Error('invalid function definition');
+
+        const fnName = fnMatch[1];
+        if (functions.has(fnName)) {
+          throw new Error('function already defined: ' + fnName);
+        }
+        const paramsStr = fnMatch[2];
+        const returnTypeRaw = fnMatch[3];
+        const returnTypeStr = returnTypeRaw ? returnTypeRaw.trim() : undefined;
+        const fnBody = fnMatch[4].trim();
+
+        const params: Array<{ name: string; type: Suffix }> = [];
+        if (paramsStr.trim()) {
+          const paramParts = paramsStr.split(',').map((p) => p.trim());
+          for (const paramPart of paramParts) {
+            const paramMatch = paramPart.match(/^([a-zA-Z_]\w*)\s*:\s*(.+)$/);
+            if (!paramMatch) throw new Error('invalid parameter');
+            const paramName = paramMatch[1];
+            const paramType = paramMatch[2].trim();
+
+            const paramSuffix = tryParseSuffix(paramType);
+            if (!paramSuffix) throw new Error('invalid parameter type: ' + paramType);
+            params.push({ name: paramName, type: paramSuffix });
+          }
+        }
+
+        let returnSuffix: Suffix | undefined;
+        if (returnTypeStr) {
+          returnSuffix = tryParseSuffix(returnTypeStr);
+          if (!returnSuffix) throw new Error('invalid return type: ' + returnTypeStr);
+        }
+
+        functions.set(fnName, {
+          params,
+          returnType: returnSuffix,
+          body: fnBody,
+        });
+      } else if (stmt.startsWith('let ')) {
+        // parse: let [mut] x [: Type] [= expr]
+        // Type can be: U8, I32, Bool, *I32, *U16, etc.
+        const m = stmt.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*(.+?))?(?:\s*=\s*(.+))?$/);
         if (!m) throw new Error('invalid let statement');
         const isMutable = !!m[1];
         const varName = m[2];
         if (declaredInThisBlock.has(varName)) {
-          throw new Error(`variable already declared: ${varName}`);
+          throw new Error('variable already declared: ' + varName);
         }
         const varType = m[3]; // undefined if no type specified
         const varExprStr = m[4] ? m[4].trim() : undefined;
@@ -531,11 +845,13 @@ export function interpret(input: string): number {
         let varValue = 0;
         let valSuffix: Suffix | undefined;
         let initialized = false;
+        let refersTo: string | undefined;
 
         if (varExprStr !== undefined) {
-          const varValueObj = processExprWithContext(varExprStr, context);
+          const varValueObj = processExprWithContext(varExprStr, context, functions);
           varValue = varValueObj.value;
           valSuffix = varValueObj.suffix;
+          refersTo = varValueObj.refersTo;
           initialized = true;
         }
 
@@ -544,6 +860,10 @@ export function interpret(input: string): number {
         if (varType) {
           if (varType === 'Bool') {
             declaredSuffix = { kind: 'Bool', width: 1 };
+          } else if (varType.startsWith('*mut ')) {
+            declaredSuffix = parsePointerSuffix(varType.substring(5).trim(), true);
+          } else if (varType.startsWith('*')) {
+            declaredSuffix = parsePointerSuffix(varType.substring(1).trim(), false);
           } else {
             const typeMatch = varType.match(/^([UI])(\d+)$/);
             if (typeMatch) {
@@ -555,7 +875,9 @@ export function interpret(input: string): number {
 
           if (declaredSuffix && initialized) {
             validateNarrowing(valSuffix, declaredSuffix);
-            validateValueAgainstSuffix(varValue, declaredSuffix.kind, declaredSuffix.width);
+            if (declaredSuffix.kind !== 'Ptr' && 'width' in declaredSuffix) {
+              validateValueAgainstSuffix(varValue, declaredSuffix.kind, declaredSuffix.width);
+            }
           }
         }
 
@@ -564,6 +886,7 @@ export function interpret(input: string): number {
           suffix: declaredSuffix || valSuffix || { kind: 'I', width: 32 },
           mutable: isMutable,
           initialized: initialized,
+          refersTo: refersTo,
         };
         context.set(varName, varInfo);
         declaredInThisBlock.add(varName);
@@ -579,18 +902,34 @@ export function interpret(input: string): number {
           continue;
         }
         const conditionExpr = m[1];
-        const bodyExpr = m[2].trim();
+        let bodyExpr = m[2].trim();
+
+        // If body starts with {, extract just the bracketed part
+        if (bodyExpr.startsWith('{')) {
+          let depth = 0;
+          let endPos = -1;
+          for (let i = 0; i < bodyExpr.length; i++) {
+            if (bodyExpr[i] === '{') depth++;
+            else if (bodyExpr[i] === '}') depth--;
+            if (depth === 0) {
+              endPos = i;
+              break;
+            }
+          }
+          if (endPos !== -1) {
+            bodyExpr = bodyExpr.substring(0, endPos + 1);
+          }
+        }
 
         // Execute while loop
         while (true) {
-          const condObj = processExprWithContext(conditionExpr, context);
+          const condObj = processExprWithContext(conditionExpr, context, functions);
           if (condObj.suffix?.kind !== 'Bool') {
             throw new Error('while condition must be boolean');
           }
           if (!condObj.value) break; // condition is false
-
           // Execute body as a block statement to update context
-          const bodyBlockResult = processBlock(bodyExpr, context);
+          const bodyBlockResult = processBlock(bodyExpr, context, functions);
           // Merge changes from body back into current context
           for (const [key, value] of bodyBlockResult.context) {
             if (context.has(key)) {
@@ -599,60 +938,105 @@ export function interpret(input: string): number {
           }
         }
 
-        finalExpr = stmt;
+        // Check if there's trailing content after the while body (for the final expression)
+        const bodyEndInStmt = stmt.indexOf(bodyExpr) + bodyExpr.length;
+        const trailing = stmt.substring(bodyEndInStmt).trim();
+        finalExpr = trailing || stmt;
         lastProcessedValue = undefined;
       } else if (stmt.includes('=') && !stmt.startsWith('let ')) {
-        // assignment: x = 100 or compound: x += 1, x -= 2, x *= 3, x /= 4
-        const m = stmt.match(/^([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
-        if (!m) {
+        // assignment: x = 100 or compound: x += 1, x -= 2, x *= 3, x /= 4 or *y = 100
+        // First check if it's a dereferenced pointer assignment (*y = ...)
+        const derefMatch = stmt.match(/^\*([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+        if (derefMatch) {
+          const ptrName = derefMatch[1];
+          const op = derefMatch[2];
+          const varExprStr = derefMatch[3].trim();
+
+          const ptrInfo = ensurePointer(ptrName, context);
+          if (!ptrInfo.suffix.mutable) {
+            throw new Error('cannot assign through immutable pointer');
+          }
+
+          const targetVarName = ptrInfo.refersTo;
+          const targetVarInfo = ensureVariable(targetVarName, context);
+          if (!targetVarInfo.mutable) {
+            throw new Error('cannot assign to immutable variable through pointer');
+          }
+
+          const newValueObj = evaluateAssignmentValue(
+            targetVarInfo.value,
+            op,
+            varExprStr,
+            context,
+            functions
+          );
+          const newValue = newValueObj.value;
+          const newValSuffix = newValueObj.suffix;
+
+          // validate against pointee type
+          const pointeeType = (ptrInfo.suffix as any).pointsTo;
+          if (pointeeType) {
+            validateNarrowing(newValSuffix, pointeeType);
+            if (pointeeType.kind !== 'Ptr' && 'width' in pointeeType) {
+              validateValueAgainstSuffix(newValue, pointeeType.kind, pointeeType.width);
+            }
+          }
+
+          const updatedTargetInfo = { ...targetVarInfo, value: newValue, initialized: true };
+          context.set(targetVarName, updatedTargetInfo);
+          if (!declaredInThisBlock.has(targetVarName) && parentContext.has(targetVarName)) {
+            parentContext.set(targetVarName, updatedTargetInfo);
+          }
+
           finalExpr = stmt;
-          lastProcessedValue = undefined;
-          continue;
-        }
-        const varName = m[1];
-        const op = m[2];
-        const varExprStr = m[3].trim();
+          lastProcessedValue = updatedTargetInfo;
+        } else {
+          // Regular variable assignment
+          const m = stmt.match(/^([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+          if (!m) {
+            finalExpr = stmt;
+            lastProcessedValue = undefined;
+            continue;
+          }
+          const varName = m[1];
+          const op = m[2];
+          const varExprStr = m[3].trim();
 
-        if (!context.has(varName)) {
-          throw new Error(`undefined variable: ${varName}`);
-        }
+          const varInfo = ensureVariable(varName, context);
+          if (!varInfo.mutable && varInfo.initialized) {
+            throw new Error('cannot assign to immutable variable: ' + varName);
+          }
 
-        const varInfo = context.get(varName)!;
-        if (!varInfo.mutable && varInfo.initialized) {
-          throw new Error(`cannot assign to immutable variable: ${varName}`);
-        }
+          if (op !== '=' && varInfo.suffix?.kind === 'Bool') {
+            throw new Error('cannot perform arithmetic on booleans');
+          }
 
-        if (op !== '=' && varInfo.suffix?.kind === 'Bool') {
-          throw new Error('cannot perform arithmetic on booleans');
-        }
+          const newValueObj = evaluateAssignmentValue(
+            varInfo.value,
+            op,
+            varExprStr,
+            context,
+            functions
+          );
+          const newValue = newValueObj.value;
+          const newValSuffix = newValueObj.suffix;
 
-        let valueToAssign: string = varExprStr;
-        if (op !== '=') {
-          // Compound assignment: construct binary expression
-          valueToAssign = `${varInfo.value}${op[0]} ${varExprStr}`;
-        }
+          // validate against original type
+          if (varInfo.suffix) {
+            validateNarrowing(newValSuffix, varInfo.suffix);
+            if (varInfo.suffix.kind !== 'Ptr' && 'width' in varInfo.suffix) {
+              validateValueAgainstSuffix(newValue, varInfo.suffix.kind, varInfo.suffix.width);
+            }
+          }
 
-        const newValueObj = processExprWithContext(valueToAssign, context);
-        const newValue = newValueObj.value;
-        const newValSuffix = newValueObj.suffix;
-
-        if (newValSuffix?.kind === 'Bool') {
-          throw new Error('cannot perform arithmetic on booleans');
+          const updatedVarInfo = { ...varInfo, value: newValue, initialized: true };
+          context.set(varName, updatedVarInfo);
+          if (!declaredInThisBlock.has(varName) && parentContext.has(varName)) {
+            parentContext.set(varName, updatedVarInfo);
+          }
+          finalExpr = stmt;
+          lastProcessedValue = updatedVarInfo;
         }
-
-        // validate against original type
-        if (varInfo.suffix) {
-          validateNarrowing(newValSuffix, varInfo.suffix);
-          validateValueAgainstSuffix(newValue, varInfo.suffix.kind, varInfo.suffix.width);
-        }
-
-        const updatedVarInfo = { ...varInfo, value: newValue, initialized: true };
-        context.set(varName, updatedVarInfo);
-        if (!declaredInThisBlock.has(varName) && parentContext.has(varName)) {
-          parentContext.set(varName, updatedVarInfo);
-        }
-        finalExpr = stmt;
-        lastProcessedValue = updatedVarInfo;
       } else {
         // treat as final expression
         finalExpr = stmt;
@@ -668,12 +1052,17 @@ export function interpret(input: string): number {
       return { result: lastProcessedValue, context, declaredInThisBlock };
     }
 
-    return { result: processExprWithContext(finalExpr, context), context, declaredInThisBlock };
+    return {
+      result: processExprWithContext(finalExpr, context, functions),
+      context,
+      declaredInThisBlock,
+    };
   }
 
   // Check for top-level code (which can be a single expression or multiple statements)
   try {
-    return processBlock(s, new Map()).result.value;
+    const functions: FunctionTable = new Map();
+    return processBlock(s, new Map(), functions).result.value;
   } catch (e) {
     if (
       e instanceof Error &&

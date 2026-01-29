@@ -15,7 +15,14 @@ module.exports = [
     },
     rules: {
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'prettier/prettier': 'error'
+      'prettier/prettier': 'error',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'TemplateLiteral',
+          message: 'Template literals are disallowed; use string concatenation instead.'
+        }
+      ]
     },
     ignores: ['dist', 'node_modules']
   }
