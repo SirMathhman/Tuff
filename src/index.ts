@@ -223,6 +223,7 @@ export function interpret(input: string): number {
   // Helper to process a let block and return the final expression result
   function processLetBlock(blockContent: string, parentContext: Map<string, number>): number {
     const context = new Map(parentContext);
+    const declaredInThisBlock = new Set<string>();
 
     // Split by ';' but respect bracket boundaries
     const statements: string[] = [];
@@ -260,6 +261,9 @@ export function interpret(input: string): number {
         const m = stmt.match(/^let\s+([a-zA-Z_]\w*)\s*(?::\s*([UI]\d+))?\s*=\s*(.+)$/);
         if (!m) throw new Error('invalid let statement');
         const varName = m[1];
+        if (declaredInThisBlock.has(varName)) {
+          throw new Error(`variable already declared: ${varName}`);
+        }
         const varType = m[2]; // undefined if no type specified
         const varExprStr = m[3].trim();
 
@@ -286,6 +290,7 @@ export function interpret(input: string): number {
         }
 
         context.set(varName, varValue);
+        declaredInThisBlock.add(varName);
       } else {
         // treat as final expression
         finalExpr = stmt;

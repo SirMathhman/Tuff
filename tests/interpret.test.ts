@@ -148,3 +148,7 @@ test('interpret rejects narrowing conversions in variable declarations', () => {
 test('interpret returns 0 for a declaration without a trailing expression', () => {
   expect(interpret('let x = 100;')).toBe(0);
 });
+
+test('interpret rejects variable re-declaration in the same scope', () => {
+  expect(() => interpret('let x = 100; let x = 200;')).toThrow('variable already declared');
+});
