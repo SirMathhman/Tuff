@@ -181,6 +181,16 @@ test('interpret supports reassignment to mutable uninitialized variables', () =>
   expect(interpret('let mut x : U8; x = 100; x = 200; x')).toBe(200);
 });
 
+test('interpret supports Bool type and true/false literals', () => {
+  expect(interpret('let x : Bool = true; x')).toBe(1);
+  expect(interpret('let x : Bool = false; x')).toBe(0);
+});
+
+test('interpret rejects numeric values for Bool type', () => {
+  expect(() => interpret('let x : Bool = 1;')).toThrow();
+  expect(() => interpret('let x : Bool; x = 1;')).toThrow();
+});
+
 test('interpret rejects reassignment to immutable variables even if initially uninitialized', () => {
   expect(() => interpret('let x : U8; x = 100; x = 200; x')).toThrow(
     'cannot assign to immutable variable'
