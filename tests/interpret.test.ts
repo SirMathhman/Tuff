@@ -624,3 +624,7 @@ test('interpret rejects assignment through this.x when variable is immutable', (
 test('interpret supports this pointer type and dereference', () => {
   expect(interpret('let x = 100; let self : *This = &this; self.x')).toBe(100);
 });
+
+test('interpret supports mutable this pointer and assignment', () => {
+  expect(interpret('let mut x = 0; let self : *mut This = &mut this; self.x = 100; x')).toBe(100);
+});

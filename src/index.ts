@@ -494,6 +494,14 @@ export function interpret(input: string): number {
     // Handle mutable reference operator
     if (token.startsWith('&mut ')) {
       const varName = token.substring(5).trim();
+      if (varName === 'this') {
+        // Special case: &mut this creates a mutable reference to the current scope
+        return {
+          value: 0, // value is not used for pointers
+          type: { kind: 'Ptr', pointsTo: { kind: 'This' }, mutable: true },
+          refersTo: '$thisScope',
+        };
+      }
       const var_ = ensureVariable(varName, context);
       if (!var_.mutable) {
         throw new Error('cannot take mutable reference to immutable variable');
@@ -1826,25 +1834,44 @@ export function interpret(input: string): number {
             recordAssignment(varName, updatedVarInfo);
             continue;
           }
-          // Regular variable assignment or this.x assignment
+          // Regular variable assignment or this.x assignment or pointerToThis.x assignment
           let m = stmt.match(/^([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
           let varName: string;
           let op: string;
           let varExprStr: string;
 
           if (!m) {
-            // Check for this.x assignment
-            const thisAssignMatch = stmt.match(
-              /^this\s*\.\s*([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
+            // Check for this.x assignment or pointerVar.x assignment
+            const dotAssignMatch = stmt.match(
+              /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
             );
-            if (!thisAssignMatch) {
+            if (!dotAssignMatch) {
               finalExpr = stmt;
               lastProcessedValue = undefined;
               continue;
             }
-            varName = thisAssignMatch[1];
-            op = thisAssignMatch[2];
-            varExprStr = thisAssignMatch[3].trim();
+
+            const assignTarget = dotAssignMatch[1];
+            const fieldName = dotAssignMatch[2];
+            op = dotAssignMatch[3];
+            varExprStr = dotAssignMatch[4].trim();
+
+            if (assignTarget === 'this') {
+              varName = fieldName;
+            } else {
+              // Check if this is a pointer to This
+              const ptrVarInfo = ensureVariable(assignTarget, context);
+              if (
+                ptrVarInfo.type?.kind === 'Ptr' &&
+                ptrVarInfo.type.pointsTo.kind === 'This' &&
+                ptrVarInfo.type.mutable
+              ) {
+                varName = fieldName;
+              } else {
+                // Regular field assignment on a struct through a variable
+                throw new Error('assignments to struct fields not yet supported');
+              }
+            }
           } else {
             varName = m[1];
             op = m[2];
