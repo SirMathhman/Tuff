@@ -73,8 +73,17 @@ export function interpret(input: string): number {
     const sum = a.value + b.value;
 
     // if either operand had a suffix, ensure the sum fits within that operand's type
-    if (a.suffix) validateValueAgainstSuffix(sum, a.suffix.kind, a.suffix.width);
-    if (b.suffix) validateValueAgainstSuffix(sum, b.suffix.kind, b.suffix.width);
+    // if both have suffixes, use the wider type for validation
+    if (a.suffix || b.suffix) {
+      let validationSuffix = a.suffix || b.suffix;
+      if (a.suffix && b.suffix) {
+        // both have suffixes: use the wider (larger width) type
+        validationSuffix = a.suffix.width >= b.suffix.width ? a.suffix : b.suffix;
+      }
+      if (validationSuffix) {
+        validateValueAgainstSuffix(sum, validationSuffix.kind, validationSuffix.width);
+      }
+    }
 
     return sum;
   }
