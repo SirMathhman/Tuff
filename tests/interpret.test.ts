@@ -132,3 +132,7 @@ test('interpret supports top-level variable declarations', () => {
     interpret('let z : U8 = (4 + { let x : U8 = 2; let y : U8 = x; y }) * 3; z')
   ).toBe(18);
 });
+
+test('interpret supports variable declarations without type annotations', () => {
+  expect(interpret('let x = 18; x')).toBe(18);
+});

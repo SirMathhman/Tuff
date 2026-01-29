@@ -245,22 +245,24 @@ export function interpret(input: string): number {
     let finalExpr = '';
     for (const stmt of statements) {
       if (stmt.startsWith('let ')) {
-        // parse: let x : U8 = 2
-        const m = stmt.match(/^let\s+([a-zA-Z_]\w*)\s*:\s*([UI]\d+)\s*=\s*(.+)$/);
+        // parse: let x : U8 = 2   or   let x = 2 (without type)
+        const m = stmt.match(/^let\s+([a-zA-Z_]\w*)\s*(?::\s*([UI]\d+))?\s*=\s*(.+)$/);
         if (!m) throw new Error('invalid let statement');
         const varName = m[1];
-        const varType = m[2];
+        const varType = m[2]; // undefined if no type specified
         const varExprStr = m[3].trim();
 
         // evaluate the initialization expression with potential brackets/nested lets
         const varValue = processExprWithContext(varExprStr, context);
 
-        // validate against the type
-        const typeMatch = varType.match(/^([UI])(\d+)$/);
-        if (typeMatch) {
-          const kind = typeMatch[1] as 'U' | 'I';
-          const width = Number(typeMatch[2]);
-          validateValueAgainstSuffix(varValue, kind, width);
+        // validate against the type only if specified
+        if (varType) {
+          const typeMatch = varType.match(/^([UI])(\d+)$/);
+          if (typeMatch) {
+            const kind = typeMatch[1] as 'U' | 'I';
+            const width = Number(typeMatch[2]);
+            validateValueAgainstSuffix(varValue, kind, width);
+          }
         }
 
         context.set(varName, varValue);
