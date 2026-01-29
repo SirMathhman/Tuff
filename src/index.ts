@@ -1,3 +1,11 @@
+type NativeFunctionDef = {
+  kind: 'return-expr' | 'new-array';
+  expr: string;
+  paramNames: string[];
+};
+
+let currentNativeFunctions: Map<string, NativeFunctionDef> | null = null;
+
 export function add(a: number, b: number): number {
   return a + b;
 }
@@ -80,10 +88,10 @@ export function interpretAll(
 
   function parseNativeExports(source: string): {
     constExports: Map<string, string>;
-    fnExports: Map<string, string>;
+    fnExports: Map<string, NativeFunctionDef>;
   } {
     const constExports = new Map<string, string>();
-    const fnExports = new Map<string, string>();
+    const fnExports = new Map<string, NativeFunctionDef>();
     const tsMorph = require('ts-morph');
     const project = new tsMorph.Project({ useInMemoryFileSystem: true });
     const sourceFile = project.createSourceFile('native.ts', source, { overwrite: true });
@@ -120,7 +128,9 @@ export function interpretAll(
       if (!expr) {
         throw new Error('native function return missing value: ' + name);
       }
-      fnExports.set(name, expr.getText().trim());
+      const paramNames = fnDecl.getParameters().map((param: any) => param.getName());
+      const kind = expr.getKindName() === 'NewExpression' ? 'new-array' : 'return-expr';
+      fnExports.set(name, { kind, expr: expr.getText().trim(), paramNames });
     }
     return { constExports, fnExports };
   }
@@ -181,7 +191,7 @@ export function interpretAll(
   if (!parts.length && externLets.length === 0 && externFns.length === 0) return 0;
 
   const externValueByName = new Map<string, string>();
-  const externFnByName = new Map<string, string>();
+  const externFnByName = new Map<string, NativeFunctionDef>();
   for (const externUse of externUses) {
     const nativeSource = nativeModuleMap.get(externUse.module);
     if (!nativeSource) {
@@ -213,21 +223,13 @@ export function interpretAll(
       ['let ', externLet.name, ' : ', externLet.type, ' = ', value, ';'].join('')
     );
   }
+  const nativeFunctionTable = new Map<string, NativeFunctionDef>();
   for (const externFn of externFns) {
     const fnBody = externFnByName.get(externFn.name);
     if (!fnBody) {
       throw new Error('native export not found: ' + externFn.name);
     }
-    const signature = [
-      'fn ',
-      externFn.name,
-      externFn.generics,
-      '(',
-      externFn.params,
-      ') : ',
-      externFn.returnType,
-    ].join('');
-    externPreludeParts.push([signature, ' => ', fnBody, ';'].join(''));
+    nativeFunctionTable.set(externFn.name, fnBody);
   }
 
   let combined = '';
@@ -241,7 +243,13 @@ export function interpretAll(
     combined += part;
   }
   if (!combined.trim()) return 0;
-  return interpret(combined);
+  const previousNative = currentNativeFunctions;
+  currentNativeFunctions = nativeFunctionTable;
+  try {
+    return interpret(combined);
+  } finally {
+    currentNativeFunctions = previousNative;
+  }
 }
 
 export function buildReplInputs(rootDir: string): {
@@ -1881,10 +1889,11 @@ export function interpret(input: string): number {
     argsStr: string,
     context: Context,
     functions: FunctionTable,
-    structs: StructTable
+    structs: StructTable,
+    explicitTypeArgs?: Type[]
   ): RuntimeValue {
     const args = parseCallArguments(argsStr, context, functions, structs);
-    return executeFunctionCallWithArgs(fnName, args, context, functions, structs);
+    return executeFunctionCallWithArgs(fnName, args, context, functions, structs, explicitTypeArgs);
   }
 
   function parseCallArguments(
@@ -1905,15 +1914,36 @@ export function interpret(input: string): number {
     return args;
   }
 
+  function parseExplicitTypeArgs(typeArgsStr?: string): Type[] | undefined {
+    if (!typeArgsStr) return undefined;
+    const parts = splitTopLevelComma(typeArgsStr);
+    const types: Type[] = [];
+    for (const part of parts) {
+      const parsed = tryParseSuffix(part.trim());
+      if (!parsed) {
+        throw new Error('invalid type argument: ' + part.trim());
+      }
+      types.push(parsed);
+    }
+    return types.length ? types : undefined;
+  }
+
   function executeFunctionCallWithArgs(
     fnName: string,
     args: RuntimeValue[],
     context: Context,
     functions: FunctionTable,
-    structs: StructTable
+    structs: StructTable,
+    explicitTypeArgs?: Type[]
   ): RuntimeValue {
     const fnDef = functions.get(fnName);
-    if (!fnDef) throw new Error('function not found: ' + fnName);
+    if (!fnDef) {
+      const nativeFn = currentNativeFunctions?.get(fnName);
+      if (nativeFn) {
+        return executeNativeFunction(nativeFn, args, context, explicitTypeArgs);
+      }
+      throw new Error('function not found: ' + fnName);
+    }
 
     // Handle closure-style calls: if we have one extra argument that's a *This pointer,
     // use it to derive the context for the call
@@ -2039,6 +2069,56 @@ export function interpret(input: string): number {
       arrayInitializedCount: returnValue.arrayInitializedCount,
       tupleElements: returnValue.tupleElements,
       maxValue: returnValue.maxValue,
+    };
+  }
+
+  function executeNativeFunction(
+    nativeFn: NativeFunctionDef,
+    args: RuntimeValue[],
+    context: Context,
+    explicitTypeArgs?: Type[]
+  ): RuntimeValue {
+    const resolveParamValue = (name: string): number => {
+      const index = nativeFn.paramNames.indexOf(name);
+      if (index < 0) {
+        throw new Error('native function missing parameter: ' + name);
+      }
+      return args[index]?.value ?? 0;
+    };
+
+    if (nativeFn.kind === 'new-array') {
+      const expr = nativeFn.expr;
+      const lengthMatch = expr.match(/^new\s+Array(?:<[^>]+>)?\s*\((.+)\)$/);
+      if (!lengthMatch) {
+        throw new Error('native function unsupported: ' + expr);
+      }
+      const lengthExpr = lengthMatch[1].trim();
+      const lengthValue = /^[0-9]+$/.test(lengthExpr)
+        ? Number(lengthExpr)
+        : resolveParamValue(lengthExpr);
+      const elementType =
+        explicitTypeArgs && explicitTypeArgs.length > 0
+          ? explicitTypeArgs[0]
+          : ({ kind: 'I', width: 32 } as Type);
+      const elements = new Array<RuntimeValue | undefined>(lengthValue).fill(undefined);
+      return {
+        value: 0,
+        type: {
+          kind: 'Array',
+          elementType,
+          length: lengthValue,
+          initializedCount: 0,
+        },
+        arrayElements: elements,
+        arrayInitializedCount: 0,
+      };
+    }
+
+    const literalResult = parseLiteralToken(nativeFn.expr);
+    return {
+      value: literalResult.value,
+      type: literalResult.type,
+      stringValue: literalResult.stringValue,
     };
   }
 
@@ -2374,6 +2454,7 @@ export function interpret(input: string): number {
       const nameOrVar = callMatch[1];
       const explicitTypeArgs = callMatch[2];
       const callArgsStr = callMatch[3];
+      const explicitTypes = parseExplicitTypeArgs(explicitTypeArgs);
       let fnName = nameOrVar;
       let boundThis: RuntimeValue | undefined;
       let boundThisInfo: RuntimeValue | undefined;
@@ -2388,16 +2469,20 @@ export function interpret(input: string): number {
         }
       }
 
-      if (!functions.has(fnName)) {
+      if (!functions.has(fnName) && !currentNativeFunctions?.has(fnName)) {
         throw new Error('function not found: ' + fnName);
-      }
-      if (explicitTypeArgs) {
-        // Explicit type args are accepted for syntax compatibility; inference is still used.
       }
 
       if (boundThis) {
         const derivedContext = buildContextFromThisValue(boundThis, context);
-        const result = executeFunctionCall(fnName, callArgsStr, derivedContext, functions, structs);
+        const result = executeFunctionCall(
+          fnName,
+          callArgsStr,
+          derivedContext,
+          functions,
+          structs,
+          explicitTypes
+        );
         if (boundThisInfo?.boundThisRef && boundThis.structFields) {
           const fieldKeys =
             boundThisInfo.boundThisFieldKeys || Array.from(boundThis.structFields.keys());
@@ -2405,7 +2490,7 @@ export function interpret(input: string): number {
         }
         return result;
       }
-      return executeFunctionCall(fnName, callArgsStr, context, functions, structs);
+      return executeFunctionCall(fnName, callArgsStr, context, functions, structs, explicitTypes);
     }
 
     // Check for function calls through this notation: this.functionName()
