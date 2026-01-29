@@ -16,7 +16,7 @@ export function interpret(input: string): number {
   if (s === '') return 0;
 
   type TypedResult = { value: number; suffix?: { kind: 'U' | 'I'; width: number } };
-  type Context = Map<string, TypedResult & { mutable: boolean }>;
+  type Context = Map<string, TypedResult & { mutable: boolean; initialized: boolean }>;
 
   // helper to validate a value against a suffix kind/width
   function validateValueAgainstSuffix(val: number, kind: 'U' | 'I', width: number) {
@@ -256,8 +256,10 @@ export function interpret(input: string): number {
     let lastProcessedValue: TypedResult | undefined;
     for (const stmt of statements) {
       if (stmt.startsWith('let ')) {
-        // parse: let [mut] x [: U8] = 2
-        const m = stmt.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([UI]\d+))?\s*=\s*(.+)$/);
+        // parse: let [mut] x [: U8] [= 2]
+        const m = stmt.match(
+          /^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*([UI]\d+))?(?:\s*=\s*(.+))?$/
+        );
         if (!m) throw new Error('invalid let statement');
         const isMutable = !!m[1];
         const varName = m[2];
@@ -265,12 +267,19 @@ export function interpret(input: string): number {
           throw new Error(`variable already declared: ${varName}`);
         }
         const varType = m[3]; // undefined if no type specified
-        const varExprStr = m[4].trim();
+        const varExprStr = m[4] ? m[4].trim() : undefined;
 
-        // evaluate the initialization expression with potential brackets/nested lets
-        const varValueObj = processExprWithContext(varExprStr, context);
-        const varValue = varValueObj.value;
-        const valSuffix = varValueObj.suffix;
+        // evaluate the initialization expression if present
+        let varValue = 0;
+        let valSuffix: { kind: 'U' | 'I'; width: number } | undefined;
+        let initialized = false;
+
+        if (varExprStr !== undefined) {
+          const varValueObj = processExprWithContext(varExprStr, context);
+          varValue = varValueObj.value;
+          valSuffix = varValueObj.suffix;
+          initialized = true;
+        }
 
         // validate against the type only if specified
         let declaredSuffix: { kind: 'U' | 'I'; width: number } | undefined;
@@ -281,9 +290,10 @@ export function interpret(input: string): number {
             const width = Number(typeMatch[2]);
             declaredSuffix = { kind, width };
 
-            validateNarrowing(valSuffix, declaredSuffix);
-
-            validateValueAgainstSuffix(varValue, kind, width);
+            if (initialized) {
+              validateNarrowing(valSuffix, declaredSuffix);
+              validateValueAgainstSuffix(varValue, kind, width);
+            }
           }
         }
 
@@ -291,6 +301,7 @@ export function interpret(input: string): number {
           value: varValue,
           suffix: declaredSuffix || valSuffix,
           mutable: isMutable,
+          initialized: initialized,
         };
         context.set(varName, varInfo);
         declaredInThisBlock.add(varName);
@@ -313,7 +324,7 @@ export function interpret(input: string): number {
         }
 
         const varInfo = context.get(varName)!;
-        if (!varInfo.mutable) {
+        if (!varInfo.mutable && varInfo.initialized) {
           throw new Error(`cannot assign to immutable variable: ${varName}`);
         }
 
@@ -327,7 +338,7 @@ export function interpret(input: string): number {
           validateValueAgainstSuffix(newValue, varInfo.suffix.kind, varInfo.suffix.width);
         }
 
-        const updatedVarInfo = { ...varInfo, value: newValue };
+        const updatedVarInfo = { ...varInfo, value: newValue, initialized: true };
         context.set(varName, updatedVarInfo);
         finalExpr = stmt;
         lastProcessedValue = updatedVarInfo;

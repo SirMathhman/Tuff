@@ -173,6 +173,10 @@ test('interpret returns 0 for a block ending in an assignment with a semicolon',
   expect(interpret('let mut x : U16 = 100; x = 100U16;')).toBe(0);
 });
 
+test('interpret supports variable declarations without initializers', () => {
+  expect(interpret('let x : U8; x = 100; x')).toBe(100);
+});
+
 test('interpret rejects narrowing conversions when assigning variables', () => {
   expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
 });
