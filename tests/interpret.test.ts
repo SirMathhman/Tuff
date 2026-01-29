@@ -98,3 +98,7 @@ test('interpret supports addition and subtraction', () => {
 test('interpret supports multiplication with operator precedence', () => {
   expect(interpret('2 * 3 - 4')).toBe(2);
 });
+
+test('interpret respects operator precedence (multiplication before addition)', () => {
+  expect(interpret('4 + 2 * 3')).toBe(10);
+});
