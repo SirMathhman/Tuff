@@ -102,3 +102,7 @@ test('interpret supports multiplication with operator precedence', () => {
 test('interpret respects operator precedence (multiplication before addition)', () => {
   expect(interpret('4 + 2 * 3')).toBe(10);
 });
+
+test('interpret supports division operator', () => {
+  expect(interpret('10 / 2')).toBe(5);
+});

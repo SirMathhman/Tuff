@@ -65,8 +65,8 @@ export function interpret(input: string): number {
     return { value: Number.isFinite(n) ? n : 0 };
   }
 
-  // support arithmetic with +, -, * operators (left-to-right, * has higher precedence)
-  const tokens = s.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*])/g);
+  // support arithmetic with +, -, *, / operators (left-to-right, * and / have higher precedence)
+  const tokens = s.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/])/g);
   if (tokens && tokens.length >= 3 && tokens.length % 2 === 1) {
     // must have odd count: literal, op, literal, op, ..., literal
     const operands: Array<{ value: number; suffix?: { kind: 'U' | 'I'; width: number } }> = [];
@@ -82,14 +82,17 @@ export function interpret(input: string): number {
       }
     }
 
-    // first pass: handle multiplication (higher precedence)
+    // first pass: handle multiplication and division (higher precedence)
     for (let i = 0; i < operators.length; i++) {
-      if (operators[i] === '*') {
-        const result = operands[i].value * operands[i + 1].value;
+      if (operators[i] === '*' || operators[i] === '/') {
+        const result =
+          operators[i] === '*'
+            ? operands[i].value * operands[i + 1].value
+            : operands[i].value / operands[i + 1].value;
         operands[i] = { value: result };
         operands.splice(i + 1, 1);
         operators.splice(i, 1);
-        i--; // re-check this position in case of consecutive multiplies
+        i--; // re-check this position in case of consecutive * or /
       }
     }
 
