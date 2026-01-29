@@ -65,24 +65,23 @@ export function interpret(input: string): number {
     return { value: Number.isFinite(n) ? n : 0 };
   }
 
-  // support simple addition: <literal> + <literal>
+  // support chained addition: <literal> + <literal> [+ <literal> ...]*
   const parts = s.split(/\s*\+\s*/);
-  if (parts.length === 2) {
-    const a = parseLiteralToken(parts[0]);
-    const b = parseLiteralToken(parts[1]);
-    const sum = a.value + b.value;
+  if (parts.length >= 2) {
+    const operands = parts.map((part) => parseLiteralToken(part));
+    const sum = operands.reduce((acc, op) => acc + op.value, 0);
 
-    // if either operand had a suffix, ensure the sum fits within that operand's type
-    // if both have suffixes, use the wider type for validation
-    if (a.suffix || b.suffix) {
-      let validationSuffix = a.suffix || b.suffix;
-      if (a.suffix && b.suffix) {
-        // both have suffixes: use the wider (larger width) type
-        validationSuffix = a.suffix.width >= b.suffix.width ? a.suffix : b.suffix;
+    // find the widest suffix among all operands (if any)
+    let widestSuffix = operands.find((op) => op.suffix)?.suffix;
+    for (const op of operands) {
+      if (op.suffix && (!widestSuffix || op.suffix.width > widestSuffix.width)) {
+        widestSuffix = op.suffix;
       }
-      if (validationSuffix) {
-        validateValueAgainstSuffix(sum, validationSuffix.kind, validationSuffix.width);
-      }
+    }
+
+    // validate against the widest type
+    if (widestSuffix) {
+      validateValueAgainstSuffix(sum, widestSuffix.kind, widestSuffix.width);
     }
 
     return sum;
