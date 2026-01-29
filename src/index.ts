@@ -18,7 +18,8 @@ export function interpret(input: string): number {
   type Suffix =
     | { kind: 'U' | 'I' | 'Bool'; width: number }
     | { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean }
-    | { kind: 'Void' };
+    | { kind: 'Void' }
+    | { kind: 'Array'; elementType: Suffix; length: number };
 
   type TypedResult = {
     value: number;
@@ -26,6 +27,7 @@ export function interpret(input: string): number {
     refersTo?: string;
     structName?: string;
     structFields?: Map<string, TypedResult>;
+    arrayElements?: TypedResult[];
   };
   type Context = Map<string, TypedResult & { mutable: boolean; initialized: boolean }>;
 
@@ -65,6 +67,8 @@ export function interpret(input: string): number {
   function suffixKind(suffix: Suffix): string {
     if (suffix.kind === 'Ptr') return 'Ptr<' + suffixKind(suffix.pointsTo) + '>';
     if (suffix.kind === 'Void') return 'Void';
+    if (suffix.kind === 'Array')
+      return '[' + suffixKind(suffix.elementType) + '; ' + suffix.length + ']';
     return suffix.kind + suffix.width;
   }
 
@@ -74,6 +78,21 @@ export function interpret(input: string): number {
         throw new Error('void function cannot return a value');
       }
       return;
+    }
+
+    if (target.kind === 'Array') {
+      if (!source || source.kind !== 'Array') {
+        throw new Error('cannot convert non-array to array type');
+      }
+      if (source.length !== target.length) {
+        throw new Error('array length mismatch');
+      }
+      validateNarrowing(source.elementType, target.elementType);
+      return;
+    }
+
+    if (source && source.kind === 'Array') {
+      throw new Error('cannot convert array to non-array type');
     }
 
     if (target.kind === 'Ptr') {
@@ -179,6 +198,17 @@ export function interpret(input: string): number {
   function tryParseSuffix(typeStr: string): Suffix | undefined {
     if (typeStr === 'Bool') return { kind: 'Bool', width: 1 };
     if (typeStr === 'Void') return { kind: 'Void' };
+
+    // Parse array type: [I32; init; length]
+    const arrayMatch = typeStr.match(/^\[(.+?);\s*(\d+);\s*(\d+)\]$/);
+    if (arrayMatch) {
+      const elementTypeStr = arrayMatch[1].trim();
+      const length = Number(arrayMatch[3]);
+      const elementType = tryParseSuffix(elementTypeStr);
+      if (!elementType) return undefined;
+      return { kind: 'Array', elementType, length };
+    }
+
     const typeMatch = typeStr.match(/^([UI])(\d+)$/);
     if (typeMatch) {
       const kind = typeMatch[1] as 'U' | 'I';
@@ -678,16 +708,53 @@ export function interpret(input: string): number {
       return ifResult;
     }
 
+    // Check for array indexing: arrayName[index]
+    const arrayIndexRegex = /^([a-zA-Z_]\w*)\s*\[\s*(\d+)\s*\]$/;
+    const arrayIndexMatch = expr.trim().match(arrayIndexRegex);
+    if (arrayIndexMatch) {
+      const varName = arrayIndexMatch[1];
+      const index = Number(arrayIndexMatch[2]);
+      const varInfo = ensureVariable(varName, context);
+      if (!varInfo.arrayElements) {
+        throw new Error('variable ' + varName + ' is not an array');
+      }
+      if (index < 0 || index >= varInfo.arrayElements.length) {
+        throw new Error('array index out of bounds');
+      }
+      return varInfo.arrayElements[index];
+    }
+
+    // Check for array literal: [elem1, elem2, ...]
+    const arrayLiteralRegex = /^\[\s*(.*?)\s*\]$/;
+    const arrayLitMatch = expr.trim().match(arrayLiteralRegex);
+    if (arrayLitMatch) {
+      const elementsStr = arrayLitMatch[1];
+      if (!elementsStr) {
+        throw new Error('empty array literal');
+      }
+      const elements: TypedResult[] = [];
+      const elemParts = elementsStr.split(',').map((e) => e.trim());
+      for (const elemPart of elemParts) {
+        const elemVal = processExprWithContext(elemPart, context, functions, structs);
+        elements.push(elemVal);
+      }
+      // Infer element type from first element
+      let elementType = elements[0]?.suffix || { kind: 'I', width: 32 };
+      // Return array as object with arrayElements and array suffix
+      return {
+        value: 0,
+        arrayElements: elements,
+        suffix: { kind: 'Array', elementType, length: elements.length },
+      };
+    }
+
     // Check for struct field access through variable: variableName.fieldName
     const fieldAccessRegex = /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)$/;
     const fieldAccessMatch = expr.trim().match(fieldAccessRegex);
     if (fieldAccessMatch) {
       const varName = fieldAccessMatch[1];
       const fieldName = fieldAccessMatch[2];
-      if (!context.has(varName)) {
-        throw new Error('undefined variable: ' + varName);
-      }
-      const varInfo = context.get(varName)!;
+      const varInfo = ensureVariable(varName, context);
       if (!varInfo.structFields) {
         throw new Error('variable ' + varName + ' is not a struct');
       }
@@ -721,10 +788,10 @@ export function interpret(input: string): number {
         let bracketDepth = 0;
         for (let i = 0; i < argsStr.length; i++) {
           const ch = argsStr[i];
-          if ((ch === '(' || ch === '{') && bracketDepth === 0) {
+          if ((ch === '(' || ch === '{' || ch === '[') && bracketDepth === 0) {
             bracketDepth++;
             currentArg += ch;
-          } else if ((ch === ')' || ch === '}') && bracketDepth > 0) {
+          } else if ((ch === ')' || ch === '}' || ch === ']') && bracketDepth > 0) {
             bracketDepth--;
             currentArg += ch;
           } else if (ch === ',' && bracketDepth === 0) {
@@ -907,10 +974,10 @@ export function interpret(input: string): number {
 
     for (let i = 0; i < blockContent.length; i++) {
       const ch = blockContent[i];
-      if (ch === '(' || ch === '{') {
+      if (ch === '(' || ch === '{' || ch === '[') {
         bracketDepth++;
         currentStmt += ch;
-      } else if (ch === ')' || ch === '}') {
+      } else if (ch === ')' || ch === '}' || ch === ']') {
         bracketDepth--;
         currentStmt += ch;
       } else if (ch === ';' && bracketDepth === 0) {
@@ -1038,6 +1105,7 @@ export function interpret(input: string): number {
 
         let structName: string | undefined;
         let structFields: Map<string, TypedResult> | undefined;
+        let arrayElements: TypedResult[] | undefined;
 
         if (varExprStr !== undefined) {
           const varValueObj = processExprWithContext(varExprStr, context, functions, structs);
@@ -1049,6 +1117,7 @@ export function interpret(input: string): number {
           refersTo = varValueObj.refersTo;
           structName = varValueObj.structName;
           structFields = varValueObj.structFields;
+          arrayElements = varValueObj.arrayElements;
           initialized = true;
         }
 
@@ -1061,6 +1130,8 @@ export function interpret(input: string): number {
             declaredSuffix = parsePointerSuffix(varType.substring(5).trim(), true);
           } else if (varType.startsWith('*')) {
             declaredSuffix = parsePointerSuffix(varType.substring(1).trim(), false);
+          } else if (varType.startsWith('[')) {
+            declaredSuffix = tryParseSuffix(varType);
           } else {
             const typeMatch = varType.match(/^([UI])(\d+)$/);
             if (typeMatch) {
@@ -1072,7 +1143,11 @@ export function interpret(input: string): number {
 
           if (declaredSuffix && initialized) {
             validateNarrowing(valSuffix, declaredSuffix);
-            if (declaredSuffix.kind !== 'Ptr' && 'width' in declaredSuffix) {
+            if (
+              declaredSuffix.kind !== 'Ptr' &&
+              declaredSuffix.kind !== 'Array' &&
+              'width' in declaredSuffix
+            ) {
               validateValueAgainstSuffix(varValue, declaredSuffix.kind, declaredSuffix.width);
             }
           }
@@ -1086,6 +1161,7 @@ export function interpret(input: string): number {
           refersTo: refersTo,
           structName: structName,
           structFields: structFields,
+          arrayElements: arrayElements,
         };
         context.set(varName, varInfo);
         declaredInThisBlock.add(varName);

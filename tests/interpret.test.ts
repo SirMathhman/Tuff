@@ -50,6 +50,12 @@ test('interpret rejects access to non-existent struct field', () => {
   ).toThrow();
 });
 
+test('interpret creates and accesses arrays with indexing', () => {
+  expect(
+    interpret('let array : [I32; 1; 1] = [100]; array[0]')
+  ).toBe(100);
+});
+
 test('interpret rejects calling a non-function variable', () => {
   expect(() => interpret('let x = 100; x()')).toThrow('function not found: x');
 });
