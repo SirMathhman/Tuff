@@ -93,16 +93,23 @@ export function interpretAll(
   } {
     const constExports = new Map<string, string>();
     const fnExports = new Map<string, NativeFunctionDef>();
-    const tsMorph = require('ts-morph');
-    const project = new tsMorph.Project({ useInMemoryFileSystem: true });
-    const sourceFile = project.createSourceFile('native.ts', source, { overwrite: true });
+    const ts = require('typescript');
 
     // Transpile TS to JS
-    const emitOutput = sourceFile.getEmitOutput();
-    const jsCode = emitOutput.getOutputFiles()[0]?.getText() || '';
+    const jsCode = ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2019,
+      },
+    }).outputText;
 
     // Execute the JS to extract exports
-    const wrapped = ['const exports = {};', jsCode, 'return exports;'].join('\n');
+    const wrapped = [
+      'const exports = {};',
+      'const module = { exports };',
+      jsCode,
+      'return module.exports;',
+    ].join('\n');
 
     try {
       const getExports = new Function(wrapped);
@@ -376,6 +383,18 @@ export function buildReplInputs(rootDir: string): {
  * - Otherwise returns 0 (stub behavior)
  */
 export function interpret(input: string): number {
+  const buildFunctionNotFoundMessage = (fnName: string, contextInfo: string): string => {
+    return (
+      'function not found: ' +
+      fnName +
+      '. Cause: call references an undefined function. Reason: functions must be declared before use. Fix: define fn ' +
+      fnName +
+      '(...) or correct the call. Context: ' +
+      contextInfo +
+      '.'
+    );
+  };
+
   function stripComments(source: string): string {
     let out = '';
     let i = 0;
@@ -555,7 +574,7 @@ export function interpret(input: string): number {
   function buildFunctionPointerValue(fnName: string, functions: FunctionTable): RuntimeValue {
     const fnDef = functions.get(fnName);
     if (!fnDef) {
-      throw new Error('function not found: ' + fnName);
+      throw new Error(buildFunctionNotFoundMessage(fnName, 'function pointer ' + fnName));
     }
     const returnType = fnDef.returnType || { kind: 'I', width: 32 };
     const paramTypes = fnDef.params.map((param) => param.type);
@@ -2015,7 +2034,7 @@ export function interpret(input: string): number {
         const returnTypeStr = currentNativeFunctionReturnTypes?.get(fnName);
         return executeNativeFunction(nativeFn, args, context, explicitTypeArgs, returnTypeStr);
       }
-      throw new Error('function not found: ' + fnName);
+      throw new Error(buildFunctionNotFoundMessage(fnName, 'function call ' + fnName + '(...)'));
     }
 
     // Handle closure-style calls: if we have one extra argument that's a *This pointer,
@@ -2502,17 +2521,29 @@ export function interpret(input: string): number {
         if (calleeValue.refersToFn) {
           if (calleeValue.boundThis) {
             const derivedContext = buildContextFromThisValue(calleeValue.boundThis, context);
-            return executeFunctionCall(
+            const result = executeFunctionCall(
               calleeValue.refersToFn,
               argsStr,
               derivedContext,
               functions,
               structs
             );
+            if (calleeValue.boundThisRef && calleeValue.boundThis.structFields) {
+              const fieldKeys =
+                calleeValue.boundThisFieldKeys ||
+                Array.from(calleeValue.boundThis.structFields.keys());
+              updateThisFieldsInContext(
+                calleeValue.boundThisRef,
+                fieldKeys,
+                derivedContext,
+                context
+              );
+            }
+            return result;
           }
           return executeFunctionCall(calleeValue.refersToFn, argsStr, context, functions, structs);
         }
-        throw new Error('function not found: ' + calleeExpr);
+        throw new Error(buildFunctionNotFoundMessage(calleeExpr, 'call expression ' + calleeExpr));
       }
     }
 
@@ -2545,10 +2576,16 @@ export function interpret(input: string): number {
       if (isBalanced && baseExpr !== 'this') {
         const baseValue = processExprWithContext(baseExpr, context, functions, structs);
         if (!functions.has(fnName)) {
-          throw new Error('function not found: ' + fnName);
+          throw new Error(
+            buildFunctionNotFoundMessage(fnName, 'method call ' + baseExpr + '.' + fnName + '()')
+          );
         }
         const fnDef = functions.get(fnName);
-        if (!fnDef) throw new Error('function not found: ' + fnName);
+        if (!fnDef) {
+          throw new Error(
+            buildFunctionNotFoundMessage(fnName, 'method call ' + baseExpr + '.' + fnName + '()')
+          );
+        }
 
         const hasThisParam = fnDef.params[0]?.name === 'this';
         if (!hasThisParam) {
@@ -2627,7 +2664,7 @@ export function interpret(input: string): number {
       }
 
       if (!functions.has(fnName) && !currentNativeFunctions?.has(fnName)) {
-        throw new Error('function not found: ' + fnName);
+        throw new Error(buildFunctionNotFoundMessage(fnName, 'call expression ' + fnName + '()'));
       }
 
       if (boundThis) {
@@ -2655,7 +2692,12 @@ export function interpret(input: string): number {
     const thisCallMatch = expr.trim().match(thisFunctionCallRegex);
     if (thisCallMatch) {
       if (!functions.has(thisCallMatch[1])) {
-        throw new Error('function not found: ' + thisCallMatch[1]);
+        throw new Error(
+          buildFunctionNotFoundMessage(
+            thisCallMatch[1],
+            'method call this.' + thisCallMatch[1] + '()'
+          )
+        );
       }
       return executeFunctionCall(thisCallMatch[1], thisCallMatch[2], context, functions, structs);
     }
@@ -3544,8 +3586,8 @@ export function interpret(input: string): number {
         }
       } else {
         // Execute statement for side effects, or treat as final expression
-        if (stmtIndex < statements.length - 1) {
-          // Not the last statement - execute for side effects
+        if (stmtIndex < statements.length - 1 || !hasTrailingExpression) {
+          // Execute for side effects
           processExprWithContext(stmt, context, functions, structs);
           lastProcessedValue = undefined;
         } else {

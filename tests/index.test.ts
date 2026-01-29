@@ -12,6 +12,15 @@ const interpretWithLib = (mainSource: string, libSource: string): number => {
   return interpretAll(['main'], config, nativeConfig);
 };
 
+const createArrayLibSource =
+  'export function createArray<T>(length: number): T[] { return new Array<T>(length); }';
+const complexLibSource =
+  createArrayLibSource +
+  '\n' +
+  'export function complexCalculation(n: number): number { let result = 0; for (let i = 0; i < n; i++) { result += helper(i); } return result; }' +
+  '\n' +
+  'function helper(x: number): number { return x * x + 1; }';
+
 test('add', () => {
   expect(add(1, 2)).toBe(3);
 });
@@ -152,21 +161,19 @@ test('buildReplInputs should not load index.ts as a native module', () => {
 });
 
 test('interpretAll handles mutable array from native function', () => {
-  const libSource = fs.readFileSync(path.join(__dirname, '../src/lib.ts'), 'utf-8');
   expect(
     interpretWithLib(
-      'extern use { createArray } from lib; extern fn createArray() : *mut [I32]; let array = createArray(); array[0] = 100; array[0]',
-      libSource
+      'extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *mut [T]; let array = createArray<I32>(1); array[0] = 100; array[0]',
+      createArrayLibSource
     )
   ).toBe(100);
 });
 
 test('interpretAll handles complex native function with unrestricted syntax', () => {
-  const libSource = fs.readFileSync(path.join(__dirname, '../src/lib.ts'), 'utf-8');
   expect(
     interpretWithLib(
       'extern use { complexCalculation } from lib; extern fn complexCalculation(n : I32) : I32; complexCalculation(5)',
-      libSource
+      complexLibSource
     )
   ).toBe(35);
 });

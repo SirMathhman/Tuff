@@ -1,15 +1,5 @@
-export function createArray() {
-  return new Array(3);
-}
+// This file is expected to change substantially and should not be depended on for tests.
 
-export function complexCalculation(n: number): number {
-  let result = 0;
-  for (let i = 0; i < n; i++) {
-    result += helper(i);
-  }
-  return result;
-}
-
-function helper(x: number): number {
-  return x * x + 1;
+export function createArray<T>(length: number): T[] {
+  return new Array<T>(length);
 }

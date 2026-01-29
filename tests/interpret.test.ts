@@ -190,7 +190,19 @@ test('interpret rejects passing arrays with insufficient initialized elements', 
 });
 
 test('interpret rejects calling a non-function variable', () => {
-  expect(() => interpret('let x = 100; x()')).toThrow('function not found: x');
+  expect(() => interpret('let x = 100; x()')).toThrow(
+    'function not found: x. Cause: call references an undefined function. Reason: functions must be declared before use. Fix: define fn x(...) or correct the call. Context: call expression x().'
+  );
+});
+
+test('interpret reports missing method on value', () => {
+  expect(() =>
+    interpret(
+      'fn List<T>() => { let x = 1; this }; let list = List<I32>(); list.getFirst();'
+    )
+  ).toThrow(
+    'function not found: getFirst. Cause: call references an undefined function. Reason: functions must be declared before use. Fix: define fn getFirst(...) or correct the call. Context: method call list.getFirst().'
+  );
 });
 
 test('interpret parses integer numeric literals with unsigned suffixes', () => {

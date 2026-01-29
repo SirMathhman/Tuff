@@ -1,7 +1,11 @@
 extern use { createArray } from lib;
 
-extern fn createArray() : *mut [I32];
+extern fn createArray<T>(length : USize) : *mut [T];
 
-let array = createArray();
-array[0] = 100;
-array[0]
+fn List<T>() => {
+    let array = createArray(10);
+    this
+}
+
+let mut list = List<I32>();
+list.getFirst()
