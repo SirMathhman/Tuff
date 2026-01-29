@@ -136,3 +136,7 @@ test('interpret supports top-level variable declarations', () => {
 test('interpret supports variable declarations without type annotations', () => {
   expect(interpret('let x = 18; x')).toBe(18);
 });
+
+test('interpret supports variable declarations with suffix in initializer', () => {
+  expect(interpret('let x : U16 = 18U8; x')).toBe(18);
+});
