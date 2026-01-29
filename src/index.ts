@@ -152,12 +152,12 @@ export function interpret(input: string): number {
     // Helper to apply operators of a certain precedence
     function applyPass(
       ops: string[],
-      handler: (left: number, op: string, right: number) => number | TypedResult
+      handler: (left: TypedResult, op: string, right: TypedResult) => number | TypedResult
     ) {
       const targetOps = new Set(ops);
       for (let i = 0; i < operators.length; i++) {
         if (targetOps.has(operators[i])) {
-          const res = handler(operands[i].value, operators[i], operands[i + 1].value);
+          const res = handler(operands[i], operators[i], operands[i + 1]);
           if (typeof res === 'number') {
             operands[i] = { value: res };
           } else {
@@ -172,15 +172,15 @@ export function interpret(input: string): number {
 
     // first pass: handle multiplication and division (higher precedence)
     applyPass(['*', '/'], (left, op, right) => {
-      if (op === '/' && right === 0) {
+      if (op === '/' && right.value === 0) {
         throw new Error('division by zero');
       }
-      return op === '*' ? left * right : left / right;
+      return op === '*' ? left.value * right.value : left.value / right.value;
     });
 
     // second pass: handle addition and subtraction (left to right)
     applyPass(['+', '-'], (left, op, right) => {
-      return op === '+' ? left + right : left - right;
+      return op === '+' ? left.value + right.value : left.value - right.value;
     });
 
     // third pass: handle comparison operators (<, <=, >, >=)
@@ -188,33 +188,40 @@ export function interpret(input: string): number {
     applyPass(['<', '<=', '>', '>='], (left, op, right) => {
       isBooleanResult = true;
       let res = false;
-      if (op === '<') res = left < right;
-      else if (op === '<=') res = left <= right;
-      else if (op === '>') res = left > right;
-      else if (op === '>=') res = left >= right;
+      if (op === '<') res = left.value < right.value;
+      else if (op === '<=') res = left.value <= right.value;
+      else if (op === '>') res = left.value > right.value;
+      else if (op === '>=') res = left.value >= right.value;
       return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
     });
 
     // fourth pass: handle equality operators (==, !=)
     applyPass(['==', '!='], (left, op, right) => {
       isBooleanResult = true;
-      const res = op === '==' ? left === right : left !== right;
+      const res = op === '==' ? left.value === right.value : left.value !== right.value;
       return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
     });
+
+    // Helper to handle logical operators
+    function applyLogicalPass(opStr: '&&' | '||') {
+      applyPass([opStr], (left, op, right) => {
+        if (left.suffix?.kind !== 'Bool' || right.suffix?.kind !== 'Bool') {
+          throw new Error('logical operators only supported for booleans');
+        }
+        isBooleanResult = true;
+        const res =
+          op === '&&'
+            ? left.value !== 0 && right.value !== 0
+            : left.value !== 0 || right.value !== 0;
+        return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+      });
+    }
 
     // fifth pass: handle logical AND (&&)
-    applyPass(['&&'], (left, op, right) => {
-      isBooleanResult = true;
-      const res = left !== 0 && right !== 0;
-      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
-    });
+    applyLogicalPass('&&');
 
     // sixth pass: handle logical OR (||)
-    applyPass(['||'], (left, op, right) => {
-      isBooleanResult = true;
-      const res = left !== 0 || right !== 0;
-      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
-    });
+    applyLogicalPass('||');
 
     const finalResult = operands[0].value;
     const finalSuffix = operands[0].suffix;

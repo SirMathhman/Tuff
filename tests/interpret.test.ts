@@ -238,6 +238,12 @@ test('interpret supports logical AND operator', () => {
   expect(interpret('true && true')).toBe(1);
 });
 
+test('interpret rejects logical operators on numeric types', () => {
+  expect(() => interpret('let x = 10U8; let y = 20U8; x || y')).toThrow(
+    'logical operators only supported for booleans'
+  );
+});
+
 test('interpret rejects narrowing conversions when assigning variables', () => {
   expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
 });
