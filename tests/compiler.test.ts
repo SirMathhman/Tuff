@@ -200,6 +200,40 @@ describe('compiler: boolean operators', () => {
   });
 });
 
+describe('compiler: if/else expressions', () => {
+  test('compile handles if with true condition', () => {
+    assertValid('if (true) 10 else 20', 10);
+  });
+
+  test('compile handles if with false condition', () => {
+    assertValid('if (false) 10 else 20', 20);
+  });
+
+  test('compile handles if with comparison condition', () => {
+    assertValid('if (5 > 3) 100 else 200', 100);
+  });
+
+  test('compile handles nested if expressions', () => {
+    assertValid('if (true) if (false) 10 else 20 else 30', 20);
+  });
+
+  test('compile handles if with variable condition', () => {
+    assertValid('let x = 5; if (x > 3) 1 else 0', 1);
+  });
+
+  test('compile handles chained if/else-if', () => {
+    assertValid('if (false) 1 else if (true) 2 else 3', 2);
+  });
+
+  test('compile handles if with arithmetic in branches', () => {
+    assertValid('if (true) 2 + 3 else 4 + 5', 5);
+  });
+
+  test('compile handles if with boolean results', () => {
+    assertValid('if (true) true else false', 1);
+  });
+});
+
 describe('compiler: error handling', () => {
   test('compile rejects unmatched opening parenthesis', () => {
     assertInvalid('(1 + 2');

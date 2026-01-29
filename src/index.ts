@@ -501,6 +501,9 @@ export function compile(input: string): string {
   if (stmts.length > 0) {
     let lastStmt = stmts[stmts.length - 1];
 
+    // Handle if/else expressions by converting to ternary operators
+    lastStmt = convertIfElseToTernary(lastStmt);
+
     // Check for undefined variables in final expression
     checkUndefinedVars(lastStmt, definedVars);
 
@@ -510,14 +513,19 @@ export function compile(input: string): string {
     const hasBoolOp = /==|!=|<|>|<=|>=|&&|\|\||!/.test(lastStmt);
 
     if (hasBoolOp) {
-      // For NOT operator, we need special handling as it's unary
-      // Convert !expr to (expr ? 0 : 1)
-      lastStmt = lastStmt.replace(/!(\w+)/g, '($1 ? 0 : 1)');
-      lastStmt = lastStmt.replace(/!\(([^)]+)\)/g, '($1 ? 0 : 1)');
+      // Skip wrapping if this is already a ternary expression (from if/else conversion)
+      const isAlreadyTernary = /\?.*:/.test(lastStmt);
 
-      // Wrap the whole expression if it contains comparison or logical operators
-      if (/==|!=|<|>|<=|>=|&&|\|\|/.test(lastStmt)) {
-        lastStmt = '(' + lastStmt + ' ? 1 : 0)';
+      if (!isAlreadyTernary) {
+        // For NOT operator, we need special handling as it's unary
+        // Convert !expr to (expr ? 0 : 1)
+        lastStmt = lastStmt.replace(/!(\w+)/g, '($1 ? 0 : 1)');
+        lastStmt = lastStmt.replace(/!\(([^)]+)\)/g, '($1 ? 0 : 1)');
+
+        // Wrap the whole expression if it contains comparison or logical operators
+        if (/==|!=|<|>|<=|>=|&&|\|\|/.test(lastStmt)) {
+          lastStmt = '(' + lastStmt + ' ? 1 : 0)';
+        }
       }
     }
 
@@ -527,6 +535,186 @@ export function compile(input: string): string {
   }
 
   return jsCode;
+}
+
+/**
+ * Find the index of the closing parenthesis that matches an opening paren.
+ */
+function findMatchingClosingParen(str: string, openParenIndex: number): number {
+  let count = 1;
+  for (let i = openParenIndex + 1; i < str.length; i++) {
+    if (str[i] === '(') count++;
+    if (str[i] === ')') count--;
+    if (count === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Check if a position contains an 'if' keyword with word boundary.
+ */
+function isIfKeyword(str: string, pos: number): boolean {
+  return str.slice(pos, pos + 2) === 'if' && (pos === 0 || !/\w/.test(str[pos - 1]));
+}
+
+/**
+ * Check if a position contains an 'else' keyword with word boundary.
+ */
+function isElseKeyword(str: string, pos: number): boolean {
+  return str.slice(pos, pos + 4) === 'else' && (pos === 0 || !/\w/.test(str[pos - 1]));
+}
+
+/**
+ * Find the matching else for an if by tracking nested if/else depth.
+ * Returns the index of the matching else, or -1 if not found.
+ */
+function findMatchingElse(str: string, ifStartIndex: number, conditionEnd: number): number {
+  let ifDepth = 0;
+  let branchStart = conditionEnd + 1;
+
+  for (let i = branchStart; i < str.length; i++) {
+    if (isIfKeyword(str, i)) {
+      ifDepth++;
+      i++;
+    } else if (isElseKeyword(str, i)) {
+      if (ifDepth === 0) {
+        return i;
+      }
+      ifDepth--;
+      i += 3;
+    }
+  }
+
+  return -1;
+}
+
+/**
+ * Convert if/else expressions to ternary operators.
+ * Processes innermost if/else first to handle nesting correctly.
+ */
+function convertIfElseToTernary(code: string): string {
+  let result = code;
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    // Find the INNERMOST if/else pair (one with no nested if between condition and else)
+    let targetIfIndex = -1;
+    let offset = 0;
+
+    while (offset < result.length) {
+      const ifIdx = result.indexOf('if', offset);
+      if (ifIdx === -1) break;
+
+      // Make sure it's a word boundary
+      if (ifIdx > 0 && /\w/.test(result[ifIdx - 1])) {
+        offset = ifIdx + 1;
+        continue;
+      }
+
+      // Find the opening paren after this if
+      const parenStart = result.indexOf('(', ifIdx);
+      if (parenStart === -1) {
+        offset = ifIdx + 2;
+        continue;
+      }
+
+      // Find the matching closing paren
+      const parenEnd = findMatchingClosingParen(result, parenStart);
+      if (parenEnd === -1) {
+        offset = ifIdx + 2;
+        continue;
+      }
+
+      // Check if there's any 'if' between parenEnd and the next 'else'
+      // This would indicate a nested if/else
+      const branchStart = parenEnd + 1;
+      let hasNestedIf = false;
+
+      for (let i = branchStart; i < result.length; i++) {
+        if (isElseKeyword(result, i)) {
+          // Found an else - check if there was an if before it
+          break;
+        }
+        if (isIfKeyword(result, i)) {
+          hasNestedIf = true;
+          break;
+        }
+      }
+
+      if (!hasNestedIf) {
+        // This is a good candidate - innermost if/else
+        targetIfIndex = ifIdx;
+        break;
+      }
+
+      offset = ifIdx + 2;
+    }
+
+    if (targetIfIndex === -1) break;
+
+    // Now process this if/else
+    const ifIndex = targetIfIndex;
+    const parenStart = result.indexOf('(', ifIndex);
+    const parenEnd = findMatchingClosingParen(result, parenStart);
+
+    const condition = result.slice(parenStart + 1, parenEnd);
+
+    // Find the matching else for this if by tracking nested if/else depth
+    const elseIndex = findMatchingElse(result, ifIndex, parenEnd);
+
+    if (elseIndex === -1) break;
+
+    let branchStart = parenEnd + 1;
+    while (branchStart < result.length && /\s/.test(result[branchStart])) {
+      branchStart++;
+    }
+
+    const trueBranch = result.slice(branchStart, elseIndex).trim();
+
+    // Find the false branch
+    let falseStart = elseIndex + 4;
+    while (falseStart < result.length && /\s/.test(result[falseStart])) {
+      falseStart++;
+    }
+
+    // The false branch goes until a semicolon, or until we see another 'else' at depth 0
+    let falseEnd = result.length;
+    let depth = 0;
+    for (let i = falseStart; i < result.length; i++) {
+      if (result[i] === ';') {
+        falseEnd = i;
+        break;
+      }
+      // Track if/else depth
+      if (isIfKeyword(result, i)) {
+        depth++;
+        i++;
+      } else if (isElseKeyword(result, i)) {
+        if (depth === 0) {
+          // Found another else at our level - false branch ends here
+          falseEnd = i;
+          break;
+        }
+        depth--;
+        i += 3;
+      }
+    }
+
+    const falseBranch = result.slice(falseStart, falseEnd).trim();
+
+    // Build the ternary expression
+    const ternary = '(' + condition + ' ? ' + trueBranch + ' : ' + falseBranch + ')';
+
+    // Replace the if/else with the ternary
+    const remaining = result.slice(falseEnd);
+    result = result.slice(0, ifIndex) + ternary + remaining;
+
+    changed = true;
+  }
+
+  return result;
 }
 
 /**
