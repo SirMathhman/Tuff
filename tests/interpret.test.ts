@@ -606,3 +606,7 @@ test('interpret supports drop functions for type aliases', () => {
 test('interpret accesses variables through this.x notation', () => {
   expect(interpret('let x = 100; this.x')).toBe(100);
 });
+
+test('interpret rejects this.x when variable does not exist', () => {
+  expect(() => interpret('let y = 100; this.x')).toThrow('undefined variable: x');
+});
