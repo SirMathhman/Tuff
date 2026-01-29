@@ -1375,6 +1375,12 @@ export function interpret(input: string): number {
               throw new Error('array index out of bounds');
             }
 
+            const currentInitializedCount =
+              varInfo.arrayInitializedCount ?? elements.filter((e) => e !== undefined).length;
+            if (!elements[index] && index !== currentInitializedCount) {
+              throw new Error('array elements must be initialized in order');
+            }
+
             const currentElement = elements[index];
             if (op !== '=' && !currentElement) {
               throw new Error('array element not initialized');
@@ -1403,9 +1409,9 @@ export function interpret(input: string): number {
             }
 
             elements[index] = { value: newValue, suffix: newValSuffix };
-            const existingInitCount =
-              varInfo.arrayInitializedCount ?? elements.filter((e) => e !== undefined).length;
-            const newInitCount = currentElement ? existingInitCount : existingInitCount + 1;
+            const newInitCount = currentElement
+              ? currentInitializedCount
+              : currentInitializedCount + 1;
             const updatedSuffix = {
               ...varInfo.suffix,
               initializedCount: newInitCount,

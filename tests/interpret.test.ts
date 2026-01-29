@@ -70,6 +70,14 @@ test('interpret handles array indexing bounds', () => {
   expect(() => interpret('let array = [1, 2, 3]; array[3]')).toThrow();
 });
 
+test('interpret enforces ordered array initialization', () => {
+  expect(() => interpret('let mut array : [I32; 0; 3]; array[0]')).toThrow();
+  expect(interpret('let mut array : [I32; 0; 3]; array[0] = 100; array[0]')).toBe(100);
+  expect(() =>
+    interpret('let mut array : [I32; 0; 3]; array[1] = 1; array[0] = 2; array[0]')
+  ).toThrow();
+});
+
 test('interpret allows assigning into uninitialized arrays before passing', () => {
   expect(
     interpret(
