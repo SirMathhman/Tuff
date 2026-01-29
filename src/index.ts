@@ -15,37 +15,39 @@ export function interpret(input: string): number {
   const s = input.trim();
   if (s === '') return 0;
 
-  type Suffix =
+  type Type =
     | { kind: 'U' | 'I' | 'Bool'; width: number }
-    | { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean }
+    | { kind: 'Ptr'; pointsTo: Type; mutable: boolean }
     | { kind: 'Void' }
-    | { kind: 'Array'; elementType: Suffix; length: number; initializedCount: number }
+    | { kind: 'Array'; elementType: Type; length: number; initializedCount: number }
     | { kind: 'Generic'; name: string }
-    | { kind: 'Tuple'; elements: Suffix[] };
+    | { kind: 'Tuple'; elements: Type[] };
 
-  type TypedResult = {
+  type RuntimeValue = {
     value: number;
-    suffix?: Suffix;
+    suffix?: Type;
     refersTo?: string;
     structName?: string;
-    structFields?: Map<string, TypedResult>;
-    arrayElements?: Array<TypedResult | undefined>;
+    structFields?: Map<string, RuntimeValue>;
+    arrayElements?: Array<RuntimeValue | undefined>;
     arrayInitializedCount?: number;
-    tupleElements?: TypedResult[];
+    tupleElements?: RuntimeValue[];
     maxValue?: number;
   };
-  type Context = Map<string, TypedResult & { mutable: boolean; initialized: boolean }>;
+
+  type Context = Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>;
 
   type FunctionDef = {
-    params: Array<{ name: string; type: Suffix }>;
-    returnType?: Suffix;
+    params: Array<{ name: string; type: Type }>;
+    returnType?: Type;
     generics?: string[];
     body: string;
   };
+
   type FunctionTable = Map<string, FunctionDef>;
-  type StructInfo = { fields: Array<{ name: string; type: Suffix }> };
+  type StructInfo = { fields: Array<{ name: string; type: Type }> };
   type StructTable = Map<string, StructInfo>;
-  type TypeAliasTable = Map<string, Suffix>;
+  type TypeAliasTable = Map<string, Type>;
 
   const typeAliases: TypeAliasTable = new Map();
 
@@ -73,7 +75,7 @@ export function interpret(input: string): number {
     }
   }
 
-  function suffixKind(suffix: Suffix): string {
+  function suffixKind(suffix: Type): string {
     if (suffix.kind === 'Ptr') return 'Ptr<' + suffixKind(suffix.pointsTo) + '>';
     if (suffix.kind === 'Void') return 'Void';
     if (suffix.kind === 'Generic') return suffix.name;
@@ -97,7 +99,7 @@ export function interpret(input: string): number {
     return suffix.kind + suffix.width;
   }
 
-  function validateNarrowing(source: Suffix | undefined, target: Suffix) {
+  function validateNarrowing(source: Type | undefined, target: Type) {
     if (target.kind === 'Void') {
       if (source && source.kind !== 'Void') {
         throw new Error('void function cannot return a value');
@@ -188,7 +190,7 @@ export function interpret(input: string): number {
 
   // helper to parse a single literal token and validate suffixes
   // returns { value, suffix } where suffix is undefined or { kind, width }
-  function parseLiteralToken(token: string): TypedResult {
+  function parseLiteralToken(token: string): RuntimeValue {
     const t = token.trim();
     if (t === 'true') return { value: 1, suffix: { kind: 'Bool', width: 1 } };
     if (t === 'false') return { value: 0, suffix: { kind: 'Bool', width: 1 } };
@@ -226,7 +228,7 @@ export function interpret(input: string): number {
   function ensureVariable(
     name: string,
     context: Context
-  ): TypedResult & { mutable: boolean; initialized: boolean; refersTo?: string } {
+  ): RuntimeValue & { mutable: boolean; initialized: boolean; refersTo?: string } {
     if (!context.has(name)) {
       throw new Error('undefined variable: ' + name);
     }
@@ -236,8 +238,8 @@ export function interpret(input: string): number {
   function ensurePointer(
     name: string,
     context: Context
-  ): TypedResult & {
-    suffix: { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean };
+  ): RuntimeValue & {
+    suffix: { kind: 'Ptr'; pointsTo: Type; mutable: boolean };
     refersTo: string;
   } {
     const ptrVar = ensureVariable(name, context);
@@ -247,13 +249,13 @@ export function interpret(input: string): number {
     if (!ptrVar.refersTo) {
       throw new Error('pointer does not refer to a variable');
     }
-    return ptrVar as TypedResult & {
-      suffix: { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean };
+    return ptrVar as RuntimeValue & {
+      suffix: { kind: 'Ptr'; pointsTo: Type; mutable: boolean };
       refersTo: string;
     };
   }
 
-  function resolveArrayElement(varName: string, index: number, context: Context): TypedResult {
+  function resolveArrayElement(varName: string, index: number, context: Context): RuntimeValue {
     const varInfo = ensureVariable(varName, context);
     if (varInfo.tupleElements) {
       if (index < 0 || index >= varInfo.tupleElements.length) {
@@ -304,7 +306,7 @@ export function interpret(input: string): number {
     return parts;
   }
 
-  function resolveTypeAlias(name: string, seen: Set<string> = new Set()): Suffix | undefined {
+  function resolveTypeAlias(name: string, seen: Set<string> = new Set()): Type | undefined {
     if (!typeAliases.has(name)) return undefined;
     if (seen.has(name)) {
       throw new Error('cyclic type alias: ' + name);
@@ -315,7 +317,7 @@ export function interpret(input: string): number {
     return alias;
   }
 
-  function tryParseSuffix(typeStr: string): Suffix | undefined {
+  function tryParseSuffix(typeStr: string): Type | undefined {
     const alias = resolveTypeAlias(typeStr.trim());
     if (alias) return alias;
     if (typeStr === 'Bool') return { kind: 'Bool', width: 1 };
@@ -349,7 +351,7 @@ export function interpret(input: string): number {
       if (!inner) return undefined;
       const parts = splitTopLevelComma(inner);
       if (parts.length < 2) return undefined;
-      const elements: Suffix[] = [];
+      const elements: Type[] = [];
       for (const part of parts) {
         const elementType = tryParseSuffix(part);
         if (!elementType) return undefined;
@@ -367,7 +369,7 @@ export function interpret(input: string): number {
     return undefined;
   }
 
-  function parsePointerSuffix(typeStr: string, mutable: boolean): Suffix | undefined {
+  function parsePointerSuffix(typeStr: string, mutable: boolean): Type | undefined {
     const pointeeSuffix = tryParseSuffix(typeStr);
     if (!pointeeSuffix || pointeeSuffix.kind === 'Void') {
       return undefined;
@@ -375,7 +377,7 @@ export function interpret(input: string): number {
     return { kind: 'Ptr', pointsTo: pointeeSuffix, mutable };
   }
 
-  function parseStructFieldType(typeExpression: string): Suffix | undefined {
+  function parseStructFieldType(typeExpression: string): Type | undefined {
     const trimmed = typeExpression.trim();
     if (trimmed === 'Bool') return { kind: 'Bool', width: 1 };
     if (trimmed === 'Void') return { kind: 'Void' };
@@ -395,7 +397,7 @@ export function interpret(input: string): number {
     context: Context,
     functions: FunctionTable,
     structs: StructTable
-  ): TypedResult {
+  ): RuntimeValue {
     let valueToAssign = rhs;
     if (op !== '=') {
       valueToAssign = currentValue + op[0] + ' ' + rhs;
@@ -442,7 +444,7 @@ export function interpret(input: string): number {
   }
 
   // helper to evaluate an expression with optional variable context
-  function resolveOperand(token: string, context: Context): TypedResult {
+  function resolveOperand(token: string, context: Context): RuntimeValue {
     if (token === 'true' || token === 'false') {
       return parseLiteralToken(token);
     }
@@ -507,7 +509,7 @@ export function interpret(input: string): number {
     return parseLiteralToken(token);
   }
 
-  function evaluateExpression(expr: string, context: Context = new Map()): TypedResult {
+  function evaluateExpression(expr: string, context: Context = new Map()): RuntimeValue {
     const tokens = expr.match(
       /true|false|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
     );
@@ -524,7 +526,7 @@ export function interpret(input: string): number {
       throw new Error('invalid expression');
     }
 
-    const operands: Array<TypedResult> = [];
+    const operands: Array<RuntimeValue> = [];
     const operators: string[] = [];
 
     // extract operators first to check if they are all logical
@@ -563,7 +565,7 @@ export function interpret(input: string): number {
     // Helper to apply operators of a certain precedence
     function applyPass(
       ops: string[],
-      handler: (left: TypedResult, op: string, right: TypedResult) => number | TypedResult
+      handler: (left: RuntimeValue, op: string, right: RuntimeValue) => number | RuntimeValue
     ) {
       const targetOps = new Set(ops);
       for (let i = 0; i < operators.length; i++) {
@@ -582,7 +584,7 @@ export function interpret(input: string): number {
     }
 
     // Helper to validate operand types for comparison/equality
-    function validateComparable(left: TypedResult, right: TypedResult, isEquality: boolean) {
+    function validateComparable(left: RuntimeValue, right: RuntimeValue, isEquality: boolean) {
       const leftKind = left.suffix?.kind || 'Numeric';
       const rightKind = right.suffix?.kind || 'Numeric';
       if ((leftKind === 'Bool') !== (rightKind === 'Bool')) {
@@ -593,7 +595,7 @@ export function interpret(input: string): number {
       }
     }
 
-    function typeEquals(leftType: Suffix, rightType: Suffix): boolean {
+    function typeEquals(leftType: Type, rightType: Type): boolean {
       if (leftType.kind !== rightType.kind) return false;
       if (leftType.kind === 'Ptr' && rightType.kind === 'Ptr') {
         return typeEquals(leftType.pointsTo, rightType.pointsTo);
@@ -692,7 +694,7 @@ export function interpret(input: string): number {
     const finalSuffix = operands[0].suffix;
 
     // find the widest suffix among all original operands (if any)
-    let widestSuffix: Suffix | undefined;
+    let widestSuffix: Type | undefined;
     for (let i = 0; i < tokens.length; i += 2) {
       const prevOp = getPrevOperator(i, originalOperators);
       if (prevOp === 'is') {
@@ -729,7 +731,7 @@ export function interpret(input: string): number {
     context: Context,
     functions: FunctionTable,
     structs: StructTable
-  ): TypedResult | null {
+  ): RuntimeValue | null {
     const trimmed = expr.trim();
     const structRegex = /^([a-zA-Z_]\w*)\s*\{\s*([\s\S]*?)\s*\}\s*(?:\.\s*([a-zA-Z_]\w*))?$/;
     const match = trimmed.match(structRegex);
@@ -750,7 +752,7 @@ export function interpret(input: string): number {
           argParts.length
       );
     }
-    const fieldValues = new Map<string, TypedResult>();
+    const fieldValues = new Map<string, RuntimeValue>();
     for (let i = 0; i < structDef.fields.length; i++) {
       const fieldDef = structDef.fields[i];
       const exprPart = argParts[i];
@@ -784,7 +786,7 @@ export function interpret(input: string): number {
     context: Context,
     _functions: FunctionTable,
     structs: StructTable
-  ): TypedResult | null {
+  ): RuntimeValue | null {
     const trimmed = expr.trim();
     if (!trimmed.startsWith('if')) {
       return null;
@@ -896,7 +898,7 @@ export function interpret(input: string): number {
     const trueResult = processExprWithContext(trueBranch, context, _functions, structs);
     const falseResult = processExprWithContext(falseBranch, context, _functions, structs);
 
-    const normalizedSuffix = (res: TypedResult): Suffix => res.suffix || { kind: 'I', width: 32 };
+    const normalizedSuffix = (res: RuntimeValue): Type => res.suffix || { kind: 'I', width: 32 };
     const trueSuffix = normalizedSuffix(trueResult);
     const falseSuffix = normalizedSuffix(falseResult);
     if (trueSuffix.kind !== falseSuffix.kind) {
@@ -912,7 +914,7 @@ export function interpret(input: string): number {
     context: Context,
     functions: FunctionTable,
     structs: StructTable
-  ): TypedResult {
+  ): RuntimeValue {
     const structResult = evaluateStructLiteralAccess(expr, context, functions, structs);
     if (structResult) {
       return structResult;
@@ -928,8 +930,8 @@ export function interpret(input: string): number {
       const inner = trimmedExpr.substring(1, trimmedExpr.length - 1);
       const parts = splitTopLevelComma(inner);
       if (parts.length > 1) {
-        const tupleElements: TypedResult[] = [];
-        const elementTypes: Suffix[] = [];
+        const tupleElements: RuntimeValue[] = [];
+        const elementTypes: Type[] = [];
         for (const part of parts) {
           const elementValue = processExprWithContext(part, context, functions, structs);
           tupleElements.push(elementValue);
@@ -960,7 +962,7 @@ export function interpret(input: string): number {
       if (!elementsStr) {
         throw new Error('empty array literal');
       }
-      const elements: TypedResult[] = [];
+      const elements: RuntimeValue[] = [];
       const elemParts = elementsStr.split(',').map((e) => e.trim());
       for (const elemPart of elemParts) {
         const elemVal = processExprWithContext(elemPart, context, functions, structs);
@@ -1014,7 +1016,7 @@ export function interpret(input: string): number {
       if (!fnDef) throw new Error('function not found: ' + fnName);
 
       // Parse arguments
-      const args: TypedResult[] = [];
+      const args: RuntimeValue[] = [];
       if (argsStr.trim()) {
         // Split arguments by commas (respecting brackets)
         const argParts: string[] = [];
@@ -1060,8 +1062,8 @@ export function interpret(input: string): number {
         );
       }
 
-      const genericMap = new Map<string, Suffix>();
-      const resolveGenericType = (type: Suffix, argValue?: TypedResult): Suffix => {
+      const genericMap = new Map<string, Type>();
+      const resolveGenericType = (type: Type, argValue?: RuntimeValue): Type => {
         if (type.kind === 'Generic') {
           const existing = genericMap.get(type.name);
           if (existing) return existing;
@@ -1073,7 +1075,10 @@ export function interpret(input: string): number {
       };
 
       // Create function call context with parameters
-      const fnContext = new Map<string, TypedResult & { mutable: boolean; initialized: boolean }>();
+      const fnContext = new Map<
+        string,
+        RuntimeValue & { mutable: boolean; initialized: boolean }
+      >();
       for (let i = 0; i < fnDef.params.length; i++) {
         const param = fnDef.params[i];
         const arg = args[i];
@@ -1166,7 +1171,7 @@ export function interpret(input: string): number {
       if (closePos === -1) throw new Error('mismatched parentheses or braces');
 
       const content = e.substring(openPos + 1, closePos);
-      let res: TypedResult;
+      let res: RuntimeValue;
 
       // Check if this is a block with expressions or assignments
       if (openChar === '{') {
@@ -1219,7 +1224,7 @@ export function interpret(input: string): number {
     parentContext: Context,
     functions: FunctionTable,
     structs: StructTable
-  ): { result: TypedResult; context: Context; declaredInThisBlock: Set<string> } {
+  ): { result: RuntimeValue; context: Context; declaredInThisBlock: Set<string> } {
     const context = new Map(parentContext);
     const declaredInThisBlock = new Set<string>();
 
@@ -1253,7 +1258,7 @@ export function interpret(input: string): number {
 
     const structNames = new Set<string>();
     let finalExpr = '';
-    let lastProcessedValue: TypedResult | undefined;
+    let lastProcessedValue: RuntimeValue | undefined;
     for (let stmtIndex = 0; stmtIndex < statements.length; stmtIndex++) {
       const stmt = statements[stmtIndex];
       if (stmt.startsWith('type ')) {
@@ -1294,7 +1299,7 @@ export function interpret(input: string): number {
         }
         const returnTypeStr = returnTypeRaw ? returnTypeRaw.trim() : undefined;
 
-        const params: Array<{ name: string; type: Suffix }> = [];
+        const params: Array<{ name: string; type: Type }> = [];
         const paramNames = new Set<string>();
         if (paramsStr.trim()) {
           const paramParts = paramsStr.split(',').map((p) => p.trim());
@@ -1317,7 +1322,7 @@ export function interpret(input: string): number {
           }
         }
 
-        let returnSuffix: Suffix | undefined;
+        let returnSuffix: Type | undefined;
         if (returnTypeStr) {
           returnSuffix = tryParseSuffix(returnTypeStr);
           if (!returnSuffix && generics.includes(returnTypeStr)) {
@@ -1345,7 +1350,7 @@ export function interpret(input: string): number {
           }
           structNames.add(structName);
           const fieldNames = new Set<string>();
-          const fieldDefs: Array<{ name: string; type: Suffix }> = [];
+          const fieldDefs: Array<{ name: string; type: Type }> = [];
           const fields = structMatch[2].split(';');
           for (const field of fields) {
             const fieldTrimmed = field.trim();
@@ -1385,15 +1390,15 @@ export function interpret(input: string): number {
 
         // evaluate the initialization expression if present
         let varValue = 0;
-        let valSuffix: Suffix | undefined;
+        let valSuffix: Type | undefined;
         let initialized = false;
         let refersTo: string | undefined;
 
         let structName: string | undefined;
-        let structFields: Map<string, TypedResult> | undefined;
-        let arrayElements: Array<TypedResult | undefined> | undefined;
+        let structFields: Map<string, RuntimeValue> | undefined;
+        let arrayElements: Array<RuntimeValue | undefined> | undefined;
         let arrayInitializedCount: number | undefined;
-        let tupleElements: TypedResult[] | undefined;
+        let tupleElements: RuntimeValue[] | undefined;
 
         if (varExprStr !== undefined) {
           const varValueObj = processExprWithContext(varExprStr, context, functions, structs);
@@ -1416,7 +1421,7 @@ export function interpret(input: string): number {
         }
 
         // validate against the type only if specified
-        let declaredSuffix: Suffix | undefined;
+        let declaredSuffix: Type | undefined;
         let maxValue: number | undefined;
         let normalizedVarType = varType;
         if (varType) {
@@ -1582,7 +1587,7 @@ export function interpret(input: string): number {
         // assignment: x = 100 or compound: x += 1, x -= 2, x *= 3, x /= 4 or *y = 100
         const recordAssignment = (
           varName: string,
-          updatedVarInfo: TypedResult & { mutable: boolean; initialized: boolean }
+          updatedVarInfo: RuntimeValue & { mutable: boolean; initialized: boolean }
         ) => {
           context.set(varName, updatedVarInfo);
           if (!declaredInThisBlock.has(varName) && parentContext.has(varName)) {
