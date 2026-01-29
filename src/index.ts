@@ -5,6 +5,7 @@ type NativeFunctionDef = {
 };
 
 let currentNativeFunctions: Map<string, NativeFunctionDef> | null = null;
+let nativeArrayCounter = 0;
 
 export function add(a: number, b: number): number {
   return a + b;
@@ -2106,16 +2107,25 @@ export function interpret(input: string): number {
           ? explicitTypeArgs[0]
           : ({ kind: 'I', width: 32 } as Type);
       const elements = new Array<RuntimeValue | undefined>(lengthValue).fill(undefined);
-      return {
+      const arrayType: Type = {
+        kind: 'Array',
+        elementType,
+        length: lengthValue,
+        initializedCount: 0,
+      };
+      const arrayName = ['$native_array_', nativeArrayCounter++].join('');
+      context.set(arrayName, {
         value: 0,
-        type: {
-          kind: 'Array',
-          elementType,
-          length: lengthValue,
-          initializedCount: 0,
-        },
+        type: arrayType,
+        mutable: false,
+        initialized: true,
         arrayElements: elements,
         arrayInitializedCount: 0,
+      });
+      return {
+        value: 0,
+        type: { kind: 'Ptr', pointsTo: arrayType, mutable: false },
+        refersTo: arrayName,
       };
     }
 

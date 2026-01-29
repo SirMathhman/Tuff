@@ -95,3 +95,19 @@ test('interpretAll allows unused void native functions', () => {
   ]);
   expect(interpretAll(['main'], config, nativeConfig)).toBe(0);
 });
+
+test('interpretAll handles native createArray without copying arrays', () => {
+  const config = new Map([
+    [
+      ['main'],
+      'extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; let array = createArray<I32>(3); 0',
+    ],
+  ]);
+  const nativeConfig = new Map([
+    [
+      ['lib'],
+      'export function createArray<T>(length: number) { return new Array<T>(length); }',
+    ],
+  ]);
+  expect(interpretAll(['main'], config, nativeConfig)).toBe(0);
+});
