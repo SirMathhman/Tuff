@@ -177,6 +177,10 @@ test('interpret supports variable declarations without initializers', () => {
   expect(interpret('let x : U8; x = 100; x')).toBe(100);
 });
 
+test('interpret supports reassignment to mutable uninitialized variables', () => {
+  expect(interpret('let mut x : U8; x = 100; x = 200; x')).toBe(200);
+});
+
 test('interpret rejects reassignment to immutable variables even if initially uninitialized', () => {
   expect(() => interpret('let x : U8; x = 100; x = 200; x')).toThrow(
     'cannot assign to immutable variable'
