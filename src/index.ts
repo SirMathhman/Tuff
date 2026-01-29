@@ -24,6 +24,7 @@ export function interpret(input: string): number {
     | { kind: 'Tuple'; elements: Type[] }
     | { kind: 'This' }
     | { kind: 'Char' }
+    | { kind: 'Str' }
     | { kind: 'FnPtr'; paramTypes: Type[]; returnType: Type };
 
   type RuntimeValue = {
@@ -39,6 +40,7 @@ export function interpret(input: string): number {
     arrayElements?: Array<RuntimeValue | undefined>;
     arrayInitializedCount?: number;
     tupleElements?: RuntimeValue[];
+    stringValue?: string;
     maxValue?: number;
     mutable?: boolean;
     initialized?: boolean;
@@ -114,6 +116,9 @@ export function interpret(input: string): number {
     }
     if (suffix.kind === 'Char') {
       return 'Char';
+    }
+    if (suffix.kind === 'Str') {
+      return 'Str';
     }
     if (suffix.kind === 'FnPtr') {
       const paramStrs = suffix.paramTypes.map((p) => suffixKind(p));
@@ -284,6 +289,10 @@ export function interpret(input: string): number {
     }
 
     if (target.kind === 'Ptr') {
+      // Special case: allow assigning Str to *Str
+      if (source && source.kind === 'Str' && target.pointsTo.kind === 'Str') {
+        return;
+      }
       if (!source || source.kind !== 'Ptr') {
         throw new Error('cannot convert non-pointer to pointer type');
       }
@@ -327,6 +336,13 @@ export function interpret(input: string): number {
     const t = token.trim();
     if (t === 'true') return { value: 1, type: { kind: 'Bool', width: 1 } };
     if (t === 'false') return { value: 0, type: { kind: 'Bool', width: 1 } };
+
+    // Check for string literals: "test", "hello", etc.
+    const stringMatch = t.match(/^"(.*?)"\s*$/);
+    if (stringMatch) {
+      const str = stringMatch[1];
+      return { value: 0, type: { kind: 'Str' }, stringValue: str };
+    }
 
     // Check for char literals: 'a', 'A', etc.
     const charMatch = t.match(/^'(.)'\s*$/);
@@ -404,6 +420,30 @@ export function interpret(input: string): number {
       }
       return varInfo.tupleElements[index];
     }
+
+    // Handle string indexing through pointer
+    if (varInfo.type?.kind === 'Ptr' && varInfo.type.pointsTo.kind === 'Str') {
+      // First try to get stringValue from the variable itself (inline strings)
+      if (varInfo.stringValue) {
+        if (index < 0 || index >= varInfo.stringValue.length) {
+          throw new Error('string index out of bounds');
+        }
+        const char = varInfo.stringValue[index];
+        return { value: char.charCodeAt(0), type: { kind: 'Char' } };
+      }
+      // Otherwise try to get it from the variable it refers to
+      if (varInfo.refersTo) {
+        const targetVar = ensureVariable(varInfo.refersTo, context);
+        if (targetVar.stringValue) {
+          if (index < 0 || index >= targetVar.stringValue.length) {
+            throw new Error('string index out of bounds');
+          }
+          const char = targetVar.stringValue[index];
+          return { value: char.charCodeAt(0), type: { kind: 'Char' } };
+        }
+      }
+    }
+
     let elements = varInfo.arrayElements;
     if (!elements && varInfo.type?.kind === 'Ptr' && varInfo.type.pointsTo.kind === 'Array') {
       const targetVar = ensureVariable(varInfo.refersTo || '', context);
@@ -486,6 +526,7 @@ export function interpret(input: string): number {
     if (trimmed === 'Bool') return { kind: 'Bool', width: 1 };
     if (trimmed === 'Void') return { kind: 'Void' };
     if (trimmed === 'Char') return { kind: 'Char' };
+    if (trimmed === 'Str') return { kind: 'Str' };
     if (trimmed === 'This') return { kind: 'This' };
     if (trimmed === 'USize') return { kind: 'U', width: 64 };
 
@@ -867,7 +908,7 @@ export function interpret(input: string): number {
     functions: FunctionTable
   ): RuntimeValue {
     const tokens = expr.match(
-      /true|false|'.'|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
+      /true|false|"[^"]*"|'.'|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
     );
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -2264,6 +2305,7 @@ export function interpret(input: string): number {
         let tupleElements: RuntimeValue[] | undefined;
         let refersToFn: string | undefined;
         let boundThis: RuntimeValue | undefined;
+        let stringValue: string | undefined;
 
         // First, try to parse the declared type
         let declaredSuffix: Type | undefined;
@@ -2331,6 +2373,7 @@ export function interpret(input: string): number {
               refersTo = varValueObj.refersTo;
               refersToFn = varValueObj.refersToFn;
               boundThis = varValueObj.boundThis;
+              stringValue = varValueObj.stringValue;
               initialized = true;
             }
           } else {
@@ -2341,6 +2384,7 @@ export function interpret(input: string): number {
             refersTo = varValueObj.refersTo;
             refersToFn = varValueObj.refersToFn;
             boundThis = varValueObj.boundThis;
+            stringValue = varValueObj.stringValue;
             initialized = true;
           }
         } else if (varExprStr !== undefined) {
@@ -2359,6 +2403,7 @@ export function interpret(input: string): number {
           arrayInitializedCount = varValueObj.arrayInitializedCount;
           tupleElements = varValueObj.tupleElements;
           boundThis = varValueObj.boundThis;
+          stringValue = varValueObj.stringValue;
           initialized = true;
         }
 
@@ -2440,6 +2485,7 @@ export function interpret(input: string): number {
           arrayElements: arrayElements,
           arrayInitializedCount: arrayInitializedCount,
           tupleElements: tupleElements,
+          stringValue: stringValue,
           maxValue: maxValue,
           dropFn: normalizedVarType ? getAliasDropFn(normalizedVarType) : undefined,
         };

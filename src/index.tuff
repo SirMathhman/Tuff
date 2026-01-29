@@ -1,1 +1,1 @@
-let x : Char = 'a'; x
+let x : *Str = "test"; let y : Char = x[0]; y
