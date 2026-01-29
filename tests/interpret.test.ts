@@ -628,3 +628,7 @@ test('interpret supports this pointer type and dereference', () => {
 test('interpret supports mutable this pointer and assignment', () => {
   expect(interpret('let mut x = 0; let self : *mut This = &mut this; self.x = 100; x')).toBe(100);
 });
+
+test('interpret supports function calls through this notation', () => {
+  expect(interpret('fn get() => 100; this.get()')).toBe(100);
+});

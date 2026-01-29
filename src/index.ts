@@ -1001,6 +1001,132 @@ export function interpret(input: string): number {
     }
   }
 
+  // Helper to execute a function call with given arguments
+  function executeFunctionCall(
+    fnName: string,
+    argsStr: string,
+    context: Context,
+    functions: FunctionTable,
+    structs: StructTable
+  ): RuntimeValue {
+    const fnDef = functions.get(fnName);
+    if (!fnDef) throw new Error('function not found: ' + fnName);
+
+    // Parse arguments
+    const args: RuntimeValue[] = [];
+    if (argsStr.trim()) {
+      // Split arguments by commas (respecting brackets)
+      const argParts: string[] = [];
+      let currentArg = '';
+      let bracketDepth = 0;
+      for (let i = 0; i < argsStr.length; i++) {
+        const ch = argsStr[i];
+        if ((ch === '(' || ch === '{' || ch === '[') && bracketDepth === 0) {
+          bracketDepth++;
+          currentArg += ch;
+        } else if ((ch === ')' || ch === '}' || ch === ']') && bracketDepth > 0) {
+          bracketDepth--;
+          currentArg += ch;
+        } else if (ch === ',' && bracketDepth === 0) {
+          if (currentArg.trim()) {
+            argParts.push(currentArg.trim());
+          }
+          currentArg = '';
+        } else {
+          currentArg += ch;
+        }
+      }
+      if (currentArg.trim()) {
+        argParts.push(currentArg.trim());
+      }
+
+      // Evaluate each argument
+      for (const argPart of argParts) {
+        const argValue = processExprWithContext(argPart, context, functions, structs);
+        args.push(argValue);
+      }
+    }
+
+    // Validate argument count
+    if (args.length !== fnDef.params.length) {
+      throw new Error(
+        'function ' + fnName + ' expects ' + fnDef.params.length + ' arguments, got ' + args.length
+      );
+    }
+
+    const genericMap = new Map<string, Type>();
+    const resolveGenericType = (type: Type, argValue?: RuntimeValue): Type => {
+      if (type.kind === 'Generic') {
+        const existing = genericMap.get(type.name);
+        if (existing) return existing;
+        const inferred = argValue?.type || { kind: 'I', width: 32 };
+        genericMap.set(type.name, inferred);
+        return inferred;
+      }
+      return type;
+    };
+
+    // Create function call context with outer scope access (closure)
+    const fnContext = new Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>(
+      context
+    );
+    for (let i = 0; i < fnDef.params.length; i++) {
+      const param = fnDef.params[i];
+      const arg = args[i];
+
+      // Validate argument type
+      const resolvedParamType = resolveGenericType(param.type, arg);
+      validateNarrowing(arg.type, resolvedParamType);
+      if (resolvedParamType.kind !== 'Ptr' && 'width' in resolvedParamType) {
+        validateValueAgainstSuffix(arg.value, resolvedParamType.kind, resolvedParamType.width);
+      }
+
+      fnContext.set(param.name, {
+        value: arg.value,
+        type: resolvedParamType,
+        mutable: false,
+        initialized: true,
+        structName: arg.structName,
+        structFields: arg.structFields,
+        arrayElements: arg.arrayElements,
+        arrayInitializedCount: arg.arrayInitializedCount,
+      });
+    }
+
+    // Evaluate function body
+    const bodyResult = processBlock(fnDef.body, fnContext, functions, structs);
+    const returnValue = bodyResult.result;
+
+    // Merge changes back to outer context (closure updates)
+    mergeBlockContext(bodyResult, context);
+
+    let resolvedReturnType = fnDef.returnType;
+    if (resolvedReturnType && resolvedReturnType.kind === 'Generic') {
+      resolvedReturnType = genericMap.get(resolvedReturnType.name);
+    }
+
+    if (resolvedReturnType) {
+      if (returnValue.type?.kind === 'Bool' && resolvedReturnType.kind !== 'Bool') {
+        throw new Error('cannot return boolean value from non-bool function');
+      }
+      // Validate return type
+      validateNarrowing(returnValue.type, resolvedReturnType);
+      if (
+        resolvedReturnType.kind !== 'Ptr' &&
+        resolvedReturnType.kind !== 'Void' &&
+        'width' in resolvedReturnType
+      ) {
+        validateValueAgainstSuffix(
+          returnValue.value,
+          resolvedReturnType.kind,
+          resolvedReturnType.width
+        );
+      }
+    }
+
+    return { value: returnValue.value, type: resolvedReturnType || returnValue.type };
+  }
+
   // Helper to process an expression recursively through brackets and let blocks
   function processExprWithContext(
     expr: string,
@@ -1115,129 +1241,17 @@ export function interpret(input: string): number {
       throw new Error('function not found: ' + callMatch[1]);
     }
     if (callMatch && functions.has(callMatch[1])) {
-      const fnName = callMatch[1];
-      const argsStr = callMatch[2];
-      const fnDef = functions.get(fnName);
-      if (!fnDef) throw new Error('function not found: ' + fnName);
+      return executeFunctionCall(callMatch[1], callMatch[2], context, functions, structs);
+    }
 
-      // Parse arguments
-      const args: RuntimeValue[] = [];
-      if (argsStr.trim()) {
-        // Split arguments by commas (respecting brackets)
-        const argParts: string[] = [];
-        let currentArg = '';
-        let bracketDepth = 0;
-        for (let i = 0; i < argsStr.length; i++) {
-          const ch = argsStr[i];
-          if ((ch === '(' || ch === '{' || ch === '[') && bracketDepth === 0) {
-            bracketDepth++;
-            currentArg += ch;
-          } else if ((ch === ')' || ch === '}' || ch === ']') && bracketDepth > 0) {
-            bracketDepth--;
-            currentArg += ch;
-          } else if (ch === ',' && bracketDepth === 0) {
-            if (currentArg.trim()) {
-              argParts.push(currentArg.trim());
-            }
-            currentArg = '';
-          } else {
-            currentArg += ch;
-          }
-        }
-        if (currentArg.trim()) {
-          argParts.push(currentArg.trim());
-        }
-
-        // Evaluate each argument
-        for (const argPart of argParts) {
-          const argValue = processExprWithContext(argPart, context, functions, structs);
-          args.push(argValue);
-        }
+    // Check for function calls through this notation: this.functionName()
+    const thisFunctionCallRegex = /^this\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/;
+    const thisCallMatch = expr.trim().match(thisFunctionCallRegex);
+    if (thisCallMatch) {
+      if (!functions.has(thisCallMatch[1])) {
+        throw new Error('function not found: ' + thisCallMatch[1]);
       }
-
-      // Validate argument count
-      if (args.length !== fnDef.params.length) {
-        throw new Error(
-          'function ' +
-            fnName +
-            ' expects ' +
-            fnDef.params.length +
-            ' arguments, got ' +
-            args.length
-        );
-      }
-
-      const genericMap = new Map<string, Type>();
-      const resolveGenericType = (type: Type, argValue?: RuntimeValue): Type => {
-        if (type.kind === 'Generic') {
-          const existing = genericMap.get(type.name);
-          if (existing) return existing;
-          const inferred = argValue?.type || { kind: 'I', width: 32 };
-          genericMap.set(type.name, inferred);
-          return inferred;
-        }
-        return type;
-      };
-
-      // Create function call context with outer scope access (closure)
-      const fnContext = new Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>(
-        context
-      );
-      for (let i = 0; i < fnDef.params.length; i++) {
-        const param = fnDef.params[i];
-        const arg = args[i];
-
-        // Validate argument type
-        const resolvedParamType = resolveGenericType(param.type, arg);
-        validateNarrowing(arg.type, resolvedParamType);
-        if (resolvedParamType.kind !== 'Ptr' && 'width' in resolvedParamType) {
-          validateValueAgainstSuffix(arg.value, resolvedParamType.kind, resolvedParamType.width);
-        }
-
-        fnContext.set(param.name, {
-          value: arg.value,
-          type: resolvedParamType,
-          mutable: false,
-          initialized: true,
-          structName: arg.structName,
-          structFields: arg.structFields,
-          arrayElements: arg.arrayElements,
-          arrayInitializedCount: arg.arrayInitializedCount,
-        });
-      }
-
-      // Evaluate function body
-      const bodyResult = processBlock(fnDef.body, fnContext, functions, structs);
-      const returnValue = bodyResult.result;
-
-      // Merge changes back to outer context (closure updates)
-      mergeBlockContext(bodyResult, context);
-
-      let resolvedReturnType = fnDef.returnType;
-      if (resolvedReturnType && resolvedReturnType.kind === 'Generic') {
-        resolvedReturnType = genericMap.get(resolvedReturnType.name);
-      }
-
-      if (resolvedReturnType) {
-        if (returnValue.type?.kind === 'Bool' && resolvedReturnType.kind !== 'Bool') {
-          throw new Error('cannot return boolean value from non-bool function');
-        }
-        // Validate return type
-        validateNarrowing(returnValue.type, resolvedReturnType);
-        if (
-          resolvedReturnType.kind !== 'Ptr' &&
-          resolvedReturnType.kind !== 'Void' &&
-          'width' in resolvedReturnType
-        ) {
-          validateValueAgainstSuffix(
-            returnValue.value,
-            resolvedReturnType.kind,
-            resolvedReturnType.width
-          );
-        }
-      }
-
-      return { value: returnValue.value, type: resolvedReturnType || returnValue.type };
+      return executeFunctionCall(thisCallMatch[1], thisCallMatch[2], context, functions, structs);
     }
 
     let e = expr;
