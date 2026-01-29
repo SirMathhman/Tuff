@@ -66,6 +66,32 @@ export function interpretAll(inputs: string[], config: Map<string[], string>): n
   return interpret(combined);
 }
 
+export function buildReplInputs(rootDir: string): {
+  inputs: string[];
+  config: Map<string[], string>;
+} {
+  const fs = require('fs');
+  const path = require('path');
+  const srcDir = path.join(rootDir, 'src');
+  const indexPath = path.join(srcDir, 'index.tuff');
+  const libPath = path.join(srcDir, 'lib.tuff');
+
+  if (!fs.existsSync(indexPath)) {
+    throw new Error('index.tuff not found');
+  }
+
+  const indexCode = fs.readFileSync(indexPath, 'utf-8');
+  const config = new Map<string[], string>();
+  config.set(['index'], indexCode);
+
+  if (fs.existsSync(libPath)) {
+    const libCode = fs.readFileSync(libPath, 'utf-8');
+    config.set(['lib'], libCode);
+  }
+
+  return { inputs: ['index'], config };
+}
+
 /**
  * Interpret the given input string and produce a numeric result.
  * This function supports numeric literals (integers and decimals), optionally
@@ -3016,31 +3042,9 @@ export function interpret(input: string): number {
 
 // Main REPL entry point
 if (require.main === module) {
-  const fs = require('fs');
-  const path = require('path');
-
   try {
-    // Look for index.tuff starting from project root (process.cwd())
-    const candidates = [
-      path.join(process.cwd(), 'src', 'index.tuff'),
-      path.join(__dirname, 'index.tuff'),
-      path.join(__dirname, '..', '..', 'src', 'index.tuff'),
-    ];
-
-    let tuffFile: string | undefined;
-    for (const candidate of candidates) {
-      if (fs.existsSync(candidate)) {
-        tuffFile = candidate;
-        break;
-      }
-    }
-
-    if (!tuffFile) {
-      throw new Error('index.tuff not found');
-    }
-
-    const code = fs.readFileSync(tuffFile, 'utf-8');
-    const result = interpret(code);
+    const replInputs = buildReplInputs(process.cwd());
+    const result = interpretAll(replInputs.inputs, replInputs.config);
     console.log(result);
   } catch (error) {
     if (error instanceof Error) {

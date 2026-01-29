@@ -10,3 +10,8 @@ Quick commands:
 - Format: `pnpm format`
 - Build: `pnpm build`
 - Dev: `pnpm dev`
+
+REPL loading:
+
+- `bun run start` loads `src/index.tuff` as module `index` and `src/lib.tuff` as module `lib`.
+- The REPL evaluates with `main` set to `index`.
