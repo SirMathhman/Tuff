@@ -65,16 +65,31 @@ export function interpret(input: string): number {
     return { value: Number.isFinite(n) ? n : 0 };
   }
 
-  // helper to evaluate an expression (after parentheses are resolved)
-  function evaluateExpression(expr: string): number {
-    const tokens = expr.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/])/g);
+  // helper to evaluate an expression with optional variable context
+  function resolveOperand(
+    token: string,
+    context: Map<string, number>
+  ): { value: number; suffix?: { kind: 'U' | 'I'; width: number } } {
+    if (/^[a-zA-Z_]/.test(token)) {
+      // variable reference
+      if (!context.has(token)) {
+        throw new Error(`undefined variable: ${token}`);
+      }
+      return { value: context.get(token)! };
+    }
+    // literal
+    return parseLiteralToken(token);
+  }
+
+  function evaluateExpression(expr: string, context: Map<string, number> = new Map()): number {
+    const tokens = expr.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/])|([a-zA-Z_]\w*)/g);
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
     }
 
     if (tokens.length === 1) {
-      // single operand
-      return parseLiteralToken(tokens[0]).value;
+      // single operand (literal or variable)
+      return resolveOperand(tokens[0], context).value;
     }
 
     if (tokens.length < 3 || tokens.length % 2 === 0) {
@@ -86,8 +101,8 @@ export function interpret(input: string): number {
 
     for (let i = 0; i < tokens.length; i++) {
       if (i % 2 === 0) {
-        // even indices are operands
-        operands.push(parseLiteralToken(tokens[i]));
+        // even indices are operands (literals or variables)
+        operands.push(resolveOperand(tokens[i], context));
       } else {
         // odd indices are operators
         operators.push(tokens[i]);
@@ -122,9 +137,12 @@ export function interpret(input: string): number {
     // find the widest suffix among all original operands (if any)
     let widestSuffix: { kind: 'U' | 'I'; width: number } | undefined;
     for (let i = 0; i < tokens.length; i += 2) {
-      const parsed = parseLiteralToken(tokens[i]);
-      if (parsed.suffix && (!widestSuffix || parsed.suffix.width > widestSuffix.width)) {
-        widestSuffix = parsed.suffix;
+      const token = tokens[i];
+      if (!/^[a-zA-Z_]/.test(token)) {
+        const parsed = parseLiteralToken(token);
+        if (parsed.suffix && (!widestSuffix || parsed.suffix.width > widestSuffix.width)) {
+          widestSuffix = parsed.suffix;
+        }
       }
     }
 
@@ -142,7 +160,52 @@ export function interpret(input: string): number {
   while (expr.includes('(') || expr.includes('{')) {
     const innermost = expr.match(/[({]([^(){}]+)[)})]/);
     if (!innermost) throw new Error('mismatched parentheses or braces');
-    const result = evaluateExpression(innermost[1]);
+
+    const content = innermost[1];
+    let result: number;
+
+    // check if this is a block with variable declarations
+    if (content.includes('let ')) {
+      // parse variable declarations: let x : TYPE = value; ...
+      const context = new Map<string, number>();
+      const statements = content
+        .split(';')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      let finalExpr = '';
+      for (const stmt of statements) {
+        if (stmt.startsWith('let ')) {
+          // parse: let x : U8 = 2
+          const m = stmt.match(/^let\s+([a-zA-Z_]\w*)\s*:\s*([UI]\d+)\s*=\s*(.+)$/);
+          if (!m) throw new Error('invalid let statement');
+          const varName = m[1];
+          const varType = m[2];
+          const varExprStr = m[3].trim();
+
+          // evaluate the initialization expression in current context
+          const varValue = evaluateExpression(varExprStr, context);
+
+          // validate against the type
+          const typeMatch = varType.match(/^([UI])(\d+)$/);
+          if (typeMatch) {
+            const kind = typeMatch[1] as 'U' | 'I';
+            const width = Number(typeMatch[2]);
+            validateValueAgainstSuffix(varValue, kind, width);
+          }
+
+          context.set(varName, varValue);
+        } else {
+          // treat as final expression
+          finalExpr = stmt;
+        }
+      }
+
+      result = evaluateExpression(finalExpr, context);
+    } else {
+      result = evaluateExpression(content);
+    }
+
     expr = expr.replace(innermost[0], result.toString());
   }
 
