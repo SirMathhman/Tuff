@@ -56,6 +56,10 @@ test('interpret creates and accesses arrays with indexing', () => {
   ).toBe(100);
 });
 
+test('interpret rejects array element type mismatch', () => {
+  expect(() => interpret('let array : [I32; 1; 1] = [true]; array[0]')).toThrow();
+});
+
 test('interpret rejects calling a non-function variable', () => {
   expect(() => interpret('let x = 100; x()')).toThrow('function not found: x');
 });

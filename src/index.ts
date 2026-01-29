@@ -1150,6 +1150,26 @@ export function interpret(input: string): number {
             ) {
               validateValueAgainstSuffix(varValue, declaredSuffix.kind, declaredSuffix.width);
             }
+            if (declaredSuffix.kind === 'Array' && arrayElements) {
+              if (arrayElements.length !== declaredSuffix.length) {
+                throw new Error('array length mismatch');
+              }
+              for (const element of arrayElements) {
+                const elementSuffix = element.suffix || { kind: 'I', width: 32 };
+                validateNarrowing(elementSuffix, declaredSuffix.elementType);
+                if (
+                  declaredSuffix.elementType.kind !== 'Ptr' &&
+                  declaredSuffix.elementType.kind !== 'Array' &&
+                  'width' in declaredSuffix.elementType
+                ) {
+                  validateValueAgainstSuffix(
+                    element.value,
+                    declaredSuffix.elementType.kind,
+                    declaredSuffix.elementType.width
+                  );
+                }
+              }
+            }
           }
         }
 
