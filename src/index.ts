@@ -1800,16 +1800,30 @@ export function interpret(input: string): number {
             recordAssignment(varName, updatedVarInfo);
             continue;
           }
-          // Regular variable assignment
-          const m = stmt.match(/^([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+          // Regular variable assignment or this.x assignment
+          let m = stmt.match(/^([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+          let varName: string;
+          let op: string;
+          let varExprStr: string;
+
           if (!m) {
-            finalExpr = stmt;
-            lastProcessedValue = undefined;
-            continue;
+            // Check for this.x assignment
+            const thisAssignMatch = stmt.match(
+              /^this\s*\.\s*([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
+            );
+            if (!thisAssignMatch) {
+              finalExpr = stmt;
+              lastProcessedValue = undefined;
+              continue;
+            }
+            varName = thisAssignMatch[1];
+            op = thisAssignMatch[2];
+            varExprStr = thisAssignMatch[3].trim();
+          } else {
+            varName = m[1];
+            op = m[2];
+            varExprStr = m[3].trim();
           }
-          const varName = m[1];
-          const op = m[2];
-          const varExprStr = m[3].trim();
 
           const varInfo = ensureMutableVar(varName);
 

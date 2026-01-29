@@ -610,3 +610,7 @@ test('interpret accesses variables through this.x notation', () => {
 test('interpret rejects this.x when variable does not exist', () => {
   expect(() => interpret('let y = 100; this.x')).toThrow('undefined variable: x');
 });
+
+test('interpret allows assignment through this.x notation', () => {
+  expect(interpret('let mut x = 0; this.x = 100; x')).toBe(100);
+});
