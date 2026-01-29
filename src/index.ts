@@ -65,11 +65,30 @@ export function interpret(input: string): number {
     return { value: Number.isFinite(n) ? n : 0 };
   }
 
-  // support chained addition: <literal> + <literal> [+ <literal> ...]*
-  const parts = s.split(/\s*\+\s*/);
-  if (parts.length >= 2) {
-    const operands = parts.map((part) => parseLiteralToken(part));
-    const sum = operands.reduce((acc, op) => acc + op.value, 0);
+  // support chained addition/subtraction: <literal> [+|-] <literal> [+|-] ...
+  const tokens = s.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+-])/g);
+  if (tokens && tokens.length >= 3 && tokens.length % 2 === 1) {
+    // must have odd count: literal, op, literal, op, ..., literal
+    const operands: Array<{ value: number; suffix?: { kind: 'U' | 'I'; width: number } }> = [];
+    const operators: string[] = [];
+
+    for (let i = 0; i < tokens.length; i++) {
+      if (i % 2 === 0) {
+        // even indices are operands
+        operands.push(parseLiteralToken(tokens[i]));
+      } else {
+        // odd indices are operators
+        operators.push(tokens[i]);
+      }
+    }
+
+    // compute result left to right
+    let result = operands[0].value;
+    for (let i = 0; i < operators.length; i++) {
+      const op = operators[i];
+      const nextVal = operands[i + 1].value;
+      result = op === '+' ? result + nextVal : result - nextVal;
+    }
 
     // find the widest suffix among all operands (if any)
     let widestSuffix = operands.find((op) => op.suffix)?.suffix;
@@ -81,10 +100,10 @@ export function interpret(input: string): number {
 
     // validate against the widest type
     if (widestSuffix) {
-      validateValueAgainstSuffix(sum, widestSuffix.kind, widestSuffix.width);
+      validateValueAgainstSuffix(result, widestSuffix.kind, widestSuffix.width);
     }
 
-    return sum;
+    return result;
   }
 
   // fallback: single literal — non-numeric inputs return 0 (preserve previous behavior)

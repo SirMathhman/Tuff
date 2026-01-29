@@ -90,3 +90,7 @@ test('interpret supports chained addition with mixed suffixes and widths', () =>
 test('interpret throws when chained sum overflows the widest type', () => {
   expect(() => interpret('1U8 + 1 + 254')).toThrow('unsigned literal out of range');
 });
+
+test('interpret supports addition and subtraction', () => {
+  expect(interpret('2U8 + 3U8 - 4U8')).toBe(1);
+});
