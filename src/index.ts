@@ -36,6 +36,16 @@ export function interpret(input: string): number {
     }
   }
 
+  type Suffix = { kind: 'U' | 'I'; width: number };
+
+  function validateNarrowing(source: Suffix | undefined, target: Suffix) {
+    if (source && source.width > target.width) {
+      throw new Error(
+        `narrowing conversion from ${source.kind}${source.width} to ${target.kind}${target.width}`
+      );
+    }
+  }
+
   // helper to parse a single literal token and validate suffixes
   // returns { value, suffix } where suffix is undefined or { kind, width }
   function parseLiteralToken(token: string): TypedResult {
@@ -270,11 +280,7 @@ export function interpret(input: string): number {
             const width = Number(typeMatch[2]);
             declaredSuffix = { kind, width };
 
-            if (valSuffix && valSuffix.width > width) {
-              throw new Error(
-                `narrowing conversion from ${valSuffix.kind}${valSuffix.width} to ${kind}${width}`
-              );
-            }
+            validateNarrowing(valSuffix, declaredSuffix);
 
             validateValueAgainstSuffix(varValue, kind, width);
           }
@@ -307,9 +313,11 @@ export function interpret(input: string): number {
 
         const newValueObj = processExprWithContext(varExprStr, context);
         const newValue = newValueObj.value;
+        const newValSuffix = newValueObj.suffix;
 
         // validate against original type
         if (varInfo.suffix) {
+          validateNarrowing(newValSuffix, varInfo.suffix);
           validateValueAgainstSuffix(newValue, varInfo.suffix.kind, varInfo.suffix.width);
         }
 

@@ -161,6 +161,10 @@ test('interpret rejects assignment to immutable variables', () => {
   expect(() => interpret('let x = 0; x = 100;')).toThrow('cannot assign to immutable variable');
 });
 
+test('interpret rejects narrowing conversions when assigning to mutable variables', () => {
+  expect(() => interpret('let mut x = 0U8; x = 100U16; x')).toThrow();
+});
+
 test('interpret rejects narrowing conversions when assigning variables', () => {
   expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
 });
