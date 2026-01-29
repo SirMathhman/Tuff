@@ -19,7 +19,8 @@ export function interpret(input: string): number {
     | { kind: 'U' | 'I' | 'Bool'; width: number }
     | { kind: 'Ptr'; pointsTo: Suffix; mutable: boolean }
     | { kind: 'Void' }
-    | { kind: 'Array'; elementType: Suffix; length: number; initializedCount: number };
+    | { kind: 'Array'; elementType: Suffix; length: number; initializedCount: number }
+    | { kind: 'Generic'; name: string };
 
   type TypedResult = {
     value: number;
@@ -36,6 +37,7 @@ export function interpret(input: string): number {
   type FunctionDef = {
     params: Array<{ name: string; type: Suffix }>;
     returnType?: Suffix;
+    generics?: string[];
     body: string;
   };
   type FunctionTable = Map<string, FunctionDef>;
@@ -69,6 +71,7 @@ export function interpret(input: string): number {
   function suffixKind(suffix: Suffix): string {
     if (suffix.kind === 'Ptr') return 'Ptr<' + suffixKind(suffix.pointsTo) + '>';
     if (suffix.kind === 'Void') return 'Void';
+    if (suffix.kind === 'Generic') return suffix.name;
     if (suffix.kind === 'Array') {
       if (suffix.length < 0 || suffix.initializedCount < 0) {
         return '[' + suffixKind(suffix.elementType) + ']';
@@ -94,6 +97,10 @@ export function interpret(input: string): number {
       return;
     }
 
+    if (target.kind === 'Generic') {
+      return;
+    }
+
     if (target.kind === 'Array') {
       if (!source || source.kind !== 'Array') {
         throw new Error('cannot convert non-array to array type');
@@ -105,6 +112,10 @@ export function interpret(input: string): number {
         throw new Error('array initialized count mismatch');
       }
       validateNarrowing(source.elementType, target.elementType);
+      return;
+    }
+
+    if (source && source.kind === 'Generic') {
       return;
     }
 
@@ -878,6 +889,18 @@ export function interpret(input: string): number {
         );
       }
 
+      const genericMap = new Map<string, Suffix>();
+      const resolveGenericType = (type: Suffix, argValue?: TypedResult): Suffix => {
+        if (type.kind === 'Generic') {
+          const existing = genericMap.get(type.name);
+          if (existing) return existing;
+          const inferred = argValue?.suffix || { kind: 'I', width: 32 };
+          genericMap.set(type.name, inferred);
+          return inferred;
+        }
+        return type;
+      };
+
       // Create function call context with parameters
       const fnContext = new Map<string, TypedResult & { mutable: boolean; initialized: boolean }>();
       for (let i = 0; i < fnDef.params.length; i++) {
@@ -885,14 +908,15 @@ export function interpret(input: string): number {
         const arg = args[i];
 
         // Validate argument type
-        validateNarrowing(arg.suffix, param.type);
-        if (param.type.kind !== 'Ptr' && 'width' in param.type) {
-          validateValueAgainstSuffix(arg.value, param.type.kind, param.type.width);
+        const resolvedParamType = resolveGenericType(param.type, arg);
+        validateNarrowing(arg.suffix, resolvedParamType);
+        if (resolvedParamType.kind !== 'Ptr' && 'width' in resolvedParamType) {
+          validateValueAgainstSuffix(arg.value, resolvedParamType.kind, resolvedParamType.width);
         }
 
         fnContext.set(param.name, {
           value: arg.value,
-          suffix: param.type,
+          suffix: resolvedParamType,
           mutable: false,
           initialized: true,
           structName: arg.structName,
@@ -906,26 +930,31 @@ export function interpret(input: string): number {
       const bodyResult = processBlock(fnDef.body, fnContext, functions, structs);
       const returnValue = bodyResult.result;
 
-      if (fnDef.returnType) {
-        if (returnValue.suffix?.kind === 'Bool' && fnDef.returnType.kind !== 'Bool') {
+      let resolvedReturnType = fnDef.returnType;
+      if (resolvedReturnType && resolvedReturnType.kind === 'Generic') {
+        resolvedReturnType = genericMap.get(resolvedReturnType.name);
+      }
+
+      if (resolvedReturnType) {
+        if (returnValue.suffix?.kind === 'Bool' && resolvedReturnType.kind !== 'Bool') {
           throw new Error('cannot return boolean value from non-bool function');
         }
         // Validate return type
-        validateNarrowing(returnValue.suffix, fnDef.returnType);
+        validateNarrowing(returnValue.suffix, resolvedReturnType);
         if (
-          fnDef.returnType.kind !== 'Ptr' &&
-          fnDef.returnType.kind !== 'Void' &&
-          'width' in fnDef.returnType
+          resolvedReturnType.kind !== 'Ptr' &&
+          resolvedReturnType.kind !== 'Void' &&
+          'width' in resolvedReturnType
         ) {
           validateValueAgainstSuffix(
             returnValue.value,
-            fnDef.returnType.kind,
-            fnDef.returnType.width
+            resolvedReturnType.kind,
+            resolvedReturnType.width
           );
         }
       }
 
-      return { value: returnValue.value, suffix: fnDef.returnType || returnValue.suffix };
+      return { value: returnValue.value, suffix: resolvedReturnType || returnValue.suffix };
     }
 
     let e = expr;
@@ -1058,18 +1087,28 @@ export function interpret(input: string): number {
       const stmt = statements[stmtIndex];
       if (stmt.startsWith('fn ')) {
         const fnMatch = stmt.match(
-          /^fn\s+([a-zA-Z_]\w*)\s*\(\s*(.*?)\s*\)\s*(?::\s*([^=]+?))?\s*=>\s*(.+)$/
+          /^fn\s+([a-zA-Z_]\w*)\s*(?:<\s*([^>]+)\s*>)?\s*\(\s*(.*?)\s*\)\s*(?::\s*([^=]+?))?\s*=>\s*(.+)$/
         );
         if (!fnMatch) throw new Error('invalid function definition');
 
         const fnName = fnMatch[1];
+        const genericsRaw = fnMatch[2];
+        const paramsStr = fnMatch[3];
+        const returnTypeRaw = fnMatch[4];
+        const fnBody = fnMatch[5].trim();
+        const generics = genericsRaw
+          ? genericsRaw
+              .split(',')
+              .map((name) => name.trim())
+              .filter(Boolean)
+          : [];
+        if (new Set(generics).size !== generics.length) {
+          throw new Error('duplicate generic parameter');
+        }
         if (functions.has(fnName)) {
           throw new Error('function already defined: ' + fnName);
         }
-        const paramsStr = fnMatch[2];
-        const returnTypeRaw = fnMatch[3];
         const returnTypeStr = returnTypeRaw ? returnTypeRaw.trim() : undefined;
-        const fnBody = fnMatch[4].trim();
 
         const params: Array<{ name: string; type: Suffix }> = [];
         const paramNames = new Set<string>();
@@ -1084,7 +1123,10 @@ export function interpret(input: string): number {
             }
             const paramType = paramMatch[2].trim();
 
-            const paramSuffix = tryParseSuffix(paramType);
+            let paramSuffix = tryParseSuffix(paramType);
+            if (!paramSuffix && generics.includes(paramType)) {
+              paramSuffix = { kind: 'Generic', name: paramType };
+            }
             if (!paramSuffix) throw new Error('invalid parameter type: ' + paramType);
             paramNames.add(paramName);
             params.push({ name: paramName, type: paramSuffix });
@@ -1094,12 +1136,16 @@ export function interpret(input: string): number {
         let returnSuffix: Suffix | undefined;
         if (returnTypeStr) {
           returnSuffix = tryParseSuffix(returnTypeStr);
+          if (!returnSuffix && generics.includes(returnTypeStr)) {
+            returnSuffix = { kind: 'Generic', name: returnTypeStr };
+          }
           if (!returnSuffix) throw new Error('invalid return type: ' + returnTypeStr);
         }
 
         functions.set(fnName, {
           params,
           returnType: returnSuffix,
+          generics,
           body: fnBody,
         });
       } else if (stmt.startsWith('struct ')) {
