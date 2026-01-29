@@ -1292,12 +1292,21 @@ export function interpret(input: string): number {
   }
 
   // helper to evaluate an expression with optional variable context
-  function resolveOperand(token: string, context: Context, functions: FunctionTable): RuntimeValue {
+  function resolveOperand(
+    token: string,
+    context: Context,
+    functions: FunctionTable,
+    structs: StructTable
+  ): RuntimeValue {
     if (token === 'true' || token === 'false') {
       return parseLiteralToken(token);
     }
     if (token === 'this' && !context.has('this')) {
       return buildThisValue(context);
+    }
+    const fieldAccessMatch = token.match(/^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)$/);
+    if (fieldAccessMatch) {
+      return processExprWithContext(token, context, functions, structs);
     }
     const arrayIndexTokenMatch = token.match(/^([a-zA-Z_]\w*)\s*\[\s*([+-]?\d+)\s*\]$/);
     if (arrayIndexTokenMatch) {
@@ -1382,10 +1391,11 @@ export function interpret(input: string): number {
   function evaluateExpression(
     expr: string,
     context: Context = new Map(),
-    functions: FunctionTable
+    functions: FunctionTable,
+    structs: StructTable
   ): RuntimeValue {
     const tokens = expr.match(
-      /true|false|"[^"]*"|'.'|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
+      /true|false|"[^"]*"|'.'|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)*)/g
     );
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -1393,7 +1403,7 @@ export function interpret(input: string): number {
 
     if (tokens.length === 1) {
       // single operand (literal or variable)
-      return resolveOperand(tokens[0], context, functions);
+      return resolveOperand(tokens[0], context, functions, structs);
     }
 
     if (tokens.length < 3 || tokens.length % 2 === 0) {
@@ -1426,7 +1436,7 @@ export function interpret(input: string): number {
         operands.push({ value: 0, type: typeSuffix });
         continue;
       }
-      const opResult = resolveOperand(tokens[i], context, functions);
+      const opResult = resolveOperand(tokens[i], context, functions, structs);
       if (opResult.structFields) {
         throw new Error('cannot use struct value in expression');
       }
@@ -1553,7 +1563,7 @@ export function interpret(input: string): number {
       if (prevOp === 'is') {
         continue;
       }
-      const op = resolveOperand(tokens[i], context, functions);
+      const op = resolveOperand(tokens[i], context, functions, structs);
       if (
         op.type &&
         op.type.kind !== 'Bool' &&
@@ -2342,9 +2352,12 @@ export function interpret(input: string): number {
       const varName = fieldAccessMatch[1];
       const fieldName = fieldAccessMatch[2];
 
-      // Special case: this.this builds a fresh snapshot of the current context
+      // Special case: this.this returns the bound outer scope when available
       if (varName === 'this' && fieldName === 'this' && !context.has('this')) {
-        // Build a fresh 'this' from the current context state
+        const boundThis = context.get('$boundThis');
+        if (boundThis?.type?.kind === 'This') {
+          return snapshotRuntimeValue(boundThis);
+        }
         return buildThisValue(context);
       }
 
@@ -2519,8 +2532,16 @@ export function interpret(input: string): number {
               structs
             );
             if (baseExpr.match(/^[a-zA-Z_]\w*$/) && baseValue.structFields) {
-              const fieldKeys = Array.from(baseValue.structFields.keys());
-              updateThisFieldsInContext(baseExpr, fieldKeys, derivedContext, context);
+              for (const key of baseValue.structFields.keys()) {
+                const updatedValue = derivedContext.get(key);
+                if (updatedValue) {
+                  baseValue.structFields.set(key, snapshotRuntimeValue(updatedValue));
+                }
+              }
+              const targetVar = context.get(baseExpr);
+              if (targetVar) {
+                context.set(baseExpr, { ...targetVar, structFields: baseValue.structFields });
+              }
             }
             return result;
           }
@@ -2695,13 +2716,13 @@ export function interpret(input: string): number {
     }
 
     try {
-      return evaluateExpression(e, context, functions);
+      return evaluateExpression(e, context, functions, structs);
     } catch (err) {
       if (sawBlockReplacement && err instanceof Error && err.message === 'invalid expression') {
         const trimmed = e.trim();
         const match = trimmed.match(/^(true|false|[+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)\s+(.+)$/);
         if (match) {
-          return evaluateExpression(match[2], context, functions);
+          return evaluateExpression(match[2], context, functions, structs);
         }
       }
       throw err;
@@ -3380,6 +3401,7 @@ export function interpret(input: string): number {
           let op: string;
           let varExprStr: string;
 
+          let shouldUpdateBoundThis = false;
           if (!m) {
             // Check for this.x assignment or pointerVar.x assignment
             const dotAssignMatch = stmt.match(
@@ -3395,9 +3417,9 @@ export function interpret(input: string): number {
             const fieldName = dotAssignMatch[2];
             op = dotAssignMatch[3];
             varExprStr = dotAssignMatch[4].trim();
-
             if (assignTarget === 'this') {
               varName = fieldName;
+              shouldUpdateBoundThis = true;
             } else {
               // Check if this is a pointer to This
               const ptrVarInfo = ensureVariable(assignTarget, context);
@@ -3407,6 +3429,7 @@ export function interpret(input: string): number {
                 ptrVarInfo.type.mutable
               ) {
                 varName = fieldName;
+                shouldUpdateBoundThis = true;
               } else {
                 // Regular field assignment on a struct through a variable
                 throw new Error('assignments to struct fields not yet supported');
@@ -3453,6 +3476,19 @@ export function interpret(input: string): number {
 
           const updatedVarInfo = { ...varInfo, value: newValue, initialized: true };
           recordAssignment(varName, updatedVarInfo);
+          if (shouldUpdateBoundThis) {
+            const boundThis = context.get('$boundThis');
+            if (boundThis?.type?.kind === 'This' && boundThis.structFields) {
+              boundThis.structFields.set(varName, snapshotRuntimeValue(updatedVarInfo));
+              context.set('$boundThis', boundThis);
+              context.set('$boundThisDirty', {
+                value: 1,
+                type: { kind: 'Bool', width: 1 },
+                mutable: false,
+                initialized: true,
+              });
+            }
+          }
         }
       } else {
         // Execute statement for side effects, or treat as final expression
