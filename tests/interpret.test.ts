@@ -38,6 +38,12 @@ test('interpret accesses struct field through variable', () => {
   ).toBe(100);
 });
 
+test('interpret rejects struct instantiation with missing fields', () => {
+  expect(() =>
+    interpret('struct Wrapper { x : I32; } let value : Wrapper = Wrapper {}; value.x')
+  ).toThrow();
+});
+
 test('interpret rejects calling a non-function variable', () => {
   expect(() => interpret('let x = 100; x()')).toThrow('function not found: x');
 });
