@@ -540,20 +540,45 @@ export function interpret(input: string): number {
       if (!value.initialized) {
         continue;
       }
-      fields.set(key, {
-        value: value.value,
-        type: value.type,
-        refersTo: value.refersTo,
-        refersToFn: value.refersToFn,
-        structName: value.structName,
-        structFields: value.structFields,
-        arrayElements: value.arrayElements,
-        arrayInitializedCount: value.arrayInitializedCount,
-        tupleElements: value.tupleElements,
-        maxValue: value.maxValue,
-      });
+      fields.set(key, snapshotRuntimeValue(value));
     }
     return { value: 0, type: { kind: 'This' }, structName: 'This', structFields: fields };
+  }
+
+  function snapshotRuntimeValue(value: RuntimeValue): RuntimeValue {
+    return {
+      value: value.value,
+      type: value.type,
+      refersTo: value.refersTo,
+      refersToFn: value.refersToFn,
+      structName: value.structName,
+      structFields: value.structFields,
+      arrayElements: value.arrayElements,
+      arrayInitializedCount: value.arrayInitializedCount,
+      tupleElements: value.tupleElements,
+      maxValue: value.maxValue,
+    };
+  }
+
+  function snapshotContextValue(
+    value: RuntimeValue
+  ): RuntimeValue & { mutable: boolean; initialized: boolean } {
+    return {
+      ...snapshotRuntimeValue(value),
+      mutable: false,
+      initialized: true,
+    };
+  }
+
+  function buildContextFromThisValue(baseValue: RuntimeValue, context: Context): Context {
+    const derived = new Map(context);
+    if (!baseValue.structFields) {
+      return derived;
+    }
+    for (const [key, value] of baseValue.structFields) {
+      derived.set(key, snapshotContextValue(value));
+    }
+    return derived;
   }
 
   function evaluateAssignmentValue(
@@ -1574,8 +1599,9 @@ export function interpret(input: string): number {
         const hasThisParam = fnDef.params[0]?.name === 'this';
         if (!hasThisParam) {
           if (baseValue.type?.kind === 'This') {
-            const args = parseCallArguments(argsStr, context, functions, structs);
-            return executeFunctionCallWithArgs(fnName, args, context, functions, structs);
+            const derivedContext = buildContextFromThisValue(baseValue, context);
+            const args = parseCallArguments(argsStr, derivedContext, functions, structs);
+            return executeFunctionCallWithArgs(fnName, args, derivedContext, functions, structs);
           }
         } else {
           let receiverArg = baseValue;
