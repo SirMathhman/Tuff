@@ -441,10 +441,38 @@ export function compile(input: string): string {
     throw new Error('numeric literal overflow');
   }
 
+  // Handle block expressions - check if entire code is a block
+  if (code.startsWith('{')) {
+    // Find the matching closing brace
+    let braceCount = 0;
+    let blockEnd = -1;
+    for (let i = 0; i < code.length; i++) {
+      if (code[i] === '{') braceCount++;
+      if (code[i] === '}') braceCount--;
+      if (braceCount === 0) {
+        blockEnd = i;
+        break;
+      }
+    }
+
+    if (blockEnd === -1) {
+      throw new Error('unmatched opening brace');
+    }
+
+    // If the block is the entire expression, convert it to IIFE
+    if (blockEnd === code.length - 1) {
+      const blockContent = code.slice(1, blockEnd).trim();
+      const blockCode = convertBlockToIIFE(blockContent);
+      return 'return (' + blockCode + ')();';
+    }
+  }
+
   // Handle let statements and track mutability
   const mutableVars = new Set<string>();
   const definedVars = new Set<string>();
   let jsCode = '';
+  // Replace inline blocks with IIFEs
+  code = replaceInlineBlocks(code);
 
   // Split by semicolons while preserving the rest
   const stmts = code
@@ -535,6 +563,50 @@ export function compile(input: string): string {
   }
 
   return jsCode;
+}
+
+/**
+ * Find and replace all inline block expressions with IIFEs.
+ * Only processes complete blocks and returns the modified code.
+ */
+function replaceInlineBlocks(code: string): string {
+  // For now, disable this while we debug the infinite loop issue
+  return code;
+}
+
+/**
+ * Convert block content to an arrow function IIFE.
+ * Extracts statements and wraps the final expression in a return.
+ */
+function convertBlockToIIFE(blockContent: string): string {
+  if (!blockContent.trim()) {
+    return '() => 0';
+  }
+
+  const stmts = blockContent
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s);
+
+  if (stmts.length === 0) {
+    return '() => 0';
+  }
+
+  // All but the last are statements - convert Tuff syntax to JS
+  let body = stmts
+    .slice(0, -1)
+    .map((stmt) => {
+      // Remove 'mut' keyword from let statements
+      return stmt.replace(/^let\s+mut\s+/g, 'let ');
+    })
+    .join('; ');
+  const lastExpr = stmts[stmts.length - 1];
+
+  if (body) {
+    body = body + '; ';
+  }
+
+  return '() => { ' + body + 'return ' + lastExpr + '; }';
 }
 
 /**

@@ -233,7 +233,32 @@ describe('compiler: if/else expressions', () => {
     assertValid('if (true) true else false', 1);
   });
 });
+describe('compiler: block expressions', () => {
+  test('compile handles empty blocks', () => {
+    assertValid('{ }', 0);
+  });
 
+  test('compile handles blocks with single expression', () => {
+    assertValid('{ 100 }', 100);
+  });
+
+  test('compile handles blocks with variable declaration and expression', () => {
+    assertValid('{ let x = 50; x }', 50);
+  });
+
+  test('compile handles multiple statements in block', () => {
+    assertValid('{ let x = 10; let y = 20; x + y }', 30);
+  });
+
+  test('compile handles blocks with mutation', () => {
+    assertValid('{ let mut x = 5; x = 10; x }', 10);
+  });
+
+  test('compile handles nested blocks', () => {
+      assertValid('{ let x = 5; { let y = 10; x + y } }', 15);
+  });
+
+});
 describe('compiler: error handling', () => {
   test('compile rejects unmatched opening parenthesis', () => {
     assertInvalid('(1 + 2');
