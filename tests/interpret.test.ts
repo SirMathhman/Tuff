@@ -236,6 +236,12 @@ test('interpret rejects compound assignment to undefined variables', () => {
   expect(() => interpret('x += 1;')).toThrow('undefined variable');
 });
 
+test('interpret rejects compound assignment to boolean variables', () => {
+  expect(() => interpret('let mut x = true; x += 1;')).toThrow(
+    'cannot perform arithmetic on booleans'
+  );
+});
+
 test('interpret rejects numeric values for Bool type', () => {
   expect(() => interpret('let x : Bool = 1;')).toThrow();
   expect(() => interpret('let x : Bool; x = 1;')).toThrow();

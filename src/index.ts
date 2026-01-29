@@ -591,6 +591,10 @@ export function interpret(input: string): number {
           throw new Error(`cannot assign to immutable variable: ${varName}`);
         }
 
+        if (op !== '=' && varInfo.suffix?.kind === 'Bool') {
+          throw new Error('cannot perform arithmetic on booleans');
+        }
+
         let valueToAssign: string = varExprStr;
         if (op !== '=') {
           // Compound assignment: construct binary expression
