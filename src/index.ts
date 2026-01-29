@@ -22,12 +22,14 @@ export function interpret(input: string): number {
     | { kind: 'Array'; elementType: Type; length: number; initializedCount: number }
     | { kind: 'Generic'; name: string }
     | { kind: 'Tuple'; elements: Type[] }
-    | { kind: 'This' };
+    | { kind: 'This' }
+    | { kind: 'FnPtr'; paramTypes: Type[]; returnType: Type };
 
   type RuntimeValue = {
     value: number;
     type?: Type;
     refersTo?: string;
+    refersToFn?: string;
     structName?: string;
     structFields?: Map<string, RuntimeValue>;
     arrayElements?: Array<RuntimeValue | undefined>;
@@ -103,6 +105,11 @@ export function interpret(input: string): number {
     }
     if (suffix.kind === 'This') {
       return 'This';
+    }
+    if (suffix.kind === 'FnPtr') {
+      const paramStrs = suffix.paramTypes.map((p) => suffixKind(p));
+      const returnStr = suffixKind(suffix.returnType);
+      return '(' + paramStrs.join(', ') + ') => ' + returnStr;
     }
     return suffix.kind + suffix.width;
   }
@@ -296,27 +303,43 @@ export function interpret(input: string): number {
     return element;
   }
 
+  type BracketDepths = { paren: number; bracket: number; brace: number };
+
+  function updateBracketDepths(ch: string, depths: BracketDepths): void {
+    if (ch === '(') depths.paren++;
+    if (ch === ')') depths.paren--;
+    if (ch === '[') depths.bracket++;
+    if (ch === ']') depths.bracket--;
+    if (ch === '{') depths.brace++;
+    if (ch === '}') depths.brace--;
+  }
+
+  function forEachCharWithDepths(
+    input: string,
+    handler: (ch: string, index: number, depths: BracketDepths) => boolean | void
+  ): void {
+    const depths: BracketDepths = { paren: 0, bracket: 0, brace: 0 };
+    for (let i = 0; i < input.length; i++) {
+      const ch = input[i];
+      updateBracketDepths(ch, depths);
+      const shouldStop = handler(ch, i, depths);
+      if (shouldStop) {
+        break;
+      }
+    }
+  }
+
   function splitTopLevelComma(input: string): string[] {
     const parts: string[] = [];
     let current = '';
-    let depthParen = 0;
-    let depthBracket = 0;
-    let depthBrace = 0;
-    for (let i = 0; i < input.length; i++) {
-      const ch = input[i];
-      if (ch === '(') depthParen++;
-      if (ch === ')') depthParen--;
-      if (ch === '[') depthBracket++;
-      if (ch === ']') depthBracket--;
-      if (ch === '{') depthBrace++;
-      if (ch === '}') depthBrace--;
-      if (ch === ',' && depthParen === 0 && depthBracket === 0 && depthBrace === 0) {
+    forEachCharWithDepths(input, (ch, _index, depths) => {
+      if (ch === ',' && depths.paren === 0 && depths.bracket === 0 && depths.brace === 0) {
         if (current.trim()) parts.push(current.trim());
         current = '';
-        continue;
+        return;
       }
       current += ch;
-    }
+    });
     if (current.trim()) parts.push(current.trim());
     return parts;
   }
@@ -344,6 +367,28 @@ export function interpret(input: string): number {
     if (typeStr === 'Void') return { kind: 'Void' };
     if (typeStr === 'This') return { kind: 'This' };
     if (typeStr === 'USize') return { kind: 'U', width: 64 };
+
+    // Parse function pointer type: (param1, param2, ...) => returnType
+    const fnPtrMatch = typeStr.match(/^\s*\((.*?)\)\s*=>\s*(.+)$/);
+    if (fnPtrMatch) {
+      const paramsStr = fnPtrMatch[1].trim();
+      const returnTypeStr = fnPtrMatch[2].trim();
+
+      const paramTypes: Type[] = [];
+      if (paramsStr) {
+        const paramParts = splitTopLevelComma(paramsStr);
+        for (const paramPart of paramParts) {
+          const paramType = tryParseSuffix(paramPart.trim());
+          if (!paramType) return undefined;
+          paramTypes.push(paramType);
+        }
+      }
+
+      const returnType = tryParseSuffix(returnTypeStr);
+      if (!returnType) return undefined;
+
+      return { kind: 'FnPtr', paramTypes, returnType };
+    }
 
     // Parse array type: [I32; init; length]
     const arrayMatch = typeStr.match(/^\[(.+?);\s*(\d+);\s*(\d+)\]$/);
@@ -640,9 +685,28 @@ export function interpret(input: string): number {
     }
 
     function typeEquals(leftType: Type, rightType: Type): boolean {
+      if (leftType.kind === 'Generic') {
+        const leftAlias = resolveTypeAlias(leftType.name);
+        if (leftAlias) {
+          return typeEquals(leftAlias, rightType);
+        }
+      }
+      if (rightType.kind === 'Generic') {
+        const rightAlias = resolveTypeAlias(rightType.name);
+        if (rightAlias) {
+          return typeEquals(leftType, rightAlias);
+        }
+      }
       if (leftType.kind !== rightType.kind) return false;
       if (leftType.kind === 'Ptr' && rightType.kind === 'Ptr') {
         return typeEquals(leftType.pointsTo, rightType.pointsTo);
+      }
+      if (leftType.kind === 'FnPtr' && rightType.kind === 'FnPtr') {
+        if (leftType.paramTypes.length !== rightType.paramTypes.length) return false;
+        for (let i = 0; i < leftType.paramTypes.length; i++) {
+          if (!typeEquals(leftType.paramTypes[i], rightType.paramTypes[i])) return false;
+        }
+        return typeEquals(leftType.returnType, rightType.returnType);
       }
       if (leftType.kind === 'Array' && rightType.kind === 'Array') {
         return (
@@ -1001,6 +1065,82 @@ export function interpret(input: string): number {
     }
   }
 
+  function splitTypeAndInitializer(input: string): { typePart: string; exprPart?: string } {
+    let result: { typePart: string; exprPart?: string } | undefined;
+    forEachCharWithDepths(input, (ch, index, depths) => {
+      if (ch === '=' && depths.paren === 0 && depths.bracket === 0 && depths.brace === 0) {
+        if (index + 1 < input.length && input[index + 1] === '>') {
+          return;
+        }
+        result = {
+          typePart: input.substring(0, index).trim(),
+          exprPart: input.substring(index + 1).trim(),
+        };
+        return true;
+      }
+    });
+    if (result) {
+      return result;
+    }
+    return { typePart: input.trim() };
+  }
+
+  function parseLetStatement(stmt: string): {
+    isMutable: boolean;
+    varName: string;
+    varType?: string;
+    varExprStr?: string;
+  } {
+    const trimmed = stmt.trim();
+    if (!trimmed.startsWith('let ')) {
+      throw new Error('invalid let statement');
+    }
+    let rest = trimmed.substring(4).trim();
+    let isMutable = false;
+    if (rest.startsWith('mut ')) {
+      isMutable = true;
+      rest = rest.substring(4).trim();
+    }
+
+    const nameMatch = rest.match(/^([a-zA-Z_]\w*)/);
+    if (!nameMatch) {
+      throw new Error('invalid let statement');
+    }
+    const varName = nameMatch[1];
+    rest = rest.substring(nameMatch[0].length).trim();
+
+    let varType: string | undefined;
+    let varExprStr: string | undefined;
+
+    if (rest.startsWith(':')) {
+      rest = rest.substring(1).trim();
+      const split = splitTypeAndInitializer(rest);
+      varType = split.typePart || undefined;
+      if (split.exprPart !== undefined) {
+        varExprStr = split.exprPart.trim();
+      }
+    } else if (rest.startsWith('=')) {
+      varExprStr = rest.substring(1).trim();
+    } else if (rest.length > 0) {
+      throw new Error('invalid let statement');
+    }
+
+    return { isMutable, varName, varType, varExprStr };
+  }
+
+  function evaluateNonVoidExpression(
+    expr: string,
+    context: Context,
+    functions: FunctionTable,
+    structs: StructTable
+  ): RuntimeValue {
+    const valueObj = processExprWithContext(expr, context, functions, structs);
+    if (valueObj.type?.kind === 'Void') {
+      throw new Error('void function cannot return a value');
+    }
+    return valueObj;
+  }
+
   // Helper to execute a function call with given arguments
   function executeFunctionCall(
     fnName: string,
@@ -1237,11 +1377,22 @@ export function interpret(input: string): number {
     // Check for function calls: name() or name(arg1, arg2, ...)
     const functionCallRegex = /^([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/;
     const callMatch = expr.trim().match(functionCallRegex);
-    if (callMatch && !functions.has(callMatch[1])) {
-      throw new Error('function not found: ' + callMatch[1]);
-    }
-    if (callMatch && functions.has(callMatch[1])) {
-      return executeFunctionCall(callMatch[1], callMatch[2], context, functions, structs);
+    if (callMatch) {
+      const nameOrVar = callMatch[1];
+      let fnName = nameOrVar;
+
+      // Check if this is a function pointer variable
+      if (!functions.has(nameOrVar) && context.has(nameOrVar)) {
+        const varInfo = context.get(nameOrVar);
+        if (varInfo?.refersToFn) {
+          fnName = varInfo.refersToFn;
+        }
+      }
+
+      if (!functions.has(fnName)) {
+        throw new Error('function not found: ' + fnName);
+      }
+      return executeFunctionCall(fnName, callMatch[2], context, functions, structs);
     }
 
     // Check for function calls through this notation: this.functionName()
@@ -1506,15 +1657,14 @@ export function interpret(input: string): number {
       } else if (stmt.startsWith('let ')) {
         // parse: let [mut] x [: Type] [= expr]
         // Type can be: U8, I32, Bool, *I32, *U16, etc.
-        const m = stmt.match(/^let\s+(mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*(.+?))?(?:\s*=\s*(.+))?$/);
-        if (!m) throw new Error('invalid let statement');
-        const isMutable = !!m[1];
-        const varName = m[2];
+        const parsedLet = parseLetStatement(stmt);
+        const isMutable = parsedLet.isMutable;
+        const varName = parsedLet.varName;
         if (declaredInThisBlock.has(varName)) {
           throw new Error('variable already declared: ' + varName);
         }
-        const varType = m[3]; // undefined if no type specified
-        const varExprStr = m[4] ? m[4].trim() : undefined;
+        const varType = parsedLet.varType; // undefined if no type specified
+        const varExprStr = parsedLet.varExprStr;
 
         // evaluate the initialization expression if present
         let varValue = 0;
@@ -1527,28 +1677,9 @@ export function interpret(input: string): number {
         let arrayElements: Array<RuntimeValue | undefined> | undefined;
         let arrayInitializedCount: number | undefined;
         let tupleElements: RuntimeValue[] | undefined;
+        let refersToFn: string | undefined;
 
-        if (varExprStr !== undefined) {
-          const varValueObj = processExprWithContext(varExprStr, context, functions, structs);
-          if (varValueObj.type?.kind === 'Void') {
-            throw new Error('void function cannot return a value');
-          }
-          const isArrayLiteral = varExprStr.trim().startsWith('[');
-          if (varValueObj.type?.kind === 'Array' && !isArrayLiteral) {
-            throw new Error('cannot copy arrays');
-          }
-          varValue = varValueObj.value;
-          valSuffix = varValueObj.type;
-          refersTo = varValueObj.refersTo;
-          structName = varValueObj.structName;
-          structFields = varValueObj.structFields;
-          arrayElements = varValueObj.arrayElements;
-          arrayInitializedCount = varValueObj.arrayInitializedCount;
-          tupleElements = varValueObj.tupleElements;
-          initialized = true;
-        }
-
-        // validate against the type only if specified
+        // First, try to parse the declared type
         let declaredSuffix: Type | undefined;
         let maxValue: number | undefined;
         let normalizedVarType = varType;
@@ -1572,15 +1703,73 @@ export function interpret(input: string): number {
           } else if (normalizedVarType.startsWith('[')) {
             declaredSuffix = tryParseSuffix(normalizedVarType);
           } else {
-            const typeMatch = normalizedVarType.match(/^([UI])(\d+)$/);
-            if (typeMatch) {
-              const kind = typeMatch[1] as 'U' | 'I';
-              const width = Number(typeMatch[2]);
-              declaredSuffix = { kind, width };
+            // Try parsing as function pointer type or other general types
+            declaredSuffix = tryParseSuffix(normalizedVarType);
+            if (!declaredSuffix) {
+              const typeMatch = normalizedVarType.match(/^([UI])(\d+)$/);
+              if (typeMatch) {
+                const kind = typeMatch[1] as 'U' | 'I';
+                const width = Number(typeMatch[2]);
+                declaredSuffix = { kind, width };
+              }
             }
           }
+        }
 
-          if (declaredSuffix && initialized) {
+        // Handle function pointer assignment specially
+        if (declaredSuffix?.kind === 'FnPtr' && varExprStr !== undefined) {
+          const exprTrimmed = varExprStr.trim();
+          // Check if varExprStr is just a function name (no parentheses)
+          const fnNameMatch = exprTrimmed.match(/^([a-zA-Z_]\w*)$/);
+          if (fnNameMatch) {
+            const fnName = fnNameMatch[1];
+            if (functions.has(fnName)) {
+              // This is a function pointer assignment
+              varValue = 0; // Function pointers have value 0
+              valSuffix = declaredSuffix;
+              refersToFn = fnName;
+              initialized = true;
+            } else {
+              // Not a known function, try normal evaluation
+              const varValueObj = evaluateNonVoidExpression(
+                varExprStr,
+                context,
+                functions,
+                structs
+              );
+              varValue = varValueObj.value;
+              valSuffix = varValueObj.type;
+              refersTo = varValueObj.refersTo;
+              initialized = true;
+            }
+          } else {
+            // Not a simple function name, try normal evaluation
+            const varValueObj = evaluateNonVoidExpression(varExprStr, context, functions, structs);
+            varValue = varValueObj.value;
+            valSuffix = varValueObj.type;
+            refersTo = varValueObj.refersTo;
+            initialized = true;
+          }
+        } else if (varExprStr !== undefined) {
+          const varValueObj = evaluateNonVoidExpression(varExprStr, context, functions, structs);
+          const isArrayLiteral = varExprStr.trim().startsWith('[');
+          if (varValueObj.type?.kind === 'Array' && !isArrayLiteral) {
+            throw new Error('cannot copy arrays');
+          }
+          varValue = varValueObj.value;
+          valSuffix = varValueObj.type;
+          refersTo = varValueObj.refersTo;
+          structName = varValueObj.structName;
+          structFields = varValueObj.structFields;
+          arrayElements = varValueObj.arrayElements;
+          arrayInitializedCount = varValueObj.arrayInitializedCount;
+          tupleElements = varValueObj.tupleElements;
+          initialized = true;
+        }
+
+        // validate against the type only if specified
+        if (declaredSuffix && initialized) {
+          if (declaredSuffix.kind !== 'FnPtr') {
             validateNarrowing(valSuffix, declaredSuffix);
             if (
               declaredSuffix.kind !== 'Ptr' &&
@@ -1649,6 +1838,7 @@ export function interpret(input: string): number {
           mutable: isMutable,
           initialized: initialized,
           refersTo: refersTo,
+          refersToFn: refersToFn,
           structName: structName,
           structFields: structFields,
           arrayElements: arrayElements,

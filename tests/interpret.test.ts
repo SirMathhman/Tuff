@@ -632,3 +632,9 @@ test('interpret supports mutable this pointer and assignment', () => {
 test('interpret supports function calls through this notation', () => {
   expect(interpret('fn get() => 100; this.get()')).toBe(100);
 });
+
+test('interpret supports function pointers and calling through them', () => {
+  expect(
+    interpret('fn get() => 100; let func : () => I32 = get; func()')
+  ).toBe(100);
+});
