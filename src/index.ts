@@ -35,7 +35,10 @@ export function interpret(input: string): number {
     maxValue?: number;
   };
 
-  type Context = Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>;
+  type Context = Map<
+    string,
+    RuntimeValue & { mutable: boolean; initialized: boolean; dropFn?: string }
+  >;
 
   type FunctionDef = {
     params: Array<{ name: string; type: Type }>;
@@ -47,7 +50,8 @@ export function interpret(input: string): number {
   type FunctionTable = Map<string, FunctionDef>;
   type StructInfo = { fields: Array<{ name: string; type: Type }>; typeParams?: string[] };
   type StructTable = Map<string, StructInfo>;
-  type TypeAliasTable = Map<string, Type>;
+  type TypeAliasInfo = { type: Type; dropFn?: string };
+  type TypeAliasTable = Map<string, TypeAliasInfo>;
 
   const typeAliases: TypeAliasTable = new Map();
 
@@ -312,9 +316,14 @@ export function interpret(input: string): number {
       throw new Error('cyclic type alias: ' + name);
     }
     seen.add(name);
-    const alias = typeAliases.get(name);
-    if (!alias) return undefined;
-    return alias;
+    const aliasInfo = typeAliases.get(name);
+    if (!aliasInfo) return undefined;
+    return aliasInfo.type;
+  }
+
+  function getAliasDropFn(name: string): string | undefined {
+    const aliasInfo = typeAliases.get(name);
+    return aliasInfo?.dropFn;
   }
 
   function tryParseSuffix(typeStr: string): Type | undefined {
@@ -952,6 +961,18 @@ export function interpret(input: string): number {
     return conditionResult.value !== 0 ? trueResult : falseResult;
   }
 
+  // Helper to merge block context changes back to parent context
+  function mergeBlockContext(
+    blockResult: { context: Context; declaredInThisBlock: Set<string> },
+    parentContext: Context
+  ): void {
+    for (const [key, value] of blockResult.context) {
+      if (!blockResult.declaredInThisBlock.has(key) && parentContext.has(key)) {
+        parentContext.set(key, value);
+      }
+    }
+  }
+
   // Helper to process an expression recursively through brackets and let blocks
   function processExprWithContext(
     expr: string,
@@ -1150,11 +1171,7 @@ export function interpret(input: string): number {
       const returnValue = bodyResult.result;
 
       // Merge changes back to outer context (closure updates)
-      for (const [key, value] of bodyResult.context) {
-        if (!bodyResult.declaredInThisBlock.has(key) && context.has(key)) {
-          context.set(key, value);
-        }
-      }
+      mergeBlockContext(bodyResult, context);
 
       let resolvedReturnType = fnDef.returnType;
       if (resolvedReturnType && resolvedReturnType.kind === 'Generic') {
@@ -1312,16 +1329,19 @@ export function interpret(input: string): number {
     for (let stmtIndex = 0; stmtIndex < statements.length; stmtIndex++) {
       const stmt = statements[stmtIndex];
       if (stmt.startsWith('type ')) {
-        const typeMatch = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+        const typeMatch = stmt.match(
+          /^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?$/
+        );
         if (!typeMatch) throw new Error('invalid type alias');
         const aliasName = typeMatch[1];
         if (typeAliases.has(aliasName)) {
           throw new Error('type alias already defined: ' + aliasName);
         }
         const aliasTypeStr = typeMatch[2].trim();
+        const dropFnName = typeMatch[3];
         const aliasSuffix = tryParseSuffix(aliasTypeStr);
         if (!aliasSuffix) throw new Error('invalid type alias');
-        typeAliases.set(aliasName, aliasSuffix);
+        typeAliases.set(aliasName, { type: aliasSuffix, dropFn: dropFnName });
         continue;
       }
       if (stmt.startsWith('fn ')) {
@@ -1581,6 +1601,7 @@ export function interpret(input: string): number {
           arrayInitializedCount: arrayInitializedCount,
           tupleElements: tupleElements,
           maxValue: maxValue,
+          dropFn: normalizedVarType ? getAliasDropFn(normalizedVarType) : undefined,
         };
         context.set(varName, varInfo);
         declaredInThisBlock.add(varName);
@@ -1834,14 +1855,51 @@ export function interpret(input: string): number {
       }
     }
 
+    // Helper to call drop functions for variables going out of scope
+    const callDropFunctions = () => {
+      for (const varName of declaredInThisBlock) {
+        const varInfo = context.get(varName);
+        if (varInfo?.dropFn && varInfo.initialized) {
+          const dropFn = functions.get(varInfo.dropFn);
+          if (dropFn) {
+            // Call drop function with variable value
+            const fnContext = new Map<
+              string,
+              RuntimeValue & { mutable: boolean; initialized: boolean }
+            >(context);
+            if (dropFn.params.length === 1) {
+              const param = dropFn.params[0];
+              fnContext.set(param.name, {
+                value: varInfo.value,
+                type: varInfo.type,
+                mutable: false,
+                initialized: true,
+                structName: varInfo.structName,
+                structFields: varInfo.structFields,
+                arrayElements: varInfo.arrayElements,
+                arrayInitializedCount: varInfo.arrayInitializedCount,
+                tupleElements: varInfo.tupleElements,
+              });
+              const bodyResult = processBlock(dropFn.body, fnContext, functions, structs);
+              // Merge changes back to context (for closure updates)
+              mergeBlockContext(bodyResult, context);
+            }
+          }
+        }
+      }
+    };
+
     if (!hasTrailingExpression || !finalExpr.trim()) {
+      callDropFunctions();
       return { result: { value: 0 }, context, declaredInThisBlock };
     }
 
     if (lastProcessedValue) {
+      callDropFunctions();
       return { result: lastProcessedValue, context, declaredInThisBlock };
     }
 
+    callDropFunctions();
     return {
       result: processExprWithContext(finalExpr, context, functions, structs),
       context,

@@ -595,3 +595,10 @@ test('interpret supports forward function references', () => {
 test('interpret allows functions to access outer scope variables', () => {
   expect(interpret('let mut sum = 0; fn addOnce() => sum += 1; addOnce(); sum')).toBe(1);
 });
+test('interpret supports drop functions for type aliases', () => {
+  expect(
+    interpret(
+      'let mut sum = 0; fn drop(this : MyDroppable) => sum += this; type MyDroppable = I32 then drop; let temp : MyDroppable = 100; sum'
+    )
+  ).toBe(100);
+});
