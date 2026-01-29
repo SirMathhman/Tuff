@@ -227,6 +227,17 @@ test('interpret supports all comparison operators', () => {
   expect(interpret('1 != 1')).toBe(0);
 });
 
+test('interpret supports logical OR operator', () => {
+  expect(interpret('true || false')).toBe(1);
+  expect(interpret('false || false')).toBe(0);
+  expect(interpret('let x = true; let y = false; x || y')).toBe(1);
+});
+
+test('interpret supports logical AND operator', () => {
+  expect(interpret('true && false')).toBe(0);
+  expect(interpret('true && true')).toBe(1);
+});
+
 test('interpret rejects narrowing conversions when assigning variables', () => {
   expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
 });

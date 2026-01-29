@@ -116,7 +116,7 @@ export function interpret(input: string): number {
 
   function evaluateExpression(expr: string, context: Context = new Map()): TypedResult {
     const tokens = expr.match(
-      /true|false|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
+      /true|false|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
     );
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -134,18 +134,19 @@ export function interpret(input: string): number {
     const operands: Array<TypedResult> = [];
     const operators: string[] = [];
 
-    for (let i = 0; i < tokens.length; i++) {
-      if (i % 2 === 0) {
-        // even indices are operands (literals or variables)
-        const opResult = resolveOperand(tokens[i], context);
-        if (tokens.length > 1 && opResult.suffix?.kind === 'Bool') {
-          throw new Error('cannot perform arithmetic on booleans');
-        }
-        operands.push(opResult);
-      } else {
-        // odd indices are operators
-        operators.push(tokens[i]);
+    // extract operators first to check if they are all logical
+    for (let i = 1; i < tokens.length; i += 2) {
+      operators.push(tokens[i]);
+    }
+    const hasAnyLogicalOps = operators.some((op) => op === '||' || op === '&&');
+
+    for (let i = 0; i < tokens.length; i += 2) {
+      // even indices are operands (literals or variables)
+      const opResult = resolveOperand(tokens[i], context);
+      if (tokens.length > 1 && opResult.suffix?.kind === 'Bool' && !hasAnyLogicalOps) {
+        throw new Error('cannot perform arithmetic on booleans');
       }
+      operands.push(opResult);
     }
 
     // Helper to apply operators of a certain precedence
@@ -198,6 +199,20 @@ export function interpret(input: string): number {
     applyPass(['==', '!='], (left, op, right) => {
       isBooleanResult = true;
       const res = op === '==' ? left === right : left !== right;
+      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+    });
+
+    // fifth pass: handle logical AND (&&)
+    applyPass(['&&'], (left, op, right) => {
+      isBooleanResult = true;
+      const res = left !== 0 && right !== 0;
+      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+    });
+
+    // sixth pass: handle logical OR (||)
+    applyPass(['||'], (left, op, right) => {
+      isBooleanResult = true;
+      const res = left !== 0 || right !== 0;
       return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
     });
 
