@@ -102,6 +102,40 @@ describe('compiler: numeric type suffixes', () => {
   });
 });
 
+describe('compiler: let statements', () => {
+  test('compile handles simple let binding', () => {
+    assertValid('let x = 100; x', 100);
+  });
+
+  test('compile handles multiple let bindings', () => {
+    assertValid('let x = 50; let y = 25; x + y', 75);
+  });
+
+  test('compile handles let with type annotation', () => {
+    assertValid('let x : I32 = 10; x', 10);
+  });
+
+  test('compile handles let with arithmetic', () => {
+    assertValid('let x = 2 + 3; let y = 4 * 5; x + y', 25);
+  });
+
+  test('compile handles mutable let binding', () => {
+    assertValid('let mut x = 5; x = 10; x', 10);
+  });
+
+  test('compile handles compound assignment', () => {
+    assertValid('let mut x = 5; x += 3; x', 8);
+  });
+
+  test('compile rejects undefined variable', () => {
+    assertInvalid('let x = y + 1; x');
+  });
+
+  test('compile rejects reassignment of immutable var', () => {
+    assertInvalid('let x = 5; x = 10; x');
+  });
+});
+
 describe('compiler: error handling', () => {
   test('compile rejects unmatched opening parenthesis', () => {
     assertInvalid('(1 + 2');

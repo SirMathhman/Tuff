@@ -432,17 +432,62 @@ export function compile(input: string): string {
     return '';
   }
 
-  // Try to handle simple expressions - if it parses as a valid expression, wrap it
-  // Very basic validation: just ensure it doesn't contain invalid tokens
-  const invalidTokens = /[{}()[\];:,]/; // These suggest complex statements we can't handle simply
-  if (invalidTokens.test(code)) {
-    // For now, return empty string to indicate compile failure
-    // The execute function will handle this
-    return '';
+  // Handle let statements and track mutability
+  const mutableVars = new Set<string>();
+  let jsCode = '';
+
+  // Split by semicolons while preserving the rest
+  const stmts = code
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s);
+
+  // Process all statements except the last
+  for (let i = 0; i < stmts.length - 1; i++) {
+    const stmt = stmts[i];
+
+    // Check if this is a let statement
+    const letMatch = stmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*[\w<>]+)?\s*=\s*(.+)$/);
+    if (letMatch) {
+      const isMutable = !!letMatch[1];
+      const varName = letMatch[2];
+      const varValue = letMatch[3];
+
+      if (isMutable) {
+        mutableVars.add(varName);
+      }
+
+      jsCode += 'let ' + varName + ' = ' + varValue + '; ';
+    } else {
+      // Check if this is an assignment
+      const assignMatch = stmt.match(/^(\w+)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+      if (assignMatch) {
+        const varName = assignMatch[1];
+        const operator = assignMatch[2];
+        const value = assignMatch[3];
+
+        // Verify variable is mutable
+        if (operator === '=' && !mutableVars.has(varName)) {
+          return '';
+        }
+
+        jsCode += varName + ' ' + operator + ' ' + value + '; ';
+      } else {
+        // Unknown statement
+        return '';
+      }
+    }
   }
 
-  // Wrap the expression in a return statement
-  return 'return ' + code + ';';
+  // Process the final statement as a return expression
+  if (stmts.length > 0) {
+    const lastStmt = stmts[stmts.length - 1];
+    jsCode += 'return ' + lastStmt + ';';
+  } else {
+    jsCode = 'return 0;';
+  }
+
+  return jsCode;
 }
 
 /**
