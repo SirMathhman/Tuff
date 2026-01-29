@@ -562,6 +562,28 @@ export function interpret(input: string): number {
     };
   }
 
+  function resolveStringIndex(str: string, index: number): RuntimeValue {
+    if (index < 0 || index >= str.length) {
+      throw new Error('string index out of bounds');
+    }
+    const char = str[index];
+    return { value: char.charCodeAt(0), type: { kind: 'Char' } };
+  }
+
+  function resolveArrayElementFromList(
+    elements: Array<RuntimeValue | undefined>,
+    index: number
+  ): RuntimeValue {
+    if (index < 0 || index >= elements.length) {
+      throw new Error('array index out of bounds');
+    }
+    const element = elements[index];
+    if (!element) {
+      throw new Error('array element not initialized');
+    }
+    return element;
+  }
+
   function resolveArrayElement(varName: string, index: number, context: Context): RuntimeValue {
     const varInfo = ensureVariable(varName, context);
     if (varInfo.tupleElements) {
@@ -575,21 +597,13 @@ export function interpret(input: string): number {
     if (varInfo.type?.kind === 'Ptr' && varInfo.type.pointsTo.kind === 'Str') {
       // First try to get stringValue from the variable itself (inline strings)
       if (varInfo.stringValue) {
-        if (index < 0 || index >= varInfo.stringValue.length) {
-          throw new Error('string index out of bounds');
-        }
-        const char = varInfo.stringValue[index];
-        return { value: char.charCodeAt(0), type: { kind: 'Char' } };
+        return resolveStringIndex(varInfo.stringValue, index);
       }
       // Otherwise try to get it from the variable it refers to
       if (varInfo.refersTo) {
         const targetVar = ensureVariable(varInfo.refersTo, context);
         if (targetVar.stringValue) {
-          if (index < 0 || index >= targetVar.stringValue.length) {
-            throw new Error('string index out of bounds');
-          }
-          const char = targetVar.stringValue[index];
-          return { value: char.charCodeAt(0), type: { kind: 'Char' } };
+          return resolveStringIndex(targetVar.stringValue, index);
         }
       }
     }
@@ -602,14 +616,46 @@ export function interpret(input: string): number {
     if (!elements) {
       throw new Error('variable ' + varName + ' is not an array');
     }
-    if (index < 0 || index >= elements.length) {
-      throw new Error('array index out of bounds');
+    return resolveArrayElementFromList(elements, index);
+  }
+
+  function resolveIndexedValue(
+    baseValue: RuntimeValue,
+    index: number,
+    context: Context
+  ): RuntimeValue {
+    if (baseValue.tupleElements) {
+      if (index < 0 || index >= baseValue.tupleElements.length) {
+        throw new Error('tuple index out of bounds');
+      }
+      return baseValue.tupleElements[index];
     }
-    const element = elements[index];
-    if (!element) {
-      throw new Error('array element not initialized');
+
+    if (baseValue.type?.kind === 'Str' && baseValue.stringValue !== undefined) {
+      return resolveStringIndex(baseValue.stringValue, index);
     }
-    return element;
+
+    if (baseValue.type?.kind === 'Ptr' && baseValue.type.pointsTo.kind === 'Str') {
+      if (baseValue.stringValue !== undefined) {
+        return resolveStringIndex(baseValue.stringValue, index);
+      }
+      if (baseValue.refersTo) {
+        const targetVar = ensureVariable(baseValue.refersTo, context);
+        if (targetVar.stringValue !== undefined) {
+          return resolveStringIndex(targetVar.stringValue, index);
+        }
+      }
+    }
+
+    let elements = baseValue.arrayElements;
+    if (!elements && baseValue.type?.kind === 'Ptr' && baseValue.type.pointsTo.kind === 'Array') {
+      const targetVar = ensureVariable(baseValue.refersTo || '', context);
+      elements = targetVar.arrayElements;
+    }
+    if (!elements) {
+      throw new Error('expression is not an array');
+    }
+    return resolveArrayElementFromList(elements, index);
   }
 
   type BracketDepths = { paren: number; bracket: number; brace: number };
@@ -1841,13 +1887,19 @@ export function interpret(input: string): number {
       }
     }
 
-    // Check for array indexing: arrayName[index]
-    const arrayIndexRegex = /^([a-zA-Z_]\w*)\s*\[\s*([+-]?\d+)\s*\]$/;
+    // Check for array indexing on array literals: [..][index]
+    const arrayIndexRegex = /^(.+)\s*\[\s*([+-]?\d+)\s*\]$/;
     const arrayIndexMatch = expr.trim().match(arrayIndexRegex);
     if (arrayIndexMatch) {
-      const varName = arrayIndexMatch[1];
+      const baseExpr = arrayIndexMatch[1].trim();
       const index = Number(arrayIndexMatch[2]);
-      return resolveArrayElement(varName, index, context);
+      if (!baseExpr) {
+        throw new Error('invalid array access');
+      }
+      if (baseExpr.startsWith('[') || baseExpr.startsWith('(')) {
+        const baseValue = processExprWithContext(baseExpr, context, functions, structs);
+        return resolveIndexedValue(baseValue, index, context);
+      }
     }
 
     // Check for array literal: [elem1, elem2, ...]
