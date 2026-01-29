@@ -1427,6 +1427,28 @@ export function interpret(input: string): number {
       }
     }
 
+    if (trimmedExpr.startsWith('{')) {
+      let depth = 0;
+      let closePos = -1;
+      for (let i = 0; i < trimmedExpr.length; i++) {
+        if (trimmedExpr[i] === '{') {
+          depth++;
+        } else if (trimmedExpr[i] === '}') {
+          depth--;
+          if (depth === 0) {
+            closePos = i;
+            break;
+          }
+        }
+      }
+      if (closePos === trimmedExpr.length - 1 && depth === 0) {
+        const blockContent = trimmedExpr.substring(1, closePos);
+        const blockResult = processBlock(blockContent, context, functions, structs);
+        mergeBlockContext(blockResult, context);
+        return blockResult.result;
+      }
+    }
+
     // Check for array indexing: arrayName[index]
     const arrayIndexRegex = /^([a-zA-Z_]\w*)\s*\[\s*([+-]?\d+)\s*\]$/;
     const arrayIndexMatch = expr.trim().match(arrayIndexRegex);
@@ -1652,11 +1674,7 @@ export function interpret(input: string): number {
         res = blockResult.result;
         sawBlockReplacement = true;
         // Update parent context with changes from block
-        for (const [key, value] of blockResult.context) {
-          if (!blockResult.declaredInThisBlock.has(key) && context.has(key)) {
-            context.set(key, value);
-          }
-        }
+        mergeBlockContext(blockResult, context);
       } else {
         // Regular parenthesization - just evaluate the contents
         res = processExprWithContext(content, context, functions, structs);
@@ -1756,7 +1774,27 @@ export function interpret(input: string): number {
         const genericsRaw = fnMatch.genericsRaw;
         const paramsStr = fnMatch.paramsStr;
         const returnTypeRaw = fnMatch.returnTypeRaw;
-        const fnBody = fnMatch.body;
+        let fnBody = fnMatch.body;
+        let remainder = '';
+        if (fnBody.startsWith('{')) {
+          let depth = 0;
+          let closePos = -1;
+          for (let i = 0; i < fnBody.length; i++) {
+            if (fnBody[i] === '{') {
+              depth++;
+            } else if (fnBody[i] === '}') {
+              depth--;
+              if (depth === 0) {
+                closePos = i;
+                break;
+              }
+            }
+          }
+          if (closePos !== -1 && closePos < fnBody.length - 1) {
+            remainder = fnBody.substring(closePos + 1).trim();
+            fnBody = fnBody.substring(0, closePos + 1).trim();
+          }
+        }
         const generics = genericsRaw
           ? genericsRaw
               .split(',')
@@ -1822,6 +1860,9 @@ export function interpret(input: string): number {
           generics,
           body: fnBody,
         });
+        if (remainder) {
+          statements.splice(stmtIndex + 1, 0, remainder);
+        }
       } else if (stmt.startsWith('struct ')) {
         let remainder = stmt;
         while (remainder.startsWith('struct ')) {
