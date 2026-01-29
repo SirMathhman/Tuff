@@ -36,7 +36,9 @@ export function interpretAll(inputs: string[], config: Map<string[], string>): n
     if (visited.has(name)) return;
     visited.add(name);
     const raw = moduleMap.get(name);
-    if (raw === undefined) return;
+    if (raw === undefined) {
+      throw new Error('module not found: ' + name);
+    }
     const extracted = extractUseStatements(raw);
     for (const dep of extracted.deps) {
       includeModule(dep);
