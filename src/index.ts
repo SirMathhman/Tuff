@@ -1168,6 +1168,8 @@ export function interpret(input: string): number {
     for (const [key, value] of baseValue.structFields) {
       derived.set(key, snapshotContextValue(value));
     }
+    // Store a marker so we know this context came from a boundThis
+    derived.set('$boundThis', snapshotContextValue(baseValue));
     return derived;
   }
 
@@ -2339,6 +2341,12 @@ export function interpret(input: string): number {
     if (fieldAccessMatch) {
       const varName = fieldAccessMatch[1];
       const fieldName = fieldAccessMatch[2];
+
+      // Special case: this.this builds a fresh snapshot of the current context
+      if (varName === 'this' && fieldName === 'this' && !context.has('this')) {
+        // Build a fresh 'this' from the current context state
+        return buildThisValue(context);
+      }
 
       // Special case: this.x refers to variable x in the current scope
       if (varName === 'this' && !context.has('this')) {

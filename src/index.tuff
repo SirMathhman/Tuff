@@ -1,15 +1,13 @@
-// Example demonstrating method calls with nested function calls
-fn Math() => {
-    fn square(x : I32) => x * x;
-    
-    fn add(x : I32) => {
-        square(this.getValue())
-    }
-    
-    fn getValue() => 5;
-    
-    this
+fn Builder() => {
+  let mut value = 0;
+  fn increment() => {
+    this.value = this.value + 1;
+    this.this
+  }
+  this
 }
 
-Math().add(0)
+let b = Builder();
+b.increment();
+b.value
 

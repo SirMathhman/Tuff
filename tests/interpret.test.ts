@@ -833,3 +833,120 @@ test('interpret handles function calls with this.method() inside arguments', () 
       'this }; List().add(5)')
   ).toBe(100);
 });
+
+test('interpret this returns a snapshot of the current scope', () => {
+  expect(interpret('let x = 100; this.x')).toBe(100);
+});
+
+test('interpret function returning this creates a class-like object', () => {
+  expect(interpret('fn Point(x : I32, y : I32) => { this }; Point(3, 4).x')).toBe(3);
+});
+
+test('interpret method returning this returns the method context not outer scope', () => {
+  // setValue returns its own context (like an inner class), which has field 'v'
+  expect(
+    interpret(
+      'fn Builder() => {' +
+        '  let mut value = 0;' +
+        '  fn setValue(v : I32) => { this.value = v; this }' +
+        '  this' +
+        '}; ' +
+        'Builder().setValue(42).v'
+    )
+  ).toBe(42);
+});
+
+test('interpret this.this accesses outer scope from method for chaining', () => {
+  expect(
+    interpret(
+      'fn Builder() => {' +
+        '  let mut value = 0;' +
+        '  fn setValue(v : I32) => { this.value = v; this.this }' +
+        '  this' +
+        '}; ' +
+        'Builder().setValue(42).value'
+    )
+  ).toBe(42);
+});
+
+test('interpret method chaining with this.this', () => {
+  expect(
+    interpret(
+      'fn Counter() => {' +
+        '  let mut count = 0;' +
+        '  fn add(n : I32) => { this.count = this.count + n; this.this }' +
+        '  this' +
+        '}; ' +
+        'let c = Counter();' +
+        'c.add(10).add(5).count'
+    )
+  ).toBe(15);
+});
+
+test('interpret nested functions each get their own this context', () => {
+  expect(
+    interpret(
+      'fn Outer() => {' +
+        '  let x = 100;' +
+        '  fn Inner() => {' +
+        '    let y = 50;' +
+        '    this' +
+        '  }' +
+        '  Inner().y' +
+        '}; ' +
+        'Outer()'
+    )
+  ).toBe(50);
+});
+
+test('interpret this.this in nested function accesses outer function scope', () => {
+  expect(
+    interpret(
+      'fn Outer() => {' +
+        '  let x = 100;' +
+        '  fn Inner() => {' +
+        '    let y = 50;' +
+        '    this.this' +
+        '  }' +
+        '  Inner().x' +
+        '}; ' +
+        'Outer()'
+    )
+  ).toBe(100);
+});
+
+test('interpret method can modify outer scope through this reference', () => {
+  expect(
+    interpret(
+      'fn Builder() => {' +
+        '  let mut value = 0;' +
+        '  fn increment() => { this.value = this.value + 1; this.this }' +
+        '  this' +
+        '}; ' +
+        'let b = Builder();' +
+        'b.increment();' +
+        'b.value'
+    )
+  ).toBe(1);
+});
+
+test('interpret deep nesting requires multiple this accessors', () => {
+  // This demonstrates the "code smell" - this.this.this suggests bad architecture
+  expect(
+    interpret(
+      'fn Level1() => {' +
+        '  let a = 1;' +
+        '  fn Level2() => {' +
+        '    let b = 2;' +
+        '    fn Level3() => {' +
+        '      let c = 3;' +
+        '      this.this.this' +
+        '    }' +
+        '    Level3().a' +
+        '  }' +
+        '  Level2()' +
+        '}; ' +
+        'Level1()'
+    )
+  ).toBe(1);
+});
