@@ -589,4 +589,6 @@ test('interpret infers return type from function body when missing', () => {
   expect(interpret('fn empty() => true; let result = empty(); result')).toBe(1);
 });
 
-
+test('interpret supports forward function references', () => {
+  expect(interpret('fn getA() => getB(); fn getB() => 100; getA()')).toBe(100);
+});
