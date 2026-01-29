@@ -60,6 +60,10 @@ test('interpret indexes array literals directly', () => {
   expect(interpret('[1, 2, 3][1]')).toBe(2);
 });
 
+test('interpret indexes arrays returned by calls', () => {
+  expect(interpret('fn getFirst() => [1, 2, 3]; getFirst()[1]')).toBe(2);
+});
+
 test('interpret rejects array element type mismatch', () => {
   expect(() => interpret('let array : [I32; 1; 1] = [true]; array[0]')).toThrow();
 });

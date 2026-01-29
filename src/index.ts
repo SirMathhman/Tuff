@@ -1896,7 +1896,7 @@ export function interpret(input: string): number {
       if (!baseExpr) {
         throw new Error('invalid array access');
       }
-      if (baseExpr.startsWith('[') || baseExpr.startsWith('(')) {
+      if (baseExpr.startsWith('[') || baseExpr.startsWith('(') || baseExpr.endsWith(')')) {
         const baseValue = processExprWithContext(baseExpr, context, functions, structs);
         return resolveIndexedValue(baseValue, index, context);
       }
