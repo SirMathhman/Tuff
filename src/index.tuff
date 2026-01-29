@@ -3,9 +3,18 @@ extern use { createArray } from lib;
 extern fn createArray<T>(length : USize) : *mut [T];
 
 fn List<T>() => {
-    let array = createArray(10);
+    let mut array : *mut [T] = createArray(10);
+
+    fn set(index : USize, element : T) => {
+        array[index] = element;
+        this.this
+    }
+
+    fn getFirst() => array[0];
+
     this
 }
 
-let mut list = List<I32>();
-list.getFirst()
+List<I32>()
+    .set(0, 100)
+    .getFirst()

@@ -36,8 +36,11 @@ def copy_paste(
 
     if not source_file.exists():
         raise FileNotFoundError(f"Source file not found: {source_path}")
+    
+    # Create destination file if it doesn't exist
     if not dest_file.exists():
-        raise FileNotFoundError(f"Destination file not found: {dest_path}")
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        dest_file.touch()
 
     if source_line < 1:
         raise ValueError(f"Source line must be >= 1, got {source_line}")

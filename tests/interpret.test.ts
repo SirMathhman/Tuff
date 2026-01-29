@@ -64,6 +64,14 @@ test('interpret indexes arrays returned by calls', () => {
   expect(interpret('fn getFirst() => [1, 2, 3]; getFirst()[1]')).toBe(2);
 });
 
+test('interpret assigns array element with variable index', () => {
+  expect(
+    interpret(
+      'let mut array : [I32; 0; 2]; let mut idx : USize = 0; array[idx] = 100; array[0]'
+    )
+  ).toBe(100);
+});
+
 test('interpret rejects assigning void function result', () => {
   expect(() =>
     interpret('fn outer() : Void => { fn inner() => {} } let value = outer()')
@@ -737,6 +745,14 @@ test('interpret supports nested this with uppercase function names', () => {
       'fn OuterClass(x : I32) => { fn InnerClass(y : I32) => { fn manhattan() => x + y; this } this } OuterClass(3).InnerClass(4).manhattan()'
     )
   ).toBe(7);
+});
+
+test('interpret supports method chaining across lines', () => {
+  expect(
+    interpret(
+      'fn Builder() => { let mut value = 0; fn add() => { value += 1; this.this } fn get() => value; this } Builder()\n  .add()\n  .get()'
+    )
+  ).toBe(1);
 });
 
 test('interpret supports returning this from inner function and reusing it', () => {

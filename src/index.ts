@@ -455,7 +455,9 @@ export function interpret(input: string): number {
     return out;
   }
 
-  const s = stripComments(input).trim();
+  const s = stripComments(input)
+    .replace(/\n\s*\./g, '.')
+    .trim();
   if (s === '') return 0;
 
   type Type =
@@ -2548,8 +2550,12 @@ export function interpret(input: string): number {
     }
 
     // Check for method-style calls: expr.methodName(args...)
+    // Support line-broken chaining by collapsing newline + leading dot
+    const methodCallExpr = expr.replace(/\s*\n\s*\./g, '.');
     // Need to be careful not to match dots inside bracket expressions
-    const methodCallMatch = expr.trim().match(/^(.+)\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/);
+    const methodCallMatch = methodCallExpr
+      .trim()
+      .match(/^([\s\S]+)\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/);
     if (methodCallMatch) {
       const baseExpr = methodCallMatch[1].trim();
       const fnName = methodCallMatch[2];
@@ -2599,16 +2605,18 @@ export function interpret(input: string): number {
               functions,
               structs
             );
-            if (baseExpr.match(/^[a-zA-Z_]\w*$/) && baseValue.structFields) {
+            if (baseValue.structFields) {
               for (const key of baseValue.structFields.keys()) {
                 const updatedValue = derivedContext.get(key);
                 if (updatedValue) {
                   baseValue.structFields.set(key, snapshotRuntimeValue(updatedValue));
                 }
               }
-              const targetVar = context.get(baseExpr);
-              if (targetVar) {
-                context.set(baseExpr, { ...targetVar, structFields: baseValue.structFields });
+              if (baseExpr.match(/^[a-zA-Z_]\w*$/)) {
+                const targetVar = context.get(baseExpr);
+                if (targetVar) {
+                  context.set(baseExpr, { ...targetVar, structFields: baseValue.structFields });
+                }
               }
             }
             return result;
@@ -3334,6 +3342,26 @@ export function interpret(input: string): number {
         lastProcessedValue = undefined;
       } else if (stmt.includes('=') && !stmt.startsWith('let ')) {
         // assignment: x = 100 or compound: x += 1, x -= 2, x *= 3, x /= 4 or *y = 100
+        const updateBoundThisField = (
+          varName: string,
+          updatedVarInfo: RuntimeValue & { mutable: boolean; initialized: boolean },
+          markDirty: boolean
+        ) => {
+          const boundThis = context.get('$boundThis');
+          if (boundThis?.type?.kind === 'This' && boundThis.structFields) {
+            boundThis.structFields.set(varName, snapshotRuntimeValue(updatedVarInfo));
+            context.set('$boundThis', boundThis);
+            if (markDirty) {
+              context.set('$boundThisDirty', {
+                value: 1,
+                type: { kind: 'Bool', width: 1 },
+                mutable: false,
+                initialized: true,
+              });
+            }
+          }
+        };
+
         const recordAssignment = (
           varName: string,
           updatedVarInfo: RuntimeValue & { mutable: boolean; initialized: boolean }
@@ -3342,6 +3370,7 @@ export function interpret(input: string): number {
           if (!declaredInThisBlock.has(varName) && parentContext.has(varName)) {
             parentContext.set(varName, updatedVarInfo);
           }
+          updateBoundThisField(varName, updatedVarInfo, false);
           finalExpr = stmt;
           lastProcessedValue = updatedVarInfo;
         };
@@ -3398,13 +3427,19 @@ export function interpret(input: string): number {
         } else {
           // Array element assignment: array[index] = value or array[index] += value
           const arrayAssignMatch = stmt.match(
-            /^([a-zA-Z_]\w*)\s*\[\s*([+-]?\d+)\s*\]\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
+            /^([a-zA-Z_]\w*)\s*\[\s*(.+?)\s*\]\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
           );
           if (arrayAssignMatch) {
             const varName = arrayAssignMatch[1];
-            const index = Number(arrayAssignMatch[2]);
+            const indexExpr = arrayAssignMatch[2].trim();
             const op = arrayAssignMatch[3];
             const varExprStr = arrayAssignMatch[4].trim();
+
+            const indexValueObj = processExprWithContext(indexExpr, context, functions, structs);
+            const index = Number(indexValueObj.value);
+            if (!Number.isInteger(index)) {
+              throw new Error('array index must be an integer');
+            }
 
             let varInfo = ensureVariable(varName, context);
             let targetArrayVarName = varName;
@@ -3571,17 +3606,7 @@ export function interpret(input: string): number {
           const updatedVarInfo = { ...varInfo, value: newValue, initialized: true };
           recordAssignment(varName, updatedVarInfo);
           if (shouldUpdateBoundThis) {
-            const boundThis = context.get('$boundThis');
-            if (boundThis?.type?.kind === 'This' && boundThis.structFields) {
-              boundThis.structFields.set(varName, snapshotRuntimeValue(updatedVarInfo));
-              context.set('$boundThis', boundThis);
-              context.set('$boundThisDirty', {
-                value: 1,
-                type: { kind: 'Bool', width: 1 },
-                mutable: false,
-                initialized: true,
-              });
-            }
+            updateBoundThisField(varName, updatedVarInfo, true);
           }
         }
       } else {
