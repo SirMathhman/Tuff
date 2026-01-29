@@ -723,7 +723,7 @@ export function interpret(input: string): number {
     }
 
     // Check for array indexing: arrayName[index]
-    const arrayIndexRegex = /^([a-zA-Z_]\w*)\s*\[\s*(\d+)\s*\]$/;
+    const arrayIndexRegex = /^([a-zA-Z_]\w*)\s*\[\s*([+-]?\d+)\s*\]$/;
     const arrayIndexMatch = expr.trim().match(arrayIndexRegex);
     if (arrayIndexMatch) {
       const varName = arrayIndexMatch[1];
@@ -1357,7 +1357,7 @@ export function interpret(input: string): number {
         } else {
           // Array element assignment: array[index] = value or array[index] += value
           const arrayAssignMatch = stmt.match(
-            /^([a-zA-Z_]\w*)\s*\[\s*(\d+)\s*\]\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
+            /^([a-zA-Z_]\w*)\s*\[\s*([+-]?\d+)\s*\]\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
           );
           if (arrayAssignMatch) {
             const varName = arrayAssignMatch[1];
