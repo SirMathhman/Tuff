@@ -570,6 +570,37 @@ export function interpret(input: string): number {
 
         finalExpr = '';
         lastProcessedValue = undefined;
+      } else if (stmt.startsWith('while ')) {
+        // while loop: while (condition) body
+        const m = stmt.match(/^while\s*\(\s*(.+?)\s*\)\s*(.+)$/);
+        if (!m) {
+          finalExpr = stmt;
+          lastProcessedValue = undefined;
+          continue;
+        }
+        const conditionExpr = m[1];
+        const bodyExpr = m[2].trim();
+
+        // Execute while loop
+        while (true) {
+          const condObj = processExprWithContext(conditionExpr, context);
+          if (condObj.suffix?.kind !== 'Bool') {
+            throw new Error('while condition must be boolean');
+          }
+          if (!condObj.value) break; // condition is false
+
+          // Execute body as a block statement to update context
+          const bodyBlockResult = processBlock(bodyExpr, context);
+          // Merge changes from body back into current context
+          for (const [key, value] of bodyBlockResult.context) {
+            if (context.has(key)) {
+              context.set(key, value);
+            }
+          }
+        }
+
+        finalExpr = stmt;
+        lastProcessedValue = undefined;
       } else if (stmt.includes('=') && !stmt.startsWith('let ')) {
         // assignment: x = 100 or compound: x += 1, x -= 2, x *= 3, x /= 4
         const m = stmt.match(/^([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
