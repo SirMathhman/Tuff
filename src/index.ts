@@ -112,8 +112,8 @@ export function interpretAll(
     ].join('\n');
 
     try {
-      const getExports = new Function(wrapped);
-      const exportsObj = getExports();
+      const getExports = new Function('require', wrapped);
+      const exportsObj = getExports(require);
 
       // Collect const exports
       for (const [key, value] of Object.entries(exportsObj)) {
