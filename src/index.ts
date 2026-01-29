@@ -23,16 +23,13 @@ export function interpretAll(inputs: string[], config: Map<string[], string>): n
   }
 
   const visited = new Set<string>();
-  let combined = '';
+  const parts: string[] = [];
 
   function appendCode(code: string): void {
     if (!code) return;
     const trimmed = code.trim();
     if (!trimmed) return;
-    combined += trimmed;
-    if (!combined.endsWith(';')) {
-      combined += ';';
-    }
+    parts.push(trimmed);
   }
 
   function includeModule(name: string): void {
@@ -51,6 +48,18 @@ export function interpretAll(inputs: string[], config: Map<string[], string>): n
     includeModule(input);
   }
 
+  if (!parts.length) return 0;
+
+  let combined = '';
+  for (const part of parts) {
+    if (!combined) {
+      combined = part;
+      continue;
+    }
+    const needsSeparator = !combined.trim().endsWith(';') && !part.trim().startsWith(';');
+    combined += needsSeparator ? ';' : '';
+    combined += part;
+  }
   if (!combined.trim()) return 0;
   return interpret(combined);
 }
@@ -1848,22 +1857,26 @@ export function interpret(input: string): number {
       value: RuntimeValue,
       valueContext?: Context
     ): RuntimeValue | null {
+      const buildLengthResult = (len: number): RuntimeValue => {
+        return { value: len, type: { kind: 'U', width: 64 } };
+      };
+
       if (value.type?.kind === 'Str' && value.stringValue !== undefined) {
-        return { value: value.stringValue.length, type: { kind: 'U', width: 64 } };
+        return buildLengthResult(value.stringValue.length);
       }
       if (value.type?.kind === 'Ptr' && value.type.pointsTo.kind === 'Str') {
         if (value.stringValue !== undefined) {
-          return { value: value.stringValue.length, type: { kind: 'U', width: 64 } };
+          return buildLengthResult(value.stringValue.length);
         }
         if (value.refersTo && valueContext) {
           const targetVar = valueContext.get(value.refersTo);
           if (targetVar && targetVar.stringValue !== undefined) {
-            return { value: targetVar.stringValue.length, type: { kind: 'U', width: 64 } };
+            return buildLengthResult(targetVar.stringValue.length);
           }
         }
       }
       if (value.type?.kind === 'Array') {
-        return { value: value.type.length, type: { kind: 'U', width: 64 } };
+        return buildLengthResult(value.type.length);
       }
       return null;
     }
