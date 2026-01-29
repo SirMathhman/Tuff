@@ -1178,45 +1178,38 @@ export function interpret(input: string): number {
     functions: FunctionTable,
     structs: StructTable
   ): RuntimeValue {
+    const args = parseCallArguments(argsStr, context, functions, structs);
+    return executeFunctionCallWithArgs(fnName, args, context, functions, structs);
+  }
+
+  function parseCallArguments(
+    argsStr: string,
+    context: Context,
+    functions: FunctionTable,
+    structs: StructTable
+  ): RuntimeValue[] {
+    const args: RuntimeValue[] = [];
+    if (!argsStr.trim()) {
+      return args;
+    }
+    const argParts = splitTopLevelComma(argsStr);
+    for (const argPart of argParts) {
+      const argValue = processExprWithContext(argPart, context, functions, structs);
+      args.push(argValue);
+    }
+    return args;
+  }
+
+  function executeFunctionCallWithArgs(
+    fnName: string,
+    args: RuntimeValue[],
+    context: Context,
+    functions: FunctionTable,
+    structs: StructTable
+  ): RuntimeValue {
     const fnDef = functions.get(fnName);
     if (!fnDef) throw new Error('function not found: ' + fnName);
 
-    // Parse arguments
-    const args: RuntimeValue[] = [];
-    if (argsStr.trim()) {
-      // Split arguments by commas (respecting brackets)
-      const argParts: string[] = [];
-      let currentArg = '';
-      let bracketDepth = 0;
-      for (let i = 0; i < argsStr.length; i++) {
-        const ch = argsStr[i];
-        if ((ch === '(' || ch === '{' || ch === '[') && bracketDepth === 0) {
-          bracketDepth++;
-          currentArg += ch;
-        } else if ((ch === ')' || ch === '}' || ch === ']') && bracketDepth > 0) {
-          bracketDepth--;
-          currentArg += ch;
-        } else if (ch === ',' && bracketDepth === 0) {
-          if (currentArg.trim()) {
-            argParts.push(currentArg.trim());
-          }
-          currentArg = '';
-        } else {
-          currentArg += ch;
-        }
-      }
-      if (currentArg.trim()) {
-        argParts.push(currentArg.trim());
-      }
-
-      // Evaluate each argument
-      for (const argPart of argParts) {
-        const argValue = processExprWithContext(argPart, context, functions, structs);
-        args.push(argValue);
-      }
-    }
-
-    // Validate argument count
     if (args.length !== fnDef.params.length) {
       throw new Error(
         'function ' + fnName + ' expects ' + fnDef.params.length + ' arguments, got ' + args.length
@@ -1235,7 +1228,6 @@ export function interpret(input: string): number {
       return type;
     };
 
-    // Create function call context with outer scope access (closure)
     const fnContext = new Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>(
       context
     );
@@ -1243,7 +1235,6 @@ export function interpret(input: string): number {
       const param = fnDef.params[i];
       const arg = args[i];
 
-      // Validate argument type
       const resolvedParamType = resolveGenericType(param.type, arg);
       validateNarrowing(arg.type, resolvedParamType);
       if (resolvedParamType.kind !== 'Ptr' && 'width' in resolvedParamType) {
@@ -1262,11 +1253,9 @@ export function interpret(input: string): number {
       });
     }
 
-    // Evaluate function body
     const bodyResult = processBlock(fnDef.body, fnContext, functions, structs);
     const returnValue = bodyResult.result;
 
-    // Merge changes back to outer context (closure updates)
     mergeBlockContext(bodyResult, context);
 
     let resolvedReturnType = fnDef.returnType;
@@ -1278,7 +1267,6 @@ export function interpret(input: string): number {
       if (returnValue.type?.kind === 'Bool' && resolvedReturnType.kind !== 'Bool') {
         throw new Error('cannot return boolean value from non-bool function');
       }
-      // Validate return type
       validateNarrowing(returnValue.type, resolvedReturnType);
       if (
         resolvedReturnType.kind !== 'Ptr' &&
@@ -1435,6 +1423,23 @@ export function interpret(input: string): number {
         );
       }
       return fieldValue;
+    }
+
+    // Check for method-style calls: expr.methodName(args...)
+    const methodCallMatch = expr.trim().match(/^(.+)\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/);
+    if (methodCallMatch) {
+      const baseExpr = methodCallMatch[1].trim();
+      const fnName = methodCallMatch[2];
+      const argsStr = methodCallMatch[3];
+
+      if (baseExpr !== 'this') {
+        const baseValue = processExprWithContext(baseExpr, context, functions, structs);
+        if (!functions.has(fnName)) {
+          throw new Error('function not found: ' + fnName);
+        }
+        const args = [baseValue, ...parseCallArguments(argsStr, context, functions, structs)];
+        return executeFunctionCallWithArgs(fnName, args, context, functions, structs);
+      }
     }
 
     // Check for function calls: name() or name(arg1, arg2, ...)
