@@ -29,6 +29,7 @@ export function interpret(input: string): number {
     structFields?: Map<string, TypedResult>;
     arrayElements?: Array<TypedResult | undefined>;
     arrayInitializedCount?: number;
+    maxValue?: number;
   };
   type Context = Map<string, TypedResult & { mutable: boolean; initialized: boolean }>;
 
@@ -1184,17 +1185,29 @@ export function interpret(input: string): number {
 
         // validate against the type only if specified
         let declaredSuffix: Suffix | undefined;
+        let maxValue: number | undefined;
+        let normalizedVarType = varType;
         if (varType) {
-          if (varType === 'Bool') {
+          const constraintMatch = varType.match(/^(.+?)\s*<\s*([+-]?\d+)\s*$/);
+          if (constraintMatch) {
+            normalizedVarType = constraintMatch[1].trim();
+            maxValue = Number(constraintMatch[2]);
+            if (!Number.isInteger(maxValue)) {
+              throw new Error('invalid type constraint');
+            }
+          }
+        }
+        if (normalizedVarType) {
+          if (normalizedVarType === 'Bool') {
             declaredSuffix = { kind: 'Bool', width: 1 };
-          } else if (varType.startsWith('*mut ')) {
-            declaredSuffix = parsePointerSuffix(varType.substring(5).trim(), true);
-          } else if (varType.startsWith('*')) {
-            declaredSuffix = parsePointerSuffix(varType.substring(1).trim(), false);
-          } else if (varType.startsWith('[')) {
-            declaredSuffix = tryParseSuffix(varType);
+          } else if (normalizedVarType.startsWith('*mut ')) {
+            declaredSuffix = parsePointerSuffix(normalizedVarType.substring(5).trim(), true);
+          } else if (normalizedVarType.startsWith('*')) {
+            declaredSuffix = parsePointerSuffix(normalizedVarType.substring(1).trim(), false);
+          } else if (normalizedVarType.startsWith('[')) {
+            declaredSuffix = tryParseSuffix(normalizedVarType);
           } else {
-            const typeMatch = varType.match(/^([UI])(\d+)$/);
+            const typeMatch = normalizedVarType.match(/^([UI])(\d+)$/);
             if (typeMatch) {
               const kind = typeMatch[1] as 'U' | 'I';
               const width = Number(typeMatch[2]);
@@ -1210,6 +1223,14 @@ export function interpret(input: string): number {
               'width' in declaredSuffix
             ) {
               validateValueAgainstSuffix(varValue, declaredSuffix.kind, declaredSuffix.width);
+            }
+            if (maxValue !== undefined) {
+              if (declaredSuffix.kind !== 'U' && declaredSuffix.kind !== 'I') {
+                throw new Error('invalid type constraint');
+              }
+              if (varValue >= maxValue) {
+                throw new Error('value exceeds type constraint');
+              }
             }
             if (declaredSuffix.kind === 'Array' && arrayElements) {
               if (arrayElements.length !== declaredSuffix.length) {
@@ -1267,6 +1288,7 @@ export function interpret(input: string): number {
           structFields: structFields,
           arrayElements: arrayElements,
           arrayInitializedCount: arrayInitializedCount,
+          maxValue: maxValue,
         };
         context.set(varName, varInfo);
         declaredInThisBlock.add(varName);
@@ -1489,6 +1511,9 @@ export function interpret(input: string): number {
           const isArrayLiteral = varExprStr.trim().startsWith('[');
           if (newValSuffix?.kind === 'Array' && !isArrayLiteral) {
             throw new Error('cannot copy arrays');
+          }
+          if (varInfo.maxValue !== undefined && newValue >= varInfo.maxValue) {
+            throw new Error('value exceeds type constraint');
           }
 
           // validate against original type

@@ -64,6 +64,11 @@ test('interpret rejects array initializer with too few elements', () => {
   expect(() => interpret('let array : [I32; 3; 3] = [1, 2]')).toThrow();
 });
 
+test('interpret enforces numeric type constraints in declarations', () => {
+  expect(interpret('let x : I32 < 10 = 5; x')).toBe(5);
+  expect(() => interpret('let x : I32 < 10 = 20; x')).toThrow();
+});
+
 test('interpret rejects copying arrays', () => {
   expect(() =>
     interpret('let array : [I32; 3; 3] = [1, 2, 3]; let array0 = array;')
