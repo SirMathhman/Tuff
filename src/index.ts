@@ -129,6 +129,10 @@ export function interpret(input: string): number {
       return;
     }
 
+    if (source && source.kind === 'This') {
+      throw new Error('cannot convert This to non-This type');
+    }
+
     if (target.kind === 'Generic') {
       return;
     }
@@ -463,6 +467,28 @@ export function interpret(input: string): number {
     return tryParseSuffix(trimmed);
   }
 
+  function buildThisValue(context: Context): RuntimeValue {
+    const fields = new Map<string, RuntimeValue>();
+    for (const [key, value] of context) {
+      if (!value.initialized) {
+        continue;
+      }
+      fields.set(key, {
+        value: value.value,
+        type: value.type,
+        refersTo: value.refersTo,
+        refersToFn: value.refersToFn,
+        structName: value.structName,
+        structFields: value.structFields,
+        arrayElements: value.arrayElements,
+        arrayInitializedCount: value.arrayInitializedCount,
+        tupleElements: value.tupleElements,
+        maxValue: value.maxValue,
+      });
+    }
+    return { value: 0, type: { kind: 'This' }, structName: 'This', structFields: fields };
+  }
+
   function evaluateAssignmentValue(
     currentValue: number,
     op: string,
@@ -520,6 +546,9 @@ export function interpret(input: string): number {
   function resolveOperand(token: string, context: Context): RuntimeValue {
     if (token === 'true' || token === 'false') {
       return parseLiteralToken(token);
+    }
+    if (token === 'this' && !context.has('this')) {
+      return buildThisValue(context);
     }
     const arrayIndexTokenMatch = token.match(/^([a-zA-Z_]\w*)\s*\[\s*([+-]?\d+)\s*\]$/);
     if (arrayIndexTokenMatch) {
@@ -1264,7 +1293,18 @@ export function interpret(input: string): number {
       }
     }
 
-    return { value: returnValue.value, type: resolvedReturnType || returnValue.type };
+    return {
+      value: returnValue.value,
+      type: resolvedReturnType || returnValue.type,
+      refersTo: returnValue.refersTo,
+      refersToFn: returnValue.refersToFn,
+      structName: returnValue.structName,
+      structFields: returnValue.structFields,
+      arrayElements: returnValue.arrayElements,
+      arrayInitializedCount: returnValue.arrayInitializedCount,
+      tupleElements: returnValue.tupleElements,
+      maxValue: returnValue.maxValue,
+    };
   }
 
   // Helper to process an expression recursively through brackets and let blocks
@@ -1351,7 +1391,7 @@ export function interpret(input: string): number {
       const fieldName = fieldAccessMatch[2];
 
       // Special case: this.x refers to variable x in the current scope
-      if (varName === 'this') {
+      if (varName === 'this' && !context.has('this')) {
         return ensureVariable(fieldName, context);
       }
 
@@ -1369,6 +1409,29 @@ export function interpret(input: string): number {
       if (!fieldValue) {
         throw new Error(
           'struct ' + (varInfo.structName || 'unknown') + ' has no field: ' + fieldName
+        );
+      }
+      return fieldValue;
+    }
+
+    // Check for field access on expression results: expr.fieldName
+    const exprFieldMatch = expr.trim().match(/^(.+)\s*\.\s*([a-zA-Z_]\w*)$/);
+    if (exprFieldMatch) {
+      const baseExpr = exprFieldMatch[1].trim();
+      const fieldName = exprFieldMatch[2];
+      const baseValue = processExprWithContext(baseExpr, context, functions, structs);
+
+      if (baseValue.type?.kind === 'Ptr' && baseValue.type.pointsTo.kind === 'This') {
+        return ensureVariable(fieldName, context);
+      }
+
+      if (!baseValue.structFields) {
+        throw new Error('expression is not a struct');
+      }
+      const fieldValue = baseValue.structFields.get(fieldName);
+      if (!fieldValue) {
+        throw new Error(
+          'struct ' + (baseValue.structName || 'unknown') + ' has no field: ' + fieldName
         );
       }
       return fieldValue;
