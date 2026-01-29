@@ -3,6 +3,9 @@ import os from 'os';
 import path from 'path';
 import { add, interpretAll, buildReplInputs } from '../src/index';
 
+const buildMainConfig = (source: string) => new Map([[['main'], source]]);
+const buildLibConfig = (source: string) => new Map([[['lib'], source]]);
+
 test('add', () => {
   expect(add(1, 2)).toBe(3);
 });
@@ -70,57 +73,49 @@ test('interpretAll supports extern native functions', () => {
 });
 
 test('interpretAll supports generic extern native functions', () => {
-  const config = new Map([
-    [
-      ['main'],
-      'extern use { get } from lib; extern fn get<T>() : I32; get<Bool>()',
-    ],
-  ]);
-  const nativeConfig = new Map([[['lib'], 'export function get<T>() { return 100; }']]);
+  const config = buildMainConfig(
+    'extern use { get } from lib; extern fn get<T>() : I32; get<Bool>()'
+  );
+  const nativeConfig = buildLibConfig('export function get<T>() { return 100; }');
   expect(interpretAll(['main'], config, nativeConfig)).toBe(100);
 });
 
 test('interpretAll reports missing native exports with context', () => {
-  const config = new Map([
-    [
-      ['main'],
-      'extern use { resizeArray } from lib; extern fn resizeArray<T>(ptr : *mut [T], length : USize) : *mut [T]; 0',
-    ],
-  ]);
-  const nativeConfig = new Map([[['lib'], 'export function createArray<T>() { return 0; }']]);
+  const config = buildMainConfig(
+    'extern use { resizeArray } from lib; extern fn resizeArray<T>(ptr : *mut [T], length : USize) : *mut [T]; 0'
+  );
+  const nativeConfig = buildLibConfig('export function createArray<T>() { return 0; }');
   expect(() => interpretAll(['main'], config, nativeConfig)).toThrow(
     'native export not found: resizeArray. Cause: extern use references a native export that does not exist. Fix: export resizeArray from lib.ts or remove it. Context: module lib.'
   );
 });
 
+test('interpretAll reports missing extern fn export with context', () => {
+  const config = buildMainConfig(
+    'extern use { createArray } from lib; extern fn resizeArray<T>(ptr : *mut [T], length : USize) : *mut [T]; 0'
+  );
+  const nativeConfig = buildLibConfig('export function createArray<T>() { return 0; }');
+  expect(() => interpretAll(['main'], config, nativeConfig)).toThrow(
+    'native export not found: resizeArray. Cause: extern fn declares a native symbol without a matching export. Reason: extern functions must be provided by a native module. Fix: add extern use { resizeArray } from lib and export it from lib.ts. Context: module lib.'
+  );
+});
+
 test('interpretAll allows unused void native functions', () => {
-  const config = new Map([
-    [
-      ['main'],
-      'extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; 0',
-    ],
-  ]);
-  const nativeConfig = new Map([
-    [
-      ['lib'],
-      'export function createArray<T>(length: number) { return new Array<T>(length); }\nexport function println(content: string) { console.log(content); }',
-    ],
-  ]);
+  const config = buildMainConfig(
+    'extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; 0'
+  );
+  const nativeConfig = buildLibConfig(
+    'export function createArray<T>(length: number) { return new Array<T>(length); }\nexport function println(content: string) { console.log(content); }'
+  );
   expect(interpretAll(['main'], config, nativeConfig)).toBe(0);
 });
 
 test('interpretAll handles native createArray without copying arrays', () => {
-  const config = new Map([
-    [
-      ['main'],
-      'extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; let array = createArray<I32>(3); 0',
-    ],
-  ]);
-  const nativeConfig = new Map([
-    [
-      ['lib'],
-      'export function createArray<T>(length: number) { return new Array<T>(length); }',
-    ],
-  ]);
+  const config = buildMainConfig(
+    'extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; let array = createArray<I32>(3); 0'
+  );
+  const nativeConfig = buildLibConfig(
+    'export function createArray<T>(length: number) { return new Array<T>(length); }'
+  );
   expect(interpretAll(['main'], config, nativeConfig)).toBe(0);
 });

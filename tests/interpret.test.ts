@@ -82,6 +82,12 @@ test('interpret rejects assigning implicit void from block with inner fn', () =>
   ).toThrow('void function cannot return a value');
 });
 
+test('interpret allows consecutive fn declarations without semicolons', () => {
+  expect(
+    interpret('fn outer() => {\nfn a() => 1\nfn b() => 2\nb()\n} outer()')
+  ).toBe(2);
+});
+
 test('interpret rejects array element type mismatch', () => {
   expect(() => interpret('let array : [I32; 1; 1] = [true]; array[0]')).toThrow();
 });

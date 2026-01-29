@@ -211,12 +211,22 @@ export function interpretAll(
       '.'
     );
   };
+  const nativeExportsByModule = new Map<
+    string,
+    { constExports: Map<string, string>; fnExports: Map<string, NativeFunctionDef> }
+  >();
+  for (const [moduleName, source] of nativeModuleMap) {
+    nativeExportsByModule.set(moduleName, parseNativeExports(source));
+  }
   for (const externUse of externUses) {
     const nativeSource = nativeModuleMap.get(externUse.module);
     if (!nativeSource) {
       throw new Error('native module not found: ' + externUse.module);
     }
-    const nativeExports = parseNativeExports(nativeSource);
+    const nativeExports = nativeExportsByModule.get(externUse.module);
+    if (!nativeExports) {
+      throw new Error('native module not found: ' + externUse.module);
+    }
     for (const name of externUse.names) {
       const constValue = nativeExports.constExports.get(name);
       const fnValue = nativeExports.fnExports.get(name);
@@ -246,7 +256,42 @@ export function interpretAll(
   for (const externFn of externFns) {
     const fnBody = externFnByName.get(externFn.name);
     if (!fnBody) {
-      throw new Error('native export not found: ' + externFn.name);
+      const matches: Array<{ module: string; fn: NativeFunctionDef }> = [];
+      for (const [moduleName, nativeExports] of nativeExportsByModule) {
+        const found = nativeExports.fnExports.get(externFn.name);
+        if (found) {
+          matches.push({ module: moduleName, fn: found });
+        }
+      }
+      if (matches.length === 1) {
+        nativeFunctionTable.set(externFn.name, matches[0].fn);
+        continue;
+      }
+      const moduleName = externUses.length === 1 ? externUses[0].module : 'unknown';
+      if (matches.length > 1) {
+        const message =
+          'native export not found: ' +
+          externFn.name +
+          '. Cause: extern fn matches multiple native modules. Reason: extern functions must resolve to a single native module. Fix: add extern use { ' +
+          externFn.name +
+          ' } from <module> to disambiguate. Context: module ' +
+          moduleName +
+          '.';
+        throw new Error(message);
+      }
+      const message =
+        'native export not found: ' +
+        externFn.name +
+        '. Cause: extern fn declares a native symbol without a matching export. Reason: extern functions must be provided by a native module. Fix: add extern use { ' +
+        externFn.name +
+        ' } from ' +
+        moduleName +
+        ' and export it from ' +
+        moduleName +
+        '.ts. Context: module ' +
+        moduleName +
+        '.';
+      throw new Error(message);
     }
     nativeFunctionTable.set(externFn.name, fnBody);
   }
@@ -2635,9 +2680,17 @@ export function interpret(input: string): number {
     const statements: string[] = [];
     let currentStmt = '';
     let bracketDepth = 0;
+    const isIdentChar = (ch: string | undefined) => !!ch && /[A-Za-z0-9_]/.test(ch);
 
     for (let i = 0; i < blockContent.length; i++) {
       const ch = blockContent[i];
+      if (bracketDepth === 0 && blockContent.startsWith('fn ', i)) {
+        const prev = i > 0 ? blockContent[i - 1] : undefined;
+        if (!isIdentChar(prev) && currentStmt.trim()) {
+          statements.push(currentStmt.trim());
+          currentStmt = '';
+        }
+      }
       if (ch === '(' || ch === '{' || ch === '[') {
         bracketDepth++;
         currentStmt += ch;
@@ -2649,6 +2702,14 @@ export function interpret(input: string): number {
           statements.push(currentStmt.trim());
         }
         currentStmt = '';
+      } else if (ch === '\n' && bracketDepth === 0) {
+        const trimmed = currentStmt.trim();
+        if (trimmed.startsWith('fn ') && trimmed.includes('=>')) {
+          statements.push(trimmed);
+          currentStmt = '';
+        } else {
+          currentStmt += ch;
+        }
       } else {
         currentStmt += ch;
       }
