@@ -639,6 +639,10 @@ test('interpret supports function pointers and calling through them', () => {
   ).toBe(100);
 });
 
+test('interpret supports returning function pointers from functions', () => {
+  expect(interpret('fn get() => 100; fn pass() : () => I32 => get; pass()()')).toBe(100);
+});
+
 test('interpret allows functions to return this scope values', () => {
   expect(interpret('fn Wrap(x : I32) => this; Wrap(100).x')).toBe(100);
 });

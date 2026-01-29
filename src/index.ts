@@ -114,6 +114,55 @@ export function interpret(input: string): number {
     return suffix.kind + suffix.width;
   }
 
+  function typeEqualsForValidation(leftType: Type, rightType: Type): boolean {
+    if (leftType.kind === 'Generic') {
+      const leftAlias = resolveTypeAlias(leftType.name);
+      if (leftAlias) {
+        return typeEqualsForValidation(leftAlias, rightType);
+      }
+    }
+    if (rightType.kind === 'Generic') {
+      const rightAlias = resolveTypeAlias(rightType.name);
+      if (rightAlias) {
+        return typeEqualsForValidation(leftType, rightAlias);
+      }
+    }
+    if (leftType.kind !== rightType.kind) return false;
+    if (leftType.kind === 'Ptr' && rightType.kind === 'Ptr') {
+      return (
+        leftType.mutable === rightType.mutable &&
+        typeEqualsForValidation(leftType.pointsTo, rightType.pointsTo)
+      );
+    }
+    if (leftType.kind === 'Array' && rightType.kind === 'Array') {
+      return (
+        leftType.length === rightType.length &&
+        leftType.initializedCount === rightType.initializedCount &&
+        typeEqualsForValidation(leftType.elementType, rightType.elementType)
+      );
+    }
+    if (leftType.kind === 'Tuple' && rightType.kind === 'Tuple') {
+      if (leftType.elements.length !== rightType.elements.length) return false;
+      for (let i = 0; i < leftType.elements.length; i++) {
+        if (!typeEqualsForValidation(leftType.elements[i], rightType.elements[i])) return false;
+      }
+      return true;
+    }
+    if (leftType.kind === 'FnPtr' && rightType.kind === 'FnPtr') {
+      if (leftType.paramTypes.length !== rightType.paramTypes.length) return false;
+      for (let i = 0; i < leftType.paramTypes.length; i++) {
+        if (!typeEqualsForValidation(leftType.paramTypes[i], rightType.paramTypes[i])) {
+          return false;
+        }
+      }
+      return typeEqualsForValidation(leftType.returnType, rightType.returnType);
+    }
+    if ('width' in leftType && 'width' in rightType) {
+      return leftType.kind === rightType.kind && leftType.width === rightType.width;
+    }
+    return true;
+  }
+
   function validateNarrowing(source: Type | undefined, target: Type) {
     if (target.kind === 'Void') {
       if (source && source.kind !== 'Void') {
@@ -131,6 +180,24 @@ export function interpret(input: string): number {
 
     if (source && source.kind === 'This') {
       throw new Error('cannot convert This to non-This type');
+    }
+
+    if (target.kind === 'FnPtr') {
+      if (!source || source.kind !== 'FnPtr') {
+        throw new Error('cannot convert non-function to function pointer type');
+      }
+      if (source.paramTypes.length !== target.paramTypes.length) {
+        throw new Error('function pointer parameter length mismatch');
+      }
+      for (let i = 0; i < target.paramTypes.length; i++) {
+        if (!typeEqualsForValidation(source.paramTypes[i], target.paramTypes[i])) {
+          throw new Error('function pointer parameter type mismatch');
+        }
+      }
+      if (!typeEqualsForValidation(source.returnType, target.returnType)) {
+        throw new Error('function pointer return type mismatch');
+      }
+      return;
     }
 
     if (target.kind === 'Generic') {
@@ -543,7 +610,7 @@ export function interpret(input: string): number {
   }
 
   // helper to evaluate an expression with optional variable context
-  function resolveOperand(token: string, context: Context): RuntimeValue {
+  function resolveOperand(token: string, context: Context, functions: FunctionTable): RuntimeValue {
     if (token === 'true' || token === 'false') {
       return parseLiteralToken(token);
     }
@@ -619,6 +686,12 @@ export function interpret(input: string): number {
     if (/^[a-zA-Z_]/.test(token)) {
       // variable reference
       if (!context.has(token)) {
+        if (functions.has(token)) {
+          const fnDef = functions.get(token);
+          const returnType = fnDef?.returnType || { kind: 'I', width: 32 };
+          const paramTypes = fnDef ? fnDef.params.map((param) => param.type) : [];
+          return { value: 0, type: { kind: 'FnPtr', paramTypes, returnType }, refersToFn: token };
+        }
         throw new Error('undefined variable: ' + token);
       }
       return context.get(token)!;
@@ -627,7 +700,11 @@ export function interpret(input: string): number {
     return parseLiteralToken(token);
   }
 
-  function evaluateExpression(expr: string, context: Context = new Map()): RuntimeValue {
+  function evaluateExpression(
+    expr: string,
+    context: Context = new Map(),
+    functions: FunctionTable
+  ): RuntimeValue {
     const tokens = expr.match(
       /true|false|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*)/g
     );
@@ -637,7 +714,7 @@ export function interpret(input: string): number {
 
     if (tokens.length === 1) {
       // single operand (literal or variable)
-      return resolveOperand(tokens[0], context);
+      return resolveOperand(tokens[0], context, functions);
     }
 
     if (tokens.length < 3 || tokens.length % 2 === 0) {
@@ -670,7 +747,7 @@ export function interpret(input: string): number {
         operands.push({ value: 0, type: typeSuffix });
         continue;
       }
-      const opResult = resolveOperand(tokens[i], context);
+      const opResult = resolveOperand(tokens[i], context, functions);
       if (opResult.structFields) {
         throw new Error('cannot use struct value in expression');
       }
@@ -713,53 +790,6 @@ export function interpret(input: string): number {
       }
     }
 
-    function typeEquals(leftType: Type, rightType: Type): boolean {
-      if (leftType.kind === 'Generic') {
-        const leftAlias = resolveTypeAlias(leftType.name);
-        if (leftAlias) {
-          return typeEquals(leftAlias, rightType);
-        }
-      }
-      if (rightType.kind === 'Generic') {
-        const rightAlias = resolveTypeAlias(rightType.name);
-        if (rightAlias) {
-          return typeEquals(leftType, rightAlias);
-        }
-      }
-      if (leftType.kind !== rightType.kind) return false;
-      if (leftType.kind === 'Ptr' && rightType.kind === 'Ptr') {
-        return typeEquals(leftType.pointsTo, rightType.pointsTo);
-      }
-      if (leftType.kind === 'FnPtr' && rightType.kind === 'FnPtr') {
-        if (leftType.paramTypes.length !== rightType.paramTypes.length) return false;
-        for (let i = 0; i < leftType.paramTypes.length; i++) {
-          if (!typeEquals(leftType.paramTypes[i], rightType.paramTypes[i])) return false;
-        }
-        return typeEquals(leftType.returnType, rightType.returnType);
-      }
-      if (leftType.kind === 'Array' && rightType.kind === 'Array') {
-        return (
-          leftType.length === rightType.length &&
-          leftType.initializedCount === rightType.initializedCount &&
-          typeEquals(leftType.elementType, rightType.elementType)
-        );
-      }
-      if (leftType.kind === 'Tuple' && rightType.kind === 'Tuple') {
-        if (leftType.elements.length !== rightType.elements.length) return false;
-        for (let i = 0; i < leftType.elements.length; i++) {
-          if (!typeEquals(leftType.elements[i], rightType.elements[i])) return false;
-        }
-        return true;
-      }
-      if (leftType.kind === 'Generic' && rightType.kind === 'Generic') {
-        return leftType.name === rightType.name;
-      }
-      if ('width' in leftType && 'width' in rightType) {
-        return leftType.kind === rightType.kind && leftType.width === rightType.width;
-      }
-      return true;
-    }
-
     // first pass: handle multiplication and division (higher precedence)
     applyPass(['*', '/'], (left, op, right) => {
       if (op === '/' && right.value === 0) {
@@ -794,7 +824,7 @@ export function interpret(input: string): number {
         throw new Error('invalid type in is expression');
       }
       isBooleanResult = true;
-      const res = typeEquals(leftType, rightType);
+      const res = typeEqualsForValidation(leftType, rightType);
       return { value: res ? 1 : 0, type: { kind: 'Bool', width: 1 } };
     });
 
@@ -837,7 +867,7 @@ export function interpret(input: string): number {
       if (prevOp === 'is') {
         continue;
       }
-      const op = resolveOperand(tokens[i], context);
+      const op = resolveOperand(tokens[i], context, functions);
       if (
         op.type &&
         op.type.kind !== 'Bool' &&
@@ -1157,6 +1187,70 @@ export function interpret(input: string): number {
     return { isMutable, varName, varType, varExprStr };
   }
 
+  function splitFunctionHeaderAndBody(input: string): { header: string; body: string } {
+    let result: { header: string; body: string } | undefined;
+    forEachCharWithDepths(input, (ch, index, depths) => {
+      if (ch === '=' && index + 1 < input.length && input[index + 1] === '>') {
+        if (depths.paren === 0 && depths.bracket === 0 && depths.brace === 0) {
+          result = {
+            header: input.substring(0, index).trim(),
+            body: input.substring(index + 2).trim(),
+          };
+        }
+      }
+    });
+    if (!result) {
+      throw new Error('invalid function definition');
+    }
+    return result;
+  }
+
+  function parseFunctionDefinition(stmt: string): {
+    name: string;
+    genericsRaw?: string;
+    paramsStr: string;
+    returnTypeRaw?: string;
+    body: string;
+  } {
+    const { header, body } = splitFunctionHeaderAndBody(stmt);
+    const headerMatch = header.match(
+      /^fn\s+([a-zA-Z_]\w*)\s*(?:<\s*([^>]+)\s*>)?\s*\(\s*(.*?)\s*\)\s*(?::\s*(.+))?$/
+    );
+    if (!headerMatch) {
+      throw new Error('invalid function definition');
+    }
+    return {
+      name: headerMatch[1],
+      genericsRaw: headerMatch[2],
+      paramsStr: headerMatch[3],
+      returnTypeRaw: headerMatch[4]?.trim(),
+      body,
+    };
+  }
+
+  function parseTrailingCall(expr: string): { calleeExpr: string; argsStr: string } | null {
+    const trimmed = expr.trim();
+    if (!trimmed.endsWith(')')) return null;
+    let depth = 0;
+    for (let i = trimmed.length - 1; i >= 0; i--) {
+      const ch = trimmed[i];
+      if (ch === ')') {
+        depth++;
+        continue;
+      }
+      if (ch === '(') {
+        depth--;
+        if (depth === 0) {
+          const calleeExpr = trimmed.substring(0, i).trim();
+          const argsStr = trimmed.substring(i + 1, trimmed.length - 1).trim();
+          if (!calleeExpr) return null;
+          return { calleeExpr, argsStr };
+        }
+      }
+    }
+    return null;
+  }
+
   function evaluateNonVoidExpression(
     expr: string,
     context: Context,
@@ -1426,6 +1520,20 @@ export function interpret(input: string): number {
       return fieldValue;
     }
 
+    const trailingCall = parseTrailingCall(expr);
+    if (trailingCall) {
+      const { calleeExpr, argsStr } = trailingCall;
+      if (calleeExpr.includes('.')) {
+        // handled by method-style call
+      } else if (!calleeExpr.match(/^[a-zA-Z_]\w*$/)) {
+        const calleeValue = processExprWithContext(calleeExpr, context, functions, structs);
+        if (calleeValue.refersToFn) {
+          return executeFunctionCall(calleeValue.refersToFn, argsStr, context, functions, structs);
+        }
+        throw new Error('function not found: ' + calleeExpr);
+      }
+    }
+
     // Check for method-style calls: expr.methodName(args...)
     const methodCallMatch = expr.trim().match(/^(.+)\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/);
     if (methodCallMatch) {
@@ -1444,11 +1552,15 @@ export function interpret(input: string): number {
         let receiverArg = baseValue;
         if (fnDef.params[0]?.type.kind === 'Ptr') {
           if (baseExpr.match(/^[a-zA-Z_]\w*$/)) {
+            const receiverVar = ensureVariable(baseExpr, context);
+            if (fnDef.params[0].type.mutable && !receiverVar.mutable) {
+              throw new Error('cannot take mutable reference to immutable variable');
+            }
             receiverArg = {
               value: 0,
               type: {
                 kind: 'Ptr',
-                pointsTo: baseValue.type || { kind: 'I', width: 32 },
+                pointsTo: receiverVar.type || { kind: 'I', width: 32 },
                 mutable: fnDef.params[0].type.mutable,
               },
               refersTo: baseExpr,
@@ -1566,13 +1678,13 @@ export function interpret(input: string): number {
     }
 
     try {
-      return evaluateExpression(e, context);
+      return evaluateExpression(e, context, functions);
     } catch (err) {
       if (sawBlockReplacement && err instanceof Error && err.message === 'invalid expression') {
         const trimmed = e.trim();
         const match = trimmed.match(/^(true|false|[+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)\s+(.+)$/);
         if (match) {
-          return evaluateExpression(match[2], context);
+          return evaluateExpression(match[2], context, functions);
         }
       }
       throw err;
@@ -1639,16 +1751,12 @@ export function interpret(input: string): number {
         continue;
       }
       if (stmt.startsWith('fn ')) {
-        const fnMatch = stmt.match(
-          /^fn\s+([a-zA-Z_]\w*)\s*(?:<\s*([^>]+)\s*>)?\s*\(\s*(.*?)\s*\)\s*(?::\s*([^=]+?))?\s*=>\s*(.+)$/
-        );
-        if (!fnMatch) throw new Error('invalid function definition');
-
-        const fnName = fnMatch[1];
-        const genericsRaw = fnMatch[2];
-        const paramsStr = fnMatch[3];
-        const returnTypeRaw = fnMatch[4];
-        const fnBody = fnMatch[5].trim();
+        const fnMatch = parseFunctionDefinition(stmt);
+        const fnName = fnMatch.name;
+        const genericsRaw = fnMatch.genericsRaw;
+        const paramsStr = fnMatch.paramsStr;
+        const returnTypeRaw = fnMatch.returnTypeRaw;
+        const fnBody = fnMatch.body;
         const generics = genericsRaw
           ? genericsRaw
               .split(',')
@@ -1695,7 +1803,13 @@ export function interpret(input: string): number {
 
         let returnSuffix: Type | undefined;
         if (returnTypeStr) {
-          returnSuffix = tryParseSuffix(returnTypeStr);
+          if (returnTypeStr.startsWith('*mut ')) {
+            returnSuffix = parsePointerSuffix(returnTypeStr.substring(5).trim(), true);
+          } else if (returnTypeStr.startsWith('*')) {
+            returnSuffix = parsePointerSuffix(returnTypeStr.substring(1).trim(), false);
+          } else {
+            returnSuffix = tryParseSuffix(returnTypeStr);
+          }
           if (!returnSuffix && generics.includes(returnTypeStr)) {
             returnSuffix = { kind: 'Generic', name: returnTypeStr };
           }
