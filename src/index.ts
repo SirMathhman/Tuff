@@ -1993,7 +1993,7 @@ export function interpret(input: string): number {
       const { calleeExpr, argsStr } = trailingCall;
       if (calleeExpr.includes('.')) {
         // handled by method-style call
-      } else if (!calleeExpr.match(/^[a-zA-Z_]\w*$/)) {
+      } else if (!calleeExpr.match(/^[a-zA-Z_]\w*(?:\s*<\s*[^>]+\s*>)?$/)) {
         const calleeValue = processExprWithContext(calleeExpr, context, functions, structs);
         if (calleeValue.refersToFn) {
           if (calleeValue.boundThis) {
@@ -2074,10 +2074,12 @@ export function interpret(input: string): number {
     }
 
     // Check for function calls: name() or name(arg1, arg2, ...)
-    const functionCallRegex = /^([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/;
+    const functionCallRegex = /^([a-zA-Z_]\w*)\s*(?:<\s*([^>]+)\s*>)?\s*\(\s*(.*)\s*\)$/;
     const callMatch = expr.trim().match(functionCallRegex);
     if (callMatch) {
       const nameOrVar = callMatch[1];
+      const explicitTypeArgs = callMatch[2];
+      const callArgsStr = callMatch[3];
       let fnName = nameOrVar;
       let boundThis: RuntimeValue | undefined;
       let boundThisInfo: RuntimeValue | undefined;
@@ -2095,15 +2097,13 @@ export function interpret(input: string): number {
       if (!functions.has(fnName)) {
         throw new Error('function not found: ' + fnName);
       }
+      if (explicitTypeArgs) {
+        // Explicit type args are accepted for syntax compatibility; inference is still used.
+      }
+
       if (boundThis) {
         const derivedContext = buildContextFromThisValue(boundThis, context);
-        const result = executeFunctionCall(
-          fnName,
-          callMatch[2],
-          derivedContext,
-          functions,
-          structs
-        );
+        const result = executeFunctionCall(fnName, callArgsStr, derivedContext, functions, structs);
         if (boundThisInfo?.boundThisRef && boundThis.structFields) {
           const fieldKeys =
             boundThisInfo.boundThisFieldKeys || Array.from(boundThis.structFields.keys());
@@ -2111,7 +2111,7 @@ export function interpret(input: string): number {
         }
         return result;
       }
-      return executeFunctionCall(fnName, callMatch[2], context, functions, structs);
+      return executeFunctionCall(fnName, callArgsStr, context, functions, structs);
     }
 
     // Check for function calls through this notation: this.functionName()
