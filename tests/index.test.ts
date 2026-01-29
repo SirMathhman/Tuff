@@ -144,3 +144,13 @@ test('buildReplInputs should not load index.ts as a native module', () => {
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
+
+test('interpretAll handles mutable array from native function', () => {
+  const config = buildMainConfig(
+    'extern use { createArray } from lib; extern fn createArray() : *mut [I32]; let array = createArray(); array[0] = 100; array[0]'
+  );
+  const nativeConfig = buildLibConfig(
+    'export function createArray() { return new Array(1); }'
+  );
+  expect(interpretAll(['main'], config, nativeConfig)).toBe(100);
+});

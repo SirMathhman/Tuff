@@ -5,6 +5,7 @@ type NativeFunctionDef = {
 };
 
 let currentNativeFunctions: Map<string, NativeFunctionDef> | null = null;
+let currentNativeFunctionReturnTypes: Map<string, string> | null = null;
 let nativeArrayCounter = 0;
 
 export function add(a: number, b: number): number {
@@ -253,6 +254,7 @@ export function interpretAll(
     );
   }
   const nativeFunctionTable = new Map<string, NativeFunctionDef>();
+  const nativeFunctionReturnTypesLocal = new Map<string, string>();
   for (const externFn of externFns) {
     const fnBody = externFnByName.get(externFn.name);
     if (!fnBody) {
@@ -265,6 +267,7 @@ export function interpretAll(
       }
       if (matches.length === 1) {
         nativeFunctionTable.set(externFn.name, matches[0].fn);
+        nativeFunctionReturnTypesLocal.set(externFn.name, externFn.returnType);
         continue;
       }
       const moduleName = externUses.length === 1 ? externUses[0].module : 'unknown';
@@ -294,6 +297,7 @@ export function interpretAll(
       throw new Error(message);
     }
     nativeFunctionTable.set(externFn.name, fnBody);
+    nativeFunctionReturnTypesLocal.set(externFn.name, externFn.returnType);
   }
 
   let combined = '';
@@ -308,11 +312,14 @@ export function interpretAll(
   }
   if (!combined.trim()) return 0;
   const previousNative = currentNativeFunctions;
+  const previousNativeReturnTypes = currentNativeFunctionReturnTypes;
   currentNativeFunctions = nativeFunctionTable;
+  currentNativeFunctionReturnTypes = nativeFunctionReturnTypesLocal;
   try {
     return interpret(combined);
   } finally {
     currentNativeFunctions = previousNative;
+    currentNativeFunctionReturnTypes = previousNativeReturnTypes;
   }
 }
 
@@ -2017,7 +2024,8 @@ export function interpret(input: string): number {
     if (!fnDef) {
       const nativeFn = currentNativeFunctions?.get(fnName);
       if (nativeFn) {
-        return executeNativeFunction(nativeFn, args, context, explicitTypeArgs);
+        const returnTypeStr = currentNativeFunctionReturnTypes?.get(fnName);
+        return executeNativeFunction(nativeFn, args, context, explicitTypeArgs, returnTypeStr);
       }
       throw new Error('function not found: ' + fnName);
     }
@@ -2153,7 +2161,8 @@ export function interpret(input: string): number {
     nativeFn: NativeFunctionDef,
     args: RuntimeValue[],
     context: Context,
-    explicitTypeArgs?: Type[]
+    explicitTypeArgs?: Type[],
+    returnTypeStr?: string
   ): RuntimeValue {
     const resolveParamValue = (name: string): number => {
       const index = nativeFn.paramNames.indexOf(name);
@@ -2185,17 +2194,24 @@ export function interpret(input: string): number {
         initializedCount: 0,
       };
       const arrayName = ['$native_array_', nativeArrayCounter++].join('');
+
+      // Determine if the pointer to array should be mutable based on the declared return type
+      let pointerIsMutable = false;
+      if (returnTypeStr) {
+        pointerIsMutable = returnTypeStr.startsWith('*mut ');
+      }
+
       context.set(arrayName, {
         value: 0,
         type: arrayType,
-        mutable: false,
+        mutable: pointerIsMutable,
         initialized: true,
         arrayElements: elements,
         arrayInitializedCount: 0,
       });
       return {
         value: 0,
-        type: { kind: 'Ptr', pointsTo: arrayType, mutable: false },
+        type: { kind: 'Ptr', pointsTo: arrayType, mutable: pointerIsMutable },
         refersTo: arrayName,
       };
     }
@@ -3333,7 +3349,30 @@ export function interpret(input: string): number {
             const op = arrayAssignMatch[3];
             const varExprStr = arrayAssignMatch[4].trim();
 
-            const varInfo = ensureMutableVar(varName);
+            let varInfo = ensureVariable(varName, context);
+            let isPointerToMutableArray = false;
+            let targetArrayVarName = varName;
+
+            // Check if this is a pointer to a mutable array
+            if (
+              varInfo.type?.kind === 'Ptr' &&
+              varInfo.type.pointsTo.kind === 'Array' &&
+              varInfo.type.mutable
+            ) {
+              isPointerToMutableArray = true;
+              // Resolve the actual array from the pointer
+              if (varInfo.refersTo) {
+                const targetVar = context.get(varInfo.refersTo);
+                if (targetVar) {
+                  targetArrayVarName = varInfo.refersTo;
+                  varInfo = targetVar;
+                }
+              }
+            } else if (!varInfo.mutable && varInfo.initialized) {
+              // Not a mutable pointer to array, so the variable itself must be mutable
+              throw new Error('cannot assign to immutable variable: ' + varName);
+            }
+
             if (varInfo.type?.kind !== 'Array') {
               throw new Error('variable ' + varName + ' is not an array');
             }
@@ -3392,7 +3431,7 @@ export function interpret(input: string): number {
               arrayInitializedCount: newInitCount,
               initialized: true,
             };
-            recordAssignment(varName, updatedVarInfo);
+            recordAssignment(targetArrayVarName, updatedVarInfo);
             continue;
           }
           // Regular variable assignment or this.x assignment or pointerToThis.x assignment
