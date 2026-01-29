@@ -21,7 +21,8 @@ export function interpret(input: string): number {
     | { kind: 'Void' }
     | { kind: 'Array'; elementType: Type; length: number; initializedCount: number }
     | { kind: 'Generic'; name: string }
-    | { kind: 'Tuple'; elements: Type[] };
+    | { kind: 'Tuple'; elements: Type[] }
+    | { kind: 'This' };
 
   type RuntimeValue = {
     value: number;
@@ -100,6 +101,9 @@ export function interpret(input: string): number {
         ']'
       );
     }
+    if (suffix.kind === 'This') {
+      return 'This';
+    }
     return suffix.kind + suffix.width;
   }
 
@@ -107,6 +111,13 @@ export function interpret(input: string): number {
     if (target.kind === 'Void') {
       if (source && source.kind !== 'Void') {
         throw new Error('void function cannot return a value');
+      }
+      return;
+    }
+
+    if (target.kind === 'This') {
+      if (source && source.kind !== 'This') {
+        throw new Error('cannot convert non-This type to This');
       }
       return;
     }
@@ -331,6 +342,7 @@ export function interpret(input: string): number {
     if (alias) return alias;
     if (typeStr === 'Bool') return { kind: 'Bool', width: 1 };
     if (typeStr === 'Void') return { kind: 'Void' };
+    if (typeStr === 'This') return { kind: 'This' };
     if (typeStr === 'USize') return { kind: 'U', width: 64 };
 
     // Parse array type: [I32; init; length]
@@ -506,12 +518,20 @@ export function interpret(input: string): number {
     }
     // Handle immutable reference operator
     if (token.startsWith('&')) {
-      const varName = token.substring(1);
-      const var_ = ensureVariable(varName, context);
+      const refTarget = token.substring(1);
+      if (refTarget === 'this') {
+        // Special case: &this creates a reference to the current scope
+        return {
+          value: 0, // value is not used for pointers
+          type: { kind: 'Ptr', pointsTo: { kind: 'This' }, mutable: false },
+          refersTo: '$thisScope',
+        };
+      }
+      const var_ = ensureVariable(refTarget, context);
       return {
         value: 0, // value is not used for pointers
         type: { kind: 'Ptr', pointsTo: var_.type || { kind: 'I', width: 32 }, mutable: false },
-        refersTo: varName,
+        refersTo: refTarget,
       };
     }
     if (/^[a-zA-Z_]/.test(token)) {
@@ -1062,6 +1082,12 @@ export function interpret(input: string): number {
       }
 
       const varInfo = ensureVariable(varName, context);
+
+      // Special case: if varInfo is a pointer to This, dereference and access variable
+      if (varInfo.type?.kind === 'Ptr' && varInfo.type.pointsTo.kind === 'This') {
+        return ensureVariable(fieldName, context);
+      }
+
       if (!varInfo.structFields) {
         throw new Error('variable ' + varName + ' is not a struct');
       }
