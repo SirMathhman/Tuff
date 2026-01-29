@@ -247,3 +247,11 @@ test('interpret rejects logical operators on numeric types', () => {
 test('interpret rejects narrowing conversions when assigning variables', () => {
   expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
 });
+
+test('interpret treats un-suffixed numeric variables as I32 and rejects narrowing', () => {
+  expect(() => interpret('let x = 100; let y : U8 = x; y')).toThrow();
+});
+
+test('interpret treats un-suffixed numeric variables as I32 and allows assignment to I32', () => {
+  expect(interpret('let x = 100; let y : I32 = x; y')).toBe(100);
+});

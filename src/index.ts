@@ -59,9 +59,10 @@ export function interpret(input: string): number {
       return;
     }
 
-    if (source && source.width > target.width) {
+    const effectiveSource = source;
+    if (effectiveSource && effectiveSource.width > target.width) {
       throw new Error(
-        `narrowing conversion from ${source.kind}${source.width} to ${target.kind}${target.width}`
+        `narrowing conversion from ${effectiveSource.kind}${effectiveSource.width} to ${target.kind}${target.width}`
       );
     }
   }
@@ -396,7 +397,7 @@ export function interpret(input: string): number {
 
         const varInfo = {
           value: varValue,
-          suffix: declaredSuffix || valSuffix,
+          suffix: declaredSuffix || valSuffix || { kind: 'I', width: 32 },
           mutable: isMutable,
           initialized: initialized,
         };
