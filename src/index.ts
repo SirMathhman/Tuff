@@ -390,6 +390,15 @@ export function compile(input: string): string {
     return 'return 0;';
   }
 
+  // Validate parentheses are balanced
+  let parenCount = 0;
+  for (const char of code) {
+    if (char === '(') parenCount++;
+    if (char === ')') parenCount--;
+    if (parenCount < 0) throw new Error('unmatched closing parenthesis');
+  }
+  if (parenCount !== 0) throw new Error('unmatched opening parenthesis');
+
   // Handle boolean literals
   code = code.replace(/\btrue\b/g, '1').replace(/\bfalse\b/g, '0');
 
@@ -429,11 +438,12 @@ export function compile(input: string): string {
 
   // Check for overflow markers
   if (code.includes('__OVERFLOW__')) {
-    return '';
+    throw new Error('numeric literal overflow');
   }
 
   // Handle let statements and track mutability
   const mutableVars = new Set<string>();
+  const definedVars = new Set<string>();
   let jsCode = '';
 
   // Split by semicolons while preserving the rest
@@ -457,6 +467,11 @@ export function compile(input: string): string {
         mutableVars.add(varName);
       }
 
+      definedVars.add(varName);
+
+      // Check if varValue references undefined variables
+      checkUndefinedVars(varValue, definedVars);
+
       jsCode += 'let ' + varName + ' = ' + varValue + '; ';
     } else {
       // Check if this is an assignment
@@ -468,13 +483,16 @@ export function compile(input: string): string {
 
         // Verify variable is mutable
         if (operator === '=' && !mutableVars.has(varName)) {
-          return '';
+          throw new Error('cannot assign to immutable variable');
         }
+
+        // Check if value references undefined variables
+        checkUndefinedVars(value, definedVars);
 
         jsCode += varName + ' ' + operator + ' ' + value + '; ';
       } else {
         // Unknown statement
-        return '';
+        throw new Error('invalid statement');
       }
     }
   }
@@ -482,6 +500,9 @@ export function compile(input: string): string {
   // Process the final statement as a return expression
   if (stmts.length > 0) {
     let lastStmt = stmts[stmts.length - 1];
+
+    // Check for undefined variables in final expression
+    checkUndefinedVars(lastStmt, definedVars);
 
     // Check if this is a comparison and wrap it to convert bool to number
     // Comparison operators: ==, !=, <, >, <=, >=
@@ -498,6 +519,56 @@ export function compile(input: string): string {
 }
 
 /**
+ * Check if an expression references undefined variables.
+ * This is a simple heuristic that checks for bare identifiers.
+ */
+function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
+  // Extract all identifiers from the expression
+  // This is a simple regex that finds word characters that aren't part of numbers or operators
+  const identifiers = expr.match(/\b[a-zA-Z_]\w*\b/g) || [];
+
+  for (const id of identifiers) {
+    // Skip JavaScript/Tuff keywords
+    const keywords = new Set([
+      'let',
+      'mut',
+      'if',
+      'else',
+      'while',
+      'true',
+      'false',
+      'fn',
+      'return',
+      'struct',
+    ]);
+    if (keywords.has(id)) continue;
+
+    // Skip numeric type names
+    const typeNames = new Set([
+      'U8',
+      'U16',
+      'U32',
+      'U64',
+      'USize',
+      'I8',
+      'I16',
+      'I32',
+      'I64',
+      'I32',
+      'Bool',
+      'Str',
+      'Void',
+    ]);
+    if (typeNames.has(id)) continue;
+
+    // Check if this identifier is defined
+    if (!definedVars.has(id)) {
+      throw new Error('undefined variable: ' + id);
+    }
+  }
+}
+
+/**
  * Execute Tuff code by compiling it to JavaScript and running it.
  * Takes Tuff source code as input, compiles it, and executes it.
  * @param input - Tuff source code to execute
@@ -505,10 +576,6 @@ export function compile(input: string): string {
  */
 export function execute(input: string): number {
   const jsCode = compile(input);
-  if (!jsCode) {
-    // Compilation failed (e.g., unsupported syntax)
-    throw new Error('Failed to compile code');
-  }
 
   try {
     const fn = new Function(jsCode);

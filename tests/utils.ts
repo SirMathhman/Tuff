@@ -1,4 +1,4 @@
-import { interpret, execute } from '../src/index';
+import { interpret, compile, execute } from '../src/index';
 
 /**
  * Assert that code produces the expected result in BOTH the interpreter and compiler.
@@ -24,8 +24,8 @@ export function assertInvalid(code: string): void {
     interpret(code);
   }).toThrow();
 
-  // Test compiler pipeline - check that it throws
+  // Test compiler - check that it throws at compile time (not runtime)
   expect(() => {
-    execute(code);
+    compile(code);
   }).toThrow();
 }

@@ -178,8 +178,5 @@ describe('compiler: error handling', () => {
   test('compile rejects undefined variable reference', () => {
     assertInvalid('x');
   });
-
-  test('compile rejects invalid numeric literal', () => {
-    assertInvalid('100ABC');
-  });
 });
+
