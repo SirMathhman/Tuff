@@ -128,9 +128,7 @@ test('interpret supports multiple variable declarations within braces', () => {
 });
 
 test('interpret supports top-level variable declarations', () => {
-  expect(
-    interpret('let z : U8 = (4 + { let x : U8 = 2; let y : U8 = x; y }) * 3; z')
-  ).toBe(18);
+  expect(interpret('let z : U8 = (4 + { let x : U8 = 2; let y : U8 = x; y }) * 3; z')).toBe(18);
 });
 
 test('interpret supports variable declarations without type annotations', () => {
@@ -260,6 +258,12 @@ test('interpret handles while loops', () => {
   expect(interpret('let mut x = 0; while (x < 4) x += 1; x')).toBe(4);
 });
 
+test('interpret rejects non-boolean while conditions', () => {
+  expect(() => interpret('let mut x = 0; while (100) x += 1; x')).toThrow(
+    'while condition must be boolean'
+  );
+});
+
 test('interpret rejects numeric values for Bool type', () => {
   expect(() => interpret('let x : Bool = 1;')).toThrow();
   expect(() => interpret('let x : Bool; x = 1;')).toThrow();
@@ -299,7 +303,7 @@ test('interpret supports all comparison operators', () => {
   expect(interpret('1 == 2')).toBe(0);
   expect(interpret('1 != 2')).toBe(1);
   expect(interpret('1 != 1')).toBe(0);
-}); 
+});
 
 test('interpret supports logical OR operator', () => {
   expect(interpret('true || false')).toBe(1);
