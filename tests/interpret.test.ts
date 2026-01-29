@@ -153,6 +153,14 @@ test('interpret rejects variable re-declaration in the same scope', () => {
   expect(() => interpret('let x = 100; let x = 200;')).toThrow('variable already declared');
 });
 
+test('interpret supports mutable variables and assignment', () => {
+  expect(interpret('let mut x = 0; x = 100; x')).toBe(100);
+});
+
+test('interpret rejects assignment to immutable variables', () => {
+  expect(() => interpret('let x = 0; x = 100;')).toThrow('cannot assign to immutable variable');
+});
+
 test('interpret rejects narrowing conversions when assigning variables', () => {
   expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
 });
