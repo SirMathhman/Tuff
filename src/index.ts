@@ -54,11 +54,21 @@ export function interpretAll(
 
   function parseNativeExports(source: string): Map<string, string> {
     const exports = new Map<string, string>();
-    const exportRegex = /export\s+const\s+([a-zA-Z_]\w*)\s*=\s*([^;]+);?/g;
-    let match = exportRegex.exec(source);
-    while (match) {
-      exports.set(match[1], match[2].trim());
-      match = exportRegex.exec(source);
+    const tsMorph = require('ts-morph');
+    const project = new tsMorph.Project({ useInMemoryFileSystem: true });
+    const sourceFile = project.createSourceFile('native.ts', source, { overwrite: true });
+    const statements = sourceFile.getVariableStatements();
+    for (const statement of statements) {
+      if (!statement.isExported()) continue;
+      const declarations = statement.getDeclarations();
+      for (const declaration of declarations) {
+        const name = declaration.getName();
+        const initializer = declaration.getInitializer();
+        if (!initializer) {
+          throw new Error('native export missing initializer: ' + name);
+        }
+        exports.set(name, initializer.getText().trim());
+      }
     }
     return exports;
   }
