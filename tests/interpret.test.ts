@@ -592,3 +592,6 @@ test('interpret infers return type from function body when missing', () => {
 test('interpret supports forward function references', () => {
   expect(interpret('fn getA() => getB(); fn getB() => 100; getA()')).toBe(100);
 });
+test('interpret allows functions to access outer scope variables', () => {
+  expect(interpret('let mut sum = 0; fn addOnce() => sum += 1; addOnce(); sum')).toBe(1);
+});

@@ -1118,11 +1118,10 @@ export function interpret(input: string): number {
         return type;
       };
 
-      // Create function call context with parameters
-      const fnContext = new Map<
-        string,
-        RuntimeValue & { mutable: boolean; initialized: boolean }
-      >();
+      // Create function call context with outer scope access (closure)
+      const fnContext = new Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>(
+        context
+      );
       for (let i = 0; i < fnDef.params.length; i++) {
         const param = fnDef.params[i];
         const arg = args[i];
@@ -1149,6 +1148,13 @@ export function interpret(input: string): number {
       // Evaluate function body
       const bodyResult = processBlock(fnDef.body, fnContext, functions, structs);
       const returnValue = bodyResult.result;
+
+      // Merge changes back to outer context (closure updates)
+      for (const [key, value] of bodyResult.context) {
+        if (!bodyResult.declaredInThisBlock.has(key) && context.has(key)) {
+          context.set(key, value);
+        }
+      }
 
       let resolvedReturnType = fnDef.returnType;
       if (resolvedReturnType && resolvedReturnType.kind === 'Generic') {
@@ -1815,9 +1821,16 @@ export function interpret(input: string): number {
           recordAssignment(varName, updatedVarInfo);
         }
       } else {
-        // treat as final expression
-        finalExpr = stmt;
-        lastProcessedValue = undefined;
+        // Execute statement for side effects, or treat as final expression
+        if (stmtIndex < statements.length - 1) {
+          // Not the last statement - execute for side effects
+          processExprWithContext(stmt, context, functions, structs);
+          lastProcessedValue = undefined;
+        } else {
+          // Last statement - treat as final expression
+          finalExpr = stmt;
+          lastProcessedValue = undefined;
+        }
       }
     }
 
