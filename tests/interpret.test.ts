@@ -152,3 +152,7 @@ test('interpret returns 0 for a declaration without a trailing expression', () =
 test('interpret rejects variable re-declaration in the same scope', () => {
   expect(() => interpret('let x = 100; let x = 200;')).toThrow('variable already declared');
 });
+
+test('interpret rejects narrowing conversions when assigning variables', () => {
+  expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
+});

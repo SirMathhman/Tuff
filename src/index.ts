@@ -15,6 +15,9 @@ export function interpret(input: string): number {
   const s = input.trim();
   if (s === '') return 0;
 
+  type TypedResult = { value: number; suffix?: { kind: 'U' | 'I'; width: number } };
+  type Context = Map<string, TypedResult>;
+
   // helper to validate a value against a suffix kind/width
   function validateValueAgainstSuffix(val: number, kind: 'U' | 'I', width: number) {
     if (!Number.isInteger(val)) {
@@ -35,10 +38,7 @@ export function interpret(input: string): number {
 
   // helper to parse a single literal token and validate suffixes
   // returns { value, suffix } where suffix is undefined or { kind, width }
-  function parseLiteralToken(token: string): {
-    value: number;
-    suffix?: { kind: 'U' | 'I'; width: number };
-  } {
+  function parseLiteralToken(token: string): TypedResult {
     const t = token.trim();
     const m = t.match(/^([+-]?\d+(?:\.\d+)?)(?:([A-Za-z]+\d*))?$/);
     if (!m) throw new Error('invalid literal');
@@ -66,25 +66,19 @@ export function interpret(input: string): number {
   }
 
   // helper to evaluate an expression with optional variable context
-  function resolveOperand(
-    token: string,
-    context: Map<string, number>
-  ): { value: number; suffix?: { kind: 'U' | 'I'; width: number } } {
+  function resolveOperand(token: string, context: Context): TypedResult {
     if (/^[a-zA-Z_]/.test(token)) {
       // variable reference
       if (!context.has(token)) {
         throw new Error(`undefined variable: ${token}`);
       }
-      return { value: context.get(token)! };
+      return context.get(token)!;
     }
     // literal
     return parseLiteralToken(token);
   }
 
-  function evaluateExpression(
-    expr: string,
-    context: Map<string, number> = new Map()
-  ): { value: number; suffix?: { kind: 'U' | 'I'; width: number } } {
+  function evaluateExpression(expr: string, context: Context = new Map()): TypedResult {
     const tokens = expr.match(/([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|([+\-*/])|([a-zA-Z_]\w*)/g);
     if (!tokens || tokens.length === 0) {
       throw new Error('invalid expression');
@@ -99,7 +93,7 @@ export function interpret(input: string): number {
       throw new Error('invalid expression');
     }
 
-    const operands: Array<{ value: number; suffix?: { kind: 'U' | 'I'; width: number } }> = [];
+    const operands: Array<TypedResult> = [];
     const operators: string[] = [];
 
     for (let i = 0; i < tokens.length; i++) {
@@ -140,12 +134,9 @@ export function interpret(input: string): number {
     // find the widest suffix among all original operands (if any)
     let widestSuffix: { kind: 'U' | 'I'; width: number } | undefined;
     for (let i = 0; i < tokens.length; i += 2) {
-      const token = tokens[i];
-      if (!/^[a-zA-Z_]/.test(token)) {
-        const parsed = parseLiteralToken(token);
-        if (parsed.suffix && (!widestSuffix || parsed.suffix.width > widestSuffix.width)) {
-          widestSuffix = parsed.suffix;
-        }
+      const op = resolveOperand(tokens[i], context);
+      if (op.suffix && (!widestSuffix || op.suffix.width > widestSuffix.width)) {
+        widestSuffix = op.suffix;
       }
     }
 
@@ -158,10 +149,7 @@ export function interpret(input: string): number {
   }
 
   // Helper to process an expression recursively through brackets and let blocks
-  function processExprWithContext(
-    expr: string,
-    context: Map<string, number>
-  ): { value: number; suffix?: { kind: 'U' | 'I'; width: number } } {
+  function processExprWithContext(expr: string, context: Context): TypedResult {
     let e = expr;
 
     // Handle parentheses and braces recursively
@@ -199,7 +187,7 @@ export function interpret(input: string): number {
       if (closePos === -1) throw new Error('mismatched parentheses or braces');
 
       const content = e.substring(openPos + 1, closePos);
-      let res: { value: number; suffix?: { kind: 'U' | 'I'; width: number } };
+      let res: TypedResult;
 
       // Check if this is a block with variable declarations (must start with 'let')
       if (content.trim().startsWith('let ')) {
@@ -221,7 +209,7 @@ export function interpret(input: string): number {
   }
 
   // Helper to process a let block and return the final expression result
-  function processLetBlock(blockContent: string, parentContext: Map<string, number>): number {
+  function processLetBlock(blockContent: string, parentContext: Context): number {
     const context = new Map(parentContext);
     const declaredInThisBlock = new Set<string>();
 
@@ -289,7 +277,7 @@ export function interpret(input: string): number {
           }
         }
 
-        context.set(varName, varValue);
+        context.set(varName, { value: varValue, suffix: valSuffix });
         declaredInThisBlock.add(varName);
       } else {
         // treat as final expression
