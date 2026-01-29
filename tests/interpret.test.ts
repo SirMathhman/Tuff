@@ -64,6 +64,12 @@ test('interpret rejects array initializer with too few elements', () => {
   expect(() => interpret('let array : [I32; 3; 3] = [1, 2]')).toThrow();
 });
 
+test('interpret rejects copying arrays', () => {
+  expect(() =>
+    interpret('let array : [I32; 3; 3] = [1, 2, 3]; let array0 = array;')
+  ).toThrow();
+});
+
 test('interpret handles array indexing bounds', () => {
   expect(interpret('let array = [1, 2, 3]; array[1]')).toBe(2);
   expect(() => interpret('let array = [1, 2, 3]; array[-1]')).toThrow();

@@ -1141,6 +1141,10 @@ export function interpret(input: string): number {
           if (varValueObj.suffix?.kind === 'Void') {
             throw new Error('void function cannot return a value');
           }
+          const isArrayLiteral = varExprStr.trim().startsWith('[');
+          if (varValueObj.suffix?.kind === 'Array' && !isArrayLiteral) {
+            throw new Error('cannot copy arrays');
+          }
           varValue = varValueObj.value;
           valSuffix = varValueObj.suffix;
           refersTo = varValueObj.refersTo;
@@ -1454,6 +1458,11 @@ export function interpret(input: string): number {
           );
           const newValue = newValueObj.value;
           const newValSuffix = newValueObj.suffix;
+
+          const isArrayLiteral = varExprStr.trim().startsWith('[');
+          if (newValSuffix?.kind === 'Array' && !isArrayLiteral) {
+            throw new Error('cannot copy arrays');
+          }
 
           // validate against original type
           if (varInfo.suffix) {
