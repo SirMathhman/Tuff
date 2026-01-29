@@ -25,7 +25,7 @@ export function interpret(input: string): number {
 
   type RuntimeValue = {
     value: number;
-    suffix?: Type;
+    type?: Type;
     refersTo?: string;
     structName?: string;
     structFields?: Map<string, RuntimeValue>;
@@ -192,8 +192,8 @@ export function interpret(input: string): number {
   // returns { value, suffix } where suffix is undefined or { kind, width }
   function parseLiteralToken(token: string): RuntimeValue {
     const t = token.trim();
-    if (t === 'true') return { value: 1, suffix: { kind: 'Bool', width: 1 } };
-    if (t === 'false') return { value: 0, suffix: { kind: 'Bool', width: 1 } };
+    if (t === 'true') return { value: 1, type: { kind: 'Bool', width: 1 } };
+    if (t === 'false') return { value: 0, type: { kind: 'Bool', width: 1 } };
 
     const m = t.match(/^([+-]?\d+(?:\.\d+)?)(?:([A-Za-z]+\d*))?$/);
     if (!m) throw new Error('invalid literal');
@@ -208,7 +208,7 @@ export function interpret(input: string): number {
       if (suffix === 'USize') {
         const width = 64;
         validateValueAgainstSuffix(n, 'U', width);
-        return { value: Number.isFinite(n) ? n : 0, suffix: { kind: 'U', width } };
+        return { value: Number.isFinite(n) ? n : 0, type: { kind: 'U', width } };
       }
       const m2 = suffix.match(/^([UI])(\d+)$/);
       if (!m2) throw new Error('invalid suffix');
@@ -219,7 +219,7 @@ export function interpret(input: string): number {
 
       validateValueAgainstSuffix(n, kind, width);
 
-      return { value: Number.isFinite(n) ? n : 0, suffix: { kind, width } };
+      return { value: Number.isFinite(n) ? n : 0, type: { kind, width } };
     }
 
     return { value: Number.isFinite(n) ? n : 0 };
@@ -239,18 +239,18 @@ export function interpret(input: string): number {
     name: string,
     context: Context
   ): RuntimeValue & {
-    suffix: { kind: 'Ptr'; pointsTo: Type; mutable: boolean };
+    type: { kind: 'Ptr'; pointsTo: Type; mutable: boolean };
     refersTo: string;
   } {
     const ptrVar = ensureVariable(name, context);
-    if (ptrVar.suffix?.kind !== 'Ptr') {
+    if (ptrVar.type?.kind !== 'Ptr') {
       throw new Error('cannot dereference non-pointer type');
     }
     if (!ptrVar.refersTo) {
       throw new Error('pointer does not refer to a variable');
     }
     return ptrVar as RuntimeValue & {
-      suffix: { kind: 'Ptr'; pointsTo: Type; mutable: boolean };
+      type: { kind: 'Ptr'; pointsTo: Type; mutable: boolean };
       refersTo: string;
     };
   }
@@ -264,7 +264,7 @@ export function interpret(input: string): number {
       return varInfo.tupleElements[index];
     }
     let elements = varInfo.arrayElements;
-    if (!elements && varInfo.suffix?.kind === 'Ptr' && varInfo.suffix.pointsTo.kind === 'Array') {
+    if (!elements && varInfo.type?.kind === 'Ptr' && varInfo.type.pointsTo.kind === 'Array') {
       const targetVar = ensureVariable(varInfo.refersTo || '', context);
       elements = targetVar.arrayElements;
     }
@@ -410,7 +410,7 @@ export function interpret(input: string): number {
       valueToAssign = currentValue + op[0] + ' ' + rhs;
     }
     const newValueObj = processExprWithContext(valueToAssign, context, functions, structs);
-    if (newValueObj.suffix?.kind === 'Bool') {
+    if (newValueObj.type?.kind === 'Bool') {
       throw new Error('cannot perform arithmetic on booleans');
     }
     return newValueObj;
@@ -467,7 +467,7 @@ export function interpret(input: string): number {
       const pointedVar = ensureVariable(ptrVar.refersTo, context);
       return {
         value: pointedVar.value,
-        suffix: ptrVar.suffix.pointsTo,
+        type: (ptrVar.type as { kind: 'Ptr'; pointsTo: Type; mutable: boolean }).pointsTo,
       };
     }
     // Handle mutable reference operator
@@ -481,9 +481,9 @@ export function interpret(input: string): number {
       // Check for existing mutable borrow to the same variable
       for (const [, ptrVar] of context) {
         if (
-          ptrVar.suffix?.kind === 'Ptr' &&
+          ptrVar.type?.kind === 'Ptr' &&
           ptrVar.refersTo === varName &&
-          (ptrVar.suffix as any).mutable
+          (ptrVar.type as any).mutable
         ) {
           throw new Error('cannot have multiple mutable references to the same variable');
         }
@@ -491,7 +491,7 @@ export function interpret(input: string): number {
 
       return {
         value: 0, // value is not used for pointers
-        suffix: { kind: 'Ptr', pointsTo: var_.suffix || { kind: 'I', width: 32 }, mutable: true },
+        type: { kind: 'Ptr', pointsTo: var_.type || { kind: 'I', width: 32 }, mutable: true },
         refersTo: varName,
       };
     }
@@ -501,7 +501,7 @@ export function interpret(input: string): number {
       const var_ = ensureVariable(varName, context);
       return {
         value: 0, // value is not used for pointers
-        suffix: { kind: 'Ptr', pointsTo: var_.suffix || { kind: 'I', width: 32 }, mutable: false },
+        type: { kind: 'Ptr', pointsTo: var_.type || { kind: 'I', width: 32 }, mutable: false },
         refersTo: varName,
       };
     }
@@ -556,14 +556,14 @@ export function interpret(input: string): number {
         if (!typeSuffix) {
           throw new Error('invalid type in is expression');
         }
-        operands.push({ value: 0, suffix: typeSuffix });
+        operands.push({ value: 0, type: typeSuffix });
         continue;
       }
       const opResult = resolveOperand(tokens[i], context);
       if (opResult.structFields) {
         throw new Error('cannot use struct value in expression');
       }
-      if (tokens.length > 1 && opResult.suffix?.kind === 'Bool' && hasArithmeticOps) {
+      if (tokens.length > 1 && opResult.type?.kind === 'Bool' && hasArithmeticOps) {
         throw new Error('cannot perform arithmetic on booleans');
       }
       operands.push(opResult);
@@ -592,8 +592,8 @@ export function interpret(input: string): number {
 
     // Helper to validate operand types for comparison/equality
     function validateComparable(left: RuntimeValue, right: RuntimeValue, isEquality: boolean) {
-      const leftKind = left.suffix?.kind || 'Numeric';
-      const rightKind = right.suffix?.kind || 'Numeric';
+      const leftKind = left.type?.kind || 'Numeric';
+      const rightKind = right.type?.kind || 'Numeric';
       if ((leftKind === 'Bool') !== (rightKind === 'Bool')) {
         throw new Error('cannot compare different types');
       }
@@ -653,19 +653,19 @@ export function interpret(input: string): number {
       else if (op === '<=') res = left.value <= right.value;
       else if (op === '>') res = left.value > right.value;
       else if (op === '>=') res = left.value >= right.value;
-      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+      return { value: res ? 1 : 0, type: { kind: 'Bool', width: 1 } };
     });
 
     // fourth pass: handle type checks (is)
     applyPass(['is'], (left, _op, right) => {
-      const leftType = left.suffix || { kind: 'I', width: 32 };
-      const rightType = right.suffix;
+      const leftType = left.type || { kind: 'I', width: 32 };
+      const rightType = right.type;
       if (!rightType) {
         throw new Error('invalid type in is expression');
       }
       isBooleanResult = true;
       const res = typeEquals(leftType, rightType);
-      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+      return { value: res ? 1 : 0, type: { kind: 'Bool', width: 1 } };
     });
 
     // fifth pass: handle equality operators (==, !=)
@@ -673,13 +673,13 @@ export function interpret(input: string): number {
       validateComparable(left, right, true);
       isBooleanResult = true;
       const res = op === '==' ? left.value === right.value : left.value !== right.value;
-      return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+      return { value: res ? 1 : 0, type: { kind: 'Bool', width: 1 } };
     });
 
     // Helper to handle logical operators
     function applyLogicalPass(opStr: '&&' | '||') {
       applyPass([opStr], (left, op, right) => {
-        if (left.suffix?.kind !== 'Bool' || right.suffix?.kind !== 'Bool') {
+        if (left.type?.kind !== 'Bool' || right.type?.kind !== 'Bool') {
           throw new Error('logical operators only supported for booleans');
         }
         isBooleanResult = true;
@@ -687,7 +687,7 @@ export function interpret(input: string): number {
           op === '&&'
             ? left.value !== 0 && right.value !== 0
             : left.value !== 0 || right.value !== 0;
-        return { value: res ? 1 : 0, suffix: { kind: 'Bool', width: 1 } };
+        return { value: res ? 1 : 0, type: { kind: 'Bool', width: 1 } };
       });
     }
 
@@ -698,7 +698,7 @@ export function interpret(input: string): number {
     applyLogicalPass('||');
 
     const finalResult = operands[0].value;
-    const finalSuffix = operands[0].suffix;
+    const finalSuffix = operands[0].type;
 
     // find the widest suffix among all original operands (if any)
     let widestSuffix: Type | undefined;
@@ -709,15 +709,15 @@ export function interpret(input: string): number {
       }
       const op = resolveOperand(tokens[i], context);
       if (
-        op.suffix &&
-        op.suffix.kind !== 'Bool' &&
-        op.suffix.kind !== 'Ptr' &&
+        op.type &&
+        op.type.kind !== 'Bool' &&
+        op.type.kind !== 'Ptr' &&
         (!widestSuffix ||
-          ('width' in op.suffix &&
+          ('width' in op.type &&
             'width' in widestSuffix &&
-            (op.suffix as any).width > (widestSuffix as any).width))
+            (op.type as any).width > (widestSuffix as any).width))
       ) {
-        widestSuffix = op.suffix;
+        widestSuffix = op.type;
       }
     }
 
@@ -730,7 +730,7 @@ export function interpret(input: string): number {
       );
     }
 
-    return { value: finalResult, suffix: finalSuffix || widestSuffix };
+    return { value: finalResult, type: finalSuffix || widestSuffix };
   }
 
   function evaluateStructLiteralAccess(
@@ -797,7 +797,7 @@ export function interpret(input: string): number {
         resolvedFieldType = typeSubstitution.get(fieldDef.type.name)!;
       }
 
-      validateNarrowing(fieldValue.suffix, resolvedFieldType);
+      validateNarrowing(fieldValue.type, resolvedFieldType);
       if (
         resolvedFieldType.kind !== 'Ptr' &&
         resolvedFieldType.kind !== 'Void' &&
@@ -936,13 +936,13 @@ export function interpret(input: string): number {
     }
 
     const conditionResult = processExprWithContext(conditionExpr, context, _functions, structs);
-    if (conditionResult.suffix?.kind !== 'Bool') {
+    if (conditionResult.type?.kind !== 'Bool') {
       throw new Error('if condition must be boolean');
     }
     const trueResult = processExprWithContext(trueBranch, context, _functions, structs);
     const falseResult = processExprWithContext(falseBranch, context, _functions, structs);
 
-    const normalizedSuffix = (res: RuntimeValue): Type => res.suffix || { kind: 'I', width: 32 };
+    const normalizedSuffix = (res: RuntimeValue): Type => res.type || { kind: 'I', width: 32 };
     const trueSuffix = normalizedSuffix(trueResult);
     const falseSuffix = normalizedSuffix(falseResult);
     if (trueSuffix.kind !== falseSuffix.kind) {
@@ -979,12 +979,12 @@ export function interpret(input: string): number {
         for (const part of parts) {
           const elementValue = processExprWithContext(part, context, functions, structs);
           tupleElements.push(elementValue);
-          elementTypes.push(elementValue.suffix || { kind: 'I', width: 32 });
+          elementTypes.push(elementValue.type || { kind: 'I', width: 32 });
         }
         return {
           value: 0,
           tupleElements,
-          suffix: { kind: 'Tuple', elements: elementTypes },
+          type: { kind: 'Tuple', elements: elementTypes },
         };
       }
     }
@@ -1013,13 +1013,13 @@ export function interpret(input: string): number {
         elements.push(elemVal);
       }
       // Infer element type from first element
-      let elementType = elements[0]?.suffix || { kind: 'I', width: 32 };
+      let elementType = elements[0]?.type || { kind: 'I', width: 32 };
       // Return array as object with arrayElements and array suffix
       return {
         value: 0,
         arrayElements: elements,
         arrayInitializedCount: elements.length,
-        suffix: {
+        type: {
           kind: 'Array',
           elementType,
           length: elements.length,
@@ -1111,7 +1111,7 @@ export function interpret(input: string): number {
         if (type.kind === 'Generic') {
           const existing = genericMap.get(type.name);
           if (existing) return existing;
-          const inferred = argValue?.suffix || { kind: 'I', width: 32 };
+          const inferred = argValue?.type || { kind: 'I', width: 32 };
           genericMap.set(type.name, inferred);
           return inferred;
         }
@@ -1129,14 +1129,14 @@ export function interpret(input: string): number {
 
         // Validate argument type
         const resolvedParamType = resolveGenericType(param.type, arg);
-        validateNarrowing(arg.suffix, resolvedParamType);
+        validateNarrowing(arg.type, resolvedParamType);
         if (resolvedParamType.kind !== 'Ptr' && 'width' in resolvedParamType) {
           validateValueAgainstSuffix(arg.value, resolvedParamType.kind, resolvedParamType.width);
         }
 
         fnContext.set(param.name, {
           value: arg.value,
-          suffix: resolvedParamType,
+          type: resolvedParamType,
           mutable: false,
           initialized: true,
           structName: arg.structName,
@@ -1156,11 +1156,11 @@ export function interpret(input: string): number {
       }
 
       if (resolvedReturnType) {
-        if (returnValue.suffix?.kind === 'Bool' && resolvedReturnType.kind !== 'Bool') {
+        if (returnValue.type?.kind === 'Bool' && resolvedReturnType.kind !== 'Bool') {
           throw new Error('cannot return boolean value from non-bool function');
         }
         // Validate return type
-        validateNarrowing(returnValue.suffix, resolvedReturnType);
+        validateNarrowing(returnValue.type, resolvedReturnType);
         if (
           resolvedReturnType.kind !== 'Ptr' &&
           resolvedReturnType.kind !== 'Void' &&
@@ -1174,7 +1174,7 @@ export function interpret(input: string): number {
         }
       }
 
-      return { value: returnValue.value, suffix: resolvedReturnType || returnValue.suffix };
+      return { value: returnValue.value, type: resolvedReturnType || returnValue.type };
     }
 
     let e = expr;
@@ -1234,15 +1234,15 @@ export function interpret(input: string): number {
       }
 
       let replacement = res.value.toString();
-      if (res.suffix) {
-        if (res.suffix.kind === 'Bool') {
+      if (res.type) {
+        if (res.type.kind === 'Bool') {
           replacement = res.value === 1 ? 'true' : 'false';
-        } else if (res.suffix.kind === 'Ptr') {
+        } else if (res.type.kind === 'Ptr') {
           // For pointers, we store the reference variable name, don't change the representation
           // The value is already the variable index or reference
           replacement = res.value.toString();
-        } else if ('width' in res.suffix) {
-          replacement += res.suffix.kind + res.suffix.width;
+        } else if ('width' in res.type) {
+          replacement += res.type.kind + res.type.width;
         }
       }
       e = e.substring(0, openPos) + replacement + e.substring(closePos + 1);
@@ -1450,15 +1450,15 @@ export function interpret(input: string): number {
 
         if (varExprStr !== undefined) {
           const varValueObj = processExprWithContext(varExprStr, context, functions, structs);
-          if (varValueObj.suffix?.kind === 'Void') {
+          if (varValueObj.type?.kind === 'Void') {
             throw new Error('void function cannot return a value');
           }
           const isArrayLiteral = varExprStr.trim().startsWith('[');
-          if (varValueObj.suffix?.kind === 'Array' && !isArrayLiteral) {
+          if (varValueObj.type?.kind === 'Array' && !isArrayLiteral) {
             throw new Error('cannot copy arrays');
           }
           varValue = varValueObj.value;
-          valSuffix = varValueObj.suffix;
+          valSuffix = varValueObj.type;
           refersTo = varValueObj.refersTo;
           structName = varValueObj.structName;
           structFields = varValueObj.structFields;
@@ -1528,7 +1528,7 @@ export function interpret(input: string): number {
                 if (!element) {
                   throw new Error('array element not initialized');
                 }
-                const elementSuffix = element.suffix || { kind: 'I', width: 32 };
+                const elementSuffix = element.type || { kind: 'I', width: 32 };
                 validateNarrowing(elementSuffix, declaredSuffix.elementType);
                 if (
                   declaredSuffix.elementType.kind !== 'Ptr' &&
@@ -1565,7 +1565,7 @@ export function interpret(input: string): number {
 
         const varInfo = {
           value: varValue,
-          suffix: declaredSuffix || valSuffix || { kind: 'I', width: 32 },
+          type: declaredSuffix || valSuffix || { kind: 'I', width: 32 },
           mutable: isMutable,
           initialized: initialized,
           refersTo: refersTo,
@@ -1612,7 +1612,7 @@ export function interpret(input: string): number {
         // Execute while loop
         while (true) {
           const condObj = processExprWithContext(conditionExpr, context, functions, structs);
-          if (condObj.suffix?.kind !== 'Bool') {
+          if (condObj.type?.kind !== 'Bool') {
             throw new Error('while condition must be boolean');
           }
           if (!condObj.value) break; // condition is false
@@ -1661,7 +1661,7 @@ export function interpret(input: string): number {
           const varExprStr = derefMatch[3].trim();
 
           const ptrInfo = ensurePointer(ptrName, context);
-          if (!ptrInfo.suffix.mutable) {
+          if (!(ptrInfo.type as { kind: 'Ptr'; pointsTo: Type; mutable: boolean }).mutable) {
             throw new Error('cannot assign through immutable pointer');
           }
 
@@ -1680,10 +1680,11 @@ export function interpret(input: string): number {
             structs
           );
           const newValue = newValueObj.value;
-          const newValSuffix = newValueObj.suffix;
+          const newValSuffix = newValueObj.type;
 
           // validate against pointee type
-          const pointeeType = (ptrInfo.suffix as any).pointsTo;
+          const ptrType = ptrInfo.type as { kind: 'Ptr'; pointsTo: Type; mutable: boolean };
+          const pointeeType = ptrType.pointsTo;
           if (pointeeType) {
             validateNarrowing(newValSuffix, pointeeType);
             if (pointeeType.kind !== 'Ptr' && 'width' in pointeeType) {
@@ -1705,10 +1706,10 @@ export function interpret(input: string): number {
             const varExprStr = arrayAssignMatch[4].trim();
 
             const varInfo = ensureMutableVar(varName);
-            if (varInfo.suffix?.kind !== 'Array') {
+            if (varInfo.type?.kind !== 'Array') {
               throw new Error('variable ' + varName + ' is not an array');
             }
-            const arrayLength = varInfo.suffix.length;
+            const arrayLength = varInfo.type.length;
             const elements = varInfo.arrayElements || new Array(arrayLength).fill(undefined);
             if (index < 0 || index >= elements.length) {
               throw new Error('array index out of bounds');
@@ -1736,8 +1737,8 @@ export function interpret(input: string): number {
             );
 
             const newValue = newValueObj.value;
-            const newValSuffix = newValueObj.suffix || { kind: 'I', width: 32 };
-            const elementType = varInfo.suffix.elementType;
+            const newValSuffix = newValueObj.type || { kind: 'I', width: 32 };
+            const elementType = varInfo.type.elementType;
             validateNarrowing(newValSuffix, elementType);
             if (
               elementType.kind !== 'Ptr' &&
@@ -1752,13 +1753,13 @@ export function interpret(input: string): number {
               ? currentInitializedCount
               : currentInitializedCount + 1;
             const updatedSuffix = {
-              ...varInfo.suffix,
+              ...varInfo.type,
               initializedCount: newInitCount,
             };
 
             const updatedVarInfo = {
               ...varInfo,
-              suffix: updatedSuffix,
+              type: updatedSuffix,
               arrayElements: elements,
               arrayInitializedCount: newInitCount,
               initialized: true,
@@ -1779,7 +1780,7 @@ export function interpret(input: string): number {
 
           const varInfo = ensureMutableVar(varName);
 
-          if (op !== '=' && varInfo.suffix?.kind === 'Bool') {
+          if (op !== '=' && varInfo.type?.kind === 'Bool') {
             throw new Error('cannot perform arithmetic on booleans');
           }
 
@@ -1792,7 +1793,7 @@ export function interpret(input: string): number {
             structs
           );
           const newValue = newValueObj.value;
-          const newValSuffix = newValueObj.suffix;
+          const newValSuffix = newValueObj.type;
 
           const isArrayLiteral = varExprStr.trim().startsWith('[');
           if (newValSuffix?.kind === 'Array' && !isArrayLiteral) {
@@ -1803,10 +1804,10 @@ export function interpret(input: string): number {
           }
 
           // validate against original type
-          if (varInfo.suffix) {
-            validateNarrowing(newValSuffix, varInfo.suffix);
-            if (varInfo.suffix.kind !== 'Ptr' && 'width' in varInfo.suffix) {
-              validateValueAgainstSuffix(newValue, varInfo.suffix.kind, varInfo.suffix.width);
+          if (varInfo.type) {
+            validateNarrowing(newValSuffix, varInfo.type);
+            if (varInfo.type.kind !== 'Ptr' && 'width' in varInfo.type) {
+              validateValueAgainstSuffix(newValue, varInfo.type.kind, varInfo.type.width);
             }
           }
 
