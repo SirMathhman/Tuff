@@ -11,132 +11,142 @@ export function add(a: number, b: number): number {
   return a + b;
 }
 
-export function interpretAll(
+type ExternUse = { module: string; names: string[] };
+type ExternLet = { name: string; type: string };
+type ExternFn = {
+  name: string;
+  generics: string;
+  returnType: string;
+  params: string;
+};
+
+type NativeExports = {
+  constExports: Map<string, string>;
+  fnExports: Map<string, NativeFunctionDef>;
+};
+
+type ModulePlan = {
+  parts: string[];
+  externUses: ExternUse[];
+  externLets: ExternLet[];
+  externFns: ExternFn[];
+  moduleMap: Map<string, string>;
+  nativeModuleMap: Map<string, string>;
+};
+
+function transpileNativeSource(source: string): string {
+  const ts = require('typescript');
+  return ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2019,
+    },
+  }).outputText;
+}
+
+function extractUseStatements(source: string): {
+  code: string;
+  deps: string[];
+  externDeps: ExternUse[];
+  externLets: ExternLet[];
+  externFns: ExternFn[];
+} {
+  const deps: string[] = [];
+  const externDeps: ExternUse[] = [];
+  const externLetsList: ExternLet[] = [];
+  const externFnsList: ExternFn[] = [];
+
+  const useRegex = /use\s*\{\s*[^}]*\s*\}\s*from\s+([a-zA-Z_]\w*)\s*;?/g;
+
+  const externUseRegex = /extern\s+use\s*\{\s*([^}]+)\s*\}\s*from\s+([a-zA-Z_]\w*)\s*;?/g;
+  let externMatch = externUseRegex.exec(source);
+  while (externMatch) {
+    const rawNames = externMatch[1]
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean);
+    externDeps.push({ module: externMatch[2], names: rawNames });
+    externMatch = externUseRegex.exec(source);
+  }
+
+  const sourceWithoutExtern = source.replace(externUseRegex, '');
+  let match = useRegex.exec(sourceWithoutExtern);
+  while (match) {
+    deps.push(match[1]);
+    match = useRegex.exec(sourceWithoutExtern);
+  }
+
+  const externLetRegex = /extern\s+let\s+([a-zA-Z_]\w*)\s*:\s*([^;]+);?/g;
+  let externLetMatch = externLetRegex.exec(source);
+  while (externLetMatch) {
+    externLetsList.push({ name: externLetMatch[1], type: externLetMatch[2].trim() });
+    externLetMatch = externLetRegex.exec(source);
+  }
+
+  const externFnRegex =
+    /extern\s+fn\s+([a-zA-Z_]\w*)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^;]+))?;?/g;
+  let externFnMatch = externFnRegex.exec(source);
+  while (externFnMatch) {
+    externFnsList.push({
+      name: externFnMatch[1],
+      generics: externFnMatch[2] ? externFnMatch[2].trim() : '',
+      params: externFnMatch[3].trim(),
+      returnType: externFnMatch[4] ? externFnMatch[4].trim() : 'I32',
+    });
+    externFnMatch = externFnRegex.exec(source);
+  }
+
+  const code = sourceWithoutExtern
+    .replace(externUseRegex, '')
+    .replace(externLetRegex, '')
+    .replace(externFnRegex, '')
+    .replace(useRegex, '')
+    .trim();
+  return { code, deps, externDeps, externLets: externLetsList, externFns: externFnsList };
+}
+
+function parseNativeExports(source: string): NativeExports {
+  const constExports = new Map<string, string>();
+  const fnExports = new Map<string, NativeFunctionDef>();
+
+  const jsCode = transpileNativeSource(source);
+
+  const wrapped = [
+    'const exports = {};',
+    'const module = { exports };',
+    jsCode,
+    'return module.exports;',
+  ].join('\n');
+
+  try {
+    const getExports = new Function('require', wrapped);
+    const exportsObj = getExports(require);
+
+    for (const [key, value] of Object.entries(exportsObj)) {
+      if (typeof value !== 'function') {
+        constExports.set(key, String(value));
+      }
+    }
+
+    for (const [key, value] of Object.entries(exportsObj)) {
+      if (typeof value === 'function') {
+        const fn = value as any;
+        const paramNames = Array.from({ length: fn.length }, (_v, i) => 'arg' + i);
+        fnExports.set(key, { fn, paramNames });
+      }
+    }
+  } catch (err) {
+    throw new Error('failed to execute native code: ' + (err as Error).message);
+  }
+
+  return { constExports, fnExports };
+}
+
+function collectModulePlan(
   inputs: string[],
   config: Map<string[], string>,
   nativeConfig: Map<string[], string>
-): number {
-  function extractUseStatements(source: string): {
-    code: string;
-    deps: string[];
-    externDeps: Array<{ module: string; names: string[] }>;
-    externLets: Array<{ name: string; type: string }>;
-    externFns: Array<{
-      name: string;
-      generics: string;
-      returnType: string;
-      params: string;
-    }>;
-  } {
-    const deps: string[] = [];
-    const externDeps: Array<{ module: string; names: string[] }> = [];
-    const externLetsList: Array<{ name: string; type: string }> = [];
-    const externFnsList: Array<{
-      name: string;
-      generics: string;
-      returnType: string;
-      params: string;
-    }> = [];
-
-    const useRegex = /use\s*\{\s*[^}]*\s*\}\s*from\s+([a-zA-Z_]\w*)\s*;?/g;
-
-    const externUseRegex = /extern\s+use\s*\{\s*([^}]+)\s*\}\s*from\s+([a-zA-Z_]\w*)\s*;?/g;
-    let externMatch = externUseRegex.exec(source);
-    while (externMatch) {
-      const rawNames = externMatch[1]
-        .split(',')
-        .map((name) => name.trim())
-        .filter(Boolean);
-      externDeps.push({ module: externMatch[2], names: rawNames });
-      externMatch = externUseRegex.exec(source);
-    }
-
-    const sourceWithoutExtern = source.replace(externUseRegex, '');
-    let match = useRegex.exec(sourceWithoutExtern);
-    while (match) {
-      deps.push(match[1]);
-      match = useRegex.exec(sourceWithoutExtern);
-    }
-
-    const externLetRegex = /extern\s+let\s+([a-zA-Z_]\w*)\s*:\s*([^;]+);?/g;
-    let externLetMatch = externLetRegex.exec(source);
-    while (externLetMatch) {
-      externLetsList.push({ name: externLetMatch[1], type: externLetMatch[2].trim() });
-      externLetMatch = externLetRegex.exec(source);
-    }
-
-    const externFnRegex =
-      /extern\s+fn\s+([a-zA-Z_]\w*)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^;]+))?;?/g;
-    let externFnMatch = externFnRegex.exec(source);
-    while (externFnMatch) {
-      externFnsList.push({
-        name: externFnMatch[1],
-        generics: externFnMatch[2] ? externFnMatch[2].trim() : '',
-        params: externFnMatch[3].trim(),
-        returnType: externFnMatch[4] ? externFnMatch[4].trim() : 'I32',
-      });
-      externFnMatch = externFnRegex.exec(source);
-    }
-
-    const code = sourceWithoutExtern
-      .replace(externUseRegex, '')
-      .replace(externLetRegex, '')
-      .replace(externFnRegex, '')
-      .replace(useRegex, '')
-      .trim();
-    return { code, deps, externDeps, externLets: externLetsList, externFns: externFnsList };
-  }
-
-  function parseNativeExports(source: string): {
-    constExports: Map<string, string>;
-    fnExports: Map<string, NativeFunctionDef>;
-  } {
-    const constExports = new Map<string, string>();
-    const fnExports = new Map<string, NativeFunctionDef>();
-    const ts = require('typescript');
-
-    // Transpile TS to JS
-    const jsCode = ts.transpileModule(source, {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2019,
-      },
-    }).outputText;
-
-    // Execute the JS to extract exports
-    const wrapped = [
-      'const exports = {};',
-      'const module = { exports };',
-      jsCode,
-      'return module.exports;',
-    ].join('\n');
-
-    try {
-      const getExports = new Function('require', wrapped);
-      const exportsObj = getExports(require);
-
-      // Collect const exports
-      for (const [key, value] of Object.entries(exportsObj)) {
-        if (typeof value !== 'function') {
-          constExports.set(key, String(value));
-        }
-      }
-
-      // Collect function exports with their actual function references
-      for (const [key, value] of Object.entries(exportsObj)) {
-        if (typeof value === 'function') {
-          const fn = value as any;
-          const paramNames = Array.from({ length: fn.length }, (_, i) => 'arg' + i);
-          fnExports.set(key, { fn, paramNames });
-        }
-      }
-    } catch (err) {
-      throw new Error('failed to execute native code: ' + (err as Error).message);
-    }
-
-    return { constExports, fnExports };
-  }
-
+): ModulePlan {
   const moduleMap = new Map<string, string>();
   for (const [key, value] of config) {
     if (key.length > 0) {
@@ -153,14 +163,9 @@ export function interpretAll(
 
   const visited = new Set<string>();
   const parts: string[] = [];
-  const externUses: Array<{ module: string; names: string[] }> = [];
-  const externLets: Array<{ name: string; type: string }> = [];
-  const externFns: Array<{
-    name: string;
-    generics: string;
-    returnType: string;
-    params: string;
-  }> = [];
+  const externUses: ExternUse[] = [];
+  const externLets: ExternLet[] = [];
+  const externFns: ExternFn[] = [];
 
   function appendCode(code: string): void {
     if (!code) return;
@@ -190,30 +195,45 @@ export function interpretAll(
     includeModule(input);
   }
 
-  if (!parts.length && externLets.length === 0 && externFns.length === 0) return 0;
+  return { parts, externUses, externLets, externFns, moduleMap, nativeModuleMap };
+}
 
-  const externValueByName = new Map<string, string>();
-  const externFnByName = new Map<string, NativeFunctionDef>();
-  const buildMissingNativeExportMessage = (exportName: string, moduleName: string): string => {
-    return (
-      'native export not found: ' +
-      exportName +
-      '. Cause: extern use references a native export that does not exist. Fix: export ' +
-      exportName +
-      ' from ' +
-      moduleName +
-      '.ts or remove it. Context: module ' +
-      moduleName +
-      '.'
-    );
-  };
-  const nativeExportsByModule = new Map<
-    string,
-    { constExports: Map<string, string>; fnExports: Map<string, NativeFunctionDef> }
-  >();
+function buildMissingNativeExportMessage(exportName: string, moduleName: string): string {
+  return (
+    'native export not found: ' +
+    exportName +
+    '. Cause: extern use references a native export that does not exist. Fix: export ' +
+    exportName +
+    ' from ' +
+    moduleName +
+    '.ts or remove it. Context: module ' +
+    moduleName +
+    '.'
+  );
+}
+
+function buildNativeExportsByModule(
+  nativeModuleMap: Map<string, string>
+): Map<string, NativeExports> {
+  const nativeExportsByModule = new Map<string, NativeExports>();
   for (const [moduleName, source] of nativeModuleMap) {
     nativeExportsByModule.set(moduleName, parseNativeExports(source));
   }
+  return nativeExportsByModule;
+}
+
+function resolveExternUses(
+  externUses: ExternUse[],
+  nativeModuleMap: Map<string, string>,
+  nativeExportsByModule: Map<string, NativeExports>
+): {
+  externValueByName: Map<string, string>;
+  externFnByName: Map<string, NativeFunctionDef>;
+  externFnModuleByName: Map<string, string>;
+} {
+  const externValueByName = new Map<string, string>();
+  const externFnByName = new Map<string, NativeFunctionDef>();
+  const externFnModuleByName = new Map<string, string>();
   for (const externUse of externUses) {
     const nativeSource = nativeModuleMap.get(externUse.module);
     if (!nativeSource) {
@@ -232,24 +252,81 @@ export function interpretAll(
       }
       if (fnValue) {
         externFnByName.set(name, fnValue);
+        externFnModuleByName.set(name, externUse.module);
         continue;
       }
       throw new Error(buildMissingNativeExportMessage(name, externUse.module));
     }
   }
+  return { externValueByName, externFnByName, externFnModuleByName };
+}
 
-  const externPreludeParts: string[] = [];
-  for (const externLet of externLets) {
-    const value = externValueByName.get(externLet.name);
-    if (!value) {
-      throw new Error('native export not found: ' + externLet.name);
-    }
-    externPreludeParts.push(
-      ['let ', externLet.name, ' : ', externLet.type, ' = ', value, ';'].join('')
-    );
+function resolveExternBindings(
+  externUses: ExternUse[],
+  externFns: ExternFn[],
+  nativeModuleMap: Map<string, string>
+): {
+  nativeExportsByModule: Map<string, NativeExports>;
+  externValueByName: Map<string, string>;
+  externFnByName: Map<string, NativeFunctionDef>;
+  resolvedFns: {
+    nativeFunctionTable: Map<string, NativeFunctionDef>;
+    nativeFunctionReturnTypesLocal: Map<string, string>;
+    externFnModuleByName: Map<string, string>;
+  };
+} {
+  const nativeExportsByModule = buildNativeExportsByModule(nativeModuleMap);
+  const resolvedUses = resolveExternUses(externUses, nativeModuleMap, nativeExportsByModule);
+  const resolvedFns = resolveExternFns(
+    externFns,
+    externUses,
+    resolvedUses.externFnByName,
+    nativeExportsByModule,
+    resolvedUses.externFnModuleByName
+  );
+  return {
+    nativeExportsByModule,
+    externValueByName: resolvedUses.externValueByName,
+    externFnByName: resolvedUses.externFnByName,
+    resolvedFns,
+  };
+}
+
+type ExternBindings = ReturnType<typeof resolveExternBindings>;
+
+function prepareExternBindings(
+  inputs: string[],
+  config: Map<string[], string>,
+  nativeConfig: Map<string[], string>
+): { plan: ModulePlan; externBindings: ExternBindings | null; hasContent: boolean } {
+  const plan = collectModulePlan(inputs, config, nativeConfig);
+  const hasContent =
+    plan.parts.length > 0 || plan.externLets.length > 0 || plan.externFns.length > 0;
+  if (!hasContent) {
+    return { plan, externBindings: null, hasContent: false };
   }
+  const externBindings = resolveExternBindings(
+    plan.externUses,
+    plan.externFns,
+    plan.nativeModuleMap
+  );
+  return { plan, externBindings, hasContent };
+}
+
+function resolveExternFns(
+  externFns: ExternFn[],
+  externUses: ExternUse[],
+  externFnByName: Map<string, NativeFunctionDef>,
+  nativeExportsByModule: Map<string, NativeExports>,
+  externFnModuleByName: Map<string, string>
+): {
+  nativeFunctionTable: Map<string, NativeFunctionDef>;
+  nativeFunctionReturnTypesLocal: Map<string, string>;
+  externFnModuleByName: Map<string, string>;
+} {
   const nativeFunctionTable = new Map<string, NativeFunctionDef>();
   const nativeFunctionReturnTypesLocal = new Map<string, string>();
+
   for (const externFn of externFns) {
     const fnBody = externFnByName.get(externFn.name);
     if (!fnBody) {
@@ -263,6 +340,7 @@ export function interpretAll(
       if (matches.length === 1) {
         nativeFunctionTable.set(externFn.name, matches[0].fn);
         nativeFunctionReturnTypesLocal.set(externFn.name, externFn.returnType);
+        externFnModuleByName.set(externFn.name, matches[0].module);
         continue;
       }
       const moduleName = externUses.length === 1 ? externUses[0].module : 'unknown';
@@ -295,8 +373,29 @@ export function interpretAll(
     nativeFunctionReturnTypesLocal.set(externFn.name, externFn.returnType);
   }
 
+  return { nativeFunctionTable, nativeFunctionReturnTypesLocal, externFnModuleByName };
+}
+
+function buildExternPreludeParts(
+  externLets: ExternLet[],
+  externValueByName: Map<string, string>
+): string[] {
+  const externPreludeParts: string[] = [];
+  for (const externLet of externLets) {
+    const value = externValueByName.get(externLet.name);
+    if (!value) {
+      throw new Error('native export not found: ' + externLet.name);
+    }
+    externPreludeParts.push(
+      ['let ', externLet.name, ' : ', externLet.type, ' = ', value, ';'].join('')
+    );
+  }
+  return externPreludeParts;
+}
+
+function combineCodeParts(parts: string[]): string {
   let combined = '';
-  for (const part of externPreludeParts.concat(parts)) {
+  for (const part of parts) {
     if (!combined) {
       combined = part;
       continue;
@@ -305,6 +404,36 @@ export function interpretAll(
     combined += needsSeparator ? ';' : '';
     combined += part;
   }
+  return combined;
+}
+
+function stripExplicitTypeArgsFromCalls(source: string): string {
+  const regex = /\b([a-zA-Z_]\w*)\s*<\s*[^>]*\s*>\s*\(/g;
+  return source.replace(regex, (match, name: string, offset: number, full: string) => {
+    const before = full.slice(0, offset);
+    const prevWordMatch = before.match(/([a-zA-Z_]\w*)\s*$/);
+    if (prevWordMatch && prevWordMatch[1] === 'fn') {
+      return match;
+    }
+    return name + '(';
+  });
+}
+
+export function interpretAll(
+  inputs: string[],
+  config: Map<string[], string>,
+  nativeConfig: Map<string[], string>
+): number {
+  const prepared = prepareExternBindings(inputs, config, nativeConfig);
+  if (!prepared.hasContent || !prepared.externBindings) return 0;
+  const { parts, externLets } = prepared.plan;
+  const externValueByName = prepared.externBindings.externValueByName;
+  const nativeFunctionTable = prepared.externBindings.resolvedFns.nativeFunctionTable;
+  const nativeFunctionReturnTypesLocal =
+    prepared.externBindings.resolvedFns.nativeFunctionReturnTypesLocal;
+
+  const externPreludeParts = buildExternPreludeParts(externLets, externValueByName);
+  const combined = combineCodeParts(externPreludeParts.concat(parts));
   if (!combined.trim()) return 0;
   const previousNative = currentNativeFunctions;
   const previousNativeReturnTypes = currentNativeFunctionReturnTypes;
@@ -495,6 +624,7 @@ export function compile(input: string): string {
   const pointerVarIsMutable = new Map<string, boolean>();
   const arrayVars = new Map<string, ArrayVarInfo>();
   const arrayPointerTargets = new Map<string, string>();
+  const arrayPointerVarIsMutable = new Map<string, boolean>();
   const fnArrayParamRequirements = new Map<
     string,
     Array<{ index: number; minInitialized: number }>
@@ -525,6 +655,7 @@ export function compile(input: string): string {
     pointerVarIsMutable,
     arrayVars,
     arrayPointerTargets,
+    arrayPointerVarIsMutable,
     fnArrayParamRequirements,
     fnSignatures,
     structDefs,
@@ -729,6 +860,7 @@ export function compile(input: string): string {
         definedVars,
         arrayVars,
         arrayPointerTargets,
+        context.arrayPointerVarIsMutable,
         varTypes,
         varNumericSuffixes
       );
@@ -2268,6 +2400,7 @@ type CompileContext = {
   pointerVarIsMutable: Map<string, boolean>;
   arrayVars: Map<string, ArrayVarInfo>;
   arrayPointerTargets: Map<string, string>;
+  arrayPointerVarIsMutable: Map<string, boolean>;
   fnArrayParamRequirements: Map<string, Array<{ index: number; minInitialized: number }>>;
   fnSignatures: Map<string, FunctionSignature>;
   structDefs: Map<string, string[]>;
@@ -2287,6 +2420,7 @@ type FunctionSignature = {
   paramPointerMutables: boolean[];
   returnKind: ExprType;
   returnsVoid: boolean;
+  returnTypeAnnotation?: string;
 };
 
 type FnParamInfo = {
@@ -2324,6 +2458,25 @@ function parseArrayType(typeAnnotation?: string): ArrayTypeInfo | undefined {
   }
 
   return undefined;
+}
+
+function parseArrayPointerReturnInfo(returnType?: string): {
+  isArrayPointer: boolean;
+  mutable: boolean;
+} {
+  if (!returnType) return { isArrayPointer: false, mutable: false };
+  let trimmed = returnType.trim();
+  if (!trimmed.startsWith('*')) {
+    return { isArrayPointer: false, mutable: false };
+  }
+  trimmed = trimmed.slice(1).trim();
+  let mutable = false;
+  if (trimmed.startsWith('mut ')) {
+    mutable = true;
+    trimmed = trimmed.slice(4).trim();
+  }
+  const isArrayPointer = trimmed.startsWith('[');
+  return { isArrayPointer, mutable };
 }
 
 function parseTypeConstraint(typeAnnotation?: string): {
@@ -2939,6 +3092,7 @@ function validateArrayElementAssignment(
   definedVars: Set<string>,
   arrayVars: Map<string, ArrayVarInfo>,
   arrayPointerTargets: Map<string, string>,
+  arrayPointerVarIsMutable: Map<string, boolean>,
   varTypes: Map<string, ExprType>,
   varNumericSuffixes: Map<string, string | undefined>
 ): void {
@@ -2946,8 +3100,15 @@ function validateArrayElementAssignment(
     throw new Error('undefined variable');
   }
 
+  const pointerMutable = arrayPointerVarIsMutable.get(arrayName);
   if (!mutableVars.has(arrayName)) {
-    throw new Error('cannot assign to immutable variable');
+    if (pointerMutable === true) {
+      // ok
+    } else if (pointerMutable === false) {
+      throw new Error('cannot assign through immutable pointer');
+    } else {
+      throw new Error('cannot assign to immutable variable');
+    }
   }
 
   validateArrayAccesses(valueExpr, arrayVars, arrayPointerTargets);
@@ -3263,6 +3424,7 @@ function registerFunctionSignature(
     paramPointerMutables: parsedParams.map((param) => param.pointerMutable),
     returnKind,
     returnsVoid,
+    returnTypeAnnotation: returnType ? returnType.trim() : undefined,
   };
   fnSignatures.set(fnName, signature);
   definedVars.add(fnName);
@@ -3512,6 +3674,13 @@ function handleLetInitializer(
     const members = context.thisMemberSets.get(callName);
     if (members) {
       context.thisValueMembers.set(varName, members);
+    }
+    const signature = context.fnSignatures.get(callName);
+    if (signature && signature.returnTypeAnnotation) {
+      const arrayReturnInfo = parseArrayPointerReturnInfo(signature.returnTypeAnnotation);
+      if (arrayReturnInfo.isArrayPointer) {
+        context.arrayPointerVarIsMutable.set(varName, arrayReturnInfo.mutable);
+      }
     }
   }
   const exprInfo = inferExprInfo(valueOriginal, varTypes, varNumericSuffixes);
@@ -4010,7 +4179,78 @@ export function compileAll(
   _config: Map<string[], string>,
   _nativeConfig: Map<string[], string>
 ): string {
-  throw new Error('compileAll not yet implemented');
+  const prepared = prepareExternBindings(_inputs, _config, _nativeConfig);
+  if (!prepared.hasContent || !prepared.externBindings) return 'return 0;';
+  const { parts, externLets, externFns, nativeModuleMap } = prepared.plan;
+  const externValueByName = prepared.externBindings.externValueByName;
+  const resolvedFns = prepared.externBindings.resolvedFns;
+
+  const externPreludeParts = buildExternPreludeParts(externLets, externValueByName);
+
+  const externFnPreludeParts: string[] = [];
+  for (const externFn of externFns) {
+    const paramParts: string[] = externFn.params ? splitTopLevel(externFn.params, ',') : [];
+    const paramNames = paramParts
+      .map((part: string) => {
+        const match = part.trim().match(/^([a-zA-Z_]\w*)/);
+        return match ? match[1] : '';
+      })
+      .filter(Boolean);
+    const callArgs = paramNames.join(', ');
+    const wrapperName = '__tuff_extern_' + externFn.name;
+    const returnType = externFn.returnType ? ' : ' + externFn.returnType : '';
+    const generics = externFn.generics ? externFn.generics : '';
+    const params = externFn.params ? externFn.params : '';
+    const callExpr = wrapperName + '(' + callArgs + ')';
+    const body = externFn.returnType === 'Void' ? '{ ' + callExpr + '; }' : callExpr;
+    externFnPreludeParts.push(
+      ['fn ', externFn.name, generics, '(', params, ')', returnType, ' => ', body, ';'].join('')
+    );
+  }
+
+  const combined = combineCodeParts(externPreludeParts.concat(externFnPreludeParts, parts));
+  if (!combined.trim()) {
+    return 'return 0;';
+  }
+  const sanitized = stripExplicitTypeArgsFromCalls(combined);
+  const compiled = compile(sanitized);
+
+  const moduleVarByName = new Map<string, string>();
+  const nativeModulePreludeParts: string[] = [];
+  const externFnAssignments: string[] = [];
+  for (const [fnName, moduleName] of resolvedFns.externFnModuleByName) {
+    let moduleVar = moduleVarByName.get(moduleName);
+    if (!moduleVar) {
+      const nativeSource = nativeModuleMap.get(moduleName);
+      if (!nativeSource) {
+        throw new Error('native module not found: ' + moduleName);
+      }
+      moduleVar = '__tuff_native_module_' + moduleName;
+      moduleVarByName.set(moduleName, moduleVar);
+      const jsCode = transpileNativeSource(nativeSource);
+      nativeModulePreludeParts.push(
+        [
+          'const ',
+          moduleVar,
+          ' = (function() {',
+          '\nconst exports = {};',
+          '\nconst module = { exports: exports };\n',
+          jsCode,
+          '\nreturn module.exports;\n',
+          '})();',
+        ].join('')
+      );
+    }
+    externFnAssignments.push(
+      ['const __tuff_extern_', fnName, ' = ', moduleVar, '.', fnName, ';'].join('')
+    );
+  }
+
+  const nativePrelude = nativeModulePreludeParts.concat(externFnAssignments).join('\n');
+  if (!nativePrelude.trim()) {
+    return compiled;
+  }
+  return nativePrelude + '\n' + compiled;
 }
 
 /**

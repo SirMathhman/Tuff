@@ -57,9 +57,7 @@ export function assertAllValid(
     const compilerResult = execute(compiled);
     expect(compilerResult).toBe(expectedResult);
   } catch (e) {
-    throw new Error(
-      "Compiled code threw an error: " + (e as Error).message
-    );
+    throw new Error('Compiled code threw an error: ' + (e as Error).message);
   }
 }
 
