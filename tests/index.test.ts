@@ -109,3 +109,7 @@ test("interpret supports nested block expressions with variable binding", () => 
     interpret("let x : U8 = {\n    let y : U8 = 100U8;\n    y\n};\nx"),
   ).toBe(100);
 });
+
+test("compile throws error when block expression returns larger type than variable type", () => {
+  assertInvalid("let x : U8 = {\n    let y : U16 = 100;\n    y\n};\nx");
+});

@@ -29,7 +29,19 @@ module.exports = [
         { argsIgnorePattern: "^_" },
       ],
       "no-console": "off",
+      "max-lines": [
+        "error",
+        { max: 500, skipComments: true, skipBlankLines: true },
+      ],
       "max-lines-per-function": ["error", { max: 50 }],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TemplateLiteral",
+          message:
+            "Template literals are not allowed. Use string concatenation instead to avoid CPD (copy-paste detection) issues.",
+        },
+      ],
     },
   },
   {
@@ -56,6 +68,10 @@ module.exports = [
         { argsIgnorePattern: "^_" },
       ],
       "no-console": "off",
+      "max-lines": [
+        "error",
+        { max: 500, skipComments: true, skipBlankLines: true },
+      ],
       "max-lines-per-function": ["error", { max: 50 }],
     },
   },

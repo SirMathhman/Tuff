@@ -16,6 +16,7 @@ These steps must be followed in a strict order. When you are doing your task, yo
 
 - You MUST refactor duplicates and you MUST fix linting issues. This includes preexisting issues.
 - When refactoring duplicates, here is some advice. If the snippet is mostly declarations or types, extract an interface, parameter object, or type alias.
+- When you hit file length limits, you SHOULD refactor the file into smaller files. Avoid trimming whitespace or comments because ESLint is set to ignore this anyways.
 - Do NOT change the project configuration unless instructed to by the user.
 
 6. You MUST verify using `git log` that the commit went through.

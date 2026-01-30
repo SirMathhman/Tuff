@@ -27,6 +27,25 @@ const TYPE_FAMILIES = {
     signedInts: ["I8", "I16", "I32", "I64"],
     floats: ["F32", "F64"],
 };
+// Type ordering for size comparison
+const TYPE_ORDER = {
+    U8: 1,
+    U16: 2,
+    U32: 3,
+    U64: 4,
+    I8: 1,
+    I16: 2,
+    I32: 3,
+    I64: 4,
+    F32: 5,
+    F64: 6,
+};
+/**
+ * Throw a type mismatch error with consistent formatting.
+ */
+function throwTypeMismatchError(sourceType, targetType) {
+    throw new Error(`Type mismatch: cannot assign ${sourceType} to ${targetType}`);
+}
 /**
  * Strip brace-wrapped expressions, treating { ... } as a grouping operator.
  * Also handles `let` variable bindings within blocks.
@@ -145,18 +164,6 @@ function getLargestUsedType(typesUsed) {
  * Extract types used in an expression and validate against declared type.
  */
 function extractAndValidateTypesInExpression(expression, declaredType) {
-    const typeOrder = {
-        U8: 1,
-        U16: 2,
-        U32: 3,
-        U64: 4,
-        I8: 1,
-        I16: 2,
-        I32: 3,
-        I64: 4,
-        F32: 5,
-        F64: 6,
-    };
     const typesUsed = new Set();
     expression.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, (match, value, type) => {
         typesUsed.add(type);
@@ -171,8 +178,8 @@ function extractAndValidateTypesInExpression(expression, declaredType) {
         return; // Mixed families - already validated elsewhere
     }
     // Check if max used type fits into declared type
-    if (typeOrder[maxUsedType] > typeOrder[declaredType]) {
-        throw new Error(`Type mismatch: cannot assign ${maxUsedType} to ${declaredType}`);
+    if (TYPE_ORDER[maxUsedType] > TYPE_ORDER[declaredType]) {
+        throwTypeMismatchError(maxUsedType, declaredType);
     }
 }
 /**
@@ -180,10 +187,91 @@ function extractAndValidateTypesInExpression(expression, declaredType) {
  * Handles multiline declarations and braces properly.
  * For example: 'let x : U8 = 5; x + 1' → {declarations: ['let x = 5'], expression: 'x + 1'}
  */
+/**
+ * Extract and process a single top-level let statement.
+ */
+function extractSingleLetStatement(statement) {
+    const parsed = parseLetStatement(statement);
+    if (!parsed) {
+        return null;
+    }
+    const { varName, declType, value } = parsed;
+    // Validate types in the assigned expression
+    extractAndValidateTypesInExpression(value, declType);
+    // Strip type annotations from literals in the value
+    const cleanValue = value.replace(/(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
+    return { varName, declType, cleanValue };
+}
+/**
+ * Check if a variable reference appears in a value expression.
+ * Returns the variable name if found, otherwise null.
+ */
+function findVariableReference(varNames, value) {
+    // Remove quoted strings to avoid false matches
+    const cleanedValue = value.replace(/'([^']|\')*'/g, "").replace(/"([^"]|\\")*"/g, "");
+    for (const varName of varNames) {
+        // Match whole word variable names (not part of longer identifiers)
+        const regex = new RegExp(`\\b${varName}\\b`);
+        if (regex.test(cleanedValue)) {
+            return varName;
+        }
+    }
+    return null;
+}
+/**
+ * Validate that a variable's type is compatible with the target type.
+ * Throws an error if the source type is larger than the target type.
+ */
+function validateVariableTypeCompatibility(sourceType, targetType) {
+    const sourcePriority = TYPE_ORDER[sourceType];
+    const targetPriority = TYPE_ORDER[targetType];
+    if (sourcePriority === undefined || targetPriority === undefined) {
+        return; // Unknown types, skip validation
+    }
+    // Check if they're in the same family
+    const sameFamily = (TYPE_FAMILIES.unsignedInts.includes(sourceType) &&
+        TYPE_FAMILIES.unsignedInts.includes(targetType)) ||
+        (TYPE_FAMILIES.signedInts.includes(sourceType) &&
+            TYPE_FAMILIES.signedInts.includes(targetType)) ||
+        (TYPE_FAMILIES.floats.includes(sourceType) &&
+            TYPE_FAMILIES.floats.includes(targetType));
+    if (!sameFamily) {
+        throwTypeMismatchError(sourceType, targetType);
+    }
+    // Within same family, source must not be larger than target
+    if (sourcePriority > targetPriority) {
+        throwTypeMismatchError(sourceType, targetType);
+    }
+}
+/**
+ * Process a single let statement and validate type compatibility with previous declarations.
+ */
+function processSingleLetInTopLevel(statement, variableTypes) {
+    const extracted = extractSingleLetStatement(statement);
+    if (!extracted) {
+        return null;
+    }
+    const { varName, declType, cleanValue } = extracted;
+    // Check if this value references any previously declared variables
+    const referencedVar = findVariableReference(Object.keys(variableTypes), cleanValue);
+    if (referencedVar) {
+        const referencedType = variableTypes[referencedVar];
+        validateVariableTypeCompatibility(referencedType, declType);
+    }
+    // Track this variable's type
+    variableTypes[varName] = declType;
+    return { varName, cleanValue };
+}
+/**
+ * Extract top-level let statements from input and return {declarations, expression}.
+ * Handles multiline declarations and braces properly.
+ * Tracks variable types and validates compatibility.
+ * For example: 'let x : U8 = 5; x + 1' → {declarations: ['let x = 5'], expression: 'x + 1'}
+ */
 function extractTopLevelStatements(input) {
     const declarations = [];
+    const variableTypes = {};
     let remaining = input.trim();
-    // Extract all top-level let statements
     while (remaining.startsWith("let ")) {
         // Find the semicolon that ends this let statement, accounting for braces
         let semiIdx = -1;
@@ -198,21 +286,13 @@ function extractTopLevelStatements(input) {
                 break;
             }
         }
-        if (semiIdx === -1) {
-            break; // No semicolon found at brace depth 0, treat rest as expression
-        }
+        if (semiIdx === -1)
+            break;
         const statement = remaining.substring(0, semiIdx);
         remaining = remaining.substring(semiIdx + 1).trim();
-        // Parse: let identifier : type = value (using [\s\S] to match across newlines)
-        const letMatch = statement.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
-        if (letMatch) {
-            const [, varName, declType, value] = letMatch;
-            let cleanValue = value.trim().replace(/;$/, "");
-            // Validate types in the assigned expression
-            extractAndValidateTypesInExpression(cleanValue, declType);
-            // Strip type annotations from literals in the value
-            cleanValue = cleanValue.replace(/(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
-            declarations.push(`let ${varName} = ${cleanValue}`);
+        const processed = processSingleLetInTopLevel(statement, variableTypes);
+        if (processed) {
+            declarations.push(`let ${processed.varName} = ${processed.cleanValue}`);
         }
     }
     return { declarations, expression: remaining };
@@ -346,6 +426,50 @@ function validateExpressionResult(expression, type) {
  */
 function findLargestType(types, order) {
     return types.reduce((max, current) => order.indexOf(current) > order.indexOf(max) ? current : max);
+}
+/**
+ * Infer a type from a value expression by analyzing type annotations present.
+ * Returns the inferred type or undefined if no types are present.
+ */
+function inferTypeFromValue(value) {
+    const typesUsed = new Set();
+    value.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, (match, _num, type) => {
+        typesUsed.add(type);
+        return match;
+    });
+    if (typesUsed.size === 0) {
+        return undefined; // No types found
+    }
+    // If multiple types, determine coerced type
+    if (typesUsed.size > 1) {
+        return determineCoercedType(Array.from(typesUsed));
+    }
+    return Array.from(typesUsed)[0];
+}
+/**
+ * Parse a let statement (with or without type annotation) and return extracted info.
+ * Returns {varName, declType, value} or null if not a valid let statement.
+ */
+function parseLetStatement(statement) {
+    // Try with type annotation first: let identifier : type = value
+    let letMatch = statement.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
+    if (letMatch) {
+        const [, varName, declType, value] = letMatch;
+        return { varName, declType, value: value.trim().replace(/;$/, "") };
+    }
+    // Try without type annotation: let identifier = value
+    letMatch = statement.match(/let\s+(\w+)\s*=\s*([\s\S]+)/);
+    if (letMatch) {
+        const [, varName, value] = letMatch;
+        const trimmedValue = value.trim().replace(/;$/, "");
+        // Infer type from the value
+        const inferredType = inferTypeFromValue(trimmedValue);
+        if (!inferredType) {
+            throw new Error(`Cannot infer type for variable '${varName}' - value must contain explicit type annotations`);
+        }
+        return { varName, declType: inferredType, value: trimmedValue };
+    }
+    return null;
 }
 /**
  * Determine the coerced type for a set of types.
