@@ -7589,8 +7589,10 @@ if (require.main === module) {
       fs.mkdirSync(distDir, { recursive: true });
     }
 
+    const wrapped = ['process.exit((function() {', bundled, '})());'].join('\n');
+
     const bundlePath = path.join(distDir, 'bundle.js');
-    fs.writeFileSync(bundlePath, bundled, 'utf-8');
+    fs.writeFileSync(bundlePath, wrapped, 'utf-8');
     console.log('Successfully bundled to ' + bundlePath);
   } catch (error) {
     if (error instanceof Error) {
