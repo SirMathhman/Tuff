@@ -1921,17 +1921,20 @@ function inferOperandKindForIs(expr: string, context: CompileContext): ExprType 
 }
 
 function convertIsExpressions(expr: string, context: CompileContext): string {
-  return expr.replace(/\b([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)?)\s+is\s+([a-zA-Z_]\w*)/g, (_match, left, typeName) => {
-    const kind = inferOperandKindForIs(left, context);
-    const resolvedType = resolveTypeAliasBaseType(typeName, context) || typeName;
-    if (resolvedType === 'Bool') {
-      return kind === 'Bool' ? '1' : '0';
+  return expr.replace(
+    /\b([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)?|true|false|-?\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)?|'.'|"[^"]*")\s+is\s+([a-zA-Z_]\w*)/g,
+    (_match, left, typeName) => {
+      const kind = inferOperandKindForIs(left, context);
+      const resolvedType = resolveTypeAliasBaseType(typeName, context) || typeName;
+      if (resolvedType === 'Bool') {
+        return kind === 'Bool' ? '1' : '0';
+      }
+      if (isNumericTypeName(resolvedType)) {
+        return kind === 'Numeric' ? '1' : '0';
+      }
+      return '0';
     }
-    if (isNumericTypeName(resolvedType)) {
-      return kind === 'Numeric' ? '1' : '0';
-    }
-    return '0';
-  });
+  );
 }
 
 function replaceInlineBlocks(code: string): string {
@@ -5125,12 +5128,6 @@ export function interpret(input: string): number {
     }
     // literal
     return parseLiteralToken(token);
-  }
-
-  function normalizeGenericSingletonReferences(expr: string, context: Context): string {
-    // This function is kept for backward compatibility but the main logic
-    // is now in resolveOperand where we handle non-existent variables
-    return expr;
   }
 
   function evaluateExpression(expr: string, context: Context = new Map(), functions: FunctionTable, structs: StructTable): RuntimeValue {

@@ -19,3 +19,7 @@ test('interpret supports generic singleton pointer inequality across types', () 
 test('interpret treats pointer vs value as unequal for generics', () => {
     assertValid('object None<T> {} &None<I32> == None<I32>', 0);
 });
+
+test('supports is operator with singleton values', () => {
+    assertValid('object MySingleton {} let a = MySingleton; 1 is MySingleton', 0);
+});
