@@ -7,6 +7,7 @@
     "prepare": "husky install",
     "build": "tsc",
     "start": "npm run build && node dist/index.js",
+    "watch": "nodemon --watch src/main.tuff --exec npm start",
     "lint": "npm run lint:tsc && npm run lint:eslint",
     "lint:eslint": "eslint src tests",
     "lint:tsc": "tsc --noEmit",
@@ -33,6 +34,7 @@
     "eslint": "^9.39.2",
     "husky": "^9.1.7",
     "jest": "^30.2.0",
+    "nodemon": "^3.1.11",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3"
   }

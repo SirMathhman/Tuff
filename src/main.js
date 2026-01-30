@@ -1,4 +1,4 @@
 (function() {
-  return 100;
+  return 200;
 })();
 process.exit(0);
