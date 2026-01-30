@@ -76,7 +76,7 @@ export function compileFile(inputPath: string, outputPath: string): void {
   const source = fs.readFileSync(inputPath, "utf-8");
   const compiled = compile(source);
   // Wrap in IIFE and add process.exit
-  const wrapped = `(function() {\n  ${compiled}\n})();\nprocess.exit(0);`;
+  const wrapped = `process.exit((function() {\n  ${compiled}\n})());`;
   fs.writeFileSync(outputPath, wrapped, "utf-8");
   console.log(`Compiled ${inputPath} to ${outputPath}`);
 }
