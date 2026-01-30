@@ -1,5 +1,5 @@
 ---
-name: tddImplementation
+name: implement
 description: Implement a feature using Test-Driven Development workflow.
 argument-hint: The desired feature requirement or test case to implement
 ---

@@ -3,9 +3,15 @@ import readline from "readline";
 /**
  * Compile Tuff source code to JavaScript.
  * Currently treats expressions as implicit return values.
+ * Strips type annotations like U8, U16, I32, etc.
  */
 export function compile(input: string): string {
-  const trimmed = input.trim();
+  let trimmed = input.trim();
+  // Strip type annotations (e.g., 100U8 -> 100, 42I32 -> 42)
+  trimmed = trimmed.replace(
+    /([0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
+    "$1",
+  );
   // If it doesn't contain return, wrap it in a return statement
   if (!trimmed.includes("return")) {
     return `return ${trimmed};`;
