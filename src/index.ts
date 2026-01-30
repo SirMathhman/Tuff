@@ -4140,6 +4140,10 @@ export function compileAll(_inputs: string[], _config: Map<string[], string>, _n
  * - Otherwise returns 0 (stub behavior)
  */
 export function interpret(input: string): number {
+  return interpretInternal(input);
+}
+
+function interpretInternal(input: string): number {
   const buildFunctionNotFoundMessage = (fnName: string, contextInfo: string): string => {
     return (
       'function not found: ' +
