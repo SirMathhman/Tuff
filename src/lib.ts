@@ -13,11 +13,11 @@ export function free<T>(toFree: T[]) {
 
 export function checkMemoryOrPanic() {
   if (allocated !== 0) {
-    throw new Error('Memory leak detected: ' + allocated + ' items still allocated.');
+    throw new Error('Memory leak detected: ' + allocated + ' items still allocated. Compiled code did not free all allocated memory as expected.');
   }
 }
 
-import fs from 'fs';
+import * as fs from 'fs';
 
 export function readContent() {
   // READ the README.md file using fs
