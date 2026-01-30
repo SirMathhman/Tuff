@@ -834,6 +834,7 @@ export function compile(input: string): string {
     validateNumericLiteralOverflow(lastStmtOriginal);
     validateStructFieldAccess(lastStmtOriginal, context);
     validateFunctionCalls(lastStmtOriginal, context, false);
+    validateComparisonTypes(lastStmtOriginal, context);
 
     // Check if this is a comparison or boolean operator and wrap to convert bool to number
     // Comparison operators: ==, !=, <, >, <=, >=
@@ -1394,6 +1395,84 @@ function validateStructFieldAccess(expr: string, context: CompileContext): void 
     const fields = structDefs.get(structName) || [];
     if (!fields.includes(field)) {
       throw new Error('struct field does not exist: ' + field);
+    }
+  }
+}
+
+function validateComparisonTypes(expr: string, context: CompileContext): void {
+  const trimmed = expr.trim();
+  if (!trimmed) return;
+  const operators: Array<{ op: string; index: number }> = [];
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let inString = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === '"' && trimmed[i - 1] !== '\\') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (ch === '(') parenDepth++;
+    if (ch === ')') parenDepth--;
+    if (ch === '[') bracketDepth++;
+    if (ch === ']') bracketDepth--;
+    if (ch === '{') braceDepth++;
+    if (ch === '}') braceDepth--;
+    if (parenDepth !== 0 || bracketDepth !== 0 || braceDepth !== 0) {
+      continue;
+    }
+
+    const twoChar = trimmed.slice(i, i + 2);
+    if (twoChar === '==' || twoChar === '!=' || twoChar === '<=' || twoChar === '>=') {
+      operators.push({ op: twoChar, index: i });
+      i++;
+      continue;
+    }
+    if (ch === '<' || ch === '>') {
+      operators.push({ op: ch, index: i });
+    }
+  }
+
+  if (!operators.length) return;
+
+  const parts: string[] = [];
+  let lastIndex = 0;
+  for (const op of operators) {
+    parts.push(trimmed.slice(lastIndex, op.index));
+    lastIndex = op.index + op.op.length;
+  }
+  parts.push(trimmed.slice(lastIndex));
+
+  const getOperandKind = (segment: string): ExprType => {
+    const literalKind = inferLiteralKind(segment);
+    if (literalKind) return literalKind;
+    return inferExprInfo(segment, context.varTypes, context.varNumericSuffixes).kind;
+  };
+
+  for (let i = 0; i < operators.length; i++) {
+    const left = parts[i];
+    const right = parts[i + 1];
+    const leftKind = getOperandKind(left);
+    const rightKind = getOperandKind(right);
+    if (leftKind === 'Unknown' || rightKind === 'Unknown') {
+      continue;
+    }
+    if (
+      operators[i].op === '<' ||
+      operators[i].op === '<=' ||
+      operators[i].op === '>' ||
+      operators[i].op === '>='
+    ) {
+      if (leftKind !== 'Numeric' || rightKind !== 'Numeric') {
+        throw new Error('cannot compare different types');
+      }
+    } else if (leftKind !== rightKind) {
+      throw new Error('cannot compare different types');
     }
   }
 }
@@ -2169,6 +2248,7 @@ function prepareValueExpression(
   validateNumericLiteralOverflow(valueOriginal);
   validateStructFieldAccess(valueOriginal, context);
   validateFunctionCalls(valueOriginal, context, disallowVoidCall);
+  validateComparisonTypes(valueOriginal, context);
   validateArrayAccesses(valueOriginal, arrayVars, arrayPointerTargets);
   validateArrayLiteralIndexing(valueOriginal);
   validateArrayCallRequirements(valueOriginal, context);
