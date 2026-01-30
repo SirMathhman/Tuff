@@ -6,7 +6,7 @@
   "scripts": {
     "prepare": "husky install",
     "build": "tsc",
-    "repl": "npm run build && node dist/index.js",
+    "start": "npm run build && node dist/index.js",
     "lint": "npm run lint:tsc && npm run lint:eslint",
     "lint:eslint": "eslint src tests",
     "lint:tsc": "tsc --noEmit",
