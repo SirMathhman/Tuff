@@ -1,3 +1,5 @@
-let x = 100U8;
-let y : U8 = x;
-y
+let x : U8 = {
+    let y : U8 = 100U8;
+    y
+};
+x

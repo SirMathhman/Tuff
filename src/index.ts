@@ -35,22 +35,14 @@ const TYPE_ORDER: Record<string, number> = {
   F64: 6,
 };
 
-/**
- * Throw a type mismatch error with consistent formatting.
- */
+/** Throw a type mismatch error. */
 function throwTypeMismatchError(sourceType: string, targetType: string): never {
   throw new Error(
-    `Type mismatch: cannot assign ${sourceType} to ${targetType}`,
+    "Type mismatch: cannot assign " + sourceType + " to " + targetType,
   );
 }
 
-/**
- * Strip brace-wrapped expressions, treating { ... } as a grouping operator.
- * Also handles `let` variable bindings within blocks.
- * Recursively removes braces from the inner-most expressions outward.
- * For example: { 5 } → 5, (2 + { 3 }) → (2 + 3)
- * Variable bindings: { let x : U8 = 3; x } → (function() { let x = 3; return x; })()
- */
+/** Strip brace-wrapped expressions and convert let bindings to IIFEs. */
 function stripBraceWrappers(input: string): string {
   let result = input;
   const iifeMap = new Map<string, string>();
@@ -74,7 +66,7 @@ function stripBraceWrappers(input: string): string {
       if (inside.includes("let ") && inside.includes(";")) {
         // Parse let statements and convert to IIFE
         const iife = convertLetBindingToIIFE(inside);
-        const placeholder = `__IIFE_${iifeCounter}__`;
+        const placeholder = "__IIFE_" + iifeCounter + "__";
         iifeMap.set(placeholder, iife);
         iifeCounter++;
         return placeholder;
@@ -95,39 +87,52 @@ function stripBraceWrappers(input: string): string {
 
 /**
  * Validate a let statement and extract its declaration.
- * Returns the declaration string or null if invalid.
+ * Handles both typed (let x : U8 = 5) and untyped (let x = 5U8) declarations.
  */
 function parseLetDeclaration(
   stmt: string,
   declaredVars: Set<string>,
   validateTypes: boolean,
 ): string | null {
-  const letMatch = stmt.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
-  if (!letMatch) {
-    return null;
-  }
+  const typePattern = /let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/;
+  const noTypePattern = /let\s+(\w+)\s*=\s*([\s\S]+)/;
+  
+  let match = stmt.match(typePattern);
+  const [varName, declType, value] = match 
+    ? [match[1], match[2], match[3]]
+    : (() => {
+        match = stmt.match(noTypePattern);
+        return match ? [match[1], undefined, match[2]] : [null, null, null];
+      })();
 
-  const [, varName, declType, value] = letMatch;
-
-  // Check for duplicate variable declaration
+  if (!varName) return null;
+  
   if (declaredVars.has(varName)) {
     throw new Error(
-      `Variable '${varName}' has already been declared in this block`,
+      "Variable '" + varName + "' has already been declared in this block",
     );
   }
   declaredVars.add(varName);
 
-  // Validate types in the assigned expression if requested
-  if (validateTypes) {
-    extractAndValidateTypesInExpression(value, declType);
+  const trimmedValue = value.trim().replace(/;$/, "");
+  
+  if (declType && validateTypes) {
+    extractAndValidateTypesInExpression(trimmedValue, declType);
+  } else if (!declType && validateTypes) {
+    const inferredType = inferTypeFromValue(trimmedValue);
+    if (!inferredType) {
+      throw new Error(
+        "Cannot infer type for variable '" + varName +
+        "' - value must contain explicit type annotations",
+      );
+    }
   }
 
-  // Strip type annotations from the value
-  const cleanValue = value.replace(
+  const cleanValue = trimmedValue.replace(
     /(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
     "$1",
   );
-  return `let ${varName} = ${cleanValue}`;
+  return "let " + varName + " = " + cleanValue;
 }
 
 /**
@@ -153,7 +158,7 @@ function convertLetBindingToIIFE(blockContent: string): string {
   for (let i = 0; i < statements.length - 1; i++) {
     const stmt = statements[i];
     if (stmt.startsWith("let ")) {
-      const decl = parseLetDeclaration(stmt, declaredVars, true);
+      const decl = parseLetDeclaration(stmt, declaredVars, false);
       if (decl) {
         declarations.push(decl);
       }
@@ -164,17 +169,14 @@ function convertLetBindingToIIFE(blockContent: string): string {
   const functionBody =
     declarations.join("; ") +
     (declarations.length > 0 ? "; " : "") +
-    `return ${lastStatement};`;
-  return `(function() { ${functionBody} })()`;
+    "return " +
+    lastStatement +
+    ";";
+  return "(function() { " + functionBody + " })()";
 }
 
-/**
- * Determine the largest type used, ensuring all types are in the same family.
- * Returns the largest type or undefined if types are from different families.
- */
-function getLargestUsedType(
-  typesUsed: Set<string>,
-): string | undefined {
+/** Find the largest type in the same family. */
+function getLargestUsedType(typesUsed: Set<string>): string | undefined {
   const types = Array.from(typesUsed);
 
   if (types.every((t) => TYPE_FAMILIES.unsignedInts.includes(t))) {
@@ -187,9 +189,7 @@ function getLargestUsedType(
   return undefined;
 }
 
-/**
- * Extract types used in an expression and validate against declared type.
- */
+/** Extract and validate types in an expression against declared type. */
 function extractAndValidateTypesInExpression(
   expression: string,
   declaredType: string,
@@ -225,9 +225,7 @@ function extractAndValidateTypesInExpression(
  * Handles multiline declarations and braces properly.
  * For example: 'let x : U8 = 5; x + 1' → {declarations: ['let x = 5'], expression: 'x + 1'}
  */
-/**
- * Extract and process a single top-level let statement.
- */
+/** Extract and process a single top-level let statement. */
 function extractSingleLetStatement(statement: string): {
   varName: string;
   declType: string;
@@ -252,20 +250,19 @@ function extractSingleLetStatement(statement: string): {
   return { varName, declType, cleanValue };
 }
 
-/**
- * Check if a variable reference appears in a value expression.
- * Returns the variable name if found, otherwise null.
- */
+/** Check if a variable is referenced in a value expression. */
 function findVariableReference(
   varNames: string[],
   value: string,
 ): string | null {
   // Remove quoted strings to avoid false matches
-  const cleanedValue = value.replace(/'([^']|\')*'/g, "").replace(/"([^"]|\\")*"/g, "");
+  const cleanedValue = value
+    .replace(/'([^']|\')*'/g, "")
+    .replace(/"([^"]|\\")*"/g, "");
 
   for (const varName of varNames) {
     // Match whole word variable names (not part of longer identifiers)
-    const regex = new RegExp(`\\b${varName}\\b`);
+    const regex = new RegExp("\\b" + varName + "\\b");
     if (regex.test(cleanedValue)) {
       return varName;
     }
@@ -273,10 +270,7 @@ function findVariableReference(
   return null;
 }
 
-/**
- * Validate that a variable's type is compatible with the target type.
- * Throws an error if the source type is larger than the target type.
- */
+/** Validate variable type compatibility. */
 function validateVariableTypeCompatibility(
   sourceType: string,
   targetType: string,
@@ -374,7 +368,9 @@ function extractTopLevelStatements(input: string): {
 
     const processed = processSingleLetInTopLevel(statement, variableTypes);
     if (processed) {
-      declarations.push(`let ${processed.varName} = ${processed.cleanValue}`);
+      declarations.push(
+        "let " + processed.varName + " = " + processed.cleanValue,
+      );
     }
   }
 
@@ -387,30 +383,22 @@ function extractTopLevelStatements(input: string): {
 function processDeclarations(rawDeclarations: string[]): string[] {
   const declarations: string[] = [];
   for (const decl of rawDeclarations) {
-    // Remove "let " prefix and split to get var name and value (using [\s\S] to match across newlines)
+    // Strip braces and type annotations
     const declMatch = decl.match(/let\s+(\w+)\s*=\s*([\s\S]+)/);
     if (declMatch) {
       const [, varName, value] = declMatch;
-      let processedValue = value.trim();
-
-      // Strip brace-wrapped expressions
-      processedValue = stripBraceWrappers(processedValue);
-
-      // Strip type annotations
+      let processedValue = stripBraceWrappers(value.trim());
       processedValue = processedValue.replace(
         /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
         "$1",
       );
-
-      declarations.push(`let ${varName} = ${processedValue}`);
+      declarations.push("let " + varName + " = " + processedValue);
     }
   }
   return declarations;
 }
 
-/**
- * Determine the result type and validate expression.
- */
+/** Determine result type and validate expression. */
 function determineAndValidateType(
   trimmed: string,
   typesUsed: Set<string>,
@@ -420,53 +408,30 @@ function determineAndValidateType(
   if (typesUsed.size > 1) {
     const types = Array.from(typesUsed);
     resultType = determineCoercedType(types);
-
     if (!resultType) {
-      // Types are incompatible
       const sorted = types.sort();
       throw new Error(
-        `Type mismatch: cannot mix ${sorted[0]} and ${sorted[1]} in arithmetic expression`,
+        "Type mismatch: cannot mix " + sorted[0] + " and " + sorted[1] +
+        " in arithmetic expression",
       );
     }
   } else if (typesUsed.size === 1) {
     resultType = Array.from(typesUsed)[0];
   }
 
-  // Validate result at compile time for non-float types
-  if (resultType && resultType !== "F32" && resultType !== "F64") {
-    validateExpressionResult(trimmed, resultType);
-  }
+  if (resultType && resultType !== "F32" && resultType !== "F64") validateExpressionResult(trimmed, resultType);
 }
 
 /**
  * Compile Tuff source code to JavaScript.
- * Currently treats expressions as implicit return values.
- * Handles top-level variable declarations.
- * Strips type annotations like U8, U16, I32, etc.
- * Strips brace-wrapped expressions (block expressions).
- * Validates that numeric values are within the range of their type annotation.
  */
 export function compile(input: string): string {
-  const { declarations: rawDeclarations, expression: rawExpression } =
-    extractTopLevelStatements(input);
-
-  // Process declarations to strip braces and type annotations
+  const { declarations: rawDeclarations, expression: rawExpression } = extractTopLevelStatements(input);
   const declarations = processDeclarations(rawDeclarations);
-
-  let trimmed = rawExpression.trim();
-
-  // Strip brace-wrapped expressions { ... }
-  trimmed = stripBraceWrappers(trimmed);
+  let trimmed = stripBraceWrappers(rawExpression.trim());
 
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
-  trimmed = trimmed.replace(
-    /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
-    "$1",
-  );
-
-  // Determine result type and validate
-  determineAndValidateType(trimmed, typesUsed);
-
+  trimmed = trimmed.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");  determineAndValidateType(trimmed, typesUsed);
   // Build the compiled code
   let compiled = "";
   if (declarations.length > 0) {
@@ -475,7 +440,7 @@ export function compile(input: string): string {
 
   // If it doesn't start with "return ", wrap it in a return statement
   if (!trimmed.startsWith("return ")) {
-    compiled += `return ${trimmed};`;
+    compiled += "return " + trimmed + ";";
   } else {
     compiled += trimmed;
   }
@@ -483,33 +448,39 @@ export function compile(input: string): string {
   return compiled;
 }
 
-/**
- * Check if a numeric value is within the range of its type.
- * Throws an error if the value is outside the range.
- */
+/** Validate a numeric value is within the type range. */
 function validateInRange(value: number, type: string): void {
   const range = typeRanges[type];
 
   if (!range) {
-    throw new Error(`Unknown type: ${type}`);
+    throw new Error("Unknown type: " + type);
   }
 
   if (value < range.min) {
     throw new Error(
-      `Underflow: ${value} is below minimum for ${type} (${range.min})`,
+      "Underflow: " +
+        value +
+        " is below minimum for " +
+        type +
+        " (" +
+        range.min +
+        ")",
     );
   }
   if (value > range.max) {
     throw new Error(
-      `Overflow: ${value} is above maximum for ${type} (${range.max})`,
+      "Overflow: " +
+        value +
+        " is above maximum for " +
+        type +
+        " (" +
+        range.max +
+        ")",
     );
   }
 }
 
-/**
- * Validate type annotations in the input and return the set of types used.
- * Throws errors for underflow/overflow violations.
- */
+/** Validate type annotations and return used types. */
 function validateAndStripTypeAnnotations(input: string): Set<string> {
   const typesUsed: Set<string> = new Set();
 
@@ -526,13 +497,10 @@ function validateAndStripTypeAnnotations(input: string): Set<string> {
   return typesUsed;
 }
 
-/**
- * Validate that an expression evaluates to a value within the given type's range.
- * Throws an error if the result overflows or underflows the type.
- */
+/** Validate expression evaluates within type range. */
 function validateExpressionResult(expression: string, type: string): void {
   try {
-    const fn = new Function(`return ${expression}`);
+    const fn = new Function("return " + expression);
     const result = fn();
     validateInRange(result, type);
   } catch (err) {
@@ -547,19 +515,14 @@ function validateExpressionResult(expression: string, type: string): void {
   }
 }
 
-/**
- * Find the largest type in a family of types based on the given order.
- */
+/** Find the largest type in a family. */
 function findLargestType(types: string[], order: string[]): string {
   return types.reduce((max, current) =>
     order.indexOf(current) > order.indexOf(max) ? current : max,
   );
 }
 
-/**
- * Infer a type from a value expression by analyzing type annotations present.
- * Returns the inferred type or undefined if no types are present.
- */
+/** Infer type from value. */
 function inferTypeFromValue(value: string): string | undefined {
   const typesUsed: Set<string> = new Set();
 
@@ -583,10 +546,7 @@ function inferTypeFromValue(value: string): string | undefined {
   return Array.from(typesUsed)[0];
 }
 
-/**
- * Parse a let statement (with or without type annotation) and return extracted info.
- * Returns {varName, declType, value} or null if not a valid let statement.
- */
+/** Parse a let statement with or without type annotation. */
 function parseLetStatement(
   statement: string,
 ): { varName: string; declType: string; value: string } | null {
@@ -607,7 +567,9 @@ function parseLetStatement(
     const inferredType = inferTypeFromValue(trimmedValue);
     if (!inferredType) {
       throw new Error(
-        `Cannot infer type for variable '${varName}' - value must contain explicit type annotations`,
+        "Cannot infer type for variable '" +
+          varName +
+          "' - value must contain explicit type annotations",
       );
     }
 
@@ -617,10 +579,7 @@ function parseLetStatement(
   return null;
 }
 
-/**
- * Determine the coerced type for a set of types.
- * Returns the coerced type if types are compatible, undefined otherwise.
- */
+/** Coerce type for multiple types from different families. */
 function determineCoercedType(types: string[]): string | undefined {
   // Check if all types are in the same family
   const allUnsigned = types.every((t) =>
@@ -714,9 +673,9 @@ export function compileFile(inputPath: string, outputPath: string): void {
   const source = fs.readFileSync(inputPath, "utf-8");
   const compiled = compile(source);
   // Wrap in IIFE and add process.exit
-  const wrapped = `process.exit((function() {\n  ${compiled}\n})());`;
+  const wrapped = "process.exit((function() {\n  " + compiled + "\n})());";
   fs.writeFileSync(outputPath, wrapped, "utf-8");
-  console.log(`Compiled ${inputPath} to ${outputPath}`);
+  console.log("Compiled " + inputPath + " to " + outputPath);
 }
 
 const args = process.argv.slice(2);

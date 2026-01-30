@@ -104,3 +104,8 @@ test("interpret supports variable declaration without type annotation", () => {
 test("compile throws error when assigning larger inferred type to smaller explicit type", () => {
   assertInvalid("let x = 100U16; let y : U8 = x; y");
 });
+test("interpret supports nested block expressions with variable binding", () => {
+  expect(
+    interpret("let x : U8 = {\n    let y : U8 = 100U8;\n    y\n};\nx"),
+  ).toBe(100);
+});
