@@ -6,7 +6,10 @@
   "scripts": {
     "prepare": "husky install",
     "build": "tsc",
-    "lint": "tsc --noEmit",
+    "repl": "npm run build && node dist/index.js",
+    "lint": "npm run lint:tsc && npm run lint:eslint",
+    "lint:eslint": "eslint src tests",
+    "lint:tsc": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch"
   },
@@ -24,6 +27,10 @@
   "homepage": "https://github.com/SirMathhman/Tuff#readme",
   "devDependencies": {
     "@types/jest": "^30.0.0",
+    "@types/node": "^25.1.0",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
     "husky": "^9.1.7",
     "jest": "^30.2.0",
     "ts-jest": "^29.4.6",
