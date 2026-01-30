@@ -1,3 +1,5 @@
+import readline from "readline";
+
 /**
  * Compile Tuff source code to JavaScript.
  * Currently treats expressions as implicit return values.
@@ -31,13 +33,12 @@ function evaluate(bundledJs: string) {
   const result = fn();
   return Number(result);
 }
-
 /**
  * Start a simple REPL that reads lines, runs `interpret` on each input,
  * and prints the numeric result. Use `.exit` or `.quit` to leave.
  */
 export function startRepl(): void {
-  const rl = require("readline").createInterface({
+  const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     prompt: "tuff> ",
@@ -68,12 +69,15 @@ export function startRepl(): void {
 
 /**
  * Compile a Tuff source file and write the output to a JavaScript file.
+ * Wraps the output in an IIFE with process.exit.
  */
 export function compileFile(inputPath: string, outputPath: string): void {
   const fs = require("fs");
   const source = fs.readFileSync(inputPath, "utf-8");
   const compiled = compile(source);
-  fs.writeFileSync(outputPath, compiled, "utf-8");
+  // Wrap in IIFE and add process.exit
+  const wrapped = `(function() {\n  ${compiled}\n})();\nprocess.exit(0);`;
+  fs.writeFileSync(outputPath, wrapped, "utf-8");
   console.log(`Compiled ${inputPath} to ${outputPath}`);
 }
 

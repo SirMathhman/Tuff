@@ -1,9 +1,13 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.compile = compile;
 exports.interpret = interpret;
 exports.startRepl = startRepl;
 exports.compileFile = compileFile;
+const readline_1 = __importDefault(require("readline"));
 /**
  * Compile Tuff source code to JavaScript.
  * Currently treats expressions as implicit return values.
@@ -41,7 +45,7 @@ function evaluate(bundledJs) {
  * and prints the numeric result. Use `.exit` or `.quit` to leave.
  */
 function startRepl() {
-    const rl = require("readline").createInterface({
+    const rl = readline_1.default.createInterface({
         input: process.stdin,
         output: process.stdout,
         prompt: "tuff> ",
@@ -72,12 +76,15 @@ function startRepl() {
 }
 /**
  * Compile a Tuff source file and write the output to a JavaScript file.
+ * Wraps the output in an IIFE with process.exit.
  */
 function compileFile(inputPath, outputPath) {
     const fs = require("fs");
     const source = fs.readFileSync(inputPath, "utf-8");
     const compiled = compile(source);
-    fs.writeFileSync(outputPath, compiled, "utf-8");
+    // Wrap in IIFE and add process.exit
+    const wrapped = `(function() {\n  ${compiled}\n})();\nprocess.exit(0);`;
+    fs.writeFileSync(outputPath, wrapped, "utf-8");
     console.log(`Compiled ${inputPath} to ${outputPath}`);
 }
 /* If executed directly (e.g., `node dist/index.js`) compile ./src/index.tuff to ./src/index.js
