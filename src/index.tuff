@@ -12,4 +12,4 @@ let a = &MySingleton;
 
 checkMemoryOrPanic();
 
-0
+1
