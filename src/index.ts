@@ -31,7 +31,12 @@ function stripBraceWrappers(input: string): string {
     changed = false;
 
     // Match { ... } patterns where inside contains no braces (innermost first)
-    const newResult = result.replace(/\{\s*([^{}]+)\s*\}/g, (match, inside) => {
+    // Using [\s\S] instead of . to match across newlines, and [^{}]+ to exclude braces
+    const newResult = result.replace(/\{([\s\S]*?)\}/g, (match, inside) => {
+      // Check if this has nested braces
+      if (inside.includes("{") || inside.includes("}")) {
+        return match; // Skip, process inner braces first
+      }
       changed = true;
       inside = inside.trim();
 
@@ -87,7 +92,7 @@ function convertLetBindingToIIFE(blockContent: string): string {
       if (letMatch) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const [, varName, _type, value] = letMatch;
-        
+
         // Check for duplicate variable declaration
         if (declaredVars.has(varName)) {
           throw new Error(
@@ -95,7 +100,7 @@ function convertLetBindingToIIFE(blockContent: string): string {
           );
         }
         declaredVars.add(varName);
-        
+
         // Strip type annotations from the value
         const cleanValue = value.replace(
           /(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
@@ -115,25 +120,89 @@ function convertLetBindingToIIFE(blockContent: string): string {
 }
 
 /**
- * Compile Tuff source code to JavaScript.
- * Currently treats expressions as implicit return values.
- * Strips type annotations like U8, U16, I32, etc.
- * Strips brace-wrapped expressions (block expressions).
- * Validates that numeric values are within the range of their type annotation.
+ * Extract top-level let statements from input and return {declarations, expression}.
+ * Handles multiline declarations and braces properly.
+ * For example: 'let x : U8 = 5; x + 1' → {declarations: ['let x = 5'], expression: 'x + 1'}
  */
-export function compile(input: string): string {
-  let trimmed = input.trim();
+function extractTopLevelStatements(
+  input: string,
+): { declarations: string[]; expression: string } {
+  const declarations: string[] = [];
+  let remaining = input.trim();
 
-  // Strip brace-wrapped expressions { ... }
-  trimmed = stripBraceWrappers(trimmed);
+  // Extract all top-level let statements
+  while (remaining.startsWith("let ")) {
+    // Find the semicolon that ends this let statement, accounting for braces
+    let semiIdx = -1;
+    let braceDepth = 0;
+    for (let i = 0; i < remaining.length; i++) {
+      if (remaining[i] === "{") braceDepth++;
+      else if (remaining[i] === "}") braceDepth--;
+      else if (remaining[i] === ";" && braceDepth === 0) {
+        semiIdx = i;
+        break;
+      }
+    }
 
-  const typesUsed = validateAndStripTypeAnnotations(trimmed);
-  trimmed = trimmed.replace(
-    /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
-    "$1",
-  );
+    if (semiIdx === -1) {
+      break; // No semicolon found at brace depth 0, treat rest as expression
+    }
 
-  // Determine result type and validate
+    const statement = remaining.substring(0, semiIdx);
+    remaining = remaining.substring(semiIdx + 1).trim();
+
+    // Parse: let identifier : type = value (using [\s\S] to match across newlines)
+    const letMatch = statement.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
+    if (letMatch) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const [, varName, _type, value] = letMatch;
+      let cleanValue = value.trim().replace(/;$/, "");
+      // Strip type annotations from literals in the value
+      cleanValue = cleanValue.replace(
+        /(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
+        "$1",
+      );
+      declarations.push(`let ${varName} = ${cleanValue}`);
+    }
+  }
+
+  return { declarations, expression: remaining };
+}
+
+/**
+ * Process top-level declarations by stripping braces and type annotations.
+ */
+function processDeclarations(rawDeclarations: string[]): string[] {
+  const declarations: string[] = [];
+  for (const decl of rawDeclarations) {
+    // Remove "let " prefix and split to get var name and value (using [\s\S] to match across newlines)
+    const declMatch = decl.match(/let\s+(\w+)\s*=\s*([\s\S]+)/);
+    if (declMatch) {
+      const [, varName, value] = declMatch;
+      let processedValue = value.trim();
+
+      // Strip brace-wrapped expressions
+      processedValue = stripBraceWrappers(processedValue);
+
+      // Strip type annotations
+      processedValue = processedValue.replace(
+        /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
+        "$1",
+      );
+
+      declarations.push(`let ${varName} = ${processedValue}`);
+    }
+  }
+  return declarations;
+}
+
+/**
+ * Determine the result type and validate expression.
+ */
+function determineAndValidateType(
+  trimmed: string,
+  typesUsed: Set<string>,
+): void {
   let resultType: string | undefined;
 
   if (typesUsed.size > 1) {
@@ -155,13 +224,51 @@ export function compile(input: string): string {
   if (resultType && resultType !== "F32" && resultType !== "F64") {
     validateExpressionResult(trimmed, resultType);
   }
+}
+
+/**
+ * Compile Tuff source code to JavaScript.
+ * Currently treats expressions as implicit return values.
+ * Handles top-level variable declarations.
+ * Strips type annotations like U8, U16, I32, etc.
+ * Strips brace-wrapped expressions (block expressions).
+ * Validates that numeric values are within the range of their type annotation.
+ */
+export function compile(input: string): string {
+  const { declarations: rawDeclarations, expression: rawExpression } =
+    extractTopLevelStatements(input);
+
+  // Process declarations to strip braces and type annotations
+  const declarations = processDeclarations(rawDeclarations);
+
+  let trimmed = rawExpression.trim();
+
+  // Strip brace-wrapped expressions { ... }
+  trimmed = stripBraceWrappers(trimmed);
+
+  const typesUsed = validateAndStripTypeAnnotations(trimmed);
+  trimmed = trimmed.replace(
+    /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
+    "$1",
+  );
+
+  // Determine result type and validate
+  determineAndValidateType(trimmed, typesUsed);
+
+  // Build the compiled code
+  let compiled = "";
+  if (declarations.length > 0) {
+    compiled += declarations.join(";\n") + ";\n";
+  }
 
   // If it doesn't start with "return ", wrap it in a return statement
-  // (Check for "return " ensures we're looking for top-level return, not inner returns)
   if (!trimmed.startsWith("return ")) {
-    return `return ${trimmed};`;
+    compiled += `return ${trimmed};`;
+  } else {
+    compiled += trimmed;
   }
-  return trimmed;
+
+  return compiled;
 }
 
 /**

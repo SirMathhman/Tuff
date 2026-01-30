@@ -86,3 +86,9 @@ test("interpret supports variable binding with arithmetic", () => {
 test("compile throws error for duplicate variable declaration", () => {
   assertInvalid("{ let x : U8 = 3; let x : U8 = 100; x }");
 });
+
+test("interpret supports top-level variable declaration", () => {
+  expect(
+    interpret("let z : U8 = (2 + { let x : U8 = 3; x }) * 4;\nz"),
+  ).toBe(20);
+});
