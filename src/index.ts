@@ -478,6 +478,7 @@ export function compile(input: string): string {
   const varNumericSuffixes = new Map<string, string | undefined>();
   const varInitialized = new Map<string, boolean>();
   const varDropFns = new Map<string, string>();
+  const stringVars = new Set<string>();
   const arrayVars = new Map<string, ArrayVarInfo>();
   const arrayPointerTargets = new Map<string, string>();
   const fnArrayParamRequirements = new Map<
@@ -496,6 +497,7 @@ export function compile(input: string): string {
     varNumericSuffixes,
     varInitialized,
     varDropFns,
+    stringVars,
     arrayVars,
     arrayPointerTargets,
     fnArrayParamRequirements,
@@ -827,6 +829,7 @@ export function compile(input: string): string {
 
     // Handle if/else expressions by converting to ternary operators
     lastStmt = convertIsExpressions(lastStmt, context);
+    lastStmt = convertStringIndexing(lastStmt, context);
     lastStmt = convertIfElseToTernary(lastStmt);
 
     // Check for undefined variables in final expression
@@ -1761,6 +1764,7 @@ type CompileContext = {
   varNumericSuffixes: Map<string, string | undefined>;
   varInitialized: Map<string, boolean>;
   varDropFns: Map<string, string>;
+  stringVars: Set<string>;
   arrayVars: Map<string, ArrayVarInfo>;
   arrayPointerTargets: Map<string, string>;
   fnArrayParamRequirements: Map<string, Array<{ index: number; minInitialized: number }>>;
@@ -1791,16 +1795,9 @@ type NumericConstraint = { operator: '<' | '<=' | '>' | '>='; limit: number };
 
 function parseArrayType(typeAnnotation?: string): ArrayTypeInfo | undefined {
   if (!typeAnnotation) return undefined;
-  let trimmed = typeAnnotation.trim();
-  let isPointer = false;
-
-  if (trimmed.startsWith('*')) {
-    isPointer = true;
-    trimmed = trimmed.slice(1).trim();
-    if (trimmed.startsWith('mut ')) {
-      trimmed = trimmed.slice(4).trim();
-    }
-  }
+  const stripped = stripPointerPrefix(typeAnnotation);
+  let trimmed = stripped.base;
+  const isPointer = stripped.isPointer;
 
   const fullMatch = trimmed.match(/^\[\s*([^;\]]+)\s*;\s*(\d+)\s*;\s*(\d+)\s*\]$/);
   if (fullMatch) {
@@ -2042,6 +2039,44 @@ function normalizeRefs(expr: string): string {
   return result;
 }
 
+function stripPointerPrefix(typeStr: string): { base: string; isPointer: boolean } {
+  let trimmed = typeStr.trim();
+  let isPointer = false;
+  if (trimmed.startsWith('*')) {
+    isPointer = true;
+    trimmed = trimmed.slice(1).trim();
+    if (trimmed.startsWith('mut ')) {
+      trimmed = trimmed.slice(4).trim();
+    }
+  }
+  return { base: trimmed, isPointer };
+}
+
+function isStringLiteral(expr: string): boolean {
+  return /^"(?:\\.|[^"\\])*"$/.test(expr.trim());
+}
+
+function isStringTypeAnnotation(
+  typeAnnotation: string | undefined,
+  context: CompileContext
+): boolean {
+  if (!typeAnnotation) return false;
+  const parsed = parseTypeConstraint(typeAnnotation);
+  const resolvedBase = resolveTypeAliasBaseType(parsed.baseType, context);
+  if (!resolvedBase) return false;
+  const stripped = stripPointerPrefix(resolvedBase);
+  return stripped.base === 'Str';
+}
+
+function convertStringIndexing(expr: string, context: CompileContext): string {
+  let result = expr;
+  for (const name of context.stringVars) {
+    const regex = new RegExp('\\b' + name + '\\s*\\[\\s*([^\\]]+)\\s*\\]', 'g');
+    result = result.replace(regex, '(' + name + ').charCodeAt($1)');
+  }
+  return result;
+}
+
 function parseIndexLiteral(expr: string): number | undefined {
   const trimmed = expr.trim();
   const match = trimmed.match(/^-?\d+(U8|U16|U32|U64|USize|I8|I16|I32|I64)?$/);
@@ -2253,7 +2288,8 @@ function prepareValueExpression(
   validateArrayLiteralIndexing(valueOriginal);
   validateArrayCallRequirements(valueOriginal, context);
   const isConverted = convertIsExpressions(value, context);
-  const structConversion = convertStructLiteralExpression(isConverted, context);
+  const stringConverted = convertStringIndexing(isConverted, context);
+  const structConversion = convertStructLiteralExpression(stringConverted, context);
   return normalizeRefs(convertIfElseToTernary(structConversion.converted));
 }
 
@@ -2577,6 +2613,9 @@ function handleLetInitializer(
   definedVars.add(varName);
   varInitialized.set(varName, true);
   varTypes.set(varName, declaredInfo.kind !== 'Unknown' ? declaredInfo.kind : exprInfo.kind);
+  if (isStringTypeAnnotation(typeAnnotation, context) || isStringLiteral(valueOriginal)) {
+    context.stringVars.add(varName);
+  }
   const valueConverted = prepareValueExpression(value, valueOriginal, context, true, true);
   return 'let ' + varName + ' = ' + valueConverted + '; ';
 }
@@ -2601,6 +2640,9 @@ function handleLetNoInit(
   }
   if (declaredInfo.kind !== 'Unknown') {
     varTypes.set(varName, declaredInfo.kind);
+  }
+  if (isStringTypeAnnotation(typeAnnotation, context)) {
+    context.stringVars.add(varName);
   }
   if (declaredInfo.numericSuffix) {
     varNumericSuffixes.set(varName, declaredInfo.numericSuffix);
