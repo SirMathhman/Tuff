@@ -1,5 +1,12 @@
 import readline from "readline";
 
+// Declare CommonJS globals for compatibility with Node and Bun
+declare const require: { main: NodeModule };
+declare const module: NodeModule;
+interface NodeModule {
+  main?: NodeModule;
+}
+
 // Type ranges for validation
 const typeRanges: Record<string, { min: number; max: number }> = {
   U8: { min: 0, max: 255 },
@@ -226,18 +233,9 @@ export function compileFile(inputPath: string, outputPath: string): void {
   console.log(`Compiled ${inputPath} to ${outputPath}`);
 }
 
-/* If executed directly (e.g., `node dist/index.js`) compile ./src/index.tuff to ./src/index.js
-   Pass --repl as a CLI argument to start the REPL instead */
-if (
-  typeof module !== "undefined" &&
-  module &&
-  require &&
-  require.main === module
-) {
-  const args = process.argv.slice(2);
-  if (args.includes("--repl")) {
-    startRepl();
-  } else {
-    compileFile("./src/main.tuff", "./src/main.js");
-  }
+const args = process.argv.slice(2);
+if (args.includes("--repl")) {
+  startRepl();
+} else {
+  compileFile("./src/main.tuff", "./src/main.js");
 }

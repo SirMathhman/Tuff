@@ -1,3 +1,3 @@
 process.exit((function() {
-  return 1 + 2;
+  return 3 - 0;
 })());
