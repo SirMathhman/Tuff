@@ -58,3 +58,11 @@ test("compile allows coercion of compatible unsigned integer types", () => {
 test("interpret evaluates coerced types correctly", () => {
   expect(interpret("1U8 + 2U16")).toBe(3);
 });
+
+test("compile throws error for I8 underflow (arithmetic)", () => {
+  expect(() => compile("-128I8 - 1I8")).toThrow(/Underflow/);
+});
+
+test("compile throws error message distinguishes underflow from overflow", () => {
+  expect(() => compile("-128I8 - 1I8")).toThrow(/Underflow.*below minimum/);
+});

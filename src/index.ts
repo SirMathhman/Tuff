@@ -1,12 +1,5 @@
 import readline from "readline";
 
-// Declare CommonJS globals for compatibility with Node and Bun
-declare const require: { main: NodeModule };
-declare const module: NodeModule;
-interface NodeModule {
-  main?: NodeModule;
-}
-
 // Type ranges for validation
 const typeRanges: Record<string, { min: number; max: number }> = {
   U8: { min: 0, max: 255 },
@@ -66,6 +59,29 @@ export function compile(input: string): string {
 }
 
 /**
+ * Check if a numeric value is within the range of its type.
+ * Throws an error if the value is outside the range.
+ */
+function validateInRange(value: number, type: string): void {
+  const range = typeRanges[type];
+
+  if (!range) {
+    throw new Error(`Unknown type: ${type}`);
+  }
+
+  if (value < range.min) {
+    throw new Error(
+      `Underflow: ${value} is below minimum for ${type} (${range.min})`,
+    );
+  }
+  if (value > range.max) {
+    throw new Error(
+      `Overflow: ${value} is above maximum for ${type} (${range.max})`,
+    );
+  }
+}
+
+/**
  * Validate type annotations in the input and return the set of types used.
  * Throws errors for underflow/overflow violations.
  */
@@ -76,24 +92,7 @@ function validateAndStripTypeAnnotations(input: string): Set<string> {
     /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
     (match: string, value: string, type: string) => {
       const num = parseInt(value, 10);
-      const range = typeRanges[type];
-
-      if (!range) {
-        throw new Error(`Unknown type: ${type}`);
-      }
-
-      // Check for underflow or overflow of the literal
-      if (num < range.min) {
-        throw new Error(
-          `Underflow: ${num} is below minimum for ${type} (${range.min})`,
-        );
-      }
-      if (num > range.max) {
-        throw new Error(
-          `Overflow: ${num} is above maximum for ${type} (${range.max})`,
-        );
-      }
-
+      validateInRange(num, type);
       typesUsed.add(type);
       return match;
     },
@@ -104,24 +103,32 @@ function validateAndStripTypeAnnotations(input: string): Set<string> {
 
 /**
  * Validate that an expression evaluates to a value within the given type's range.
- * Throws an error if the result overflows the type.
+ * Throws an error if the result overflows or underflows the type.
  */
 function validateExpressionResult(expression: string, type: string): void {
-  const range = typeRanges[type];
   try {
     const fn = new Function(`return ${expression}`);
     const result = fn();
-    if (result < range.min || result > range.max) {
-      throw new Error(
-        `Overflow: ${result} is above maximum for ${type} (${range.max})`,
-      );
-    }
+    validateInRange(result, type);
   } catch (err) {
-    // If it's our overflow error, rethrow; otherwise continue compilation
-    if (err instanceof Error && err.message.startsWith("Overflow:")) {
+    // If it's our underflow/overflow error, rethrow; otherwise continue compilation
+    if (
+      err instanceof Error &&
+      (err.message.startsWith("Underflow:") ||
+        err.message.startsWith("Overflow:"))
+    ) {
       throw err;
     }
   }
+}
+
+/**
+ * Find the largest type in a family of types based on the given order.
+ */
+function findLargestType(types: string[], order: string[]): string {
+  return types.reduce((max, current) =>
+    order.indexOf(current) > order.indexOf(max) ? current : max,
+  );
 }
 
 /**
@@ -144,17 +151,11 @@ function determineCoercedType(types: string[]): string | undefined {
 
   // Find the largest type in the family
   if (allUnsigned) {
-    const order = ["U8", "U16", "U32", "U64"];
-    return types.reduce((max, current) =>
-      order.indexOf(current) > order.indexOf(max) ? current : max,
-    );
+    return findLargestType(types, unsignedInts);
   }
 
   if (allSigned) {
-    const order = ["I8", "I16", "I32", "I64"];
-    return types.reduce((max, current) =>
-      order.indexOf(current) > order.indexOf(max) ? current : max,
-    );
+    return findLargestType(types, signedInts);
   }
 
   if (allFloats) {
@@ -224,7 +225,8 @@ export function startRepl(): void {
  * Wraps the output in an IIFE with process.exit.
  */
 export function compileFile(inputPath: string, outputPath: string): void {
-  const fs = require("fs");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fs = require("fs") as any;
   const source = fs.readFileSync(inputPath, "utf-8");
   const compiled = compile(source);
   // Wrap in IIFE and add process.exit
