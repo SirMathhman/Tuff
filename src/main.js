@@ -1,3 +1,3 @@
 process.exit((function() {
-  return 1 + 65535;
+  return 1 + 2;
 })());

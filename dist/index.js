@@ -47,37 +47,79 @@ function compile(input) {
         typesUsed.add(type);
         return value;
     });
-    // Check for mixed types
+    // Determine result type and validate
+    let resultType;
     if (typesUsed.size > 1) {
-        const types = Array.from(typesUsed).sort();
-        throw new Error(`Type mismatch: cannot mix ${types[0]} and ${types[1]} in arithmetic expression`);
-    }
-    // If all type annotations are from the same type, validate the result at compile time
-    if (typesUsed.size === 1) {
-        const resultType = Array.from(typesUsed)[0];
-        const range = typeRanges[resultType];
-        // For non-float types with arithmetic, evaluate at compile time
-        if (resultType !== "F32" && resultType !== "F64") {
-            try {
-                const fn = new Function(`return ${trimmed}`);
-                const result = fn();
-                if (result < range.min || result > range.max) {
-                    throw new Error(`Overflow: ${result} is above maximum for ${resultType} (${range.max})`);
-                }
-            }
-            catch (err) {
-                // If it's our overflow error, rethrow; otherwise continue compilation
-                if (err instanceof Error && err.message.startsWith("Overflow:")) {
-                    throw err;
-                }
-            }
+        const types = Array.from(typesUsed);
+        resultType = determineCoercedType(types);
+        if (!resultType) {
+            // Types are incompatible
+            const sorted = types.sort();
+            throw new Error(`Type mismatch: cannot mix ${sorted[0]} and ${sorted[1]} in arithmetic expression`);
         }
+    }
+    else if (typesUsed.size === 1) {
+        resultType = Array.from(typesUsed)[0];
+    }
+    // Validate result at compile time for non-float types
+    if (resultType && resultType !== "F32" && resultType !== "F64") {
+        validateExpressionResult(trimmed, resultType);
     }
     // If it doesn't contain return, wrap it in a return statement
     if (!trimmed.includes("return")) {
         return `return ${trimmed};`;
     }
     return trimmed;
+}
+/**
+ * Validate that an expression evaluates to a value within the given type's range.
+ * Throws an error if the result overflows the type.
+ */
+function validateExpressionResult(expression, type) {
+    const range = typeRanges[type];
+    try {
+        const fn = new Function(`return ${expression}`);
+        const result = fn();
+        if (result < range.min || result > range.max) {
+            throw new Error(`Overflow: ${result} is above maximum for ${type} (${range.max})`);
+        }
+    }
+    catch (err) {
+        // If it's our overflow error, rethrow; otherwise continue compilation
+        if (err instanceof Error && err.message.startsWith("Overflow:")) {
+            throw err;
+        }
+    }
+}
+/**
+ * Determine the coerced type for a set of types.
+ * Returns the coerced type if types are compatible, undefined otherwise.
+ */
+function determineCoercedType(types) {
+    const unsignedInts = ["U8", "U16", "U32", "U64"];
+    const signedInts = ["I8", "I16", "I32", "I64"];
+    const floats = ["F32", "F64"];
+    // Check if all types are in the same family
+    const allUnsigned = types.every((t) => unsignedInts.includes(t));
+    const allSigned = types.every((t) => signedInts.includes(t));
+    const allFloats = types.every((t) => floats.includes(t));
+    if (!allUnsigned && !allSigned && !allFloats) {
+        return undefined; // Incompatible types
+    }
+    // Find the largest type in the family
+    if (allUnsigned) {
+        const order = ["U8", "U16", "U32", "U64"];
+        return types.reduce((max, current) => order.indexOf(current) > order.indexOf(max) ? current : max);
+    }
+    if (allSigned) {
+        const order = ["I8", "I16", "I32", "I64"];
+        return types.reduce((max, current) => order.indexOf(current) > order.indexOf(max) ? current : max);
+    }
+    if (allFloats) {
+        // F64 > F32
+        return types.includes("F64") ? "F64" : "F32";
+    }
+    return undefined;
 }
 /**
  * Interpret a program written in the custom language by compiling it to JS

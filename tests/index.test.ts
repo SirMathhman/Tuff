@@ -49,7 +49,15 @@ test("compile throws error for U8 overflow (arithmetic)", () => {
 
 test("compile throws error for mixed type arithmetic", () => {
   assertInvalid(
-    "1U8 + 65535U16",
-    "Type mismatch: cannot mix U16 and U8 in arithmetic expression",
+    "1U8 + 2I8",
+    "Type mismatch: cannot mix I8 and U8 in arithmetic expression",
   );
+});
+
+test("compile allows coercion of compatible unsigned integer types", () => {
+  assertValid("1U8 + 2U16", "return 1 + 2;");
+});
+
+test("interpret evaluates coerced types correctly", () => {
+  expect(interpret("1U8 + 2U16")).toBe(3);
 });
