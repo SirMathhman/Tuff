@@ -1,11 +1,14 @@
 /**
- * Stubbed compile function.
- * Takes an input string and returns a (currently identity) string.
- * TODO: implement actual compilation logic.
+ * Compile Tuff source code to JavaScript.
+ * Currently treats expressions as implicit return values.
  */
 export function compile(input: string): string {
-  // Placeholder implementation — return the input for now
-  return input;
+  const trimmed = input.trim();
+  // If it doesn't contain return, wrap it in a return statement
+  if (!trimmed.includes("return")) {
+    return `return ${trimmed};`;
+  }
+  return trimmed;
 }
 
 /**
@@ -34,6 +37,8 @@ function evaluate(bundledJs: string) {
 declare const require: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const module: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const process: any;
 
 /**
  * Start a simple REPL that reads lines, runs `interpret` on each input,
@@ -69,12 +74,29 @@ export function startRepl(): void {
   });
 }
 
-/* If executed directly (e.g., `node dist/index.js`) start the REPL */
+/**
+ * Compile a Tuff source file and write the output to a JavaScript file.
+ */
+export function compileFile(inputPath: string, outputPath: string): void {
+  const fs = require("fs");
+  const source = fs.readFileSync(inputPath, "utf-8");
+  const compiled = compile(source);
+  fs.writeFileSync(outputPath, compiled, "utf-8");
+  console.log(`Compiled ${inputPath} to ${outputPath}`);
+}
+
+/* If executed directly (e.g., `node dist/index.js`) compile ./src/index.tuff to ./src/index.js
+   Pass --repl as a CLI argument to start the REPL instead */
 if (
   typeof module !== "undefined" &&
   module &&
   require &&
   require.main === module
 ) {
-  startRepl();
+  const args = process.argv.slice(2);
+  if (args.includes("--repl")) {
+    startRepl();
+  } else {
+    compileFile("./src/main.tuff", "./src/main.js");
+  }
 }
