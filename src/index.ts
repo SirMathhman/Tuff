@@ -473,6 +473,24 @@ export function compile(input: string): string {
   const mutableVars = new Set<string>();
   const definedVars = new Set<string>();
   const varTypes = new Map<string, ExprType>();
+  const varNumericSuffixes = new Map<string, string | undefined>();
+  const varInitialized = new Map<string, boolean>();
+  const arrayVars = new Map<string, ArrayVarInfo>();
+  const arrayPointerTargets = new Map<string, string>();
+  const fnArrayParamRequirements = new Map<
+    string,
+    Array<{ index: number; minInitialized: number }>
+  >();
+  const context: CompileContext = {
+    mutableVars,
+    definedVars,
+    varTypes,
+    varNumericSuffixes,
+    varInitialized,
+    arrayVars,
+    arrayPointerTargets,
+    fnArrayParamRequirements,
+  };
   let jsCode = '';
   // Replace inline blocks with IIFEs
   code = replaceInlineBlocks(code);
@@ -503,44 +521,103 @@ export function compile(input: string): string {
       continue;
     }
 
-    // Check if this is a let statement
-    const letMatch = stmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*[\w<>]+)?\s*=\s*(.+)$/);
+    const fnMatch = stmt.match(
+      /^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*(.+)$/
+    );
+    if (fnMatch) {
+      const fnName = fnMatch[1];
+      const params = fnMatch[3].trim();
+      const body = fnMatch[5].trim();
+
+      const parsedParams = parseFnParams(params);
+      for (const param of parsedParams) {
+        if (param.arrayInfo) {
+          registerFnArrayParam(fnArrayParamRequirements, fnName, param.index, param.arrayInfo);
+        }
+      }
+
+      const jsParams = parsedParams.map((param) => param.name).join(', ');
+      const convertedBody = normalizeRefs(convertIfElseToTernary(body));
+      jsCode += 'function ' + fnName + '(' + jsParams + ') { return ' + convertedBody + '; } ';
+      definedVars.add(fnName);
+      continue;
+    }
+
+    // Check if this is a let statement with initializer
+    const letMatch = stmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+)$/);
     if (letMatch) {
       const isMutable = !!letMatch[1];
       const varName = letMatch[2];
-      const varValue = letMatch[3];
-      const varValueOriginal = stmtOriginal.match(
-        /^let\s+(mut\s+)?(\w+)\s*(?::\s*[\w<>]+)?\s*=\s*(.+)$/
+      const typeAnnotation = letMatch[3] ? letMatch[3].trim() : undefined;
+      const varValue = letMatch[4];
+      const varValueOriginalMatch = stmtOriginal.match(
+        /^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+)$/
       );
-      const valueForType = varValueOriginal ? varValueOriginal[3] : varValue;
+      const valueOriginal = varValueOriginalMatch ? varValueOriginalMatch[4] : varValue;
 
-      if (isMutable) {
-        mutableVars.add(varName);
-      }
-
-      definedVars.add(varName);
-      varTypes.set(varName, detectExprTypeSimple(valueForType, varTypes));
-
-      // Check if varValue references undefined variables
-      checkUndefinedVars(valueForType, definedVars);
-
-      jsCode += 'let ' + varName + ' = ' + varValue + '; ';
+      const letSnippet = handleLetInitializer(
+        varName,
+        typeAnnotation,
+        varValue,
+        valueOriginal,
+        isMutable,
+        context
+      );
+      jsCode += letSnippet;
     } else {
-      // Check if this is an assignment
-      const assignMatch = stmt.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
-      if (assignMatch) {
-        const varName = assignMatch[1];
-        const operator = assignMatch[2];
-        const value = assignMatch[3];
-        const valueOriginalMatch = stmtOriginal.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
-        const valueOriginal = valueOriginalMatch ? valueOriginalMatch[3] : value;
-
-        validateAssignment(varName, operator, valueOriginal, mutableVars, definedVars, varTypes);
-
-        jsCode += varName + ' ' + operator + ' ' + value + '; ';
+      const letNoInitMatch = stmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?$/);
+      if (letNoInitMatch) {
+        const isMutable = !!letNoInitMatch[1];
+        const varName = letNoInitMatch[2];
+        const typeAnnotation = letNoInitMatch[3] ? letNoInitMatch[3].trim() : undefined;
+        const letSnippet = handleLetNoInit(varName, typeAnnotation, isMutable, context);
+        jsCode += letSnippet;
       } else {
-        // Unknown statement
-        throw new Error('invalid statement');
+        const arrayAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\[\s*([^\]]+)\s*\]\s*=\s*(.+)$/);
+        if (arrayAssignMatch) {
+          const arrayName = arrayAssignMatch[1];
+          const indexExpr = arrayAssignMatch[2].trim();
+          const valueExpr = arrayAssignMatch[3];
+
+          validateArrayElementAssignment(
+            arrayName,
+            indexExpr,
+            valueExpr,
+            mutableVars,
+            definedVars,
+            arrayVars,
+            arrayPointerTargets,
+            varTypes,
+            varNumericSuffixes
+          );
+
+          const convertedValue = normalizeRefs(convertIfElseToTernary(valueExpr));
+          const convertedIndex = normalizeRefs(convertIfElseToTernary(indexExpr));
+          jsCode += arrayName + '[' + convertedIndex + '] = ' + convertedValue + '; ';
+        } else {
+          // Check if this is an assignment
+          const assignMatch = stmt.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
+          if (assignMatch) {
+            const varName = assignMatch[1];
+            const operator = assignMatch[2];
+            const value = assignMatch[3];
+            const valueOriginalMatch = stmtOriginal.match(
+              /^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
+            );
+            const valueOriginal = valueOriginalMatch ? valueOriginalMatch[3] : value;
+            const assignSnippet = handleAssignment(
+              varName,
+              operator,
+              value,
+              valueOriginal,
+              context
+            );
+            jsCode += assignSnippet;
+          } else {
+            // Unknown statement
+            throw new Error('invalid statement');
+          }
+        }
       }
     }
   }
@@ -548,7 +625,7 @@ export function compile(input: string): string {
   // Process the final statement as a return expression
   if (stmts.length > 0) {
     let lastStmt = stmts[stmts.length - 1];
-    const lastStmtOriginal = stmtsOriginal[stmtsOriginal.length - 1] || lastStmt;
+    let lastStmtOriginal = stmtsOriginal[stmtsOriginal.length - 1] || lastStmt;
 
     const lastWhileOriginal = lastStmtOriginal.match(/^while\s*\((.+)\)\s*(.+)$/);
     if (lastWhileOriginal) {
@@ -570,25 +647,50 @@ export function compile(input: string): string {
       }
     }
 
+    const lastBlockOriginal = splitLeadingBlockExpression(lastStmtOriginal);
+    const lastBlockConverted = splitLeadingBlockExpression(lastStmt);
+    if (lastBlockConverted && lastBlockOriginal) {
+      const blockCode = convertBlockToIIFE(lastBlockConverted.blockContent);
+      jsCode += '(' + blockCode + ')(); ';
+      if (lastBlockConverted.trailing) {
+        lastStmt = lastBlockConverted.trailing;
+        lastStmtOriginal = lastBlockOriginal.trailing;
+      } else {
+        jsCode += 'return 0;';
+        return jsCode;
+      }
+    }
+
     const lastLetOriginal = lastStmtOriginal.match(
-      /^let\s+(mut\s+)?(\w+)\s*(?::\s*[\w<>]+)?\s*=\s*(.+)$/
+      /^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+)$/
     );
     if (lastLetOriginal) {
       const isMutable = !!lastLetOriginal[1];
       const varName = lastLetOriginal[2];
-      const varValueOriginal = lastLetOriginal[3];
-      const lastLet = lastStmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*[\w<>]+)?\s*=\s*(.+)$/);
-      const varValue = lastLet ? lastLet[3] : varValueOriginal;
+      const typeAnnotation = lastLetOriginal[3] ? lastLetOriginal[3].trim() : undefined;
+      const varValueOriginal = lastLetOriginal[4];
+      const lastLet = lastStmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+)$/);
+      const varValue = lastLet ? lastLet[4] : varValueOriginal;
+      const letSnippet = handleLetInitializer(
+        varName,
+        typeAnnotation,
+        varValue,
+        varValueOriginal,
+        isMutable,
+        context
+      );
+      jsCode += letSnippet;
+      jsCode += 'return 0;';
+      return jsCode;
+    }
 
-      if (isMutable) {
-        mutableVars.add(varName);
-      }
-
-      definedVars.add(varName);
-      varTypes.set(varName, detectExprTypeSimple(varValueOriginal, varTypes));
-      checkUndefinedVars(varValueOriginal, definedVars);
-
-      jsCode += 'let ' + varName + ' = ' + varValue + '; ';
+    const lastLetNoInit = lastStmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?$/);
+    if (lastLetNoInit) {
+      const isMutable = !!lastLetNoInit[1];
+      const varName = lastLetNoInit[2];
+      const typeAnnotation = lastLetNoInit[3] ? lastLetNoInit[3].trim() : undefined;
+      const letSnippet = handleLetNoInit(varName, typeAnnotation, isMutable, context);
+      jsCode += letSnippet;
       jsCode += 'return 0;';
       return jsCode;
     }
@@ -600,13 +702,14 @@ export function compile(input: string): string {
       const valueOriginal = lastAssignOriginal[3];
       const lastAssign = lastStmt.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
       const value = lastAssign ? lastAssign[3] : valueOriginal;
-
-      validateAssignment(varName, operator, valueOriginal, mutableVars, definedVars, varTypes);
-
-      jsCode += varName + ' ' + operator + ' ' + value + '; ';
+      const assignSnippet = handleAssignment(varName, operator, value, valueOriginal, context);
+      jsCode += assignSnippet;
       jsCode += 'return 0;';
       return jsCode;
     }
+
+    ensureNoBoolArithmetic(lastStmtOriginal, varTypes);
+    inferExprInfo(lastStmtOriginal, varTypes, varNumericSuffixes);
 
     // Handle if/else expressions by converting to ternary operators
     lastStmt = convertIfElseToTernary(lastStmt);
@@ -636,6 +739,10 @@ export function compile(input: string): string {
       }
     }
 
+    validateArrayAccesses(lastStmtOriginal, arrayVars, arrayPointerTargets);
+    validateArrayLiteralIndexing(lastStmtOriginal);
+    validateArrayCallRequirements(lastStmtOriginal, context);
+    lastStmt = normalizeRefs(lastStmt);
     jsCode += 'return ' + lastStmt + ';';
   } else {
     jsCode = 'return 0;';
@@ -649,6 +756,24 @@ export function compile(input: string): string {
  * Only processes complete blocks and returns the modified code.
  */
 type ExprType = 'Bool' | 'Numeric' | 'Unknown';
+
+type ExprInfo = {
+  kind: ExprType;
+  numericSuffixes: string[];
+};
+
+const RESERVED_KEYWORDS = new Set([
+  'let',
+  'mut',
+  'if',
+  'else',
+  'while',
+  'true',
+  'false',
+  'fn',
+  'return',
+  'struct',
+]);
 
 function detectExprTypeSimple(expr: string, varTypes: Map<string, ExprType>): ExprType {
   const trimmed = expr.trim();
@@ -670,29 +795,211 @@ function detectExprTypeSimple(expr: string, varTypes: Map<string, ExprType>): Ex
   return 'Numeric';
 }
 
-function splitStatements(source: string): string[] {
-  const parts: string[] = [];
-  let current = '';
-  let braceDepth = 0;
-  let parenDepth = 0;
+function parseNumericLiteralSuffix(expr: string): string | undefined {
+  const trimmed = expr.trim();
+  const match = trimmed.match(/^-?\d+(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/);
+  return match ? match[1] : undefined;
+}
 
-  for (let i = 0; i < source.length; i++) {
-    const ch = source[i];
-    if (ch === '{') braceDepth++;
-    if (ch === '}') braceDepth--;
-    if (ch === '(') parenDepth++;
-    if (ch === ')') parenDepth--;
+function inferLiteralKind(expr: string): ExprType | undefined {
+  const trimmed = expr.trim();
+  if (trimmed === 'true' || trimmed === 'false') return 'Bool';
+  if (/^-?\d+(U8|U16|U32|U64|USize|I8|I16|I32|I64)?$/.test(trimmed)) return 'Numeric';
+  return undefined;
+}
 
-    if (ch === ';' && braceDepth === 0 && parenDepth === 0) {
-      if (current.trim()) parts.push(current.trim());
-      current = '';
-      continue;
-    }
-    current += ch;
+function getDeclaredTypeInfo(typeAnnotation?: string): { kind: ExprType; numericSuffix?: string } {
+  if (!typeAnnotation) return { kind: 'Unknown' };
+  const trimmed = typeAnnotation.trim();
+  if (trimmed === 'Bool') return { kind: 'Bool' };
+
+  const numericMatch = trimmed.match(/^(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/);
+  if (numericMatch) return { kind: 'Numeric', numericSuffix: numericMatch[1] };
+
+  return { kind: 'Unknown' };
+}
+
+function getNumericSuffixInfo(suffix: string): { width: number; signed: boolean } {
+  switch (suffix) {
+    case 'U8':
+      return { width: 8, signed: false };
+    case 'U16':
+      return { width: 16, signed: false };
+    case 'U32':
+      return { width: 32, signed: false };
+    case 'U64':
+      return { width: 64, signed: false };
+    case 'USize':
+      return { width: 64, signed: false };
+    case 'I8':
+      return { width: 8, signed: true };
+    case 'I16':
+      return { width: 16, signed: true };
+    case 'I32':
+      return { width: 32, signed: true };
+    case 'I64':
+      return { width: 64, signed: true };
+    default:
+      return { width: 0, signed: true };
+  }
+}
+
+function isNumericSuffixWider(exprSuffix: string, targetSuffix: string): boolean {
+  const exprInfo = getNumericSuffixInfo(exprSuffix);
+  const targetInfo = getNumericSuffixInfo(targetSuffix);
+  if (exprInfo.signed !== targetInfo.signed) {
+    return true;
+  }
+  return exprInfo.width > targetInfo.width;
+}
+
+function parseIfExpression(
+  expr: string
+): { condition: string; trueBranch: string; falseBranch: string } | undefined {
+  const trimmed = expr.trim();
+  if (!isIfKeyword(trimmed, 0)) return undefined;
+
+  const parenStart = trimmed.indexOf('(', 0);
+  if (parenStart === -1) return undefined;
+  const parenEnd = findMatchingClosingParen(trimmed, parenStart);
+  if (parenEnd === -1) return undefined;
+
+  const elseIndex = findMatchingElse(trimmed, 0, parenEnd);
+  if (elseIndex === -1) {
+    const fallbackMatch = trimmed.match(/^if\s*\((.+)\)\s*(.+?)\s+else\s+(.+)$/);
+    if (!fallbackMatch) return undefined;
+    return {
+      condition: fallbackMatch[1].trim(),
+      trueBranch: fallbackMatch[2].trim(),
+      falseBranch: fallbackMatch[3].trim(),
+    };
   }
 
-  if (current.trim()) parts.push(current.trim());
-  return parts;
+  const condition = trimmed.slice(parenStart + 1, parenEnd).trim();
+
+  let branchStart = parenEnd + 1;
+  while (branchStart < trimmed.length && /\s/.test(trimmed[branchStart])) {
+    branchStart++;
+  }
+
+  const trueBranch = trimmed.slice(branchStart, elseIndex).trim();
+
+  let falseStart = elseIndex + 4;
+  while (falseStart < trimmed.length && /\s/.test(trimmed[falseStart])) {
+    falseStart++;
+  }
+
+  const falseBranch = trimmed.slice(falseStart).trim();
+
+  return { condition, trueBranch, falseBranch };
+}
+
+function inferExprInfo(
+  expr: string,
+  varTypes: Map<string, ExprType>,
+  varNumericSuffixes: Map<string, string | undefined>
+): ExprInfo {
+  const trimmed = expr.trim();
+  if (!trimmed) return { kind: 'Unknown', numericSuffixes: [] };
+
+  const simpleIfMatch = trimmed.match(/^if\s*\((.+)\)\s*(.+?)\s+else\s+(.+)$/);
+  if (simpleIfMatch) {
+    const conditionExpr = simpleIfMatch[1].trim();
+    if (detectExprTypeSimple(conditionExpr, varTypes) !== 'Bool') {
+      throw new Error('if condition must be boolean');
+    }
+
+    const trueBranch = simpleIfMatch[2];
+    const falseBranch = simpleIfMatch[3];
+    const trueKind = inferLiteralKind(trueBranch);
+    const falseKind = inferLiteralKind(falseBranch);
+
+    if (trueKind && falseKind && trueKind !== falseKind) {
+      throw new Error('if branches must match types');
+    }
+
+    if (trueKind && falseKind) {
+      const suffixes: string[] = [];
+      if (trueKind === 'Numeric') {
+        const trueSuffix = parseNumericLiteralSuffix(trueBranch);
+        const falseSuffix = parseNumericLiteralSuffix(falseBranch);
+        if (trueSuffix) suffixes.push(trueSuffix);
+        if (falseSuffix) suffixes.push(falseSuffix);
+      }
+      return { kind: trueKind, numericSuffixes: suffixes };
+    }
+  }
+
+  const ifParts = parseIfExpression(trimmed);
+  if (ifParts) {
+    if (detectExprTypeSimple(ifParts.condition, varTypes) !== 'Bool') {
+      throw new Error('if condition must be boolean');
+    }
+
+    const trueInfo = inferExprInfo(ifParts.trueBranch, varTypes, varNumericSuffixes);
+    const falseInfo = inferExprInfo(ifParts.falseBranch, varTypes, varNumericSuffixes);
+
+    if (
+      trueInfo.kind !== 'Unknown' &&
+      falseInfo.kind !== 'Unknown' &&
+      trueInfo.kind !== falseInfo.kind
+    ) {
+      throw new Error('if branches must match types');
+    }
+
+    const resolvedKind = trueInfo.kind !== 'Unknown' ? trueInfo.kind : falseInfo.kind;
+    if (resolvedKind === 'Bool') {
+      return { kind: 'Bool', numericSuffixes: [] };
+    }
+
+    const combined = trueInfo.numericSuffixes.concat(falseInfo.numericSuffixes);
+    return { kind: resolvedKind, numericSuffixes: combined };
+  }
+
+  if (/\btrue\b|\bfalse\b/.test(trimmed)) {
+    return { kind: 'Bool', numericSuffixes: [] };
+  }
+
+  if (/==|!=|<|>|<=|>=|&&|\|\||!/.test(trimmed)) {
+    return { kind: 'Bool', numericSuffixes: [] };
+  }
+
+  const literalSuffix = parseNumericLiteralSuffix(trimmed);
+  if (literalSuffix) {
+    return { kind: 'Numeric', numericSuffixes: [literalSuffix] };
+  }
+
+  const identMatch = trimmed.match(/^\w+$/);
+  if (identMatch) {
+    const varType = varTypes.get(trimmed) || 'Unknown';
+    if (varType === 'Numeric') {
+      const suffix = varNumericSuffixes.get(trimmed);
+      return { kind: 'Numeric', numericSuffixes: suffix ? [suffix] : [] };
+    }
+    return { kind: varType, numericSuffixes: [] };
+  }
+
+  return { kind: 'Numeric', numericSuffixes: [] };
+}
+
+function ensureNoBoolArithmetic(expr: string, varTypes: Map<string, ExprType>): void {
+  if (!/[+\-*/]/.test(expr)) return;
+
+  if (/\btrue\b|\bfalse\b/.test(expr)) {
+    throw new Error('cannot perform arithmetic on booleans');
+  }
+
+  const identifiers = expr.match(/\b[a-zA-Z_]\w*\b/g) || [];
+  for (const id of identifiers) {
+    if (RESERVED_KEYWORDS.has(id)) continue;
+    if (varTypes.get(id) === 'Bool') {
+      throw new Error('cannot perform arithmetic on booleans');
+    }
+  }
+}
+
+function splitStatements(source: string): string[] {
+  return splitTopLevel(source, ';');
 }
 
 function ensureWhileConditionBool(condition: string, varTypes: Map<string, ExprType>): void {
@@ -728,14 +1035,21 @@ function validateAssignment(
   valueOriginal: string,
   mutableVars: Set<string>,
   definedVars: Set<string>,
-  varTypes: Map<string, ExprType>
+  varTypes: Map<string, ExprType>,
+  varNumericSuffixes: Map<string, string | undefined>,
+  varInitialized: Map<string, boolean>
 ): void {
   if (!definedVars.has(varName)) {
     throw new Error('undefined variable');
   }
 
-  if (!mutableVars.has(varName)) {
-    throw new Error('cannot assign to immutable variable');
+  const isMutable = mutableVars.has(varName);
+  const wasInitialized = varInitialized.get(varName) !== false;
+
+  if (!isMutable) {
+    if (operator !== '=' || wasInitialized) {
+      throw new Error('cannot assign to immutable variable');
+    }
   }
 
   checkUndefinedVars(valueOriginal, definedVars);
@@ -746,6 +1060,30 @@ function validateAssignment(
     if (varType === 'Bool' || valueType === 'Bool') {
       throw new Error('cannot perform arithmetic on booleans');
     }
+  } else {
+    ensureNoBoolArithmetic(valueOriginal, varTypes);
+
+    const exprInfo = inferExprInfo(valueOriginal, varTypes, varNumericSuffixes);
+    const varType = varTypes.get(varName) || 'Unknown';
+    if (varType === 'Bool' && exprInfo.kind === 'Numeric') {
+      throw new Error('cannot convert numeric type to Bool');
+    }
+    if (varType === 'Numeric' && exprInfo.kind === 'Bool') {
+      throw new Error('cannot convert Bool to numeric type');
+    }
+
+    const declaredSuffix = varNumericSuffixes.get(varName);
+    if (declaredSuffix) {
+      for (const suffix of exprInfo.numericSuffixes) {
+        if (isNumericSuffixWider(suffix, declaredSuffix)) {
+          throw new Error('cannot convert numeric type to smaller width');
+        }
+      }
+    }
+  }
+
+  if (operator === '=') {
+    varInitialized.set(varName, true);
   }
 }
 
@@ -787,6 +1125,631 @@ function convertBlockToIIFE(blockContent: string): string {
   }
 
   return '() => { ' + body + 'return ' + lastExpr + '; }';
+}
+
+type ArrayTypeInfo = {
+  elementKind: ExprType;
+  length?: number;
+  initializedCount?: number;
+  isPointer: boolean;
+};
+
+type ArrayVarInfo = { length: number; initializedCount: number | null; elementKind: ExprType };
+
+type CompileContext = {
+  mutableVars: Set<string>;
+  definedVars: Set<string>;
+  varTypes: Map<string, ExprType>;
+  varNumericSuffixes: Map<string, string | undefined>;
+  varInitialized: Map<string, boolean>;
+  arrayVars: Map<string, ArrayVarInfo>;
+  arrayPointerTargets: Map<string, string>;
+  fnArrayParamRequirements: Map<string, Array<{ index: number; minInitialized: number }>>;
+};
+
+type FnParamInfo = {
+  name: string;
+  index: number;
+  arrayInfo?: { minInitialized: number };
+};
+
+function parseArrayType(typeAnnotation?: string): ArrayTypeInfo | undefined {
+  if (!typeAnnotation) return undefined;
+  let trimmed = typeAnnotation.trim();
+  let isPointer = false;
+
+  if (trimmed.startsWith('*')) {
+    isPointer = true;
+    trimmed = trimmed.slice(1).trim();
+    if (trimmed.startsWith('mut ')) {
+      trimmed = trimmed.slice(4).trim();
+    }
+  }
+
+  const fullMatch = trimmed.match(/^\[\s*([^;\]]+)\s*;\s*(\d+)\s*;\s*(\d+)\s*\]$/);
+  if (fullMatch) {
+    const elementKind = normalizeElementKind(fullMatch[1]);
+    return {
+      elementKind,
+      initializedCount: parseInt(fullMatch[2], 10),
+      length: parseInt(fullMatch[3], 10),
+      isPointer,
+    };
+  }
+
+  const sliceMatch = trimmed.match(/^\[\s*([^;\]]+)\s*\]$/);
+  if (sliceMatch) {
+    const elementKind = normalizeElementKind(sliceMatch[1]);
+    return { elementKind, isPointer };
+  }
+
+  return undefined;
+}
+
+function normalizeElementKind(typeName: string): ExprType {
+  const trimmed = typeName.trim();
+  if (trimmed === 'Bool') return 'Bool';
+  if (/^(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/.test(trimmed)) return 'Numeric';
+  return 'Unknown';
+}
+
+function parseFnParams(params: string): FnParamInfo[] {
+  const trimmed = params.trim();
+  if (!trimmed) return [];
+  const parts = splitTopLevel(trimmed, ',');
+  const result: FnParamInfo[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i].trim();
+    if (!part) continue;
+    const match = part.match(/^(?:mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*(.+))?$/);
+    if (!match) continue;
+    const name = match[1];
+    const typeAnnotation = match[2] ? match[2].trim() : undefined;
+    const arrayTypeInfo = parseArrayType(typeAnnotation);
+    if (arrayTypeInfo && arrayTypeInfo.initializedCount !== undefined) {
+      result.push({
+        name,
+        index: i,
+        arrayInfo: { minInitialized: arrayTypeInfo.initializedCount },
+      });
+    } else {
+      result.push({ name, index: i });
+    }
+  }
+  return result;
+}
+
+function registerFnArrayParam(
+  map: Map<string, Array<{ index: number; minInitialized: number }>>,
+  fnName: string,
+  index: number,
+  info: { minInitialized: number }
+): void {
+  const existing = map.get(fnName) || [];
+  existing.push({ index, minInitialized: info.minInitialized });
+  map.set(fnName, existing);
+}
+
+function parseArrayLiteral(expr: string): string[] | undefined {
+  const trimmed = expr.trim();
+  if (!trimmed.startsWith('[')) return undefined;
+  const endIndex = findMatchingClosingBracket(trimmed, 0);
+  if (endIndex !== trimmed.length - 1) return undefined;
+  const content = trimmed.slice(1, endIndex).trim();
+  if (!content) return [];
+  return splitTopLevel(content, ',');
+}
+
+function splitTopLevel(source: string, separator: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let braceDepth = 0;
+  let inString = false;
+  let stringChar = '';
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (inString) {
+      if (ch === stringChar && source[i - 1] !== '\\') {
+        inString = false;
+      }
+      current += ch;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      inString = true;
+      stringChar = ch;
+      current += ch;
+      continue;
+    }
+
+    if (ch === '[') bracketDepth++;
+    if (ch === ']') bracketDepth--;
+    if (ch === '(') parenDepth++;
+    if (ch === ')') parenDepth--;
+    if (ch === '{') braceDepth++;
+    if (ch === '}') braceDepth--;
+
+    if (ch === separator && bracketDepth === 0 && parenDepth === 0 && braceDepth === 0) {
+      parts.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function inferArrayLiteralElementKind(
+  elements: string[],
+  varTypes: Map<string, ExprType>,
+  varNumericSuffixes: Map<string, string | undefined>
+): ExprType {
+  for (const element of elements) {
+    const kind = inferLiteralKind(element);
+    if (kind) {
+      return kind;
+    }
+    const info = inferExprInfo(element, varTypes, varNumericSuffixes);
+    if (info.kind !== 'Unknown') {
+      return info.kind;
+    }
+  }
+  return 'Unknown';
+}
+
+function validateArrayLiteral(
+  elements: string[],
+  arrayTypeInfo: ArrayTypeInfo,
+  original: string
+): void {
+  if (arrayTypeInfo.length !== undefined && elements.length > arrayTypeInfo.length) {
+    throw new Error('array literal exceeds declared length');
+  }
+  if (
+    arrayTypeInfo.initializedCount !== undefined &&
+    elements.length < arrayTypeInfo.initializedCount
+  ) {
+    throw new Error('array literal has too few elements');
+  }
+
+  const elementKind = arrayTypeInfo.elementKind;
+  if (elementKind === 'Unknown') return;
+
+  for (const element of elements) {
+    const literalKind = inferLiteralKind(element);
+    if (literalKind && literalKind !== elementKind) {
+      throw new Error('array literal element type mismatch');
+    }
+  }
+
+  if (elementKind === 'Numeric' && /\btrue\b|\bfalse\b/.test(original)) {
+    throw new Error('array literal element type mismatch');
+  }
+}
+
+function parseAddressOfTarget(expr: string): string | undefined {
+  const match = expr.trim().match(/^&\s*(?:mut\s+)?([a-zA-Z_]\w*)$/);
+  return match ? match[1] : undefined;
+}
+
+function normalizeRefs(expr: string): string {
+  let result = expr;
+  result = result.replace(/&\s*mut\s+([a-zA-Z_]\w*)/g, '$1');
+  result = result.replace(/&\s*([a-zA-Z_]\w*)/g, '$1');
+  return result;
+}
+
+function parseIndexLiteral(expr: string): number | undefined {
+  const trimmed = expr.trim();
+  const match = trimmed.match(/^-?\d+(U8|U16|U32|U64|USize|I8|I16|I32|I64)?$/);
+  if (!match) return undefined;
+  const suffix = match[1];
+  const numStr = suffix ? trimmed.slice(0, -suffix.length) : trimmed;
+  return parseInt(numStr, 10);
+}
+
+function resolveArrayInfo(
+  name: string,
+  arrayVars: Map<string, ArrayVarInfo>,
+  arrayPointerTargets: Map<string, string>
+): { info: ArrayVarInfo; target: string } | undefined {
+  const direct = arrayVars.get(name);
+  if (direct) {
+    return { info: direct, target: name };
+  }
+  const target = arrayPointerTargets.get(name);
+  if (target) {
+    const info = arrayVars.get(target);
+    if (info) return { info, target };
+  }
+  return undefined;
+}
+
+function validateArrayElementAssignment(
+  arrayName: string,
+  indexExpr: string,
+  valueExpr: string,
+  mutableVars: Set<string>,
+  definedVars: Set<string>,
+  arrayVars: Map<string, ArrayVarInfo>,
+  arrayPointerTargets: Map<string, string>,
+  varTypes: Map<string, ExprType>,
+  varNumericSuffixes: Map<string, string | undefined>
+): void {
+  if (!definedVars.has(arrayName) && !arrayPointerTargets.has(arrayName)) {
+    throw new Error('undefined variable');
+  }
+
+  if (!mutableVars.has(arrayName)) {
+    throw new Error('cannot assign to immutable variable');
+  }
+
+  validateArrayAccesses(valueExpr, arrayVars, arrayPointerTargets);
+  validateArrayLiteralIndexing(valueExpr);
+  const resolved = resolveArrayInfo(arrayName, arrayVars, arrayPointerTargets);
+  if (!resolved) return;
+
+  const indexLiteral = parseIndexLiteral(indexExpr);
+  if (indexLiteral === undefined) {
+    resolved.info.initializedCount = null;
+    return;
+  }
+
+  if (indexLiteral < 0 || indexLiteral >= resolved.info.length) {
+    throw new Error('array index out of bounds');
+  }
+
+  if (resolved.info.initializedCount !== null) {
+    if (indexLiteral > resolved.info.initializedCount) {
+      throw new Error('array elements must be initialized in order');
+    }
+    if (indexLiteral === resolved.info.initializedCount) {
+      resolved.info.initializedCount += 1;
+    }
+  }
+
+  const valueInfo = inferExprInfo(valueExpr, varTypes, varNumericSuffixes);
+  if (resolved.info.elementKind === 'Numeric' && valueInfo.kind === 'Bool') {
+    throw new Error('array element type mismatch');
+  }
+  if (resolved.info.elementKind === 'Bool' && valueInfo.kind === 'Numeric') {
+    throw new Error('array element type mismatch');
+  }
+}
+
+function validateArrayAccesses(
+  expr: string,
+  arrayVars: Map<string, ArrayVarInfo>,
+  arrayPointerTargets: Map<string, string>
+): void {
+  const regex = /\b([a-zA-Z_]\w*)\s*\[\s*([^\]]+)\s*\]/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(expr)) !== null) {
+    const name = match[1];
+    const indexExpr = match[2];
+    const resolved = resolveArrayInfo(name, arrayVars, arrayPointerTargets);
+    if (!resolved) continue;
+
+    const indexLiteral = parseIndexLiteral(indexExpr);
+    if (indexLiteral === undefined) continue;
+
+    if (indexLiteral < 0 || indexLiteral >= resolved.info.length) {
+      throw new Error('array index out of bounds');
+    }
+
+    if (resolved.info.initializedCount !== null && indexLiteral >= resolved.info.initializedCount) {
+      throw new Error('array element is not initialized');
+    }
+  }
+}
+
+function validateArrayLiteralIndexing(expr: string): void {
+  const literalIndexRegex = /\[([^\]]*)\]\s*\[\s*(-?\d+)\s*\]/g;
+  let match: RegExpExecArray | null;
+  while ((match = literalIndexRegex.exec(expr)) !== null) {
+    const elements = splitTopLevel(match[1], ',');
+    const index = parseInt(match[2], 10);
+    if (index < 0 || index >= elements.length) {
+      throw new Error('array index out of bounds');
+    }
+  }
+}
+
+function validateArrayCallRequirements(expr: string, context: CompileContext): void {
+  const { arrayVars, arrayPointerTargets, fnArrayParamRequirements } = context;
+  const callRegex = /\b([a-zA-Z_]\w*)\s*\(([^()]*)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = callRegex.exec(expr)) !== null) {
+    const fnName = match[1];
+    const argsStr = match[2];
+    const requirements = fnArrayParamRequirements.get(fnName);
+    if (!requirements || requirements.length === 0) continue;
+
+    const args = splitTopLevel(argsStr, ',');
+    for (const requirement of requirements) {
+      const arg = args[requirement.index];
+      if (!arg) continue;
+      const trimmed = arg.trim();
+      const literal = parseArrayLiteral(trimmed);
+      if (literal) {
+        if (literal.length < requirement.minInitialized) {
+          throw new Error('array argument has insufficient initialized elements');
+        }
+        continue;
+      }
+
+      const identMatch = trimmed.match(/^\w+$/);
+      if (!identMatch) continue;
+      const name = identMatch[0];
+      const resolved = resolveArrayInfo(name, arrayVars, arrayPointerTargets);
+      if (!resolved) continue;
+      if (
+        resolved.info.initializedCount !== null &&
+        resolved.info.initializedCount < requirement.minInitialized
+      ) {
+        throw new Error('array argument has insufficient initialized elements');
+      }
+    }
+  }
+}
+
+function handleArrayRhsIdentifier(
+  varName: string,
+  rhsIdent: RegExpMatchArray | null,
+  context: CompileContext
+): void {
+  if (!rhsIdent) return;
+  const { arrayVars, arrayPointerTargets } = context;
+  const rhsName = rhsIdent[0];
+  if (arrayVars.has(rhsName) && !arrayPointerTargets.has(rhsName)) {
+    throw new Error('cannot copy arrays');
+  }
+  if (arrayPointerTargets.has(rhsName)) {
+    arrayPointerTargets.set(varName, arrayPointerTargets.get(rhsName) as string);
+  }
+}
+
+function prepareLetBinding(
+  varName: string,
+  typeAnnotation: string | undefined,
+  isMutable: boolean,
+  context: CompileContext
+): {
+  declaredInfo: { kind: ExprType; numericSuffix?: string };
+  arrayTypeInfo: ArrayTypeInfo | undefined;
+} {
+  const { mutableVars, definedVars } = context;
+  if (definedVars.has(varName)) {
+    throw new Error('variable already declared');
+  }
+  if (isMutable) {
+    mutableVars.add(varName);
+  }
+  const declaredInfo = getDeclaredTypeInfo(typeAnnotation);
+  const arrayTypeInfo = parseArrayType(typeAnnotation);
+  return { declaredInfo, arrayTypeInfo };
+}
+
+function prepareValueExpression(
+  value: string,
+  valueOriginal: string,
+  context: CompileContext,
+  checkUndefined: boolean
+): string {
+  const { definedVars, arrayVars, arrayPointerTargets } = context;
+  if (checkUndefined) {
+    checkUndefinedVars(valueOriginal, definedVars);
+  }
+  validateArrayAccesses(valueOriginal, arrayVars, arrayPointerTargets);
+  validateArrayLiteralIndexing(valueOriginal);
+  validateArrayCallRequirements(valueOriginal, context);
+  return normalizeRefs(convertIfElseToTernary(value));
+}
+
+function applyArrayInitializer(
+  varName: string,
+  typeAnnotation: string | undefined,
+  valueOriginal: string,
+  context: CompileContext,
+  arrayTypeInfoOverride?: ArrayTypeInfo
+): void {
+  const { arrayVars, arrayPointerTargets, varTypes, varNumericSuffixes } = context;
+  const arrayTypeInfo = arrayTypeInfoOverride || parseArrayType(typeAnnotation);
+  const literalElements = parseArrayLiteral(valueOriginal);
+  const rhsIdent = valueOriginal.match(/^\w+$/);
+
+  if (arrayTypeInfo) {
+    if (literalElements) {
+      validateArrayLiteral(literalElements, arrayTypeInfo, valueOriginal);
+      arrayVars.set(varName, {
+        length: arrayTypeInfo.length !== undefined ? arrayTypeInfo.length : literalElements.length,
+        initializedCount: literalElements.length,
+        elementKind: arrayTypeInfo.elementKind,
+      });
+    } else {
+      handleArrayRhsIdentifier(varName, rhsIdent, context);
+
+      if (arrayTypeInfo.length !== undefined) {
+        arrayVars.set(varName, {
+          length: arrayTypeInfo.length,
+          initializedCount:
+            arrayTypeInfo.initializedCount !== undefined ? arrayTypeInfo.initializedCount : null,
+          elementKind: arrayTypeInfo.elementKind,
+        });
+      }
+    }
+
+    if (arrayTypeInfo.isPointer) {
+      const pointerTarget = parseAddressOfTarget(valueOriginal);
+      if (pointerTarget && arrayVars.has(pointerTarget)) {
+        arrayPointerTargets.set(varName, pointerTarget);
+      }
+    }
+  } else {
+    if (literalElements) {
+      arrayVars.set(varName, {
+        length: literalElements.length,
+        initializedCount: literalElements.length,
+        elementKind: inferArrayLiteralElementKind(literalElements, varTypes, varNumericSuffixes),
+      });
+    } else if (rhsIdent) {
+      handleArrayRhsIdentifier(varName, rhsIdent, context);
+    }
+  }
+}
+
+function handleLetInitializer(
+  varName: string,
+  typeAnnotation: string | undefined,
+  value: string,
+  valueOriginal: string,
+  isMutable: boolean,
+  context: CompileContext
+): string {
+  const { varTypes, varNumericSuffixes, varInitialized, definedVars } = context;
+  const { declaredInfo, arrayTypeInfo } = prepareLetBinding(
+    varName,
+    typeAnnotation,
+    isMutable,
+    context
+  );
+  const exprInfo = inferExprInfo(valueOriginal, varTypes, varNumericSuffixes);
+  ensureNoBoolArithmetic(valueOriginal, varTypes);
+  applyArrayInitializer(varName, typeAnnotation, valueOriginal, context, arrayTypeInfo);
+
+  if (
+    declaredInfo.kind !== 'Unknown' &&
+    exprInfo.kind !== 'Unknown' &&
+    declaredInfo.kind !== exprInfo.kind
+  ) {
+    throw new Error('type mismatch');
+  }
+
+  if (declaredInfo.kind === 'Bool' && exprInfo.kind === 'Numeric') {
+    throw new Error('cannot convert numeric type to Bool');
+  }
+
+  if (declaredInfo.kind === 'Numeric' && exprInfo.kind === 'Bool') {
+    throw new Error('cannot convert Bool to numeric type');
+  }
+
+  if (declaredInfo.numericSuffix) {
+    for (const suffix of exprInfo.numericSuffixes) {
+      if (isNumericSuffixWider(suffix, declaredInfo.numericSuffix)) {
+        throw new Error('cannot convert numeric type to smaller width');
+      }
+    }
+    varNumericSuffixes.set(varName, declaredInfo.numericSuffix);
+  } else if (exprInfo.numericSuffixes.length > 0) {
+    varNumericSuffixes.set(varName, exprInfo.numericSuffixes[0]);
+  }
+
+  definedVars.add(varName);
+  varInitialized.set(varName, true);
+  varTypes.set(varName, declaredInfo.kind !== 'Unknown' ? declaredInfo.kind : exprInfo.kind);
+  const valueConverted = prepareValueExpression(value, valueOriginal, context, true);
+  return 'let ' + varName + ' = ' + valueConverted + '; ';
+}
+
+function handleLetNoInit(
+  varName: string,
+  typeAnnotation: string | undefined,
+  isMutable: boolean,
+  context: CompileContext
+): string {
+  const { definedVars, varTypes, varNumericSuffixes, varInitialized, arrayVars } = context;
+  const { declaredInfo, arrayTypeInfo } = prepareLetBinding(
+    varName,
+    typeAnnotation,
+    isMutable,
+    context
+  );
+  if (declaredInfo.kind !== 'Unknown') {
+    varTypes.set(varName, declaredInfo.kind);
+  }
+  if (declaredInfo.numericSuffix) {
+    varNumericSuffixes.set(varName, declaredInfo.numericSuffix);
+  }
+
+  if (arrayTypeInfo && arrayTypeInfo.length !== undefined) {
+    arrayVars.set(varName, {
+      length: arrayTypeInfo.length,
+      initializedCount:
+        arrayTypeInfo.initializedCount !== undefined ? arrayTypeInfo.initializedCount : 0,
+      elementKind: arrayTypeInfo.elementKind,
+    });
+  }
+
+  definedVars.add(varName);
+  varInitialized.set(varName, false);
+  if (arrayTypeInfo && arrayTypeInfo.length !== undefined) {
+    return 'let ' + varName + ' = new Array(' + arrayTypeInfo.length + '); ';
+  }
+  return 'let ' + varName + '; ';
+}
+
+function handleAssignment(
+  varName: string,
+  operator: string,
+  value: string,
+  valueOriginal: string,
+  context: CompileContext
+): string {
+  const { mutableVars, definedVars, varTypes, varNumericSuffixes, varInitialized } = context;
+  validateAssignment(
+    varName,
+    operator,
+    valueOriginal,
+    mutableVars,
+    definedVars,
+    varTypes,
+    varNumericSuffixes,
+    varInitialized
+  );
+
+  const valueConverted = prepareValueExpression(value, valueOriginal, context, false);
+  return varName + ' ' + operator + ' ' + valueConverted + '; ';
+}
+
+function findMatchingClosingBracket(str: string, openIndex: number): number {
+  let count = 1;
+  for (let i = openIndex + 1; i < str.length; i++) {
+    if (str[i] === '[') count++;
+    if (str[i] === ']') count--;
+    if (count === 0) return i;
+  }
+  return -1;
+}
+
+function splitLeadingBlockExpression(
+  expr: string
+): { blockContent: string; trailing: string } | undefined {
+  const trimmed = expr.trim();
+  if (!trimmed.startsWith('{')) return undefined;
+
+  let braceDepth = 0;
+  let endIndex = -1;
+  for (let i = 0; i < trimmed.length; i++) {
+    if (trimmed[i] === '{') braceDepth++;
+    if (trimmed[i] === '}') braceDepth--;
+    if (braceDepth === 0) {
+      endIndex = i;
+      break;
+    }
+  }
+
+  if (endIndex === -1) return undefined;
+
+  const blockContent = trimmed.slice(1, endIndex).trim();
+  const trailing = trimmed.slice(endIndex + 1).trim();
+  return { blockContent, trailing };
 }
 
 /**
@@ -980,19 +1943,7 @@ function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
 
   for (const id of identifiers) {
     // Skip JavaScript/Tuff keywords
-    const keywords = new Set([
-      'let',
-      'mut',
-      'if',
-      'else',
-      'while',
-      'true',
-      'false',
-      'fn',
-      'return',
-      'struct',
-    ]);
-    if (keywords.has(id)) continue;
+    if (RESERVED_KEYWORDS.has(id)) continue;
 
     // Skip numeric type names
     const typeNames = new Set([
@@ -1020,14 +1971,11 @@ function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
 }
 
 /**
- * Execute Tuff code by compiling it to JavaScript and running it.
- * Takes Tuff source code as input, compiles it, and executes it.
- * @param input - Tuff source code to execute
+ * Run compiled JavaScript code and return the numeric result.
+ * @param jsCode - JavaScript code to execute
  * @returns Numeric result from execution
  */
-export function execute(input: string): number {
-  const jsCode = compile(input);
-
+function executeJavaScript(jsCode: string): number {
   try {
     const fn = new Function(jsCode);
     const result = fn();
@@ -1036,6 +1984,17 @@ export function execute(input: string): number {
     // If execution fails, re-throw the error
     throw e;
   }
+}
+
+/**
+ * Execute Tuff code by compiling it to JavaScript and running it.
+ * Takes Tuff source code as input, compiles it, and executes it.
+ * @param input - Tuff source code to execute
+ * @returns Numeric result from execution
+ */
+export function execute(input: string): number {
+  const jsCode = compile(input);
+  return executeJavaScript(jsCode);
 }
 
 /**
