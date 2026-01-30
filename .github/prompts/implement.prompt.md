@@ -11,4 +11,5 @@ The user will provide expectations (either requirements for success or failure c
 4) Verify the implementation meets all requirements and passes all tests.
 5) Commit your changes, respecting all pre-commit checks. 
 - You MUST refactor duplicates and you MUST fix linting issues. This includes preexisting issues.
+- Do NOT change the project configuration unless instructed to by the user.
 6) You MUST verify using `git log` that the commit went through.

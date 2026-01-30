@@ -29,24 +29,8 @@ const typeRanges = {
  */
 function compile(input) {
     let trimmed = input.trim();
-    const typesUsed = new Set();
-    // Validate and strip type annotations (e.g., 100U8 -> 100, 42I32 -> 42)
-    trimmed = trimmed.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, (match, value, type) => {
-        const num = parseInt(value, 10);
-        const range = typeRanges[type];
-        if (!range) {
-            throw new Error(`Unknown type: ${type}`);
-        }
-        // Check for underflow or overflow of the literal
-        if (num < range.min) {
-            throw new Error(`Underflow: ${num} is below minimum for ${type} (${range.min})`);
-        }
-        if (num > range.max) {
-            throw new Error(`Overflow: ${num} is above maximum for ${type} (${range.max})`);
-        }
-        typesUsed.add(type);
-        return value;
-    });
+    const typesUsed = validateAndStripTypeAnnotations(trimmed);
+    trimmed = trimmed.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
     // Determine result type and validate
     let resultType;
     if (typesUsed.size > 1) {
@@ -70,6 +54,30 @@ function compile(input) {
         return `return ${trimmed};`;
     }
     return trimmed;
+}
+/**
+ * Validate type annotations in the input and return the set of types used.
+ * Throws errors for underflow/overflow violations.
+ */
+function validateAndStripTypeAnnotations(input) {
+    const typesUsed = new Set();
+    input.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, (match, value, type) => {
+        const num = parseInt(value, 10);
+        const range = typeRanges[type];
+        if (!range) {
+            throw new Error(`Unknown type: ${type}`);
+        }
+        // Check for underflow or overflow of the literal
+        if (num < range.min) {
+            throw new Error(`Underflow: ${num} is below minimum for ${type} (${range.min})`);
+        }
+        if (num > range.max) {
+            throw new Error(`Overflow: ${num} is above maximum for ${type} (${range.max})`);
+        }
+        typesUsed.add(type);
+        return match;
+    });
+    return typesUsed;
 }
 /**
  * Validate that an expression evaluates to a value within the given type's range.

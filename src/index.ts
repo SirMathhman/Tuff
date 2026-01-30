@@ -22,34 +22,10 @@ const typeRanges: Record<string, { min: number; max: number }> = {
  */
 export function compile(input: string): string {
   let trimmed = input.trim();
-  const typesUsed: Set<string> = new Set();
-
-  // Validate and strip type annotations (e.g., 100U8 -> 100, 42I32 -> 42)
+  const typesUsed = validateAndStripTypeAnnotations(trimmed);
   trimmed = trimmed.replace(
     /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
-    (match: string, value: string, type: string) => {
-      const num = parseInt(value, 10);
-      const range = typeRanges[type];
-
-      if (!range) {
-        throw new Error(`Unknown type: ${type}`);
-      }
-
-      // Check for underflow or overflow of the literal
-      if (num < range.min) {
-        throw new Error(
-          `Underflow: ${num} is below minimum for ${type} (${range.min})`,
-        );
-      }
-      if (num > range.max) {
-        throw new Error(
-          `Overflow: ${num} is above maximum for ${type} (${range.max})`,
-        );
-      }
-
-      typesUsed.add(type);
-      return value;
-    },
+    "$1",
   );
 
   // Determine result type and validate
@@ -80,6 +56,43 @@ export function compile(input: string): string {
     return `return ${trimmed};`;
   }
   return trimmed;
+}
+
+/**
+ * Validate type annotations in the input and return the set of types used.
+ * Throws errors for underflow/overflow violations.
+ */
+function validateAndStripTypeAnnotations(input: string): Set<string> {
+  const typesUsed: Set<string> = new Set();
+
+  input.replace(
+    /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
+    (match: string, value: string, type: string) => {
+      const num = parseInt(value, 10);
+      const range = typeRanges[type];
+
+      if (!range) {
+        throw new Error(`Unknown type: ${type}`);
+      }
+
+      // Check for underflow or overflow of the literal
+      if (num < range.min) {
+        throw new Error(
+          `Underflow: ${num} is below minimum for ${type} (${range.min})`,
+        );
+      }
+      if (num > range.max) {
+        throw new Error(
+          `Overflow: ${num} is above maximum for ${type} (${range.max})`,
+        );
+      }
+
+      typesUsed.add(type);
+      return match;
+    },
+  );
+
+  return typesUsed;
 }
 
 /**

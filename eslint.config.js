@@ -29,6 +29,7 @@ module.exports = [
         { argsIgnorePattern: "^_" },
       ],
       "no-console": "off",
+      "max-lines-per-function": ["error", { max: 50 }],
     },
   },
   {
@@ -55,6 +56,7 @@ module.exports = [
         { argsIgnorePattern: "^_" },
       ],
       "no-console": "off",
+      "max-lines-per-function": ["error", { max: 50 }],
     },
   },
 ];
