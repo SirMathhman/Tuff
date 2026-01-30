@@ -1,55 +1,43 @@
-import { interpret } from '../src/index';
+import { assertInvalid, assertValid } from './utils';
 
-test('interpret ignores struct declarations', () => {
-  expect(interpret('struct Empty {}')).toBe(0);
+test('ignores struct declarations', () => {
+  assertValid('struct Empty {}', 0);
 });
 
-test('interpret rejects duplicate struct declarations', () => {
-  expect(() => interpret('struct Empty {} struct Empty {}')).toThrow(
-    'struct already defined: Empty'
+test('rejects duplicate struct declarations', () => {
+  assertInvalid('struct Empty {} struct Empty {}');
+});
+
+test('rejects duplicate struct fields', () => {
+  assertInvalid('struct Empty { x : I32; x : I32; }');
+});
+
+test('allows structs with multiple fields', () => {
+  assertValid('struct Point { x : I32; y : I32; }', 0);
+});
+
+test('accesses struct field through variable', () => {
+  assertValid('struct Wrapper { x : I32; } let value : Wrapper = Wrapper { 100 }; value.x', 100);
+});
+
+test('rejects struct instantiation with missing fields', () => {
+  assertInvalid('struct Wrapper { x : I32; } let value : Wrapper = Wrapper {}; value.x');
+});
+
+test('rejects access to non-existent struct field', () => {
+  assertInvalid('struct Wrapper { x : I32; } let value = Wrapper { 100 }; value.y');
+});
+
+test('supports generic structs', () => {
+  assertValid(
+    'struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field',
+    100
   );
 });
 
-test('interpret rejects duplicate struct fields', () => {
-  expect(() => interpret('struct Empty { x : I32; x : I32; }')).toThrow(
-    'duplicate struct field: x'
+test('supports generic structs with type checking', () => {
+  assertValid(
+    'struct Wrapper<T> { field : T; } let wrapper = Wrapper<Bool> { true }; wrapper.field is I32',
+    0
   );
-});
-
-test('interpret allows structs with multiple fields', () => {
-  expect(interpret('struct Point { x : I32; y : I32; }')).toBe(0);
-});
-
-test('interpret accesses struct field through variable', () => {
-  expect(
-    interpret('struct Wrapper { x : I32; } let value : Wrapper = Wrapper { 100 }; value.x')
-  ).toBe(100);
-});
-
-test('interpret rejects struct instantiation with missing fields', () => {
-  expect(() =>
-    interpret('struct Wrapper { x : I32; } let value : Wrapper = Wrapper {}; value.x')
-  ).toThrow();
-});
-
-test('interpret rejects access to non-existent struct field', () => {
-  expect(() =>
-    interpret('struct Wrapper { x : I32; } let value = Wrapper { 100 }; value.y')
-  ).toThrow();
-});
-
-test('interpret supports generic structs', () => {
-  expect(
-    interpret(
-      'struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field'
-    )
-  ).toBe(100);
-});
-
-test('interpret supports generic structs with type checking', () => {
-  expect(
-    interpret(
-      'struct Wrapper<T> { field : T; } let wrapper = Wrapper<Bool> { true }; wrapper.field is I32'
-    )
-  ).toBe(0);
 });

@@ -484,6 +484,9 @@ export function compile(input: string): string {
     Array<{ index: number; minInitialized: number }>
   >();
   const fnSignatures = new Map<string, FunctionSignature>();
+  const structDefs = new Map<string, string[]>();
+  const structVarTypes = new Map<string, string>();
+  const structVarFieldKinds = new Map<string, Map<string, ExprType>>();
   const context: CompileContext = {
     mutableVars,
     definedVars,
@@ -494,7 +497,11 @@ export function compile(input: string): string {
     arrayPointerTargets,
     fnArrayParamRequirements,
     fnSignatures,
+    structDefs,
+    structVarTypes,
+    structVarFieldKinds,
   };
+  currentStructNames = new Set();
   let jsCode = '';
   // Replace inline blocks with IIFEs
   code = replaceInlineBlocks(code);
@@ -505,8 +512,31 @@ export function compile(input: string): string {
 
   // Process all statements except the last
   for (let i = 0; i < stmts.length - 1; i++) {
-    const stmt = stmts[i];
-    const stmtOriginal = stmtsOriginal[i] || stmt;
+    let stmt = stmts[i];
+    let stmtOriginal = stmtsOriginal[i] || stmt;
+    let structOnly = false;
+
+    while (true) {
+      const leadingStruct = splitLeadingStructDeclaration(stmtOriginal);
+      if (!leadingStruct) {
+        break;
+      }
+      const structDecl = parseStructDeclaration(leadingStruct.declaration);
+      if (!structDecl) {
+        throw new Error('invalid struct declaration');
+      }
+      registerStructDeclaration(structDecl, context);
+      if (!leadingStruct.trailing) {
+        structOnly = true;
+        break;
+      }
+      stmt = leadingStruct.trailing;
+      stmtOriginal = leadingStruct.trailing;
+    }
+
+    if (structOnly) {
+      continue;
+    }
 
     const whileMatchOriginal = stmtOriginal.match(/^while\s*\((.+)\)\s*(.+)$/);
     if (whileMatchOriginal) {
@@ -683,6 +713,24 @@ export function compile(input: string): string {
       }
     }
 
+    while (true) {
+      const finalStructSplit = splitLeadingStructDeclaration(lastStmtOriginal);
+      if (!finalStructSplit) {
+        break;
+      }
+      const structDecl = parseStructDeclaration(finalStructSplit.declaration);
+      if (!structDecl) {
+        throw new Error('invalid struct declaration');
+      }
+      registerStructDeclaration(structDecl, context);
+      if (!finalStructSplit.trailing) {
+        jsCode += 'return 0;';
+        return jsCode;
+      }
+      lastStmtOriginal = finalStructSplit.trailing;
+      lastStmt = finalStructSplit.trailing;
+    }
+
     const leadingFn = splitLeadingFunctionDefinition(lastStmtOriginal);
     if (leadingFn) {
       const fnDef = parseFunctionDefinitionForCompile(leadingFn.definition);
@@ -758,11 +806,13 @@ export function compile(input: string): string {
     inferExprInfo(lastStmtOriginal, varTypes, varNumericSuffixes);
 
     // Handle if/else expressions by converting to ternary operators
+    lastStmt = convertIsExpressions(lastStmt, context);
     lastStmt = convertIfElseToTernary(lastStmt);
 
     // Check for undefined variables in final expression
     checkUndefinedVars(lastStmt, definedVars);
     validateNumericLiteralOverflow(lastStmtOriginal);
+    validateStructFieldAccess(lastStmtOriginal, context);
     validateFunctionCalls(lastStmtOriginal, context, false);
 
     // Check if this is a comparison or boolean operator and wrap to convert bool to number
@@ -821,6 +871,7 @@ const RESERVED_KEYWORDS = new Set([
   'fn',
   'return',
   'struct',
+  'is',
 ]);
 
 function detectExprTypeSimple(expr: string, varTypes: Map<string, ExprType>): ExprType {
@@ -1210,6 +1261,166 @@ function validateAssignment(
   }
 }
 
+function parseStructDeclaration(stmt: string): { name: string; fields: string[] } | null {
+  const match = stmt.match(/^struct\s+(\w+)(<[^>]+>)?\s*\{([\s\S]*)\}$/);
+  if (!match) return null;
+  const name = match[1];
+  const fieldsRaw = match[3].trim();
+  if (!fieldsRaw) {
+    return { name, fields: [] };
+  }
+
+  const fieldParts = splitTopLevel(fieldsRaw, ';').filter((part) => part.trim());
+  const fields: string[] = [];
+  const seen = new Set<string>();
+  for (const part of fieldParts) {
+    const fieldMatch = part.trim().match(/^([a-zA-Z_]\w*)\s*:\s*([^;]+)$/);
+    if (!fieldMatch) {
+      throw new Error('invalid struct field: ' + part.trim());
+    }
+    const fieldName = fieldMatch[1];
+    if (seen.has(fieldName)) {
+      throw new Error('duplicate struct field: ' + fieldName);
+    }
+    seen.add(fieldName);
+    fields.push(fieldName);
+  }
+  return { name, fields };
+}
+
+function registerStructDeclaration(
+  decl: { name: string; fields: string[] },
+  context: CompileContext
+): void {
+  const { structDefs } = context;
+  if (structDefs.has(decl.name)) {
+    throw new Error('struct already defined: ' + decl.name);
+  }
+  structDefs.set(decl.name, decl.fields);
+  if (currentStructNames) {
+    currentStructNames.add(decl.name);
+  }
+}
+
+function parseStructTypeName(typeAnnotation?: string): string | undefined {
+  if (!typeAnnotation) return undefined;
+  const parsed = parseTypeConstraint(typeAnnotation);
+  const base = parsed.baseType;
+  if (!base) return undefined;
+  const match = base.match(/^([a-zA-Z_]\w*)(?:<[^>]+>)?$/);
+  return match ? match[1] : undefined;
+}
+
+function parseStructLiteralExpression(
+  expr: string,
+  context: CompileContext
+): { name: string; values: string[] } | null {
+  const trimmed = expr.trim();
+  const match = trimmed.match(/^([a-zA-Z_]\w*)(<[^>]+>)?\s*\{([\s\S]*)\}$/);
+  if (!match) return null;
+  const name = match[1];
+  const structFields = context.structDefs.get(name);
+  if (!structFields) {
+    throw new Error('struct not defined: ' + name);
+  }
+  const content = match[3].trim();
+  let values: string[] = [];
+  if (content) {
+    values = splitTopLevel(content, ';').filter((part) => part.trim());
+    if (values.length === 1 && content.includes(',')) {
+      values = splitTopLevel(content, ',').filter((part) => part.trim());
+    }
+  }
+  if (values.length !== structFields.length) {
+    throw new Error('struct literal has wrong field count');
+  }
+  return { name, values };
+}
+
+function convertStructLiteralExpression(
+  expr: string,
+  context: CompileContext
+): { converted: string; structName?: string } {
+  const literal = parseStructLiteralExpression(expr, context);
+  if (!literal) {
+    return { converted: expr };
+  }
+  const fields = context.structDefs.get(literal.name) || [];
+  const values = literal.values.map((value) => normalizeRefs(convertIfElseToTernary(value)));
+  const entries = fields.map((field, index) => field + ': ' + values[index]);
+  return { converted: '{ ' + entries.join(', ') + ' }', structName: literal.name };
+}
+
+function validateStructFieldAccess(expr: string, context: CompileContext): void {
+  const { structVarTypes, structDefs } = context;
+  const matchIter = expr.match(/\b([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\b/g);
+  if (!matchIter) return;
+  for (const match of matchIter) {
+    const parts = match.split('.').map((part) => part.trim());
+    const base = parts[0];
+    const field = parts[1];
+    if (base === 'this') continue;
+    const structName = structVarTypes.get(base);
+    if (!structName) continue;
+    const fields = structDefs.get(structName) || [];
+    if (!fields.includes(field)) {
+      throw new Error('struct field does not exist: ' + field);
+    }
+  }
+}
+
+function isNumericTypeName(typeName: string): boolean {
+  return /^(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/.test(typeName);
+}
+
+function inferStructFieldKinds(
+  structName: string,
+  values: string[],
+  context: CompileContext
+): Map<string, ExprType> {
+  const fields = context.structDefs.get(structName) || [];
+  const kinds = new Map<string, ExprType>();
+  for (let i = 0; i < fields.length; i++) {
+    const valueInfo = inferExprInfo(values[i], context.varTypes, context.varNumericSuffixes);
+    kinds.set(fields[i], valueInfo.kind);
+  }
+  return kinds;
+}
+
+function inferOperandKindForIs(expr: string, context: CompileContext): ExprType {
+  const trimmed = expr.trim();
+  if (/^true|false$/.test(trimmed)) return 'Bool';
+  if (/^-?\d+(U8|U16|U32|U64|USize|I8|I16|I32|I64)?$/.test(trimmed)) return 'Numeric';
+  const fieldMatch = trimmed.match(/^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)$/);
+  if (fieldMatch) {
+    const base = fieldMatch[1];
+    const field = fieldMatch[2];
+    const fieldKinds = context.structVarFieldKinds.get(base);
+    if (fieldKinds && fieldKinds.has(field)) {
+      return fieldKinds.get(field) as ExprType;
+    }
+  }
+  const varType = context.varTypes.get(trimmed);
+  if (varType) return varType;
+  return 'Unknown';
+}
+
+function convertIsExpressions(expr: string, context: CompileContext): string {
+  return expr.replace(
+    /\b([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)?)\s+is\s+([a-zA-Z_]\w*)/g,
+    (_match, left, typeName) => {
+      const kind = inferOperandKindForIs(left, context);
+      if (typeName === 'Bool') {
+        return kind === 'Bool' ? '1' : '0';
+      }
+      if (isNumericTypeName(typeName)) {
+        return kind === 'Numeric' ? '1' : '0';
+      }
+      return '0';
+    }
+  );
+}
+
 function replaceInlineBlocks(code: string): string {
   // For now, disable this while we debug the infinite loop issue
   return code;
@@ -1362,7 +1573,12 @@ type CompileContext = {
   arrayPointerTargets: Map<string, string>;
   fnArrayParamRequirements: Map<string, Array<{ index: number; minInitialized: number }>>;
   fnSignatures: Map<string, FunctionSignature>;
+  structDefs: Map<string, string[]>;
+  structVarTypes: Map<string, string>;
+  structVarFieldKinds: Map<string, Map<string, ExprType>>;
 };
+
+let currentStructNames: Set<string> | null = null;
 
 type FunctionSignature = {
   paramKinds: ExprType[];
@@ -1748,7 +1964,7 @@ function validateArrayLiteralIndexing(expr: string): void {
 
 function validateArrayCallRequirements(expr: string, context: CompileContext): void {
   const { arrayVars, arrayPointerTargets, fnArrayParamRequirements } = context;
-  forEachCallExpression(expr, (fnName, args, argsStr) => {
+  forEachCallExpression(expr, (fnName, args, _argsStr) => {
     const requirements = fnArrayParamRequirements.get(fnName);
     if (!requirements || requirements.length === 0) return;
     for (const requirement of requirements) {
@@ -1829,11 +2045,14 @@ function prepareValueExpression(
     checkUndefinedVars(valueOriginal, definedVars);
   }
   validateNumericLiteralOverflow(valueOriginal);
+  validateStructFieldAccess(valueOriginal, context);
   validateFunctionCalls(valueOriginal, context, disallowVoidCall);
   validateArrayAccesses(valueOriginal, arrayVars, arrayPointerTargets);
   validateArrayLiteralIndexing(valueOriginal);
   validateArrayCallRequirements(valueOriginal, context);
-  return normalizeRefs(convertIfElseToTernary(value));
+  const isConverted = convertIsExpressions(value, context);
+  const structConversion = convertStructLiteralExpression(isConverted, context);
+  return normalizeRefs(convertIfElseToTernary(structConversion.converted));
 }
 
 function validateFunctionCalls(
@@ -2012,6 +2231,22 @@ function splitLeadingFunctionDefinition(
   return { definition, trailing };
 }
 
+function splitLeadingStructDeclaration(
+  stmt: string
+): { declaration: string; trailing: string } | undefined {
+  const trimmed = stmt.trim();
+  if (!trimmed.startsWith('struct ')) return undefined;
+  const braceStart = trimmed.indexOf('{');
+  if (braceStart === -1) return undefined;
+  const braceEnd = findMatchingClosing(trimmed, braceStart, '{', '}');
+  if (braceEnd === -1) {
+    throw new Error('unmatched opening brace');
+  }
+  const declaration = trimmed.slice(0, braceEnd + 1).trim();
+  const trailing = trimmed.slice(braceEnd + 1).trim();
+  return { declaration, trailing };
+}
+
 function applyArrayInitializer(
   varName: string,
   typeAnnotation: string | undefined,
@@ -2072,7 +2307,8 @@ function handleLetInitializer(
   isMutable: boolean,
   context: CompileContext
 ): string {
-  const { varTypes, varNumericSuffixes, varInitialized, definedVars } = context;
+  const { varTypes, varNumericSuffixes, varInitialized, definedVars, structVarTypes, structDefs } =
+    context;
   const { declaredInfo, arrayTypeInfo, constraint } = prepareLetBinding(
     varName,
     typeAnnotation,
@@ -2083,6 +2319,16 @@ function handleLetInitializer(
   ensureNoBoolArithmetic(valueOriginal, varTypes);
   applyArrayInitializer(varName, typeAnnotation, valueOriginal, context, arrayTypeInfo);
   validateNumericConstraint(valueOriginal, constraint);
+  const structTypeName = parseStructTypeName(typeAnnotation);
+  if (structTypeName && structDefs.has(structTypeName)) {
+    structVarTypes.set(varName, structTypeName);
+  }
+  const structLiteral = parseStructLiteralExpression(valueOriginal, context);
+  if (structLiteral) {
+    structVarTypes.set(varName, structLiteral.name);
+    const fieldKinds = inferStructFieldKinds(structLiteral.name, structLiteral.values, context);
+    context.structVarFieldKinds.set(varName, fieldKinds);
+  }
   const callReturn = getFunctionCallReturnInfo(valueOriginal, context);
   if (callReturn) {
     if (callReturn.returnsVoid) {
@@ -2136,13 +2382,18 @@ function handleLetNoInit(
   isMutable: boolean,
   context: CompileContext
 ): string {
-  const { definedVars, varTypes, varNumericSuffixes, varInitialized, arrayVars } = context;
+  const { definedVars, varTypes, varNumericSuffixes, varInitialized, arrayVars, structVarTypes } =
+    context;
   const { declaredInfo, arrayTypeInfo } = prepareLetBinding(
     varName,
     typeAnnotation,
     isMutable,
     context
   );
+  const structTypeName = parseStructTypeName(typeAnnotation);
+  if (structTypeName) {
+    structVarTypes.set(varName, structTypeName);
+  }
   if (declaredInfo.kind !== 'Unknown') {
     varTypes.set(varName, declaredInfo.kind);
   }
@@ -2414,11 +2665,18 @@ function convertIfElseToTernary(code: string): string {
 function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
   // Extract all identifiers from the expression
   // This is a simple regex that finds word characters that aren't part of numbers or operators
-  const identifiers = expr.match(/\b[a-zA-Z_]\w*\b/g) || [];
-
-  for (const id of identifiers) {
+  const identifierRegex = /\b[a-zA-Z_]\w*\b/g;
+  let match: RegExpExecArray | null;
+  while ((match = identifierRegex.exec(expr)) !== null) {
+    const id = match[0];
+    const index = match.index;
+    const prevChar = index > 0 ? expr[index - 1] : '';
+    if (prevChar === '.') {
+      continue;
+    }
     // Skip JavaScript/Tuff keywords
     if (RESERVED_KEYWORDS.has(id)) continue;
+    if (currentStructNames && currentStructNames.has(id)) continue;
 
     // Skip numeric type names
     const typeNames = new Set([
