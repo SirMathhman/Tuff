@@ -32,14 +32,6 @@ function evaluate(bundledJs: string) {
   return Number(result);
 }
 
-// Allow using require/module without adding Node types to the project
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const require: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const module: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const process: any;
-
 /**
  * Start a simple REPL that reads lines, runs `interpret` on each input,
  * and prints the numeric result. Use `.exit` or `.quit` to leave.

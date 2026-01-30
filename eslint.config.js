@@ -16,12 +16,7 @@ module.exports = [
         sourceType: "module",
       },
       globals: {
-        process: "readonly",
         console: "readonly",
-        require: "readonly",
-        module: "readonly",
-        __dirname: "readonly",
-        __filename: "readonly",
       },
     },
     plugins: {
@@ -45,10 +40,7 @@ module.exports = [
         sourceType: "module",
       },
       globals: {
-        process: "readonly",
         console: "readonly",
-        require: "readonly",
-        module: "readonly",
         test: "readonly",
         expect: "readonly",
       },
