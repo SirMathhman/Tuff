@@ -53,5 +53,26 @@ const __tuff_extern_checkMemoryOrPanic = __tuff_native_module_lib.checkMemoryOrP
 const __tuff_extern_format = __tuff_native_module_lib.format;
 const __tuff_extern_readContent = __tuff_native_module_lib.readContent;
 const __tuff_extern_println = __tuff_native_module_lib.println;
-function alloc(length) { return __tuff_extern_alloc(length); } function free(_this) { return (() => { return __tuff_extern_free(_this);; })(); } function checkMemoryOrPanic() { return (() => { return __tuff_extern_checkMemoryOrPanic();; })(); } function readContent() { return __tuff_extern_readContent(); } function println(content) { return (() => { return __tuff_extern_println(content);; })(); } function format(message) { return __tuff_extern_format(message); } const None = (function () {  return {  }; })(); function expect(actualValue, equator) { return (() => { return 0; })(); } println("100"); checkMemoryOrPanic(); return +(0);
+function alloc(length) { return __tuff_extern_alloc(length); } function free(_this) { return (() => { return __tuff_extern_free(_this);; })(); } function checkMemoryOrPanic() { return (() => { return __tuff_extern_checkMemoryOrPanic();; })(); } function readContent() { return __tuff_extern_readContent(); } function println(content) { return (() => { return __tuff_extern_println(content);; })(); } function format(message) { return __tuff_extern_format(message); } const None = (function () {  return {  }; })(); function expect(actualValue, equator) { return TestResult {
+    print(format("Test: \t%s", testDesc));
+    let result = func();
+
+    
+    (result.passes ? {
+        println
+    } : {
+
+    }
+
+    TestResult {
+        testDesc,
+        result
+    }
+}
+
+let testSetResult = describe("The application", () => {
+    it("can run a simple test", () => {
+        expect(100).toBe(100)
+    })
+})); } println("100"); checkMemoryOrPanic(); return +(0);
 })());
