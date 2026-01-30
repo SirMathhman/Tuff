@@ -3997,6 +3997,23 @@ export function execute(input: string): number {
 }
 
 /**
+ * Compile multiple Tuff code files into a single executable JavaScript artifact.
+ * Mirrors interpretAll() signature for multi-file module support.
+ * Currently stubbed; implementation deferred.
+ * @param inputs - Array of Tuff source code strings
+ * @param config - Map of module paths to source code
+ * @param nativeConfig - Map of native configurations
+ * @returns Bundled JavaScript code
+ */
+export function compileAll(
+  _inputs: string[],
+  _config: Map<string[], string>,
+  _nativeConfig: Map<string[], string>
+): string {
+  throw new Error('compileAll not yet implemented');
+}
+
+/**
  * Interpret the given input string and produce a numeric result.
  * This function supports numeric literals (integers and decimals), optionally
  * followed by a type suffix such as `U8` (unsigned 8-bit). Examples:
