@@ -891,6 +891,7 @@ export function compile(input: string): string {
 
     // Handle if/else expressions by converting to ternary operators
     lastStmt = convertInlineBlockExpressions(lastStmt);
+    lastStmt = resolveMethodStyleCall(lastStmt, context).converted;
     lastStmt = convertUnboundFunctionPointerAccess(lastStmt);
     lastStmt = convertPointerDerefs(lastStmt, context);
     lastStmt = convertIsExpressions(lastStmt, context);
@@ -905,7 +906,8 @@ export function compile(input: string): string {
     validateDivisionByZero(lastStmtOriginal);
     validatePointerDerefs(lastStmtOriginal, context);
     validateStructFieldAccess(lastStmtOriginal, context);
-    validateFunctionCalls(lastStmtOriginal, context, false);
+    const methodValidation = resolveMethodStyleCall(lastStmtOriginal, context);
+    validateFunctionCalls(methodValidation.converted, context, false);
     validateComparisonTypes(lastStmtOriginal, context);
 
     // Check if this is a comparison or boolean operator and wrap to convert bool to number
@@ -1740,13 +1742,13 @@ function replaceInlineBlocks(code: string): string {
  */
 function convertBlockToIIFE(blockContent: string): string {
   if (!blockContent.trim()) {
-    return 'function () { return 0; }';
+    return '() => { return 0; }';
   }
 
   const stmts = splitBlockStatements(blockContent);
 
   if (stmts.length === 0) {
-    return 'function () { return 0; }';
+    return '() => { return 0; }';
   }
 
   // All but the last are statements - convert Tuff syntax to JS
@@ -1770,7 +1772,7 @@ function convertBlockToIIFE(blockContent: string): string {
     );
     const body = parts.locals.join(' ');
     const memberList = parts.members.join(', ');
-    return 'function () { ' + body + ' const __this = { ' + memberList + ' }; return __this; }';
+    return '() => { ' + body + ' const __this = { ' + memberList + ' }; return __this; }';
   }
   const finalExpr = lastIsStatement ? '0' : normalizeRefs(convertIfElseToTernary(lastExpr));
 
@@ -1782,13 +1784,29 @@ function convertBlockToIIFE(blockContent: string): string {
     body = body + convertBlockStatementToJs(lastExpr) + '; ';
   }
 
-  return 'function () { ' + body + 'return ' + finalExpr + '; }';
+  return '() => { ' + body + 'return ' + finalExpr + '; }';
 }
 
 function splitBlockStatements(blockContent: string): string[] {
   const parts = splitTopLevel(blockContent, ';');
-  if (parts.length > 1) {
-    return parts.map((part) => part.trim()).filter((part) => part);
+  const statements: string[] = [];
+  for (const part of parts) {
+    let trimmed = part.trim();
+    if (!trimmed) continue;
+    while (trimmed) {
+      const leadingFn = splitLeadingFunctionDefinition(trimmed);
+      if (!leadingFn) {
+        break;
+      }
+      statements.push(leadingFn.definition.trim());
+      trimmed = leadingFn.trailing.trim();
+    }
+    if (trimmed) {
+      statements.push(trimmed);
+    }
+  }
+  if (statements.length > 1) {
+    return statements;
   }
 
   const trimmed = blockContent.trim();
@@ -2007,6 +2025,12 @@ function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body
   if (parsedParams.some((param) => param.name === 'this')) {
     bodyExpr = bodyExpr.replace(/\bthis\b/g, '_this');
   }
+  const pointerParams = parsedParams.filter((param) => param.isPointer);
+  for (const param of pointerParams) {
+    const jsParam = param.name === 'this' ? '_this' : param.name;
+    const derefRegex = new RegExp('\\*\\s*' + jsParam + '\\b', 'g');
+    bodyExpr = bodyExpr.replace(derefRegex, jsParam + '.value');
+  }
   return 'function ' + name + '(' + jsParams + ') { return ' + bodyExpr + '; }';
 }
 
@@ -2079,6 +2103,8 @@ let currentStructNames: Set<string> | null = null;
 type FunctionSignature = {
   paramKinds: ExprType[];
   paramNames: string[];
+  paramIsPointer: boolean[];
+  paramPointerMutables: boolean[];
   returnKind: ExprType;
   returnsVoid: boolean;
 };
@@ -2088,6 +2114,8 @@ type FnParamInfo = {
   index: number;
   arrayInfo?: { minInitialized: number };
   kind: ExprType;
+  isPointer: boolean;
+  pointerMutable: boolean;
 };
 
 type NumericConstraint = { operator: '<' | '<=' | '>' | '>='; limit: number };
@@ -2197,15 +2225,20 @@ function parseFnParams(params: string, context?: CompileContext): FnParamInfo[] 
     const declaredInfo = getDeclaredTypeInfo(resolvedType, context);
     const kind = declaredInfo.kind;
     const arrayTypeInfo = parseArrayType(resolvedType);
+    const pointerInfo = context ? parsePointerTypeAnnotation(typeAnnotation, context) : undefined;
+    const isPointer = !!pointerInfo;
+    const pointerMutable = pointerInfo ? pointerInfo.mutable : false;
     if (arrayTypeInfo && arrayTypeInfo.initializedCount !== undefined) {
       result.push({
         name,
         index: i,
         arrayInfo: { minInitialized: arrayTypeInfo.initializedCount },
         kind,
+        isPointer,
+        pointerMutable,
       });
     } else {
-      result.push({ name, index: i, kind });
+      result.push({ name, index: i, kind, isPointer, pointerMutable });
     }
   }
   return result;
@@ -2413,6 +2446,68 @@ function convertUnboundFunctionPointerAccess(expr: string): string {
   return expr.replace(/\b([a-zA-Z_]\w*)::([a-zA-Z_]\w*)/g, (_match, _base, field) => {
     return 'function (ctx) { return ctx.' + field + '(); }';
   });
+}
+
+function parseMethodCallExpression(
+  expr: string
+): { baseExpr: string; fnName: string; argsStr: string } | undefined {
+  const methodCallExpr = expr.replace(/\s*\n\s*\./g, '.');
+  const match = methodCallExpr.trim().match(/^([\s\S]+)\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/);
+  if (!match) return undefined;
+  const baseExpr = match[1].trim();
+  if (!baseExpr) return undefined;
+  const depths = { paren: 0, bracket: 0, brace: 0 };
+  for (let i = 0; i < baseExpr.length; i++) {
+    updateDepthCounters(baseExpr[i], depths);
+  }
+  if (!isAtTopLevel(depths)) return undefined;
+  return { baseExpr, fnName: match[2], argsStr: match[3] };
+}
+
+function isSimpleReceiver(expr: string): boolean {
+  const trimmed = expr.trim();
+  if (/^[a-zA-Z_]\w*$/.test(trimmed)) return true;
+  return !!parseNumericLiteralValue(trimmed);
+}
+
+function buildPointerWrapper(varName: string): string {
+  return '({ get value() { return ' + varName + '; }, set value(v) { ' + varName + ' = v; } })';
+}
+
+function resolveMethodStyleCall(expr: string, context: CompileContext): { converted: string } {
+  const parsed = parseMethodCallExpression(expr);
+  if (!parsed) return { converted: expr };
+  const { baseExpr, fnName, argsStr } = parsed;
+  if (baseExpr === 'this') return { converted: expr };
+  const signature = context.fnSignatures.get(fnName);
+  const args = argsStr.trim() ? splitTopLevel(argsStr, ',') : [];
+  const simpleReceiver = isSimpleReceiver(baseExpr);
+  if (!signature) {
+    if (simpleReceiver) {
+      throw new Error('function not found: ' + fnName);
+    }
+    return { converted: expr };
+  }
+  const expectsThis = signature.paramNames[0] === 'this';
+  if (!expectsThis) {
+    return { converted: expr };
+  }
+  const expectedArgs = signature.paramKinds.length - 1;
+  if (args.length !== expectedArgs) {
+    throw new Error('function ' + fnName + ' expects ' + expectedArgs + ' args');
+  }
+  let receiverExpr = baseExpr;
+  if (signature.paramIsPointer[0]) {
+    if (!/^[a-zA-Z_]\w*$/.test(baseExpr)) {
+      throw new Error('cannot take reference to non-variable receiver');
+    }
+    if (signature.paramPointerMutables[0] && !context.mutableVars.has(baseExpr)) {
+      throw new Error('cannot take mutable reference to immutable variable');
+    }
+    receiverExpr = buildPointerWrapper(baseExpr);
+  }
+  const mergedArgs = [receiverExpr].concat(args).join(', ');
+  return { converted: fnName + '(' + mergedArgs + ')' };
 }
 
 function validatePointerDerefs(expr: string, context: CompileContext): void {
@@ -2670,13 +2765,15 @@ function prepareValueExpression(
   validateDivisionByZero(valueOriginal);
   validatePointerDerefs(valueOriginal, context);
   validateStructFieldAccess(valueOriginal, context);
-  validateFunctionCalls(valueOriginal, context, disallowVoidCall);
+  const methodValidation = resolveMethodStyleCall(valueOriginal, context);
+  validateFunctionCalls(methodValidation.converted, context, disallowVoidCall);
   validateComparisonTypes(valueOriginal, context);
   validateArrayAccesses(valueOriginal, arrayVars, arrayPointerTargets);
   validateArrayLiteralIndexing(valueOriginal);
   validateArrayCallRequirements(valueOriginal, context);
   const blockConverted = convertInlineBlockExpressions(value);
-  const unboundConverted = convertUnboundFunctionPointerAccess(blockConverted);
+  const methodConverted = resolveMethodStyleCall(blockConverted, context).converted;
+  const unboundConverted = convertUnboundFunctionPointerAccess(methodConverted);
   const pointerConverted = convertPointerDerefs(unboundConverted, context);
   const isConverted = convertIsExpressions(pointerConverted, context);
   const stringConverted = convertStringIndexing(isConverted, context);
@@ -2820,6 +2917,8 @@ function registerFunctionSignature(
   const signature: FunctionSignature = {
     paramKinds: parsedParams.map((param) => param.kind),
     paramNames: parsedParams.map((param) => param.name),
+    paramIsPointer: parsedParams.map((param) => param.isPointer),
+    paramPointerMutables: parsedParams.map((param) => param.pointerMutable),
     returnKind,
     returnsVoid,
   };
