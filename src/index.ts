@@ -504,6 +504,7 @@ export function compile(input: string): string {
   const structVarTypes = new Map<string, string>();
   const structVarFieldKinds = new Map<string, Map<string, ExprType>>();
   const typeAliases = new Map<string, { baseType: string; dropFn?: string }>();
+  const singletonMethods = new Map<string, Set<string>>();
   const context: CompileContext = {
     mutableVars,
     definedVars,
@@ -530,8 +531,10 @@ export function compile(input: string): string {
     structVarTypes,
     structVarFieldKinds,
     typeAliases,
+    singletonMethods,
   };
   currentStructNames = new Set();
+  currentTypeAliasNames = new Set();
   let jsCode = '';
   // Replace inline blocks with IIFEs
   code = replaceInlineBlocks(code);
@@ -959,7 +962,10 @@ export function compile(input: string): string {
     // Check if this is a comparison or boolean operator and wrap to convert bool to number
     // Comparison operators: ==, !=, <, >, <=, >=
     // Boolean operators: &&, ||, !
-    const hasBoolOp = /==|!=|<|>|<=|>=|&&|\|\||!/.test(lastStmt);
+    // Use original statement to avoid matching => from arrow functions in IIFEs
+    const hasBoolOp = /==|!=|(?<!=>?)<(?!=)|(?<!-)>(?!=)|<=|>=|&&|\|\||(?<![!=])!(?!=)/.test(
+      lastStmtOriginal
+    );
 
     if (hasBoolOp) {
       // Skip wrapping if this is already a ternary expression (from if/else conversion)
@@ -980,7 +986,8 @@ export function compile(input: string): string {
 
     lastStmt = normalizeRefs(lastStmt);
     jsCode += buildDropCalls(context);
-    jsCode += 'return ' + lastStmt + ';';
+    // Coerce to number to handle boolean return values
+    jsCode += 'return +(' + lastStmt + ');';
   } else {
     jsCode = 'return 0;';
   }
@@ -1345,11 +1352,21 @@ function inferExprInfo(
 function ensureNoBoolArithmetic(expr: string, varTypes: Map<string, ExprType>): void {
   if (!/[+\-*/]/.test(expr)) return;
 
-  if (/\btrue\b|\bfalse\b/.test(expr)) {
+  // Strip out if conditions and boolean branch contexts before checking
+  // to avoid false positives for `if (true) 2 + 3`
+  let sanitized = expr;
+  // Remove if conditions: if (...) - just the condition part
+  sanitized = sanitized.replace(/\bif\s*\([^)]*\)/g, 'if ()');
+  // Remove else keyword
+  sanitized = sanitized.replace(/\belse\b/g, '');
+  // Remove while conditions
+  sanitized = sanitized.replace(/\bwhile\s*\([^)]*\)/g, 'while ()');
+
+  if (/\btrue\b|\bfalse\b/.test(sanitized)) {
     throw new Error('cannot perform arithmetic on booleans');
   }
 
-  const identifiers = expr.match(/\b[a-zA-Z_]\w*\b/g) || [];
+  const identifiers = sanitized.match(/\b[a-zA-Z_]\w*\b/g) || [];
   for (const id of identifiers) {
     if (RESERVED_KEYWORDS.has(id)) continue;
     if (varTypes.get(id) === 'Bool') {
@@ -1565,52 +1582,82 @@ function validateStructFieldAccess(expr: string, context: CompileContext): void 
   }
 }
 
-function validateComparisonTypes(expr: string, context: CompileContext): void {
-  const trimmed = expr.trim();
-  if (!trimmed) return;
-  const operators: Array<{ op: string; index: number }> = [];
+type TopLevelMatch = { pattern: string; index: number };
+
+function scanTopLevel(
+  text: string,
+  matcher: (text: string, i: number) => { matched: string; skip: number } | null
+): TopLevelMatch[] {
+  const matches: TopLevelMatch[] = [];
   let parenDepth = 0;
   let bracketDepth = 0;
   let braceDepth = 0;
   let inString = false;
-
-  for (let i = 0; i < trimmed.length; i++) {
-    const ch = trimmed[i];
-    if (ch === '"' && trimmed[i - 1] !== '\\') {
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"' && text[i - 1] !== '\\') {
       inString = !inString;
       continue;
     }
-    if (inString) {
-      continue;
-    }
+    if (inString) continue;
     if (ch === '(') parenDepth++;
     if (ch === ')') parenDepth--;
     if (ch === '[') bracketDepth++;
     if (ch === ']') bracketDepth--;
     if (ch === '{') braceDepth++;
     if (ch === '}') braceDepth--;
-    if (parenDepth !== 0 || bracketDepth !== 0 || braceDepth !== 0) {
-      continue;
-    }
-
-    const twoChar = trimmed.slice(i, i + 2);
-    if (twoChar === '==' || twoChar === '!=' || twoChar === '<=' || twoChar === '>=') {
-      operators.push({ op: twoChar, index: i });
-      i++;
-      continue;
-    }
-    if (ch === '<' || ch === '>') {
-      operators.push({ op: ch, index: i });
+    if (parenDepth !== 0 || bracketDepth !== 0 || braceDepth !== 0) continue;
+    const result = matcher(text, i);
+    if (result) {
+      matches.push({ pattern: result.matched, index: i });
+      i += result.skip;
     }
   }
+  return matches;
+}
 
-  if (!operators.length) return;
+function validateComparisonTypes(expr: string, context: CompileContext): void {
+  const trimmed = expr.trim();
+  if (!trimmed) return;
+
+  // First split on && and || at top level, then validate each part
+  const boolOpMatches = scanTopLevel(trimmed, (text, i) => {
+    const twoChar = text.slice(i, i + 2);
+    if (twoChar === '&&' || twoChar === '||') return { matched: twoChar, skip: 1 };
+    return null;
+  });
+
+  if (boolOpMatches.length > 0) {
+    const boolParts: string[] = [];
+    let lastIndex = 0;
+    for (const m of boolOpMatches) {
+      boolParts.push(trimmed.slice(lastIndex, m.index).trim());
+      lastIndex = m.index + m.pattern.length;
+    }
+    boolParts.push(trimmed.slice(lastIndex).trim());
+    for (const part of boolParts) {
+      validateComparisonTypes(part, context);
+    }
+    return;
+  }
+
+  const comparisonMatches = scanTopLevel(trimmed, (text, i) => {
+    const twoChar = text.slice(i, i + 2);
+    if (twoChar === '==' || twoChar === '!=' || twoChar === '<=' || twoChar === '>=') {
+      return { matched: twoChar, skip: 1 };
+    }
+    const ch = text[i];
+    if (ch === '<' || ch === '>') return { matched: ch, skip: 0 };
+    return null;
+  });
+
+  if (!comparisonMatches.length) return;
 
   const parts: string[] = [];
   let lastIndex = 0;
-  for (const op of operators) {
+  for (const op of comparisonMatches) {
     parts.push(trimmed.slice(lastIndex, op.index));
-    lastIndex = op.index + op.op.length;
+    lastIndex = op.index + op.pattern.length;
   }
   parts.push(trimmed.slice(lastIndex));
 
@@ -1620,7 +1667,7 @@ function validateComparisonTypes(expr: string, context: CompileContext): void {
     return inferExprInfo(segment, context.varTypes, context.varNumericSuffixes).kind;
   };
 
-  for (let i = 0; i < operators.length; i++) {
+  for (let i = 0; i < comparisonMatches.length; i++) {
     const left = parts[i];
     const right = parts[i + 1];
     const leftKind = getOperandKind(left);
@@ -1629,10 +1676,10 @@ function validateComparisonTypes(expr: string, context: CompileContext): void {
       continue;
     }
     if (
-      operators[i].op === '<' ||
-      operators[i].op === '<=' ||
-      operators[i].op === '>' ||
-      operators[i].op === '>='
+      comparisonMatches[i].pattern === '<' ||
+      comparisonMatches[i].pattern === '<=' ||
+      comparisonMatches[i].pattern === '>' ||
+      comparisonMatches[i].pattern === '>='
     ) {
       if (leftKind !== 'Numeric' || rightKind !== 'Numeric') {
         throw new Error('cannot compare different types');
@@ -1659,6 +1706,9 @@ function registerTypeAliasDeclaration(
     throw new Error('type alias already defined: ' + info.name);
   }
   context.typeAliases.set(info.name, { baseType: info.baseType, dropFn: info.dropFn });
+  if (currentTypeAliasNames) {
+    currentTypeAliasNames.add(info.name);
+  }
 }
 
 function resolveTypeAliasEntry(
@@ -1828,14 +1878,18 @@ function convertBlockToIIFE(blockContent: string): string {
   );
   const scopeMembers = scopeParts.members.join(', ');
   const thisScopeDecl =
-    'const __thisValue = { this: (typeof __thisParent !== "undefined" ? __thisParent : undefined)' +
+    'const __thisValue = { this: (typeof __thisParent !== "undefined" ? (__thisParent.__thisValue || __thisParent) : undefined)' +
     (scopeMembers ? ', ' + scopeMembers : '') +
     ' };';
+  const thisScopeAssign =
+    ' if (typeof __thisScope !== "undefined") __thisScope.__thisValue = __thisValue;';
   if (lastExpr.trim() === 'this' && !lastIsStatement) {
     const body = scopeParts.locals.join(' ');
-    return '() => { ' + body + ' ' + thisScopeDecl + ' return __thisValue; }';
+    return '() => { ' + body + ' ' + thisScopeDecl + thisScopeAssign + ' return __thisValue; }';
   }
-  const finalExpr = lastIsStatement ? '0' : normalizeRefs(convertIfElseToTernary(lastExpr));
+  const finalExpr = lastIsStatement
+    ? '0'
+    : convertInlineBlockExpressions(normalizeRefs(convertIfElseToTernary(lastExpr)));
 
   if (body) {
     body = body + '; ';
@@ -1845,7 +1899,7 @@ function convertBlockToIIFE(blockContent: string): string {
     body = body + convertBlockStatementToJs(lastExpr) + '; ';
   }
   if (scopeMembers) {
-    body = body + thisScopeDecl + ' ';
+    body = body + thisScopeDecl + thisScopeAssign + ' ';
   }
   return '() => { ' + body + 'return ' + finalExpr + '; }';
 }
@@ -2138,10 +2192,12 @@ function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body
       'const __thisParent = this; ' +
       'const __thisScope = new Proxy({}, { ' +
       'get: function (_target, prop) { ' +
-      'if (prop === "this") { return __thisParent; } ' +
+      'if (prop === "this") { return __thisParent && __thisParent.__thisValue ? __thisParent.__thisValue : __thisParent; } ' +
+      'if (prop === "__thisValue") { return _target.__thisValue; } ' +
       'return eval(String(prop)); ' +
       '}, ' +
       'set: function (_target, prop, newValue) { ' +
+      'if (prop === "__thisValue") { _target.__thisValue = newValue; return true; } ' +
       'eval(String(prop) + " = newValue"); ' +
       'return true; ' +
       '} ' +
@@ -2218,9 +2274,11 @@ type CompileContext = {
   structVarTypes: Map<string, string>;
   structVarFieldKinds: Map<string, Map<string, ExprType>>;
   typeAliases: Map<string, { baseType: string; dropFn?: string }>;
+  singletonMethods: Map<string, Set<string>>;
 };
 
 let currentStructNames: Set<string> | null = null;
+let currentTypeAliasNames: Set<string> | null = null;
 
 type FunctionSignature = {
   paramKinds: ExprType[];
@@ -2765,6 +2823,14 @@ function resolveMethodStyleCall(expr: string, context: CompileContext): { conver
         }
         return { converted: expr };
       }
+      // Check if receiver is a singleton with this method
+      const singletonMethods = context.singletonMethods.get(baseExpr);
+      if (singletonMethods) {
+        if (!singletonMethods.has(fnName)) {
+          throw new Error('function not found: ' + fnName);
+        }
+        return { converted: expr };
+      }
     }
     if (simpleReceiver) {
       throw new Error('function not found: ' + fnName);
@@ -3303,6 +3369,17 @@ function buildObjectDeclaration(
   );
 
   context.definedVars.add(declaration.name);
+
+  // Track singleton methods for method resolution
+  const methods = new Set<string>();
+  for (const stmt of statements) {
+    const fnDef = parseFunctionDefinitionForCompile(stmt.trim());
+    if (fnDef) {
+      methods.add(fnDef.name);
+    }
+  }
+  context.singletonMethods.set(declaration.name, methods);
+
   const body = parts.locals.join(' ');
   const members = parts.members.join(', ');
   return (
@@ -3857,6 +3934,7 @@ function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
     // Skip JavaScript/Tuff keywords
     if (RESERVED_KEYWORDS.has(id)) continue;
     if (currentStructNames && currentStructNames.has(id)) continue;
+    if (currentTypeAliasNames && currentTypeAliasNames.has(id)) continue;
 
     // Skip numeric type names
     const typeNames = new Set([
