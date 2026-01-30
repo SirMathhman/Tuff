@@ -5262,6 +5262,8 @@ export function interpret(input: string): number {
       // For pointer comparisons, check refersTo for identity
       if (left.type?.kind === 'Ptr' && right.type?.kind === 'Ptr') {
         res = left.refersTo === right.refersTo;
+      } else if (left.type?.kind === 'Ptr' || right.type?.kind === 'Ptr') {
+        res = false;
       } else {
         res = left.value === right.value;
       }
