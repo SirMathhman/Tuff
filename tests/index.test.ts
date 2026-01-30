@@ -66,3 +66,11 @@ test("compile throws error for I8 underflow (arithmetic)", () => {
 test("compile throws error message distinguishes underflow from overflow", () => {
   expect(() => compile("-128I8 - 1I8")).toThrow(/Underflow.*below minimum/);
 });
+
+test("interpret supports brace-wrapped numeric literals", () => {
+  expect(interpret("{ 5 }")).toBe(5);
+});
+
+test("interpret supports brace-wrapped expressions", () => {
+  expect(interpret("(2 + { 3 }) * 4")).toBe(20);
+});

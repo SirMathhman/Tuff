@@ -15,13 +15,38 @@ const typeRanges: Record<string, { min: number; max: number }> = {
 };
 
 /**
+ * Strip brace-wrapped expressions, treating { ... } as a grouping operator.
+ * Recursively removes braces from the inner-most expressions outward.
+ * For example: { 5 } → 5, (2 + { 3 }) → (2 + 3)
+ */
+function stripBraceWrappers(input: string): string {
+  let result = input;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    // Match { ... } patterns where inside contains no braces (innermost first)
+    const newResult = result.replace(/\{\s*([^{}]+)\s*\}/g, (match, inside) => {
+      changed = true;
+      return inside.trim();
+    });
+    result = newResult;
+  }
+  return result;
+}
+
+/**
  * Compile Tuff source code to JavaScript.
  * Currently treats expressions as implicit return values.
  * Strips type annotations like U8, U16, I32, etc.
+ * Strips brace-wrapped expressions (block expressions).
  * Validates that numeric values are within the range of their type annotation.
  */
 export function compile(input: string): string {
   let trimmed = input.trim();
+
+  // Strip brace-wrapped expressions { ... }
+  trimmed = stripBraceWrappers(trimmed);
+
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
   trimmed = trimmed.replace(
     /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,

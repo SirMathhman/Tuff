@@ -1,3 +1,3 @@
 process.exit((function() {
-  return 3 + 0;
+  return (2 + let x : U8 = 3; x) * 4;
 })());

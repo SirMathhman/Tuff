@@ -56,6 +56,22 @@ function compile(input) {
     return trimmed;
 }
 /**
+ * Check if a numeric value is within the range of its type.
+ * Throws an error if the value is outside the range.
+ */
+function validateInRange(value, type) {
+    const range = typeRanges[type];
+    if (!range) {
+        throw new Error(`Unknown type: ${type}`);
+    }
+    if (value < range.min) {
+        throw new Error(`Underflow: ${value} is below minimum for ${type} (${range.min})`);
+    }
+    if (value > range.max) {
+        throw new Error(`Overflow: ${value} is above maximum for ${type} (${range.max})`);
+    }
+}
+/**
  * Validate type annotations in the input and return the set of types used.
  * Throws errors for underflow/overflow violations.
  */
@@ -63,17 +79,7 @@ function validateAndStripTypeAnnotations(input) {
     const typesUsed = new Set();
     input.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, (match, value, type) => {
         const num = parseInt(value, 10);
-        const range = typeRanges[type];
-        if (!range) {
-            throw new Error(`Unknown type: ${type}`);
-        }
-        // Check for underflow or overflow of the literal
-        if (num < range.min) {
-            throw new Error(`Underflow: ${num} is below minimum for ${type} (${range.min})`);
-        }
-        if (num > range.max) {
-            throw new Error(`Overflow: ${num} is above maximum for ${type} (${range.max})`);
-        }
+        validateInRange(num, type);
         typesUsed.add(type);
         return match;
     });
@@ -81,23 +87,28 @@ function validateAndStripTypeAnnotations(input) {
 }
 /**
  * Validate that an expression evaluates to a value within the given type's range.
- * Throws an error if the result overflows the type.
+ * Throws an error if the result overflows or underflows the type.
  */
 function validateExpressionResult(expression, type) {
-    const range = typeRanges[type];
     try {
         const fn = new Function(`return ${expression}`);
         const result = fn();
-        if (result < range.min || result > range.max) {
-            throw new Error(`Overflow: ${result} is above maximum for ${type} (${range.max})`);
-        }
+        validateInRange(result, type);
     }
     catch (err) {
-        // If it's our overflow error, rethrow; otherwise continue compilation
-        if (err instanceof Error && err.message.startsWith("Overflow:")) {
+        // If it's our underflow/overflow error, rethrow; otherwise continue compilation
+        if (err instanceof Error &&
+            (err.message.startsWith("Underflow:") ||
+                err.message.startsWith("Overflow:"))) {
             throw err;
         }
     }
+}
+/**
+ * Find the largest type in a family of types based on the given order.
+ */
+function findLargestType(types, order) {
+    return types.reduce((max, current) => order.indexOf(current) > order.indexOf(max) ? current : max);
 }
 /**
  * Determine the coerced type for a set of types.
@@ -116,12 +127,10 @@ function determineCoercedType(types) {
     }
     // Find the largest type in the family
     if (allUnsigned) {
-        const order = ["U8", "U16", "U32", "U64"];
-        return types.reduce((max, current) => order.indexOf(current) > order.indexOf(max) ? current : max);
+        return findLargestType(types, unsignedInts);
     }
     if (allSigned) {
-        const order = ["I8", "I16", "I32", "I64"];
-        return types.reduce((max, current) => order.indexOf(current) > order.indexOf(max) ? current : max);
+        return findLargestType(types, signedInts);
     }
     if (allFloats) {
         // F64 > F32
@@ -188,6 +197,7 @@ function startRepl() {
  * Wraps the output in an IIFE with process.exit.
  */
 function compileFile(inputPath, outputPath) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fs = require("fs");
     const source = fs.readFileSync(inputPath, "utf-8");
     const compiled = compile(source);
@@ -196,17 +206,10 @@ function compileFile(inputPath, outputPath) {
     fs.writeFileSync(outputPath, wrapped, "utf-8");
     console.log(`Compiled ${inputPath} to ${outputPath}`);
 }
-/* If executed directly (e.g., `node dist/index.js`) compile ./src/index.tuff to ./src/index.js
-   Pass --repl as a CLI argument to start the REPL instead */
-if (typeof module !== "undefined" &&
-    module &&
-    require &&
-    require.main === module) {
-    const args = process.argv.slice(2);
-    if (args.includes("--repl")) {
-        startRepl();
-    }
-    else {
-        compileFile("./src/main.tuff", "./src/main.js");
-    }
+const args = process.argv.slice(2);
+if (args.includes("--repl")) {
+    startRepl();
+}
+else {
+    compileFile("./src/main.tuff", "./src/main.js");
 }
