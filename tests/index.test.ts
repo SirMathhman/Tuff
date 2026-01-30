@@ -74,3 +74,11 @@ test("interpret supports brace-wrapped numeric literals", () => {
 test("interpret supports brace-wrapped expressions", () => {
   expect(interpret("(2 + { 3 }) * 4")).toBe(20);
 });
+
+test("interpret supports variable binding in blocks", () => {
+  expect(interpret("{ let x : U8 = 3; x }")).toBe(3);
+});
+
+test("interpret supports variable binding with arithmetic", () => {
+  expect(interpret("(2 + { let x : U8 = 3; x }) * 4")).toBe(20);
+});

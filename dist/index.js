@@ -22,13 +22,83 @@ const typeRanges = {
     F64: { min: -Infinity, max: Infinity },
 };
 /**
+ * Strip brace-wrapped expressions, treating { ... } as a grouping operator.
+ * Also handles `let` variable bindings within blocks.
+ * Recursively removes braces from the inner-most expressions outward.
+ * For example: { 5 } → 5, (2 + { 3 }) → (2 + 3)
+ * Variable bindings: { let x : U8 = 3; x } → (function() { let x = 3; return x; })()
+ */
+function stripBraceWrappers(input) {
+    let result = input;
+    const iifeMap = new Map();
+    let iifeCounter = 0;
+    let changed = true;
+    while (changed) {
+        changed = false;
+        // Match { ... } patterns where inside contains no braces (innermost first)
+        const newResult = result.replace(/\{\s*([^{}]+)\s*\}/g, (match, inside) => {
+            changed = true;
+            inside = inside.trim();
+            // Check if this is a let binding block (contains 'let' and semicolons)
+            if (inside.includes("let ") && inside.includes(";")) {
+                // Parse let statements and convert to IIFE
+                const iife = convertLetBindingToIIFE(inside);
+                const placeholder = `__IIFE_${iifeCounter}__`;
+                iifeMap.set(placeholder, iife);
+                iifeCounter++;
+                return placeholder;
+            }
+            return inside;
+        });
+        result = newResult;
+    }
+    // Replace placeholders with actual IIFEs
+    for (const [placeholder, iife] of iifeMap) {
+        result = result.split(placeholder).join(iife);
+    }
+    return result;
+}
+/**
+ * Convert a let binding block to a JavaScript IIFE.
+ * For example: 'let x : U8 = 3; x' → '(function() { let x = 3; return x; })()'
+ */
+function convertLetBindingToIIFE(blockContent) {
+    // Split by semicolon to separate statements
+    const statements = blockContent.split(";").map(s => s.trim()).filter(s => s.length > 0);
+    if (statements.length === 0) {
+        return "";
+    }
+    // Process each statement except the last
+    const declarations = [];
+    let lastStatement = statements[statements.length - 1];
+    for (let i = 0; i < statements.length - 1; i++) {
+        const stmt = statements[i];
+        if (stmt.startsWith("let ")) {
+            // Parse: let identifier : type = value
+            const letMatch = stmt.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*(.+)/);
+            if (letMatch) {
+                const [, varName, type, value] = letMatch;
+                // Strip type annotations from the value
+                const cleanValue = value.replace(/(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
+                declarations.push(`let ${varName} = ${cleanValue}`);
+            }
+        }
+    }
+    // Build the IIFE
+    const functionBody = declarations.join("; ") + (declarations.length > 0 ? "; " : "") + `return ${lastStatement};`;
+    return `(function() { ${functionBody} })()`;
+}
+/**
  * Compile Tuff source code to JavaScript.
  * Currently treats expressions as implicit return values.
  * Strips type annotations like U8, U16, I32, etc.
+ * Strips brace-wrapped expressions (block expressions).
  * Validates that numeric values are within the range of their type annotation.
  */
 function compile(input) {
     let trimmed = input.trim();
+    // Strip brace-wrapped expressions { ... }
+    trimmed = stripBraceWrappers(trimmed);
     const typesUsed = validateAndStripTypeAnnotations(trimmed);
     trimmed = trimmed.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
     // Determine result type and validate
@@ -49,8 +119,9 @@ function compile(input) {
     if (resultType && resultType !== "F32" && resultType !== "F64") {
         validateExpressionResult(trimmed, resultType);
     }
-    // If it doesn't contain return, wrap it in a return statement
-    if (!trimmed.includes("return")) {
+    // If it doesn't start with "return ", wrap it in a return statement
+    // (Check for "return " ensures we're looking for top-level return, not inner returns)
+    if (!trimmed.startsWith("return ")) {
         return `return ${trimmed};`;
     }
     return trimmed;
