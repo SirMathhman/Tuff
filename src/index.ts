@@ -1787,7 +1787,7 @@ function buildInvalidFunctionDefinitionError(definition: string): Error {
     'Invalid function definition: "' +
       definition.substring(0, 50) +
       (definition.length > 50 ? '...' : '') +
-      '". Function definitions must follow the pattern: fn name(params) => body or fn name(params) : ReturnType => body'
+      '". Cause: function definition could not be parsed. Reason: the definition must follow the pattern fn name(params) => body or fn name(params) : ReturnType => body, and parameter types with nested parentheses (like closure types) must be correctly balanced. Fix: check for syntax errors, unbalanced parentheses, or missing => operator. Context: function parsing.'
   );
 }
 
@@ -2023,13 +2023,38 @@ function parseFunctionDefinitionForCompile(stmt: string): FunctionDefinition | n
   if (arrowIndex === -1) return null;
   const header = trimmed.slice(0, arrowIndex).trim();
   const body = trimmed.slice(arrowIndex + 2).trim();
-  const headerMatch = header.match(/^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*(.+))?$/);
-  if (!headerMatch) return null;
+
+  // Parse header by finding balanced parentheses for parameters
+  const fnMatch = header.match(/^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?/);
+  if (!fnMatch) return null;
+  const name = fnMatch[1];
+  const afterGenerics = header.slice(fnMatch[0].length).trim();
+
+  // Find the parameter list by tracking parenthesis depth
+  if (!afterGenerics.startsWith('(')) return null;
+  let paramDepth = 0;
+  let paramEndIndex = -1;
+  for (let i = 0; i < afterGenerics.length; i++) {
+    if (afterGenerics[i] === '(') paramDepth++;
+    if (afterGenerics[i] === ')') {
+      paramDepth--;
+      if (paramDepth === 0) {
+        paramEndIndex = i;
+        break;
+      }
+    }
+  }
+  if (paramEndIndex === -1) return null;
+
+  const params = afterGenerics.slice(1, paramEndIndex).trim();
+  const afterParams = afterGenerics.slice(paramEndIndex + 1).trim();
+  const returnType = afterParams.startsWith(':') ? afterParams.slice(1).trim() : undefined;
+
   return {
-    name: headerMatch[1],
-    params: headerMatch[3].trim(),
-    returnType: headerMatch[4] ? headerMatch[4].trim() : undefined,
-    body: body,
+    name,
+    params,
+    returnType,
+    body,
   };
 }
 
