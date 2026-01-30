@@ -1038,6 +1038,13 @@ export function compile(input: string): string {
       return jsCode;
     }
 
+    const isTypeAliasStatement = /^type\s+[a-zA-Z_]\w*(?:\s*<[^>]+>)?\s*=/.test(lastStmtOriginal.trim());
+    if (isTypeAliasStatement) {
+      jsCode += buildDropCalls(context);
+      jsCode += 'return 0;';
+      return jsCode;
+    }
+
     ensureNoBoolArithmetic(lastStmtOriginal, varTypes);
     inferExprInfo(lastStmtOriginal, varTypes, varNumericSuffixes);
 
@@ -1103,7 +1110,7 @@ type ExprInfo = {
   numericSuffixes: string[];
 };
 
-const RESERVED_KEYWORDS = new Set(['let', 'mut', 'if', 'else', 'while', 'true', 'false', 'fn', 'return', 'struct', 'is']);
+const RESERVED_KEYWORDS = new Set(['let', 'mut', 'if', 'else', 'while', 'true', 'false', 'fn', 'return', 'struct', 'is', 'type']);
 
 function detectExprTypeSimple(expr: string, varTypes: Map<string, ExprType>): ExprType {
   const trimmed = expr.trim();
@@ -1553,7 +1560,7 @@ function validateAssignment(
   varInitialized: Map<string, boolean>
 ): void {
   if (!definedVars.has(varName)) {
-    throw new Error('undefined variable');
+    throw buildUndefinedVariableError(varName, varName + ' ' + operator + ' ' + valueOriginal);
   }
 
   const isMutable = mutableVars.has(varName);
@@ -3053,7 +3060,7 @@ function validateArrayElementAssignment(
   varNumericSuffixes: Map<string, string | undefined>
 ): void {
   if (!definedVars.has(arrayName) && !arrayPointerTargets.has(arrayName)) {
-    throw new Error('undefined variable');
+    throw buildUndefinedVariableError(arrayName, arrayName + '[' + indexExpr + '] = ' + valueExpr);
   }
 
   const pointerMutable = arrayPointerVarIsMutable.get(arrayName);
@@ -3536,7 +3543,7 @@ function handleLetInitializer(
   if (target) {
     // Skip validation for synthetic singleton instances
     if (!target.startsWith('__singleton_') && !definedVars.has(target)) {
-      throw new Error('undefined variable');
+      throw buildUndefinedVariableError(target, valueOriginal);
     }
     const isMutableRef = /&\s*mut\s+/.test(valueOriginal);
     const pointerKind = pointerInfo ? pointerInfo.kind : context.varTypes.get(target) || 'Unknown';
@@ -3942,6 +3949,24 @@ function convertIfElseToTernary(code: string): string {
 }
 
 /**
+ * Build an undefined variable error with full context details.
+ */
+function buildUndefinedVariableError(name: string, context?: string): Error {
+  const parts = [
+    'Undefined variable "' + name + '".',
+    'Cause: identifier used before declaration.',
+    'Reason: Tuff requires variables to be declared in scope before use.',
+    'Fix: declare "' + name + '" with let (or import/extern/use it) before use, or correct the name.',
+  ];
+  if (context && context.trim()) {
+    parts.push('Context: ' + context.trim());
+  } else {
+    parts.push('Context: (unknown)');
+  }
+  return new Error(parts.join(' '));
+}
+
+/**
  * Check if an expression references undefined variables.
  * This is a simple heuristic that checks for bare identifiers.
  */
@@ -3989,7 +4014,7 @@ function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
 
     // Check if this identifier is defined
     if (!definedVars.has(id)) {
-      throw new Error('undefined variable: ' + id);
+      throw buildUndefinedVariableError(id, expr);
     }
   }
 }
@@ -4537,7 +4562,7 @@ export function interpret(input: string): number {
 
   function ensureVariable(name: string, context: Context): RuntimeValue & { mutable: boolean; initialized: boolean; refersTo?: string } {
     if (!context.has(name)) {
-      throw new Error('undefined variable: ' + name);
+      throw buildUndefinedVariableError(name, 'variable lookup for ' + name);
     }
     return context.get(name)!;
   }
@@ -5122,7 +5147,7 @@ export function interpret(input: string): number {
         if (functions.has(token)) {
           return buildFunctionPointerValue(token, functions);
         }
-        throw new Error('undefined variable: ' + token);
+        throw buildUndefinedVariableError(token, 'expression token ' + token);
       }
       return context.get(token)!;
     }

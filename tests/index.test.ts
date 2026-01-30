@@ -33,6 +33,11 @@ test('interpretAll supports explicit generic call syntax', () => {
   assertAllValid(['main'], config, new Map(), 100);
 });
 
+test('interpretAll supports struct type aliases', () => {
+  const config = buildMainConfig('struct Some {} type OtherSome = Some; 0');
+  assertAllValid(['main'], config, new Map(), 0);
+});
+
 test('buildReplInputs loads src tree for repl', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tuff-repl-'));
   const srcDir = path.join(tempDir, 'src');
