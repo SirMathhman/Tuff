@@ -485,6 +485,10 @@ export function compile(input: string): string {
   const stringVars = new Set<string>();
   const implicitNumericVars = new Set<string>();
   const untypedVars = new Set<string>();
+  const pointerTargets = new Map<string, string>();
+  const pointerMutableTargets = new Map<string, string>();
+  const pointerVarKinds = new Map<string, ExprType>();
+  const pointerVarIsMutable = new Map<string, boolean>();
   const arrayVars = new Map<string, ArrayVarInfo>();
   const arrayPointerTargets = new Map<string, string>();
   const fnArrayParamRequirements = new Map<
@@ -506,6 +510,10 @@ export function compile(input: string): string {
     stringVars,
     implicitNumericVars,
     untypedVars,
+    pointerTargets,
+    pointerMutableTargets,
+    pointerVarKinds,
+    pointerVarIsMutable,
     arrayVars,
     arrayPointerTargets,
     fnArrayParamRequirements,
@@ -652,6 +660,27 @@ export function compile(input: string): string {
           const convertedIndex = normalizeRefs(convertIfElseToTernary(indexExpr));
           jsCode += arrayName + '[' + convertedIndex + '] = ' + convertedValue + '; ';
         } else {
+          const derefAssignMatch = stmt.match(/^\*\s*([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+          if (derefAssignMatch) {
+            const ptrName = derefAssignMatch[1];
+            const valueExpr = derefAssignMatch[2];
+            const target = context.pointerTargets.get(ptrName);
+            if (!target) {
+              throw new Error('cannot dereference non-pointer type');
+            }
+            if (!context.pointerVarIsMutable.get(ptrName)) {
+              throw new Error('cannot assign through immutable pointer');
+            }
+            const convertedValue = prepareValueExpression(
+              valueExpr,
+              valueExpr,
+              context,
+              true,
+              true
+            );
+            jsCode += target + ' = ' + convertedValue + '; ';
+            continue;
+          }
           // Check if this is an assignment
           const assignMatch = stmt.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
           if (assignMatch) {
@@ -837,6 +866,7 @@ export function compile(input: string): string {
 
     // Handle if/else expressions by converting to ternary operators
     lastStmt = convertInlineBlockExpressions(lastStmt);
+    lastStmt = convertPointerDerefs(lastStmt, context);
     lastStmt = convertIsExpressions(lastStmt, context);
     lastStmt = convertStringIndexing(lastStmt, context);
     lastStmt = convertIfElseToTernary(lastStmt);
@@ -845,6 +875,7 @@ export function compile(input: string): string {
     checkUndefinedVars(lastStmtOriginal, definedVars);
     validateNumericLiteralOverflow(lastStmtOriginal);
     validateDivisionByZero(lastStmtOriginal);
+    validatePointerDerefs(lastStmtOriginal, context);
     validateStructFieldAccess(lastStmtOriginal, context);
     validateFunctionCalls(lastStmtOriginal, context, false);
     validateComparisonTypes(lastStmtOriginal, context);
@@ -1384,13 +1415,20 @@ function registerStructDeclaration(
   }
 }
 
-function parseStructTypeName(
+function resolveBaseTypeFromAnnotation(
   typeAnnotation: string | undefined,
   context: CompileContext
 ): string | undefined {
   if (!typeAnnotation) return undefined;
   const parsed = parseTypeConstraint(typeAnnotation);
-  const resolvedBase = resolveTypeAliasBaseType(parsed.baseType, context);
+  return resolveTypeAliasBaseType(parsed.baseType, context);
+}
+
+function parseStructTypeName(
+  typeAnnotation: string | undefined,
+  context: CompileContext
+): string | undefined {
+  const resolvedBase = resolveBaseTypeFromAnnotation(typeAnnotation, context);
   if (!resolvedBase) return undefined;
   const match = resolvedBase.match(/^([a-zA-Z_]\w*)(?:<[^>]+>)?$/);
   return match ? match[1] : undefined;
@@ -1831,6 +1869,10 @@ type CompileContext = {
   stringVars: Set<string>;
   implicitNumericVars: Set<string>;
   untypedVars: Set<string>;
+  pointerTargets: Map<string, string>;
+  pointerMutableTargets: Map<string, string>;
+  pointerVarKinds: Map<string, ExprType>;
+  pointerVarIsMutable: Map<string, boolean>;
   arrayVars: Map<string, ArrayVarInfo>;
   arrayPointerTargets: Map<string, string>;
   fnArrayParamRequirements: Map<string, Array<{ index: number; minInitialized: number }>>;
@@ -2152,6 +2194,41 @@ function stripPointerPrefix(typeStr: string): { base: string; isPointer: boolean
   return { base: trimmed, isPointer };
 }
 
+function parsePointerTypeAnnotation(
+  typeAnnotation: string | undefined,
+  context: CompileContext
+): { kind: ExprType; mutable: boolean } | undefined {
+  const resolvedBase = resolveBaseTypeFromAnnotation(typeAnnotation, context);
+  if (!resolvedBase) return undefined;
+  const trimmed = resolvedBase.trim();
+  if (!trimmed.startsWith('*')) return undefined;
+  const mutable = trimmed.startsWith('*mut ');
+  const stripped = stripPointerPrefix(resolvedBase);
+  const kindInfo = getDeclaredTypeInfo(stripped.base, context);
+  return { kind: kindInfo.kind, mutable };
+}
+
+function validatePointerDerefs(expr: string, context: CompileContext): void {
+  const regex = /\*\s*([a-zA-Z_]\w*)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(expr)) !== null) {
+    const name = match[1];
+    if (!context.pointerTargets.has(name)) {
+      throw new Error('cannot dereference non-pointer type');
+    }
+  }
+}
+
+function convertPointerDerefs(expr: string, context: CompileContext): string {
+  return expr.replace(/\*\s*([a-zA-Z_]\w*)/g, (_match, name) => {
+    const target = context.pointerTargets.get(name);
+    if (!target) {
+      throw new Error('cannot dereference non-pointer type');
+    }
+    return target;
+  });
+}
+
 function isStringLiteral(expr: string): boolean {
   return /^"(?:\\.|[^"\\])*"$/.test(expr.trim());
 }
@@ -2382,6 +2459,7 @@ function prepareValueExpression(
   }
   validateNumericLiteralOverflow(valueOriginal);
   validateDivisionByZero(valueOriginal);
+  validatePointerDerefs(valueOriginal, context);
   validateStructFieldAccess(valueOriginal, context);
   validateFunctionCalls(valueOriginal, context, disallowVoidCall);
   validateComparisonTypes(valueOriginal, context);
@@ -2389,7 +2467,8 @@ function prepareValueExpression(
   validateArrayLiteralIndexing(valueOriginal);
   validateArrayCallRequirements(valueOriginal, context);
   const blockConverted = convertInlineBlockExpressions(value);
-  const isConverted = convertIsExpressions(blockConverted, context);
+  const pointerConverted = convertPointerDerefs(blockConverted, context);
+  const isConverted = convertIsExpressions(pointerConverted, context);
   const stringConverted = convertStringIndexing(isConverted, context);
   const structConversion = convertStructLiteralExpression(stringConverted, context);
   return normalizeRefs(convertIfElseToTernary(structConversion.converted));
@@ -2660,6 +2739,42 @@ function handleLetInitializer(
   );
   if (!typeAnnotation) {
     context.untypedVars.add(varName);
+  }
+  const pointerInfo = parsePointerTypeAnnotation(typeAnnotation, context);
+  const target = parseAddressOfTarget(valueOriginal);
+  if (pointerInfo || target) {
+    if (!target) {
+      throw new Error('invalid pointer initialization');
+    }
+    if (!definedVars.has(target)) {
+      throw new Error('undefined variable');
+    }
+    const isMutableRef = /&\s*mut\s+/.test(valueOriginal);
+    const pointerKind = pointerInfo ? pointerInfo.kind : context.varTypes.get(target) || 'Unknown';
+    const pointerMutable = pointerInfo ? pointerInfo.mutable : isMutableRef;
+    if (pointerMutable && !context.mutableVars.has(target)) {
+      throw new Error('cannot take mutable reference to immutable variable');
+    }
+    if (pointerMutable && context.pointerMutableTargets.has(target)) {
+      throw new Error('cannot have multiple mutable references to the same variable');
+    }
+    const targetKind =
+      context.varTypes.get(target) ||
+      (context.varNumericSuffixes.has(target) || context.implicitNumericVars.has(target)
+        ? 'Numeric'
+        : 'Unknown');
+    if (pointerKind === 'Bool' && targetKind !== 'Bool') {
+      throw new Error('type mismatch');
+    }
+    if (pointerKind === 'Numeric' && targetKind === 'Bool') {
+      throw new Error('type mismatch');
+    }
+    context.pointerTargets.set(varName, target);
+    context.pointerVarKinds.set(varName, pointerKind);
+    context.pointerVarIsMutable.set(varName, pointerMutable);
+    if (pointerMutable) {
+      context.pointerMutableTargets.set(target, varName);
+    }
   }
   const exprInfo = inferExprInfo(valueOriginal, varTypes, varNumericSuffixes);
   ensureNoBoolArithmetic(valueOriginal, varTypes);
