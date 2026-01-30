@@ -457,8 +457,7 @@ export function buildReplInputs(rootDir: string): {
       const content = fs.readFileSync(fullPath, 'utf-8');
       if (entry.name.endsWith('.tuff')) {
         config.set(key, content);
-      } else if (entry.name !== 'index.ts') {
-        // Skip index.ts to avoid loading the interpreter source as a native module
+      } else {
         nativeConfig.set(key, content);
       }
     }

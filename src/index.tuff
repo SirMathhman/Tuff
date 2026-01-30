@@ -1,4 +1,5 @@
 extern use { alloc, free, checkMemoryOrPanic } from lib;
+extern use { interpret } from index;
 
 type Alloc<T> = *mut [T] then free;
 
