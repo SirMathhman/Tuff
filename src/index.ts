@@ -477,6 +477,7 @@ export function compile(input: string): string {
   const varTypes = new Map<string, ExprType>();
   const varNumericSuffixes = new Map<string, string | undefined>();
   const varInitialized = new Map<string, boolean>();
+  const varDropFns = new Map<string, string>();
   const arrayVars = new Map<string, ArrayVarInfo>();
   const arrayPointerTargets = new Map<string, string>();
   const fnArrayParamRequirements = new Map<
@@ -487,12 +488,14 @@ export function compile(input: string): string {
   const structDefs = new Map<string, string[]>();
   const structVarTypes = new Map<string, string>();
   const structVarFieldKinds = new Map<string, Map<string, ExprType>>();
+  const typeAliases = new Map<string, { baseType: string; dropFn?: string }>();
   const context: CompileContext = {
     mutableVars,
     definedVars,
     varTypes,
     varNumericSuffixes,
     varInitialized,
+    varDropFns,
     arrayVars,
     arrayPointerTargets,
     fnArrayParamRequirements,
@@ -500,6 +503,7 @@ export function compile(input: string): string {
     structDefs,
     structVarTypes,
     structVarFieldKinds,
+    typeAliases,
   };
   currentStructNames = new Set();
   let jsCode = '';
@@ -509,6 +513,7 @@ export function compile(input: string): string {
   // Split by semicolons while preserving the rest
   const stmts = splitStatements(code);
   const stmtsOriginal = splitStatements(originalCode);
+  preRegisterTypeAliases(stmtsOriginal, context);
 
   // Process all statements except the last
   for (let i = 0; i < stmts.length - 1; i++) {
@@ -535,6 +540,10 @@ export function compile(input: string): string {
     }
 
     if (structOnly) {
+      continue;
+    }
+
+    if (parseTypeAliasDeclaration(stmtOriginal)) {
       continue;
     }
 
@@ -568,7 +577,7 @@ export function compile(input: string): string {
       const returnType = fnMatchOriginal[4] ? fnMatchOriginal[4].trim() : undefined;
       const body = fnMatch[5].trim();
 
-      const parsedParams = parseFnParams(params);
+      const parsedParams = parseFnParams(params, context);
       for (const param of parsedParams) {
         if (param.arrayInfo) {
           registerFnArrayParam(fnArrayParamRequirements, fnName, param.index, param.arrayInfo);
@@ -577,9 +586,7 @@ export function compile(input: string): string {
 
       registerFunctionSignature(fnName, parsedParams, returnType, bodyOriginal, context);
 
-      const jsParams = parsedParams.map((param) => param.name).join(', ');
-      const convertedBody = compileFunctionBodyExpression(body);
-      jsCode += 'function ' + fnName + '(' + jsParams + ') { return ' + convertedBody + '; } ';
+      jsCode += buildFunctionDefinition(fnName, parsedParams, body) + ' ';
       continue;
     }
 
@@ -679,6 +686,12 @@ export function compile(input: string): string {
     let lastStmt = stmts[stmts.length - 1];
     let lastStmtOriginal = stmtsOriginal[stmtsOriginal.length - 1] || lastStmt;
 
+    if (parseTypeAliasDeclaration(lastStmtOriginal)) {
+      jsCode += buildDropCalls(context);
+      jsCode += 'return 0;';
+      return jsCode;
+    }
+
     const lastWhileOriginal = lastStmtOriginal.match(/^while\s*\((.+)\)\s*(.+)$/);
     if (lastWhileOriginal) {
       const conditionOriginal = lastWhileOriginal[1].trim();
@@ -694,6 +707,7 @@ export function compile(input: string): string {
       if (lastWhileResult.trailing) {
         lastStmt = lastWhileResult.trailing;
       } else {
+        jsCode += buildDropCalls(context);
         jsCode += 'return 0;';
         return jsCode;
       }
@@ -708,6 +722,7 @@ export function compile(input: string): string {
         lastStmt = lastBlockConverted.trailing;
         lastStmtOriginal = lastBlockOriginal.trailing;
       } else {
+        jsCode += buildDropCalls(context);
         jsCode += 'return 0;';
         return jsCode;
       }
@@ -724,6 +739,7 @@ export function compile(input: string): string {
       }
       registerStructDeclaration(structDecl, context);
       if (!finalStructSplit.trailing) {
+        jsCode += buildDropCalls(context);
         jsCode += 'return 0;';
         return jsCode;
       }
@@ -737,7 +753,7 @@ export function compile(input: string): string {
       if (!fnDef) {
         throw new Error('invalid statement');
       }
-      const parsedParams = parseFnParams(fnDef.params);
+      const parsedParams = parseFnParams(fnDef.params, context);
       for (const param of parsedParams) {
         if (param.arrayInfo) {
           registerFnArrayParam(fnArrayParamRequirements, fnDef.name, param.index, param.arrayInfo);
@@ -747,6 +763,7 @@ export function compile(input: string): string {
       jsCode += buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body) + ' ';
 
       if (!leadingFn.trailing) {
+        jsCode += buildDropCalls(context);
         jsCode += 'return 0;';
         return jsCode;
       }
@@ -774,6 +791,7 @@ export function compile(input: string): string {
         context
       );
       jsCode += letSnippet;
+      jsCode += buildDropCalls(context);
       jsCode += 'return 0;';
       return jsCode;
     }
@@ -785,6 +803,7 @@ export function compile(input: string): string {
       const typeAnnotation = lastLetNoInit[3] ? lastLetNoInit[3].trim() : undefined;
       const letSnippet = handleLetNoInit(varName, typeAnnotation, isMutable, context);
       jsCode += letSnippet;
+      jsCode += buildDropCalls(context);
       jsCode += 'return 0;';
       return jsCode;
     }
@@ -798,6 +817,7 @@ export function compile(input: string): string {
       const value = lastAssign ? lastAssign[3] : valueOriginal;
       const assignSnippet = handleAssignment(varName, operator, value, valueOriginal, context);
       jsCode += assignSnippet;
+      jsCode += buildDropCalls(context);
       jsCode += 'return 0;';
       return jsCode;
     }
@@ -841,6 +861,7 @@ export function compile(input: string): string {
     validateArrayLiteralIndexing(lastStmtOriginal);
     validateArrayCallRequirements(lastStmtOriginal, context);
     lastStmt = normalizeRefs(lastStmt);
+    jsCode += buildDropCalls(context);
     jsCode += 'return ' + lastStmt + ';';
   } else {
     jsCode = 'return 0;';
@@ -982,12 +1003,17 @@ function inferLiteralKind(expr: string): ExprType | undefined {
   return undefined;
 }
 
-function getDeclaredTypeInfo(typeAnnotation?: string): { kind: ExprType; numericSuffix?: string } {
+function getDeclaredTypeInfo(
+  typeAnnotation: string | undefined,
+  context?: CompileContext
+): { kind: ExprType; numericSuffix?: string } {
   if (!typeAnnotation) return { kind: 'Unknown' };
-  const trimmed = typeAnnotation.trim();
-  if (trimmed === 'Bool') return { kind: 'Bool' };
+  const resolved = context
+    ? resolveTypeAliasBaseType(typeAnnotation.trim(), context) || typeAnnotation.trim()
+    : typeAnnotation.trim();
+  if (resolved === 'Bool') return { kind: 'Bool' };
 
-  const numericMatch = trimmed.match(/^(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/);
+  const numericMatch = resolved.match(/^(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/);
   if (numericMatch) return { kind: 'Numeric', numericSuffix: numericMatch[1] };
 
   return { kind: 'Unknown' };
@@ -1302,12 +1328,15 @@ function registerStructDeclaration(
   }
 }
 
-function parseStructTypeName(typeAnnotation?: string): string | undefined {
+function parseStructTypeName(
+  typeAnnotation: string | undefined,
+  context: CompileContext
+): string | undefined {
   if (!typeAnnotation) return undefined;
   const parsed = parseTypeConstraint(typeAnnotation);
-  const base = parsed.baseType;
-  if (!base) return undefined;
-  const match = base.match(/^([a-zA-Z_]\w*)(?:<[^>]+>)?$/);
+  const resolvedBase = resolveTypeAliasBaseType(parsed.baseType, context);
+  if (!resolvedBase) return undefined;
+  const match = resolvedBase.match(/^([a-zA-Z_]\w*)(?:<[^>]+>)?$/);
   return match ? match[1] : undefined;
 }
 
@@ -1369,6 +1398,83 @@ function validateStructFieldAccess(expr: string, context: CompileContext): void 
   }
 }
 
+function parseTypeAliasDeclaration(
+  stmt: string
+): { name: string; baseType: string; dropFn?: string } | null {
+  const match = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?$/);
+  if (!match) return null;
+  return { name: match[1], baseType: match[2].trim(), dropFn: match[3] };
+}
+
+function registerTypeAliasDeclaration(
+  info: { name: string; baseType: string; dropFn?: string },
+  context: CompileContext
+): void {
+  if (context.typeAliases.has(info.name)) {
+    throw new Error('type alias already defined: ' + info.name);
+  }
+  context.typeAliases.set(info.name, { baseType: info.baseType, dropFn: info.dropFn });
+}
+
+function preRegisterTypeAliases(statements: string[], context: CompileContext): void {
+  for (const stmt of statements) {
+    const info = parseTypeAliasDeclaration(stmt.trim());
+    if (info) {
+      registerTypeAliasDeclaration(info, context);
+    }
+  }
+}
+
+function resolveTypeAliasEntry(
+  typeName: string | undefined,
+  context: CompileContext,
+  seen: Set<string>
+): { name: string; alias: { baseType: string; dropFn?: string } } | undefined {
+  if (!typeName) return undefined;
+  const trimmed = typeName.trim();
+  const alias = context.typeAliases.get(trimmed);
+  if (!alias) return undefined;
+  if (seen.has(trimmed)) {
+    throw new Error('cyclic type alias: ' + trimmed);
+  }
+  seen.add(trimmed);
+  return { name: trimmed, alias };
+}
+
+function resolveTypeAliasBaseType(
+  typeName: string | undefined,
+  context: CompileContext,
+  seen: Set<string> = new Set()
+): string | undefined {
+  if (!typeName) return undefined;
+  const trimmed = typeName.trim();
+  const entry = resolveTypeAliasEntry(trimmed, context, seen);
+  if (!entry) return trimmed;
+  return resolveTypeAliasBaseType(entry.alias.baseType, context, seen);
+}
+
+function resolveTypeAliasDropFn(
+  typeName: string | undefined,
+  context: CompileContext,
+  seen: Set<string> = new Set()
+): string | undefined {
+  const entry = resolveTypeAliasEntry(typeName, context, seen);
+  if (!entry) return undefined;
+  if (entry.alias.dropFn) return entry.alias.dropFn;
+  return resolveTypeAliasDropFn(entry.alias.baseType, context, seen);
+}
+
+function buildDropCalls(context: CompileContext): string {
+  const calls: string[] = [];
+  for (const [varName, dropFn] of context.varDropFns) {
+    if (context.varInitialized.get(varName)) {
+      calls.push('if (typeof ' + dropFn + " === 'function') { " + dropFn + '(' + varName + '); }');
+    }
+  }
+  if (!calls.length) return '';
+  return calls.join(' ');
+}
+
 function isNumericTypeName(typeName: string): boolean {
   return /^(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/.test(typeName);
 }
@@ -1410,10 +1516,11 @@ function convertIsExpressions(expr: string, context: CompileContext): string {
     /\b([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)?)\s+is\s+([a-zA-Z_]\w*)/g,
     (_match, left, typeName) => {
       const kind = inferOperandKindForIs(left, context);
-      if (typeName === 'Bool') {
+      const resolvedType = resolveTypeAliasBaseType(typeName, context) || typeName;
+      if (resolvedType === 'Bool') {
         return kind === 'Bool' ? '1' : '0';
       }
-      if (isNumericTypeName(typeName)) {
+      if (isNumericTypeName(resolvedType)) {
         return kind === 'Numeric' ? '1' : '0';
       }
       return '0';
@@ -1519,8 +1626,13 @@ function parseFunctionDefinitionForCompile(stmt: string): FunctionDefinition | n
 }
 
 function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body: string): string {
-  const jsParams = parsedParams.map((param) => param.name).join(', ');
-  const bodyExpr = compileFunctionBodyExpression(body);
+  const jsParams = parsedParams
+    .map((param) => (param.name === 'this' ? '_this' : param.name))
+    .join(', ');
+  let bodyExpr = compileFunctionBodyExpression(body);
+  if (parsedParams.some((param) => param.name === 'this')) {
+    bodyExpr = bodyExpr.replace(/\bthis\b/g, '_this');
+  }
   return 'function ' + name + '(' + jsParams + ') { return ' + bodyExpr + '; }';
 }
 
@@ -1569,6 +1681,7 @@ type CompileContext = {
   varTypes: Map<string, ExprType>;
   varNumericSuffixes: Map<string, string | undefined>;
   varInitialized: Map<string, boolean>;
+  varDropFns: Map<string, string>;
   arrayVars: Map<string, ArrayVarInfo>;
   arrayPointerTargets: Map<string, string>;
   fnArrayParamRequirements: Map<string, Array<{ index: number; minInitialized: number }>>;
@@ -1576,6 +1689,7 @@ type CompileContext = {
   structDefs: Map<string, string[]>;
   structVarTypes: Map<string, string>;
   structVarFieldKinds: Map<string, Map<string, ExprType>>;
+  typeAliases: Map<string, { baseType: string; dropFn?: string }>;
 };
 
 let currentStructNames: Set<string> | null = null;
@@ -1685,7 +1799,7 @@ function normalizeElementKind(typeName: string): ExprType {
   return 'Unknown';
 }
 
-function parseFnParams(params: string): FnParamInfo[] {
+function parseFnParams(params: string, context?: CompileContext): FnParamInfo[] {
   const trimmed = params.trim();
   if (!trimmed) return [];
   const parts = splitTopLevel(trimmed, ',');
@@ -1702,9 +1816,12 @@ function parseFnParams(params: string): FnParamInfo[] {
     }
     seen.add(name);
     const typeAnnotation = match[2] ? match[2].trim() : undefined;
-    const declaredInfo = getDeclaredTypeInfo(typeAnnotation);
+    const resolvedType = context
+      ? resolveTypeAliasBaseType(typeAnnotation, context)
+      : typeAnnotation;
+    const declaredInfo = getDeclaredTypeInfo(resolvedType, context);
     const kind = declaredInfo.kind;
-    const arrayTypeInfo = parseArrayType(typeAnnotation);
+    const arrayTypeInfo = parseArrayType(resolvedType);
     if (arrayTypeInfo && arrayTypeInfo.initializedCount !== undefined) {
       result.push({
         name,
@@ -2028,8 +2145,13 @@ function prepareLetBinding(
     mutableVars.add(varName);
   }
   const parsed = parseTypeConstraint(typeAnnotation);
-  const declaredInfo = getDeclaredTypeInfo(parsed.baseType);
-  const arrayTypeInfo = parseArrayType(parsed.baseType);
+  const resolvedBase = resolveTypeAliasBaseType(parsed.baseType, context);
+  const declaredInfo = getDeclaredTypeInfo(resolvedBase, context);
+  const arrayTypeInfo = parseArrayType(resolvedBase);
+  const dropFn = resolveTypeAliasDropFn(parsed.baseType, context);
+  if (dropFn) {
+    context.varDropFns.set(varName, dropFn);
+  }
   return { declaredInfo, arrayTypeInfo, constraint: parsed.constraint };
 }
 
@@ -2107,13 +2229,16 @@ function forEachCallExpression(
   }
 }
 
-function parseReturnTypeAnnotation(returnType?: string): { kind: ExprType; returnsVoid: boolean } {
+function parseReturnTypeAnnotation(
+  returnType: string | undefined,
+  context?: CompileContext
+): { kind: ExprType; returnsVoid: boolean } {
   if (!returnType) return { kind: 'Unknown', returnsVoid: false };
   const trimmed = returnType.trim();
   if (trimmed === 'Void') {
     return { kind: 'Unknown', returnsVoid: true };
   }
-  const declaredInfo = getDeclaredTypeInfo(trimmed);
+  const declaredInfo = getDeclaredTypeInfo(trimmed, context);
   return { kind: declaredInfo.kind, returnsVoid: false };
 }
 
@@ -2164,7 +2289,7 @@ function registerFunctionSignature(
     throw new Error('function already defined: ' + fnName);
   }
 
-  const declaredReturn = parseReturnTypeAnnotation(returnType);
+  const declaredReturn = parseReturnTypeAnnotation(returnType, context);
   const inferredReturn = inferFunctionReturnInfo(body, parsedParams, context);
   let returnKind = inferredReturn.kind;
   let returnsVoid = inferredReturn.returnsVoid;
@@ -2319,7 +2444,7 @@ function handleLetInitializer(
   ensureNoBoolArithmetic(valueOriginal, varTypes);
   applyArrayInitializer(varName, typeAnnotation, valueOriginal, context, arrayTypeInfo);
   validateNumericConstraint(valueOriginal, constraint);
-  const structTypeName = parseStructTypeName(typeAnnotation);
+  const structTypeName = parseStructTypeName(typeAnnotation, context);
   if (structTypeName && structDefs.has(structTypeName)) {
     structVarTypes.set(varName, structTypeName);
   }
@@ -2390,7 +2515,7 @@ function handleLetNoInit(
     isMutable,
     context
   );
-  const structTypeName = parseStructTypeName(typeAnnotation);
+  const structTypeName = parseStructTypeName(typeAnnotation, context);
   if (structTypeName) {
     structVarTypes.set(varName, structTypeName);
   }
