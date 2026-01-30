@@ -1,2 +1,3 @@
 let x = 100U8;
-x
+let y : U8 = x;
+y

@@ -1,4 +1,5 @@
 process.exit((function() {
   let x = 100;
-return x;
+let y = x;
+return y;
 })());

@@ -21,6 +21,29 @@ const TYPE_FAMILIES = {
   floats: ["F32", "F64"],
 };
 
+// Type ordering for size comparison
+const TYPE_ORDER: Record<string, number> = {
+  U8: 1,
+  U16: 2,
+  U32: 3,
+  U64: 4,
+  I8: 1,
+  I16: 2,
+  I32: 3,
+  I64: 4,
+  F32: 5,
+  F64: 6,
+};
+
+/**
+ * Throw a type mismatch error with consistent formatting.
+ */
+function throwTypeMismatchError(sourceType: string, targetType: string): never {
+  throw new Error(
+    `Type mismatch: cannot assign ${sourceType} to ${targetType}`,
+  );
+}
+
 /**
  * Strip brace-wrapped expressions, treating { ... } as a grouping operator.
  * Also handles `let` variable bindings within blocks.
@@ -171,19 +194,6 @@ function extractAndValidateTypesInExpression(
   expression: string,
   declaredType: string,
 ): void {
-  const typeOrder: Record<string, number> = {
-    U8: 1,
-    U16: 2,
-    U32: 3,
-    U64: 4,
-    I8: 1,
-    I16: 2,
-    I32: 3,
-    I64: 4,
-    F32: 5,
-    F64: 6,
-  };
-
   const typesUsed: Set<string> = new Set();
   expression.replace(
     /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
@@ -205,10 +215,8 @@ function extractAndValidateTypesInExpression(
   }
 
   // Check if max used type fits into declared type
-  if (typeOrder[maxUsedType] > typeOrder[declaredType]) {
-    throw new Error(
-      `Type mismatch: cannot assign ${maxUsedType} to ${declaredType}`,
-    );
+  if (TYPE_ORDER[maxUsedType] > TYPE_ORDER[declaredType]) {
+    throwTypeMismatchError(maxUsedType, declaredType);
   }
 }
 
@@ -222,6 +230,7 @@ function extractAndValidateTypesInExpression(
  */
 function extractSingleLetStatement(statement: string): {
   varName: string;
+  declType: string;
   cleanValue: string;
 } | null {
   const parsed = parseLetStatement(statement);
@@ -240,12 +249,101 @@ function extractSingleLetStatement(statement: string): {
     "$1",
   );
 
+  return { varName, declType, cleanValue };
+}
+
+/**
+ * Check if a variable reference appears in a value expression.
+ * Returns the variable name if found, otherwise null.
+ */
+function findVariableReference(
+  varNames: string[],
+  value: string,
+): string | null {
+  // Remove quoted strings to avoid false matches
+  const cleanedValue = value.replace(/'([^']|\')*'/g, "").replace(/"([^"]|\\")*"/g, "");
+
+  for (const varName of varNames) {
+    // Match whole word variable names (not part of longer identifiers)
+    const regex = new RegExp(`\\b${varName}\\b`);
+    if (regex.test(cleanedValue)) {
+      return varName;
+    }
+  }
+  return null;
+}
+
+/**
+ * Validate that a variable's type is compatible with the target type.
+ * Throws an error if the source type is larger than the target type.
+ */
+function validateVariableTypeCompatibility(
+  sourceType: string,
+  targetType: string,
+): void {
+  const sourcePriority = TYPE_ORDER[sourceType];
+  const targetPriority = TYPE_ORDER[targetType];
+
+  if (sourcePriority === undefined || targetPriority === undefined) {
+    return; // Unknown types, skip validation
+  }
+
+  // Check if they're in the same family
+  const sameFamily =
+    (TYPE_FAMILIES.unsignedInts.includes(sourceType) &&
+      TYPE_FAMILIES.unsignedInts.includes(targetType)) ||
+    (TYPE_FAMILIES.signedInts.includes(sourceType) &&
+      TYPE_FAMILIES.signedInts.includes(targetType)) ||
+    (TYPE_FAMILIES.floats.includes(sourceType) &&
+      TYPE_FAMILIES.floats.includes(targetType));
+
+  if (!sameFamily) {
+    throwTypeMismatchError(sourceType, targetType);
+  }
+
+  // Within same family, source must not be larger than target
+  if (sourcePriority > targetPriority) {
+    throwTypeMismatchError(sourceType, targetType);
+  }
+}
+
+/**
+ * Process a single let statement and validate type compatibility with previous declarations.
+ */
+function processSingleLetInTopLevel(
+  statement: string,
+  variableTypes: Record<string, string>,
+): {
+  varName: string;
+  cleanValue: string;
+} | null {
+  const extracted = extractSingleLetStatement(statement);
+  if (!extracted) {
+    return null;
+  }
+
+  const { varName, declType, cleanValue } = extracted;
+
+  // Check if this value references any previously declared variables
+  const referencedVar = findVariableReference(
+    Object.keys(variableTypes),
+    cleanValue,
+  );
+  if (referencedVar) {
+    const referencedType = variableTypes[referencedVar];
+    validateVariableTypeCompatibility(referencedType, declType);
+  }
+
+  // Track this variable's type
+  variableTypes[varName] = declType;
+
   return { varName, cleanValue };
 }
 
 /**
  * Extract top-level let statements from input and return {declarations, expression}.
  * Handles multiline declarations and braces properly.
+ * Tracks variable types and validates compatibility.
  * For example: 'let x : U8 = 5; x + 1' → {declarations: ['let x = 5'], expression: 'x + 1'}
  */
 function extractTopLevelStatements(input: string): {
@@ -253,9 +351,9 @@ function extractTopLevelStatements(input: string): {
   expression: string;
 } {
   const declarations: string[] = [];
+  const variableTypes: Record<string, string> = {};
   let remaining = input.trim();
 
-  // Extract all top-level let statements
   while (remaining.startsWith("let ")) {
     // Find the semicolon that ends this let statement, accounting for braces
     let semiIdx = -1;
@@ -269,17 +367,14 @@ function extractTopLevelStatements(input: string): {
       }
     }
 
-    if (semiIdx === -1) {
-      break; // No semicolon found at brace depth 0, treat rest as expression
-    }
+    if (semiIdx === -1) break;
 
     const statement = remaining.substring(0, semiIdx);
     remaining = remaining.substring(semiIdx + 1).trim();
 
-    const extracted = extractSingleLetStatement(statement);
-    if (extracted) {
-      const { varName, cleanValue } = extracted;
-      declarations.push(`let ${varName} = ${cleanValue}`);
+    const processed = processSingleLetInTopLevel(statement, variableTypes);
+    if (processed) {
+      declarations.push(`let ${processed.varName} = ${processed.cleanValue}`);
     }
   }
 
