@@ -7576,12 +7576,22 @@ export function interpret(input: string): number {
   }
 }
 
-// Main REPL entry point
+// Main bundler entry point
 if (require.main === module) {
   try {
+    const fs = require('fs');
+    const path = require('path');
     const replInputs = buildReplInputs(process.cwd());
-    const result = interpretAll(replInputs.inputs, replInputs.config, replInputs.nativeConfig);
-    console.log(result);
+    const bundled = compileAll(replInputs.inputs, replInputs.config, replInputs.nativeConfig);
+
+    const distDir = path.join(process.cwd(), 'dist');
+    if (!fs.existsSync(distDir)) {
+      fs.mkdirSync(distDir, { recursive: true });
+    }
+
+    const bundlePath = path.join(distDir, 'bundle.js');
+    fs.writeFileSync(bundlePath, bundled, 'utf-8');
+    console.log('Successfully bundled to ' + bundlePath);
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.message);

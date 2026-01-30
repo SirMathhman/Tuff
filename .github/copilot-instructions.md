@@ -2,10 +2,11 @@
 
 ## Repo shape
 
-- Interpreter + compiler live in `src/index.ts` (single-file, ~4.4k LOC; most logic is inside `interpret()` and `compile()`).
+- Interpreter + compiler live in `src/index.ts` (single-file, ~7.6k LOC; most logic is inside `interpret()` and `compile()`).
 - The DSL spec is the test suite (originally `tests/interpret.test.ts`, now split by feature into ~20 files like `variables.test.ts`, `pointers.test.ts`, etc.).
 - Tests assert exact behavior and error messages for BOTH interpreter and compiler using `assertValid(code, expected)` / `assertInvalid(code)` from `tests/utils.ts`.
-- The CLI runner (`pnpm start` / `pnpm dev`) executes `bun ./src/index.ts`, which loads `src/index.tuff` and prints `interpret(...)`.
+- Multi-file tests use `assertAllValid(inputs, config, nativeConfig, expected)` / `assertAllInvalid(...)` for module system validation.
+- The CLI runner (`pnpm start` / `pnpm dev`) executes `bun ./src/index.ts`, which loads `src/*.tuff` and `src/*.ts` files as modules via `buildReplInputs()`.
 - For DSL syntax and semantics overview, see [TUTORIAL.md](../TUTORIAL.md).
 
 ## Skills and utilities
@@ -22,11 +23,21 @@
 - Typecheck/build: `pnpm typecheck` / `pnpm build`
 - Lint/format: `pnpm lint` and `pnpm format`
 
+## Module system and API exports
+
+- **Single-file API**: `interpret(code: string): number` evaluates Tuff code; `compile(code: string): string` generates C code; `execute(cCode: string): number` compiles C via gcc and returns result.
+- **Multi-file API**: `interpretAll(inputs, config, nativeConfig)` and `compileAll(inputs, config, nativeConfig)` handle module dependencies.
+  - `config: Map<string[], string>` maps module paths (e.g., `['foo', 'bar']` → `"foo/bar.tuff"`) to Tuff source.
+  - `nativeConfig: Map<string[], string>` maps module paths to TypeScript/JavaScript native bindings.
+- **Module syntax**: `use { functionName } from moduleName;` imports Tuff symbols; `extern use { name } from mod; extern let/fn ...` declares native bindings.
+- **REPL workflow**: `buildReplInputs(rootDir: string)` scans `src/` for `.tuff` and `.ts` files and returns `{ inputs, config, nativeConfig }` for `interpretAll()`.
+
 ## Test organization
 
 - Tests are split by feature into separate files: `variables.test.ts`, `pointers.test.ts`, `functions.test.ts`, etc.
 - **Critical**: All tests use `assertValid(code, expected)` or `assertInvalid(code)` from `tests/utils.ts` to validate BOTH interpreter (`interpret()`) AND compiler (`compile()` + `execute()`) produce identical results.
-- When writing tests, always use these utilities instead of calling `interpret()` directly.
+- Multi-file tests use `assertAllValid(inputs, config, nativeConfig, expected)` / `assertAllInvalid(...)` to test module system.
+- When writing tests, always use these utilities instead of calling `interpret()` or `interpretAll()` directly.
 - Python scripts in `scripts/` help with test file reorganization (e.g., `split_tests_v2.py`).
 
 ## Interpreter mental model (read `src/index.ts`)
