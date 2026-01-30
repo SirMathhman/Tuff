@@ -1,7 +1,7 @@
-import { interpret } from '../src/index';
+import { assertValid } from './utils';
 
 test('interpret accesses .length property on dereferenced strings', () => {
-  expect(interpret('let x : *Str = "test"; x.length')).toBe(4);
-  expect(interpret('let x : *Str = "hello"; x.length')).toBe(5);
-  expect(interpret('let x : *Str = ""; x.length')).toBe(0);
+  assertValid('let x : *Str = "test"; x.length', 4);
+  assertValid('let x : *Str = "hello"; x.length', 5);
+  assertValid('let x : *Str = ""; x.length', 0);
 });

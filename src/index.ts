@@ -2868,14 +2868,15 @@ function convertIfElseToTernary(code: string): string {
  * This is a simple heuristic that checks for bare identifiers.
  */
 function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
+  const sanitized = expr.replace(/"(?:\\.|[^"\\])*"/g, '').replace(/'(?:\\.|[^'\\])*'/g, '');
   // Extract all identifiers from the expression
   // This is a simple regex that finds word characters that aren't part of numbers or operators
   const identifierRegex = /\b[a-zA-Z_]\w*\b/g;
   let match: RegExpExecArray | null;
-  while ((match = identifierRegex.exec(expr)) !== null) {
+  while ((match = identifierRegex.exec(sanitized)) !== null) {
     const id = match[0];
     const index = match.index;
-    const prevChar = index > 0 ? expr[index - 1] : '';
+    const prevChar = index > 0 ? sanitized[index - 1] : '';
     if (prevChar === '.') {
       continue;
     }
