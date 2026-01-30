@@ -23,3 +23,10 @@ test('supports generic type aliases with pointer types', () => {
 test('supports generic type aliases with drop functions', () => {
   assertValid('let mut sum = 0; fn cleanup(this : I32) => sum += this; type Alloc<T> = T then cleanup; let x = 50; let p : Alloc<I32> = x; sum', 50);
 });
+
+test('drop functions are called for captured variables', () => {
+  assertValid(
+    'let mut freed = 0; fn free(this : I32) => freed += 1; type Alloc<T> = T then free; fn makeValue() => { let x : Alloc<I32> = 10; this }; makeValue(); freed',
+    1
+  );
+});

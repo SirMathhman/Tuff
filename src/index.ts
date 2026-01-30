@@ -1,5 +1,5 @@
 type NativeFunctionDef = {
-  fn: any; // Dynamically created function
+  fn: unknown; // Dynamically created function
   paramNames: string[];
 };
 
@@ -119,9 +119,9 @@ function parseNativeExports(source: string): NativeExports {
 
     for (const [key, value] of Object.entries(exportsObj)) {
       if (typeof value === 'function') {
-        const fn = value as any;
+        const fn = value as Function;
         const paramNames = Array.from({ length: fn.length }, (_v, i) => 'arg' + i);
-        fnExports.set(key, { fn, paramNames });
+        fnExports.set(key, { fn: fn as unknown, paramNames });
       }
     }
   } catch (err) {
@@ -4349,7 +4349,7 @@ export function interpret(input: string): number {
     const effectiveSource = source;
     const sourceIsNumeric = effectiveSource && 'width' in effectiveSource;
     const targetIsNumeric = 'width' in target;
-    if (sourceIsNumeric && targetIsNumeric && (effectiveSource as any).width > target.width) {
+    if (sourceIsNumeric && targetIsNumeric && (effectiveSource as { width: number }).width > target.width) {
       const message = ['narrowing conversion from ', suffixKind(effectiveSource), ' to ', suffixKind(target)].join('');
       throw new Error(message);
     }
@@ -4900,7 +4900,7 @@ export function interpret(input: string): number {
 
       // Check for existing mutable borrow to the same variable
       for (const [, ptrVar] of context) {
-        if (ptrVar.type?.kind === 'Ptr' && ptrVar.refersTo === varName && (ptrVar.type as any).mutable) {
+        if (ptrVar.type?.kind === 'Ptr' && ptrVar.refersTo === varName && (ptrVar.type as { mutable: boolean }).mutable) {
           throw new Error('cannot have multiple mutable references to the same variable');
         }
       }
@@ -5112,7 +5112,7 @@ export function interpret(input: string): number {
         op.type &&
         op.type.kind !== 'Bool' &&
         op.type.kind !== 'Ptr' &&
-        (!widestSuffix || ('width' in op.type && 'width' in widestSuffix && (op.type as any).width > (widestSuffix as any).width))
+        (!widestSuffix || ('width' in op.type && 'width' in widestSuffix && (op.type as { width: number }).width > (widestSuffix as { width: number }).width))
       ) {
         widestSuffix = op.type;
       }
@@ -5120,7 +5120,7 @@ export function interpret(input: string): number {
 
     // validate against the widest type if it's not a boolean result and it's numeric
     if (widestSuffix && !isBooleanResult && 'width' in widestSuffix) {
-      validateValueAgainstSuffix(finalResult, widestSuffix.kind as 'U' | 'I' | 'Bool', (widestSuffix as any).width);
+      validateValueAgainstSuffix(finalResult, widestSuffix.kind as 'U' | 'I' | 'Bool', (widestSuffix as { width: number }).width);
     }
 
     return { value: finalResult, type: finalSuffix || widestSuffix };
@@ -5610,7 +5610,7 @@ export function interpret(input: string): number {
     };
   }
 
-  function inferTypeFromValue(value: any): Type {
+  function inferTypeFromValue(value: unknown): Type {
     if (typeof value === 'boolean') {
       return { kind: 'Bool', width: 1 };
     }
@@ -5621,7 +5621,7 @@ export function interpret(input: string): number {
       return { kind: 'Str' };
     }
     if (Array.isArray(value)) {
-      const elementType: any = value.length > 0 ? inferTypeFromValue(value[0]) : { kind: 'I', width: 32 };
+      const elementType: Type = value.length > 0 ? inferTypeFromValue(value[0]) : { kind: 'I', width: 32 };
       return {
         kind: 'Array',
         elementType,
@@ -5644,9 +5644,9 @@ export function interpret(input: string): number {
     const jsArgs = args.map((arg) => arg.value);
 
     // Call the actual native function
-    let result: any;
+    let result: unknown;
     try {
-      result = nativeFn.fn(...jsArgs);
+      result = (nativeFn.fn as (...args: unknown[]) => unknown)(...jsArgs);
     } catch (err) {
       throw new Error('native function execution failed: ' + (err as Error).message);
     }
@@ -5669,7 +5669,7 @@ export function interpret(input: string): number {
       // Only wrap values that are not undefined.
       const elements: Array<RuntimeValue | undefined> = result.map((v) => (v !== undefined ? { value: v, type: inferTypeFromValue(v) } : undefined));
 
-      const initializedCount = result.filter((v: any) => v !== undefined).length;
+      const initializedCount = (result as unknown[]).filter((v: unknown) => v !== undefined).length;
 
       const arrayType: Type = {
         kind: 'Array',
@@ -5698,10 +5698,12 @@ export function interpret(input: string): number {
 
     // Handle non-array results
     const resultType = inferTypeFromValue(result);
+    const numericValue = typeof result === 'number' ? result : 0;
+    const stringValue = typeof result === 'string' ? result : undefined;
     return {
-      value: result,
+      value: numericValue,
       type: resultType,
-      stringValue: typeof result === 'string' ? result : undefined,
+      stringValue,
     };
   }
 

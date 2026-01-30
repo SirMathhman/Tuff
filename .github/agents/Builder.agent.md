@@ -13,3 +13,7 @@ When provided a test case, follow this workflow:
 4. If the tests fail, implement the feature to make them pass.
 5. Update documentation as needed.
 6. Commit your changes. Do not use `--no-verify`; always respect the pre-commit checks.
+
+Helpful tips:
+
+If you come across duplicate code, and that code has declarations, consider extracting a type alias or parameter object. If you have a piece of duplicate code that has a roughly equal amount of types and expressions, refactor the types first.

@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "bun ./src/index.ts && bun ./dist/bundle.js",
+    "start": "bun ./src/index.ts && bun ./generated/bundle.js",
     "dev": "nodemon",
     "lint": "eslint 'src/**/*.{ts,tsx}' --ext .ts",
     "format": "prettier --write .",
