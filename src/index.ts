@@ -538,6 +538,7 @@ export function compile(input: string): string {
     let stmt = stmts[i];
     let stmtOriginal = stmtsOriginal[i] || stmt;
     let structOnly = false;
+    let objectOnly = false;
 
     while (true) {
       const leadingStruct = splitLeadingStructDeclaration(stmtOriginal);
@@ -557,7 +558,25 @@ export function compile(input: string): string {
       stmtOriginal = leadingStruct.trailing;
     }
 
-    if (structOnly) {
+    while (true) {
+      const leadingObject = splitLeadingObjectDeclaration(stmtOriginal);
+      if (!leadingObject) {
+        break;
+      }
+      const objectDecl = parseObjectDeclaration(leadingObject.declaration);
+      if (!objectDecl) {
+        throw new Error('invalid object declaration');
+      }
+      jsCode += buildObjectDeclaration(objectDecl, context) + ' ';
+      if (!leadingObject.trailing) {
+        objectOnly = true;
+        break;
+      }
+      stmt = leadingObject.trailing;
+      stmtOriginal = leadingObject.trailing;
+    }
+
+    if (structOnly || objectOnly) {
       continue;
     }
 
@@ -700,7 +719,7 @@ export function compile(input: string): string {
             );
             jsCode += assignSnippet;
           } else {
-            const callExprMatch = stmt.match(/^\w+\s*\([\s\S]*\)$/);
+            const callExprMatch = stmt.match(/^[a-zA-Z_][\w\.]*\s*\([\s\S]*\)$/);
             if (callExprMatch) {
               const exprConverted = prepareValueExpression(
                 stmt,
@@ -784,6 +803,25 @@ export function compile(input: string): string {
       }
       lastStmtOriginal = finalStructSplit.trailing;
       lastStmt = finalStructSplit.trailing;
+    }
+
+    while (true) {
+      const finalObjectSplit = splitLeadingObjectDeclaration(lastStmtOriginal);
+      if (!finalObjectSplit) {
+        break;
+      }
+      const objectDecl = parseObjectDeclaration(finalObjectSplit.declaration);
+      if (!objectDecl) {
+        throw new Error('invalid object declaration');
+      }
+      jsCode += buildObjectDeclaration(objectDecl, context) + ' ';
+      if (!finalObjectSplit.trailing) {
+        jsCode += buildDropCalls(context);
+        jsCode += 'return 0;';
+        return jsCode;
+      }
+      lastStmtOriginal = finalObjectSplit.trailing;
+      lastStmt = finalObjectSplit.trailing;
     }
 
     const leadingFn = splitLeadingFunctionDefinition(lastStmtOriginal);
@@ -2653,11 +2691,12 @@ function splitLeadingFunctionDefinition(
   return { definition, trailing };
 }
 
-function splitLeadingStructDeclaration(
-  stmt: string
+function splitLeadingBlockDeclaration(
+  stmt: string,
+  keyword: 'struct' | 'object'
 ): { declaration: string; trailing: string } | undefined {
   const trimmed = stmt.trim();
-  if (!trimmed.startsWith('struct ')) return undefined;
+  if (!trimmed.startsWith(keyword + ' ')) return undefined;
   const braceStart = trimmed.indexOf('{');
   if (braceStart === -1) return undefined;
   const braceEnd = findMatchingClosing(trimmed, braceStart, '{', '}');
@@ -2667,6 +2706,81 @@ function splitLeadingStructDeclaration(
   const declaration = trimmed.slice(0, braceEnd + 1).trim();
   const trailing = trimmed.slice(braceEnd + 1).trim();
   return { declaration, trailing };
+}
+
+function splitLeadingStructDeclaration(
+  stmt: string
+): { declaration: string; trailing: string } | undefined {
+  return splitLeadingBlockDeclaration(stmt, 'struct');
+}
+
+function splitLeadingObjectDeclaration(
+  stmt: string
+): { declaration: string; trailing: string } | undefined {
+  return splitLeadingBlockDeclaration(stmt, 'object');
+}
+
+function parseObjectDeclaration(declaration: string): { name: string; body: string } | null {
+  const trimmed = declaration.trim();
+  if (!trimmed.startsWith('object ')) return null;
+  const nameMatch = trimmed.match(/^object\s+([a-zA-Z_]\w*)/);
+  if (!nameMatch) return null;
+  const name = nameMatch[1];
+  const braceStart = trimmed.indexOf('{');
+  if (braceStart === -1) return null;
+  const braceEnd = findMatchingClosing(trimmed, braceStart, '{', '}');
+  if (braceEnd === -1) return null;
+  const body = trimmed.slice(braceStart + 1, braceEnd).trim();
+  return { name, body };
+}
+
+function buildObjectDeclaration(
+  declaration: { name: string; body: string },
+  context: CompileContext
+): string {
+  const statements = splitBlockStatements(declaration.body);
+  const locals: string[] = [];
+  const fields: string[] = [];
+  const methods: string[] = [];
+
+  for (const stmt of statements) {
+    const trimmed = stmt.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('fn ')) {
+      const fnDef = parseFunctionDefinitionForCompile(trimmed);
+      if (!fnDef) {
+        throw new Error('invalid function definition');
+      }
+      const parsedParams = parseFnParams(fnDef.params, context);
+      locals.push(buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body));
+      methods.push(fnDef.name + ': ' + fnDef.name);
+      continue;
+    }
+    const letWithInit = trimmed.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*[^=]+)?\s*=\s*(.+)$/);
+    if (letWithInit) {
+      const varName = letWithInit[2];
+      const value = letWithInit[3];
+      const converted = prepareValueExpression(value, value, context, true, true);
+      locals.push('let ' + varName + ' = ' + converted + ';');
+      fields.push('get ' + varName + '() { return ' + varName + '; }');
+      continue;
+    }
+    const letNoInit = trimmed.match(/^let\s+(mut\s+)?(\w+)(?:\s*:\s*.+)?$/);
+    if (letNoInit) {
+      const varName = letNoInit[2];
+      locals.push('let ' + varName + ' = 0;');
+      fields.push('get ' + varName + '() { return ' + varName + '; }');
+      continue;
+    }
+    throw new Error('invalid object declaration');
+  }
+
+  context.definedVars.add(declaration.name);
+  const body = locals.join(' ');
+  const members = fields.concat(methods).join(', ');
+  return (
+    'const ' + declaration.name + ' = (function () { ' + body + ' return { ' + members + ' }; })();'
+  );
 }
 
 function applyArrayInitializer(
