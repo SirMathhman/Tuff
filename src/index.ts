@@ -481,6 +481,7 @@ export function compile(input: string): string {
     string,
     Array<{ index: number; minInitialized: number }>
   >();
+  const fnSignatures = new Map<string, FunctionSignature>();
   const context: CompileContext = {
     mutableVars,
     definedVars,
@@ -490,6 +491,7 @@ export function compile(input: string): string {
     arrayVars,
     arrayPointerTargets,
     fnArrayParamRequirements,
+    fnSignatures,
   };
   let jsCode = '';
   // Replace inline blocks with IIFEs
@@ -522,11 +524,16 @@ export function compile(input: string): string {
     }
 
     const fnMatch = stmt.match(
-      /^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*(.+)$/
+      /^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*([\s\S]+)$/
     );
-    if (fnMatch) {
-      const fnName = fnMatch[1];
-      const params = fnMatch[3].trim();
+    const fnMatchOriginal = stmtOriginal.match(
+      /^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*([\s\S]+)$/
+    );
+    if (fnMatch && fnMatchOriginal) {
+      const fnName = fnMatchOriginal[1];
+      const params = fnMatchOriginal[3].trim();
+      const bodyOriginal = fnMatchOriginal[5].trim();
+      const returnType = fnMatchOriginal[4] ? fnMatchOriginal[4].trim() : undefined;
       const body = fnMatch[5].trim();
 
       const parsedParams = parseFnParams(params);
@@ -536,10 +543,11 @@ export function compile(input: string): string {
         }
       }
 
+      registerFunctionSignature(fnName, parsedParams, returnType, bodyOriginal, context);
+
       const jsParams = parsedParams.map((param) => param.name).join(', ');
-      const convertedBody = normalizeRefs(convertIfElseToTernary(body));
+      const convertedBody = compileFunctionBodyExpression(body);
       jsCode += 'function ' + fnName + '(' + jsParams + ') { return ' + convertedBody + '; } ';
-      definedVars.add(fnName);
       continue;
     }
 
@@ -614,8 +622,20 @@ export function compile(input: string): string {
             );
             jsCode += assignSnippet;
           } else {
-            // Unknown statement
-            throw new Error('invalid statement');
+            const callExprMatch = stmt.match(/^\w+\s*\([\s\S]*\)$/);
+            if (callExprMatch) {
+              const exprConverted = prepareValueExpression(
+                stmt,
+                stmtOriginal,
+                context,
+                true,
+                false
+              );
+              jsCode += exprConverted + '; ';
+            } else {
+              // Unknown statement
+              throw new Error('invalid statement');
+            }
           }
         }
       }
@@ -659,6 +679,30 @@ export function compile(input: string): string {
         jsCode += 'return 0;';
         return jsCode;
       }
+    }
+
+    const leadingFn = splitLeadingFunctionDefinition(lastStmtOriginal);
+    if (leadingFn) {
+      const fnDef = parseFunctionDefinitionForCompile(leadingFn.definition);
+      if (!fnDef) {
+        throw new Error('invalid statement');
+      }
+      const parsedParams = parseFnParams(fnDef.params);
+      for (const param of parsedParams) {
+        if (param.arrayInfo) {
+          registerFnArrayParam(fnArrayParamRequirements, fnDef.name, param.index, param.arrayInfo);
+        }
+      }
+      registerFunctionSignature(fnDef.name, parsedParams, fnDef.returnType, fnDef.body, context);
+      jsCode += buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body) + ' ';
+
+      if (!leadingFn.trailing) {
+        jsCode += 'return 0;';
+        return jsCode;
+      }
+
+      lastStmtOriginal = leadingFn.trailing;
+      lastStmt = leadingFn.trailing;
     }
 
     const lastLetOriginal = lastStmtOriginal.match(
@@ -716,6 +760,7 @@ export function compile(input: string): string {
 
     // Check for undefined variables in final expression
     checkUndefinedVars(lastStmt, definedVars);
+    validateFunctionCalls(lastStmtOriginal, context, false);
 
     // Check if this is a comparison or boolean operator and wrap to convert bool to number
     // Comparison operators: ==, !=, <, >, <=, >=
@@ -1101,10 +1146,7 @@ function convertBlockToIIFE(blockContent: string): string {
     return '() => 0';
   }
 
-  const stmts = blockContent
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s);
+  const stmts = splitBlockStatements(blockContent);
 
   if (stmts.length === 0) {
     return '() => 0';
@@ -1114,17 +1156,113 @@ function convertBlockToIIFE(blockContent: string): string {
   let body = stmts
     .slice(0, -1)
     .map((stmt) => {
-      // Remove 'mut' keyword from let statements
-      return stmt.replace(/^let\s+mut\s+/g, 'let ');
+      return convertBlockStatementToJs(stmt);
     })
     .join('; ');
   const lastExpr = stmts[stmts.length - 1];
+  const lastIsStatement = isNonValueStatement(lastExpr);
+  const finalExpr = lastIsStatement ? '0' : normalizeRefs(convertIfElseToTernary(lastExpr));
 
   if (body) {
     body = body + '; ';
   }
 
-  return '() => { ' + body + 'return ' + lastExpr + '; }';
+  if (lastIsStatement) {
+    body = body + convertBlockStatementToJs(lastExpr) + '; ';
+  }
+
+  return '() => { ' + body + 'return ' + finalExpr + '; }';
+}
+
+function splitBlockStatements(blockContent: string): string[] {
+  const parts = splitTopLevel(blockContent, ';');
+  if (parts.length > 1) {
+    return parts.map((part) => part.trim()).filter((part) => part);
+  }
+
+  const trimmed = blockContent.trim();
+  if (!trimmed) return [];
+  return splitTopLevel(trimmed, '\n')
+    .map((part) => part.trim())
+    .filter((part) => part);
+}
+
+function isNonValueStatement(stmt: string): boolean {
+  const trimmed = stmt.trim();
+  if (!trimmed) return true;
+  if (trimmed.startsWith('fn ')) return true;
+  if (trimmed.startsWith('let ')) return true;
+  if (trimmed.startsWith('while ')) return true;
+  return /^\w+\s*(\+=|-=|\*=|\/=|=(?!=))/.test(trimmed);
+}
+
+function convertBlockStatementToJs(stmt: string): string {
+  const trimmed = stmt.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('fn ')) {
+    const fnDef = parseFunctionDefinitionForCompile(trimmed);
+    if (!fnDef) return '';
+    const parsedParams = parseFnParams(fnDef.params);
+    return buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body);
+  }
+
+  return normalizeRefs(convertIfElseToTernary(trimmed)).replace(/^let\s+mut\s+/g, 'let ');
+}
+
+type FunctionDefinition = {
+  name: string;
+  params: string;
+  returnType?: string;
+  body: string;
+};
+
+function parseFunctionDefinitionForCompile(stmt: string): FunctionDefinition | null {
+  const match = stmt.match(
+    /^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*([\s\S]+)$/
+  );
+  if (!match) return null;
+  return {
+    name: match[1],
+    params: match[3].trim(),
+    returnType: match[4] ? match[4].trim() : undefined,
+    body: match[5].trim(),
+  };
+}
+
+function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body: string): string {
+  const jsParams = parsedParams.map((param) => param.name).join(', ');
+  const bodyExpr = compileFunctionBodyExpression(body);
+  return 'function ' + name + '(' + jsParams + ') { return ' + bodyExpr + '; }';
+}
+
+function compileFunctionBodyExpression(body: string): string {
+  const trimmed = body.trim();
+  if (trimmed.startsWith('{')) {
+    const endIndex = findMatchingClosing(trimmed, 0, '{', '}');
+    if (endIndex === -1) {
+      throw new Error('unmatched opening brace');
+    }
+    const blockContent = trimmed.slice(1, endIndex).trim();
+    const blockCode = convertBlockToIIFE(blockContent);
+    return '(' + blockCode + ')()';
+  }
+
+  return normalizeRefs(convertIfElseToTernary(trimmed));
+}
+
+function findMatchingClosing(
+  str: string,
+  openIndex: number,
+  openChar: string,
+  closeChar: string
+): number {
+  let count = 1;
+  for (let i = openIndex + 1; i < str.length; i++) {
+    if (str[i] === openChar) count++;
+    if (str[i] === closeChar) count--;
+    if (count === 0) return i;
+  }
+  return -1;
 }
 
 type ArrayTypeInfo = {
@@ -1145,12 +1283,21 @@ type CompileContext = {
   arrayVars: Map<string, ArrayVarInfo>;
   arrayPointerTargets: Map<string, string>;
   fnArrayParamRequirements: Map<string, Array<{ index: number; minInitialized: number }>>;
+  fnSignatures: Map<string, FunctionSignature>;
+};
+
+type FunctionSignature = {
+  paramKinds: ExprType[];
+  paramNames: string[];
+  returnKind: ExprType;
+  returnsVoid: boolean;
 };
 
 type FnParamInfo = {
   name: string;
   index: number;
   arrayInfo?: { minInitialized: number };
+  kind: ExprType;
 };
 
 function parseArrayType(typeAnnotation?: string): ArrayTypeInfo | undefined {
@@ -1198,22 +1345,30 @@ function parseFnParams(params: string): FnParamInfo[] {
   if (!trimmed) return [];
   const parts = splitTopLevel(trimmed, ',');
   const result: FnParamInfo[] = [];
+  const seen = new Set<string>();
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i].trim();
     if (!part) continue;
     const match = part.match(/^(?:mut\s+)?([a-zA-Z_]\w*)\s*(?::\s*(.+))?$/);
     if (!match) continue;
     const name = match[1];
+    if (seen.has(name)) {
+      throw new Error('duplicate parameter name: ' + name);
+    }
+    seen.add(name);
     const typeAnnotation = match[2] ? match[2].trim() : undefined;
+    const declaredInfo = getDeclaredTypeInfo(typeAnnotation);
+    const kind = declaredInfo.kind;
     const arrayTypeInfo = parseArrayType(typeAnnotation);
     if (arrayTypeInfo && arrayTypeInfo.initializedCount !== undefined) {
       result.push({
         name,
         index: i,
         arrayInfo: { minInitialized: arrayTypeInfo.initializedCount },
+        kind,
       });
     } else {
-      result.push({ name, index: i });
+      result.push({ name, index: i, kind });
     }
   }
   return result;
@@ -1233,7 +1388,7 @@ function registerFnArrayParam(
 function parseArrayLiteral(expr: string): string[] | undefined {
   const trimmed = expr.trim();
   if (!trimmed.startsWith('[')) return undefined;
-  const endIndex = findMatchingClosingBracket(trimmed, 0);
+  const endIndex = findMatchingClosing(trimmed, 0, '[', ']');
   if (endIndex !== trimmed.length - 1) return undefined;
   const content = trimmed.slice(1, endIndex).trim();
   if (!content) return [];
@@ -1464,15 +1619,9 @@ function validateArrayLiteralIndexing(expr: string): void {
 
 function validateArrayCallRequirements(expr: string, context: CompileContext): void {
   const { arrayVars, arrayPointerTargets, fnArrayParamRequirements } = context;
-  const callRegex = /\b([a-zA-Z_]\w*)\s*\(([^()]*)\)/g;
-  let match: RegExpExecArray | null;
-  while ((match = callRegex.exec(expr)) !== null) {
-    const fnName = match[1];
-    const argsStr = match[2];
+  forEachCallExpression(expr, (fnName, args, argsStr) => {
     const requirements = fnArrayParamRequirements.get(fnName);
-    if (!requirements || requirements.length === 0) continue;
-
-    const args = splitTopLevel(argsStr, ',');
+    if (!requirements || requirements.length === 0) return;
     for (const requirement of requirements) {
       const arg = args[requirement.index];
       if (!arg) continue;
@@ -1497,7 +1646,7 @@ function validateArrayCallRequirements(expr: string, context: CompileContext): v
         throw new Error('array argument has insufficient initialized elements');
       }
     }
-  }
+  });
 }
 
 function handleArrayRhsIdentifier(
@@ -1541,16 +1690,194 @@ function prepareValueExpression(
   value: string,
   valueOriginal: string,
   context: CompileContext,
-  checkUndefined: boolean
+  checkUndefined: boolean,
+  disallowVoidCall: boolean
 ): string {
   const { definedVars, arrayVars, arrayPointerTargets } = context;
   if (checkUndefined) {
     checkUndefinedVars(valueOriginal, definedVars);
   }
+  validateFunctionCalls(valueOriginal, context, disallowVoidCall);
   validateArrayAccesses(valueOriginal, arrayVars, arrayPointerTargets);
   validateArrayLiteralIndexing(valueOriginal);
   validateArrayCallRequirements(valueOriginal, context);
   return normalizeRefs(convertIfElseToTernary(value));
+}
+
+function validateFunctionCalls(
+  expr: string,
+  context: CompileContext,
+  disallowVoidCall: boolean
+): void {
+  const { fnSignatures, definedVars, varTypes, varNumericSuffixes } = context;
+  forEachCallExpression(expr, (fnName, args) => {
+    const signature = fnSignatures.get(fnName);
+
+    if (!signature) {
+      if (definedVars.has(fnName)) {
+        throw new Error('cannot call non-function');
+      }
+      return;
+    }
+
+    if (args.length !== signature.paramKinds.length) {
+      throw new Error('function ' + fnName + ' expects ' + signature.paramKinds.length + ' args');
+    }
+
+    for (let i = 0; i < signature.paramKinds.length; i++) {
+      const paramKind = signature.paramKinds[i];
+      if (paramKind === 'Unknown') continue;
+      const argInfo = inferExprInfo(args[i], varTypes, varNumericSuffixes);
+      if (paramKind === 'Numeric' && argInfo.kind === 'Bool') {
+        throw new Error('cannot convert Bool to numeric type');
+      }
+      if (paramKind === 'Bool' && argInfo.kind === 'Numeric') {
+        throw new Error('cannot convert numeric type to Bool');
+      }
+    }
+
+    if (disallowVoidCall && signature.returnsVoid) {
+      throw new Error('void function cannot return a value');
+    }
+  });
+}
+
+function forEachCallExpression(
+  expr: string,
+  callback: (fnName: string, args: string[], rawArgs: string) => void
+): void {
+  const callRegex = /\b([a-zA-Z_]\w*)\s*\(([^()]*)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = callRegex.exec(expr)) !== null) {
+    const fnName = match[1];
+    const argsStr = match[2];
+    const args = argsStr.trim() ? splitTopLevel(argsStr, ',') : [];
+    callback(fnName, args, argsStr);
+  }
+}
+
+function parseReturnTypeAnnotation(returnType?: string): { kind: ExprType; returnsVoid: boolean } {
+  if (!returnType) return { kind: 'Unknown', returnsVoid: false };
+  const trimmed = returnType.trim();
+  if (trimmed === 'Void') {
+    return { kind: 'Unknown', returnsVoid: true };
+  }
+  const declaredInfo = getDeclaredTypeInfo(trimmed);
+  return { kind: declaredInfo.kind, returnsVoid: false };
+}
+
+function inferFunctionReturnInfo(
+  body: string,
+  paramKinds: FnParamInfo[],
+  context: CompileContext
+): { kind: ExprType; returnsVoid: boolean } {
+  const localVarTypes = new Map<string, ExprType>();
+  for (const param of paramKinds) {
+    if (param.kind !== 'Unknown') {
+      localVarTypes.set(param.name, param.kind);
+    }
+  }
+  const trimmed = body.trim();
+  if (trimmed.startsWith('{')) {
+    const endIndex = findMatchingClosing(trimmed, 0, '{', '}');
+    const blockContent = endIndex === -1 ? '' : trimmed.slice(1, endIndex).trim();
+    const stmts = splitBlockStatements(blockContent);
+    if (stmts.length === 0) {
+      return { kind: 'Unknown', returnsVoid: true };
+    }
+    const lastStmt = stmts[stmts.length - 1];
+    if (isNonValueStatement(lastStmt)) {
+      return { kind: 'Unknown', returnsVoid: true };
+    }
+    const info = inferExprInfo(lastStmt, localVarTypes, context.varNumericSuffixes);
+    return { kind: info.kind, returnsVoid: false };
+  }
+
+  if (!trimmed) {
+    return { kind: 'Unknown', returnsVoid: true };
+  }
+
+  const info = inferExprInfo(trimmed, localVarTypes, context.varNumericSuffixes);
+  return { kind: info.kind, returnsVoid: false };
+}
+
+function registerFunctionSignature(
+  fnName: string,
+  parsedParams: FnParamInfo[],
+  returnType: string | undefined,
+  body: string,
+  context: CompileContext
+): FunctionSignature {
+  const { fnSignatures, definedVars } = context;
+  if (fnSignatures.has(fnName)) {
+    throw new Error('function already defined: ' + fnName);
+  }
+
+  const declaredReturn = parseReturnTypeAnnotation(returnType);
+  const inferredReturn = inferFunctionReturnInfo(body, parsedParams, context);
+  let returnKind = inferredReturn.kind;
+  let returnsVoid = inferredReturn.returnsVoid;
+
+  if (declaredReturn.returnsVoid) {
+    returnKind = 'Unknown';
+    returnsVoid = true;
+  } else if (declaredReturn.kind !== 'Unknown') {
+    if (declaredReturn.kind === 'Numeric' && inferredReturn.kind === 'Bool') {
+      throw new Error('cannot return boolean value from non-bool function');
+    }
+    if (declaredReturn.kind === 'Bool' && inferredReturn.kind === 'Numeric') {
+      throw new Error('cannot return numeric value from bool function');
+    }
+    returnKind = declaredReturn.kind;
+    returnsVoid = false;
+  }
+
+  const signature: FunctionSignature = {
+    paramKinds: parsedParams.map((param) => param.kind),
+    paramNames: parsedParams.map((param) => param.name),
+    returnKind,
+    returnsVoid,
+  };
+  fnSignatures.set(fnName, signature);
+  definedVars.add(fnName);
+  return signature;
+}
+
+function getFunctionCallReturnInfo(
+  expr: string,
+  context: CompileContext
+): { kind: ExprType; returnsVoid: boolean } | undefined {
+  const match = expr.trim().match(/^([a-zA-Z_]\w*)\s*\(([^()]*)\)$/);
+  if (!match) return undefined;
+  const fnName = match[1];
+  const signature = context.fnSignatures.get(fnName);
+  if (!signature) return undefined;
+  return { kind: signature.returnKind, returnsVoid: signature.returnsVoid };
+}
+
+function splitLeadingFunctionDefinition(
+  stmt: string
+): { definition: string; trailing: string } | undefined {
+  const trimmed = stmt.trim();
+  if (!trimmed.startsWith('fn ')) return undefined;
+  const arrowIndex = trimmed.indexOf('=>');
+  if (arrowIndex === -1) return undefined;
+
+  const afterArrow = trimmed.slice(arrowIndex + 2).trim();
+  if (!afterArrow.startsWith('{')) {
+    return { definition: trimmed, trailing: '' };
+  }
+
+  const bodyStart = trimmed.indexOf('{', arrowIndex);
+  if (bodyStart === -1) return undefined;
+  const bodyEnd = findMatchingClosing(trimmed, bodyStart, '{', '}');
+  if (bodyEnd === -1) {
+    throw new Error('unmatched opening brace');
+  }
+
+  const definition = trimmed.slice(0, bodyEnd + 1).trim();
+  const trailing = trimmed.slice(bodyEnd + 1).trim();
+  return { definition, trailing };
 }
 
 function applyArrayInitializer(
@@ -1623,6 +1950,18 @@ function handleLetInitializer(
   const exprInfo = inferExprInfo(valueOriginal, varTypes, varNumericSuffixes);
   ensureNoBoolArithmetic(valueOriginal, varTypes);
   applyArrayInitializer(varName, typeAnnotation, valueOriginal, context, arrayTypeInfo);
+  const callReturn = getFunctionCallReturnInfo(valueOriginal, context);
+  if (callReturn) {
+    if (callReturn.returnsVoid) {
+      throw new Error('void function cannot return a value');
+    }
+    if (declaredInfo.kind === 'Numeric' && callReturn.kind === 'Bool') {
+      throw new Error('cannot convert Bool to numeric type');
+    }
+    if (declaredInfo.kind === 'Bool' && callReturn.kind === 'Numeric') {
+      throw new Error('cannot convert numeric type to Bool');
+    }
+  }
 
   if (
     declaredInfo.kind !== 'Unknown' &&
@@ -1654,7 +1993,7 @@ function handleLetInitializer(
   definedVars.add(varName);
   varInitialized.set(varName, true);
   varTypes.set(varName, declaredInfo.kind !== 'Unknown' ? declaredInfo.kind : exprInfo.kind);
-  const valueConverted = prepareValueExpression(value, valueOriginal, context, true);
+  const valueConverted = prepareValueExpression(value, valueOriginal, context, true, true);
   return 'let ' + varName + ' = ' + valueConverted + '; ';
 }
 
@@ -1713,19 +2052,22 @@ function handleAssignment(
     varNumericSuffixes,
     varInitialized
   );
-
-  const valueConverted = prepareValueExpression(value, valueOriginal, context, false);
-  return varName + ' ' + operator + ' ' + valueConverted + '; ';
-}
-
-function findMatchingClosingBracket(str: string, openIndex: number): number {
-  let count = 1;
-  for (let i = openIndex + 1; i < str.length; i++) {
-    if (str[i] === '[') count++;
-    if (str[i] === ']') count--;
-    if (count === 0) return i;
+  const callReturn = getFunctionCallReturnInfo(valueOriginal, context);
+  if (callReturn) {
+    if (callReturn.returnsVoid) {
+      throw new Error('void function cannot return a value');
+    }
+    const varType = varTypes.get(varName);
+    if (varType === 'Numeric' && callReturn.kind === 'Bool') {
+      throw new Error('cannot convert Bool to numeric type');
+    }
+    if (varType === 'Bool' && callReturn.kind === 'Numeric') {
+      throw new Error('cannot convert numeric type to Bool');
+    }
   }
-  return -1;
+
+  const valueConverted = prepareValueExpression(value, valueOriginal, context, false, true);
+  return varName + ' ' + operator + ' ' + valueConverted + '; ';
 }
 
 function splitLeadingBlockExpression(
