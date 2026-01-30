@@ -488,8 +488,6 @@ export function compile(input: string): string {
         .replace(/\/\*[\s\S]*?\*\//g, '') // strip block comments
         .trim();
 
-    const originalCode = code;
-
     if (!code) {
         return 'return 0;';
     }
@@ -497,6 +495,12 @@ export function compile(input: string): string {
     if (/^[a-zA-Z_]\w*(\s+[a-zA-Z_]\w*)+$/.test(code)) {
         return 'return 0;';
     }
+
+    // Remove generic type parameters from singleton references (e.g., None<I32> becomes None)
+    // This allows the compiler to treat generic singletons as their base singleton
+    code = code.replace(/\b([a-zA-Z_]\w*)\s*<[^<>]+>/g, '$1');
+
+    const originalCode = code;
 
     // Validate parentheses are balanced
     let parenCount = 0;
@@ -2661,14 +2665,6 @@ function parseAddressOfTarget(expr: string): string | undefined {
 }
 
 function normalizeRefs(expr: string): string {
-    // Check for taking address of generic singleton with concrete type (e.g., &None<I32>)
-    const invalidPattern = /&\s*mut\s+([a-zA-Z_]\w*)\s*<|&\s*([a-zA-Z_]\w*)\s*</;
-    const match = expr.match(invalidPattern);
-    if (match) {
-        const name = match[1] || match[2];
-        throw new Error('cannot take address of monomorphized singleton with concrete type: ' + name);
-    }
-
     let result = expr;
     result = result.replace(/&\s*mut\s+([a-zA-Z_]\w*)/g, '$1');
     result = result.replace(/&\s*([a-zA-Z_]\w*)/g, '$1');
@@ -3511,7 +3507,8 @@ function handleLetInitializer(
         return 'let ' + varName + ' = ' + valueConverted + '; ';
     }
     if (target) {
-        if (!definedVars.has(target)) {
+        // Skip validation for synthetic singleton instances
+        if (!target.startsWith('__singleton_') && !definedVars.has(target)) {
             throw new Error('undefined variable');
         }
         const isMutableRef = /&\s*mut\s+/.test(valueOriginal);
@@ -4963,6 +4960,33 @@ export function interpret(input: string): number {
         return parts;
     }
 
+    const ensureSingletonInstanceInContext = (instanceVarName: string, singletonName: string, context: Context, mutable: boolean): void => {
+        if (!context.has(instanceVarName)) {
+            const baseSingleton = context.get(singletonName);
+            if (baseSingleton && baseSingleton.structFields !== undefined) {
+                context.set(instanceVarName, {
+                    value: 0,
+                    type: baseSingleton.type,
+                    mutable,
+                    initialized: true,
+                    structName: singletonName,
+                    structFields: baseSingleton.structFields,
+                });
+            }
+        }
+    };
+
+    const getGenericSingletonInstanceName = (rawName: string): { instanceVarName: string; singletonName: string } | null => {
+        const genericMatch = rawName.match(/^([a-zA-Z_]\w*)\s*<([^>]+)>$/);
+        if (!genericMatch) {
+            return null;
+        }
+        const singletonName = genericMatch[1];
+        const typeArg = genericMatch[2].trim();
+        const instanceVarName = '__singleton_' + singletonName + '_' + typeArg.replace(/\s+/g, '') + '_';
+        return { instanceVarName, singletonName };
+    };
+
     // helper to evaluate an expression with optional variable context
     function resolveOperand(token: string, context: Context, functions: FunctionTable, structs: StructTable): RuntimeValue {
         if (token === 'true' || token === 'false') {
@@ -4992,10 +5016,23 @@ export function interpret(input: string): number {
         }
         // Handle mutable reference operator
         if (token.startsWith('&mut ')) {
-            const varName = token.substring(5).trim();
-            if (varName.includes('<')) {
-                throw new Error('cannot take address of monomorphized singleton with concrete type');
+            let varName = token.substring(5).trim();
+
+            // Handle preprocessed singleton instances like __singleton_None_I32_
+            if (varName.startsWith('__singleton_')) {
+                const match = varName.match(/^__singleton_([a-zA-Z_]\w+)_([A-Za-z0-9_]+)_$/);
+                if (match) {
+                    const singletonName = match[1];
+                    ensureSingletonInstanceInContext(varName, singletonName, context, true);
+                }
             }
+            // Check if this is a generic singleton reference like &mut None<I32>
+            const genericInfo = getGenericSingletonInstanceName(varName);
+            if (genericInfo) {
+                ensureSingletonInstanceInContext(genericInfo.instanceVarName, genericInfo.singletonName, context, true);
+                varName = genericInfo.instanceVarName;
+            }
+
             if (varName === 'this') {
                 // Special case: &mut this creates a mutable reference to the current scope
                 return {
@@ -5024,10 +5061,23 @@ export function interpret(input: string): number {
         }
         // Handle immutable reference operator
         if (token.startsWith('&')) {
-            const refTarget = token.substring(1);
-            if (refTarget.includes('<')) {
-                throw new Error('cannot take address of monomorphized singleton with concrete type');
+            let refTarget = token.substring(1);
+
+            // Handle preprocessed singleton instances like __singleton_None_I32_
+            if (refTarget.startsWith('__singleton_')) {
+                const match = refTarget.match(/^__singleton_([a-zA-Z_]\w+)_([A-Za-z0-9_]+)_$/);
+                if (match) {
+                    const singletonName = match[1];
+                    ensureSingletonInstanceInContext(refTarget, singletonName, context, false);
+                }
             }
+            // Check if this is a generic singleton reference like &None<I32>
+            const genericInfo = getGenericSingletonInstanceName(refTarget);
+            if (genericInfo) {
+                ensureSingletonInstanceInContext(genericInfo.instanceVarName, genericInfo.singletonName, context, false);
+                refTarget = genericInfo.instanceVarName;
+            }
+
             if (refTarget === 'this') {
                 // Special case: &this creates a reference to the current scope
                 return {
@@ -5057,14 +5107,15 @@ export function interpret(input: string): number {
         return parseLiteralToken(token);
     }
 
-    function evaluateExpression(expr: string, context: Context = new Map(), functions: FunctionTable, structs: StructTable): RuntimeValue {
-        // Check for invalid pattern: taking address of generic singleton with concrete type
-        if (/[&]\s*[a-zA-Z_]\w*\s*</.test(expr)) {
-            throw new Error('cannot take address of monomorphized singleton with concrete type');
-        }
+    function normalizeGenericSingletonReferences(expr: string, context: Context): string {
+        // This function is kept for backward compatibility but the main logic
+        // is now in resolveOperand where we handle non-existent variables
+        return expr;
+    }
 
+    function evaluateExpression(expr: string, context: Context = new Map(), functions: FunctionTable, structs: StructTable): RuntimeValue {
         const tokens = expr.match(
-            /true|false|"[^"]*"|'.'|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)*)/g
+            /true|false|"[^"]*"|'.'|(&mut\s+[a-zA-Z_]\w*(?:<[^>]+>)?)|([&*][a-zA-Z_]\w*(?:<[^>]+>)?)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)*)/g
         );
         if (!tokens || tokens.length === 0) {
             throw new Error('invalid expression');
@@ -6330,6 +6381,12 @@ export function interpret(input: string): number {
         declaredInThisBlock: Set<string>;
         hasTrailingExpression: boolean;
     } {
+        // Preprocess generic singleton references: convert &Name<Type> to &__singleton_Name_Type_
+        blockContent = blockContent.replace(/&(mut\s+)?([a-zA-Z_]\w*)\s*<([^<>]+)>/g, (match, isMut, name, type_) => {
+            const instanceName = '__singleton_' + name + '_' + type_.replace(/\s+/g, '') + '_';
+            return (isMut ? '&mut ' : '&') + instanceName;
+        });
+
         const context = new Map(parentContext);
         const declaredInThisBlock = new Set<string>();
 
@@ -6530,7 +6587,7 @@ export function interpret(input: string): number {
                 }
                 continue;
             } else if (stmt.startsWith('object ')) {
-                const nameMatch = stmt.match(/^object\s+([a-zA-Z_]\w*)\s*/);
+                const nameMatch = stmt.match(/^object\s+([a-zA-Z_]\w*)(\s*<[^>]+>)?\s*/);
                 if (!nameMatch) {
                     throw new Error('invalid object declaration');
                 }
@@ -6856,13 +6913,13 @@ export function interpret(input: string): number {
                 const ensureMutableVar = (varName: string) => {
                     const varInfo = ensureVariable(varName, context);
                     if (!varInfo.mutable && varInfo.initialized) {
-                        throw new Error('cannot assign to immutable variable: ' + varName);
+                        throw new Error('cannot assign to immutable variable: ' + varName + ' (declare with `let mut ' + varName + '` to make it mutable)');
                     }
                     return varInfo;
                 };
 
                 // First check if it's a dereferenced pointer assignment (*y = ...)
-                const derefMatch = stmt.match(/^\*([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+                const derefMatch = stmt.match(/^\*([a-zA-Z_]\w*)\s*(=(?!=)|\+=|-=|\*=|\/=)\s*(.+)$/);
                 if (derefMatch) {
                     const ptrName = derefMatch[1];
                     const op = derefMatch[2];
@@ -6897,7 +6954,7 @@ export function interpret(input: string): number {
                     recordAssignment(targetVarName, updatedTargetInfo);
                 } else {
                     // Array element assignment: array[index] = value or array[index] += value
-                    const arrayAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\[\s*(.+?)\s*\]\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+                    const arrayAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\[\s*(.+?)\s*\]\s*(=(?!=)|\+=|-=|\*=|\/=)\s*(.+)$/);
                     if (arrayAssignMatch) {
                         const varName = arrayAssignMatch[1];
                         const indexExpr = arrayAssignMatch[2].trim();
@@ -6976,7 +7033,7 @@ export function interpret(input: string): number {
                         continue;
                     }
                     // Regular variable assignment or this.x assignment or pointerToThis.x assignment
-                    let m = stmt.match(/^([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+                    let m = stmt.match(/^([a-zA-Z_]\w*)\s*(=(?!=)|\+=|-=|\*=|\/=)\s*(.+)$/);
                     let varName: string;
                     let op: string;
                     let varExprStr: string;
@@ -6984,7 +7041,7 @@ export function interpret(input: string): number {
                     let shouldUpdateBoundThis = false;
                     if (!m) {
                         // Check for this.x assignment or pointerVar.x assignment
-                        const dotAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
+                        const dotAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(=(?!=)|\+=|-=|\*=|\/=)\s*(.+)$/);
                         if (!dotAssignMatch) {
                             finalExpr = stmt;
                             lastProcessedValue = undefined;
