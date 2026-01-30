@@ -5,7 +5,10 @@ extern fn free<T>(this : *mut [T]) : Void;
 extern fn checkMemoryOrPanic() : Void;
 extern fn println(content : *Str) : Void;
 
-println("Test passed");
+object MySingleton {
+}
+
+let a = &MySingleton;
 
 checkMemoryOrPanic();
 
