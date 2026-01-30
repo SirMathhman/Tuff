@@ -41,12 +41,7 @@ export function assertInvalid(code: string): void {
  * the interpreter and compiler. Validates consistency across both pipelines
  * for modular code with use statements and extern declarations.
  */
-export function assertAllValid(
-  inputs: string[],
-  config: Map<string[], string>,
-  nativeConfig: Map<string[], string>,
-  expectedResult: number
-): void {
+export function assertAllValid(inputs: string[], config: Map<string[], string>, nativeConfig: Map<string[], string>, expectedResult: number): void {
   // Test interpreter
   const interpreterResult = interpretAll(inputs, config, nativeConfig);
   expect(interpreterResult).toBe(expectedResult);
@@ -65,11 +60,7 @@ export function assertAllValid(
  * Assert that multi-file Tuff code throws an error in BOTH the interpreter and compiler.
  * Validates that error checking is consistent across both pipelines for modular code.
  */
-export function assertAllInvalid(
-  inputs: string[],
-  config: Map<string[], string>,
-  nativeConfig: Map<string[], string>
-): void {
+export function assertAllInvalid(inputs: string[], config: Map<string[], string>, nativeConfig: Map<string[], string>): void {
   // Test interpreter
   expect(() => {
     interpretAll(inputs, config, nativeConfig);

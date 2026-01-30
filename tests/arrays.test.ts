@@ -20,10 +20,7 @@ test('indexes arrays returned by calls', () => {
 });
 
 test('assigns array element with variable index', () => {
-  assertValid(
-    'let mut array : [I32; 0; 2]; let mut idx : USize = 0; array[idx] = 100; array[0]',
-    100
-  );
+  assertValid('let mut array : [I32; 0; 2]; let mut idx : USize = 0; array[idx] = 100; array[0]', 100);
 });
 
 test('rejects copying arrays', () => {
@@ -31,10 +28,7 @@ test('rejects copying arrays', () => {
 });
 
 test('supports slice pointer indexing', () => {
-  assertValid(
-    'let array = [1, 2, 3]; let slice : *[I32] = &array; slice[0] + slice[1] + slice[2]',
-    6
-  );
+  assertValid('let array = [1, 2, 3]; let slice : *[I32] = &array; slice[0] + slice[1] + slice[2]', 6);
 });
 
 test('allows copying slice pointers', () => {
@@ -54,14 +48,9 @@ test('enforces ordered array initialization', () => {
 });
 
 test('allows assigning into uninitialized arrays before passing', () => {
-  assertValid(
-    'let mut array : [I32; 0; 3]; array[0] = 100; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)',
-    100
-  );
+  assertValid('let mut array : [I32; 0; 3]; array[0] = 100; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)', 100);
 });
 
 test('rejects passing arrays with insufficient initialized elements', () => {
-  assertInvalid(
-    'let mut array : [I32; 0; 3]; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)'
-  );
+  assertInvalid('let mut array : [I32; 0; 3]; fn getFirst(arr : [I32; 1; 3]) => arr[0]; getFirst(array)');
 });

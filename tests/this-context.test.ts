@@ -52,38 +52,16 @@ test('interpret allows binding inner function from returned this', () => {
 });
 
 test('interpret supports nested this with uppercase function names', () => {
-  assertValid(
-    'fn OuterClass(x : I32) => { fn InnerClass(y : I32) => { fn manhattan() => x + y; this } this } OuterClass(3).InnerClass(4).manhattan()',
-    7
-  );
+  assertValid('fn OuterClass(x : I32) => { fn InnerClass(y : I32) => { fn manhattan() => x + y; this } this } OuterClass(3).InnerClass(4).manhattan()', 7);
 });
 
 test('interpret nested functions each get their own this context', () => {
-  assertValid(
-    'fn Outer() => {' +
-      '  let x = 100;' +
-      '  fn Inner() => {' +
-      '    let y = 50;' +
-      '    this' +
-      '  }' +
-      '  Inner().y' +
-      '}; ' +
-      'Outer()',
-    50
-  );
+  assertValid('fn Outer() => {' + '  let x = 100;' + '  fn Inner() => {' + '    let y = 50;' + '    this' + '  }' + '  Inner().y' + '}; ' + 'Outer()', 50);
 });
 
 test('interpret this.this in nested function accesses outer function scope', () => {
   assertValid(
-    'fn Outer() => {' +
-      '  let x = 100;' +
-      '  fn Inner() => {' +
-      '    let y = 50;' +
-      '    this.this' +
-      '  }' +
-      '  Inner().x' +
-      '}; ' +
-      'Outer()',
+    'fn Outer() => {' + '  let x = 100;' + '  fn Inner() => {' + '    let y = 50;' + '    this.this' + '  }' + '  Inner().x' + '}; ' + 'Outer()',
     100
   );
 });

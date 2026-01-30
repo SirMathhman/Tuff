@@ -29,15 +29,9 @@ test('rejects access to non-existent struct field', () => {
 });
 
 test('supports generic structs', () => {
-  assertValid(
-    'struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field',
-    100
-  );
+  assertValid('struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field', 100);
 });
 
 test('supports generic structs with type checking', () => {
-  assertValid(
-    'struct Wrapper<T> { field : T; } let wrapper = Wrapper<Bool> { true }; wrapper.field is I32',
-    0
-  );
+  assertValid('struct Wrapper<T> { field : T; } let wrapper = Wrapper<Bool> { true }; wrapper.field is I32', 0);
 });

@@ -9,8 +9,5 @@ test('supports forward type alias references', () => {
 });
 
 test('supports drop functions for type aliases', () => {
-  assertValid(
-    'let mut sum = 0; fn drop(this : MyDroppable) => sum += this; type MyDroppable = I32 then drop; let temp : MyDroppable = 100; sum',
-    100
-  );
+  assertValid('let mut sum = 0; fn drop(this : MyDroppable) => sum += this; type MyDroppable = I32 then drop; let temp : MyDroppable = 100; sum', 100);
 });

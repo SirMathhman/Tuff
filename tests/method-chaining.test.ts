@@ -3,12 +3,7 @@ import { assertValid } from './utils';
 test('interpret method returning this returns the method context not outer scope', () => {
   // setValue returns its own context (like an inner class), which has field 'v'
   assertValid(
-    'fn Builder() => {' +
-      '  let mut value = 0;' +
-      '  fn setValue(v : I32) => { this.value = v; this }' +
-      '  this' +
-      '}; ' +
-      'Builder().setValue(42).v',
+    'fn Builder() => {' + '  let mut value = 0;' + '  fn setValue(v : I32) => { this.value = v; this }' + '  this' + '}; ' + 'Builder().setValue(42).v',
     42
   );
 });

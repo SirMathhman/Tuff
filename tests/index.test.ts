@@ -13,8 +13,7 @@ const assertWithLib = (mainSource: string, libSource: string, expected: number):
   assertAllValid(['main'], config, nativeConfig, expected);
 };
 
-const createArrayLibSource =
-  'export function createArray<T>(length: number): T[] { return new Array<T>(length); }';
+const createArrayLibSource = 'export function createArray<T>(length: number): T[] { return new Array<T>(length); }';
 const complexLibSource =
   createArrayLibSource +
   '\n' +
@@ -64,9 +63,7 @@ test('buildReplInputs loads src tree for repl', () => {
 });
 
 test('interpretAll supports extern native bindings', () => {
-  const config = new Map([
-    [['main'], 'extern use { myConst } from lib; extern let myConst : I32; myConst'],
-  ]);
+  const config = new Map([[['main'], 'extern use { myConst } from lib; extern let myConst : I32; myConst']]);
   const nativeConfig = new Map([[['lib'], 'export const myConst = 100;']]);
   assertAllValid(['main'], config, nativeConfig, 100);
 });
@@ -78,33 +75,25 @@ test('interpretAll supports extern native functions', () => {
 });
 
 test('interpretAll supports generic extern native functions', () => {
-  const config = buildMainConfig(
-    'extern use { get } from lib; extern fn get<T>() : I32; get<Bool>()'
-  );
+  const config = buildMainConfig('extern use { get } from lib; extern fn get<T>() : I32; get<Bool>()');
   const nativeConfig = buildLibConfig('export function get<T>() { return 100; }');
   assertAllValid(['main'], config, nativeConfig, 100);
 });
 
 test('interpretAll reports missing native exports with context', () => {
-  const config = buildMainConfig(
-    'extern use { resizeArray } from lib; extern fn resizeArray<T>(ptr : *mut [T], length : USize) : *mut [T]; 0'
-  );
+  const config = buildMainConfig('extern use { resizeArray } from lib; extern fn resizeArray<T>(ptr : *mut [T], length : USize) : *mut [T]; 0');
   const nativeConfig = buildLibConfig('export function createArray<T>() { return 0; }');
   assertAllInvalid(['main'], config, nativeConfig);
 });
 
 test('interpretAll reports missing extern fn export with context', () => {
-  const config = buildMainConfig(
-    'extern use { createArray } from lib; extern fn resizeArray<T>(ptr : *mut [T], length : USize) : *mut [T]; 0'
-  );
+  const config = buildMainConfig('extern use { createArray } from lib; extern fn resizeArray<T>(ptr : *mut [T], length : USize) : *mut [T]; 0');
   const nativeConfig = buildLibConfig('export function createArray<T>() { return 0; }');
   assertAllInvalid(['main'], config, nativeConfig);
 });
 
 test('interpretAll allows unused void native functions', () => {
-  const config = buildMainConfig(
-    'extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; 0'
-  );
+  const config = buildMainConfig('extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; 0');
   const nativeConfig = buildLibConfig(
     'export function createArray<T>(length: number) { return new Array<T>(length); }\nexport function println(content: string) { console.log(content); }'
   );
@@ -112,12 +101,8 @@ test('interpretAll allows unused void native functions', () => {
 });
 
 test('interpretAll handles native createArray without copying arrays', () => {
-  const config = buildMainConfig(
-    'extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; let array = createArray<I32>(3); 0'
-  );
-  const nativeConfig = buildLibConfig(
-    'export function createArray<T>(length: number) { return new Array<T>(length); }'
-  );
+  const config = buildMainConfig('extern use { createArray } from lib; extern fn createArray<T>(length : USize) : *[T]; let array = createArray<I32>(3); 0');
+  const nativeConfig = buildLibConfig('export function createArray<T>(length: number) { return new Array<T>(length); }');
   assertAllValid(['main'], config, nativeConfig, 0);
 });
 
@@ -128,10 +113,7 @@ test('buildReplInputs should not load index.ts as a native module', () => {
   // Create a minimal index.tuff
   fs.writeFileSync(path.join(srcDir, 'index.tuff'), '100');
   // Create index.ts (simulating the interpreter source file)
-  fs.writeFileSync(
-    path.join(srcDir, 'index.ts'),
-    'export function interpret() { if (true) { return 0; } return 1; }'
-  );
+  fs.writeFileSync(path.join(srcDir, 'index.ts'), 'export function interpret() { if (true) { return 0; } return 1; }');
   // Create lib.ts (actual native module)
   fs.writeFileSync(path.join(srcDir, 'lib.ts'), 'export const x = 7;');
 
@@ -155,9 +137,5 @@ test('interpretAll handles mutable array from native function', () => {
 });
 
 test('interpretAll handles complex native function with unrestricted syntax', () => {
-  assertWithLib(
-    'extern use { complexCalculation } from lib; extern fn complexCalculation(n : I32) : I32; complexCalculation(5)',
-    complexLibSource,
-    35
-  );
+  assertWithLib('extern use { complexCalculation } from lib; extern fn complexCalculation(n : I32) : I32; complexCalculation(5)', complexLibSource, 35);
 });

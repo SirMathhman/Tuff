@@ -83,8 +83,7 @@ function extractUseStatements(source: string): {
     externLetMatch = externLetRegex.exec(source);
   }
 
-  const externFnRegex =
-    /extern\s+fn\s+([a-zA-Z_]\w*)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^;]+))?;?/g;
+  const externFnRegex = /extern\s+fn\s+([a-zA-Z_]\w*)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^;]+))?;?/g;
   let externFnMatch = externFnRegex.exec(source);
   while (externFnMatch) {
     externFnsList.push({
@@ -96,12 +95,7 @@ function extractUseStatements(source: string): {
     externFnMatch = externFnRegex.exec(source);
   }
 
-  const code = sourceWithoutExtern
-    .replace(externUseRegex, '')
-    .replace(externLetRegex, '')
-    .replace(externFnRegex, '')
-    .replace(useRegex, '')
-    .trim();
+  const code = sourceWithoutExtern.replace(externUseRegex, '').replace(externLetRegex, '').replace(externFnRegex, '').replace(useRegex, '').trim();
   return { code, deps, externDeps, externLets: externLetsList, externFns: externFnsList };
 }
 
@@ -111,12 +105,7 @@ function parseNativeExports(source: string): NativeExports {
 
   const jsCode = transpileNativeSource(source);
 
-  const wrapped = [
-    'const exports = {};',
-    'const module = { exports };',
-    jsCode,
-    'return module.exports;',
-  ].join('\n');
+  const wrapped = ['const exports = {};', 'const module = { exports };', jsCode, 'return module.exports;'].join('\n');
 
   try {
     const getExports = new Function('require', wrapped);
@@ -142,11 +131,7 @@ function parseNativeExports(source: string): NativeExports {
   return { constExports, fnExports };
 }
 
-function collectModulePlan(
-  inputs: string[],
-  config: Map<string[], string>,
-  nativeConfig: Map<string[], string>
-): ModulePlan {
+function collectModulePlan(inputs: string[], config: Map<string[], string>, nativeConfig: Map<string[], string>): ModulePlan {
   const moduleMap = new Map<string, string>();
   for (const [key, value] of config) {
     if (key.length > 0) {
@@ -212,9 +197,7 @@ function buildMissingNativeExportMessage(exportName: string, moduleName: string)
   );
 }
 
-function buildNativeExportsByModule(
-  nativeModuleMap: Map<string, string>
-): Map<string, NativeExports> {
+function buildNativeExportsByModule(nativeModuleMap: Map<string, string>): Map<string, NativeExports> {
   const nativeExportsByModule = new Map<string, NativeExports>();
   for (const [moduleName, source] of nativeModuleMap) {
     nativeExportsByModule.set(moduleName, parseNativeExports(source));
@@ -277,13 +260,7 @@ function resolveExternBindings(
 } {
   const nativeExportsByModule = buildNativeExportsByModule(nativeModuleMap);
   const resolvedUses = resolveExternUses(externUses, nativeModuleMap, nativeExportsByModule);
-  const resolvedFns = resolveExternFns(
-    externFns,
-    externUses,
-    resolvedUses.externFnByName,
-    nativeExportsByModule,
-    resolvedUses.externFnModuleByName
-  );
+  const resolvedFns = resolveExternFns(externFns, externUses, resolvedUses.externFnByName, nativeExportsByModule, resolvedUses.externFnModuleByName);
   return {
     nativeExportsByModule,
     externValueByName: resolvedUses.externValueByName,
@@ -300,16 +277,11 @@ function prepareExternBindings(
   nativeConfig: Map<string[], string>
 ): { plan: ModulePlan; externBindings: ExternBindings | null; hasContent: boolean } {
   const plan = collectModulePlan(inputs, config, nativeConfig);
-  const hasContent =
-    plan.parts.length > 0 || plan.externLets.length > 0 || plan.externFns.length > 0;
+  const hasContent = plan.parts.length > 0 || plan.externLets.length > 0 || plan.externFns.length > 0;
   if (!hasContent) {
     return { plan, externBindings: null, hasContent: false };
   }
-  const externBindings = resolveExternBindings(
-    plan.externUses,
-    plan.externFns,
-    plan.nativeModuleMap
-  );
+  const externBindings = resolveExternBindings(plan.externUses, plan.externFns, plan.nativeModuleMap);
   return { plan, externBindings, hasContent };
 }
 
@@ -376,19 +348,14 @@ function resolveExternFns(
   return { nativeFunctionTable, nativeFunctionReturnTypesLocal, externFnModuleByName };
 }
 
-function buildExternPreludeParts(
-  externLets: ExternLet[],
-  externValueByName: Map<string, string>
-): string[] {
+function buildExternPreludeParts(externLets: ExternLet[], externValueByName: Map<string, string>): string[] {
   const externPreludeParts: string[] = [];
   for (const externLet of externLets) {
     const value = externValueByName.get(externLet.name);
     if (!value) {
       throw new Error('native export not found: ' + externLet.name);
     }
-    externPreludeParts.push(
-      ['let ', externLet.name, ' : ', externLet.type, ' = ', value, ';'].join('')
-    );
+    externPreludeParts.push(['let ', externLet.name, ' : ', externLet.type, ' = ', value, ';'].join(''));
   }
   return externPreludeParts;
 }
@@ -419,18 +386,13 @@ function stripExplicitTypeArgsFromCalls(source: string): string {
   });
 }
 
-export function interpretAll(
-  inputs: string[],
-  config: Map<string[], string>,
-  nativeConfig: Map<string[], string>
-): number {
+export function interpretAll(inputs: string[], config: Map<string[], string>, nativeConfig: Map<string[], string>): number {
   const prepared = prepareExternBindings(inputs, config, nativeConfig);
   if (!prepared.hasContent || !prepared.externBindings) return 0;
   const { parts, externLets } = prepared.plan;
   const externValueByName = prepared.externBindings.externValueByName;
   const nativeFunctionTable = prepared.externBindings.resolvedFns.nativeFunctionTable;
-  const nativeFunctionReturnTypesLocal =
-    prepared.externBindings.resolvedFns.nativeFunctionReturnTypesLocal;
+  const nativeFunctionReturnTypesLocal = prepared.externBindings.resolvedFns.nativeFunctionReturnTypesLocal;
 
   const externPreludeParts = buildExternPreludeParts(externLets, externValueByName);
   const combined = combineCodeParts(externPreludeParts.concat(parts));
@@ -491,9 +453,7 @@ export function buildReplInputs(rootDir: string): {
   collectFiles(srcDir);
 
   if (!config.has(['index'])) {
-    const hasIndex = Array.from(config.keys()).some(
-      (key) => key.length === 1 && key[0] === 'index'
-    );
+    const hasIndex = Array.from(config.keys()).some((key) => key.length === 1 && key[0] === 'index');
     if (!hasIndex) {
       throw new Error('index.tuff not found');
     }
@@ -625,10 +585,7 @@ export function compile(input: string): string {
   const arrayVars = new Map<string, ArrayVarInfo>();
   const arrayPointerTargets = new Map<string, string>();
   const arrayPointerVarIsMutable = new Map<string, boolean>();
-  const fnArrayParamRequirements = new Map<
-    string,
-    Array<{ index: number; minInitialized: number }>
-  >();
+  const fnArrayParamRequirements = new Map<string, Array<{ index: number; minInitialized: number }>>();
   const fnSignatures = new Map<string, FunctionSignature>();
   const structDefs = new Map<string, string[]>();
   const structVarTypes = new Map<string, string>();
@@ -736,9 +693,7 @@ export function compile(input: string): string {
       if (!fnDefOriginal) {
         throw new Error('invalid statement');
       }
-      jsCode +=
-        emitFunctionDefinition(fnDefOriginal, fnDefOriginal, context, fnArrayParamRequirements) +
-        ' ';
+      jsCode += emitFunctionDefinition(fnDefOriginal, fnDefOriginal, context, fnArrayParamRequirements) + ' ';
       if (!leadingFn.trailing) {
         fnOnly = true;
         break;
@@ -771,8 +726,7 @@ export function compile(input: string): string {
     const fnDefOriginal = parseFunctionDefinitionForCompile(stmtOriginal);
     if (fnDefOriginal) {
       const fnDef = parseFunctionDefinitionForCompile(stmt) || fnDefOriginal;
-      jsCode +=
-        emitFunctionDefinition(fnDef, fnDefOriginal, context, fnArrayParamRequirements) + ' ';
+      jsCode += emitFunctionDefinition(fnDef, fnDefOriginal, context, fnArrayParamRequirements) + ' ';
       continue;
     }
 
@@ -791,57 +745,32 @@ export function compile(input: string): string {
         );
         jsCode += letSnippet;
       } else {
-        const letSnippet = handleLetNoInit(
-          parsedLet.varName,
-          parsedLet.typeAnnotation,
-          parsedLet.isMutable,
-          context
-        );
+        const letSnippet = handleLetNoInit(parsedLet.varName, parsedLet.typeAnnotation, parsedLet.isMutable, context);
         jsCode += letSnippet;
       }
       continue;
     }
 
-    const thisAssignMatch = stmt.match(
-      /^this\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
-    );
+    const thisAssignMatch = stmt.match(/^this\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
     if (thisAssignMatch) {
       const varName = thisAssignMatch[1];
       const operator = thisAssignMatch[2];
       const value = thisAssignMatch[3];
-      const valueOriginalMatch = stmtOriginal.match(
-        /^this\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
-      );
+      const valueOriginalMatch = stmtOriginal.match(/^this\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
       const valueOriginal = valueOriginalMatch ? valueOriginalMatch[3] : value;
-      const assignSnippet = buildThisFieldAssignment(
-        varName,
-        operator,
-        value,
-        valueOriginal,
-        context
-      );
+      const assignSnippet = buildThisFieldAssignment(varName, operator, value, valueOriginal, context);
       jsCode += assignSnippet;
       continue;
     }
 
-    const thisPointerAssignMatch = stmt.match(
-      /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
-    );
+    const thisPointerAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
     if (thisPointerAssignMatch && context.thisPointerVars.has(thisPointerAssignMatch[1])) {
       const varName = thisPointerAssignMatch[2];
       const operator = thisPointerAssignMatch[3];
       const value = thisPointerAssignMatch[4];
-      const valueOriginalMatch = stmtOriginal.match(
-        /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
-      );
+      const valueOriginalMatch = stmtOriginal.match(/^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
       const valueOriginal = valueOriginalMatch ? valueOriginalMatch[4] : value;
-      const assignSnippet = buildThisFieldAssignment(
-        varName,
-        operator,
-        value,
-        valueOriginal,
-        context
-      );
+      const assignSnippet = buildThisFieldAssignment(varName, operator, value, valueOriginal, context);
       jsCode += assignSnippet;
       continue;
     }
@@ -1021,9 +950,7 @@ export function compile(input: string): string {
       lastStmt = leadingFn.trailing;
     }
 
-    const lastLetOriginal = lastStmtOriginal.match(
-      /^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+)$/
-    );
+    const lastLetOriginal = lastStmtOriginal.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+)$/);
     if (lastLetOriginal) {
       const isMutable = !!lastLetOriginal[1];
       const varName = lastLetOriginal[2];
@@ -1031,14 +958,7 @@ export function compile(input: string): string {
       const varValueOriginal = lastLetOriginal[4];
       const lastLet = lastStmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+)$/);
       const varValue = lastLet ? lastLet[4] : varValueOriginal;
-      const letSnippet = handleLetInitializer(
-        varName,
-        typeAnnotation,
-        varValue,
-        varValueOriginal,
-        isMutable,
-        context
-      );
+      const letSnippet = handleLetInitializer(varName, typeAnnotation, varValue, varValueOriginal, isMutable, context);
       jsCode += letSnippet;
       jsCode += buildDropCalls(context);
       jsCode += 'return 0;';
@@ -1095,9 +1015,7 @@ export function compile(input: string): string {
     // Comparison operators: ==, !=, <, >, <=, >=
     // Boolean operators: &&, ||, !
     // Use original statement to avoid matching => from arrow functions in IIFEs
-    const hasBoolOp = /==|!=|(?<!=>?)<(?!=)|(?<!-)>(?!=)|<=|>=|&&|\|\||(?<![!=])!(?!=)/.test(
-      lastStmtOriginal
-    );
+    const hasBoolOp = /==|!=|(?<!=>?)<(?!=)|(?<!-)>(?!=)|<=|>=|&&|\|\||(?<![!=])!(?!=)/.test(lastStmtOriginal);
 
     if (hasBoolOp) {
       // Skip wrapping if this is already a ternary expression (from if/else conversion)
@@ -1138,19 +1056,7 @@ type ExprInfo = {
   numericSuffixes: string[];
 };
 
-const RESERVED_KEYWORDS = new Set([
-  'let',
-  'mut',
-  'if',
-  'else',
-  'while',
-  'true',
-  'false',
-  'fn',
-  'return',
-  'struct',
-  'is',
-]);
+const RESERVED_KEYWORDS = new Set(['let', 'mut', 'if', 'else', 'while', 'true', 'false', 'fn', 'return', 'struct', 'is']);
 
 function detectExprTypeSimple(expr: string, varTypes: Map<string, ExprType>): ExprType {
   const trimmed = expr.trim();
@@ -1259,9 +1165,7 @@ function validateNumericLiteralOverflow(expr: string): void {
       }
     }
   }
-  const match = trimmed.match(
-    /^(-?\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)?)\s*\+\s*(-?\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)?)$/
-  );
+  const match = trimmed.match(/^(-?\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)?)\s*\+\s*(-?\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)?)$/);
   if (!match) return;
   const left = parseNumericLiteralValue(match[1]);
   const right = parseNumericLiteralValue(match[2]);
@@ -1302,14 +1206,9 @@ function inferLiteralKind(expr: string): ExprType | undefined {
   return undefined;
 }
 
-function getDeclaredTypeInfo(
-  typeAnnotation: string | undefined,
-  context?: CompileContext
-): { kind: ExprType; numericSuffix?: string } {
+function getDeclaredTypeInfo(typeAnnotation: string | undefined, context?: CompileContext): { kind: ExprType; numericSuffix?: string } {
   if (!typeAnnotation) return { kind: 'Unknown' };
-  const resolved = context
-    ? resolveTypeAliasBaseType(typeAnnotation.trim(), context) || typeAnnotation.trim()
-    : typeAnnotation.trim();
+  const resolved = context ? resolveTypeAliasBaseType(typeAnnotation.trim(), context) || typeAnnotation.trim() : typeAnnotation.trim();
   if (resolved === 'Bool') return { kind: 'Bool' };
 
   const numericMatch = resolved.match(/^(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/);
@@ -1352,9 +1251,7 @@ function isNumericSuffixWider(exprSuffix: string, targetSuffix: string): boolean
   return exprInfo.width > targetInfo.width;
 }
 
-function parseIfExpression(
-  expr: string
-): { condition: string; trueBranch: string; falseBranch: string } | undefined {
+function parseIfExpression(expr: string): { condition: string; trueBranch: string; falseBranch: string } | undefined {
   const trimmed = expr.trim();
   if (!isIfKeyword(trimmed, 0)) return undefined;
 
@@ -1393,11 +1290,7 @@ function parseIfExpression(
   return { condition, trueBranch, falseBranch };
 }
 
-function inferExprInfo(
-  expr: string,
-  varTypes: Map<string, ExprType>,
-  varNumericSuffixes: Map<string, string | undefined>
-): ExprInfo {
+function inferExprInfo(expr: string, varTypes: Map<string, ExprType>, varNumericSuffixes: Map<string, string | undefined>): ExprInfo {
   const trimmed = expr.trim();
   if (!trimmed) return { kind: 'Unknown', numericSuffixes: [] };
 
@@ -1438,11 +1331,7 @@ function inferExprInfo(
     const trueInfo = inferExprInfo(ifParts.trueBranch, varTypes, varNumericSuffixes);
     const falseInfo = inferExprInfo(ifParts.falseBranch, varTypes, varNumericSuffixes);
 
-    if (
-      trueInfo.kind !== 'Unknown' &&
-      falseInfo.kind !== 'Unknown' &&
-      trueInfo.kind !== falseInfo.kind
-    ) {
+    if (trueInfo.kind !== 'Unknown' && falseInfo.kind !== 'Unknown' && trueInfo.kind !== falseInfo.kind) {
       throw new Error('if branches must match types');
     }
 
@@ -1623,10 +1512,7 @@ function parseStructDeclaration(stmt: string): { name: string; fields: string[] 
   return { name, fields };
 }
 
-function registerStructDeclaration(
-  decl: { name: string; fields: string[] },
-  context: CompileContext
-): void {
+function registerStructDeclaration(decl: { name: string; fields: string[] }, context: CompileContext): void {
   const { structDefs } = context;
   if (structDefs.has(decl.name)) {
     throw new Error('struct already defined: ' + decl.name);
@@ -1637,29 +1523,20 @@ function registerStructDeclaration(
   }
 }
 
-function resolveBaseTypeFromAnnotation(
-  typeAnnotation: string | undefined,
-  context: CompileContext
-): string | undefined {
+function resolveBaseTypeFromAnnotation(typeAnnotation: string | undefined, context: CompileContext): string | undefined {
   if (!typeAnnotation) return undefined;
   const parsed = parseTypeConstraint(typeAnnotation);
   return resolveTypeAliasBaseType(parsed.baseType, context);
 }
 
-function parseStructTypeName(
-  typeAnnotation: string | undefined,
-  context: CompileContext
-): string | undefined {
+function parseStructTypeName(typeAnnotation: string | undefined, context: CompileContext): string | undefined {
   const resolvedBase = resolveBaseTypeFromAnnotation(typeAnnotation, context);
   if (!resolvedBase) return undefined;
   const match = resolvedBase.match(/^([a-zA-Z_]\w*)(?:<[^>]+>)?$/);
   return match ? match[1] : undefined;
 }
 
-function parseStructLiteralExpression(
-  expr: string,
-  context: CompileContext
-): { name: string; values: string[] } | null {
+function parseStructLiteralExpression(expr: string, context: CompileContext): { name: string; values: string[] } | null {
   const trimmed = expr.trim();
   const match = trimmed.match(/^([a-zA-Z_]\w*)(<[^>]+>)?\s*\{([\s\S]*)\}$/);
   if (!match) return null;
@@ -1682,10 +1559,7 @@ function parseStructLiteralExpression(
   return { name, values };
 }
 
-function convertStructLiteralExpression(
-  expr: string,
-  context: CompileContext
-): { converted: string; structName?: string } {
+function convertStructLiteralExpression(expr: string, context: CompileContext): { converted: string; structName?: string } {
   const literal = parseStructLiteralExpression(expr, context);
   if (!literal) {
     return { converted: expr };
@@ -1716,10 +1590,7 @@ function validateStructFieldAccess(expr: string, context: CompileContext): void 
 
 type TopLevelMatch = { pattern: string; index: number };
 
-function scanTopLevel(
-  text: string,
-  matcher: (text: string, i: number) => { matched: string; skip: number } | null
-): TopLevelMatch[] {
+function scanTopLevel(text: string, matcher: (text: string, i: number) => { matched: string; skip: number } | null): TopLevelMatch[] {
   const matches: TopLevelMatch[] = [];
   let parenDepth = 0;
   let bracketDepth = 0;
@@ -1822,18 +1693,13 @@ function validateComparisonTypes(expr: string, context: CompileContext): void {
   }
 }
 
-function parseTypeAliasDeclaration(
-  stmt: string
-): { name: string; baseType: string; dropFn?: string } | null {
+function parseTypeAliasDeclaration(stmt: string): { name: string; baseType: string; dropFn?: string } | null {
   const match = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?$/);
   if (!match) return null;
   return { name: match[1], baseType: match[2].trim(), dropFn: match[3] };
 }
 
-function registerTypeAliasDeclaration(
-  info: { name: string; baseType: string; dropFn?: string },
-  context: CompileContext
-): void {
+function registerTypeAliasDeclaration(info: { name: string; baseType: string; dropFn?: string }, context: CompileContext): void {
   if (context.typeAliases.has(info.name)) {
     throw new Error('type alias already defined: ' + info.name);
   }
@@ -1861,11 +1727,7 @@ function resolveTypeAliasEntry(
   return { name: trimmed, alias };
 }
 
-function resolveTypeAliasBaseType(
-  typeName: string | undefined,
-  context: CompileContext,
-  seen: Set<string> = new Set()
-): string | undefined {
+function resolveTypeAliasBaseType(typeName: string | undefined, context: CompileContext, seen: Set<string> = new Set()): string | undefined {
   if (!typeName) return undefined;
   const entry = resolveTypeAliasEntry(typeName, context, seen);
   if (!entry) return typeName;
@@ -1881,11 +1743,7 @@ function preRegisterTypeAliases(stmts: string[], context: CompileContext): void 
   }
 }
 
-function resolveTypeAliasDropFn(
-  typeName: string | undefined,
-  context: CompileContext,
-  seen: Set<string> = new Set()
-): string | undefined {
+function resolveTypeAliasDropFn(typeName: string | undefined, context: CompileContext, seen: Set<string> = new Set()): string | undefined {
   const entry = resolveTypeAliasEntry(typeName, context, seen);
   if (!entry) return undefined;
   if (entry.alias.dropFn) return entry.alias.dropFn;
@@ -1907,11 +1765,7 @@ function isNumericTypeName(typeName: string): boolean {
   return /^(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/.test(typeName);
 }
 
-function inferStructFieldKinds(
-  structName: string,
-  values: string[],
-  context: CompileContext
-): Map<string, ExprType> {
+function inferStructFieldKinds(structName: string, values: string[], context: CompileContext): Map<string, ExprType> {
   const fields = context.structDefs.get(structName) || [];
   const kinds = new Map<string, ExprType>();
   for (let i = 0; i < fields.length; i++) {
@@ -1940,20 +1794,17 @@ function inferOperandKindForIs(expr: string, context: CompileContext): ExprType 
 }
 
 function convertIsExpressions(expr: string, context: CompileContext): string {
-  return expr.replace(
-    /\b([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)?)\s+is\s+([a-zA-Z_]\w*)/g,
-    (_match, left, typeName) => {
-      const kind = inferOperandKindForIs(left, context);
-      const resolvedType = resolveTypeAliasBaseType(typeName, context) || typeName;
-      if (resolvedType === 'Bool') {
-        return kind === 'Bool' ? '1' : '0';
-      }
-      if (isNumericTypeName(resolvedType)) {
-        return kind === 'Numeric' ? '1' : '0';
-      }
-      return '0';
+  return expr.replace(/\b([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)?)\s+is\s+([a-zA-Z_]\w*)/g, (_match, left, typeName) => {
+    const kind = inferOperandKindForIs(left, context);
+    const resolvedType = resolveTypeAliasBaseType(typeName, context) || typeName;
+    if (resolvedType === 'Bool') {
+      return kind === 'Bool' ? '1' : '0';
     }
-  );
+    if (isNumericTypeName(resolvedType)) {
+      return kind === 'Numeric' ? '1' : '0';
+    }
+    return '0';
+  });
 }
 
 function replaceInlineBlocks(code: string): string {
@@ -1993,17 +1844,7 @@ function convertBlockToIIFE(blockContent: string): string {
     convertBlockStatementToJs,
     (kind, name) => {
       if (kind === 'var') {
-        return (
-          'get ' +
-          name +
-          '() { return ' +
-          name +
-          '; }, set ' +
-          name +
-          '(newValue) { ' +
-          name +
-          ' = newValue; }'
-        );
+        return 'get ' + name + '() { return ' + name + '; }, set ' + name + '(newValue) { ' + name + ' = newValue; }';
       }
       return name + ': ' + name;
     }
@@ -2013,15 +1854,12 @@ function convertBlockToIIFE(blockContent: string): string {
     'const __thisValue = { this: (typeof __thisParent !== "undefined" ? (__thisParent.__thisValue || __thisParent) : undefined)' +
     (scopeMembers ? ', ' + scopeMembers : '') +
     ' };';
-  const thisScopeAssign =
-    ' if (typeof __thisScope !== "undefined") __thisScope.__thisValue = __thisValue;';
+  const thisScopeAssign = ' if (typeof __thisScope !== "undefined") __thisScope.__thisValue = __thisValue;';
   if (lastExpr.trim() === 'this' && !lastIsStatement) {
     const body = scopeParts.locals.join(' ');
     return '() => { ' + body + ' ' + thisScopeDecl + thisScopeAssign + ' return __thisValue; }';
   }
-  const finalExpr = lastIsStatement
-    ? '0'
-    : convertInlineBlockExpressions(normalizeRefs(convertIfElseToTernary(lastExpr)));
+  const finalExpr = lastIsStatement ? '0' : convertInlineBlockExpressions(normalizeRefs(convertIfElseToTernary(lastExpr)));
 
   if (body) {
     body = body + '; ';
@@ -2134,10 +1972,7 @@ function parseFunctionDefinitionForCompile(stmt: string): FunctionDefinition | n
   };
 }
 
-function updateDepthCounters(
-  ch: string,
-  depths: { paren: number; bracket: number; brace: number }
-): void {
+function updateDepthCounters(ch: string, depths: { paren: number; bracket: number; brace: number }): void {
   const deltas: Record<string, [keyof typeof depths, number]> = {
     '(': ['paren', 1],
     ')': ['paren', -1],
@@ -2254,12 +2089,7 @@ function emitFunctionDefinition(
   const parsedParams = parseFnParams(params, context);
   for (const param of parsedParams) {
     if (param.arrayInfo) {
-      registerFnArrayParam(
-        fnArrayParamRequirements,
-        fnDefOriginal.name,
-        param.index,
-        param.arrayInfo
-      );
+      registerFnArrayParam(fnArrayParamRequirements, fnDefOriginal.name, param.index, param.arrayInfo);
     }
   }
   registerFunctionSignature(fnDefOriginal.name, parsedParams, returnType, bodyOriginal, context);
@@ -2271,9 +2101,7 @@ function emitFunctionDefinition(
 }
 
 function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body: string): string {
-  const jsParams = parsedParams
-    .map((param) => (param.name === 'this' ? '_this' : param.name))
-    .join(', ');
+  const jsParams = parsedParams.map((param) => (param.name === 'this' ? '_this' : param.name)).join(', ');
   let bodyExpr = compileFunctionBodyExpression(body);
   const paramMembers = parsedParams
     .filter((param) => param.name !== 'this')
@@ -2283,16 +2111,10 @@ function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body
     bodyExpr = bodyExpr.replace('const __this = {', 'const __this = { ' + paramMembers + ',');
   }
   if (paramMembers && bodyExpr.includes('const __thisValue = {')) {
-    bodyExpr = bodyExpr.replace(
-      'const __thisValue = {',
-      'const __thisValue = { ' + paramMembers + ','
-    );
+    bodyExpr = bodyExpr.replace('const __thisValue = {', 'const __thisValue = { ' + paramMembers + ',');
   }
   if (paramMembers && bodyExpr.includes('const __thisScope = {')) {
-    bodyExpr = bodyExpr.replace(
-      'const __thisScope = {',
-      'const __thisScope = { ' + paramMembers + ','
-    );
+    bodyExpr = bodyExpr.replace('const __thisScope = {', 'const __thisScope = { ' + paramMembers + ',');
   }
   const hasExplicitThis = parsedParams.some((param) => param.name === 'this');
   if (hasExplicitThis) {
@@ -2334,9 +2156,7 @@ function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body
       'return true; ' +
       '} ' +
       '}); ';
-    return (
-      'function ' + name + '(' + jsParams + ') { ' + thisPrelude + 'return ' + bodyExpr + '; }'
-    );
+    return 'function ' + name + '(' + jsParams + ') { ' + thisPrelude + 'return ' + bodyExpr + '; }';
   }
   return 'function ' + name + '(' + jsParams + ') { return ' + bodyExpr + '; }';
 }
@@ -2356,12 +2176,7 @@ function compileFunctionBodyExpression(body: string): string {
   return normalizeRefs(convertIfElseToTernary(trimmed));
 }
 
-function findMatchingClosing(
-  str: string,
-  openIndex: number,
-  openChar: string,
-  closeChar: string
-): number {
+function findMatchingClosing(str: string, openIndex: number, openChar: string, closeChar: string): number {
   let count = 1;
   for (let i = openIndex + 1; i < str.length; i++) {
     if (str[i] === openChar) count++;
@@ -2552,9 +2367,7 @@ function parseFnParams(params: string, context?: CompileContext): FnParamInfo[] 
     }
     seen.add(name);
     const typeAnnotation = match[2] ? match[2].trim() : undefined;
-    const resolvedType = context
-      ? resolveTypeAliasBaseType(typeAnnotation, context)
-      : typeAnnotation;
+    const resolvedType = context ? resolveTypeAliasBaseType(typeAnnotation, context) : typeAnnotation;
     const declaredInfo = getDeclaredTypeInfo(resolvedType, context);
     const kind = declaredInfo.kind;
     const arrayTypeInfo = parseArrayType(resolvedType);
@@ -2644,11 +2457,7 @@ function splitTopLevel(source: string, separator: string): string[] {
   return parts;
 }
 
-function inferArrayLiteralElementKind(
-  elements: string[],
-  varTypes: Map<string, ExprType>,
-  varNumericSuffixes: Map<string, string | undefined>
-): ExprType {
+function inferArrayLiteralElementKind(elements: string[], varTypes: Map<string, ExprType>, varNumericSuffixes: Map<string, string | undefined>): ExprType {
   for (const element of elements) {
     const kind = inferLiteralKind(element);
     if (kind) {
@@ -2662,18 +2471,11 @@ function inferArrayLiteralElementKind(
   return 'Unknown';
 }
 
-function validateArrayLiteral(
-  elements: string[],
-  arrayTypeInfo: ArrayTypeInfo,
-  original: string
-): void {
+function validateArrayLiteral(elements: string[], arrayTypeInfo: ArrayTypeInfo, original: string): void {
   if (arrayTypeInfo.length !== undefined && elements.length > arrayTypeInfo.length) {
     throw new Error('array literal exceeds declared length');
   }
-  if (
-    arrayTypeInfo.initializedCount !== undefined &&
-    elements.length < arrayTypeInfo.initializedCount
-  ) {
+  if (arrayTypeInfo.initializedCount !== undefined && elements.length < arrayTypeInfo.initializedCount) {
     throw new Error('array literal has too few elements');
   }
 
@@ -2755,10 +2557,7 @@ function stripPointerPrefix(typeStr: string): { base: string; isPointer: boolean
   return { base: trimmed, isPointer };
 }
 
-function parsePointerTypeAnnotation(
-  typeAnnotation: string | undefined,
-  context: CompileContext
-): { kind: ExprType; mutable: boolean } | undefined {
+function parsePointerTypeAnnotation(typeAnnotation: string | undefined, context: CompileContext): { kind: ExprType; mutable: boolean } | undefined {
   const resolvedBase = resolveBaseTypeFromAnnotation(typeAnnotation, context);
   if (!resolvedBase) return undefined;
   const trimmed = resolvedBase.trim();
@@ -2770,10 +2569,7 @@ function parsePointerTypeAnnotation(
   return { kind: kindInfo.kind, mutable };
 }
 
-function isFunctionPointerType(
-  typeAnnotation: string | undefined,
-  context: CompileContext
-): boolean {
+function isFunctionPointerType(typeAnnotation: string | undefined, context: CompileContext): boolean {
   const resolvedBase = resolveBaseTypeFromAnnotation(typeAnnotation, context);
   if (!resolvedBase) return false;
   return resolvedBase.includes('=>');
@@ -2785,9 +2581,7 @@ function convertUnboundFunctionPointerAccess(expr: string): string {
   });
 }
 
-function parseMethodCallExpression(
-  expr: string
-): { baseExpr: string; fnName: string; argsStr: string } | undefined {
+function parseMethodCallExpression(expr: string): { baseExpr: string; fnName: string; argsStr: string } | undefined {
   const methodCallExpr = expr.replace(/\s*\n\s*\./g, '.');
   const match = methodCallExpr.trim().match(/^([\s\S]+)\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/);
   if (!match) return undefined;
@@ -2824,42 +2618,24 @@ function buildThisScopeObject(context: CompileContext): string {
 }
 
 function bindCallsToThisScope(code: string): string {
-  const skip = new Set([
-    'if',
-    'while',
-    'for',
-    'switch',
-    'catch',
-    'return',
-    'function',
-    'typeof',
-    'new',
-    'Proxy',
-    'eval',
-  ]);
-  const replaced = code.replace(
-    /(^|[^.\w])([a-zA-Z_]\w*)\s*\(/g,
-    (match, prefix, name, offset, full) => {
-      const before = full.slice(0, offset);
-      if (/\bfunction\s*$/.test(before) || /\bnew\s*$/.test(before)) {
-        return match;
-      }
-      if (/\bget\s*$/.test(before) || /\bset\s*$/.test(before)) {
-        return match;
-      }
-      if (skip.has(name)) {
-        return match;
-      }
-      return prefix + name + '.call(__thisScope, ';
+  const skip = new Set(['if', 'while', 'for', 'switch', 'catch', 'return', 'function', 'typeof', 'new', 'Proxy', 'eval']);
+  const replaced = code.replace(/(^|[^.\w])([a-zA-Z_]\w*)\s*\(/g, (match, prefix, name, offset, full) => {
+    const before = full.slice(0, offset);
+    if (/\bfunction\s*$/.test(before) || /\bnew\s*$/.test(before)) {
+      return match;
     }
-  );
+    if (/\bget\s*$/.test(before) || /\bset\s*$/.test(before)) {
+      return match;
+    }
+    if (skip.has(name)) {
+      return match;
+    }
+    return prefix + name + '.call(__thisScope, ';
+  });
   return replaced.replace(/\.call\(__thisScope,\s*\)/g, '.call(__thisScope)');
 }
 
-function applyOutsideFunctionDeclarations(
-  code: string,
-  transform: (segment: string) => string
-): string {
+function applyOutsideFunctionDeclarations(code: string, transform: (segment: string) => string): string {
   let result = '';
   let index = 0;
   while (index < code.length) {
@@ -2893,11 +2669,7 @@ function applyOutsideFunctionDeclarations(
   return result;
 }
 
-function validateExpressionForCompile(
-  expr: string,
-  context: CompileContext,
-  disallowVoidCall: boolean
-): void {
+function validateExpressionForCompile(expr: string, context: CompileContext, disallowVoidCall: boolean): void {
   const { arrayVars, arrayPointerTargets } = context;
   validateNumericLiteralOverflow(expr);
   validateDivisionByZero(expr);
@@ -2911,13 +2683,7 @@ function validateExpressionForCompile(
   validateArrayCallRequirements(expr, context);
 }
 
-function buildThisFieldAssignment(
-  varName: string,
-  operator: string,
-  value: string,
-  valueOriginal: string,
-  context: CompileContext
-): string {
+function buildThisFieldAssignment(varName: string, operator: string, value: string, valueOriginal: string, context: CompileContext): string {
   return handleAssignment(varName, operator, value, valueOriginal, context);
 }
 
@@ -3037,10 +2803,7 @@ function isStringLiteral(expr: string): boolean {
   return /^"(?:\\.|[^"\\])*"$/.test(expr.trim());
 }
 
-function isStringTypeAnnotation(
-  typeAnnotation: string | undefined,
-  context: CompileContext
-): boolean {
+function isStringTypeAnnotation(typeAnnotation: string | undefined, context: CompileContext): boolean {
   if (!typeAnnotation) return false;
   const parsed = parseTypeConstraint(typeAnnotation);
   const resolvedBase = resolveTypeAliasBaseType(parsed.baseType, context);
@@ -3144,11 +2907,7 @@ function validateArrayElementAssignment(
   }
 }
 
-function validateArrayAccesses(
-  expr: string,
-  arrayVars: Map<string, ArrayVarInfo>,
-  arrayPointerTargets: Map<string, string>
-): void {
+function validateArrayAccesses(expr: string, arrayVars: Map<string, ArrayVarInfo>, arrayPointerTargets: Map<string, string>): void {
   const regex = /\b([a-zA-Z_]\w*)\s*\[\s*([^\]]+)\s*\]/g;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(expr)) !== null) {
@@ -3204,21 +2963,14 @@ function validateArrayCallRequirements(expr: string, context: CompileContext): v
       const name = identMatch[0];
       const resolved = resolveArrayInfo(name, arrayVars, arrayPointerTargets);
       if (!resolved) continue;
-      if (
-        resolved.info.initializedCount !== null &&
-        resolved.info.initializedCount < requirement.minInitialized
-      ) {
+      if (resolved.info.initializedCount !== null && resolved.info.initializedCount < requirement.minInitialized) {
         throw new Error('array argument has insufficient initialized elements');
       }
     }
   });
 }
 
-function handleArrayRhsIdentifier(
-  varName: string,
-  rhsIdent: RegExpMatchArray | null,
-  context: CompileContext
-): void {
+function handleArrayRhsIdentifier(varName: string, rhsIdent: RegExpMatchArray | null, context: CompileContext): void {
   if (!rhsIdent) return;
   const { arrayVars, arrayPointerTargets } = context;
   const rhsName = rhsIdent[0];
@@ -3258,13 +3010,7 @@ function prepareLetBinding(
   return { declaredInfo, arrayTypeInfo, constraint: parsed.constraint };
 }
 
-function prepareValueExpression(
-  value: string,
-  valueOriginal: string,
-  context: CompileContext,
-  checkUndefined: boolean,
-  disallowVoidCall: boolean
-): string {
+function prepareValueExpression(value: string, valueOriginal: string, context: CompileContext, checkUndefined: boolean, disallowVoidCall: boolean): string {
   const { definedVars } = context;
   const thisAccessNormalized = convertThisAccess(valueOriginal);
   if (checkUndefined) {
@@ -3284,11 +3030,7 @@ function prepareValueExpression(
   return normalizeRefs(convertIfElseToTernary(structConversion.converted));
 }
 
-function validateFunctionCalls(
-  expr: string,
-  context: CompileContext,
-  disallowVoidCall: boolean
-): void {
+function validateFunctionCalls(expr: string, context: CompileContext, disallowVoidCall: boolean): void {
   const { fnSignatures, definedVars, varTypes, varNumericSuffixes, fnPointerVars } = context;
   forEachCallExpression(expr, (fnName, args) => {
     const signature = fnSignatures.get(fnName);
@@ -3324,10 +3066,7 @@ function validateFunctionCalls(
   });
 }
 
-function forEachCallExpression(
-  expr: string,
-  callback: (fnName: string, args: string[], rawArgs: string) => void
-): void {
+function forEachCallExpression(expr: string, callback: (fnName: string, args: string[], rawArgs: string) => void): void {
   const callRegex = /\b([a-zA-Z_]\w*)\s*\(([^()]*)\)/g;
   let match: RegExpExecArray | null;
   while ((match = callRegex.exec(expr)) !== null) {
@@ -3338,10 +3077,7 @@ function forEachCallExpression(
   }
 }
 
-function parseReturnTypeAnnotation(
-  returnType: string | undefined,
-  context?: CompileContext
-): { kind: ExprType; returnsVoid: boolean } {
+function parseReturnTypeAnnotation(returnType: string | undefined, context?: CompileContext): { kind: ExprType; returnsVoid: boolean } {
   if (!returnType) return { kind: 'Unknown', returnsVoid: false };
   const trimmed = returnType.trim();
   if (trimmed === 'Void') {
@@ -3351,11 +3087,7 @@ function parseReturnTypeAnnotation(
   return { kind: declaredInfo.kind, returnsVoid: false };
 }
 
-function inferFunctionReturnInfo(
-  body: string,
-  paramKinds: FnParamInfo[],
-  context: CompileContext
-): { kind: ExprType; returnsVoid: boolean } {
+function inferFunctionReturnInfo(body: string, paramKinds: FnParamInfo[], context: CompileContext): { kind: ExprType; returnsVoid: boolean } {
   const localVarTypes = new Map<string, ExprType>();
   for (const param of paramKinds) {
     if (param.kind !== 'Unknown') {
@@ -3431,10 +3163,7 @@ function registerFunctionSignature(
   return signature;
 }
 
-function getFunctionCallReturnInfo(
-  expr: string,
-  context: CompileContext
-): { kind: ExprType; returnsVoid: boolean } | undefined {
+function getFunctionCallReturnInfo(expr: string, context: CompileContext): { kind: ExprType; returnsVoid: boolean } | undefined {
   const match = expr.trim().match(/^([a-zA-Z_]\w*)\s*\(([^()]*)\)$/);
   if (!match) return undefined;
   const fnName = match[1];
@@ -3443,9 +3172,7 @@ function getFunctionCallReturnInfo(
   return { kind: signature.returnKind, returnsVoid: signature.returnsVoid };
 }
 
-function splitLeadingFunctionDefinition(
-  stmt: string
-): { definition: string; trailing: string } | undefined {
+function splitLeadingFunctionDefinition(stmt: string): { definition: string; trailing: string } | undefined {
   const trimmed = stmt.trim();
   if (!trimmed.startsWith('fn ')) return undefined;
   const arrowIndex = trimmed.indexOf('=>');
@@ -3468,10 +3195,7 @@ function splitLeadingFunctionDefinition(
   return { definition, trailing };
 }
 
-function splitLeadingBlockDeclaration(
-  stmt: string,
-  keyword: 'struct' | 'object'
-): { declaration: string; trailing: string } | undefined {
+function splitLeadingBlockDeclaration(stmt: string, keyword: 'struct' | 'object'): { declaration: string; trailing: string } | undefined {
   const trimmed = stmt.trim();
   if (!trimmed.startsWith(keyword + ' ')) return undefined;
   const braceStart = trimmed.indexOf('{');
@@ -3485,15 +3209,11 @@ function splitLeadingBlockDeclaration(
   return { declaration, trailing };
 }
 
-function splitLeadingStructDeclaration(
-  stmt: string
-): { declaration: string; trailing: string } | undefined {
+function splitLeadingStructDeclaration(stmt: string): { declaration: string; trailing: string } | undefined {
   return splitLeadingBlockDeclaration(stmt, 'struct');
 }
 
-function splitLeadingObjectDeclaration(
-  stmt: string
-): { declaration: string; trailing: string } | undefined {
+function splitLeadingObjectDeclaration(stmt: string): { declaration: string; trailing: string } | undefined {
   return splitLeadingBlockDeclaration(stmt, 'object');
 }
 
@@ -3511,10 +3231,7 @@ function parseObjectDeclaration(declaration: string): { name: string; body: stri
   return { name, body };
 }
 
-function buildObjectDeclaration(
-  declaration: { name: string; body: string },
-  context: CompileContext
-): string {
+function buildObjectDeclaration(declaration: { name: string; body: string }, context: CompileContext): string {
   const statements = splitBlockStatements(declaration.body);
   const parts = collectThisObjectParts(
     statements,
@@ -3544,9 +3261,7 @@ function buildObjectDeclaration(
 
   const body = parts.locals.join(' ');
   const members = parts.members.join(', ');
-  return (
-    'const ' + declaration.name + ' = (function () { ' + body + ' return { ' + members + ' }; })();'
-  );
+  return 'const ' + declaration.name + ' = (function () { ' + body + ' return { ' + members + ' }; })();';
 }
 
 function applyArrayInitializer(
@@ -3575,8 +3290,7 @@ function applyArrayInitializer(
       if (arrayTypeInfo.length !== undefined) {
         arrayVars.set(varName, {
           length: arrayTypeInfo.length,
-          initializedCount:
-            arrayTypeInfo.initializedCount !== undefined ? arrayTypeInfo.initializedCount : null,
+          initializedCount: arrayTypeInfo.initializedCount !== undefined ? arrayTypeInfo.initializedCount : null,
           elementKind: arrayTypeInfo.elementKind,
         });
       }
@@ -3609,14 +3323,8 @@ function handleLetInitializer(
   isMutable: boolean,
   context: CompileContext
 ): string {
-  const { varTypes, varNumericSuffixes, varInitialized, definedVars, structVarTypes, structDefs } =
-    context;
-  const { declaredInfo, arrayTypeInfo, constraint } = prepareLetBinding(
-    varName,
-    typeAnnotation,
-    isMutable,
-    context
-  );
+  const { varTypes, varNumericSuffixes, varInitialized, definedVars, structVarTypes, structDefs } = context;
+  const { declaredInfo, arrayTypeInfo, constraint } = prepareLetBinding(varName, typeAnnotation, isMutable, context);
   if (!typeAnnotation) {
     context.untypedVars.add(varName);
   }
@@ -3645,10 +3353,7 @@ function handleLetInitializer(
       throw new Error('cannot have multiple mutable references to the same variable');
     }
     const targetKind =
-      context.varTypes.get(target) ||
-      (context.varNumericSuffixes.has(target) || context.implicitNumericVars.has(target)
-        ? 'Numeric'
-        : 'Unknown');
+      context.varTypes.get(target) || (context.varNumericSuffixes.has(target) || context.implicitNumericVars.has(target) ? 'Numeric' : 'Unknown');
     if (pointerKind === 'Bool' && targetKind !== 'Bool') {
       throw new Error('type mismatch');
     }
@@ -3662,10 +3367,7 @@ function handleLetInitializer(
       context.pointerMutableTargets.set(target, varName);
     }
   }
-  if (
-    isFunctionPointerType(typeAnnotation, context) ||
-    (valueOriginal.trim().match(/^\w+$/) && context.fnSignatures.has(valueOriginal.trim()))
-  ) {
+  if (isFunctionPointerType(typeAnnotation, context) || (valueOriginal.trim().match(/^\w+$/) && context.fnSignatures.has(valueOriginal.trim()))) {
     context.fnPointerVars.add(varName);
   }
   const callNameMatch = valueOriginal.trim().match(/^([a-zA-Z_]\w*)(?:\s*<[^>]+>)?\s*\(/);
@@ -3710,11 +3412,7 @@ function handleLetInitializer(
     }
   }
 
-  if (
-    declaredInfo.kind !== 'Unknown' &&
-    exprInfo.kind !== 'Unknown' &&
-    declaredInfo.kind !== exprInfo.kind
-  ) {
+  if (declaredInfo.kind !== 'Unknown' && exprInfo.kind !== 'Unknown' && declaredInfo.kind !== exprInfo.kind) {
     throw new Error('type mismatch');
   }
 
@@ -3778,20 +3476,9 @@ function handleLetInitializer(
   return 'let ' + varName + ' = ' + valueConverted + '; ';
 }
 
-function handleLetNoInit(
-  varName: string,
-  typeAnnotation: string | undefined,
-  isMutable: boolean,
-  context: CompileContext
-): string {
-  const { definedVars, varTypes, varNumericSuffixes, varInitialized, arrayVars, structVarTypes } =
-    context;
-  const { declaredInfo, arrayTypeInfo } = prepareLetBinding(
-    varName,
-    typeAnnotation,
-    isMutable,
-    context
-  );
+function handleLetNoInit(varName: string, typeAnnotation: string | undefined, isMutable: boolean, context: CompileContext): string {
+  const { definedVars, varTypes, varNumericSuffixes, varInitialized, arrayVars, structVarTypes } = context;
+  const { declaredInfo, arrayTypeInfo } = prepareLetBinding(varName, typeAnnotation, isMutable, context);
   const structTypeName = parseStructTypeName(typeAnnotation, context);
   if (structTypeName) {
     structVarTypes.set(varName, structTypeName);
@@ -3809,8 +3496,7 @@ function handleLetNoInit(
   if (arrayTypeInfo && arrayTypeInfo.length !== undefined) {
     arrayVars.set(varName, {
       length: arrayTypeInfo.length,
-      initializedCount:
-        arrayTypeInfo.initializedCount !== undefined ? arrayTypeInfo.initializedCount : 0,
+      initializedCount: arrayTypeInfo.initializedCount !== undefined ? arrayTypeInfo.initializedCount : 0,
       elementKind: arrayTypeInfo.elementKind,
     });
   }
@@ -3823,24 +3509,9 @@ function handleLetNoInit(
   return 'let ' + varName + '; ';
 }
 
-function handleAssignment(
-  varName: string,
-  operator: string,
-  value: string,
-  valueOriginal: string,
-  context: CompileContext
-): string {
+function handleAssignment(varName: string, operator: string, value: string, valueOriginal: string, context: CompileContext): string {
   const { mutableVars, definedVars, varTypes, varNumericSuffixes, varInitialized } = context;
-  validateAssignment(
-    varName,
-    operator,
-    valueOriginal,
-    mutableVars,
-    definedVars,
-    varTypes,
-    varNumericSuffixes,
-    varInitialized
-  );
+  validateAssignment(varName, operator, valueOriginal, mutableVars, definedVars, varTypes, varNumericSuffixes, varInitialized);
   const callReturn = getFunctionCallReturnInfo(valueOriginal, context);
   if (callReturn) {
     if (callReturn.returnsVoid) {
@@ -3859,9 +3530,7 @@ function handleAssignment(
   return varName + ' ' + operator + ' ' + valueConverted + '; ';
 }
 
-function splitLeadingBlockExpression(
-  expr: string
-): { blockContent: string; trailing: string } | undefined {
+function splitLeadingBlockExpression(expr: string): { blockContent: string; trailing: string } | undefined {
   const trimmed = expr.trim();
   if (!trimmed.startsWith('{')) return undefined;
 
@@ -4106,21 +3775,7 @@ function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
     if (currentTypeAliasNames && currentTypeAliasNames.has(id)) continue;
 
     // Skip numeric type names
-    const typeNames = new Set([
-      'U8',
-      'U16',
-      'U32',
-      'U64',
-      'USize',
-      'I8',
-      'I16',
-      'I32',
-      'I64',
-      'I32',
-      'Bool',
-      'Str',
-      'Void',
-    ]);
+    const typeNames = new Set(['U8', 'U16', 'U32', 'U64', 'USize', 'I8', 'I16', 'I32', 'I64', 'I32', 'Bool', 'Str', 'Void']);
     if (typeNames.has(id)) continue;
 
     // Check if this identifier is defined
@@ -4174,11 +3829,7 @@ export function execute(input: string): number {
  * @param nativeConfig - Map of native configurations
  * @returns Bundled JavaScript code
  */
-export function compileAll(
-  _inputs: string[],
-  _config: Map<string[], string>,
-  _nativeConfig: Map<string[], string>
-): string {
+export function compileAll(_inputs: string[], _config: Map<string[], string>, _nativeConfig: Map<string[], string>): string {
   const prepared = prepareExternBindings(_inputs, _config, _nativeConfig);
   if (!prepared.hasContent || !prepared.externBindings) return 'return 0;';
   const { parts, externLets, externFns, nativeModuleMap } = prepared.plan;
@@ -4203,9 +3854,7 @@ export function compileAll(
     const params = externFn.params ? externFn.params : '';
     const callExpr = wrapperName + '(' + callArgs + ')';
     const body = externFn.returnType === 'Void' ? '{ ' + callExpr + '; }' : callExpr;
-    externFnPreludeParts.push(
-      ['fn ', externFn.name, generics, '(', params, ')', returnType, ' => ', body, ';'].join('')
-    );
+    externFnPreludeParts.push(['fn ', externFn.name, generics, '(', params, ')', returnType, ' => ', body, ';'].join(''));
   }
 
   const combined = combineCodeParts(externPreludeParts.concat(externFnPreludeParts, parts));
@@ -4241,9 +3890,7 @@ export function compileAll(
         ].join('')
       );
     }
-    externFnAssignments.push(
-      ['const __tuff_extern_', fnName, ' = ', moduleVar, '.', fnName, ';'].join('')
-    );
+    externFnAssignments.push(['const __tuff_extern_', fnName, ' = ', moduleVar, '.', fnName, ';'].join(''));
   }
 
   const nativePrelude = nativeModulePreludeParts.concat(externFnAssignments).join('\n');
@@ -4371,10 +4018,7 @@ export function interpret(input: string): number {
     initialized?: boolean;
   };
 
-  type Context = Map<
-    string,
-    RuntimeValue & { mutable: boolean; initialized: boolean; dropFn?: string }
-  >;
+  type Context = Map<string, RuntimeValue & { mutable: boolean; initialized: boolean; dropFn?: string }>;
 
   type FunctionDef = {
     params: Array<{ name: string; type: Type }>;
@@ -4400,9 +4044,7 @@ export function interpret(input: string): number {
       return;
     }
     if (!Number.isInteger(val)) {
-      throw new Error(
-        kind === 'U' ? 'unsigned literal must be integer' : 'signed literal must be integer'
-      );
+      throw new Error(kind === 'U' ? 'unsigned literal must be integer' : 'signed literal must be integer');
     }
     if (kind === 'U') {
       if (val < 0) throw new Error('unsigned literal cannot be negative');
@@ -4426,15 +4068,7 @@ export function interpret(input: string): number {
       if (suffix.length < 0 || suffix.initializedCount < 0) {
         return '[' + suffixKind(suffix.elementType) + ']';
       }
-      return (
-        '[' +
-        suffixKind(suffix.elementType) +
-        '; ' +
-        suffix.initializedCount +
-        '; ' +
-        suffix.length +
-        ']'
-      );
+      return '[' + suffixKind(suffix.elementType) + '; ' + suffix.initializedCount + '; ' + suffix.length + ']';
     }
     if (suffix.kind === 'This') {
       return 'This';
@@ -4478,10 +4112,7 @@ export function interpret(input: string): number {
     }
     if (leftType.kind !== rightType.kind) return false;
     if (leftType.kind === 'Ptr' && rightType.kind === 'Ptr') {
-      return (
-        leftType.mutable === rightType.mutable &&
-        typeEqualsForValidation(leftType.pointsTo, rightType.pointsTo)
-      );
+      return leftType.mutable === rightType.mutable && typeEqualsForValidation(leftType.pointsTo, rightType.pointsTo);
     }
     if (leftType.kind === 'Array' && rightType.kind === 'Array') {
       return (
@@ -4539,11 +4170,7 @@ export function interpret(input: string): number {
       // where the extra first param is *This
       let sourceOffset = 0;
       let targetOffset = 0;
-      if (
-        target.paramTypes.length === source.paramTypes.length + 1 &&
-        target.paramTypes[0].kind === 'Ptr' &&
-        target.paramTypes[0].pointsTo.kind === 'This'
-      ) {
+      if (target.paramTypes.length === source.paramTypes.length + 1 && target.paramTypes[0].kind === 'Ptr' && target.paramTypes[0].pointsTo.kind === 'This') {
         // Skip the first *This param in target when comparing
         targetOffset = 1;
       } else if (source.paramTypes.length !== target.paramTypes.length) {
@@ -4555,12 +4182,7 @@ export function interpret(input: string): number {
         throw new Error('function pointer parameter length mismatch');
       }
       for (let i = 0; i < effectiveSourceParams; i++) {
-        if (
-          !typeEqualsForValidation(
-            source.paramTypes[i + sourceOffset],
-            target.paramTypes[i + targetOffset]
-          )
-        ) {
+        if (!typeEqualsForValidation(source.paramTypes[i + sourceOffset], target.paramTypes[i + targetOffset])) {
           throw new Error('function pointer parameter type mismatch');
         }
       }
@@ -4645,12 +4267,7 @@ export function interpret(input: string): number {
     const sourceIsNumeric = effectiveSource && 'width' in effectiveSource;
     const targetIsNumeric = 'width' in target;
     if (sourceIsNumeric && targetIsNumeric && (effectiveSource as any).width > target.width) {
-      const message = [
-        'narrowing conversion from ',
-        suffixKind(effectiveSource),
-        ' to ',
-        suffixKind(target),
-      ].join('');
+      const message = ['narrowing conversion from ', suffixKind(effectiveSource), ' to ', suffixKind(target)].join('');
       throw new Error(message);
     }
   }
@@ -4707,10 +4324,7 @@ export function interpret(input: string): number {
     return { value: Number.isFinite(n) ? n : 0 };
   }
 
-  function ensureVariable(
-    name: string,
-    context: Context
-  ): RuntimeValue & { mutable: boolean; initialized: boolean; refersTo?: string } {
+  function ensureVariable(name: string, context: Context): RuntimeValue & { mutable: boolean; initialized: boolean; refersTo?: string } {
     if (!context.has(name)) {
       throw new Error('undefined variable: ' + name);
     }
@@ -4745,10 +4359,7 @@ export function interpret(input: string): number {
     return { value: char.charCodeAt(0), type: { kind: 'Char' } };
   }
 
-  function resolveArrayElementFromList(
-    elements: Array<RuntimeValue | undefined>,
-    index: number
-  ): RuntimeValue {
+  function resolveArrayElementFromList(elements: Array<RuntimeValue | undefined>, index: number): RuntimeValue {
     if (index < 0 || index >= elements.length) {
       throw new Error('array index out of bounds');
     }
@@ -4794,11 +4405,7 @@ export function interpret(input: string): number {
     return resolveArrayElementFromList(elements, index);
   }
 
-  function resolveIndexedValue(
-    baseValue: RuntimeValue,
-    index: number,
-    context: Context
-  ): RuntimeValue {
+  function resolveIndexedValue(baseValue: RuntimeValue, index: number, context: Context): RuntimeValue {
     if (baseValue.tupleElements) {
       if (index < 0 || index >= baseValue.tupleElements.length) {
         throw new Error('tuple index out of bounds');
@@ -4844,10 +4451,7 @@ export function interpret(input: string): number {
     if (ch === '}') depths.brace--;
   }
 
-  function forEachCharWithDepths(
-    input: string,
-    handler: (ch: string, index: number, depths: BracketDepths) => boolean | void
-  ): void {
+  function forEachCharWithDepths(input: string, handler: (ch: string, index: number, depths: BracketDepths) => boolean | void): void {
     const depths: BracketDepths = { paren: 0, bracket: 0, brace: 0 };
     for (let i = 0; i < input.length; i++) {
       const ch = input[i];
@@ -5046,9 +4650,7 @@ export function interpret(input: string): number {
     };
   }
 
-  function snapshotContextValue(
-    value: RuntimeValue
-  ): RuntimeValue & { mutable: boolean; initialized: boolean } {
+  function snapshotContextValue(value: RuntimeValue): RuntimeValue & { mutable: boolean; initialized: boolean } {
     return {
       ...snapshotRuntimeValue(value),
       mutable: value.mutable ?? false,
@@ -5069,12 +4671,7 @@ export function interpret(input: string): number {
     return derived;
   }
 
-  function updateThisFieldsInContext(
-    targetName: string,
-    fieldKeys: string[],
-    sourceContext: Context,
-    targetContext: Context
-  ): void {
+  function updateThisFieldsInContext(targetName: string, fieldKeys: string[], sourceContext: Context, targetContext: Context): void {
     const targetVar = targetContext.get(targetName);
     if (targetVar?.type?.kind === 'This' && targetVar.structFields) {
       const updatedFields = new Map(targetVar.structFields);
@@ -5088,12 +4685,7 @@ export function interpret(input: string): number {
     }
   }
 
-  function buildThisFunctionValue(
-    baseValue: RuntimeValue,
-    fieldName: string,
-    functions: FunctionTable,
-    bound: boolean = false
-  ): RuntimeValue | null {
+  function buildThisFunctionValue(baseValue: RuntimeValue, fieldName: string, functions: FunctionTable, bound: boolean = false): RuntimeValue | null {
     if (baseValue.type?.kind !== 'This') {
       return null;
     }
@@ -5112,12 +4704,7 @@ export function interpret(input: string): number {
     return fnValue;
   }
 
-  function buildBoundThisFunctionValue(
-    baseValue: RuntimeValue,
-    fieldName: string,
-    functions: FunctionTable,
-    boundThisRef?: string
-  ): RuntimeValue | null {
+  function buildBoundThisFunctionValue(baseValue: RuntimeValue, fieldName: string, functions: FunctionTable, boundThisRef?: string): RuntimeValue | null {
     const fnValue = buildThisFunctionValue(baseValue, fieldName, functions, true);
     if (!fnValue) return null;
     if (boundThisRef) {
@@ -5126,11 +4713,7 @@ export function interpret(input: string): number {
     return fnValue;
   }
 
-  function buildUnboundFunctionPointerValue(
-    baseValue: RuntimeValue,
-    fieldName: string,
-    functions: FunctionTable
-  ): RuntimeValue | null {
+  function buildUnboundFunctionPointerValue(baseValue: RuntimeValue, fieldName: string, functions: FunctionTable): RuntimeValue | null {
     return buildThisFunctionValue(baseValue, fieldName, functions, false);
   }
 
@@ -5188,12 +4771,7 @@ export function interpret(input: string): number {
   }
 
   // helper to evaluate an expression with optional variable context
-  function resolveOperand(
-    token: string,
-    context: Context,
-    functions: FunctionTable,
-    structs: StructTable
-  ): RuntimeValue {
+  function resolveOperand(token: string, context: Context, functions: FunctionTable, structs: StructTable): RuntimeValue {
     if (token === 'true' || token === 'false') {
       return parseLiteralToken(token);
     }
@@ -5237,11 +4815,7 @@ export function interpret(input: string): number {
 
       // Check for existing mutable borrow to the same variable
       for (const [, ptrVar] of context) {
-        if (
-          ptrVar.type?.kind === 'Ptr' &&
-          ptrVar.refersTo === varName &&
-          (ptrVar.type as any).mutable
-        ) {
+        if (ptrVar.type?.kind === 'Ptr' && ptrVar.refersTo === varName && (ptrVar.type as any).mutable) {
           throw new Error('cannot have multiple mutable references to the same variable');
         }
       }
@@ -5284,12 +4858,7 @@ export function interpret(input: string): number {
     return parseLiteralToken(token);
   }
 
-  function evaluateExpression(
-    expr: string,
-    context: Context = new Map(),
-    functions: FunctionTable,
-    structs: StructTable
-  ): RuntimeValue {
+  function evaluateExpression(expr: string, context: Context = new Map(), functions: FunctionTable, structs: StructTable): RuntimeValue {
     const tokens = expr.match(
       /true|false|"[^"]*"|'.'|(&mut\s+[a-zA-Z_]\w*)|([&*][a-zA-Z_]\w*)|([a-zA-Z_]\w*\s*\[\s*[+-]?\d+\s*\])|([+-]?\d+(?:\.\d+)?(?:[A-Za-z]+\d*)?)|(\bis\b|\|\||&&|==|!=|<=|>=|[+\-*/<>])|([a-zA-Z_]\w*(?:\s*\.\s*[a-zA-Z_]\w*)*)/g
     );
@@ -5343,10 +4912,7 @@ export function interpret(input: string): number {
     }
 
     // Helper to apply operators of a certain precedence
-    function applyPass(
-      ops: string[],
-      handler: (left: RuntimeValue, op: string, right: RuntimeValue) => number | RuntimeValue
-    ) {
+    function applyPass(ops: string[], handler: (left: RuntimeValue, op: string, right: RuntimeValue) => number | RuntimeValue) {
       const targetOps = new Set(ops);
       for (let i = 0; i < operators.length; i++) {
         if (targetOps.has(operators[i])) {
@@ -5435,10 +5001,7 @@ export function interpret(input: string): number {
           throw new Error('logical operators only supported for booleans');
         }
         isBooleanResult = true;
-        const res =
-          op === '&&'
-            ? left.value !== 0 && right.value !== 0
-            : left.value !== 0 || right.value !== 0;
+        const res = op === '&&' ? left.value !== 0 && right.value !== 0 : left.value !== 0 || right.value !== 0;
         return { value: res ? 1 : 0, type: { kind: 'Bool', width: 1 } };
       });
     }
@@ -5464,10 +5027,7 @@ export function interpret(input: string): number {
         op.type &&
         op.type.kind !== 'Bool' &&
         op.type.kind !== 'Ptr' &&
-        (!widestSuffix ||
-          ('width' in op.type &&
-            'width' in widestSuffix &&
-            (op.type as any).width > (widestSuffix as any).width))
+        (!widestSuffix || ('width' in op.type && 'width' in widestSuffix && (op.type as any).width > (widestSuffix as any).width))
       ) {
         widestSuffix = op.type;
       }
@@ -5475,25 +5035,15 @@ export function interpret(input: string): number {
 
     // validate against the widest type if it's not a boolean result and it's numeric
     if (widestSuffix && !isBooleanResult && 'width' in widestSuffix) {
-      validateValueAgainstSuffix(
-        finalResult,
-        widestSuffix.kind as 'U' | 'I' | 'Bool',
-        (widestSuffix as any).width
-      );
+      validateValueAgainstSuffix(finalResult, widestSuffix.kind as 'U' | 'I' | 'Bool', (widestSuffix as any).width);
     }
 
     return { value: finalResult, type: finalSuffix || widestSuffix };
   }
 
-  function evaluateStructLiteralAccess(
-    expr: string,
-    context: Context,
-    functions: FunctionTable,
-    structs: StructTable
-  ): RuntimeValue | null {
+  function evaluateStructLiteralAccess(expr: string, context: Context, functions: FunctionTable, structs: StructTable): RuntimeValue | null {
     const trimmed = expr.trim();
-    const structRegex =
-      /^([a-zA-Z_]\w*)(?:\s*<\s*([^>]+)\s*>)?\s*\{\s*([\s\S]*?)\s*\}\s*(?:\.\s*([a-zA-Z_]\w*))?$/;
+    const structRegex = /^([a-zA-Z_]\w*)(?:\s*<\s*([^>]+)\s*>)?\s*\{\s*([\s\S]*?)\s*\}\s*(?:\.\s*([a-zA-Z_]\w*))?$/;
     const match = trimmed.match(structRegex);
     if (!match) return null;
     const structName = match[1];
@@ -5509,13 +5059,7 @@ export function interpret(input: string): number {
     if (typeArgsStr) {
       const typeArgs = typeArgsStr.split(',').map((s) => s.trim());
       if (!structDef.typeParams || typeArgs.length !== structDef.typeParams.length) {
-        throw new Error(
-          'struct ' +
-            structName +
-            ' expects ' +
-            (structDef.typeParams?.length || 0) +
-            ' type arguments'
-        );
+        throw new Error('struct ' + structName + ' expects ' + (structDef.typeParams?.length || 0) + ' type arguments');
       }
       for (let i = 0; i < typeArgs.length; i++) {
         const typeArg = parseStructFieldType(typeArgs[i]);
@@ -5528,14 +5072,7 @@ export function interpret(input: string): number {
 
     const argParts = splitStructArgs(argsBody);
     if (argParts.length !== structDef.fields.length) {
-      throw new Error(
-        'struct ' +
-          structName +
-          ' expects ' +
-          structDef.fields.length +
-          ' values, got ' +
-          argParts.length
-      );
+      throw new Error('struct ' + structName + ' expects ' + structDef.fields.length + ' values, got ' + argParts.length);
     }
     const fieldValues = new Map<string, RuntimeValue>();
     for (let i = 0; i < structDef.fields.length; i++) {
@@ -5550,16 +5087,8 @@ export function interpret(input: string): number {
       }
 
       validateNarrowing(fieldValue.type, resolvedFieldType);
-      if (
-        resolvedFieldType.kind !== 'Ptr' &&
-        resolvedFieldType.kind !== 'Void' &&
-        'width' in resolvedFieldType
-      ) {
-        validateValueAgainstSuffix(
-          fieldValue.value,
-          resolvedFieldType.kind,
-          resolvedFieldType.width
-        );
+      if (resolvedFieldType.kind !== 'Ptr' && resolvedFieldType.kind !== 'Void' && 'width' in resolvedFieldType) {
+        validateValueAgainstSuffix(fieldValue.value, resolvedFieldType.kind, resolvedFieldType.width);
       }
       fieldValues.set(fieldDef.name, fieldValue);
     }
@@ -5577,12 +5106,7 @@ export function interpret(input: string): number {
     };
   }
 
-  function evaluateIfExpression(
-    expr: string,
-    context: Context,
-    _functions: FunctionTable,
-    structs: StructTable
-  ): RuntimeValue | null {
+  function evaluateIfExpression(expr: string, context: Context, _functions: FunctionTable, structs: StructTable): RuntimeValue | null {
     const trimmed = expr.trim();
     if (!trimmed.startsWith('if')) {
       return null;
@@ -5621,8 +5145,7 @@ export function interpret(input: string): number {
       throw new Error('if condition cannot be empty');
     }
 
-    const isIdentifierChar = (ch: string | undefined) =>
-      ch !== undefined && /[A-Za-z0-9_]/.test(ch);
+    const isIdentifierChar = (ch: string | undefined) => ch !== undefined && /[A-Za-z0-9_]/.test(ch);
 
     let depthParen = 0;
     let depthBrace = 0;
@@ -5648,20 +5171,12 @@ export function interpret(input: string): number {
       }
 
       if (depthParen === 0 && depthBrace === 0) {
-        if (
-          trimmed.startsWith('if', i) &&
-          !isIdentifierChar(trimmed[i - 1]) &&
-          !isIdentifierChar(trimmed[i + 2])
-        ) {
+        if (trimmed.startsWith('if', i) && !isIdentifierChar(trimmed[i - 1]) && !isIdentifierChar(trimmed[i + 2])) {
           pendingIfs++;
           i += 1;
           continue;
         }
-        if (
-          trimmed.startsWith('else', i) &&
-          !isIdentifierChar(trimmed[i - 1]) &&
-          !isIdentifierChar(trimmed[i + 4])
-        ) {
+        if (trimmed.startsWith('else', i) && !isIdentifierChar(trimmed[i - 1]) && !isIdentifierChar(trimmed[i + 4])) {
           if (pendingIfs > 0) {
             pendingIfs--;
             i += 3;
@@ -5705,10 +5220,7 @@ export function interpret(input: string): number {
   }
 
   // Helper to merge block context changes back to parent context
-  function mergeBlockContext(
-    blockResult: { context: Context; declaredInThisBlock: Set<string> },
-    parentContext: Context
-  ): void {
+  function mergeBlockContext(blockResult: { context: Context; declaredInThisBlock: Set<string> }, parentContext: Context): void {
     for (const [key, value] of blockResult.context) {
       if (!blockResult.declaredInThisBlock.has(key) && parentContext.has(key)) {
         parentContext.set(key, value);
@@ -5805,9 +5317,7 @@ export function interpret(input: string): number {
     body: string;
   } {
     const { header, body } = splitFunctionHeaderAndBody(stmt);
-    const headerMatch = header.match(
-      /^fn\s+([a-zA-Z_]\w*)\s*(?:<\s*([^>]+)\s*>)?\s*\(\s*(.*?)\s*\)\s*(?::\s*(.+))?$/
-    );
+    const headerMatch = header.match(/^fn\s+([a-zA-Z_]\w*)\s*(?:<\s*([^>]+)\s*>)?\s*\(\s*(.*?)\s*\)\s*(?::\s*(.+))?$/);
     if (!headerMatch) {
       throw new Error('invalid function definition');
     }
@@ -5843,12 +5353,7 @@ export function interpret(input: string): number {
     return null;
   }
 
-  function evaluateNonVoidExpression(
-    expr: string,
-    context: Context,
-    functions: FunctionTable,
-    structs: StructTable
-  ): RuntimeValue {
+  function evaluateNonVoidExpression(expr: string, context: Context, functions: FunctionTable, structs: StructTable): RuntimeValue {
     const valueObj = processExprWithContext(expr, context, functions, structs);
     if (valueObj.type?.kind === 'Void') {
       throw new Error('void function cannot return a value');
@@ -5869,12 +5374,7 @@ export function interpret(input: string): number {
     return executeFunctionCallWithArgs(fnName, args, context, functions, structs, explicitTypeArgs);
   }
 
-  function parseCallArguments(
-    argsStr: string,
-    context: Context,
-    functions: FunctionTable,
-    structs: StructTable
-  ): RuntimeValue[] {
+  function parseCallArguments(argsStr: string, context: Context, functions: FunctionTable, structs: StructTable): RuntimeValue[] {
     const args: RuntimeValue[] = [];
     if (!argsStr.trim()) {
       return args;
@@ -5925,11 +5425,7 @@ export function interpret(input: string): number {
     let derivedContext = context;
     let thisBindingName: string | undefined;
     let thisBindingFieldKeys: string[] | undefined;
-    if (
-      args.length === fnDef.params.length + 1 &&
-      args[0].type?.kind === 'Ptr' &&
-      args[0].type.pointsTo.kind === 'This'
-    ) {
+    if (args.length === fnDef.params.length + 1 && args[0].type?.kind === 'Ptr' && args[0].type.pointsTo.kind === 'This') {
       // The first arg is a pointer to This - use its target as context
       const ptrArg = args[0];
       if (ptrArg.refersTo) {
@@ -5944,14 +5440,7 @@ export function interpret(input: string): number {
     }
 
     if (effectiveArgs.length !== fnDef.params.length) {
-      throw new Error(
-        'function ' +
-          fnName +
-          ' expects ' +
-          fnDef.params.length +
-          ' arguments, got ' +
-          effectiveArgs.length
-      );
+      throw new Error('function ' + fnName + ' expects ' + fnDef.params.length + ' arguments, got ' + effectiveArgs.length);
     }
 
     const genericMap = new Map<string, Type>();
@@ -5966,9 +5455,7 @@ export function interpret(input: string): number {
       return type;
     };
 
-    const fnContext = new Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>(
-      derivedContext
-    );
+    const fnContext = new Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>(derivedContext);
     for (let i = 0; i < fnDef.params.length; i++) {
       const param = fnDef.params[i];
       const arg = effectiveArgs[i];
@@ -6019,16 +5506,8 @@ export function interpret(input: string): number {
         throw new Error('cannot return boolean value from non-bool function');
       }
       validateNarrowing(returnValue.type, resolvedReturnType);
-      if (
-        resolvedReturnType.kind !== 'Ptr' &&
-        resolvedReturnType.kind !== 'Void' &&
-        'width' in resolvedReturnType
-      ) {
-        validateValueAgainstSuffix(
-          returnValue.value,
-          resolvedReturnType.kind,
-          resolvedReturnType.width
-        );
+      if (resolvedReturnType.kind !== 'Ptr' && resolvedReturnType.kind !== 'Void' && 'width' in resolvedReturnType) {
+        validateValueAgainstSuffix(returnValue.value, resolvedReturnType.kind, resolvedReturnType.width);
       }
     }
 
@@ -6057,8 +5536,7 @@ export function interpret(input: string): number {
       return { kind: 'Str' };
     }
     if (Array.isArray(value)) {
-      const elementType: any =
-        value.length > 0 ? inferTypeFromValue(value[0]) : { kind: 'I', width: 32 };
+      const elementType: any = value.length > 0 ? inferTypeFromValue(value[0]) : { kind: 'I', width: 32 };
       return {
         kind: 'Array',
         elementType,
@@ -6104,9 +5582,7 @@ export function interpret(input: string): number {
 
       // For arrays from native code, uninitialized slots should be undefined.
       // Only wrap values that are not undefined.
-      const elements: Array<RuntimeValue | undefined> = result.map((v) =>
-        v !== undefined ? { value: v, type: inferTypeFromValue(v) } : undefined
-      );
+      const elements: Array<RuntimeValue | undefined> = result.map((v) => (v !== undefined ? { value: v, type: inferTypeFromValue(v) } : undefined));
 
       const initializedCount = result.filter((v: any) => v !== undefined).length;
 
@@ -6145,12 +5621,7 @@ export function interpret(input: string): number {
   }
 
   // Helper to process an expression recursively through brackets and let blocks
-  function processExprWithContext(
-    expr: string,
-    context: Context,
-    functions: FunctionTable,
-    structs: StructTable
-  ): RuntimeValue {
+  function processExprWithContext(expr: string, context: Context, functions: FunctionTable, structs: StructTable): RuntimeValue {
     const structResult = evaluateStructLiteralAccess(expr, context, functions, structs);
     if (structResult) {
       return structResult;
@@ -6249,10 +5720,7 @@ export function interpret(input: string): number {
     }
 
     // Helper to evaluate .length property on values
-    function evaluateLengthProperty(
-      value: RuntimeValue,
-      valueContext?: Context
-    ): RuntimeValue | null {
+    function evaluateLengthProperty(value: RuntimeValue, valueContext?: Context): RuntimeValue | null {
       const buildLengthResult = (len: number): RuntimeValue => {
         return { value: len, type: { kind: 'U', width: 64 } };
       };
@@ -6313,12 +5781,7 @@ export function interpret(input: string): number {
         return snapshotRuntimeValue(varInfo);
       }
 
-      const boundFunctionValue = buildBoundThisFunctionValue(
-        snapshotRuntimeValue(varInfo),
-        fieldName,
-        functions,
-        varName
-      );
+      const boundFunctionValue = buildBoundThisFunctionValue(snapshotRuntimeValue(varInfo), fieldName, functions, varName);
       if (boundFunctionValue) {
         return boundFunctionValue;
       }
@@ -6333,9 +5796,7 @@ export function interpret(input: string): number {
       }
       const fieldValue = varInfo.structFields.get(fieldName);
       if (!fieldValue) {
-        throw new Error(
-          'struct ' + (varInfo.structName || 'unknown') + ' has no field: ' + fieldName
-        );
+        throw new Error('struct ' + (varInfo.structName || 'unknown') + ' has no field: ' + fieldName);
       }
       return fieldValue;
     }
@@ -6386,9 +5847,7 @@ export function interpret(input: string): number {
       }
       const fieldValue = baseValue.structFields.get(fieldName);
       if (!fieldValue) {
-        throw new Error(
-          'struct ' + (baseValue.structName || 'unknown') + ' has no field: ' + fieldName
-        );
+        throw new Error('struct ' + (baseValue.structName || 'unknown') + ' has no field: ' + fieldName);
       }
       return fieldValue;
     }
@@ -6403,23 +5862,10 @@ export function interpret(input: string): number {
         if (calleeValue.refersToFn) {
           if (calleeValue.boundThis) {
             const derivedContext = buildContextFromThisValue(calleeValue.boundThis, context);
-            const result = executeFunctionCall(
-              calleeValue.refersToFn,
-              argsStr,
-              derivedContext,
-              functions,
-              structs
-            );
+            const result = executeFunctionCall(calleeValue.refersToFn, argsStr, derivedContext, functions, structs);
             if (calleeValue.boundThisRef && calleeValue.boundThis.structFields) {
-              const fieldKeys =
-                calleeValue.boundThisFieldKeys ||
-                Array.from(calleeValue.boundThis.structFields.keys());
-              updateThisFieldsInContext(
-                calleeValue.boundThisRef,
-                fieldKeys,
-                derivedContext,
-                context
-              );
+              const fieldKeys = calleeValue.boundThisFieldKeys || Array.from(calleeValue.boundThis.structFields.keys());
+              updateThisFieldsInContext(calleeValue.boundThisRef, fieldKeys, derivedContext, context);
             }
             return result;
           }
@@ -6433,9 +5879,7 @@ export function interpret(input: string): number {
     // Support line-broken chaining by collapsing newline + leading dot
     const methodCallExpr = expr.replace(/\s*\n\s*\./g, '.');
     // Need to be careful not to match dots inside bracket expressions
-    const methodCallMatch = methodCallExpr
-      .trim()
-      .match(/^([\s\S]+)\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/);
+    const methodCallMatch = methodCallExpr.trim().match(/^([\s\S]+)\s*\.\s*([a-zA-Z_]\w*)\s*\(\s*(.*)\s*\)$/);
     if (methodCallMatch) {
       const baseExpr = methodCallMatch[1].trim();
       const fnName = methodCallMatch[2];
@@ -6462,15 +5906,11 @@ export function interpret(input: string): number {
       if (isBalanced && baseExpr !== 'this') {
         const baseValue = processExprWithContext(baseExpr, context, functions, structs);
         if (!functions.has(fnName)) {
-          throw new Error(
-            buildFunctionNotFoundMessage(fnName, 'method call ' + baseExpr + '.' + fnName + '()')
-          );
+          throw new Error(buildFunctionNotFoundMessage(fnName, 'method call ' + baseExpr + '.' + fnName + '()'));
         }
         const fnDef = functions.get(fnName);
         if (!fnDef) {
-          throw new Error(
-            buildFunctionNotFoundMessage(fnName, 'method call ' + baseExpr + '.' + fnName + '()')
-          );
+          throw new Error(buildFunctionNotFoundMessage(fnName, 'method call ' + baseExpr + '.' + fnName + '()'));
         }
 
         const hasThisParam = fnDef.params[0]?.name === 'this';
@@ -6478,13 +5918,7 @@ export function interpret(input: string): number {
           if (baseValue.type?.kind === 'This') {
             const derivedContext = buildContextFromThisValue(baseValue, context);
             const args = parseCallArguments(argsStr, derivedContext, functions, structs);
-            const result = executeFunctionCallWithArgs(
-              fnName,
-              args,
-              derivedContext,
-              functions,
-              structs
-            );
+            const result = executeFunctionCallWithArgs(fnName, args, derivedContext, functions, structs);
             if (baseValue.structFields) {
               for (const key of baseValue.structFields.keys()) {
                 const updatedValue = derivedContext.get(key);
@@ -6557,17 +5991,9 @@ export function interpret(input: string): number {
 
       if (boundThis) {
         const derivedContext = buildContextFromThisValue(boundThis, context);
-        const result = executeFunctionCall(
-          fnName,
-          callArgsStr,
-          derivedContext,
-          functions,
-          structs,
-          explicitTypes
-        );
+        const result = executeFunctionCall(fnName, callArgsStr, derivedContext, functions, structs, explicitTypes);
         if (boundThisInfo?.boundThisRef && boundThis.structFields) {
-          const fieldKeys =
-            boundThisInfo.boundThisFieldKeys || Array.from(boundThis.structFields.keys());
+          const fieldKeys = boundThisInfo.boundThisFieldKeys || Array.from(boundThis.structFields.keys());
           updateThisFieldsInContext(boundThisInfo.boundThisRef, fieldKeys, derivedContext, context);
         }
         return result;
@@ -6580,12 +6006,7 @@ export function interpret(input: string): number {
     const thisCallMatch = expr.trim().match(thisFunctionCallRegex);
     if (thisCallMatch) {
       if (!functions.has(thisCallMatch[1])) {
-        throw new Error(
-          buildFunctionNotFoundMessage(
-            thisCallMatch[1],
-            'method call this.' + thisCallMatch[1] + '()'
-          )
-        );
+        throw new Error(buildFunctionNotFoundMessage(thisCallMatch[1], 'method call this.' + thisCallMatch[1] + '()'));
       }
       return executeFunctionCall(thisCallMatch[1], thisCallMatch[2], context, functions, structs);
     }
@@ -6755,9 +6176,7 @@ export function interpret(input: string): number {
     for (let stmtIndex = 0; stmtIndex < statements.length; stmtIndex++) {
       const stmt = statements[stmtIndex];
       if (stmt.startsWith('type ')) {
-        const typeMatch = stmt.match(
-          /^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?$/
-        );
+        const typeMatch = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?$/);
         if (!typeMatch) throw new Error('invalid type alias');
         const aliasName = typeMatch[1];
         if (typeAliases.has(aliasName)) {
@@ -6868,15 +6287,11 @@ export function interpret(input: string): number {
       } else if (stmt.startsWith('struct ')) {
         let remainder = stmt;
         while (remainder.startsWith('struct ')) {
-          const structMatch = remainder.match(
-            /^struct\s+([a-zA-Z_]\w*)(?:\s*<\s*([^>]+)\s*>)?\s*\{\s*([\s\S]*?)\s*\}\s*(?:;\s*)?/
-          );
+          const structMatch = remainder.match(/^struct\s+([a-zA-Z_]\w*)(?:\s*<\s*([^>]+)\s*>)?\s*\{\s*([\s\S]*?)\s*\}\s*(?:;\s*)?/);
           if (!structMatch) throw new Error('invalid struct declaration');
           const structName = structMatch[1];
           const typeParamsStr = structMatch[2];
-          const typeParams = typeParamsStr
-            ? typeParamsStr.split(',').map((p) => p.trim())
-            : undefined;
+          const typeParams = typeParamsStr ? typeParamsStr.split(',').map((p) => p.trim()) : undefined;
           if (structs.has(structName) || structNames.has(structName)) {
             throw new Error('struct already defined: ' + structName);
           }
@@ -6926,10 +6341,7 @@ export function interpret(input: string): number {
         if (remainder.startsWith(';')) {
           remainder = remainder.substring(1).trim();
         }
-        const objectContext = new Map<
-          string,
-          RuntimeValue & { mutable: boolean; initialized: boolean }
-        >();
+        const objectContext = new Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>();
         const objectResult = processBlock(body, objectContext, functions, structs);
 
         const fields = new Map<string, RuntimeValue>();
@@ -7038,12 +6450,7 @@ export function interpret(input: string): number {
               initialized = true;
             } else {
               // Not a known function, try normal evaluation
-              const varValueObj = evaluateNonVoidExpression(
-                varExprStr,
-                context,
-                functions,
-                structs
-              );
+              const varValueObj = evaluateNonVoidExpression(varExprStr, context, functions, structs);
               varValue = varValueObj.value;
               valSuffix = varValueObj.type;
               refersTo = varValueObj.refersTo;
@@ -7087,11 +6494,7 @@ export function interpret(input: string): number {
         if (declaredSuffix && initialized) {
           if (declaredSuffix.kind !== 'FnPtr') {
             validateNarrowing(valSuffix, declaredSuffix);
-            if (
-              declaredSuffix.kind !== 'Ptr' &&
-              declaredSuffix.kind !== 'Array' &&
-              'width' in declaredSuffix
-            ) {
+            if (declaredSuffix.kind !== 'Ptr' && declaredSuffix.kind !== 'Array' && 'width' in declaredSuffix) {
               validateValueAgainstSuffix(varValue, declaredSuffix.kind, declaredSuffix.width);
             }
             if (maxValue !== undefined) {
@@ -7115,16 +6518,8 @@ export function interpret(input: string): number {
                 }
                 const elementSuffix = element.type || { kind: 'I', width: 32 };
                 validateNarrowing(elementSuffix, declaredSuffix.elementType);
-                if (
-                  declaredSuffix.elementType.kind !== 'Ptr' &&
-                  declaredSuffix.elementType.kind !== 'Array' &&
-                  'width' in declaredSuffix.elementType
-                ) {
-                  validateValueAgainstSuffix(
-                    element.value,
-                    declaredSuffix.elementType.kind,
-                    declaredSuffix.elementType.width
-                  );
+                if (declaredSuffix.elementType.kind !== 'Ptr' && declaredSuffix.elementType.kind !== 'Array' && 'width' in declaredSuffix.elementType) {
+                  validateValueAgainstSuffix(element.value, declaredSuffix.elementType.kind, declaredSuffix.elementType.width);
                 }
               }
             }
@@ -7139,12 +6534,7 @@ export function interpret(input: string): number {
           arrayInitializedCount = 0;
         }
 
-        if (
-          initialized &&
-          declaredSuffix?.kind === 'Array' &&
-          arrayElements &&
-          arrayInitializedCount === undefined
-        ) {
+        if (initialized && declaredSuffix?.kind === 'Array' && arrayElements && arrayInitializedCount === undefined) {
           arrayInitializedCount = arrayElements.length;
         }
 
@@ -7222,11 +6612,7 @@ export function interpret(input: string): number {
         lastProcessedValue = undefined;
       } else if (stmt.includes('=') && !stmt.startsWith('let ')) {
         // assignment: x = 100 or compound: x += 1, x -= 2, x *= 3, x /= 4 or *y = 100
-        const updateBoundThisField = (
-          varName: string,
-          updatedVarInfo: RuntimeValue & { mutable: boolean; initialized: boolean },
-          markDirty: boolean
-        ) => {
+        const updateBoundThisField = (varName: string, updatedVarInfo: RuntimeValue & { mutable: boolean; initialized: boolean }, markDirty: boolean) => {
           const boundThis = context.get('$boundThis');
           if (boundThis?.type?.kind === 'This' && boundThis.structFields) {
             boundThis.structFields.set(varName, snapshotRuntimeValue(updatedVarInfo));
@@ -7242,10 +6628,7 @@ export function interpret(input: string): number {
           }
         };
 
-        const recordAssignment = (
-          varName: string,
-          updatedVarInfo: RuntimeValue & { mutable: boolean; initialized: boolean }
-        ) => {
+        const recordAssignment = (varName: string, updatedVarInfo: RuntimeValue & { mutable: boolean; initialized: boolean }) => {
           context.set(varName, updatedVarInfo);
           if (!declaredInThisBlock.has(varName) && parentContext.has(varName)) {
             parentContext.set(varName, updatedVarInfo);
@@ -7281,14 +6664,7 @@ export function interpret(input: string): number {
             throw new Error('cannot assign to immutable variable through pointer');
           }
 
-          const newValueObj = evaluateAssignmentValue(
-            targetVarInfo.value,
-            op,
-            varExprStr,
-            context,
-            functions,
-            structs
-          );
+          const newValueObj = evaluateAssignmentValue(targetVarInfo.value, op, varExprStr, context, functions, structs);
           const newValue = newValueObj.value;
           const newValSuffix = newValueObj.type;
 
@@ -7306,9 +6682,7 @@ export function interpret(input: string): number {
           recordAssignment(targetVarName, updatedTargetInfo);
         } else {
           // Array element assignment: array[index] = value or array[index] += value
-          const arrayAssignMatch = stmt.match(
-            /^([a-zA-Z_]\w*)\s*\[\s*(.+?)\s*\]\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
-          );
+          const arrayAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\[\s*(.+?)\s*\]\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
           if (arrayAssignMatch) {
             const varName = arrayAssignMatch[1];
             const indexExpr = arrayAssignMatch[2].trim();
@@ -7325,11 +6699,7 @@ export function interpret(input: string): number {
             let targetArrayVarName = varName;
 
             // Check if this is a pointer to a mutable array
-            if (
-              varInfo.type?.kind === 'Ptr' &&
-              varInfo.type.pointsTo.kind === 'Array' &&
-              varInfo.type.mutable
-            ) {
+            if (varInfo.type?.kind === 'Ptr' && varInfo.type.pointsTo.kind === 'Array' && varInfo.type.mutable) {
               // Resolve the actual array from the pointer
               if (varInfo.refersTo) {
                 const targetVar = context.get(varInfo.refersTo);
@@ -7352,8 +6722,7 @@ export function interpret(input: string): number {
               throw new Error('array index out of bounds');
             }
 
-            const currentInitializedCount =
-              varInfo.arrayInitializedCount ?? elements.filter((e) => e !== undefined).length;
+            const currentInitializedCount = varInfo.arrayInitializedCount ?? elements.filter((e) => e !== undefined).length;
             if (!elements[index] && index !== currentInitializedCount) {
               throw new Error('array elements must be initialized in order');
             }
@@ -7364,31 +6733,18 @@ export function interpret(input: string): number {
             }
 
             const currentValue = currentElement ? currentElement.value : 0;
-            const newValueObj = evaluateAssignmentValue(
-              currentValue,
-              op,
-              varExprStr,
-              context,
-              functions,
-              structs
-            );
+            const newValueObj = evaluateAssignmentValue(currentValue, op, varExprStr, context, functions, structs);
 
             const newValue = newValueObj.value;
             const newValSuffix = newValueObj.type || { kind: 'I', width: 32 };
             const elementType = varInfo.type.elementType;
             validateNarrowing(newValSuffix, elementType);
-            if (
-              elementType.kind !== 'Ptr' &&
-              elementType.kind !== 'Array' &&
-              'width' in elementType
-            ) {
+            if (elementType.kind !== 'Ptr' && elementType.kind !== 'Array' && 'width' in elementType) {
               validateValueAgainstSuffix(newValue, elementType.kind, elementType.width);
             }
 
             elements[index] = { value: newValue, suffix: newValSuffix };
-            const newInitCount = currentElement
-              ? currentInitializedCount
-              : currentInitializedCount + 1;
+            const newInitCount = currentElement ? currentInitializedCount : currentInitializedCount + 1;
             const updatedSuffix = {
               ...varInfo.type,
               initializedCount: newInitCount,
@@ -7413,9 +6769,7 @@ export function interpret(input: string): number {
           let shouldUpdateBoundThis = false;
           if (!m) {
             // Check for this.x assignment or pointerVar.x assignment
-            const dotAssignMatch = stmt.match(
-              /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/
-            );
+            const dotAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(=|\+=|-=|\*=|\/=)\s*(.+)$/);
             if (!dotAssignMatch) {
               finalExpr = stmt;
               lastProcessedValue = undefined;
@@ -7432,11 +6786,7 @@ export function interpret(input: string): number {
             } else {
               // Check if this is a pointer to This
               const ptrVarInfo = ensureVariable(assignTarget, context);
-              if (
-                ptrVarInfo.type?.kind === 'Ptr' &&
-                ptrVarInfo.type.pointsTo.kind === 'This' &&
-                ptrVarInfo.type.mutable
-              ) {
+              if (ptrVarInfo.type?.kind === 'Ptr' && ptrVarInfo.type.pointsTo.kind === 'This' && ptrVarInfo.type.mutable) {
                 varName = fieldName;
                 shouldUpdateBoundThis = true;
               } else {
@@ -7456,14 +6806,7 @@ export function interpret(input: string): number {
             throw new Error('cannot perform arithmetic on booleans');
           }
 
-          const newValueObj = evaluateAssignmentValue(
-            varInfo.value,
-            op,
-            varExprStr,
-            context,
-            functions,
-            structs
-          );
+          const newValueObj = evaluateAssignmentValue(varInfo.value, op, varExprStr, context, functions, structs);
           const newValue = newValueObj.value;
           const newValSuffix = newValueObj.type;
 
@@ -7511,10 +6854,7 @@ export function interpret(input: string): number {
           const dropFn = functions.get(varInfo.dropFn);
           if (dropFn) {
             // Call drop function with variable value
-            const fnContext = new Map<
-              string,
-              RuntimeValue & { mutable: boolean; initialized: boolean }
-            >(context);
+            const fnContext = new Map<string, RuntimeValue & { mutable: boolean; initialized: boolean }>(context);
             if (dropFn.params.length === 1) {
               const param = dropFn.params[0];
               fnContext.set(param.name, {
@@ -7566,10 +6906,7 @@ export function interpret(input: string): number {
     const structs: StructTable = new Map();
     return processBlock(s, new Map(), functions, structs).result.value;
   } catch (e) {
-    if (
-      e instanceof Error &&
-      (e.message === 'invalid literal' || e.message === 'invalid expression')
-    ) {
+    if (e instanceof Error && (e.message === 'invalid literal' || e.message === 'invalid expression')) {
       return 0;
     }
     throw e;
