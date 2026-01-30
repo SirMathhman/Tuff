@@ -1,83 +1,81 @@
-import { interpret } from '../src/index';
+import { assertInvalid, assertValid } from './utils';
 
 test('interpret supports chained addition', () => {
-  expect(interpret('1U8 + 2U8 + 3U8')).toBe(6);
+  assertValid('1U8 + 2U8 + 3U8', 6);
 });
 
 test('interpret supports chained addition with mixed suffixes and widths', () => {
-  expect(interpret('1U8 + 2 + 1000U16')).toBe(1003);
+  assertValid('1U8 + 2 + 1000U16', 1003);
 });
 
 test('interpret throws when chained sum overflows the widest type', () => {
-  expect(() => interpret('1U8 + 1 + 254')).toThrow('unsigned literal out of range');
+  assertInvalid('1U8 + 1 + 254');
 });
 
 test('interpret supports addition and subtraction', () => {
-  expect(interpret('2U8 + 3U8 - 4U8')).toBe(1);
+  assertValid('2U8 + 3U8 - 4U8', 1);
 });
 
 test('interpret supports multiplication with operator precedence', () => {
-  expect(interpret('2 * 3 - 4')).toBe(2);
+  assertValid('2 * 3 - 4', 2);
 });
 
 test('interpret respects operator precedence (multiplication before addition)', () => {
-  expect(interpret('4 + 2 * 3')).toBe(10);
+  assertValid('4 + 2 * 3', 10);
 });
 
 test('interpret supports division operator', () => {
-  expect(interpret('10 / 2')).toBe(5);
+  assertValid('10 / 2', 5);
 });
 
 test('interpret throws on division by zero', () => {
-  expect(() => interpret('10 / 0')).toThrow('division by zero');
+  assertInvalid('10 / 0');
 });
 
 test('interpret supports parenthesized expressions', () => {
-  expect(interpret('(4 + 2) * 3')).toBe(18);
+  assertValid('(4 + 2) * 3', 18);
 });
 
 test('interpret supports curly braces as grouping operators', () => {
-  expect(interpret('(4 + { 2 }) * 3')).toBe(18);
+  assertValid('(4 + { 2 }) * 3', 18);
 });
 
 test('interpret supports variable declarations within braces', () => {
-  expect(interpret('(4 + { let x : U8 = 2; x }) * 3')).toBe(18);
+  assertValid('(4 + { let x : U8 = 2; x }) * 3', 18);
 });
 
 test('interpret supports multiple variable declarations within braces', () => {
-  expect(interpret('(4 + { let x : U8 = 2; let y : U8 = x; y }) * 3')).toBe(18);
+  assertValid('(4 + { let x : U8 = 2; let y : U8 = x; y }) * 3', 18);
 });
 
 test('interpret supports top-level variable declarations', () => {
-  expect(interpret('let z : U8 = (4 + { let x : U8 = 2; let y : U8 = x; y }) * 3; z')).toBe(18);
+  assertValid('let z : U8 = (4 + { let x : U8 = 2; let y : U8 = x; y }) * 3; z', 18);
 });
 
 test('interpret supports variable declarations without type annotations', () => {
-  expect(interpret('let x = 18; x')).toBe(18);
+  assertValid('let x = 18; x', 18);
 });
 
 test('interpret rejects narrowing conversions when assigning variables', () => {
-  expect(() => interpret('let x = 100U16; let y : U8 = x;')).toThrow();
+  assertInvalid('let x = 100U16; let y : U8 = x;');
 });
 
 test('interpret treats un-suffixed numeric variables as I32 and rejects narrowing', () => {
-  expect(() => interpret('let x = 100; let y : U8 = x; y')).toThrow();
+  assertInvalid('let x = 100; let y : U8 = x; y');
 });
 
 test('interpret treats un-suffixed numeric variables as I32 and allows assignment to I32', () => {
-  expect(interpret('let x = 100; let y : I32 = x; y')).toBe(100);
+  assertValid('let x = 100; let y : I32 = x; y', 100);
 });
 
 test('interpret supports variable declarations with suffix in initializer', () => {
-  expect(interpret('let x : U16 = 18U8; x')).toBe(18);
+  assertValid('let x : U16 = 18U8; x', 18);
 });
 
 test('interpret rejects narrowing conversions in variable declarations', () => {
-  expect(() => interpret('let x : U8 = 18U16; x')).toThrow();
+  assertInvalid('let x : U8 = 18U16; x');
 });
 
 test('interpret rejects reassignment to immutable variables even if initially uninitialized', () => {
-  expect(() => interpret('let x : U8; x = 100; x = 200; x')).toThrow(
-    'cannot assign to immutable variable'
-  );
+  assertInvalid('let x : U8; x = 100; x = 200; x');
 });

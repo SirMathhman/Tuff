@@ -479,6 +479,8 @@ export function compile(input: string): string {
   const varInitialized = new Map<string, boolean>();
   const varDropFns = new Map<string, string>();
   const stringVars = new Set<string>();
+  const implicitNumericVars = new Set<string>();
+  const untypedVars = new Set<string>();
   const arrayVars = new Map<string, ArrayVarInfo>();
   const arrayPointerTargets = new Map<string, string>();
   const fnArrayParamRequirements = new Map<
@@ -498,6 +500,8 @@ export function compile(input: string): string {
     varInitialized,
     varDropFns,
     stringVars,
+    implicitNumericVars,
+    untypedVars,
     arrayVars,
     arrayPointerTargets,
     fnArrayParamRequirements,
@@ -828,13 +832,15 @@ export function compile(input: string): string {
     inferExprInfo(lastStmtOriginal, varTypes, varNumericSuffixes);
 
     // Handle if/else expressions by converting to ternary operators
+    lastStmt = convertInlineBlockExpressions(lastStmt);
     lastStmt = convertIsExpressions(lastStmt, context);
     lastStmt = convertStringIndexing(lastStmt, context);
     lastStmt = convertIfElseToTernary(lastStmt);
 
     // Check for undefined variables in final expression
-    checkUndefinedVars(lastStmt, definedVars);
+    checkUndefinedVars(lastStmtOriginal, definedVars);
     validateNumericLiteralOverflow(lastStmtOriginal);
+    validateDivisionByZero(lastStmtOriginal);
     validateStructFieldAccess(lastStmtOriginal, context);
     validateFunctionCalls(lastStmtOriginal, context, false);
     validateComparisonTypes(lastStmtOriginal, context);
@@ -984,6 +990,28 @@ function chooseNumericSuffix(suffixA?: string, suffixB?: string): string | undef
 
 function validateNumericLiteralOverflow(expr: string): void {
   const trimmed = expr.trim();
+  if (trimmed.includes('+')) {
+    const parts = splitTopLevel(trimmed, '+')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length > 1) {
+      const literals = parts.map((part) => parseNumericLiteralValue(part));
+      if (literals.every((value) => value)) {
+        let suffix: string | undefined;
+        for (const literal of literals) {
+          if (!literal) continue;
+          suffix = chooseNumericSuffix(suffix, literal.suffix);
+        }
+        if (suffix) {
+          const sum = literals.reduce((total, literal) => total + (literal ? literal.value : 0), 0);
+          const range = getNumericSuffixRange(suffix);
+          if (sum < range.min || sum > range.max) {
+            throw new Error('numeric literal overflow');
+          }
+        }
+      }
+    }
+  }
   const match = trimmed.match(
     /^(-?\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)?)\s*\+\s*(-?\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)?)$/
   );
@@ -997,6 +1025,26 @@ function validateNumericLiteralOverflow(expr: string): void {
   const range = getNumericSuffixRange(suffix);
   if (result < range.min || result > range.max) {
     throw new Error('numeric literal overflow');
+  }
+}
+
+function validateDivisionByZero(expr: string): void {
+  const trimmed = expr.trim();
+  const regex = /\//g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(trimmed)) !== null) {
+    const index = match.index;
+    const before = trimmed[index - 1];
+    if (before === '/') continue;
+    let i = index + 1;
+    while (i < trimmed.length && /\s/.test(trimmed[i])) {
+      i++;
+    }
+    const rest = trimmed.slice(i);
+    const literal = parseNumericLiteralValue(rest.split(/\s|\)|\}|\]/)[0]);
+    if (literal && literal.value === 0) {
+      throw new Error('division by zero');
+    }
   }
 }
 
@@ -1621,13 +1669,13 @@ function replaceInlineBlocks(code: string): string {
  */
 function convertBlockToIIFE(blockContent: string): string {
   if (!blockContent.trim()) {
-    return '() => 0';
+    return 'function () { return 0; }';
   }
 
   const stmts = splitBlockStatements(blockContent);
 
   if (stmts.length === 0) {
-    return '() => 0';
+    return 'function () { return 0; }';
   }
 
   // All but the last are statements - convert Tuff syntax to JS
@@ -1649,7 +1697,7 @@ function convertBlockToIIFE(blockContent: string): string {
     body = body + convertBlockStatementToJs(lastExpr) + '; ';
   }
 
-  return '() => { ' + body + 'return ' + finalExpr + '; }';
+  return 'function () { ' + body + 'return ' + finalExpr + '; }';
 }
 
 function splitBlockStatements(blockContent: string): string[] {
@@ -1682,6 +1730,18 @@ function convertBlockStatementToJs(stmt: string): string {
     if (!fnDef) return '';
     const parsedParams = parseFnParams(fnDef.params);
     return buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body);
+  }
+
+  const letWithInit = trimmed.match(/^let\s+(mut\s+)?(\w+)\s*:\s*[^=]+\s*=\s*(.+)$/);
+  if (letWithInit) {
+    const name = letWithInit[2];
+    const init = letWithInit[3];
+    return 'let ' + name + ' = ' + normalizeRefs(convertIfElseToTernary(init)) + ';';
+  }
+  const letNoInit = trimmed.match(/^let\s+(mut\s+)?(\w+)\s*:\s*.+$/);
+  if (letNoInit) {
+    const name = letNoInit[2];
+    return 'let ' + name;
   }
 
   return normalizeRefs(convertIfElseToTernary(trimmed)).replace(/^let\s+mut\s+/g, 'let ');
@@ -1765,6 +1825,8 @@ type CompileContext = {
   varInitialized: Map<string, boolean>;
   varDropFns: Map<string, string>;
   stringVars: Set<string>;
+  implicitNumericVars: Set<string>;
+  untypedVars: Set<string>;
   arrayVars: Map<string, ArrayVarInfo>;
   arrayPointerTargets: Map<string, string>;
   fnArrayParamRequirements: Map<string, Array<{ index: number; minInitialized: number }>>;
@@ -2039,6 +2101,40 @@ function normalizeRefs(expr: string): string {
   return result;
 }
 
+function convertInlineBlockExpressions(expr: string): string {
+  let result = '';
+  let index = 0;
+  while (index < expr.length) {
+    const start = expr.indexOf('{', index);
+    if (start === -1) {
+      result += expr.slice(index);
+      break;
+    }
+    const before = expr.slice(index, start);
+    result += before;
+    let prevIndex = start - 1;
+    while (prevIndex >= 0 && /\s/.test(expr[prevIndex])) {
+      prevIndex--;
+    }
+    const prevChar = prevIndex >= 0 ? expr[prevIndex] : '';
+    const isStructLiteral = /[a-zA-Z0-9_>\]]/.test(prevChar);
+    if (isStructLiteral) {
+      result += '{';
+      index = start + 1;
+      continue;
+    }
+    const end = findMatchingClosing(expr, start, '{', '}');
+    if (end === -1) {
+      throw new Error('unmatched opening brace');
+    }
+    const blockContent = expr.slice(start + 1, end).trim();
+    const blockCode = convertBlockToIIFE(blockContent);
+    result += '(' + blockCode + ')()';
+    index = end + 1;
+  }
+  return result;
+}
+
 function stripPointerPrefix(typeStr: string): { base: string; isPointer: boolean } {
   let trimmed = typeStr.trim();
   let isPointer = false;
@@ -2281,13 +2377,15 @@ function prepareValueExpression(
     checkUndefinedVars(valueOriginal, definedVars);
   }
   validateNumericLiteralOverflow(valueOriginal);
+  validateDivisionByZero(valueOriginal);
   validateStructFieldAccess(valueOriginal, context);
   validateFunctionCalls(valueOriginal, context, disallowVoidCall);
   validateComparisonTypes(valueOriginal, context);
   validateArrayAccesses(valueOriginal, arrayVars, arrayPointerTargets);
   validateArrayLiteralIndexing(valueOriginal);
   validateArrayCallRequirements(valueOriginal, context);
-  const isConverted = convertIsExpressions(value, context);
+  const blockConverted = convertInlineBlockExpressions(value);
+  const isConverted = convertIsExpressions(blockConverted, context);
   const stringConverted = convertStringIndexing(isConverted, context);
   const structConversion = convertStructLiteralExpression(stringConverted, context);
   return normalizeRefs(convertIfElseToTernary(structConversion.converted));
@@ -2556,6 +2654,9 @@ function handleLetInitializer(
     isMutable,
     context
   );
+  if (!typeAnnotation) {
+    context.untypedVars.add(varName);
+  }
   const exprInfo = inferExprInfo(valueOriginal, varTypes, varNumericSuffixes);
   ensureNoBoolArithmetic(valueOriginal, varTypes);
   applyArrayInitializer(varName, typeAnnotation, valueOriginal, context, arrayTypeInfo);
@@ -2600,7 +2701,32 @@ function handleLetInitializer(
   }
 
   if (declaredInfo.numericSuffix) {
-    for (const suffix of exprInfo.numericSuffixes) {
+    let effectiveSuffixes = exprInfo.numericSuffixes;
+    if (effectiveSuffixes.length === 0) {
+      const trimmedValue = valueOriginal.trim();
+      const identMatch = trimmedValue.match(/^\w+$/);
+      if (identMatch) {
+        if (context.untypedVars.has(trimmedValue) && declaredInfo.numericSuffix !== 'I32') {
+          throw new Error('cannot convert numeric type to smaller width');
+        }
+        if (declaredInfo.numericSuffix !== 'I32' && varTypes.get(trimmedValue) === 'Numeric') {
+          const sourceSuffix = varNumericSuffixes.get(trimmedValue);
+          if (!sourceSuffix || isNumericSuffixWider(sourceSuffix, declaredInfo.numericSuffix)) {
+            throw new Error('cannot convert numeric type to smaller width');
+          }
+        }
+        if (context.implicitNumericVars.has(trimmedValue) && declaredInfo.numericSuffix !== 'I32') {
+          throw new Error('cannot convert numeric type to smaller width');
+        }
+        const existingSuffix = varNumericSuffixes.get(trimmedValue);
+        if (existingSuffix) {
+          effectiveSuffixes = [existingSuffix];
+        } else if (context.implicitNumericVars.has(trimmedValue)) {
+          effectiveSuffixes = ['I32'];
+        }
+      }
+    }
+    for (const suffix of effectiveSuffixes) {
       if (isNumericSuffixWider(suffix, declaredInfo.numericSuffix)) {
         throw new Error('cannot convert numeric type to smaller width');
       }
@@ -2608,6 +2734,12 @@ function handleLetInitializer(
     varNumericSuffixes.set(varName, declaredInfo.numericSuffix);
   } else if (exprInfo.numericSuffixes.length > 0) {
     varNumericSuffixes.set(varName, exprInfo.numericSuffixes[0]);
+  } else if (exprInfo.kind === 'Numeric') {
+    varNumericSuffixes.set(varName, 'I32');
+    if (!typeAnnotation) {
+      context.implicitNumericVars.add(varName);
+      context.untypedVars.add(varName);
+    }
   }
 
   definedVars.add(varName);
@@ -2910,7 +3042,24 @@ function convertIfElseToTernary(code: string): string {
  * This is a simple heuristic that checks for bare identifiers.
  */
 function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
-  const sanitized = expr.replace(/"(?:\\.|[^"\\])*"/g, '').replace(/'(?:\\.|[^'\\])*'/g, '');
+  let sanitized = expr.replace(/"(?:\\.|[^"\\])*"/g, '').replace(/'(?:\\.|[^'\\])*'/g, '');
+  let result = '';
+  let braceDepth = 0;
+  for (let i = 0; i < sanitized.length; i++) {
+    const ch = sanitized[i];
+    if (ch === '{') {
+      braceDepth++;
+      continue;
+    }
+    if (ch === '}') {
+      braceDepth = Math.max(0, braceDepth - 1);
+      continue;
+    }
+    if (braceDepth === 0) {
+      result += ch;
+    }
+  }
+  sanitized = result;
   // Extract all identifiers from the expression
   // This is a simple regex that finds word characters that aren't part of numbers or operators
   const identifierRegex = /\b[a-zA-Z_]\w*\b/g;
