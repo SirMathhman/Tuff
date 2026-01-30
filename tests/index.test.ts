@@ -96,3 +96,7 @@ test("interpret supports top-level variable declaration", () => {
 test("compile throws error when assigning larger type to smaller type in declaration", () => {
   assertInvalid("let x : U8 = 100U16; x");
 });
+
+test("interpret supports variable declaration without type annotation", () => {
+  expect(interpret("let x = 100U8; x")).toBe(100);
+});

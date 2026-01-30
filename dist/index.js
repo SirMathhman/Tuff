@@ -21,6 +21,12 @@ const typeRanges = {
     F32: { min: -Infinity, max: Infinity },
     F64: { min: -Infinity, max: Infinity },
 };
+// Type families for organization
+const TYPE_FAMILIES = {
+    unsignedInts: ["U8", "U16", "U32", "U64"],
+    signedInts: ["I8", "I16", "I32", "I64"],
+    floats: ["F32", "F64"],
+};
 /**
  * Strip brace-wrapped expressions, treating { ... } as a grouping operator.
  * Also handles `let` variable bindings within blocks.
@@ -64,9 +70,31 @@ function stripBraceWrappers(input) {
     return result;
 }
 /**
+ * Validate a let statement and extract its declaration.
+ * Returns the declaration string or null if invalid.
+ */
+function parseLetDeclaration(stmt, declaredVars, validateTypes) {
+    const letMatch = stmt.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
+    if (!letMatch) {
+        return null;
+    }
+    const [, varName, declType, value] = letMatch;
+    // Check for duplicate variable declaration
+    if (declaredVars.has(varName)) {
+        throw new Error(`Variable '${varName}' has already been declared in this block`);
+    }
+    declaredVars.add(varName);
+    // Validate types in the assigned expression if requested
+    if (validateTypes) {
+        extractAndValidateTypesInExpression(value, declType);
+    }
+    // Strip type annotations from the value
+    const cleanValue = value.replace(/(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
+    return `let ${varName} = ${cleanValue}`;
+}
+/**
  * Convert a let binding block to a JavaScript IIFE.
  * For example: 'let x : U8 = 3; x' → '(function() { let x = 3; return x; })()'
- * Throws an error if a variable is declared more than once in the same block.
  */
 function convertLetBindingToIIFE(blockContent) {
     // Split by semicolon to separate statements
@@ -80,23 +108,13 @@ function convertLetBindingToIIFE(blockContent) {
     // Process each statement except the last
     const declarations = [];
     const declaredVars = new Set();
-    let lastStatement = statements[statements.length - 1];
+    const lastStatement = statements[statements.length - 1];
     for (let i = 0; i < statements.length - 1; i++) {
         const stmt = statements[i];
         if (stmt.startsWith("let ")) {
-            // Parse: let identifier : type = value
-            const letMatch = stmt.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*(.+)/);
-            if (letMatch) {
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const [, varName, _type, value] = letMatch;
-                // Check for duplicate variable declaration
-                if (declaredVars.has(varName)) {
-                    throw new Error(`Variable '${varName}' has already been declared in this block`);
-                }
-                declaredVars.add(varName);
-                // Strip type annotations from the value
-                const cleanValue = value.replace(/(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
-                declarations.push(`let ${varName} = ${cleanValue}`);
+            const decl = parseLetDeclaration(stmt, declaredVars, true);
+            if (decl) {
+                declarations.push(decl);
             }
         }
     }
@@ -105,6 +123,57 @@ function convertLetBindingToIIFE(blockContent) {
         (declarations.length > 0 ? "; " : "") +
         `return ${lastStatement};`;
     return `(function() { ${functionBody} })()`;
+}
+/**
+ * Determine the largest type used, ensuring all types are in the same family.
+ * Returns the largest type or undefined if types are from different families.
+ */
+function getLargestUsedType(typesUsed) {
+    const types = Array.from(typesUsed);
+    if (types.every((t) => TYPE_FAMILIES.unsignedInts.includes(t))) {
+        return findLargestType(types, TYPE_FAMILIES.unsignedInts);
+    }
+    else if (types.every((t) => TYPE_FAMILIES.signedInts.includes(t))) {
+        return findLargestType(types, TYPE_FAMILIES.signedInts);
+    }
+    else if (types.every((t) => TYPE_FAMILIES.floats.includes(t))) {
+        return types.includes("F64") ? "F64" : "F32";
+    }
+    return undefined;
+}
+/**
+ * Extract types used in an expression and validate against declared type.
+ */
+function extractAndValidateTypesInExpression(expression, declaredType) {
+    const typeOrder = {
+        U8: 1,
+        U16: 2,
+        U32: 3,
+        U64: 4,
+        I8: 1,
+        I16: 2,
+        I32: 3,
+        I64: 4,
+        F32: 5,
+        F64: 6,
+    };
+    const typesUsed = new Set();
+    expression.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, (match, value, type) => {
+        typesUsed.add(type);
+        return match;
+    });
+    // If no explicit types in the expression, it's OK
+    if (typesUsed.size === 0) {
+        return;
+    }
+    const maxUsedType = getLargestUsedType(typesUsed);
+    if (!maxUsedType) {
+        return; // Mixed families - already validated elsewhere
+    }
+    // Check if max used type fits into declared type
+    if (typeOrder[maxUsedType] > typeOrder[declaredType]) {
+        throw new Error(`Type mismatch: cannot assign ${maxUsedType} to ${declaredType}`);
+    }
 }
 /**
  * Extract top-level let statements from input and return {declarations, expression}.
@@ -137,9 +206,10 @@ function extractTopLevelStatements(input) {
         // Parse: let identifier : type = value (using [\s\S] to match across newlines)
         const letMatch = statement.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
         if (letMatch) {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const [, varName, _type, value] = letMatch;
+            const [, varName, declType, value] = letMatch;
             let cleanValue = value.trim().replace(/;$/, "");
+            // Validate types in the assigned expression
+            extractAndValidateTypesInExpression(cleanValue, declType);
             // Strip type annotations from literals in the value
             cleanValue = cleanValue.replace(/(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
             declarations.push(`let ${varName} = ${cleanValue}`);
@@ -282,22 +352,19 @@ function findLargestType(types, order) {
  * Returns the coerced type if types are compatible, undefined otherwise.
  */
 function determineCoercedType(types) {
-    const unsignedInts = ["U8", "U16", "U32", "U64"];
-    const signedInts = ["I8", "I16", "I32", "I64"];
-    const floats = ["F32", "F64"];
     // Check if all types are in the same family
-    const allUnsigned = types.every((t) => unsignedInts.includes(t));
-    const allSigned = types.every((t) => signedInts.includes(t));
-    const allFloats = types.every((t) => floats.includes(t));
+    const allUnsigned = types.every((t) => TYPE_FAMILIES.unsignedInts.includes(t));
+    const allSigned = types.every((t) => TYPE_FAMILIES.signedInts.includes(t));
+    const allFloats = types.every((t) => TYPE_FAMILIES.floats.includes(t));
     if (!allUnsigned && !allSigned && !allFloats) {
         return undefined; // Incompatible types
     }
     // Find the largest type in the family
     if (allUnsigned) {
-        return findLargestType(types, unsignedInts);
+        return findLargestType(types, TYPE_FAMILIES.unsignedInts);
     }
     if (allSigned) {
-        return findLargestType(types, signedInts);
+        return findLargestType(types, TYPE_FAMILIES.signedInts);
     }
     if (allFloats) {
         // F64 > F32

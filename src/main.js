@@ -1,3 +1,4 @@
 process.exit((function() {
-  return x;
+  let x = 100;
+return x;
 })());

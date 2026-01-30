@@ -217,6 +217,37 @@ function extractAndValidateTypesInExpression(
  * Handles multiline declarations and braces properly.
  * For example: 'let x : U8 = 5; x + 1' → {declarations: ['let x = 5'], expression: 'x + 1'}
  */
+/**
+ * Extract and process a single top-level let statement.
+ */
+function extractSingleLetStatement(statement: string): {
+  varName: string;
+  cleanValue: string;
+} | null {
+  const parsed = parseLetStatement(statement);
+  if (!parsed) {
+    return null;
+  }
+
+  const { varName, declType, value } = parsed;
+
+  // Validate types in the assigned expression
+  extractAndValidateTypesInExpression(value, declType);
+
+  // Strip type annotations from literals in the value
+  const cleanValue = value.replace(
+    /(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
+    "$1",
+  );
+
+  return { varName, cleanValue };
+}
+
+/**
+ * Extract top-level let statements from input and return {declarations, expression}.
+ * Handles multiline declarations and braces properly.
+ * For example: 'let x : U8 = 5; x + 1' → {declarations: ['let x = 5'], expression: 'x + 1'}
+ */
 function extractTopLevelStatements(input: string): {
   declarations: string[];
   expression: string;
@@ -245,20 +276,9 @@ function extractTopLevelStatements(input: string): {
     const statement = remaining.substring(0, semiIdx);
     remaining = remaining.substring(semiIdx + 1).trim();
 
-    // Parse: let identifier : type = value (using [\s\S] to match across newlines)
-    const letMatch = statement.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
-    if (letMatch) {
-      const [, varName, declType, value] = letMatch;
-      let cleanValue = value.trim().replace(/;$/, "");
-
-      // Validate types in the assigned expression
-      extractAndValidateTypesInExpression(cleanValue, declType);
-
-      // Strip type annotations from literals in the value
-      cleanValue = cleanValue.replace(
-        /(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
-        "$1",
-      );
+    const extracted = extractSingleLetStatement(statement);
+    if (extracted) {
+      const { varName, cleanValue } = extracted;
       declarations.push(`let ${varName} = ${cleanValue}`);
     }
   }
@@ -439,6 +459,67 @@ function findLargestType(types: string[], order: string[]): string {
   return types.reduce((max, current) =>
     order.indexOf(current) > order.indexOf(max) ? current : max,
   );
+}
+
+/**
+ * Infer a type from a value expression by analyzing type annotations present.
+ * Returns the inferred type or undefined if no types are present.
+ */
+function inferTypeFromValue(value: string): string | undefined {
+  const typesUsed: Set<string> = new Set();
+
+  value.replace(
+    /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
+    (match: string, _num: string, type: string) => {
+      typesUsed.add(type);
+      return match;
+    },
+  );
+
+  if (typesUsed.size === 0) {
+    return undefined; // No types found
+  }
+
+  // If multiple types, determine coerced type
+  if (typesUsed.size > 1) {
+    return determineCoercedType(Array.from(typesUsed));
+  }
+
+  return Array.from(typesUsed)[0];
+}
+
+/**
+ * Parse a let statement (with or without type annotation) and return extracted info.
+ * Returns {varName, declType, value} or null if not a valid let statement.
+ */
+function parseLetStatement(
+  statement: string,
+): { varName: string; declType: string; value: string } | null {
+  // Try with type annotation first: let identifier : type = value
+  let letMatch = statement.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
+  if (letMatch) {
+    const [, varName, declType, value] = letMatch;
+    return { varName, declType, value: value.trim().replace(/;$/, "") };
+  }
+
+  // Try without type annotation: let identifier = value
+  letMatch = statement.match(/let\s+(\w+)\s*=\s*([\s\S]+)/);
+  if (letMatch) {
+    const [, varName, value] = letMatch;
+    const trimmedValue = value.trim().replace(/;$/, "");
+
+    // Infer type from the value
+    const inferredType = inferTypeFromValue(trimmedValue);
+    if (!inferredType) {
+      throw new Error(
+        `Cannot infer type for variable '${varName}' - value must contain explicit type annotations`,
+      );
+    }
+
+    return { varName, declType: inferredType, value: trimmedValue };
+  }
+
+  return null;
 }
 
 /**

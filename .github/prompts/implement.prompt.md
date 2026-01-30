@@ -3,7 +3,9 @@ name: implement
 description: Implementing new features.
 ---
 
-The user will provide expectations (either requirements for success or failure cases). These steps must be followed in a strict order. When you are doing your task, you must announce what step you are on.
+The user may provide expectations (either requirements for success or failure cases). If the user does not provide some, you may assume that they want a successful implementation of a new feature and that the provided program is valid.
+
+These steps must be followed in a strict order. When you are doing your task, you must announce what step you are on.
 
 1. Read the [main file](../../src/main.tuff) and [generated main file](../../src/main.js) to understand the difference. Furthermore, you are advised to execute `bun run start` to get further information.
 2. Write a minimal failing test for the new feature. This failing test may or may not be the same conditions as the original test, but it must be enough to demonstrate the feature is not yet implemented.
