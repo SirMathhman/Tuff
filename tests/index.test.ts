@@ -92,3 +92,7 @@ test("interpret supports top-level variable declaration", () => {
     interpret("let z : U8 = (2 + { let x : U8 = 3; x }) * 4;\nz"),
   ).toBe(20);
 });
+
+test("compile throws error when assigning larger type to smaller type in declaration", () => {
+  assertInvalid("let x : U8 = 100U16; x");
+});
