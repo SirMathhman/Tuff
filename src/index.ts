@@ -25,16 +25,16 @@ function stripBraceWrappers(input: string): string {
   let result = input;
   const iifeMap = new Map<string, string>();
   let iifeCounter = 0;
-  
+
   let changed = true;
   while (changed) {
     changed = false;
-    
+
     // Match { ... } patterns where inside contains no braces (innermost first)
     const newResult = result.replace(/\{\s*([^{}]+)\s*\}/g, (match, inside) => {
       changed = true;
       inside = inside.trim();
-      
+
       // Check if this is a let binding block (contains 'let' and semicolons)
       if (inside.includes("let ") && inside.includes(";")) {
         // Parse let statements and convert to IIFE
@@ -44,36 +44,41 @@ function stripBraceWrappers(input: string): string {
         iifeCounter++;
         return placeholder;
       }
-      
+
       return inside;
     });
     result = newResult;
   }
-  
+
   // Replace placeholders with actual IIFEs
   for (const [placeholder, iife] of iifeMap) {
     result = result.split(placeholder).join(iife);
   }
-  
+
   return result;
 }
 
 /**
  * Convert a let binding block to a JavaScript IIFE.
  * For example: 'let x : U8 = 3; x' → '(function() { let x = 3; return x; })()'
+ * Throws an error if a variable is declared more than once in the same block.
  */
 function convertLetBindingToIIFE(blockContent: string): string {
   // Split by semicolon to separate statements
-  const statements = blockContent.split(";").map(s => s.trim()).filter(s => s.length > 0);
-  
+  const statements = blockContent
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   if (statements.length === 0) {
     return "";
   }
-  
+
   // Process each statement except the last
   const declarations: string[] = [];
+  const declaredVars = new Set<string>();
   let lastStatement = statements[statements.length - 1];
-  
+
   for (let i = 0; i < statements.length - 1; i++) {
     const stmt = statements[i];
     if (stmt.startsWith("let ")) {
@@ -82,15 +87,30 @@ function convertLetBindingToIIFE(blockContent: string): string {
       if (letMatch) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const [, varName, _type, value] = letMatch;
+        
+        // Check for duplicate variable declaration
+        if (declaredVars.has(varName)) {
+          throw new Error(
+            `Variable '${varName}' has already been declared in this block`,
+          );
+        }
+        declaredVars.add(varName);
+        
         // Strip type annotations from the value
-        const cleanValue = value.replace(/(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
+        const cleanValue = value.replace(
+          /(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
+          "$1",
+        );
         declarations.push(`let ${varName} = ${cleanValue}`);
       }
     }
   }
-  
+
   // Build the IIFE
-  const functionBody = declarations.join("; ") + (declarations.length > 0 ? "; " : "") + `return ${lastStatement};`;
+  const functionBody =
+    declarations.join("; ") +
+    (declarations.length > 0 ? "; " : "") +
+    `return ${lastStatement};`;
   return `(function() { ${functionBody} })()`;
 }
 

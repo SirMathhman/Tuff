@@ -64,7 +64,10 @@ function stripBraceWrappers(input) {
  */
 function convertLetBindingToIIFE(blockContent) {
     // Split by semicolon to separate statements
-    const statements = blockContent.split(";").map(s => s.trim()).filter(s => s.length > 0);
+    const statements = blockContent
+        .split(";")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
     if (statements.length === 0) {
         return "";
     }
@@ -77,7 +80,8 @@ function convertLetBindingToIIFE(blockContent) {
             // Parse: let identifier : type = value
             const letMatch = stmt.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*(.+)/);
             if (letMatch) {
-                const [, varName, type, value] = letMatch;
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const [, varName, _type, value] = letMatch;
                 // Strip type annotations from the value
                 const cleanValue = value.replace(/(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
                 declarations.push(`let ${varName} = ${cleanValue}`);
@@ -85,7 +89,9 @@ function convertLetBindingToIIFE(blockContent) {
         }
     }
     // Build the IIFE
-    const functionBody = declarations.join("; ") + (declarations.length > 0 ? "; " : "") + `return ${lastStatement};`;
+    const functionBody = declarations.join("; ") +
+        (declarations.length > 0 ? "; " : "") +
+        `return ${lastStatement};`;
     return `(function() { ${functionBody} })()`;
 }
 /**

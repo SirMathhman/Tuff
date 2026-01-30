@@ -82,3 +82,7 @@ test("interpret supports variable binding in blocks", () => {
 test("interpret supports variable binding with arithmetic", () => {
   expect(interpret("(2 + { let x : U8 = 3; x }) * 4")).toBe(20);
 });
+
+test("compile throws error for duplicate variable declaration", () => {
+  assertInvalid("{ let x : U8 = 3; let x : U8 = 100; x }");
+});
