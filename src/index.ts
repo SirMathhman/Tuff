@@ -52,6 +52,14 @@ export function compile(input: string): string {
     },
   );
 
+  // Check for mixed types
+  if (typesUsed.size > 1) {
+    const types = Array.from(typesUsed).sort();
+    throw new Error(
+      `Type mismatch: cannot mix ${types[0]} and ${types[1]} in arithmetic expression`,
+    );
+  }
+
   // If all type annotations are from the same type, validate the result at compile time
   if (typesUsed.size === 1) {
     const resultType = Array.from(typesUsed)[0];

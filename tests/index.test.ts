@@ -1,5 +1,18 @@
 import { interpret, compile } from "../src/index";
 
+// Test helpers
+function assertValid(input: string, expected?: string): void {
+  expect(() => compile(input)).not.toThrow();
+  if (expected) {
+    expect(compile(input)).toBe(expected);
+  }
+}
+
+function assertInvalid(input: string, expectedError: string): void {
+  expect(() => compile(input)).toThrow(expectedError);
+}
+
+// Interpret tests
 test("interpret numeric literal", () => {
   expect(interpret("100")).toBe(100);
 });
@@ -13,28 +26,30 @@ test("interpret returns NaN for non-numeric output", () => {
   expect(Number.isNaN(interpret("return 'not-a-number';"))).toBe(true);
 });
 
+// Compile validation tests
 test("compile throws error for U8 underflow", () => {
-  expect(() => compile("-100U8")).toThrow(
-    "Underflow: -100 is below minimum for U8 (0)",
-  );
+  assertInvalid("-100U8", "Underflow: -100 is below minimum for U8 (0)");
 });
 
 test("compile throws error for I8 underflow", () => {
-  expect(() => compile("-129I8")).toThrow(
-    "Underflow: -129 is below minimum for I8 (-128)",
-  );
+  assertInvalid("-129I8", "Underflow: -129 is below minimum for I8 (-128)");
 });
 
 test("compile allows valid U8 value", () => {
-  expect(compile("255U8")).toBe("return 255;");
+  assertValid("255U8", "return 255;");
 });
 
 test("compile allows valid I8 value", () => {
-  expect(compile("-128I8")).toBe("return -128;");
+  assertValid("-128I8", "return -128;");
 });
 
 test("compile throws error for U8 overflow (arithmetic)", () => {
-  expect(() => compile("1U8 + 255U8")).toThrow(
-    "Overflow: 256 is above maximum for U8 (255)",
+  assertInvalid("1U8 + 255U8", "Overflow: 256 is above maximum for U8 (255)");
+});
+
+test("compile throws error for mixed type arithmetic", () => {
+  assertInvalid(
+    "1U8 + 65535U16",
+    "Type mismatch: cannot mix U16 and U8 in arithmetic expression",
   );
 });
