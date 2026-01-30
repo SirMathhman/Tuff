@@ -487,6 +487,8 @@ export function compile(input: string): string {
   const untypedVars = new Set<string>();
   const fnPointerVars = new Set<string>();
   const thisPointerVars = new Set<string>();
+  const thisMemberSets = new Map<string, Set<string>>();
+  const thisValueMembers = new Map<string, Set<string>>();
   const pointerTargets = new Map<string, string>();
   const pointerMutableTargets = new Map<string, string>();
   const pointerVarKinds = new Map<string, ExprType>();
@@ -514,6 +516,8 @@ export function compile(input: string): string {
     untypedVars,
     fnPointerVars,
     thisPointerVars,
+    thisMemberSets,
+    thisValueMembers,
     pointerTargets,
     pointerMutableTargets,
     pointerVarKinds,
@@ -1805,16 +1809,31 @@ function convertBlockToIIFE(blockContent: string): string {
     (params) => parseFnParams(params),
     true,
     convertBlockStatementToJs,
-    (_kind, name) => name + ': ' + name
+    (kind, name) => {
+      if (kind === 'var') {
+        return (
+          'get ' +
+          name +
+          '() { return ' +
+          name +
+          '; }, set ' +
+          name +
+          '(newValue) { ' +
+          name +
+          ' = newValue; }'
+        );
+      }
+      return name + ': ' + name;
+    }
   );
   const scopeMembers = scopeParts.members.join(', ');
   const thisScopeDecl =
-    'const __thisScope = { this: (typeof __thisParent !== "undefined" ? __thisParent : undefined)' +
+    'const __thisValue = { this: (typeof __thisParent !== "undefined" ? __thisParent : undefined)' +
     (scopeMembers ? ', ' + scopeMembers : '') +
     ' };';
   if (lastExpr.trim() === 'this' && !lastIsStatement) {
     const body = scopeParts.locals.join(' ');
-    return '() => { ' + body + ' ' + thisScopeDecl + ' return __thisScope; }';
+    return '() => { ' + body + ' ' + thisScopeDecl + ' return __thisValue; }';
   }
   const finalExpr = lastIsStatement ? '0' : normalizeRefs(convertIfElseToTernary(lastExpr));
 
@@ -2058,6 +2077,10 @@ function emitFunctionDefinition(
     }
   }
   registerFunctionSignature(fnDefOriginal.name, parsedParams, returnType, bodyOriginal, context);
+  const thisMembers = inferThisMembersFromBody(bodyOriginal, context);
+  if (thisMembers) {
+    context.thisMemberSets.set(fnDefOriginal.name, thisMembers);
+  }
   return buildFunctionDefinition(fnDefOriginal.name, parsedParams, fnDef.body.trim());
 }
 
@@ -2072,6 +2095,12 @@ function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body
     .join(', ');
   if (paramMembers && bodyExpr.includes('const __this = {')) {
     bodyExpr = bodyExpr.replace('const __this = {', 'const __this = { ' + paramMembers + ',');
+  }
+  if (paramMembers && bodyExpr.includes('const __thisValue = {')) {
+    bodyExpr = bodyExpr.replace(
+      'const __thisValue = {',
+      'const __thisValue = { ' + paramMembers + ','
+    );
   }
   if (paramMembers && bodyExpr.includes('const __thisScope = {')) {
     bodyExpr = bodyExpr.replace(
@@ -2112,8 +2141,8 @@ function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body
       'if (prop === "this") { return __thisParent; } ' +
       'return eval(String(prop)); ' +
       '}, ' +
-      'set: function (_target, prop, value) { ' +
-      'eval(String(prop) + " = value"); ' +
+      'set: function (_target, prop, newValue) { ' +
+      'eval(String(prop) + " = newValue"); ' +
       'return true; ' +
       '} ' +
       '}); ';
@@ -2175,6 +2204,8 @@ type CompileContext = {
   untypedVars: Set<string>;
   fnPointerVars: Set<string>;
   thisPointerVars: Set<string>;
+  thisMemberSets: Map<string, Set<string>>;
+  thisValueMembers: Map<string, Set<string>>;
   pointerTargets: Map<string, string>;
   pointerMutableTargets: Map<string, string>;
   pointerVarKinds: Map<string, ExprType>;
@@ -2602,6 +2633,9 @@ function bindCallsToThisScope(code: string): string {
       if (/\bfunction\s*$/.test(before) || /\bnew\s*$/.test(before)) {
         return match;
       }
+      if (/\bget\s*$/.test(before) || /\bset\s*$/.test(before)) {
+        return match;
+      }
       if (skip.has(name)) {
         return match;
       }
@@ -2676,6 +2710,34 @@ function buildThisFieldAssignment(
   return handleAssignment(varName, operator, value, valueOriginal, context);
 }
 
+function inferThisMembersFromBody(body: string, context: CompileContext): Set<string> | undefined {
+  const trimmed = body.trim();
+  if (!trimmed.startsWith('{')) return undefined;
+  const endIndex = findMatchingClosing(trimmed, 0, '{', '}');
+  if (endIndex === -1) return undefined;
+  const blockContent = trimmed.slice(1, endIndex).trim();
+  const stmts = splitBlockStatements(blockContent);
+  if (stmts.length === 0) return undefined;
+  const last = stmts[stmts.length - 1];
+  if (last.trim() !== 'this' || isNonValueStatement(last)) return undefined;
+  const parts = collectThisObjectParts(
+    stmts.slice(0, -1),
+    (init) => normalizeRefs(convertIfElseToTernary(init)),
+    (params) => parseFnParams(params, context),
+    true,
+    convertBlockStatementToJs,
+    (_kind, name) => name + ': ' + name
+  );
+  const members = new Set<string>();
+  for (const entry of parts.members) {
+    const match = entry.match(/^([a-zA-Z_]\w*)\s*:/);
+    if (match) {
+      members.add(match[1]);
+    }
+  }
+  return members;
+}
+
 function resolveMethodStyleCall(expr: string, context: CompileContext): { converted: string } {
   const parsed = parseMethodCallExpression(expr);
   if (!parsed) return { converted: expr };
@@ -2695,6 +2757,15 @@ function resolveMethodStyleCall(expr: string, context: CompileContext): { conver
   const args = argsStr.trim() ? splitTopLevel(argsStr, ',') : [];
   const simpleReceiver = isSimpleReceiver(baseExpr);
   if (!signature) {
+    if (/^[a-zA-Z_]\w*$/.test(baseExpr)) {
+      const members = context.thisValueMembers.get(baseExpr);
+      if (members) {
+        if (!members.has(fnName)) {
+          throw new Error('function not found: ' + fnName);
+        }
+        return { converted: expr };
+      }
+    }
     if (simpleReceiver) {
       throw new Error('function not found: ' + fnName);
     }
@@ -3357,6 +3428,14 @@ function handleLetInitializer(
     (valueOriginal.trim().match(/^\w+$/) && context.fnSignatures.has(valueOriginal.trim()))
   ) {
     context.fnPointerVars.add(varName);
+  }
+  const callNameMatch = valueOriginal.trim().match(/^([a-zA-Z_]\w*)(?:\s*<[^>]+>)?\s*\(/);
+  if (callNameMatch) {
+    const callName = callNameMatch[1];
+    const members = context.thisMemberSets.get(callName);
+    if (members) {
+      context.thisValueMembers.set(varName, members);
+    }
   }
   const exprInfo = inferExprInfo(valueOriginal, varTypes, varNumericSuffixes);
   ensureNoBoolArithmetic(valueOriginal, varTypes);
