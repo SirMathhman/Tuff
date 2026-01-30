@@ -1,4 +1,4 @@
-process.exit((function() {
-  let x = (function() { let y = 100; return y; })();
+process.exit(Number((function() {
+  let x = true;
 return x;
-})());
+})()));

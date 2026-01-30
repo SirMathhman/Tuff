@@ -113,3 +113,12 @@ test("interpret supports nested block expressions with variable binding", () => 
 test("compile throws error when block expression returns larger type than variable type", () => {
   assertInvalid("let x : U8 = {\n    let y : U16 = 100;\n    y\n};\nx");
 });
+
+test("compile supports boolean type annotation", () => {
+  assertValid("let x : Bool = true; x", "let x = true;\nreturn x;");
+});
+
+test("interpret returns 1 for true, 0 for false", () => {
+  expect(interpret("let x : Bool = true; x")).toBe(1);
+  expect(interpret("let x : Bool = false; x")).toBe(0);
+});

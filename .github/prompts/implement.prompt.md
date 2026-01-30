@@ -8,7 +8,7 @@ The user may provide expectations (either requirements for success or failure ca
 These steps must be followed in a strict order. When you are doing your task, you must announce what step you are on.
 
 1. Read the [main file](../../src/main.tuff) and [generated main file](../../src/main.js) to understand the difference. Furthermore, you are advised to execute `bun run start` to get further information.
-2. Write a minimal failing test for the new feature. This failing test may or may not be the same conditions as the original test, but it must be enough to demonstrate the feature is not yet implemented.
+2. Write a minimal failing test (or tests) for the new feature. This failing test may or may not be the same conditions as the original test, but it must be enough to demonstrate the feature is not yet implemented.
 3. Implement the feature to make the test pass. For error cases, ensure you define: what the error is, why it's an error, and how to fix it.
 4. Verify the implementation meets all requirements and passes all tests.
 5. Verify that `bun run start` also works as expected. If it does not work as expect, this means that your test is not sufficient, and you must go back to step 2 and write another test.
