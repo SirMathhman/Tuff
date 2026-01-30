@@ -1,7 +1,0 @@
-{
-  "watch": ["src"],
-  "ext": "ts,tuff",
-  "ignore": ["dist", "tests"],
-  "exec": "bun run start",
-  "delay": 500
-}
