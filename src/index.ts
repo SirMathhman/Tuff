@@ -485,6 +485,7 @@ export function compile(input: string): string {
   const stringVars = new Set<string>();
   const implicitNumericVars = new Set<string>();
   const untypedVars = new Set<string>();
+  const fnPointerVars = new Set<string>();
   const pointerTargets = new Map<string, string>();
   const pointerMutableTargets = new Map<string, string>();
   const pointerVarKinds = new Map<string, ExprType>();
@@ -510,6 +511,7 @@ export function compile(input: string): string {
     stringVars,
     implicitNumericVars,
     untypedVars,
+    fnPointerVars,
     pointerTargets,
     pointerMutableTargets,
     pointerVarKinds,
@@ -539,6 +541,7 @@ export function compile(input: string): string {
     let stmtOriginal = stmtsOriginal[i] || stmt;
     let structOnly = false;
     let objectOnly = false;
+    let fnOnly = false;
 
     while (true) {
       const leadingStruct = splitLeadingStructDeclaration(stmtOriginal);
@@ -584,6 +587,30 @@ export function compile(input: string): string {
       continue;
     }
 
+    while (true) {
+      const leadingFn = splitLeadingFunctionDefinition(stmtOriginal);
+      if (!leadingFn) {
+        break;
+      }
+      const fnDefOriginal = parseFunctionDefinitionForCompile(leadingFn.definition);
+      if (!fnDefOriginal) {
+        throw new Error('invalid statement');
+      }
+      jsCode +=
+        emitFunctionDefinition(fnDefOriginal, fnDefOriginal, context, fnArrayParamRequirements) +
+        ' ';
+      if (!leadingFn.trailing) {
+        fnOnly = true;
+        break;
+      }
+      stmt = leadingFn.trailing;
+      stmtOriginal = leadingFn.trailing;
+    }
+
+    if (fnOnly) {
+      continue;
+    }
+
     const whileMatchOriginal = stmtOriginal.match(/^while\s*\((.+)\)\s*(.+)$/);
     if (whileMatchOriginal) {
       const conditionOriginal = whileMatchOriginal[1].trim();
@@ -601,142 +628,102 @@ export function compile(input: string): string {
       continue;
     }
 
-    const fnMatch = stmt.match(
-      /^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*([\s\S]+)$/
-    );
-    const fnMatchOriginal = stmtOriginal.match(
-      /^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*([\s\S]+)$/
-    );
-    if (fnMatch && fnMatchOriginal) {
-      const fnName = fnMatchOriginal[1];
-      const params = fnMatchOriginal[3].trim();
-      const bodyOriginal = fnMatchOriginal[5].trim();
-      const returnType = fnMatchOriginal[4] ? fnMatchOriginal[4].trim() : undefined;
-      const body = fnMatch[5].trim();
-
-      const parsedParams = parseFnParams(params, context);
-      for (const param of parsedParams) {
-        if (param.arrayInfo) {
-          registerFnArrayParam(fnArrayParamRequirements, fnName, param.index, param.arrayInfo);
-        }
-      }
-
-      registerFunctionSignature(fnName, parsedParams, returnType, bodyOriginal, context);
-
-      jsCode += buildFunctionDefinition(fnName, parsedParams, body) + ' ';
+    const fnDefOriginal = parseFunctionDefinitionForCompile(stmtOriginal);
+    if (fnDefOriginal) {
+      const fnDef = parseFunctionDefinitionForCompile(stmt) || fnDefOriginal;
+      jsCode +=
+        emitFunctionDefinition(fnDef, fnDefOriginal, context, fnArrayParamRequirements) + ' ';
       continue;
     }
 
-    // Check if this is a let statement with initializer
-    const letMatch = stmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+)$/);
-    if (letMatch) {
-      const isMutable = !!letMatch[1];
-      const varName = letMatch[2];
-      const typeAnnotation = letMatch[3] ? letMatch[3].trim() : undefined;
-      const varValue = letMatch[4];
-      const varValueOriginalMatch = stmtOriginal.match(
-        /^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?\s*=\s*(.+)$/
-      );
-      const valueOriginal = varValueOriginalMatch ? varValueOriginalMatch[4] : varValue;
-
-      const letSnippet = handleLetInitializer(
-        varName,
-        typeAnnotation,
-        varValue,
-        valueOriginal,
-        isMutable,
-        context
-      );
-      jsCode += letSnippet;
-    } else {
-      const letNoInitMatch = stmt.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*([^=]+?))?$/);
-      if (letNoInitMatch) {
-        const isMutable = !!letNoInitMatch[1];
-        const varName = letNoInitMatch[2];
-        const typeAnnotation = letNoInitMatch[3] ? letNoInitMatch[3].trim() : undefined;
-        const letSnippet = handleLetNoInit(varName, typeAnnotation, isMutable, context);
+    // Check if this is a let statement
+    const parsedLet = parseLetStatementForCompile(stmtOriginal);
+    if (parsedLet) {
+      if (parsedLet.expr !== undefined) {
+        const parsedLetConverted = parseLetStatementForCompile(stmt) || parsedLet;
+        const letSnippet = handleLetInitializer(
+          parsedLet.varName,
+          parsedLet.typeAnnotation,
+          parsedLetConverted.expr || parsedLet.expr,
+          parsedLet.expr,
+          parsedLet.isMutable,
+          context
+        );
         jsCode += letSnippet;
       } else {
-        const arrayAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\[\s*([^\]]+)\s*\]\s*=\s*(.+)$/);
-        if (arrayAssignMatch) {
-          const arrayName = arrayAssignMatch[1];
-          const indexExpr = arrayAssignMatch[2].trim();
-          const valueExpr = arrayAssignMatch[3];
-
-          validateArrayElementAssignment(
-            arrayName,
-            indexExpr,
-            valueExpr,
-            mutableVars,
-            definedVars,
-            arrayVars,
-            arrayPointerTargets,
-            varTypes,
-            varNumericSuffixes
-          );
-
-          const convertedValue = normalizeRefs(convertIfElseToTernary(valueExpr));
-          const convertedIndex = normalizeRefs(convertIfElseToTernary(indexExpr));
-          jsCode += arrayName + '[' + convertedIndex + '] = ' + convertedValue + '; ';
-        } else {
-          const derefAssignMatch = stmt.match(/^\*\s*([a-zA-Z_]\w*)\s*=\s*(.+)$/);
-          if (derefAssignMatch) {
-            const ptrName = derefAssignMatch[1];
-            const valueExpr = derefAssignMatch[2];
-            const target = context.pointerTargets.get(ptrName);
-            if (!target) {
-              throw new Error('cannot dereference non-pointer type');
-            }
-            if (!context.pointerVarIsMutable.get(ptrName)) {
-              throw new Error('cannot assign through immutable pointer');
-            }
-            const convertedValue = prepareValueExpression(
-              valueExpr,
-              valueExpr,
-              context,
-              true,
-              true
-            );
-            jsCode += target + ' = ' + convertedValue + '; ';
-            continue;
-          }
-          // Check if this is an assignment
-          const assignMatch = stmt.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
-          if (assignMatch) {
-            const varName = assignMatch[1];
-            const operator = assignMatch[2];
-            const value = assignMatch[3];
-            const valueOriginalMatch = stmtOriginal.match(
-              /^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
-            );
-            const valueOriginal = valueOriginalMatch ? valueOriginalMatch[3] : value;
-            const assignSnippet = handleAssignment(
-              varName,
-              operator,
-              value,
-              valueOriginal,
-              context
-            );
-            jsCode += assignSnippet;
-          } else {
-            const callExprMatch = stmt.match(/^[a-zA-Z_][\w\.]*\s*\([\s\S]*\)$/);
-            if (callExprMatch) {
-              const exprConverted = prepareValueExpression(
-                stmt,
-                stmtOriginal,
-                context,
-                true,
-                false
-              );
-              jsCode += exprConverted + '; ';
-            } else {
-              // Unknown statement
-              throw new Error('invalid statement');
-            }
-          }
-        }
+        const letSnippet = handleLetNoInit(
+          parsedLet.varName,
+          parsedLet.typeAnnotation,
+          parsedLet.isMutable,
+          context
+        );
+        jsCode += letSnippet;
       }
+      continue;
     }
+
+    const arrayAssignMatch = stmt.match(/^([a-zA-Z_]\w*)\s*\[\s*([^\]]+)\s*\]\s*=\s*(.+)$/);
+    if (arrayAssignMatch) {
+      const arrayName = arrayAssignMatch[1];
+      const indexExpr = arrayAssignMatch[2].trim();
+      const valueExpr = arrayAssignMatch[3];
+
+      validateArrayElementAssignment(
+        arrayName,
+        indexExpr,
+        valueExpr,
+        mutableVars,
+        definedVars,
+        arrayVars,
+        arrayPointerTargets,
+        varTypes,
+        varNumericSuffixes
+      );
+
+      const convertedValue = normalizeRefs(convertIfElseToTernary(valueExpr));
+      const convertedIndex = normalizeRefs(convertIfElseToTernary(indexExpr));
+      jsCode += arrayName + '[' + convertedIndex + '] = ' + convertedValue + '; ';
+      continue;
+    }
+
+    const derefAssignMatch = stmt.match(/^\*\s*([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+    if (derefAssignMatch) {
+      const ptrName = derefAssignMatch[1];
+      const valueExpr = derefAssignMatch[2];
+      const target = context.pointerTargets.get(ptrName);
+      if (!target) {
+        throw new Error('cannot dereference non-pointer type');
+      }
+      if (!context.pointerVarIsMutable.get(ptrName)) {
+        throw new Error('cannot assign through immutable pointer');
+      }
+      const convertedValue = prepareValueExpression(valueExpr, valueExpr, context, true, true);
+      jsCode += target + ' = ' + convertedValue + '; ';
+      continue;
+    }
+
+    // Check if this is an assignment
+    const assignMatch = stmt.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
+    if (assignMatch) {
+      const varName = assignMatch[1];
+      const operator = assignMatch[2];
+      const value = assignMatch[3];
+      const valueOriginalMatch = stmtOriginal.match(/^(\w+)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/);
+      const valueOriginal = valueOriginalMatch ? valueOriginalMatch[3] : value;
+      const assignSnippet = handleAssignment(varName, operator, value, valueOriginal, context);
+      jsCode += assignSnippet;
+      continue;
+    }
+
+    const callExprMatch = stmt.match(/^[a-zA-Z_][\w\.]*\s*\([\s\S]*\)$/);
+    if (callExprMatch) {
+      const exprConverted = prepareValueExpression(stmt, stmtOriginal, context, true, false);
+      jsCode += exprConverted + '; ';
+      continue;
+    }
+
+    // Unknown statement
+    throw new Error('invalid statement');
   }
 
   // Process the final statement as a return expression
@@ -904,13 +891,16 @@ export function compile(input: string): string {
 
     // Handle if/else expressions by converting to ternary operators
     lastStmt = convertInlineBlockExpressions(lastStmt);
+    lastStmt = convertUnboundFunctionPointerAccess(lastStmt);
     lastStmt = convertPointerDerefs(lastStmt, context);
     lastStmt = convertIsExpressions(lastStmt, context);
     lastStmt = convertStringIndexing(lastStmt, context);
     lastStmt = convertIfElseToTernary(lastStmt);
 
     // Check for undefined variables in final expression
-    checkUndefinedVars(lastStmtOriginal, definedVars);
+    if (!lastStmtOriginal.includes('::')) {
+      checkUndefinedVars(lastStmtOriginal, definedVars);
+    }
     validateNumericLiteralOverflow(lastStmtOriginal);
     validateDivisionByZero(lastStmtOriginal);
     validatePointerDerefs(lastStmtOriginal, context);
@@ -1626,28 +1616,21 @@ function registerTypeAliasDeclaration(
   context.typeAliases.set(info.name, { baseType: info.baseType, dropFn: info.dropFn });
 }
 
-function preRegisterTypeAliases(statements: string[], context: CompileContext): void {
-  for (const stmt of statements) {
-    const info = parseTypeAliasDeclaration(stmt.trim());
-    if (info) {
-      registerTypeAliasDeclaration(info, context);
-    }
-  }
-}
-
 function resolveTypeAliasEntry(
   typeName: string | undefined,
   context: CompileContext,
-  seen: Set<string>
+  seen: Set<string> = new Set()
 ): { name: string; alias: { baseType: string; dropFn?: string } } | undefined {
   if (!typeName) return undefined;
   const trimmed = typeName.trim();
-  const alias = context.typeAliases.get(trimmed);
-  if (!alias) return undefined;
+  if (!/^[a-zA-Z_]\w*$/.test(trimmed)) return undefined;
+  if (!context.typeAliases.has(trimmed)) return undefined;
   if (seen.has(trimmed)) {
     throw new Error('cyclic type alias: ' + trimmed);
   }
   seen.add(trimmed);
+  const alias = context.typeAliases.get(trimmed);
+  if (!alias) return undefined;
   return { name: trimmed, alias };
 }
 
@@ -1657,10 +1640,18 @@ function resolveTypeAliasBaseType(
   seen: Set<string> = new Set()
 ): string | undefined {
   if (!typeName) return undefined;
-  const trimmed = typeName.trim();
-  const entry = resolveTypeAliasEntry(trimmed, context, seen);
-  if (!entry) return trimmed;
-  return resolveTypeAliasBaseType(entry.alias.baseType, context, seen);
+  const entry = resolveTypeAliasEntry(typeName, context, seen);
+  if (!entry) return typeName;
+  const resolved = resolveTypeAliasBaseType(entry.alias.baseType, context, seen);
+  return resolved || entry.alias.baseType;
+}
+
+function preRegisterTypeAliases(stmts: string[], context: CompileContext): void {
+  for (const stmt of stmts) {
+    const alias = parseTypeAliasDeclaration(stmt);
+    if (!alias) continue;
+    registerTypeAliasDeclaration(alias, context);
+  }
 }
 
 function resolveTypeAliasDropFn(
@@ -1767,6 +1758,20 @@ function convertBlockToIIFE(blockContent: string): string {
     .join('; ');
   const lastExpr = stmts[stmts.length - 1];
   const lastIsStatement = isNonValueStatement(lastExpr);
+  if (lastExpr.trim() === 'this' && !lastIsStatement) {
+    const bodyStatements = stmts.slice(0, -1);
+    const parts = collectThisObjectParts(
+      bodyStatements,
+      (init) => normalizeRefs(convertIfElseToTernary(init)),
+      (params) => parseFnParams(params),
+      true,
+      convertBlockStatementToJs,
+      (_kind, name) => name + ': ' + name
+    );
+    const body = parts.locals.join(' ');
+    const memberList = parts.members.join(', ');
+    return 'function () { ' + body + ' const __this = { ' + memberList + ' }; return __this; }';
+  }
   const finalExpr = lastIsStatement ? '0' : normalizeRefs(convertIfElseToTernary(lastExpr));
 
   if (body) {
@@ -1835,16 +1840,163 @@ type FunctionDefinition = {
 };
 
 function parseFunctionDefinitionForCompile(stmt: string): FunctionDefinition | null {
-  const match = stmt.match(
-    /^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*([^=]+))?\s*=>\s*([\s\S]+)$/
-  );
-  if (!match) return null;
+  const trimmed = stmt.trim();
+  if (!trimmed.startsWith('fn ')) return null;
+  const depths = { paren: 0, bracket: 0, brace: 0 };
+  let arrowIndex = -1;
+  for (let i = 0; i < trimmed.length - 1; i++) {
+    const ch = trimmed[i];
+    updateDepthCounters(ch, depths);
+    if (!isAtTopLevel(depths)) {
+      continue;
+    }
+    if (trimmed[i] === '=' && trimmed[i + 1] === '>') {
+      arrowIndex = i;
+    }
+  }
+  if (arrowIndex === -1) return null;
+  const header = trimmed.slice(0, arrowIndex).trim();
+  const body = trimmed.slice(arrowIndex + 2).trim();
+  const headerMatch = header.match(/^fn\s+(\w+)\s*(<\s*[^>]+\s*>)?\s*\(([^)]*)\)\s*(?::\s*(.+))?$/);
+  if (!headerMatch) return null;
   return {
-    name: match[1],
-    params: match[3].trim(),
-    returnType: match[4] ? match[4].trim() : undefined,
-    body: match[5].trim(),
+    name: headerMatch[1],
+    params: headerMatch[3].trim(),
+    returnType: headerMatch[4] ? headerMatch[4].trim() : undefined,
+    body: body,
   };
+}
+
+function updateDepthCounters(
+  ch: string,
+  depths: { paren: number; bracket: number; brace: number }
+): void {
+  const deltas: Record<string, [keyof typeof depths, number]> = {
+    '(': ['paren', 1],
+    ')': ['paren', -1],
+    '[': ['bracket', 1],
+    ']': ['bracket', -1],
+    '{': ['brace', 1],
+    '}': ['brace', -1],
+  };
+  const entry = deltas[ch];
+  if (!entry) return;
+  depths[entry[0]] += entry[1];
+}
+
+function isAtTopLevel(depths: { paren: number; bracket: number; brace: number }): boolean {
+  return depths.paren === 0 && depths.bracket === 0 && depths.brace === 0;
+}
+
+function parseLetStatementForCompile(stmt: string): {
+  isMutable: boolean;
+  varName: string;
+  typeAnnotation?: string;
+  expr?: string;
+} | null {
+  const trimmed = stmt.trim();
+  if (!trimmed.startsWith('let ')) return null;
+  let rest = trimmed.slice(4).trim();
+  let isMutable = false;
+  if (rest.startsWith('mut ')) {
+    isMutable = true;
+    rest = rest.slice(4).trim();
+  }
+  const nameMatch = rest.match(/^([a-zA-Z_]\w*)/);
+  if (!nameMatch) return null;
+  const varName = nameMatch[1];
+  rest = rest.slice(nameMatch[0].length).trim();
+  if (!rest) return { isMutable, varName };
+  if (rest.startsWith('=')) {
+    return { isMutable, varName, expr: rest.slice(1).trim() };
+  }
+  if (!rest.startsWith(':')) return null;
+  let typePart = rest.slice(1).trim();
+  let expr: string | undefined;
+  const depths = { paren: 0, bracket: 0, brace: 0 };
+  for (let i = 0; i < typePart.length; i++) {
+    const ch = typePart[i];
+    updateDepthCounters(ch, depths);
+    if (isAtTopLevel(depths) && ch === '=') {
+      if (typePart[i + 1] === '>') {
+        continue;
+      }
+      expr = typePart.slice(i + 1).trim();
+      typePart = typePart.slice(0, i).trim();
+      break;
+    }
+  }
+  return { isMutable, varName, typeAnnotation: typePart || undefined, expr };
+}
+
+function collectThisObjectParts(
+  statements: string[],
+  convertValue: (value: string) => string,
+  parseParams: (params: string) => FnParamInfo[],
+  allowOtherStatements: boolean,
+  convertStatement: (stmt: string) => string,
+  buildMember: (kind: 'fn' | 'var', name: string) => string
+): { locals: string[]; members: string[] } {
+  const locals: string[] = [];
+  const members: string[] = [];
+  for (const stmt of statements) {
+    const trimmed = stmt.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('fn ')) {
+      const fnDef = parseFunctionDefinitionForCompile(trimmed);
+      if (!fnDef) {
+        throw new Error('invalid function definition');
+      }
+      const parsedParams = parseParams(fnDef.params);
+      locals.push(buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body));
+      members.push(buildMember('fn', fnDef.name));
+      continue;
+    }
+    const letWithInit = trimmed.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*[^=]+)?\s*=\s*(.+)$/);
+    if (letWithInit) {
+      const varName = letWithInit[2];
+      const init = letWithInit[3];
+      locals.push('let ' + varName + ' = ' + convertValue(init) + ';');
+      members.push(buildMember('var', varName));
+      continue;
+    }
+    const letNoInit = trimmed.match(/^let\s+(mut\s+)?(\w+)(?:\s*:\s*.+)?$/);
+    if (letNoInit) {
+      const varName = letNoInit[2];
+      locals.push('let ' + varName + ' = 0;');
+      members.push(buildMember('var', varName));
+      continue;
+    }
+    if (!allowOtherStatements) {
+      throw new Error('invalid object declaration');
+    }
+    locals.push(convertStatement(trimmed) + ';');
+  }
+  return { locals, members };
+}
+
+function emitFunctionDefinition(
+  fnDef: FunctionDefinition,
+  fnDefOriginal: FunctionDefinition,
+  context: CompileContext,
+  fnArrayParamRequirements: Map<string, Array<{ index: number; minInitialized: number }>>
+): string {
+  const params = fnDefOriginal.params.trim();
+  const bodyOriginal = fnDefOriginal.body.trim();
+  const returnType = fnDefOriginal.returnType;
+  const parsedParams = parseFnParams(params, context);
+  for (const param of parsedParams) {
+    if (param.arrayInfo) {
+      registerFnArrayParam(
+        fnArrayParamRequirements,
+        fnDefOriginal.name,
+        param.index,
+        param.arrayInfo
+      );
+    }
+  }
+  registerFunctionSignature(fnDefOriginal.name, parsedParams, returnType, bodyOriginal, context);
+  return buildFunctionDefinition(fnDefOriginal.name, parsedParams, fnDef.body.trim());
 }
 
 function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body: string): string {
@@ -1907,6 +2059,7 @@ type CompileContext = {
   stringVars: Set<string>;
   implicitNumericVars: Set<string>;
   untypedVars: Set<string>;
+  fnPointerVars: Set<string>;
   pointerTargets: Map<string, string>;
   pointerMutableTargets: Map<string, string>;
   pointerVarKinds: Map<string, ExprType>;
@@ -2242,8 +2395,24 @@ function parsePointerTypeAnnotation(
   if (!trimmed.startsWith('*')) return undefined;
   const mutable = trimmed.startsWith('*mut ');
   const stripped = stripPointerPrefix(resolvedBase);
+  if (stripped.base.includes('=>')) return undefined;
   const kindInfo = getDeclaredTypeInfo(stripped.base, context);
   return { kind: kindInfo.kind, mutable };
+}
+
+function isFunctionPointerType(
+  typeAnnotation: string | undefined,
+  context: CompileContext
+): boolean {
+  const resolvedBase = resolveBaseTypeFromAnnotation(typeAnnotation, context);
+  if (!resolvedBase) return false;
+  return resolvedBase.includes('=>');
+}
+
+function convertUnboundFunctionPointerAccess(expr: string): string {
+  return expr.replace(/\b([a-zA-Z_]\w*)::([a-zA-Z_]\w*)/g, (_match, _base, field) => {
+    return 'function (ctx) { return ctx.' + field + '(); }';
+  });
 }
 
 function validatePointerDerefs(expr: string, context: CompileContext): void {
@@ -2493,7 +2662,9 @@ function prepareValueExpression(
 ): string {
   const { definedVars, arrayVars, arrayPointerTargets } = context;
   if (checkUndefined) {
-    checkUndefinedVars(valueOriginal, definedVars);
+    if (!valueOriginal.includes('::')) {
+      checkUndefinedVars(valueOriginal, definedVars);
+    }
   }
   validateNumericLiteralOverflow(valueOriginal);
   validateDivisionByZero(valueOriginal);
@@ -2505,7 +2676,8 @@ function prepareValueExpression(
   validateArrayLiteralIndexing(valueOriginal);
   validateArrayCallRequirements(valueOriginal, context);
   const blockConverted = convertInlineBlockExpressions(value);
-  const pointerConverted = convertPointerDerefs(blockConverted, context);
+  const unboundConverted = convertUnboundFunctionPointerAccess(blockConverted);
+  const pointerConverted = convertPointerDerefs(unboundConverted, context);
   const isConverted = convertIsExpressions(pointerConverted, context);
   const stringConverted = convertStringIndexing(isConverted, context);
   const structConversion = convertStructLiteralExpression(stringConverted, context);
@@ -2517,13 +2689,15 @@ function validateFunctionCalls(
   context: CompileContext,
   disallowVoidCall: boolean
 ): void {
-  const { fnSignatures, definedVars, varTypes, varNumericSuffixes } = context;
+  const { fnSignatures, definedVars, varTypes, varNumericSuffixes, fnPointerVars } = context;
   forEachCallExpression(expr, (fnName, args) => {
     const signature = fnSignatures.get(fnName);
 
     if (!signature) {
       if (definedVars.has(fnName)) {
-        throw new Error('cannot call non-function');
+        if (!fnPointerVars.has(fnName)) {
+          throw new Error('cannot call non-function');
+        }
       }
       return;
     }
@@ -2739,45 +2913,23 @@ function buildObjectDeclaration(
   context: CompileContext
 ): string {
   const statements = splitBlockStatements(declaration.body);
-  const locals: string[] = [];
-  const fields: string[] = [];
-  const methods: string[] = [];
-
-  for (const stmt of statements) {
-    const trimmed = stmt.trim();
-    if (!trimmed) continue;
-    if (trimmed.startsWith('fn ')) {
-      const fnDef = parseFunctionDefinitionForCompile(trimmed);
-      if (!fnDef) {
-        throw new Error('invalid function definition');
+  const parts = collectThisObjectParts(
+    statements,
+    (value) => prepareValueExpression(value, value, context, true, true),
+    (params) => parseFnParams(params, context),
+    false,
+    convertBlockStatementToJs,
+    (kind, name) => {
+      if (kind === 'var') {
+        return 'get ' + name + '() { return ' + name + '; }';
       }
-      const parsedParams = parseFnParams(fnDef.params, context);
-      locals.push(buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body));
-      methods.push(fnDef.name + ': ' + fnDef.name);
-      continue;
+      return name + ': ' + name;
     }
-    const letWithInit = trimmed.match(/^let\s+(mut\s+)?(\w+)\s*(?::\s*[^=]+)?\s*=\s*(.+)$/);
-    if (letWithInit) {
-      const varName = letWithInit[2];
-      const value = letWithInit[3];
-      const converted = prepareValueExpression(value, value, context, true, true);
-      locals.push('let ' + varName + ' = ' + converted + ';');
-      fields.push('get ' + varName + '() { return ' + varName + '; }');
-      continue;
-    }
-    const letNoInit = trimmed.match(/^let\s+(mut\s+)?(\w+)(?:\s*:\s*.+)?$/);
-    if (letNoInit) {
-      const varName = letNoInit[2];
-      locals.push('let ' + varName + ' = 0;');
-      fields.push('get ' + varName + '() { return ' + varName + '; }');
-      continue;
-    }
-    throw new Error('invalid object declaration');
-  }
+  );
 
   context.definedVars.add(declaration.name);
-  const body = locals.join(' ');
-  const members = fields.concat(methods).join(', ');
+  const body = parts.locals.join(' ');
+  const members = parts.members.join(', ');
   return (
     'const ' + declaration.name + ' = (function () { ' + body + ' return { ' + members + ' }; })();'
   );
@@ -2856,10 +3008,7 @@ function handleLetInitializer(
   }
   const pointerInfo = parsePointerTypeAnnotation(typeAnnotation, context);
   const target = parseAddressOfTarget(valueOriginal);
-  if (pointerInfo || target) {
-    if (!target) {
-      throw new Error('invalid pointer initialization');
-    }
+  if (target) {
     if (!definedVars.has(target)) {
       throw new Error('undefined variable');
     }
@@ -2889,6 +3038,12 @@ function handleLetInitializer(
     if (pointerMutable) {
       context.pointerMutableTargets.set(target, varName);
     }
+  }
+  if (
+    isFunctionPointerType(typeAnnotation, context) ||
+    (valueOriginal.trim().match(/^\w+$/) && context.fnSignatures.has(valueOriginal.trim()))
+  ) {
+    context.fnPointerVars.add(varName);
   }
   const exprInfo = inferExprInfo(valueOriginal, varTypes, varNumericSuffixes);
   ensureNoBoolArithmetic(valueOriginal, varTypes);
@@ -3301,7 +3456,7 @@ function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
     const id = match[0];
     const index = match.index;
     const prevChar = index > 0 ? sanitized[index - 1] : '';
-    if (prevChar === '.') {
+    if (prevChar === '.' || prevChar === ':' || prevChar === '&') {
       continue;
     }
     // Skip JavaScript/Tuff keywords
