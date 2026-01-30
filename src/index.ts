@@ -7,10 +7,6 @@ let currentNativeFunctions: Map<string, NativeFunctionDef> | null = null;
 let currentNativeFunctionReturnTypes: Map<string, string> | null = null;
 let nativeArrayCounter = 0;
 
-export function add(a: number, b: number): number {
-  return a + b;
-}
-
 type ExternUse = { module: string; names: string[] };
 type ExternLet = { name: string; type: string };
 type ExternFn = {

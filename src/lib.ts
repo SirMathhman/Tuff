@@ -25,8 +25,8 @@ export function readContent() {
   return fs.readFileSync('README.md', 'utf-8');
 }
 
-export function println(content: string): void {
-  console.log(content);
+export function print(content: string): void {
+  process.stdout.write(content);
 }
 
 // This should be similar to C's snprintf_s (use the secure function as a model, don't use the insecure one).

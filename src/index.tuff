@@ -1,9 +1,9 @@
-extern use { alloc, free, checkMemoryOrPanic, println } from lib;
+extern use { alloc, free, checkMemoryOrPanic, print } from lib;
 
 extern fn alloc<T>(length : USize) : *mut [T];
 extern fn free<T>(this : *mut [T]) : Void;
 extern fn checkMemoryOrPanic() : Void;
-extern fn println(content : *Str) : Void;
+extern fn print(content : *Str) : Void;
 
 object MySingleton {
 }
@@ -12,4 +12,5 @@ let a = &MySingleton;
 
 checkMemoryOrPanic();
 
-1
+
+0

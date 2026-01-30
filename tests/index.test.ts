@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { add, buildReplInputs } from '../src/index';
+import { buildReplInputs } from '../src/index';
 import { assertAllInvalid, assertAllValid } from './utils';
 
 const buildMainConfig = (source: string) => new Map([[['main'], source]]);
@@ -20,10 +20,6 @@ const complexLibSource =
   'export function complexCalculation(n: number): number { let result = 0; for (let i = 0; i < n; i++) { result += helper(i); } return result; }' +
   '\n' +
   'function helper(x: number): number { return x * x + 1; }';
-
-test('add', () => {
-  expect(add(1, 2)).toBe(3);
-});
 
 test('interpretAll supports explicit generic call syntax', () => {
   const config = new Map([
