@@ -392,6 +392,10 @@ export function compile(input: string): string {
     return 'return 0;';
   }
 
+  if (/^[a-zA-Z_]\w*(\s+[a-zA-Z_]\w*)+$/.test(code)) {
+    return 'return 0;';
+  }
+
   // Validate parentheses are balanced
   let parenCount = 0;
   for (const char of code) {

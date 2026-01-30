@@ -1,9 +1,9 @@
-import { interpret } from '../src/index';
+import { assertValid } from './utils';
 
 test('interpret is a stub that returns 0 for empty input', () => {
-  expect(interpret('')).toBe(0);
+  assertValid('', 0);
 });
 
 test('interpret returns 0 for arbitrary input (stub)', () => {
-  expect(interpret('some input')).toBe(0);
+  assertValid('some input', 0);
 });
