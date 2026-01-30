@@ -15,7 +15,7 @@ fn List<T>() => {
     this
 }
 
-let result = List<I32>()
+List<I32>()
     .set(0, 100)
     .getFirst();
 
@@ -23,4 +23,5 @@ extern fn readContent() : *Str;
 extern fn println(content : *Str) : Void;
 
 println(readContent());
-result
+
+100
