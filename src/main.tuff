@@ -1,2 +1,2 @@
-let x = 100;
-x
+let y = if (true) { let z = 100; z } else 5;
+y

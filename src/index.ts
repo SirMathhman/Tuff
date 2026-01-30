@@ -1,8 +1,6 @@
 import readline from "readline";
 
-import {
-  validateVariableTypeCompatibility,
-} from "./types";
+import { validateVariableTypeCompatibility } from "./types";
 import {
   validateAndStripTypeAnnotations,
   extractAndValidateTypesInExpression,
@@ -50,6 +48,218 @@ function stripBraceWrappers(input: string): string {
   return result;
 }
 
+function isWordChar(ch: string): boolean {
+  return /[A-Za-z0-9_]/.test(ch);
+}
+
+function isKeywordAt(input: string, idx: number, keyword: string): boolean {
+  if (input.slice(idx, idx + keyword.length) !== keyword) return false;
+  const before = idx > 0 ? input[idx - 1] : "";
+  const after =
+    idx + keyword.length < input.length ? input[idx + keyword.length] : "";
+  if (before && isWordChar(before)) return false;
+  if (after && isWordChar(after)) return false;
+  return true;
+}
+
+type StringState = {
+  inString: string | null;
+  escaped: boolean;
+};
+
+function updateStringState(ch: string, state: StringState): boolean {
+  if (state.inString) {
+    if (state.escaped) {
+      state.escaped = false;
+    } else if (ch === "\\") {
+      state.escaped = true;
+    } else if (ch === state.inString) {
+      state.inString = null;
+    }
+    return true;
+  }
+
+  if (ch === '"' || ch === "'" || ch === "`") {
+    state.inString = ch;
+    return true;
+  }
+
+  return false;
+}
+
+type DepthState = {
+  paren: number;
+  brace: number;
+  bracket: number;
+};
+
+function isAtTopLevel(state: DepthState): boolean {
+  return state.paren === 0 && state.brace === 0 && state.bracket === 0;
+}
+
+function updateDepthState(
+  ch: string,
+  state: DepthState,
+  stopTokens: string[] | undefined,
+): { stop: boolean; handled: boolean } {
+  if (ch === "(") {
+    state.paren++;
+    return { stop: false, handled: true };
+  }
+  if (ch === ")") {
+    if (state.paren === 0 && stopTokens?.includes(")")) {
+      return { stop: true, handled: true };
+    }
+    state.paren = Math.max(state.paren - 1, 0);
+    return { stop: false, handled: true };
+  }
+  if (ch === "{") {
+    state.brace++;
+    return { stop: false, handled: true };
+  }
+  if (ch === "}") {
+    if (state.brace === 0 && stopTokens?.includes("}")) {
+      return { stop: true, handled: true };
+    }
+    state.brace = Math.max(state.brace - 1, 0);
+    return { stop: false, handled: true };
+  }
+  if (ch === "[") {
+    state.bracket++;
+    return { stop: false, handled: true };
+  }
+  if (ch === "]") {
+    if (state.bracket === 0 && stopTokens?.includes("]")) {
+      return { stop: true, handled: true };
+    }
+    state.bracket = Math.max(state.bracket - 1, 0);
+    return { stop: false, handled: true };
+  }
+
+  return { stop: false, handled: false };
+}
+
+function readBalanced(
+  input: string,
+  start: number,
+  open: string,
+  close: string,
+): { content: string; end: number } | null {
+  if (input[start] !== open) return null;
+  let depth = 1;
+  const stringState: StringState = { inString: null, escaped: false };
+  let i = start + 1;
+  while (i < input.length) {
+    const ch = input[i];
+    if (updateStringState(ch, stringState)) {
+      i++;
+      continue;
+    }
+
+    if (ch === open) {
+      depth++;
+    } else if (ch === close) {
+      depth--;
+      if (depth === 0) {
+        return { content: input.slice(start + 1, i), end: i + 1 };
+      }
+    }
+    i++;
+  }
+  return null;
+}
+
+function scanExpression(
+  input: string,
+  start: number,
+  options: { stopOnElse: boolean; stopTokens?: string[] },
+): { expr: string; end: number } {
+  const stringState: StringState = { inString: null, escaped: false };
+  const depthState: DepthState = { paren: 0, brace: 0, bracket: 0 };
+
+  for (let i = start; i < input.length; i++) {
+    const ch = input[i];
+    if (updateStringState(ch, stringState)) {
+      continue;
+    }
+    const depthResult = updateDepthState(ch, depthState, options.stopTokens);
+    if (depthResult.stop) {
+      return { expr: input.slice(start, i).trim(), end: i };
+    }
+    if (depthResult.handled) {
+      continue;
+    }
+
+    if (isAtTopLevel(depthState)) {
+      if (options.stopOnElse && isKeywordAt(input, i, "else")) {
+        return { expr: input.slice(start, i).trim(), end: i };
+      }
+      if (options.stopTokens?.includes(ch)) {
+        return { expr: input.slice(start, i).trim(), end: i };
+      }
+    }
+  }
+
+  return { expr: input.slice(start).trim(), end: input.length };
+}
+
+function parseIfExpression(
+  input: string,
+  start: number,
+): { replacement: string; end: number } | null {
+  if (!isKeywordAt(input, start, "if")) return null;
+  let idx = start + 2;
+  while (idx < input.length && /\s/.test(input[idx])) idx++;
+
+  const condition = readBalanced(input, idx, "(", ")");
+  if (!condition) return null;
+  const conditionExpr = condition.content.trim();
+  idx = condition.end;
+
+  while (idx < input.length && /\s/.test(input[idx])) idx++;
+  const thenResult = scanExpression(input, idx, { stopOnElse: true });
+  idx = thenResult.end;
+
+  while (idx < input.length && /\s/.test(input[idx])) idx++;
+  if (!isKeywordAt(input, idx, "else")) return null;
+  idx += 4;
+  while (idx < input.length && /\s/.test(input[idx])) idx++;
+
+  const elseResult = scanExpression(input, idx, {
+    stopOnElse: false,
+    stopTokens: [";", ")", "}", "]", ","],
+  });
+
+  const thenExpr = transformIfExpressions(thenResult.expr);
+  const elseExpr = transformIfExpressions(elseResult.expr);
+  const replacement =
+    "(" + conditionExpr + " ? " + thenExpr + " : " + elseExpr + ")";
+
+  return { replacement, end: elseResult.end };
+}
+
+function transformIfExpressions(input: string): string {
+  let result = "";
+  let i = 0;
+  while (i < input.length) {
+    if (isKeywordAt(input, i, "if")) {
+      const parsed = parseIfExpression(input, i);
+      if (parsed) {
+        result += parsed.replacement;
+        i = parsed.end;
+        continue;
+      }
+    }
+    result += input[i];
+    i++;
+  }
+  return result;
+}
+
+function normalizeExpression(input: string): string {
+  return transformIfExpressions(stripBraceWrappers(input));
+}
+
 function parseLetDeclaration(
   stmt: string,
   declaredVars: Set<string>,
@@ -57,9 +267,9 @@ function parseLetDeclaration(
 ): string | null {
   const typePattern = /let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/;
   const noTypePattern = /let\s+(\w+)\s*=\s*([\s\S]+)/;
-  
+
   let match = stmt.match(typePattern);
-  const [varName, declType, value] = match 
+  const [varName, declType, value] = match
     ? [match[1], match[2], match[3]]
     : (() => {
         match = stmt.match(noTypePattern);
@@ -67,7 +277,7 @@ function parseLetDeclaration(
       })();
 
   if (!varName) return null;
-  
+
   if (declaredVars.has(varName)) {
     throw new Error(
       "Variable '" + varName + "' has already been declared in this block",
@@ -76,7 +286,7 @@ function parseLetDeclaration(
   declaredVars.add(varName);
 
   const trimmedValue = value.trim().replace(/;$/, "");
-  
+
   if (declType && validateTypes) {
     extractAndValidateTypesInExpression(trimmedValue, declType);
   } else if (!declType && validateTypes) {
@@ -108,11 +318,20 @@ function convertLetBindingToIIFE(blockContent: string): string {
     }
   });
 
+  const normalizedDeclarations = declarations.map((decl) => {
+    const match = decl.match(/let\s+(\w+)\s*=\s*([\s\S]+)/);
+    if (!match) return decl;
+    const [, varName, value] = match;
+    const normalizedValue = normalizeExpression(value.trim());
+    return "let " + varName + " = " + normalizedValue;
+  });
+  const normalizedLastStatement = normalizeExpression(lastStatement.trim());
+
   const functionBody =
-    declarations.join("; ") +
-    (declarations.length > 0 ? "; " : "") +
+    normalizedDeclarations.join("; ") +
+    (normalizedDeclarations.length > 0 ? "; " : "") +
     "return " +
-    lastStatement +
+    normalizedLastStatement +
     ";";
   return "(function() { " + functionBody + " })()";
 }
@@ -211,7 +430,9 @@ function extractTopLevelStatements(input: string): {
 
     const processed = processSingleLetInTopLevel(statement, variableTypes);
     if (processed) {
-      declarations.push("let " + processed.varName + " = " + processed.cleanValue);
+      declarations.push(
+        "let " + processed.varName + " = " + processed.cleanValue,
+      );
     }
   }
 
@@ -224,7 +445,7 @@ function processDeclarations(rawDeclarations: string[]): string[] {
     const declMatch = decl.match(/let\s+(\w+)\s*=\s*([\s\S]+)/);
     if (declMatch) {
       const [, varName, value] = declMatch;
-      let processedValue = stripBraceWrappers(value.trim());
+      let processedValue = normalizeExpression(value.trim());
       processedValue = processedValue.replace(
         /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
         "$1",
@@ -236,12 +457,16 @@ function processDeclarations(rawDeclarations: string[]): string[] {
 }
 
 export function compile(input: string): string {
-  const { declarations: rawDeclarations, expression: rawExpression } = extractTopLevelStatements(input);
+  const { declarations: rawDeclarations, expression: rawExpression } =
+    extractTopLevelStatements(input);
   const declarations = processDeclarations(rawDeclarations);
-  let trimmed = stripBraceWrappers(rawExpression.trim());
+  let trimmed = normalizeExpression(rawExpression.trim());
 
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
-  trimmed = trimmed.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
+  trimmed = trimmed.replace(
+    /(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g,
+    "$1",
+  );
   determineAndValidateType(trimmed, typesUsed);
 
   let compiled = "";
@@ -304,7 +529,8 @@ export function compileFile(inputPath: string, outputPath: string): void {
   const fs = require("fs") as any;
   const source = fs.readFileSync(inputPath, "utf-8");
   const compiled = compile(source);
-  const wrapped = "process.exit(Number((function() {\n  " + compiled + "\n})()));";
+  const wrapped =
+    "process.exit(Number((function() {\n  " + compiled + "\n})()));";
   fs.writeFileSync(outputPath, wrapped, "utf-8");
   console.log("Compiled " + inputPath + " to " + outputPath);
 }

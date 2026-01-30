@@ -52,7 +52,8 @@ function parseBlockStatements(blockContent: string): {
 } {
   const statements = splitBlockStatements(blockContent);
   const variableTypes = extractVariableTypes(statements);
-  const lastStatement = statements.length > 0 ? statements[statements.length - 1] : "";
+  const lastStatement =
+    statements.length > 0 ? statements[statements.length - 1] : "";
 
   return { statements, variableTypes, lastStatement };
 }

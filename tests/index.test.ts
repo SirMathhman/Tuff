@@ -83,14 +83,18 @@ test("interpret supports variable binding with arithmetic", () => {
   expect(interpret("(2 + { let x : U8 = 3; x }) * 4")).toBe(20);
 });
 
+test("interpret supports if expressions", () => {
+  expect(interpret("if (true) { let z = 100; z } else 5")).toBe(100);
+});
+
 test("compile throws error for duplicate variable declaration", () => {
   assertInvalid("{ let x : U8 = 3; let x : U8 = 100; x }");
 });
 
 test("interpret supports top-level variable declaration", () => {
-  expect(
-    interpret("let z : U8 = (2 + { let x : U8 = 3; x }) * 4;\nz"),
-  ).toBe(20);
+  expect(interpret("let z : U8 = (2 + { let x : U8 = 3; x }) * 4;\nz")).toBe(
+    20,
+  );
 });
 
 test("compile throws error when assigning larger type to smaller type in declaration", () => {
