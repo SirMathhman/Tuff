@@ -26,6 +26,12 @@ function processLetStatements(
       if (match) {
         const [, varName, declType] = match;
         variableTypes[varName] = declType;
+      } else {
+        const untypedMatch = stmt.match(/let\s+(\w+)\s*=\s*([\s\S]+)/);
+        if (untypedMatch) {
+          const [, varName] = untypedMatch;
+          variableTypes[varName] = "I32";
+        }
       }
       handler(stmt, i);
     }
@@ -185,15 +191,9 @@ export function parseLetStatement(
     const trimmedValue = value.trim().replace(/;$/, "");
 
     const inferredType = inferTypeFromValue(trimmedValue);
-    if (!inferredType) {
-      throw new Error(
-        "Cannot infer type for variable '" +
-          varName +
-          "' - value must contain explicit type annotations",
-      );
-    }
+    const declType = inferredType ?? "I32";
 
-    return { varName, declType: inferredType, value: trimmedValue };
+    return { varName, declType, value: trimmedValue };
   }
 
   return null;

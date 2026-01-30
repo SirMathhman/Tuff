@@ -101,6 +101,10 @@ test("interpret supports variable declaration without type annotation", () => {
   expect(interpret("let x = 100U8; x")).toBe(100);
 });
 
+test("interpret defaults untyped numeric bindings to I32", () => {
+  expect(interpret("let x = 100; x")).toBe(100);
+});
+
 test("compile throws error when assigning larger inferred type to smaller explicit type", () => {
   assertInvalid("let x = 100U16; let y : U8 = x; y");
 });

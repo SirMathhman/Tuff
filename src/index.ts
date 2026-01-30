@@ -80,13 +80,7 @@ function parseLetDeclaration(
   if (declType && validateTypes) {
     extractAndValidateTypesInExpression(trimmedValue, declType);
   } else if (!declType && validateTypes) {
-    const inferredType = inferTypeFromValue(trimmedValue);
-    if (!inferredType) {
-      throw new Error(
-        "Cannot infer type for variable '" + varName +
-        "' - value must contain explicit type annotations",
-      );
-    }
+    inferTypeFromValue(trimmedValue);
   }
 
   const cleanValue = trimmedValue.replace(

@@ -1,2 +1,2 @@
-let x : Bool = true;
+let x = 100;
 x
