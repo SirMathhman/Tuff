@@ -486,6 +486,7 @@ export function compile(input: string): string {
   const implicitNumericVars = new Set<string>();
   const untypedVars = new Set<string>();
   const fnPointerVars = new Set<string>();
+  const thisPointerVars = new Set<string>();
   const pointerTargets = new Map<string, string>();
   const pointerMutableTargets = new Map<string, string>();
   const pointerVarKinds = new Map<string, ExprType>();
@@ -512,6 +513,7 @@ export function compile(input: string): string {
     implicitNumericVars,
     untypedVars,
     fnPointerVars,
+    thisPointerVars,
     pointerTargets,
     pointerMutableTargets,
     pointerVarKinds,
@@ -659,6 +661,50 @@ export function compile(input: string): string {
         );
         jsCode += letSnippet;
       }
+      continue;
+    }
+
+    const thisAssignMatch = stmt.match(
+      /^this\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
+    );
+    if (thisAssignMatch) {
+      const varName = thisAssignMatch[1];
+      const operator = thisAssignMatch[2];
+      const value = thisAssignMatch[3];
+      const valueOriginalMatch = stmtOriginal.match(
+        /^this\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
+      );
+      const valueOriginal = valueOriginalMatch ? valueOriginalMatch[3] : value;
+      const assignSnippet = buildThisFieldAssignment(
+        varName,
+        operator,
+        value,
+        valueOriginal,
+        context
+      );
+      jsCode += assignSnippet;
+      continue;
+    }
+
+    const thisPointerAssignMatch = stmt.match(
+      /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
+    );
+    if (thisPointerAssignMatch && context.thisPointerVars.has(thisPointerAssignMatch[1])) {
+      const varName = thisPointerAssignMatch[2];
+      const operator = thisPointerAssignMatch[3];
+      const value = thisPointerAssignMatch[4];
+      const valueOriginalMatch = stmtOriginal.match(
+        /^([a-zA-Z_]\w*)\s*\.\s*([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|=(?!=))\s*(.+)$/
+      );
+      const valueOriginal = valueOriginalMatch ? valueOriginalMatch[4] : value;
+      const assignSnippet = buildThisFieldAssignment(
+        varName,
+        operator,
+        value,
+        valueOriginal,
+        context
+      );
+      jsCode += assignSnippet;
       continue;
     }
 
@@ -891,6 +937,7 @@ export function compile(input: string): string {
 
     // Handle if/else expressions by converting to ternary operators
     lastStmt = convertInlineBlockExpressions(lastStmt);
+    lastStmt = convertThisAccess(lastStmt);
     lastStmt = resolveMethodStyleCall(lastStmt, context).converted;
     lastStmt = convertUnboundFunctionPointerAccess(lastStmt);
     lastStmt = convertPointerDerefs(lastStmt, context);
@@ -898,17 +945,12 @@ export function compile(input: string): string {
     lastStmt = convertStringIndexing(lastStmt, context);
     lastStmt = convertIfElseToTernary(lastStmt);
 
+    const thisAccessNormalized = convertThisAccess(lastStmtOriginal);
     // Check for undefined variables in final expression
     if (!lastStmtOriginal.includes('::')) {
-      checkUndefinedVars(lastStmtOriginal, definedVars);
+      checkUndefinedVars(thisAccessNormalized, definedVars);
     }
-    validateNumericLiteralOverflow(lastStmtOriginal);
-    validateDivisionByZero(lastStmtOriginal);
-    validatePointerDerefs(lastStmtOriginal, context);
-    validateStructFieldAccess(lastStmtOriginal, context);
-    const methodValidation = resolveMethodStyleCall(lastStmtOriginal, context);
-    validateFunctionCalls(methodValidation.converted, context, false);
-    validateComparisonTypes(lastStmtOriginal, context);
+    validateExpressionForCompile(thisAccessNormalized, context, false);
 
     // Check if this is a comparison or boolean operator and wrap to convert bool to number
     // Comparison operators: ==, !=, <, >, <=, >=
@@ -932,9 +974,6 @@ export function compile(input: string): string {
       }
     }
 
-    validateArrayAccesses(lastStmtOriginal, arrayVars, arrayPointerTargets);
-    validateArrayLiteralIndexing(lastStmtOriginal);
-    validateArrayCallRequirements(lastStmtOriginal, context);
     lastStmt = normalizeRefs(lastStmt);
     jsCode += buildDropCalls(context);
     jsCode += 'return ' + lastStmt + ';';
@@ -1751,28 +1790,31 @@ function convertBlockToIIFE(blockContent: string): string {
     return '() => { return 0; }';
   }
 
+  const bodyStatements = stmts.slice(0, -1);
   // All but the last are statements - convert Tuff syntax to JS
-  let body = stmts
-    .slice(0, -1)
+  let body = bodyStatements
     .map((stmt) => {
       return convertBlockStatementToJs(stmt);
     })
     .join('; ');
   const lastExpr = stmts[stmts.length - 1];
   const lastIsStatement = isNonValueStatement(lastExpr);
+  const scopeParts = collectThisObjectParts(
+    bodyStatements,
+    (init) => normalizeRefs(convertIfElseToTernary(init)),
+    (params) => parseFnParams(params),
+    true,
+    convertBlockStatementToJs,
+    (_kind, name) => name + ': ' + name
+  );
+  const scopeMembers = scopeParts.members.join(', ');
+  const thisScopeDecl =
+    'const __thisScope = { this: (typeof __thisParent !== "undefined" ? __thisParent : undefined)' +
+    (scopeMembers ? ', ' + scopeMembers : '') +
+    ' };';
   if (lastExpr.trim() === 'this' && !lastIsStatement) {
-    const bodyStatements = stmts.slice(0, -1);
-    const parts = collectThisObjectParts(
-      bodyStatements,
-      (init) => normalizeRefs(convertIfElseToTernary(init)),
-      (params) => parseFnParams(params),
-      true,
-      convertBlockStatementToJs,
-      (_kind, name) => name + ': ' + name
-    );
-    const body = parts.locals.join(' ');
-    const memberList = parts.members.join(', ');
-    return '() => { ' + body + ' const __this = { ' + memberList + ' }; return __this; }';
+    const body = scopeParts.locals.join(' ');
+    return '() => { ' + body + ' ' + thisScopeDecl + ' return __thisScope; }';
   }
   const finalExpr = lastIsStatement ? '0' : normalizeRefs(convertIfElseToTernary(lastExpr));
 
@@ -1783,7 +1825,9 @@ function convertBlockToIIFE(blockContent: string): string {
   if (lastIsStatement) {
     body = body + convertBlockStatementToJs(lastExpr) + '; ';
   }
-
+  if (scopeMembers) {
+    body = body + thisScopeDecl + ' ';
+  }
   return '() => { ' + body + 'return ' + finalExpr + '; }';
 }
 
@@ -2022,7 +2066,21 @@ function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body
     .map((param) => (param.name === 'this' ? '_this' : param.name))
     .join(', ');
   let bodyExpr = compileFunctionBodyExpression(body);
-  if (parsedParams.some((param) => param.name === 'this')) {
+  const paramMembers = parsedParams
+    .filter((param) => param.name !== 'this')
+    .map((param) => param.name + ': ' + param.name)
+    .join(', ');
+  if (paramMembers && bodyExpr.includes('const __this = {')) {
+    bodyExpr = bodyExpr.replace('const __this = {', 'const __this = { ' + paramMembers + ',');
+  }
+  if (paramMembers && bodyExpr.includes('const __thisScope = {')) {
+    bodyExpr = bodyExpr.replace(
+      'const __thisScope = {',
+      'const __thisScope = { ' + paramMembers + ','
+    );
+  }
+  const hasExplicitThis = parsedParams.some((param) => param.name === 'this');
+  if (hasExplicitThis) {
     bodyExpr = bodyExpr.replace(/\bthis\b/g, '_this');
   }
   const pointerParams = parsedParams.filter((param) => param.isPointer);
@@ -2030,6 +2088,38 @@ function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body
     const jsParam = param.name === 'this' ? '_this' : param.name;
     const derefRegex = new RegExp('\\*\\s*' + jsParam + '\\b', 'g');
     bodyExpr = bodyExpr.replace(derefRegex, jsParam + '.value');
+  }
+  const usesThisProxy = !hasExplicitThis && /\bthis\b/.test(bodyExpr);
+  if (usesThisProxy) {
+    bodyExpr = applyOutsideFunctionDeclarations(bodyExpr, (segment) => {
+      return segment.replace(/(^|[^.\w])this\b/g, (match, prefix, offset, full) => {
+        const start = offset + prefix.length;
+        let i = start + 4;
+        while (i < full.length && /\s/.test(full[i])) {
+          i++;
+        }
+        if (full[i] === ':') {
+          return match;
+        }
+        return prefix + '__thisScope';
+      });
+    });
+    bodyExpr = applyOutsideFunctionDeclarations(bodyExpr, bindCallsToThisScope);
+    const thisPrelude =
+      'const __thisParent = this; ' +
+      'const __thisScope = new Proxy({}, { ' +
+      'get: function (_target, prop) { ' +
+      'if (prop === "this") { return __thisParent; } ' +
+      'return eval(String(prop)); ' +
+      '}, ' +
+      'set: function (_target, prop, value) { ' +
+      'eval(String(prop) + " = value"); ' +
+      'return true; ' +
+      '} ' +
+      '}); ';
+    return (
+      'function ' + name + '(' + jsParams + ') { ' + thisPrelude + 'return ' + bodyExpr + '; }'
+    );
   }
   return 'function ' + name + '(' + jsParams + ') { return ' + bodyExpr + '; }';
 }
@@ -2084,6 +2174,7 @@ type CompileContext = {
   implicitNumericVars: Set<string>;
   untypedVars: Set<string>;
   fnPointerVars: Set<string>;
+  thisPointerVars: Set<string>;
   pointerTargets: Map<string, string>;
   pointerMutableTargets: Map<string, string>;
   pointerVarKinds: Map<string, ExprType>;
@@ -2371,6 +2462,10 @@ function normalizeRefs(expr: string): string {
   return result;
 }
 
+function convertThisAccess(expr: string): string {
+  return expr.replace(/\bthis\s*\.\s*([a-zA-Z_]\w*)/g, (_match, field) => field);
+}
+
 function convertInlineBlockExpressions(expr: string): string {
   let result = '';
   let index = 0;
@@ -2474,11 +2569,128 @@ function buildPointerWrapper(varName: string): string {
   return '({ get value() { return ' + varName + '; }, set value(v) { ' + varName + ' = v; } })';
 }
 
+function buildThisScopeObject(context: CompileContext): string {
+  const entries: string[] = [];
+  for (const name of context.definedVars) {
+    if (name === 'this') continue;
+    entries.push('get ' + name + '() { return ' + name + '; }');
+    if (context.mutableVars.has(name)) {
+      entries.push('set ' + name + '(value) { ' + name + ' = value; }');
+    }
+  }
+  return '{ ' + entries.join(', ') + ' }';
+}
+
+function bindCallsToThisScope(code: string): string {
+  const skip = new Set([
+    'if',
+    'while',
+    'for',
+    'switch',
+    'catch',
+    'return',
+    'function',
+    'typeof',
+    'new',
+    'Proxy',
+    'eval',
+  ]);
+  const replaced = code.replace(
+    /(^|[^.\w])([a-zA-Z_]\w*)\s*\(/g,
+    (match, prefix, name, offset, full) => {
+      const before = full.slice(0, offset);
+      if (/\bfunction\s*$/.test(before) || /\bnew\s*$/.test(before)) {
+        return match;
+      }
+      if (skip.has(name)) {
+        return match;
+      }
+      return prefix + name + '.call(__thisScope, ';
+    }
+  );
+  return replaced.replace(/\.call\(__thisScope,\s*\)/g, '.call(__thisScope)');
+}
+
+function applyOutsideFunctionDeclarations(
+  code: string,
+  transform: (segment: string) => string
+): string {
+  let result = '';
+  let index = 0;
+  while (index < code.length) {
+    const next = code.indexOf('function', index);
+    if (next === -1) {
+      result += transform(code.slice(index));
+      break;
+    }
+    const before = code[next - 1];
+    const after = code[next + 8];
+    const isKeyword = (!before || /\W/.test(before)) && (!after || /\W/.test(after));
+    if (!isKeyword) {
+      result += transform(code.slice(index, next + 8));
+      index = next + 8;
+      continue;
+    }
+    result += transform(code.slice(index, next));
+    const braceStart = code.indexOf('{', next);
+    if (braceStart === -1) {
+      result += code.slice(next);
+      break;
+    }
+    const braceEnd = findMatchingClosing(code, braceStart, '{', '}');
+    if (braceEnd === -1) {
+      result += code.slice(next);
+      break;
+    }
+    result += code.slice(next, braceEnd + 1);
+    index = braceEnd + 1;
+  }
+  return result;
+}
+
+function validateExpressionForCompile(
+  expr: string,
+  context: CompileContext,
+  disallowVoidCall: boolean
+): void {
+  const { arrayVars, arrayPointerTargets } = context;
+  validateNumericLiteralOverflow(expr);
+  validateDivisionByZero(expr);
+  validatePointerDerefs(expr, context);
+  validateStructFieldAccess(expr, context);
+  const methodValidation = resolveMethodStyleCall(expr, context);
+  validateFunctionCalls(methodValidation.converted, context, disallowVoidCall);
+  validateComparisonTypes(expr, context);
+  validateArrayAccesses(expr, arrayVars, arrayPointerTargets);
+  validateArrayLiteralIndexing(expr);
+  validateArrayCallRequirements(expr, context);
+}
+
+function buildThisFieldAssignment(
+  varName: string,
+  operator: string,
+  value: string,
+  valueOriginal: string,
+  context: CompileContext
+): string {
+  return handleAssignment(varName, operator, value, valueOriginal, context);
+}
+
 function resolveMethodStyleCall(expr: string, context: CompileContext): { converted: string } {
   const parsed = parseMethodCallExpression(expr);
   if (!parsed) return { converted: expr };
   const { baseExpr, fnName, argsStr } = parsed;
-  if (baseExpr === 'this') return { converted: expr };
+  if (baseExpr === 'this') {
+    const signature = context.fnSignatures.get(fnName);
+    if (!signature) {
+      return { converted: expr };
+    }
+    const args = argsStr.trim() ? splitTopLevel(argsStr, ',') : [];
+    if (args.length !== signature.paramKinds.length) {
+      throw new Error('function ' + fnName + ' expects ' + signature.paramKinds.length + ' args');
+    }
+    return { converted: fnName + '(' + args.join(', ') + ')' };
+  }
   const signature = context.fnSignatures.get(fnName);
   const args = argsStr.trim() ? splitTopLevel(argsStr, ',') : [];
   const simpleReceiver = isSimpleReceiver(baseExpr);
@@ -2755,23 +2967,16 @@ function prepareValueExpression(
   checkUndefined: boolean,
   disallowVoidCall: boolean
 ): string {
-  const { definedVars, arrayVars, arrayPointerTargets } = context;
+  const { definedVars } = context;
+  const thisAccessNormalized = convertThisAccess(valueOriginal);
   if (checkUndefined) {
     if (!valueOriginal.includes('::')) {
-      checkUndefinedVars(valueOriginal, definedVars);
+      checkUndefinedVars(thisAccessNormalized, definedVars);
     }
   }
-  validateNumericLiteralOverflow(valueOriginal);
-  validateDivisionByZero(valueOriginal);
-  validatePointerDerefs(valueOriginal, context);
-  validateStructFieldAccess(valueOriginal, context);
-  const methodValidation = resolveMethodStyleCall(valueOriginal, context);
-  validateFunctionCalls(methodValidation.converted, context, disallowVoidCall);
-  validateComparisonTypes(valueOriginal, context);
-  validateArrayAccesses(valueOriginal, arrayVars, arrayPointerTargets);
-  validateArrayLiteralIndexing(valueOriginal);
-  validateArrayCallRequirements(valueOriginal, context);
-  const blockConverted = convertInlineBlockExpressions(value);
+  validateExpressionForCompile(thisAccessNormalized, context, disallowVoidCall);
+  const thisConverted = convertThisAccess(value);
+  const blockConverted = convertInlineBlockExpressions(thisConverted);
   const methodConverted = resolveMethodStyleCall(blockConverted, context).converted;
   const unboundConverted = convertUnboundFunctionPointerAccess(methodConverted);
   const pointerConverted = convertPointerDerefs(unboundConverted, context);
@@ -3107,6 +3312,15 @@ function handleLetInitializer(
   }
   const pointerInfo = parsePointerTypeAnnotation(typeAnnotation, context);
   const target = parseAddressOfTarget(valueOriginal);
+  if (target === 'this') {
+    const thisObject = buildThisScopeObject(context);
+    definedVars.add(varName);
+    varInitialized.set(varName, true);
+    varTypes.set(varName, declaredInfo.kind);
+    context.thisPointerVars.add(varName);
+    const valueConverted = thisObject;
+    return 'let ' + varName + ' = ' + valueConverted + '; ';
+  }
   if (target) {
     if (!definedVars.has(target)) {
       throw new Error('undefined variable');
@@ -3558,6 +3772,9 @@ function checkUndefinedVars(expr: string, definedVars: Set<string>): void {
     if (prevChar === '.' || prevChar === ':' || prevChar === '&') {
       continue;
     }
+    if (id === 'this') {
+      continue;
+    }
     // Skip JavaScript/Tuff keywords
     if (RESERVED_KEYWORDS.has(id)) continue;
     if (currentStructNames && currentStructNames.has(id)) continue;
@@ -3610,6 +3827,14 @@ function executeJavaScript(jsCode: string): number {
  * @returns Numeric result from execution
  */
 export function execute(input: string): number {
+  const trimmed = input.trim();
+  const hasReturn = /\breturn\b/.test(trimmed);
+  const hasFunction = /\bfunction\b/.test(trimmed);
+  const looksLikeJs = hasReturn || hasFunction;
+  const looksLikeTuff = /\bfn\b/.test(trimmed);
+  if (looksLikeJs && !looksLikeTuff) {
+    return executeJavaScript(input);
+  }
   const jsCode = compile(input);
   return executeJavaScript(jsCode);
 }
