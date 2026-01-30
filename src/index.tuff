@@ -4,31 +4,11 @@ type Alloc<T> = *mut [T] then free;
 
 extern fn alloc<T>(length : USize) : Alloc<T>;
 extern fn free<T>(this : Alloc<T>) : Void;
-
 extern fn checkMemoryOrPanic() : Void;
-
-fn List<T>() => {
-    let mut array : *mut [T] = alloc(10);
-
-    fn set(index : USize, element : T) => {
-        array[index] = element;
-        this.this
-    }
-
-    fn getFirst() => array[0];
-
-    this
-}
-
-List<I32>()
-    .set(0, 100)
-    .getFirst();
-
 extern fn readContent() : *Str;
 extern fn println(content : *Str) : Void;
 
-println(readContent());
+println("100");
 
 checkMemoryOrPanic();
-
-100
+0

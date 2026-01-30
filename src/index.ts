@@ -197,6 +197,20 @@ function buildMissingNativeExportMessage(exportName: string, moduleName: string)
   );
 }
 
+function buildMissingNativeModuleMessage(moduleName: string, contextInfo: string): string {
+  return (
+    'native module not found: ' +
+    moduleName +
+    '. Cause: extern use references a native module that is not loaded. Reason: native modules must be provided via nativeConfig or src/' +
+    moduleName +
+    '.ts in the REPL loader. Fix: add ' +
+    moduleName +
+    '.ts with the required exports or update the extern use. Context: ' +
+    contextInfo +
+    '.'
+  );
+}
+
 function buildNativeExportsByModule(nativeModuleMap: Map<string, string>): Map<string, NativeExports> {
   const nativeExportsByModule = new Map<string, NativeExports>();
   for (const [moduleName, source] of nativeModuleMap) {
@@ -220,11 +234,11 @@ function resolveExternUses(
   for (const externUse of externUses) {
     const nativeSource = nativeModuleMap.get(externUse.module);
     if (!nativeSource) {
-      throw new Error('native module not found: ' + externUse.module);
+      throw new Error(buildMissingNativeModuleMessage(externUse.module, 'extern use { ' + externUse.names.join(', ') + ' } from ' + externUse.module));
     }
     const nativeExports = nativeExportsByModule.get(externUse.module);
     if (!nativeExports) {
-      throw new Error('native module not found: ' + externUse.module);
+      throw new Error(buildMissingNativeModuleMessage(externUse.module, 'extern use { ' + externUse.names.join(', ') + ' } from ' + externUse.module));
     }
     for (const name of externUse.names) {
       const constValue = nativeExports.constExports.get(name);
@@ -559,7 +573,7 @@ export function compile(input: string): string {
     // If the block is the entire expression, convert it to IIFE
     if (blockEnd === code.length - 1) {
       const blockContent = code.slice(1, blockEnd).trim();
-      const blockCode = convertBlockToIIFE(blockContent);
+      const blockCode = convertBlockToIIFE(blockContent, undefined);
       return 'return (' + blockCode + ')();';
     }
   }
@@ -880,7 +894,7 @@ export function compile(input: string): string {
     const lastBlockOriginal = splitLeadingBlockExpression(lastStmtOriginal);
     const lastBlockConverted = splitLeadingBlockExpression(lastStmt);
     if (lastBlockConverted && lastBlockOriginal) {
-      const blockCode = convertBlockToIIFE(lastBlockConverted.blockContent);
+      const blockCode = convertBlockToIIFE(lastBlockConverted.blockContent, context.typeAliases);
       jsCode += '(' + blockCode + ')(); ';
       if (lastBlockConverted.trailing) {
         lastStmt = lastBlockConverted.trailing;
@@ -943,7 +957,7 @@ export function compile(input: string): string {
         }
       }
       registerFunctionSignature(fnDef.name, parsedParams, fnDef.returnType, fnDef.body, context);
-      jsCode += buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body) + ' ';
+      jsCode += buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body, context.typeAliases) + ' ';
 
       if (!leadingFn.trailing) {
         jsCode += buildDropCalls(context);
@@ -1000,7 +1014,7 @@ export function compile(input: string): string {
     inferExprInfo(lastStmtOriginal, varTypes, varNumericSuffixes);
 
     // Handle if/else expressions by converting to ternary operators
-    lastStmt = convertInlineBlockExpressions(lastStmt);
+    lastStmt = convertInlineBlockExpressions(lastStmt, context.typeAliases);
     lastStmt = convertThisAccess(lastStmt);
     lastStmt = resolveMethodStyleCall(lastStmt, context).converted;
     lastStmt = convertUnboundFunctionPointerAccess(lastStmt);
@@ -1833,7 +1847,7 @@ function replaceInlineBlocks(code: string): string {
  * Convert block content to an arrow function IIFE.
  * Extracts statements and wraps the final expression in a return.
  */
-function convertBlockToIIFE(blockContent: string): string {
+function convertBlockToIIFE(blockContent: string, typeAliases?: Map<string, { baseType: string; dropFn?: string }>): string {
   if (!blockContent.trim()) {
     return '() => { return 0; }';
   }
@@ -1844,11 +1858,29 @@ function convertBlockToIIFE(blockContent: string): string {
     return '() => { return 0; }';
   }
 
+  // Track variables with drop functions
+  const blockDropFns = new Map<string, string>();
+  if (typeAliases) {
+    for (const stmt of stmts) {
+      const letWithType = stmt.trim().match(/^let\s+(mut\s+)?(\w+)\s*:\s*([^=]+?)(?:\s*=|$)/);
+      if (letWithType) {
+        const varName = letWithType[2];
+        const typePart = letWithType[3].trim();
+        // Strip generic parameters for type alias lookup
+        const baseTypeName = typePart.replace(/<[^>]+>/g, '');
+        const alias = typeAliases.get(baseTypeName);
+        if (alias && alias.dropFn) {
+          blockDropFns.set(varName, alias.dropFn);
+        }
+      }
+    }
+  }
+
   const bodyStatements = stmts.slice(0, -1);
   // All but the last are statements - convert Tuff syntax to JS
   let body = bodyStatements
     .map((stmt) => {
-      return convertBlockStatementToJs(stmt);
+      return convertBlockStatementToJs(stmt, typeAliases);
     })
     .join('; ');
   const lastExpr = stmts[stmts.length - 1];
@@ -1858,13 +1890,14 @@ function convertBlockToIIFE(blockContent: string): string {
     (init) => normalizeRefs(convertIfElseToTernary(init)),
     (params) => parseFnParams(params),
     true,
-    convertBlockStatementToJs,
+    (stmt: string) => convertBlockStatementToJs(stmt, typeAliases),
     (kind, name) => {
       if (kind === 'var') {
         return 'get ' + name + '() { return ' + name + '; }, set ' + name + '(newValue) { ' + name + ' = newValue; }';
       }
       return name + ': ' + name;
-    }
+    },
+    typeAliases
   );
   const scopeMembers = scopeParts.members.join(', ');
   const thisScopeDecl =
@@ -1873,20 +1906,32 @@ function convertBlockToIIFE(blockContent: string): string {
     ' };';
   const thisScopeAssign = ' if (typeof __thisScope !== "undefined") __thisScope.__thisValue = __thisValue;';
   if (lastExpr.trim() === 'this' && !lastIsStatement) {
-    const body = scopeParts.locals.join(' ');
+    let body = scopeParts.locals.join(' ');
+    // Clean up variables with drop functions before returning
+    if (blockDropFns.size > 0) {
+      for (const [varName, dropFn] of blockDropFns.entries()) {
+        body = body + ' if (typeof ' + dropFn + ' === "function") { ' + dropFn + '(' + varName + '); }';
+      }
+    }
     return '() => { ' + body + ' ' + thisScopeDecl + thisScopeAssign + ' return __thisValue; }';
   }
-  const finalExpr = lastIsStatement ? '0' : convertInlineBlockExpressions(normalizeRefs(convertIfElseToTernary(lastExpr)));
+  const finalExpr = lastIsStatement ? '0' : convertInlineBlockExpressions(normalizeRefs(convertIfElseToTernary(lastExpr)), typeAliases);
 
   if (body) {
     body = body + '; ';
   }
 
   if (lastIsStatement) {
-    body = body + convertBlockStatementToJs(lastExpr) + '; ';
+    body = body + convertBlockStatementToJs(lastExpr, typeAliases) + '; ';
   }
   if (scopeMembers) {
     body = body + thisScopeDecl + thisScopeAssign + ' ';
+  }
+  // Clean up variables with drop functions before returning
+  if (blockDropFns.size > 0) {
+    for (const [varName, dropFn] of blockDropFns.entries()) {
+      body = body + 'if (typeof ' + dropFn + ' === "function") { ' + dropFn + '(' + varName + '); } ';
+    }
   }
   return '() => { ' + body + 'return ' + finalExpr + '; }';
 }
@@ -1929,14 +1974,14 @@ function isNonValueStatement(stmt: string): boolean {
   return /^\w+\s*(\+=|-=|\*=|\/=|=(?!=))/.test(trimmed);
 }
 
-function convertBlockStatementToJs(stmt: string): string {
+function convertBlockStatementToJs(stmt: string, typeAliases?: Map<string, { baseType: string; dropFn?: string }>): string {
   const trimmed = stmt.trim();
   if (!trimmed) return '';
   if (trimmed.startsWith('fn ')) {
     const fnDef = parseFunctionDefinitionForCompile(trimmed);
     if (!fnDef) return '';
     const parsedParams = parseFnParams(fnDef.params);
-    return buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body);
+    return buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body, typeAliases);
   }
 
   const letWithInit = trimmed.match(/^let\s+(mut\s+)?(\w+)\s*:\s*[^=]+\s*=\s*(.+)$/);
@@ -2054,7 +2099,8 @@ function collectThisObjectParts(
   parseParams: (params: string) => FnParamInfo[],
   allowOtherStatements: boolean,
   convertStatement: (stmt: string) => string,
-  buildMember: (kind: 'fn' | 'var', name: string) => string
+  buildMember: (kind: 'fn' | 'var', name: string) => string,
+  typeAliases?: Map<string, { baseType: string; dropFn?: string }>
 ): { locals: string[]; members: string[] } {
   const locals: string[] = [];
   const members: string[] = [];
@@ -2067,7 +2113,7 @@ function collectThisObjectParts(
         throw new Error('invalid function definition');
       }
       const parsedParams = parseParams(fnDef.params);
-      locals.push(buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body));
+      locals.push(buildFunctionDefinition(fnDef.name, parsedParams, fnDef.body, typeAliases));
       members.push(buildMember('fn', fnDef.name));
       continue;
     }
@@ -2114,12 +2160,17 @@ function emitFunctionDefinition(
   if (thisMembers) {
     context.thisMemberSets.set(fnDefOriginal.name, thisMembers);
   }
-  return buildFunctionDefinition(fnDefOriginal.name, parsedParams, fnDef.body.trim());
+  return buildFunctionDefinition(fnDefOriginal.name, parsedParams, fnDef.body.trim(), context.typeAliases);
 }
 
-function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body: string): string {
+function buildFunctionDefinition(
+  name: string,
+  parsedParams: FnParamInfo[],
+  body: string,
+  typeAliases?: Map<string, { baseType: string; dropFn?: string }>
+): string {
   const jsParams = parsedParams.map((param) => (param.name === 'this' ? '_this' : param.name)).join(', ');
-  let bodyExpr = compileFunctionBodyExpression(body);
+  let bodyExpr = compileFunctionBodyExpression(body, typeAliases);
   const paramMembers = parsedParams
     .filter((param) => param.name !== 'this')
     .map((param) => param.name + ': ' + param.name)
@@ -2178,7 +2229,7 @@ function buildFunctionDefinition(name: string, parsedParams: FnParamInfo[], body
   return 'function ' + name + '(' + jsParams + ') { return ' + bodyExpr + '; }';
 }
 
-function compileFunctionBodyExpression(body: string): string {
+function compileFunctionBodyExpression(body: string, typeAliases?: Map<string, { baseType: string; dropFn?: string }>): string {
   const trimmed = body.trim();
   if (trimmed.startsWith('{')) {
     const endIndex = findMatchingClosing(trimmed, 0, '{', '}');
@@ -2186,7 +2237,7 @@ function compileFunctionBodyExpression(body: string): string {
       throw new Error('unmatched opening brace');
     }
     const blockContent = trimmed.slice(1, endIndex).trim();
-    const blockCode = convertBlockToIIFE(blockContent);
+    const blockCode = convertBlockToIIFE(blockContent, typeAliases);
     return '(' + blockCode + ')()';
   }
 
@@ -2527,7 +2578,7 @@ function convertThisAccess(expr: string): string {
   return expr.replace(/\bthis\s*\.\s*([a-zA-Z_]\w*)/g, (_match, field) => field);
 }
 
-function convertInlineBlockExpressions(expr: string): string {
+function convertInlineBlockExpressions(expr: string, typeAliases?: Map<string, { baseType: string; dropFn?: string }>): string {
   let result = '';
   let index = 0;
   while (index < expr.length) {
@@ -2554,7 +2605,7 @@ function convertInlineBlockExpressions(expr: string): string {
       throw new Error('unmatched opening brace');
     }
     const blockContent = expr.slice(start + 1, end).trim();
-    const blockCode = convertBlockToIIFE(blockContent);
+    const blockCode = convertBlockToIIFE(blockContent, typeAliases);
     result += '(' + blockCode + ')()';
     index = end + 1;
   }
@@ -2719,8 +2770,9 @@ function inferThisMembersFromBody(body: string, context: CompileContext): Set<st
     (init) => normalizeRefs(convertIfElseToTernary(init)),
     (params) => parseFnParams(params, context),
     true,
-    convertBlockStatementToJs,
-    (_kind, name) => name + ': ' + name
+    (stmt: string) => convertBlockStatementToJs(stmt, context.typeAliases),
+    (_kind, name) => name + ': ' + name,
+    context.typeAliases
   );
   const members = new Set<string>();
   for (const entry of parts.members) {
@@ -3037,7 +3089,7 @@ function prepareValueExpression(value: string, valueOriginal: string, context: C
   }
   validateExpressionForCompile(thisAccessNormalized, context, disallowVoidCall);
   const thisConverted = convertThisAccess(value);
-  const blockConverted = convertInlineBlockExpressions(thisConverted);
+  const blockConverted = convertInlineBlockExpressions(thisConverted, context.typeAliases);
   const methodConverted = resolveMethodStyleCall(blockConverted, context).converted;
   const unboundConverted = convertUnboundFunctionPointerAccess(methodConverted);
   const pointerConverted = convertPointerDerefs(unboundConverted, context);
@@ -3255,13 +3307,14 @@ function buildObjectDeclaration(declaration: { name: string; body: string }, con
     (value) => prepareValueExpression(value, value, context, true, true),
     (params) => parseFnParams(params, context),
     false,
-    convertBlockStatementToJs,
+    (stmt: string) => convertBlockStatementToJs(stmt, context.typeAliases),
     (kind, name) => {
       if (kind === 'var') {
         return 'get ' + name + '() { return ' + name + '; }';
       }
       return name + ': ' + name;
-    }
+    },
+    context.typeAliases
   );
 
   context.definedVars.add(declaration.name);
@@ -3903,7 +3956,7 @@ export function compileAll(_inputs: string[], _config: Map<string[], string>, _n
     if (!moduleVar) {
       const nativeSource = nativeModuleMap.get(moduleName);
       if (!nativeSource) {
-        throw new Error('native module not found: ' + moduleName);
+        throw new Error(buildMissingNativeModuleMessage(moduleName, 'extern fn ' + fnName + ' from ' + moduleName));
       }
       moduleVar = '__tuff_native_module_' + moduleName;
       moduleVarByName.set(moduleName, moduleVar);
@@ -6955,7 +7008,7 @@ if (require.main === module) {
     const replInputs = buildReplInputs(process.cwd());
     const bundled = compileAll(replInputs.inputs, replInputs.config, replInputs.nativeConfig);
 
-    const distDir = path.join(process.cwd(), 'dist');
+    const distDir = path.join(process.cwd(), 'generated');
     if (!fs.existsSync(distDir)) {
       fs.mkdirSync(distDir, { recursive: true });
     }

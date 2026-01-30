@@ -68,6 +68,12 @@ test('interpretAll supports extern native bindings', () => {
   assertAllValid(['main'], config, nativeConfig, 100);
 });
 
+test('interpretAll reports missing native module', () => {
+  const config = new Map([[['main'], 'extern use { myConst } from lib; extern let myConst : I32; myConst']]);
+  const nativeConfig = new Map();
+  assertAllInvalid(['main'], config, nativeConfig);
+});
+
 test('interpretAll supports extern native functions', () => {
   const config = new Map([[['main'], 'extern use { get } from lib; extern fn get() : I32; get()']]);
   const nativeConfig = new Map([[['lib'], 'export function get() { return 100; }']]);
