@@ -29,6 +29,7 @@ const typeRanges = {
  */
 function compile(input) {
     let trimmed = input.trim();
+    const typesUsed = new Set();
     // Validate and strip type annotations (e.g., 100U8 -> 100, 42I32 -> 42)
     trimmed = trimmed.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, (match, value, type) => {
         const num = parseInt(value, 10);
@@ -36,15 +37,37 @@ function compile(input) {
         if (!range) {
             throw new Error(`Unknown type: ${type}`);
         }
-        // Check for underflow or overflow
+        // Check for underflow or overflow of the literal
         if (num < range.min) {
             throw new Error(`Underflow: ${num} is below minimum for ${type} (${range.min})`);
         }
         if (num > range.max) {
             throw new Error(`Overflow: ${num} is above maximum for ${type} (${range.max})`);
         }
+        typesUsed.add(type);
         return value;
     });
+    // If all type annotations are from the same type, validate the result at compile time
+    if (typesUsed.size === 1) {
+        const resultType = Array.from(typesUsed)[0];
+        const range = typeRanges[resultType];
+        // For non-float types with arithmetic, evaluate at compile time
+        if (resultType !== "F32" && resultType !== "F64") {
+            try {
+                const fn = new Function(`return ${trimmed}`);
+                const result = fn();
+                if (result < range.min || result > range.max) {
+                    throw new Error(`Overflow: ${result} is above maximum for ${resultType} (${range.max})`);
+                }
+            }
+            catch (err) {
+                // If it's our overflow error, rethrow; otherwise continue compilation
+                if (err instanceof Error && err.message.startsWith("Overflow:")) {
+                    throw err;
+                }
+            }
+        }
+    }
     // If it doesn't contain return, wrap it in a return statement
     if (!trimmed.includes("return")) {
         return `return ${trimmed};`;

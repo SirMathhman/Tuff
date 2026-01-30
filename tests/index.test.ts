@@ -32,3 +32,9 @@ test("compile allows valid U8 value", () => {
 test("compile allows valid I8 value", () => {
   expect(compile("-128I8")).toBe("return -128;");
 });
+
+test("compile throws error for U8 overflow (arithmetic)", () => {
+  expect(() => compile("1U8 + 255U8")).toThrow(
+    "Overflow: 256 is above maximum for U8 (255)",
+  );
+});
