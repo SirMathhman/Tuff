@@ -404,6 +404,8 @@ export function compile(input: string): string {
   // Handle boolean literals
   code = code.replace(/\btrue\b/g, '1').replace(/\bfalse\b/g, '0');
 
+  validateNumericLiteralSuffixes(code);
+
   // Handle numeric literals with type suffixes (e.g., 100U8, -128I8)
   code = code.replace(/-?\b\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)\b/g, (match) => {
     // Parse the numeric suffix
@@ -760,6 +762,7 @@ export function compile(input: string): string {
 
     // Check for undefined variables in final expression
     checkUndefinedVars(lastStmt, definedVars);
+    validateNumericLiteralOverflow(lastStmtOriginal);
     validateFunctionCalls(lastStmtOriginal, context, false);
 
     // Check if this is a comparison or boolean operator and wrap to convert bool to number
@@ -844,6 +847,81 @@ function parseNumericLiteralSuffix(expr: string): string | undefined {
   const trimmed = expr.trim();
   const match = trimmed.match(/^-?\d+(U8|U16|U32|U64|USize|I8|I16|I32|I64)$/);
   return match ? match[1] : undefined;
+}
+
+function validateNumericLiteralSuffixes(code: string): void {
+  const allowed = new Set(['U8', 'U16', 'U32', 'U64', 'USize', 'I8', 'I16', 'I32', 'I64']);
+  const matches = code.match(/-?\b\d+[a-zA-Z][a-zA-Z0-9]*\b/g) || [];
+  for (const token of matches) {
+    const suffixMatch = token.match(/[a-zA-Z][a-zA-Z0-9]*$/);
+    if (!suffixMatch) continue;
+    const suffix = suffixMatch[0];
+    if (!allowed.has(suffix)) {
+      throw new Error('invalid suffix');
+    }
+  }
+}
+
+function getNumericSuffixRange(suffix: string): { min: number; max: number } {
+  switch (suffix) {
+    case 'U8':
+      return { min: 0, max: 255 };
+    case 'U16':
+      return { min: 0, max: 65535 };
+    case 'U32':
+      return { min: 0, max: 4294967295 };
+    case 'U64':
+      return { min: 0, max: 18446744073709551615 };
+    case 'USize':
+      return { min: 0, max: 18446744073709551615 };
+    case 'I8':
+      return { min: -128, max: 127 };
+    case 'I16':
+      return { min: -32768, max: 32767 };
+    case 'I32':
+      return { min: -2147483648, max: 2147483647 };
+    case 'I64':
+      return { min: -9223372036854775808, max: 9223372036854775807 };
+    default:
+      return { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER };
+  }
+}
+
+function parseNumericLiteralValue(expr: string): { value: number; suffix?: string } | null {
+  const trimmed = expr.trim();
+  const match = trimmed.match(/^-?\d+(U8|U16|U32|U64|USize|I8|I16|I32|I64)?$/);
+  if (!match) return null;
+  const suffix = match[1];
+  const numStr = suffix ? trimmed.slice(0, -suffix.length) : trimmed;
+  return { value: parseInt(numStr, 10), suffix };
+}
+
+function chooseNumericSuffix(suffixA?: string, suffixB?: string): string | undefined {
+  if (!suffixA && !suffixB) return undefined;
+  if (suffixA && !suffixB) return suffixA;
+  if (!suffixA && suffixB) return suffixB;
+  if (!suffixA || !suffixB) return undefined;
+  if (isNumericSuffixWider(suffixA, suffixB)) return suffixA;
+  if (isNumericSuffixWider(suffixB, suffixA)) return suffixB;
+  return suffixA;
+}
+
+function validateNumericLiteralOverflow(expr: string): void {
+  const trimmed = expr.trim();
+  const match = trimmed.match(
+    /^(-?\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)?)\s*\+\s*(-?\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)?)$/
+  );
+  if (!match) return;
+  const left = parseNumericLiteralValue(match[1]);
+  const right = parseNumericLiteralValue(match[2]);
+  if (!left || !right) return;
+  const suffix = chooseNumericSuffix(left.suffix, right.suffix);
+  if (!suffix) return;
+  const result = left.value + right.value;
+  const range = getNumericSuffixRange(suffix);
+  if (result < range.min || result > range.max) {
+    throw new Error('numeric literal overflow');
+  }
 }
 
 function inferLiteralKind(expr: string): ExprType | undefined {
@@ -1300,6 +1378,8 @@ type FnParamInfo = {
   kind: ExprType;
 };
 
+type NumericConstraint = { operator: '<' | '<=' | '>' | '>='; limit: number };
+
 function parseArrayType(typeAnnotation?: string): ArrayTypeInfo | undefined {
   if (!typeAnnotation) return undefined;
   let trimmed = typeAnnotation.trim();
@@ -1331,6 +1411,55 @@ function parseArrayType(typeAnnotation?: string): ArrayTypeInfo | undefined {
   }
 
   return undefined;
+}
+
+function parseTypeConstraint(typeAnnotation?: string): {
+  baseType?: string;
+  constraint?: NumericConstraint;
+} {
+  if (!typeAnnotation) return { baseType: undefined };
+  const match = typeAnnotation.match(/^(.+?)\s*(<=|>=|<|>)\s*(-?\d+.*)$/);
+  if (!match) {
+    return { baseType: typeAnnotation.trim() };
+  }
+
+  const baseType = match[1].trim();
+  const operator = match[2] as NumericConstraint['operator'];
+  const limitLiteral = match[3].trim();
+  const limitValue = parseNumericLiteralValue(limitLiteral);
+  if (!limitValue) {
+    throw new Error('invalid numeric constraint');
+  }
+  return { baseType, constraint: { operator, limit: limitValue.value } };
+}
+
+function validateNumericConstraint(valueOriginal: string, constraint?: NumericConstraint): void {
+  if (!constraint) return;
+  const literal = parseNumericLiteralValue(valueOriginal);
+  if (!literal) return;
+  const value = literal.value;
+  switch (constraint.operator) {
+    case '<':
+      if (!(value < constraint.limit)) {
+        throw new Error('numeric constraint violated');
+      }
+      break;
+    case '<=':
+      if (!(value <= constraint.limit)) {
+        throw new Error('numeric constraint violated');
+      }
+      break;
+    case '>':
+      if (!(value > constraint.limit)) {
+        throw new Error('numeric constraint violated');
+      }
+      break;
+    case '>=':
+      if (!(value >= constraint.limit)) {
+        throw new Error('numeric constraint violated');
+      }
+      break;
+  }
 }
 
 function normalizeElementKind(typeName: string): ExprType {
@@ -1673,6 +1802,7 @@ function prepareLetBinding(
 ): {
   declaredInfo: { kind: ExprType; numericSuffix?: string };
   arrayTypeInfo: ArrayTypeInfo | undefined;
+  constraint?: NumericConstraint;
 } {
   const { mutableVars, definedVars } = context;
   if (definedVars.has(varName)) {
@@ -1681,9 +1811,10 @@ function prepareLetBinding(
   if (isMutable) {
     mutableVars.add(varName);
   }
-  const declaredInfo = getDeclaredTypeInfo(typeAnnotation);
-  const arrayTypeInfo = parseArrayType(typeAnnotation);
-  return { declaredInfo, arrayTypeInfo };
+  const parsed = parseTypeConstraint(typeAnnotation);
+  const declaredInfo = getDeclaredTypeInfo(parsed.baseType);
+  const arrayTypeInfo = parseArrayType(parsed.baseType);
+  return { declaredInfo, arrayTypeInfo, constraint: parsed.constraint };
 }
 
 function prepareValueExpression(
@@ -1697,6 +1828,7 @@ function prepareValueExpression(
   if (checkUndefined) {
     checkUndefinedVars(valueOriginal, definedVars);
   }
+  validateNumericLiteralOverflow(valueOriginal);
   validateFunctionCalls(valueOriginal, context, disallowVoidCall);
   validateArrayAccesses(valueOriginal, arrayVars, arrayPointerTargets);
   validateArrayLiteralIndexing(valueOriginal);
@@ -1941,7 +2073,7 @@ function handleLetInitializer(
   context: CompileContext
 ): string {
   const { varTypes, varNumericSuffixes, varInitialized, definedVars } = context;
-  const { declaredInfo, arrayTypeInfo } = prepareLetBinding(
+  const { declaredInfo, arrayTypeInfo, constraint } = prepareLetBinding(
     varName,
     typeAnnotation,
     isMutable,
@@ -1950,6 +2082,7 @@ function handleLetInitializer(
   const exprInfo = inferExprInfo(valueOriginal, varTypes, varNumericSuffixes);
   ensureNoBoolArithmetic(valueOriginal, varTypes);
   applyArrayInitializer(varName, typeAnnotation, valueOriginal, context, arrayTypeInfo);
+  validateNumericConstraint(valueOriginal, constraint);
   const callReturn = getFunctionCallReturnInfo(valueOriginal, context);
   if (callReturn) {
     if (callReturn.returnsVoid) {
