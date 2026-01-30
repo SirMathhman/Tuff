@@ -1,10 +1,23 @@
 // This file is expected to change substantially and should not be depended on for tests.
 
-export function createArray<T>(length: number): T[] {
+let allocated = 0;
+
+export function alloc<T>(length: number): T[] {
+  allocated += length;
   return new Array<T>(length);
 }
 
-const fs = require('fs');
+export function free<T>(toFree: T[]) {
+  allocated -= toFree.length;
+}
+
+export function checkMemoryOrPanic() {
+  if (allocated !== 0) {
+    throw new Error('Memory leak detected: ' + allocated + ' items still allocated.');
+  }
+}
+
+import fs from 'fs';
 
 export function readContent() {
   // READ the README.md file using fs

@@ -691,7 +691,7 @@ export function compile(input: string): string {
       }
       const fnDefOriginal = parseFunctionDefinitionForCompile(leadingFn.definition);
       if (!fnDefOriginal) {
-        throw new Error('invalid statement');
+        throw buildInvalidFunctionDefinitionError(leadingFn.definition);
       }
       jsCode += emitFunctionDefinition(fnDefOriginal, fnDefOriginal, context, fnArrayParamRequirements) + ' ';
       if (!leadingFn.trailing) {
@@ -837,7 +837,12 @@ export function compile(input: string): string {
     }
 
     // Unknown statement
-    throw new Error('invalid statement');
+    throw new Error(
+      'Invalid statement: "' +
+        stmtOriginal.substring(0, 50) +
+        (stmtOriginal.length > 50 ? '...' : '') +
+        '". Expected a variable declaration (let/let mut), assignment, function call, while loop, struct/object definition, type alias, or function definition. Check for missing semicolons or syntax errors.'
+    );
   }
 
   // Process the final statement as a return expression
@@ -929,7 +934,7 @@ export function compile(input: string): string {
     if (leadingFn) {
       const fnDef = parseFunctionDefinitionForCompile(leadingFn.definition);
       if (!fnDef) {
-        throw new Error('invalid statement');
+        throw buildInvalidFunctionDefinitionError(leadingFn.definition);
       }
       const parsedParams = parseFnParams(fnDef.params, context);
       for (const param of parsedParams) {
@@ -1694,7 +1699,7 @@ function validateComparisonTypes(expr: string, context: CompileContext): void {
 }
 
 function parseTypeAliasDeclaration(stmt: string): { name: string; baseType: string; dropFn?: string } | null {
-  const match = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?$/);
+  const match = stmt.match(/^type\s+([a-zA-Z_]\w*)(?:\s*<[^>]+>)?\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?$/);
   if (!match) return null;
   return { name: match[1], baseType: match[2].trim(), dropFn: match[3] };
 }
@@ -1727,9 +1732,9 @@ function resolveTypeAliasEntry(
   return { name: trimmed, alias };
 }
 
-function resolveTypeAliasBaseType(typeName: string | undefined, context: CompileContext, seen: Set<string> = new Set()): string | undefined {
+function resolveTypeAliasBaseType(typeName: string | undefined, context: CompileContext, seen?: Set<string>): string | undefined {
   if (!typeName) return undefined;
-  const entry = resolveTypeAliasEntry(typeName, context, seen);
+  const entry = resolveTypeAliasEntry(typeName, context, seen || new Set());
   if (!entry) return typeName;
   const resolved = resolveTypeAliasBaseType(entry.alias.baseType, context, seen);
   return resolved || entry.alias.baseType;
@@ -1743,8 +1748,11 @@ function preRegisterTypeAliases(stmts: string[], context: CompileContext): void 
   }
 }
 
-function resolveTypeAliasDropFn(typeName: string | undefined, context: CompileContext, seen: Set<string> = new Set()): string | undefined {
-  const entry = resolveTypeAliasEntry(typeName, context, seen);
+function resolveTypeAliasDropFn(typeName: string | undefined, context: CompileContext, seen?: Set<string>): string | undefined {
+  // Strip generic parameters if present (e.g., "Alloc<I32>" -> "Alloc")
+  const baseName = typeName ? typeName.replace(/<[^>]+>/, '').trim() : undefined;
+  if (!baseName) return undefined;
+  const entry = resolveTypeAliasEntry(baseName, context, seen || new Set());
   if (!entry) return undefined;
   if (entry.alias.dropFn) return entry.alias.dropFn;
   return resolveTypeAliasDropFn(entry.alias.baseType, context, seen);
@@ -1759,6 +1767,15 @@ function buildDropCalls(context: CompileContext): string {
   }
   if (!calls.length) return '';
   return calls.join(' ');
+}
+
+function buildInvalidFunctionDefinitionError(definition: string): Error {
+  return new Error(
+    'Invalid function definition: "' +
+      definition.substring(0, 50) +
+      (definition.length > 50 ? '...' : '') +
+      '". Function definitions must follow the pattern: fn name(params) => body or fn name(params) : ReturnType => body'
+  );
 }
 
 function isNumericTypeName(typeName: string): boolean {
@@ -3472,6 +3489,13 @@ function handleLetInitializer(
   if (isStringTypeAnnotation(typeAnnotation, context) || isStringLiteral(valueOriginal)) {
     context.stringVars.add(varName);
   }
+  // Check if the type annotation has a drop function
+  if (typeAnnotation) {
+    const dropFn = resolveTypeAliasDropFn(typeAnnotation, context);
+    if (dropFn) {
+      context.varDropFns.set(varName, dropFn);
+    }
+  }
   const valueConverted = prepareValueExpression(value, valueOriginal, context, true, true);
   return 'let ' + varName + ' = ' + valueConverted + '; ';
 }
@@ -3503,6 +3527,13 @@ function handleLetNoInit(varName: string, typeAnnotation: string | undefined, is
 
   definedVars.add(varName);
   varInitialized.set(varName, false);
+  // Check if the type annotation has a drop function
+  if (typeAnnotation) {
+    const dropFn = resolveTypeAliasDropFn(typeAnnotation, context);
+    if (dropFn) {
+      context.varDropFns.set(varName, dropFn);
+    }
+  }
   if (arrayTypeInfo && arrayTypeInfo.length !== undefined) {
     return 'let ' + varName + ' = new Array(' + arrayTypeInfo.length + '); ';
   }
@@ -4490,7 +4521,9 @@ export function interpret(input: string): number {
   }
 
   function getAliasDropFn(name: string): string | undefined {
-    const aliasInfo = typeAliases.get(name);
+    // Strip generic parameters if present (e.g., "Alloc<I32>" -> "Alloc")
+    const baseName = name.replace(/<[^>]+>/, '');
+    const aliasInfo = typeAliases.get(baseName);
     return aliasInfo?.dropFn;
   }
 
@@ -6176,7 +6209,7 @@ export function interpret(input: string): number {
     for (let stmtIndex = 0; stmtIndex < statements.length; stmtIndex++) {
       const stmt = statements[stmtIndex];
       if (stmt.startsWith('type ')) {
-        const typeMatch = stmt.match(/^type\s+([a-zA-Z_]\w*)\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?$/);
+        const typeMatch = stmt.match(/^type\s+([a-zA-Z_]\w*)(?:\s*<[^>]+>)?\s*=\s*(.+?)(?:\s+then\s+([a-zA-Z_]\w*))?$/);
         if (!typeMatch) throw new Error('invalid type alias');
         const aliasName = typeMatch[1];
         if (typeAliases.has(aliasName)) {
@@ -6184,7 +6217,7 @@ export function interpret(input: string): number {
         }
         const aliasTypeStr = typeMatch[2].trim();
         const dropFnName = typeMatch[3];
-        const aliasSuffix = tryParseSuffix(aliasTypeStr);
+        const aliasSuffix = parseStructFieldType(aliasTypeStr);
         if (!aliasSuffix) throw new Error('invalid type alias');
         typeAliases.set(aliasName, { type: aliasSuffix, dropFn: dropFnName });
         continue;
@@ -6862,6 +6895,7 @@ export function interpret(input: string): number {
                 type: varInfo.type,
                 mutable: false,
                 initialized: true,
+                refersTo: varInfo.refersTo,
                 structName: varInfo.structName,
                 structFields: varInfo.structFields,
                 arrayElements: varInfo.arrayElements,

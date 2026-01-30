@@ -1,9 +1,14 @@
-extern use { createArray } from lib;
+extern use { alloc, free, checkMemoryOrPanic } from lib;
 
-extern fn createArray<T>(length : USize) : *mut [T];
+type Alloc<T> = *mut [T] then free;
+
+extern fn alloc<T>(length : USize) : Alloc<T>;
+extern fn free<T>(this : Alloc<T>) : Void;
+
+extern fn checkMemoryOrPanic() : Void;
 
 fn List<T>() => {
-    let mut array : *mut [T] = createArray(10);
+    let mut array : *mut [T] = alloc(10);
 
     fn set(index : USize, element : T) => {
         array[index] = element;
@@ -23,5 +28,7 @@ extern fn readContent() : *Str;
 extern fn println(content : *Str) : Void;
 
 println(readContent());
+
+checkMemoryOrPanic();
 
 100
