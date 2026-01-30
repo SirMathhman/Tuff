@@ -511,6 +511,7 @@ export function compile(input: string): string {
   code = code.replace(/\btrue\b/g, '1').replace(/\bfalse\b/g, '0');
 
   validateNumericLiteralSuffixes(code);
+  validateUnsupportedFeatures(code);
 
   // Handle numeric literals with type suffixes (e.g., 100U8, -128I8)
   code = code.replace(/-?\b\d+(?:U8|U16|U32|U64|USize|I8|I16|I32|I64)\b/g, (match) => {
@@ -1112,6 +1113,74 @@ function validateNumericLiteralSuffixes(code: string): void {
     if (!allowed.has(suffix)) {
       throw new Error('invalid suffix');
     }
+  }
+}
+
+function validateUnsupportedFeatures(code: string): void {
+  // Reject union type syntax with |>
+  if (/\|\>/.test(code)) {
+    throw new Error(
+      'union type syntax with |> is not supported. Cause: union types are not yet implemented. ' +
+        'Reason: the compiler does not support the |> operator for defining union types. ' +
+        'Fix: use separate type definitions or struct types instead. ' +
+        'Context: |> operator found in code.'
+    );
+  }
+
+  // Reject try operator ?
+  // Look for ) ? or condition ? followed by something other than :
+  if (/\)\s*\?\s+[^\:?]|if\s*\([^)]*\)\s*\?/.test(code)) {
+    throw new Error(
+      'try operator ? is not supported. Cause: the try operator is not implemented. ' +
+        'Reason: Tuff does not support the ? operator for error handling. ' +
+        'Fix: use explicit handling instead of ?. ' +
+        'Context: ? operator found in code.'
+    );
+  }
+
+  // Reject label syntax: word : followed by a statement (this, function call, etc.)
+  // Check for patterns like "pass : this" or "label : expr" after { or ; or newline
+  if (/{\s*[a-zA-Z_]\w*\s*:\s*(?:this|[a-zA-Z_]\w*\s*\()|;\s*[a-zA-Z_]\w*\s*:\s*(?:this|[a-zA-Z_]\w*\s*\()/m.test(code)) {
+    throw new Error(
+      'label syntax is not supported. Cause: labels are not implemented. ' +
+        'Reason: Tuff does not support goto labels or labeled breaks. ' +
+        'Fix: remove the label or use a different control flow structure. ' +
+        'Context: label syntax found in code.'
+    );
+  }
+
+  // Also check line-by-line for labels at the start of a line followed by a statement
+  const lines = code.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*[a-zA-Z_]\w*\s*:\s*(?:this|[a-zA-Z_]\w*\s*\(|{|if|let|fn|return)/.test(line)) {
+      throw new Error(
+        'label syntax is not supported. Cause: labels are not implemented. ' +
+          'Reason: Tuff does not support goto labels or labeled breaks. ' +
+          'Fix: remove the label or use a different control flow structure. ' +
+          'Context: label syntax found in code.'
+      );
+    }
+  }
+
+  // Reject triple-quoted strings
+  if (/"{3}/.test(code)) {
+    throw new Error(
+      'triple-quoted strings are not supported. Cause: they are not implemented. ' +
+        'Reason: Tuff does not support triple-quoted string literals. ' +
+        'Fix: use regular double-quoted strings or string concatenation. ' +
+        'Context: """ found in code.'
+    );
+  }
+
+  // Reject array wildcard in types
+  if (/\[\s*\w+\s*;\s*_\s*;|;\s*_\s*\]/.test(code)) {
+    throw new Error(
+      'array wildcard _ is not supported. Cause: array length must be explicitly specified. ' +
+        'Reason: array types require explicit initialized count and total length. ' +
+        'Fix: specify explicit numbers like [Type; 0; 10] instead of [Type; _; _]. ' +
+        'Context: array with _ wildcard found in type annotation.'
+    );
   }
 }
 
@@ -4094,6 +4163,8 @@ export function interpret(input: string): number {
     .replace(/\n\s*\./g, '.')
     .trim();
   if (s === '') return 0;
+
+  validateUnsupportedFeatures(s);
 
   type Type =
     | { kind: 'U' | 'I' | 'Bool'; width: number }
