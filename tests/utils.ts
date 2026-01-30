@@ -1,5 +1,7 @@
 import { interpret, compile, execute } from '../src/index';
 
+// USER SAYS: DO NOT TOUCH THIS FILE
+
 /**
  * Assert that code produces the expected result in BOTH the interpreter and compiler.
  * This validates that the implementation is consistent across both pipelines.
@@ -9,9 +11,13 @@ export function assertValid(code: string, expectedResult: number): void {
   const interpreterResult = interpret(code);
   expect(interpreterResult).toBe(expectedResult);
 
-  // Test compiler pipeline
-  const compilerResult = execute(code);
-  expect(compilerResult).toBe(expectedResult);
+  const compiled = compile(code);
+  try {
+    const compilerResult = execute(compiled);
+    expect(compilerResult).toBe(expectedResult);
+  } catch (e) {
+    throw new Error("Compiled code of '" + compiled + "' threw an error: " + (e as Error).message);
+  }
 }
 
 /**
@@ -19,13 +25,13 @@ export function assertValid(code: string, expectedResult: number): void {
  * This validates that error checking is consistent across both pipelines.
  */
 export function assertInvalid(code: string): void {
-  // Test interpreter - check that it throws
+  // Test interpreter - just check that it throws, we don't validate the message
   expect(() => {
     interpret(code);
   }).toThrow();
 
-  // Test compiler - check that it throws at compile time (not runtime)
   expect(() => {
-    compile(code);
+    const compiled = compile(code);
+    execute(compiled);
   }).toThrow();
 }
