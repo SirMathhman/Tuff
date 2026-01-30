@@ -1,4 +1,4 @@
-extern use { alloc, free, checkMemoryOrPanic, format } from lib;
+extern use { alloc, free, checkMemoryOrPanic } from lib;
 
 type Alloc<T> = *mut [T] then free;
 
@@ -8,77 +8,15 @@ extern fn checkMemoryOrPanic() : Void;
 extern fn readContent() : *Str;
 extern fn println(content : *Str) : Void;
 
-struct Some<T> {
-    value : T
-}
+fn describe(testSetDesc : *Str, func : () => Void) => {
+  0
+};
 
-object None<T> {
-}
+fn it(testDesc : *Str, func : () => Void) => {
+  0
+};
 
-/*
-The |> means | in most contexts, but it also is similar to Rust's Try trait.
-This is new syntax.
-
-```
-let temp : Option<T> = ???;
-let result = temp?;
-```
-*/
-type Option<T> = Some<T> |> None<T>;
-
-struct ExpectResult {
-    passes : Bool;
-    message : Option<*Str>;
-}
-
-/*
-The Any type is a new type that is the supertype of all types.
-All types, whether it be a string, char, int, struct, array, all extend from Any.
-
-However, Any can ONLY be used in an extern declaration because the usage of Any is unsafe.
-We just assume that this extern declaration works fine.
-
-Note that, when we compile to C later, we will compile varargs similar to monomorphization, where we generate a
-different function from each permutation of parameters from the original definition.
-
-We use an underscore because we don't know or care about how many elements were initialized or total here.
-*/
-extern fn format(message : *Str, ...args : [Any; _; _]);
-
-fn expect<T>(actualValue : T, equator : (T, T) => Βοοl) : ExpectResult => {
-    fn toBe(expectedValue : T) => { 
-        let passes = equator(actualValue, expectedValue);
-        let message = if (passes) ? None<*Str> else Some<*Str> { 
-            format("Expected '%s', but was actually '%s'.", expectedValue, actualValue)
-        };
-        ExpectResult { passes, message }
-    }
-    
-    this     
-}
-
-fn describe(testSetDesc : *Str, func : () => Void) : TestSetResult => {
-
-}
-
-struct TestResult {
-    testDesc : *Str;
-    
-}
-
-fn it(testDesc : *Str, func : () => ExpectResult) : TestResult => {
-
-}
-
-let testSetResult = describe("The application", () => {
-    it("can run a simple test", () => {
-        expect(100).toBe(100)
-    })
-});
-
-
-// Something temp for now
 println("100");
-checkMemoryOrPanic();
 
+checkMemoryOrPanic();
 0
