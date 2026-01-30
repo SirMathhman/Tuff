@@ -1,0 +1,32 @@
+{
+  "name": "tuff",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "prepare": "husky install",
+    "build": "tsc",
+    "lint": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SirMathhman/Tuff.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/SirMathhman/Tuff/issues"
+  },
+  "homepage": "https://github.com/SirMathhman/Tuff#readme",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "husky": "^9.1.7",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.3"
+  }
+}
