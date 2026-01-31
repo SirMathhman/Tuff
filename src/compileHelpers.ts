@@ -1,6 +1,6 @@
 import { updateStringState, type StringState } from "./stringState";
 import { handleStructInstantiation } from "./structUtils";
-import { buildFunctionBody, convertLetBindingToIIFE } from "./blockUtils";
+import { buildFunctionBody, buildFunctionBodyWithThisCapture, convertLetBindingToIIFE, extractParamNames } from "./blockUtils";
 
 // Re-export conversion utilities
 export {
@@ -414,10 +414,7 @@ export function parseStructDefinition(
 }
 
 function buildThisCaptureBody(params: string): string {
-  const paramNames = params
-    .split(",")
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
+  const paramNames = extractParamNames(params);
 
   if (paramNames.length === 0) {
     return "return {};";
@@ -427,10 +424,14 @@ function buildThisCaptureBody(params: string): string {
   return "return {" + properties + "};";
 }
 
-export function parseFunctionDeclaration(
+function parseFunctionSignature(
   input: string,
   start: number,
-): { declaration: string; end: number } | null {
+): {
+  fnName: string;
+  params: string;
+  idx: number;
+} | null {
   if (!isKeywordAt(input, start, "fn")) return null;
   let idx = skipWhitespace(input, start + 2);
 
@@ -455,18 +456,38 @@ export function parseFunctionDeclaration(
   if (input.slice(idx, idx + 2) !== "=>") return null;
   idx = skipWhitespace(input, idx + 2);
 
-  const bodyResult = parseFunctionBody(input, idx);
+  return { fnName, params, idx };
+}
+
+export function parseFunctionDeclaration(
+  input: string,
+  start: number,
+): { declaration: string; end: number } | null {
+  const sig = parseFunctionSignature(input, start);
+  if (!sig) return null;
+
+  const bodyResult = parseFunctionBody(input, sig.idx);
   if (!bodyResult) return null;
 
-  // Check if the body is just "this" - if so, create an object with params
   const trimmedBody = bodyResult.content.trim();
-  const functionBody =
-    trimmedBody === "this"
-      ? buildThisCaptureBody(params)
-      : buildFunctionBody(bodyResult.content);
+  const isBlockBody =
+    bodyResult.content.trim().startsWith("{") ||
+    bodyResult.content.includes(";");
+
+  let functionBody: string;
+  if (trimmedBody === "this") {
+    functionBody = buildThisCaptureBody(sig.params);
+  } else if (isBlockBody && (trimmedBody.endsWith("this") || trimmedBody.includes("this"))) {
+    functionBody = buildFunctionBodyWithThisCapture(
+      bodyResult.content,
+      sig.params,
+    );
+  } else {
+    functionBody = buildFunctionBody(bodyResult.content);
+  }
 
   const declaration =
-    "function " + fnName + "(" + params + ") { " + functionBody + " }";
+    "function " + sig.fnName + "(" + sig.params + ") { " + functionBody + " }";
 
   return { declaration, end: bodyResult.end };
 }

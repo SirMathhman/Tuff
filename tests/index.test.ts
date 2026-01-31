@@ -308,3 +308,9 @@ test("function returning this captures parameters as properties", () => {
     100,
   );
 });
+test("function returning this captures local variables in function body", () => {
+  assertInterpret(
+    "fn Wrapper() : Wrapper => { let field = 100; this } let value = Wrapper(); value.field",
+    100,
+  );
+});

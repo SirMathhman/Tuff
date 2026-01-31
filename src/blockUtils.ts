@@ -8,7 +8,9 @@ import { normalizeAndStripNumericTypes } from "./conversionUtils";
 type BlockReturn = {
   declarations: string[];
   returnExpr: string;
+  declaredVars: string[];
 };
+
 
 export function parseLetDeclaration(
   stmt: string,
@@ -50,34 +52,10 @@ export function parseLetDeclaration(
   return "let " + varName + " = " + cleanValue;
 }
 
-export function buildBlockReturn(blockContent: string): BlockReturn {
-  const statements = splitBlockStatements(blockContent);
-  if (statements.length === 0) {
-    return { declarations: [], returnExpr: "" };
-  }
-
-  const declarations: string[] = [];
-  const declaredVars = new Set<string>();
-  const lastStatement = statements[statements.length - 1];
-
-  // Process all statements except the last one
-  for (let i = 0; i < statements.length - 1; i++) {
-    const stmt = statements[i];
-    if (stmt.startsWith("let ")) {
-      const decl = parseLetDeclaration(stmt, declaredVars, false);
-      if (decl) {
-        declarations.push(decl);
-      }
-    } else {
-      // For non-let statements (like assignments), add them as-is
-      declarations.push(
-        normalizeAndStripNumericTypes(stmt.trim().replace(/;$/, "")),
-      );
-    }
-  }
-
-  // Process let statements in declarations for normalization
-  const normalizedDeclarations = declarations.map((decl) => {
+function normalizeDeclarations(
+  declarations: string[],
+): string[] {
+  return declarations.map((decl) => {
     if (decl.startsWith("let ")) {
       const match = decl.match(/^let\s+(\w+)\s*=\s*([\s\S]+)$/);
       if (!match) return decl;
@@ -85,10 +63,42 @@ export function buildBlockReturn(blockContent: string): BlockReturn {
       const normalizedValue = normalizeAndStripNumericTypes(value.trim());
       return "let " + varName + " = " + normalizedValue;
     }
-    // Non-let statements are already normalized above
     return decl;
   });
+}
 
+export function buildBlockReturn(blockContent: string): BlockReturn {
+  const statements = splitBlockStatements(blockContent);
+  if (statements.length === 0) {
+    return { declarations: [], returnExpr: "", declaredVars: [] };
+  }
+
+  const declarations: string[] = [];
+  const declaredVars: string[] = [];
+  const declaredVarsSet = new Set<string>();
+  const lastStatement = statements[statements.length - 1];
+
+  // Process all statements except the last one
+  for (let i = 0; i < statements.length - 1; i++) {
+    const stmt = statements[i];
+    if (stmt.startsWith("let ")) {
+      const decl = parseLetDeclaration(stmt, declaredVarsSet, false);
+      if (decl) {
+        declarations.push(decl);
+        // Extract variable name from the declaration
+        const varMatch = decl.match(/^let\s+(\w+)\s*=/);
+        if (varMatch) {
+          declaredVars.push(varMatch[1]);
+        }
+      }
+    } else {
+      declarations.push(
+        normalizeAndStripNumericTypes(stmt.trim().replace(/;$/, "")),
+      );
+    }
+  }
+
+  const normalizedDeclarations = normalizeDeclarations(declarations);
   const normalizedLastStatement = normalizeAndStripNumericTypes(
     lastStatement.trim().replace(/;$/, ""),
   );
@@ -96,17 +106,58 @@ export function buildBlockReturn(blockContent: string): BlockReturn {
   return {
     declarations: normalizedDeclarations,
     returnExpr: normalizedLastStatement,
+    declaredVars,
   };
 }
 
-export function buildFunctionBody(blockContent: string): string {
-  const { declarations, returnExpr } = buildBlockReturn(blockContent);
+function buildFunctionWithPrefix(
+  declarations: string[],
+  returnExpr: string,
+): string {
   const bodyPrefix = declarations.join("; ");
   if (!returnExpr) {
     return bodyPrefix ? bodyPrefix + ";" : "";
   }
   return bodyPrefix + (bodyPrefix ? "; " : "") + "return " + returnExpr + ";";
 }
+
+export function extractParamNames(params: string): string[] {
+  return params
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+}
+
+export function buildFunctionBody(blockContent: string): string {
+  const { declarations, returnExpr } = buildBlockReturn(blockContent);
+  return buildFunctionWithPrefix(declarations, returnExpr);
+}
+
+export function buildFunctionBodyWithThisCapture(
+  blockContent: string,
+  params: string,
+): string {
+  const { declarations, returnExpr, declaredVars } = buildBlockReturn(blockContent);
+  
+  // If the return expression is "this", capture all variables (params + locals)
+  if (returnExpr === "this") {
+    const paramNames = extractParamNames(params);
+    const allVars = [...paramNames, ...declaredVars];
+    
+    if (allVars.length === 0) {
+      const prefix = declarations.length > 0 ? declarations.join("; ") + "; " : "";
+      return prefix + "return {};";
+    }
+    
+    const properties = allVars.map((name) => name + ": " + name).join(", ");
+    const prefix = declarations.length > 0 ? declarations.join("; ") + "; " : "";
+    return prefix + "return {" + properties + "};";
+  }
+  
+  // Otherwise use normal function body building
+  return buildFunctionWithPrefix(declarations, returnExpr);
+}
+
 
 export function convertLetBindingToIIFE(blockContent: string): string {
   const { declarations, returnExpr } = buildBlockReturn(blockContent);
