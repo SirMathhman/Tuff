@@ -3,7 +3,7 @@ extern use path from path;
 
 // Simple compileTuffToJS function - takes in Tuff source and compileTuffToJSs it
 fn compileTuffToJS(source : String) : String => {
-  let mut result = source;
+  let mut result : String = source;
   let mut mutVariables = [];
   
   // First pass: collect all mut variable declarations

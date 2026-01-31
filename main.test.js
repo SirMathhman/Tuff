@@ -79,13 +79,14 @@ describe("compileTuffToJS", () => {
   });
 
   it("should remove return type annotations from functions", () => {
-    const source = "fn getValue() : String => { return \"hello\"; }";
+    const source = 'fn getValue() : String => { return "hello"; }';
     const result = compileTuffToJS(source);
-    expect(result).toBe("function getValue() { return \"hello\"; }");
+    expect(result).toBe('function getValue() { return "hello"; }');
   });
 
   it("should handle functions with parameters and return types", () => {
-    const source = "fn add(a : Number, b : Number) : Number => { return a + b; }";
+    const source =
+      "fn add(a : Number, b : Number) : Number => { return a + b; }";
     const result = compileTuffToJS(source);
     expect(result).toBe("function add(a, b) { return a + b; }");
   });
@@ -142,5 +143,23 @@ describe("compileTuffToJS", () => {
   it("should error on multiple reassignments without mut", () => {
     const source = "let x = 5;\nx = 10;\nx = 15;";
     expect(() => compileTuffToJS(source)).toThrow();
+  });
+
+  it("should remove type annotations from let declarations", () => {
+    const source = "let x : Number = 5;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let x = 5;");
+  });
+
+  it("should remove type annotations from mutable let declarations", () => {
+    const source = "let mut y : String = \"hello\";";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let y = \"hello\";");
+  });
+
+  it("should handle multiple local declarations with types", () => {
+    const source = "let x : Number = 5;\nlet y : String = \"test\";";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let x = 5;\nlet y = \"test\";");
   });
 });
