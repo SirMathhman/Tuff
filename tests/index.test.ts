@@ -264,3 +264,7 @@ test("interpret handles if without else followed by expression", () => {
 test("interpret handles while loop", () => {
   assertInterpret("let mut x = 0; while (x < 4) { x += 1; } x", 4);
 });
+
+test("interpret handles function definition without invocation", () => {
+  assertInterpret("fn get() : I32 => {}", 0);
+});

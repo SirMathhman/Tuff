@@ -381,6 +381,9 @@ function processDeclarations(rawDeclarations: string[]): string[] {
         ? refConverted
         : normalizeAndStripNumericTypes(refConverted);
       declarations.push("let " + varName + " = " + processedValue);
+    } else if (decl.trim().startsWith("function ")) {
+      // Don't normalize function declarations - push as-is
+      declarations.push(decl.trim());
     } else if (decl.trim().length > 0) {
       declarations.push(normalizeAndStripNumericTypes(decl));
     }
