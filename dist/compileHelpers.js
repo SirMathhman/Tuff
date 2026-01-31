@@ -24,6 +24,8 @@ function stripBraceWrappers(input) {
             }
             changed = true;
             inside = inside.trim();
+            // Only convert blocks with let bindings to IIFEs
+            // Blocks with just statements should be handled at a higher level
             if (inside.includes("let ") && inside.includes(";")) {
                 const iife = convertLetBindingToIIFE(inside);
                 const placeholder = "__IIFE_" + iifeCounter + "__";
@@ -31,7 +33,7 @@ function stripBraceWrappers(input) {
                 iifeCounter++;
                 return placeholder;
             }
-            // For empty blocks, return empty string
+            // For empty blocks or statement blocks, return empty string
             return inside;
         });
         result = newResult;
@@ -286,21 +288,34 @@ function buildBlockReturn(blockContent) {
     const declarations = [];
     const declaredVars = new Set();
     const lastStatement = statements[statements.length - 1];
-    (0, compiler_1.processLetStatements)(statements, (stmt) => {
-        const decl = parseLetDeclaration(stmt, declaredVars, false);
-        if (decl) {
-            declarations.push(decl);
+    // Process all statements except the last one
+    for (let i = 0; i < statements.length - 1; i++) {
+        const stmt = statements[i];
+        if (stmt.startsWith("let ")) {
+            const decl = parseLetDeclaration(stmt, declaredVars, false);
+            if (decl) {
+                declarations.push(decl);
+            }
         }
-    });
+        else {
+            // For non-let statements (like assignments), add them as-is
+            declarations.push(normalizeAndStripNumericTypes(stmt.trim().replace(/;$/, "")));
+        }
+    }
+    // Process let statements in declarations for normalization
     const normalizedDeclarations = declarations.map((decl) => {
-        const match = decl.match(/^let\s+(\w+)\s*=\s*([\s\S]+)$/);
-        if (!match)
-            return decl;
-        const [, varName, value] = match;
-        const normalizedValue = normalizeAndStripNumericTypes(value.trim());
-        return "let " + varName + " = " + normalizedValue;
+        if (decl.startsWith("let ")) {
+            const match = decl.match(/^let\s+(\w+)\s*=\s*([\s\S]+)$/);
+            if (!match)
+                return decl;
+            const [, varName, value] = match;
+            const normalizedValue = normalizeAndStripNumericTypes(value.trim());
+            return "let " + varName + " = " + normalizedValue;
+        }
+        // Non-let statements are already normalized above
+        return decl;
     });
-    const normalizedLastStatement = normalizeAndStripNumericTypes(lastStatement.trim());
+    const normalizedLastStatement = normalizeAndStripNumericTypes(lastStatement.trim().replace(/;$/, ""));
     return {
         declarations: normalizedDeclarations,
         returnExpr: normalizedLastStatement,

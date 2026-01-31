@@ -70,12 +70,16 @@ function splitBlockStatements(blockContent: string): string[] {
   return state.statements;
 }
 
-function processLetStatements(
-  statements: string[],
-  handler: (_stmt: string, _idx: number) => void,
-): Record<string, string> {
+function parseBlockStatements(blockContent: string): {
+  statements: string[];
+  variableTypes: Record<string, string>;
+  lastStatement: string;
+} {
+  const statements = splitBlockStatements(blockContent);
   const variableTypes: Record<string, string> = {};
-  for (let i = 0; i < statements.length - 1; i++) {
+
+  // Extract variable types from let statements
+  for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
     if (stmt.startsWith("let ")) {
       const match = stmt.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
@@ -89,32 +93,16 @@ function processLetStatements(
           variableTypes[varName] = "I32";
         }
       }
-      handler(stmt, i);
     }
   }
-  return variableTypes;
-}
 
-function extractVariableTypes(statements: string[]): Record<string, string> {
-  return processLetStatements(statements, () => {
-    // No-op handler for just extracting types
-  });
-}
-
-function parseBlockStatements(blockContent: string): {
-  statements: string[];
-  variableTypes: Record<string, string>;
-  lastStatement: string;
-} {
-  const statements = splitBlockStatements(blockContent);
-  const variableTypes = extractVariableTypes(statements);
   const lastStatement =
     statements.length > 0 ? statements[statements.length - 1] : "";
 
   return { statements, variableTypes, lastStatement };
 }
 
-export { parseBlockStatements, splitBlockStatements, processLetStatements };
+export { parseBlockStatements, splitBlockStatements };
 
 /** Validate type annotations and return used types. */
 export function validateAndStripTypeAnnotations(input: string): Set<string> {

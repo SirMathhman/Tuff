@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseBlockStatements = parseBlockStatements;
 exports.splitBlockStatements = splitBlockStatements;
-exports.processLetStatements = processLetStatements;
 exports.validateAndStripTypeAnnotations = validateAndStripTypeAnnotations;
 exports.validateExpressionResult = validateExpressionResult;
 exports.inferBlockExpressionType = inferBlockExpressionType;
@@ -63,9 +62,11 @@ function splitBlockStatements(blockContent) {
     flushBlockStatement(state);
     return state.statements;
 }
-function processLetStatements(statements, handler) {
+function parseBlockStatements(blockContent) {
+    const statements = splitBlockStatements(blockContent);
     const variableTypes = {};
-    for (let i = 0; i < statements.length - 1; i++) {
+    // Extract variable types from let statements
+    for (let i = 0; i < statements.length; i++) {
         const stmt = statements[i];
         if (stmt.startsWith("let ")) {
             const match = stmt.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
@@ -80,19 +81,8 @@ function processLetStatements(statements, handler) {
                     variableTypes[varName] = "I32";
                 }
             }
-            handler(stmt, i);
         }
     }
-    return variableTypes;
-}
-function extractVariableTypes(statements) {
-    return processLetStatements(statements, () => {
-        // No-op handler for just extracting types
-    });
-}
-function parseBlockStatements(blockContent) {
-    const statements = splitBlockStatements(blockContent);
-    const variableTypes = extractVariableTypes(statements);
     const lastStatement = statements.length > 0 ? statements[statements.length - 1] : "";
     return { statements, variableTypes, lastStatement };
 }

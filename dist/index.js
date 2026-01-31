@@ -98,6 +98,51 @@ function processFnDeclaration(remaining, declarations) {
     }
     return newRemaining;
 }
+function findNextBlockEnd(input, start) {
+    if (input[start] !== "{")
+        return -1;
+    let depth = 1;
+    let i = start + 1;
+    while (i < input.length && depth > 0) {
+        if (input[i] === "{")
+            depth++;
+        else if (input[i] === "}")
+            depth--;
+        i++;
+    }
+    return depth === 0 ? i - 1 : -1;
+}
+function processBlockStatements(blockContent, variableTypes, mutableVars, declarations) {
+    const { statements } = (0, compiler_1.parseBlockStatements)(blockContent);
+    for (const stmt of statements) {
+        if (stmt.startsWith("let ")) {
+            const processed = processSingleLetInTopLevel(stmt, variableTypes, mutableVars);
+            if (processed) {
+                declarations.push("let " + processed.varName + " = " + processed.cleanValue);
+            }
+        }
+        else if (stmt.trim().length > 0) {
+            const assignStmt = processAssignmentStatement(stmt, mutableVars);
+            if (assignStmt) {
+                declarations.push(assignStmt);
+            }
+        }
+    }
+}
+function handleTopLevelStatement(statement, variableTypes, mutableVars, declarations) {
+    if (statement.startsWith("let ")) {
+        const processed = processSingleLetInTopLevel(statement, variableTypes, mutableVars);
+        if (processed) {
+            declarations.push("let " + processed.varName + " = " + processed.cleanValue);
+        }
+    }
+    else {
+        const assignStmt = processAssignmentStatement(statement, mutableVars);
+        if (assignStmt) {
+            declarations.push(assignStmt);
+        }
+    }
+}
 function extractTopLevelStatements(input) {
     const declarations = [];
     const variableTypes = {};
@@ -105,28 +150,28 @@ function extractTopLevelStatements(input) {
     let remaining = input.trim();
     while (remaining.startsWith("let ") ||
         remaining.startsWith("fn ") ||
+        remaining.startsWith("{") ||
         /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining)) {
         if (remaining.startsWith("fn ")) {
             remaining = processFnDeclaration(remaining, declarations);
             continue;
         }
+        if (remaining.startsWith("{")) {
+            const blockEndIdx = findNextBlockEnd(remaining, 0);
+            if (blockEndIdx !== -1) {
+                const afterBlock = remaining.substring(blockEndIdx + 1).trim();
+                if (afterBlock.length > 0 && !afterBlock.startsWith(";")) {
+                    processBlockStatements(remaining.substring(1, blockEndIdx), variableTypes, mutableVars, declarations);
+                    remaining = afterBlock;
+                    continue;
+                }
+            }
+        }
         const semiIdx = findNextSemicolon(remaining);
         if (semiIdx === -1)
             break;
-        const statement = remaining.substring(0, semiIdx);
+        handleTopLevelStatement(remaining.substring(0, semiIdx), variableTypes, mutableVars, declarations);
         remaining = remaining.substring(semiIdx + 1).trim();
-        if (statement.startsWith("let ")) {
-            const processed = processSingleLetInTopLevel(statement, variableTypes, mutableVars);
-            if (processed) {
-                declarations.push("let " + processed.varName + " = " + processed.cleanValue);
-            }
-        }
-        else {
-            const assignStmt = processAssignmentStatement(statement, mutableVars);
-            if (assignStmt) {
-                declarations.push(assignStmt);
-            }
-        }
     }
     return { declarations, expression: remaining };
 }

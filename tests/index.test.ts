@@ -238,3 +238,7 @@ test("compile generates clean code without unreachable statements", () => {
 test("interpret supports assignment followed by expression", () => {
   assertInterpret("let mut x = 200; x += 100; x", 300);
 });
+
+test("interpret handles multiple assignments in a block", () => {
+  assertInterpret("let mut x = 100; { x = 200; x = 300; } x", 300);
+});
