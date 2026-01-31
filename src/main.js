@@ -1,3 +1,4 @@
 process.exit(Number((function() {
-  return 0;
+  let value = {field: 100};
+return value.field;
 })()));

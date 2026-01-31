@@ -284,3 +284,10 @@ test("interpret handles this.property assignment", () => {
 test("interpret handles empty struct definition", () => {
   assertInterpret("struct Empty {}", 0);
 });
+
+test("struct instantiation with field access", () => {
+  assertInterpret(
+    "struct Wrapper { field : I32 } let value = Wrapper { 100 }; value.field",
+    100,
+  );
+});

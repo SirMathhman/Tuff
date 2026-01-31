@@ -4,6 +4,7 @@ import {
   splitBlockStatements,
 } from "./compiler";
 import { updateStringState, type StringState } from "./stringState";
+import { handleStructInstantiation } from "./structUtils";
 
 /** Strip brace-wrapped expressions and convert let bindings to IIFEs. */
 function stripBraceWrappers(input: string): string {
@@ -328,7 +329,10 @@ function transformIfExpressions(input: string): string {
 }
 
 export function normalizeExpression(input: string): string {
-  return stripBraceWrappers(transformIfExpressions(input));
+  const [p, m] = handleStructInstantiation(input);
+  let r = stripBraceWrappers(transformIfExpressions(p));
+  for (const [k, v] of m) r = r.split(k).join(v);
+  return r;
 }
 
 export function stripNumericTypeSuffixes(input: string): string {
@@ -592,15 +596,7 @@ export function parseFunctionDeclaration(
 
 function convertLetBindingToIIFE(blockContent: string): string {
   const { declarations, returnExpr } = buildBlockReturn(blockContent);
-  if (!returnExpr) {
-    return "";
-  }
-
-  const functionBody =
-    declarations.join("; ") +
-    (declarations.length > 0 ? "; " : "") +
-    "return " +
-    returnExpr +
-    ";";
-  return "(function() { " + functionBody + " })()";
+  if (!returnExpr) return "";
+  const d = declarations.length > 0 ? declarations.join("; ") + "; " : "";
+  return "(function() { " + d + "return " + returnExpr + "; })()";
 }
