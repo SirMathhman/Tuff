@@ -13,6 +13,7 @@ import {
   convertMutableReference,
   convertPointerDereference,
   convertThisProperty,
+  convertThisTypeVarProperty,
   normalizeAndStripNumericTypes,
   normalizeExpression,
   parseFunctionDeclaration,
@@ -69,6 +70,7 @@ function processSingleLetInTopLevel(
   statement: string,
   variableTypes: Record<string, string>,
   mutableVars: Set<string>,
+  thisTypeVars: Set<string>,
 ): {
   varName: string;
   cleanValue: string;
@@ -79,6 +81,11 @@ function processSingleLetInTopLevel(
   }
 
   const { varName, declType, cleanValue, isMutable } = extracted;
+
+  // Track if this is a This type
+  if (declType === "This") {
+    thisTypeVars.add(varName);
+  }
 
   const referencedVar = findVariableReference(
     Object.keys(variableTypes),
@@ -198,57 +205,52 @@ function findNextBlockEnd(input: string, start: number): number {
   return depth === 0 ? i - 1 : -1;
 }
 
+type StatementContext = {
+  variableTypes: Record<string, string>;
+  mutableVars: Set<string>;
+  declarations: string[];
+  thisTypeVars: Set<string>;
+};
+
+function processStatement(statement: string, context: StatementContext): void {
+  if (statement.startsWith("let ")) {
+    const processed = processSingleLetInTopLevel(
+      statement,
+      context.variableTypes,
+      context.mutableVars,
+      context.thisTypeVars,
+    );
+    if (processed) {
+      context.declarations.push(
+        "let " + processed.varName + " = " + processed.cleanValue,
+      );
+    }
+  } else if (statement.trim().length > 0) {
+    const assignStmt = processAssignmentStatement(
+      statement,
+      context.mutableVars,
+    );
+    if (assignStmt) {
+      context.declarations.push(assignStmt);
+    }
+  }
+}
+
 function processBlockStatements(
   blockContent: string,
-  variableTypes: Record<string, string>,
-  mutableVars: Set<string>,
-  declarations: string[],
+  context: StatementContext,
 ): void {
   const { statements } = parseBlockStatements(blockContent);
   for (const stmt of statements) {
-    if (stmt.startsWith("let ")) {
-      const processed = processSingleLetInTopLevel(
-        stmt,
-        variableTypes,
-        mutableVars,
-      );
-      if (processed) {
-        declarations.push(
-          "let " + processed.varName + " = " + processed.cleanValue,
-        );
-      }
-    } else if (stmt.trim().length > 0) {
-      const assignStmt = processAssignmentStatement(stmt, mutableVars);
-      if (assignStmt) {
-        declarations.push(assignStmt);
-      }
-    }
+    processStatement(stmt, context);
   }
 }
 
 function handleTopLevelStatement(
   statement: string,
-  variableTypes: Record<string, string>,
-  mutableVars: Set<string>,
-  declarations: string[],
+  context: StatementContext,
 ): void {
-  if (statement.startsWith("let ")) {
-    const processed = processSingleLetInTopLevel(
-      statement,
-      variableTypes,
-      mutableVars,
-    );
-    if (processed) {
-      declarations.push(
-        "let " + processed.varName + " = " + processed.cleanValue,
-      );
-    }
-  } else {
-    const assignStmt = processAssignmentStatement(statement, mutableVars);
-    if (assignStmt) {
-      declarations.push(assignStmt);
-    }
-  }
+  processStatement(statement, context);
 }
 
 function handleTopLevelIf(
@@ -305,18 +307,20 @@ function handleTopLevelBlock(
   variableTypes: Record<string, string>,
   mutableVars: Set<string>,
   declarations: string[],
+  thisTypeVars: Set<string>,
 ): string | null {
   if (!remaining.startsWith("{")) return null;
   const blockEndIdx = findNextBlockEnd(remaining, 0);
   if (blockEndIdx !== -1) {
     const afterBlock = remaining.substring(blockEndIdx + 1).trim();
     if (afterBlock.length > 0 && !afterBlock.startsWith(";")) {
-      processBlockStatements(
-        remaining.substring(1, blockEndIdx),
+      const context: StatementContext = {
         variableTypes,
         mutableVars,
         declarations,
-      );
+        thisTypeVars,
+      };
+      processBlockStatements(remaining.substring(1, blockEndIdx), context);
       return afterBlock;
     }
   }
@@ -341,6 +345,7 @@ function tryHandleControlFlow(
   declarations: string[],
   variableTypes: Record<string, string>,
   mutableVars: Set<string>,
+  thisTypeVars: Set<string>,
 ): string | null {
   if (remaining.startsWith("fn ")) {
     return processFnDeclaration(remaining, declarations);
@@ -361,6 +366,7 @@ function tryHandleControlFlow(
     variableTypes,
     mutableVars,
     declarations,
+    thisTypeVars,
   );
   if (blockResult !== null) return blockResult;
 
@@ -370,10 +376,12 @@ function tryHandleControlFlow(
 function extractTopLevelStatements(input: string): {
   declarations: string[];
   expression: string;
+  thisTypeVars: Set<string>;
 } {
   const declarations: string[] = [];
   const variableTypes: Record<string, string> = {};
   const mutableVars: Set<string> = new Set();
+  const thisTypeVars: Set<string> = new Set();
   let remaining = input.trim();
 
   while (isTopLevelTrigger(remaining)) {
@@ -382,6 +390,7 @@ function extractTopLevelStatements(input: string): {
       declarations,
       variableTypes,
       mutableVars,
+      thisTypeVars,
     );
     if (controlFlowResult !== null) {
       remaining = controlFlowResult;
@@ -390,16 +399,17 @@ function extractTopLevelStatements(input: string): {
 
     const semiIdx = findNextSemicolon(remaining);
     if (semiIdx === -1) break;
-    handleTopLevelStatement(
-      remaining.substring(0, semiIdx),
+    const context: StatementContext = {
       variableTypes,
       mutableVars,
       declarations,
-    );
+      thisTypeVars,
+    };
+    handleTopLevelStatement(remaining.substring(0, semiIdx), context);
     remaining = remaining.substring(semiIdx + 1).trim();
   }
 
-  return { declarations, expression: remaining };
+  return { declarations, expression: remaining, thisTypeVars };
 }
 
 function processDeclarations(rawDeclarations: string[]): string[] {
@@ -427,16 +437,22 @@ function processDeclarations(rawDeclarations: string[]): string[] {
 }
 
 export function compile(input: string): string {
-  const { declarations: rawDeclarations, expression: rawExpression } =
-    extractTopLevelStatements(input);
+  const {
+    declarations: rawDeclarations,
+    expression: rawExpression,
+    thisTypeVars,
+  } = extractTopLevelStatements(input);
   const declarations = processDeclarations(rawDeclarations);
   let trimmed = normalizeExpression(stripComments(rawExpression).trim());
 
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
-  trimmed = convertThisProperty(
-    convertPointerDereference(
-      convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed)),
+  trimmed = convertThisTypeVarProperty(
+    convertThisProperty(
+      convertPointerDereference(
+        convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed)),
+      ),
     ),
+    thisTypeVars,
   );
   if (trimmed === "") {
     trimmed = "0";

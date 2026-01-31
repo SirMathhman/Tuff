@@ -1,7 +1,4 @@
-struct Point {
-    x : I32;
-    y : I32;
-}
-
-let point = Point { 3, 4 };
-point.x + point.y
+let x = 100;
+let temp : This = this;
+temp.x
+// This should return 100

@@ -297,3 +297,7 @@ test("struct instantiation with multiple fields", () => {
     7,
   );
 });
+
+test("interpret handles This type annotation with property access", () => {
+  assertInterpret("let x = 100; let temp : This = this; temp.x", 100);
+});
