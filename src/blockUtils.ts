@@ -317,18 +317,13 @@ function buildFunctionWithScope(
   const declarationStr = declarations.join("; ");
   const paramNames = extractParamNames(params);
 
-  // Build parameter assignments
-  let paramAssignments = "";
-  for (const p of paramNames) {
-    paramAssignments += p + ": " + p + ", ";
-  }
-
   // Create self-referential __scope to support nested function chains
+  const paramAssignments = paramNames
+    .map((p) => "__scope." + p + " = " + p)
+    .join("; ");
   const prefix =
     "let __scope = {this: null}; __scope.this = __scope; " +
-    paramAssignments +
-    paramNames.map((p) => "__scope." + p + " = " + p).join("; ") +
-    (paramNames.length > 0 ? "; " : "") +
+    (paramAssignments ? paramAssignments + "; " : "") +
     declarationStr +
     (declarationStr ? "; " : "");
   if (!returnExpr) {

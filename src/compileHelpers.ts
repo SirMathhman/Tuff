@@ -1,6 +1,7 @@
 import { updateStringState, type StringState } from "./stringState";
 import { handleStructInstantiation } from "./structUtils";
 import {
+  buildBlockReturn,
   buildFunctionBody,
   buildFunctionBodyWithThisCapture,
   convertLetBindingToIIFE,
@@ -513,25 +514,33 @@ export function parseFunctionDeclaration(
   if (!bodyResult) return null;
 
   const trimmedBody = bodyResult.content.trim();
+  // Check if originally a block: either the content is wrapped in braces
+  // or it contains semicolons or multiple statements
   const isBlockBody =
     bodyResult.content.trim().startsWith("{") ||
-    bodyResult.content.includes(";");
+    bodyResult.content.includes(";") ||
+    trimmedBody.includes("fn ") ||
+    trimmedBody.includes("let ");
 
   // Process nested function declarations in the body first
   const processedBody = processNestedFunctionDeclarations(bodyResult.content);
 
+  // Check what the function actually returns
   let functionBody: string;
   if (trimmedBody === "this") {
     functionBody = buildThisCaptureBody(sig.params);
-  } else if (
-    isBlockBody &&
-    (trimmedBody.endsWith("this") || trimmedBody.includes("this"))
-  ) {
-    functionBody = buildFunctionBodyWithThisCapture(
-      processedBody,
-      sig.params,
-      isNestedFunction,
-    );
+  } else if (isBlockBody) {
+    // For block bodies, parse to check if it returns "this"
+    const { returnExpr } = buildBlockReturn(processedBody);
+    if (returnExpr === "this") {
+      functionBody = buildFunctionBodyWithThisCapture(
+        processedBody,
+        sig.params,
+        isNestedFunction,
+      );
+    } else {
+      functionBody = buildFunctionBody(processedBody, sig.params);
+    }
   } else {
     functionBody = buildFunctionBody(processedBody, sig.params);
   }

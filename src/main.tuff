@@ -1,16 +1,12 @@
-fn a(ref : I32) => {
-    fn b() => {
-        fn c() => {
-            // this is scope of c, this.this is scope of b, this.this.this is scope of a
-            this.this.this.ref
-        }
-
-        c()
+fn Point(x : I32, y : I32) => {
+    fn manhattan() => {
+        x + y
     }
 
-    b()
+    this
 }
 
-a(100)
-// Should print out 100
+let point = Point(3, 4);
+point.manhattan()
 
+// This should have an exit code of 7

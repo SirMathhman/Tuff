@@ -131,70 +131,47 @@ function extractParamNames(params) {
         .map((p) => p.trim())
         .filter((p) => p.length > 0);
 }
-function rewriteNestedFunctionCalls(content, functionNames) {
-    if (functionNames.length === 0) {
-        return content;
+function findFunctionCallMatch(content, i, fnName) {
+    const nameIsAtBoundary = (i === 0 || !/[a-zA-Z0-9_.]/.test(content[i - 1])) &&
+        (i + fnName.length >= content.length ||
+            !/[a-zA-Z0-9_]/.test(content[i + fnName.length]));
+    if (!nameIsAtBoundary) {
+        return { foundCall: false };
     }
-    let result = "";
-    let i = 0;
-    while (i < content.length) {
-        let matched = false;
-        // Check for each function name at current position
-        for (const fnName of functionNames) {
-            // Check if we're at a word boundary and the function name starts here
-            if (content.slice(i, i + fnName.length) === fnName &&
-                (i === 0 || !/[a-zA-Z0-9_.]/.test(content[i - 1])) &&
-                (i + fnName.length >= content.length ||
-                    !/[a-zA-Z0-9_]/.test(content[i + fnName.length]))) {
-                // Found function name, check if it's followed by (
-                let j = i + fnName.length;
-                while (j < content.length && /\s/.test(content[j]))
-                    j++;
-                if (j < content.length && content[j] === "(") {
-                    // Check if this is a function DECLARATION (preceded by 'function' keyword)
-                    let k = i - 1;
-                    while (k >= 0 && /\s/.test(content[k]))
-                        k--;
-                    const isFunctionDeclaration = content
-                        .slice(Math.max(0, k - 7), k + 1)
-                        .endsWith("function");
-                    if (!isFunctionDeclaration) {
-                        // This is a function call - rewrite it
-                        result += fnName + ".call(this";
-                        // Find the closing paren, tracking nested parens
-                        j++;
-                        let parenDepth = 1;
-                        let args = "";
-                        while (j < content.length && parenDepth > 0) {
-                            if (content[j] === "(")
-                                parenDepth++;
-                            else if (content[j] === ")")
-                                parenDepth--;
-                            if (parenDepth > 0) {
-                                args += content[j];
-                            }
-                            j++;
-                        }
-                        // Add args if present
-                        if (args.trim()) {
-                            result += ", " + args;
-                        }
-                        result += ")";
-                        i = j;
-                        matched = true;
-                        break;
-                    }
-                }
-            }
-        }
-        if (!matched) {
-            result += content[i];
-            i++;
-        }
+    let j = i + fnName.length;
+    while (j < content.length && /\s/.test(content[j]))
+        j++;
+    if (j >= content.length || content[j] !== "(") {
+        return { foundCall: false };
     }
-    return result;
+    // Check if this is a function DECLARATION
+    let k = i - 1;
+    while (k >= 0 && /\s/.test(content[k]))
+        k--;
+    const isFunctionDeclaration = content
+        .slice(Math.max(0, k - 7), k + 1)
+        .endsWith("function");
+    if (isFunctionDeclaration) {
+        return { foundCall: false };
+    }
+    // Extract arguments
+    j++;
+    let parenDepth = 1;
+    let args = "";
+    while (j < content.length && parenDepth > 0) {
+        if (content[j] === "(")
+            parenDepth++;
+        else if (content[j] === ")")
+            parenDepth--;
+        if (parenDepth > 0) {
+            args += content[j];
+        }
+        j++;
+    }
+    return { foundCall: true, endPos: j, args };
 }
 function rewriteNestedFunctionCallsWithScopeVar(content, functionNames) {
+    var _a;
     if (functionNames.length === 0) {
         return content;
     }
@@ -203,44 +180,16 @@ function rewriteNestedFunctionCallsWithScopeVar(content, functionNames) {
     while (i < content.length) {
         let matched = false;
         for (const fnName of functionNames) {
-            if (content.slice(i, i + fnName.length) === fnName &&
-                (i === 0 || !/[a-zA-Z0-9_.]/.test(content[i - 1])) &&
-                (i + fnName.length >= content.length ||
-                    !/[a-zA-Z0-9_]/.test(content[i + fnName.length]))) {
-                let j = i + fnName.length;
-                while (j < content.length && /\s/.test(content[j]))
-                    j++;
-                if (j < content.length && content[j] === "(") {
-                    let k = i - 1;
-                    while (k >= 0 && /\s/.test(content[k]))
-                        k--;
-                    const isFunctionDeclaration = content
-                        .slice(Math.max(0, k - 7), k + 1)
-                        .endsWith("function");
-                    if (!isFunctionDeclaration) {
-                        result += fnName + ".call(__scope";
-                        j++;
-                        let parenDepth = 1;
-                        let args = "";
-                        while (j < content.length && parenDepth > 0) {
-                            if (content[j] === "(")
-                                parenDepth++;
-                            else if (content[j] === ")")
-                                parenDepth--;
-                            if (parenDepth > 0) {
-                                args += content[j];
-                            }
-                            j++;
-                        }
-                        if (args.trim()) {
-                            result += ", " + args;
-                        }
-                        result += ")";
-                        i = j;
-                        matched = true;
-                        break;
-                    }
+            const match = findFunctionCallMatch(content, i, fnName);
+            if (match.foundCall) {
+                result += fnName + ".call(__scope";
+                if ((_a = match.args) === null || _a === void 0 ? void 0 : _a.trim()) {
+                    result += ", " + match.args;
                 }
+                result += ")";
+                i = match.endPos || i + fnName.length;
+                matched = true;
+                break;
             }
         }
         if (!matched) {
@@ -274,16 +223,12 @@ function buildFunctionBody(blockContent, params = "") {
 function buildFunctionWithScope(declarations, returnExpr, params) {
     const declarationStr = declarations.join("; ");
     const paramNames = extractParamNames(params);
-    // Build parameter assignments
-    let paramAssignments = "";
-    for (const p of paramNames) {
-        paramAssignments += p + ": " + p + ", ";
-    }
     // Create self-referential __scope to support nested function chains
+    const paramAssignments = paramNames
+        .map((p) => "__scope." + p + " = " + p)
+        .join("; ");
     const prefix = "let __scope = {this: null}; __scope.this = __scope; " +
-        paramAssignments +
-        paramNames.map((p) => "__scope." + p + " = " + p).join("; ") +
-        (paramNames.length > 0 ? "; " : "") +
+        (paramAssignments ? paramAssignments + "; " : "") +
         declarationStr +
         (declarationStr ? "; " : "");
     if (!returnExpr) {
