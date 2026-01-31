@@ -9,7 +9,7 @@ type Result<T, X> = Ok<T> | Err<T>;
 fn collectMutVariables(source : String) : Array => {
   let mut mutVariables = [];
   let mut validationLines = source.split("\n");
-  for (let i in 0..validationLines.length) {
+  for (let mut i in 0..validationLines.length) {
     let mut line = validationLines[i];
     let letMutStr = "let" + " " + "mut" + " ";
     if (line.includes(letMutStr)) {
@@ -27,7 +27,7 @@ fn collectMutVariables(source : String) : Array => {
 // Helper: Validate that only mut variables are reassigned
 fn validateMutability(source : String, mutVariables : Array) : Result<String, String> => {
   let mut checkLines = source.split("\n");
-  for (let i in 0..checkLines.length) {
+  for (let mut i in 0..checkLines.length) {
     let mut line = checkLines[i];
     let trimmed = line.trim();
     let typeKeyword = "t" + "y" + "p" + "e";
@@ -42,7 +42,7 @@ fn validateMutability(source : String, mutVariables : Array) : Result<String, St
       if (!varName.includes(".") && !varName.includes("[")) {
         // Check if this variable is in mutVariables
         let mut found = 0;
-        for (let j in 0..mutVariables.length) {
+        for (let mut j in 0..mutVariables.length) {
           if (mutVariables[j] === varName) {
             found = 1;
           }
@@ -63,7 +63,7 @@ fn removeTypeDeclarations(source : String) : String => {
   let mut aliasLines = source.split("\n");
   let mut filteredLines = [];
   let mut bracketDepth = 0;
-  for (let i in 0..aliasLines.length) {
+  for (let mut i in 0..aliasLines.length) {
     let mut line = aliasLines[i];
     let trimmed = line.trim();
     let typeKeyword = "t" + "y" + "p" + "e";
@@ -76,7 +76,7 @@ fn removeTypeDeclarations(source : String) : String => {
       // Count braces on this struct declaration line
       let mut openCount = 0;
       let mut closeCount = 0;
-      for (let j in 0..line.length) {
+      for (let mut j in 0..line.length) {
         if (line.substring(j, j + 1) === openBrace) {
           openCount = openCount + 1;
         }
@@ -91,7 +91,7 @@ fn removeTypeDeclarations(source : String) : String => {
       // Remove lines while inside struct (tracking brace depth)
       let mut openCount = 0;
       let mut closeCount = 0;
-      for (let j in 0..line.length) {
+      for (let mut j in 0..line.length) {
         if (line.substring(j, j + 1) === openBrace) {
           openCount = openCount + 1;
         }
@@ -116,7 +116,7 @@ fn removeTypeDeclarations(source : String) : String => {
 fn transformExternUse(source : String) : String => {
   let mut transformLines = source.split("\n");
   let mut transformed = [];
-  for (let i in 0..transformLines.length) {
+  for (let mut i in 0..transformLines.length) {
     let mut line = transformLines[i];
     let searchTerm = "extern" + " " + "use";
     if (line.includes(searchTerm)) {
@@ -134,7 +134,7 @@ fn transformExternUse(source : String) : String => {
 fn transformFnKeyword(source : String) : String => {
   let mut fnLines = source.split("\n");
   let mut transformed = [];
-  for (let i in 0..fnLines.length) {
+  for (let mut i in 0..fnLines.length) {
     let mut line = fnLines[i];
     let trimmed = line.trimStart();
     let fnKeyword = "f" + "n";
@@ -180,7 +180,7 @@ fn removeArrowSyntax(source : String) : String => {
   let mut result = source;
   let mut lines = result.split("\n");
   let mut transformed = [];
-  for (let i in 0..lines.length) {
+  for (let mut i in 0..lines.length) {
     let mut line = lines[i];
     // Only remove ) => { when it appears after "function" keyword
     if (line.includes("function ")) {
@@ -219,7 +219,7 @@ fn removeGenericParameters(source : String) : String => {
           // Check if there's matching > between < and {
           let mut depth = 0;
           let mut matchingClose = -1;
-          for (let j in anglePos..bracePos) {
+          for (let mut j in anglePos..bracePos) {
             let char = result.substring(j, j + 1);
             if (char === openAngle) {
               depth = depth + 1;
@@ -410,16 +410,21 @@ fn addKindToStructInstantiation(source : String) : String => {
 fn transformForLoops(source : String) : String => {
   let mut forLines = source.split("\n");
   let mut transformed = [];
-  for (let idx in 0..forLines.length) {
+  for (let mut idx in 0..forLines.length) {
     let mut line = forLines[idx];
     let forStr = "for" + " ";
     if (line.includes(forStr + "(let ")) {
       // Check if this is a Rust-like for loop with " in "
       if (line.includes(" in ") && line.includes("..")) {
-        // Find the start: "for (let "
+        // Find the start: "for (let " or "for (let mut "
         let forStart = line.indexOf(forStr + "(let ");
         let letEnd = line.indexOf(" in ", forStart);
-        let varName = line.substring(forStart + 9, letEnd);
+        
+        // Extract variable name, handling both "let" and "let mut"
+        let afterFor = line.substring(forStart + 5);
+        let inIdx = afterFor.indexOf(" in ");
+        let beforeIn = afterFor.substring(0, inIdx);
+        let varName = beforeIn.replace("(let ", "").replace("mut ", "").trim();
         
         // Find the range: "0..10"
         let inPos = letEnd;
