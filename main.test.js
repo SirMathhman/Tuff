@@ -240,4 +240,28 @@ describe("compileTuffToJS", () => {
     const result = compileTuffToJS(source);
     expect(result).toBe("let x = 5;\n\nlet y = 10;");
   });
+
+  it("should remove generic type aliases", () => {
+    const source = "type Maybe<T> = T | null;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should handle multiple type parameters in type aliases", () => {
+    const source = "type Pair<A, B> = A | B;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should handle nested type parameters in type aliases", () => {
+    const source = "type Container<T<U>> = T<U> | null;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should preserve code around generic type aliases", () => {
+    const source = "let x = 5;\ntype Result<T> = T | Error;\nlet y = 10;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let x = 5;\n\nlet y = 10;");
+  });
 });

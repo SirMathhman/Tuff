@@ -2,7 +2,8 @@ extern use fs from fs;
 extern use path from path;
 
 struct Ok<T> { value : T; }
-type SampleAlias = String | String;
+struct Err<X> { err : X; }
+type Result<T, X> = Ok<T> | Err<T>;
 
 // Simple compileTuffToJS function - takes in Tuff source and compileTuffToJSs it
 fn compileTuffToJS(source : String) : String => {
