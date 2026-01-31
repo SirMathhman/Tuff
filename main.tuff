@@ -1,7 +1,7 @@
 extern use fs from fs;
 extern use path from path;
 
-type SampleAlias = String;
+type SampleAlias = String | String;
 
 // Simple compileTuffToJS function - takes in Tuff source and compileTuffToJSs it
 fn compileTuffToJS(source : String) : String => {

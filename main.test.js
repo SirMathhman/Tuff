@@ -180,4 +180,22 @@ describe("compileTuffToJS", () => {
     const result = compileTuffToJS(source);
     expect(result).toBe("let x = 5;\n\nlet y = 10;");
   });
+
+  it("should remove type disjunctions in type aliases", () => {
+    const source = "type Status = String | Number;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should handle multiple disjunctions in union types", () => {
+    const source = "type Value = String | Number | Boolean;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should preserve code around type disjunctions", () => {
+    const source = "let x = 5;\ntype Status = String | Number;\nlet y = 10;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let x = 5;\n\nlet y = 10;");
+  });
 });
