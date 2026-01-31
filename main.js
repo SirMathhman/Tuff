@@ -1,10 +1,29 @@
 const fs = require("fs");
 const path = require("path");
 
+
+
 // Simple compileTuffToJS function - takes in Tuff source and compileTuffToJSs it
 function compileTuffToJS(source) {
   let result = source;
   let mutVariables = [];
+  
+  // Remove custom keyword declarations first (before validation)
+  let aliasLines = result.split("\n");
+  let filteredLines = [];
+  for (let i = 0; i < aliasLines.length; i = i + 1) {
+    let line = aliasLines[i];
+    let trimmed = line.trim();
+    let typeKeyword = "t" + "y" + "p" + "e";
+    // Check if line starts with alias keyword
+    if (trimmed.indexOf(typeKeyword + " ") === 0) {
+      // Replace alias declarations with empty string to preserve blank lines
+      filteredLines.push("");
+    } else {
+      filteredLines.push(line);
+    }
+  }
+  result = filteredLines.join("\n");
   
   // First pass: collect all mut variable declarations
   let validationLines = result.split("\n");

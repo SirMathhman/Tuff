@@ -152,14 +152,32 @@ describe("compileTuffToJS", () => {
   });
 
   it("should remove type annotations from mutable let declarations", () => {
-    const source = "let mut y : String = \"hello\";";
+    const source = 'let mut y : String = "hello";';
     const result = compileTuffToJS(source);
-    expect(result).toBe("let y = \"hello\";");
+    expect(result).toBe('let y = "hello";');
   });
 
   it("should handle multiple local declarations with types", () => {
-    const source = "let x : Number = 5;\nlet y : String = \"test\";";
+    const source = 'let x : Number = 5;\nlet y : String = "test";';
     const result = compileTuffToJS(source);
-    expect(result).toBe("let x = 5;\nlet y = \"test\";");
+    expect(result).toBe('let x = 5;\nlet y = "test";');
+  });
+
+  it("should remove type alias declarations", () => {
+    const source = "type MyString = String;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should handle multiple type aliases", () => {
+    const source = "type MyString = String;\ntype MyNumber = Number;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("\n");
+  });
+
+  it("should preserve code around type aliases", () => {
+    const source = "let x = 5;\ntype MyString = String;\nlet y = 10;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let x = 5;\n\nlet y = 10;");
   });
 });

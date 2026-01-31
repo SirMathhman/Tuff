@@ -1,10 +1,29 @@
 extern use fs from fs;
 extern use path from path;
 
+type SampleAlias = String;
+
 // Simple compileTuffToJS function - takes in Tuff source and compileTuffToJSs it
 fn compileTuffToJS(source : String) : String => {
   let mut result : String = source;
   let mut mutVariables = [];
+  
+  // Remove custom keyword declarations first (before validation)
+  let mut aliasLines = result.split("\n");
+  let mut filteredLines = [];
+  for (let i in 0..aliasLines.length) {
+    let mut line = aliasLines[i];
+    let trimmed = line.trim();
+    let typeKeyword = "t" + "y" + "p" + "e";
+    // Check if line starts with alias keyword
+    if (trimmed.indexOf(typeKeyword + " ") === 0) {
+      // Replace alias declarations with empty string to preserve blank lines
+      filteredLines.push("");
+    } else {
+      filteredLines.push(line);
+    }
+  }
+  result = filteredLines.join("\n");
   
   // First pass: collect all mut variable declarations
   let mut validationLines = result.split("\n");
