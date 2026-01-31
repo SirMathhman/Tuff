@@ -1,3 +1,3 @@
 process.exit(Number((function() {
-  return 100;
+  return 0;
 })()));

@@ -229,6 +229,9 @@ export function compile(input: string): string {
   trimmed = convertPointerDereference(
     convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed)),
   );
+  if (trimmed === "") {
+    trimmed = "0";
+  }
   determineAndValidateType(trimmed, typesUsed);
 
   let compiled = "";

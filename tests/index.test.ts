@@ -182,6 +182,10 @@ test("interpret supports pointer with expression", () => {
   assertInterpret("let x = 42; let p : *I32 = x; *p + 8", 50);
 });
 
+test("interpret returns 0 for empty program", () => {
+  assertInterpret("", 0);
+});
+
 test("interpret ignores comments before expressions", () => {
   assertInterpret("// line comment\n/* block comment */\n100", 100);
 });
