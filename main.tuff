@@ -1,0 +1,33 @@
+const fs = require("fs");
+const path = require("path");
+
+// Get the path of the current file
+const sourceFile = __filename;
+
+// Define the destination file path (same directory with -copy suffix)
+const destinationFile = path.join(
+  path.dirname(sourceFile),
+  path.basename(sourceFile, path.extname(sourceFile)) +
+    "-copy" +
+    path.extname(sourceFile),
+);
+
+// Read the current file
+fs.readFile(sourceFile, "utf8", (err, data) => {
+  if (err) {
+    console.error("Error reading source file:", err);
+    process.exit(1);
+  }
+
+  // Write to the destination file
+  fs.writeFile(destinationFile, data, "utf8", (err) => {
+    if (err) {
+      console.error("Error writing destination file:", err);
+      process.exit(1);
+    }
+
+    console.log(`Successfully copied ${sourceFile} to ${destinationFile}`);
+  });
+});
+
+module.exports = { sourceFile, destinationFile };
