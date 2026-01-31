@@ -7,7 +7,7 @@
     "prepare": "husky install",
     "build": "tsc",
     "cpd": "pmd cpd src tests --language typescript --minimum-tokens 35",
-    "start": "bun ./src/index.ts && (bun ./src/main.js || true)",
+    "start": "bun ./src/index.ts && bun ./src/main.js || true",
     "watch": "nodemon --watch src --watch src/main.tuff --ext ts,tuff --exec npm start",
     "lint": "npm run lint:tsc && npm run lint:eslint",
     "lint:eslint": "eslint src tests",

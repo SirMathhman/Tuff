@@ -534,7 +534,11 @@ export function compileFile(inputPath: string, outputPath: string): void {
   const source = fs.readFileSync(inputPath, "utf-8");
   const compiled = compile(source);
   const wrapped =
-    "process.exit(Number((function() {\n  " + compiled + "\n})()));";
+    "const exitCode = Number((function() {\n  " +
+    compiled +
+    "\n})());\n" +
+    "console.log('Exit code: ' + exitCode);\n" +
+    "process.exit(exitCode);";
   fs.writeFileSync(outputPath, wrapped, "utf-8");
   console.log("Compiled " + inputPath + " to " + outputPath);
 }
