@@ -1,2 +1,3 @@
 npm run build
 npm run build
+powershell -ExecutionPolicy Bypass -File ./scripts/check-duplication.ps1

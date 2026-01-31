@@ -5,6 +5,58 @@ const path = require("path");
 
 
 
+// Helper: Extract variable name from let or let declaration
+function extractVarNameFromLet(trimmed) {
+  let letMutStr = "let" + " " + "mut" + " ";
+  let afterLet = "";
+  let offset = 0;
+  
+  if (trimmed.indexOf(letMutStr) === 0) {
+    afterLet = trimmed.substring(8);
+    offset = 8;
+  } else {
+    afterLet = trimmed.substring(4);
+    offset = 4;
+  }
+  
+  let spaceIdx = afterLet.indexOf(" ");
+  let colonIdx = afterLet.indexOf(":");
+  let endIdx = spaceIdx;
+  
+  if (colonIdx !== -1 && (colonIdx < spaceIdx || spaceIdx === -1)) {
+    endIdx = colonIdx;
+  }
+  if (endIdx === -1) {
+    endIdx = afterLet.length;
+  }
+  
+  return afterLet.substring(0, endIdx).trim();
+}
+
+// Helper: Find matching closing angle bracket for an opening one
+function findMatchingAngleBracket(source, startPos) {
+  let openAngle = "<";
+  let closeAngle = ">";
+  let depth = 1;
+  let pos = startPos + 1;
+  let matchingClose = -1;
+  
+  while (pos < source.length && depth > 0) {
+    let char = source.substring(pos, pos + 1);
+    if (char === openAngle) {
+      depth = depth + 1;
+    } else if (char === closeAngle) {
+      depth = depth - 1;
+      if (depth === 0) {
+        matchingClose = pos;
+      }
+    }
+    pos = pos + 1;
+  }
+  
+  return matchingClose;
+}
+
 // Helper: Collect all mut variable declarations
 function collectMutVariables(source) {
   let mutVariables = [];
@@ -106,37 +158,9 @@ function validateNoShadowing(source) {
       if ((inFunctionBody === 1 && scopeDepth === 1) || (inFunctionBody === 0 && scopeDepth === 0)) {
         // Check for let declarations (both let and let mut)
         let letStr = "let" + " ";
-        let letMutStr = "let" + " " + "mut" + " ";
         if (trimmed.indexOf(letStr) === 0) {
-        // Extract variable name
-        let varName = "";
-        if (trimmed.indexOf(letMutStr) === 0) {
-          // let x = ...
-          let afterLet = trimmed.substring(8);
-          let spaceIdx = afterLet.indexOf(" ");
-          let colonIdx = afterLet.indexOf(":");
-          let endIdx = spaceIdx;
-          if (colonIdx !== -1 && (colonIdx < spaceIdx || spaceIdx === -1)) {
-            endIdx = colonIdx;
-          }
-          if (endIdx === -1) {
-            endIdx = afterLet.length;
-          }
-          varName = afterLet.substring(0, endIdx).trim();
-        } else {
-          // let x = ...
-          let afterLet = trimmed.substring(4);
-          let spaceIdx = afterLet.indexOf(" ");
-          let colonIdx = afterLet.indexOf(":");
-          let endIdx = spaceIdx;
-          if (colonIdx !== -1 && (colonIdx < spaceIdx || spaceIdx === -1)) {
-            endIdx = colonIdx;
-          }
-          if (endIdx === -1) {
-            endIdx = afterLet.length;
-          }
-          varName = afterLet.substring(0, endIdx).trim();
-        }
+        // Extract variable name using helper
+        let varName = extractVarNameFromLet(trimmed);
         
         // Check if variable.kind === "already" declared in this scope
         let alreadyDeclared = 0;
@@ -237,22 +261,8 @@ function transformTypedArrayLiterals(source) {
         newResult = newResult + result.substring(i);
         i = result.length;
       } else {
-        // Find matching >
-        let depth = 1;
-        let matchingClose = -1;
-        let searchPos = anglePos + 1;
-        while (searchPos < result.length && depth > 0) {
-          let char = result.substring(searchPos, searchPos + 1);
-          if (char === openAngle) {
-            depth = depth + 1;
-          } else if (char === closeAngle) {
-            depth = depth - 1;
-            if (depth === 0) {
-              matchingClose = searchPos;
-            }
-          }
-          searchPos = searchPos + 1;
-        }
+        // Find matching > using helper
+        let matchingClose = findMatchingAngleBracket(result, anglePos);
         
         if (matchingClose !== -1) {
           // Check if immediately followed by []
@@ -539,20 +549,14 @@ function transformIsOperator(source) {
         }
         let typeName = result.substring(typeStart, typeEnd);
         
-        // Skip generic type parameters if present
+        // Skip generic type parameters if present using helper
         let afterType = typeEnd;
         if (result.substring(typeEnd, typeEnd + 1) === "<") {
-          // Find matching >
-          let depth = 1;
-          afterType = typeEnd + 1;
-          while (afterType < result.length && depth > 0) {
-            let ch = result.substring(afterType, afterType + 1);
-            if (ch === "<") {
-              depth = depth + 1;
-            } else if (ch === ">") {
-              depth = depth - 1;
-            }
-            afterType = afterType + 1;
+          let matchingClose = findMatchingAngleBracket(result, typeEnd);
+          if (matchingClose !== -1) {
+            afterType = matchingClose + 1;
+          } else {
+            afterType = typeEnd + 1;
           }
         }
         
