@@ -123,14 +123,27 @@ function processAssignmentStatement(
   statement: string,
   mutableVars: Set<string>,
 ): string {
-  const assignMatch = statement.match(
-    /^(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/,
+  let varName: string;
+  let operator: string;
+  let value: string;
+
+  // Handle this.varName assignments
+  const thisAssignMatch = statement.match(
+    /^this\.\s*(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/,
   );
-  if (!assignMatch) {
-    return "";
+  if (thisAssignMatch) {
+    [, varName, operator, value] = thisAssignMatch;
+  } else {
+    // Handle regular varName assignments
+    const assignMatch = statement.match(
+      /^(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/,
+    );
+    if (!assignMatch) {
+      return "";
+    }
+    [, varName, operator, value] = assignMatch;
   }
 
-  const [, varName, operator, value] = assignMatch;
   if (!mutableVars.has(varName)) {
     throw new Error(
       "Cannot assign to immutable variable '" +
@@ -302,6 +315,7 @@ function isTopLevelTrigger(remaining: string): boolean {
     remaining.startsWith("{") ||
     remaining.startsWith("if") ||
     remaining.startsWith("while") ||
+    remaining.startsWith("this.") ||
     /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining)
   );
 }
