@@ -1,23 +1,16 @@
-fn Outer() => {
-    fn Inner() : Outer => {
-        /*
-        The word "this" here is ambiguous in some languages
-        because we don't know what "this' means.
+fn a(ref : I32) => {
+    fn b() => {
+        fn c() => {
+            // this is scope of c, this.this is scope of b, this.this.this is scope of a
+            this.this.this.ref
+        }
 
-        A standalone "this" would imply an inner class, conceptually,
-        so this.this is used to refer to the outer scope.
-        */
-
-        let innerScope : Inner = this;
-        let outerScope : Outer = innerScope.this;
-        outerScope
+        c()
     }
 
-    fn get() => 100;
-
-    this
+    b()
 }
 
-let obj : Outer = Outer();
-let outerScope : Outer = obj.Inner();
-outerScope.get() // This should become 100
+a(100)
+// Should print out 100
+

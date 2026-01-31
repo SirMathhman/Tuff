@@ -131,43 +131,205 @@ function extractParamNames(params) {
         .map((p) => p.trim())
         .filter((p) => p.length > 0);
 }
-function buildFunctionBody(blockContent) {
-    const { declarations, returnExpr } = buildBlockReturn(blockContent);
+function rewriteNestedFunctionCalls(content, functionNames) {
+    if (functionNames.length === 0) {
+        return content;
+    }
+    let result = "";
+    let i = 0;
+    while (i < content.length) {
+        let matched = false;
+        // Check for each function name at current position
+        for (const fnName of functionNames) {
+            // Check if we're at a word boundary and the function name starts here
+            if (content.slice(i, i + fnName.length) === fnName &&
+                (i === 0 || !/[a-zA-Z0-9_.]/.test(content[i - 1])) &&
+                (i + fnName.length >= content.length ||
+                    !/[a-zA-Z0-9_]/.test(content[i + fnName.length]))) {
+                // Found function name, check if it's followed by (
+                let j = i + fnName.length;
+                while (j < content.length && /\s/.test(content[j]))
+                    j++;
+                if (j < content.length && content[j] === "(") {
+                    // Check if this is a function DECLARATION (preceded by 'function' keyword)
+                    let k = i - 1;
+                    while (k >= 0 && /\s/.test(content[k]))
+                        k--;
+                    const isFunctionDeclaration = content
+                        .slice(Math.max(0, k - 7), k + 1)
+                        .endsWith("function");
+                    if (!isFunctionDeclaration) {
+                        // This is a function call - rewrite it
+                        result += fnName + ".call(this";
+                        // Find the closing paren, tracking nested parens
+                        j++;
+                        let parenDepth = 1;
+                        let args = "";
+                        while (j < content.length && parenDepth > 0) {
+                            if (content[j] === "(")
+                                parenDepth++;
+                            else if (content[j] === ")")
+                                parenDepth--;
+                            if (parenDepth > 0) {
+                                args += content[j];
+                            }
+                            j++;
+                        }
+                        // Add args if present
+                        if (args.trim()) {
+                            result += ", " + args;
+                        }
+                        result += ")";
+                        i = j;
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!matched) {
+            result += content[i];
+            i++;
+        }
+    }
+    return result;
+}
+function rewriteNestedFunctionCallsWithScopeVar(content, functionNames) {
+    if (functionNames.length === 0) {
+        return content;
+    }
+    let result = "";
+    let i = 0;
+    while (i < content.length) {
+        let matched = false;
+        for (const fnName of functionNames) {
+            if (content.slice(i, i + fnName.length) === fnName &&
+                (i === 0 || !/[a-zA-Z0-9_.]/.test(content[i - 1])) &&
+                (i + fnName.length >= content.length ||
+                    !/[a-zA-Z0-9_]/.test(content[i + fnName.length]))) {
+                let j = i + fnName.length;
+                while (j < content.length && /\s/.test(content[j]))
+                    j++;
+                if (j < content.length && content[j] === "(") {
+                    let k = i - 1;
+                    while (k >= 0 && /\s/.test(content[k]))
+                        k--;
+                    const isFunctionDeclaration = content
+                        .slice(Math.max(0, k - 7), k + 1)
+                        .endsWith("function");
+                    if (!isFunctionDeclaration) {
+                        result += fnName + ".call(__scope";
+                        j++;
+                        let parenDepth = 1;
+                        let args = "";
+                        while (j < content.length && parenDepth > 0) {
+                            if (content[j] === "(")
+                                parenDepth++;
+                            else if (content[j] === ")")
+                                parenDepth--;
+                            if (parenDepth > 0) {
+                                args += content[j];
+                            }
+                            j++;
+                        }
+                        if (args.trim()) {
+                            result += ", " + args;
+                        }
+                        result += ")";
+                        i = j;
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!matched) {
+            result += content[i];
+            i++;
+        }
+    }
+    return result;
+}
+function buildFunctionBody(blockContent, params = "") {
+    const { declarations, returnExpr, declaredFunctions } = buildBlockReturn(blockContent);
+    // If function has nested functions, rewrite their calls to propagate scope
+    if (declaredFunctions.length > 0) {
+        const paramNames = extractParamNames(params);
+        // Always use __scope for nested function calls
+        const rewrittenExpr = rewriteNestedFunctionCallsWithScopeVar(returnExpr, declaredFunctions);
+        const rewrittenDeclarations = declarations.map((decl) => {
+            return rewriteNestedFunctionCallsWithScopeVar(decl, declaredFunctions);
+        });
+        if (paramNames.length > 0) {
+            // Function has parameters - create __scope with parameter captures
+            return buildFunctionWithScope(rewrittenDeclarations, rewrittenExpr, params);
+        }
+        else {
+            // Function has no parameters - create __scope that chains to parent
+            return buildFunctionWithParentScope(rewrittenDeclarations, rewrittenExpr);
+        }
+    }
     return buildFunctionWithPrefix(declarations, returnExpr);
+}
+function buildFunctionWithScope(declarations, returnExpr, params) {
+    const declarationStr = declarations.join("; ");
+    const paramNames = extractParamNames(params);
+    // Build parameter assignments
+    let paramAssignments = "";
+    for (const p of paramNames) {
+        paramAssignments += p + ": " + p + ", ";
+    }
+    // Create self-referential __scope to support nested function chains
+    const prefix = "let __scope = {this: null}; __scope.this = __scope; " +
+        paramAssignments +
+        paramNames.map((p) => "__scope." + p + " = " + p).join("; ") +
+        (paramNames.length > 0 ? "; " : "") +
+        declarationStr +
+        (declarationStr ? "; " : "");
+    if (!returnExpr) {
+        return prefix;
+    }
+    return prefix + "return " + returnExpr + ";";
+}
+function buildFunctionWithParentScope(declarations, returnExpr) {
+    const declarationStr = declarations.join("; ");
+    const prefix = "let __scope = {this: this}; " +
+        declarationStr +
+        (declarationStr ? "; " : "");
+    if (!returnExpr) {
+        return prefix;
+    }
+    return prefix + "return " + returnExpr + ";";
+}
+function buildSelfReferencingThisReturn(properties) {
+    if (properties.length === 0) {
+        return "let o = {}; o.this = o; return o;";
+    }
+    const props = properties.map((name) => name + ": " + name).join(", ");
+    return "let o = {" + props + "}; o.this = o; return o;";
+}
+function buildRegularThisReturn(properties) {
+    if (properties.length === 0) {
+        return "return {};";
+    }
+    const props = properties.map((name) => name + ": " + name).join(", ");
+    return "return {" + props + "};";
 }
 function buildFunctionBodyWithThisCapture(blockContent, params, isNestedFunction = false) {
     const { declarations, returnExpr, declaredVars, declaredFunctions } = buildBlockReturn(blockContent);
-    // If the return expression is "this", capture all variables (params + locals)
-    if (returnExpr === "this") {
-        const paramNames = extractParamNames(params);
-        const allVars = [...paramNames, ...declaredVars, ...declaredFunctions];
-        // For nested functions returning this, also capture parent's this
-        if (isNestedFunction) {
-            allVars.push("this");
-        }
-        const prefix = declarations.length > 0 ? declarations.join("; ") + "; " : "";
-        // If function contains nested functions, create self-referencing object
-        // so nested functions can access parent scope via this.this pattern
-        if (declaredFunctions.length > 0) {
-            if (allVars.length === 0) {
-                return (prefix +
-                    "let o = {}; o.this = o; return o;");
-            }
-            const properties = allVars.map((name) => name + ": " + name).join(", ");
-            return (prefix +
-                "let o = {" +
-                properties +
-                "}; o.this = o; return o;");
-        }
-        // Normal case: no nested functions
-        if (allVars.length === 0) {
-            return prefix + "return {};";
-        }
-        const properties = allVars.map((name) => name + ": " + name).join(", ");
-        return prefix + "return {" + properties + "};";
+    if (returnExpr !== "this") {
+        return buildFunctionWithPrefix(declarations, returnExpr);
     }
-    // Otherwise use normal function body building
-    return buildFunctionWithPrefix(declarations, returnExpr);
+    const prefix = declarations.length > 0 ? declarations.join("; ") + "; " : "";
+    const paramNames = extractParamNames(params);
+    const allVars = [...paramNames, ...declaredVars, ...declaredFunctions];
+    if (isNestedFunction) {
+        allVars.push("this");
+    }
+    if (declaredFunctions.length > 0) {
+        return prefix + buildSelfReferencingThisReturn(allVars);
+    }
+    return prefix + buildRegularThisReturn(allVars);
 }
 function convertLetBindingToIIFE(blockContent) {
     const { declarations, returnExpr } = buildBlockReturn(blockContent);

@@ -340,3 +340,10 @@ test("nested function can access outer function scope via this.this", () => {
     100,
   );
 });
+
+test("deeply nested function can access grandparent scope via this.this.this", () => {
+  assertInterpret(
+    "fn a(ref : I32) => { fn b() => { fn c() => { this.this.this.ref } c() } b() } a(100)",
+    100,
+  );
+});

@@ -187,14 +187,172 @@ export function extractParamNames(params: string): string[] {
     .filter((p) => p.length > 0);
 }
 
-export function buildFunctionBody(blockContent: string): string {
-  const { declarations, returnExpr } = buildBlockReturn(blockContent);
+function findFunctionCallMatch(
+  content: string,
+  i: number,
+  fnName: string,
+): { foundCall: boolean; endPos?: number; args?: string } {
+  const nameIsAtBoundary =
+    (i === 0 || !/[a-zA-Z0-9_.]/.test(content[i - 1])) &&
+    (i + fnName.length >= content.length ||
+      !/[a-zA-Z0-9_]/.test(content[i + fnName.length]));
+
+  if (!nameIsAtBoundary) {
+    return { foundCall: false };
+  }
+
+  let j = i + fnName.length;
+  while (j < content.length && /\s/.test(content[j])) j++;
+
+  if (j >= content.length || content[j] !== "(") {
+    return { foundCall: false };
+  }
+
+  // Check if this is a function DECLARATION
+  let k = i - 1;
+  while (k >= 0 && /\s/.test(content[k])) k--;
+  const isFunctionDeclaration = content
+    .slice(Math.max(0, k - 7), k + 1)
+    .endsWith("function");
+
+  if (isFunctionDeclaration) {
+    return { foundCall: false };
+  }
+
+  // Extract arguments
+  j++;
+  let parenDepth = 1;
+  let args = "";
+  while (j < content.length && parenDepth > 0) {
+    if (content[j] === "(") parenDepth++;
+    else if (content[j] === ")") parenDepth--;
+
+    if (parenDepth > 0) {
+      args += content[j];
+    }
+    j++;
+  }
+
+  return { foundCall: true, endPos: j, args };
+}
+
+function rewriteNestedFunctionCallsWithScopeVar(
+  content: string,
+  functionNames: string[],
+): string {
+  if (functionNames.length === 0) {
+    return content;
+  }
+
+  let result = "";
+  let i = 0;
+
+  while (i < content.length) {
+    let matched = false;
+
+    for (const fnName of functionNames) {
+      const match = findFunctionCallMatch(content, i, fnName);
+      if (match.foundCall) {
+        result += fnName + ".call(__scope";
+        if (match.args?.trim()) {
+          result += ", " + match.args;
+        }
+        result += ")";
+        i = match.endPos || i + fnName.length;
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched) {
+      result += content[i];
+      i++;
+    }
+  }
+
+  return result;
+}
+
+export function buildFunctionBody(
+  blockContent: string,
+  params: string = "",
+): string {
+  const { declarations, returnExpr, declaredFunctions } =
+    buildBlockReturn(blockContent);
+
+  // If function has nested functions, rewrite their calls to propagate scope
+  if (declaredFunctions.length > 0) {
+    const paramNames = extractParamNames(params);
+
+    // Always use __scope for nested function calls
+    const rewrittenExpr = rewriteNestedFunctionCallsWithScopeVar(
+      returnExpr,
+      declaredFunctions,
+    );
+    const rewrittenDeclarations = declarations.map((decl) => {
+      return rewriteNestedFunctionCallsWithScopeVar(decl, declaredFunctions);
+    });
+
+    if (paramNames.length > 0) {
+      // Function has parameters - create __scope with parameter captures
+      return buildFunctionWithScope(
+        rewrittenDeclarations,
+        rewrittenExpr,
+        params,
+      );
+    } else {
+      // Function has no parameters - create __scope that chains to parent
+      return buildFunctionWithParentScope(rewrittenDeclarations, rewrittenExpr);
+    }
+  }
+
   return buildFunctionWithPrefix(declarations, returnExpr);
 }
 
-function buildSelfReferencingThisReturn(
-  properties: string[],
+function buildFunctionWithScope(
+  declarations: string[],
+  returnExpr: string,
+  params: string,
 ): string {
+  const declarationStr = declarations.join("; ");
+  const paramNames = extractParamNames(params);
+
+  // Build parameter assignments
+  let paramAssignments = "";
+  for (const p of paramNames) {
+    paramAssignments += p + ": " + p + ", ";
+  }
+
+  // Create self-referential __scope to support nested function chains
+  const prefix =
+    "let __scope = {this: null}; __scope.this = __scope; " +
+    paramAssignments +
+    paramNames.map((p) => "__scope." + p + " = " + p).join("; ") +
+    (paramNames.length > 0 ? "; " : "") +
+    declarationStr +
+    (declarationStr ? "; " : "");
+  if (!returnExpr) {
+    return prefix;
+  }
+  return prefix + "return " + returnExpr + ";";
+}
+
+function buildFunctionWithParentScope(
+  declarations: string[],
+  returnExpr: string,
+): string {
+  const declarationStr = declarations.join("; ");
+  const prefix =
+    "let __scope = {this: this}; " +
+    declarationStr +
+    (declarationStr ? "; " : "");
+  if (!returnExpr) {
+    return prefix;
+  }
+  return prefix + "return " + returnExpr + ";";
+}
+
+function buildSelfReferencingThisReturn(properties: string[]): string {
   if (properties.length === 0) {
     return "let o = {}; o.this = o; return o;";
   }
@@ -222,8 +380,7 @@ export function buildFunctionBodyWithThisCapture(
     return buildFunctionWithPrefix(declarations, returnExpr);
   }
 
-  const prefix =
-    declarations.length > 0 ? declarations.join("; ") + "; " : "";
+  const prefix = declarations.length > 0 ? declarations.join("; ") + "; " : "";
   const paramNames = extractParamNames(params);
   const allVars = [...paramNames, ...declaredVars, ...declaredFunctions];
 

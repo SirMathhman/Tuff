@@ -533,7 +533,7 @@ export function parseFunctionDeclaration(
       isNestedFunction,
     );
   } else {
-    functionBody = buildFunctionBody(processedBody);
+    functionBody = buildFunctionBody(processedBody, sig.params);
   }
 
   const declaration =

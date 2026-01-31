@@ -427,7 +427,7 @@ function parseFunctionDeclaration(input, start, isNestedFunction = false) {
         functionBody = (0, blockUtils_1.buildFunctionBodyWithThisCapture)(processedBody, sig.params, isNestedFunction);
     }
     else {
-        functionBody = (0, blockUtils_1.buildFunctionBody)(processedBody);
+        functionBody = (0, blockUtils_1.buildFunctionBody)(processedBody, sig.params);
     }
     const declaration = "function " + sig.fnName + "(" + sig.params + ") { " + functionBody + " }";
     return { declaration, end: bodyResult.end };
