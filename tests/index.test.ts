@@ -138,3 +138,11 @@ test("interpret returns 1 for true, 0 for false", () => {
   expect(interpret("let x : Bool = true; x")).toBe(1);
   expect(interpret("let x : Bool = false; x")).toBe(0);
 });
+
+test("interpret converts character literals to UTF-8 codes", () => {
+  expect(interpret("let a : Char = 'a'; a")).toBe(97);
+});
+
+test("interpret supports character literals in expressions", () => {
+  expect(interpret("'z'")).toBe(122);
+});

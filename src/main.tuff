@@ -1,9 +1,2 @@
-fn get() : I32 => {
-    let y = if (true) {
-        let z = 100; 
-        z
-    } else 5;
-    y
-}
-
-get()
+let a : Char = 'a';
+a

@@ -8,6 +8,7 @@ import {
   determineAndValidateType,
 } from "./compiler";
 import {
+  convertCharLiteralsToUTF8,
   normalizeAndStripNumericTypes,
   normalizeExpression,
   parseFunctionDeclaration,
@@ -152,7 +153,7 @@ export function compile(input: string): string {
   let trimmed = normalizeExpression(rawExpression.trim());
 
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
-  trimmed = stripNumericTypeSuffixes(trimmed);
+  trimmed = convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed));
   determineAndValidateType(trimmed, typesUsed);
 
   let compiled = "";

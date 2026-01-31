@@ -237,8 +237,16 @@ export function stripNumericTypeSuffixes(input: string): string {
   );
 }
 
+export function convertCharLiteralsToUTF8(input: string): string {
+  return input.replace(/'(.)'/g, (match, char) => {
+    return String(char.charCodeAt(0));
+  });
+}
+
 export function normalizeAndStripNumericTypes(input: string): string {
-  return stripNumericTypeSuffixes(normalizeExpression(input));
+  return convertCharLiteralsToUTF8(
+    stripNumericTypeSuffixes(normalizeExpression(input)),
+  );
 }
 
 function readIdentifier(
