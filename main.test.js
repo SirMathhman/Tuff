@@ -264,4 +264,29 @@ describe("compileTuffToJS", () => {
     const result = compileTuffToJS(source);
     expect(result).toBe("let x = 5;\n\nlet y = 10;");
   });
+
+  it("should remove type parameters from struct instantiation", () => {
+    const source = 'let result = Err<String> { err : "Sample" };';
+    const result = compileTuffToJS(source);
+    expect(result).toBe('let result = Err { err : "Sample" };');
+  });
+
+  it("should handle multiple type parameters in struct instantiation", () => {
+    const source =
+      'let pair = Pair<String, Number> { first : "a", second : 42 };';
+    const result = compileTuffToJS(source);
+    expect(result).toBe('let pair = Pair { first : "a", second : 42 };');
+  });
+
+  it("should handle nested generics in struct instantiation", () => {
+    const source = "let container = Container<Vec<T>> { data : items };";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let container = Container { data : items };");
+  });
+
+  it("should handle multiple struct instantiations on one line", () => {
+    const source = "let x = Ok<T> { value : 5 }; let y = Err<E> { err : msg };";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let x = Ok { value : 5 }; let y = Err { err : msg };");
+  });
 });

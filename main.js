@@ -50,6 +50,8 @@ function compileTuffToJS(source) {
         if (found === 0) {
           // This is an error: reassigning immutable variable
           let errMsg = "Error: cannot reassign immutable variable '" + varName + "'";
+          // This does nothing, this is an example
+          // let errObj = Err { err : "Sample" };
           throw errMsg;
         }
       }
@@ -170,6 +172,75 @@ function compileTuffToJS(source) {
   
   // Transform: remove ) => { to ) {
   result = result.replace(") => {", ") {");
+  
+  // Transform: remove generic type parameters from struct instantiations
+  // Pattern: StructName { -> StructName {
+  // Need to handle nested angle brackets like Vec<T>
+  let doneWithInstantiation = 0;
+  while (doneWithInstantiation === 0) {
+    let beforeRemoval = result;
+    let newResult = "";
+    let i = 0;
+    let openAngle = "<";
+    let closeAngle = ">";
+    let openBrace = "{";
+    
+    while (i < result.length) {
+      let anglePos = result.indexOf(openAngle, i);
+      if (anglePos === -1) {
+        // No more <, copy rest
+        newResult = newResult + result.substring(i);
+        i = result.length;
+      } else {
+        let bracePos = result.indexOf(openBrace, anglePos);
+        if (bracePos === -1) {
+          // No { after this <, copy up to < and continue
+          newResult = newResult + result.substring(i, anglePos + 1);
+          i = anglePos + 1;
+        } else {
+          // Check if there's matching > between < and {
+          let depth = 0;
+          let matchingClose = -1;
+          for (let j = anglePos; j < bracePos; j = j + 1) {
+            let char = result.substring(j, j + 1);
+            if (char === openAngle) {
+              depth = depth + 1;
+            }
+            if (char === closeAngle) {
+              depth = depth - 1;
+              if (depth === 0) {
+                matchingClose = j;
+              }
+            }
+          }
+          
+          if (matchingClose !== -1) {
+            // Found matching >. Check what's between matchingClose and bracePos
+            let between = result.substring(matchingClose + 1, bracePos).trim();
+            if (between.length === 0) {
+              // This is struct instantiation! Remove <...>
+              newResult = newResult + result.substring(i, anglePos);
+              i = matchingClose + 1;
+            } else {
+              // Not struct instantiation, keep the <
+              newResult = newResult + result.substring(i, anglePos + 1);
+              i = anglePos + 1;
+            }
+          } else {
+            // No matching >, keep the <
+            newResult = newResult + result.substring(i, anglePos + 1);
+            i = anglePos + 1;
+          }
+        }
+      }
+    }
+    
+    result = newResult;
+    if (result === beforeRemoval) {
+      doneWithInstantiation = 1;
+    }
+  }
+
   
   // Transform: Rust-like for loops to JavaScript
   // for (let i = 0; i < 10; i = i + 1) -> for (let i = 0; i < 10; i = i + 1)
