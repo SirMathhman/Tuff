@@ -198,10 +198,14 @@ function parseIfBranch(
   });
 }
 
-export function parseIfExpression(
+function parseIfConditionAndThen(
   input: string,
   start: number,
-): { replacement: string; end: number } | null {
+): {
+  conditionExpr: string;
+  thenResult: { expr: string; end: number };
+  idx: number;
+} | null {
   if (!isKeywordAt(input, start, "if")) return null;
   let idx = start + 2;
   while (idx < input.length && /\s/.test(input[idx])) idx++;
@@ -214,18 +218,59 @@ export function parseIfExpression(
   const thenResult = parseIfBranch(input, idx, { stopOnElse: true });
   idx = thenResult.end;
 
+  return { conditionExpr, thenResult, idx };
+}
+
+function parseElseClause(
+  input: string,
+  idx: number,
+): { elseResult: { expr: string; end: number }; idx: number } | null {
   while (idx < input.length && /\s/.test(input[idx])) idx++;
   if (!isKeywordAt(input, idx, "else")) return null;
   idx += 4;
-
   const elseResult = parseIfBranch(input, idx, { stopOnElse: false });
+  return { elseResult, idx: elseResult.end };
+}
 
-  const thenExpr = transformIfExpressions(thenResult.expr);
-  const elseExpr = transformIfExpressions(elseResult.expr);
+export function parseIfExpression(
+  input: string,
+  start: number,
+): { replacement: string; end: number } | null {
+  const parsed = parseIfConditionAndThen(input, start);
+  if (!parsed) return null;
+
+  const elseClause = parseElseClause(input, parsed.idx);
+  if (!elseClause) return null;
+
+  const thenExpr = transformIfExpressions(parsed.thenResult.expr);
+  const elseExpr = transformIfExpressions(elseClause.elseResult.expr);
   const replacement =
-    "(" + conditionExpr + " ? " + thenExpr + " : " + elseExpr + ")";
+    "(" + parsed.conditionExpr + " ? " + thenExpr + " : " + elseExpr + ")";
 
-  return { replacement, end: elseResult.end };
+  return { replacement, end: elseClause.idx };
+}
+
+export function parseIfStatement(
+  input: string,
+  start: number,
+): { statement: string; end: number } | null {
+  const parsed = parseIfConditionAndThen(input, start);
+  if (!parsed) return null;
+
+  let idx = parsed.idx;
+  let elseStatement = "";
+  const elseClause = parseElseClause(input, idx);
+  if (elseClause) {
+    const elseBody = transformIfExpressions(elseClause.elseResult.expr);
+    elseStatement = " else " + elseBody;
+    idx = elseClause.idx;
+  }
+
+  const thenBody = transformIfExpressions(parsed.thenResult.expr);
+  const statement =
+    "if (" + parsed.conditionExpr + ") " + thenBody + elseStatement;
+
+  return { statement, end: idx };
 }
 
 function transformIfExpressions(input: string): string {

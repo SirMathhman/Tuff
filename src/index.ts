@@ -16,6 +16,7 @@ import {
   normalizeExpression,
   parseFunctionDeclaration,
   parseIfExpression,
+  parseIfStatement,
   stripComments,
   stripNumericTypeSuffixes,
 } from "./compileHelpers";
@@ -225,6 +226,19 @@ function handleTopLevelIf(
   declarations: string[],
 ): string | null {
   if (!remaining.startsWith("if")) return null;
+
+  // First try to parse as a statement (with or without else)
+  const parsedStmt = parseIfStatement(remaining, 0);
+  if (parsedStmt) {
+    const afterIf = remaining.substring(parsedStmt.end).trim();
+    // If there's more code after the if statement, treat it as a statement
+    if (afterIf.length > 0 && !afterIf.startsWith(";")) {
+      declarations.push(parsedStmt.statement);
+      return afterIf;
+    }
+  }
+
+  // Otherwise try as an expression (requires else clause)
   const parsedIf = parseIfExpression(remaining, 0);
   if (parsedIf) {
     const afterIf = remaining.substring(parsedIf.end).trim();
@@ -233,6 +247,7 @@ function handleTopLevelIf(
       return afterIf;
     }
   }
+
   return null;
 }
 

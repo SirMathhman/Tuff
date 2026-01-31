@@ -146,6 +146,17 @@ function handleTopLevelStatement(statement, variableTypes, mutableVars, declarat
 function handleTopLevelIf(remaining, declarations) {
     if (!remaining.startsWith("if"))
         return null;
+    // First try to parse as a statement (with or without else)
+    const parsedStmt = (0, compileHelpers_1.parseIfStatement)(remaining, 0);
+    if (parsedStmt) {
+        const afterIf = remaining.substring(parsedStmt.end).trim();
+        // If there's more code after the if statement, treat it as a statement
+        if (afterIf.length > 0 && !afterIf.startsWith(";")) {
+            declarations.push(parsedStmt.statement);
+            return afterIf;
+        }
+    }
+    // Otherwise try as an expression (requires else clause)
     const parsedIf = (0, compileHelpers_1.parseIfExpression)(remaining, 0);
     if (parsedIf) {
         const afterIf = remaining.substring(parsedIf.end).trim();
@@ -291,9 +302,7 @@ function compileFile(inputPath, outputPath) {
     const fs = require("fs");
     const source = fs.readFileSync(inputPath, "utf-8");
     const compiled = compile(source);
-    const wrapped = "const result = (function() {\n  " +
-        compiled +
-        "\n})();\nconsole.log(result);";
+    const wrapped = "process.exit(Number((function() {\n  " + compiled + "\n})()));";
     fs.writeFileSync(outputPath, wrapped, "utf-8");
     console.log("Compiled " + inputPath + " to " + outputPath);
 }

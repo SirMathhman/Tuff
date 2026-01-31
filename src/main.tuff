@@ -1,7 +1,5 @@
-let mut x = 100;
+let mut x = 1;
 if (x < 10) {
-    x = 20;
-} else {
-    x = 300;
+    x = 2;
 }
 x

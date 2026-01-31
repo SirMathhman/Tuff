@@ -256,3 +256,7 @@ test("interpret handles if-else as trailing expression", () => {
     20,
   );
 });
+
+test("interpret handles if without else followed by expression", () => {
+  assertInterpret("let mut x = 1; if (x < 10) { x = 2; } x", 2);
+});
