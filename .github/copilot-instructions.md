@@ -56,15 +56,15 @@ The project operates on a three-file system:
 **Critical:** When adding new Tuff syntax (like `let mut`), follow this two-phase approach:
 
 **Phase 1: Implement without using the new syntax**
+
 1. Add transformation logic in `main.tuff` using OLD syntax only (e.g., use `let i` not `let mut i`)
 2. Run `npm run build` to regenerate `main.js`
 3. Now `main.js` can compile the new syntax
 
-**Phase 2: Adopt the new syntax**
-4. Update `main.tuff` to USE the new syntax in its own code
-5. Run `npm run build` again to achieve self-consistency
+**Phase 2: Adopt the new syntax** 4. Update `main.tuff` to USE the new syntax in its own code 5. Run `npm run build` again to achieve self-consistency
 
 **Example:** To add `let mut` support:
+
 - Phase 1: Implement `removeMutKeyword()` helper using `let i` loops → build → `main.js` now handles `mut`
 - Phase 2: Change loops to `for (let mut i in 0..n)` in `main.tuff` → build → compiler uses its own feature
 

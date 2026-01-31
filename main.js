@@ -1,6 +1,10 @@
 const fs = require("fs");
 const path = require("path");
 
+
+
+
+
 // Helper: Collect all mut variable declarations
 function collectMutVariables(source) {
   let mutVariables = [];
@@ -29,17 +33,9 @@ function validateMutability(source, mutVariables) {
     let typeKeyword = "t" + "y" + "p" + "e";
     let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
     // Skip type aliases and struct declarations from validation
-    if (
-      trimmed.indexOf(typeKeyword + " ") === 0 ||
-      trimmed.indexOf(structKeyword + " ") === 0
-    ) {
+    if (trimmed.indexOf(typeKeyword + " ") === 0 || trimmed.indexOf(structKeyword + " ") === 0) {
       // Skip validation for these lines
-    } else if (
-      trimmed.includes(" = ") &&
-      !trimmed.includes("let ") &&
-      !trimmed.includes("function ") &&
-      !trimmed.includes("const ")
-    ) {
+    } else if (trimmed.includes(" = ") && !trimmed.includes("let ") && !trimmed.includes("function ") && !trimmed.includes("const ")) {
       let assignIdx = trimmed.indexOf(" = ");
       let varName = trimmed.substring(0, assignIdx).trim();
       // Check if this.kind === "a" simple variable name (not an object property or array access)
@@ -53,14 +49,13 @@ function validateMutability(source, mutVariables) {
         }
         if (found === 0) {
           // This.kind === "an" error: reassigning immutable variable
-          let errMsg =
-            "Error: cannot reassign immutable variable '" + varName + "'";
-          return { kind: "Err", err: errMsg };
+          let errMsg = "Error: cannot reassign immutable variable '" + varName + "'";
+          return { kind : "Err", err : errMsg };
         }
       }
     }
   }
-  return { kind: "Ok", value: source };
+  return { kind : "Ok", value : source };
 }
 
 // Helper: Remove type aliases and struct declarations
@@ -75,7 +70,7 @@ function removeTypeDeclarations(source) {
     let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
     let openBrace = "{";
     let closeBrace = "}";
-
+    
     // Check if line starts with struct keyword
     if (trimmed.indexOf(structKeyword + " ") === 0) {
       // Count braces on this struct declaration line
@@ -127,8 +122,8 @@ function transformExternUse(source) {
     if (line.includes(searchTerm)) {
       // Replace: const fs = require("fs"); -> const fs = require("fs");
       line = line.replace(searchTerm + " ", "const ");
-      line = line.replace(" from ", ' = require("');
-      line = line.replace(";", '");');
+      line = line.replace(" from ", " = require(\"");
+      line = line.replace(";", "\");");
     }
     transformed.push(line);
   }
@@ -160,7 +155,7 @@ function removeTypeAnnotations(source) {
   let attemptCount = 0;
   while (attemptCount < 100) {
     let beforeReplace = replaced;
-
+    
     // Remove type patterns by concatenating strings to avoid transformation
     let colonSpace = " " + ":" + " ";
     replaced = replaced.replace(colonSpace + "String", "");
@@ -171,7 +166,7 @@ function removeTypeAnnotations(source) {
     replaced = replaced.replace(colonSpace + "Function", "");
     replaced = replaced.replace(colonSpace + "Any", "");
     replaced = replaced.replace(colonSpace + "Result<String, String>", "");
-
+    
     if (replaced === beforeReplace) {
       attemptCount = 100;
     }
@@ -207,7 +202,7 @@ function removeGenericParameters(source) {
     let openAngle = "<";
     let closeAngle = ">";
     let openBrace = "{";
-
+    
     while (i < result.length) {
       let anglePos = result.indexOf(openAngle, i);
       if (anglePos === -1) {
@@ -236,7 +231,7 @@ function removeGenericParameters(source) {
               }
             }
           }
-
+          
           if (matchingClose !== -1) {
             // Found matching >. Check what's between matchingClose and bracePos
             let between = result.substring(matchingClose + 1, bracePos).trim();
@@ -257,7 +252,7 @@ function removeGenericParameters(source) {
         }
       }
     }
-
+    
     result = newResult;
     if (result === beforeRemoval) {
       doneWithInstantiation = 1;
@@ -275,7 +270,7 @@ function transformIsOperator(source) {
     let newResult = "";
     let i = 0;
     let isKeyword = " " + "is" + " ";
-
+    
     while (i < result.length) {
       let isPos = result.indexOf(isKeyword, i);
       if (isPos === -1) {
@@ -289,12 +284,7 @@ function transformIsOperator(source) {
         // Walk backwards to find start of identifier
         while (varStart > 0) {
           let ch = before.substring(varStart - 1, varStart);
-          let isAlphaNum =
-            (ch >= "a" && ch <= "z") ||
-            (ch >= "A" && ch <= "Z") ||
-            (ch >= "0" && ch <= "9") ||
-            ch === "_" ||
-            ch === ".";
+          let isAlphaNum = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_" || ch === ".";
           if (!isAlphaNum) {
             varStart = varStart;
             break;
@@ -302,27 +292,20 @@ function transformIsOperator(source) {
           varStart = varStart - 1;
         }
         let varName = result.substring(varStart, isPos);
-
+        
         // Find the type name after is-keyword
         let typeStart = isPos + isKeyword.length;
         let typeEnd = typeStart;
         // Walk forward to find endof type name (before <)
         while (typeEnd < result.length) {
           let ch = result.substring(typeEnd, typeEnd + 1);
-          if (
-            ch === "<" ||
-            ch === ";" ||
-            ch === " " ||
-            ch === ")" ||
-            ch === "{" ||
-            ch === ","
-          ) {
+          if (ch === "<" || ch === ";" || ch === " " || ch === ")" || ch === "{" || ch === ",") {
             break;
           }
           typeEnd = typeEnd + 1;
         }
         let typeName = result.substring(typeStart, typeEnd);
-
+        
         // Skip generic type parameters if present
         let afterType = typeEnd;
         if (result.substring(typeEnd, typeEnd + 1) === "<") {
@@ -339,14 +322,14 @@ function transformIsOperator(source) {
             afterType = afterType + 1;
           }
         }
-
+        
         // Build replacement: varName.kind === "TypeName"
-        let replacement = varName + '.kind === "' + typeName + '"';
+        let replacement = varName + ".kind === \"" + typeName + "\"";
         newResult = newResult + result.substring(i, varStart) + replacement;
         i = afterType;
       }
     }
-
+    
     result = newResult;
     if (result === beforeIs) {
       isOpDone = 1;
@@ -364,7 +347,7 @@ function addKindToStructInstantiation(source) {
     let newResult = "";
     let i = 0;
     let openBrace = " {";
-
+    
     while (i < result.length) {
       // Look for pattern: StructName {
       // where StructName starts with uppercase letter
@@ -377,52 +360,44 @@ function addKindToStructInstantiation(source) {
         // Check if there's an identifier before the {
         let nameStart = bracePos - 1;
         // Skip whitespace backwards
-        while (
-          nameStart > 0 &&
-          result.substring(nameStart, nameStart + 1) === " "
-        ) {
+        while (nameStart > 0 && result.substring(nameStart, nameStart + 1) === " ") {
           nameStart = nameStart - 1;
         }
         let nameEnd = nameStart + 1;
-
+        
         // Walk backwards to find start of identifier
         while (nameStart > 0) {
           let ch = result.substring(nameStart - 1, nameStart);
-          let isAlphaNum =
-            (ch >= "a" && ch <= "z") ||
-            (ch >= "A" && ch <= "Z") ||
-            (ch >= "0" && ch <= "9") ||
-            ch === "_";
+          let isAlphaNum = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_";
           if (!isAlphaNum) {
             break;
           }
           nameStart = nameStart - 1;
         }
-
+        
         let structName = result.substring(nameStart, nameEnd);
         let firstChar = structName.substring(0, 1);
         let isUpperCase = firstChar >= "A" && firstChar <= "Z";
-
+        
         // Check for invalid patterns (equals sign before name, or function keyword)
         let beforeName = result.substring(nameStart - 10, nameStart);
         let hasEquals = beforeName.includes("=");
         let isFunction = beforeName.includes("function");
-
+        
         if (isUpperCase && structName.length > 0 && !isFunction && hasEquals) {
           // This looks like a struct instantiation
           // Replace: StructName { -> { kind : "StructName",
-          let replacement = '{ kind : "' + structName + '",';
+          let replacement = "{ kind : \"" + structName + "\",";
           newResult = newResult + result.substring(i, nameStart) + replacement;
           i = bracePos + openBrace.length;
         } else {
           // Not a struct instantiation, copy up to and including {
-          newResult =
-            newResult + result.substring(i, bracePos + openBrace.length);
+          newResult = newResult + result.substring(i, bracePos + openBrace.length);
           i = bracePos + openBrace.length;
         }
       }
     }
-
+    
     result = newResult;
     if (result === beforeInst) {
       structInstDone = 1;
@@ -444,42 +419,24 @@ function transformForLoops(source) {
         // Find the start: "for (let " or "for (let "
         let forStart = line.indexOf(forStr + "(let ");
         let letEnd = line.indexOf(" in ", forStart);
-
+        
         // Extract variable name, handling both "let" and "let mut"
         let afterFor = line.substring(forStart + 5);
         let inIdx = afterFor.indexOf(" in ");
         let beforeIn = afterFor.substring(0, inIdx);
-        let varName = beforeIn
-          .replace("(let ", "")
-          .replace("let ", "")
-          .replace("mut ", "")
-          .trim();
-
+        let varName = beforeIn.replace("(let ", "").replace("let ", "").replace("mut ", "").trim();
+        
         // Find the range: "0..10"
         let inPos = letEnd;
         let dotDotPos = line.indexOf("..", inPos);
         let endPos = line.indexOf(")", dotDotPos);
-
+        
         let rangeStart = line.substring(inPos + 4, dotDotPos).trim();
         let rangeEnd = line.substring(dotDotPos + 2, endPos).trim();
-
+        
         // Replace with JavaScript for loop
-        let newLoop =
-          "for (let " +
-          varName +
-          " = " +
-          rangeStart +
-          "; " +
-          varName +
-          " < " +
-          rangeEnd +
-          "; " +
-          varName +
-          " = " +
-          varName +
-          " + 1)";
-        line =
-          line.substring(0, forStart) + newLoop + line.substring(endPos + 1);
+        let newLoop = "for (let " + varName + " = " + rangeStart + "; " + varName + " < " + rangeEnd + "; " + varName + " = " + varName + " + 1)";
+        line = line.substring(0, forStart) + newLoop + line.substring(endPos + 1);
       }
     }
     transformed.push(line);
@@ -506,17 +463,17 @@ function removeMutKeyword(source) {
 // Simple compileTuffToJS function - takes in Tuff source and returns Result
 function compileTuffToJS(source) {
   let result = source;
-
+  
   // Validation pass
   let mutVariables = collectMutVariables(result);
   let validationResult = validateMutability(result, mutVariables);
   if (validationResult.kind === "Err") {
     return validationResult;
   }
-
+  
   // Remove type declarations
   result = removeTypeDeclarations(result);
-
+  
   // Apply transformations
   result = transformExternUse(result);
   result = transformFnKeyword(result);
@@ -527,12 +484,12 @@ function compileTuffToJS(source) {
   result = addKindToStructInstantiation(result);
   result = transformForLoops(result);
   result = removeMutKeyword(result);
-
-  return { kind: "Ok", value: result };
+  
+  return { kind : "Ok", value : result };
 }
 
 // Read from main.tuff and write to main.js
-let sourceFile = path.join(path.dirname(__filename), "main.tuff");
+let sourceFile = path.join(path.dirname(__filename), 'main.tuff');
 let destinationFile = __filename;
 
 // Only run the compilation if this.kind === "the" main module (not being imported for testing)
@@ -546,12 +503,12 @@ if (require.main === module) {
 
     // compileTuffToJS the source and write to the destination file
     const compilationResult = compileTuffToJS(data);
-
+    
     if (compilationResult.kind === "Err") {
       console.error("Compilation error:", compilationResult.err);
       process.exit(1);
     }
-
+    
     const compileTuffToJSd = compilationResult.value;
     fs.writeFile(destinationFile, compileTuffToJSd, "utf8", (err) => {
       if (err) {
@@ -559,9 +516,7 @@ if (require.main === module) {
         process.exit(1);
       }
 
-      console.log(
-        `Successfully compileTuffToJSd ${sourceFile} to ${destinationFile}`,
-      );
+      console.log(`Successfully compileTuffToJSd ${sourceFile} to ${destinationFile}`);
     });
   });
 }
