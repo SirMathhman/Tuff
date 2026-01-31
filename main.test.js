@@ -420,4 +420,41 @@ describe("compileTuffToJS", () => {
     const result = compileTuffToJS(source);
     expect(unwrap(result)).toBe('let x = [1, 2, 3];\nlet y = ["a", "b"];');
   });
+
+  it("should error on shadowing in local declarations", () => {
+    const source = "let x = 0;\nlet x = 1;";
+    const result = compileTuffToJS(source);
+    expect(result.kind).toBe("Err");
+    expect(result.err).toContain("variable 'x' is already declared");
+  });
+
+  it("should error on shadowing with let mut", () => {
+    const source = "let mut x = 0;\nlet x = 1;";
+    const result = compileTuffToJS(source);
+    expect(result.kind).toBe("Err");
+    expect(result.err).toContain("variable 'x' is already declared");
+  });
+
+  it("should error on multiple shadowings", () => {
+    const source = "let x = 0;\nlet y = 1;\nlet x = 2;";
+    const result = compileTuffToJS(source);
+    expect(result.kind).toBe("Err");
+    expect(result.err).toContain("variable 'x' is already declared");
+  });
+
+  it("should allow same variable name in different scopes", () => {
+    const source =
+      "function foo() { let x = 0; }\nfunction bar() { let x = 1; }";
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toContain("let x = 0");
+    expect(unwrap(result)).toContain("let x = 1");
+  });
+
+  it("should allow parameters with same name as local variables in different functions", () => {
+    const source =
+      "function foo(x) { return x; }\nfunction bar(x) { return x; }";
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toContain("function foo(x)");
+    expect(unwrap(result)).toContain("function bar(x)");
+  });
 });

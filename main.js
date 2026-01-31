@@ -58,6 +58,111 @@ function validateMutability(source, mutVariables) {
   return { kind : "Ok", value : source };
 }
 
+// Helper: Validate no shadowing in local declarations
+function validateNoShadowing(source) {
+  let lines = source.split("\n");
+  let declaredVars = [];
+  let scopeDepth = 0;
+  let inFunctionBody = 0;
+  
+  for (let i = 0; i < lines.length; i = i + 1) {
+    let line = lines[i];
+    let trimmed = line.trim();
+    
+    // Skip type/struct declarations
+    let typeKeyword = "t" + "y" + "p" + "e";
+    let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
+    if (trimmed.indexOf(typeKeyword + " ") === 0 || trimmed.indexOf(structKeyword + " ") === 0) {
+      // Skip validation for these lines
+    } else {
+      // Check for function declarations - they start a new scope
+      if (trimmed.includes("function ") || trimmed.includes("function ")) {
+        // Reset declared variables for new function scope
+        declaredVars = [];
+        scopeDepth = 0;
+        inFunctionBody = 0;
+      }
+      
+      // Count braces to track scope depth
+      let j = 0;
+      while (j < line.length) {
+        let char = line.substring(j, j + 1);
+        if (char === "{") {
+          scopeDepth = scopeDepth + 1;
+          if (scopeDepth === 1) {
+            inFunctionBody = 1;
+          }
+        }
+        if (char === "}") {
+          scopeDepth = scopeDepth - 1;
+          if (scopeDepth === 0) {
+            inFunctionBody = 0;
+          }
+        }
+        j = j + 1;
+      }
+      
+      // Only check declarations at function body level (scopeDepth === 1) or top level (scopeDepth === 0)
+      if ((inFunctionBody === 1 && scopeDepth === 1) || (inFunctionBody === 0 && scopeDepth === 0)) {
+        // Check for let declarations (both let and let mut)
+        let letStr = "let" + " ";
+        let letMutStr = "let" + " " + "mut" + " ";
+        if (trimmed.indexOf(letStr) === 0) {
+        // Extract variable name
+        let varName = "";
+        if (trimmed.indexOf(letMutStr) === 0) {
+          // let x = ...
+          let afterLet = trimmed.substring(8);
+          let spaceIdx = afterLet.indexOf(" ");
+          let colonIdx = afterLet.indexOf(":");
+          let endIdx = spaceIdx;
+          if (colonIdx !== -1 && (colonIdx < spaceIdx || spaceIdx === -1)) {
+            endIdx = colonIdx;
+          }
+          if (endIdx === -1) {
+            endIdx = afterLet.length;
+          }
+          varName = afterLet.substring(0, endIdx).trim();
+        } else {
+          // let x = ...
+          let afterLet = trimmed.substring(4);
+          let spaceIdx = afterLet.indexOf(" ");
+          let colonIdx = afterLet.indexOf(":");
+          let endIdx = spaceIdx;
+          if (colonIdx !== -1 && (colonIdx < spaceIdx || spaceIdx === -1)) {
+            endIdx = colonIdx;
+          }
+          if (endIdx === -1) {
+            endIdx = afterLet.length;
+          }
+          varName = afterLet.substring(0, endIdx).trim();
+        }
+        
+        // Check if variable.kind === "already" declared in this scope
+        let alreadyDeclared = 0;
+        for (let k = 0; k < declaredVars.length; k = k + 1) {
+          if (declaredVars[k] === varName) {
+            alreadyDeclared = 1;
+          }
+        }
+        
+        if (alreadyDeclared === 1) {
+          let lineNum = i + 1;
+          let isWord = "i" + "s";
+          let errMsg = "Error: variable '" + varName + "' " + isWord + " already declared in th" + isWord + " scope on line " + lineNum;
+          return { kind : "Err", err : errMsg };
+        }
+        
+        // Add to declared variables
+        declaredVars.push(varName);
+      }
+      }
+    }
+  }
+  
+  return { kind : "Ok", value : source };
+}
+
 // Helper: Validate that array literals have type annotations
 function validateTypedArrayLiterals(source) {
   let lines = source.split("\n");
@@ -216,18 +321,18 @@ function removeTypeDeclarations(source) {
       filteredLines.push("");
     } else if (bracketDepth > 0) {
       // Remove lines while inside struct (tracking brace depth)
-      let openCount = 0;
-      let closeCount = 0;
+      let openCount2 = 0;
+      let closeCount2 = 0;
       for (let j = 0; j < line.length; j = j + 1) {
         if (line.substring(j, j + 1) === openBrace) {
-          openCount = openCount + 1;
+          openCount2 = openCount2 + 1;
         }
         if (line.substring(j, j + 1) === closeBrace) {
-          closeCount = closeCount + 1;
+          closeCount2 = closeCount2 + 1;
         }
       }
-      bracketDepth = bracketDepth + openCount;
-      bracketDepth = bracketDepth - closeCount;
+      bracketDepth = bracketDepth + openCount2;
+      bracketDepth = bracketDepth - closeCount2;
       filteredLines.push("");
     } else if (trimmed.indexOf(typeKeyword + " ") === 0) {
       // Replace alias declarations with empty string to preserve blank lines
@@ -602,6 +707,11 @@ function compileTuffToJS(source) {
   let arrayValidation = validateTypedArrayLiterals(result);
   if (arrayValidation.kind === "Err") {
     return arrayValidation;
+  }
+  
+  let shadowingValidation = validateNoShadowing(result);
+  if (shadowingValidation.kind === "Err") {
+    return shadowingValidation;
   }
   
   // Remove type declarations
