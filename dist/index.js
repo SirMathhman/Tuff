@@ -11,6 +11,7 @@ const readline_1 = __importDefault(require("readline"));
 const types_1 = require("./types");
 const compiler_1 = require("./compiler");
 const compileHelpers_1 = require("./compileHelpers");
+const structUtils_1 = require("./structUtils");
 function extractSingleLetStatement(statement) {
     const parsed = (0, compiler_1.parseLetStatement)(statement);
     if (!parsed) {
@@ -33,12 +34,16 @@ function findVariableReference(varNames, value) {
     }
     return null;
 }
-function processSingleLetInTopLevel(statement, variableTypes, mutableVars) {
+function processSingleLetInTopLevel(statement, variableTypes, mutableVars, thisTypeVars) {
     const extracted = extractSingleLetStatement(statement);
     if (!extracted) {
         return null;
     }
     const { varName, declType, cleanValue, isMutable } = extracted;
+    // Track if this is a This type
+    if (declType === "This") {
+        thisTypeVars.add(varName);
+    }
     const referencedVar = findVariableReference(Object.keys(variableTypes), cleanValue);
     if (referencedVar) {
         const referencedType = variableTypes[referencedVar];
@@ -73,11 +78,22 @@ function findNextSemicolon(remaining) {
     return semiIdx;
 }
 function processAssignmentStatement(statement, mutableVars) {
-    const assignMatch = statement.match(/^(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/);
-    if (!assignMatch) {
-        return "";
+    let varName;
+    let operator;
+    let value;
+    // Handle this.varName assignments
+    const thisAssignMatch = statement.match(/^this\.\s*(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/);
+    if (thisAssignMatch) {
+        [, varName, operator, value] = thisAssignMatch;
     }
-    const [, varName, operator, value] = assignMatch;
+    else {
+        // Handle regular varName assignments
+        const assignMatch = statement.match(/^(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/);
+        if (!assignMatch) {
+            return "";
+        }
+        [, varName, operator, value] = assignMatch;
+    }
     if (!mutableVars.has(varName)) {
         throw new Error("Cannot assign to immutable variable '" +
             varName +
@@ -86,17 +102,28 @@ function processAssignmentStatement(statement, mutableVars) {
     const processedValue = (0, compileHelpers_1.normalizeAndStripNumericTypes)(value.trim());
     return varName + " " + operator + " " + processedValue;
 }
+function advancePastDefinition(remaining, end) {
+    let newRemaining = remaining.substring(end).trim();
+    if (newRemaining.startsWith(";")) {
+        newRemaining = newRemaining.substring(1).trim();
+    }
+    return newRemaining;
+}
 function processFnDeclaration(remaining, declarations) {
     const parsedFn = (0, compileHelpers_1.parseFunctionDeclaration)(remaining, 0);
     if (!parsedFn) {
         return remaining;
     }
     declarations.push(parsedFn.declaration);
-    let newRemaining = remaining.substring(parsedFn.end).trim();
-    if (newRemaining.startsWith(";")) {
-        newRemaining = newRemaining.substring(1).trim();
+    return advancePastDefinition(remaining, parsedFn.end);
+}
+function processStructDefinition(remaining) {
+    const parsedStruct = (0, compileHelpers_1.parseStructDefinition)(remaining, 0);
+    if (!parsedStruct) {
+        return remaining;
     }
-    return newRemaining;
+    (0, structUtils_1.registerStruct)(parsedStruct.name, parsedStruct.fields);
+    return advancePastDefinition(remaining, parsedStruct.end);
 }
 function findNextBlockEnd(input, start) {
     if (input[start] !== "{")
@@ -112,36 +139,28 @@ function findNextBlockEnd(input, start) {
     }
     return depth === 0 ? i - 1 : -1;
 }
-function processBlockStatements(blockContent, variableTypes, mutableVars, declarations) {
-    const { statements } = (0, compiler_1.parseBlockStatements)(blockContent);
-    for (const stmt of statements) {
-        if (stmt.startsWith("let ")) {
-            const processed = processSingleLetInTopLevel(stmt, variableTypes, mutableVars);
-            if (processed) {
-                declarations.push("let " + processed.varName + " = " + processed.cleanValue);
-            }
+function processStatement(statement, context) {
+    if (statement.startsWith("let ")) {
+        const processed = processSingleLetInTopLevel(statement, context.variableTypes, context.mutableVars, context.thisTypeVars);
+        if (processed) {
+            context.declarations.push("let " + processed.varName + " = " + processed.cleanValue);
         }
-        else if (stmt.trim().length > 0) {
-            const assignStmt = processAssignmentStatement(stmt, mutableVars);
-            if (assignStmt) {
-                declarations.push(assignStmt);
-            }
+    }
+    else if (statement.trim().length > 0) {
+        const assignStmt = processAssignmentStatement(statement, context.mutableVars);
+        if (assignStmt) {
+            context.declarations.push(assignStmt);
         }
     }
 }
-function handleTopLevelStatement(statement, variableTypes, mutableVars, declarations) {
-    if (statement.startsWith("let ")) {
-        const processed = processSingleLetInTopLevel(statement, variableTypes, mutableVars);
-        if (processed) {
-            declarations.push("let " + processed.varName + " = " + processed.cleanValue);
-        }
+function processBlockStatements(blockContent, context) {
+    const { statements } = (0, compiler_1.parseBlockStatements)(blockContent);
+    for (const stmt of statements) {
+        processStatement(stmt, context);
     }
-    else {
-        const assignStmt = processAssignmentStatement(statement, mutableVars);
-        if (assignStmt) {
-            declarations.push(assignStmt);
-        }
-    }
+}
+function handleTopLevelStatement(statement, context) {
+    processStatement(statement, context);
 }
 function handleTopLevelIf(remaining, declarations) {
     if (!remaining.startsWith("if"))
@@ -181,14 +200,20 @@ function handleTopLevelWhile(remaining, declarations) {
     }
     return null;
 }
-function handleTopLevelBlock(remaining, variableTypes, mutableVars, declarations) {
+function handleTopLevelBlock(remaining, variableTypes, mutableVars, declarations, thisTypeVars) {
     if (!remaining.startsWith("{"))
         return null;
     const blockEndIdx = findNextBlockEnd(remaining, 0);
     if (blockEndIdx !== -1) {
         const afterBlock = remaining.substring(blockEndIdx + 1).trim();
         if (afterBlock.length > 0 && !afterBlock.startsWith(";")) {
-            processBlockStatements(remaining.substring(1, blockEndIdx), variableTypes, mutableVars, declarations);
+            const context = {
+                variableTypes,
+                mutableVars,
+                declarations,
+                thisTypeVars,
+            };
+            processBlockStatements(remaining.substring(1, blockEndIdx), context);
             return afterBlock;
         }
     }
@@ -197,43 +222,56 @@ function handleTopLevelBlock(remaining, variableTypes, mutableVars, declarations
 function isTopLevelTrigger(remaining) {
     return (remaining.startsWith("let ") ||
         remaining.startsWith("fn ") ||
+        remaining.startsWith("struct ") ||
         remaining.startsWith("{") ||
         remaining.startsWith("if") ||
         remaining.startsWith("while") ||
+        remaining.startsWith("this.") ||
         /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining));
+}
+function tryHandleControlFlow(remaining, declarations, variableTypes, mutableVars, thisTypeVars) {
+    if (remaining.startsWith("fn ")) {
+        return processFnDeclaration(remaining, declarations);
+    }
+    if (remaining.startsWith("struct ")) {
+        return processStructDefinition(remaining);
+    }
+    const ifResult = handleTopLevelIf(remaining, declarations);
+    if (ifResult !== null)
+        return ifResult;
+    const whileResult = handleTopLevelWhile(remaining, declarations);
+    if (whileResult !== null)
+        return whileResult;
+    const blockResult = handleTopLevelBlock(remaining, variableTypes, mutableVars, declarations, thisTypeVars);
+    if (blockResult !== null)
+        return blockResult;
+    return null;
 }
 function extractTopLevelStatements(input) {
     const declarations = [];
     const variableTypes = {};
     const mutableVars = new Set();
+    const thisTypeVars = new Set();
     let remaining = input.trim();
     while (isTopLevelTrigger(remaining)) {
-        if (remaining.startsWith("fn ")) {
-            remaining = processFnDeclaration(remaining, declarations);
-            continue;
-        }
-        const ifResult = handleTopLevelIf(remaining, declarations);
-        if (ifResult !== null) {
-            remaining = ifResult;
-            continue;
-        }
-        const whileResult = handleTopLevelWhile(remaining, declarations);
-        if (whileResult !== null) {
-            remaining = whileResult;
-            continue;
-        }
-        const blockResult = handleTopLevelBlock(remaining, variableTypes, mutableVars, declarations);
-        if (blockResult !== null) {
-            remaining = blockResult;
+        const controlFlowResult = tryHandleControlFlow(remaining, declarations, variableTypes, mutableVars, thisTypeVars);
+        if (controlFlowResult !== null) {
+            remaining = controlFlowResult;
             continue;
         }
         const semiIdx = findNextSemicolon(remaining);
         if (semiIdx === -1)
             break;
-        handleTopLevelStatement(remaining.substring(0, semiIdx), variableTypes, mutableVars, declarations);
+        const context = {
+            variableTypes,
+            mutableVars,
+            declarations,
+            thisTypeVars,
+        };
+        handleTopLevelStatement(remaining.substring(0, semiIdx), context);
         remaining = remaining.substring(semiIdx + 1).trim();
     }
-    return { declarations, expression: remaining };
+    return { declarations, expression: remaining, thisTypeVars };
 }
 function processDeclarations(rawDeclarations) {
     const declarations = [];
@@ -250,6 +288,10 @@ function processDeclarations(rawDeclarations) {
                 : (0, compileHelpers_1.normalizeAndStripNumericTypes)(refConverted);
             declarations.push("let " + varName + " = " + processedValue);
         }
+        else if (decl.trim().startsWith("function ")) {
+            // Don't normalize function declarations - push as-is
+            declarations.push(decl.trim());
+        }
         else if (decl.trim().length > 0) {
             declarations.push((0, compileHelpers_1.normalizeAndStripNumericTypes)(decl));
         }
@@ -257,11 +299,13 @@ function processDeclarations(rawDeclarations) {
     return declarations;
 }
 function compile(input) {
-    const { declarations: rawDeclarations, expression: rawExpression } = extractTopLevelStatements(input);
+    // Strip comments before processing
+    const cleanedInput = (0, compileHelpers_1.stripComments)(input);
+    const { declarations: rawDeclarations, expression: rawExpression, thisTypeVars, } = extractTopLevelStatements(cleanedInput);
     const declarations = processDeclarations(rawDeclarations);
-    let trimmed = (0, compileHelpers_1.normalizeExpression)((0, compileHelpers_1.stripComments)(rawExpression).trim());
+    let trimmed = (0, compileHelpers_1.normalizeExpression)(rawExpression.trim());
     const typesUsed = (0, compiler_1.validateAndStripTypeAnnotations)(trimmed);
-    trimmed = (0, compileHelpers_1.convertPointerDereference)((0, compileHelpers_1.convertCharLiteralsToUTF8)((0, compileHelpers_1.stripNumericTypeSuffixes)(trimmed)));
+    trimmed = (0, compileHelpers_1.convertThisTypeVarProperty)((0, compileHelpers_1.convertThisProperty)((0, compileHelpers_1.convertPointerDereference)((0, compileHelpers_1.convertCharLiteralsToUTF8)((0, compileHelpers_1.stripNumericTypeSuffixes)(trimmed)))), thisTypeVars);
     if (trimmed === "") {
         trimmed = "0";
     }

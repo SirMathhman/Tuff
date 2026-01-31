@@ -1,19 +1,26 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.normalizeAndStripNumericTypes = exports.convertThisTypeVarProperty = exports.convertThisProperty = exports.stripComments = exports.convertPointerDereference = exports.convertMutableReference = exports.convertCharLiteralsToUTF8 = exports.stripNumericTypeSuffixes = void 0;
 exports.parseIfExpression = parseIfExpression;
 exports.parseIfStatement = parseIfStatement;
 exports.parseWhileStatement = parseWhileStatement;
 exports.normalizeExpression = normalizeExpression;
-exports.stripNumericTypeSuffixes = stripNumericTypeSuffixes;
-exports.convertCharLiteralsToUTF8 = convertCharLiteralsToUTF8;
-exports.convertMutableReference = convertMutableReference;
-exports.convertPointerDereference = convertPointerDereference;
-exports.stripComments = stripComments;
-exports.normalizeAndStripNumericTypes = normalizeAndStripNumericTypes;
 exports.skipWhitespace = skipWhitespace;
+exports.parseStructDefinition = parseStructDefinition;
 exports.parseFunctionDeclaration = parseFunctionDeclaration;
-const compiler_1 = require("./compiler");
 const stringState_1 = require("./stringState");
+const structUtils_1 = require("./structUtils");
+const blockUtils_1 = require("./blockUtils");
+// Re-export conversion utilities
+var conversionUtils_1 = require("./conversionUtils");
+Object.defineProperty(exports, "stripNumericTypeSuffixes", { enumerable: true, get: function () { return conversionUtils_1.stripNumericTypeSuffixes; } });
+Object.defineProperty(exports, "convertCharLiteralsToUTF8", { enumerable: true, get: function () { return conversionUtils_1.convertCharLiteralsToUTF8; } });
+Object.defineProperty(exports, "convertMutableReference", { enumerable: true, get: function () { return conversionUtils_1.convertMutableReference; } });
+Object.defineProperty(exports, "convertPointerDereference", { enumerable: true, get: function () { return conversionUtils_1.convertPointerDereference; } });
+Object.defineProperty(exports, "stripComments", { enumerable: true, get: function () { return conversionUtils_1.stripComments; } });
+Object.defineProperty(exports, "convertThisProperty", { enumerable: true, get: function () { return conversionUtils_1.convertThisProperty; } });
+Object.defineProperty(exports, "convertThisTypeVarProperty", { enumerable: true, get: function () { return conversionUtils_1.convertThisTypeVarProperty; } });
+Object.defineProperty(exports, "normalizeAndStripNumericTypes", { enumerable: true, get: function () { return conversionUtils_1.normalizeAndStripNumericTypes; } });
 /** Strip brace-wrapped expressions and convert let bindings to IIFEs. */
 function stripBraceWrappers(input) {
     let result = input;
@@ -30,7 +37,7 @@ function stripBraceWrappers(input) {
             inside = inside.trim();
             // Convert blocks with statements to IIFEs to avoid syntax errors in expressions
             if (inside.includes(";")) {
-                const iife = convertLetBindingToIIFE(inside);
+                const iife = (0, blockUtils_1.convertLetBindingToIIFE)(inside);
                 const placeholder = "__IIFE_" + iifeCounter + "__";
                 iifeMap.set(placeholder, iife);
                 iifeCounter++;
@@ -168,17 +175,24 @@ function parseIfBranch(input, start, options) {
         stopTokens: [";", ")", "}", "]", ","],
     });
 }
-function parseIfConditionAndThen(input, start) {
-    if (!isKeywordAt(input, start, "if"))
-        return null;
-    let idx = start + 2;
+function parseConditionAfterKeyword(input, start, keywordLength) {
+    let idx = start + keywordLength;
     while (idx < input.length && /\s/.test(input[idx]))
         idx++;
     const condition = readBalanced(input, idx, "(", ")");
     if (!condition)
         return null;
     const conditionExpr = condition.content.trim();
-    idx = condition.end;
+    return { conditionExpr, end: condition.end };
+}
+function parseIfConditionAndThen(input, start) {
+    if (!isKeywordAt(input, start, "if"))
+        return null;
+    const conditionResult = parseConditionAfterKeyword(input, start, 2);
+    if (!conditionResult)
+        return null;
+    let idx = conditionResult.end;
+    const conditionExpr = conditionResult.conditionExpr;
     const thenResult = parseIfBranch(input, idx, { stopOnElse: true });
     idx = thenResult.end;
     return { conditionExpr, thenResult, idx };
@@ -223,14 +237,11 @@ function parseIfStatement(input, start) {
 function parseWhileStatement(input, start) {
     if (!isKeywordAt(input, start, "while"))
         return null;
-    let idx = start + 5;
-    while (idx < input.length && /\s/.test(input[idx]))
-        idx++;
-    const condition = readBalanced(input, idx, "(", ")");
-    if (!condition)
+    const conditionResult = parseConditionAfterKeyword(input, start, 5);
+    if (!conditionResult)
         return null;
-    const conditionExpr = condition.content.trim();
-    idx = condition.end;
+    let idx = conditionResult.end;
+    const conditionExpr = conditionResult.conditionExpr;
     while (idx < input.length && /\s/.test(input[idx]))
         idx++;
     const bodyResult = readBalanced(input, idx, "{", "}");
@@ -258,34 +269,11 @@ function transformIfExpressions(input) {
     return result;
 }
 function normalizeExpression(input) {
-    return stripBraceWrappers(transformIfExpressions(input));
-}
-function stripNumericTypeSuffixes(input) {
-    return input.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
-}
-function convertCharLiteralsToUTF8(input) {
-    return input.replace(/'(.)'/g, (match, char) => {
-        return String(char.charCodeAt(0));
-    });
-}
-function convertMutableReference(input) {
-    // Convert &mut identifier to {value: identifier}
-    return input.replace(/&mut\s+([a-zA-Z_][a-zA-Z0-9_]*)/g, "{value: $1}");
-}
-function convertPointerDereference(input) {
-    // Convert *identifier to identifier.value
-    // Match * followed by an identifier (word characters)
-    // Use negative lookbehind to avoid matching multiplication operators
-    // that come after numbers or identifiers
-    return input.replace(/(?<![a-zA-Z0-9_])\*([a-zA-Z_][a-zA-Z0-9_]*)/g, "$1.value");
-}
-function stripComments(input) {
-    return input
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/\/\/[^\n\r]*(?=\n|$)/g, "");
-}
-function normalizeAndStripNumericTypes(input) {
-    return convertCharLiteralsToUTF8(stripNumericTypeSuffixes(normalizeExpression(input)));
+    const [p, m] = (0, structUtils_1.handleStructInstantiation)(input);
+    let r = stripBraceWrappers(transformIfExpressions(p));
+    for (const [k, v] of m)
+        r = r.split(k).join(v);
+    return r;
 }
 function readIdentifier(input, start) {
     const match = input.slice(start).match(/^([A-Za-z_]\w*)/);
@@ -313,82 +301,53 @@ function normalizeParamList(paramList) {
         .filter((name) => name.length > 0)
         .join(", ");
 }
-function parseLetDeclaration(stmt, declaredVars, validateTypes) {
-    const typePattern = /let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/;
-    const noTypePattern = /let\s+(\w+)\s*=\s*([\s\S]+)/;
-    let match = stmt.match(typePattern);
-    const [varName, declType, value] = match
-        ? [match[1], match[2], match[3]]
-        : (() => {
-            match = stmt.match(noTypePattern);
-            return match ? [match[1], undefined, match[2]] : [null, null, null];
-        })();
-    if (!varName)
+function parseFunctionBody(input, idx) {
+    // Check if body is braced or a bare expression
+    if (input[idx] === "{") {
+        const bodyResult = readBalanced(input, idx, "{", "}");
+        if (!bodyResult)
+            return null;
+        return { content: bodyResult.content, end: bodyResult.end };
+    }
+    // Handle bare expression body - read until semicolon
+    let semiIdx = input.indexOf(";", idx);
+    if (semiIdx === -1) {
+        semiIdx = input.length;
+    }
+    const content = input.substring(idx, semiIdx).trim();
+    return { content, end: semiIdx };
+}
+function parseStructDefinition(input, start) {
+    if (!isKeywordAt(input, start, "struct"))
         return null;
-    if (declaredVars.has(varName)) {
-        throw new Error("Variable '" + varName + "' has already been declared in this block");
-    }
-    declaredVars.add(varName);
-    const trimmedValue = value.trim().replace(/;$/, "");
-    if (declType && validateTypes) {
-        (0, compiler_1.extractAndValidateTypesInExpression)(trimmedValue, declType);
-    }
-    else if (!declType && validateTypes) {
-        (0, compiler_1.inferTypeFromValue)(trimmedValue);
-    }
-    const cleanValue = trimmedValue.replace(/(\d+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");
-    return "let " + varName + " = " + cleanValue;
+    let idx = skipWhitespace(input, start + 6);
+    const nameResult = readIdentifier(input, idx);
+    if (!nameResult)
+        return null;
+    idx = skipWhitespace(input, nameResult.end);
+    const bodyResult = readBalanced(input, idx, "{", "}");
+    if (!bodyResult)
+        return null;
+    idx = bodyResult.end;
+    const fields = bodyResult.content
+        .trim()
+        .split(";")
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0)
+        .map((f) => f.substring(0, f.indexOf(":")).trim());
+    if (input[idx] === ";")
+        idx++;
+    return { end: idx, name: nameResult.name, fields };
 }
-function buildBlockReturn(blockContent) {
-    const statements = (0, compiler_1.splitBlockStatements)(blockContent);
-    if (statements.length === 0) {
-        return { declarations: [], returnExpr: "" };
+function buildThisCaptureBody(params) {
+    const paramNames = (0, blockUtils_1.extractParamNames)(params);
+    if (paramNames.length === 0) {
+        return "return {};";
     }
-    const declarations = [];
-    const declaredVars = new Set();
-    const lastStatement = statements[statements.length - 1];
-    // Process all statements except the last one
-    for (let i = 0; i < statements.length - 1; i++) {
-        const stmt = statements[i];
-        if (stmt.startsWith("let ")) {
-            const decl = parseLetDeclaration(stmt, declaredVars, false);
-            if (decl) {
-                declarations.push(decl);
-            }
-        }
-        else {
-            // For non-let statements (like assignments), add them as-is
-            declarations.push(normalizeAndStripNumericTypes(stmt.trim().replace(/;$/, "")));
-        }
-    }
-    // Process let statements in declarations for normalization
-    const normalizedDeclarations = declarations.map((decl) => {
-        if (decl.startsWith("let ")) {
-            const match = decl.match(/^let\s+(\w+)\s*=\s*([\s\S]+)$/);
-            if (!match)
-                return decl;
-            const [, varName, value] = match;
-            const normalizedValue = normalizeAndStripNumericTypes(value.trim());
-            return "let " + varName + " = " + normalizedValue;
-        }
-        // Non-let statements are already normalized above
-        return decl;
-    });
-    const normalizedLastStatement = normalizeAndStripNumericTypes(lastStatement.trim().replace(/;$/, ""));
-    return {
-        declarations: normalizedDeclarations,
-        returnExpr: normalizedLastStatement,
-    };
+    const properties = paramNames.map((name) => name + ": " + name).join(", ");
+    return "return {" + properties + "};";
 }
-function buildFunctionBody(blockContent) {
-    const { declarations, returnExpr } = buildBlockReturn(blockContent);
-    const bodyPrefix = declarations.join("; ");
-    if (!returnExpr) {
-        return bodyPrefix ? bodyPrefix + ";" : "";
-    }
-    return bodyPrefix + (bodyPrefix ? "; " : "") + "return " + returnExpr + ";";
-}
-function parseFunctionDeclaration(input, start) {
+function parseFunctionSignature(input, start) {
     if (!isKeywordAt(input, start, "fn"))
         return null;
     let idx = skipWhitespace(input, start + 2);
@@ -412,22 +371,29 @@ function parseFunctionDeclaration(input, start) {
     if (input.slice(idx, idx + 2) !== "=>")
         return null;
     idx = skipWhitespace(input, idx + 2);
-    const bodyResult = readBalanced(input, idx, "{", "}");
+    return { fnName, params, idx };
+}
+function parseFunctionDeclaration(input, start) {
+    const sig = parseFunctionSignature(input, start);
+    if (!sig)
+        return null;
+    const bodyResult = parseFunctionBody(input, sig.idx);
     if (!bodyResult)
         return null;
-    const functionBody = buildFunctionBody(bodyResult.content);
-    const declaration = "function " + fnName + "(" + params + ") { " + functionBody + " }";
-    return { declaration, end: bodyResult.end };
-}
-function convertLetBindingToIIFE(blockContent) {
-    const { declarations, returnExpr } = buildBlockReturn(blockContent);
-    if (!returnExpr) {
-        return "";
+    const trimmedBody = bodyResult.content.trim();
+    const isBlockBody = bodyResult.content.trim().startsWith("{") ||
+        bodyResult.content.includes(";");
+    let functionBody;
+    if (trimmedBody === "this") {
+        functionBody = buildThisCaptureBody(sig.params);
     }
-    const functionBody = declarations.join("; ") +
-        (declarations.length > 0 ? "; " : "") +
-        "return " +
-        returnExpr +
-        ";";
-    return "(function() { " + functionBody + " })()";
+    else if (isBlockBody &&
+        (trimmedBody.endsWith("this") || trimmedBody.includes("this"))) {
+        functionBody = (0, blockUtils_1.buildFunctionBodyWithThisCapture)(bodyResult.content, sig.params);
+    }
+    else {
+        functionBody = (0, blockUtils_1.buildFunctionBody)(bodyResult.content);
+    }
+    const declaration = "function " + sig.fnName + "(" + sig.params + ") { " + functionBody + " }";
+    return { declaration, end: bodyResult.end };
 }

@@ -1,7 +1,5 @@
-fn Wrapper() : Wrapper => {
-    let field = 100;
-    this
+fn outer() => {
+    fn inner() => {
+        
+    }
 }
-
-let value = Wrapper();
-value.field // should be 100

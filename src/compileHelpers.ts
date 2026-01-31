@@ -1,6 +1,11 @@
 import { updateStringState, type StringState } from "./stringState";
 import { handleStructInstantiation } from "./structUtils";
-import { buildFunctionBody, buildFunctionBodyWithThisCapture, convertLetBindingToIIFE, extractParamNames } from "./blockUtils";
+import {
+  buildFunctionBody,
+  buildFunctionBodyWithThisCapture,
+  convertLetBindingToIIFE,
+  extractParamNames,
+} from "./blockUtils";
 
 // Re-export conversion utilities
 export {
@@ -413,6 +418,44 @@ export function parseStructDefinition(
   return { end: idx, name: nameResult.name, fields };
 }
 
+function processNestedFunctionDeclarations(
+  content: string,
+): string {
+  let result = content;
+  let pos = 0;
+
+  while (pos < result.length) {
+    const remaining = result.substring(pos);
+    const fnIndex = remaining.indexOf("fn ");
+
+    if (fnIndex === -1) break;
+
+    const fnStart = pos + fnIndex;
+    // Check if this is actually a function declaration at word boundary
+    if (fnStart > 0) {
+      const charBefore = result[fnStart - 1];
+      if (/[a-zA-Z0-9_]/.test(charBefore)) {
+        pos = fnStart + 3;
+        continue;
+      }
+    }
+
+    // Try to parse as function declaration
+    const parsed = parseFunctionDeclaration(result, fnStart);
+    if (parsed) {
+      // Replace the Tuff function declaration with JavaScript
+      const before = result.substring(0, fnStart);
+      const after = result.substring(parsed.end);
+      result = before + parsed.declaration + after;
+      pos = fnStart + parsed.declaration.length;
+    } else {
+      pos = fnStart + 3;
+    }
+  }
+
+  return result;
+}
+
 function buildThisCaptureBody(params: string): string {
   const paramNames = extractParamNames(params);
 
@@ -423,6 +466,7 @@ function buildThisCaptureBody(params: string): string {
   const properties = paramNames.map((name) => name + ": " + name).join(", ");
   return "return {" + properties + "};";
 }
+
 
 function parseFunctionSignature(
   input: string,
@@ -474,16 +518,22 @@ export function parseFunctionDeclaration(
     bodyResult.content.trim().startsWith("{") ||
     bodyResult.content.includes(";");
 
+  // Process nested function declarations in the body first
+  const processedBody = processNestedFunctionDeclarations(bodyResult.content);
+
   let functionBody: string;
   if (trimmedBody === "this") {
     functionBody = buildThisCaptureBody(sig.params);
-  } else if (isBlockBody && (trimmedBody.endsWith("this") || trimmedBody.includes("this"))) {
+  } else if (
+    isBlockBody &&
+    (trimmedBody.endsWith("this") || trimmedBody.includes("this"))
+  ) {
     functionBody = buildFunctionBodyWithThisCapture(
-      bodyResult.content,
+      processedBody,
       sig.params,
     );
   } else {
-    functionBody = buildFunctionBody(bodyResult.content);
+    functionBody = buildFunctionBody(processedBody);
   }
 
   const declaration =

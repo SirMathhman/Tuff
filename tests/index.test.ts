@@ -314,3 +314,18 @@ test("function returning this captures local variables in function body", () => 
     100,
   );
 });
+
+test("nested function declaration compiles without error", () => {
+  assertValid("fn outer() => { fn inner() => { } }");
+});
+
+test("interpret handles nested function declaration that evaluates to 0", () => {
+  assertInterpret("fn outer() => { fn inner() => { } }", 0);
+});
+
+test("interpret handles nested function declaration with outer return", () => {
+  assertInterpret(
+    "fn outer() => { fn inner() => { } 42 }",
+    0,
+  );
+});
