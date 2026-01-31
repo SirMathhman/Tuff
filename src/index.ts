@@ -23,6 +23,7 @@ import {
   stripComments,
   stripNumericTypeSuffixes,
 } from "./compileHelpers";
+import { registerStruct } from "./structUtils";
 
 function extractSingleLetStatement(statement: string): {
   varName: string;
@@ -181,6 +182,7 @@ function processStructDefinition(remaining: string): string {
   if (!parsedStruct) {
     return remaining;
   }
+  registerStruct(parsedStruct.name, parsedStruct.fields);
   return advancePastDefinition(remaining, parsedStruct.end);
 }
 

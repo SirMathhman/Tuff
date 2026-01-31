@@ -535,25 +535,23 @@ function parseFunctionBody(
 export function parseStructDefinition(
   input: string,
   start: number,
-): { end: number } | null {
+): { end: number; name: string; fields: string[] } | null {
   if (!isKeywordAt(input, start, "struct")) return null;
   let idx = skipWhitespace(input, start + 6);
-
   const nameResult = readIdentifier(input, idx);
   if (!nameResult) return null;
   idx = skipWhitespace(input, nameResult.end);
-
-  // Expect struct body in braces
   const bodyResult = readBalanced(input, idx, "{", "}");
   if (!bodyResult) return null;
   idx = bodyResult.end;
-
-  // Skip optional semicolon
-  if (input[idx] === ";") {
-    idx++;
-  }
-
-  return { end: idx };
+  const fields = bodyResult.content
+    .trim()
+    .split(";")
+    .map((f) => f.trim())
+    .filter((f) => f.length > 0)
+    .map((f) => f.substring(0, f.indexOf(":")).trim());
+  if (input[idx] === ";") idx++;
+  return { end: idx, name: nameResult.name, fields };
 }
 
 export function parseFunctionDeclaration(

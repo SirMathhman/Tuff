@@ -1,4 +1,4 @@
 process.exit(Number((function() {
-  let value = {field: 100};
-return value.field;
+  let point = {x: 3, y: 4};
+return point.x + point.y;
 })()));

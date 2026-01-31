@@ -291,3 +291,9 @@ test("struct instantiation with field access", () => {
     100,
   );
 });
+test("struct instantiation with multiple fields", () => {
+  assertInterpret(
+    "struct Point { x : I32; y : I32; } let point = Point { 3, 4 }; point.x + point.y",
+    7,
+  );
+});
