@@ -1,12 +1,11 @@
-const fs = require("fs");
-const path = require("path");
-
-// wah
+extern use fs from fs;
+extern use path from path;
 
 // Simple compile function - takes in Tuff source and compiles it
 function compile(source) {
-  // For now, just return the source as-is
-  return source;
+  // Transform: extern use identifier from module; -> const identifier = require("module");
+  let result = source.replace(/extern\s+use\s+(\w+)\s+from\s+(\w+);?/g, 'const $1 = require("$2");');
+  return result;
 }
 
 // Read from main.tuff and write to main.js

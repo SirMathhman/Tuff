@@ -27,4 +27,18 @@ describe("compile", () => {
     const result = compile(source);
     expect(result).toBe(source);
   });
+
+  it("should transform extern use to const require syntax", () => {
+    const source = "extern use fs from fs;";
+    const result = compile(source);
+    expect(result).toBe('const fs = require("fs");');
+  });
+
+  it("should handle multiple extern use statements", () => {
+    const source = "extern use fs from fs;\nextern use path from path;";
+    const result = compile(source);
+    expect(result).toBe(
+      'const fs = require("fs");\nconst path = require("path");',
+    );
+  });
 });

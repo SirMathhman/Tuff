@@ -5,12 +5,16 @@ const path = require("path");
 
 // Simple compile function - takes in Tuff source and compiles it
 function compile(source) {
-  // For now, just return the source as-is
-  return source;
+  // Transform: const identifier = require("module"); -> const identifier = require("module");
+  let result = source.replace(
+    /extern\s+use\s+(\w+)\s+from\s+(\w+);?/g,
+    'const $1 = require("$2");',
+  );
+  return result;
 }
 
 // Read from main.tuff and write to main.js
-const sourceFile = path.join(path.dirname(__filename), 'main.tuff');
+const sourceFile = path.join(path.dirname(__filename), "main.tuff");
 const destinationFile = __filename;
 
 // Only run the compilation if this is the main module (not being imported for testing)
