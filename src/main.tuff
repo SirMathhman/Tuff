@@ -1,4 +1,5 @@
-let mut x = 0;
-let y : *mut I32 = &mut x;
-*y = 100;
-x
+// line comment
+
+/* block comment */
+
+100

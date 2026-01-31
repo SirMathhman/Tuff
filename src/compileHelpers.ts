@@ -259,6 +259,12 @@ export function convertPointerDereference(input: string): string {
   );
 }
 
+export function stripComments(input: string): string {
+  return input
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n\r]*(?=\n|$)/g, "");
+}
+
 export function normalizeAndStripNumericTypes(input: string): string {
   return convertCharLiteralsToUTF8(
     stripNumericTypeSuffixes(normalizeExpression(input)),

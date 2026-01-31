@@ -182,6 +182,10 @@ test("interpret supports pointer with expression", () => {
   assertInterpret("let x = 42; let p : *I32 = x; *p + 8", 50);
 });
 
+test("interpret ignores comments before expressions", () => {
+  assertInterpret("// line comment\n/* block comment */\n100", 100);
+});
+
 test("interpret supports mutable variable declaration", () => {
   assertInterpret("let mut x = 100; x", 100);
 });

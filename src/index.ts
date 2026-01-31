@@ -14,6 +14,7 @@ import {
   normalizeAndStripNumericTypes,
   normalizeExpression,
   parseFunctionDeclaration,
+  stripComments,
   stripNumericTypeSuffixes,
 } from "./compileHelpers";
 
@@ -222,7 +223,7 @@ export function compile(input: string): string {
   const { declarations: rawDeclarations, expression: rawExpression } =
     extractTopLevelStatements(input);
   const declarations = processDeclarations(rawDeclarations);
-  let trimmed = normalizeExpression(rawExpression.trim());
+  let trimmed = normalizeExpression(stripComments(rawExpression).trim());
 
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
   trimmed = convertPointerDereference(
