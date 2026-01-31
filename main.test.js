@@ -285,7 +285,9 @@ describe("compileTuffToJS", () => {
   it("should remove type parameters from struct instantiation", () => {
     const source = 'let result = Err<String> { err : "Sample" };';
     const result = compileTuffToJS(source);
-    expect(unwrap(result)).toBe('let result = { kind : "Err", err : "Sample" };');
+    expect(unwrap(result)).toBe(
+      'let result = { kind : "Err", err : "Sample" };',
+    );
   });
 
   it("should handle multiple type parameters in struct instantiation", () => {
@@ -300,14 +302,16 @@ describe("compileTuffToJS", () => {
   it("should handle nested generics in struct instantiation", () => {
     const source = "let container = Container<Vec<T>> { data : items };";
     const result = compileTuffToJS(source);
-    expect(unwrap(result)).toBe("let container = { kind : \"Container\", data : items };");
+    expect(unwrap(result)).toBe(
+      'let container = { kind : "Container", data : items };',
+    );
   });
 
   it("should handle multiple struct instantiations on one line", () => {
     const source = "let x = Ok<T> { value : 5 }; let y = Err<E> { err : msg };";
     const result = compileTuffToJS(source);
     expect(unwrap(result)).toBe(
-      "let x = { kind : \"Ok\", value : 5 }; let y = { kind : \"Err\", err : msg };",
+      'let x = { kind : "Ok", value : 5 }; let y = { kind : "Err", err : msg };',
     );
   });
 

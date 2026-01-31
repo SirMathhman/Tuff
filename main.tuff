@@ -424,7 +424,7 @@ fn transformForLoops(source : String) : String => {
         let afterFor = line.substring(forStart + 5);
         let inIdx = afterFor.indexOf(" in ");
         let beforeIn = afterFor.substring(0, inIdx);
-        let varName = beforeIn.replace("(let ", "").replace("mut ", "").trim();
+        let varName = beforeIn.replace("(let ", "").replace("let ", "").replace("mut ", "").trim();
         
         // Find the range: "0..10"
         let inPos = letEnd;

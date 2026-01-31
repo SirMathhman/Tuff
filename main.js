@@ -416,10 +416,15 @@ function transformForLoops(source) {
     if (line.includes(forStr + "(let ")) {
       // Check if this.kind === "a" Rust-like for loop with " in "
       if (line.includes(" in ") && line.includes("..")) {
-        // Find the start: "for (let "
+        // Find the start: "for (let " or "for (let "
         let forStart = line.indexOf(forStr + "(let ");
         let letEnd = line.indexOf(" in ", forStart);
-        let varName = line.substring(forStart + 9, letEnd);
+        
+        // Extract variable name, handling both "let" and "let mut"
+        let afterFor = line.substring(forStart + 5);
+        let inIdx = afterFor.indexOf(" in ");
+        let beforeIn = afterFor.substring(0, inIdx);
+        let varName = beforeIn.replace("(let ", "").replace("let ", "").replace("mut ", "").trim();
         
         // Find the range: "0..10"
         let inPos = letEnd;
