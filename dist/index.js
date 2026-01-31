@@ -65,12 +65,25 @@ function processSingleLetInTopLevel(statement, variableTypes, mutableVars, thisT
 function findNextSemicolon(remaining) {
     let semiIdx = -1;
     let braceDepth = 0;
+    let bracketDepth = 0;
+    let parenDepth = 0;
     for (let i = 0; i < remaining.length; i++) {
         if (remaining[i] === "{")
             braceDepth++;
         else if (remaining[i] === "}")
             braceDepth--;
-        else if (remaining[i] === ";" && braceDepth === 0) {
+        else if (remaining[i] === "[")
+            bracketDepth++;
+        else if (remaining[i] === "]")
+            bracketDepth--;
+        else if (remaining[i] === "(")
+            parenDepth++;
+        else if (remaining[i] === ")")
+            parenDepth--;
+        else if (remaining[i] === ";" &&
+            braceDepth === 0 &&
+            bracketDepth === 0 &&
+            parenDepth === 0) {
             semiIdx = i;
             break;
         }
@@ -79,20 +92,25 @@ function findNextSemicolon(remaining) {
 }
 function processAssignmentStatement(statement, mutableVars) {
     let varName;
+    let lhs;
     let operator;
     let value;
     // Handle this.varName assignments
     const thisAssignMatch = statement.match(/^this\.\s*(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/);
     if (thisAssignMatch) {
         [, varName, operator, value] = thisAssignMatch;
+        lhs = varName;
     }
     else {
-        // Handle regular varName assignments
-        const assignMatch = statement.match(/^(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/);
+        // Handle array/subscript assignments and regular varName assignments
+        const assignMatch = statement.match(/^(\w+(?:\[[^\]]*\])*)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/);
         if (!assignMatch) {
             return "";
         }
-        [, varName, operator, value] = assignMatch;
+        [, lhs, operator, value] = assignMatch;
+        // Extract base variable name from lhs for mutability check
+        const baseVarMatch = lhs.match(/^(\w+)/);
+        varName = baseVarMatch ? baseVarMatch[1] : lhs;
     }
     if (!mutableVars.has(varName)) {
         throw new Error("Cannot assign to immutable variable '" +
@@ -100,7 +118,7 @@ function processAssignmentStatement(statement, mutableVars) {
             "'. Declare it with 'let mut' to allow reassignment.");
     }
     const processedValue = (0, compileHelpers_1.normalizeAndStripNumericTypes)(value.trim());
-    return varName + " " + operator + " " + processedValue;
+    return lhs + " " + operator + " " + processedValue;
 }
 function advancePastDefinition(remaining, end) {
     let newRemaining = remaining.substring(end).trim();
@@ -227,7 +245,7 @@ function isTopLevelTrigger(remaining) {
         remaining.startsWith("if") ||
         remaining.startsWith("while") ||
         remaining.startsWith("this.") ||
-        /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining));
+        /^\w+(?:\[[^\]]*\])*\s*(?:[+\-*/%&|^])?=\s*/.test(remaining));
 }
 function tryHandleControlFlow(remaining, declarations, variableTypes, mutableVars, thisTypeVars) {
     if (remaining.startsWith("fn ")) {

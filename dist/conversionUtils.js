@@ -7,6 +7,7 @@ exports.convertPointerDereference = convertPointerDereference;
 exports.stripComments = stripComments;
 exports.convertThisProperty = convertThisProperty;
 exports.convertThisTypeVarProperty = convertThisTypeVarProperty;
+exports.convertArrayLiterals = convertArrayLiterals;
 exports.normalizeAndStripNumericTypes = normalizeAndStripNumericTypes;
 const compileHelpers_1 = require("./compileHelpers");
 function stripNumericTypeSuffixes(input) {
@@ -45,6 +46,12 @@ function convertThisTypeVarProperty(input, thisTypeVars) {
         result = result.replace(regex, "$1");
     }
     return result;
+}
+function convertArrayLiterals(input) {
+    // Convert Tuff array literals [val1, val2, ...] to JavaScript arrays
+    // This is a simple passthrough as JavaScript array syntax is the same
+    // but we preserve it so it's not treated as a block
+    return input;
 }
 function normalizeAndStripNumericTypes(input) {
     return convertCharLiteralsToUTF8(stripNumericTypeSuffixes((0, compileHelpers_1.normalizeExpression)(input)));

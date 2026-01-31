@@ -144,6 +144,7 @@ function processAssignmentStatement(
   mutableVars: Set<string>,
 ): string {
   let varName: string;
+  let lhs: string;
   let operator: string;
   let value: string;
 
@@ -153,15 +154,19 @@ function processAssignmentStatement(
   );
   if (thisAssignMatch) {
     [, varName, operator, value] = thisAssignMatch;
+    lhs = varName;
   } else {
-    // Handle regular varName assignments
+    // Handle array/subscript assignments and regular varName assignments
     const assignMatch = statement.match(
-      /^(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/,
+      /^(\w+(?:\[[^\]]*\])*)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/,
     );
     if (!assignMatch) {
       return "";
     }
-    [, varName, operator, value] = assignMatch;
+    [, lhs, operator, value] = assignMatch;
+    // Extract base variable name from lhs for mutability check
+    const baseVarMatch = lhs.match(/^(\w+)/);
+    varName = baseVarMatch ? baseVarMatch[1] : lhs;
   }
 
   if (!mutableVars.has(varName)) {
@@ -172,7 +177,7 @@ function processAssignmentStatement(
     );
   }
   const processedValue = normalizeAndStripNumericTypes(value.trim());
-  return varName + " " + operator + " " + processedValue;
+  return lhs + " " + operator + " " + processedValue;
 }
 
 function advancePastDefinition(remaining: string, end: number): string {
@@ -347,7 +352,7 @@ function isTopLevelTrigger(remaining: string): boolean {
     remaining.startsWith("if") ||
     remaining.startsWith("while") ||
     remaining.startsWith("this.") ||
-    /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining)
+    /^\w+(?:\[[^\]]*\])*\s*(?:[+\-*/%&|^])?=\s*/.test(remaining)
   );
 }
 

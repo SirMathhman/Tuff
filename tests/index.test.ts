@@ -374,3 +374,10 @@ test("interpret array mutable assignment", () => {
     100,
   );
 });
+
+test("interpret multiple sequential array element assignments", () => {
+  assertInterpret(
+    "let mut array : [I32; 0; 3]; array[0] = 120; array[0] = 20; array[0]",
+    20,
+  );
+});

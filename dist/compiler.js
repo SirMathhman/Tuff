@@ -127,6 +127,10 @@ function inferBlockExpressionType(blockContent) {
 }
 /** Extract and validate types in an expression against declared type. */
 function extractAndValidateTypesInExpression(expression, declaredType) {
+    // Skip validation for array types - they are handled separately
+    if (declaredType.startsWith("[") && declaredType.endsWith("]")) {
+        return;
+    }
     const blockMatch = expression.match(/^\s*\{\s*([\s\S]*)\s*\}\s*$/);
     if (blockMatch) {
         const blockContent = blockMatch[1];
@@ -166,24 +170,54 @@ function inferTypeFromValue(value) {
     }
     return Array.from(typesUsed)[0];
 }
+function buildLetStatementResult(varName, declType, value, isMutable) {
+    const processedValue = value.trim().replace(/;$/, "");
+    return { varName, declType, value: processedValue, isMutable };
+}
+function tryArrayNoInitMatch(statement) {
+    const match = statement.match(/let\s+(mut\s+)?(\w+)\s*:\s*(\[[^\]]*;\s*0\s*;[^\]]*\])\s*;?$/);
+    if (!match)
+        return null;
+    const [, varMut, varName, arrayType] = match;
+    return buildLetStatementResult(varName, arrayType, "[]", varMut !== undefined);
+}
+function tryArrayWithInitMatch(statement) {
+    const match = statement.match(/let\s+(mut\s+)?(\w+)\s*:\s*(\[[^\]]+\])\s*=\s*([\s\S]+)/);
+    if (!match)
+        return null;
+    const [, varMut, varName, arrayType, value] = match;
+    return buildLetStatementResult(varName, arrayType, value, varMut !== undefined);
+}
+function tryTypedMatch(statement) {
+    const match = statement.match(/let\s+(mut\s+)?(\w+)\s*:\s*(\*?)(mut\s+)?(\w+)\s*=\s*([\s\S]+)/);
+    if (!match)
+        return null;
+    const [, varMut, varName, pointerPrefix, typeMut, baseType, value] = match;
+    const declType = pointerPrefix + (typeMut ? "mut " : "") + baseType;
+    return buildLetStatementResult(varName, declType, value, varMut !== undefined);
+}
+function tryInferredMatch(statement) {
+    const match = statement.match(/let\s+(mut\s+)?(\w+)\s*=\s*([\s\S]+)/);
+    if (!match)
+        return null;
+    const [, mutKeyword, varName, value] = match;
+    const inferredType = inferTypeFromValue(value);
+    const declType = inferredType !== null && inferredType !== void 0 ? inferredType : "I32";
+    return buildLetStatementResult(varName, declType, value, mutKeyword !== undefined);
+}
 function parseLetStatement(statement) {
-    let letMatch = statement.match(/let\s+(mut\s+)?(\w+)\s*:\s*(\*?)(mut\s+)?(\w+)\s*=\s*([\s\S]+)/);
-    if (letMatch) {
-        const [, varMut, varName, pointerPrefix, typeMut, baseType, value] = letMatch;
-        const declType = pointerPrefix + (typeMut ? "mut " : "") + baseType;
-        const processedValue = value.trim().replace(/;$/, "");
-        const isMutable = varMut !== undefined;
-        return { varName, declType, value: processedValue, isMutable };
-    }
-    letMatch = statement.match(/let\s+(mut\s+)?(\w+)\s*=\s*([\s\S]+)/);
-    if (letMatch) {
-        const [, mutKeyword, varName, value] = letMatch;
-        const trimmedValue = value.trim().replace(/;$/, "");
-        const inferredType = inferTypeFromValue(trimmedValue);
-        const declType = inferredType !== null && inferredType !== void 0 ? inferredType : "I32";
-        const isMutable = mutKeyword !== undefined;
-        return { varName, declType, value: trimmedValue, isMutable };
-    }
+    const arrayNoInit = tryArrayNoInitMatch(statement);
+    if (arrayNoInit)
+        return arrayNoInit;
+    const arrayWithInit = tryArrayWithInitMatch(statement);
+    if (arrayWithInit)
+        return arrayWithInit;
+    const typed = tryTypedMatch(statement);
+    if (typed)
+        return typed;
+    const inferred = tryInferredMatch(statement);
+    if (inferred)
+        return inferred;
     return null;
 }
 function determineAndValidateType(trimmed, typesUsed) {
