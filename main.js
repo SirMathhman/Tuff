@@ -8,23 +8,6 @@ function compileTuffToJS(source) {
   let result = source;
   let mutVariables = [];
   
-  // Remove custom keyword declarations first (before validation)
-  let aliasLines = result.split("\n");
-  let filteredLines = [];
-  for (let i = 0; i < aliasLines.length; i = i + 1) {
-    let line = aliasLines[i];
-    let trimmed = line.trim();
-    let typeKeyword = "t" + "y" + "p" + "e";
-    // Check if line starts with alias keyword
-    if (trimmed.indexOf(typeKeyword + " ") === 0) {
-      // Replace alias declarations with empty string to preserve blank lines
-      filteredLines.push("");
-    } else {
-      filteredLines.push(line);
-    }
-  }
-  result = filteredLines.join("\n");
-  
   // First pass: collect all mut variable declarations
   let validationLines = result.split("\n");
   for (let i = 0; i < validationLines.length; i = i + 1) {
@@ -45,8 +28,12 @@ function compileTuffToJS(source) {
   for (let i = 0; i < checkLines.length; i = i + 1) {
     let line = checkLines[i];
     let trimmed = line.trim();
-    // Look for reassignments: name = value (but not let name = ... or function stuff or const)
-    if (trimmed.includes(" = ") && !trimmed.includes("let ") && !trimmed.includes("function ") && !trimmed.includes("const ")) {
+    let typeKeyword = "t" + "y" + "p" + "e";
+    let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
+    // Skip type aliases and struct declarations from validation
+    if (trimmed.indexOf(typeKeyword + " ") === 0 || trimmed.indexOf(structKeyword + " ") === 0) {
+      // Skip validation for these lines
+    } else if (trimmed.includes(" = ") && !trimmed.includes("let ") && !trimmed.includes("function ") && !trimmed.includes("const ")) {
       let assignIdx = trimmed.indexOf(" = ");
       let varName = trimmed.substring(0, assignIdx).trim();
       // Check if this is a simple variable name (not an object property or array access)
@@ -66,6 +53,46 @@ function compileTuffToJS(source) {
       }
     }
   }
+  
+  // Remove custom keyword declarations (after validation)
+  let aliasLines = result.split("\n");
+  let filteredLines = [];
+  let bracketDepth = 0;
+  for (let i = 0; i < aliasLines.length; i = i + 1) {
+    let line = aliasLines[i];
+    let trimmed = line.trim();
+    let typeKeyword = "t" + "y" + "p" + "e";
+    let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
+    let openBrace = "{";
+    let closeBrace = "}";
+    
+    // Check if line starts with struct keyword
+    if (trimmed.indexOf(structKeyword + " ") === 0) {
+      bracketDepth = bracketDepth + 1;
+      filteredLines.push("");
+    } else if (bracketDepth > 0) {
+      // Remove lines while inside struct (tracking brace depth)
+      let openCount = 0;
+      let closeCount = 0;
+      for (let j = 0; j < line.length; j = j + 1) {
+        if (line.substring(j, j + 1) === openBrace) {
+          openCount = openCount + 1;
+        }
+        if (line.substring(j, j + 1) === closeBrace) {
+          closeCount = closeCount + 1;
+        }
+      }
+      bracketDepth = bracketDepth + openCount;
+      bracketDepth = bracketDepth - closeCount;
+      filteredLines.push("");
+    } else if (trimmed.indexOf(typeKeyword + " ") === 0) {
+      // Replace alias declarations with empty string to preserve blank lines
+      filteredLines.push("");
+    } else {
+      filteredLines.push(line);
+    }
+  }
+  result = filteredLines.join("\n");
   
   // Continue with regular transformations...
   

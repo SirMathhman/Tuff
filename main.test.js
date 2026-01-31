@@ -198,4 +198,22 @@ describe("compileTuffToJS", () => {
     const result = compileTuffToJS(source);
     expect(result).toBe("let x = 5;\n\nlet y = 10;");
   });
+
+  it("should remove struct declarations", () => {
+    const source = "struct User { name : String; }";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should handle multi-line struct declarations", () => {
+    const source = "struct User {\n  name : String;\n  age : Number;\n}";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("\n  \n  \n");
+  });
+
+  it("should preserve code around struct declarations", () => {
+    const source = "let x = 5;\nstruct User { name : String; }\nlet y = 10;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let x = 5;\n\nlet y = 10;");
+  });
 });
