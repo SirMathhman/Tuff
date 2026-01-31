@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseIfExpression = parseIfExpression;
 exports.parseIfStatement = parseIfStatement;
+exports.parseWhileStatement = parseWhileStatement;
 exports.normalizeExpression = normalizeExpression;
 exports.stripNumericTypeSuffixes = stripNumericTypeSuffixes;
 exports.convertCharLiteralsToUTF8 = convertCharLiteralsToUTF8;
@@ -218,6 +219,26 @@ function parseIfStatement(input, start) {
     const thenBody = transformIfExpressions(parsed.thenResult.expr);
     const statement = "if (" + parsed.conditionExpr + ") " + thenBody + elseStatement;
     return { statement, end: idx };
+}
+function parseWhileStatement(input, start) {
+    if (!isKeywordAt(input, start, "while"))
+        return null;
+    let idx = start + 5;
+    while (idx < input.length && /\s/.test(input[idx]))
+        idx++;
+    const condition = readBalanced(input, idx, "(", ")");
+    if (!condition)
+        return null;
+    const conditionExpr = condition.content.trim();
+    idx = condition.end;
+    while (idx < input.length && /\s/.test(input[idx]))
+        idx++;
+    const bodyResult = readBalanced(input, idx, "{", "}");
+    if (!bodyResult)
+        return null;
+    const body = transformIfExpressions(bodyResult.content);
+    const statement = "while (" + conditionExpr + ") {" + body + "}";
+    return { statement, end: bodyResult.end };
 }
 function transformIfExpressions(input) {
     let result = "";

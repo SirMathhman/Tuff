@@ -167,6 +167,20 @@ function handleTopLevelIf(remaining, declarations) {
     }
     return null;
 }
+function handleTopLevelWhile(remaining, declarations) {
+    if (!remaining.startsWith("while"))
+        return null;
+    const parsedStmt = (0, compileHelpers_1.parseWhileStatement)(remaining, 0);
+    if (parsedStmt) {
+        const afterWhile = remaining.substring(parsedStmt.end).trim();
+        // If there's more code after the while statement, treat it as a statement
+        if (afterWhile.length > 0 && !afterWhile.startsWith(";")) {
+            declarations.push(parsedStmt.statement);
+            return afterWhile;
+        }
+    }
+    return null;
+}
 function handleTopLevelBlock(remaining, variableTypes, mutableVars, declarations) {
     if (!remaining.startsWith("{"))
         return null;
@@ -185,6 +199,7 @@ function isTopLevelTrigger(remaining) {
         remaining.startsWith("fn ") ||
         remaining.startsWith("{") ||
         remaining.startsWith("if") ||
+        remaining.startsWith("while") ||
         /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining));
 }
 function extractTopLevelStatements(input) {
@@ -200,6 +215,11 @@ function extractTopLevelStatements(input) {
         const ifResult = handleTopLevelIf(remaining, declarations);
         if (ifResult !== null) {
             remaining = ifResult;
+            continue;
+        }
+        const whileResult = handleTopLevelWhile(remaining, declarations);
+        if (whileResult !== null) {
+            remaining = whileResult;
             continue;
         }
         const blockResult = handleTopLevelBlock(remaining, variableTypes, mutableVars, declarations);

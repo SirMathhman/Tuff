@@ -1,5 +1,5 @@
 process.exit(Number((function() {
-  let x = 1;
-if (x < 10) (function() { return x = 2; })();
+  let x = 0;
+while (x < 4) (function() { return x += 1; })();
 return x;
 })()));

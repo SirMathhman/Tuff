@@ -198,6 +198,21 @@ function parseIfBranch(
   });
 }
 
+function parseConditionAfterKeyword(
+  input: string,
+  start: number,
+  keywordLength: number,
+): { conditionExpr: string; end: number } | null {
+  let idx = start + keywordLength;
+  while (idx < input.length && /\s/.test(input[idx])) idx++;
+
+  const condition = readBalanced(input, idx, "(", ")");
+  if (!condition) return null;
+  const conditionExpr = condition.content.trim();
+
+  return { conditionExpr, end: condition.end };
+}
+
 function parseIfConditionAndThen(
   input: string,
   start: number,
@@ -207,13 +222,12 @@ function parseIfConditionAndThen(
   idx: number;
 } | null {
   if (!isKeywordAt(input, start, "if")) return null;
-  let idx = start + 2;
-  while (idx < input.length && /\s/.test(input[idx])) idx++;
-
-  const condition = readBalanced(input, idx, "(", ")");
-  if (!condition) return null;
-  const conditionExpr = condition.content.trim();
-  idx = condition.end;
+  
+  const conditionResult = parseConditionAfterKeyword(input, start, 2);
+  if (!conditionResult) return null;
+  
+  let idx = conditionResult.end;
+  const conditionExpr = conditionResult.conditionExpr;
 
   const thenResult = parseIfBranch(input, idx, { stopOnElse: true });
   idx = thenResult.end;
@@ -271,6 +285,28 @@ export function parseIfStatement(
     "if (" + parsed.conditionExpr + ") " + thenBody + elseStatement;
 
   return { statement, end: idx };
+}
+
+export function parseWhileStatement(
+  input: string,
+  start: number,
+): { statement: string; end: number } | null {
+  if (!isKeywordAt(input, start, "while")) return null;
+  
+  const conditionResult = parseConditionAfterKeyword(input, start, 5);
+  if (!conditionResult) return null;
+  
+  let idx = conditionResult.end;
+  const conditionExpr = conditionResult.conditionExpr;
+
+  while (idx < input.length && /\s/.test(input[idx])) idx++;
+  const bodyResult = readBalanced(input, idx, "{", "}");
+  if (!bodyResult) return null;
+
+  const body = transformIfExpressions(bodyResult.content);
+  const statement = "while (" + conditionExpr + ") {" + body + "}";
+
+  return { statement, end: bodyResult.end };
 }
 
 function transformIfExpressions(input: string): string {

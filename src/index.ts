@@ -17,6 +17,7 @@ import {
   parseFunctionDeclaration,
   parseIfExpression,
   parseIfStatement,
+  parseWhileStatement,
   stripComments,
   stripNumericTypeSuffixes,
 } from "./compileHelpers";
@@ -251,6 +252,25 @@ function handleTopLevelIf(
   return null;
 }
 
+function handleTopLevelWhile(
+  remaining: string,
+  declarations: string[],
+): string | null {
+  if (!remaining.startsWith("while")) return null;
+
+  const parsedStmt = parseWhileStatement(remaining, 0);
+  if (parsedStmt) {
+    const afterWhile = remaining.substring(parsedStmt.end).trim();
+    // If there's more code after the while statement, treat it as a statement
+    if (afterWhile.length > 0 && !afterWhile.startsWith(";")) {
+      declarations.push(parsedStmt.statement);
+      return afterWhile;
+    }
+  }
+
+  return null;
+}
+
 function handleTopLevelBlock(
   remaining: string,
   variableTypes: Record<string, string>,
@@ -280,8 +300,36 @@ function isTopLevelTrigger(remaining: string): boolean {
     remaining.startsWith("fn ") ||
     remaining.startsWith("{") ||
     remaining.startsWith("if") ||
+    remaining.startsWith("while") ||
     /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining)
   );
+}
+
+function tryHandleControlFlow(
+  remaining: string,
+  declarations: string[],
+  variableTypes: Record<string, string>,
+  mutableVars: Set<string>,
+): string | null {
+  if (remaining.startsWith("fn ")) {
+    return processFnDeclaration(remaining, declarations);
+  }
+
+  const ifResult = handleTopLevelIf(remaining, declarations);
+  if (ifResult !== null) return ifResult;
+
+  const whileResult = handleTopLevelWhile(remaining, declarations);
+  if (whileResult !== null) return whileResult;
+
+  const blockResult = handleTopLevelBlock(
+    remaining,
+    variableTypes,
+    mutableVars,
+    declarations,
+  );
+  if (blockResult !== null) return blockResult;
+
+  return null;
 }
 
 function extractTopLevelStatements(input: string): {
@@ -294,25 +342,14 @@ function extractTopLevelStatements(input: string): {
   let remaining = input.trim();
 
   while (isTopLevelTrigger(remaining)) {
-    if (remaining.startsWith("fn ")) {
-      remaining = processFnDeclaration(remaining, declarations);
-      continue;
-    }
-
-    const ifResult = handleTopLevelIf(remaining, declarations);
-    if (ifResult !== null) {
-      remaining = ifResult;
-      continue;
-    }
-
-    const blockResult = handleTopLevelBlock(
+    const controlFlowResult = tryHandleControlFlow(
       remaining,
+      declarations,
       variableTypes,
       mutableVars,
-      declarations,
     );
-    if (blockResult !== null) {
-      remaining = blockResult;
+    if (controlFlowResult !== null) {
+      remaining = controlFlowResult;
       continue;
     }
 
