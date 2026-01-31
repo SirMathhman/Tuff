@@ -395,3 +395,15 @@ test("function with array parameter and leading comments", () => {
     120,
   );
 });
+
+test("compile throws error for array type mismatch in function call - insufficient initialization", () => {
+  assertInvalid(
+    "fn getFirst(array : [I32; 1; 5]) => array[0];\n\nlet mut array : [I32; 0; 3];\ngetFirst(array);",
+  );
+});
+
+test("compile throws error for array type mismatch in function call - wrong capacity", () => {
+  assertInvalid(
+    "fn getFirst(array : [I32; 1; 5]) => array[0];\n\nlet mut array : [I32; 0; 3];\ngetFirst(array);",
+  );
+});

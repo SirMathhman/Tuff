@@ -29,15 +29,10 @@ function stripBraceWrappers(input: string): string {
   let changed = true;
   while (changed) {
     changed = false;
-
     const newResult = result.replace(/\{([\s\S]*?)\}/g, (match, inside) => {
-      if (inside.includes("{") || inside.includes("}")) {
-        return match;
-      }
+      if (inside.includes("{") || inside.includes("}")) return match;
       changed = true;
       inside = inside.trim();
-
-      // Convert blocks with statements to IIFEs to avoid syntax errors in expressions
       if (inside.includes(";")) {
         const iife = convertLetBindingToIIFE(inside);
         const placeholder = "__IIFE_" + iifeCounter + "__";
@@ -45,8 +40,6 @@ function stripBraceWrappers(input: string): string {
         iifeCounter++;
         return placeholder;
       }
-
-      // For blocks without statements, just return the content
       return inside;
     });
     result = newResult;
@@ -84,9 +77,7 @@ type DepthState = {
 
 function isAtTopLevel(state: DepthState): boolean {
   return state.paren === 0 && state.brace === 0 && state.bracket === 0;
-}
-
-function updateDepthState(
+}function updateDepthState(
   ch: string,
   state: DepthState,
   stopTokens: string[] | undefined,
@@ -96,9 +87,7 @@ function updateDepthState(
     return { stop: false, handled: true };
   }
   if (ch === ")") {
-    if (state.paren === 0 && stopTokens?.includes(")")) {
-      return { stop: true, handled: true };
-    }
+    if (state.paren === 0 && stopTokens?.includes(")")) return { stop: true, handled: true };
     state.paren = Math.max(state.paren - 1, 0);
     return { stop: false, handled: true };
   }
@@ -107,9 +96,7 @@ function updateDepthState(
     return { stop: false, handled: true };
   }
   if (ch === "}") {
-    if (state.brace === 0 && stopTokens?.includes("}")) {
-      return { stop: true, handled: true };
-    }
+    if (state.brace === 0 && stopTokens?.includes("}")) return { stop: true, handled: true };
     state.brace = Math.max(state.brace - 1, 0);
     return { stop: false, handled: true };
   }
@@ -118,13 +105,10 @@ function updateDepthState(
     return { stop: false, handled: true };
   }
   if (ch === "]") {
-    if (state.bracket === 0 && stopTokens?.includes("]")) {
-      return { stop: true, handled: true };
-    }
+    if (state.bracket === 0 && stopTokens?.includes("]")) return { stop: true, handled: true };
     state.bracket = Math.max(state.bracket - 1, 0);
     return { stop: false, handled: true };
   }
-
   return { stop: false, handled: false };
 }
 
@@ -378,6 +362,40 @@ function normalizeParamList(paramList: string): string {
     .join(", ");
 }
 
+/**
+ * Extract parameter information with full type details.
+ * Returns array of {name, type} objects from parameter list like "x : I32, arr : [I32; 1; 3]"
+ */
+export function extractParameterInfo(
+  paramList: string,
+): Array<{ name: string; type: string }> {
+  const trimmed = paramList.trim();
+  if (!trimmed) return [];
+
+  const params: Array<{ name: string; type: string }> = [];
+  const paramParts = trimmed.split(",");
+
+  for (const param of paramParts) {
+    const trimmedParam = param.trim();
+    const colonIdx = trimmedParam.indexOf(":");
+    if (colonIdx !== -1) {
+      const name = trimmedParam.substring(0, colonIdx).trim();
+      const type = trimmedParam.substring(colonIdx + 1).trim();
+      if (name && type) {
+        params.push({ name, type });
+      }
+    } else {
+      // No type annotation, try to extract just the name
+      const nameMatch = trimmedParam.match(/^([A-Za-z_]\w*)/);
+      if (nameMatch) {
+        params.push({ name: nameMatch[1], type: "I32" }); // default to I32
+      }
+    }
+  }
+
+  return params;
+}
+
 function parseFunctionBody(
   input: string,
   idx: number,
@@ -473,6 +491,7 @@ function parseFunctionSignature(
 ): {
   fnName: string;
   params: string;
+  rawParams: string;
   idx: number;
 } | null {
   if (!isKeywordAt(input, start, "fn")) return null;
@@ -485,7 +504,8 @@ function parseFunctionSignature(
 
   const paramsResult = readBalanced(input, idx, "(", ")");
   if (!paramsResult) return null;
-  const params = normalizeParamList(paramsResult.content);
+  const rawParams = paramsResult.content;
+  const params = normalizeParamList(rawParams);
   idx = skipWhitespace(input, paramsResult.end);
 
   if (input[idx] === ":") {
@@ -499,14 +519,50 @@ function parseFunctionSignature(
   if (input.slice(idx, idx + 2) !== "=>") return null;
   idx = skipWhitespace(input, idx + 2);
 
-  return { fnName, params, idx };
+  return { fnName, params, rawParams, idx };
+}
+
+function buildFunctionBodyCode(
+  trimmedBody: string,
+  bodyResult: { content: string; end: number },
+  sig: { fnName: string; params: string; rawParams: string; idx: number },
+  isNestedFunction: boolean,
+): string {
+  const isBlockBody =
+    bodyResult.content.trim().startsWith("{") ||
+    bodyResult.content.includes(";") ||
+    trimmedBody.includes("fn ") ||
+    trimmedBody.includes("let ");
+
+  const processedBody = processNestedFunctionDeclarations(bodyResult.content);
+
+  if (trimmedBody === "this") {
+    return buildThisCaptureBody(sig.params);
+  }
+  if (isBlockBody) {
+    const { returnExpr } = buildBlockReturn(processedBody);
+    if (returnExpr === "this") {
+      return buildFunctionBodyWithThisCapture(
+        processedBody,
+        sig.params,
+        isNestedFunction,
+      );
+    }
+    return buildFunctionBody(processedBody, sig.params);
+  }
+  return buildFunctionBody(processedBody, sig.params);
 }
 
 export function parseFunctionDeclaration(
   input: string,
   start: number,
   isNestedFunction: boolean = false,
-): { declaration: string; end: number } | null {
+): {
+  declaration: string;
+  end: number;
+  fnName: string;
+  rawParams: string;
+} | null {
   const sig = parseFunctionSignature(input, start);
   if (!sig) return null;
 
@@ -514,39 +570,20 @@ export function parseFunctionDeclaration(
   if (!bodyResult) return null;
 
   const trimmedBody = bodyResult.content.trim();
-  // Check if originally a block: either the content is wrapped in braces
-  // or it contains semicolons or multiple statements
-  const isBlockBody =
-    bodyResult.content.trim().startsWith("{") ||
-    bodyResult.content.includes(";") ||
-    trimmedBody.includes("fn ") ||
-    trimmedBody.includes("let ");
-
-  // Process nested function declarations in the body first
-  const processedBody = processNestedFunctionDeclarations(bodyResult.content);
-
-  // Check what the function actually returns
-  let functionBody: string;
-  if (trimmedBody === "this") {
-    functionBody = buildThisCaptureBody(sig.params);
-  } else if (isBlockBody) {
-    // For block bodies, parse to check if it returns "this"
-    const { returnExpr } = buildBlockReturn(processedBody);
-    if (returnExpr === "this") {
-      functionBody = buildFunctionBodyWithThisCapture(
-        processedBody,
-        sig.params,
-        isNestedFunction,
-      );
-    } else {
-      functionBody = buildFunctionBody(processedBody, sig.params);
-    }
-  } else {
-    functionBody = buildFunctionBody(processedBody, sig.params);
-  }
+  const functionBody = buildFunctionBodyCode(
+    trimmedBody,
+    bodyResult,
+    sig,
+    isNestedFunction,
+  );
 
   const declaration =
     "function " + sig.fnName + "(" + sig.params + ") { " + functionBody + " }";
 
-  return { declaration, end: bodyResult.end };
+  return {
+    declaration,
+    end: bodyResult.end,
+    fnName: sig.fnName,
+    rawParams: sig.rawParams,
+  };
 }

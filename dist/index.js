@@ -12,6 +12,8 @@ const types_1 = require("./types");
 const compiler_1 = require("./compiler");
 const compileHelpers_1 = require("./compileHelpers");
 const structUtils_1 = require("./structUtils");
+const functionRegistry_1 = require("./functionRegistry");
+const functionCallValidator_1 = require("./functionCallValidator");
 function extractSingleLetStatement(statement) {
     const parsed = (0, compiler_1.parseLetStatement)(statement);
     if (!parsed) {
@@ -133,6 +135,9 @@ function processFnDeclaration(remaining, declarations) {
         return remaining;
     }
     declarations.push(parsedFn.declaration);
+    // Register the function signature with its parameter types
+    const paramInfo = (0, compileHelpers_1.extractParameterInfo)(parsedFn.rawParams);
+    (0, functionRegistry_1.registerFunction)(parsedFn.fnName, paramInfo);
     return advancePastDefinition(remaining, parsedFn.end);
 }
 function processStructDefinition(remaining) {
@@ -289,7 +294,7 @@ function extractTopLevelStatements(input) {
         handleTopLevelStatement(remaining.substring(0, semiIdx), context);
         remaining = remaining.substring(semiIdx + 1).trim();
     }
-    return { declarations, expression: remaining, thisTypeVars };
+    return { declarations, expression: remaining, thisTypeVars, variableTypes };
 }
 function processDeclarations(rawDeclarations) {
     const declarations = [];
@@ -319,7 +324,9 @@ function processDeclarations(rawDeclarations) {
 function compile(input) {
     // Strip comments before processing
     const cleanedInput = (0, compileHelpers_1.stripComments)(input);
-    const { declarations: rawDeclarations, expression: rawExpression, thisTypeVars, } = extractTopLevelStatements(cleanedInput);
+    const { declarations: rawDeclarations, expression: rawExpression, thisTypeVars, variableTypes, } = extractTopLevelStatements(cleanedInput);
+    // Validate function calls against registered signatures
+    (0, functionCallValidator_1.validateFunctionCalls)(rawExpression, variableTypes);
     const declarations = processDeclarations(rawDeclarations);
     let trimmed = (0, compileHelpers_1.normalizeExpression)(rawExpression.trim());
     const typesUsed = (0, compiler_1.validateAndStripTypeAnnotations)(trimmed);
@@ -388,10 +395,13 @@ function compileFile(inputPath, outputPath) {
     fs.writeFileSync(outputPath, wrapped, "utf-8");
     console.log("Compiled " + inputPath + " to " + outputPath);
 }
-const args = process.argv.slice(2);
-if (args.includes("--repl")) {
-    startRepl();
-}
-else {
-    compileFile("./src/main.tuff", "./src/main.js");
+// Only execute if this is the entry point (not imported during tests)
+if (require.main === module) {
+    const args = process.argv.slice(2);
+    if (args.includes("--repl")) {
+        startRepl();
+    }
+    else {
+        compileFile("./src/main.tuff", "./src/main.js");
+    }
 }

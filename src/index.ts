@@ -23,8 +23,11 @@ import {
   parseWhileStatement,
   stripComments,
   stripNumericTypeSuffixes,
+  extractParameterInfo,
 } from "./compileHelpers";
 import { registerStruct } from "./structUtils";
+import { registerFunction } from "./functionRegistry";
+import { validateFunctionCalls } from "./functionCallValidator";
 
 function extractSingleLetStatement(statement: string): {
   varName: string;
@@ -197,6 +200,11 @@ function processFnDeclaration(
     return remaining;
   }
   declarations.push(parsedFn.declaration);
+
+  // Register the function signature with its parameter types
+  const paramInfo = extractParameterInfo(parsedFn.rawParams);
+  registerFunction(parsedFn.fnName, paramInfo);
+
   return advancePastDefinition(remaining, parsedFn.end);
 }
 
@@ -393,6 +401,7 @@ function extractTopLevelStatements(input: string): {
   declarations: string[];
   expression: string;
   thisTypeVars: Set<string>;
+  variableTypes: Record<string, string>;
 } {
   const declarations: string[] = [];
   const variableTypes: Record<string, string> = {};
@@ -425,7 +434,7 @@ function extractTopLevelStatements(input: string): {
     remaining = remaining.substring(semiIdx + 1).trim();
   }
 
-  return { declarations, expression: remaining, thisTypeVars };
+  return { declarations, expression: remaining, thisTypeVars, variableTypes };
 }
 
 function processDeclarations(rawDeclarations: string[]): string[] {
@@ -460,7 +469,12 @@ export function compile(input: string): string {
     declarations: rawDeclarations,
     expression: rawExpression,
     thisTypeVars,
+    variableTypes,
   } = extractTopLevelStatements(cleanedInput);
+
+  // Validate function calls against registered signatures
+  validateFunctionCalls(rawExpression, variableTypes);
+
   const declarations = processDeclarations(rawDeclarations);
   let trimmed = normalizeExpression(rawExpression.trim());
 
@@ -544,9 +558,12 @@ export function compileFile(inputPath: string, outputPath: string): void {
   console.log("Compiled " + inputPath + " to " + outputPath);
 }
 
-const args = process.argv.slice(2);
-if (args.includes("--repl")) {
-  startRepl();
-} else {
-  compileFile("./src/main.tuff", "./src/main.js");
+// Only execute if this is the entry point (not imported during tests)
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  if (args.includes("--repl")) {
+    startRepl();
+  } else {
+    compileFile("./src/main.tuff", "./src/main.js");
+  }
 }
