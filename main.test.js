@@ -354,4 +354,32 @@ describe("compileTuffToJS", () => {
     const result = compileTuffToJS(source);
     expect(unwrap(result)).toBe('let val = { kind : "MyStruct", field : 10 };');
   });
+
+  it("should remove &[Any] type annotations from function parameters", () => {
+    const source = "fn collectMutVariables(source : String) : &[Any] => { }";
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toBe("function collectMutVariables(source) { }");
+  });
+
+  it("should remove &[Any] type annotations from let declarations", () => {
+    const source = "let mut mutVariables : &[Any] = [];";
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toBe("let mutVariables = [];");
+  });
+
+  it("should handle multiple &[Any] annotations", () => {
+    const source =
+      "fn validateMutability(source : String, mutVariables : &[Any]) : Result<String, String> => { }";
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toBe(
+      "function validateMutability(source, mutVariables) { }",
+    );
+  });
+
+  it("should remove &[Any] with other type annotations", () => {
+    const source =
+      'let x : Number = 5;\nlet y : &[Any] = [];\nlet z : String = "test";';
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toBe('let x = 5;\nlet y = [];\nlet z = "test";');
+  });
 });

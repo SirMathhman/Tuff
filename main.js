@@ -162,6 +162,7 @@ function removeTypeAnnotations(source) {
     replaced = replaced.replace(colonSpace + "Number", "");
     replaced = replaced.replace(colonSpace + "Boolean", "");
     replaced = replaced.replace(colonSpace + "Array", "");
+    replaced = replaced.replace(colonSpace + "&[Any]", "");
     replaced = replaced.replace(colonSpace + "Object", "");
     replaced = replaced.replace(colonSpace + "Function", "");
     replaced = replaced.replace(colonSpace + "Any", "");

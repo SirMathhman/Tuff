@@ -6,7 +6,7 @@ struct Err<X> { err : X; }
 type Result<T, X> = Ok<T> | Err<T>;
 
 // Helper: Collect all mut variable declarations
-fn collectMutVariables(source : String) : Array => {
+fn collectMutVariables(source : String) : &[Any] => {
   let mut mutVariables = [];
   let mut validationLines = source.split("\n");
   for (let mut i in 0..validationLines.length) {
@@ -25,7 +25,7 @@ fn collectMutVariables(source : String) : Array => {
 }
 
 // Helper: Validate that only mut variables are reassigned
-fn validateMutability(source : String, mutVariables : Array) : Result<String, String> => {
+fn validateMutability(source : String, mutVariables : &[Any]) : Result<String, String> => {
   let mut checkLines = source.split("\n");
   for (let mut i in 0..checkLines.length) {
     let mut line = checkLines[i];
@@ -162,6 +162,7 @@ fn removeTypeAnnotations(source : String) : String => {
     replaced = replaced.replace(colonSpace + "Number", "");
     replaced = replaced.replace(colonSpace + "Boolean", "");
     replaced = replaced.replace(colonSpace + "Array", "");
+    replaced = replaced.replace(colonSpace + "&[Any]", "");
     replaced = replaced.replace(colonSpace + "Object", "");
     replaced = replaced.replace(colonSpace + "Function", "");
     replaced = replaced.replace(colonSpace + "Any", "");
