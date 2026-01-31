@@ -5,7 +5,7 @@ const path = require("path");
 
 
 
-// Simple compileTuffToJS function - takes in Tuff source and compileTuffToJSs it
+// Simple compileTuffToJS function - takes in Tuff source and returns Result
 function compileTuffToJS(source) {
   let result = source;
   let mutVariables = [];
@@ -50,9 +50,7 @@ function compileTuffToJS(source) {
         if (found === 0) {
           // This is an error: reassigning immutable variable
           let errMsg = "Error: cannot reassign immutable variable '" + varName + "'";
-          // This does nothing, this is an example
-          // let errObj = Err { err : "Sample" };
-          throw errMsg;
+          return { kind : "Err", err : errMsg };
         }
       }
     }
@@ -162,6 +160,7 @@ function compileTuffToJS(source) {
     replaced = replaced.replace(colonSpace + "Object", "");
     replaced = replaced.replace(colonSpace + "Function", "");
     replaced = replaced.replace(colonSpace + "Any", "");
+    replaced = replaced.replace(colonSpace + "Result<String, String>", "");
     
     if (replaced === beforeReplace) {
       attemptCount = 100;
@@ -241,6 +240,145 @@ function compileTuffToJS(source) {
     }
   }
 
+  // Transform: value is Type<T> -> value.kind === "Type"
+  // This implements runtime type checks for struct variants
+  let isOpDone = 0;
+  while (isOpDone === 0) {
+    let beforeIs = result;
+    let newResult = "";
+    let i = 0;
+    let isKeyword = " is ";
+    
+    while (i < result.length) {
+      let isPos = result.indexOf(isKeyword, i);
+      if (isPos === -1) {
+        // No more " is ", copy rest
+        newResult = newResult + result.substring(i);
+        i = result.length;
+      } else {
+        // Found " is " - extract the variable name before it
+        let before = result.substring(0, isPos);
+        let varStart = isPos - 1;
+        // Walk backwards to find start of identifier
+        while (varStart > 0) {
+          let ch = before.substring(varStart - 1, varStart);
+          let isAlphaNum = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_" || ch === ".";
+          if (!isAlphaNum) {
+            varStart = varStart;
+            break;
+          }
+          varStart = varStart - 1;
+        }
+        let varName = result.substring(varStart, isPos);
+        
+        // Find the type name after " is "
+        let typeStart = isPos + isKeyword.length;
+        let typeEnd = typeStart;
+        // Walk forward to find endof type name (before <)
+        while (typeEnd < result.length) {
+          let ch = result.substring(typeEnd, typeEnd + 1);
+          if (ch === "<" || ch === ";" || ch === " " || ch === ")" || ch === "{" || ch === ",") {
+            break;
+          }
+          typeEnd = typeEnd + 1;
+        }
+        let typeName = result.substring(typeStart, typeEnd);
+        
+        // Skip generic type parameters if present
+        let afterType = typeEnd;
+        if (result.substring(typeEnd, typeEnd + 1) === "<") {
+          // Find matching >
+          let depth = 1;
+          afterType = typeEnd + 1;
+          while (afterType < result.length && depth > 0) {
+            let ch = result.substring(afterType, afterType + 1);
+            if (ch === "<") {
+              depth = depth + 1;
+            } else if (ch === ">") {
+              depth = depth - 1;
+            }
+            afterType = afterType + 1;
+          }
+        }
+        
+        // Build replacement: varName.kind === "TypeName"
+        let replacement = varName + ".kind === \"" + typeName + "\"";
+        newResult = newResult + result.substring(i, varStart) + replacement;
+        i = afterType;
+      }
+    }
+    
+    result = newResult;
+    if (result === beforeIs) {
+      isOpDone = 1;
+    }
+  }
+  
+  // Transform: struct instantiation to add kind property
+  // Pattern: StructName { fields } -> { kind : "StructName", fields }
+  let structInstDone = 0;
+  while (structInstDone === 0) {
+    let beforeInst = result;
+    let newResult = "";
+    let i = 0;
+    let openBrace = " {";
+    
+    while (i < result.length) {
+      // Look for pattern: StructName {
+      // where StructName starts with uppercase letter
+      let bracePos = result.indexOf(openBrace, i);
+      if (bracePos === -1) {
+        // No more {, copy rest
+        newResult = newResult + result.substring(i);
+        i = result.length;
+      } else {
+        // Check if there's an identifier before the {
+        let nameStart = bracePos - 1;
+        // Skip whitespace backwards
+        while (nameStart > 0 && result.substring(nameStart, nameStart + 1) === " ") {
+          nameStart = nameStart - 1;
+        }
+        let nameEnd = nameStart + 1;
+        
+        // Walk backwards to find start of identifier
+        while (nameStart > 0) {
+          let ch = result.substring(nameStart - 1, nameStart);
+          let isAlphaNum = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "_";
+          if (!isAlphaNum) {
+            break;
+          }
+          nameStart = nameStart - 1;
+        }
+        
+        let structName = result.substring(nameStart, nameEnd);
+        let firstChar = structName.substring(0, 1);
+        let isUpperCase = firstChar >= "A" && firstChar <= "Z";
+        
+        // Check for invalid patterns (equals sign before name, or function keyword)
+        let beforeName = result.substring(nameStart - 10, nameStart);
+        let hasEquals = beforeName.includes("=");
+        let isFunction = beforeName.includes("function");
+        
+        if (isUpperCase && structName.length > 0 && !isFunction && hasEquals) {
+          // This looks like a struct instantiation
+          // Replace: StructName { -> { kind : "StructName",
+          let replacement = "{ kind : \"" + structName + "\",";
+          newResult = newResult + result.substring(i, nameStart) + replacement;
+          i = bracePos + openBrace.length;
+        } else {
+          // Not a struct instantiation, copy up to and including {
+          newResult = newResult + result.substring(i, bracePos + openBrace.length);
+          i = bracePos + openBrace.length;
+        }
+      }
+    }
+    
+    result = newResult;
+    if (result === beforeInst) {
+      structInstDone = 1;
+    }
+  }
+
   
   // Transform: Rust-like for loops to JavaScript
   // for (let i = 0; i < 10; i = i + 1) -> for (let i = 0; i < 10; i = i + 1)
@@ -287,7 +425,7 @@ function compileTuffToJS(source) {
     result = newResult;
   }
   
-  return result;
+  return { kind : "Ok", value : result };
 }
 
 // Read from main.tuff and write to main.js
@@ -304,7 +442,14 @@ if (require.main === module) {
     }
 
     // compileTuffToJS the source and write to the destination file
-    const compileTuffToJSd = compileTuffToJS(data);
+    const compilationResult = compileTuffToJS(data);
+    
+    if (compilationResult.kind === "Err") {
+      console.error("Compilation error:", compilationResult.err);
+      process.exit(1);
+    }
+    
+    const compileTuffToJSd = compilationResult.value;
     fs.writeFile(destinationFile, compileTuffToJSd, "utf8", (err) => {
       if (err) {
         console.error("Error writing destination file:", err);
