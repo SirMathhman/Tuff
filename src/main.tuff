@@ -1,5 +1,8 @@
-fn outer() => {
-    fn inner() => {
-        
-    }
+fn Wrapper() => {
+    fn get() => 100;
+
+    this
 }
+
+let obj : Wrapper = Wrapper();
+obj.get() // This should become 100

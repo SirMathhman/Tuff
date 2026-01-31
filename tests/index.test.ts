@@ -324,8 +324,12 @@ test("interpret handles nested function declaration that evaluates to 0", () => 
 });
 
 test("interpret handles nested function declaration with outer return", () => {
+  assertInterpret("fn outer() => { fn inner() => { } 42 }", 0);
+});
+
+test("function returning this captures nested function declarations", () => {
   assertInterpret(
-    "fn outer() => { fn inner() => { } 42 }",
-    0,
+    "fn Wrapper() => { fn get() => 100; this } let obj = Wrapper(); obj.get()",
+    100,
   );
 });

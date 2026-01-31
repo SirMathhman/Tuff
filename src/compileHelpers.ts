@@ -418,9 +418,7 @@ export function parseStructDefinition(
   return { end: idx, name: nameResult.name, fields };
 }
 
-function processNestedFunctionDeclarations(
-  content: string,
-): string {
+function processNestedFunctionDeclarations(content: string): string {
   let result = content;
   let pos = 0;
 
@@ -466,7 +464,6 @@ function buildThisCaptureBody(params: string): string {
   const properties = paramNames.map((name) => name + ": " + name).join(", ");
   return "return {" + properties + "};";
 }
-
 
 function parseFunctionSignature(
   input: string,
@@ -528,10 +525,7 @@ export function parseFunctionDeclaration(
     isBlockBody &&
     (trimmedBody.endsWith("this") || trimmedBody.includes("this"))
   ) {
-    functionBody = buildFunctionBodyWithThisCapture(
-      processedBody,
-      sig.params,
-    );
+    functionBody = buildFunctionBodyWithThisCapture(processedBody, sig.params);
   } else {
     functionBody = buildFunctionBody(processedBody);
   }

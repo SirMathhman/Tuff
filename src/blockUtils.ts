@@ -9,6 +9,7 @@ type BlockReturn = {
   declarations: string[];
   returnExpr: string;
   declaredVars: string[];
+  declaredFunctions: string[];
 };
 
 export function parseLetDeclaration(
@@ -67,9 +68,14 @@ function normalizeDeclarations(declarations: string[]): string[] {
 function processStatementsBeforeLast(
   statements: string[],
   declaredVarsSet: Set<string>,
-): { declarations: string[]; declaredVars: string[] } {
+): {
+  declarations: string[];
+  declaredVars: string[];
+  declaredFunctions: string[];
+} {
   const declarations: string[] = [];
   const declaredVars: string[] = [];
+  const declaredFunctions: string[] = [];
 
   for (let i = 0; i < statements.length - 1; i++) {
     const stmt = statements[i];
@@ -82,8 +88,17 @@ function processStatementsBeforeLast(
           declaredVars.push(varMatch[1]);
         }
       }
-    } else if (stmt.trim().startsWith("fn ") || stmt.trim().startsWith("function ")) {
-      declarations.push(stmt.trim().replace(/;$/, ""));
+    } else if (
+      stmt.trim().startsWith("fn ") ||
+      stmt.trim().startsWith("function ")
+    ) {
+      const cleaned = stmt.trim().replace(/;$/, "");
+      declarations.push(cleaned);
+      // Extract function name from "function <name>(...)"
+      const fnMatch = cleaned.match(/^function\s+(\w+)\s*\(/);
+      if (fnMatch) {
+        declaredFunctions.push(fnMatch[1]);
+      }
     } else {
       declarations.push(
         normalizeAndStripNumericTypes(stmt.trim().replace(/;$/, "")),
@@ -91,18 +106,22 @@ function processStatementsBeforeLast(
     }
   }
 
-  return { declarations, declaredVars };
+  return { declarations, declaredVars, declaredFunctions };
 }
 
-function processLastStatement(
-  lastStatement: string,
-): { normalizedLastStatement: string; isFnDeclaration: boolean } {
+function processLastStatement(lastStatement: string): {
+  normalizedLastStatement: string;
+  isFnDeclaration: boolean;
+} {
   const trimmed = lastStatement.trim();
   const isFnDeclaration =
     trimmed.startsWith("fn ") || trimmed.startsWith("function ");
 
   if (isFnDeclaration) {
-    return { normalizedLastStatement: trimmed.replace(/;$/, ""), isFnDeclaration: true };
+    return {
+      normalizedLastStatement: trimmed.replace(/;$/, ""),
+      isFnDeclaration: true,
+    };
   }
 
   return {
@@ -116,16 +135,22 @@ function processLastStatement(
 export function buildBlockReturn(blockContent: string): BlockReturn {
   const statements = splitBlockStatements(blockContent);
   if (statements.length === 0) {
-    return { declarations: [], returnExpr: "", declaredVars: [] };
+    return {
+      declarations: [],
+      returnExpr: "",
+      declaredVars: [],
+      declaredFunctions: [],
+    };
   }
 
   const declaredVarsSet = new Set<string>();
   const lastStatement = statements[statements.length - 1];
 
-  const { declarations: stmtDecls, declaredVars } = processStatementsBeforeLast(
-    statements,
-    declaredVarsSet,
-  );
+  const {
+    declarations: stmtDecls,
+    declaredVars,
+    declaredFunctions,
+  } = processStatementsBeforeLast(statements, declaredVarsSet);
 
   const { normalizedLastStatement, isFnDeclaration } =
     processLastStatement(lastStatement);
@@ -140,6 +165,7 @@ export function buildBlockReturn(blockContent: string): BlockReturn {
     declarations: normalizedDeclarations,
     returnExpr: isFnDeclaration ? "" : normalizedLastStatement,
     declaredVars,
+    declaredFunctions,
   };
 }
 
@@ -170,13 +196,13 @@ export function buildFunctionBodyWithThisCapture(
   blockContent: string,
   params: string,
 ): string {
-  const { declarations, returnExpr, declaredVars } =
+  const { declarations, returnExpr, declaredVars, declaredFunctions } =
     buildBlockReturn(blockContent);
 
   // If the return expression is "this", capture all variables (params + locals)
   if (returnExpr === "this") {
     const paramNames = extractParamNames(params);
-    const allVars = [...paramNames, ...declaredVars];
+    const allVars = [...paramNames, ...declaredVars, ...declaredFunctions];
 
     if (allVars.length === 0) {
       const prefix =
