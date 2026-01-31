@@ -9,6 +9,7 @@ import {
 } from "./compiler";
 import {
   convertCharLiteralsToUTF8,
+  convertPointerDereference,
   normalizeAndStripNumericTypes,
   normalizeExpression,
   parseFunctionDeclaration,
@@ -78,8 +79,13 @@ function processSingleLetInTopLevel(
   }
 
   variableTypes[varName] = declType;
+  
+  // If declaring a pointer type, wrap the value in an object
+  const finalValue = declType.startsWith("*") 
+    ? "{value: " + cleanValue + "}" 
+    : cleanValue;
 
-  return { varName, cleanValue };
+  return { varName, cleanValue: finalValue };
 }
 
 function extractTopLevelStatements(input: string): {
@@ -137,7 +143,11 @@ function processDeclarations(rawDeclarations: string[]): string[] {
     const declMatch = decl.match(/^let\s+(\w+)\s*=\s*([\s\S]+)$/);
     if (declMatch) {
       const [, varName, value] = declMatch;
-      const processedValue = normalizeAndStripNumericTypes(value.trim());
+      // Skip normalization for pointer wrapper objects {value: ...}
+      const isPointerWrapper = /^\{value:\s*/.test(value.trim());
+      const processedValue = isPointerWrapper 
+        ? value.trim()
+        : normalizeAndStripNumericTypes(value.trim());
       declarations.push("let " + varName + " = " + processedValue);
     } else if (decl.trim().length > 0) {
       declarations.push(decl);
@@ -153,7 +163,7 @@ export function compile(input: string): string {
   let trimmed = normalizeExpression(rawExpression.trim());
 
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
-  trimmed = convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed));
+  trimmed = convertPointerDereference(convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed)));
   determineAndValidateType(trimmed, typesUsed);
 
   let compiled = "";

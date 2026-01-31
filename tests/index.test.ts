@@ -146,3 +146,11 @@ test("interpret converts character literals to UTF-8 codes", () => {
 test("interpret supports character literals in expressions", () => {
   expect(interpret("'z'")).toBe(122);
 });
+
+test("interpret supports pointer declaration and dereference", () => {
+  expect(interpret("let x = 100; let y : *I32 = x; *y")).toBe(100);
+});
+
+test("interpret supports pointer with expression", () => {
+  expect(interpret("let x = 42; let p : *I32 = x; *p + 8")).toBe(50);
+});

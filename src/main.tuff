@@ -1,2 +1,3 @@
-let a : Char = 'a';
-a
+let x = 100;
+let y : *I32 = x;
+*y

@@ -236,10 +236,13 @@ export function inferTypeFromValue(value: string): string | undefined {
 export function parseLetStatement(
   statement: string,
 ): { varName: string; declType: string; value: string } | null {
-  let letMatch = statement.match(/let\s+(\w+)\s*:\s*(\w+)\s*=\s*([\s\S]+)/);
+  let letMatch = statement.match(/let\s+(\w+)\s*:\s*(\*?)(\w+)\s*=\s*([\s\S]+)/);
   if (letMatch) {
-    const [, varName, declType, value] = letMatch;
-    return { varName, declType, value: value.trim().replace(/;$/, "") };
+    const [, varName, pointerPrefix, baseType, value] = letMatch;
+    const declType = pointerPrefix + baseType;
+    const processedValue = value.trim().replace(/;$/, "");
+    
+    return { varName, declType, value: processedValue };
   }
 
   letMatch = statement.match(/let\s+(\w+)\s*=\s*([\s\S]+)/);

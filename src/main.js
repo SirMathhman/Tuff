@@ -1,4 +1,5 @@
 process.exit(Number((function() {
-  let a = 97;
-return a;
+  let x = 100;
+let y = {value: x};
+return y.value;
 })()));
