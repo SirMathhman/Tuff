@@ -87,6 +87,14 @@ test("interpret supports if expressions", () => {
   expect(interpret("if (true) { let z = 100; z } else 5")).toBe(100);
 });
 
+test("interpret supports function declarations", () => {
+  expect(
+    interpret(
+      "fn get() : I32 => {\n  let y = if (true) { let z = 100; z } else 5;\n  y\n}\nget()",
+    ),
+  ).toBe(100);
+});
+
 test("compile throws error for duplicate variable declaration", () => {
   assertInvalid("{ let x : U8 = 3; let x : U8 = 100; x }");
 });

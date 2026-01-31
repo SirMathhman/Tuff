@@ -6,12 +6,68 @@ import {
   determineCoercedType,
   TYPE_ORDER,
 } from "./types";
+import { updateStringState, type StringState } from "./stringState";
+
+type BlockScanState = {
+  statements: string[];
+  current: string;
+  stringState: StringState;
+  parenDepth: number;
+  braceDepth: number;
+  bracketDepth: number;
+};
+
+function createBlockScanState(): BlockScanState {
+  return {
+    statements: [],
+    current: "",
+    stringState: { inString: null, escaped: false },
+    parenDepth: 0,
+    braceDepth: 0,
+    bracketDepth: 0,
+  };
+}
+
+function flushBlockStatement(state: BlockScanState): void {
+  const trimmed = state.current.trim();
+  if (trimmed.length > 0) {
+    state.statements.push(trimmed);
+  }
+  state.current = "";
+}
+
+function trackBlockChar(state: BlockScanState, ch: string): void {
+  if (updateStringState(ch, state.stringState)) {
+    state.current += ch;
+    return;
+  }
+
+  if (ch === "(") state.parenDepth++;
+  if (ch === ")") state.parenDepth = Math.max(state.parenDepth - 1, 0);
+  if (ch === "{") state.braceDepth++;
+  if (ch === "}") state.braceDepth = Math.max(state.braceDepth - 1, 0);
+  if (ch === "[") state.bracketDepth++;
+  if (ch === "]") state.bracketDepth = Math.max(state.bracketDepth - 1, 0);
+
+  const isTopLevel =
+    state.parenDepth === 0 &&
+    state.braceDepth === 0 &&
+    state.bracketDepth === 0;
+  if (ch === ";" && isTopLevel) {
+    flushBlockStatement(state);
+    return;
+  }
+
+  state.current += ch;
+}
 
 function splitBlockStatements(blockContent: string): string[] {
-  return blockContent
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  const state = createBlockScanState();
+  for (let i = 0; i < blockContent.length; i++) {
+    trackBlockChar(state, blockContent[i]);
+  }
+  flushBlockStatement(state);
+  return state.statements;
 }
 
 function processLetStatements(
