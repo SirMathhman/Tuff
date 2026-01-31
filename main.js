@@ -1,11 +1,20 @@
 const fs = require("fs");
 const path = require("path");
 
-// Get the path of the main.tuff source file (Tuff language source)
-const sourceFile = path.join(path.dirname(__filename), "main.tuff");
+// Simple compile function - takes in Tuff source and compiles it
+function compile(source) {
+  // For now, just return the source as-is
+  return source;
+}
 
-// Define the destination file path (update main.js itself with compiled output)
-const destinationFile = __filename;
+// Get the path of the current file
+const sourceFile = __filename;
+
+// Define the destination file path (same directory with -copy suffix)
+const destinationFile = path.join(
+  path.dirname(sourceFile),
+  path.basename(sourceFile, path.extname(sourceFile)) + path.extname(sourceFile),
+);
 
 // Read the current file
 fs.readFile(sourceFile, "utf8", (err, data) => {
@@ -14,8 +23,9 @@ fs.readFile(sourceFile, "utf8", (err, data) => {
     process.exit(1);
   }
 
-  // Write to the destination file
-  fs.writeFile(destinationFile, data, "utf8", (err) => {
+  // Compile the source and write to the destination file
+  const compiled = compile(data);
+  fs.writeFile(destinationFile, compiled, "utf8", (err) => {
     if (err) {
       console.error("Error writing destination file:", err);
       process.exit(1);
