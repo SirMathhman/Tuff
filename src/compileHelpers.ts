@@ -222,10 +222,10 @@ function parseIfConditionAndThen(
   idx: number;
 } | null {
   if (!isKeywordAt(input, start, "if")) return null;
-  
+
   const conditionResult = parseConditionAfterKeyword(input, start, 2);
   if (!conditionResult) return null;
-  
+
   let idx = conditionResult.end;
   const conditionExpr = conditionResult.conditionExpr;
 
@@ -292,10 +292,10 @@ export function parseWhileStatement(
   start: number,
 ): { statement: string; end: number } | null {
   if (!isKeywordAt(input, start, "while")) return null;
-  
+
   const conditionResult = parseConditionAfterKeyword(input, start, 5);
   if (!conditionResult) return null;
-  
+
   let idx = conditionResult.end;
   const conditionExpr = conditionResult.conditionExpr;
 
@@ -504,6 +504,25 @@ function buildFunctionBody(blockContent: string): string {
   return bodyPrefix + (bodyPrefix ? "; " : "") + "return " + returnExpr + ";";
 }
 
+function parseFunctionBody(
+  input: string,
+  idx: number,
+): { content: string; end: number } | null {
+  // Check if body is braced or a bare expression
+  if (input[idx] === "{") {
+    const bodyResult = readBalanced(input, idx, "{", "}");
+    if (!bodyResult) return null;
+    return { content: bodyResult.content, end: bodyResult.end };
+  }
+  // Handle bare expression body - read until semicolon
+  let semiIdx = input.indexOf(";", idx);
+  if (semiIdx === -1) {
+    semiIdx = input.length;
+  }
+  const content = input.substring(idx, semiIdx).trim();
+  return { content, end: semiIdx };
+}
+
 export function parseFunctionDeclaration(
   input: string,
   start: number,
@@ -532,8 +551,9 @@ export function parseFunctionDeclaration(
   if (input.slice(idx, idx + 2) !== "=>") return null;
   idx = skipWhitespace(input, idx + 2);
 
-  const bodyResult = readBalanced(input, idx, "{", "}");
+  const bodyResult = parseFunctionBody(input, idx);
   if (!bodyResult) return null;
+
   const functionBody = buildFunctionBody(bodyResult.content);
   const declaration =
     "function " + fnName + "(" + params + ") { " + functionBody + " }";

@@ -268,3 +268,7 @@ test("interpret handles while loop", () => {
 test("interpret handles function definition without invocation", () => {
   assertInterpret("fn get() : I32 => {}", 0);
 });
+
+test("interpret handles function definition with expression body", () => {
+  assertInterpret("fn get() : I32 => 100", 0);
+});
