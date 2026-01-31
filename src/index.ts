@@ -412,9 +412,7 @@ export function compileFile(inputPath: string, outputPath: string): void {
   const source = fs.readFileSync(inputPath, "utf-8");
   const compiled = compile(source);
   const wrapped =
-    "const result = (function() {\n  " +
-    compiled +
-    "\n})();\nconsole.log(result);";
+    "process.exit(Number((function() {\n  " + compiled + "\n})()));";
   fs.writeFileSync(outputPath, wrapped, "utf-8");
   console.log("Compiled " + inputPath + " to " + outputPath);
 }

@@ -249,3 +249,10 @@ test("interpret handles if-else with assignments in blocks", () => {
     20,
   );
 });
+
+test("interpret handles if-else as trailing expression", () => {
+  assertInterpret(
+    "let mut x = 0; if (x < 10) { x = 20; } else { x = 30; }",
+    20,
+  );
+});
