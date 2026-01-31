@@ -1,3 +1,4 @@
-let x = 100;
-let y : *I32 = x;
-*y
+let mut x = 0;
+x = 100;
+x = 200;
+x

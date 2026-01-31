@@ -248,7 +248,10 @@ export function convertPointerDereference(input: string): string {
   // Match * followed by an identifier (word characters)
   // Use negative lookbehind to avoid matching multiplication operators
   // that come after numbers or identifiers
-  return input.replace(/(?<![a-zA-Z0-9_])\*([a-zA-Z_][a-zA-Z0-9_]*)/g, "$1.value");
+  return input.replace(
+    /(?<![a-zA-Z0-9_])\*([a-zA-Z_][a-zA-Z0-9_]*)/g,
+    "$1.value",
+  );
 }
 
 export function normalizeAndStripNumericTypes(input: string): string {

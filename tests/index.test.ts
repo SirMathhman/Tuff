@@ -1,4 +1,4 @@
-import { interpret, compile } from "../src/index";
+import { compile } from "../src/index";
 
 // Test helpers
 function assertValid(input: string, expected?: string): void {
@@ -12,18 +12,50 @@ function assertInvalid(input: string): void {
   expect(() => compile(input)).toThrow();
 }
 
+function assertInterpret(source: string, expected: number): void {
+  const compiled = compile(source);
+  try {
+    const fn = new Function(compiled);
+    const result = fn();
+    expect(Number(result)).toBe(expected);
+  } catch (error) {
+    const errorMsg =
+      "Failed to interpret. Compiled JS:\n" +
+      compiled +
+      "\n\nOriginal error: " +
+      String(error);
+    throw new Error(errorMsg);
+  }
+}
+
+function assertInterpretNaN(source: string): void {
+  const compiled = compile(source);
+  try {
+    const fn = new Function(compiled);
+    const result = fn();
+    expect(Number.isNaN(Number(result))).toBe(true);
+  } catch (error) {
+    const errorMsg =
+      "Failed to interpret. Compiled JS:\n" +
+      compiled +
+      "\n\nOriginal error: " +
+      String(error);
+    throw new Error(errorMsg);
+  }
+}
+
 // Interpret tests
 test("interpret numeric literal", () => {
-  expect(interpret("100")).toBe(100);
+  assertInterpret("100", 100);
 });
 
 test("interpret returns number for numeric return", () => {
   // compile is identity for now; provide JS directly that returns a number
-  expect(interpret("return 42;")).toBe(42);
+  assertInterpret("return 42;", 42);
 });
 
 test("interpret returns NaN for non-numeric output", () => {
-  expect(Number.isNaN(interpret("return 'not-a-number';"))).toBe(true);
+  assertInterpretNaN("return 'not-a-number';");
 });
 
 // Compile validation tests
@@ -56,7 +88,7 @@ test("compile allows coercion of compatible unsigned integer types", () => {
 });
 
 test("interpret evaluates coerced types correctly", () => {
-  expect(interpret("1U8 + 2U16")).toBe(3);
+  assertInterpret("1U8 + 2U16", 3);
 });
 
 test("compile throws error for I8 underflow (arithmetic)", () => {
@@ -68,31 +100,30 @@ test("compile throws error message distinguishes underflow from overflow", () =>
 });
 
 test("interpret supports brace-wrapped numeric literals", () => {
-  expect(interpret("{ 5 }")).toBe(5);
+  assertInterpret("{ 5 }", 5);
 });
 
 test("interpret supports brace-wrapped expressions", () => {
-  expect(interpret("(2 + { 3 }) * 4")).toBe(20);
+  assertInterpret("(2 + { 3 }) * 4", 20);
 });
 
 test("interpret supports variable binding in blocks", () => {
-  expect(interpret("{ let x : U8 = 3; x }")).toBe(3);
+  assertInterpret("{ let x : U8 = 3; x }", 3);
 });
 
 test("interpret supports variable binding with arithmetic", () => {
-  expect(interpret("(2 + { let x : U8 = 3; x }) * 4")).toBe(20);
+  assertInterpret("(2 + { let x : U8 = 3; x }) * 4", 20);
 });
 
 test("interpret supports if expressions", () => {
-  expect(interpret("if (true) { let z = 100; z } else 5")).toBe(100);
+  assertInterpret("if (true) { let z = 100; z } else 5", 100);
 });
 
 test("interpret supports function declarations", () => {
-  expect(
-    interpret(
-      "fn get() : I32 => {\n  let y = if (true) { let z = 100; z } else 5;\n  y\n}\nget()",
-    ),
-  ).toBe(100);
+  assertInterpret(
+    "fn get() : I32 => {\n  let y = if (true) { let z = 100; z } else 5;\n  y\n}\nget()",
+    100,
+  );
 });
 
 test("compile throws error for duplicate variable declaration", () => {
@@ -100,9 +131,7 @@ test("compile throws error for duplicate variable declaration", () => {
 });
 
 test("interpret supports top-level variable declaration", () => {
-  expect(interpret("let z : U8 = (2 + { let x : U8 = 3; x }) * 4;\nz")).toBe(
-    20,
-  );
+  assertInterpret("let z : U8 = (2 + { let x : U8 = 3; x }) * 4;\nz", 20);
 });
 
 test("compile throws error when assigning larger type to smaller type in declaration", () => {
@@ -110,20 +139,18 @@ test("compile throws error when assigning larger type to smaller type in declara
 });
 
 test("interpret supports variable declaration without type annotation", () => {
-  expect(interpret("let x = 100U8; x")).toBe(100);
+  assertInterpret("let x = 100U8; x", 100);
 });
 
 test("interpret defaults untyped numeric bindings to I32", () => {
-  expect(interpret("let x = 100; x")).toBe(100);
+  assertInterpret("let x = 100; x", 100);
 });
 
 test("compile throws error when assigning larger inferred type to smaller explicit type", () => {
   assertInvalid("let x = 100U16; let y : U8 = x; y");
 });
 test("interpret supports nested block expressions with variable binding", () => {
-  expect(
-    interpret("let x : U8 = {\n    let y : U8 = 100U8;\n    y\n};\nx"),
-  ).toBe(100);
+  assertInterpret("let x : U8 = {\n    let y : U8 = 100U8;\n    y\n};\nx", 100);
 });
 
 test("compile throws error when block expression returns larger type than variable type", () => {
@@ -135,22 +162,38 @@ test("compile supports boolean type annotation", () => {
 });
 
 test("interpret returns 1 for true, 0 for false", () => {
-  expect(interpret("let x : Bool = true; x")).toBe(1);
-  expect(interpret("let x : Bool = false; x")).toBe(0);
+  assertInterpret("let x : Bool = true; x", 1);
+  assertInterpret("let x : Bool = false; x", 0);
 });
 
 test("interpret converts character literals to UTF-8 codes", () => {
-  expect(interpret("let a : Char = 'a'; a")).toBe(97);
+  assertInterpret("let a : Char = 'a'; a", 97);
 });
 
 test("interpret supports character literals in expressions", () => {
-  expect(interpret("'z'")).toBe(122);
+  assertInterpret("'z'", 122);
 });
 
 test("interpret supports pointer declaration and dereference", () => {
-  expect(interpret("let x = 100; let y : *I32 = x; *y")).toBe(100);
+  assertInterpret("let x = 100; let y : *I32 = x; *y", 100);
 });
 
 test("interpret supports pointer with expression", () => {
-  expect(interpret("let x = 42; let p : *I32 = x; *p + 8")).toBe(50);
+  assertInterpret("let x = 42; let p : *I32 = x; *p + 8", 50);
+});
+
+test("interpret supports mutable variable declaration", () => {
+  assertInterpret("let mut x = 100; x", 100);
+});
+
+test("interpret supports mutable variable reassignment", () => {
+  assertInterpret("let mut x = 0; x = 100; x", 100);
+});
+
+test("interpret supports multiple mutable variable reassignments", () => {
+  assertInterpret("let mut x = 0; x = 100; x = 200; x", 200);
+});
+
+test("compile throws error when assigning to immutable variable", () => {
+  assertInvalid("let x = 100; x = 200; x");
 });

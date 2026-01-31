@@ -20,13 +20,14 @@ function extractSingleLetStatement(statement: string): {
   varName: string;
   declType: string;
   cleanValue: string;
+  isMutable: boolean;
 } | null {
   const parsed = parseLetStatement(statement);
   if (!parsed) {
     return null;
   }
 
-  const { varName, declType, value } = parsed;
+  const { varName, declType, value, isMutable } = parsed;
 
   extractAndValidateTypesInExpression(value, declType);
 
@@ -35,7 +36,7 @@ function extractSingleLetStatement(statement: string): {
     "$1",
   );
 
-  return { varName, declType, cleanValue };
+  return { varName, declType, cleanValue, isMutable };
 }
 
 function findVariableReference(
@@ -58,6 +59,7 @@ function findVariableReference(
 function processSingleLetInTopLevel(
   statement: string,
   variableTypes: Record<string, string>,
+  mutableVars: Set<string>,
 ): {
   varName: string;
   cleanValue: string;
@@ -67,7 +69,7 @@ function processSingleLetInTopLevel(
     return null;
   }
 
-  const { varName, declType, cleanValue } = extracted;
+  const { varName, declType, cleanValue, isMutable } = extracted;
 
   const referencedVar = findVariableReference(
     Object.keys(variableTypes),
@@ -80,12 +82,67 @@ function processSingleLetInTopLevel(
 
   variableTypes[varName] = declType;
   
+  if (isMutable) {
+    mutableVars.add(varName);
+  }
+
   // If declaring a pointer type, wrap the value in an object
-  const finalValue = declType.startsWith("*") 
-    ? "{value: " + cleanValue + "}" 
+  const finalValue = declType.startsWith("*")
+    ? "{value: " + cleanValue + "}"
     : cleanValue;
 
   return { varName, cleanValue: finalValue };
+}
+
+function findNextSemicolon(remaining: string): number {
+  let semiIdx = -1;
+  let braceDepth = 0;
+  for (let i = 0; i < remaining.length; i++) {
+    if (remaining[i] === "{") braceDepth++;
+    else if (remaining[i] === "}") braceDepth--;
+    else if (remaining[i] === ";" && braceDepth === 0) {
+      semiIdx = i;
+      break;
+    }
+  }
+  return semiIdx;
+}
+
+function processAssignmentStatement(
+  statement: string,
+  mutableVars: Set<string>,
+): string {
+  const assignMatch = statement.match(/^(\w+)\s*=\s*([\s\S]+)$/);
+  if (!assignMatch) {
+    return "";
+  }
+
+  const [, varName, value] = assignMatch;
+  if (!mutableVars.has(varName)) {
+    throw new Error(
+      "Cannot assign to immutable variable '" +
+        varName +
+        "'. Declare it with 'let mut' to allow reassignment.",
+    );
+  }
+  const processedValue = normalizeAndStripNumericTypes(value.trim());
+  return varName + " = " + processedValue;
+}
+
+function processFnDeclaration(
+  remaining: string,
+  declarations: string[],
+): string {
+  const parsedFn = parseFunctionDeclaration(remaining, 0);
+  if (!parsedFn) {
+    return remaining;
+  }
+  declarations.push(parsedFn.declaration);
+  let newRemaining = remaining.substring(parsedFn.end).trim();
+  if (newRemaining.startsWith(";")) {
+    newRemaining = newRemaining.substring(1).trim();
+  }
+  return newRemaining;
 }
 
 function extractTopLevelStatements(input: string): {
@@ -94,43 +151,41 @@ function extractTopLevelStatements(input: string): {
 } {
   const declarations: string[] = [];
   const variableTypes: Record<string, string> = {};
+  const mutableVars: Set<string> = new Set();
   let remaining = input.trim();
 
-  while (remaining.startsWith("let ") || remaining.startsWith("fn ")) {
+  while (
+    remaining.startsWith("let ") ||
+    remaining.startsWith("fn ") ||
+    /^\w+\s*=\s*/.test(remaining)
+  ) {
     if (remaining.startsWith("fn ")) {
-      const parsedFn = parseFunctionDeclaration(remaining, 0);
-      if (!parsedFn) {
-        break;
-      }
-      declarations.push(parsedFn.declaration);
-      remaining = remaining.substring(parsedFn.end).trim();
-      if (remaining.startsWith(";")) {
-        remaining = remaining.substring(1).trim();
-      }
+      remaining = processFnDeclaration(remaining, declarations);
       continue;
     }
 
-    let semiIdx = -1;
-    let braceDepth = 0;
-    for (let i = 0; i < remaining.length; i++) {
-      if (remaining[i] === "{") braceDepth++;
-      else if (remaining[i] === "}") braceDepth--;
-      else if (remaining[i] === ";" && braceDepth === 0) {
-        semiIdx = i;
-        break;
-      }
-    }
-
+    const semiIdx = findNextSemicolon(remaining);
     if (semiIdx === -1) break;
 
     const statement = remaining.substring(0, semiIdx);
     remaining = remaining.substring(semiIdx + 1).trim();
 
-    const processed = processSingleLetInTopLevel(statement, variableTypes);
-    if (processed) {
-      declarations.push(
-        "let " + processed.varName + " = " + processed.cleanValue,
+    if (statement.startsWith("let ")) {
+      const processed = processSingleLetInTopLevel(
+        statement,
+        variableTypes,
+        mutableVars,
       );
+      if (processed) {
+        declarations.push(
+          "let " + processed.varName + " = " + processed.cleanValue,
+        );
+      }
+    } else {
+      const assignStmt = processAssignmentStatement(statement, mutableVars);
+      if (assignStmt) {
+        declarations.push(assignStmt);
+      }
     }
   }
 
@@ -145,7 +200,7 @@ function processDeclarations(rawDeclarations: string[]): string[] {
       const [, varName, value] = declMatch;
       // Skip normalization for pointer wrapper objects {value: ...}
       const isPointerWrapper = /^\{value:\s*/.test(value.trim());
-      const processedValue = isPointerWrapper 
+      const processedValue = isPointerWrapper
         ? value.trim()
         : normalizeAndStripNumericTypes(value.trim());
       declarations.push("let " + varName + " = " + processedValue);
@@ -163,7 +218,9 @@ export function compile(input: string): string {
   let trimmed = normalizeExpression(rawExpression.trim());
 
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
-  trimmed = convertPointerDereference(convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed)));
+  trimmed = convertPointerDereference(
+    convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed)),
+  );
   determineAndValidateType(trimmed, typesUsed);
 
   let compiled = "";

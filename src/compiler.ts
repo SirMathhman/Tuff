@@ -235,25 +235,29 @@ export function inferTypeFromValue(value: string): string | undefined {
 
 export function parseLetStatement(
   statement: string,
-): { varName: string; declType: string; value: string } | null {
-  let letMatch = statement.match(/let\s+(\w+)\s*:\s*(\*?)(\w+)\s*=\s*([\s\S]+)/);
+): { varName: string; declType: string; value: string; isMutable: boolean } | null {
+  let letMatch = statement.match(
+    /let\s+(mut\s+)?(\w+)\s*:\s*(\*?)(\w+)\s*=\s*([\s\S]+)/,
+  );
   if (letMatch) {
-    const [, varName, pointerPrefix, baseType, value] = letMatch;
+    const [, mutKeyword, varName, pointerPrefix, baseType, value] = letMatch;
     const declType = pointerPrefix + baseType;
     const processedValue = value.trim().replace(/;$/, "");
-    
-    return { varName, declType, value: processedValue };
+    const isMutable = mutKeyword !== undefined;
+
+    return { varName, declType, value: processedValue, isMutable };
   }
 
-  letMatch = statement.match(/let\s+(\w+)\s*=\s*([\s\S]+)/);
+  letMatch = statement.match(/let\s+(mut\s+)?(\w+)\s*=\s*([\s\S]+)/);
   if (letMatch) {
-    const [, varName, value] = letMatch;
+    const [, mutKeyword, varName, value] = letMatch;
     const trimmedValue = value.trim().replace(/;$/, "");
 
     const inferredType = inferTypeFromValue(trimmedValue);
     const declType = inferredType ?? "I32";
+    const isMutable = mutKeyword !== undefined;
 
-    return { varName, declType, value: trimmedValue };
+    return { varName, declType, value: trimmedValue, isMutable };
   }
 
   return null;
