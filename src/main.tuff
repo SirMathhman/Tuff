@@ -1,1 +1,3 @@
-// An empty program should exit with 0, duh!
+let mut x = 200;
+x += 100;
+x

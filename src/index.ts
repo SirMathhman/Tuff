@@ -118,12 +118,14 @@ function processAssignmentStatement(
   statement: string,
   mutableVars: Set<string>,
 ): string {
-  const assignMatch = statement.match(/^(\w+)\s*=\s*([\s\S]+)$/);
+  const assignMatch = statement.match(
+    /^(\w+)\s*((?:[+\-*/%&|^])?=)\s*([\s\S]+)$/,
+  );
   if (!assignMatch) {
     return "";
   }
 
-  const [, varName, value] = assignMatch;
+  const [, varName, operator, value] = assignMatch;
   if (!mutableVars.has(varName)) {
     throw new Error(
       "Cannot assign to immutable variable '" +
@@ -132,7 +134,7 @@ function processAssignmentStatement(
     );
   }
   const processedValue = normalizeAndStripNumericTypes(value.trim());
-  return varName + " = " + processedValue;
+  return varName + " " + operator + " " + processedValue;
 }
 
 function processFnDeclaration(
@@ -163,7 +165,7 @@ function extractTopLevelStatements(input: string): {
   while (
     remaining.startsWith("let ") ||
     remaining.startsWith("fn ") ||
-    /^\w+\s*=\s*/.test(remaining)
+    /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining)
   ) {
     if (remaining.startsWith("fn ")) {
       remaining = processFnDeclaration(remaining, declarations);

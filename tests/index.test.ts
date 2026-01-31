@@ -212,3 +212,15 @@ test("interpret supports mutable reference with &mut", () => {
 test("interpret supports mutable pointer assignment", () => {
   assertInterpret("let mut x = 50; let z : *mut I32 = &mut x; *z = 75; x", 75);
 });
+
+test("compile generates clean code without unreachable statements", () => {
+  const compiled = compile("let mut x = 200; x += 100; x");
+  // Should not contain unreachable code after return
+  expect(compiled).not.toMatch(/return\s+[\s\S]*;\s*\w+\s*;/);
+  // Should contain proper statement separator
+  expect(compiled).toContain("return");
+});
+
+test("interpret supports assignment followed by expression", () => {
+  assertInterpret("let mut x = 200; x += 100; x", 300);
+});

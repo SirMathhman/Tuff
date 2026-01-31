@@ -1,3 +1,5 @@
 process.exit(Number((function() {
-  return 0;
+  let x = 200;
+x += 100;
+return x;
 })()));
