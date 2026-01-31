@@ -7,6 +7,15 @@ import {
   convertLetBindingToIIFE,
   extractParamNames,
 } from "./blockUtils";
+import {
+  isKeywordAt,
+  isAtTopLevel,
+  updateDepthState,
+  readBalanced,
+  readIdentifier,
+  skipWhitespace,
+  type DepthState,
+} from "./parseHelpers";
 
 // Re-export conversion utilities
 export {
@@ -44,102 +53,13 @@ function stripBraceWrappers(input: string): string {
     });
     result = newResult;
   }
-
   // Clean up leading/trailing whitespace that may result from empty block replacement
   result = result.replace(/^\s+/, "").replace(/\s+$/, "");
-
   for (const [placeholder, iife] of iifeMap) {
     result = result.split(placeholder).join(iife);
   }
 
   return result;
-}
-
-function isWordChar(ch: string): boolean {
-  return /[A-Za-z0-9_]/.test(ch);
-}
-
-function isKeywordAt(input: string, idx: number, keyword: string): boolean {
-  if (input.slice(idx, idx + keyword.length) !== keyword) return false;
-  const before = idx > 0 ? input[idx - 1] : "";
-  const after =
-    idx + keyword.length < input.length ? input[idx + keyword.length] : "";
-  if (before && isWordChar(before)) return false;
-  if (after && isWordChar(after)) return false;
-  return true;
-}
-
-type DepthState = {
-  paren: number;
-  brace: number;
-  bracket: number;
-};
-
-function isAtTopLevel(state: DepthState): boolean {
-  return state.paren === 0 && state.brace === 0 && state.bracket === 0;
-}function updateDepthState(
-  ch: string,
-  state: DepthState,
-  stopTokens: string[] | undefined,
-): { stop: boolean; handled: boolean } {
-  if (ch === "(") {
-    state.paren++;
-    return { stop: false, handled: true };
-  }
-  if (ch === ")") {
-    if (state.paren === 0 && stopTokens?.includes(")")) return { stop: true, handled: true };
-    state.paren = Math.max(state.paren - 1, 0);
-    return { stop: false, handled: true };
-  }
-  if (ch === "{") {
-    state.brace++;
-    return { stop: false, handled: true };
-  }
-  if (ch === "}") {
-    if (state.brace === 0 && stopTokens?.includes("}")) return { stop: true, handled: true };
-    state.brace = Math.max(state.brace - 1, 0);
-    return { stop: false, handled: true };
-  }
-  if (ch === "[") {
-    state.bracket++;
-    return { stop: false, handled: true };
-  }
-  if (ch === "]") {
-    if (state.bracket === 0 && stopTokens?.includes("]")) return { stop: true, handled: true };
-    state.bracket = Math.max(state.bracket - 1, 0);
-    return { stop: false, handled: true };
-  }
-  return { stop: false, handled: false };
-}
-
-function readBalanced(
-  input: string,
-  start: number,
-  open: string,
-  close: string,
-): { content: string; end: number } | null {
-  if (input[start] !== open) return null;
-  let depth = 1;
-  const stringState: StringState = { inString: null, escaped: false };
-  let i = start + 1;
-  while (i < input.length) {
-    const ch = input[i];
-    if (updateStringState(ch, stringState)) {
-      i++;
-      continue;
-    }
-
-    if (ch === open) {
-      depth++;
-    } else if (ch === close) {
-      depth--;
-      if (depth === 0) {
-        return { content: input.slice(start + 1, i), end: i + 1 };
-      }
-    }
-    i++;
-  }
-  return null;
 }
 
 function scanExpression(
@@ -149,7 +69,6 @@ function scanExpression(
 ): { expr: string; end: number } {
   const stringState: StringState = { inString: null, escaped: false };
   const depthState: DepthState = { paren: 0, brace: 0, bracket: 0 };
-
   for (let i = start; i < input.length; i++) {
     const ch = input[i];
     if (updateStringState(ch, stringState)) {
@@ -162,7 +81,6 @@ function scanExpression(
     if (depthResult.handled) {
       continue;
     }
-
     if (isAtTopLevel(depthState)) {
       if (options.stopOnElse && isKeywordAt(input, i, "else")) {
         return { expr: input.slice(start, i).trim(), end: i };
@@ -172,10 +90,8 @@ function scanExpression(
       }
     }
   }
-
   return { expr: input.slice(start).trim(), end: input.length };
 }
-
 function parseIfBranch(
   input: string,
   start: number,
@@ -190,13 +106,11 @@ function parseIfBranch(
       return { expr: "{" + balanced.content + "}", end: balanced.end };
     }
   }
-
   return scanExpression(input, idx, {
     stopOnElse: options.stopOnElse,
     stopTokens: [";", ")", "}", "]", ","],
   });
 }
-
 function parseConditionAfterKeyword(
   input: string,
   start: number,
@@ -208,10 +122,8 @@ function parseConditionAfterKeyword(
   const condition = readBalanced(input, idx, "(", ")");
   if (!condition) return null;
   const conditionExpr = condition.content.trim();
-
   return { conditionExpr, end: condition.end };
 }
-
 function parseIfConditionAndThen(
   input: string,
   start: number,
@@ -221,19 +133,14 @@ function parseIfConditionAndThen(
   idx: number;
 } | null {
   if (!isKeywordAt(input, start, "if")) return null;
-
   const conditionResult = parseConditionAfterKeyword(input, start, 2);
   if (!conditionResult) return null;
-
   let idx = conditionResult.end;
   const conditionExpr = conditionResult.conditionExpr;
-
   const thenResult = parseIfBranch(input, idx, { stopOnElse: true });
   idx = thenResult.end;
-
   return { conditionExpr, thenResult, idx };
 }
-
 function parseElseClause(
   input: string,
   idx: number,
@@ -244,32 +151,26 @@ function parseElseClause(
   const elseResult = parseIfBranch(input, idx, { stopOnElse: false });
   return { elseResult, idx: elseResult.end };
 }
-
 export function parseIfExpression(
   input: string,
   start: number,
 ): { replacement: string; end: number } | null {
   const parsed = parseIfConditionAndThen(input, start);
   if (!parsed) return null;
-
   const elseClause = parseElseClause(input, parsed.idx);
   if (!elseClause) return null;
-
   const thenExpr = transformIfExpressions(parsed.thenResult.expr);
   const elseExpr = transformIfExpressions(elseClause.elseResult.expr);
   const replacement =
     "(" + parsed.conditionExpr + " ? " + thenExpr + " : " + elseExpr + ")";
-
   return { replacement, end: elseClause.idx };
 }
-
 export function parseIfStatement(
   input: string,
   start: number,
 ): { statement: string; end: number } | null {
   const parsed = parseIfConditionAndThen(input, start);
   if (!parsed) return null;
-
   let idx = parsed.idx;
   let elseStatement = "";
   const elseClause = parseElseClause(input, idx);
@@ -278,36 +179,27 @@ export function parseIfStatement(
     elseStatement = " else " + elseBody;
     idx = elseClause.idx;
   }
-
   const thenBody = transformIfExpressions(parsed.thenResult.expr);
   const statement =
     "if (" + parsed.conditionExpr + ") " + thenBody + elseStatement;
-
   return { statement, end: idx };
 }
-
 export function parseWhileStatement(
   input: string,
   start: number,
 ): { statement: string; end: number } | null {
   if (!isKeywordAt(input, start, "while")) return null;
-
   const conditionResult = parseConditionAfterKeyword(input, start, 5);
   if (!conditionResult) return null;
-
   let idx = conditionResult.end;
   const conditionExpr = conditionResult.conditionExpr;
-
   while (idx < input.length && /\s/.test(input[idx])) idx++;
   const bodyResult = readBalanced(input, idx, "{", "}");
   if (!bodyResult) return null;
-
   const body = transformIfExpressions(bodyResult.content);
   const statement = "while (" + conditionExpr + ") {" + body + "}";
-
   return { statement, end: bodyResult.end };
 }
-
 function transformIfExpressions(input: string): string {
   let result = "";
   let i = 0;
@@ -325,28 +217,11 @@ function transformIfExpressions(input: string): string {
   }
   return result;
 }
-
 export function normalizeExpression(input: string): string {
   const [p, m] = handleStructInstantiation(input);
   let r = stripBraceWrappers(transformIfExpressions(p));
   for (const [k, v] of m) r = r.split(k).join(v);
   return r;
-}
-
-function readIdentifier(
-  input: string,
-  start: number,
-): { name: string; end: number } | null {
-  const match = input.slice(start).match(/^([A-Za-z_]\w*)/);
-  if (!match) return null;
-  const [name] = match;
-  return { name, end: start + name.length };
-}
-
-export function skipWhitespace(input: string, start: number): number {
-  let idx = start;
-  while (idx < input.length && /\s/.test(input[idx])) idx++;
-  return idx;
 }
 
 function normalizeParamList(paramList: string): string {
@@ -371,10 +246,8 @@ export function extractParameterInfo(
 ): Array<{ name: string; type: string }> {
   const trimmed = paramList.trim();
   if (!trimmed) return [];
-
   const params: Array<{ name: string; type: string }> = [];
   const paramParts = trimmed.split(",");
-
   for (const param of paramParts) {
     const trimmedParam = param.trim();
     const colonIdx = trimmedParam.indexOf(":");
@@ -392,10 +265,8 @@ export function extractParameterInfo(
       }
     }
   }
-
   return params;
 }
-
 function parseFunctionBody(
   input: string,
   idx: number,
@@ -414,7 +285,6 @@ function parseFunctionBody(
   const content = input.substring(idx, semiIdx).trim();
   return { content, end: semiIdx };
 }
-
 export function parseStructDefinition(
   input: string,
   start: number,
@@ -436,17 +306,13 @@ export function parseStructDefinition(
   if (input[idx] === ";") idx++;
   return { end: idx, name: nameResult.name, fields };
 }
-
 function processNestedFunctionDeclarations(content: string): string {
   let result = content;
   let pos = 0;
-
   while (pos < result.length) {
     const remaining = result.substring(pos);
     const fnIndex = remaining.indexOf("fn ");
-
     if (fnIndex === -1) break;
-
     const fnStart = pos + fnIndex;
     // Check if this is actually a function declaration at word boundary
     if (fnStart > 0) {
@@ -470,21 +336,16 @@ function processNestedFunctionDeclarations(content: string): string {
       pos = fnStart + 3;
     }
   }
-
   return result;
 }
-
 function buildThisCaptureBody(params: string): string {
   const paramNames = extractParamNames(params);
-
   if (paramNames.length === 0) {
     return "return {};";
   }
-
   const properties = paramNames.map((name) => name + ": " + name).join(", ");
-  return "return {" + properties + "};";
+  return "return {" + properties + "};"; 
 }
-
 function parseFunctionSignature(
   input: string,
   start: number,

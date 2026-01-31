@@ -384,14 +384,14 @@ test("interpret multiple sequential array element assignments", () => {
 
 test("function with array parameter type annotation", () => {
   assertInterpret(
-    "fn getFirst(array : [I32; 1; 3]) => array[0]; let mut a : [I32; 0; 3]; a[0] = 100; getFirst(a)",
+    "fn getFirst(array : [I32; 1; 3]) => array[0]; let mut a : [I32; 1; 3] = [100]; getFirst(a)",
     100,
   );
 });
 
 test("function with array parameter and leading comments", () => {
   assertInterpret(
-    "// This is valid\nfn getFirst(array : [I32; 1; 3]) => array[0];\n\nlet mut array : [I32; 0; 3];\narray[0] = 120;\ngetFirst(array);",
+    "// This is valid\nfn getFirst(array : [I32; 1; 3]) => array[0];\n\nlet mut array : [I32; 1; 3] = [120];\ngetFirst(array);",
     120,
   );
 });

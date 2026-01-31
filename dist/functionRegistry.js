@@ -36,14 +36,21 @@ function validateArgumentType(argumentType, parameterType) {
     const paramDims = extractArrayDimensions(parameterType);
     const argDims = extractArrayDimensions(argumentType);
     if (paramDims && argDims) {
-        const [paramElem, , paramCap] = paramDims;
-        const [argElem, , argCap] = argDims;
+        const [paramElem, paramInit, paramCap] = paramDims;
+        const [argElem, argInit, argCap] = argDims;
         // Element types must match
         if (paramElem !== argElem) {
             throw new Error("Type mismatch: argument element type " +
                 argElem +
                 " does not match parameter element type " +
                 paramElem);
+        }
+        // Initialized count must be sufficient
+        if (argInit < paramInit) {
+            throw new Error("Type mismatch: argument array has " +
+                argInit +
+                " initialized elements, but parameter requires at least " +
+                paramInit);
         }
         // Capacity must match exactly - this is a hard requirement
         if (argCap !== paramCap) {
