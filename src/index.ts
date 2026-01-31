@@ -437,13 +437,16 @@ function processDeclarations(rawDeclarations: string[]): string[] {
 }
 
 export function compile(input: string): string {
+  // Strip comments before processing
+  const cleanedInput = stripComments(input);
+
   const {
     declarations: rawDeclarations,
     expression: rawExpression,
     thisTypeVars,
-  } = extractTopLevelStatements(input);
+  } = extractTopLevelStatements(cleanedInput);
   const declarations = processDeclarations(rawDeclarations);
-  let trimmed = normalizeExpression(stripComments(rawExpression).trim());
+  let trimmed = normalizeExpression(rawExpression.trim());
 
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
   trimmed = convertThisTypeVarProperty(

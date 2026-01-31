@@ -1,4 +1,5 @@
-let x = 100;
-let temp : This = this;
-temp.x
-// This should return 100
+// this captures params
+fn Wrapper(field : I32) => this;
+
+let value = Wrapper(100);
+value.field

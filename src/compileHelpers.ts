@@ -413,6 +413,20 @@ export function parseStructDefinition(
   return { end: idx, name: nameResult.name, fields };
 }
 
+function buildThisCaptureBody(params: string): string {
+  const paramNames = params
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  if (paramNames.length === 0) {
+    return "return {};";
+  }
+
+  const properties = paramNames.map((name) => name + ": " + name).join(", ");
+  return "return {" + properties + "};";
+}
+
 export function parseFunctionDeclaration(
   input: string,
   start: number,
@@ -444,7 +458,13 @@ export function parseFunctionDeclaration(
   const bodyResult = parseFunctionBody(input, idx);
   if (!bodyResult) return null;
 
-  const functionBody = buildFunctionBody(bodyResult.content);
+  // Check if the body is just "this" - if so, create an object with params
+  const trimmedBody = bodyResult.content.trim();
+  const functionBody =
+    trimmedBody === "this"
+      ? buildThisCaptureBody(params)
+      : buildFunctionBody(bodyResult.content);
+
   const declaration =
     "function " + fnName + "(" + params + ") { " + functionBody + " }";
 

@@ -301,3 +301,10 @@ test("struct instantiation with multiple fields", () => {
 test("interpret handles This type annotation with property access", () => {
   assertInterpret("let x = 100; let temp : This = this; temp.x", 100);
 });
+
+test("function returning this captures parameters as properties", () => {
+  assertInterpret(
+    "fn Wrapper(field : I32) => this; let value = Wrapper(100); value.field",
+    100,
+  );
+});

@@ -1,5 +1,5 @@
 process.exit(Number((function() {
-  let x = 100;
-let temp = this;
-return x;
+  function Wrapper(field) { return {field: field}; };
+let value = Wrapper(100);
+return value.field;
 })()));
