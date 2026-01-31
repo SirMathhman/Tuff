@@ -1,1 +1,2 @@
-fn get() : I32 => 100;
+let x = 100;
+this.x // This should produce 100

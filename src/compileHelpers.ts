@@ -366,6 +366,11 @@ export function stripComments(input: string): string {
     .replace(/\/\/[^\n\r]*(?=\n|$)/g, "");
 }
 
+export function convertThisProperty(input: string): string {
+  // Convert this.property to just property
+  return input.replace(/this\.([a-zA-Z_][a-zA-Z0-9_]*)/g, "$1");
+}
+
 export function normalizeAndStripNumericTypes(input: string): string {
   return convertCharLiteralsToUTF8(
     stripNumericTypeSuffixes(normalizeExpression(input)),

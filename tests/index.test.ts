@@ -272,3 +272,7 @@ test("interpret handles function definition without invocation", () => {
 test("interpret handles function definition with expression body", () => {
   assertInterpret("fn get() : I32 => 100", 0);
 });
+
+test("interpret handles this.property access", () => {
+  assertInterpret("let x = 100; this.x", 100);
+});

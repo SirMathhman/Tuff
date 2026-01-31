@@ -12,6 +12,7 @@ import {
   convertCharLiteralsToUTF8,
   convertMutableReference,
   convertPointerDereference,
+  convertThisProperty,
   normalizeAndStripNumericTypes,
   normalizeExpression,
   parseFunctionDeclaration,
@@ -398,8 +399,10 @@ export function compile(input: string): string {
   let trimmed = normalizeExpression(stripComments(rawExpression).trim());
 
   const typesUsed = validateAndStripTypeAnnotations(trimmed);
-  trimmed = convertPointerDereference(
-    convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed)),
+  trimmed = convertThisProperty(
+    convertPointerDereference(
+      convertCharLiteralsToUTF8(stripNumericTypeSuffixes(trimmed)),
+    ),
   );
   if (trimmed === "") {
     trimmed = "0";
