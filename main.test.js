@@ -289,4 +289,42 @@ describe("compileTuffToJS", () => {
     const result = compileTuffToJS(source);
     expect(result).toBe("let x = Ok { value : 5 }; let y = Err { err : msg };");
   });
+
+  it("should transform 'is' operator for basic type checking", () => {
+    const source = "let isOk = value is Ok<T>;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe('let isOk = value.kind === "Ok";');
+  });
+
+  it("should transform 'is' operator with different variants", () => {
+    const source = "let isErr = result is Err<X>;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe('let isErr = result.kind === "Err";');
+  });
+
+  it("should transform multiple 'is' checks on one line", () => {
+    const source = "let ok = x is Ok<T>; let err = x is Err<E>;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe(
+      'let ok = x.kind === "Ok"; let err = x.kind === "Err";',
+    );
+  });
+
+  it("should add 'kind' property to struct instantiations", () => {
+    const source = "let result = Ok { value : 42 };";
+    const result = compileTuffToJS(source);
+    expect(result).toBe('let result = { kind : "Ok", value : 42 };');
+  });
+
+  it("should add 'kind' to struct instantiation with multiple fields", () => {
+    const source = 'let err = Err { err : "msg", code : 500 };';
+    const result = compileTuffToJS(source);
+    expect(result).toBe('let err = { kind : "Err", err : "msg", code : 500 };');
+  });
+
+  it("should handle struct instantiation without type parameters", () => {
+    const source = "let val = MyStruct { field : 10 };";
+    const result = compileTuffToJS(source);
+    expect(result).toBe('let val = { kind : "MyStruct", field : 10 };');
+  });
 });
