@@ -3,6 +3,7 @@ const path = require("path");
 
 
 
+
 // Simple compileTuffToJS function - takes in Tuff source and compileTuffToJSs it
 function compileTuffToJS(source) {
   let result = source;
@@ -68,7 +69,19 @@ function compileTuffToJS(source) {
     
     // Check if line starts with struct keyword
     if (trimmed.indexOf(structKeyword + " ") === 0) {
-      bracketDepth = bracketDepth + 1;
+      // Count braces on this struct declaration line
+      let openCount = 0;
+      let closeCount = 0;
+      for (let j = 0; j < line.length; j = j + 1) {
+        if (line.substring(j, j + 1) === openBrace) {
+          openCount = openCount + 1;
+        }
+        if (line.substring(j, j + 1) === closeBrace) {
+          closeCount = closeCount + 1;
+        }
+      }
+      bracketDepth = bracketDepth + openCount;
+      bracketDepth = bracketDepth - closeCount;
       filteredLines.push("");
     } else if (bracketDepth > 0) {
       // Remove lines while inside struct (tracking brace depth)

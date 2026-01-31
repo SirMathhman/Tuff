@@ -216,4 +216,28 @@ describe("compileTuffToJS", () => {
     const result = compileTuffToJS(source);
     expect(result).toBe("let x = 5;\n\nlet y = 10;");
   });
+
+  it("should remove generic struct declarations", () => {
+    const source = "struct Ok<T> { value : T; }";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should handle multiple type parameters in structs", () => {
+    const source = "struct Pair<A, B> { first : A; second : B; }";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should handle nested type parameters in structs", () => {
+    const source = "struct Container<T<U>> { data : T<U>; }";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("");
+  });
+
+  it("should preserve code around generic struct declarations", () => {
+    const source = "let x = 5;\nstruct Result<T> { ok : T; }\nlet y = 10;";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("let x = 5;\n\nlet y = 10;");
+  });
 });
