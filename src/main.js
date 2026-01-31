@@ -1,7 +1,5 @@
-const exitCode = Number((function() {
+process.exit(Number((function() {
   let array = [];
-return array[0] = 100;
+return array[0] = 120;
 array[0];
-})());
-console.log('Exit code: ' + exitCode);
-process.exit(exitCode);
+})()));
