@@ -1,7 +1,7 @@
 {
   "name": "tuff",
   "version": "0.1.0",
-  "description": "Tuff - A bootstrapped compiler",
+  "description": "Tuff - A bootstrapped compileTuffToJSr",
   "main": "main.js",
   "scripts": {
     "build": "node main.js",
@@ -10,7 +10,7 @@
     "lint:fix": "eslint . --fix"
   },
   "keywords": [
-    "compiler",
+    "compileTuffToJSr",
     "bootstrap"
   ],
   "author": "SirMathhman",
