@@ -32,7 +32,7 @@ function convertPointerDereference(input) {
 function stripComments(input) {
     return input
         .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/\/\/[^\n\r]*(?=\n|$)/g, "");
+        .replace(/\/\/.*?(?=\r\n|\n|$)/g, "");
 }
 function convertThisProperty(input) {
     // Convert this.property to just property

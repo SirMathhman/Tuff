@@ -32,7 +32,7 @@ export function convertPointerDereference(input: string): string {
 export function stripComments(input: string): string {
   return input
     .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/[^\n\r]*(?=\n|$)/g, "");
+    .replace(/\/\/.*?(?=\r\n|\n|$)/g, "");
 }
 
 export function convertThisProperty(input: string): string {

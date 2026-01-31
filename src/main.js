@@ -1,6 +1,6 @@
 process.exit(Number((function() {
-  let array = [];
+  function getFirst(array) { return array[0]; };
+let array = [];
 array[0] = 120;
-array[0] = 20;
-return array[0];
+return getFirst(array);;
 })()));
