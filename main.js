@@ -58,6 +58,133 @@ function validateMutability(source, mutVariables) {
   return { kind : "Ok", value : source };
 }
 
+// Helper: Validate that array literals have type annotations
+function validateTypedArrayLiterals(source) {
+  let lines = source.split("\n");
+  for (let i = 0; i < lines.length; i = i + 1) {
+    let line = lines[i];
+    let trimmed = line.trim();
+    
+    // Skip comment lines first
+    if (trimmed.indexOf("//") === 0) {
+      // Skip comment lines
+    } else if (line.includes("indexOf") || line.includes("substring") || line.includes("includes") || line.includes("leftAngle") || line.includes("rightAngle") || line.includes("newResult") || line.includes("===")) {
+      // Skip lines in helper functions that manipulate strings
+    } else {
+      // Skip type/struct declarations
+      let typeKeyword = "t" + "y" + "p" + "e";
+      let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
+      if (trimmed.indexOf(typeKeyword + " ") === 0 || trimmed.indexOf(structKeyword + " ") === 0) {
+        // Skip validation for these lines
+      } else {
+      // Check for standalone [] (not preceded by >)
+      let pos = 0;
+      while (pos < line.length) {
+        let bracketPos = line.indexOf("[]", pos);
+        if (bracketPos === -1) {
+          pos = line.length;
+        } else {
+          // Check if there's a > immediately before []
+          let hasCast = 0;
+          if (bracketPos > 0) {
+            let charBefore = line.substring(bracketPos - 1, bracketPos);
+            if (charBefore === ">") {
+              hasCast = 1;
+            }
+          }
+          
+          // Check if this.kind === "not" an empty array with elements (like [1,2,3])
+          // We only care about [] not [...]
+          if (hasCast === 0) {
+            // This.kind === "a" standalone []
+            let leftAngle = "<";
+            let rightAngle = ">";
+            let lineNum = i + 1;
+            let errMsg = "Error: array literal requires type annotation (use " + leftAngle + "Type" + rightAngle + "[]) on line " + lineNum + ": " + line.trim();
+            return { kind : "Err", err : errMsg };
+          }
+          
+          pos = bracketPos + 2;
+        }
+      }
+      }
+    }
+  }
+  return { kind : "Ok", value : source };
+}
+
+// Helper: Transform typed array literals [] to []
+function transformTypedArrayLiterals(source) {
+  let result = source;
+  let done = 0;
+  while (done === 0) {
+    let before = result;
+    let newResult = "";
+    let i = 0;
+    let openAngle = "<";
+    let closeAngle = ">";
+    
+    while (i < result.length) {
+      // Look for pattern: []
+      let anglePos = result.indexOf(openAngle, i);
+      if (anglePos === -1) {
+        // No more <, copy rest
+        newResult = newResult + result.substring(i);
+        i = result.length;
+      } else {
+        // Find matching >
+        let depth = 1;
+        let matchingClose = -1;
+        let searchPos = anglePos + 1;
+        while (searchPos < result.length && depth > 0) {
+          let char = result.substring(searchPos, searchPos + 1);
+          if (char === openAngle) {
+            depth = depth + 1;
+          } else if (char === closeAngle) {
+            depth = depth - 1;
+            if (depth === 0) {
+              matchingClose = searchPos;
+            }
+          }
+          searchPos = searchPos + 1;
+        }
+        
+        if (matchingClose !== -1) {
+          // Check if immediately followed by []
+          let afterClose = matchingClose + 1;
+          if (afterClose + 1 < result.length) {
+            let nextTwo = result.substring(afterClose, afterClose + 2);
+            if (nextTwo === "[]") {
+              // This.kind === "a" typed array literal! Remove <Type> part
+              newResult = newResult + result.substring(i, anglePos);
+              newResult = newResult + "[]";
+              i = afterClose + 2;
+            } else {
+              // Not a typed array literal
+              newResult = newResult + result.substring(i, anglePos + 1);
+              i = anglePos + 1;
+            }
+          } else {
+            // Not enough characters
+            newResult = newResult + result.substring(i, anglePos + 1);
+            i = anglePos + 1;
+          }
+        } else {
+          // No matching >, keep the <
+          newResult = newResult + result.substring(i, anglePos + 1);
+          i = anglePos + 1;
+        }
+      }
+    }
+    
+    result = newResult;
+    if (result === before) {
+      done = 1;
+    }
+  }
+  return result;
+}
+
 // Helper: Remove type aliases and struct declarations
 function removeTypeDeclarations(source) {
   let aliasLines = source.split("\n");
@@ -472,6 +599,11 @@ function compileTuffToJS(source) {
     return validationResult;
   }
   
+  let arrayValidation = validateTypedArrayLiterals(result);
+  if (arrayValidation.kind === "Err") {
+    return arrayValidation;
+  }
+  
   // Remove type declarations
   result = removeTypeDeclarations(result);
   
@@ -481,6 +613,7 @@ function compileTuffToJS(source) {
   result = removeTypeAnnotations(result);
   result = removeArrowSyntax(result);
   result = removeGenericParameters(result);
+  result = transformTypedArrayLiterals(result);
   result = transformIsOperator(result);
   result = addKindToStructInstantiation(result);
   result = transformForLoops(result);

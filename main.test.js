@@ -362,7 +362,7 @@ describe("compileTuffToJS", () => {
   });
 
   it("should remove &[Any] type annotations from let declarations", () => {
-    const source = "let mut mutVariables : &[Any] = [];";
+    const source = "let mut mutVariables : &[Any] = <String>[];";
     const result = compileTuffToJS(source);
     expect(unwrap(result)).toBe("let mutVariables = [];");
   });
@@ -378,8 +378,46 @@ describe("compileTuffToJS", () => {
 
   it("should remove &[Any] with other type annotations", () => {
     const source =
-      'let x : Number = 5;\nlet y : &[Any] = [];\nlet z : String = "test";';
+      'let x : Number = 5;\nlet y : &[Any] = <String>[];\nlet z : String = "test";';
     const result = compileTuffToJS(source);
     expect(unwrap(result)).toBe('let x = 5;\nlet y = [];\nlet z = "test";');
+  });
+
+  it("should error on standalone empty array literal []", () => {
+    const source = "let x = [];";
+    const result = compileTuffToJS(source);
+    expect(result.kind).toBe("Err");
+    expect(result.err).toContain("array literal requires type annotation");
+  });
+
+  it("should error on multiple standalone array literals", () => {
+    const source = "let x = [];\nlet y = [];";
+    const result = compileTuffToJS(source);
+    expect(result.kind).toBe("Err");
+    expect(result.err).toContain("array literal requires type annotation");
+  });
+
+  it("should transform typed array literal to plain array", () => {
+    const source = "let x = <String>[];";
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toBe("let x = [];");
+  });
+
+  it("should handle typed array literals with different types", () => {
+    const source = "let nums = <Number>[];\nlet strs = <String>[];";
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toBe("let nums = [];\nlet strs = [];");
+  });
+
+  it("should handle typed array literal with complex type", () => {
+    const source = "let items = <Result<String, String>>[];";
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toBe("let items = [];");
+  });
+
+  it("should allow arrays with elements (no type required)", () => {
+    const source = 'let x = [1, 2, 3];\nlet y = ["a", "b"];';
+    const result = compileTuffToJS(source);
+    expect(unwrap(result)).toBe('let x = [1, 2, 3];\nlet y = ["a", "b"];');
   });
 });

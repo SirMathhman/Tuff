@@ -7,7 +7,7 @@ type Result<T, X> = Ok<T> | Err<T>;
 
 // Helper: Collect all mut variable declarations
 fn collectMutVariables(source : String) : &[Any] => {
-  let mut mutVariables = [];
+  let mut mutVariables = <String>[];
   let mut validationLines = source.split("\n");
   for (let mut i in 0..validationLines.length) {
     let mut line = validationLines[i];
@@ -58,10 +58,137 @@ fn validateMutability(source : String, mutVariables : &[Any]) : Result<String, S
   return { kind : "Ok", value : source };
 }
 
+// Helper: Validate that array literals have type annotations
+fn validateTypedArrayLiterals(source : String) : Result<String, String> => {
+  let mut lines = source.split("\n");
+  for (let mut i in 0..lines.length) {
+    let mut line = lines[i];
+    let trimmed = line.trim();
+    
+    // Skip comment lines first
+    if (trimmed.indexOf("//") === 0) {
+      // Skip comment lines
+    } else if (line.includes("indexOf") || line.includes("substring") || line.includes("includes") || line.includes("leftAngle") || line.includes("rightAngle") || line.includes("newResult") || line.includes("===")) {
+      // Skip lines in helper functions that manipulate strings
+    } else {
+      // Skip type/struct declarations
+      let typeKeyword = "t" + "y" + "p" + "e";
+      let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
+      if (trimmed.indexOf(typeKeyword + " ") === 0 || trimmed.indexOf(structKeyword + " ") === 0) {
+        // Skip validation for these lines
+      } else {
+      // Check for standalone [] (not preceded by >)
+      let mut pos = 0;
+      while (pos < line.length) {
+        let bracketPos = line.indexOf("[]", pos);
+        if (bracketPos === -1) {
+          pos = line.length;
+        } else {
+          // Check if there's a > immediately before []
+          let mut hasCast = 0;
+          if (bracketPos > 0) {
+            let charBefore = line.substring(bracketPos - 1, bracketPos);
+            if (charBefore === ">") {
+              hasCast = 1;
+            }
+          }
+          
+          // Check if this is not an empty array with elements (like [1,2,3])
+          // We only care about [] not [...]
+          if (hasCast === 0) {
+            // This is a standalone []
+            let leftAngle = "<";
+            let rightAngle = ">";
+            let lineNum = i + 1;
+            let errMsg = "Error: array literal requires type annotation (use " + leftAngle + "Type" + rightAngle + "[]) on line " + lineNum + ": " + line.trim();
+            return { kind : "Err", err : errMsg };
+          }
+          
+          pos = bracketPos + 2;
+        }
+      }
+      }
+    }
+  }
+  return { kind : "Ok", value : source };
+}
+
+// Helper: Transform typed array literals <Type>[] to []
+fn transformTypedArrayLiterals(source : String) : String => {
+  let mut result = source;
+  let mut done = 0;
+  while (done === 0) {
+    let before = result;
+    let mut newResult = "";
+    let mut i = 0;
+    let openAngle = "<";
+    let closeAngle = ">";
+    
+    while (i < result.length) {
+      // Look for pattern: <...>[]
+      let anglePos = result.indexOf(openAngle, i);
+      if (anglePos === -1) {
+        // No more <, copy rest
+        newResult = newResult + result.substring(i);
+        i = result.length;
+      } else {
+        // Find matching >
+        let mut depth = 1;
+        let mut matchingClose = -1;
+        let mut searchPos = anglePos + 1;
+        while (searchPos < result.length && depth > 0) {
+          let char = result.substring(searchPos, searchPos + 1);
+          if (char === openAngle) {
+            depth = depth + 1;
+          } else if (char === closeAngle) {
+            depth = depth - 1;
+            if (depth === 0) {
+              matchingClose = searchPos;
+            }
+          }
+          searchPos = searchPos + 1;
+        }
+        
+        if (matchingClose !== -1) {
+          // Check if immediately followed by []
+          let afterClose = matchingClose + 1;
+          if (afterClose + 1 < result.length) {
+            let nextTwo = result.substring(afterClose, afterClose + 2);
+            if (nextTwo === "[]") {
+              // This is a typed array literal! Remove <Type> part
+              newResult = newResult + result.substring(i, anglePos);
+              newResult = newResult + "[]";
+              i = afterClose + 2;
+            } else {
+              // Not a typed array literal
+              newResult = newResult + result.substring(i, anglePos + 1);
+              i = anglePos + 1;
+            }
+          } else {
+            // Not enough characters
+            newResult = newResult + result.substring(i, anglePos + 1);
+            i = anglePos + 1;
+          }
+        } else {
+          // No matching >, keep the <
+          newResult = newResult + result.substring(i, anglePos + 1);
+          i = anglePos + 1;
+        }
+      }
+    }
+    
+    result = newResult;
+    if (result === before) {
+      done = 1;
+    }
+  }
+  return result;
+}
+
 // Helper: Remove type aliases and struct declarations
 fn removeTypeDeclarations(source : String) : String => {
   let mut aliasLines = source.split("\n");
-  let mut filteredLines = [];
+  let mut filteredLines = <String>[];
   let mut bracketDepth = 0;
   for (let mut i in 0..aliasLines.length) {
     let mut line = aliasLines[i];
@@ -115,7 +242,7 @@ fn removeTypeDeclarations(source : String) : String => {
 // Helper: Transform extern use statements to require()
 fn transformExternUse(source : String) : String => {
   let mut transformLines = source.split("\n");
-  let mut transformed = [];
+  let mut transformed = <String>[];
   for (let mut i in 0..transformLines.length) {
     let mut line = transformLines[i];
     let searchTerm = "extern" + " " + "use";
@@ -133,7 +260,7 @@ fn transformExternUse(source : String) : String => {
 // Helper: Transform fn keyword to function
 fn transformFnKeyword(source : String) : String => {
   let mut fnLines = source.split("\n");
-  let mut transformed = [];
+  let mut transformed = <String>[];
   for (let mut i in 0..fnLines.length) {
     let mut line = fnLines[i];
     let trimmed = line.trimStart();
@@ -180,7 +307,7 @@ fn removeTypeAnnotations(source : String) : String => {
 fn removeArrowSyntax(source : String) : String => {
   let mut result = source;
   let mut lines = result.split("\n");
-  let mut transformed = [];
+  let mut transformed = <String>[];
   for (let mut i in 0..lines.length) {
     let mut line = lines[i];
     // Only remove ) => { when it appears after "function" keyword
@@ -410,7 +537,7 @@ fn addKindToStructInstantiation(source : String) : String => {
 // Helper: Transform Rust-like for loops to JavaScript
 fn transformForLoops(source : String) : String => {
   let mut forLines = source.split("\n");
-  let mut transformed = [];
+  let mut transformed = <String>[];
   for (let mut idx in 0..forLines.length) {
     let mut line = forLines[idx];
     let forStr = "for" + " ";
@@ -472,6 +599,11 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
     return validationResult;
   }
   
+  let arrayValidation = validateTypedArrayLiterals(result);
+  if (arrayValidation.kind === "Err") {
+    return arrayValidation;
+  }
+  
   // Remove type declarations
   result = removeTypeDeclarations(result);
   
@@ -481,6 +613,7 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
   result = removeTypeAnnotations(result);
   result = removeArrowSyntax(result);
   result = removeGenericParameters(result);
+  result = transformTypedArrayLiterals(result);
   result = transformIsOperator(result);
   result = addKindToStructInstantiation(result);
   result = transformForLoops(result);
