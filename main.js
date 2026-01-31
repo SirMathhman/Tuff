@@ -1,4 +1,4 @@
-let fs = require("fs");
+const fs = require("fs");
 const path = require("path");
 
 // Simple compileTuffToJS function - takes in Tuff source and compileTuffToJSs it
@@ -83,6 +83,30 @@ function compileTuffToJS(source) {
     transformed.push(line);
   }
   result = transformed.join("\n");
+  
+  // Transform: remove type annotations using simple string replacement
+  // This removes patterns like " : Type" where Type is followed by space, comma, or closing paren
+  let replaced = result;
+  let attemptCount = 0;
+  while (attemptCount < 100) {
+    let beforeReplace = replaced;
+    
+    // Remove type patterns by concatenating strings to avoid transformation
+    let colonSpace = " " + ":" + " ";
+    replaced = replaced.replace(colonSpace + "String", "");
+    replaced = replaced.replace(colonSpace + "Number", "");
+    replaced = replaced.replace(colonSpace + "Boolean", "");
+    replaced = replaced.replace(colonSpace + "Array", "");
+    replaced = replaced.replace(colonSpace + "Object", "");
+    replaced = replaced.replace(colonSpace + "Function", "");
+    replaced = replaced.replace(colonSpace + "Any", "");
+    
+    if (replaced === beforeReplace) {
+      attemptCount = 100;
+    }
+    attemptCount = attemptCount + 1;
+  }
+  result = replaced;
   
   // Transform: remove ) => { to ) {
   result = result.replace(") => {", ") {");

@@ -66,6 +66,18 @@ describe("compileTuffToJS", () => {
     expect(result).toBe("function add(a, b) { return a + b; }");
   });
 
+  it("should remove type annotations from function parameters", () => {
+    const source = "fn compileTuffToJS(source : String) => { return source; }";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("function compileTuffToJS(source) { return source; }");
+  });
+
+  it("should handle multiple parameters with type annotations", () => {
+    const source = "fn add(a : Number, b : Number) => { return a + b; }";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("function add(a, b) { return a + b; }");
+  });
+
   it("should transform Rust-like for loops to JavaScript", () => {
     const source = "for (let i in 0..5) { }";
     const result = compileTuffToJS(source);
