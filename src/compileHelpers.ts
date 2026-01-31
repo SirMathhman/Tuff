@@ -243,6 +243,11 @@ export function convertCharLiteralsToUTF8(input: string): string {
   });
 }
 
+export function convertMutableReference(input: string): string {
+  // Convert &mut identifier to {value: identifier}
+  return input.replace(/&mut\s+([a-zA-Z_][a-zA-Z0-9_]*)/g, "{value: $1}");
+}
+
 export function convertPointerDereference(input: string): string {
   // Convert *identifier to identifier.value
   // Match * followed by an identifier (word characters)

@@ -1,4 +1,4 @@
 let mut x = 0;
-x = 100;
-x = 200;
+let y : *mut I32 = &mut x;
+*y = 100;
 x

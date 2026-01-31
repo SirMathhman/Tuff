@@ -9,6 +9,7 @@ import {
 } from "./compiler";
 import {
   convertCharLiteralsToUTF8,
+  convertMutableReference,
   convertPointerDereference,
   normalizeAndStripNumericTypes,
   normalizeExpression,
@@ -81,15 +82,19 @@ function processSingleLetInTopLevel(
   }
 
   variableTypes[varName] = declType;
-  
+
   if (isMutable) {
     mutableVars.add(varName);
   }
 
   // If declaring a pointer type, wrap the value in an object
-  const finalValue = declType.startsWith("*")
-    ? "{value: " + cleanValue + "}"
-    : cleanValue;
+  // But don't wrap if value already contains &mut (will be wrapped by reference)
+  const containsMutRef = /&mut\s+/.test(cleanValue);
+  const alreadyWrapped = /^\{value:\s*/.test(cleanValue);
+  const finalValue =
+    declType.startsWith("*") && !alreadyWrapped && !containsMutRef
+      ? "{value: " + cleanValue + "}"
+      : cleanValue;
 
   return { varName, cleanValue: finalValue };
 }
@@ -198,11 +203,13 @@ function processDeclarations(rawDeclarations: string[]): string[] {
     const declMatch = decl.match(/^let\s+(\w+)\s*=\s*([\s\S]+)$/);
     if (declMatch) {
       const [, varName, value] = declMatch;
+      // Convert &mut references first
+      const refConverted = convertMutableReference(value.trim());
       // Skip normalization for pointer wrapper objects {value: ...}
-      const isPointerWrapper = /^\{value:\s*/.test(value.trim());
+      const isPointerWrapper = /^\{value:\s*/.test(refConverted);
       const processedValue = isPointerWrapper
-        ? value.trim()
-        : normalizeAndStripNumericTypes(value.trim());
+        ? refConverted
+        : normalizeAndStripNumericTypes(refConverted);
       declarations.push("let " + varName + " = " + processedValue);
     } else if (decl.trim().length > 0) {
       declarations.push(decl);

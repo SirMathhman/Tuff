@@ -233,17 +233,21 @@ export function inferTypeFromValue(value: string): string | undefined {
   return Array.from(typesUsed)[0];
 }
 
-export function parseLetStatement(
-  statement: string,
-): { varName: string; declType: string; value: string; isMutable: boolean } | null {
+export function parseLetStatement(statement: string): {
+  varName: string;
+  declType: string;
+  value: string;
+  isMutable: boolean;
+} | null {
   let letMatch = statement.match(
-    /let\s+(mut\s+)?(\w+)\s*:\s*(\*?)(\w+)\s*=\s*([\s\S]+)/,
+    /let\s+(mut\s+)?(\w+)\s*:\s*(\*?)(mut\s+)?(\w+)\s*=\s*([\s\S]+)/,
   );
   if (letMatch) {
-    const [, mutKeyword, varName, pointerPrefix, baseType, value] = letMatch;
-    const declType = pointerPrefix + baseType;
+    const [, varMut, varName, pointerPrefix, typeMut, baseType, value] =
+      letMatch;
+    const declType = pointerPrefix + (typeMut ? "mut " : "") + baseType;
     const processedValue = value.trim().replace(/;$/, "");
-    const isMutable = mutKeyword !== undefined;
+    const isMutable = varMut !== undefined;
 
     return { varName, declType, value: processedValue, isMutable };
   }

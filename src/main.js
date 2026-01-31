@@ -1,6 +1,6 @@
 process.exit(Number((function() {
   let x = 0;
-x = 100;
-x = 200;
-return x;
+let y = {value: x};
+return y.value = 100;
+x;
 })()));

@@ -197,3 +197,10 @@ test("interpret supports multiple mutable variable reassignments", () => {
 test("compile throws error when assigning to immutable variable", () => {
   assertInvalid("let x = 100; x = 200; x");
 });
+test("interpret supports mutable reference with &mut", () => {
+  assertInterpret("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x", 100);
+});
+
+test("interpret supports mutable pointer assignment", () => {
+  assertInterpret("let mut x = 50; let z : *mut I32 = &mut x; *z = 75; x", 75);
+});
