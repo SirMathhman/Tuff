@@ -5,13 +5,10 @@ const path = require("path");
 
 
 
-// Simple compileTuffToJS function - takes in Tuff source and returns Result
-function compileTuffToJS(source) {
-  let result = source;
+// Helper: Collect all mut variable declarations
+function collectMutVariables(source) {
   let mutVariables = [];
-  
-  // First pass: collect all mut variable declarations
-  let validationLines = result.split("\n");
+  let validationLines = source.split("\n");
   for (let i = 0; i < validationLines.length; i = i + 1) {
     let line = validationLines[i];
     let letMutStr = "let" + " " + "mut" + " ";
@@ -24,9 +21,12 @@ function compileTuffToJS(source) {
       mutVariables.push(varName);
     }
   }
-  
-  // Second pass: check for unauthorized reassignments
-  let checkLines = result.split("\n");
+  return mutVariables;
+}
+
+// Helper: Validate that only mut variables are reassigned
+function validateMutability(source, mutVariables) {
+  let checkLines = source.split("\n");
   for (let i = 0; i < checkLines.length; i = i + 1) {
     let line = checkLines[i];
     let trimmed = line.trim();
@@ -38,9 +38,9 @@ function compileTuffToJS(source) {
     } else if (trimmed.includes(" = ") && !trimmed.includes("let ") && !trimmed.includes("function ") && !trimmed.includes("const ")) {
       let assignIdx = trimmed.indexOf(" = ");
       let varName = trimmed.substring(0, assignIdx).trim();
-      // Check if this is a simple variable name (not an object property or array access)
+      // Check if this.kind === "a" simple variable name (not an object property or array access)
       if (!varName.includes(".") && !varName.includes("[")) {
-        // Check if this variable is in mutVariables
+        // Check if this variable.kind === "in" mutVariables
         let found = 0;
         for (let j = 0; j < mutVariables.length; j = j + 1) {
           if (mutVariables[j] === varName) {
@@ -48,16 +48,19 @@ function compileTuffToJS(source) {
           }
         }
         if (found === 0) {
-          // This is an error: reassigning immutable variable
+          // This.kind === "an" error: reassigning immutable variable
           let errMsg = "Error: cannot reassign immutable variable '" + varName + "'";
           return { kind : "Err", err : errMsg };
         }
       }
     }
   }
-  
-  // Remove custom keyword declarations (after validation)
-  let aliasLines = result.split("\n");
+  return { kind : "Ok", value : source };
+}
+
+// Helper: Remove type aliases and struct declarations
+function removeTypeDeclarations(source) {
+  let aliasLines = source.split("\n");
   let filteredLines = [];
   let bracketDepth = 0;
   for (let i = 0; i < aliasLines.length; i = i + 1) {
@@ -106,12 +109,12 @@ function compileTuffToJS(source) {
       filteredLines.push(line);
     }
   }
-  result = filteredLines.join("\n");
-  
-  // Continue with regular transformations...
-  
-  // Transform: const identifier = require("module"); -> const identifier = require("module");
-  let transformLines = result.split("\n");
+  return filteredLines.join("\n");
+}
+
+// Helper: Transform const statements to require()
+function transformExternUse(source) {
+  let transformLines = source.split("\n");
   let transformed = [];
   for (let i = 0; i < transformLines.length; i = i + 1) {
     let line = transformLines[i];
@@ -124,12 +127,13 @@ function compileTuffToJS(source) {
     }
     transformed.push(line);
   }
-  result = transformed.join("\n");
-  
-  // Transform: function to function
-  // Handle "function " at start of line
-  let fnLines = result.split("\n");
-  transformed = [];
+  return transformed.join("\n");
+}
+
+// Helper: Transform function keyword to function
+function transformFnKeyword(source) {
+  let fnLines = source.split("\n");
+  let transformed = [];
   for (let i = 0; i < fnLines.length; i = i + 1) {
     let line = fnLines[i];
     let trimmed = line.trimStart();
@@ -142,11 +146,12 @@ function compileTuffToJS(source) {
     }
     transformed.push(line);
   }
-  result = transformed.join("\n");
-  
-  // Transform: remove type annotations using simple string replacement
-  // This removes patterns like " : Type" where Type is followed by space, comma, or closing paren
-  let replaced = result;
+  return transformed.join("\n");
+}
+
+// Helper: Remove type annotations
+function removeTypeAnnotations(source) {
+  let replaced = source;
   let attemptCount = 0;
   while (attemptCount < 100) {
     let beforeReplace = replaced;
@@ -167,14 +172,28 @@ function compileTuffToJS(source) {
     }
     attemptCount = attemptCount + 1;
   }
-  result = replaced;
-  
-  // Transform: remove ) => { to ) {
-  result = result.replace(") => {", ") {");
-  
-  // Transform: remove generic type parameters from struct instantiations
-  // Pattern: StructName { -> StructName {
-  // Need to handle nested angle brackets like Vec<T>
+  return replaced;
+}
+
+// Helper: Remove arrow function syntax
+function removeArrowSyntax(source) {
+  let result = source;
+  let lines = result.split("\n");
+  let transformed = [];
+  for (let i = 0; i < lines.length; i = i + 1) {
+    let line = lines[i];
+    // Only remove ) => { when it appears after "function" keyword
+    if (line.includes("function ")) {
+      line = line.replace(") => {", ") {");
+    }
+    transformed.push(line);
+  }
+  return transformed.join("\n");
+}
+
+// Helper: Remove generic type parameters from struct instantiations
+function removeGenericParameters(source) {
+  let result = source;
   let doneWithInstantiation = 0;
   while (doneWithInstantiation === 0) {
     let beforeRemoval = result;
@@ -217,7 +236,7 @@ function compileTuffToJS(source) {
             // Found matching >. Check what's between matchingClose and bracePos
             let between = result.substring(matchingClose + 1, bracePos).trim();
             if (between.length === 0) {
-              // This is struct instantiation! Remove <...>
+              // This.kind === "struct" instantiation! Remove <...>
               newResult = newResult + result.substring(i, anglePos);
               i = matchingClose + 1;
             } else {
@@ -239,24 +258,27 @@ function compileTuffToJS(source) {
       doneWithInstantiation = 1;
     }
   }
+  return result;
+}
 
-  // Transform: value is Type<T> -> value.kind === "Type"
-  // This implements runtime type checks for struct variants
+// Helper: Transform.kind === "operator" for type checking
+function transformIsOperator(source) {
+  let result = source;
   let isOpDone = 0;
   while (isOpDone === 0) {
     let beforeIs = result;
     let newResult = "";
     let i = 0;
-    let isKeyword = " is ";
+    let isKeyword = " " + "is" + " ";
     
     while (i < result.length) {
       let isPos = result.indexOf(isKeyword, i);
       if (isPos === -1) {
-        // No more " is ", copy rest
+        // No more is-keyword, copy rest
         newResult = newResult + result.substring(i);
         i = result.length;
       } else {
-        // Found " is " - extract the variable name before it
+        // Found is-keyword - extract the variable name before it
         let before = result.substring(0, isPos);
         let varStart = isPos - 1;
         // Walk backwards to find start of identifier
@@ -271,7 +293,7 @@ function compileTuffToJS(source) {
         }
         let varName = result.substring(varStart, isPos);
         
-        // Find the type name after " is "
+        // Find the type name after is-keyword
         let typeStart = isPos + isKeyword.length;
         let typeEnd = typeStart;
         // Walk forward to find endof type name (before <)
@@ -313,9 +335,12 @@ function compileTuffToJS(source) {
       isOpDone = 1;
     }
   }
-  
-  // Transform: struct instantiation to add kind property
-  // Pattern: StructName { fields } -> { kind : "StructName", fields }
+  return result;
+}
+
+// Helper: Transform struct instantiation to add kind property
+function addKindToStructInstantiation(source) {
+  let result = source;
   let structInstDone = 0;
   while (structInstDone === 0) {
     let beforeInst = result;
@@ -378,17 +403,18 @@ function compileTuffToJS(source) {
       structInstDone = 1;
     }
   }
+  return result;
+}
 
-  
-  // Transform: Rust-like for loops to JavaScript
-  // for (let i = 0; i < 10; i = i + 1) -> for (let i = 0; i < 10; i = i + 1)
-  let forLines = result.split("\n");
-  transformed = [];
+// Helper: Transform Rust-like for loops to JavaScript
+function transformForLoops(source) {
+  let forLines = source.split("\n");
+  let transformed = [];
   for (let idx = 0; idx < forLines.length; idx = idx + 1) {
     let line = forLines[idx];
     let forStr = "for" + " ";
     if (line.includes(forStr + "(let ")) {
-      // Check if this is a Rust-like for loop with " in "
+      // Check if this.kind === "a" Rust-like for loop with " in "
       if (line.includes(" in ") && line.includes("..")) {
         // Find the start: "for (let "
         let forStart = line.indexOf(forStr + "(let ");
@@ -410,10 +436,12 @@ function compileTuffToJS(source) {
     }
     transformed.push(line);
   }
-  result = transformed.join("\n");
-  
-  // Transform: remove mut keyword from let declarations
-  // let x -> let x
+  return transformed.join("\n");
+}
+
+// Helper: Remove mut keyword from let declarations
+function removeMutKeyword(source) {
+  let result = source;
   let finished = 0;
   let mutKeyword = "let" + " " + "mut" + " ";
   let letKeyword = "let" + " ";
@@ -424,6 +452,33 @@ function compileTuffToJS(source) {
     }
     result = newResult;
   }
+  return result;
+}
+
+// Simple compileTuffToJS function - takes in Tuff source and returns Result
+function compileTuffToJS(source) {
+  let result = source;
+  
+  // Validation pass
+  let mutVariables = collectMutVariables(result);
+  let validationResult = validateMutability(result, mutVariables);
+  if (validationResult.kind === "Err") {
+    return validationResult;
+  }
+  
+  // Remove type declarations
+  result = removeTypeDeclarations(result);
+  
+  // Apply transformations
+  result = transformExternUse(result);
+  result = transformFnKeyword(result);
+  result = removeTypeAnnotations(result);
+  result = removeArrowSyntax(result);
+  result = removeGenericParameters(result);
+  result = transformIsOperator(result);
+  result = addKindToStructInstantiation(result);
+  result = transformForLoops(result);
+  result = removeMutKeyword(result);
   
   return { kind : "Ok", value : result };
 }
@@ -432,7 +487,7 @@ function compileTuffToJS(source) {
 let sourceFile = path.join(path.dirname(__filename), 'main.tuff');
 let destinationFile = __filename;
 
-// Only run the compilation if this is the main module (not being imported for testing)
+// Only run the compilation if this.kind === "the" main module (not being imported for testing)
 if (require.main === module) {
   // Read the current file
   fs.readFile(sourceFile, "utf8", (err, data) => {

@@ -178,17 +178,17 @@ fn removeTypeAnnotations(source : String) : String => {
 // Helper: Remove arrow function syntax
 fn removeArrowSyntax(source : String) : String => {
   let mut result = source;
-  let mut finished = 0;
-  let arrow = ") => {";
-  let replacement = ") {";
-  while (finished === 0) {
-    let newResult = result.replace(arrow, replacement);
-    if (newResult === result) {
-      finished = 1;
+  let mut lines = result.split("\n");
+  let mut transformed = [];
+  for (let i in 0..lines.length) {
+    let mut line = lines[i];
+    // Only remove ) => { when it appears after "function" keyword
+    if (line.includes("function ")) {
+      line = line.replace(") => {", ") {");
     }
-    result = newResult;
+    transformed.push(line);
   }
-  return result;
+  return transformed.join("\n");
 }
 
 // Helper: Remove generic type parameters from struct instantiations
