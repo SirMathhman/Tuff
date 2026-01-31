@@ -10,7 +10,7 @@ function compile(source) {
 }
 
 // Read from main.tuff and write to main.js
-const sourceFile = path.join(path.dirname(__filename), "main.tuff");
+const sourceFile = path.join(path.dirname(__filename), 'main.tuff');
 const destinationFile = __filename;
 
 // Read the current file
