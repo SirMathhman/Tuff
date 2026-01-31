@@ -5,13 +5,10 @@ struct Ok<T> { value : T; }
 struct Err<X> { err : X; }
 type Result<T, X> = Ok<T> | Err<T>;
 
-// Simple compileTuffToJS function - takes in Tuff source and returns Result
-fn compileTuffToJS(source : String) : Result<String, String> => {
-  let mut result : String = source;
+// Helper: Collect all mut variable declarations
+fn collectMutVariables(source : String) : Array => {
   let mut mutVariables = [];
-  
-  // First pass: collect all mut variable declarations
-  let mut validationLines = result.split("\n");
+  let mut validationLines = source.split("\n");
   for (let i in 0..validationLines.length) {
     let mut line = validationLines[i];
     let letMutStr = "let" + " " + "mut" + " ";
@@ -24,9 +21,12 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
       mutVariables.push(varName);
     }
   }
-  
-  // Second pass: check for unauthorized reassignments
-  let mut checkLines = result.split("\n");
+  return mutVariables;
+}
+
+// Helper: Validate that only mut variables are reassigned
+fn validateMutability(source : String, mutVariables : Array) : Result<String, String> => {
+  let mut checkLines = source.split("\n");
   for (let i in 0..checkLines.length) {
     let mut line = checkLines[i];
     let trimmed = line.trim();
@@ -55,9 +55,12 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
       }
     }
   }
-  
-  // Remove custom keyword declarations (after validation)
-  let mut aliasLines = result.split("\n");
+  return { kind : "Ok", value : source };
+}
+
+// Helper: Remove type aliases and struct declarations
+fn removeTypeDeclarations(source : String) : String => {
+  let mut aliasLines = source.split("\n");
   let mut filteredLines = [];
   let mut bracketDepth = 0;
   for (let i in 0..aliasLines.length) {
@@ -106,12 +109,12 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
       filteredLines.push(line);
     }
   }
-  result = filteredLines.join("\n");
-  
-  // Continue with regular transformations...
-  
-  // Transform: extern use identifier from module; -> const identifier = require("module");
-  let mut transformLines = result.split("\n");
+  return filteredLines.join("\n");
+}
+
+// Helper: Transform extern use statements to require()
+fn transformExternUse(source : String) : String => {
+  let mut transformLines = source.split("\n");
   let mut transformed = [];
   for (let i in 0..transformLines.length) {
     let mut line = transformLines[i];
@@ -124,12 +127,13 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
     }
     transformed.push(line);
   }
-  result = transformed.join("\n");
-  
-  // Transform: fn to function
-  // Handle "fn " at start of line
-  let mut fnLines = result.split("\n");
-  transformed = [];
+  return transformed.join("\n");
+}
+
+// Helper: Transform fn keyword to function
+fn transformFnKeyword(source : String) : String => {
+  let mut fnLines = source.split("\n");
+  let mut transformed = [];
   for (let i in 0..fnLines.length) {
     let mut line = fnLines[i];
     let trimmed = line.trimStart();
@@ -142,11 +146,12 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
     }
     transformed.push(line);
   }
-  result = transformed.join("\n");
-  
-  // Transform: remove type annotations using simple string replacement
-  // This removes patterns like " : Type" where Type is followed by space, comma, or closing paren
-  let mut replaced = result;
+  return transformed.join("\n");
+}
+
+// Helper: Remove type annotations
+fn removeTypeAnnotations(source : String) : String => {
+  let mut replaced = source;
   let mut attemptCount = 0;
   while (attemptCount < 100) {
     let beforeReplace = replaced;
@@ -167,14 +172,28 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
     }
     attemptCount = attemptCount + 1;
   }
-  result = replaced;
-  
-  // Transform: remove ) => { to ) {
-  result = result.replace(") => {", ") {");
-  
-  // Transform: remove generic type parameters from struct instantiations
-  // Pattern: StructName<...> { -> StructName {
-  // Need to handle nested angle brackets like Vec<T>
+  return replaced;
+}
+
+// Helper: Remove arrow function syntax
+fn removeArrowSyntax(source : String) : String => {
+  let mut result = source;
+  let mut finished = 0;
+  let arrow = ") => {";
+  let replacement = ") {";
+  while (finished === 0) {
+    let newResult = result.replace(arrow, replacement);
+    if (newResult === result) {
+      finished = 1;
+    }
+    result = newResult;
+  }
+  return result;
+}
+
+// Helper: Remove generic type parameters from struct instantiations
+fn removeGenericParameters(source : String) : String => {
+  let mut result = source;
   let mut doneWithInstantiation = 0;
   while (doneWithInstantiation === 0) {
     let beforeRemoval = result;
@@ -239,24 +258,27 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
       doneWithInstantiation = 1;
     }
   }
+  return result;
+}
 
-  // Transform: value is Type<T> -> value.kind === "Type"
-  // This implements runtime type checks for struct variants
+// Helper: Transform is operator for type checking
+fn transformIsOperator(source : String) : String => {
+  let mut result = source;
   let mut isOpDone = 0;
   while (isOpDone === 0) {
     let beforeIs = result;
     let mut newResult = "";
     let mut i = 0;
-    let isKeyword = " is ";
+    let isKeyword = " " + "is" + " ";
     
     while (i < result.length) {
       let isPos = result.indexOf(isKeyword, i);
       if (isPos === -1) {
-        // No more " is ", copy rest
+        // No more is-keyword, copy rest
         newResult = newResult + result.substring(i);
         i = result.length;
       } else {
-        // Found " is " - extract the variable name before it
+        // Found is-keyword - extract the variable name before it
         let before = result.substring(0, isPos);
         let mut varStart = isPos - 1;
         // Walk backwards to find start of identifier
@@ -271,7 +293,7 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
         }
         let varName = result.substring(varStart, isPos);
         
-        // Find the type name after " is "
+        // Find the type name after is-keyword
         let typeStart = isPos + isKeyword.length;
         let mut typeEnd = typeStart;
         // Walk forward to find endof type name (before <)
@@ -313,9 +335,12 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
       isOpDone = 1;
     }
   }
-  
-  // Transform: struct instantiation to add kind property
-  // Pattern: StructName { fields } -> { kind : "StructName", fields }
+  return result;
+}
+
+// Helper: Transform struct instantiation to add kind property
+fn addKindToStructInstantiation(source : String) : String => {
+  let mut result = source;
   let mut structInstDone = 0;
   while (structInstDone === 0) {
     let beforeInst = result;
@@ -378,12 +403,13 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
       structInstDone = 1;
     }
   }
+  return result;
+}
 
-  
-  // Transform: Rust-like for loops to JavaScript
-  // for (let i in 0..10) -> for (let i = 0; i < 10; i = i + 1)
-  let mut forLines = result.split("\n");
-  transformed = [];
+// Helper: Transform Rust-like for loops to JavaScript
+fn transformForLoops(source : String) : String => {
+  let mut forLines = source.split("\n");
+  let mut transformed = [];
   for (let idx in 0..forLines.length) {
     let mut line = forLines[idx];
     let forStr = "for" + " ";
@@ -410,10 +436,12 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
     }
     transformed.push(line);
   }
-  result = transformed.join("\n");
-  
-  // Transform: remove mut keyword from let declarations
-  // let mut x -> let x
+  return transformed.join("\n");
+}
+
+// Helper: Remove mut keyword from let declarations
+fn removeMutKeyword(source : String) : String => {
+  let mut result = source;
   let mut finished = 0;
   let mutKeyword = "let" + " " + "mut" + " ";
   let letKeyword = "let" + " ";
@@ -424,6 +452,33 @@ fn compileTuffToJS(source : String) : Result<String, String> => {
     }
     result = newResult;
   }
+  return result;
+}
+
+// Simple compileTuffToJS function - takes in Tuff source and returns Result
+fn compileTuffToJS(source : String) : Result<String, String> => {
+  let mut result : String = source;
+  
+  // Validation pass
+  let mutVariables = collectMutVariables(result);
+  let validationResult = validateMutability(result, mutVariables);
+  if (validationResult.kind === "Err") {
+    return validationResult;
+  }
+  
+  // Remove type declarations
+  result = removeTypeDeclarations(result);
+  
+  // Apply transformations
+  result = transformExternUse(result);
+  result = transformFnKeyword(result);
+  result = removeTypeAnnotations(result);
+  result = removeArrowSyntax(result);
+  result = removeGenericParameters(result);
+  result = transformIsOperator(result);
+  result = addKindToStructInstantiation(result);
+  result = transformForLoops(result);
+  result = removeMutKeyword(result);
   
   return { kind : "Ok", value : result };
 }
