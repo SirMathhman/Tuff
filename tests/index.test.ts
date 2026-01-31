@@ -213,6 +213,20 @@ test("interpret supports mutable pointer assignment", () => {
   assertInterpret("let mut x = 50; let z : *mut I32 = &mut x; *z = 75; x", 75);
 });
 
+test("interpret handles empty blocks without affecting return", () => {
+  assertInterpret("let mut x = 100; {} x", 100);
+});
+
+test("compile generates valid code with empty blocks", () => {
+  const compiled = compile("let mut x = 100; {} x");
+  // Should not have automatic semicolon insertion breaking return
+  expect(compiled).toContain("return");
+  // The compiled code when executed should work (no NaN)
+  const fn = new Function(compiled);
+  const result = fn();
+  expect(Number.isNaN(Number(result))).toBe(false);
+});
+
 test("compile generates clean code without unreachable statements", () => {
   const compiled = compile("let mut x = 200; x += 100; x");
   // Should not contain unreachable code after return

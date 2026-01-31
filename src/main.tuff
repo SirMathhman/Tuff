@@ -1,3 +1,4 @@
-let mut x = 200;
-x += 100;
+let mut x = 100;
+{
+}
 x

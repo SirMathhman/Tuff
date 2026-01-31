@@ -31,10 +31,14 @@ function stripBraceWrappers(input: string): string {
         return placeholder;
       }
 
+      // For empty blocks, return empty string
       return inside;
     });
     result = newResult;
   }
+
+  // Clean up leading/trailing whitespace that may result from empty block replacement
+  result = result.replace(/^\s+/, "").replace(/\s+$/, "");
 
   for (const [placeholder, iife] of iifeMap) {
     result = result.split(placeholder).join(iife);
