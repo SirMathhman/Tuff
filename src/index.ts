@@ -18,6 +18,7 @@ import {
   parseFunctionDeclaration,
   parseIfExpression,
   parseIfStatement,
+  parseStructDefinition,
   parseWhileStatement,
   stripComments,
   stripNumericTypeSuffixes,
@@ -155,6 +156,14 @@ function processAssignmentStatement(
   return varName + " " + operator + " " + processedValue;
 }
 
+function advancePastDefinition(remaining: string, end: number): string {
+  let newRemaining = remaining.substring(end).trim();
+  if (newRemaining.startsWith(";")) {
+    newRemaining = newRemaining.substring(1).trim();
+  }
+  return newRemaining;
+}
+
 function processFnDeclaration(
   remaining: string,
   declarations: string[],
@@ -164,11 +173,15 @@ function processFnDeclaration(
     return remaining;
   }
   declarations.push(parsedFn.declaration);
-  let newRemaining = remaining.substring(parsedFn.end).trim();
-  if (newRemaining.startsWith(";")) {
-    newRemaining = newRemaining.substring(1).trim();
+  return advancePastDefinition(remaining, parsedFn.end);
+}
+
+function processStructDefinition(remaining: string): string {
+  const parsedStruct = parseStructDefinition(remaining, 0);
+  if (!parsedStruct) {
+    return remaining;
   }
-  return newRemaining;
+  return advancePastDefinition(remaining, parsedStruct.end);
 }
 
 function findNextBlockEnd(input: string, start: number): number {
@@ -312,6 +325,7 @@ function isTopLevelTrigger(remaining: string): boolean {
   return (
     remaining.startsWith("let ") ||
     remaining.startsWith("fn ") ||
+    remaining.startsWith("struct ") ||
     remaining.startsWith("{") ||
     remaining.startsWith("if") ||
     remaining.startsWith("while") ||
@@ -328,6 +342,10 @@ function tryHandleControlFlow(
 ): string | null {
   if (remaining.startsWith("fn ")) {
     return processFnDeclaration(remaining, declarations);
+  }
+
+  if (remaining.startsWith("struct ")) {
+    return processStructDefinition(remaining);
   }
 
   const ifResult = handleTopLevelIf(remaining, declarations);

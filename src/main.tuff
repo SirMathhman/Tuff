@@ -1,4 +1,1 @@
-let mut x = 0;
-this.x = 100;
-this.x = 200;
-x
+struct Empty {}

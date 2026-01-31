@@ -280,3 +280,7 @@ test("interpret handles this.property access", () => {
 test("interpret handles this.property assignment", () => {
   assertInterpret("let mut x = 0; this.x = 100; this.x = 200; x", 200);
 });
+
+test("interpret handles empty struct definition", () => {
+  assertInterpret("struct Empty {}", 0);
+});

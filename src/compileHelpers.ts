@@ -528,6 +528,30 @@ function parseFunctionBody(
   return { content, end: semiIdx };
 }
 
+export function parseStructDefinition(
+  input: string,
+  start: number,
+): { end: number } | null {
+  if (!isKeywordAt(input, start, "struct")) return null;
+  let idx = skipWhitespace(input, start + 6);
+
+  const nameResult = readIdentifier(input, idx);
+  if (!nameResult) return null;
+  idx = skipWhitespace(input, nameResult.end);
+
+  // Expect struct body in braces
+  const bodyResult = readBalanced(input, idx, "{", "}");
+  if (!bodyResult) return null;
+  idx = bodyResult.end;
+
+  // Skip optional semicolon
+  if (input[idx] === ";") {
+    idx++;
+  }
+
+  return { end: idx };
+}
+
 export function parseFunctionDeclaration(
   input: string,
   start: number,
