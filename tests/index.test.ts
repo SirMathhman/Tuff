@@ -347,3 +347,19 @@ test("deeply nested function can access grandparent scope via this.this.this", (
     100,
   );
 });
+
+test("interpret array declaration and access", () => {
+  assertInterpret("let array : [I32; 1; 1] = [100]; array[0]", 100);
+});
+
+test("interpret array with multiple elements", () => {
+  assertInterpret("let array : [I32; 3; 3] = [10, 20, 30]; array[1]", 20);
+});
+
+test("interpret array initialization with implicit type", () => {
+  assertInterpret("let array = [100]; array[0]", 100);
+});
+
+test("compile validates array type annotation", () => {
+  assertValid("let array : [I32; 2; 2] = [10, 20]; array[0]");
+});

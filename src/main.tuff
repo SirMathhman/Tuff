@@ -1,12 +1,8 @@
-fn Point(x : I32, y : I32) => {
-    fn manhattan() => {
-        x + y
-    }
+/*
+In Tuff, arrays are of the format [Type; Initialized Element Count; Total Element Count]
 
-    this
-}
+This is an array of type I32 of length 1 with one Element initialized
+*/
 
-let point = Point(3, 4);
-point.manhattan()
-
-// This should have an exit code of 7
+let array : [I32; 1; 1] = [100];
+array[0]

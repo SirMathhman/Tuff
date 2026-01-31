@@ -117,10 +117,21 @@ function processSingleLetInTopLevel(
 function findNextSemicolon(remaining: string): number {
   let semiIdx = -1;
   let braceDepth = 0;
+  let bracketDepth = 0;
+  let parenDepth = 0;
   for (let i = 0; i < remaining.length; i++) {
     if (remaining[i] === "{") braceDepth++;
     else if (remaining[i] === "}") braceDepth--;
-    else if (remaining[i] === ";" && braceDepth === 0) {
+    else if (remaining[i] === "[") bracketDepth++;
+    else if (remaining[i] === "]") bracketDepth--;
+    else if (remaining[i] === "(") parenDepth++;
+    else if (remaining[i] === ")") parenDepth--;
+    else if (
+      remaining[i] === ";" &&
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      parenDepth === 0
+    ) {
       semiIdx = i;
       break;
     }

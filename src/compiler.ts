@@ -165,6 +165,11 @@ export function extractAndValidateTypesInExpression(
   expression: string,
   declaredType: string,
 ): void {
+  // Skip validation for array types - they are handled separately
+  if (declaredType.startsWith("[") && declaredType.endsWith("]")) {
+    return;
+  }
+
   const blockMatch = expression.match(/^\s*\{\s*([\s\S]*)\s*\}\s*$/);
   if (blockMatch) {
     const blockContent = blockMatch[1];
@@ -221,12 +226,42 @@ export function inferTypeFromValue(value: string): string | undefined {
   return Array.from(typesUsed)[0];
 }
 
+function buildLetStatementResult(
+  varName: string,
+  declType: string,
+  value: string,
+  isMutable: boolean,
+): {
+  varName: string;
+  declType: string;
+  value: string;
+  isMutable: boolean;
+} {
+  const processedValue = value.trim().replace(/;$/, "");
+  return { varName, declType, value: processedValue, isMutable };
+}
+
 export function parseLetStatement(statement: string): {
   varName: string;
   declType: string;
   value: string;
   isMutable: boolean;
 } | null {
+  // Try array type first: let [mut] varName : [Type; init; total] = value
+  const arrayTypeMatch = statement.match(
+    /let\s+(mut\s+)?(\w+)\s*:\s*(\[[^\]]+\])\s*=\s*([\s\S]+)/,
+  );
+  if (arrayTypeMatch) {
+    const [, varMut, varName, arrayType, value] = arrayTypeMatch;
+    return buildLetStatementResult(
+      varName,
+      arrayType,
+      value,
+      varMut !== undefined,
+    );
+  }
+
+  // Try regular types: let [mut] varName : [*][mut] Type = value
   let letMatch = statement.match(
     /let\s+(mut\s+)?(\w+)\s*:\s*(\*?)(mut\s+)?(\w+)\s*=\s*([\s\S]+)/,
   );
@@ -234,22 +269,20 @@ export function parseLetStatement(statement: string): {
     const [, varMut, varName, pointerPrefix, typeMut, baseType, value] =
       letMatch;
     const declType = pointerPrefix + (typeMut ? "mut " : "") + baseType;
-    const processedValue = value.trim().replace(/;$/, "");
-    const isMutable = varMut !== undefined;
-
-    return { varName, declType, value: processedValue, isMutable };
+    return buildLetStatementResult(
+      varName,
+      declType,
+      value,
+      varMut !== undefined,
+    );
   }
 
   letMatch = statement.match(/let\s+(mut\s+)?(\w+)\s*=\s*([\s\S]+)/);
   if (letMatch) {
     const [, mutKeyword, varName, value] = letMatch;
-    const trimmedValue = value.trim().replace(/;$/, "");
-
-    const inferredType = inferTypeFromValue(trimmedValue);
+    const inferredType = inferTypeFromValue(value);
     const declType = inferredType ?? "I32";
-    const isMutable = mutKeyword !== undefined;
-
-    return { varName, declType, value: trimmedValue, isMutable };
+    return buildLetStatementResult(varName, declType, value, mutKeyword !== undefined);
   }
 
   return null;

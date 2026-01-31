@@ -56,6 +56,13 @@ export function convertThisTypeVarProperty(
   return result;
 }
 
+export function convertArrayLiterals(input: string): string {
+  // Convert Tuff array literals [val1, val2, ...] to JavaScript arrays
+  // This is a simple passthrough as JavaScript array syntax is the same
+  // but we preserve it so it's not treated as a block
+  return input;
+}
+
 export function normalizeAndStripNumericTypes(input: string): string {
   return convertCharLiteralsToUTF8(
     stripNumericTypeSuffixes(normalizeExpression(input)),
