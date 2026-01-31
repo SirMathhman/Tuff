@@ -241,49 +241,88 @@ function buildLetStatementResult(
   return { varName, declType, value: processedValue, isMutable };
 }
 
+function tryArrayNoInitMatch(
+  statement: string,
+): ReturnType<typeof buildLetStatementResult> | null {
+  const match = statement.match(
+    /let\s+(mut\s+)?(\w+)\s*:\s*(\[[^\]]*;\s*0\s*;[^\]]*\])\s*;?$/,
+  );
+  if (!match) return null;
+  const [, varMut, varName, arrayType] = match;
+  return buildLetStatementResult(
+    varName,
+    arrayType,
+    "[]",
+    varMut !== undefined,
+  );
+}
+
+function tryArrayWithInitMatch(
+  statement: string,
+): ReturnType<typeof buildLetStatementResult> | null {
+  const match = statement.match(
+    /let\s+(mut\s+)?(\w+)\s*:\s*(\[[^\]]+\])\s*=\s*([\s\S]+)/,
+  );
+  if (!match) return null;
+  const [, varMut, varName, arrayType, value] = match;
+  return buildLetStatementResult(
+    varName,
+    arrayType,
+    value,
+    varMut !== undefined,
+  );
+}
+
+function tryTypedMatch(
+  statement: string,
+): ReturnType<typeof buildLetStatementResult> | null {
+  const match = statement.match(
+    /let\s+(mut\s+)?(\w+)\s*:\s*(\*?)(mut\s+)?(\w+)\s*=\s*([\s\S]+)/,
+  );
+  if (!match) return null;
+  const [, varMut, varName, pointerPrefix, typeMut, baseType, value] = match;
+  const declType = pointerPrefix + (typeMut ? "mut " : "") + baseType;
+  return buildLetStatementResult(
+    varName,
+    declType,
+    value,
+    varMut !== undefined,
+  );
+}
+
+function tryInferredMatch(
+  statement: string,
+): ReturnType<typeof buildLetStatementResult> | null {
+  const match = statement.match(/let\s+(mut\s+)?(\w+)\s*=\s*([\s\S]+)/);
+  if (!match) return null;
+  const [, mutKeyword, varName, value] = match;
+  const inferredType = inferTypeFromValue(value);
+  const declType = inferredType ?? "I32";
+  return buildLetStatementResult(
+    varName,
+    declType,
+    value,
+    mutKeyword !== undefined,
+  );
+}
+
 export function parseLetStatement(statement: string): {
   varName: string;
   declType: string;
   value: string;
   isMutable: boolean;
 } | null {
-  // Try array type first: let [mut] varName : [Type; init; total] = value
-  const arrayTypeMatch = statement.match(
-    /let\s+(mut\s+)?(\w+)\s*:\s*(\[[^\]]+\])\s*=\s*([\s\S]+)/,
-  );
-  if (arrayTypeMatch) {
-    const [, varMut, varName, arrayType, value] = arrayTypeMatch;
-    return buildLetStatementResult(
-      varName,
-      arrayType,
-      value,
-      varMut !== undefined,
-    );
-  }
+  const arrayNoInit = tryArrayNoInitMatch(statement);
+  if (arrayNoInit) return arrayNoInit;
 
-  // Try regular types: let [mut] varName : [*][mut] Type = value
-  let letMatch = statement.match(
-    /let\s+(mut\s+)?(\w+)\s*:\s*(\*?)(mut\s+)?(\w+)\s*=\s*([\s\S]+)/,
-  );
-  if (letMatch) {
-    const [, varMut, varName, pointerPrefix, typeMut, baseType, value] =
-      letMatch;
-    const declType = pointerPrefix + (typeMut ? "mut " : "") + baseType;
-    return buildLetStatementResult(
-      varName,
-      declType,
-      value,
-      varMut !== undefined,
-    );
-  }
+  const arrayWithInit = tryArrayWithInitMatch(statement);
+  if (arrayWithInit) return arrayWithInit;
 
-  letMatch = statement.match(/let\s+(mut\s+)?(\w+)\s*=\s*([\s\S]+)/);
-  if (letMatch) {
-    const [, mutKeyword, varName, value] = letMatch;
-    const inferredType = inferTypeFromValue(value);
-    const declType = inferredType ?? "I32";
-    return buildLetStatementResult(varName, declType, value, mutKeyword !== undefined);
-  }
+  const typed = tryTypedMatch(statement);
+  if (typed) return typed;
+
+  const inferred = tryInferredMatch(statement);
+  if (inferred) return inferred;
 
   return null;
 }

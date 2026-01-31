@@ -363,3 +363,14 @@ test("interpret array initialization with implicit type", () => {
 test("compile validates array type annotation", () => {
   assertValid("let array : [I32; 2; 2] = [10, 20]; array[0]");
 });
+
+test("interpret array declaration without initialization", () => {
+  assertInterpret("let mut array : [I32; 0; 3]; array[0] = 100; array[0]", 100);
+});
+
+test("interpret array mutable assignment", () => {
+  assertInterpret(
+    "let mut array : [I32; 1; 1] = [5]; array[0] = 100; array[0]",
+    100,
+  );
+});

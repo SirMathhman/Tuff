@@ -1,8 +1,3 @@
-/*
-In Tuff, arrays are of the format [Type; Initialized Element Count; Total Element Count]
-
-This is an array of type I32 of length 1 with one Element initialized
-*/
-
-let array : [I32; 1; 1] = [100];
+let mut array : [I32; 0; 3];
+array[0] = 100;
 array[0]

@@ -1,4 +1,5 @@
 process.exit(Number((function() {
-  let array = [100];
-return array[0];
+  let array = [];
+return array[0] = 100;
+array[0];
 })()));
