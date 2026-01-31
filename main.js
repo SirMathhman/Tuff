@@ -1,20 +1,17 @@
 const fs = require("fs");
 const path = require("path");
 
+// wah
+
 // Simple compile function - takes in Tuff source and compiles it
 function compile(source) {
   // For now, just return the source as-is
   return source;
 }
 
-// Get the path of the current file
-const sourceFile = __filename;
-
-// Define the destination file path (same directory with -copy suffix)
-const destinationFile = path.join(
-  path.dirname(sourceFile),
-  path.basename(sourceFile, path.extname(sourceFile)) + path.extname(sourceFile),
-);
+// Read from main.tuff and write to main.js
+const sourceFile = path.join(path.dirname(__filename), "main.tuff");
+const destinationFile = __filename;
 
 // Read the current file
 fs.readFile(sourceFile, "utf8", (err, data) => {
