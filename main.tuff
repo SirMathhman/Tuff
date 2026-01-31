@@ -2,7 +2,7 @@ extern use fs from fs;
 extern use path from path;
 
 // Simple compileTuffToJS function - takes in Tuff source and compileTuffToJSs it
-fn compileTuffToJS(source) => {
+fn compileTuffToJS(source : String) : String => {
   let mut result = source;
   let mut mutVariables = [];
   

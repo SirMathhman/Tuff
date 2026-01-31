@@ -78,6 +78,18 @@ describe("compileTuffToJS", () => {
     expect(result).toBe("function add(a, b) { return a + b; }");
   });
 
+  it("should remove return type annotations from functions", () => {
+    const source = "fn getValue() : String => { return \"hello\"; }";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("function getValue() { return \"hello\"; }");
+  });
+
+  it("should handle functions with parameters and return types", () => {
+    const source = "fn add(a : Number, b : Number) : Number => { return a + b; }";
+    const result = compileTuffToJS(source);
+    expect(result).toBe("function add(a, b) { return a + b; }");
+  });
+
   it("should transform Rust-like for loops to JavaScript", () => {
     const source = "for (let i in 0..5) { }";
     const result = compileTuffToJS(source);
