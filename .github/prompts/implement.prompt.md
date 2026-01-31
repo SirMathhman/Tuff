@@ -12,8 +12,7 @@ Follow these steps exactly. This is a variant of TDD. You must tell the user whe
 
 - If `main.js` becomes malformed, restore it from version control. Version control always has a "working" compiler. Furthermore, there is no issue with restoring main.js, it is generated and will be overwritten regardless.
 - If the build fails, notice the error message. It must provide the following information: what was the cause? what is the reason why this error occured? how to fix it? information around the error. You are required to improve this error message if it does not satisfy this criteria.
-- If the warnings or error messages are legitimate, then refactor 
-
 4. Run the tests to make them pass. If they do not pass, fix the code in `main.tuff` and repeat from step 2.
-5. Update main.tuff to use the new feature.
+5. Update main.tuff to use the new feature. If the new feature were warnings or error messages, then refactor or update the code appropriately.
+
 6. Commit.
