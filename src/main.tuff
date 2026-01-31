@@ -1,5 +1,7 @@
-// this captures params
-fn Wrapper(field : I32) => this;
+fn Wrapper() : Wrapper => {
+    let field = 100;
+    this
+}
 
-let value = Wrapper(100);
-value.field
+let value = Wrapper();
+value.field // should be 100

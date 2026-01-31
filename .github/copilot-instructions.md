@@ -2,87 +2,129 @@
 
 ## Project Overview
 
-**Tuff** is a language interpreter/compiler framework in TypeScript. The project implements a custom language that can be compiled to JavaScript and interpreted at runtime, with a REPL interface for interactive evaluation.
+**Tuff** is a statically-typed systems language compiler implemented in TypeScript that compiles to JavaScript. It features a type system with numeric types, pointers, mutability tracking, and compile-time validation.
 
-### Architecture
+### Language Features
 
-The project has a simple three-layer architecture:
+- **Numeric types**: U8/U16/U32/U64 (unsigned), I8/I16/I32/I64 (signed), F32/F64 (float), with compile-time range validation
+- **Type annotations**: `let x : Type = value` or inferred `let x = 100U8` (defaults to I32)
+- **Mutability**: `let` (immutable) vs `let mut` (mutable); immutability enforced at compile time
+- **Pointers**: `*Type` (immutable pointer), `*mut Type` (mutable pointer), `&mut x` (reference), `*ptr` (dereference)
+- **Structs**: `struct Name { field: Type; }` with instantiation `Name { value1, value2 }`
+- **Functions**: `fn name(param: Type) : ReturnType => body` (body can be expression or block)
+- **Control flow**: `if/else` (expressions when both branches present), `while` loops
+- **Block expressions**: `{ statements; final_expr }` — last expression is return value
+- **Special types**: `Bool`, `Char` (converted to UTF-8 code), `This` (captures function context)
 
-1. **Compile** (`compile()`) - Transforms source code (currently a stub that returns input as-is)
-2. **Interpret** (`interpret()`) - Calls compile, then evaluates the resulting JavaScript
-3. **REPL** (`startRepl()`) - Interactive command-line interface for executing interpret on user input
+## Architecture & Compilation Pipeline
 
-The execution model uses JavaScript's `Function` constructor for dynamic evaluation—this is intentional but carries security implications for untrusted code.
+The compiler transforms Tuff source → JavaScript through a multi-stage process in [../src/index.ts](../src/index.ts):
+
+```
+Tuff source → stripComments → extract top-level (declarations + expression)
+→ validate types → convert syntax → generate JS → evaluate
+```
+
+### Key Modules
+
+- **[compiler.ts](../src/compiler.ts)**: Core compilation logic — block statement parsing, type validation/inference, let statement parsing. Exports `parseBlockStatements()`, `validateAndStripTypeAnnotations()`, `extractAndValidateTypesInExpression()`, `parseLetStatement()`
+- **[compileHelpers.ts](../src/compileHelpers.ts)**: Parser for language constructs — `parseIfExpression()`, `parseIfStatement()`, `parseWhileStatement()`, `parseFunctionDeclaration()`, `parseStructDefinition()`, `normalizeExpression()`. Uses balanced delimiter tracking with `readBalanced()` and depth state machines
+- **[conversionUtils.ts](../src/conversionUtils.ts)**: Syntax transformations — numeric suffix stripping, char literals → UTF-8, `&mut x` → `{value: x}`, `*ptr` → `ptr.value`, `this.prop` → `prop`, comment removal
+- **[blockUtils.ts](../src/blockUtils.ts)**: Block expression handling — converts `{ stmts; expr }` to IIFEs for embedding in expressions
+- **[structUtils.ts](../src/structUtils.ts)**: Global struct registry and instantiation — maps `StructName { vals }` to `{field1: val1, ...}`
+- **[types.ts](../src/types.ts)**: Type system constants — `typeRanges`, `TYPE_ORDER`, `TYPE_FAMILIES`, validation functions (`validateInRange()`, `validateVariableTypeCompatibility()`), type coercion rules (`determineCoercedType()`)
+- **[stringState.ts](../src/stringState.ts)**: String literal tracking for parser — prevents delimiter matching inside strings
+
+### Type System Rules
+
+**Type families**: Unsigned ints, signed ints, floats — mixing families is an error. Within a family, smaller types coerce to larger (U8 + U16 → U16), larger to smaller is rejected.
+
+**Assignment validation**: Source type priority must be ≤ target type priority within the same family. Example:
+
+```typescript
+let x : U16 = 100U8;  // ✓ U8 fits in U16
+let y : U8 = 100U16;  // ✗ Type mismatch: cannot assign U16 to U8
+```
+
+**Overflow/underflow checking**: Arithmetic expressions with typed literals are evaluated at compile time; out-of-range results throw errors.
+
+**Block expression types**: Inferred from last statement's type or variables referenced in it (see `inferBlockExpressionType()` in [compiler.ts](../src/compiler.ts)).
 
 ## Developer Workflows
 
 ### Building & Running
 
-- `npm run build` - Compile TypeScript to `dist/` using tsc (no watch mode configured)
-- `npm start` - Build and launch the REPL immediately
-- Output directory: `dist/` (configured in tsconfig.json)
+- `npm run build` — Compile TypeScript to `dist/`
+- `npm start` — Compile `src/main.tuff` to `src/main.js` and execute it (exit code printed)
+- `npm run watch` — Hot reload on changes to `src/**/*.ts` or `src/main.tuff`
+- Pass `--repl` flag to launch interactive REPL instead of compiling main.tuff
 
 ### Testing
 
-- `npm test` - Run Jest suite (files in `tests/` matched with `*.test.ts`)
-- `npm test:watch` - Watch mode for active development
-- Jest configured to transform TypeScript via ts-jest; test globals (`test`, `expect`) are available without imports
+- `npm test` — Run Jest suite ([tests/index.test.ts](../tests/index.test.ts))
+- `npm test:watch` — Watch mode for TDD
+- **Test helpers**: `assertInterpret(source, expected)`, `assertInterpretNaN(source)`, `assertValid(input, expectedJS?)`, `assertInvalid(input)` — all defined at top of test file
+- Pattern: Test both `compile()` output correctness AND `interpret()` runtime behavior
 
 ### Code Quality
 
-- `npm run lint` - Runs both type checking and linting (must pass both)
-  - `npm run lint:tsc` - Type check without emitting
-  - `npm run lint:eslint` - ESLint on `src/` and `tests/`
+- `npm run lint` — Run TSC type checking + ESLint (both must pass)
+- `npm run cpd` — PMD copy-paste detection (35+ token threshold)
 
-## Project Conventions & Patterns
+## Project Conventions
 
-### TypeScript Configuration
+### Parser Implementation Patterns
 
-- **Strict mode enabled** - All implicit `any` must be addressed; unused vars not prefixed with `_` are errors
-- **Target: ES2019** - Use const/let, arrow functions, async/await; no experimental features
-- **CommonJS module system** - Add `declare const require: any` when accessing require (as shown in src/index.ts around line 48)
+**Balanced delimiter reading**: Use `readBalanced(input, start, open, close)` from [compileHelpers.ts](../src/compileHelpers.ts) for matching `()`, `{}`, `[]` — tracks depth and respects string boundaries via `StringState`
 
-### ESLint Rules (Project-Specific Relaxations)
+**Depth state tracking**: Many parsers use `DepthState = {paren, brace, bracket}` to detect top-level positions for control flow parsing
 
-- `no-console` is **off** - Logging to console is expected (especially in REPL)
-- Unused vars starting with `_` are ignored (convention for intentionally unused parameters)
-- `@typescript-eslint/no-explicit-any` is **warn** (not error) - Use sparingly with `eslint-disable-next-line` comments for dynamic code
+**Keyword detection**: Use `isKeywordAt(input, idx, keyword)` to ensure word boundaries (prevents matching `ifx` when looking for `if`)
+
+**Expression scanning**: `scanExpression()` reads until delimiter/keyword, respecting nesting and string literals
+
+### String Building Conventions
+
+Use string concatenation (`+`) not template literals for output JS generation (matches project style). Example from [compileHelpers.ts](../src/compileHelpers.ts):
+
+```typescript
+const statement = "while (" + conditionExpr + ") {" + body + "}";
+```
+
+### Error Messages
+
+Format: `throw new Error("Category: details")` — Examples:
+
+- `"Type mismatch: cannot assign U16 to U8"`
+- `"Underflow: -200 is below minimum for I8 (-128)"`
+- `"Cannot assign to immutable variable 'x'. Declare it with 'let mut'"`
+
+### TypeScript Patterns
+
+- **CommonJS require**: Add `// eslint-disable-next-line @typescript-eslint/no-explicit-any` + `const fs = require("fs") as any` when using require (see [src/index.ts](../src/index.ts))
+- **Regex with capture groups**: Destructure with `const [, group1, group2] = match` (skips full match at index 0)
+- **Unused params**: Prefix with `_` to satisfy linter (e.g., `(_num: string, type: string)`)
 
 ### Test Patterns
 
-- Tests directly import and call functions under test—no mocking framework configured yet
-- Return values are coerced: `interpret()` always returns a `number`, so test expectations use `.toBe(expectedNumber)`
-- Use `Number.isNaN()` to verify non-numeric outputs (not truthiness checks on `NaN`)
-- See tests/index.test.ts for examples
+Tests compile Tuff source and verify:
 
-### Runtime Patterns
+1. **Valid compilation**: `assertValid(input, expectedJS)` checks no errors + optional JS output match
+2. **Runtime behavior**: `assertInterpret(source, expectedNumber)` evaluates compiled JS and checks result
+3. **Error cases**: `assertInvalid(input)` verifies compile-time rejection
 
-- **REPL exit**: Accepts `.exit` or `.quit` commands; empty lines are skipped
-- **Error handling**: Errors are caught and logged; REPL continues operating
-- **Function constructor usage**: Code uses `new Function(bundledJs)` for evaluation—this is a known security boundary (comment in source documents tradeoff)
+Example pattern from [tests/index.test.ts](../tests/index.test.ts):
 
-## Key Implementation Details
-
-### The `interpret()` Function
-
-Applies numeric coercion to all results: `Number(result)`. This means:
-
-- `interpret("return 42;")` → `42`
-- `interpret("return 'text';")` → `NaN` (intentional behavior)
-- Implementation in src/index.ts
-
-### The `compile()` Function (TODO)
-
-Currently a stub—accepts any string and returns it unchanged. Future implementations should transform source code to valid JavaScript.
-
-### Node Globals In Tests
-
-ESLint config explicitly declares Jest globals (`test`, `expect`, `describe`, `it`) so they don't require imports in test files.
+```typescript
+test("compile throws error for mixed type arithmetic", () => {
+  assertInvalid("1U8 + 2I8"); // Different type families
+});
+```
 
 ## File References
 
-- **Core logic:** src/index.ts (contains compile, interpret, startRepl)
-- **Test suite:** tests/index.test.ts
-- **TypeScript config:** tsconfig.json (strict: true, ES2019 target)
-- **ESLint config:** eslint.config.js (flat config format; separate configs for src/ and tests/)
-- **Jest config:** jest.config.js
+- **Entry point**: [src/index.ts](../src/index.ts) — `compile()`, `interpret()`, `startRepl()`, `compileFile()`
+- **Main test suite**: [tests/index.test.ts](../tests/index.test.ts)
+- **Example program**: [src/main.tuff](../src/main.tuff)
+- **Type definitions**: [src/types.ts](../src/types.ts) — All type ranges and validation
+- **Configs**: [tsconfig.json](../tsconfig.json) (strict mode, ES2019), [eslint.config.js](../eslint.config.js) (flat config)
