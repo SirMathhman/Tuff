@@ -22,9 +22,8 @@ function stripBraceWrappers(input: string): string {
       changed = true;
       inside = inside.trim();
 
-      // Only convert blocks with let bindings to IIFEs
-      // Blocks with just statements should be handled at a higher level
-      if (inside.includes("let ") && inside.includes(";")) {
+      // Convert blocks with statements to IIFEs to avoid syntax errors in expressions
+      if (inside.includes(";")) {
         const iife = convertLetBindingToIIFE(inside);
         const placeholder = "__IIFE_" + iifeCounter + "__";
         iifeMap.set(placeholder, iife);
@@ -32,7 +31,7 @@ function stripBraceWrappers(input: string): string {
         return placeholder;
       }
 
-      // For empty blocks or statement blocks, return empty string
+      // For blocks without statements, just return the content
       return inside;
     });
     result = newResult;
@@ -178,7 +177,28 @@ function scanExpression(
   return { expr: input.slice(start).trim(), end: input.length };
 }
 
-function parseIfExpression(
+function parseIfBranch(
+  input: string,
+  start: number,
+  options: { stopOnElse: boolean },
+): { expr: string; end: number } {
+  let idx = start;
+  while (idx < input.length && /\s/.test(input[idx])) idx++;
+
+  if (input[idx] === "{") {
+    const balanced = readBalanced(input, idx, "{", "}");
+    if (balanced) {
+      return { expr: "{" + balanced.content + "}", end: balanced.end };
+    }
+  }
+
+  return scanExpression(input, idx, {
+    stopOnElse: options.stopOnElse,
+    stopTokens: [";", ")", "}", "]", ","],
+  });
+}
+
+export function parseIfExpression(
   input: string,
   start: number,
 ): { replacement: string; end: number } | null {
@@ -191,19 +211,14 @@ function parseIfExpression(
   const conditionExpr = condition.content.trim();
   idx = condition.end;
 
-  while (idx < input.length && /\s/.test(input[idx])) idx++;
-  const thenResult = scanExpression(input, idx, { stopOnElse: true });
+  const thenResult = parseIfBranch(input, idx, { stopOnElse: true });
   idx = thenResult.end;
 
   while (idx < input.length && /\s/.test(input[idx])) idx++;
   if (!isKeywordAt(input, idx, "else")) return null;
   idx += 4;
-  while (idx < input.length && /\s/.test(input[idx])) idx++;
 
-  const elseResult = scanExpression(input, idx, {
-    stopOnElse: false,
-    stopTokens: [";", ")", "}", "]", ","],
-  });
+  const elseResult = parseIfBranch(input, idx, { stopOnElse: false });
 
   const thenExpr = transformIfExpressions(thenResult.expr);
   const elseExpr = transformIfExpressions(elseResult.expr);
@@ -232,7 +247,7 @@ function transformIfExpressions(input: string): string {
 }
 
 export function normalizeExpression(input: string): string {
-  return transformIfExpressions(stripBraceWrappers(input));
+  return stripBraceWrappers(transformIfExpressions(input));
 }
 
 export function stripNumericTypeSuffixes(input: string): string {
@@ -286,7 +301,7 @@ function readIdentifier(
   return { name, end: start + name.length };
 }
 
-function skipWhitespace(input: string, start: number): number {
+export function skipWhitespace(input: string, start: number): number {
   let idx = start;
   while (idx < input.length && /\s/.test(input[idx])) idx++;
   return idx;

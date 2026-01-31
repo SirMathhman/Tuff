@@ -1,6 +1,6 @@
-process.exit(Number((function() {
+const result = (function() {
   let x = 100;
-x = 200;
-x = 300;
+(x < 10 ? (function() { return x = 20; })() : (function() { return x = 300; })());
 return x;
-})()));
+})();
+console.log(result);

@@ -242,3 +242,10 @@ test("interpret supports assignment followed by expression", () => {
 test("interpret handles multiple assignments in a block", () => {
   assertInterpret("let mut x = 100; { x = 200; x = 300; } x", 300);
 });
+
+test("interpret handles if-else with assignments in blocks", () => {
+  assertInterpret(
+    "let mut x = 0; if (x < 10) { x = 20; } else { x = 30; } x",
+    20,
+  );
+});

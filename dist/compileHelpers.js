@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.parseIfExpression = parseIfExpression;
 exports.normalizeExpression = normalizeExpression;
 exports.stripNumericTypeSuffixes = stripNumericTypeSuffixes;
 exports.convertCharLiteralsToUTF8 = convertCharLiteralsToUTF8;
@@ -7,6 +8,7 @@ exports.convertMutableReference = convertMutableReference;
 exports.convertPointerDereference = convertPointerDereference;
 exports.stripComments = stripComments;
 exports.normalizeAndStripNumericTypes = normalizeAndStripNumericTypes;
+exports.skipWhitespace = skipWhitespace;
 exports.parseFunctionDeclaration = parseFunctionDeclaration;
 const compiler_1 = require("./compiler");
 const stringState_1 = require("./stringState");
@@ -24,16 +26,15 @@ function stripBraceWrappers(input) {
             }
             changed = true;
             inside = inside.trim();
-            // Only convert blocks with let bindings to IIFEs
-            // Blocks with just statements should be handled at a higher level
-            if (inside.includes("let ") && inside.includes(";")) {
+            // Convert blocks with statements to IIFEs to avoid syntax errors in expressions
+            if (inside.includes(";")) {
                 const iife = convertLetBindingToIIFE(inside);
                 const placeholder = "__IIFE_" + iifeCounter + "__";
                 iifeMap.set(placeholder, iife);
                 iifeCounter++;
                 return placeholder;
             }
-            // For empty blocks or statement blocks, return empty string
+            // For blocks without statements, just return the content
             return inside;
         });
         result = newResult;
@@ -150,6 +151,21 @@ function scanExpression(input, start, options) {
     }
     return { expr: input.slice(start).trim(), end: input.length };
 }
+function parseIfBranch(input, start, options) {
+    let idx = start;
+    while (idx < input.length && /\s/.test(input[idx]))
+        idx++;
+    if (input[idx] === "{") {
+        const balanced = readBalanced(input, idx, "{", "}");
+        if (balanced) {
+            return { expr: "{" + balanced.content + "}", end: balanced.end };
+        }
+    }
+    return scanExpression(input, idx, {
+        stopOnElse: options.stopOnElse,
+        stopTokens: [";", ")", "}", "]", ","],
+    });
+}
 function parseIfExpression(input, start) {
     if (!isKeywordAt(input, start, "if"))
         return null;
@@ -161,21 +177,14 @@ function parseIfExpression(input, start) {
         return null;
     const conditionExpr = condition.content.trim();
     idx = condition.end;
-    while (idx < input.length && /\s/.test(input[idx]))
-        idx++;
-    const thenResult = scanExpression(input, idx, { stopOnElse: true });
+    const thenResult = parseIfBranch(input, idx, { stopOnElse: true });
     idx = thenResult.end;
     while (idx < input.length && /\s/.test(input[idx]))
         idx++;
     if (!isKeywordAt(input, idx, "else"))
         return null;
     idx += 4;
-    while (idx < input.length && /\s/.test(input[idx]))
-        idx++;
-    const elseResult = scanExpression(input, idx, {
-        stopOnElse: false,
-        stopTokens: [";", ")", "}", "]", ","],
-    });
+    const elseResult = parseIfBranch(input, idx, { stopOnElse: false });
     const thenExpr = transformIfExpressions(thenResult.expr);
     const elseExpr = transformIfExpressions(elseResult.expr);
     const replacement = "(" + conditionExpr + " ? " + thenExpr + " : " + elseExpr + ")";
@@ -199,7 +208,7 @@ function transformIfExpressions(input) {
     return result;
 }
 function normalizeExpression(input) {
-    return transformIfExpressions(stripBraceWrappers(input));
+    return stripBraceWrappers(transformIfExpressions(input));
 }
 function stripNumericTypeSuffixes(input) {
     return input.replace(/(-?[0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64|F32|F64)\b/g, "$1");

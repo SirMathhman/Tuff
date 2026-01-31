@@ -15,6 +15,7 @@ import {
   normalizeAndStripNumericTypes,
   normalizeExpression,
   parseFunctionDeclaration,
+  parseIfExpression,
   stripComments,
   stripNumericTypeSuffixes,
 } from "./compileHelpers";
@@ -219,6 +220,55 @@ function handleTopLevelStatement(
   }
 }
 
+function handleTopLevelIf(
+  remaining: string,
+  declarations: string[],
+): string | null {
+  if (!remaining.startsWith("if")) return null;
+  const parsedIf = parseIfExpression(remaining, 0);
+  if (parsedIf) {
+    const afterIf = remaining.substring(parsedIf.end).trim();
+    if (afterIf.length > 0 && !afterIf.startsWith(";")) {
+      declarations.push(parsedIf.replacement);
+      return afterIf;
+    }
+  }
+  return null;
+}
+
+function handleTopLevelBlock(
+  remaining: string,
+  variableTypes: Record<string, string>,
+  mutableVars: Set<string>,
+  declarations: string[],
+): string | null {
+  if (!remaining.startsWith("{")) return null;
+  const blockEndIdx = findNextBlockEnd(remaining, 0);
+  if (blockEndIdx !== -1) {
+    const afterBlock = remaining.substring(blockEndIdx + 1).trim();
+    if (afterBlock.length > 0 && !afterBlock.startsWith(";")) {
+      processBlockStatements(
+        remaining.substring(1, blockEndIdx),
+        variableTypes,
+        mutableVars,
+        declarations,
+      );
+      return afterBlock;
+    }
+  }
+  return null;
+}
+
+function isTopLevelTrigger(remaining: string): boolean {
+  return (
+    remaining.startsWith("let ") ||
+    remaining.startsWith("fn ") ||
+    remaining.startsWith("{") ||
+    remaining.startsWith("if") ||
+    /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining)
+  );
+}
+
 function extractTopLevelStatements(input: string): {
   declarations: string[];
   expression: string;
@@ -228,32 +278,27 @@ function extractTopLevelStatements(input: string): {
   const mutableVars: Set<string> = new Set();
   let remaining = input.trim();
 
-  while (
-    remaining.startsWith("let ") ||
-    remaining.startsWith("fn ") ||
-    remaining.startsWith("{") ||
-    /^\w+\s*(?:[+\-*/%&|^])?=\s*/.test(remaining)
-  ) {
+  while (isTopLevelTrigger(remaining)) {
     if (remaining.startsWith("fn ")) {
       remaining = processFnDeclaration(remaining, declarations);
       continue;
     }
 
-    if (remaining.startsWith("{")) {
-      const blockEndIdx = findNextBlockEnd(remaining, 0);
-      if (blockEndIdx !== -1) {
-        const afterBlock = remaining.substring(blockEndIdx + 1).trim();
-        if (afterBlock.length > 0 && !afterBlock.startsWith(";")) {
-          processBlockStatements(
-            remaining.substring(1, blockEndIdx),
-            variableTypes,
-            mutableVars,
-            declarations,
-          );
-          remaining = afterBlock;
-          continue;
-        }
-      }
+    const ifResult = handleTopLevelIf(remaining, declarations);
+    if (ifResult !== null) {
+      remaining = ifResult;
+      continue;
+    }
+
+    const blockResult = handleTopLevelBlock(
+      remaining,
+      variableTypes,
+      mutableVars,
+      declarations,
+    );
+    if (blockResult !== null) {
+      remaining = blockResult;
+      continue;
     }
 
     const semiIdx = findNextSemicolon(remaining);
@@ -285,7 +330,7 @@ function processDeclarations(rawDeclarations: string[]): string[] {
         : normalizeAndStripNumericTypes(refConverted);
       declarations.push("let " + varName + " = " + processedValue);
     } else if (decl.trim().length > 0) {
-      declarations.push(decl);
+      declarations.push(normalizeAndStripNumericTypes(decl));
     }
   }
   return declarations;
@@ -367,7 +412,9 @@ export function compileFile(inputPath: string, outputPath: string): void {
   const source = fs.readFileSync(inputPath, "utf-8");
   const compiled = compile(source);
   const wrapped =
-    "process.exit(Number((function() {\n  " + compiled + "\n})()));";
+    "const result = (function() {\n  " +
+    compiled +
+    "\n})();\nconsole.log(result);";
   fs.writeFileSync(outputPath, wrapped, "utf-8");
   console.log("Compiled " + inputPath + " to " + outputPath);
 }
