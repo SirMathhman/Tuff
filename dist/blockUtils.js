@@ -47,48 +47,75 @@ function normalizeDeclarations(declarations) {
         return decl;
     });
 }
-function buildBlockReturn(blockContent) {
-    const statements = (0, compiler_1.splitBlockStatements)(blockContent);
-    if (statements.length === 0) {
-        return { declarations: [], returnExpr: "", declaredVars: [] };
-    }
+function processStatementsBeforeLast(statements, declaredVarsSet) {
     const declarations = [];
     const declaredVars = [];
-    const declaredVarsSet = new Set();
-    const lastStatement = statements[statements.length - 1];
-    // Check if last statement is a function declaration
-    const isFnDeclaration = lastStatement.trim().startsWith("fn ");
-    // Process all statements except the last one
+    const declaredFunctions = [];
     for (let i = 0; i < statements.length - 1; i++) {
         const stmt = statements[i];
         if (stmt.startsWith("let ")) {
             const decl = parseLetDeclaration(stmt, declaredVarsSet, false);
             if (decl) {
                 declarations.push(decl);
-                // Extract variable name from the declaration
                 const varMatch = decl.match(/^let\s+(\w+)\s*=/);
                 if (varMatch) {
                     declaredVars.push(varMatch[1]);
                 }
             }
         }
+        else if (stmt.trim().startsWith("fn ") ||
+            stmt.trim().startsWith("function ")) {
+            const cleaned = stmt.trim().replace(/;$/, "");
+            declarations.push(cleaned);
+            // Extract function name from "function <name>(...)"
+            const fnMatch = cleaned.match(/^function\s+(\w+)\s*\(/);
+            if (fnMatch) {
+                declaredFunctions.push(fnMatch[1]);
+            }
+        }
         else {
             declarations.push((0, conversionUtils_1.normalizeAndStripNumericTypes)(stmt.trim().replace(/;$/, "")));
         }
     }
-    // If last statement is a function declaration, treat it as a declaration
-    let normalizedLastStatement = "";
+    return { declarations, declaredVars, declaredFunctions };
+}
+function processLastStatement(lastStatement) {
+    const trimmed = lastStatement.trim();
+    const isFnDeclaration = trimmed.startsWith("fn ") || trimmed.startsWith("function ");
     if (isFnDeclaration) {
-        declarations.push((0, conversionUtils_1.normalizeAndStripNumericTypes)(lastStatement.trim().replace(/;$/, "")));
+        return {
+            normalizedLastStatement: trimmed.replace(/;$/, ""),
+            isFnDeclaration: true,
+        };
     }
-    else {
-        normalizedLastStatement = (0, conversionUtils_1.normalizeAndStripNumericTypes)(lastStatement.trim().replace(/;$/, ""));
+    return {
+        normalizedLastStatement: (0, conversionUtils_1.normalizeAndStripNumericTypes)(trimmed.replace(/;$/, "")),
+        isFnDeclaration: false,
+    };
+}
+function buildBlockReturn(blockContent) {
+    const statements = (0, compiler_1.splitBlockStatements)(blockContent);
+    if (statements.length === 0) {
+        return {
+            declarations: [],
+            returnExpr: "",
+            declaredVars: [],
+            declaredFunctions: [],
+        };
     }
+    const declaredVarsSet = new Set();
+    const lastStatement = statements[statements.length - 1];
+    const { declarations: stmtDecls, declaredVars, declaredFunctions, } = processStatementsBeforeLast(statements, declaredVarsSet);
+    const { normalizedLastStatement, isFnDeclaration } = processLastStatement(lastStatement);
+    const declarations = isFnDeclaration
+        ? [...stmtDecls, normalizedLastStatement]
+        : stmtDecls;
     const normalizedDeclarations = normalizeDeclarations(declarations);
     return {
         declarations: normalizedDeclarations,
-        returnExpr: normalizedLastStatement,
+        returnExpr: isFnDeclaration ? "" : normalizedLastStatement,
         declaredVars,
+        declaredFunctions,
     };
 }
 function buildFunctionWithPrefix(declarations, returnExpr) {
@@ -108,18 +135,35 @@ function buildFunctionBody(blockContent) {
     const { declarations, returnExpr } = buildBlockReturn(blockContent);
     return buildFunctionWithPrefix(declarations, returnExpr);
 }
-function buildFunctionBodyWithThisCapture(blockContent, params) {
-    const { declarations, returnExpr, declaredVars } = buildBlockReturn(blockContent);
+function buildFunctionBodyWithThisCapture(blockContent, params, isNestedFunction = false) {
+    const { declarations, returnExpr, declaredVars, declaredFunctions } = buildBlockReturn(blockContent);
     // If the return expression is "this", capture all variables (params + locals)
     if (returnExpr === "this") {
         const paramNames = extractParamNames(params);
-        const allVars = [...paramNames, ...declaredVars];
+        const allVars = [...paramNames, ...declaredVars, ...declaredFunctions];
+        // For nested functions returning this, also capture parent's this
+        if (isNestedFunction) {
+            allVars.push("this");
+        }
+        const prefix = declarations.length > 0 ? declarations.join("; ") + "; " : "";
+        // If function contains nested functions, create self-referencing object
+        // so nested functions can access parent scope via this.this pattern
+        if (declaredFunctions.length > 0) {
+            if (allVars.length === 0) {
+                return (prefix +
+                    "let o = {}; o.this = o; return o;");
+            }
+            const properties = allVars.map((name) => name + ": " + name).join(", ");
+            return (prefix +
+                "let o = {" +
+                properties +
+                "}; o.this = o; return o;");
+        }
+        // Normal case: no nested functions
         if (allVars.length === 0) {
-            const prefix = declarations.length > 0 ? declarations.join("; ") + "; " : "";
             return prefix + "return {};";
         }
         const properties = allVars.map((name) => name + ": " + name).join(", ");
-        const prefix = declarations.length > 0 ? declarations.join("; ") + "; " : "";
         return prefix + "return {" + properties + "};";
     }
     // Otherwise use normal function body building

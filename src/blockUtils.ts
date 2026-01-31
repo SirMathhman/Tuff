@@ -192,32 +192,50 @@ export function buildFunctionBody(blockContent: string): string {
   return buildFunctionWithPrefix(declarations, returnExpr);
 }
 
+function buildSelfReferencingThisReturn(
+  properties: string[],
+): string {
+  if (properties.length === 0) {
+    return "let o = {}; o.this = o; return o;";
+  }
+  const props = properties.map((name) => name + ": " + name).join(", ");
+  return "let o = {" + props + "}; o.this = o; return o;";
+}
+
+function buildRegularThisReturn(properties: string[]): string {
+  if (properties.length === 0) {
+    return "return {};";
+  }
+  const props = properties.map((name) => name + ": " + name).join(", ");
+  return "return {" + props + "};";
+}
+
 export function buildFunctionBodyWithThisCapture(
   blockContent: string,
   params: string,
+  isNestedFunction: boolean = false,
 ): string {
   const { declarations, returnExpr, declaredVars, declaredFunctions } =
     buildBlockReturn(blockContent);
 
-  // If the return expression is "this", capture all variables (params + locals)
-  if (returnExpr === "this") {
-    const paramNames = extractParamNames(params);
-    const allVars = [...paramNames, ...declaredVars, ...declaredFunctions];
-
-    if (allVars.length === 0) {
-      const prefix =
-        declarations.length > 0 ? declarations.join("; ") + "; " : "";
-      return prefix + "return {};";
-    }
-
-    const properties = allVars.map((name) => name + ": " + name).join(", ");
-    const prefix =
-      declarations.length > 0 ? declarations.join("; ") + "; " : "";
-    return prefix + "return {" + properties + "};";
+  if (returnExpr !== "this") {
+    return buildFunctionWithPrefix(declarations, returnExpr);
   }
 
-  // Otherwise use normal function body building
-  return buildFunctionWithPrefix(declarations, returnExpr);
+  const prefix =
+    declarations.length > 0 ? declarations.join("; ") + "; " : "";
+  const paramNames = extractParamNames(params);
+  const allVars = [...paramNames, ...declaredVars, ...declaredFunctions];
+
+  if (isNestedFunction) {
+    allVars.push("this");
+  }
+
+  if (declaredFunctions.length > 0) {
+    return prefix + buildSelfReferencingThisReturn(allVars);
+  }
+
+  return prefix + buildRegularThisReturn(allVars);
 }
 
 export function convertLetBindingToIIFE(blockContent: string): string {

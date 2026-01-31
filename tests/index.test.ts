@@ -333,3 +333,10 @@ test("function returning this captures nested function declarations", () => {
     100,
   );
 });
+
+test("nested function can access outer function scope via this.this", () => {
+  assertInterpret(
+    "fn Outer() => { fn Inner() : Outer => { let innerScope : Inner = this; let outerScope : Outer = innerScope.this; outerScope } fn get() => 100; this } let obj : Outer = Outer(); let outerScope : Outer = obj.Inner(); outerScope.get()",
+    100,
+  );
+});

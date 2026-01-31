@@ -439,13 +439,14 @@ function processNestedFunctionDeclarations(content: string): string {
     }
 
     // Try to parse as function declaration
-    const parsed = parseFunctionDeclaration(result, fnStart);
+    const parsed = parseFunctionDeclaration(result, fnStart, true);
     if (parsed) {
       // Replace the Tuff function declaration with JavaScript
       const before = result.substring(0, fnStart);
       const after = result.substring(parsed.end);
-      result = before + parsed.declaration + after;
-      pos = fnStart + parsed.declaration.length;
+      // Add semicolon after declaration to ensure proper statement separation
+      result = before + parsed.declaration + "; " + after;
+      pos = fnStart + parsed.declaration.length + 2; // +2 for "; "
     } else {
       pos = fnStart + 3;
     }
@@ -503,6 +504,7 @@ function parseFunctionSignature(
 export function parseFunctionDeclaration(
   input: string,
   start: number,
+  isNestedFunction: boolean = false,
 ): { declaration: string; end: number } | null {
   const sig = parseFunctionSignature(input, start);
   if (!sig) return null;
@@ -525,7 +527,11 @@ export function parseFunctionDeclaration(
     isBlockBody &&
     (trimmedBody.endsWith("this") || trimmedBody.includes("this"))
   ) {
-    functionBody = buildFunctionBodyWithThisCapture(processedBody, sig.params);
+    functionBody = buildFunctionBodyWithThisCapture(
+      processedBody,
+      sig.params,
+      isNestedFunction,
+    );
   } else {
     functionBody = buildFunctionBody(processedBody);
   }

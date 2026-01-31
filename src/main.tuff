@@ -1,8 +1,23 @@
-fn Wrapper() => {
+fn Outer() => {
+    fn Inner() : Outer => {
+        /*
+        The word "this" here is ambiguous in some languages
+        because we don't know what "this' means.
+
+        A standalone "this" would imply an inner class, conceptually,
+        so this.this is used to refer to the outer scope.
+        */
+
+        let innerScope : Inner = this;
+        let outerScope : Outer = innerScope.this;
+        outerScope
+    }
+
     fn get() => 100;
 
     this
 }
 
-let obj : Wrapper = Wrapper();
-obj.get() // This should become 100
+let obj : Outer = Outer();
+let outerScope : Outer = obj.Inner();
+outerScope.get() // This should become 100

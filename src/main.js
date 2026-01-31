@@ -1,5 +1,6 @@
 process.exit(Number((function() {
-  function Wrapper() { function get() { return 100; }; return {get: get}; };
-let obj = Wrapper();
-return obj.get();
+  function Outer() { function Inner() { let innerScope = this; let outerScope = innerScope.this; return outerScope; }; function get() { return 100; }; let o = {Inner: Inner, get: get}; o.this = o; return o; };
+let obj = Outer();
+let outerScope = obj.Inner();
+return outerScope.get();
 })()));

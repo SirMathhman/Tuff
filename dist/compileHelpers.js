@@ -339,6 +339,39 @@ function parseStructDefinition(input, start) {
         idx++;
     return { end: idx, name: nameResult.name, fields };
 }
+function processNestedFunctionDeclarations(content) {
+    let result = content;
+    let pos = 0;
+    while (pos < result.length) {
+        const remaining = result.substring(pos);
+        const fnIndex = remaining.indexOf("fn ");
+        if (fnIndex === -1)
+            break;
+        const fnStart = pos + fnIndex;
+        // Check if this is actually a function declaration at word boundary
+        if (fnStart > 0) {
+            const charBefore = result[fnStart - 1];
+            if (/[a-zA-Z0-9_]/.test(charBefore)) {
+                pos = fnStart + 3;
+                continue;
+            }
+        }
+        // Try to parse as function declaration
+        const parsed = parseFunctionDeclaration(result, fnStart, true);
+        if (parsed) {
+            // Replace the Tuff function declaration with JavaScript
+            const before = result.substring(0, fnStart);
+            const after = result.substring(parsed.end);
+            // Add semicolon after declaration to ensure proper statement separation
+            result = before + parsed.declaration + "; " + after;
+            pos = fnStart + parsed.declaration.length + 2; // +2 for "; "
+        }
+        else {
+            pos = fnStart + 3;
+        }
+    }
+    return result;
+}
 function buildThisCaptureBody(params) {
     const paramNames = (0, blockUtils_1.extractParamNames)(params);
     if (paramNames.length === 0) {
@@ -373,7 +406,7 @@ function parseFunctionSignature(input, start) {
     idx = skipWhitespace(input, idx + 2);
     return { fnName, params, idx };
 }
-function parseFunctionDeclaration(input, start) {
+function parseFunctionDeclaration(input, start, isNestedFunction = false) {
     const sig = parseFunctionSignature(input, start);
     if (!sig)
         return null;
@@ -383,16 +416,18 @@ function parseFunctionDeclaration(input, start) {
     const trimmedBody = bodyResult.content.trim();
     const isBlockBody = bodyResult.content.trim().startsWith("{") ||
         bodyResult.content.includes(";");
+    // Process nested function declarations in the body first
+    const processedBody = processNestedFunctionDeclarations(bodyResult.content);
     let functionBody;
     if (trimmedBody === "this") {
         functionBody = buildThisCaptureBody(sig.params);
     }
     else if (isBlockBody &&
         (trimmedBody.endsWith("this") || trimmedBody.includes("this"))) {
-        functionBody = (0, blockUtils_1.buildFunctionBodyWithThisCapture)(bodyResult.content, sig.params);
+        functionBody = (0, blockUtils_1.buildFunctionBodyWithThisCapture)(processedBody, sig.params, isNestedFunction);
     }
     else {
-        functionBody = (0, blockUtils_1.buildFunctionBody)(bodyResult.content);
+        functionBody = (0, blockUtils_1.buildFunctionBody)(processedBody);
     }
     const declaration = "function " + sig.fnName + "(" + sig.params + ") { " + functionBody + " }";
     return { declaration, end: bodyResult.end };
