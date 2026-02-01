@@ -155,7 +155,7 @@ function findAllTypedLiterals(source: string): TypedLiteral[] {
     const literal = extractLiteralAtPosition(
       source,
       foundPosition.position,
-      foundPosition.suffix
+      foundPosition.suffix,
     );
     const nextSearchPos = foundPosition.position + foundPosition.suffix.length;
     const restLiterals = findLiteralHelper(nextSearchPos);
@@ -183,5 +183,15 @@ export function compileTuffToJS(source: string): string {
       replaceAllOccurrences(acc, literal.fullMatch, literal.numberPart),
     source,
   );
+  if (typedLiterals.length > 0) {
+    const resultType = typedLiterals[0].suffix;
+    const fn = new Function("return " + compiled + ";");
+    const result = fn();
+    if (!isInRange(result, resultType)) {
+      throw new Error(
+        resultType + " operation result must be in valid range, got " + result,
+      );
+    }
+  }
   return "return " + compiled + ";";
 }
