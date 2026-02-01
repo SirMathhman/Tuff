@@ -109,17 +109,50 @@ function compileVariableBlock(
     if (parsed) {
       const compiledValue = compileExpression(parsed.valueExpr, argCount);
       compiledBlock =
-        compiledBlock +
-        "let " +
-        parsed.varName +
-        " = " +
-        compiledValue +
-        "; ";
+        compiledBlock + "let " + parsed.varName + " = " + compiledValue + "; ";
     }
   });
 
   const compiledLast = compileExpression(lastStatement, argCount);
   compiledBlock = compiledBlock + "return " + compiledLast + "; })()";
+  return compiledBlock;
+}
+
+function compileTopLevelVariableBlock(
+  source: string,
+  argCount: { value: number },
+): string | null {
+  if (!source.startsWith("let ")) {
+    return null;
+  }
+
+  const lastSemicolon = source.lastIndexOf(";");
+  if (lastSemicolon === -1) {
+    return null;
+  }
+
+  const blockPart = source.substring(0, lastSemicolon);
+  const finalPart = source.substring(lastSemicolon + 1).trim();
+
+  const parsed = parseVariableDeclaration(blockPart);
+  if (!parsed) {
+    return null;
+  }
+
+  const hasParens = parsed.valueExpr.includes("(") || parsed.valueExpr.includes("{");
+  const processedValue = hasParens
+    ? handleParentheses(parsed.valueExpr, argCount)
+    : parsed.valueExpr;
+  const compiledValue = compileExpression(processedValue, argCount);
+  let compiledBlock =
+    "(() => { let " +
+    parsed.varName +
+    " = " +
+    compiledValue +
+    "; return " +
+    finalPart +
+    "; })()";
+
   return compiledBlock;
 }
 
@@ -179,6 +212,15 @@ export function compile(source: string): string {
 
   validateNoZeroDivision(source);
 
+  // Top-level variable declarations
+  if (source.startsWith("let ")) {
+    const argCount = { value: 0 };
+    const compiled = compileTopLevelVariableBlock(source, argCount);
+    if (compiled) {
+      return "process.exit(" + compiled + ")";
+    }
+  }
+
   // Simple number literal
   const isNumber =
     source.length > 0 && source.split("").every((c) => c >= "0" && c <= "9");
@@ -203,9 +245,10 @@ export function compile(source: string): string {
     source.includes("}")
   ) {
     const argCount = { value: 0 };
-    const processed = source.includes("(") || source.includes("{")
-      ? compileExpression(handleParentheses(source, argCount), argCount)
-      : compileExpression(source, argCount);
+    const processed =
+      source.includes("(") || source.includes("{")
+        ? compileExpression(handleParentheses(source, argCount), argCount)
+        : compileExpression(source, argCount);
     return "process.exit(" + processed + ")";
   }
 

@@ -88,4 +88,14 @@ describe("The compiler", () => {
       "3",
     );
   });
+
+  it("supports top-level variable declarations", () => {
+    validate(
+      "let z : U8 = (read U8 + { let x : U8 = read U8; x }) * read U8; z",
+      45,
+      "10",
+      "5",
+      "3",
+    );
+  });
 });
