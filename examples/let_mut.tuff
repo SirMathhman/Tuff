@@ -1,0 +1,14 @@
+fn test_let() {
+  let x = 10
+  print(x)
+  
+  let mut y = 20
+  y = 30
+  print(y)
+  
+  var z = 40
+  z = 50
+  print(z)
+}
+
+test_let()

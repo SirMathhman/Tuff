@@ -1,0 +1,28 @@
+fn fibonacci(n) {
+  if (n <= 1) {
+    return n
+  }
+  return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+fn sum_to_n(n) {
+  var sum = 0
+  var i = 1
+  while (i <= n) {
+    sum = sum + i
+    i = i + 1
+  }
+  return sum
+}
+
+print("Fibonacci sequence:")
+print(fibonacci(0))
+print(fibonacci(1))
+print(fibonacci(5))
+print(fibonacci(10))
+
+print("Sum from 1 to 10:")
+print(sum_to_n(10))
+
+print("Sum from 1 to 100:")
+print(sum_to_n(100))

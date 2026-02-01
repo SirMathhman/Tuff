@@ -1,0 +1,29 @@
+struct Point {
+  x;
+  y;
+}
+
+struct Color {
+  r;
+  g;
+  b;
+}
+
+fn print_point(p) {
+  print("Point:")
+  print(p.x)
+  print(p.y)
+}
+
+fn print_color(c) {
+  print("Color:")
+  print(c.r)
+  print(c.g)
+  print(c.b)
+}
+
+let point = Point { 3, 4 }
+print_point(point)
+
+let color = Color { 255, 128, 0 }
+print_color(color)
