@@ -1,3 +1,29 @@
+function tokenizeByOperators(expr: string, operators: string[]): string[] {
+  const chars = expr.split("");
+  const result = chars.reduce(
+    (acc, char) => {
+      const isOperator = operators.includes(char);
+      if (isOperator) {
+        return {
+          tokens: acc.tokens.concat([acc.current, char]),
+          current: "",
+        };
+      }
+      return {
+        tokens: acc.tokens,
+        current: acc.current + char,
+      };
+    },
+    { tokens: [] as string[], current: "" },
+  );
+
+  if (result.current.trim().length > 0) {
+    result.tokens.push(result.current);
+  }
+
+  return result.tokens;
+}
+
 export function compile(source: string): string {
   source = source.trim();
 
@@ -14,41 +40,39 @@ export function compile(source: string): string {
   }
 
   // Arithmetic operations with read U8 and mixed operators
-  if (source.includes("+") || source.includes("-")) {
-    const chars = source.split("");
-    const result = chars.reduce(
-      (acc, char) => {
-        const isOperator = char === "+" || char === "-";
-        if (isOperator) {
-          return {
-            tokens: acc.tokens.concat([acc.current, char]),
-            current: "",
-          };
-        }
-        return {
-          tokens: acc.tokens,
-          current: acc.current + char,
-        };
-      },
-      { tokens: [] as string[], current: "" },
-    );
-
-    if (result.current.trim().length > 0) {
-      result.tokens.push(result.current);
-    }
-
+  if (
+    source.includes("+") ||
+    source.includes("-") ||
+    source.includes("*") ||
+    source.includes("/")
+  ) {
     let argCount = 0;
-    const processed = result.tokens
+
+    const processMultDiv = (expr: string) => {
+      const tokens = tokenizeByOperators(expr, ["*", "/"]);
+      return tokens
+        .map((token) => {
+          if (token === "*" || token === "/") {
+            return token;
+          }
+          const trimmed = token.trim();
+          if (trimmed === "read U8") {
+            argCount = argCount + 1;
+            return "parseInt(process.argv[" + (argCount + 1) + "], 10)";
+          }
+          return trimmed;
+        })
+        .filter((t) => t.length > 0)
+        .join(" ");
+    };
+
+    const tokens = tokenizeByOperators(source, ["+", "-"]);
+    const processed = tokens
       .map((token) => {
         if (token === "+" || token === "-") {
           return token;
         }
-        const trimmed = token.trim();
-        if (trimmed === "read U8") {
-          argCount = argCount + 1;
-          return "parseInt(process.argv[" + (argCount + 1) + "], 10)";
-        }
-        return trimmed;
+        return processMultDiv(token);
       })
       .filter((t) => t.length > 0)
       .join(" ");

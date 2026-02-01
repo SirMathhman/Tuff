@@ -50,4 +50,8 @@ describe("The compiler", () => {
   it("subtracts U8 values", () => {
     validate("read U8 + read U8 - read U8", 51, "25", "75", "49");
   });
+
+  it("multiplies and subtracts U8 values", () => {
+    validate("read U8 * read U8 - read U8", 20, "5", "6", "10");
+  });
 });
