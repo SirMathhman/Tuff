@@ -17,15 +17,8 @@ export function compileTuffToJS(source: string): string {
     I64: { min: -(2 ** 63), max: 2 ** 63 - 1 },
   };
 
-  // Extract and validate all annotated numbers in the expression
-  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
-  
-  // Find all positive annotated numbers
-  const posPattern = new RegExp('([0-9]+)(' + validTypes + ')', 'g');
-  let match;
-  while ((match = posPattern.exec(source)) !== null) {
-    const value = parseInt(match[1], 10);
-    const suffix = match[2];
+  // Validate a literal value against its type
+  function validateLiteral(value: number, suffix: string): void {
     const range = typeRanges[suffix];
     if (value < range.min || value > range.max) {
       throw new Error(
@@ -40,38 +33,57 @@ export function compileTuffToJS(source: string): string {
     }
   }
 
-  // Find all negative annotated numbers
-  const negPattern = new RegExp('-([0-9]+)(' + validTypes + ')', 'g');
-  while ((match = negPattern.exec(source)) !== null) {
-    const value = parseInt(match[1], 10);
-    const suffix = match[2];
-    const actual = -value;
-    const range = typeRanges[suffix];
+  // Extract and validate all annotated numbers in the expression
+  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  const allTypes: Set<string> = new Set();
+
+  // Find all annotated numbers (positive and negative)
+  const allPattern = new RegExp('(-?)([0-9]+)(' + validTypes + ')', 'g');
+  let match;
+  while ((match = allPattern.exec(source)) !== null) {
+    const isNegative = match[1] === '-';
+    const value = parseInt(match[2], 10);
+    const suffix = match[3];
+    allTypes.add(suffix);
 
     // Unsigned types cannot be negative
-    if (suffix.startsWith('U')) {
+    if (isNegative && suffix.startsWith('U')) {
       throw new Error(
         'Type annotations are not allowed on negative numeric literals',
       );
     }
 
-    if (actual < range.min || actual > range.max) {
-      throw new Error(
-        suffix +
-          ' value must be between ' +
-          range.min +
-          ' and ' +
-          range.max +
-          ', got ' +
-          actual,
-      );
-    }
+    validateLiteral(isNegative ? -value : value, suffix);
   }
 
   // Remove all type annotations
   const compiled = source
     .replace(new RegExp('([0-9]+)(' + validTypes + ')', 'g'), '$1')
     .replace(new RegExp('-([0-9]+)(' + validTypes + ')', 'g'), '-$1');
+
+  // If there are type annotations, validate the expression result against the type constraints
+  if (allTypes.size > 0) {
+    // Infer the result type from the types used (assume all same type for now)
+    const resultType = Array.from(allTypes)[0];
+    const range = typeRanges[resultType];
+
+    // Evaluate the expression
+    const fn = new Function('return ' + compiled);
+    const result = fn() as number;
+
+    // Check if result fits within the type range
+    if (result < range.min || result > range.max) {
+      throw new Error(
+        resultType +
+          ' value must be between ' +
+          range.min +
+          ' and ' +
+          range.max +
+          ', got ' +
+          result,
+      );
+    }
+  }
 
   return 'return ' + compiled;
 }
