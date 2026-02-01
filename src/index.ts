@@ -116,13 +116,13 @@ function getWidestType(types: Set<string>): string {
 function processVariableDeclarations(source: string): string {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
   const bracedPattern = new RegExp(
-    '\\{\\s*let\\s+(\\w+)\\s*:\\s*(?:' +
+    '\\{\\s*let\\s+(\\w+)(?:\\s*:\\s*(?:' +
       validTypes +
-      ')\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
+      '))?\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
     'g',
   );
   const unbracedPattern = new RegExp(
-    'let\\s+(\\w+)\\s*:\\s*(?:' + validTypes + ')\\s*=\\s*([^;]+);\\s*\\1',
+    'let\\s+(\\w+)(?:\\s*:\\s*(?:' + validTypes + '))?\\s*=\\s*([^;]+);\\s*\\1',
     'g',
   );
 
