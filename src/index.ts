@@ -67,6 +67,62 @@ function compileExpression(
     .join(" ");
 }
 
+function parseVariableDeclaration(
+  decl: string,
+): { varName: string; valueExpr: string } | null {
+  const declTrimmed = decl.trim();
+  if (!declTrimmed.startsWith("let ")) {
+    return null;
+  }
+  const afterLet = declTrimmed.substring(4);
+  const colonIndex = afterLet.indexOf(":");
+  if (colonIndex === -1) {
+    return null;
+  }
+  const varName = afterLet.substring(0, colonIndex).trim();
+  const afterColon = afterLet.substring(colonIndex + 1);
+  const equalIndex = afterColon.indexOf("=");
+  if (equalIndex === -1) {
+    return null;
+  }
+  const valueExpr = afterColon.substring(equalIndex + 1).trim();
+  return { varName, valueExpr };
+}
+
+function compileVariableBlock(
+  innerExpr: string,
+  argCount: { value: number },
+): string {
+  const statements = innerExpr
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (statements.length === 0) {
+    return "";
+  }
+  const lastStatement = statements[statements.length - 1];
+  const varDeclarations = statements.slice(0, -1);
+
+  let compiledBlock = "(() => { ";
+  varDeclarations.forEach((decl) => {
+    const parsed = parseVariableDeclaration(decl);
+    if (parsed) {
+      const compiledValue = compileExpression(parsed.valueExpr, argCount);
+      compiledBlock =
+        compiledBlock +
+        "let " +
+        parsed.varName +
+        " = " +
+        compiledValue +
+        "; ";
+    }
+  });
+
+  const compiledLast = compileExpression(lastStatement, argCount);
+  compiledBlock = compiledBlock + "return " + compiledLast + "; })()";
+  return compiledBlock;
+}
+
 function handleParentheses(
   source: string,
   argCount: { value: number },
@@ -92,8 +148,15 @@ function handleParentheses(
           j = j + 1;
         }
         const innerExpr = source.substring(i + 1, j - 1);
-        const processed = handleParentheses(innerExpr, argCount);
-        const compiled = compileExpression(processed, argCount);
+
+        let compiled = "";
+        if (char === "{" && innerExpr.includes("let ")) {
+          compiled = compileVariableBlock(innerExpr, argCount);
+        } else {
+          const processed = handleParentheses(innerExpr, argCount);
+          compiled = compileExpression(processed, argCount);
+        }
+
         return {
           result: acc.result + "(" + compiled + ")",
           skip: j - i - 1,
@@ -113,9 +176,6 @@ function handleParentheses(
 
 export function compile(source: string): string {
   source = source.trim();
-
-  // Convert curly braces to parentheses
-  source = source.split("{").join("(").split("}").join(")");
 
   validateNoZeroDivision(source);
 
@@ -138,10 +198,12 @@ export function compile(source: string): string {
     source.includes("*") ||
     source.includes("/") ||
     source.includes("(") ||
-    source.includes(")")
+    source.includes(")") ||
+    source.includes("{") ||
+    source.includes("}")
   ) {
     const argCount = { value: 0 };
-    const processed = source.includes("(")
+    const processed = source.includes("(") || source.includes("{")
       ? compileExpression(handleParentheses(source, argCount), argCount)
       : compileExpression(source, argCount);
     return "process.exit(" + processed + ")";

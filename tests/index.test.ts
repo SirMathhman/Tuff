@@ -78,4 +78,14 @@ describe("The compiler", () => {
   it("respects curly braces in expressions", () => {
     validate("(read U8 + { read U8 }) * read U8", 30, "10", "5", "2");
   });
+
+  it("supports variable declarations with type annotations", () => {
+    validate(
+      "(read U8 + { let x : U8 = read U8; x }) * read U8",
+      45,
+      "10",
+      "5",
+      "3",
+    );
+  });
 });
