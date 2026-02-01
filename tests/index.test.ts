@@ -22,9 +22,9 @@ function validate(source: string, expected: number): void {
   expect(execute(source)).toBe(expected);
 }
 
-// function invalidate(source: string): void {
-//   expect(() => compileTuffToJS(source)).toThrow();
-// }
+function invalidate(source: string): void {
+  expect(() => compileTuffToJS(source)).toThrow();
+}
 
 describe("execute", () => {
   it('should execute "100" and return 100', () => {
@@ -33,5 +33,9 @@ describe("execute", () => {
 
   it('should execute "100U8" and return 100', () => {
     validate("100U8", 100);
+  });
+
+  it('should reject "-100U8"', () => {
+    invalidate("-100U8");
   });
 });
