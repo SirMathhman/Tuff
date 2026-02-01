@@ -49,24 +49,20 @@ function extractAndValidateAnnotations(source: string): Set<string> {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
   const allTypes: Set<string> = new Set();
 
-  const allPattern = new RegExp('(-?)([0-9]+)(' + validTypes + ')', 'g');
+  const typePattern = new RegExp('(' + validTypes + ')', 'g');
   let match;
-  while ((match = allPattern.exec(source)) !== null) {
-    const isNegative = match[1] === '-';
-    const value = parseInt(match[2], 10);
-    const suffix = match[3];
-    validateAndAddType(suffix, isNegative, value, allTypes);
+  while ((match = typePattern.exec(source)) !== null) {
+    allTypes.add(match[1]);
   }
 
-  const varPattern = new RegExp(
-    ':\\s*(' + validTypes + ')\\s*=\\s*(-?)([0-9]+)',
-    'g',
-  );
+  const numPattern = new RegExp('(-?)([0-9]+)(' + validTypes + ')', 'g');
+  while ((match = numPattern.exec(source)) !== null) {
+    validateAndAddType(match[3], match[1] === '-', parseInt(match[2], 10), allTypes);
+  }
+
+  const varPattern = new RegExp(':\\s*(' + validTypes + ')\\s*=\\s*(-?)([0-9]+)', 'g');
   while ((match = varPattern.exec(source)) !== null) {
-    const suffix = match[1];
-    const isNegative = match[2] === '-';
-    const value = parseInt(match[3], 10);
-    validateAndAddType(suffix, isNegative, value, allTypes);
+    validateAndAddType(match[1], match[2] === '-', parseInt(match[3], 10), allTypes);
   }
 
   return allTypes;
@@ -103,16 +99,26 @@ function getWidestType(types: Set<string>): string {
   return widest;
 }
 
-// Process block expressions like { let x : U8 = 3; x } to (3)
-function processBlockExpressions(source: string): string {
+// Process variable declarations like let x : U8 = 3; x or { let x : U8 = 3; x }
+function processVariableDeclarations(source: string): string {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
-  const blockPattern = new RegExp(
-    '\\{\\s*let\\s+(\\w+)\\s*:\\s*(' +
-      validTypes +
-      ')\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
+  const bracedPattern = new RegExp(
+    '\\{\\s*let\\s+(\\w+)\\s*:\\s*(?:' + validTypes + ')\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
     'g',
   );
-  return source.replace(blockPattern, '($3)');
+  const unbracedPattern = new RegExp(
+    'let\\s+(\\w+)\\s*:\\s*(?:' + validTypes + ')\\s*=\\s*([^;]+);\\s*\\1',
+    'g',
+  );
+
+  let processed = source;
+  let last;
+  do {
+    last = processed;
+    processed = processed.replace(bracedPattern, '($2)').replace(unbracedPattern, '($2)');
+  } while (processed !== last);
+
+  return processed;
 }
 
 // Remove all type annotations from the source expression
@@ -165,7 +171,7 @@ function validateExpressionResult(
  */
 export function compileTuffToJS(source: string): string {
   const allTypes = extractAndValidateAnnotations(source);
-  let compiled = processBlockExpressions(source);
+  let compiled = processVariableDeclarations(source);
   compiled = removeTypeAnnotations(compiled);
   compiled = removeCurlyBraces(compiled);
   validateExpressionResult(compiled, allTypes);

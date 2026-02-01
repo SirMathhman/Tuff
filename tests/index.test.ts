@@ -98,4 +98,8 @@ describe('execute', () => {
   it('should execute "(2 + { let x : U8 = 3; x }) * 4" and return 20', () => {
     validate('(2 + { let x : U8 = 3; x }) * 4', 20);
   });
+
+  it('should execute "let z : U8 = (2 + { let x : U8 = 3; x }) * 4; z" and return 20', () => {
+    validate('let z : U8 = (2 + { let x : U8 = 3; x }) * 4; z', 20);
+  });
 });
