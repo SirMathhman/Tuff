@@ -102,4 +102,8 @@ describe("The compiler", () => {
   it("supports variable declarations without type annotations", () => {
     validate("let x = read U8; x", 42, "42");
   });
+
+  it("supports multiple variable declarations", () => {
+    validate("let x = read U8; let y = read U8; x + y", 30, "10", "20");
+  });
 });

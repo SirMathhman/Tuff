@@ -131,6 +131,36 @@ function compileVariableBlock(
   return compiledBlock;
 }
 
+function splitTopLevelStatements(source: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let depth = 0;
+  const chars = source.split("");
+
+  chars.forEach((char) => {
+    if ((char === "(" || char === "{") && depth >= 0) {
+      depth = depth + 1;
+      current = current + char;
+    } else if ((char === ")" || char === "}") && depth > 0) {
+      depth = depth - 1;
+      current = current + char;
+    } else if (char === ";" && depth === 0) {
+      if (current.trim().length > 0) {
+        result.push(current.trim());
+      }
+      current = "";
+    } else {
+      current = current + char;
+    }
+  });
+
+  if (current.trim().length > 0) {
+    result.push(current.trim());
+  }
+
+  return result;
+}
+
 function compileTopLevelVariableBlock(
   source: string,
   argCount: { value: number },
@@ -147,25 +177,25 @@ function compileTopLevelVariableBlock(
   const blockPart = source.substring(0, lastSemicolon);
   const finalPart = source.substring(lastSemicolon + 1).trim();
 
-  const parsed = parseVariableDeclaration(blockPart);
-  if (!parsed) {
-    return null;
-  }
+  const statements = splitTopLevelStatements(blockPart);
 
-  const hasParens =
-    parsed.valueExpr.includes("(") || parsed.valueExpr.includes("{");
-  const processedValue = hasParens
-    ? handleParentheses(parsed.valueExpr, argCount)
-    : parsed.valueExpr;
-  const compiledValue = compileExpression(processedValue, argCount);
-  let compiledBlock =
-    "(() => { let " +
-    parsed.varName +
-    " = " +
-    compiledValue +
-    "; return " +
-    finalPart +
-    "; })()";
+  let compiledBlock = "(() => { ";
+
+  statements.forEach((stmt) => {
+    const parsed = parseVariableDeclaration(stmt);
+    if (parsed) {
+      const hasParens =
+        parsed.valueExpr.includes("(") || parsed.valueExpr.includes("{");
+      const processedValue = hasParens
+        ? handleParentheses(parsed.valueExpr, argCount)
+        : parsed.valueExpr;
+      const compiledValue = compileExpression(processedValue, argCount);
+      compiledBlock =
+        compiledBlock + "let " + parsed.varName + " = " + compiledValue + "; ";
+    }
+  });
+
+  compiledBlock = compiledBlock + "return " + finalPart + "; })()";
 
   return compiledBlock;
 }
