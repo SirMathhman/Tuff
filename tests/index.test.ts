@@ -114,4 +114,8 @@ describe("execute", () => {
   it('should reject "1U8 + 255"', () => {
     invalidate("1U8 + 255");
   });
+
+  it('should execute "1U8 + 255U16" and return 256', () => {
+    validate("1U8 + 255U16", 256);
+  });
 });

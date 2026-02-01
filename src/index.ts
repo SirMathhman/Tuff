@@ -182,6 +182,25 @@ function containsAnyDigit(str: string): boolean {
   );
 }
 
+function getTypeWidth(suffix: TypeSuffix): number {
+  if (suffix === "U8" || suffix === "I8") return 1;
+  if (suffix === "U16" || suffix === "I16") return 2;
+  if (suffix === "U32" || suffix === "I32") return 3;
+  if (suffix === "U64" || suffix === "I64") return 4;
+  return 0;
+}
+
+function getLargestType(literals: TypedLiteral[]): TypeSuffix {
+  if (literals.length === 0) return null;
+  const largest = literals[0];
+  const restWithLargest = literals.slice(1).reduce((acc, lit) => {
+    const accWidth = getTypeWidth(acc.suffix);
+    const litWidth = getTypeWidth(lit.suffix);
+    return litWidth > accWidth ? lit : acc;
+  }, largest);
+  return restWithLargest.suffix;
+}
+
 function validateNoMixedTypes(
   source: string,
   typedLiterals: TypedLiteral[],
@@ -219,7 +238,7 @@ export function compileTuffToJS(source: string): string {
     source,
   );
   if (typedLiterals.length > 0) {
-    const resultType = typedLiterals[0].suffix;
+    const resultType = getLargestType(typedLiterals);
     const fn = new Function("return " + compiled + ";");
     const result = fn();
     if (!isInRange(result, resultType)) {
