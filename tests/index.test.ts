@@ -102,4 +102,8 @@ describe("execute", () => {
   it('should execute "100I64" and return 100', () => {
     validate("100I64", 100);
   });
+
+  it('should execute "1U8 + 2U8" and return 3', () => {
+    validate("1U8 + 2U8", 3);
+  });
 });
