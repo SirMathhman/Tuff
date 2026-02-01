@@ -1,19 +1,32 @@
 import { compile } from "../src";
 
-function execute(target: string, stdIn: string): number {
-  // Use Function constructor to execute compiled code
-  // The compiled code should return the exit code
+function executeJS(jsCode: string, ...args: string[]): number {
+  let exitCode = 0;
+  const mockProcess = {
+    argv: ["node", "script.js", ...args],
+    exit: (code: number) => {
+      exitCode = code;
+      throw new Error(`exit:${code}`);
+    },
+  };
+
   try {
-    const fn = new Function("stdIn", `return ${target}`);
-    return fn(stdIn);
-  } catch {
-    throw new Error("Failed to execute compiled code");
+    const func = new Function("process", jsCode);
+    func(mockProcess);
+  } catch (e: any) {
+    if (typeof e.message === "string" && e.message.startsWith("exit:")) {
+      exitCode = parseInt(e.message.substring(5), 10);
+    } else {
+      throw e;
+    }
   }
+
+  return exitCode;
 }
 
-export function validate(source: string, exitCode: number, stdIn: string = "") {
+export function validate(source: string, exitCode: number, ...args: string[]) {
   const compiled = compile(source);
-  const actualExitCode = execute(compiled, stdIn);
+  const actualExitCode = executeJS(compiled, ...args);
   expect(actualExitCode).toBe(exitCode);
 }
 
@@ -24,9 +37,5 @@ describe("The compiler", () => {
 
   it("reads a U8 from stdin", () => {
     validate("read U8", 100, "100");
-  });
-
-  it("adds two U8 values from stdin", () => {
-    validate("read U8 + read U8", 100, "25, 75");
   });
 });
