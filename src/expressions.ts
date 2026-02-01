@@ -2,12 +2,27 @@ import { Result, VariableScope } from "./types";
 import { performOperation } from "./operators";
 import { getInterpret, getInterpretStatementBlock } from "./lazy";
 
+// Helper to evaluate an operand, handling dereference operator (*var)
+function evaluateOperand(operand: string, scope: VariableScope | null): Result<number | bigint, string> {
+  const trimmed = operand.trim();
+  
+  // Handle dereference operator
+  if (trimmed.startsWith("*") && /^\*[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
+    const varName = trimmed.slice(1);
+    // Dereference: recursively interpret the variable (which will follow the reference)
+    return getInterpret()(varName, scope);
+  }
+  
+  // Regular operand
+  return getInterpret()(operand, scope);
+}
+
 export function parseAndApplyOperation(tokens: Array<{ type: "operand" | "operator"; value: string }>, leftData: number | bigint, operatorIndex: number, opName: string, scope: VariableScope | null = null): Result<number | bigint, string> {
   if (operatorIndex + 1 >= tokens.length || tokens[operatorIndex + 1].type !== "operand") {
     return { success: false, error: "Invalid expression" };
   }
 
-   const rightResult = getInterpret()(tokens[operatorIndex + 1].value, scope);
+   const rightResult = evaluateOperand(tokens[operatorIndex + 1].value, scope);
   if (!rightResult.success) {
     return rightResult;
   }
@@ -21,7 +36,7 @@ export function shouldStopOperatorParsing(operator: string, allowedOps: string[]
 }
 
 export function interpretMultiplyDivide(tokens: Array<{ type: "operand" | "operator"; value: string }>, startIndex: number, scope: VariableScope | null = null): Result<{ value: number | bigint; nextIndex: number }, string> {
-   let result = getInterpret()(tokens[startIndex].value, scope);
+    let result = evaluateOperand(tokens[startIndex].value, scope);
 
   if (!result.success) {
     return result as unknown as Result<{ value: number | bigint; nextIndex: number }, string>;

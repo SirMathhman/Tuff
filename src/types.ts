@@ -1,6 +1,6 @@
 export type Result<T, E> = { success: true; data: T } | { success: false; error: E };
 
-export type Variable = { name: string; type: string; value: number | bigint; mutable: boolean };
+export type Variable = { name: string; type: string; value: number | bigint | string; mutable: boolean };
 
 export type FunctionParameter = { name: string; type: string };
 
@@ -26,3 +26,34 @@ export const TYPE_RANGES: Record<string, Range> = {
 };
 
 export const TYPE_ORDER: string[] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+
+// Utility functions for pointer type handling
+export function isPointerType(type: string): boolean {
+  return type.startsWith("*");
+}
+
+export function getPointeeType(type: string): string {
+  if (!isPointerType(type)) {
+    throw new Error("Not a pointer type: " + type);
+  }
+  return type.slice(1);
+}
+
+export function getBaseType(type: string): string {
+  let current = type;
+  while (isPointerType(current)) {
+    current = getPointeeType(current);
+  }
+  return current;
+}
+
+export function pointerDepth(type: string): number {
+  let depth = 0;
+  let current = type;
+  while (isPointerType(current)) {
+    depth++;
+    current = getPointeeType(current);
+  }
+  return depth;
+}
+

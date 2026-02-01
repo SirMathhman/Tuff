@@ -90,6 +90,45 @@ export function interpretStatementBlock(input: string, parentScope: VariableScop
 export function interpret(input: string, scope: VariableScope | null = null): Result<number | bigint, string> {
   const trimmedInput = input.trim();
 
+  // Handle dereference operator (*variable, **variable, etc.)
+  if (trimmedInput.startsWith("*")) {
+    const match = trimmedInput.match(/^\*+([a-zA-Z_][a-zA-Z0-9_]*)$/);
+    if (match) {
+      const derefCount = trimmedInput.indexOf(match[1]);
+      const varName = match[1];
+      if (scope === null) {
+        return { success: false, error: "Cannot dereference in global scope" };
+      }
+      
+      // Start by looking up the variable
+      let lookupResult = lookupVariable(scope, varName);
+      if (!lookupResult.success) {
+        return lookupResult;
+      }
+      
+      // Follow the reference chain for each level of dereference
+      let currentVar = (lookupResult as { success: true; data: Variable }).data;
+      for (let i = 0; i < derefCount; i++) {
+        if (typeof currentVar.value === "string") {
+          // It's a reference - look up the variable it refers to
+          lookupResult = lookupVariable(scope, currentVar.value);
+          if (!lookupResult.success) {
+            return lookupResult;
+          }
+          currentVar = (lookupResult as { success: true; data: Variable }).data;
+        } else {
+          return { success: false, error: "Cannot dereference non-pointer variable at level " + (i + 1) };
+        }
+      }
+      
+      // After all dereferencing, return the final value
+      if (typeof currentVar.value === "string") {
+        return { success: false, error: "Final value is still a reference - incomplete dereferencing" };
+      }
+      return { success: true, data: currentVar.value };
+    }
+  }
+
   if (trimmedInput.includes(";")) {
     const parseResult = parseStatementBlock(trimmedInput);
     if (parseResult.success) {
@@ -136,7 +175,13 @@ export function interpret(input: string, scope: VariableScope | null = null): Re
   if (scope !== null && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmedInput)) {
     const lookupResult = lookupVariable(scope, trimmedInput);
     if (lookupResult.success) {
-      return { success: true, data: (lookupResult as { success: true; data: Variable }).data.value };
+      const varData = (lookupResult as { success: true; data: Variable }).data;
+      // If the variable is a pointer/reference, dereference it
+      if (typeof varData.value === "string") {
+        // This is a reference - look up the referenced variable recursively
+        return interpret(varData.value, scope);
+      }
+      return { success: true, data: varData.value as number | bigint };
     } else {
       return lookupResult;
     }

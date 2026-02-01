@@ -344,3 +344,33 @@ describe("interpret - mutable variables", () => {
     expectValid("let mut x : U16 = 0; x = 100U8; x", 100);
   });
 });
+
+describe("interpret - pointers", () => {
+  it("should handle simple pointer reference and dereference", () => {
+    expectValid("let x : I32 = 100; let y : *I32 = &x; *y", 100);
+  });
+
+  it("should handle pointer to U32", () => {
+    expectValid("let x : U32 = 42; let ptr : *U32 = &x; *ptr", 42);
+  });
+
+  it("should handle pointer in expressions", () => {
+    expectValid("let x : I32 = 5; let ptr : *I32 = &x; *ptr + 10", 15);
+  });
+
+  it("should handle multi-level pointers", () => {
+    expectValid("let x : I32 = 100; let p1 : *I32 = &x; let p2 : **I32 = &p1; **p2", 100);
+  });
+
+  it("should return error when pointer type doesn't match variable type", () => {
+    expectInvalid("let x : U8 = 5; let ptr : *I32 = &x; *ptr");
+  });
+
+  it("should return error when referencing undefined variable", () => {
+    expectInvalid("let ptr : *I32 = &undefined; *ptr");
+  });
+
+  it("should handle pointer dereference in arithmetic", () => {
+    expectValid("let x : I32 = 10; let y : I32 = 20; let px : *I32 = &x; let py : *I32 = &y; *px + *py", 30);
+  });
+});

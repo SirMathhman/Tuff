@@ -1,4 +1,4 @@
-import { Result, Range, TYPE_RANGES, TYPE_ORDER } from "./types";
+import { Result, Range, TYPE_RANGES, TYPE_ORDER, isPointerType, getBaseType } from "./types";
 
 function isInRange(value: number | bigint, range: Range): boolean {
   return value >= range.min && value <= range.max;
@@ -106,6 +106,23 @@ export function canCoerceType(sourceType: string, targetType: string): boolean {
     return true;
   }
 
+  // Handle pointer types - allow coercion if pointer depths and base types match
+  const sourceIsPointer = isPointerType(sourceType);
+  const targetIsPointer = isPointerType(targetType);
+
+  if (sourceIsPointer && targetIsPointer) {
+    // Both are pointers - they must have same base type
+    const sourceBase = getBaseType(sourceType);
+    const targetBase = getBaseType(targetType);
+    return sourceBase === targetBase;
+  }
+
+  if (sourceIsPointer || targetIsPointer) {
+    // One is pointer, one is not - cannot coerce
+    return false;
+  }
+
+  // Handle regular numeric types
   const sourceIndex = TYPE_ORDER.indexOf(sourceType);
   const targetIndex = TYPE_ORDER.indexOf(targetType);
 

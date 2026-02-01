@@ -1,4 +1,4 @@
-import { Result, Variable, FunctionDef, FunctionParameter, VariableScope, TYPE_RANGES } from "./types";
+import { Result, Variable, FunctionDef, FunctionParameter, VariableScope, TYPE_RANGES, isPointerType } from "./types";
 import { canCoerceType, validateNumber } from "./operators";
 import { getInterpret, getInterpretStatementBlock } from "./lazy";
 
@@ -6,22 +6,32 @@ export function createScope(parent: VariableScope | null = null): VariableScope 
   return { variables: new Map(), functions: new Map(), parent };
 }
 
-export function declareVariable(scope: VariableScope, name: string, type: string, value: number | bigint, mutable: boolean = false): Result<void, string> {
+export function declareVariable(scope: VariableScope, name: string, type: string, value: number | bigint | string, mutable: boolean = false): Result<void, string> {
   if (scope.variables.has(name)) {
     return { success: false, error: "Variable " + name + " already declared in this scope" };
   }
 
+  // For pointer types, only validate if the value is a string (it's a reference)
+  if (isPointerType(type)) {
+    if (typeof value !== "string") {
+      return { success: false, error: "Pointer variable must be initialized with a reference" };
+    }
+    scope.variables.set(name, { name, type, value, mutable });
+    return { success: true, data: undefined };
+  }
+
+  // For non-pointer types, validate normally
   const range = TYPE_RANGES[type];
   if (!range) {
     return { success: false, error: "Unknown type: " + type };
   }
 
-  const validateResult = validateNumber(value, range, type);
+  const validateResult = validateNumber(value as number | bigint, range, type);
   if (!validateResult.success) {
     return validateResult as unknown as Result<void, string>;
   }
 
-  scope.variables.set(name, { name, type, value, mutable });
+  scope.variables.set(name, { name, type, value: value as number | bigint, mutable });
   return { success: true, data: undefined };
 }
 
@@ -101,7 +111,13 @@ export function interpretWithVariables(input: string, scope: VariableScope): Res
   if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
     const lookupResult = lookupVariable(scope, trimmed);
     if (lookupResult.success) {
-      return { success: true, data: (lookupResult as { success: true; data: Variable }).data.value };
+      const varData = (lookupResult as { success: true; data: Variable }).data;
+      // If the variable is a pointer/reference, dereference it
+      if (typeof varData.value === "string") {
+        // This is a reference - look up the referenced variable recursively
+        return interpretWithVariables(varData.value, scope);
+      }
+      return { success: true, data: varData.value as number | bigint };
     } else {
       return lookupResult;
     }

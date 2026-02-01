@@ -95,64 +95,104 @@ export function inferAndValidateType(valueStr: string, targetType: string | null
   return { success: true, data: targetType };
 }
 
-export function parseVariableDeclaration(stmt: string, scope: VariableScope): Result<void, string> {
-  const trimmed = stmt.trim();
+function parseVariableParts(rest: string): Result<{ varName: string; targetType: string | null; valueStr: string }, string> {
+   const colonIndex = rest.indexOf(":");
+   const equalsIndex = rest.indexOf("=");
 
-  if (!trimmed.startsWith("let ")) {
-    return { success: false, error: "Expected 'let' keyword" };
-  }
+   if (equalsIndex === -1) {
+     return { success: false, error: "Expected '=' in variable declaration" };
+   }
 
-  let rest = trimmed.slice(4).trim();
-  let mutable = false;
+   let varName: string;
+   let targetType: string | null;
+   let valueStr: string;
 
-  if (rest.startsWith("mut ")) {
-    mutable = true;
-    rest = rest.slice(4).trim();
-  }
+   if (colonIndex === -1) {
+     varName = rest.slice(0, equalsIndex).trim();
+     targetType = null;
+     valueStr = rest.slice(equalsIndex + 1).trim();
+   } else if (colonIndex < equalsIndex) {
+     varName = rest.slice(0, colonIndex).trim();
+     const afterColon = rest.slice(colonIndex + 1).trim();
+     const equalsInAfterColon = afterColon.indexOf("=");
+     targetType = afterColon.slice(0, equalsInAfterColon).trim();
+     valueStr = afterColon.slice(equalsInAfterColon + 1).trim();
+   } else {
+     return { success: false, error: "Invalid variable declaration format" };
+   }
 
-  const colonIndex = rest.indexOf(":");
-  const equalsIndex = rest.indexOf("=");
+   if (!varName || !valueStr) {
+     return { success: false, error: "Invalid variable declaration format" };
+   }
 
-  if (equalsIndex === -1) {
-    return { success: false, error: "Expected '=' in variable declaration" };
-  }
+   return { success: true, data: { varName, targetType, valueStr } };
+}
 
-  let varName: string;
-  let targetType: string | null;
-  let valueStr: string;
+function initializePointerVariable(varName: string, targetType: string, valueStr: string, scope: VariableScope, mutable: boolean): Result<void, string> {
+   if (!valueStr.startsWith("&")) {
+     return { success: false, error: "Pointer type requires reference operator (&)" };
+   }
 
-  if (colonIndex === -1) {
-    varName = rest.slice(0, equalsIndex).trim();
-    targetType = null;
-    valueStr = rest.slice(equalsIndex + 1).trim();
-  } else if (colonIndex < equalsIndex) {
-    varName = rest.slice(0, colonIndex).trim();
-    const afterColon = rest.slice(colonIndex + 1).trim();
-    const equalsInAfterColon = afterColon.indexOf("=");
-    targetType = afterColon.slice(0, equalsInAfterColon).trim();
-    valueStr = afterColon.slice(equalsInAfterColon + 1).trim();
-  } else {
-    return { success: false, error: "Invalid variable declaration format" };
-  }
+   const referencedVarName = valueStr.slice(1).trim();
+   const refLookup = lookupVariable(scope, referencedVarName);
+   if (!refLookup.success) {
+     return { success: false, error: "Cannot reference undefined variable: " + referencedVarName };
+   }
 
-  if (!varName || !valueStr) {
-    return { success: false, error: "Invalid variable declaration format" };
-  }
+   const refVar = (refLookup as { success: true; data: Variable }).data;
+   const ptrPointeeType = targetType.slice(1);
+   if (ptrPointeeType !== refVar.type) {
+     return { success: false, error: "Cannot create pointer to " + refVar.type + " from pointer to " + ptrPointeeType };
+   }
 
+   return declareVariable(scope, varName, targetType, referencedVarName as unknown as number | bigint, mutable);
+}
+
+function initializeRegularVariable(varName: string, targetType: string | null, valueStr: string, scope: VariableScope, mutable: boolean): Result<void, string> {
    const valueResult = getInterpret()(valueStr, scope);
-  if (!valueResult.success) {
-    return valueResult;
-  }
+   if (!valueResult.success) {
+     return valueResult;
+   }
 
-  const value = (valueResult as { success: true; data: number | bigint }).data;
-  const typeResult = inferAndValidateType(valueStr, targetType, value, scope);
+   const value = (valueResult as { success: true; data: number | bigint }).data;
+   const typeResult = inferAndValidateType(valueStr, targetType, value, scope);
 
-  if (!typeResult.success) {
-    return typeResult;
-  }
+   if (!typeResult.success) {
+     return typeResult;
+   }
 
-  const finalType = (typeResult as { success: true; data: string }).data;
-  return declareVariable(scope, varName, finalType, value, mutable);
+   const finalType = (typeResult as { success: true; data: string }).data;
+   return declareVariable(scope, varName, finalType, value, mutable);
+}
+
+export function parseVariableDeclaration(stmt: string, scope: VariableScope): Result<void, string> {
+   const trimmed = stmt.trim();
+
+   if (!trimmed.startsWith("let ")) {
+     return { success: false, error: "Expected 'let' keyword" };
+   }
+
+   let rest = trimmed.slice(4).trim();
+   let mutable = false;
+
+   if (rest.startsWith("mut ")) {
+     mutable = true;
+     rest = rest.slice(4).trim();
+   }
+
+   const partsResult = parseVariableParts(rest);
+   if (!partsResult.success) {
+     return partsResult;
+   }
+
+   const { varName, targetType, valueStr } = (partsResult as { success: true; data: { varName: string; targetType: string | null; valueStr: string } }).data;
+   const isPointerType = targetType !== null && targetType.startsWith("*");
+
+   if (isPointerType) {
+     return initializePointerVariable(varName, targetType as string, valueStr, scope, mutable);
+   }
+
+   return initializeRegularVariable(varName, targetType, valueStr, scope, mutable);
 }
 
 export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Result<void, string> {
