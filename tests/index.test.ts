@@ -110,4 +110,8 @@ describe("execute", () => {
   it('should reject "1U8 + 255U8"', () => {
     invalidate("1U8 + 255U8");
   });
+
+  it('should reject "1U8 + 255"', () => {
+    invalidate("1U8 + 255");
+  });
 });
