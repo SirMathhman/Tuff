@@ -674,7 +674,7 @@ function transformForLoops(source) {
     if (line.includes(forStr + "(let ")) {
       // Check if this.kind === "a" Rust-like for loop with " in "
       if (line.includes(" in ") && line.includes("..")) {
-        // Find the start: "for (let " or "for (let "
+        // Find the start: "for (let " or "for (let mut "
         let forStart = line.indexOf(forStr + "(let ");
         let letEnd = line.indexOf(" in ", forStart);
         
@@ -706,10 +706,8 @@ function transformForLoops(source) {
 function removeMutKeyword(source) {
   let result = source;
   let finished = 0;
-  let mutKeyword = "let" + " " + "mut" + " ";
-  let letKeyword = "let" + " ";
   while (finished === 0) {
-    let newResult = result.replace(mutKeyword, letKeyword);
+    let newResult = result.replace(/let mut ([a-zA-Z_][a-zA-Z0-9_]*)/g, "let $1");
     if (newResult === result) {
       finished = 1;
     }

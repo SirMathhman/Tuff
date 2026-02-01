@@ -706,10 +706,8 @@ fn transformForLoops(source : String) : String => {
 fn removeMutKeyword(source : String) : String => {
   let mut result = source;
   let mut finished = 0;
-  let mutKeyword = "let" + " " + "mut" + " ";
-  let letKeyword = "let" + " ";
   while (finished === 0) {
-    let newResult = result.replace(mutKeyword, letKeyword);
+    let newResult = result.replace(/let mut ([a-zA-Z_][a-zA-Z0-9_]*)/g, "let $1");
     if (newResult === result) {
       finished = 1;
     }
