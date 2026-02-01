@@ -115,4 +115,8 @@ describe("The compiler", () => {
       "20",
     );
   });
+
+  it("rejects duplicate variable declarations at compile time", () => {
+    invalidate("let x = 0; let x = 0; x");
+  });
 });

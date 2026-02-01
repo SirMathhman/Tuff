@@ -30,6 +30,33 @@ function validateNoZeroDivision(source: string): void {
   }
 }
 
+function validateNoDuplicateVariables(source: string): void {
+  const declaredVars: string[] = [];
+  const lines = source.split(";").map((s) => s.trim());
+
+  lines.forEach((line) => {
+    if (line.startsWith("let ")) {
+      const afterLet = line.substring(4);
+      const colonIndex = afterLet.indexOf(":");
+      const equalIndex = afterLet.indexOf("=");
+
+      let varName = "";
+      if (colonIndex !== -1 && colonIndex < equalIndex) {
+        varName = afterLet.substring(0, colonIndex).trim();
+      } else if (equalIndex !== -1) {
+        varName = afterLet.substring(0, equalIndex).trim();
+      }
+
+      if (varName.length > 0) {
+        if (declaredVars.includes(varName)) {
+          throw new Error("Duplicate variable declaration: " + varName);
+        }
+        declaredVars.push(varName);
+      }
+    }
+  });
+}
+
 function compileExpression(
   source: string,
   argCount: { value: number },
@@ -255,6 +282,7 @@ export function compile(source: string): string {
   source = source.trim();
 
   validateNoZeroDivision(source);
+  validateNoDuplicateVariables(source);
 
   // Top-level variable declarations
   if (source.startsWith("let ")) {
