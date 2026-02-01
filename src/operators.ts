@@ -1,4 +1,4 @@
-import { Result, Range, TYPE_RANGES, TYPE_ORDER, isPointerType, getBaseType, isMutablePointerType, stripMutability } from "./types";
+import { Result, Range, TYPE_RANGES, TYPE_ORDER, isPointerType, getBaseType, isMutablePointerType, stripMutability, isArrayType, parseArrayType } from "./types";
 
 function isInRange(value: number | bigint, range: Range): boolean {
   return value >= range.min && value <= range.max;
@@ -106,6 +106,41 @@ export function canCoerceType(sourceType: string, targetType: string): boolean {
     return true;
   }
 
+  // Handle array types - check element type and initialized count
+  const sourceIsArray = isArrayType(sourceType);
+  const targetIsArray = isArrayType(targetType);
+
+  if (sourceIsArray && targetIsArray) {
+    const sourceParsed = parseArrayType(sourceType);
+    const targetParsed = parseArrayType(targetType);
+    
+    if (!sourceParsed || !targetParsed) {
+      return false;
+    }
+    
+    // Element types must match
+    if (sourceParsed.elementType !== targetParsed.elementType) {
+      return false;
+    }
+    
+    // Total capacity must be at least the target
+    if (sourceParsed.total < targetParsed.total) {
+      return false;
+    }
+    
+    // Initialized count must be at least the target (this is key!)
+    if (sourceParsed.initialized < targetParsed.initialized) {
+      return false;
+    }
+    
+    return true;
+  }
+
+  if (sourceIsArray || targetIsArray) {
+    // One is array, one is not - cannot coerce
+    return false;
+  }
+
   // Handle pointer types - allow coercion if pointer depths and base types match
   const sourceIsPointer = isPointerType(sourceType);
   const targetIsPointer = isPointerType(targetType);
@@ -123,7 +158,6 @@ export function canCoerceType(sourceType: string, targetType: string): boolean {
     const sourceMut = isMutablePointerType(sourceType);
     const targetMut = isMutablePointerType(targetType);
     
-    // Can assign immutable to mutable (gaining safety), but not vice versa
     // For now, require exact match
     return sourceMut === targetMut;
   }
@@ -148,7 +182,7 @@ export function canCoerceType(sourceType: string, targetType: string): boolean {
     return false;
   }
 
-  return targetIndex > sourceIndex;
+   return targetIndex > sourceIndex;
 }
 
 export function getTypeForValue(value: string): string | null {

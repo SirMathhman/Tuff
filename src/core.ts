@@ -1,9 +1,10 @@
-/* eslint-disable max-lines-per-function */
 import {
   Result,
   Variable,
   VariableScope,
   TYPE_RANGES,
+  parseArrayType,
+  updateArrayInitializedCount,
 } from "./types";
 import {
   validateNumber,
@@ -138,6 +139,16 @@ export function interpretStatementBlock(input: string, parentScope: VariableScop
                      
                      // Set the array element
                      (arrayVar.value as (number | bigint)[])[indexNum] = newValue;
+                     
+                     // Update the initialized count if we just initialized a new element
+                     const parsed = parseArrayType(arrayVar.type);
+                     if (parsed && indexNum >= parsed.initialized) {
+                       const newInitializedCount = indexNum + 1;
+                       const updatedType = updateArrayInitializedCount(arrayVar.type, newInitializedCount);
+                       if (updatedType) {
+                         arrayVar.type = updatedType;
+                       }
+                     }
                      continue;
                   }
                 }
@@ -232,8 +243,8 @@ export function interpret(input: string, scope: VariableScope | null = null): Re
       if (funcLookup.success) {
         const callResult = parseFunctionCall(trimmedInput, scope);
         if (callResult.success) {
-          const { name, args, argTypes, endIndex } = (callResult as { success: true; data: { name: string; args: (number | bigint)[]; argTypes: (string | null)[]; endIndex: number } }).data;
-          const callValue = executeFunctionCall(scope, name, args, argTypes);
+          const { name, args, argTypes, argNames, endIndex } = (callResult as { success: true; data: { name: string; args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[]; endIndex: number } }).data;
+          const callValue = executeFunctionCall(scope, name, args, argTypes, argNames);
           if (!callValue.success) {
             return callValue;
           }

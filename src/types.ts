@@ -104,6 +104,16 @@ export function getArrayElementType(type: string): string | null {
   return parsed.elementType;
 }
 
+export function updateArrayInitializedCount(type: string, newInitialized: number): string | null {
+  const parsed = parseArrayType(type);
+  if (!parsed) {
+    return null;
+  }
+  // Cap at total capacity
+  const initialized = Math.min(newInitialized, parsed.total);
+  return `[${parsed.elementType}; ${initialized}; ${parsed.total}]`;
+}
+
 export function isBaseType(type: string): boolean {
   return TYPE_RANGES[type] !== undefined;
 }

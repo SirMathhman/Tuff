@@ -139,12 +139,12 @@ export function declareFunction(scope: VariableScope, name: string, parameters: 
     return { success: false, error: "Function " + name + " already declared in this scope" };
   }
 
-  if (!TYPE_RANGES[returnType]) {
+  if (!TYPE_RANGES[returnType] && !isArrayType(returnType)) {
     return { success: false, error: "Unknown return type: " + returnType };
   }
 
   for (const param of parameters) {
-    if (!TYPE_RANGES[param.type]) {
+    if (!TYPE_RANGES[param.type] && !isArrayType(param.type)) {
       return { success: false, error: "Unknown parameter type: " + param.type };
     }
   }
@@ -178,7 +178,7 @@ export function interpretWithVariables(input: string, scope: VariableScope): Res
    return getInterpret()(trimmed, scope);
 }
 
-export function executeFunctionCall(scope: VariableScope, funcName: string, args: (number | bigint)[], argTypes: (string | null)[]): Result<number | bigint, string> {
+export function executeFunctionCall(scope: VariableScope, funcName: string, args: (number | bigint)[], argTypes: (string | null)[], argNames: (string | null)[]): Result<number | bigint, string> {
   const lookupResult = lookupFunction(scope, funcName);
   if (!lookupResult.success) {
     return lookupResult;
@@ -195,14 +195,35 @@ export function executeFunctionCall(scope: VariableScope, funcName: string, args
   for (let i = 0; i < func.parameters.length; i++) {
     const param = func.parameters[i];
     const argType = argTypes[i];
+    const argName = argNames[i];
 
     if (argType !== null && !canCoerceType(argType, param.type)) {
       return { success: false, error: "Cannot coerce argument " + i + " from type " + argType + " to " + param.type };
     }
 
-    const declResult = declareVariable(funcScope, param.name, param.type, args[i], false);
-    if (!declResult.success) {
-      return declResult;
+    // For array parameters, we need to handle them specially
+    if (argType !== null && isArrayType(argType) && isArrayType(param.type)) {
+      // Look up the actual array from the parent scope
+      if (argName === null) {
+        return { success: false, error: "Array argument " + i + " has no variable name" };
+      }
+      
+      const arrayLookup = lookupVariable(scope, argName);
+      if (!arrayLookup.success) {
+        return { success: false, error: "Cannot find array variable " + argName };
+      }
+      
+      const arrayVar = (arrayLookup as { success: true; data: Variable }).data;
+      // Declare the parameter in the function scope with the actual array data
+      const declResult = declareVariable(funcScope, param.name, param.type, arrayVar.value, false);
+      if (!declResult.success) {
+        return declResult;
+      }
+    } else {
+      const declResult = declareVariable(funcScope, param.name, param.type, args[i], false);
+      if (!declResult.success) {
+        return declResult;
+      }
     }
   }
 
@@ -219,10 +240,13 @@ export function executeFunctionCall(scope: VariableScope, funcName: string, args
     returnValue = (bodyResult as { success: true; data: number | bigint }).data;
   }
 
-  const returnRange = TYPE_RANGES[func.returnType];
-  const validateResult = validateNumber(returnValue, returnRange, func.returnType);
-  if (!validateResult.success) {
-    return validateResult as unknown as Result<number | bigint, string>;
+  // Return type validation - skip for array types
+  if (!isArrayType(func.returnType)) {
+    const returnRange = TYPE_RANGES[func.returnType];
+    const validateResult = validateNumber(returnValue, returnRange, func.returnType);
+    if (!validateResult.success) {
+      return validateResult as unknown as Result<number | bigint, string>;
+    }
   }
 
   return { success: true, data: returnValue };

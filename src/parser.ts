@@ -103,36 +103,47 @@ export function inferAndValidateType(valueStr: string, targetType: string | null
 }
 
 function parseVariableParts(rest: string): Result<{ varName: string; targetType: string | null; valueStr: string }, string> {
-   const colonIndex = rest.indexOf(":");
-   const equalsIndex = rest.indexOf("=");
+    const colonIndex = rest.indexOf(":");
+    const equalsIndex = rest.indexOf("=");
 
-   if (equalsIndex === -1) {
-     return { success: false, error: "Expected '=' in variable declaration" };
-   }
+    let varName: string;
+    let targetType: string | null;
+    let valueStr: string;
 
-   let varName: string;
-   let targetType: string | null;
-   let valueStr: string;
+    if (colonIndex === -1) {
+      // No type annotation
+      if (equalsIndex === -1) {
+        return { success: false, error: "Expected '=' in variable declaration" };
+      }
+      varName = rest.slice(0, equalsIndex).trim();
+      targetType = null;
+      valueStr = rest.slice(equalsIndex + 1).trim();
+    } else if (equalsIndex === -1) {
+      // Type annotation but no initialization (only valid for arrays)
+      varName = rest.slice(0, colonIndex).trim();
+      targetType = rest.slice(colonIndex + 1).trim();
+      valueStr = ""; // Empty for uninitialized arrays
+    } else if (colonIndex < equalsIndex) {
+      // Both type and initialization
+      varName = rest.slice(0, colonIndex).trim();
+      const afterColon = rest.slice(colonIndex + 1).trim();
+      const equalsInAfterColon = afterColon.indexOf("=");
+      targetType = afterColon.slice(0, equalsInAfterColon).trim();
+      valueStr = afterColon.slice(equalsInAfterColon + 1).trim();
+    } else {
+      return { success: false, error: "Invalid variable declaration format" };
+    }
 
-   if (colonIndex === -1) {
-     varName = rest.slice(0, equalsIndex).trim();
-     targetType = null;
-     valueStr = rest.slice(equalsIndex + 1).trim();
-   } else if (colonIndex < equalsIndex) {
-     varName = rest.slice(0, colonIndex).trim();
-     const afterColon = rest.slice(colonIndex + 1).trim();
-     const equalsInAfterColon = afterColon.indexOf("=");
-     targetType = afterColon.slice(0, equalsInAfterColon).trim();
-     valueStr = afterColon.slice(equalsInAfterColon + 1).trim();
-   } else {
-     return { success: false, error: "Invalid variable declaration format" };
-   }
+    if (!varName) {
+      return { success: false, error: "Invalid variable declaration format" };
+    }
 
-   if (!varName || !valueStr) {
-     return { success: false, error: "Invalid variable declaration format" };
-   }
+    // For non-array types, valueStr is required
+    if (targetType !== null && !isArrayType(targetType) && !valueStr) {
+      return { success: false, error: "Invalid variable declaration format" };
+    }
 
-   return { success: true, data: { varName, targetType, valueStr } };
+    return { success: true, data: { varName, targetType, valueStr } };
 }
 
 function initializePointerVariable(varName: string, targetType: string, valueStr: string, scope: VariableScope, mutable: boolean): Result<void, string> {
@@ -167,67 +178,78 @@ function initializePointerVariable(varName: string, targetType: string, valueStr
 }
 
 function initializeArrayVariable(varName: string, targetType: string, valueStr: string, scope: VariableScope, mutable: boolean): Result<void, string> {
-   // Parse array initialization: <Type>[elem1, elem2, elem3]
-   const typeMatch = valueStr.match(/^<([a-zA-Z0-9*mut ]+)>\[(.+)\]$/);
-   if (!typeMatch) {
-     return { success: false, error: "Invalid array initialization format. Expected: <Type>[elem1, elem2, ...]" };
-   }
+    // Parse array type: [ElementType; InitializedCount; TotalCapacity]
+    const arrayTypeInfo = parseArrayType(targetType);
+    if (!arrayTypeInfo) {
+      return { success: false, error: "Invalid array type declaration" };
+    }
 
-   const elementTypeStr = typeMatch[1];
-   const elementsStr = typeMatch[2];
-   
-   // Parse the array elements
-   const elements: (number | bigint)[] = [];
-   const elementStrings = elementsStr.split(",");
-   
-   for (const elemStr of elementStrings) {
-     const trimmedElem = elemStr.trim();
-     const elemResult = getInterpret()(trimmedElem, scope);
-     if (!elemResult.success) {
-       return elemResult as unknown as Result<void, string>;
-     }
-     elements.push((elemResult as { success: true; data: number | bigint }).data);
-   }
+    // Handle uninitialized arrays (no valueStr)
+    if (!valueStr) {
+      // Create an empty array with the specified capacity
+      // The initialized count in the type annotation is just a declaration intent;
+      // the actual initialized count will be tracked as elements are assigned
+      const emptyArray: (number | bigint)[] = new Array(arrayTypeInfo.total);
+      // Always use [Type; 0; Total] for uninitialized arrays to track actual initialized count
+      const normalizedType = "[" + arrayTypeInfo.elementType + "; 0; " + arrayTypeInfo.total + "]";
+      return declareVariable(scope, varName, normalizedType, emptyArray, mutable);
+    }
 
-   // Validate array type matches
-   const typeResult = inferAndValidateType(elementTypeStr, null, 0, null);
-   if (!typeResult.success) {
-     return typeResult;
-   }
-   const inferredElementType = (typeResult as { success: true; data: string }).data;
+    // Parse array initialization: <Type>[elem1, elem2, elem3]
+    const typeMatch = valueStr.match(/^<([a-zA-Z0-9*mut ]+)>\[(.+)\]$/);
+    if (!typeMatch) {
+      return { success: false, error: "Invalid array initialization format. Expected: <Type>[elem1, elem2, ...]" };
+    }
 
-   // Check that all elements fit in the element type
-   const typeInfo = TYPE_RANGES[inferredElementType];
-   if (!typeInfo) {
-     return { success: false, error: "Unknown type: " + inferredElementType };
-   }
+    const elementTypeStr = typeMatch[1];
+    const elementsStr = typeMatch[2];
+    
+    // Parse the array elements
+    const elements: (number | bigint)[] = [];
+    const elementStrings = elementsStr.split(",");
+    
+    for (const elemStr of elementStrings) {
+      const trimmedElem = elemStr.trim();
+      const elemResult = getInterpret()(trimmedElem, scope);
+      if (!elemResult.success) {
+        return elemResult as unknown as Result<void, string>;
+      }
+      elements.push((elemResult as { success: true; data: number | bigint }).data);
+    }
 
-   for (let i = 0; i < elements.length; i++) {
-     const validateResult = validateNumber(elements[i], typeInfo, inferredElementType);
-     if (!validateResult.success) {
-       return validateResult as unknown as Result<void, string>;
-     }
-   }
+    // Validate array type matches
+    const typeResult = inferAndValidateType(elementTypeStr, null, 0, null);
+    if (!typeResult.success) {
+      return typeResult;
+    }
+    const inferredElementType = (typeResult as { success: true; data: string }).data;
 
-   // Validate that array type declaration matches initialization
-   const arrayTypeInfo = parseArrayType(targetType);
-   if (!arrayTypeInfo) {
-     return { success: false, error: "Invalid array type declaration" };
-   }
+    // Check that all elements fit in the element type
+    const typeInfo = TYPE_RANGES[inferredElementType];
+    if (!typeInfo) {
+      return { success: false, error: "Unknown type: " + inferredElementType };
+    }
 
-   if (arrayTypeInfo.elementType !== inferredElementType) {
-     return { success: false, error: "Array element type mismatch: expected " + arrayTypeInfo.elementType + ", got " + inferredElementType };
-   }
+    for (let i = 0; i < elements.length; i++) {
+      const validateResult = validateNumber(elements[i], typeInfo, inferredElementType);
+      if (!validateResult.success) {
+        return validateResult as unknown as Result<void, string>;
+      }
+    }
 
-   if (elements.length !== arrayTypeInfo.initialized) {
-     return { success: false, error: "Array initialization count mismatch: expected " + arrayTypeInfo.initialized + " elements, got " + elements.length };
-   }
+    if (arrayTypeInfo.elementType !== inferredElementType) {
+      return { success: false, error: "Array element type mismatch: expected " + arrayTypeInfo.elementType + ", got " + inferredElementType };
+    }
 
-   if (arrayTypeInfo.initialized > arrayTypeInfo.total) {
-     return { success: false, error: "Initialized elements (" + arrayTypeInfo.initialized + ") cannot exceed total elements (" + arrayTypeInfo.total + ")" };
-   }
+    if (elements.length !== arrayTypeInfo.initialized) {
+      return { success: false, error: "Array initialization count mismatch: expected " + arrayTypeInfo.initialized + " elements, got " + elements.length };
+    }
 
-   return declareVariable(scope, varName, targetType, elements, mutable);
+    if (arrayTypeInfo.initialized > arrayTypeInfo.total) {
+      return { success: false, error: "Initialized elements (" + arrayTypeInfo.initialized + ") cannot exceed total elements (" + arrayTypeInfo.total + ")" };
+    }
+
+    return declareVariable(scope, varName, targetType, elements, mutable);
 }
 
 function initializeRegularVariable(varName: string, targetType: string | null, valueStr: string, scope: VariableScope, mutable: boolean): Result<void, string> {
@@ -291,16 +313,38 @@ export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Re
 
   const rest = trimmed.slice(3).trim();
   const parenStart = rest.indexOf("(");
-  const parenEnd = rest.indexOf(")");
-  const colonPos = rest.indexOf(":", parenEnd);
-  const arrowPos = rest.indexOf("=>", colonPos);
+  let parenEnd = -1;
+  let parenDepth = 0;
 
-  if (parenStart === -1 || parenEnd === -1 || colonPos === -1 || arrowPos === -1) {
+  // Find matching closing paren
+  for (let i = parenStart; i < rest.length; i++) {
+    if (rest[i] === "(") parenDepth++;
+    else if (rest[i] === ")") {
+      parenDepth--;
+      if (parenDepth === 0) {
+        parenEnd = i;
+        break;
+      }
+    }
+  }
+
+  if (parenStart === -1 || parenEnd === -1) {
+    return { success: false, error: "Invalid function declaration format: missing parentheses" };
+  }
+
+  // Find return type separator (the : that comes after the closing paren but before =>)
+  const afterParen = rest.slice(parenEnd + 1);
+  const colonInAfter = afterParen.indexOf(":");
+  const arrowInAfter = afterParen.indexOf("=>");
+
+  if (colonInAfter === -1 || arrowInAfter === -1 || colonInAfter >= arrowInAfter) {
     return { success: false, error: "Invalid function declaration format: expected fn name(params) : ReturnType => { body }" };
   }
 
   const funcName = rest.slice(0, parenStart).trim();
   const paramsStr = rest.slice(parenStart + 1, parenEnd).trim();
+  const colonPos = parenEnd + 1 + colonInAfter;
+  const arrowPos = parenEnd + 1 + arrowInAfter;
   const returnType = rest.slice(colonPos + 1, arrowPos).trim();
   const bodyPart = rest.slice(arrowPos + 2).trim();
 
@@ -320,7 +364,32 @@ export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Re
 
   const parameters: FunctionParameter[] = [];
   if (paramsStr) {
-    const paramParts = paramsStr.split(",");
+    // Smart parameter splitting that respects brackets
+    const paramParts: string[] = [];
+    let current = "";
+    let bracketDepth = 0;
+    
+    for (let i = 0; i < paramsStr.length; i++) {
+      const char = paramsStr[i];
+      if (char === "[") {
+        bracketDepth++;
+        current += char;
+      } else if (char === "]") {
+        bracketDepth--;
+        current += char;
+      } else if (char === "," && bracketDepth === 0) {
+        if (current.trim()) {
+          paramParts.push(current.trim());
+        }
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    if (current.trim()) {
+      paramParts.push(current.trim());
+    }
+    
     for (const paramPart of paramParts) {
       const colonIdx = paramPart.indexOf(":");
       if (colonIdx === -1) {
@@ -335,7 +404,7 @@ export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Re
   return declareFunction(scope, funcName, parameters, returnType, body);
 }
 
-export function parseFunctionCall(input: string, scope: VariableScope): Result<{ name: string; args: (number | bigint)[]; argTypes: (string | null)[]; endIndex: number }, string> {
+export function parseFunctionCall(input: string, scope: VariableScope): Result<{ name: string; args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[]; endIndex: number }, string> {
   const parenStart = input.indexOf("(");
   let parenEnd = -1;
   let depth = 0;
@@ -365,21 +434,39 @@ export function parseFunctionCall(input: string, scope: VariableScope): Result<{
 
   const args: (number | bigint)[] = [];
   const argTypes: (string | null)[] = [];
+  const argNames: (string | null)[] = [];
 
   if (argsStr) {
     const argParts = argsStr.split(",");
     for (const argPart of argParts) {
       const argTrimmed = argPart.trim();
-       const argResult = getInterpret()(argTrimmed, scope);
+      
+      // Check if this is a simple array variable name
+      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(argTrimmed)) {
+        const varLookup = lookupVariable(scope, argTrimmed);
+        if (varLookup.success) {
+          const varData = (varLookup as { success: true; data: Variable }).data;
+          if (isArrayType(varData.type)) {
+            // Pass the array type as the argument type, use 0 as dummy value, track the variable name
+            argTypes.push(varData.type);
+            args.push(0);
+            argNames.push(argTrimmed);
+            continue;
+          }
+        }
+      }
+      
+      const argResult = getInterpret()(argTrimmed, scope);
       if (!argResult.success) {
-        return argResult as unknown as Result<{ name: string; args: (number | bigint)[]; argTypes: (string | null)[]; endIndex: number }, string>;
+        return argResult as unknown as Result<{ name: string; args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[]; endIndex: number }, string>;
       }
       args.push((argResult as { success: true; data: number | bigint }).data);
       argTypes.push(getTypeForValue(argTrimmed));
+      argNames.push(null);
     }
   }
 
-  return { success: true, data: { name: funcName, args, argTypes, endIndex: parenEnd } };
+  return { success: true, data: { name: funcName, args, argTypes, argNames, endIndex: parenEnd } };
 }
 
 export function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"; value: string }> {

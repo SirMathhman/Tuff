@@ -508,3 +508,29 @@ describe("interpret - functions", () => {
     expectValid("fn paren(x : I32) : I32 => { (x + 2) * 3 }; paren(4)", 18);
   });
 });
+
+describe("interpret - array parameters", () => {
+  it("should pass array to function after initialization", () => {
+    expectValid("let mut array : [I32; 0; 3]; array[0] = 100; fn getFirst(arr : [I32; 1; 3]) : I32 => { arr[0] }; getFirst(array)", 100);
+  });
+
+  it("should return error when array has insufficient initialized elements", () => {
+    expectInvalid("let mut array : [I32; 0; 3]; fn getFirst(arr : [I32; 1; 3]) : I32 => { arr[0] }; getFirst(array)");
+  });
+
+  it("should pass array with multiple initialized elements", () => {
+    expectValid("let mut array : [I32; 0; 5]; array[0] = 10; array[1] = 20; fn getSecond(arr : [I32; 2; 5]) : I32 => { arr[1] }; getSecond(array)", 20);
+  });
+
+  it("should return error when array exceeds capacity requirement", () => {
+    expectInvalid("let mut array : [I32; 0; 2]; array[0] = 100; fn needsMore(arr : [I32; 1; 5]) : I32 => { arr[0] }; needsMore(array)");
+  });
+
+  it("should accept array with exact capacity match", () => {
+    expectValid("let mut array : [I32; 1; 3]; array[0] = 42; fn getExact(arr : [I32; 1; 3]) : I32 => { arr[0] }; getExact(array)", 42);
+  });
+
+  it("should return error on element type mismatch", () => {
+    expectInvalid("let mut array : [U32; 1; 3]; array[0] = 100U32; fn getI32(arr : [I32; 1; 3]) : I32 => { arr[0] }; getI32(array)");
+  });
+});

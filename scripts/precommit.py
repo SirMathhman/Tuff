@@ -8,13 +8,22 @@ recommendations = []
 
 def run_command(command, description):
     print(">> Running " + description + "...")
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    result = subprocess.run(
+        command,
+        shell=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    stdout = result.stdout if result.stdout else ""
+    stderr = result.stderr if result.stderr else ""
     if result.returncode == 0:
         print("[OK] " + description + " passed")
-        return True, result.stdout + result.stderr
+        return True, stdout + stderr
     else:
         print("[FAIL] " + description + " failed")
-        return False, result.stdout + result.stderr
+        return False, stdout + stderr
 
 
 def analyze_duplication(output):
@@ -55,10 +64,23 @@ def print_recommendations():
 
 def main():
     test_passed, test_output = run_command("npm test", "Test suite")
-    dupe_passed, dupe_output = run_command("pmd cpd --minimum-tokens 50 src tests --language typescript", "Duplicate code check")
+    dupe_passed, dupe_output = run_command(
+        "pmd cpd --minimum-tokens 50 src tests --language typescript",
+        "Duplicate code check",
+    )
     lint_passed, lint_output = run_command("npm run lint", "ESLint check")
 
+    if not test_passed:
+        print("\n--- Test suite output ---")
+        print(test_output)
+
+    if not lint_passed:
+        print("\n--- ESLint output ---")
+        print(lint_output)
+
     if not dupe_passed:
+        print("\n--- Duplication check output ---")
+        print(dupe_output)
         duplication_samples = analyze_duplication(dupe_output)
         for idx, sample in enumerate(duplication_samples):
             advice = get_duplication_advice(sample)
@@ -77,4 +99,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
