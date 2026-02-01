@@ -74,4 +74,8 @@ describe("The compiler", () => {
   it("respects parentheses in expressions", () => {
     validate("(read U8 + read U8) * read U8", 45, "10", "5", "3");
   });
+
+  it("respects curly braces in expressions", () => {
+    validate("(read U8 + { read U8 }) * read U8", 30, "10", "5", "2");
+  });
 });

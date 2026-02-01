@@ -61,9 +61,6 @@ function compileExpression(
       if (token === "+" || token === "-") {
         return token;
       }
-      if (token.trim().startsWith("(")) {
-        return token;
-      }
       return processMultDiv(token);
     })
     .filter((t) => t.length > 0)
@@ -84,13 +81,14 @@ function handleParentheses(
         };
       }
 
-      if (char === "(") {
+      if (char === "(" || char === "{") {
+        const closingBrace = char === "(" ? ")" : "}";
         let depth = 1;
         let j = i + 1;
         // eslint-disable-next-line no-restricted-syntax
         while (j < chars.length && depth > 0) {
-          if (chars[j] === "(") depth = depth + 1;
-          if (chars[j] === ")") depth = depth - 1;
+          if (chars[j] === char) depth = depth + 1;
+          if (chars[j] === closingBrace) depth = depth - 1;
           j = j + 1;
         }
         const innerExpr = source.substring(i + 1, j - 1);
@@ -115,6 +113,9 @@ function handleParentheses(
 
 export function compile(source: string): string {
   source = source.trim();
+
+  // Convert curly braces to parentheses
+  source = source.split("{").join("(").split("}").join(")");
 
   validateNoZeroDivision(source);
 
