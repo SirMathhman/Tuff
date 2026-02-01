@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prepare": "husky install",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "bun run src/index.ts",
-    "lint": "eslint 'src/**/*.{ts,js}'",
+    "lint": "tsc --noEmit && eslint 'src/**/*.{ts,js}'",
     "format": "prettier --write 'src/**/*.{ts,js,json,md}'",
     "test": "bun test"
   },
@@ -23,6 +24,7 @@
     "prettier": "^3.8.1",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "husky": "^8.0.0"
   }
 }

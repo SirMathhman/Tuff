@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Run PowerShell checks before commit
+# Prefer pwsh (PowerShell Core) when available, fall back to Windows PowerShell
+if command -v pwsh >/dev/null 2>&1; then
+  pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/check.ps1
+  exit_code=$?
+else
+  powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/check.ps1
+  exit_code=$?
+fi
+if [ $exit_code -ne 0 ]; then
+  echo "Pre-commit check failed. Commit aborted."
+  exit $exit_code
+fi
