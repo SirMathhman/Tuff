@@ -296,6 +296,58 @@ function processMutableVariables(source: string): string {
   return wrapped;
 }
 
+// Validate that reassignments only occur on mutable variables
+function validateImmutability(source: string): void {
+  // Extract all variable declarations and whether they're mutable
+  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  const declPattern = new RegExp(
+    'let\\s+(mut\\s+)?(\\w+)(?:\\s*:\\s*(?:' + validTypes + '))?\\s*=',
+    'g',
+  );
+
+  const mutableVars = new Set<string>();
+  const declaredVars = new Set<string>();
+
+  Array.from(source.matchAll(declPattern)).forEach((match) => {
+    const isMutable = match[1] === 'mut ';
+    const varName = match[2];
+    declaredVars.add(varName);
+    if (isMutable) {
+      mutableVars.add(varName);
+    }
+  });
+
+  // Find reassignments - look for variable assignments that aren't type annotations
+  // Type annotations look like: varname : Type = value
+  // Reassignments look like: varname = value (without the colon and type)
+  const typeAnnotPattern = /:\s*(?:U8|U16|U32|U64|I8|I16|I32|I64)\s*/;
+  const reassignPattern = /\b([a-zA-Z_]\w*)\s*=\s*[^;=]/g;
+
+  Array.from(source.matchAll(reassignPattern)).forEach((match) => {
+    const varName = match[1];
+    const matchStart = match.index ?? 0;
+    const beforeMatch = source.substring(
+      Math.max(0, matchStart - 50),
+      matchStart,
+    );
+
+    // Skip if this is a type annotation (preceded by : Type)
+    if (typeAnnotPattern.test(beforeMatch)) {
+      return;
+    }
+
+    // Skip if this is part of a let declaration
+    if (/let\s+(?:mut\s+)?\w*\s*$/.test(beforeMatch)) {
+      return;
+    }
+
+    // Check if this is a declared variable being reassigned
+    if (declaredVars.has(varName) && !mutableVars.has(varName)) {
+      throw new Error("Cannot reassign immutable variable '" + varName + "'");
+    }
+  });
+}
+
 // Validate the compiled expression result against type constraints
 function validateExpressionResult(
   compiled: string,
@@ -332,6 +384,7 @@ function validateExpressionResult(
  */
 export function compileTuffToJS(source: string): string {
   checkRedeclarations(source);
+  validateImmutability(source);
   const allTypes = extractAndValidateAnnotations(source);
   const hasMutation = /let\s+mut\s+/.test(source);
   let compiled = processMutableVariables(source);

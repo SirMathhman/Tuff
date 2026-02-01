@@ -126,4 +126,8 @@ describe('execute', () => {
   it('should execute "let mut x = 0; x = 100; x" and return 100', () => {
     validate('let mut x = 0; x = 100; x', 100);
   });
+
+  it('should throw an error when reassigning an immutable variable: "let x = 0; x = 100; x"', () => {
+    invalidate('let x = 0; x = 100; x');
+  });
 });
