@@ -98,4 +98,8 @@ describe("The compiler", () => {
       "3",
     );
   });
+
+  it("supports variable declarations without type annotations", () => {
+    validate("let x = read U8; x", 42, "42");
+  });
 });

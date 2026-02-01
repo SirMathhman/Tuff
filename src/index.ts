@@ -76,16 +76,29 @@ function parseVariableDeclaration(
   }
   const afterLet = declTrimmed.substring(4);
   const colonIndex = afterLet.indexOf(":");
-  if (colonIndex === -1) {
-    return null;
-  }
-  const varName = afterLet.substring(0, colonIndex).trim();
-  const afterColon = afterLet.substring(colonIndex + 1);
-  const equalIndex = afterColon.indexOf("=");
+  const equalIndex = afterLet.indexOf("=");
+
   if (equalIndex === -1) {
     return null;
   }
-  const valueExpr = afterColon.substring(equalIndex + 1).trim();
+
+  let varName = "";
+  let valueExpr = "";
+
+  if (colonIndex !== -1 && colonIndex < equalIndex) {
+    // Format: let x : Type = expr
+    varName = afterLet.substring(0, colonIndex).trim();
+    valueExpr = afterLet.substring(equalIndex + 1).trim();
+  } else {
+    // Format: let x = expr
+    varName = afterLet.substring(0, equalIndex).trim();
+    valueExpr = afterLet.substring(equalIndex + 1).trim();
+  }
+
+  if (varName.length === 0 || valueExpr.length === 0) {
+    return null;
+  }
+
   return { varName, valueExpr };
 }
 
@@ -139,7 +152,8 @@ function compileTopLevelVariableBlock(
     return null;
   }
 
-  const hasParens = parsed.valueExpr.includes("(") || parsed.valueExpr.includes("{");
+  const hasParens =
+    parsed.valueExpr.includes("(") || parsed.valueExpr.includes("{");
   const processedValue = hasParens
     ? handleParentheses(parsed.valueExpr, argCount)
     : parsed.valueExpr;
