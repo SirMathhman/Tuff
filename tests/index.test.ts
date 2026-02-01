@@ -1,12 +1,11 @@
-describe("Sample test", () => {
-  it("should pass a simple assertion", () => {
-    expect(1 + 1).toBe(2);
+import { interpret } from "../src/index";
+
+describe("interpret", () => {
+  it("should interpret a simple number", () => {
+    expect(interpret("100")).toBe("100");
   });
 
-  it("should test a TypeScript function", () => {
-    const add = (a: number, b: number): number => {
-      return a + b;
-    };
-    expect(add(2, 3)).toBe(5);
+  it("should interpret number with U8 suffix", () => {
+    expect(interpret("100U8")).toBe("100");
   });
 });
