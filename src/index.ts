@@ -10,8 +10,9 @@ const typeRanges: Record<string, { min: number; max: number }> = {
   I64: { min: -(2 ** 63), max: 2 ** 63 - 1 },
 };
 
-// Type ordering by width (U8=1 to I64=8)
+// Type ordering by width (U8=1 to I64=8, Bool=0 for non-numeric)
 const typeOrder: Record<string, number> = {
+  Bool: 0,
   U8: 1,
   U16: 2,
   U32: 3,
@@ -59,6 +60,13 @@ function validateAndAddType(
 // Extract and validate all annotated numbers in the source expression
 function extractAndValidateAnnotations(source: string): Set<string> {
   const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
+  const allTypes = new Set<string>();
+
+  // Extract Bool types
+  if (/:\s*Bool\b/.test(source)) {
+    allTypes.add("Bool");
+  }
+
   const typePattern = new RegExp("(" + validTypes + ")", "g");
   const numPattern = new RegExp("(-?)([0-9]+)(" + validTypes + ")", "g");
   const varPattern = new RegExp(
@@ -66,13 +74,10 @@ function extractAndValidateAnnotations(source: string): Set<string> {
     "g",
   );
 
-  const allTypes = Array.from(source.matchAll(typePattern)).reduce(
-    (set, match) => {
-      set.add(match[1]);
-      return set;
-    },
-    new Set<string>(),
-  );
+  Array.from(source.matchAll(typePattern)).reduce((set, match) => {
+    set.add(match[1]);
+    return set;
+  }, allTypes);
 
   Array.from(source.matchAll(numPattern)).forEach((match) => {
     validateAndAddType(
@@ -139,6 +144,9 @@ function findInitializerEnd(source: string, startIdx: number): number {
 
 // Extract the inferred type of a variable from its initializer
 function getVariableType(initializer: string): string {
+  if (/^\s*(true|false)\s*$/.test(initializer)) {
+    return "Bool";
+  }
   const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
   const typeMatch = new RegExp("(\\d+)(" + validTypes + ")\\b").exec(
     initializer,
@@ -148,6 +156,10 @@ function getVariableType(initializer: string): string {
 
 // Check if sourceType can be assigned to targetType
 function isTypeCompatible(sourceType: string, targetType: string): boolean {
+  // Bool types must match exactly
+  if (targetType === "Bool" || sourceType === "Bool") {
+    return sourceType === targetType;
+  }
   const sourceOrder = typeOrder[sourceType] || 0;
   const targetOrder = typeOrder[targetType] || 0;
   return sourceOrder === 0 || sourceOrder <= targetOrder;
@@ -155,7 +167,7 @@ function isTypeCompatible(sourceType: string, targetType: string): boolean {
 
 // Resolve variable references by tracking declarations and substituting values
 function resolveVariableReferences(source: string): string {
-  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
+  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64|Bool";
   const declMatch = new RegExp(
     "let\\s+(\\w+)(?:\\s*:\\s*(" + validTypes + "))?\\s*=\\s*",
   ).exec(source);
@@ -208,18 +220,39 @@ function resolveVariableReferences(source: string): string {
 
 // Process variable declarations like let x : U8 = 3; x or { let x : U8 = 3; x }
 function processVariableDeclarations(source: string): string {
-  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
+  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64|Bool";
   const resolved = resolveVariableReferences(source);
   const stabilized =
     resolved === source ? resolved : processVariableDeclarations(resolved);
 
+  // Handle braced patterns: { let x : U8 = 3; x } => (3)
   const bracedPattern = new RegExp(
     "\\{\\s*let\\s+(\\w+)(?:\\s*:\\s*(?:" +
       validTypes +
       "))?\\s*=\\s*([^;]+);\\s*\\1\\s*\\}",
     "g",
   );
-  return stabilized.replace(bracedPattern, "($2)");
+  let result = stabilized.replace(bracedPattern, "($2)");
+
+  // Handle top-level patterns: let x = value; (value) => (value)
+  // This removes the variable declaration when it's already been substituted
+  const topLevelPattern = /let\s+\w+\s*=\s*[^;]+;\s*\(/g;
+  result = result.replace(topLevelPattern, "(");
+
+  // Handle bare variable declarations (no reference): let x = value => (value)
+  const barePattern = new RegExp(
+    "let\\s+\\w+(?:\\s*:\\s*(?:" +
+      validTypes +
+      "))?\\s*=\\s*([^;]+)(?:\\s*;\\s*)?$",
+  );
+  result = result.replace(barePattern, "($1)");
+
+  return result;
+}
+
+// Replace boolean literals with numeric equivalents
+function replaceBooleans(source: string): string {
+  return source.replace(/\btrue\b/g, "1").replace(/\bfalse\b/g, "0");
 }
 
 // Remove all type annotations from the source expression
@@ -228,7 +261,7 @@ function removeTypeAnnotations(source: string): string {
   return source
     .replace(new RegExp("([0-9]+)(" + validTypes + ")", "g"), "$1")
     .replace(new RegExp("-([0-9]+)(" + validTypes + ")", "g"), "-$1")
-    .replace(new RegExp(":\\s*(" + validTypes + ")", "g"), "");
+    .replace(new RegExp(":\\s*(" + validTypes + "|Bool)", "g"), "");
 }
 
 // Remove curly braces from the source expression (preserving function bodies)
@@ -302,7 +335,7 @@ function extractVariableDeclarations(source: string): {
   declaredVars: Set<string>;
   varTypes: Record<string, string>;
 } {
-  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
+  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64|Bool";
   const declPattern = new RegExp(
     "let\\s+(mut\\s+)?(\\w+)(?:\\s*:\\s*(" +
       validTypes +
@@ -358,7 +391,7 @@ function validateReassignments(
     );
 
     if (
-      typeAnnotPattern.test(beforeMatch) || 
+      typeAnnotPattern.test(beforeMatch) ||
       /let\s+(?:mut\s+)?\w*\s*$/.test(beforeMatch)
     ) {
       return;
@@ -404,6 +437,12 @@ function validateExpressionResult(
   }
 
   const resultType = getWidestType(allTypes);
+
+  // Skip validation for Bool type (no range to check)
+  if (resultType === "Bool") {
+    return;
+  }
+
   const range = typeRanges[resultType];
 
   const fn = new Function("return " + compiled);
@@ -438,6 +477,7 @@ export function compileTuffToJS(source: string): string {
     compiled = processVariableDeclarations(compiled);
   }
   compiled = removeTypeAnnotations(compiled);
+  compiled = replaceBooleans(compiled);
   compiled = removeCurlyBraces(compiled);
   validateExpressionResult(compiled, allTypes);
   return "return " + compiled;

@@ -138,4 +138,8 @@ describe("execute", () => {
   it('should execute "let mut x = 0U16; x = 100U8; x" and return 100', () => {
     validate("let mut x = 0U16; x = 100U8; x", 100);
   });
+
+  it('should execute "let x : Bool = true" and return 1', () => {
+    validate("let x : Bool = true", 1);
+  });
 });
