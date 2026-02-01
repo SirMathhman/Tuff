@@ -22,6 +22,44 @@ describe("interpret - simple numbers", () => {
   });
 });
 
+describe("interpret - Bool", () => {
+  it("should interpret true as 1", () => {
+    expectValid("true", 1);
+  });
+
+  it("should interpret false as 0", () => {
+    expectValid("false", 0);
+  });
+
+  it("should support Bool variable declaration with true", () => {
+    expectValid("let x : Bool = true; x", 1);
+  });
+
+  it("should support Bool variable declaration with false", () => {
+    expectValid("let x : Bool = false; x", 0);
+  });
+
+  it("should support Bool type coercion to U8", () => {
+    expectValid("let x : Bool = true; let y : U8 = x; y", 1);
+  });
+
+  it("should support Bool type coercion to U16", () => {
+    expectValid("let x : Bool = false; let y : U16 = x; y", 0);
+  });
+
+  it("should support Bool type coercion to U32", () => {
+    expectValid("let x : Bool = true; let y : U32 = x; y", 1);
+  });
+
+  it("should support Bool type coercion to U64", () => {
+    expectValid("let x : Bool = true; let y : U64 = x; y", 1);
+  });
+
+  it("should not allow Bool coercion to signed types", () => {
+    expectInvalid("let x : Bool = true; let y : I8 = x; y");
+  });
+});
+
 describe("interpret - U8", () => {
   it("should interpret valid U8 numbers", () => {
     expectValid("100U8", 100);

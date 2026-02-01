@@ -15,6 +15,7 @@ export type VariableScope = {
 export type Range = { min: number | bigint; max: number | bigint; unsigned: boolean };
 
 export const TYPE_RANGES: Record<string, Range> = {
+  Bool: { min: 0, max: 1, unsigned: true },
   U8: { min: 0, max: 255, unsigned: true },
   U16: { min: 0, max: 65535, unsigned: true },
   U32: { min: 0, max: 4294967295, unsigned: true },
@@ -25,7 +26,7 @@ export const TYPE_RANGES: Record<string, Range> = {
   I64: { min: -9223372036854775808n, max: 9223372036854775807n, unsigned: false },
 };
 
-export const TYPE_ORDER: string[] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+export const TYPE_ORDER: string[] = ["Bool", "U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
 
 // Utility functions for pointer type handling
 export function isPointerType(type: string): boolean {
@@ -111,7 +112,7 @@ export function updateArrayInitializedCount(type: string, newInitialized: number
   }
   // Cap at total capacity
   const initialized = Math.min(newInitialized, parsed.total);
-  return `[${parsed.elementType}; ${initialized}; ${parsed.total}]`;
+  return "[" + parsed.elementType + "; " + initialized + "; " + parsed.total + "]";
 }
 
 export function isBaseType(type: string): boolean {

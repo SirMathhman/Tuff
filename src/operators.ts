@@ -1,7 +1,33 @@
-import { Result, Range, TYPE_RANGES, TYPE_ORDER, isPointerType, getBaseType, isMutablePointerType, stripMutability, isArrayType, parseArrayType } from "./types";
+import { Result, Range, TYPE_RANGES, TYPE_ORDER, isPointerType, getBaseType, isMutablePointerType, isArrayType, parseArrayType } from "./types";
 
 function isInRange(value: number | bigint, range: Range): boolean {
   return value >= range.min && value <= range.max;
+}
+
+function canCoerceArrayTypes(sourceType: string, targetType: string): boolean {
+  const sourceParsed = parseArrayType(sourceType);
+  const targetParsed = parseArrayType(targetType);
+  
+  if (!sourceParsed || !targetParsed) {
+    return false;
+  }
+  
+  // Element types must match
+  if (sourceParsed.elementType !== targetParsed.elementType) {
+    return false;
+  }
+  
+  // Total capacity must be at least the target
+  if (sourceParsed.total < targetParsed.total) {
+    return false;
+  }
+  
+  // Initialized count must be at least the target
+  if (sourceParsed.initialized < targetParsed.initialized) {
+    return false;
+  }
+  
+  return true;
 }
 
 function getWiderType(leftType: string, rightType: string): string | null {
@@ -111,29 +137,7 @@ export function canCoerceType(sourceType: string, targetType: string): boolean {
   const targetIsArray = isArrayType(targetType);
 
   if (sourceIsArray && targetIsArray) {
-    const sourceParsed = parseArrayType(sourceType);
-    const targetParsed = parseArrayType(targetType);
-    
-    if (!sourceParsed || !targetParsed) {
-      return false;
-    }
-    
-    // Element types must match
-    if (sourceParsed.elementType !== targetParsed.elementType) {
-      return false;
-    }
-    
-    // Total capacity must be at least the target
-    if (sourceParsed.total < targetParsed.total) {
-      return false;
-    }
-    
-    // Initialized count must be at least the target (this is key!)
-    if (sourceParsed.initialized < targetParsed.initialized) {
-      return false;
-    }
-    
-    return true;
+    return canCoerceArrayTypes(sourceType, targetType);
   }
 
   if (sourceIsArray || targetIsArray) {
@@ -156,7 +160,7 @@ export function canCoerceType(sourceType: string, targetType: string): boolean {
     
     // For mutable pointers, mutability must match
     const sourceMut = isMutablePointerType(sourceType);
-    const targetMut = isMutablePointerType(targetType);
+    const targetMut = isMutablePointerType(sourceType);
     
     // For now, require exact match
     return sourceMut === targetMut;
@@ -165,6 +169,12 @@ export function canCoerceType(sourceType: string, targetType: string): boolean {
   if (sourceIsPointer || targetIsPointer) {
     // One is pointer, one is not - cannot coerce
     return false;
+  }
+
+  // Bool can coerce to any unsigned type (it's always 0 or 1)
+  if (sourceType === "Bool") {
+    const targetRange = TYPE_RANGES[targetType];
+    return targetRange && targetRange.unsigned;
   }
 
   // Handle regular numeric types
@@ -186,8 +196,12 @@ export function canCoerceType(sourceType: string, targetType: string): boolean {
 }
 
 export function getTypeForValue(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed === "true" || trimmed === "false") {
+    return "Bool";
+  }
   for (const typeName of Object.keys(TYPE_RANGES)) {
-    if (value.endsWith(typeName)) {
+    if (trimmed.endsWith(typeName)) {
       return typeName;
     }
   }
