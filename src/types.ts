@@ -53,7 +53,13 @@ export function getPointeeType(type: string): string {
 
 export function getBaseType(type: string): string {
   let current = type;
+  const MAX_POINTER_DEPTH = 1000;
+  let safety = 0;
   while (isPointerType(current)) {
+    safety++;
+    if (safety > MAX_POINTER_DEPTH) {
+      break;
+    }
     current = getPointeeType(current);
   }
   return current;
@@ -62,7 +68,13 @@ export function getBaseType(type: string): string {
 export function pointerDepth(type: string): number {
   let depth = 0;
   let current = type;
+  const MAX_POINTER_DEPTH = 1000;
+  let safety = 0;
   while (isPointerType(current)) {
+    safety++;
+    if (safety > MAX_POINTER_DEPTH) {
+      break;
+    }
     depth++;
     current = getPointeeType(current);
   }

@@ -163,7 +163,14 @@ export function evaluateGroupedExpressions(input: string, scope: VariableScope |
   let result = input;
   let changed = true;
 
+  const MAX_GROUP_ITERATIONS = input.length + 10;
+  let safety = 0;
+
   while (changed) {
+    safety++;
+    if (safety > MAX_GROUP_ITERATIONS) {
+      return "";
+    }
     changed = false;
     let depth = 0;
     let start = -1;

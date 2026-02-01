@@ -673,3 +673,45 @@ describe("interpret - array parameters", () => {
     expectInvalid("let mut array : [U32; 1; 3]; array[0] = 100U32; fn getI32(arr : [I32; 1; 3]) : I32 => { arr[0] }; getI32(array)");
   });
 });
+
+describe("interpret - while loops", () => {
+  it("should execute simple while loop", () => {
+    expectValid("let mut x = 0; while (x < 4) x += 1; x", 4);
+  });
+
+  it("should handle while loop with zero iterations", () => {
+    expectValid("let mut x = 0; while (x < 0) x += 1; x", 0);
+  });
+
+  it("should handle while loop with multiple iterations", () => {
+    expectValid("let mut x = 0; while (x < 10) x += 2; x", 10);
+  });
+
+  it("should handle while loop with block body", () => {
+    expectValid("let mut x = 0; let mut sum = 0; while (x < 3) { x += 1; sum += x; } sum", 6);
+  });
+
+  it("should handle nested while loops", () => {
+    expectValid("let mut i = 0; let mut result = 0; while (i < 3) { let mut j = 0; while (j < 2) { result += 1; j += 1; } i += 1; } result", 6);
+  });
+
+  it("should handle while loop with complex condition", () => {
+    expectValid("let mut x = 1; while (x < 100) x = x * 2; x", 128);
+  });
+
+  it("should handle while loop with false initial condition", () => {
+    expectValid("let mut x = 5; let mut result = 0; while (x < 3) result = 1; result", 0);
+  });
+
+  it("should handle while loop comparing with variable", () => {
+    expectValid("let mut x = 0; let limit = 3; while (x < limit) x += 1; x", 3);
+  });
+
+  it("should return error for undefined variable in while condition", () => {
+    expectInvalid("while (y < 5) y += 1; y");
+  });
+
+  it("should handle while loop with typed variables", () => {
+    expectValid("let mut x : U8 = 0; while (x < 5U8) x += 1; x", 5);
+  });
+});

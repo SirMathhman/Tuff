@@ -16,6 +16,7 @@ import {
   parseVariableDeclaration,
   parseFunctionDeclaration,
   parseFunctionCall,
+  parseWhileLoop,
   tokenizeExpression,
 } from "./parser";
 import {
@@ -32,6 +33,7 @@ import {
   interpretAddSubtract,
   interpretComparisons,
 } from "./expressions";
+import { setInterpret, setInterpretStatementBlock } from "./lazy";
 
 function evaluateRhs(rhs: string, scope: VariableScope): Result<{ value: number | bigint; type: string | null }, string> {
   const valueResult = interpretWithVariables(rhs, scope);
@@ -143,8 +145,59 @@ function handleRegularAssignment(lhs: string, rhs: string, scope: VariableScope)
       return assignResult;
     }
     return { success: true, data: newValue };
+   }
+   return null;
+}
+
+function handleWhileLoop(stmt: string, scope: VariableScope): Result<number | bigint, string> | null {
+  if (!stmt.trim().startsWith("while ")) {
+    return null;
   }
-  return null;
+
+  const parseResult = parseWhileLoop(stmt);
+  if (!parseResult.success) {
+    return parseResult;
+  }
+
+  const { condition, body } = (parseResult as { success: true; data: { condition: string; body: string } }).data;
+
+  let lastValue: number | bigint = 0;
+  const MAX_ITERATIONS = 100000;
+  let iterationCount = 0;
+
+  const trimmedBody = body.trim();
+  const bodyForExecution = trimmedBody === ""
+    ? "0; 0"
+    : (trimmedBody.endsWith(";") ? (trimmedBody + " 0") : (trimmedBody + "; 0"));
+
+  // Loop while condition is truthy
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    iterationCount++;
+    if (iterationCount > MAX_ITERATIONS) {
+      return { success: false, error: "While loop exceeded maximum iterations (" + MAX_ITERATIONS + "). Possible infinite loop in: " + stmt };
+    }
+
+    const condResult = interpretWithVariables(condition, scope);
+    if (!condResult.success) {
+      return condResult;
+    }
+
+    const condValue = (condResult as { success: true; data: number | bigint }).data;
+    // In Tuff, 0 is falsy, non-zero is truthy
+    if (typeof condValue === "bigint" ? condValue === 0n : condValue === 0) {
+      break;
+    }
+
+    // Execute the body as statements (support assignments and nested loops)
+    const bodyResult = interpretStatementBlock(bodyForExecution, scope);
+    if (!bodyResult.success) {
+      return bodyResult;
+    }
+    lastValue = (bodyResult as { success: true; data: number | bigint }).data;
+  }
+
+  return { success: true, data: lastValue };
 }
 
 function processAssignment(stmt: string, scope: VariableScope): Result<number | bigint, string> | null {
@@ -194,6 +247,37 @@ function processAssignment(stmt: string, scope: VariableScope): Result<number | 
   return handleRegularAssignment(lhs, rhs, scope);
 }
 
+// Helper to process a single statement and handle declarations/loops/assignments
+function processStatement(stmt: string, blockScope: VariableScope): Result<number | bigint, string> | null {
+  if (stmt.startsWith("let ")) {
+    const declResult = parseVariableDeclaration(stmt, blockScope);
+    if (!declResult.success) {
+      return declResult as Result<number | bigint, string>;
+    }
+    return null;
+  }
+  if (stmt.startsWith("fn ")) {
+    const declResult = parseFunctionDeclaration(stmt, blockScope);
+    if (!declResult.success) {
+      return declResult as Result<number | bigint, string>;
+    }
+    return null;
+  }
+  if (stmt.startsWith("while ")) {
+    const whileResult = handleWhileLoop(stmt, blockScope);
+    if (whileResult !== null) {
+      return whileResult;
+    }
+  }
+
+  const assignResult = processAssignment(stmt, blockScope);
+  if (assignResult !== null) {
+    return assignResult;
+  }
+
+  return interpretWithVariables(stmt, blockScope);
+}
+
 export function interpretStatementBlock(input: string, parentScope: VariableScope | null = null): Result<number | bigint, string> {
   const parseResult = parseStatementBlock(input);
   if (!parseResult.success) {
@@ -204,29 +288,9 @@ export function interpretStatementBlock(input: string, parentScope: VariableScop
   const blockScope = createScope(parentScope);
 
   for (const stmt of statements) {
-    if (stmt.startsWith("let ")) {
-      const declResult = parseVariableDeclaration(stmt, blockScope);
-      if (!declResult.success) {
-        return declResult;
-      }
-    } else if (stmt.startsWith("fn ")) {
-      const declResult = parseFunctionDeclaration(stmt, blockScope);
-      if (!declResult.success) {
-        return declResult;
-      }
-    } else {
-      const assignResult = processAssignment(stmt, blockScope);
-      if (assignResult !== null) {
-        if (!assignResult.success) {
-          return assignResult;
-        }
-        continue;
-      }
-      
-      const exprResult = interpretWithVariables(stmt, blockScope);
-      if (!exprResult.success) {
-        return exprResult;
-      }
+    const stmtResult = processStatement(stmt, blockScope);
+    if (stmtResult !== null && !stmtResult.success) {
+      return stmtResult as Result<number | bigint, string>;
     }
   }
 
@@ -485,3 +549,6 @@ export function interpret(input: string, scope: VariableScope | null = null): Re
   return { success: true, data: Number(trimmedInput) };
 }
 
+// Initialize lazy loading to avoid circular dependencies
+setInterpret(interpret);
+setInterpretStatementBlock(interpretStatementBlock);

@@ -5,8 +5,8 @@ import { getInterpret } from "./lazy";
 
 // Lazy import to avoid circular dependency at module load time
 
-export function parseStatementBlock(input: string): Result<{ statements: string[]; finalExpr: string }, string> {
-  const trimmed = input.trim();
+// Helper: tokenize statement block by semicolon and braces
+function tokenizeStatements(trimmed: string): string[] {
   const parts: string[] = [];
   let current = "";
   let braceDepth = 0;
@@ -22,6 +22,16 @@ export function parseStatementBlock(input: string): Result<{ statements: string[
     } else if (char === "}") {
       braceDepth--;
       current += char;
+
+      // Allow `while (...) { ... } <expr>` without requiring a `;` after block
+      if (braceDepth === 0 && parenDepth === 0 && bracketDepth === 0) {
+        const currentTrimmed = current.trim();
+        const rest = trimmed.slice(i + 1);
+        if (currentTrimmed.startsWith("while ") && /\S/.test(rest)) {
+          parts.push(currentTrimmed);
+          current = "";
+        }
+      }
     } else if (char === "(") {
       parenDepth++;
       current += char;
@@ -47,6 +57,13 @@ export function parseStatementBlock(input: string): Result<{ statements: string[
   if (current.trim()) {
     parts.push(current.trim());
   }
+
+  return parts;
+}
+
+export function parseStatementBlock(input: string): Result<{ statements: string[]; finalExpr: string }, string> {
+  const trimmed = input.trim();
+  const parts = tokenizeStatements(trimmed);
 
   if (parts.length < 2) {
     return { success: false, error: "Statement block must contain at least one statement and an expression" };
@@ -521,12 +538,92 @@ export function parseFunctionCall(input: string, scope: VariableScope): Result<{
   return { success: true, data: { name: funcName, args, argTypes, argNames, endIndex: parenEnd } };
 }
 
+// Helper: find matching closing paren for a while condition
+function findConditionEnd(rest: string): number {
+  let parenCount = 0;
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "(") {
+      parenCount++;
+    } else if (rest[i] === ")") {
+      parenCount--;
+      if (parenCount === 0) {
+        return i;
+      }
+    }
+  }
+  return -1;
+}
+
+// Helper: extract block body from while statement
+function extractWhileBody(bodyPart: string): Result<string, string> {
+  let body = bodyPart;
+  if (bodyPart.startsWith("{")) {
+    let braceCount = 0;
+    let blockEnd = -1;
+    for (let i = 0; i < bodyPart.length; i++) {
+      if (bodyPart[i] === "{") {
+        braceCount++;
+      } else if (bodyPart[i] === "}") {
+        braceCount--;
+        if (braceCount === 0) {
+          blockEnd = i;
+          break;
+        }
+      }
+    }
+    if (blockEnd === -1) {
+      return { success: false, error: "Unclosed braces in while body" };
+    }
+    body = bodyPart.slice(1, blockEnd).trim();
+  }
+  return { success: true, data: body };
+}
+
+export function parseWhileLoop(stmt: string): Result<{ condition: string; body: string }, string> {
+  const trimmed = stmt.trim();
+
+  if (!trimmed.startsWith("while ")) {
+    return { success: false, error: "Expected 'while' keyword" };
+  }
+
+  const rest = trimmed.slice(6).trim();
+  if (!rest.startsWith("(")) {
+    return { success: false, error: "Expected '(' after 'while'" };
+  }
+
+  const conditionEnd = findConditionEnd(rest);
+  if (conditionEnd === -1) {
+    return { success: false, error: "Unclosed parentheses in while condition" };
+  }
+
+  const condition = rest.slice(1, conditionEnd).trim();
+  const bodyPart = rest.slice(conditionEnd + 1).trim();
+
+  if (!bodyPart) {
+    return { success: false, error: "Expected body after while condition" };
+  }
+
+  const bodyResult = extractWhileBody(bodyPart);
+  if (!bodyResult.success) {
+    return bodyResult;
+  }
+
+  return { success: true, data: { condition, body: (bodyResult as { success: true; data: string }).data } };
+}
+
 export function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"; value: string }> {
   const tokens: Array<{ type: "operand" | "operator"; value: string }> = [];
   let current = "";
   let i = 0;
 
+  const MAX_TOKENIZE_ITERATIONS = input.length + 10;
+  let safety = 0;
+
   while (i < input.length) {
+    safety++;
+    if (safety > MAX_TOKENIZE_ITERATIONS) {
+      break;
+    }
     // Check for two-character operators first (==, !=, <=, >=)
     const twoCharOps = ["==", "!=", "<=", ">="];
     const singleCharOps = ["+", "-", "*", "/", "<", ">"];

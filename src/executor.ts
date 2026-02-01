@@ -108,30 +108,44 @@ export function assignThroughMutablePointer(scope: VariableScope, pointerVarName
   return { success: true, data: undefined };
 }
 
-export function lookupVariable(scope: VariableScope, name: string): Result<Variable, string> {
+// Helper: traverse scope chain with safety limit
+function traverseScopeChain<T>(scope: VariableScope, finder: (s: VariableScope) => T | null, itemType: string, name: string): Result<T, string> {
   let current: VariableScope | null = scope;
 
+  const MAX_SCOPE_CHAIN = 10000;
+  let safety = 0;
+
   while (current !== null) {
-    if (current.variables.has(name)) {
-      return { success: true, data: current.variables.get(name) as Variable };
+    safety++;
+    if (safety > MAX_SCOPE_CHAIN) {
+      return { success: false, error: "Scope chain exceeded " + MAX_SCOPE_CHAIN + " while looking up " + itemType + ": " + name };
+    }
+    const found = finder(current);
+    if (found !== null) {
+      return { success: true, data: found };
     }
     current = current.parent;
   }
 
-  return { success: false, error: "Undefined variable: " + name };
+  return { success: false, error: "Undefined " + itemType + ": " + name };
+}
+
+export function lookupVariable(scope: VariableScope, name: string): Result<Variable, string> {
+  return traverseScopeChain(
+    scope,
+    (s: VariableScope) => (s.variables.has(name) ? (s.variables.get(name) as Variable) : null),
+    "variable",
+    name
+  );
 }
 
 export function lookupFunction(scope: VariableScope, name: string): Result<FunctionDef, string> {
-  let current: VariableScope | null = scope;
-
-  while (current !== null) {
-    if (current.functions.has(name)) {
-      return { success: true, data: current.functions.get(name) as FunctionDef };
-    }
-    current = current.parent;
-  }
-
-  return { success: false, error: "Undefined function: " + name };
+  return traverseScopeChain(
+    scope,
+    (s: VariableScope) => (s.functions.has(name) ? (s.functions.get(name) as FunctionDef) : null),
+    "function",
+    name
+  );
 }
 
 export function declareFunction(scope: VariableScope, name: string, parameters: FunctionParameter[], returnType: string, body: string): Result<void, string> {
