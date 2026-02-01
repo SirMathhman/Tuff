@@ -462,3 +462,49 @@ describe("interpret - arrays", () => {
     expectInvalid("let array : [I32; 2; 2] = <U32>[5, 10]; array[0]");
   });
 });
+
+describe("interpret - functions", () => {
+  it("should declare and call simple function", () => {
+    expectValid("fn add(first : I32, second : I32) : I32 => { first + second }; add(3, 4)", 7);
+  });
+
+  it("should call function with different parameters", () => {
+    expectValid("fn multiply(a : I32, b : I32) : I32 => { a * b }; multiply(5, 6)", 30);
+  });
+
+  it("should handle function with single parameter", () => {
+    expectValid("fn double(x : I32) : I32 => { x * 2 }; double(10)", 20);
+  });
+
+  it("should handle function with no parameters", () => {
+    expectValid("fn constant() : I32 => { 42 }; constant()", 42);
+  });
+
+  it("should support function with arithmetic expression", () => {
+    expectValid("fn calculate(x : I32, y : I32) : I32 => { x * 2 + y }; calculate(3, 5)", 11);
+  });
+
+  it("should support function with U32 type", () => {
+    expectValid("fn addU32(a : U32, b : U32) : U32 => { a + b }; addU32(10U32, 20U32)", 30);
+  });
+
+  it("should return error for undefined function", () => {
+    expectInvalid("undefined()");
+  });
+
+  it("should return error for function with wrong number of arguments", () => {
+    expectInvalid("fn add(a : I32, b : I32) : I32 => { a + b }; add(5)");
+  });
+
+  it("should return error for function with type mismatch", () => {
+    expectInvalid("fn add(a : I32, b : I32) : I32 => { a + b }; add(5U32, 3)");
+  });
+
+  it("should handle function body with multiple operations", () => {
+    expectValid("fn complex(x : I32) : I32 => { x + 5 * 2 }; complex(3)", 13);
+  });
+
+  it("should support function with parenthesized expressions", () => {
+    expectValid("fn paren(x : I32) : I32 => { (x + 2) * 3 }; paren(4)", 18);
+  });
+});

@@ -292,30 +292,31 @@ export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Re
   const rest = trimmed.slice(3).trim();
   const parenStart = rest.indexOf("(");
   const parenEnd = rest.indexOf(")");
-  const arrow = rest.indexOf("->");
+  const colonPos = rest.indexOf(":", parenEnd);
+  const arrowPos = rest.indexOf("=>", colonPos);
 
-  if (parenStart === -1 || parenEnd === -1 || arrow === -1) {
-    return { success: false, error: "Invalid function declaration format" };
+  if (parenStart === -1 || parenEnd === -1 || colonPos === -1 || arrowPos === -1) {
+    return { success: false, error: "Invalid function declaration format: expected fn name(params) : ReturnType => { body }" };
   }
 
   const funcName = rest.slice(0, parenStart).trim();
   const paramsStr = rest.slice(parenStart + 1, parenEnd).trim();
-  const afterArrow = rest.slice(arrow + 2).trim();
+  const returnType = rest.slice(colonPos + 1, arrowPos).trim();
+  const bodyPart = rest.slice(arrowPos + 2).trim();
 
-  const braceStart = afterArrow.indexOf("{");
+  const braceStart = bodyPart.indexOf("{");
   if (braceStart === -1) {
     return { success: false, error: "Expected '{' in function body" };
   }
 
   const bodyStart = braceStart + 1;
-  const bodyEnd = afterArrow.lastIndexOf("}");
+  const bodyEnd = bodyPart.lastIndexOf("}");
 
   if (bodyEnd === -1 || bodyEnd <= bodyStart) {
     return { success: false, error: "Invalid function body" };
   }
 
-  const returnType = afterArrow.slice(0, braceStart).trim();
-  const body = afterArrow.slice(bodyStart, bodyEnd).trim();
+  const body = bodyPart.slice(bodyStart, bodyEnd).trim();
 
   const parameters: FunctionParameter[] = [];
   if (paramsStr) {
