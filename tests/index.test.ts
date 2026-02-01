@@ -30,4 +30,8 @@ describe("execute", () => {
   it('should execute "100" and return 100', () => {
     validate("100", 100);
   });
+
+  it('should execute "100U8" and return 100', () => {
+    validate("100U8", 100);
+  });
 });
