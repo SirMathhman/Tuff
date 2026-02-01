@@ -5,45 +5,51 @@
  * @returns JavaScript output as a string (stubbed)
  */
 export function compileTuffToJS(source: string): string {
-  // Handle negative annotated numbers like "-100I8" or "-100U8"
-  const negAnnot = source.match(/^-([0-9]+)([A-Za-z][0-9]*)$/);
+  // Valid integer type suffixes with their ranges
+  const typeRanges: Record<string, { min: number; max: number }> = {
+    U8: { min: 0, max: 2 ** 8 - 1 },
+    U16: { min: 0, max: 2 ** 16 - 1 },
+    U32: { min: 0, max: 2 ** 32 - 1 },
+    U64: { min: 0, max: 2 ** 64 - 1 },
+    I8: { min: -(2 ** 7), max: 2 ** 7 - 1 },
+    I16: { min: -(2 ** 15), max: 2 ** 15 - 1 },
+    I32: { min: -(2 ** 31), max: 2 ** 31 - 1 },
+    I64: { min: -(2 ** 63), max: 2 ** 63 - 1 },
+  };
+
+  // Check for positive annotated number: "100U8", "50I16", etc.
+  const posAnnot = source.match(/^([0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64)$/);
+  if (posAnnot) {
+    const value = parseInt(posAnnot[1], 10);
+    const suffix = posAnnot[2];
+    const range = typeRanges[suffix];
+    if (value < range.min || value > range.max) {
+      throw new Error(`${suffix} value must be between ${range.min} and ${range.max}, got ${value}`);
+    }
+    return `return ${value}`;
+  }
+
+  // Check for negative annotated number: "-100I8", "-50I16", etc.
+  const negAnnot = source.match(/^-([0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64)$/);
   if (negAnnot) {
     const value = parseInt(negAnnot[1], 10);
-    const suffix = negAnnot[2]; // e.g., 'I8' or 'U8'
-    const kind = suffix[0].toUpperCase();
-    const width = parseInt(suffix.slice(1), 10);
+    const suffix = negAnnot[2];
+    const actual = -value;
+    const range = typeRanges[suffix];
 
-    if (kind === 'U') {
-      // Unsigned types cannot be negative
+    // Unsigned types cannot be negative
+    if (suffix.startsWith('U')) {
       throw new Error(
         'Type annotations are not allowed on negative numeric literals',
       );
     }
 
-    if (kind === 'I' && !Number.isNaN(width)) {
-      const min = -(2 ** (width - 1));
-      const max = 2 ** (width - 1) - 1;
-      const actual = -value;
-      if (actual < min || actual > max) {
-        throw new Error(
-          `${suffix} value must be between ${min} and ${max}, got ${actual}`,
-        );
-      }
+    if (actual < range.min || actual > range.max) {
+      throw new Error(`${suffix} value must be between ${range.min} and ${range.max}, got ${actual}`);
     }
-
-    // fall through: allowed negative annotated number
+    return `return ${actual}`;
   }
 
-  // Validate U8 values are in range 0-255
-  const u8Match = source.match(/([0-9]+)U8/);
-  if (u8Match) {
-    const value = parseInt(u8Match[1], 10);
-    if (value > 255) {
-      throw new Error(`U8 value must be between 0 and 255, got ${value}`);
-    }
-  }
-
-  // Remove type annotations (e.g., "100U8" -> "100")
-  const compiled = source.replace(/([0-9]+)[A-Z][0-9]*/g, '$1');
-  return `return ${compiled}`;
+  // No valid type annotation found; return as-is
+  return `return ${source}`;
 }
