@@ -24,8 +24,16 @@ function tokenizeByOperators(expr: string, operators: string[]): string[] {
   return result.tokens;
 }
 
+function validateNoZeroDivision(source: string): void {
+  if (source.includes("/ 0") || source.includes("/0")) {
+    throw new Error("Division by zero detected at compile time");
+  }
+}
+
 export function compile(source: string): string {
   source = source.trim();
+
+  validateNoZeroDivision(source);
 
   // Simple number literal
   const isNumber =

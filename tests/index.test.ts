@@ -30,6 +30,10 @@ export function validate(source: string, exitCode: number, ...args: string[]) {
   expect(actualExitCode).toBe(exitCode);
 }
 
+export function invalidate(source: string) {
+  expect(() => compile(source)).toThrow();
+}
+
 describe("The compiler", () => {
   it("compiles an empty program", () => {
     validate("0", 0);
@@ -61,5 +65,9 @@ describe("The compiler", () => {
 
   it("divides two U8 values", () => {
     validate("read U8 / read U8", 20, "100", "5");
+  });
+
+  it("rejects division by zero at compile time", () => {
+    invalidate("read U8 / 0");
   });
 });
