@@ -62,4 +62,8 @@ describe('execute', () => {
   it('should execute "1U8 + 2" and return 3', () => {
     validate('1U8 + 2', 3);
   });
+
+  it('should execute "1U8 + 255U16" and return 256', () => {
+    validate('1U8 + 255U16', 256);
+  });
 });

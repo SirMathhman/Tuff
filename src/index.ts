@@ -51,24 +51,35 @@ function extractAndValidateAnnotations(source: string): Set<string> {
   return allTypes;
 }
 
-// Check for mixed typed and untyped numeric literals in an expression
-function checkForMixedTypes(source: string, hasAnnotations: boolean): void {
-  if (!hasAnnotations) {
-    return;
+// Get the widest type from a set of types
+function getWidestType(types: Set<string>): string {
+  if (types.size === 0) {
+    return '';
   }
 
-  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
-  // Remove all typed numbers
-  const withoutTyped = source
-    .replace(new RegExp('(-?)([0-9]+)(' + validTypes + ')', 'g'), '')
-    .trim();
+  const typeOrder: Record<string, number> = {
+    U8: 1,
+    U16: 2,
+    U32: 3,
+    U64: 4,
+    I8: 5,
+    I16: 6,
+    I32: 7,
+    I64: 8,
+  };
 
-  // Check if there are still digits remaining
-  if (/[0-9]/.test(withoutTyped)) {
-    throw new Error(
-      'Cannot mix typed and untyped numeric literals in the same expression',
-    );
+  let widest = Array.from(types)[0];
+  let widestOrder = typeOrder[widest] || 0;
+
+  for (const type of types) {
+    const order = typeOrder[type] || 0;
+    if (order > widestOrder) {
+      widest = type;
+      widestOrder = order;
+    }
   }
+
+  return widest;
 }
 
 // Remove all type annotations from the source expression
@@ -88,7 +99,7 @@ function validateExpressionResult(
     return;
   }
 
-  const resultType = Array.from(allTypes)[0];
+  const resultType = getWidestType(allTypes);
   const range = typeRanges[resultType];
 
   const fn = new Function('return ' + compiled);
@@ -115,7 +126,6 @@ function validateExpressionResult(
  */
 export function compileTuffToJS(source: string): string {
   const allTypes = extractAndValidateAnnotations(source);
-  checkForMixedTypes(source, allTypes.size > 0);
   const compiled = removeTypeAnnotations(source);
   validateExpressionResult(compiled, allTypes);
   return 'return ' + compiled;
