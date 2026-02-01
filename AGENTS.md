@@ -10,22 +10,20 @@ This is a TypeScript project named "Tuff" located at `C:\Users\mathm\Documents\P
 - `npm run build` - Compile TypeScript to JavaScript (outputs to `dist/`)
 - `npm start` - Execute `src/index.ts` using ts-node
 - `npm run dev` - Watch mode for development (ts-node with file watching)
+- `npm test` - Run all Jest tests (pre-commit hook runs this automatically)
+- `npm run test:watch` - Run tests in watch mode
+- `npm run test:file` - Run specific test file: `npm run test:file path/to/test.spec.ts`
+- `npm run test:coverage` - Run tests with coverage report
+- `npm run lint` - Check code style with ESLint
+- `npm run lint:fix` - Auto-fix linting issues
 
-### Setting Up Testing (When Needed)
-If tests are needed, set up Jest or Vitest:
-```bash
-npm install -D jest @types/jest ts-jest
-npx ts-jest config:init
-```
+### Running Tests
+- All tests: `npm test`
+- Watch mode: `npm run test:watch`
+- Single test file: `npm run test:file path/to/test.spec.ts` or `jest path/to/test.spec.ts`
+- With coverage: `npm run test:coverage`
 
-Add to package.json scripts:
-```json
-"test": "jest",
-"test:watch": "jest --watch",
-"test:file": "jest --testPathPattern="
-```
-
-To run a single test file: `npm run test:file path/to/test.spec.ts` or `jest path/to/test.spec.ts`
+**Pre-commit hook:** Automatically runs `npm test` before each commit to ensure tests pass.
 
 ### Setting Up Linting (When Needed)
 If ESLint is needed, install and configure:
