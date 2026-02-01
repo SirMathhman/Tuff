@@ -54,4 +54,8 @@ describe("The compiler", () => {
   it("multiplies and subtracts U8 values", () => {
     validate("read U8 * read U8 - read U8", 20, "5", "6", "10");
   });
+
+  it("respects operator precedence addition and multiplication", () => {
+    validate("read U8 + read U8 * read U8", 25, "10", "5", "3");
+  });
 });
