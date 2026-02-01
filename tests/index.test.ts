@@ -158,4 +158,8 @@ describe("execute", () => {
   it('should execute "let x = if (true) 3 else 5; x" and return 3', () => {
     validate("let x = if (true) 3 else 5; x", 3);
   });
+
+  it('should execute "let x : I32; x = 100; x" and return 100', () => {
+    validate("let x : I32; x = 100; x", 100);
+  });
 });

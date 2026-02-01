@@ -259,10 +259,11 @@ function replaceBooleans(source: string): string {
 function compileIfElseExpressions(source: string): string {
   // Pattern: if (condition) thenValue else elseValue
   // We need to handle nested cases and complex conditions/values
-  
+
   // Find if-else expressions: if (cond) expr else expr
-  const ifElsePattern = /if\s*\(([^)]+)\)\s*(\S+(?:\s+\S+)*?)\s+else\s+(\S+(?:\s+\S+)*?)(?=\s*[;}]|$)/g;
-  
+  const ifElsePattern =
+    /if\s*\(([^)]+)\)\s*(\S+(?:\s+\S+)*?)\s+else\s+(\S+(?:\s+\S+)*?)(?=\s*[;}]|$)/g;
+
   // Repeatedly apply the pattern to handle nested if-else using recursion
   const applyPattern = (s: string): string => {
     const newS = s.replace(
@@ -271,14 +272,14 @@ function compileIfElseExpressions(source: string): string {
         const cond = condition.trim();
         const thenVal = thenPart.trim();
         const elseVal = elsePart.trim();
-        
+
         return "((" + cond + ") ? " + thenVal + " : " + elseVal + ")";
       },
     );
-    
+
     return newS === s ? s : applyPattern(newS);
   };
-  
+
   return applyPattern(source);
 }
 
