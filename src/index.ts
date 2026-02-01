@@ -13,8 +13,22 @@ const TYPE_RANGES: Record<string, Range> = {
   I64: { min: -9223372036854775808n, max: 9223372036854775807n, unsigned: false },
 };
 
+const TYPE_ORDER: string[] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+
 function isInRange(value: number | bigint, range: Range): boolean {
   return value >= range.min && value <= range.max;
+}
+
+function getWiderType(leftType: string, rightType: string): string | null {
+  if (leftType === rightType) {
+    return leftType;
+  }
+  const leftIndex = TYPE_ORDER.indexOf(leftType);
+  const rightIndex = TYPE_ORDER.indexOf(rightType);
+  if (leftIndex === -1 || rightIndex === -1) {
+    return null;
+  }
+  return leftIndex > rightIndex ? leftType : rightType;
 }
 
 function getRangeExceededError(typeName: string, prefix: string = "Number"): string {
@@ -76,15 +90,16 @@ export function interpret(input: string): Result<number | bigint, string> {
       const leftType = getTypeForValue(parts[0].trim());
       const rightType = getTypeForValue(parts[1].trim());
 
-      if (leftType !== rightType) {
-        return { success: false, error: "Cannot add different types together" };
-      }
-
-      if (leftType === null) {
+      if (leftType === null || rightType === null) {
         return { success: false, error: "Cannot add untyped numbers together" };
       }
 
-      return addNumbers(left, right, leftType);
+      const commonType = getWiderType(leftType, rightType);
+      if (commonType === null) {
+        return { success: false, error: "Cannot add different types together" };
+      }
+
+      return addNumbers(left, right, commonType);
     }
   }
 

@@ -163,4 +163,8 @@ describe("interpret - arithmetic operations", () => {
   it("should return error when adding mismatched types (U8 + untyped)", () => {
     expectInvalid("1U8 + 255");
   });
+
+  it("should add U8 and U16 with type coercion to wider type", () => {
+    expectValid("1U8 + 255U16", 256);
+  });
 });
