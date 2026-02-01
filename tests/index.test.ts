@@ -167,4 +167,8 @@ describe("interpret - arithmetic operations", () => {
   it("should add U8 and U16 with type coercion to wider type", () => {
     expectValid("1U8 + 255U16", 256);
   });
+
+  it("should add two untyped numbers", () => {
+    expectValid("1 + 2", 3);
+  });
 });

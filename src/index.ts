@@ -90,8 +90,14 @@ export function interpret(input: string): Result<number | bigint, string> {
       const leftType = getTypeForValue(parts[0].trim());
       const rightType = getTypeForValue(parts[1].trim());
 
+      if (leftType === null && rightType === null) {
+        const left_num = left as number;
+        const right_num = right as number;
+        return { success: true, data: left_num + right_num };
+      }
+
       if (leftType === null || rightType === null) {
-        return { success: false, error: "Cannot add untyped numbers together" };
+        return { success: false, error: "Cannot add typed and untyped numbers together" };
       }
 
       const commonType = getWiderType(leftType, rightType);
