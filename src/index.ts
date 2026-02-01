@@ -72,7 +72,7 @@ function getCommonTypeForOperation(leftType: string | null, rightType: string | 
   return { commonType, error: null };
 }
 
-function performUntypedOperation(left: number | bigint, right: number | bigint, operation: string): number | bigint {
+function performUntypedOperation(left: number | bigint, right: number | bigint, operation: string): number | bigint | null {
   const left_num = left as number;
   const right_num = right as number;
   if (operation === "add") {
@@ -82,6 +82,9 @@ function performUntypedOperation(left: number | bigint, right: number | bigint, 
   } else if (operation === "multiply") {
     return left_num * right_num;
   } else if (operation === "divide") {
+    if (right_num === 0) {
+      return null;
+    }
     return left_num / right_num;
   }
   return 0;
@@ -118,7 +121,11 @@ function performOperation(left: number | bigint, right: number | bigint, leftPar
   const rightType = getTypeForValue(rightPart.trim());
 
   if (leftType === null && rightType === null) {
-    return { success: true, data: performUntypedOperation(left, right, operation) };
+    const untypedResult = performUntypedOperation(left, right, operation);
+    if (untypedResult === null) {
+      return { success: false, error: "Cannot divide by zero" };
+    }
+    return { success: true, data: untypedResult };
   }
 
   const typeResolve = resolveCommonType(leftType, rightType, operation);
@@ -134,6 +141,12 @@ function performOperation(left: number | bigint, right: number | bigint, leftPar
 
   if ((typeof left === "bigint") !== (typeof right === "bigint")) {
     return { success: false, error: "Cannot perform " + operation + " on number and bigint together" };
+  }
+
+  if (operation === "divide") {
+    if ((typeof right === "bigint" ? right === 0n : right === 0)) {
+      return { success: false, error: "Cannot divide by zero" };
+    }
   }
 
   let result_value: number | bigint;

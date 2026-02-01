@@ -195,4 +195,8 @@ describe("interpret - arithmetic operations", () => {
   it("should divide two untyped numbers", () => {
     expectValid("10 / 5", 2);
   });
+
+  it("should return error for division by zero", () => {
+    expectInvalid("10 / (2 - 2)");
+  });
 });
