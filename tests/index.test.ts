@@ -1,6 +1,5 @@
 import { interpret } from "../src/index";
 
-
 function expectValid(input: string, expected: number | bigint): void {
   const result = interpret(input);
   if (!result.success) {
@@ -240,6 +239,74 @@ describe("interpret - arithmetic operations", () => {
 
   it("should handle curly braces like parentheses", () => {
     expectValid("10 / { 5 }", 2);
+  });
+});
+
+describe("interpret - comparison operators", () => {
+  it("should evaluate less than operator", () => {
+    expectValid("100 < 200", 1);
+  });
+
+  it("should evaluate less than false", () => {
+    expectValid("200 < 100", 0);
+  });
+
+  it("should evaluate greater than operator", () => {
+    expectValid("200 > 100", 1);
+  });
+
+  it("should evaluate greater than false", () => {
+    expectValid("100 > 200", 0);
+  });
+
+  it("should evaluate less than or equal true", () => {
+    expectValid("100 <= 100", 1);
+  });
+
+  it("should evaluate less than or equal false", () => {
+    expectValid("100 <= 99", 0);
+  });
+
+  it("should evaluate greater than or equal true", () => {
+    expectValid("100 >= 100", 1);
+  });
+
+  it("should evaluate greater than or equal false", () => {
+    expectValid("99 >= 100", 0);
+  });
+
+  it("should evaluate equality true", () => {
+    expectValid("100 == 100", 1);
+  });
+
+  it("should evaluate equality false", () => {
+    expectValid("100 == 99", 0);
+  });
+
+  it("should evaluate inequality true", () => {
+    expectValid("100 != 99", 1);
+  });
+
+  it("should evaluate inequality false", () => {
+    expectValid("100 != 100", 0);
+  });
+});
+
+describe("interpret - comparison operators (advanced)", () => {
+  it("should store comparison result in Bool variable", () => {
+    expectValid("let x : Bool = 100 < 200; x", 1);
+  });
+
+  it("should allow comparison with typed numbers", () => {
+    expectValid("100U8 < 200U16", 1);
+  });
+
+  it("should evaluate chained comparisons left to right", () => {
+    expectValid("1 < 2 < 3", 1);
+  });
+
+  it("should handle comparison with negative numbers", () => {
+    expectValid("-5 < 0", 1);
   });
 });
 

@@ -178,6 +178,29 @@ export function interpretWithVariables(input: string, scope: VariableScope): Res
    return getInterpret()(trimmed, scope);
 }
 
+function bindFunctionParameter(funcScope: VariableScope, parentScope: VariableScope, parameterIndex: number, param: FunctionParameter, argType: string | null, argValue: number | bigint, argName: string | null): Result<void, string> {
+  if (argType !== null && !canCoerceType(argType, param.type)) {
+    return { success: false, error: "Cannot coerce argument " + parameterIndex + " from type " + argType + " to " + param.type };
+  }
+
+  // For array parameters, look up the actual array from the parent scope
+  if (argType !== null && isArrayType(argType) && isArrayType(param.type)) {
+    if (argName === null) {
+      return { success: false, error: "Array argument " + parameterIndex + " has no variable name" };
+    }
+    
+    const arrayLookup = lookupVariable(parentScope, argName);
+    if (!arrayLookup.success) {
+      return { success: false, error: "Cannot find array variable " + argName };
+    }
+    
+    const arrayVar = (arrayLookup as { success: true; data: Variable }).data;
+    return declareVariable(funcScope, param.name, param.type, arrayVar.value, false);
+  }
+
+  return declareVariable(funcScope, param.name, param.type, argValue, false);
+}
+
 export function executeFunctionCall(scope: VariableScope, funcName: string, args: (number | bigint)[], argTypes: (string | null)[], argNames: (string | null)[]): Result<number | bigint, string> {
   const lookupResult = lookupFunction(scope, funcName);
   if (!lookupResult.success) {
@@ -194,36 +217,9 @@ export function executeFunctionCall(scope: VariableScope, funcName: string, args
 
   for (let i = 0; i < func.parameters.length; i++) {
     const param = func.parameters[i];
-    const argType = argTypes[i];
-    const argName = argNames[i];
-
-    if (argType !== null && !canCoerceType(argType, param.type)) {
-      return { success: false, error: "Cannot coerce argument " + i + " from type " + argType + " to " + param.type };
-    }
-
-    // For array parameters, we need to handle them specially
-    if (argType !== null && isArrayType(argType) && isArrayType(param.type)) {
-      // Look up the actual array from the parent scope
-      if (argName === null) {
-        return { success: false, error: "Array argument " + i + " has no variable name" };
-      }
-      
-      const arrayLookup = lookupVariable(scope, argName);
-      if (!arrayLookup.success) {
-        return { success: false, error: "Cannot find array variable " + argName };
-      }
-      
-      const arrayVar = (arrayLookup as { success: true; data: Variable }).data;
-      // Declare the parameter in the function scope with the actual array data
-      const declResult = declareVariable(funcScope, param.name, param.type, arrayVar.value, false);
-      if (!declResult.success) {
-        return declResult;
-      }
-    } else {
-      const declResult = declareVariable(funcScope, param.name, param.type, args[i], false);
-      if (!declResult.success) {
-        return declResult;
-      }
+    const bindResult = bindFunctionParameter(funcScope, scope, i, param, argTypes[i], args[i], argNames[i]);
+    if (!bindResult.success) {
+      return bindResult as unknown as Result<number | bigint, string>;
     }
   }
 

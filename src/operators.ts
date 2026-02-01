@@ -200,6 +200,10 @@ export function getTypeForValue(value: string): string | null {
   if (trimmed === "true" || trimmed === "false") {
     return "Bool";
   }
+  // Check if this looks like a comparison expression
+  if (trimmed.includes(" < ") || trimmed.includes(" > ") || trimmed.includes(" <= ") || trimmed.includes(" >= ") || trimmed.includes(" == ") || trimmed.includes(" != ")) {
+    return "Bool";
+  }
   for (const typeName of Object.keys(TYPE_RANGES)) {
     if (trimmed.endsWith(typeName)) {
       return typeName;
@@ -259,6 +263,32 @@ export function performOperation(left: number | bigint, right: number | bigint, 
   }
 
   return checkOperationRange(result_value, commonType, operation);
+}
+
+export function performComparison(left: number | bigint, right: number | bigint, operator: string): Result<number, string> {
+  if ((typeof left === "bigint") !== (typeof right === "bigint")) {
+    return { success: false, error: "Cannot compare number and bigint together" };
+  }
+
+  let result: boolean;
+  if (operator === "<") {
+    result = left < right;
+  } else if (operator === ">") {
+    result = left > right;
+  } else if (operator === "<=") {
+    result = left <= right;
+  } else if (operator === ">=") {
+    result = left >= right;
+  } else if (operator === "==") {
+    result = left === right;
+  } else if (operator === "!=") {
+    result = left !== right;
+  } else {
+    return { success: false, error: "Unknown comparison operator: " + operator };
+  }
+
+  const data = result ? 1 : 0;
+  return { success: true, data };
 }
 
 export { isInRange, validateNumber, getWiderType };

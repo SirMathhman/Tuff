@@ -1,5 +1,5 @@
 import { Result, VariableScope } from "./types";
-import { performOperation } from "./operators";
+import { performOperation, performComparison } from "./operators";
 import { getInterpret, getInterpretStatementBlock } from "./lazy";
 
 // Helper to evaluate an operand, handling dereference operator (*var)
@@ -14,7 +14,7 @@ function evaluateOperand(operand: string, scope: VariableScope | null): Result<n
   }
   
   // Regular operand
-  return getInterpret()(operand, scope);
+  return getInterpret()(trimmed, scope);
 }
 
 export function parseAndApplyOperation(tokens: Array<{ type: "operand" | "operator"; value: string }>, leftData: number | bigint, operatorIndex: number, opName: string, scope: VariableScope | null = null): Result<number | bigint, string> {
@@ -85,6 +85,11 @@ export function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator
     }
 
     const operator = tokens[i].value;
+    if (operator !== "+" && operator !== "-") {
+      // Stop processing - this is not an addition or subtraction operator
+      return { success: true, data: result_data };
+    }
+
     if (i + 1 >= tokens.length || tokens[i + 1].type !== "operand") {
       return { success: false, error: "Invalid expression" };
     }
@@ -108,7 +113,50 @@ export function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator
     i = (rightMdResult as { success: true; data: { value: number | bigint; nextIndex: number } }).data.nextIndex;
   }
 
-  return { success: true, data: result_data };
+   return { success: true, data: result_data };
+}
+
+export function interpretComparisons(tokens: Array<{ type: "operand" | "operator"; value: string }>, startIndex: number, scope: VariableScope | null = null): Result<number, string> {
+  // Process: left_arithmetic comp_op right_arithmetic comp_op ...
+  // Get left side (evaluate arithmetic starting at startIndex)
+  let i = startIndex;
+  const leftArith = interpretAddSubtract(tokens, i, scope);
+  if (!leftArith.success) {
+    return leftArith as Result<number, string>;
+  }
+
+  let result = (leftArith as { success: true; data: number | bigint }).data;
+
+  // Move i to after the left arithmetic expression
+  // For a simple value with no operators, this would just increment by 1
+  // For arithmetic with operators, this would increment past them
+  i += 1; // Start looking for comparisons after the first operand
+
+  // Look for comparison operators
+  while (i < tokens.length && tokens[i].type === "operator" && ["<", ">", "<=", ">=", "==", "!="].includes(tokens[i].value)) {
+    const compOp = tokens[i].value;
+
+    // Get right side arithmetic (should be at i+1)
+    if (i + 1 >= tokens.length) {
+      return { success: false, error: "Invalid comparison expression" };
+    }
+
+    const rightArith = interpretAddSubtract(tokens, i + 1, scope);
+    if (!rightArith.success) {
+      return rightArith as Result<number, string>;
+    }
+
+    const rightVal = (rightArith as { success: true; data: number | bigint }).data;
+    const compResult = performComparison(result, rightVal, compOp);
+    if (!compResult.success) {
+      return compResult;
+    }
+
+    result = (compResult as { success: true; data: number }).data;
+    i += 2; // Move past the operator and operand
+  }
+
+  return { success: true, data: typeof result === "bigint" ? Number(result) : result };
 }
 
 export function evaluateGroupedExpressions(input: string, scope: VariableScope | null = null): string {

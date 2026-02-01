@@ -30,6 +30,7 @@ import {
 import {
   evaluateParenthesizedExpressions,
   interpretAddSubtract,
+  interpretComparisons,
 } from "./expressions";
 
 function evaluateRhs(rhs: string, scope: VariableScope): Result<{ value: number | bigint; type: string | null }, string> {
@@ -389,12 +390,18 @@ function handleGroupedExpressions(input: string, scope: VariableScope | null): R
 }
 
 function handleArithmeticOperations(input: string, scope: VariableScope | null): Result<number | bigint, string> | null {
-  if (!(input.includes(" + ") || input.includes(" - ") || input.includes(" * ") || input.includes(" / "))) {
+  const hasComparison = input.includes(" < ") || input.includes(" > ") || input.includes(" <= ") || input.includes(" >= ") || input.includes(" == ") || input.includes(" != ");
+  const hasArithmetic = input.includes(" + ") || input.includes(" - ") || input.includes(" * ") || input.includes(" / ");
+
+  if (!(hasArithmetic || hasComparison)) {
     return null;
   }
 
   const tokens = tokenizeExpression(input);
   if (tokens.length >= 3 && tokens[0].type === "operand") {
+    if (hasComparison) {
+      return interpretComparisons(tokens, 0, scope);
+    }
     return interpretAddSubtract(tokens, 0, scope);
   }
   return null;

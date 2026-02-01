@@ -177,6 +177,40 @@ function initializePointerVariable(varName: string, targetType: string, valueStr
    return declareVariable(scope, varName, targetType, referencedVarName as unknown as number | bigint, mutable);
 }
 
+function parseAndValidateArrayElements(elementsStr: string, elementTypeStr: string, scope: VariableScope): Result<{ elements: (number | bigint)[]; elementType: string }, string> {
+  const elements: (number | bigint)[] = [];
+  const elementStrings = elementsStr.split(",");
+  
+  for (const elemStr of elementStrings) {
+    const trimmedElem = elemStr.trim();
+    const elemResult = getInterpret()(trimmedElem, scope);
+    if (!elemResult.success) {
+      return elemResult as unknown as Result<{ elements: (number | bigint)[]; elementType: string }, string>;
+    }
+    elements.push((elemResult as { success: true; data: number | bigint }).data);
+  }
+
+  const typeResult = inferAndValidateType(elementTypeStr, null, 0, null);
+  if (!typeResult.success) {
+    return typeResult as unknown as Result<{ elements: (number | bigint)[]; elementType: string }, string>;
+  }
+  const inferredElementType = (typeResult as { success: true; data: string }).data;
+
+  const typeInfo = TYPE_RANGES[inferredElementType];
+  if (!typeInfo) {
+    return { success: false, error: "Unknown type: " + inferredElementType };
+  }
+
+  for (let i = 0; i < elements.length; i++) {
+    const validateResult = validateNumber(elements[i], typeInfo, inferredElementType);
+    if (!validateResult.success) {
+      return validateResult as unknown as Result<{ elements: (number | bigint)[]; elementType: string }, string>;
+    }
+  }
+
+  return { success: true, data: { elements, elementType: inferredElementType } };
+}
+
 function initializeArrayVariable(varName: string, targetType: string, valueStr: string, scope: VariableScope, mutable: boolean): Result<void, string> {
     // Parse array type: [ElementType; InitializedCount; TotalCapacity]
     const arrayTypeInfo = parseArrayType(targetType);
@@ -186,11 +220,7 @@ function initializeArrayVariable(varName: string, targetType: string, valueStr: 
 
     // Handle uninitialized arrays (no valueStr)
     if (!valueStr) {
-      // Create an empty array with the specified capacity
-      // The initialized count in the type annotation is just a declaration intent;
-      // the actual initialized count will be tracked as elements are assigned
       const emptyArray: (number | bigint)[] = new Array(arrayTypeInfo.total);
-      // Always use [Type; 0; Total] for uninitialized arrays to track actual initialized count
       const normalizedType = "[" + arrayTypeInfo.elementType + "; 0; " + arrayTypeInfo.total + "]";
       return declareVariable(scope, varName, normalizedType, emptyArray, mutable);
     }
@@ -204,38 +234,12 @@ function initializeArrayVariable(varName: string, targetType: string, valueStr: 
     const elementTypeStr = typeMatch[1];
     const elementsStr = typeMatch[2];
     
-    // Parse the array elements
-    const elements: (number | bigint)[] = [];
-    const elementStrings = elementsStr.split(",");
-    
-    for (const elemStr of elementStrings) {
-      const trimmedElem = elemStr.trim();
-      const elemResult = getInterpret()(trimmedElem, scope);
-      if (!elemResult.success) {
-        return elemResult as unknown as Result<void, string>;
-      }
-      elements.push((elemResult as { success: true; data: number | bigint }).data);
+    const elemResult = parseAndValidateArrayElements(elementsStr, elementTypeStr, scope);
+    if (!elemResult.success) {
+      return elemResult as unknown as Result<void, string>;
     }
 
-    // Validate array type matches
-    const typeResult = inferAndValidateType(elementTypeStr, null, 0, null);
-    if (!typeResult.success) {
-      return typeResult;
-    }
-    const inferredElementType = (typeResult as { success: true; data: string }).data;
-
-    // Check that all elements fit in the element type
-    const typeInfo = TYPE_RANGES[inferredElementType];
-    if (!typeInfo) {
-      return { success: false, error: "Unknown type: " + inferredElementType };
-    }
-
-    for (let i = 0; i < elements.length; i++) {
-      const validateResult = validateNumber(elements[i], typeInfo, inferredElementType);
-      if (!validateResult.success) {
-        return validateResult as unknown as Result<void, string>;
-      }
-    }
+    const { elements, elementType: inferredElementType } = (elemResult as { success: true; data: { elements: (number | bigint)[]; elementType: string } }).data;
 
     if (arrayTypeInfo.elementType !== inferredElementType) {
       return { success: false, error: "Array element type mismatch: expected " + arrayTypeInfo.elementType + ", got " + inferredElementType };
@@ -305,6 +309,63 @@ export function parseVariableDeclaration(stmt: string, scope: VariableScope): Re
 }
 
 export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Result<void, string> {
+  const sigResult = parseFunctionSignature(stmt);
+  if (!sigResult.success) {
+    return sigResult as unknown as Result<void, string>;
+  }
+
+  const { funcName, paramsStr, returnType, bodyPart } = (sigResult as { success: true; data: { funcName: string; paramsStr: string; returnType: string; bodyPart: string } }).data;
+
+  const bodyResult = extractFunctionBody(bodyPart);
+  if (!bodyResult.success) {
+    return bodyResult as unknown as Result<void, string>;
+  }
+
+  const body = (bodyResult as { success: true; data: string }).data;
+
+  if (paramsStr) {
+    const paramParts = splitParametersParts(paramsStr);
+    const paramResult = parseParametersFromParts(paramParts);
+    if (!paramResult.success) {
+      return paramResult as unknown as Result<void, string>;
+    }
+    const parameters = (paramResult as { success: true; data: FunctionParameter[] }).data;
+    return declareFunction(scope, funcName, parameters, returnType, body);
+  }
+
+  return declareFunction(scope, funcName, [], returnType, body);
+}
+
+function splitParametersParts(paramsStr: string): string[] {
+  const paramParts: string[] = [];
+  let current = "";
+  let bracketDepth = 0;
+  
+  for (let i = 0; i < paramsStr.length; i++) {
+    const char = paramsStr[i];
+    if (char === "[") {
+      bracketDepth++;
+      current += char;
+    } else if (char === "]") {
+      bracketDepth--;
+      current += char;
+    } else if (char === "," && bracketDepth === 0) {
+      if (current.trim()) {
+        paramParts.push(current.trim());
+      }
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) {
+    paramParts.push(current.trim());
+  }
+
+  return paramParts;
+}
+
+function parseFunctionSignature(stmt: string): Result<{ funcName: string; paramsStr: string; returnType: string; bodyPart: string }, string> {
   const trimmed = stmt.trim();
 
   if (!trimmed.startsWith("fn ")) {
@@ -316,7 +377,6 @@ export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Re
   let parenEnd = -1;
   let parenDepth = 0;
 
-  // Find matching closing paren
   for (let i = parenStart; i < rest.length; i++) {
     if (rest[i] === "(") parenDepth++;
     else if (rest[i] === ")") {
@@ -332,7 +392,6 @@ export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Re
     return { success: false, error: "Invalid function declaration format: missing parentheses" };
   }
 
-  // Find return type separator (the : that comes after the closing paren but before =>)
   const afterParen = rest.slice(parenEnd + 1);
   const colonInAfter = afterParen.indexOf(":");
   const arrowInAfter = afterParen.indexOf("=>");
@@ -348,6 +407,10 @@ export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Re
   const returnType = rest.slice(colonPos + 1, arrowPos).trim();
   const bodyPart = rest.slice(arrowPos + 2).trim();
 
+  return { success: true, data: { funcName, paramsStr, returnType, bodyPart } };
+}
+
+function extractFunctionBody(bodyPart: string): Result<string, string> {
   const braceStart = bodyPart.indexOf("{");
   if (braceStart === -1) {
     return { success: false, error: "Expected '{' in function body" };
@@ -360,66 +423,82 @@ export function parseFunctionDeclaration(stmt: string, scope: VariableScope): Re
     return { success: false, error: "Invalid function body" };
   }
 
-  const body = bodyPart.slice(bodyStart, bodyEnd).trim();
-
-  const parameters: FunctionParameter[] = [];
-  if (paramsStr) {
-    // Smart parameter splitting that respects brackets
-    const paramParts: string[] = [];
-    let current = "";
-    let bracketDepth = 0;
-    
-    for (let i = 0; i < paramsStr.length; i++) {
-      const char = paramsStr[i];
-      if (char === "[") {
-        bracketDepth++;
-        current += char;
-      } else if (char === "]") {
-        bracketDepth--;
-        current += char;
-      } else if (char === "," && bracketDepth === 0) {
-        if (current.trim()) {
-          paramParts.push(current.trim());
-        }
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    if (current.trim()) {
-      paramParts.push(current.trim());
-    }
-    
-    for (const paramPart of paramParts) {
-      const colonIdx = paramPart.indexOf(":");
-      if (colonIdx === -1) {
-        return { success: false, error: "Expected ':' in parameter" };
-      }
-      const paramName = paramPart.slice(0, colonIdx).trim();
-      const paramType = paramPart.slice(colonIdx + 1).trim();
-      parameters.push({ name: paramName, type: paramType });
-    }
-  }
-
-  return declareFunction(scope, funcName, parameters, returnType, body);
+  return { success: true, data: bodyPart.slice(bodyStart, bodyEnd).trim() };
 }
 
-export function parseFunctionCall(input: string, scope: VariableScope): Result<{ name: string; args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[]; endIndex: number }, string> {
-  const parenStart = input.indexOf("(");
-  let parenEnd = -1;
-  let depth = 0;
+function parseParametersFromParts(paramParts: string[]): Result<FunctionParameter[], string> {
+  const parameters: FunctionParameter[] = [];
 
-  for (let i = parenStart; i < input.length; i++) {
+  for (const paramPart of paramParts) {
+    const colonIdx = paramPart.indexOf(":");
+    if (colonIdx === -1) {
+      return { success: false, error: "Expected ':' in parameter" };
+    }
+    const paramName = paramPart.slice(0, colonIdx).trim();
+    const paramType = paramPart.slice(colonIdx + 1).trim();
+    parameters.push({ name: paramName, type: paramType });
+  }
+
+  return { success: true, data: parameters };
+}
+
+function findClosingParenthesis(input: string, startIndex: number): number {
+  let depth = 0;
+  for (let i = startIndex; i < input.length; i++) {
     if (input[i] === "(") {
       depth++;
     } else if (input[i] === ")") {
       depth--;
       if (depth === 0) {
-        parenEnd = i;
-        break;
+        return i;
       }
     }
   }
+  return -1;
+}
+
+function parseFunctionArguments(argsStr: string, scope: VariableScope): Result<{ args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[] }, string> {
+  const args: (number | bigint)[] = [];
+  const argTypes: (string | null)[] = [];
+  const argNames: (string | null)[] = [];
+
+  if (!argsStr) {
+    return { success: true, data: { args, argTypes, argNames } };
+  }
+
+  const argParts = argsStr.split(",");
+  for (const argPart of argParts) {
+    const argTrimmed = argPart.trim();
+    
+    // Check if this is a simple array variable name
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(argTrimmed)) {
+      const varLookup = lookupVariable(scope, argTrimmed);
+      if (varLookup.success) {
+        const varData = (varLookup as { success: true; data: Variable }).data;
+        if (isArrayType(varData.type)) {
+          argTypes.push(varData.type);
+          args.push(0);
+          argNames.push(argTrimmed);
+          continue;
+        }
+      }
+    }
+    
+    const argResult = getInterpret()(argTrimmed, scope);
+    if (!argResult.success) {
+      return argResult as unknown as Result<{ args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[] }, string>;
+    }
+    args.push((argResult as { success: true; data: number | bigint }).data);
+    argTypes.push(getTypeForValue(argTrimmed));
+    argNames.push(null);
+  }
+
+  return { success: true, data: { args, argTypes, argNames } };
+}
+
+export function parseFunctionCall(input: string, scope: VariableScope): Result<{ name: string; args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[]; endIndex: number }, string> {
+  const parenStart = input.indexOf("(");
+  const parenEnd = findClosingParenthesis(input, parenStart);
 
   if (parenStart === -1 || parenEnd === -1 || parenStart >= parenEnd) {
     return { success: false, error: "Invalid function call" };
@@ -432,39 +511,12 @@ export function parseFunctionCall(input: string, scope: VariableScope): Result<{
     return { success: false, error: "Invalid function name" };
   }
 
-  const args: (number | bigint)[] = [];
-  const argTypes: (string | null)[] = [];
-  const argNames: (string | null)[] = [];
-
-  if (argsStr) {
-    const argParts = argsStr.split(",");
-    for (const argPart of argParts) {
-      const argTrimmed = argPart.trim();
-      
-      // Check if this is a simple array variable name
-      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(argTrimmed)) {
-        const varLookup = lookupVariable(scope, argTrimmed);
-        if (varLookup.success) {
-          const varData = (varLookup as { success: true; data: Variable }).data;
-          if (isArrayType(varData.type)) {
-            // Pass the array type as the argument type, use 0 as dummy value, track the variable name
-            argTypes.push(varData.type);
-            args.push(0);
-            argNames.push(argTrimmed);
-            continue;
-          }
-        }
-      }
-      
-      const argResult = getInterpret()(argTrimmed, scope);
-      if (!argResult.success) {
-        return argResult as unknown as Result<{ name: string; args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[]; endIndex: number }, string>;
-      }
-      args.push((argResult as { success: true; data: number | bigint }).data);
-      argTypes.push(getTypeForValue(argTrimmed));
-      argNames.push(null);
-    }
+  const argResult = parseFunctionArguments(argsStr, scope);
+  if (!argResult.success) {
+    return argResult as unknown as Result<{ name: string; args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[]; endIndex: number }, string>;
   }
+
+  const { args, argTypes, argNames } = (argResult as { success: true; data: { args: (number | bigint)[]; argTypes: (string | null)[]; argNames: (string | null)[] } }).data;
 
   return { success: true, data: { name: funcName, args, argTypes, argNames, endIndex: parenEnd } };
 }
@@ -475,13 +527,37 @@ export function tokenizeExpression(input: string): Array<{ type: "operand" | "op
   let i = 0;
 
   while (i < input.length) {
-    if (i < input.length - 1 && input[i] === " " && (input[i + 1] === "+" || input[i + 1] === "-" || input[i + 1] === "*" || input[i + 1] === "/") && input[i + 2] === " ") {
+    // Check for two-character operators first (==, !=, <=, >=)
+    const twoCharOps = ["==", "!=", "<=", ">="];
+    const singleCharOps = ["+", "-", "*", "/", "<", ">"];
+    let foundOp: string | null = null;
+    let opLength = 0;
+
+    // Check for two-character operators
+    if (i < input.length - 2 && input[i] === " " && input[i + 3] === " ") {
+      const potentialOp = input.substr(i + 1, 2);
+      if (twoCharOps.includes(potentialOp)) {
+        foundOp = potentialOp;
+        opLength = 4; // space + 2 chars + space
+      }
+    }
+
+    // Check for single-character operators if no two-char op found
+    if (!foundOp && i < input.length - 1 && input[i] === " " && input[i + 2] === " ") {
+      const potentialOp = input[i + 1];
+      if (singleCharOps.includes(potentialOp)) {
+        foundOp = potentialOp;
+        opLength = 3; // space + 1 char + space
+      }
+    }
+
+    if (foundOp) {
       if (current.trim()) {
         tokens.push({ type: "operand", value: current.trim() });
         current = "";
       }
-      tokens.push({ type: "operator", value: input[i + 1] });
-      i += 3;
+      tokens.push({ type: "operator", value: foundOp });
+      i += opLength;
     } else {
       current += input[i];
       i += 1;
