@@ -12,12 +12,22 @@ export function execute(source: string): number {
   return fn();
 }
 
+/**
+ * Test helper to assert that executing source code returns an expected value.
+ *
+ * @param source - Tuff source code as a string
+ * @param expected - The expected return value
+ */
+function expectExecute(source: string, expected: number): void {
+  expect(execute(source)).toBe(expected);
+}
+
 describe('execute', () => {
   it('should execute "100" and return 100', () => {
-    expect(execute('100')).toBe(100);
+    expectExecute('100', 100);
   });
 
   it('should execute "100U8" and return 100', () => {
-    expect(execute('100U8')).toBe(100);
+    expectExecute('100U8', 100);
   });
 });
