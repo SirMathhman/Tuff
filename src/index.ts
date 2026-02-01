@@ -1,4 +1,4 @@
-import { add } from './utils';
+import { add } from './utils.js';
 
 console.log('Hello from TypeScript!');
 console.log(`2 + 3 = ${add(2, 3)}`);

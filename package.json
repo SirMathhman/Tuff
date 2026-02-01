@@ -9,7 +9,7 @@
     "dev": "bun run src/index.ts",
     "lint": "eslint 'src/**/*.{ts,js}'",
     "format": "prettier --write 'src/**/*.{ts,js,json,md}'",
-    "test": "jest"
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
