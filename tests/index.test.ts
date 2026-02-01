@@ -130,4 +130,8 @@ describe('execute', () => {
   it('should throw an error when reassigning an immutable variable: "let x = 0; x = 100; x"', () => {
     invalidate('let x = 0; x = 100; x');
   });
+
+  it('should throw an error when reassigning with incompatible type: "let mut x = 0U8; x = 100U16; x"', () => {
+    invalidate('let mut x = 0U8; x = 100U16; x');
+  });
 });

@@ -296,56 +296,98 @@ function processMutableVariables(source: string): string {
   return wrapped;
 }
 
-// Validate that reassignments only occur on mutable variables
-function validateImmutability(source: string): void {
-  // Extract all variable declarations and whether they're mutable
+// Extract variable declarations with their mutability and types
+function extractVariableDeclarations(source: string): {
+  mutableVars: Set<string>;
+  declaredVars: Set<string>;
+  varTypes: Record<string, string>;
+} {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
   const declPattern = new RegExp(
-    'let\\s+(mut\\s+)?(\\w+)(?:\\s*:\\s*(?:' + validTypes + '))?\\s*=',
+    'let\\s+(mut\\s+)?(\\w+)(?:\\s*:\\s*(' +
+      validTypes +
+      '))?\\s*=\\s*([^;]+);',
     'g',
   );
 
   const mutableVars = new Set<string>();
   const declaredVars = new Set<string>();
+  const varTypes: Record<string, string> = {};
 
   Array.from(source.matchAll(declPattern)).forEach((match) => {
     const isMutable = match[1] === 'mut ';
     const varName = match[2];
+    const declaredType = match[3] || '';
+    const initializer = match[4].trim();
+
     declaredVars.add(varName);
     if (isMutable) {
       mutableVars.add(varName);
     }
+
+    if (declaredType) {
+      varTypes[varName] = declaredType;
+    } else {
+      const inferredType = getVariableType(initializer);
+      if (inferredType) {
+        varTypes[varName] = inferredType;
+      }
+    }
   });
 
-  // Find reassignments - look for variable assignments that aren't type annotations
-  // Type annotations look like: varname : Type = value
-  // Reassignments look like: varname = value (without the colon and type)
+  return { mutableVars, declaredVars, varTypes };
+}
+
+// Validate reassignments against mutability and type constraints
+function validateReassignments(
+  source: string,
+  mutableVars: Set<string>,
+  declaredVars: Set<string>,
+  varTypes: Record<string, string>,
+): void {
   const typeAnnotPattern = /:\s*(?:U8|U16|U32|U64|I8|I16|I32|I64)\s*/;
-  const reassignPattern = /\b([a-zA-Z_]\w*)\s*=\s*[^;=]/g;
+  const reassignPattern = /\b([a-zA-Z_]\w*)\s*=\s*([^;=}]+);/g;
 
   Array.from(source.matchAll(reassignPattern)).forEach((match) => {
     const varName = match[1];
+    const reassignValue = match[2].trim();
     const matchStart = match.index ?? 0;
     const beforeMatch = source.substring(
       Math.max(0, matchStart - 50),
       matchStart,
     );
 
-    // Skip if this is a type annotation (preceded by : Type)
-    if (typeAnnotPattern.test(beforeMatch)) {
+    if (typeAnnotPattern.test(beforeMatch) || /let\s+(?:mut\s+)?\w*\s*$/.test(beforeMatch)) {
       return;
     }
 
-    // Skip if this is part of a let declaration
-    if (/let\s+(?:mut\s+)?\w*\s*$/.test(beforeMatch)) {
-      return;
-    }
-
-    // Check if this is a declared variable being reassigned
     if (declaredVars.has(varName) && !mutableVars.has(varName)) {
       throw new Error("Cannot reassign immutable variable '" + varName + "'");
     }
+
+    if (mutableVars.has(varName) && varTypes[varName]) {
+      const assignedType = getVariableType(reassignValue);
+      const declaredType = varTypes[varName];
+
+      if (assignedType && !isTypeCompatible(assignedType, declaredType)) {
+        throw new Error(
+          'Cannot assign ' +
+            assignedType +
+            ' to ' +
+            declaredType +
+            " variable '" +
+            varName +
+            "'",
+        );
+      }
+    }
   });
+}
+
+// Validate that reassignments only occur on mutable variables and check type compatibility
+function validateImmutability(source: string): void {
+  const { mutableVars, declaredVars, varTypes } = extractVariableDeclarations(source);
+  validateReassignments(source, mutableVars, declaredVars, varTypes);
 }
 
 // Validate the compiled expression result against type constraints
