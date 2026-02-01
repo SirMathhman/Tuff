@@ -148,6 +148,32 @@ function handleRegularAssignment(lhs: string, rhs: string, scope: VariableScope)
 }
 
 function processAssignment(stmt: string, scope: VariableScope): Result<number | bigint, string> | null {
+  // Check for compound assignment operators first (+=, -=, *=, /=)
+  const compoundOps = ["+=", "-=", "*=", "/="];
+  let compoundOp: string | null = null;
+  let compoundIndex = -1;
+
+  for (const op of compoundOps) {
+    const idx = stmt.indexOf(op);
+    if (idx !== -1) {
+      compoundOp = op;
+      compoundIndex = idx;
+      break;
+    }
+  }
+
+  if (compoundOp !== null && compoundIndex !== -1) {
+    // Handle compound assignment: x += 1 becomes x = x + 1
+    const lhs = stmt.slice(0, compoundIndex).trim();
+    const rhs = stmt.slice(compoundIndex + 2).trim();
+    const operator = compoundOp[0]; // Get the operator part (+ or - or * or /)
+    
+    // Transform compound assignment into regular assignment
+    const transformedStmt = lhs + " = " + lhs + " " + operator + " " + rhs;
+    return processAssignment(transformedStmt, scope);
+  }
+
+  // Check for regular assignment
   const assignIndex = stmt.indexOf("=");
   if (assignIndex === -1) {
     return null;

@@ -450,6 +450,40 @@ describe("interpret - mutable variables", () => {
   });
 });
 
+describe("interpret - compound assignment operators", () => {
+  it("should support += operator", () => {
+    expectValid("let mut x = 0; x += 1; x", 1);
+  });
+
+  it("should support += with larger values", () => {
+    expectValid("let mut x = 10; x += 5; x", 15);
+  });
+
+  it("should support -= operator", () => {
+    expectValid("let mut x = 10; x -= 3; x", 7);
+  });
+
+  it("should support *= operator", () => {
+    expectValid("let mut x = 5; x *= 2; x", 10);
+  });
+
+  it("should support /= operator", () => {
+    expectValid("let mut x = 20; x /= 4; x", 5);
+  });
+
+  it("should support chained compound assignments", () => {
+    expectValid("let mut x = 1; x += 2; x += 3; x", 6);
+  });
+
+  it("should support compound assignment with expressions", () => {
+    expectValid("let mut x = 5; x += 2 + 3; x", 10);
+  });
+
+  it("should return error for immutable variable compound assignment", () => {
+    expectInvalid("let x = 5; x += 1; x");
+  });
+});
+
 describe("interpret - pointers", () => {
   it("should handle simple pointer reference and dereference", () => {
     expectValid("let x : I32 = 100; let y : *I32 = &x; *y", 100);
