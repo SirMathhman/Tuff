@@ -70,4 +70,8 @@ describe('execute', () => {
   it('should throw an error when executing "1U8 + 65535U16"', () => {
     invalidate('1U8 + 65535U16');
   });
+
+  it('should execute "1 + 2 + 3" and return 6', () => {
+    validate('1 + 2 + 3', 6);
+  });
 });
