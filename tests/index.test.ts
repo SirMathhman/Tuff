@@ -58,4 +58,8 @@ describe('execute', () => {
   it('should throw an error when executing "1U8 + 255"', () => {
     invalidate('1U8 + 255');
   });
+
+  it('should execute "1U8 + 2" and return 3', () => {
+    validate('1U8 + 2', 3);
+  });
 });
