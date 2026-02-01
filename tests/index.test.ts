@@ -102,4 +102,12 @@ describe('execute', () => {
   it('should execute "let z : U8 = (2 + { let x : U8 = 3; x }) * 4; z" and return 20', () => {
     validate('let z : U8 = (2 + { let x : U8 = 3; x }) * 4; z', 20);
   });
+
+  it('should throw an error when initializing with an overflowing literal: "let x : U8 = 256; x"', () => {
+    invalidate('let x : U8 = 256; x');
+  });
+
+  it('should throw an error when redeclaring a variable: "let x : U8 = 0; let x : U8 = 0; x"', () => {
+    invalidate('let x : U8 = 0; let x : U8 = 0; x');
+  });
 });

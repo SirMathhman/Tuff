@@ -57,12 +57,25 @@ function extractAndValidateAnnotations(source: string): Set<string> {
 
   const numPattern = new RegExp('(-?)([0-9]+)(' + validTypes + ')', 'g');
   while ((match = numPattern.exec(source)) !== null) {
-    validateAndAddType(match[3], match[1] === '-', parseInt(match[2], 10), allTypes);
+    validateAndAddType(
+      match[3],
+      match[1] === '-',
+      parseInt(match[2], 10),
+      allTypes,
+    );
   }
 
-  const varPattern = new RegExp(':\\s*(' + validTypes + ')\\s*=\\s*(-?)([0-9]+)', 'g');
+  const varPattern = new RegExp(
+    ':\\s*(' + validTypes + ')\\s*=\\s*(-?)([0-9]+)',
+    'g',
+  );
   while ((match = varPattern.exec(source)) !== null) {
-    validateAndAddType(match[1], match[2] === '-', parseInt(match[3], 10), allTypes);
+    validateAndAddType(
+      match[1],
+      match[2] === '-',
+      parseInt(match[3], 10),
+      allTypes,
+    );
   }
 
   return allTypes;
@@ -103,7 +116,9 @@ function getWidestType(types: Set<string>): string {
 function processVariableDeclarations(source: string): string {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
   const bracedPattern = new RegExp(
-    '\\{\\s*let\\s+(\\w+)\\s*:\\s*(?:' + validTypes + ')\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
+    '\\{\\s*let\\s+(\\w+)\\s*:\\s*(?:' +
+      validTypes +
+      ')\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
     'g',
   );
   const unbracedPattern = new RegExp(
@@ -115,7 +130,9 @@ function processVariableDeclarations(source: string): string {
   let last;
   do {
     last = processed;
-    processed = processed.replace(bracedPattern, '($2)').replace(unbracedPattern, '($2)');
+    processed = processed
+      .replace(bracedPattern, '($2)')
+      .replace(unbracedPattern, '($2)');
   } while (processed !== last);
 
   return processed;
@@ -133,6 +150,34 @@ function removeTypeAnnotations(source: string): string {
 // Remove curly braces from the source expression
 function removeCurlyBraces(source: string): string {
   return source.replace(/[{}]/g, '');
+}
+
+// Ensure no variable is redeclared in the same scope
+function validateNoDuplicates(content: string): void {
+  const letPattern = /let\s+([a-zA-Z_]\w*)/g;
+  const seen = new Set<string>();
+  let match;
+  while ((match = letPattern.exec(content)) !== null) {
+    const id = match[1];
+    if (seen.has(id)) {
+      throw new Error("Redeclaration of variable '" + id + "'");
+    }
+    seen.add(id);
+  }
+}
+
+// Check for variable redeclarations across all scopes
+function checkRedeclarations(source: string): void {
+  let current = source;
+  while (current.includes('{')) {
+    const innerBlockMatch = current.match(/\{([^{}]*)\}/);
+    if (!innerBlockMatch) {
+      break;
+    }
+    validateNoDuplicates(innerBlockMatch[1]);
+    current = current.replace(/\{[^{}]*\}/, '');
+  }
+  validateNoDuplicates(current);
 }
 
 // Validate the compiled expression result against type constraints
@@ -170,6 +215,7 @@ function validateExpressionResult(
  * @returns JavaScript output as a string (stubbed)
  */
 export function compileTuffToJS(source: string): string {
+  checkRedeclarations(source);
   const allTypes = extractAndValidateAnnotations(source);
   let compiled = processVariableDeclarations(source);
   compiled = removeTypeAnnotations(compiled);
