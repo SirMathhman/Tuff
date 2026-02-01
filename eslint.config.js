@@ -19,7 +19,7 @@ export default [
     rules: {
       ...js.configs.recommended.rules,
       ...tsPlugin.configs.recommended.rules,
-      'no-unused-vars': 'off',
+      'no-unused-vars': 'error',
       '@typescript-eslint/no-unused-vars': 'warn',
       'no-restricted-syntax': [
         'error',

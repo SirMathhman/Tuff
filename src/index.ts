@@ -51,12 +51,24 @@ function extractAndValidateAnnotations(source: string): Set<string> {
 
   const typePattern = new RegExp('(' + validTypes + ')', 'g');
   let match;
-  while ((match = typePattern.exec(source)) !== null) {
+  let iterations = 0;
+  const maxIterations = 10000;
+
+  while (
+    (match = typePattern.exec(source)) !== null &&
+    iterations < maxIterations
+  ) {
+    iterations = iterations + 1;
     allTypes.add(match[1]);
   }
 
   const numPattern = new RegExp('(-?)([0-9]+)(' + validTypes + ')', 'g');
-  while ((match = numPattern.exec(source)) !== null) {
+  iterations = 0;
+  while (
+    (match = numPattern.exec(source)) !== null &&
+    iterations < maxIterations
+  ) {
+    iterations = iterations + 1;
     validateAndAddType(
       match[3],
       match[1] === '-',
@@ -69,7 +81,12 @@ function extractAndValidateAnnotations(source: string): Set<string> {
     ':\\s*(' + validTypes + ')\\s*=\\s*(-?)([0-9]+)',
     'g',
   );
-  while ((match = varPattern.exec(source)) !== null) {
+  iterations = 0;
+  while (
+    (match = varPattern.exec(source)) !== null &&
+    iterations < maxIterations
+  ) {
+    iterations = iterations + 1;
     validateAndAddType(
       match[1],
       match[2] === '-',
@@ -101,7 +118,13 @@ function getWidestType(types: Set<string>): string {
   let widest = Array.from(types)[0];
   let widestOrder = typeOrder[widest] || 0;
 
+  let iterations = 0;
+  const maxIterations = 10000;
   for (const type of types) {
+    iterations = iterations + 1;
+    if (iterations > maxIterations) {
+      break;
+    }
     const order = typeOrder[type] || 0;
     if (order > widestOrder) {
       widest = type;
@@ -112,28 +135,113 @@ function getWidestType(types: Set<string>): string {
   return widest;
 }
 
+// Parse a variable declaration and extract variable name, type, and initializer
+function findInitializerEnd(source: string, startIdx: number): number {
+  let braceDepth = 0;
+  let parenDepth = 0;
+
+  let iterations = 0;
+  const maxIterations = 10000;
+  for (
+    let i = startIdx;
+    i < source.length && iterations < maxIterations;
+    i = i + 1
+  ) {
+    iterations = iterations + 1;
+    const ch = source[i];
+    if (ch === '{') {
+      braceDepth = braceDepth + 1;
+    } else if (ch === '}') {
+      braceDepth = braceDepth - 1;
+    } else if (ch === '(') {
+      parenDepth = parenDepth + 1;
+    } else if (ch === ')') {
+      parenDepth = parenDepth - 1;
+    } else if (ch === ';' && braceDepth === 0 && parenDepth === 0) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+// Resolve variable references by tracking declarations and substituting values
+function resolveVariableReferences(source: string): string {
+  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+
+  let processed = source;
+  let changed = true;
+  let iterations = 0;
+  const maxIterations = 1000;
+
+  while (changed && iterations < maxIterations) {
+    iterations = iterations + 1;
+    changed = false;
+
+    const declMatch = new RegExp(
+      'let\\s+(\\w+)(?:\\s*:\\s*(?:' + validTypes + '))?\\s*=\\s*',
+    ).exec(processed);
+
+    if (!declMatch) {
+      break;
+    }
+
+    const varName = declMatch[1];
+    const startIdx = declMatch.index;
+    const afterEquals = startIdx + declMatch[0].length;
+    const initEnd = findInitializerEnd(processed, afterEquals);
+
+    if (initEnd === -1) {
+      break;
+    }
+
+    const varInit = processed.substring(afterEquals, initEnd).trim();
+    const declEnd = initEnd + 1;
+
+    const searchArea = processed.substring(declEnd);
+    const varRefPattern = new RegExp('\\b' + varName + '\\b');
+    const varRefMatch = varRefPattern.exec(searchArea);
+
+    if (varRefMatch) {
+      processed =
+        processed.substring(0, startIdx) +
+        searchArea.replace(varRefPattern, '(' + varInit + ')');
+      changed = true;
+    } else {
+      processed =
+        processed.substring(0, startIdx) + processed.substring(declEnd);
+      changed = true;
+    }
+  }
+
+  return processed;
+}
+
 // Process variable declarations like let x : U8 = 3; x or { let x : U8 = 3; x }
 function processVariableDeclarations(source: string): string {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  let processed = source;
+  let last;
+  let iterations = 0;
+  const maxIterations = 1000;
+
+  do {
+    iterations = iterations + 1;
+    if (iterations > maxIterations) {
+      break;
+    }
+
+    last = processed;
+    processed = resolveVariableReferences(processed);
+  } while (processed !== last);
+
   const bracedPattern = new RegExp(
     '\\{\\s*let\\s+(\\w+)(?:\\s*:\\s*(?:' +
       validTypes +
       '))?\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
     'g',
   );
-  const unbracedPattern = new RegExp(
-    'let\\s+(\\w+)(?:\\s*:\\s*(?:' + validTypes + '))?\\s*=\\s*([^;]+);\\s*\\1',
-    'g',
-  );
-
-  let processed = source;
-  let last;
-  do {
-    last = processed;
-    processed = processed
-      .replace(bracedPattern, '($2)')
-      .replace(unbracedPattern, '($2)');
-  } while (processed !== last);
+  processed = processed.replace(bracedPattern, '($2)');
 
   return processed;
 }
@@ -157,7 +265,14 @@ function validateNoDuplicates(content: string): void {
   const letPattern = /let\s+([a-zA-Z_]\w*)/g;
   const seen = new Set<string>();
   let match;
-  while ((match = letPattern.exec(content)) !== null) {
+  let iterations = 0;
+  const maxIterations = 10000;
+
+  while (
+    (match = letPattern.exec(content)) !== null &&
+    iterations < maxIterations
+  ) {
+    iterations = iterations + 1;
     const id = match[1];
     if (seen.has(id)) {
       throw new Error("Redeclaration of variable '" + id + "'");
@@ -169,7 +284,11 @@ function validateNoDuplicates(content: string): void {
 // Check for variable redeclarations across all scopes
 function checkRedeclarations(source: string): void {
   let current = source;
-  while (current.includes('{')) {
+  let iterations = 0;
+  const maxIterations = 1000;
+
+  while (current.includes('{') && iterations < maxIterations) {
+    iterations = iterations + 1;
     const innerBlockMatch = current.match(/\{([^{}]*)\}/);
     if (!innerBlockMatch) {
       break;

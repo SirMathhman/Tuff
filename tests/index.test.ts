@@ -114,4 +114,8 @@ describe('execute', () => {
   it('should throw an error when redeclaring a variable: "let x : U8 = 0; let x : U8 = 0; x"', () => {
     invalidate('let x : U8 = 0; let x : U8 = 0; x');
   });
+
+  it('should execute "let x = 10U8; let y : U16 = x; y" and return 10', () => {
+    validate('let x = 10U8; let y : U16 = x; y', 10);
+  });
 });
