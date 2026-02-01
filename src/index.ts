@@ -51,6 +51,26 @@ function extractAndValidateAnnotations(source: string): Set<string> {
   return allTypes;
 }
 
+// Check for mixed typed and untyped numeric literals in an expression
+function checkForMixedTypes(source: string, hasAnnotations: boolean): void {
+  if (!hasAnnotations) {
+    return;
+  }
+
+  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  // Remove all typed numbers
+  const withoutTyped = source
+    .replace(new RegExp('(-?)([0-9]+)(' + validTypes + ')', 'g'), '')
+    .trim();
+
+  // Check if there are still digits remaining
+  if (/[0-9]/.test(withoutTyped)) {
+    throw new Error(
+      'Cannot mix typed and untyped numeric literals in the same expression',
+    );
+  }
+}
+
 // Remove all type annotations from the source expression
 function removeTypeAnnotations(source: string): string {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
@@ -95,6 +115,7 @@ function validateExpressionResult(
  */
 export function compileTuffToJS(source: string): string {
   const allTypes = extractAndValidateAnnotations(source);
+  checkForMixedTypes(source, allTypes.size > 0);
   const compiled = removeTypeAnnotations(source);
   validateExpressionResult(compiled, allTypes);
   return 'return ' + compiled;
