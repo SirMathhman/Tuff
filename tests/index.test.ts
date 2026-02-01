@@ -154,4 +154,8 @@ describe("execute", () => {
   it('should throw an error when using OR operator on numeric types: "1 || 2"', () => {
     invalidate("1 || 2");
   });
+
+  it('should execute "let x = if (true) 3 else 5; x" and return 3', () => {
+    validate("let x = if (true) 3 else 5; x", 3);
+  });
 });

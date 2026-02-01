@@ -255,6 +255,33 @@ function replaceBooleans(source: string): string {
   return source.replace(/\btrue\b/g, "1").replace(/\bfalse\b/g, "0");
 }
 
+// Compile if-else expressions to JavaScript ternary operators
+function compileIfElseExpressions(source: string): string {
+  // Pattern: if (condition) thenValue else elseValue
+  // We need to handle nested cases and complex conditions/values
+  
+  // Find if-else expressions: if (cond) expr else expr
+  const ifElsePattern = /if\s*\(([^)]+)\)\s*(\S+(?:\s+\S+)*?)\s+else\s+(\S+(?:\s+\S+)*?)(?=\s*[;}]|$)/g;
+  
+  // Repeatedly apply the pattern to handle nested if-else using recursion
+  const applyPattern = (s: string): string => {
+    const newS = s.replace(
+      ifElsePattern,
+      (match, condition, thenPart, elsePart) => {
+        const cond = condition.trim();
+        const thenVal = thenPart.trim();
+        const elseVal = elsePart.trim();
+        
+        return "((" + cond + ") ? " + thenVal + " : " + elseVal + ")";
+      },
+    );
+    
+    return newS === s ? s : applyPattern(newS);
+  };
+  
+  return applyPattern(source);
+}
+
 // Remove all type annotations from the source expression
 function removeTypeAnnotations(source: string): string {
   const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
@@ -430,8 +457,9 @@ function validateImmutability(source: string): void {
 // Validate that logical operators are only used with boolean types
 function validateLogicalOperators(source: string): void {
   // Check for || and && operators with numeric literals or typed numbers
-  const logicalPattern = /(\d+(?:U8|U16|U32|U64|I8|I16|I32|I64)?)\s*(\|\||&&)\s*(\d+(?:U8|U16|U32|U64|I8|I16|I32|I64)?)/g;
-  
+  const logicalPattern =
+    /(\d+(?:U8|U16|U32|U64|I8|I16|I32|I64)?)\s*(\|\||&&)\s*(\d+(?:U8|U16|U32|U64|I8|I16|I32|I64)?)/g;
+
   if (logicalPattern.test(source)) {
     throw new Error(
       "Logical operators || and && can only be used with boolean values, not numbers",
@@ -489,6 +517,7 @@ export function compileTuffToJS(source: string): string {
   if (!hasMutation) {
     compiled = processVariableDeclarations(compiled);
   }
+  compiled = compileIfElseExpressions(compiled);
   compiled = removeTypeAnnotations(compiled);
   compiled = replaceBooleans(compiled);
   compiled = removeCurlyBraces(compiled);
