@@ -94,4 +94,8 @@ describe('execute', () => {
   it('should execute "(2 + { 3 }) * 4" and return 20', () => {
     validate('(2 + { 3 }) * 4', 20);
   });
+
+  it('should execute "(2 + { let x : U8 = 3; x }) * 4" and return 20', () => {
+    validate('(2 + { let x : U8 = 3; x }) * 4', 20);
+  });
 });

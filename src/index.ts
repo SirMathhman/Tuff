@@ -26,6 +26,24 @@ function validateLiteral(value: number, suffix: string): void {
   }
 }
 
+// Validate and add a type annotation to the set
+function validateAndAddType(
+  suffix: string,
+  isNegative: boolean,
+  value: number,
+  allTypes: Set<string>,
+): void {
+  allTypes.add(suffix);
+
+  if (isNegative && suffix.startsWith('U')) {
+    throw new Error(
+      'Type annotations are not allowed on negative numeric literals',
+    );
+  }
+
+  validateLiteral(isNegative ? -value : value, suffix);
+}
+
 // Extract and validate all annotated numbers in the source expression
 function extractAndValidateAnnotations(source: string): Set<string> {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
@@ -37,15 +55,18 @@ function extractAndValidateAnnotations(source: string): Set<string> {
     const isNegative = match[1] === '-';
     const value = parseInt(match[2], 10);
     const suffix = match[3];
-    allTypes.add(suffix);
+    validateAndAddType(suffix, isNegative, value, allTypes);
+  }
 
-    if (isNegative && suffix.startsWith('U')) {
-      throw new Error(
-        'Type annotations are not allowed on negative numeric literals',
-      );
-    }
-
-    validateLiteral(isNegative ? -value : value, suffix);
+  const varPattern = new RegExp(
+    ':\\s*(' + validTypes + ')\\s*=\\s*(-?)([0-9]+)',
+    'g',
+  );
+  while ((match = varPattern.exec(source)) !== null) {
+    const suffix = match[1];
+    const isNegative = match[2] === '-';
+    const value = parseInt(match[3], 10);
+    validateAndAddType(suffix, isNegative, value, allTypes);
   }
 
   return allTypes;
@@ -82,12 +103,25 @@ function getWidestType(types: Set<string>): string {
   return widest;
 }
 
+// Process block expressions like { let x : U8 = 3; x } to (3)
+function processBlockExpressions(source: string): string {
+  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  const blockPattern = new RegExp(
+    '\\{\\s*let\\s+(\\w+)\\s*:\\s*(' +
+      validTypes +
+      ')\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
+    'g',
+  );
+  return source.replace(blockPattern, '($3)');
+}
+
 // Remove all type annotations from the source expression
 function removeTypeAnnotations(source: string): string {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
   return source
     .replace(new RegExp('([0-9]+)(' + validTypes + ')', 'g'), '$1')
-    .replace(new RegExp('-([0-9]+)(' + validTypes + ')', 'g'), '-$1');
+    .replace(new RegExp('-([0-9]+)(' + validTypes + ')', 'g'), '-$1')
+    .replace(new RegExp(':\\s*(' + validTypes + ')', 'g'), '');
 }
 
 // Remove curly braces from the source expression
@@ -131,7 +165,8 @@ function validateExpressionResult(
  */
 export function compileTuffToJS(source: string): string {
   const allTypes = extractAndValidateAnnotations(source);
-  let compiled = removeTypeAnnotations(source);
+  let compiled = processBlockExpressions(source);
+  compiled = removeTypeAnnotations(compiled);
   compiled = removeCurlyBraces(compiled);
   validateExpressionResult(compiled, allTypes);
   return 'return ' + compiled;
