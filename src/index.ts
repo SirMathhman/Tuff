@@ -17,11 +17,15 @@ export function compileTuffToJS(source: string): string {
     I64: { min: -(2 ** 63), max: 2 ** 63 - 1 },
   };
 
-  // Check for positive annotated number: "100U8", "50I16", etc.
-  const posAnnot = source.match(/^([0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64)$/);
-  if (posAnnot) {
-    const value = parseInt(posAnnot[1], 10);
-    const suffix = posAnnot[2];
+  // Extract and validate all annotated numbers in the expression
+  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  
+  // Find all positive annotated numbers
+  const posPattern = new RegExp('([0-9]+)(' + validTypes + ')', 'g');
+  let match;
+  while ((match = posPattern.exec(source)) !== null) {
+    const value = parseInt(match[1], 10);
+    const suffix = match[2];
     const range = typeRanges[suffix];
     if (value < range.min || value > range.max) {
       throw new Error(
@@ -34,14 +38,13 @@ export function compileTuffToJS(source: string): string {
           value,
       );
     }
-    return 'return ' + value;
   }
 
-  // Check for negative annotated number: "-100I8", "-50I16", etc.
-  const negAnnot = source.match(/^-([0-9]+)(U8|U16|U32|U64|I8|I16|I32|I64)$/);
-  if (negAnnot) {
-    const value = parseInt(negAnnot[1], 10);
-    const suffix = negAnnot[2];
+  // Find all negative annotated numbers
+  const negPattern = new RegExp('-([0-9]+)(' + validTypes + ')', 'g');
+  while ((match = negPattern.exec(source)) !== null) {
+    const value = parseInt(match[1], 10);
+    const suffix = match[2];
     const actual = -value;
     const range = typeRanges[suffix];
 
@@ -63,9 +66,12 @@ export function compileTuffToJS(source: string): string {
           actual,
       );
     }
-    return 'return ' + actual;
   }
 
-  // No valid type annotation found; return as-is
-  return 'return ' + source;
+  // Remove all type annotations
+  const compiled = source
+    .replace(new RegExp('([0-9]+)(' + validTypes + ')', 'g'), '$1')
+    .replace(new RegExp('-([0-9]+)(' + validTypes + ')', 'g'), '-$1');
+
+  return 'return ' + compiled;
 }

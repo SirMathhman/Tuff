@@ -46,4 +46,8 @@ describe('execute', () => {
   it('should throw an error when executing "256U8"', () => {
     invalidate('256U8');
   });
+
+  it('should execute "1U8 + 2U8" and return 3', () => {
+    validate('1U8 + 2U8', 3);
+  });
 });

@@ -25,7 +25,8 @@ export default [
         'error',
         {
           selector: 'TemplateLiteral',
-          message: 'Template strings are not allowed because they tend to be false flagged by PMD CPD. ',
+          message:
+            'Template strings are not allowed because they tend to be false flagged by PMD CPD. Use simple string concatenation instead.',
         },
       ],
     },
