@@ -5,7 +5,11 @@ export function interpret(input: string): Result<number, string> {
     if (input.startsWith("-")) {
       return { success: false, error: "Negative numbers cannot have U8 suffix" };
     }
-    return { success: true, data: Number(input.slice(0, -2)) };
+    const value = Number(input.slice(0, -2));
+    if (value > 255) {
+      return { success: false, error: "Number exceeds U8 range (0-255)" };
+    }
+    return { success: true, data: value };
   }
   return { success: true, data: Number(input) };
 }

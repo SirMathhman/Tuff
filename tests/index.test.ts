@@ -1,6 +1,5 @@
 import { interpret } from "../src/index";
 
-type Result<T, E> = { success: true; data: T } | { success: false; error: E };
 
 function expectValid(input: string, expected: number): void {
   const result = interpret(input);
@@ -28,5 +27,9 @@ describe("interpret", () => {
 
   it("should return error for negative number with U8 suffix", () => {
     expectInvalid("-100U8");
+  });
+
+  it("should return error for number exceeding U8 range", () => {
+    expectInvalid("256U8");
   });
 });
