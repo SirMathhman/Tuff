@@ -214,14 +214,46 @@ function performOperation(left: number | bigint, right: number | bigint, leftPar
 
 function parseStatementBlock(input: string): Result<{ statements: string[]; finalExpr: string }, string> {
   const trimmed = input.trim();
-  const parts = trimmed.split(";");
+  const parts: string[] = [];
+  let current = "";
+  let braceDepth = 0;
+  let parenDepth = 0;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+
+    if (char === "{") {
+      braceDepth++;
+      current += char;
+    } else if (char === "}") {
+      braceDepth--;
+      current += char;
+    } else if (char === "(") {
+      parenDepth++;
+      current += char;
+    } else if (char === ")") {
+      parenDepth--;
+      current += char;
+    } else if (char === ";" && braceDepth === 0 && parenDepth === 0) {
+      if (current.trim()) {
+        parts.push(current.trim());
+      }
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim()) {
+    parts.push(current.trim());
+  }
 
   if (parts.length < 2) {
     return { success: false, error: "Statement block must contain at least one statement and an expression" };
   }
 
-  const statements = parts.slice(0, -1).map((s) => s.trim());
-  const finalExpr = parts[parts.length - 1].trim();
+  const statements = parts.slice(0, -1);
+  const finalExpr = parts[parts.length - 1];
 
   if (finalExpr === "") {
     return { success: false, error: "Statement block must end with an expression" };
@@ -246,7 +278,10 @@ function interpretStatementBlock(input: string, parentScope: VariableScope | nul
         return declResult;
       }
     } else {
-      return { success: false, error: "Invalid statement: " + stmt };
+      const exprResult = interpretWithVariables(stmt, blockScope);
+      if (!exprResult.success) {
+        return exprResult;
+      }
     }
   }
 
@@ -303,7 +338,7 @@ function interpretWithVariables(input: string, scope: VariableScope): Result<num
     }
   }
 
-  return interpret(trimmed);
+  return interpret(trimmed, scope);
 }
 
 function evaluateGroupedExpressions(input: string, scope: VariableScope | null = null): string {
@@ -481,6 +516,13 @@ function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; valu
 
 export function interpret(input: string, scope: VariableScope | null = null): Result<number | bigint, string> {
   const trimmedInput = input.trim();
+
+  if (trimmedInput.includes(";")) {
+    const parseResult = parseStatementBlock(trimmedInput);
+    if (parseResult.success) {
+      return interpretStatementBlock(trimmedInput, scope);
+    }
+  }
 
   if (trimmedInput.includes("(") || trimmedInput.includes(")") || trimmedInput.includes("{") || trimmedInput.includes("}")) {
     const evaluated = evaluateParenthesizedExpressions(trimmedInput, scope);

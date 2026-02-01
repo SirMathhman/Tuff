@@ -203,8 +203,26 @@ describe("interpret - arithmetic operations", () => {
   it("should handle curly braces like parentheses", () => {
     expectValid("10 / { 5 }", 2);
   });
+});
 
+describe("interpret - variable declarations", () => {
   it("should handle variable declarations in blocks", () => {
     expectValid("10 / { let x : U8 = 5; x }", 2);
+  });
+
+  it("should handle nested variable blocks in assignments", () => {
+    expectValid("let x : U8 = { let y : U8 = 100; y }; x", 100);
+  });
+
+  it("should handle multiple variable declarations", () => {
+    expectValid("{ let x : U8 = 3; let y : U8 = 2; x + y }", 5);
+  });
+
+  it("should handle variable shadowing", () => {
+    expectValid("{ let x : U8 = 5; { let x : U8 = 10; x } }", 10);
+  });
+
+  it("should access outer scope variables after inner scope", () => {
+    expectValid("{ let x : U8 = 5; { let y : U8 = 10; y }; x }", 5);
   });
 });
