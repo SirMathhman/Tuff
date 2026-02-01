@@ -25,11 +25,12 @@ def print_recommendations():
 
 def main():
     test_passed = run_command("npm test", "Test suite")
+    dupe_passed = run_command("pmd cpd --minimum-tokens 35 src tests --language typescript", "Duplicate code check")
     lint_passed = run_command("npm run lint", "ESLint check")
 
     print_recommendations()
 
-    if not test_passed or not lint_passed:
+    if not test_passed or not dupe_passed or not lint_passed:
         print("\nPre-commit checks failed. Please fix issues before committing.")
         sys.exit(1)
 

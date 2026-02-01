@@ -13,6 +13,18 @@ const TYPE_RANGES: Record<string, Range> = {
   I64: { min: -9223372036854775808n, max: 9223372036854775807n, unsigned: false },
 };
 
+function validateNumber(value: number | bigint, range: Range, typeName: string): Result<number | bigint, string> {
+  if (range.unsigned && (typeof value === "number" ? value < 0 : value < 0n)) {
+    return { success: false, error: `Negative numbers cannot have ${typeName} suffix` };
+  }
+
+  if (value < range.min || value > range.max) {
+    return { success: false, error: `Number exceeds ${typeName} range (${range.min}-${range.max})` };
+  }
+
+  return { success: true, data: value };
+}
+
 export function interpret(input: string): Result<number | bigint, string> {
   const trimmedInput = input.trim();
 
@@ -51,31 +63,14 @@ export function interpret(input: string): Result<number | bigint, string> {
 
       if (typeName === "U64" || typeName === "I64") {
         const value = BigInt(numberStr);
-
-        if (range.unsigned && value < 0n) {
-          return { success: false, error: `Negative numbers cannot have ${typeName} suffix` };
-        }
-
-        if (value < range.min || value > range.max) {
-          return { success: false, error: `Number exceeds ${typeName} range (${range.min}-${range.max})` };
-        }
-
-        return { success: true, data: value };
+        return validateNumber(value, range, typeName);
       }
 
       const value = Number(numberStr);
-
-      if (range.unsigned && value < 0) {
-        return { success: false, error: `Negative numbers cannot have ${typeName} suffix` };
-      }
-
-      if (value < range.min || value > range.max) {
-        return { success: false, error: `Number exceeds ${typeName} range (${range.min}-${range.max})` };
-      }
-
-      return { success: true, data: value };
+      return validateNumber(value, range, typeName);
     }
   }
 
   return { success: true, data: Number(trimmedInput) };
 }
+
