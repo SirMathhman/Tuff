@@ -106,4 +106,13 @@ describe("The compiler", () => {
   it("supports multiple variable declarations", () => {
     validate("let x = read U8; let y = read U8; x + y", 30, "10", "20");
   });
+
+  it("supports nested variable declarations in blocks", () => {
+    validate(
+      "let x = { let y = read U8; let z = read U8; y + z}; x",
+      30,
+      "10",
+      "20",
+    );
+  });
 });
