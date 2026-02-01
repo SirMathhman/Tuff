@@ -17,7 +17,10 @@ export function compile(source: string): string {
   if (source.includes("+")) {
     const parts = source.split("+").map((p) => p.trim());
     const result = parts.reduce((acc, part, index) => {
-      const expr = part === "read U8" ? "parseInt(process.argv[" + (index + 2) + "], 10)" : part;
+      const expr =
+        part === "read U8"
+          ? "parseInt(process.argv[" + (index + 2) + "], 10)"
+          : part;
       return acc + (index === 0 ? expr : " + " + expr);
     }, "");
     return "process.exit(" + result + ")";
