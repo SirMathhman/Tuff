@@ -22,11 +22,12 @@ def print_recommendations():
 
 def main():
     lint_passed = run_command("npm run lint", "ESLint check")
+    pmd_passed = run_command("pmd check -d src -R category/ecmascript/bestpractices.xml --no-fail-on-violation", "PMD analysis")
     test_passed = run_command("npm test", "Test suite")
 
     print_recommendations()
 
-    if not lint_passed or not test_passed:
+    if not lint_passed or not pmd_passed or not test_passed:
         print("\nPre-commit checks failed. Please fix issues before committing.")
         sys.exit(1)
 
