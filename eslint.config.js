@@ -21,6 +21,13 @@ export default [
       ...tsPlugin.configs.recommended.rules,
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': 'warn',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'TemplateLiteral',
+          message: 'Template strings are not allowed because they tend to be false flagged by PMD CPD. ',
+        },
+      ],
     },
   },
 ];

@@ -24,9 +24,17 @@ export function compileTuffToJS(source: string): string {
     const suffix = posAnnot[2];
     const range = typeRanges[suffix];
     if (value < range.min || value > range.max) {
-      throw new Error(`${suffix} value must be between ${range.min} and ${range.max}, got ${value}`);
+      throw new Error(
+        suffix +
+          ' value must be between ' +
+          range.min +
+          ' and ' +
+          range.max +
+          ', got ' +
+          value,
+      );
     }
-    return `return ${value}`;
+    return 'return ' + value;
   }
 
   // Check for negative annotated number: "-100I8", "-50I16", etc.
@@ -45,11 +53,19 @@ export function compileTuffToJS(source: string): string {
     }
 
     if (actual < range.min || actual > range.max) {
-      throw new Error(`${suffix} value must be between ${range.min} and ${range.max}, got ${actual}`);
+      throw new Error(
+        suffix +
+          ' value must be between ' +
+          range.min +
+          ' and ' +
+          range.max +
+          ', got ' +
+          actual,
+      );
     }
-    return `return ${actual}`;
+    return 'return ' + actual;
   }
 
   // No valid type annotation found; return as-is
-  return `return ${source}`;
+  return 'return ' + source;
 }
