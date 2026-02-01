@@ -167,21 +167,6 @@ function findAllTypedLiterals(source: string): TypedLiteral[] {
   return findLiteralHelper(0);
 }
 
-function containsAnyDigit(str: string): boolean {
-  return (
-    str.indexOf("0") !== -1 ||
-    str.indexOf("1") !== -1 ||
-    str.indexOf("2") !== -1 ||
-    str.indexOf("3") !== -1 ||
-    str.indexOf("4") !== -1 ||
-    str.indexOf("5") !== -1 ||
-    str.indexOf("6") !== -1 ||
-    str.indexOf("7") !== -1 ||
-    str.indexOf("8") !== -1 ||
-    str.indexOf("9") !== -1
-  );
-}
-
 function getTypeWidth(suffix: TypeSuffix): number {
   if (suffix === "U8" || suffix === "I8") return 1;
   if (suffix === "U16" || suffix === "I16") return 2;
@@ -201,28 +186,8 @@ function getLargestType(literals: TypedLiteral[]): TypeSuffix {
   return restWithLargest.suffix;
 }
 
-function validateNoMixedTypes(
-  source: string,
-  typedLiterals: TypedLiteral[],
-): void {
-  let sourceWithoutTypedLiterals = source;
-  typedLiterals.forEach((literal) => {
-    sourceWithoutTypedLiterals = replaceAllOccurrences(
-      sourceWithoutTypedLiterals,
-      literal.fullMatch,
-      "",
-    );
-  });
-  if (containsAnyDigit(sourceWithoutTypedLiterals)) {
-    throw new Error("Cannot mix typed and untyped numeric literals");
-  }
-}
-
 export function compileTuffToJS(source: string): string {
   const typedLiterals = findAllTypedLiterals(source);
-  if (typedLiterals.length > 0) {
-    validateNoMixedTypes(source, typedLiterals);
-  }
   typedLiterals.forEach((literal) => {
     const num = Number(literal.numberPart);
     if (!isSigned(literal.suffix) && literal.numberPart.startsWith("-")) {
