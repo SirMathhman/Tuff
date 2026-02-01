@@ -67,45 +67,55 @@ function addNumbers(left: number | bigint, right: number | bigint, typeName: str
   return checkAdditionRange(sum, typeName);
 }
 
+function performAddition(left: number | bigint, right: number | bigint, leftPart: string, rightPart: string): Result<number | bigint, string> {
+  const leftType = getTypeForValue(leftPart.trim());
+  const rightType = getTypeForValue(rightPart.trim());
+
+  if (leftType === null && rightType === null) {
+    const left_num = left as number;
+    const right_num = right as number;
+    return { success: true, data: left_num + right_num };
+  }
+
+  if (leftType === null || rightType === null) {
+    return { success: false, error: "Cannot add typed and untyped numbers together" };
+  }
+
+  const commonType = getWiderType(leftType, rightType);
+  if (commonType === null) {
+    return { success: false, error: "Cannot add different types together" };
+  }
+
+  return addNumbers(left, right, commonType);
+}
+
 export function interpret(input: string): Result<number | bigint, string> {
   const trimmedInput = input.trim();
 
   if (trimmedInput.includes(" + ")) {
     const parts = trimmedInput.split(" + ");
-    if (parts.length === 2) {
-      const leftResult = interpret(parts[0]);
-      const rightResult = interpret(parts[1]);
+    if (parts.length >= 2) {
+      let result = interpret(parts[0]);
 
-      if (!leftResult.success) {
-        return leftResult;
+      if (!result.success) {
+        return result;
       }
 
-      if (!rightResult.success) {
-        return rightResult;
+      for (let i = 1; i < parts.length; i++) {
+        const rightResult = interpret(parts[i]);
+
+        if (!rightResult.success) {
+          return rightResult;
+        }
+
+        const addResult = performAddition(result.data, rightResult.data, parts[i - 1], parts[i]);
+        if (!addResult.success) {
+          return addResult;
+        }
+        result = addResult;
       }
 
-      const left = leftResult.data;
-      const right = rightResult.data;
-
-      const leftType = getTypeForValue(parts[0].trim());
-      const rightType = getTypeForValue(parts[1].trim());
-
-      if (leftType === null && rightType === null) {
-        const left_num = left as number;
-        const right_num = right as number;
-        return { success: true, data: left_num + right_num };
-      }
-
-      if (leftType === null || rightType === null) {
-        return { success: false, error: "Cannot add typed and untyped numbers together" };
-      }
-
-      const commonType = getWiderType(leftType, rightType);
-      if (commonType === null) {
-        return { success: false, error: "Cannot add different types together" };
-      }
-
-      return addNumbers(left, right, commonType);
+      return result;
     }
   }
 
