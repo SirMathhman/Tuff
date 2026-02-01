@@ -175,4 +175,8 @@ describe("interpret - arithmetic operations", () => {
   it("should add multiple untyped numbers in sequence", () => {
     expectValid("1 + 2 + 3", 6);
   });
+
+  it("should add and subtract untyped numbers", () => {
+    expectValid("2 + 3 - 4", 1);
+  });
 });

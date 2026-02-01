@@ -48,11 +48,48 @@ function validateNumber(value: number | bigint, range: Range, typeName: string):
   return { success: true, data: value };
 }
 
-function checkAdditionRange(sum: number | bigint, typeName: string): Result<number | bigint, string> {
-  if (!isInRange(sum, TYPE_RANGES[typeName])) {
-    return { success: false, error: getRangeExceededError(typeName, "Addition") };
+function checkOperationRange(result: number | bigint, typeName: string, operation: string = "Operation"): Result<number | bigint, string> {
+  if (!isInRange(result, TYPE_RANGES[typeName])) {
+    return { success: false, error: getRangeExceededError(typeName, operation) };
   }
-  return { success: true, data: sum };
+  return { success: true, data: result };
+}
+
+function getCommonTypeForOperation(leftType: string | null, rightType: string | null, operation: string): { commonType: string | null; error: string | null } {
+  if (leftType === null && rightType === null) {
+    return { commonType: null, error: null };
+  }
+
+  if (leftType === null || rightType === null) {
+    return { commonType: null, error: "Cannot " + operation + " typed and untyped numbers together" };
+  }
+
+  const commonType = getWiderType(leftType, rightType);
+  if (commonType === null) {
+    return { commonType: null, error: "Cannot " + operation + " different types together" };
+  }
+
+  return { commonType, error: null };
+}
+
+function performUntypedOperation(left: number | bigint, right: number | bigint, operation: string): number | bigint {
+  const left_num = left as number;
+  const right_num = right as number;
+  return operation === "add" ? left_num + right_num : left_num - right_num;
+}
+
+function resolveCommonType(leftType: string | null, rightType: string | null, operation: string): { commonType: string | null; errorResult: Result<number | bigint, string> | null } {
+  const typeCheck = getCommonTypeForOperation(leftType, rightType, operation);
+  if (typeCheck.error) {
+    return { commonType: null, errorResult: { success: false, error: typeCheck.error } };
+  }
+
+  const commonType = typeCheck.commonType;
+  if (commonType === null) {
+    return { commonType: null, errorResult: { success: false, error: "Invalid type" } };
+  }
+
+  return { commonType, errorResult: null };
 }
 
 function addNumbers(left: number | bigint, right: number | bigint, typeName: string): Result<number | bigint, string> {
@@ -64,55 +101,106 @@ function addNumbers(left: number | bigint, right: number | bigint, typeName: str
     ? (left as bigint) + (right as bigint)
     : (left as number) + (right as number);
 
-  return checkAdditionRange(sum, typeName);
+  return checkOperationRange(sum, typeName, "Addition");
 }
 
-function performAddition(left: number | bigint, right: number | bigint, leftPart: string, rightPart: string): Result<number | bigint, string> {
+function performOperation(left: number | bigint, right: number | bigint, leftPart: string, rightPart: string, operation: string): Result<number | bigint, string> {
   const leftType = getTypeForValue(leftPart.trim());
   const rightType = getTypeForValue(rightPart.trim());
 
   if (leftType === null && rightType === null) {
-    const left_num = left as number;
-    const right_num = right as number;
-    return { success: true, data: left_num + right_num };
+    return { success: true, data: performUntypedOperation(left, right, operation) };
   }
 
-  if (leftType === null || rightType === null) {
-    return { success: false, error: "Cannot add typed and untyped numbers together" };
+  const typeResolve = resolveCommonType(leftType, rightType, operation);
+  if (typeResolve.errorResult) {
+    return typeResolve.errorResult;
   }
 
-  const commonType = getWiderType(leftType, rightType);
-  if (commonType === null) {
-    return { success: false, error: "Cannot add different types together" };
+  const commonType = typeResolve.commonType as string;
+
+  if (operation === "add") {
+    return addNumbers(left, right, commonType);
   }
 
-  return addNumbers(left, right, commonType);
+  if ((typeof left === "bigint") !== (typeof right === "bigint")) {
+    return { success: false, error: "Cannot subtract number and bigint together" };
+  }
+
+  const diff = (typeof left === "bigint")
+    ? (left as bigint) - (right as bigint)
+    : (left as number) - (right as number);
+
+  return checkOperationRange(diff, commonType, "Subtraction");
+}
+
+function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"; value: string }> {
+  const tokens: Array<{ type: "operand" | "operator"; value: string }> = [];
+  let current = "";
+  let i = 0;
+
+  while (i < input.length) {
+    if (i < input.length - 1 && input[i] === " " && (input[i + 1] === "+" || input[i + 1] === "-") && input[i + 2] === " ") {
+      if (current.trim()) {
+        tokens.push({ type: "operand", value: current.trim() });
+        current = "";
+      }
+      tokens.push({ type: "operator", value: input[i + 1] });
+      i += 3;
+    } else {
+      current += input[i];
+      i += 1;
+    }
+  }
+
+  if (current.trim()) {
+    tokens.push({ type: "operand", value: current.trim() });
+  }
+
+  return tokens;
 }
 
 export function interpret(input: string): Result<number | bigint, string> {
   const trimmedInput = input.trim();
 
-  if (trimmedInput.includes(" + ")) {
-    const parts = trimmedInput.split(" + ");
-    if (parts.length >= 2) {
-      let result = interpret(parts[0]);
+  if (trimmedInput.includes(" + ") || trimmedInput.includes(" - ")) {
+    const tokens = tokenizeExpression(trimmedInput);
+
+    if (tokens.length >= 3 && tokens[0].type === "operand") {
+      let result = interpret(tokens[0].value);
 
       if (!result.success) {
         return result;
       }
 
-      for (let i = 1; i < parts.length; i++) {
-        const rightResult = interpret(parts[i]);
+      let i = 1;
+      while (i < tokens.length) {
+        if (tokens[i].type !== "operator") {
+          return { success: false, error: "Invalid expression" };
+        }
+        const operator = tokens[i].value;
 
+        if (i + 1 >= tokens.length || tokens[i + 1].type !== "operand") {
+          return { success: false, error: "Invalid expression" };
+        }
+
+        const rightResult = interpret(tokens[i + 1].value);
         if (!rightResult.success) {
           return rightResult;
         }
 
-        const addResult = performAddition(result.data, rightResult.data, parts[i - 1], parts[i]);
-        if (!addResult.success) {
-          return addResult;
+        const left_data: number | bigint = (result as { success: true; data: number | bigint }).data;
+        const right_data: number | bigint = (rightResult as { success: true; data: number | bigint }).data;
+
+        const opResult: Result<number | bigint, string> = performOperation(left_data, right_data, tokens[i - 1].value, tokens[i + 1].value, operator === "+" ? "add" : "subtract");
+
+        if (!opResult.success) {
+          return opResult;
         }
-        result = addResult;
+
+        result = opResult;
+        tokens[i + 1].value = String((result as { success: true; data: number | bigint }).data);
+        i += 2;
       }
 
       return result;
