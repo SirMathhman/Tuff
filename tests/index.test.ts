@@ -226,3 +226,29 @@ describe("interpret - variable declarations", () => {
     expectValid("{ let x : U8 = 5; { let y : U8 = 10; y }; x }", 5);
   });
 });
+
+describe("interpret - variable error handling", () => {
+  it("should return error for undefined variable", () => {
+    expectInvalid("x");
+  });
+
+  it("should return error for undefined variable in expression", () => {
+    expectInvalid("x + 5");
+  });
+
+  it("should return error for duplicate variable declaration", () => {
+    expectInvalid("{ let x : U8 = 5; let x : U8 = 10; x }");
+  });
+
+  it("should return error for duplicate variable in nested scope", () => {
+    expectInvalid("{ let x : U8 = 5; { let x : U8 = 10; let x : U8 = 20; x } }");
+  });
+
+  it("should return error for invalid type in variable declaration", () => {
+    expectInvalid("let x : InvalidType = 5; x");
+  });
+
+  it("should return error for type overflow in variable declaration", () => {
+    expectInvalid("let x : U8 = 256; x");
+  });
+});

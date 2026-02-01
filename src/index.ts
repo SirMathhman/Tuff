@@ -569,6 +569,10 @@ export function interpret(input: string, scope: VariableScope | null = null): Re
     }
   }
 
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmedInput)) {
+    return { success: false, error: "Undefined variable: " + trimmedInput };
+  }
+
   return { success: true, data: Number(trimmedInput) };
 }
 
