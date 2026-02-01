@@ -57,6 +57,96 @@ function validateNoDuplicateVariables(source: string): void {
   });
 }
 
+function extractDeclaredType(declLine: string): string | null {
+  if (!declLine.startsWith("let ")) {
+    return null;
+  }
+  const afterLet = declLine.substring(4);
+  const colonIndex = afterLet.indexOf(":");
+  if (colonIndex === -1) {
+    return null;
+  }
+  const afterColon = afterLet.substring(colonIndex + 1);
+  const equalIndex = afterColon.indexOf("=");
+  if (equalIndex === -1) {
+    return null;
+  }
+  const typeStr = afterColon.substring(0, equalIndex).trim();
+  return typeStr;
+}
+
+function getExpressionType(expr: string): string | null {
+  const trimmed = expr.trim();
+  if (trimmed === "read U8") {
+    return "U8";
+  }
+  if (trimmed === "read U16") {
+    return "U16";
+  }
+  const isNum =
+    trimmed.length > 0 && trimmed.split("").every((c) => c >= "0" && c <= "9");
+  if (isNum) {
+    const numVal = parseInt(trimmed, 10);
+    if (numVal <= 255) {
+      return "U8";
+    }
+    return "U16";
+  }
+  return null;
+}
+
+function validateTypeAssignments(source: string): void {
+  const varTypes: { [key: string]: string } = {};
+  const lines = source.split(";").map((s) => s.trim());
+
+  lines.forEach((line) => {
+    if (line.startsWith("let ")) {
+      const afterLet = line.substring(4);
+      const colonIndex = afterLet.indexOf(":");
+      const equalIndex = afterLet.indexOf("=");
+
+      let varName = "";
+      let declaredType: string | null = null;
+      let valueExpr = "";
+
+      if (colonIndex !== -1 && colonIndex < equalIndex) {
+        varName = afterLet.substring(0, colonIndex).trim();
+        const afterColon = afterLet.substring(colonIndex + 1);
+        const eqIdx = afterColon.indexOf("=");
+        declaredType = afterColon.substring(0, eqIdx).trim();
+        valueExpr = afterColon.substring(eqIdx + 1).trim();
+      } else if (equalIndex !== -1) {
+        varName = afterLet.substring(0, equalIndex).trim();
+        valueExpr = afterLet.substring(equalIndex + 1).trim();
+      }
+
+      if (varName.length > 0 && valueExpr.length > 0) {
+        let exprType: string | null = getExpressionType(valueExpr);
+
+        // If not a literal or read expression, check if it's a variable
+        if (!exprType && varTypes[valueExpr]) {
+          exprType = varTypes[valueExpr];
+        }
+
+        if (declaredType && exprType) {
+          if (declaredType !== exprType) {
+            throw new Error(
+              "Type mismatch: cannot assign " +
+                exprType +
+                " to " +
+                declaredType,
+            );
+          }
+        }
+
+        if (exprType) {
+          varTypes[varName] = exprType;
+        }
+      }
+    }
+  });
+}
+
 function compileExpression(
   source: string,
   argCount: { value: number },
@@ -283,6 +373,7 @@ export function compile(source: string): string {
 
   validateNoZeroDivision(source);
   validateNoDuplicateVariables(source);
+  validateTypeAssignments(source);
 
   // Top-level variable declarations
   if (source.startsWith("let ")) {

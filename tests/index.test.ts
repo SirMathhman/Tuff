@@ -119,4 +119,8 @@ describe("The compiler", () => {
   it("rejects duplicate variable declarations at compile time", () => {
     invalidate("let x = 0; let x = 0; x");
   });
+
+  it("rejects type mismatches at compile time", () => {
+    invalidate("let x = read U16; let y : U8 = x; y");
+  });
 });
