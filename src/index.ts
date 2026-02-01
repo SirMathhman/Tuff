@@ -1,6 +1,6 @@
 type Result<T, E> = { success: true; data: T } | { success: false; error: E };
 
-type Variable = { name: string; type: string; value: number | bigint };
+type Variable = { name: string; type: string; value: number | bigint; mutable: boolean };
 
 type VariableScope = {
   variables: Map<string, Variable>;
@@ -48,7 +48,7 @@ function canCoerceType(sourceType: string, targetType: string): boolean {
   return targetIndex > sourceIndex;
 }
 
-function declareVariable(scope: VariableScope, name: string, type: string, value: number | bigint): Result<void, string> {
+function declareVariable(scope: VariableScope, name: string, type: string, value: number | bigint, mutable: boolean = false): Result<void, string> {
   if (scope.variables.has(name)) {
     return { success: false, error: "Variable " + name + " already declared in this scope" };
   }
@@ -63,7 +63,28 @@ function declareVariable(scope: VariableScope, name: string, type: string, value
     return validateResult as unknown as Result<void, string>;
   }
 
-  scope.variables.set(name, { name, type, value });
+  scope.variables.set(name, { name, type, value, mutable });
+  return { success: true, data: undefined };
+}
+
+function assignVariable(scope: VariableScope, name: string, newValue: number | bigint): Result<void, string> {
+  const lookupResult = lookupVariable(scope, name);
+  if (!lookupResult.success) {
+    return lookupResult as Result<void, string>;
+  }
+
+  const variable = (lookupResult as { success: true; data: Variable }).data;
+  if (!variable.mutable) {
+    return { success: false, error: "Cannot assign to immutable variable: " + name };
+  }
+
+  const range = TYPE_RANGES[variable.type];
+  const validateResult = validateNumber(newValue, range, variable.type);
+  if (!validateResult.success) {
+    return validateResult as unknown as Result<void, string>;
+  }
+
+  variable.value = newValue;
   return { success: true, data: undefined };
 }
 
@@ -300,6 +321,23 @@ function interpretStatementBlock(input: string, parentScope: VariableScope | nul
         return declResult;
       }
     } else {
+      const assignIndex = stmt.indexOf("=");
+      if (assignIndex !== -1) {
+        const lhs = stmt.slice(0, assignIndex).trim();
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(lhs)) {
+          const rhs = stmt.slice(assignIndex + 1).trim();
+          const valueResult = interpretWithVariables(rhs, blockScope);
+          if (!valueResult.success) {
+            return valueResult;
+          }
+          const newValue = (valueResult as { success: true; data: number | bigint }).data;
+          const assignResult = assignVariable(blockScope, lhs, newValue);
+          if (!assignResult.success) {
+            return assignResult;
+          }
+          continue;
+        }
+      }
       const exprResult = interpretWithVariables(stmt, blockScope);
       if (!exprResult.success) {
         return exprResult;
@@ -324,7 +362,21 @@ function inferAndValidateType(valueStr: string, targetType: string | null, value
 
   if (targetType === null) {
     if (sourceType === null) {
-      return { success: false, error: "Cannot infer type for value: " + valueStr };
+      if (typeof value === "bigint") {
+        sourceType = "I64";
+      } else if (value >= 0 && value <= 255) {
+        sourceType = "U8";
+      } else if (value >= -128 && value <= 127) {
+        sourceType = "I8";
+      } else if (value >= 0 && value <= 65535) {
+        sourceType = "U16";
+      } else if (value >= -32768 && value <= 32767) {
+        sourceType = "I16";
+      } else if (value >= 0 && value <= 4294967295) {
+        sourceType = "U32";
+      } else {
+        sourceType = "I32";
+      }
     }
     return { success: true, data: sourceType };
   }
@@ -343,7 +395,14 @@ function parseVariableDeclaration(stmt: string, scope: VariableScope): Result<vo
     return { success: false, error: "Expected 'let' keyword" };
   }
 
-  const rest = trimmed.slice(4).trim();
+  let rest = trimmed.slice(4).trim();
+  let mutable = false;
+
+  if (rest.startsWith("mut ")) {
+    mutable = true;
+    rest = rest.slice(4).trim();
+  }
+
   const colonIndex = rest.indexOf(":");
   const equalsIndex = rest.indexOf("=");
 
@@ -386,7 +445,7 @@ function parseVariableDeclaration(stmt: string, scope: VariableScope): Result<vo
   }
 
   const finalType = (typeResult as { success: true; data: string }).data;
-  return declareVariable(scope, varName, finalType, value);
+  return declareVariable(scope, varName, finalType, value, mutable);
 }
 
 function interpretWithVariables(input: string, scope: VariableScope): Result<number | bigint, string> {

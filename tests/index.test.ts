@@ -286,3 +286,53 @@ describe("interpret - variable type coercion", () => {
     expectValid("let x = 5U8; let y = 10U8; let z : U16 = x + y; z", 15);
   });
 });
+
+describe("interpret - mutable variables", () => {
+  it("should declare mutable variable with let mut", () => {
+    expectValid("let mut x = 0; x", 0);
+  });
+
+  it("should allow reassigning mutable variable", () => {
+    expectValid("let mut x = 0; x = 100; x", 100);
+  });
+
+  it("should maintain type through reassignment", () => {
+    expectValid("let mut x = 5U8; x = 10U8; x", 10);
+  });
+
+  it("should allow multiple reassignments", () => {
+    expectValid("let mut x = 0; x = 10; x = 20; x = 30; x", 30);
+  });
+
+  it("should return error when reassigning immutable variable", () => {
+    expectInvalid("let x = 0; x = 100; x");
+  });
+
+  it("should return error when assigning to undefined variable", () => {
+    expectInvalid("x = 100; x");
+  });
+
+  it("should return error when reassignment violates type range", () => {
+    expectInvalid("let mut x = 5U8; x = 256; x");
+  });
+
+  it("should allow mutable variable in nested blocks", () => {
+    expectValid("{ let mut x = 0; x = 100; x }", 100);
+  });
+
+  it("should shadow mutable with immutable variable", () => {
+    expectValid("let mut x = 5; { let x = 10; x }", 10);
+  });
+
+  it("should not allow mutation of shadowed immutable variable", () => {
+    expectInvalid("let x = 5; { let mut x = 10; x = 20 }");
+  });
+
+  it("should allow mutable variable with explicit type annotation", () => {
+    expectValid("let mut x : U8 = 5; x = 10; x", 10);
+  });
+
+  it("should return error when reassignment doesn't match type", () => {
+    expectInvalid("let mut x : U8 = 5; x = 256; x");
+  });
+});
