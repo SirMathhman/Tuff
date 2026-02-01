@@ -44,11 +44,60 @@ class JSCodegen {
     this.emit(
       "const input = () => { const fs = require('fs'); return fs.readFileSync(0, 'utf-8').trim(); };",
     );
+    this.emit("const Ok = (value) => ({ kind: 'Ok', value });");
+    this.emit("const Err = (error) => ({ kind: 'Err', error });");
     this.emit("");
   }
 
+  genUseStmt(useStmt) {
+    // Convert: use { A, B } from C;
+    // To: import { A, B } from "./C.js";
+    const imports = useStmt.imports.join(", ");
+    const path = useStmt.path;
+    this.emit(`import { ${imports} } from "./${path}.js";`);
+  }
+
+  genModuleDecl(moduleDecl) {
+    // Create a namespace object for the module
+    this.emit(`const ${moduleDecl.name} = {`);
+    this.indent++;
+
+    // Generate module contents
+    // We need to convert function declarations to object methods
+    for (const stmt of moduleDecl.body) {
+      if (stmt instanceof AST.FunctionDecl) {
+        // Emit as method: functionName(params) { body }
+        this.emit(`${stmt.name}(${stmt.params.join(", ")}) {`);
+        this.indent++;
+        for (const bodyStmt of stmt.body) {
+          this.genStatement(bodyStmt);
+        }
+        this.indent--;
+        this.emit("},");
+      } else {
+        // For other statements, just generate them inline
+        this.genStatement(stmt);
+      }
+    }
+
+    this.indent--;
+    this.emit(`};`);
+    this.emit("");
+  }
+
+  genExternTypeDecl(externTypeDecl) {
+    // Extern types are pass-through - they exist in JS runtime
+    this.emit(`// extern type ${externTypeDecl.name}`);
+  }
+
   genStatement(stmt) {
-    if (stmt instanceof AST.FunctionDecl) {
+    if (stmt instanceof AST.UseStmt) {
+      this.genUseStmt(stmt);
+    } else if (stmt instanceof AST.ModuleDecl) {
+      this.genModuleDecl(stmt);
+    } else if (stmt instanceof AST.ExternTypeDecl) {
+      this.genExternTypeDecl(stmt);
+    } else if (stmt instanceof AST.FunctionDecl) {
       this.genFunctionDecl(stmt);
     } else if (stmt instanceof AST.VarDecl) {
       this.genVarDecl(stmt);
@@ -257,6 +306,10 @@ class JSCodegen {
       return this.genStructLiteral(expr);
     }
 
+    if (expr instanceof AST.ArrowFn) {
+      return this.genArrowFn(expr);
+    }
+
     throw new Error(`Unknown expression type: ${expr.type}`);
   }
 
@@ -313,6 +366,10 @@ class JSCodegen {
 
     if (call.callee instanceof AST.Identifier) {
       return `${call.callee.name}(${args})`;
+    } else if (call.callee instanceof AST.MemberAccess) {
+      // Handle method calls like arr.map(fn)
+      const obj = this.genExpression(call.callee.object);
+      return `${obj}.${call.callee.property}(${args})`;
     }
     throw new Error("Complex call targets not yet supported");
   }
@@ -366,6 +423,35 @@ class JSCodegen {
       .join(", ");
 
     return `{${fieldAssignments}}`;
+  }
+
+  genArrowFn(arrowFn) {
+    // Generate JavaScript arrow function
+    // Tuff: (x, y) => x + y  or  (x) => { return x * 2; }
+    const params = arrowFn.params.join(", ");
+
+    if (Array.isArray(arrowFn.body)) {
+      // Block body
+      const bodyLines = [];
+      for (const stmt of arrowFn.body) {
+        // We need to generate statement code inline
+        // This is tricky because we're in an expression context
+        // For simplicity, emit as a function expression
+        const oldCode = this.code;
+        const oldIndent = this.indent;
+        this.code = [];
+        this.indent = 0;
+        this.genStatement(stmt);
+        bodyLines.push(this.code.join("\n"));
+        this.code = oldCode;
+        this.indent = oldIndent;
+      }
+      return `((${params}) => { ${bodyLines.join(" ")} })`;
+    } else {
+      // Expression body
+      const body = this.genExpression(arrowFn.body);
+      return `((${params}) => ${body})`;
+    }
   }
 }
 

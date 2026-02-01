@@ -4,12 +4,7 @@ const input = () => { const fs = require('fs'); return fs.readFileSync(0, 'utf-8
 const Ok = (value) => ({ kind: 'Ok', value });
 const Err = (error) => ({ kind: 'Err', error });
 
-function factorial(n) {
-  if ((n <= 1)) {
-    return 1;
-  }
-  return (n * factorial((n - 1)));
-}
-
-print(factorial(5));
-print(factorial(10));
+// extern type Map
+// extern type Set
+// extern type Date
+print("Extern types declared: Map, Set, Date");

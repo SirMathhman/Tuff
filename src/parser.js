@@ -52,6 +52,18 @@ class Parser {
   parseStatement() {
     const token = this.peek();
 
+    if (token.type === TokenType.USE) {
+      return this.parseUseStmt();
+    }
+
+    if (token.type === TokenType.MODULE) {
+      return this.parseModuleDecl();
+    }
+
+    if (token.type === TokenType.EXTERN) {
+      return this.parseExternDecl();
+    }
+
     if (token.type === TokenType.FN) {
       return this.parseFunctionDecl();
     }
@@ -136,6 +148,64 @@ class Parser {
       fnToken.line,
       fnToken.column,
     );
+  }
+
+  parseUseStmt() {
+    const useToken = this.expect(TokenType.USE);
+    this.expect(TokenType.LBRACE);
+
+    const imports = [];
+    if (this.peek().type !== TokenType.RBRACE) {
+      imports.push(this.expect(TokenType.IDENTIFIER).value);
+      while (this.match(TokenType.COMMA)) {
+        if (this.peek().type === TokenType.RBRACE) break; // Allow trailing comma
+        imports.push(this.expect(TokenType.IDENTIFIER).value);
+      }
+    }
+    this.expect(TokenType.RBRACE);
+    this.expect(TokenType.FROM);
+
+    const pathToken = this.expect(TokenType.IDENTIFIER);
+    const path = pathToken.value;
+
+    this.consumeStatementEnd();
+    return new AST.UseStmt(imports, path, useToken.line, useToken.column);
+  }
+
+  parseModuleDecl() {
+    const moduleToken = this.expect(TokenType.MODULE);
+    const nameToken = this.expect(TokenType.IDENTIFIER);
+    const name = nameToken.value;
+
+    this.expect(TokenType.LBRACE);
+    const body = [];
+    while (
+      this.peek().type !== TokenType.RBRACE &&
+      this.peek().type !== TokenType.EOF
+    ) {
+      body.push(this.parseStatement());
+    }
+    this.expect(TokenType.RBRACE);
+
+    return new AST.ModuleDecl(name, body, moduleToken.line, moduleToken.column);
+  }
+
+  parseExternDecl() {
+    const externToken = this.expect(TokenType.EXTERN);
+
+    // Check if this is "extern type Name;"
+    if (
+      this.peek().type === TokenType.IDENTIFIER &&
+      this.peek().value === "type"
+    ) {
+      this.advance(); // consume "type"
+      const nameToken = this.expect(TokenType.IDENTIFIER);
+      const name = nameToken.value;
+      this.consumeStatementEnd();
+      return new AST.ExternTypeDecl(name, externToken.line, externToken.column);
+    }
+
+    throw new Error("Only 'extern type' is currently supported");
   }
 
   parseVarDecl() {
@@ -616,8 +686,69 @@ class Parser {
       return new AST.Array(elements, token.line, token.column);
     }
 
-    // Parenthesized expression
+    // Parenthesized expression or arrow function
     if (this.match(TokenType.LPAREN)) {
+      const startLine = token.line;
+      const startColumn = token.column;
+
+      // Check if this might be an arrow function
+      // It could be: () => expr or (x) => expr or (x, y) => expr
+      const savedPos = this.pos;
+      let isArrowFn = false;
+      const params = [];
+
+      // Try to parse as parameter list
+      if (this.peek().type === TokenType.RPAREN) {
+        // Empty params: () => ...
+        this.advance(); // consume )
+        if (this.peek().type === TokenType.ARROW) {
+          isArrowFn = true;
+        }
+      } else if (this.peek().type === TokenType.IDENTIFIER) {
+        // Could be (x) => or (x, y) => or just (expr)
+        params.push(this.expect(TokenType.IDENTIFIER).value);
+
+        while (this.peek().type === TokenType.COMMA) {
+          this.advance(); // consume comma
+          if (this.peek().type === TokenType.IDENTIFIER) {
+            params.push(this.expect(TokenType.IDENTIFIER).value);
+          }
+        }
+
+        if (this.peek().type === TokenType.RPAREN) {
+          this.advance(); // consume )
+          if (this.peek().type === TokenType.ARROW) {
+            isArrowFn = true;
+          }
+        }
+      }
+
+      if (isArrowFn) {
+        this.expect(TokenType.ARROW);
+
+        // Parse body - either expression or block
+        let body;
+        if (this.peek().type === TokenType.LBRACE) {
+          // Block body: (x) => { ... }
+          this.advance(); // consume {
+          body = [];
+          while (
+            this.peek().type !== TokenType.RBRACE &&
+            this.peek().type !== TokenType.EOF
+          ) {
+            body.push(this.parseStatement());
+          }
+          this.expect(TokenType.RBRACE);
+        } else {
+          // Expression body: (x) => x + 1
+          body = this.parseExpression();
+        }
+
+        return new AST.ArrowFn(params, body, startLine, startColumn);
+      }
+
+      // Not an arrow function, restore position and parse as expression
+      this.pos = savedPos;
       const expr = this.parseExpression();
       this.expect(TokenType.RPAREN);
       return expr;

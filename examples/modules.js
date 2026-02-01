@@ -4,12 +4,20 @@ const input = () => { const fs = require('fs'); return fs.readFileSync(0, 'utf-8
 const Ok = (value) => ({ kind: 'Ok', value });
 const Err = (error) => ({ kind: 'Err', error });
 
-function factorial(n) {
-  if ((n <= 1)) {
-    return 1;
-  }
-  return (n * factorial((n - 1)));
-}
+const Math = {
+  square(x) {
+    return (x * x);
+  },
+  cube(x) {
+    return ((x * x) * x);
+  },
+};
 
-print(factorial(5));
-print(factorial(10));
+const String = {
+  reverse(s) {
+    return s;
+  },
+};
+
+print("Math.square(5) =", Math.square(5));
+print("Math.cube(3) =", Math.cube(3));

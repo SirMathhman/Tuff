@@ -115,6 +115,29 @@ class StructDecl extends ASTNode {
   }
 }
 
+class UseStmt extends ASTNode {
+  constructor(imports, path, line, column) {
+    super("UseStmt", line, column);
+    this.imports = imports; // Array of strings (imported names)
+    this.path = path; // string (module path)
+  }
+}
+
+class ModuleDecl extends ASTNode {
+  constructor(name, body, line, column) {
+    super("ModuleDecl", line, column);
+    this.name = name; // string
+    this.body = body; // Array of Statement/Function/Module nodes
+  }
+}
+
+class ExternTypeDecl extends ASTNode {
+  constructor(name, line, column) {
+    super("ExternTypeDecl", line, column);
+    this.name = name; // string
+  }
+}
+
 // ==== Expressions ====
 
 class BinaryOp extends ASTNode {
@@ -224,6 +247,14 @@ class StructLiteral extends ASTNode {
   }
 }
 
+class ArrowFn extends ASTNode {
+  constructor(params, body, line, column) {
+    super("ArrowFn", line, column);
+    this.params = params; // Array of param names (strings)
+    this.body = body; // Expression (single expression) or Array of Statements (block)
+  }
+}
+
 export {
   Program,
   FunctionDecl,
@@ -233,6 +264,9 @@ export {
   BreakStmt,
   ContinueStmt,
   StructDecl,
+  UseStmt,
+  ModuleDecl,
+  ExternTypeDecl,
   Return,
   If,
   While,
@@ -252,4 +286,5 @@ export {
   IndexAccess,
   RangeExpr,
   StructLiteral,
+  ArrowFn,
 };

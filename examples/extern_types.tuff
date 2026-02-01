@@ -1,0 +1,9 @@
+// Test extern type declaration
+
+extern type Map;
+extern type Set;
+extern type Date;
+
+// For now, we'll just demonstrate the syntax
+// Actual Map usage would require proper JS interop
+print("Extern types declared: Map, Set, Date");

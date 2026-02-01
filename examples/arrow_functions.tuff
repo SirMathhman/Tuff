@@ -1,0 +1,27 @@
+// Test arrow functions and closures
+
+// Simple arrow function
+let double = (x) => x * 2;
+print("double(5) =", double(5));
+
+// Arrow function with multiple parameters
+let add = (a, b) => a + b;
+print("add(3, 7) =", add(3, 7));
+
+// Arrow function with no parameters
+let greet = () => "Hello!";
+print("greet() =", greet());
+
+// Closure capturing outer scope
+fn makeCounter() {
+    let count = 0;
+    return () => {
+        count = count + 1;
+        return count;
+    };
+}
+
+let counter = makeCounter();
+print("counter() =", counter());
+print("counter() =", counter());
+print("counter() =", counter());
