@@ -252,3 +252,37 @@ describe("interpret - variable error handling", () => {
     expectInvalid("let x : U8 = 256; x");
   });
 });
+
+describe("interpret - variable type coercion", () => {
+  it("should allow widening from U8 to U16", () => {
+    expectValid("let x = 100U8; let y : U16 = x; y", 100);
+  });
+
+  it("should allow widening from U8 to U32", () => {
+    expectValid("let x = 100U8; let y : U32 = x; y", 100);
+  });
+
+  it("should allow widening from U16 to U32", () => {
+    expectValid("let x = 100U16; let y : U32 = x; y", 100);
+  });
+
+  it("should allow widening from I8 to I16", () => {
+    expectValid("let x = 50I8; let y : I16 = x; y", 50);
+  });
+
+  it("should return error when narrowing from U16 to U8", () => {
+    expectInvalid("let x = 100U16; let y : U8 = x; y");
+  });
+
+  it("should return error when narrowing from U32 to U16", () => {
+    expectInvalid("let x = 100U32; let y : U16 = x; y");
+  });
+
+  it("should return error when narrowing from I16 to I8", () => {
+    expectInvalid("let x = 50I16; let y : I8 = x; y");
+  });
+
+  it("should allow widening with arithmetic expressions", () => {
+    expectValid("let x = 5U8; let y = 10U8; let z : U16 = x + y; z", 15);
+  });
+});

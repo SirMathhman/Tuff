@@ -26,6 +26,28 @@ function createScope(parent: VariableScope | null = null): VariableScope {
   return { variables: new Map(), parent };
 }
 
+function canCoerceType(sourceType: string, targetType: string): boolean {
+  if (sourceType === targetType) {
+    return true;
+  }
+
+  const sourceIndex = TYPE_ORDER.indexOf(sourceType);
+  const targetIndex = TYPE_ORDER.indexOf(targetType);
+
+  if (sourceIndex === -1 || targetIndex === -1) {
+    return false;
+  }
+
+  const sourceRange = TYPE_RANGES[sourceType];
+  const targetRange = TYPE_RANGES[targetType];
+
+  if (sourceRange.unsigned !== targetRange.unsigned) {
+    return false;
+  }
+
+  return targetIndex > sourceIndex;
+}
+
 function declareVariable(scope: VariableScope, name: string, type: string, value: number | bigint): Result<void, string> {
   if (scope.variables.has(name)) {
     return { success: false, error: "Variable " + name + " already declared in this scope" };
@@ -288,6 +310,32 @@ function interpretStatementBlock(input: string, parentScope: VariableScope | nul
   return interpretWithVariables(finalExpr, blockScope);
 }
 
+function inferAndValidateType(valueStr: string, targetType: string | null, value: number | bigint, scope: VariableScope | null): Result<string, string> {
+  let sourceType: string | null = null;
+
+  if (scope !== null && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(valueStr)) {
+    const lookupResult = lookupVariable(scope, valueStr);
+    if (lookupResult.success) {
+      sourceType = (lookupResult as { success: true; data: Variable }).data.type;
+    }
+  } else {
+    sourceType = getTypeForValue(valueStr);
+  }
+
+  if (targetType === null) {
+    if (sourceType === null) {
+      return { success: false, error: "Cannot infer type for value: " + valueStr };
+    }
+    return { success: true, data: sourceType };
+  }
+
+  if (sourceType !== null && !canCoerceType(sourceType, targetType)) {
+    return { success: false, error: "Cannot coerce type " + sourceType + " to " + targetType };
+  }
+
+  return { success: true, data: targetType };
+}
+
 function parseVariableDeclaration(stmt: string, scope: VariableScope): Result<void, string> {
   const trimmed = stmt.trim();
 
@@ -297,33 +345,48 @@ function parseVariableDeclaration(stmt: string, scope: VariableScope): Result<vo
 
   const rest = trimmed.slice(4).trim();
   const colonIndex = rest.indexOf(":");
-
-  if (colonIndex === -1) {
-    return { success: false, error: "Expected ':' in variable declaration" };
-  }
-
-  const varName = rest.slice(0, colonIndex).trim();
-  const afterColon = rest.slice(colonIndex + 1).trim();
-  const equalsIndex = afterColon.indexOf("=");
+  const equalsIndex = rest.indexOf("=");
 
   if (equalsIndex === -1) {
     return { success: false, error: "Expected '=' in variable declaration" };
   }
 
-  const typeName = afterColon.slice(0, equalsIndex).trim();
-  const valueStr = afterColon.slice(equalsIndex + 1).trim();
+  let varName: string;
+  let targetType: string | null;
+  let valueStr: string;
 
-  if (!varName || !typeName || !valueStr) {
+  if (colonIndex === -1) {
+    varName = rest.slice(0, equalsIndex).trim();
+    targetType = null;
+    valueStr = rest.slice(equalsIndex + 1).trim();
+  } else if (colonIndex < equalsIndex) {
+    varName = rest.slice(0, colonIndex).trim();
+    const afterColon = rest.slice(colonIndex + 1).trim();
+    const equalsInAfterColon = afterColon.indexOf("=");
+    targetType = afterColon.slice(0, equalsInAfterColon).trim();
+    valueStr = afterColon.slice(equalsInAfterColon + 1).trim();
+  } else {
     return { success: false, error: "Invalid variable declaration format" };
   }
 
-  const valueResult = interpret(valueStr);
+  if (!varName || !valueStr) {
+    return { success: false, error: "Invalid variable declaration format" };
+  }
+
+  const valueResult = interpret(valueStr, scope);
   if (!valueResult.success) {
     return valueResult;
   }
 
   const value = (valueResult as { success: true; data: number | bigint }).data;
-  return declareVariable(scope, varName, typeName, value);
+  const typeResult = inferAndValidateType(valueStr, targetType, value, scope);
+
+  if (!typeResult.success) {
+    return typeResult;
+  }
+
+  const finalType = (typeResult as { success: true; data: string }).data;
+  return declareVariable(scope, varName, finalType, value);
 }
 
 function interpretWithVariables(input: string, scope: VariableScope): Result<number | bigint, string> {
