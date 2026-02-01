@@ -38,4 +38,8 @@ describe("execute", () => {
   it('should reject "-100U8"', () => {
     invalidate("-100U8");
   });
+
+  it('should reject "256U8"', () => {
+    invalidate("256U8");
+  });
 });
