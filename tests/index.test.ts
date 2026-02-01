@@ -191,4 +191,8 @@ describe("interpret - arithmetic operations", () => {
   it("should evaluate parenthesized expressions", () => {
     expectValid("(4 + 2) * 3", 18);
   });
+
+  it("should divide two untyped numbers", () => {
+    expectValid("10 / 5", 2);
+  });
 });
