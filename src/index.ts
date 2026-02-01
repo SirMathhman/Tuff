@@ -14,9 +14,40 @@ const TYPE_RANGES: Record<string, Range> = {
 };
 
 export function interpret(input: string): Result<number | bigint, string> {
+  const trimmedInput = input.trim();
+
+  if (trimmedInput.includes(" + ")) {
+    const parts = trimmedInput.split(" + ");
+    if (parts.length === 2) {
+      const leftResult = interpret(parts[0]);
+      const rightResult = interpret(parts[1]);
+
+      if (!leftResult.success) {
+        return leftResult;
+      }
+
+      if (!rightResult.success) {
+        return rightResult;
+      }
+
+      const left = leftResult.data;
+      const right = rightResult.data;
+
+      if (typeof left === "bigint" && typeof right === "bigint") {
+        return { success: true, data: left + right };
+      }
+
+      if (typeof left === "number" && typeof right === "number") {
+        return { success: true, data: left + right };
+      }
+
+      return { success: false, error: "Cannot add number and bigint together" };
+    }
+  }
+
   for (const [typeName, range] of Object.entries(TYPE_RANGES)) {
-    if (input.endsWith(typeName)) {
-      const numberStr = input.slice(0, -typeName.length);
+    if (trimmedInput.endsWith(typeName)) {
+      const numberStr = trimmedInput.slice(0, -typeName.length);
 
       if (typeName === "U64" || typeName === "I64") {
         const value = BigInt(numberStr);
@@ -46,7 +77,5 @@ export function interpret(input: string): Result<number | bigint, string> {
     }
   }
 
-  return { success: true, data: Number(input) };
+  return { success: true, data: Number(trimmedInput) };
 }
-  
-console.log("Hello from TypeScript!");
