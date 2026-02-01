@@ -38,4 +38,8 @@ describe("The compiler", () => {
   it("reads a U8 from stdin", () => {
     validate("read U8", 100, "100");
   });
+
+  it("adds two U8 values", () => {
+    validate("read U8 + read U8", 100, "25", "75");
+  });
 });
