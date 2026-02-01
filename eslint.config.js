@@ -29,6 +29,10 @@ export default [
             'Template strings are not allowed because they tend to be false flagged by PMD CPD. Use simple string concatenation instead.',
         },
       ],
+      'max-lines-per-function': [
+        'error',
+        { max: 50, skipBlankLines: true, skipComments: true },
+      ],
     },
   },
 ];
