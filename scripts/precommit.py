@@ -43,25 +43,7 @@ def analyze_duplication(output):
 
 
 def get_duplication_advice(duplication_text):
-    advice_list = []
-
-    has_function_params = "function" in duplication_text and (":" in duplication_text or "," in duplication_text)
-    has_long_declaration = len([line for line in duplication_text.split("\n") if ":" in line and len(line) > 80]) > 0
-    has_complex_type = "Record<" in duplication_text or "Result<" in duplication_text or "{ " in duplication_text
-
-    if has_long_declaration and has_function_params:
-        advice_list.append("Consider extracting function parameters into a parameter object to reduce duplication")
-
-    if has_complex_type:
-        advice_list.append("Consider extracting the complex type into a type alias for reusability")
-
-    if len(duplication_text.split("\n")) > 10:
-        advice_list.append("Consider extracting duplicated logic into a shared utility function")
-
-    if not advice_list:
-        advice_list.append("Review the duplicated code and consider refactoring for maintainability")
-
-    return advice_list
+    return [duplication_text]
 
 
 def print_recommendations():
