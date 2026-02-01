@@ -30,4 +30,8 @@ describe('execute', () => {
   it('should execute "100U8" and return 100', () => {
     expectExecute('100U8', 100);
   });
+
+  it('should throw an error when executing "-100U8"', () => {
+    expect(() => execute('-100U8')).toThrow();
+  });
 });
