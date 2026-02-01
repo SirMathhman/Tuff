@@ -30,6 +30,89 @@ function validateNoZeroDivision(source: string): void {
   }
 }
 
+function compileExpression(
+  source: string,
+  argCount: { value: number },
+): string {
+  const processMultDiv = (expr: string) => {
+    const tokens = tokenizeByOperators(expr, ["*", "/"]);
+    return tokens
+      .map((token) => {
+        if (token === "*" || token === "/") {
+          return token;
+        }
+        const trimmed = token.trim();
+        if (trimmed === "read U8") {
+          argCount.value = argCount.value + 1;
+          return "parseInt(process.argv[" + (argCount.value + 1) + "], 10)";
+        }
+        if (trimmed.startsWith("(")) {
+          return trimmed;
+        }
+        return trimmed;
+      })
+      .filter((t) => t.length > 0)
+      .join(" ");
+  };
+
+  const tokens = tokenizeByOperators(source, ["+", "-"]);
+  return tokens
+    .map((token) => {
+      if (token === "+" || token === "-") {
+        return token;
+      }
+      if (token.trim().startsWith("(")) {
+        return token;
+      }
+      return processMultDiv(token);
+    })
+    .filter((t) => t.length > 0)
+    .join(" ");
+}
+
+function handleParentheses(
+  source: string,
+  argCount: { value: number },
+): string {
+  const chars = source.split("");
+  const result = chars.reduce(
+    (acc, char, i) => {
+      if (acc.skip > 0) {
+        return {
+          result: acc.result,
+          skip: acc.skip - 1,
+        };
+      }
+
+      if (char === "(") {
+        let depth = 1;
+        let j = i + 1;
+        // eslint-disable-next-line no-restricted-syntax
+        while (j < chars.length && depth > 0) {
+          if (chars[j] === "(") depth = depth + 1;
+          if (chars[j] === ")") depth = depth - 1;
+          j = j + 1;
+        }
+        const innerExpr = source.substring(i + 1, j - 1);
+        const processed = handleParentheses(innerExpr, argCount);
+        const compiled = compileExpression(processed, argCount);
+        return {
+          result: acc.result + "(" + compiled + ")",
+          skip: j - i - 1,
+        };
+      }
+
+      return {
+        result: acc.result + char,
+        skip: 0,
+      };
+    },
+    { result: "", skip: 0 },
+  );
+
+  return result.result;
+}
+
 export function compile(source: string): string {
   source = source.trim();
 
@@ -52,39 +135,14 @@ export function compile(source: string): string {
     source.includes("+") ||
     source.includes("-") ||
     source.includes("*") ||
-    source.includes("/")
+    source.includes("/") ||
+    source.includes("(") ||
+    source.includes(")")
   ) {
-    let argCount = 0;
-
-    const processMultDiv = (expr: string) => {
-      const tokens = tokenizeByOperators(expr, ["*", "/"]);
-      return tokens
-        .map((token) => {
-          if (token === "*" || token === "/") {
-            return token;
-          }
-          const trimmed = token.trim();
-          if (trimmed === "read U8") {
-            argCount = argCount + 1;
-            return "parseInt(process.argv[" + (argCount + 1) + "], 10)";
-          }
-          return trimmed;
-        })
-        .filter((t) => t.length > 0)
-        .join(" ");
-    };
-
-    const tokens = tokenizeByOperators(source, ["+", "-"]);
-    const processed = tokens
-      .map((token) => {
-        if (token === "+" || token === "-") {
-          return token;
-        }
-        return processMultDiv(token);
-      })
-      .filter((t) => t.length > 0)
-      .join(" ");
-
+    const argCount = { value: 0 };
+    const processed = source.includes("(")
+      ? compileExpression(handleParentheses(source, argCount), argCount)
+      : compileExpression(source, argCount);
     return "process.exit(" + processed + ")";
   }
 

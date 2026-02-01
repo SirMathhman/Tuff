@@ -70,4 +70,8 @@ describe("The compiler", () => {
   it("rejects division by zero at compile time", () => {
     invalidate("read U8 / 0");
   });
+
+  it("respects parentheses in expressions", () => {
+    validate("(read U8 + read U8) * read U8", 45, "10", "5", "3");
+  });
 });
