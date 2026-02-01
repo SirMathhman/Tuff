@@ -28,11 +28,11 @@ function validateLiteral(value: number, suffix: string): void {
   if (value < range.min || value > range.max) {
     throw new Error(
       suffix +
-        ' value must be between ' +
+        " value must be between " +
         range.min +
-        ' and ' +
+        " and " +
         range.max +
-        ', got ' +
+        ", got " +
         value,
     );
   }
@@ -47,9 +47,9 @@ function validateAndAddType(
 ): void {
   allTypes.add(suffix);
 
-  if (isNegative && suffix.startsWith('U')) {
+  if (isNegative && suffix.startsWith("U")) {
     throw new Error(
-      'Type annotations are not allowed on negative numeric literals',
+      "Type annotations are not allowed on negative numeric literals",
     );
   }
 
@@ -58,12 +58,12 @@ function validateAndAddType(
 
 // Extract and validate all annotated numbers in the source expression
 function extractAndValidateAnnotations(source: string): Set<string> {
-  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
-  const typePattern = new RegExp('(' + validTypes + ')', 'g');
-  const numPattern = new RegExp('(-?)([0-9]+)(' + validTypes + ')', 'g');
+  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
+  const typePattern = new RegExp("(" + validTypes + ")", "g");
+  const numPattern = new RegExp("(-?)([0-9]+)(" + validTypes + ")", "g");
   const varPattern = new RegExp(
-    ':\\s*(' + validTypes + ')\\s*=\\s*(-?)([0-9]+)',
-    'g',
+    ":\\s*(" + validTypes + ")\\s*=\\s*(-?)([0-9]+)",
+    "g",
   );
 
   const allTypes = Array.from(source.matchAll(typePattern)).reduce(
@@ -77,7 +77,7 @@ function extractAndValidateAnnotations(source: string): Set<string> {
   Array.from(source.matchAll(numPattern)).forEach((match) => {
     validateAndAddType(
       match[3],
-      match[1] === '-',
+      match[1] === "-",
       parseInt(match[2], 10),
       allTypes,
     );
@@ -86,7 +86,7 @@ function extractAndValidateAnnotations(source: string): Set<string> {
   Array.from(source.matchAll(varPattern)).forEach((match) => {
     validateAndAddType(
       match[1],
-      match[2] === '-',
+      match[2] === "-",
       parseInt(match[3], 10),
       allTypes,
     );
@@ -99,7 +99,7 @@ function extractAndValidateAnnotations(source: string): Set<string> {
 function getWidestType(types: Set<string>): string {
   const typeList = Array.from(types);
   if (typeList.length === 0) {
-    return '';
+    return "";
   }
 
   return typeList.reduce((widest, type) => {
@@ -119,10 +119,10 @@ function findInitializerEnd(source: string, startIdx: number): number {
       }
 
       const braceDepth =
-        state.braceDepth + (ch === '{' ? 1 : ch === '}' ? -1 : 0);
+        state.braceDepth + (ch === "{" ? 1 : ch === "}" ? -1 : 0);
       const parenDepth =
-        state.parenDepth + (ch === '(' ? 1 : ch === ')' ? -1 : 0);
-      const found = ch === ';' && braceDepth === 0 && parenDepth === 0;
+        state.parenDepth + (ch === "(" ? 1 : ch === ")" ? -1 : 0);
+      const found = ch === ";" && braceDepth === 0 && parenDepth === 0;
 
       return {
         braceDepth,
@@ -139,11 +139,11 @@ function findInitializerEnd(source: string, startIdx: number): number {
 
 // Extract the inferred type of a variable from its initializer
 function getVariableType(initializer: string): string {
-  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
-  const typeMatch = new RegExp('(\\d+)(' + validTypes + ')\\b').exec(
+  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
+  const typeMatch = new RegExp("(\\d+)(" + validTypes + ")\\b").exec(
     initializer,
   );
-  return typeMatch ? typeMatch[2] : '';
+  return typeMatch ? typeMatch[2] : "";
 }
 
 // Check if sourceType can be assigned to targetType
@@ -155,9 +155,9 @@ function isTypeCompatible(sourceType: string, targetType: string): boolean {
 
 // Resolve variable references by tracking declarations and substituting values
 function resolveVariableReferences(source: string): string {
-  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
   const declMatch = new RegExp(
-    'let\\s+(\\w+)(?:\\s*:\\s*(' + validTypes + '))?\\s*=\\s*',
+    "let\\s+(\\w+)(?:\\s*:\\s*(" + validTypes + "))?\\s*=\\s*",
   ).exec(source);
 
   if (!declMatch) {
@@ -165,7 +165,7 @@ function resolveVariableReferences(source: string): string {
   }
 
   const varName = declMatch[1];
-  const targetType = declMatch[2] || '';
+  const targetType = declMatch[2] || "";
   const startIdx = declMatch.index;
   const afterEquals = startIdx + declMatch[0].length;
   const initEnd = findInitializerEnd(source, afterEquals);
@@ -179,9 +179,9 @@ function resolveVariableReferences(source: string): string {
 
   if (targetType && sourceType && !isTypeCompatible(sourceType, targetType)) {
     throw new Error(
-      'Cannot assign ' +
+      "Cannot assign " +
         sourceType +
-        ' to ' +
+        " to " +
         targetType +
         " variable '" +
         varName +
@@ -191,12 +191,12 @@ function resolveVariableReferences(source: string): string {
 
   const declEnd = initEnd + 1;
   const searchArea = source.substring(declEnd);
-  const varRefPattern = new RegExp('\\b' + varName + '\\b');
+  const varRefPattern = new RegExp("\\b" + varName + "\\b");
   const varRefMatch = varRefPattern.exec(searchArea);
 
   const nextSource = varRefMatch
     ? source.substring(0, startIdx) +
-      searchArea.replace(varRefPattern, '(' + varInit + ')')
+      searchArea.replace(varRefPattern, "(" + varInit + ")")
     : source.substring(0, startIdx) + source.substring(declEnd);
 
   if (nextSource === source) {
@@ -208,27 +208,27 @@ function resolveVariableReferences(source: string): string {
 
 // Process variable declarations like let x : U8 = 3; x or { let x : U8 = 3; x }
 function processVariableDeclarations(source: string): string {
-  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
   const resolved = resolveVariableReferences(source);
   const stabilized =
     resolved === source ? resolved : processVariableDeclarations(resolved);
 
   const bracedPattern = new RegExp(
-    '\\{\\s*let\\s+(\\w+)(?:\\s*:\\s*(?:' +
+    "\\{\\s*let\\s+(\\w+)(?:\\s*:\\s*(?:" +
       validTypes +
-      '))?\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
-    'g',
+      "))?\\s*=\\s*([^;]+);\\s*\\1\\s*\\}",
+    "g",
   );
-  return stabilized.replace(bracedPattern, '($2)');
+  return stabilized.replace(bracedPattern, "($2)");
 }
 
 // Remove all type annotations from the source expression
 function removeTypeAnnotations(source: string): string {
-  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
   return source
-    .replace(new RegExp('([0-9]+)(' + validTypes + ')', 'g'), '$1')
-    .replace(new RegExp('-([0-9]+)(' + validTypes + ')', 'g'), '-$1')
-    .replace(new RegExp(':\\s*(' + validTypes + ')', 'g'), '');
+    .replace(new RegExp("([0-9]+)(" + validTypes + ")", "g"), "$1")
+    .replace(new RegExp("-([0-9]+)(" + validTypes + ")", "g"), "-$1")
+    .replace(new RegExp(":\\s*(" + validTypes + ")", "g"), "");
 }
 
 // Remove curly braces from the source expression (preserving function bodies)
@@ -237,7 +237,7 @@ function removeCurlyBraces(source: string): string {
   if (/\(function\(\)/.test(source)) {
     return source;
   }
-  return source.replace(/[{}]/g, '');
+  return source.replace(/[{}]/g, "");
 }
 
 // Ensure no variable is redeclared in the same scope
@@ -258,7 +258,7 @@ function checkRedeclarations(source: string): void {
   const innerBlockMatch = source.match(/\{([^{}]*)\}/);
   if (innerBlockMatch) {
     validateNoDuplicates(innerBlockMatch[1]);
-    const nextSource = source.replace(/\{[^{}]*\}/, '');
+    const nextSource = source.replace(/\{[^{}]*\}/, "");
     checkRedeclarations(nextSource);
     return;
   }
@@ -269,7 +269,7 @@ function checkRedeclarations(source: string): void {
 function processMutableVariables(source: string): string {
   const hasMut = /let\s+mut\s+/.test(source);
   const hasReassignment = /\b([a-zA-Z_]\w*)\s*=\s*[^;=]/.test(
-    source.replace(/let\s+(?:mut\s+)?\w+\s*(?::\s*\w+)?\s*=/g, ''),
+    source.replace(/let\s+(?:mut\s+)?\w+\s*(?::\s*\w+)?\s*=/g, ""),
   );
 
   if (!hasMut && !hasReassignment) {
@@ -277,22 +277,22 @@ function processMutableVariables(source: string): string {
   }
 
   // Replace let mut with let
-  let transformed = source.replace(/let\s+mut\s+/g, 'let ');
+  let transformed = source.replace(/let\s+mut\s+/g, "let ");
 
   // Extract the final return value (last standalone identifier)
   const lastIdMatch = transformed.match(/;\s*([a-zA-Z_]\w*)\s*$/);
-  const returnVar = lastIdMatch ? lastIdMatch[1] : '';
+  const returnVar = lastIdMatch ? lastIdMatch[1] : "";
 
   if (!returnVar) {
     return transformed;
   }
 
   // Remove the trailing variable reference
-  const withoutTrailing = transformed.replace(/;\s*[a-zA-Z_]\w*\s*$/, ';');
+  const withoutTrailing = transformed.replace(/;\s*[a-zA-Z_]\w*\s*$/, ";");
 
   // Wrap in IIFE for mutation support
   const wrapped =
-    '(function() { ' + withoutTrailing + ' return ' + returnVar + '; })()';
+    "(function() { " + withoutTrailing + " return " + returnVar + "; })()";
   return wrapped;
 }
 
@@ -302,12 +302,12 @@ function extractVariableDeclarations(source: string): {
   declaredVars: Set<string>;
   varTypes: Record<string, string>;
 } {
-  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  const validTypes = "U8|U16|U32|U64|I8|I16|I32|I64";
   const declPattern = new RegExp(
-    'let\\s+(mut\\s+)?(\\w+)(?:\\s*:\\s*(' +
+    "let\\s+(mut\\s+)?(\\w+)(?:\\s*:\\s*(" +
       validTypes +
-      '))?\\s*=\\s*([^;]+);',
-    'g',
+      "))?\\s*=\\s*([^;]+);",
+    "g",
   );
 
   const mutableVars = new Set<string>();
@@ -315,9 +315,9 @@ function extractVariableDeclarations(source: string): {
   const varTypes: Record<string, string> = {};
 
   Array.from(source.matchAll(declPattern)).forEach((match) => {
-    const isMutable = match[1] === 'mut ';
+    const isMutable = match[1] === "mut ";
     const varName = match[2];
-    const declaredType = match[3] || '';
+    const declaredType = match[3] || "";
     const initializer = match[4].trim();
 
     declaredVars.add(varName);
@@ -357,7 +357,10 @@ function validateReassignments(
       matchStart,
     );
 
-    if (typeAnnotPattern.test(beforeMatch) || /let\s+(?:mut\s+)?\w*\s*$/.test(beforeMatch)) {
+    if (
+      typeAnnotPattern.test(beforeMatch) || 
+      /let\s+(?:mut\s+)?\w*\s*$/.test(beforeMatch)
+    ) {
       return;
     }
 
@@ -371,9 +374,9 @@ function validateReassignments(
 
       if (assignedType && !isTypeCompatible(assignedType, declaredType)) {
         throw new Error(
-          'Cannot assign ' +
+          "Cannot assign " +
             assignedType +
-            ' to ' +
+            " to " +
             declaredType +
             " variable '" +
             varName +
@@ -386,7 +389,8 @@ function validateReassignments(
 
 // Validate that reassignments only occur on mutable variables and check type compatibility
 function validateImmutability(source: string): void {
-  const { mutableVars, declaredVars, varTypes } = extractVariableDeclarations(source);
+  const { mutableVars, declaredVars, varTypes } =
+    extractVariableDeclarations(source);
   validateReassignments(source, mutableVars, declaredVars, varTypes);
 }
 
@@ -402,17 +406,17 @@ function validateExpressionResult(
   const resultType = getWidestType(allTypes);
   const range = typeRanges[resultType];
 
-  const fn = new Function('return ' + compiled);
+  const fn = new Function("return " + compiled);
   const result = fn() as number;
 
   if (result < range.min || result > range.max) {
     throw new Error(
       resultType +
-        ' value must be between ' +
+        " value must be between " +
         range.min +
-        ' and ' +
+        " and " +
         range.max +
-        ', got ' +
+        ", got " +
         result,
     );
   }
@@ -436,5 +440,5 @@ export function compileTuffToJS(source: string): string {
   compiled = removeTypeAnnotations(compiled);
   compiled = removeCurlyBraces(compiled);
   validateExpressionResult(compiled, allTypes);
-  return 'return ' + compiled;
+  return "return " + compiled;
 }
