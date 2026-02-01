@@ -1,4 +1,4 @@
-import { Result, Variable, FunctionDef, FunctionParameter, VariableScope, TYPE_RANGES, isPointerType } from "./types";
+import { Result, Variable, FunctionDef, FunctionParameter, VariableScope, TYPE_RANGES, isPointerType, isArrayType } from "./types";
 import { canCoerceType, validateNumber } from "./operators";
 import { getInterpret, getInterpretStatementBlock } from "./lazy";
 
@@ -6,7 +6,7 @@ export function createScope(parent: VariableScope | null = null): VariableScope 
   return { variables: new Map(), functions: new Map(), parent };
 }
 
-export function declareVariable(scope: VariableScope, name: string, type: string, value: number | bigint | string, mutable: boolean = false): Result<void, string> {
+export function declareVariable(scope: VariableScope, name: string, type: string, value: number | bigint | string | (number | bigint)[], mutable: boolean = false): Result<void, string> {
   if (scope.variables.has(name)) {
     return { success: false, error: "Variable " + name + " already declared in this scope" };
   }
@@ -20,7 +20,16 @@ export function declareVariable(scope: VariableScope, name: string, type: string
     return { success: true, data: undefined };
   }
 
-  // For non-pointer types, validate normally
+  // For array types, value should be an array
+  if (isArrayType(type)) {
+    if (!Array.isArray(value)) {
+      return { success: false, error: "Array variable must be initialized with an array" };
+    }
+    scope.variables.set(name, { name, type, value, mutable });
+    return { success: true, data: undefined };
+  }
+
+  // For non-pointer, non-array types, validate normally
   const range = TYPE_RANGES[type];
   if (!range) {
     return { success: false, error: "Unknown type: " + type };
@@ -155,6 +164,10 @@ export function interpretWithVariables(input: string, scope: VariableScope): Res
       if (typeof varData.value === "string") {
         // This is a reference - look up the referenced variable recursively
         return interpretWithVariables(varData.value, scope);
+      }
+      // Arrays cannot be interpreted directly - must use indexing
+      if (Array.isArray(varData.value)) {
+        return { success: false, error: "Cannot interpret array directly - use array indexing: " + trimmed + "[index]" };
       }
       return { success: true, data: varData.value as number | bigint };
     } else {

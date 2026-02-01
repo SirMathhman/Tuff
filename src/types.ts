@@ -1,6 +1,6 @@
 export type Result<T, E> = { success: true; data: T } | { success: false; error: E };
 
-export type Variable = { name: string; type: string; value: number | bigint | string; mutable: boolean };
+export type Variable = { name: string; type: string; value: number | bigint | string | (number | bigint)[]; mutable: boolean };
 
 export type FunctionParameter = { name: string; type: string };
 
@@ -75,3 +75,35 @@ export function stripMutability(type: string): string {
   return type;
 }
 
+// Array type handling
+export function isArrayType(type: string): boolean {
+  return type.startsWith("[") && type.includes(";");
+}
+
+export function parseArrayType(type: string): { elementType: string; initialized: number; total: number } | null {
+  if (!isArrayType(type)) {
+    return null;
+  }
+  // Parse [Type; Initialized; Total]
+  const match = type.match(/^\[([a-zA-Z0-9*mut ]+);\s*(\d+);\s*(\d+)\]$/);
+  if (!match) {
+    return null;
+  }
+  return {
+    elementType: match[1],
+    initialized: parseInt(match[2], 10),
+    total: parseInt(match[3], 10),
+  };
+}
+
+export function getArrayElementType(type: string): string | null {
+  const parsed = parseArrayType(type);
+  if (!parsed) {
+    return null;
+  }
+  return parsed.elementType;
+}
+
+export function isBaseType(type: string): boolean {
+  return TYPE_RANGES[type] !== undefined;
+}

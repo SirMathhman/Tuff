@@ -412,3 +412,53 @@ describe("interpret - mutable pointers", () => {
     expectValid("let mut x : I32 = 0; let y : *mut I32 = &mut x; *y = 100; x", 100);
   });
 });
+
+describe("interpret - arrays", () => {
+  it("should create and access simple array", () => {
+    expectValid("let array : [I32; 3; 3] = <I32>[1, 2, 3]; array[0]", 1);
+  });
+
+  it("should access different array indices", () => {
+    expectValid("let array : [I32; 3; 3] = <I32>[10, 20, 30]; array[1]", 20);
+  });
+
+  it("should access last array element", () => {
+    expectValid("let array : [I32; 3; 3] = <I32>[10, 20, 30]; array[2]", 30);
+  });
+
+  it("should create array with U32 type", () => {
+    expectValid("let array : [U32; 2; 2] = <U32>[100, 200]; array[0]", 100);
+  });
+
+  it("should handle array with mutable variable", () => {
+    expectValid("let mut array : [I32; 2; 2] = <I32>[5, 10]; array[0]", 5);
+  });
+
+  it("should assign to array element", () => {
+    expectValid("let mut array : [I32; 2; 2] = <I32>[5, 10]; array[0] = 100; array[0]", 100);
+  });
+
+  it("should update both array elements", () => {
+    expectValid("let mut array : [I32; 2; 2] = <I32>[5, 10]; array[0] = 100; array[1] = 200; array[1]", 200);
+  });
+
+  it("should return error for immutable array assignment", () => {
+    expectInvalid("let array : [I32; 2; 2] = <I32>[5, 10]; array[0] = 100; array[0]");
+  });
+
+  it("should return error for array index out of bounds", () => {
+    expectInvalid("let array : [I32; 2; 2] = <I32>[5, 10]; array[5]");
+  });
+
+  it("should return error for negative array index", () => {
+    expectInvalid("let array : [I32; 2; 2] = <I32>[5, 10]; array[-1]");
+  });
+
+  it("should return error for array initialization mismatch", () => {
+    expectInvalid("let array : [I32; 3; 3] = <I32>[1, 2]; array[0]");
+  });
+
+  it("should return error for type mismatch in array initialization", () => {
+    expectInvalid("let array : [I32; 2; 2] = <U32>[5, 10]; array[0]");
+  });
+});

@@ -50,6 +50,15 @@ function evaluateRhs(rhs: string, scope: VariableScope): Result<{ value: number 
   return { success: true, data: { value, type } };
 }
 
+function evaluateRhsToValue(rhs: string, scope: VariableScope): Result<number | bigint, string> {
+  const rhsEvalResult = evaluateRhs(rhs, scope);
+  if (!rhsEvalResult.success) {
+    return rhsEvalResult as Result<number | bigint, string>;
+  }
+  const { value } = (rhsEvalResult as { success: true; data: { value: number | bigint; type: string | null } }).data;
+  return { success: true, data: value };
+}
+
 export function interpretStatementBlock(input: string, parentScope: VariableScope | null = null): Result<number | bigint, string> {
   const parseResult = parseStatementBlock(input);
   if (!parseResult.success) {
@@ -79,11 +88,11 @@ export function interpretStatementBlock(input: string, parentScope: VariableScop
           // Handle dereferenced assignment: *ptr = value
           if (lhs.startsWith("*") && /^\*[a-zA-Z_][a-zA-Z0-9_]*$/.test(lhs)) {
             const ptrVarName = lhs.slice(1); // Remove the *
-            const rhsEvalResult = evaluateRhs(rhs, blockScope);
-            if (!rhsEvalResult.success) {
-              return rhsEvalResult;
+            const extractResult = evaluateRhsToValue(rhs, blockScope);
+            if (!extractResult.success) {
+              return extractResult;
             }
-            const { value: newValue } = (rhsEvalResult as { success: true; data: { value: number | bigint; type: string | null } }).data;
+            const newValue = (extractResult as { success: true; data: number | bigint }).data;
             const assignResult = assignThroughMutablePointer(blockScope, ptrVarName, newValue);
             if (!assignResult.success) {
               return assignResult;
@@ -91,7 +100,52 @@ export function interpretStatementBlock(input: string, parentScope: VariableScop
             continue;
           }
           
-          // Handle regular assignment: var = value
+          // Handle array indexing assignment: array[index] = value
+          if (lhs.includes("[") && lhs.includes("]")) {
+            const bracketStart = lhs.indexOf("[");
+            const bracketEnd = lhs.lastIndexOf("]");
+            if (bracketStart > 0 && bracketEnd > bracketStart && bracketEnd === lhs.length - 1) {
+              const arrayName = lhs.slice(0, bracketStart).trim();
+              const indexExpr = lhs.slice(bracketStart + 1, bracketEnd).trim();
+              
+              if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(arrayName)) {
+                const arrayLookup = lookupVariable(blockScope, arrayName);
+                if (arrayLookup.success) {
+                  const arrayVar = (arrayLookup as { success: true; data: Variable }).data;
+                  if (Array.isArray(arrayVar.value)) {
+                    // Evaluate the index
+                    const indexResult = interpret(indexExpr, blockScope);
+                    if (!indexResult.success) {
+                      return indexResult;
+                    }
+                    const index = indexResult.data;
+                    const indexNum = typeof index === "bigint" ? Number(index) : index;
+                    
+                    if (!arrayVar.mutable) {
+                      return { success: false, error: "Cannot assign to immutable array: " + arrayName };
+                    }
+                    
+                    if (indexNum < 0 || indexNum >= arrayVar.value.length) {
+                      return { success: false, error: "Array index out of bounds: " + indexNum + " (array length: " + arrayVar.value.length + ")" };
+                    }
+                    
+                     // Evaluate RHS
+                     const extractResult = evaluateRhsToValue(rhs, blockScope);
+                     if (!extractResult.success) {
+                       return extractResult;
+                     }
+                     const newValue = (extractResult as { success: true; data: number | bigint }).data;
+                     
+                     // Set the array element
+                     (arrayVar.value as (number | bigint)[])[indexNum] = newValue;
+                     continue;
+                  }
+                }
+              }
+            }
+          }
+          
+           // Handle regular assignment: var = value
           if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(lhs)) {
             const rhsEvalResult = evaluateRhs(rhs, blockScope);
             if (!rhsEvalResult.success) {
@@ -155,6 +209,9 @@ export function interpret(input: string, scope: VariableScope | null = null): Re
       if (typeof currentVar.value === "string") {
         return { success: false, error: "Final value is still a reference - incomplete dereferencing" };
       }
+      if (Array.isArray(currentVar.value)) {
+        return { success: false, error: "Cannot dereference to array - use array indexing instead" };
+      }
       return { success: true, data: currentVar.value };
     }
   }
@@ -202,20 +259,54 @@ export function interpret(input: string, scope: VariableScope | null = null): Re
     return interpret(evaluated, scope);
   }
 
-  if (scope !== null && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmedInput)) {
-    const lookupResult = lookupVariable(scope, trimmedInput);
-    if (lookupResult.success) {
-      const varData = (lookupResult as { success: true; data: Variable }).data;
-      // If the variable is a pointer/reference, dereference it
-      if (typeof varData.value === "string") {
-        // This is a reference - look up the referenced variable recursively
-        return interpret(varData.value, scope);
-      }
-      return { success: true, data: varData.value as number | bigint };
-    } else {
-      return lookupResult;
-    }
-  }
+   if (scope !== null && /^[a-zA-Z_][a-zA-Z0-9_]*\[/.test(trimmedInput)) {
+     // Handle array indexing read: array[index]
+     const bracketStart = trimmedInput.indexOf("[");
+     const bracketEnd = trimmedInput.lastIndexOf("]");
+     
+     if (bracketStart > 0 && bracketEnd > bracketStart && bracketEnd === trimmedInput.length - 1) {
+       const arrayName = trimmedInput.slice(0, bracketStart).trim();
+       const indexExpr = trimmedInput.slice(bracketStart + 1, bracketEnd).trim();
+       
+       if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(arrayName)) {
+         const arrayLookup = lookupVariable(scope, arrayName);
+         if (arrayLookup.success) {
+           const arrayVar = (arrayLookup as { success: true; data: Variable }).data;
+           if (Array.isArray(arrayVar.value)) {
+             // Evaluate the index
+             const indexResult = interpret(indexExpr, scope);
+             if (!indexResult.success) {
+               return indexResult;
+             }
+             const index = indexResult.data;
+             const indexNum = typeof index === "bigint" ? Number(index) : index;
+             
+             if (indexNum < 0 || indexNum >= arrayVar.value.length) {
+               return { success: false, error: "Array index out of bounds: " + indexNum + " (array length: " + arrayVar.value.length + ")" };
+             }
+             
+             const element = arrayVar.value[indexNum];
+             return { success: true, data: element };
+           }
+         }
+       }
+     }
+   }
+
+   if (scope !== null && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmedInput)) {
+     const lookupResult = lookupVariable(scope, trimmedInput);
+     if (lookupResult.success) {
+       const varData = (lookupResult as { success: true; data: Variable }).data;
+       // If the variable is a pointer/reference, dereference it
+       if (typeof varData.value === "string") {
+         // This is a reference - look up the referenced variable recursively
+         return interpret(varData.value, scope);
+       }
+       return { success: true, data: varData.value as number | bigint };
+     } else {
+       return lookupResult;
+     }
+   }
 
   if (trimmedInput.includes(" + ") || trimmedInput.includes(" - ") || trimmedInput.includes(" * ") || trimmedInput.includes(" / ")) {
     const tokens = tokenizeExpression(trimmedInput);

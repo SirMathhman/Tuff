@@ -1,5 +1,5 @@
-import { Result, VariableScope, Variable, FunctionParameter, isMutablePointerType, getPointeeType } from "./types";
-import { canCoerceType, getTypeForValue } from "./operators";
+import { Result, VariableScope, Variable, FunctionParameter, isMutablePointerType, getPointeeType, isArrayType, TYPE_RANGES, parseArrayType } from "./types";
+import { canCoerceType, getTypeForValue, validateNumber } from "./operators";
 import { lookupVariable, declareVariable, declareFunction } from "./executor";
 import { getInterpret } from "./lazy";
 
@@ -11,6 +11,7 @@ export function parseStatementBlock(input: string): Result<{ statements: string[
   let current = "";
   let braceDepth = 0;
   let parenDepth = 0;
+  let bracketDepth = 0;
 
   for (let i = 0; i < trimmed.length; i++) {
     const char = trimmed[i];
@@ -27,7 +28,13 @@ export function parseStatementBlock(input: string): Result<{ statements: string[
     } else if (char === ")") {
       parenDepth--;
       current += char;
-    } else if (char === ";" && braceDepth === 0 && parenDepth === 0) {
+    } else if (char === "[") {
+      bracketDepth++;
+      current += char;
+    } else if (char === "]") {
+      bracketDepth--;
+      current += char;
+    } else if (char === ";" && braceDepth === 0 && parenDepth === 0 && bracketDepth === 0) {
       if (current.trim()) {
         parts.push(current.trim());
       }
@@ -159,6 +166,70 @@ function initializePointerVariable(varName: string, targetType: string, valueStr
    return declareVariable(scope, varName, targetType, referencedVarName as unknown as number | bigint, mutable);
 }
 
+function initializeArrayVariable(varName: string, targetType: string, valueStr: string, scope: VariableScope, mutable: boolean): Result<void, string> {
+   // Parse array initialization: <Type>[elem1, elem2, elem3]
+   const typeMatch = valueStr.match(/^<([a-zA-Z0-9*mut ]+)>\[(.+)\]$/);
+   if (!typeMatch) {
+     return { success: false, error: "Invalid array initialization format. Expected: <Type>[elem1, elem2, ...]" };
+   }
+
+   const elementTypeStr = typeMatch[1];
+   const elementsStr = typeMatch[2];
+   
+   // Parse the array elements
+   const elements: (number | bigint)[] = [];
+   const elementStrings = elementsStr.split(",");
+   
+   for (const elemStr of elementStrings) {
+     const trimmedElem = elemStr.trim();
+     const elemResult = getInterpret()(trimmedElem, scope);
+     if (!elemResult.success) {
+       return elemResult as unknown as Result<void, string>;
+     }
+     elements.push((elemResult as { success: true; data: number | bigint }).data);
+   }
+
+   // Validate array type matches
+   const typeResult = inferAndValidateType(elementTypeStr, null, 0, null);
+   if (!typeResult.success) {
+     return typeResult;
+   }
+   const inferredElementType = (typeResult as { success: true; data: string }).data;
+
+   // Check that all elements fit in the element type
+   const typeInfo = TYPE_RANGES[inferredElementType];
+   if (!typeInfo) {
+     return { success: false, error: "Unknown type: " + inferredElementType };
+   }
+
+   for (let i = 0; i < elements.length; i++) {
+     const validateResult = validateNumber(elements[i], typeInfo, inferredElementType);
+     if (!validateResult.success) {
+       return validateResult as unknown as Result<void, string>;
+     }
+   }
+
+   // Validate that array type declaration matches initialization
+   const arrayTypeInfo = parseArrayType(targetType);
+   if (!arrayTypeInfo) {
+     return { success: false, error: "Invalid array type declaration" };
+   }
+
+   if (arrayTypeInfo.elementType !== inferredElementType) {
+     return { success: false, error: "Array element type mismatch: expected " + arrayTypeInfo.elementType + ", got " + inferredElementType };
+   }
+
+   if (elements.length !== arrayTypeInfo.initialized) {
+     return { success: false, error: "Array initialization count mismatch: expected " + arrayTypeInfo.initialized + " elements, got " + elements.length };
+   }
+
+   if (arrayTypeInfo.initialized > arrayTypeInfo.total) {
+     return { success: false, error: "Initialized elements (" + arrayTypeInfo.initialized + ") cannot exceed total elements (" + arrayTypeInfo.total + ")" };
+   }
+
+   return declareVariable(scope, varName, targetType, elements, mutable);
+}
+
 function initializeRegularVariable(varName: string, targetType: string | null, valueStr: string, scope: VariableScope, mutable: boolean): Result<void, string> {
    const valueResult = getInterpret()(valueStr, scope);
    if (!valueResult.success) {
@@ -198,9 +269,14 @@ export function parseVariableDeclaration(stmt: string, scope: VariableScope): Re
 
    const { varName, targetType, valueStr } = (partsResult as { success: true; data: { varName: string; targetType: string | null; valueStr: string } }).data;
    const isPointerType = targetType !== null && targetType.startsWith("*");
+   const isArrayTypeDecl = targetType !== null && isArrayType(targetType);
 
    if (isPointerType) {
      return initializePointerVariable(varName, targetType as string, valueStr, scope, mutable);
+   }
+
+   if (isArrayTypeDecl) {
+     return initializeArrayVariable(varName, targetType as string, valueStr, scope, mutable);
    }
 
    return initializeRegularVariable(varName, targetType, valueStr, scope, mutable);
