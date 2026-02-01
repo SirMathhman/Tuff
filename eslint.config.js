@@ -28,6 +28,26 @@ export default [
           message:
             'Template strings are not allowed because they tend to be false flagged by PMD CPD. Use simple string concatenation instead.',
         },
+        {
+          selector: 'ForStatement',
+          message: 'Use array methods like map/reduce instead of loops.',
+        },
+        {
+          selector: 'ForInStatement',
+          message: 'Use array methods like map/reduce instead of loops.',
+        },
+        {
+          selector: 'ForOfStatement',
+          message: 'Use array methods like map/reduce instead of loops.',
+        },
+        {
+          selector: 'WhileStatement',
+          message: 'Use array methods like map/reduce instead of loops.',
+        },
+        {
+          selector: 'DoWhileStatement',
+          message: 'Use array methods like map/reduce instead of loops.',
+        },
       ],
       'max-lines-per-function': [
         'error',

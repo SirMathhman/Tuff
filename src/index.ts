@@ -47,63 +47,44 @@ function validateAndAddType(
 // Extract and validate all annotated numbers in the source expression
 function extractAndValidateAnnotations(source: string): Set<string> {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
-  const allTypes: Set<string> = new Set();
-
   const typePattern = new RegExp('(' + validTypes + ')', 'g');
-  let match;
-  let iterations = 0;
-  const maxIterations = 10000;
-
-  while (
-    (match = typePattern.exec(source)) !== null &&
-    iterations < maxIterations
-  ) {
-    iterations = iterations + 1;
-    allTypes.add(match[1]);
-  }
-
   const numPattern = new RegExp('(-?)([0-9]+)(' + validTypes + ')', 'g');
-  iterations = 0;
-  while (
-    (match = numPattern.exec(source)) !== null &&
-    iterations < maxIterations
-  ) {
-    iterations = iterations + 1;
+  const varPattern = new RegExp(
+    ':\\s*(' + validTypes + ')\\s*=\\s*(-?)([0-9]+)',
+    'g',
+  );
+
+  const allTypes = Array.from(source.matchAll(typePattern)).reduce(
+    (set, match) => {
+      set.add(match[1]);
+      return set;
+    },
+    new Set<string>(),
+  );
+
+  Array.from(source.matchAll(numPattern)).forEach((match) => {
     validateAndAddType(
       match[3],
       match[1] === '-',
       parseInt(match[2], 10),
       allTypes,
     );
-  }
+  });
 
-  const varPattern = new RegExp(
-    ':\\s*(' + validTypes + ')\\s*=\\s*(-?)([0-9]+)',
-    'g',
-  );
-  iterations = 0;
-  while (
-    (match = varPattern.exec(source)) !== null &&
-    iterations < maxIterations
-  ) {
-    iterations = iterations + 1;
+  Array.from(source.matchAll(varPattern)).forEach((match) => {
     validateAndAddType(
       match[1],
       match[2] === '-',
       parseInt(match[3], 10),
       allTypes,
     );
-  }
+  });
 
   return allTypes;
 }
 
 // Get the widest type from a set of types
 function getWidestType(types: Set<string>): string {
-  if (types.size === 0) {
-    return '';
-  }
-
   const typeOrder: Record<string, number> = {
     U8: 1,
     U16: 2,
@@ -115,125 +96,90 @@ function getWidestType(types: Set<string>): string {
     I64: 8,
   };
 
-  let widest = Array.from(types)[0];
-  let widestOrder = typeOrder[widest] || 0;
-
-  let iterations = 0;
-  const maxIterations = 10000;
-  for (const type of types) {
-    iterations = iterations + 1;
-    if (iterations > maxIterations) {
-      break;
-    }
-    const order = typeOrder[type] || 0;
-    if (order > widestOrder) {
-      widest = type;
-      widestOrder = order;
-    }
+  const typeList = Array.from(types);
+  if (typeList.length === 0) {
+    return '';
   }
 
-  return widest;
+  return typeList.reduce((widest, type) => {
+    const widestOrder = typeOrder[widest] || 0;
+    const order = typeOrder[type] || 0;
+    return order > widestOrder ? type : widest;
+  }, typeList[0]);
 }
 
 // Parse a variable declaration and extract variable name, type, and initializer
 function findInitializerEnd(source: string, startIdx: number): number {
-  let braceDepth = 0;
-  let parenDepth = 0;
+  const slice = Array.from(source.slice(startIdx));
+  const result = slice.reduce(
+    (state, ch, index) => {
+      if (state.found) {
+        return state;
+      }
 
-  let iterations = 0;
-  const maxIterations = 10000;
-  for (
-    let i = startIdx;
-    i < source.length && iterations < maxIterations;
-    i = i + 1
-  ) {
-    iterations = iterations + 1;
-    const ch = source[i];
-    if (ch === '{') {
-      braceDepth = braceDepth + 1;
-    } else if (ch === '}') {
-      braceDepth = braceDepth - 1;
-    } else if (ch === '(') {
-      parenDepth = parenDepth + 1;
-    } else if (ch === ')') {
-      parenDepth = parenDepth - 1;
-    } else if (ch === ';' && braceDepth === 0 && parenDepth === 0) {
-      return i;
-    }
-  }
+      const braceDepth =
+        state.braceDepth + (ch === '{' ? 1 : ch === '}' ? -1 : 0);
+      const parenDepth =
+        state.parenDepth + (ch === '(' ? 1 : ch === ')' ? -1 : 0);
+      const found = ch === ';' && braceDepth === 0 && parenDepth === 0;
 
-  return -1;
+      return {
+        braceDepth,
+        parenDepth,
+        found,
+        end: found ? index : -1,
+      };
+    },
+    { braceDepth: 0, parenDepth: 0, found: false, end: -1 },
+  );
+
+  return result.found ? startIdx + result.end : -1;
 }
 
 // Resolve variable references by tracking declarations and substituting values
 function resolveVariableReferences(source: string): string {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  const declMatch = new RegExp(
+    'let\\s+(\\w+)(?:\\s*:\\s*(?:' + validTypes + '))?\\s*=\\s*',
+  ).exec(source);
 
-  let processed = source;
-  let changed = true;
-  let iterations = 0;
-  const maxIterations = 1000;
-
-  while (changed && iterations < maxIterations) {
-    iterations = iterations + 1;
-    changed = false;
-
-    const declMatch = new RegExp(
-      'let\\s+(\\w+)(?:\\s*:\\s*(?:' + validTypes + '))?\\s*=\\s*',
-    ).exec(processed);
-
-    if (!declMatch) {
-      break;
-    }
-
-    const varName = declMatch[1];
-    const startIdx = declMatch.index;
-    const afterEquals = startIdx + declMatch[0].length;
-    const initEnd = findInitializerEnd(processed, afterEquals);
-
-    if (initEnd === -1) {
-      break;
-    }
-
-    const varInit = processed.substring(afterEquals, initEnd).trim();
-    const declEnd = initEnd + 1;
-
-    const searchArea = processed.substring(declEnd);
-    const varRefPattern = new RegExp('\\b' + varName + '\\b');
-    const varRefMatch = varRefPattern.exec(searchArea);
-
-    if (varRefMatch) {
-      processed =
-        processed.substring(0, startIdx) +
-        searchArea.replace(varRefPattern, '(' + varInit + ')');
-      changed = true;
-    } else {
-      processed =
-        processed.substring(0, startIdx) + processed.substring(declEnd);
-      changed = true;
-    }
+  if (!declMatch) {
+    return source;
   }
 
-  return processed;
+  const varName = declMatch[1];
+  const startIdx = declMatch.index;
+  const afterEquals = startIdx + declMatch[0].length;
+  const initEnd = findInitializerEnd(source, afterEquals);
+
+  if (initEnd === -1) {
+    return source;
+  }
+
+  const varInit = source.substring(afterEquals, initEnd).trim();
+  const declEnd = initEnd + 1;
+  const searchArea = source.substring(declEnd);
+  const varRefPattern = new RegExp('\\b' + varName + '\\b');
+  const varRefMatch = varRefPattern.exec(searchArea);
+
+  const nextSource = varRefMatch
+    ? source.substring(0, startIdx) +
+      searchArea.replace(varRefPattern, '(' + varInit + ')')
+    : source.substring(0, startIdx) + source.substring(declEnd);
+
+  if (nextSource === source) {
+    return source;
+  }
+
+  return resolveVariableReferences(nextSource);
 }
 
 // Process variable declarations like let x : U8 = 3; x or { let x : U8 = 3; x }
 function processVariableDeclarations(source: string): string {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
-  let processed = source;
-  let last;
-  let iterations = 0;
-  const maxIterations = 1000;
-
-  do {
-    iterations = iterations + 1;
-    if (iterations > maxIterations) {
-      break;
-    }
-
-    last = processed;
-    processed = resolveVariableReferences(processed);
-  } while (processed !== last);
+  const resolved = resolveVariableReferences(source);
+  const stabilized =
+    resolved === source ? resolved : processVariableDeclarations(resolved);
 
   const bracedPattern = new RegExp(
     '\\{\\s*let\\s+(\\w+)(?:\\s*:\\s*(?:' +
@@ -241,9 +187,7 @@ function processVariableDeclarations(source: string): string {
       '))?\\s*=\\s*([^;]+);\\s*\\1\\s*\\}',
     'g',
   );
-  processed = processed.replace(bracedPattern, '($2)');
-
-  return processed;
+  return stabilized.replace(bracedPattern, '($2)');
 }
 
 // Remove all type annotations from the source expression
@@ -263,40 +207,26 @@ function removeCurlyBraces(source: string): string {
 // Ensure no variable is redeclared in the same scope
 function validateNoDuplicates(content: string): void {
   const letPattern = /let\s+([a-zA-Z_]\w*)/g;
-  const seen = new Set<string>();
-  let match;
-  let iterations = 0;
-  const maxIterations = 10000;
-
-  while (
-    (match = letPattern.exec(content)) !== null &&
-    iterations < maxIterations
-  ) {
-    iterations = iterations + 1;
+  Array.from(content.matchAll(letPattern)).reduce((seen, match) => {
     const id = match[1];
     if (seen.has(id)) {
       throw new Error("Redeclaration of variable '" + id + "'");
     }
     seen.add(id);
-  }
+    return seen;
+  }, new Set<string>());
 }
 
 // Check for variable redeclarations across all scopes
 function checkRedeclarations(source: string): void {
-  let current = source;
-  let iterations = 0;
-  const maxIterations = 1000;
-
-  while (current.includes('{') && iterations < maxIterations) {
-    iterations = iterations + 1;
-    const innerBlockMatch = current.match(/\{([^{}]*)\}/);
-    if (!innerBlockMatch) {
-      break;
-    }
+  const innerBlockMatch = source.match(/\{([^{}]*)\}/);
+  if (innerBlockMatch) {
     validateNoDuplicates(innerBlockMatch[1]);
-    current = current.replace(/\{[^{}]*\}/, '');
+    const nextSource = source.replace(/\{[^{}]*\}/, '');
+    checkRedeclarations(nextSource);
+    return;
   }
-  validateNoDuplicates(current);
+  validateNoDuplicates(source);
 }
 
 // Validate the compiled expression result against type constraints
