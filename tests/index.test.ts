@@ -4,7 +4,7 @@ import { interpret } from "../src/index";
 function expectValid(input: string, expected: number | bigint): void {
   const result = interpret(input);
   if (!result.success) {
-    throw new Error(`Expected valid result but got error: ${result.error}`);
+    throw new Error("Expected valid result but got error: " + result.error);
   }
   expect(result.data).toBe(expected);
 }
@@ -12,7 +12,7 @@ function expectValid(input: string, expected: number | bigint): void {
 function expectInvalid(input: string): void {
   const result = interpret(input);
   if (result.success) {
-    throw new Error(`Expected error but got valid result: ${result.data}`);
+    throw new Error("Expected error but got valid result: " + result.data);
   }
 }
 

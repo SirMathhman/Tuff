@@ -18,12 +18,13 @@ function isInRange(value: number | bigint, range: Range): boolean {
 }
 
 function getRangeExceededError(typeName: string, prefix: string = "Number"): string {
-  return `${prefix} exceeds ${typeName} range (${TYPE_RANGES[typeName].min}-${TYPE_RANGES[typeName].max})`;
+  const rangeInfo = TYPE_RANGES[typeName];
+  return prefix + " exceeds " + typeName + " range (" + rangeInfo.min + "-" + rangeInfo.max + ")";
 }
 
 function validateNumber(value: number | bigint, range: Range, typeName: string): Result<number | bigint, string> {
   if (range.unsigned && (typeof value === "number" ? value < 0 : value < 0n)) {
-    return { success: false, error: `Negative numbers cannot have ${typeName} suffix` };
+    return { success: false, error: "Negative numbers cannot have " + typeName + " suffix" };
   }
 
   if (!isInRange(value, range)) {

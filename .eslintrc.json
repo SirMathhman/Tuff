@@ -19,6 +19,10 @@
     "no-console": ["warn"],
     "semi": ["error", "always"],
     "quotes": ["error", "double"],
-    "max-lines-per-function": ["error", { "max": 50, "skipBlankLines": true, "skipComments": true }]
+    "max-lines-per-function": ["error", { "max": 50, "skipBlankLines": true, "skipComments": true }],
+    "no-restricted-syntax": ["error", {
+      "selector": "TemplateLiteral",
+      "message": "Template strings are not allowed because PMD CPD false flags them. Use string concatenation with double quotes instead."
+    }]
   }
 }
