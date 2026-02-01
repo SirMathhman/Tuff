@@ -142,4 +142,8 @@ describe("execute", () => {
   it('should execute "let x : Bool = true" and return 1', () => {
     validate("let x : Bool = true", 1);
   });
+
+  it('should execute "let x = true; let y = false; x || y" and return 1', () => {
+    validate("let x = true; let y = false; x || y", 1);
+  });
 });
