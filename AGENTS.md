@@ -2,111 +2,179 @@
 
 ## Quick Reference
 
-**Project:** Tuff - TypeScript project located at `C:\Users\mathm\Documents\Projects\Tuff`
-**Node Version:** ^16.0.0 | **TypeScript:** ^5.9.3 | **Test Framework:** Jest
+**Project:** Tuff - TypeScript numeric interpreter with variable declarations and type coercion  
+**Location:** `C:\Users\mathm\Documents\Projects\Tuff`  
+**Node:** ^16.0.0 | **TypeScript:** ^5.9.3 | **Test Framework:** Jest
 
 ## Build & Test Commands
 
-### Essential Commands
-- **Build:** `npm run build` - Compiles TypeScript to `dist/`
-- **Start:** `npm start` - Execute `src/index.ts` via ts-node
-- **Dev:** `npm run dev` - Watch mode with auto-reload
-- **Lint:** `npm run lint` - Run ESLint checks
-- **Lint Fix:** `npm run lint:fix` - Auto-fix formatting issues
+### Core Commands
+- **Test all:** `npm test` - Run all 57 tests
+- **Test single file:** `npm test -- tests/index.test.ts`
+- **Test watch:** `npm run test:watch` - Auto-rerun on changes
+- **Test coverage:** `npm run test:coverage` - Generate coverage report
+- **Build:** `npm run build` - Compile TypeScript to `dist/`
+- **Lint:** `npm run lint` - Check code with ESLint
+- **Lint fix:** `npm run lint:fix` - Auto-fix formatting
+- **Pre-commit:** `npm run precommit` - Full check suite (tests + lint + PMD)
 
-### Testing
-- **All tests:** `npm test`
-- **Watch mode:** `npm run test:watch`
-- **Single test file:** `npm run test:file path/to/test.spec.ts` or `jest path/to/test.spec.ts`
-- **Coverage report:** `npm run test:coverage`
-- **Pre-commit checks:** Runs tests, lint, and PMD duplicate code detection automatically
+### Quick Test by Name
+```bash
+npm test -- --testNamePattern="should allow widening from U8 to U16"
+```
+
+### Useful Flags
+- `--verbose` - Show detailed test output
+- `--no-coverage` - Skip coverage calculation
 
 ## Code Style Guidelines
 
 ### Imports & Modules
-- Use ES6 syntax: `import { } from ''` and `export`
-- Order: 1) Node built-ins, 2) External packages, 3) Internal modules, 4) Types
-- Prefer named exports; use default exports only for main entry points
+- Use ES6: `import { } from ""; export`
+- Order: 1) Node built-ins, 2) External packages, 3) Internal modules
+- **NO template strings** - Use string concatenation instead (PMD CPD limitation)
+- Prefer named exports; default export only for main entry points
 - Avoid `import * as X` for defaults—use `import X` instead
 
-### Type Safety (Strict Mode Enabled)
-- **Never use `any`** - use specific types or `unknown` with type guards
-- Use `interface` for extensible object shapes, `type` for unions/intersections
-- Leverage TypeScript's type inference when the type is obvious
-- Use `readonly` for immutable properties: `interface Foo { readonly bar: string; }`
+### Type System (Strict Mode)
+- **Never use `any`** - Use specific types or `unknown` with type guards
+- Use `interface` for extensible shapes, `type` for unions/discriminated unions
+- Leverage type inference when obvious
+- Use `readonly` for immutable properties
 - Always type function parameters explicitly
+- **Discriminated unions for error handling:** `type Result<T, E> = { success: true; data: T } | { success: false; error: E }`
 
 ### Naming Conventions
-- **Variables/Functions:** `camelCase` (e.g., `getUserData`, `isValid`)
-- **Classes/Interfaces:** `PascalCase` (e.g., `UserService`, `IDataProvider`)
-- **Constants:** `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`, `API_BASE_URL`)
+- **Variables/functions:** `camelCase` (e.g., `interpretAddSubtract`, `createScope`)
+- **Types/interfaces:** `PascalCase` (e.g., `Variable`, `VariableScope`)
+- **Constants:** `UPPER_SNAKE_CASE` (e.g., `TYPE_RANGES`, `TYPE_ORDER`)
 - **Private members:** Leading underscore (e.g., `_internalState`)
-- **Type parameters:** Single letter (`T`, `K`) or descriptive PascalCase (`TUser`)
-- **Files:** kebab-case or camelCase (e.g., `user-service.ts`)
+- **Files:** `kebab-case` or `camelCase` (e.g., `index.ts`)
 
-### Code Formatting (ESLint Enforced)
-- **Indentation:** 2 spaces (not tabs)
-- **Quotes:** Double quotes only (`"string"`)
+### Formatting (ESLint Enforced)
+- **Indentation:** 2 spaces (tabs forbidden)
+- **Quotes:** Double quotes ONLY (ESLint enforces)
 - **Semicolons:** Always required
-- **Comparisons:** Use `===` and `!==` (never `==` or `!=`)
-- **Trailing commas:** Use in multi-line arrays/objects
-- **Line length:** Max 100 characters
-- **Unused variables:** Prefix with underscore to suppress warnings (e.g., `_unused`)
-- **Function size:** Max 50 lines per function (excludes blank lines & comments)
+- **Equality:** Use `===` and `!==` exclusively
+- **Line length:** Soft limit 100 chars
+- **Unused variables:** Prefix with `_` to suppress warning (e.g., `_unused`)
+- **Function size:** Max 50 lines (blank lines & comments excluded)
+
+### Functions & Composition
+- Keep functions focused (single responsibility)
+- Prefer pure functions (no side effects)
+- Extract long functions into helpers (strict 50-line limit)
+- Use default parameters: `function foo(x: number = 5) {}`
+- Arrow functions for callbacks; regular functions for methods/utils
 
 ### Error Handling
-- Use `try/catch` for synchronous operations
-- Use `async/await` with `try/catch` for async (avoid `.then()/.catch()`)
-- Define custom error types: `class CustomError extends Error { ... }`
-- Never use `any` for error types—use `unknown` with type guards
-- Re-throw errors after logging if they can't be handled
-- Use discriminated unions for Result types:
-  ```typescript
-  type Result<T, E> = { success: true; data: T } | { success: false; error: E };
-  ```
+- Use `Result<T, E>` discriminated union type consistently
+- Check `result.success` before accessing `data` or `error`
+- Type-safe casting: `(result as { success: true; data: T }).data`
+- Never suppress type errors; always handle both branches
+- Prefix error messages with context (e.g., "Undefined variable: x")
 
-### Functions & Logic
-- Keep functions focused (single responsibility principle)
-- Prefer pure functions (no side effects)
-- Use default parameters: `function foo(x: number = 5) {}`
-- Use rest parameters: `function sum(...nums: number[]) {}`
-- Use arrow functions for callbacks; regular functions for methods
-- Add JSDoc for complex public APIs
+## Project-Specific Guidelines
 
-### Project Structure
-- **Source code:** `src/` directory
-- **Tests:** `tests/` directory
-- **Organization:** Group by feature/domain (e.g., `src/services/`, `src/utils/`)
-- **Index files:** Use `src/feature/index.ts` to export public API
-- **File moves:** Always use `git mv` to preserve history
-- **Separation of concerns:** Keep types separate or at module top
+### Tuff Interpreter Architecture
+- **Entry point:** `export function interpret(input: string, scope?: VariableScope): Result<number | bigint, string>`
+- **Scope chain:** Parent reference enables nested variable lookups
+- **Type hierarchy:** `TYPE_RANGES` defines bounds; `TYPE_ORDER` determines coercion validity
+- **Statement blocks:** Separated by `;` at depth 0 (respecting brace/paren nesting)
+
+### Variable Declaration Syntax
+```typescript
+// Explicit type
+let x : U8 = 5;
+
+// Type inference from literal
+let x = 100U8;  // Infers U8
+
+// Type coercion (widening only)
+let x = 100U8;
+let y : U16 = x;  // ✅ Valid (U8 → U16)
+let z : U8 = y;   // ❌ Error (U16 → U8 is narrowing)
+```
+
+### Testing Requirements
+- Tests in `tests/index.test.ts` with Jest syntax
+- Each describe block ≤ 50 lines (ESLint enforces)
+- Use helper functions: `expectValid(input, expected)` and `expectInvalid(input)`
+- Test all code paths: valid inputs, overflow, narrowing, undefined vars, etc.
+- Currently: 57 tests covering types, arithmetic, variables, and coercion
 
 ## Git Workflow
 
-- **Commit format:** Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`)
-  - Example: `feat: add user authentication service`
-- **Stage changes:** `git add .` before committing
-- **Pre-commit hooks:** Automatically run tests, lint, and PMD duplicate code checks
-- **Only commit when:** Explicitly requested or when completing a feature
-- **Documentation:** Update AGENTS.md, README.md, or inline comments when modifying features
+- **Conventional commits:** `feat:`, `fix:`, `refactor:`, `test:`, `docs:`
+- **Example:** `feat: implement type coercion in variable declarations`
+- **Pre-commit runs:** tests, ESLint, PMD duplicate code (50-token threshold)
+- **Only commit when:** Explicitly requested or feature complete
+- **Always run:** `npm run precommit` before git push to verify all checks pass
 
-## Project Configuration
+## Common Patterns
 
-- **TypeScript:** Strict mode enabled (ES2020 target, CommonJS modules)
-- **ESLint:** Extends recommended + @typescript-eslint/recommended
-- **Jest:** ts-jest preset, runs tests from `src/` and `tests/` directories
-- **Husky:** Pre-commit hook runs `npm run precommit` (Python script)
-- **PMD:** Duplicate code detection (minimum 35 tokens) on pre-commit
+### Result Type Usage
+```typescript
+function example(): Result<number, string> {
+  if (error) {
+    return { success: false, error: "Description" };
+  }
+  return { success: true, data: value };
+}
 
-## Testing Guidelines
+// Caller
+const result = example();
+if (!result.success) {
+  console.error(result.error);
+  return result;
+}
+const data = (result as { success: true; data: number }).data;
+```
 
-- Write tests for business logic, not implementation details
-- Use descriptive names: `should return user data when given valid id`
-- Follow Arrange-Act-Assert pattern (setup → execute → verify)
-- Mock external dependencies (APIs, databases)
-- Test edge cases and error conditions
-- Aim for high coverage on critical paths
+### Recursive Interpretation
+- `interpret(input, scope)` → calls `interpretAddSubtract` → `interpretMultiplyDivide` → `performOperation`
+- **Scope threading:** Pass `scope` parameter through ALL recursive calls
+- **Variable lookup:** Use `lookupVariable(scope, name)` which walks parent chain
+
+### Type Coercion
+- `canCoerceType(sourceType, targetType)` - Check if widening is valid
+- Uses `TYPE_ORDER` index comparison and `TYPE_RANGES` signedness matching
+- Narrowing (smaller index → larger) returns error
+
+## Pre-Commit Checks
+
+All checks must pass before commit:
+
+1. **Test Suite:** `npm test` → 57 tests passing
+2. **ESLint:** Max 50 lines/function, no templates, double quotes only
+3. **PMD:** Minimum 50 tokens for duplication detection (structural patterns OK)
+
+Run manually: `npm run precommit`
+
+## Debugging Tips
+
+### Print Type Information
+```typescript
+console.log("Type:", getTypeForValue("100U8"));  // "U8"
+console.log("Order index:", TYPE_ORDER.indexOf("U16"));  // 1
+```
+
+### Trace Variable Lookups
+```typescript
+const result = lookupVariable(scope, varName);
+if (result.success) {
+  console.log("Found:", result.data);
+} else {
+  console.log("Not found:", result.error);
+}
+```
+
+### Test Single Scenario
+```bash
+npm test -- --testNamePattern="should allow widening from U8 to U16"
+```
 
 ---
 
-**Last Updated:** January 31, 2025
+**Last Updated:** February 2025  
+**Test Coverage:** 57 tests passing | ESLint: ✅ | PMD: ✅
