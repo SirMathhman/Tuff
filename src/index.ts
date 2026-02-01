@@ -90,6 +90,11 @@ function removeTypeAnnotations(source: string): string {
     .replace(new RegExp('-([0-9]+)(' + validTypes + ')', 'g'), '-$1');
 }
 
+// Remove curly braces from the source expression
+function removeCurlyBraces(source: string): string {
+  return source.replace(/[{}]/g, '');
+}
+
 // Validate the compiled expression result against type constraints
 function validateExpressionResult(
   compiled: string,
@@ -126,7 +131,8 @@ function validateExpressionResult(
  */
 export function compileTuffToJS(source: string): string {
   const allTypes = extractAndValidateAnnotations(source);
-  const compiled = removeTypeAnnotations(source);
+  let compiled = removeTypeAnnotations(source);
+  compiled = removeCurlyBraces(compiled);
   validateExpressionResult(compiled, allTypes);
   return 'return ' + compiled;
 }
