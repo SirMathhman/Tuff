@@ -82,4 +82,8 @@ describe('execute', () => {
   it('should execute "2 * 3 + 4" and return 10', () => {
     validate('2 * 3 + 4', 10);
   });
+
+  it('should execute "2 + 3 * 4" and return 14', () => {
+    validate('2 + 3 * 4', 14);
+  });
 });
