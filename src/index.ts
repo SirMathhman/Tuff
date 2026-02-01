@@ -67,7 +67,7 @@ function declareVariable(scope: VariableScope, name: string, type: string, value
   return { success: true, data: undefined };
 }
 
-function assignVariable(scope: VariableScope, name: string, newValue: number | bigint): Result<void, string> {
+function assignVariableWithType(scope: VariableScope, name: string, newValue: number | bigint, valueType: string | null): Result<void, string> {
   const lookupResult = lookupVariable(scope, name);
   if (!lookupResult.success) {
     return lookupResult as Result<void, string>;
@@ -76,6 +76,10 @@ function assignVariable(scope: VariableScope, name: string, newValue: number | b
   const variable = (lookupResult as { success: true; data: Variable }).data;
   if (!variable.mutable) {
     return { success: false, error: "Cannot assign to immutable variable: " + name };
+  }
+
+  if (valueType !== null && !canCoerceType(valueType, variable.type)) {
+    return { success: false, error: "Cannot coerce type " + valueType + " to " + variable.type };
   }
 
   const range = TYPE_RANGES[variable.type];
@@ -331,7 +335,16 @@ function interpretStatementBlock(input: string, parentScope: VariableScope | nul
             return valueResult;
           }
           const newValue = (valueResult as { success: true; data: number | bigint }).data;
-          const assignResult = assignVariable(blockScope, lhs, newValue);
+          let rhsType: string | null = null;
+          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(rhs)) {
+            const rhsVarLookup = lookupVariable(blockScope, rhs);
+            if (rhsVarLookup.success) {
+              rhsType = (rhsVarLookup as { success: true; data: Variable }).data.type;
+            }
+          } else {
+            rhsType = getTypeForValue(rhs);
+          }
+          const assignResult = assignVariableWithType(blockScope, lhs, newValue, rhsType);
           if (!assignResult.success) {
             return assignResult;
           }

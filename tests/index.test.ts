@@ -335,4 +335,12 @@ describe("interpret - mutable variables", () => {
   it("should return error when reassignment doesn't match type", () => {
     expectInvalid("let mut x : U8 = 5; x = 256; x");
   });
+
+  it("should return error when reassigning different typed value", () => {
+    expectInvalid("let mut x : U8 = 0; x = 100U16; x");
+  });
+
+  it("should allow widening assignment to mutable variable", () => {
+    expectValid("let mut x : U16 = 0; x = 100U8; x", 100);
+  });
 });
