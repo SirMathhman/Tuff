@@ -13,16 +13,43 @@ const TYPE_RANGES: Record<string, Range> = {
   I64: { min: -9223372036854775808n, max: 9223372036854775807n, unsigned: false },
 };
 
+function isInRange(value: number | bigint, range: Range): boolean {
+  return value >= range.min && value <= range.max;
+}
+
+function getRangeExceededError(typeName: string, prefix: string = "Number"): string {
+  return `${prefix} exceeds ${typeName} range (${TYPE_RANGES[typeName].min}-${TYPE_RANGES[typeName].max})`;
+}
+
 function validateNumber(value: number | bigint, range: Range, typeName: string): Result<number | bigint, string> {
   if (range.unsigned && (typeof value === "number" ? value < 0 : value < 0n)) {
     return { success: false, error: `Negative numbers cannot have ${typeName} suffix` };
   }
 
-  if (value < range.min || value > range.max) {
-    return { success: false, error: `Number exceeds ${typeName} range (${range.min}-${range.max})` };
+  if (!isInRange(value, range)) {
+    return { success: false, error: getRangeExceededError(typeName) };
   }
 
   return { success: true, data: value };
+}
+
+function checkAdditionRange(sum: number | bigint, typeName: string): Result<number | bigint, string> {
+  if (!isInRange(sum, TYPE_RANGES[typeName])) {
+    return { success: false, error: getRangeExceededError(typeName, "Addition") };
+  }
+  return { success: true, data: sum };
+}
+
+function addNumbers(left: number | bigint, right: number | bigint, typeName: string): Result<number | bigint, string> {
+  if ((typeof left === "bigint") !== (typeof right === "bigint")) {
+    return { success: false, error: "Cannot add number and bigint together" };
+  }
+
+  const sum = (typeof left === "bigint")
+    ? (left as bigint) + (right as bigint)
+    : (left as number) + (right as number);
+
+  return checkAdditionRange(sum, typeName);
 }
 
 export function interpret(input: string): Result<number | bigint, string> {
@@ -45,15 +72,18 @@ export function interpret(input: string): Result<number | bigint, string> {
       const left = leftResult.data;
       const right = rightResult.data;
 
-      if (typeof left === "bigint" && typeof right === "bigint") {
-        return { success: true, data: left + right };
+      const leftType = getTypeForValue(parts[0].trim());
+      const rightType = getTypeForValue(parts[1].trim());
+
+      if (leftType !== rightType) {
+        return { success: false, error: "Cannot add different types together" };
       }
 
-      if (typeof left === "number" && typeof right === "number") {
-        return { success: true, data: left + right };
+      if (leftType === null) {
+        return { success: false, error: "Cannot add untyped numbers together" };
       }
 
-      return { success: false, error: "Cannot add number and bigint together" };
+      return addNumbers(left, right, leftType);
     }
   }
 
@@ -73,4 +103,14 @@ export function interpret(input: string): Result<number | bigint, string> {
 
   return { success: true, data: Number(trimmedInput) };
 }
+
+function getTypeForValue(value: string): string | null {
+  for (const typeName of Object.keys(TYPE_RANGES)) {
+    if (value.endsWith(typeName)) {
+      return typeName;
+    }
+  }
+  return null;
+}
+
 

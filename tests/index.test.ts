@@ -155,4 +155,12 @@ describe("interpret - arithmetic operations", () => {
   it("should add two U8 numbers", () => {
     expectValid("1U8 + 2U8", 3);
   });
+
+  it("should return error when U8 addition overflows", () => {
+    expectInvalid("1U8 + 255U8");
+  });
+
+  it("should return error when adding mismatched types (U8 + untyped)", () => {
+    expectInvalid("1U8 + 255");
+  });
 });
