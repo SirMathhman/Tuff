@@ -298,13 +298,15 @@ function interpretWithVariables(input: string, scope: VariableScope): Result<num
     const lookupResult = lookupVariable(scope, trimmed);
     if (lookupResult.success) {
       return { success: true, data: (lookupResult as { success: true; data: Variable }).data.value };
+    } else {
+      return lookupResult;
     }
   }
 
   return interpret(trimmed);
 }
 
-function evaluateGroupedExpressions(input: string): string {
+function evaluateGroupedExpressions(input: string, scope: VariableScope | null = null): string {
   let result = input;
   let changed = true;
 
@@ -332,9 +334,9 @@ function evaluateGroupedExpressions(input: string): string {
           let innerResult: Result<number | bigint, string>;
 
           if (groupChar === "{" && inner.includes("let ")) {
-            innerResult = interpretStatementBlock(inner);
+            innerResult = interpretStatementBlock(inner, scope);
           } else {
-            innerResult = interpret(inner);
+            innerResult = interpret(inner, scope);
           }
 
           if (!innerResult.success) {
@@ -353,8 +355,8 @@ function evaluateGroupedExpressions(input: string): string {
   return result;
 }
 
-function evaluateParenthesizedExpressions(input: string): string {
-  return evaluateGroupedExpressions(input);
+function evaluateParenthesizedExpressions(input: string, scope: VariableScope | null = null): string {
+  return evaluateGroupedExpressions(input, scope);
 }
 
 function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"; value: string }> {
@@ -383,12 +385,12 @@ function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"
   return tokens;
 }
 
-function parseAndApplyOperation(tokens: Array<{ type: "operand" | "operator"; value: string }>, leftData: number | bigint, operatorIndex: number, opName: string): Result<number | bigint, string> {
+function parseAndApplyOperation(tokens: Array<{ type: "operand" | "operator"; value: string }>, leftData: number | bigint, operatorIndex: number, opName: string, scope: VariableScope | null = null): Result<number | bigint, string> {
   if (operatorIndex + 1 >= tokens.length || tokens[operatorIndex + 1].type !== "operand") {
     return { success: false, error: "Invalid expression" };
   }
 
-  const rightResult = interpret(tokens[operatorIndex + 1].value);
+  const rightResult = interpret(tokens[operatorIndex + 1].value, scope);
   if (!rightResult.success) {
     return rightResult;
   }
@@ -401,11 +403,11 @@ function shouldStopOperatorParsing(operator: string, allowedOps: string[]): bool
   return !allowedOps.includes(operator);
 }
 
-function interpretMultiplyDivide(tokens: Array<{ type: "operand" | "operator"; value: string }>, startIndex: number): Result<{ value: number | bigint; nextIndex: number }, string> {
-  let result = interpret(tokens[startIndex].value);
+function interpretMultiplyDivide(tokens: Array<{ type: "operand" | "operator"; value: string }>, startIndex: number, scope: VariableScope | null = null): Result<{ value: number | bigint; nextIndex: number }, string> {
+  let result = interpret(tokens[startIndex].value, scope);
 
   if (!result.success) {
-    return result;
+    return result as unknown as Result<{ value: number | bigint; nextIndex: number }, string>;
   }
 
   let i = startIndex + 1;
@@ -421,10 +423,10 @@ function interpretMultiplyDivide(tokens: Array<{ type: "operand" | "operator"; v
 
     const opName = operator === "*" ? "multiply" : "divide";
     const resultData: number | bigint = (result as { success: true; data: number | bigint }).data;
-    const opResult: Result<number | bigint, string> = parseAndApplyOperation(tokens, resultData, i, opName);
+    const opResult: Result<number | bigint, string> = parseAndApplyOperation(tokens, resultData, i, opName, scope);
 
     if (!opResult.success) {
-      return opResult;
+      return opResult as unknown as Result<{ value: number | bigint; nextIndex: number }, string>;
     }
 
     result = opResult;
@@ -435,8 +437,8 @@ function interpretMultiplyDivide(tokens: Array<{ type: "operand" | "operator"; v
   return { success: true, data: { value: (result as { success: true; data: number | bigint }).data, nextIndex: tokens.length } };
 }
 
-function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; value: string }>, startIndex: number): Result<number | bigint, string> {
-  const mdResult = interpretMultiplyDivide(tokens, startIndex);
+function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; value: string }>, startIndex: number, scope: VariableScope | null = null): Result<number | bigint, string> {
+  const mdResult = interpretMultiplyDivide(tokens, startIndex, scope);
 
   if (!mdResult.success) {
     return mdResult;
@@ -455,7 +457,7 @@ function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; valu
       return { success: false, error: "Invalid expression" };
     }
 
-    const rightMdResult = interpretMultiplyDivide(tokens, i + 1);
+    const rightMdResult = interpretMultiplyDivide(tokens, i + 1, scope);
     if (!rightMdResult.success) {
       return rightMdResult;
     }
@@ -477,22 +479,31 @@ function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; valu
   return { success: true, data: result_data };
 }
 
-export function interpret(input: string): Result<number | bigint, string> {
+export function interpret(input: string, scope: VariableScope | null = null): Result<number | bigint, string> {
   const trimmedInput = input.trim();
 
   if (trimmedInput.includes("(") || trimmedInput.includes(")") || trimmedInput.includes("{") || trimmedInput.includes("}")) {
-    const evaluated = evaluateParenthesizedExpressions(trimmedInput);
+    const evaluated = evaluateParenthesizedExpressions(trimmedInput, scope);
     if (evaluated === "") {
       return { success: false, error: "Invalid grouped expression" };
     }
-    return interpret(evaluated);
+    return interpret(evaluated, scope);
+  }
+
+  if (scope !== null && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmedInput)) {
+    const lookupResult = lookupVariable(scope, trimmedInput);
+    if (lookupResult.success) {
+      return { success: true, data: (lookupResult as { success: true; data: Variable }).data.value };
+    } else {
+      return lookupResult;
+    }
   }
 
   if (trimmedInput.includes(" + ") || trimmedInput.includes(" - ") || trimmedInput.includes(" * ") || trimmedInput.includes(" / ")) {
     const tokens = tokenizeExpression(trimmedInput);
 
     if (tokens.length >= 3 && tokens[0].type === "operand") {
-      const result = interpretAddSubtract(tokens, 0);
+      const result = interpretAddSubtract(tokens, 0, scope);
 
       if (!result.success) {
         return result;
