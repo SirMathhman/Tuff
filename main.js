@@ -57,6 +57,29 @@ function findMatchingAngleBracket(source, startPos) {
   return matchingClose;
 }
 
+// Helper: Check if a trimmed line starts with type or struct keyword
+function isTypeOrStructDeclaration(trimmed) {
+  let typeKeyword = "t" + "y" + "p" + "e";
+  let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
+  
+  if (trimmed.indexOf(typeKeyword + " ") === 0 || trimmed.indexOf(structKeyword + " ") === 0) {
+    return 1;
+  }
+  return 0;
+}
+
+// Helper: Find next angle bracket or copy rest if none found
+// Returns object with: { anglePos: Number, newResult: String, nextI: Number }
+function findNextAngleBracketOrCopyRest(result, openAngle, i, newResult) {
+  let anglePos = result.indexOf(openAngle, i);
+  if (anglePos === -1) {
+    // No more <, copy rest
+    let updatedResult = newResult + result.substring(i);
+    return { kind : "SearchResult", anglePos : -1, newResult : updatedResult, nextI : result.length };
+  }
+  return { kind : "SearchResult", anglePos : anglePos, newResult : newResult, nextI : i };
+}
+
 // Helper: Collect all mut variable declarations
 function collectMutVariables(source) {
   let mutVariables = [];
@@ -121,10 +144,8 @@ function validateNoShadowing(source) {
     let line = lines[i];
     let trimmed = line.trim();
     
-    // Skip type/struct declarations
-    let typeKeyword = "t" + "y" + "p" + "e";
-    let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
-    if (trimmed.indexOf(typeKeyword + " ") === 0 || trimmed.indexOf(structKeyword + " ") === 0) {
+    // Skip type/struct declarations using helper
+    if (isTypeOrStructDeclaration(trimmed) === 1) {
       // Skip validation for these lines
     } else {
       // Check for function declarations - they start a new scope
@@ -200,10 +221,8 @@ function validateTypedArrayLiterals(source) {
     } else if (line.includes("indexOf") || line.includes("substring") || line.includes("includes") || line.includes("leftAngle") || line.includes("rightAngle") || line.includes("newResult") || line.includes("===")) {
       // Skip lines in helper functions that manipulate strings
     } else {
-      // Skip type/struct declarations
-      let typeKeyword = "t" + "y" + "p" + "e";
-      let structKeyword = "s" + "t" + "r" + "u" + "c" + "t";
-      if (trimmed.indexOf(typeKeyword + " ") === 0 || trimmed.indexOf(structKeyword + " ") === 0) {
+      // Skip type/struct declarations using helper
+      if (isTypeOrStructDeclaration(trimmed) === 1) {
         // Skip validation for these lines
       } else {
       // Check for standalone [] (not preceded by >)
@@ -255,11 +274,13 @@ function transformTypedArrayLiterals(source) {
     
     while (i < result.length) {
       // Look for pattern: []
-      let anglePos = result.indexOf(openAngle, i);
+      let searchResult = findNextAngleBracketOrCopyRest(result, openAngle, i, newResult);
+      let anglePos = searchResult.anglePos;
+      newResult = searchResult.newResult;
+      
       if (anglePos === -1) {
-        // No more <, copy rest
-        newResult = newResult + result.substring(i);
-        i = result.length;
+        // Already copied rest, exit loop
+        i = searchResult.nextI;
       } else {
         // Find matching > using helper
         let matchingClose = findMatchingAngleBracket(result, anglePos);
