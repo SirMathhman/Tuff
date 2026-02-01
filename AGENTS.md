@@ -93,10 +93,12 @@ Add to package.json scripts:
 
 ### File Structure
 - Place source code in `src/` directory
+- Place test files in `tests/` directory
 - Organize by feature/domain (e.g., `src/services/`, `src/utils/`, `src/types/`)
 - Use index files for clean imports: `src/user/index.ts` exports public API
 - Keep related files together in the same directory
 - Separation of concerns: types in separate files or at top of module files
+- **Never move files manually** - always use `git mv` to preserve git history when moving files
 
 ### Git Workflow
 - **IMPORTANT:** Always create a git commit at the end of your task using descriptive commit messages
