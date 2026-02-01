@@ -46,4 +46,8 @@ describe("The compiler", () => {
   it("adds three U8 values", () => {
     validate("read U8 + read U8 + read U8", 101, "25", "75", "1");
   });
+
+  it("subtracts U8 values", () => {
+    validate("read U8 + read U8 - read U8", 51, "25", "75", "49");
+  });
 });

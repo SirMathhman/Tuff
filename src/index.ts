@@ -13,17 +13,47 @@ export function compile(source: string): string {
     return "process.exit(parseInt(process.argv[2], 10))";
   }
 
-  // Arithmetic operations with read U8
-  if (source.includes("+")) {
-    const parts = source.split("+").map((p) => p.trim());
-    const result = parts.reduce((acc, part, index) => {
-      const expr =
-        part === "read U8"
-          ? "parseInt(process.argv[" + (index + 2) + "], 10)"
-          : part;
-      return acc + (index === 0 ? expr : " + " + expr);
-    }, "");
-    return "process.exit(" + result + ")";
+  // Arithmetic operations with read U8 and mixed operators
+  if (source.includes("+") || source.includes("-")) {
+    const chars = source.split("");
+    const result = chars.reduce(
+      (acc, char) => {
+        const isOperator = char === "+" || char === "-";
+        if (isOperator) {
+          return {
+            tokens: acc.tokens.concat([acc.current, char]),
+            current: "",
+          };
+        }
+        return {
+          tokens: acc.tokens,
+          current: acc.current + char,
+        };
+      },
+      { tokens: [] as string[], current: "" },
+    );
+
+    if (result.current.trim().length > 0) {
+      result.tokens.push(result.current);
+    }
+
+    let argCount = 0;
+    const processed = result.tokens
+      .map((token) => {
+        if (token === "+" || token === "-") {
+          return token;
+        }
+        const trimmed = token.trim();
+        if (trimmed === "read U8") {
+          argCount = argCount + 1;
+          return "parseInt(process.argv[" + (argCount + 1) + "], 10)";
+        }
+        return trimmed;
+      })
+      .filter((t) => t.length > 0)
+      .join(" ");
+
+    return "process.exit(" + processed + ")";
   }
 
   // Default: exit with 0
