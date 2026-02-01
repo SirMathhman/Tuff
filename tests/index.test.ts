@@ -146,4 +146,8 @@ describe("execute", () => {
   it('should execute "let x = true; let y = false; x || y" and return 1', () => {
     validate("let x = true; let y = false; x || y", 1);
   });
+
+  it('should execute "let x = true; let y = false; x && y" and return 0', () => {
+    validate("let x = true; let y = false; x && y", 0);
+  });
 });
