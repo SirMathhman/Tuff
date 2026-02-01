@@ -254,8 +254,15 @@ function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; valu
       return { success: false, error: "Invalid expression" };
     }
 
+    const rightMdResult = interpretMultiplyDivide(tokens, i + 1);
+    if (!rightMdResult.success) {
+      return rightMdResult;
+    }
+
+    const right_data: number | bigint = (rightMdResult as { success: true; data: { value: number | bigint; nextIndex: number } }).data.value;
     const opName = operator === "+" ? "add" : "subtract";
-    const opResult: Result<number | bigint, string> = parseAndApplyOperation(tokens, result_data, i, opName);
+
+    const opResult: Result<number | bigint, string> = performOperation(result_data, right_data, tokens[i - 1].value, tokens[i + 1].value, opName);
 
     if (!opResult.success) {
       return opResult;
@@ -263,12 +270,6 @@ function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; valu
 
     result_data = (opResult as { success: true; data: number | bigint }).data;
     tokens[i + 1].value = String(result_data);
-
-    const rightMdResult = interpretMultiplyDivide(tokens, i + 1);
-    if (!rightMdResult.success) {
-      return rightMdResult;
-    }
-
     i = (rightMdResult as { success: true; data: { value: number | bigint; nextIndex: number } }).data.nextIndex;
   }
 

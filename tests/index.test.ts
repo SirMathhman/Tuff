@@ -183,4 +183,8 @@ describe("interpret - arithmetic operations", () => {
   it("should multiply and subtract untyped numbers", () => {
     expectValid("2 * 3 - 4", 2);
   });
+
+  it("should add and multiply untyped numbers with correct precedence", () => {
+    expectValid("4 + 2 * 3", 10);
+  });
 });
