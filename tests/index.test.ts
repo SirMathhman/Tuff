@@ -118,4 +118,8 @@ describe('execute', () => {
   it('should execute "let x = 10U8; let y : U16 = x; y" and return 10', () => {
     validate('let x = 10U8; let y : U16 = x; y', 10);
   });
+
+  it('should throw an error when assigning wider type to narrower type: "let x = 10U16; let y : U8 = x; y"', () => {
+    invalidate('let x = 10U16; let y : U8 = x; y');
+  });
 });

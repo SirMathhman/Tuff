@@ -10,6 +10,18 @@ const typeRanges: Record<string, { min: number; max: number }> = {
   I64: { min: -(2 ** 63), max: 2 ** 63 - 1 },
 };
 
+// Type ordering by width (U8=1 to I64=8)
+const typeOrder: Record<string, number> = {
+  U8: 1,
+  U16: 2,
+  U32: 3,
+  U64: 4,
+  I8: 5,
+  I16: 6,
+  I32: 7,
+  I64: 8,
+};
+
 // Validate a literal value against its type
 function validateLiteral(value: number, suffix: string): void {
   const range = typeRanges[suffix];
@@ -85,17 +97,6 @@ function extractAndValidateAnnotations(source: string): Set<string> {
 
 // Get the widest type from a set of types
 function getWidestType(types: Set<string>): string {
-  const typeOrder: Record<string, number> = {
-    U8: 1,
-    U16: 2,
-    U32: 3,
-    U64: 4,
-    I8: 5,
-    I16: 6,
-    I32: 7,
-    I64: 8,
-  };
-
   const typeList = Array.from(types);
   if (typeList.length === 0) {
     return '';
@@ -136,11 +137,27 @@ function findInitializerEnd(source: string, startIdx: number): number {
   return result.found ? startIdx + result.end : -1;
 }
 
+// Extract the inferred type of a variable from its initializer
+function getVariableType(initializer: string): string {
+  const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
+  const typeMatch = new RegExp('(\\d+)(' + validTypes + ')\\b').exec(
+    initializer,
+  );
+  return typeMatch ? typeMatch[2] : '';
+}
+
+// Check if sourceType can be assigned to targetType
+function isTypeCompatible(sourceType: string, targetType: string): boolean {
+  const sourceOrder = typeOrder[sourceType] || 0;
+  const targetOrder = typeOrder[targetType] || 0;
+  return sourceOrder === 0 || sourceOrder <= targetOrder;
+}
+
 // Resolve variable references by tracking declarations and substituting values
 function resolveVariableReferences(source: string): string {
   const validTypes = 'U8|U16|U32|U64|I8|I16|I32|I64';
   const declMatch = new RegExp(
-    'let\\s+(\\w+)(?:\\s*:\\s*(?:' + validTypes + '))?\\s*=\\s*',
+    'let\\s+(\\w+)(?:\\s*:\\s*(' + validTypes + '))?\\s*=\\s*',
   ).exec(source);
 
   if (!declMatch) {
@@ -148,6 +165,7 @@ function resolveVariableReferences(source: string): string {
   }
 
   const varName = declMatch[1];
+  const targetType = declMatch[2] || '';
   const startIdx = declMatch.index;
   const afterEquals = startIdx + declMatch[0].length;
   const initEnd = findInitializerEnd(source, afterEquals);
@@ -157,6 +175,20 @@ function resolveVariableReferences(source: string): string {
   }
 
   const varInit = source.substring(afterEquals, initEnd).trim();
+  const sourceType = getVariableType(varInit);
+
+  if (targetType && sourceType && !isTypeCompatible(sourceType, targetType)) {
+    throw new Error(
+      'Cannot assign ' +
+        sourceType +
+        ' to ' +
+        targetType +
+        " variable '" +
+        varName +
+        "'",
+    );
+  }
+
   const declEnd = initEnd + 1;
   const searchArea = source.substring(declEnd);
   const varRefPattern = new RegExp('\\b' + varName + '\\b');
