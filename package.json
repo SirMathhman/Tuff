@@ -13,7 +13,7 @@
     "dev": "ts-node --watch src/index.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
-    "precommit": "npm run lint && npm test",
+    "precommit": "python scripts/precommit.py",
     "prepare": "husky"
   },
   "repository": {
