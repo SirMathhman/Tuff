@@ -179,4 +179,8 @@ describe("interpret - arithmetic operations", () => {
   it("should add and subtract untyped numbers", () => {
     expectValid("2 + 3 - 4", 1);
   });
+
+  it("should multiply and subtract untyped numbers", () => {
+    expectValid("2 * 3 - 4", 2);
+  });
 });

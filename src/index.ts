@@ -75,7 +75,16 @@ function getCommonTypeForOperation(leftType: string | null, rightType: string | 
 function performUntypedOperation(left: number | bigint, right: number | bigint, operation: string): number | bigint {
   const left_num = left as number;
   const right_num = right as number;
-  return operation === "add" ? left_num + right_num : left_num - right_num;
+  if (operation === "add") {
+    return left_num + right_num;
+  } else if (operation === "subtract") {
+    return left_num - right_num;
+  } else if (operation === "multiply") {
+    return left_num * right_num;
+  } else if (operation === "divide") {
+    return left_num / right_num;
+  }
+  return 0;
 }
 
 function resolveCommonType(leftType: string | null, rightType: string | null, operation: string): { commonType: string | null; errorResult: Result<number | bigint, string> | null } {
@@ -124,14 +133,27 @@ function performOperation(left: number | bigint, right: number | bigint, leftPar
   }
 
   if ((typeof left === "bigint") !== (typeof right === "bigint")) {
-    return { success: false, error: "Cannot subtract number and bigint together" };
+    return { success: false, error: "Cannot perform " + operation + " on number and bigint together" };
   }
 
-  const diff = (typeof left === "bigint")
-    ? (left as bigint) - (right as bigint)
-    : (left as number) - (right as number);
+  let result_value: number | bigint;
+  if (operation === "subtract") {
+    result_value = (typeof left === "bigint")
+      ? (left as bigint) - (right as bigint)
+      : (left as number) - (right as number);
+  } else if (operation === "multiply") {
+    result_value = (typeof left === "bigint")
+      ? (left as bigint) * (right as bigint)
+      : (left as number) * (right as number);
+  } else if (operation === "divide") {
+    result_value = (typeof left === "bigint")
+      ? (left as bigint) / (right as bigint)
+      : (left as number) / (right as number);
+  } else {
+    return { success: false, error: "Unknown operation: " + operation };
+  }
 
-  return checkOperationRange(diff, commonType, "Subtraction");
+  return checkOperationRange(result_value, commonType, operation);
 }
 
 function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"; value: string }> {
@@ -140,7 +162,7 @@ function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"
   let i = 0;
 
   while (i < input.length) {
-    if (i < input.length - 1 && input[i] === " " && (input[i + 1] === "+" || input[i + 1] === "-") && input[i + 2] === " ") {
+    if (i < input.length - 1 && input[i] === " " && (input[i + 1] === "+" || input[i + 1] === "-" || input[i + 1] === "*" || input[i + 1] === "/") && input[i + 2] === " ") {
       if (current.trim()) {
         tokens.push({ type: "operand", value: current.trim() });
         current = "";
@@ -160,47 +182,110 @@ function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"
   return tokens;
 }
 
+function parseAndApplyOperation(tokens: Array<{ type: "operand" | "operator"; value: string }>, leftData: number | bigint, operatorIndex: number, opName: string): Result<number | bigint, string> {
+  if (operatorIndex + 1 >= tokens.length || tokens[operatorIndex + 1].type !== "operand") {
+    return { success: false, error: "Invalid expression" };
+  }
+
+  const rightResult = interpret(tokens[operatorIndex + 1].value);
+  if (!rightResult.success) {
+    return rightResult;
+  }
+
+  const rightData: number | bigint = (rightResult as { success: true; data: number | bigint }).data;
+  return performOperation(leftData, rightData, tokens[operatorIndex - 1].value, tokens[operatorIndex + 1].value, opName);
+}
+
+function shouldStopOperatorParsing(operator: string, allowedOps: string[]): boolean {
+  return !allowedOps.includes(operator);
+}
+
+function interpretMultiplyDivide(tokens: Array<{ type: "operand" | "operator"; value: string }>, startIndex: number): Result<{ value: number | bigint; nextIndex: number }, string> {
+  let result = interpret(tokens[startIndex].value);
+
+  if (!result.success) {
+    return result;
+  }
+
+  let i = startIndex + 1;
+  while (i < tokens.length) {
+    if (tokens[i].type !== "operator") {
+      return { success: false, error: "Invalid expression" };
+    }
+
+    const operator = tokens[i].value;
+    if (shouldStopOperatorParsing(operator, ["*", "/"])) {
+      return { success: true, data: { value: (result as { success: true; data: number | bigint }).data, nextIndex: i } };
+    }
+
+    const opName = operator === "*" ? "multiply" : "divide";
+    const resultData: number | bigint = (result as { success: true; data: number | bigint }).data;
+    const opResult: Result<number | bigint, string> = parseAndApplyOperation(tokens, resultData, i, opName);
+
+    if (!opResult.success) {
+      return opResult;
+    }
+
+    result = opResult;
+    tokens[i + 1].value = String((result as { success: true; data: number | bigint }).data);
+    i += 2;
+  }
+
+  return { success: true, data: { value: (result as { success: true; data: number | bigint }).data, nextIndex: tokens.length } };
+}
+
+function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; value: string }>, startIndex: number): Result<number | bigint, string> {
+  const mdResult = interpretMultiplyDivide(tokens, startIndex);
+
+  if (!mdResult.success) {
+    return mdResult;
+  }
+
+  let result_data: number | bigint = (mdResult as { success: true; data: { value: number | bigint; nextIndex: number } }).data.value;
+  let i: number = (mdResult as { success: true; data: { value: number | bigint; nextIndex: number } }).data.nextIndex;
+
+  while (i < tokens.length) {
+    if (tokens[i].type !== "operator") {
+      return { success: false, error: "Invalid expression" };
+    }
+
+    const operator = tokens[i].value;
+    if (i + 1 >= tokens.length || tokens[i + 1].type !== "operand") {
+      return { success: false, error: "Invalid expression" };
+    }
+
+    const opName = operator === "+" ? "add" : "subtract";
+    const opResult: Result<number | bigint, string> = parseAndApplyOperation(tokens, result_data, i, opName);
+
+    if (!opResult.success) {
+      return opResult;
+    }
+
+    result_data = (opResult as { success: true; data: number | bigint }).data;
+    tokens[i + 1].value = String(result_data);
+
+    const rightMdResult = interpretMultiplyDivide(tokens, i + 1);
+    if (!rightMdResult.success) {
+      return rightMdResult;
+    }
+
+    i = (rightMdResult as { success: true; data: { value: number | bigint; nextIndex: number } }).data.nextIndex;
+  }
+
+  return { success: true, data: result_data };
+}
+
 export function interpret(input: string): Result<number | bigint, string> {
   const trimmedInput = input.trim();
 
-  if (trimmedInput.includes(" + ") || trimmedInput.includes(" - ")) {
+  if (trimmedInput.includes(" + ") || trimmedInput.includes(" - ") || trimmedInput.includes(" * ") || trimmedInput.includes(" / ")) {
     const tokens = tokenizeExpression(trimmedInput);
 
     if (tokens.length >= 3 && tokens[0].type === "operand") {
-      let result = interpret(tokens[0].value);
+      const result = interpretAddSubtract(tokens, 0);
 
       if (!result.success) {
         return result;
-      }
-
-      let i = 1;
-      while (i < tokens.length) {
-        if (tokens[i].type !== "operator") {
-          return { success: false, error: "Invalid expression" };
-        }
-        const operator = tokens[i].value;
-
-        if (i + 1 >= tokens.length || tokens[i + 1].type !== "operand") {
-          return { success: false, error: "Invalid expression" };
-        }
-
-        const rightResult = interpret(tokens[i + 1].value);
-        if (!rightResult.success) {
-          return rightResult;
-        }
-
-        const left_data: number | bigint = (result as { success: true; data: number | bigint }).data;
-        const right_data: number | bigint = (rightResult as { success: true; data: number | bigint }).data;
-
-        const opResult: Result<number | bigint, string> = performOperation(left_data, right_data, tokens[i - 1].value, tokens[i + 1].value, operator === "+" ? "add" : "subtract");
-
-        if (!opResult.success) {
-          return opResult;
-        }
-
-        result = opResult;
-        tokens[i + 1].value = String((result as { success: true; data: number | bigint }).data);
-        i += 2;
       }
 
       return result;

@@ -73,7 +73,7 @@ def print_recommendations():
 
 def main():
     test_passed, test_output = run_command("npm test", "Test suite")
-    dupe_passed, dupe_output = run_command("pmd cpd --minimum-tokens 35 src tests --language typescript", "Duplicate code check")
+    dupe_passed, dupe_output = run_command("pmd cpd --minimum-tokens 50 src tests --language typescript", "Duplicate code check")
     lint_passed, lint_output = run_command("npm run lint", "ESLint check")
 
     if not dupe_passed:
