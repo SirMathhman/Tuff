@@ -18,28 +18,32 @@ export function execute(source: string): number {
  * @param source - Tuff source code as a string
  * @param expected - The expected return value
  */
-function expectExecuteValid(source: string, expected: number): void {
+function validate(source: string, expected: number): void {
   expect(execute(source)).toBe(expected);
 }
 
-function expectExecuteInvalid(source: string): void {
+function invalidate(source: string): void {
   expect(() => execute(source)).toThrow();
 }
 
 describe('execute', () => {
   it('should execute "100" and return 100', () => {
-    expectExecuteValid('100', 100);
+    validate('100', 100);
   });
 
   it('should execute "100U8" and return 100', () => {
-    expectExecuteValid('100U8', 100);
+    validate('100U8', 100);
   });
 
   it('should throw an error when executing "-100U8"', () => {
-    expectExecuteInvalid('-100U8');
+    invalidate('-100U8');
+  });
+
+  it('should execute "-100I8" and return -100', () => {
+    validate('-100I8', -100);
   });
 
   it('should throw an error when executing "256U8"', () => {
-    expectExecuteInvalid('256U8');
+    invalidate('256U8');
   });
 });
