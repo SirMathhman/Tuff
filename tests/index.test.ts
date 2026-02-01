@@ -187,4 +187,8 @@ describe("interpret - arithmetic operations", () => {
   it("should add and multiply untyped numbers with correct precedence", () => {
     expectValid("4 + 2 * 3", 10);
   });
+
+  it("should evaluate parenthesized expressions", () => {
+    expectValid("(4 + 2) * 3", 18);
+  });
 });

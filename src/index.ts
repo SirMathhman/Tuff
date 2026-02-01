@@ -156,6 +156,43 @@ function performOperation(left: number | bigint, right: number | bigint, leftPar
   return checkOperationRange(result_value, commonType, operation);
 }
 
+function evaluateParenthesizedExpressions(input: string): string {
+  let result = input;
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    let depth = 0;
+    let start = -1;
+
+    for (let i = 0; i < result.length; i++) {
+      if (result[i] === "(") {
+        if (depth === 0) {
+          start = i;
+        }
+        depth++;
+      } else if (result[i] === ")") {
+        depth--;
+        if (depth === 0 && start !== -1) {
+          const inner = result.substring(start + 1, i);
+          const innerResult = interpret(inner);
+
+          if (!innerResult.success) {
+            return "";
+          }
+
+          const evaluated = String((innerResult as { success: true; data: number | bigint }).data);
+          result = result.substring(0, start) + evaluated + result.substring(i + 1);
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
 function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"; value: string }> {
   const tokens: Array<{ type: "operand" | "operator"; value: string }> = [];
   let current = "";
@@ -278,6 +315,14 @@ function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; valu
 
 export function interpret(input: string): Result<number | bigint, string> {
   const trimmedInput = input.trim();
+
+  if (trimmedInput.includes("(") || trimmedInput.includes(")")) {
+    const evaluated = evaluateParenthesizedExpressions(trimmedInput);
+    if (evaluated === "") {
+      return { success: false, error: "Invalid parenthesized expression" };
+    }
+    return interpret(evaluated);
+  }
 
   if (trimmedInput.includes(" + ") || trimmedInput.includes(" - ") || trimmedInput.includes(" * ") || trimmedInput.includes(" / ")) {
     const tokens = tokenizeExpression(trimmedInput);
