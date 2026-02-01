@@ -150,4 +150,8 @@ describe("execute", () => {
   it('should execute "let x = true; let y = false; x && y" and return 0', () => {
     validate("let x = true; let y = false; x && y", 0);
   });
+
+  it('should throw an error when using OR operator on numeric types: "1 || 2"', () => {
+    invalidate("1 || 2");
+  });
 });

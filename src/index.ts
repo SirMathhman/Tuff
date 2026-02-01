@@ -427,6 +427,18 @@ function validateImmutability(source: string): void {
   validateReassignments(source, mutableVars, declaredVars, varTypes);
 }
 
+// Validate that logical operators are only used with boolean types
+function validateLogicalOperators(source: string): void {
+  // Check for || and && operators with numeric literals or typed numbers
+  const logicalPattern = /(\d+(?:U8|U16|U32|U64|I8|I16|I32|I64)?)\s*(\|\||&&)\s*(\d+(?:U8|U16|U32|U64|I8|I16|I32|I64)?)/g;
+  
+  if (logicalPattern.test(source)) {
+    throw new Error(
+      "Logical operators || and && can only be used with boolean values, not numbers",
+    );
+  }
+}
+
 // Validate the compiled expression result against type constraints
 function validateExpressionResult(
   compiled: string,
@@ -470,6 +482,7 @@ function validateExpressionResult(
 export function compileTuffToJS(source: string): string {
   checkRedeclarations(source);
   validateImmutability(source);
+  validateLogicalOperators(source);
   const allTypes = extractAndValidateAnnotations(source);
   const hasMutation = /let\s+mut\s+/.test(source);
   let compiled = processMutableVariables(source);
