@@ -34,4 +34,8 @@ describe('execute', () => {
   it('should throw an error when executing "-100U8"', () => {
     expect(() => execute('-100U8')).toThrow();
   });
+
+  it('should throw an error when executing "256U8"', () => {
+    expect(() => execute('256U8')).toThrow();
+  });
 });
