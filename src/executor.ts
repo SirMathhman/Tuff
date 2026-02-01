@@ -60,6 +60,45 @@ export function assignVariableWithType(scope: VariableScope, name: string, newVa
   return { success: true, data: undefined };
 }
 
+export function assignThroughMutablePointer(scope: VariableScope, pointerVarName: string, newValue: number | bigint): Result<void, string> {
+  const ptrLookupResult = lookupVariable(scope, pointerVarName);
+  if (!ptrLookupResult.success) {
+    return ptrLookupResult as Result<void, string>;
+  }
+
+  const ptrVar = (ptrLookupResult as { success: true; data: Variable }).data;
+  
+  // The pointer variable must hold a reference (string)
+  if (typeof ptrVar.value !== "string") {
+    return { success: false, error: "Cannot dereference non-pointer variable: " + pointerVarName };
+  }
+
+  // Check if this is a mutable pointer
+  if (!ptrVar.type.startsWith("*mut ")) {
+    return { success: false, error: "Cannot assign through immutable pointer: " + pointerVarName };
+  }
+
+  // Follow the reference to the target variable
+  const targetLookupResult = lookupVariable(scope, ptrVar.value);
+  if (!targetLookupResult.success) {
+    return targetLookupResult as Result<void, string>;
+  }
+
+  const targetVar = (targetLookupResult as { success: true; data: Variable }).data;
+  if (!targetVar.mutable) {
+    return { success: false, error: "Cannot assign through pointer to immutable variable: " + ptrVar.value };
+  }
+
+  const range = TYPE_RANGES[targetVar.type];
+  const validateResult = validateNumber(newValue, range, targetVar.type);
+  if (!validateResult.success) {
+    return validateResult as unknown as Result<void, string>;
+  }
+
+  targetVar.value = newValue;
+  return { success: true, data: undefined };
+}
+
 export function lookupVariable(scope: VariableScope, name: string): Result<Variable, string> {
   let current: VariableScope | null = scope;
 

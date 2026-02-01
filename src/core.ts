@@ -20,6 +20,7 @@ import {
   lookupVariable,
   lookupFunction,
   assignVariableWithType,
+  assignThroughMutablePointer,
   executeFunctionCall,
   interpretWithVariables,
 } from "./executor";
@@ -27,6 +28,27 @@ import {
   evaluateParenthesizedExpressions,
   interpretAddSubtract,
 } from "./expressions";
+
+function evaluateRhs(rhs: string, scope: VariableScope): Result<{ value: number | bigint; type: string | null }, string> {
+  const valueResult = interpretWithVariables(rhs, scope);
+  if (!valueResult.success) {
+    return valueResult as Result<{ value: number | bigint; type: string | null }, string>;
+  }
+
+  const value = (valueResult as { success: true; data: number | bigint }).data;
+  let type: string | null = null;
+  
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(rhs)) {
+    const rhsVarLookup = lookupVariable(scope, rhs);
+    if (rhsVarLookup.success) {
+      type = (rhsVarLookup as { success: true; data: Variable }).data.type;
+    }
+  } else {
+    type = getTypeForValue(rhs);
+  }
+
+  return { success: true, data: { value, type } };
+}
 
 export function interpretStatementBlock(input: string, parentScope: VariableScope | null = null): Result<number | bigint, string> {
   const parseResult = parseStatementBlock(input);
@@ -48,35 +70,43 @@ export function interpretStatementBlock(input: string, parentScope: VariableScop
       if (!declResult.success) {
         return declResult;
       }
-    } else {
-      const assignIndex = stmt.indexOf("=");
-      if (assignIndex !== -1) {
-        const lhs = stmt.slice(0, assignIndex).trim();
-        if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(lhs)) {
+      } else {
+        const assignIndex = stmt.indexOf("=");
+        if (assignIndex !== -1) {
+          const lhs = stmt.slice(0, assignIndex).trim();
           const rhs = stmt.slice(assignIndex + 1).trim();
-          const valueResult = interpretWithVariables(rhs, blockScope);
-          if (!valueResult.success) {
-            return valueResult;
-          }
-          const newValue = (valueResult as { success: true; data: number | bigint }).data;
-          let rhsType: string | null = null;
-          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(rhs)) {
-            const rhsVarLookup = lookupVariable(blockScope, rhs);
-            if (rhsVarLookup.success) {
-              rhsType = (rhsVarLookup as { success: true; data: Variable }).data.type;
+          
+          // Handle dereferenced assignment: *ptr = value
+          if (lhs.startsWith("*") && /^\*[a-zA-Z_][a-zA-Z0-9_]*$/.test(lhs)) {
+            const ptrVarName = lhs.slice(1); // Remove the *
+            const rhsEvalResult = evaluateRhs(rhs, blockScope);
+            if (!rhsEvalResult.success) {
+              return rhsEvalResult;
             }
-          } else {
-            rhsType = getTypeForValue(rhs);
+            const { value: newValue } = (rhsEvalResult as { success: true; data: { value: number | bigint; type: string | null } }).data;
+            const assignResult = assignThroughMutablePointer(blockScope, ptrVarName, newValue);
+            if (!assignResult.success) {
+              return assignResult;
+            }
+            continue;
           }
           
-          // Always use assignVariableWithType for direct assignments
-          const assignResult = assignVariableWithType(blockScope, lhs, newValue, rhsType);
-          if (!assignResult.success) {
-            return assignResult;
+          // Handle regular assignment: var = value
+          if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(lhs)) {
+            const rhsEvalResult = evaluateRhs(rhs, blockScope);
+            if (!rhsEvalResult.success) {
+              return rhsEvalResult;
+            }
+            const { value: newValue, type: rhsType } = (rhsEvalResult as { success: true; data: { value: number | bigint; type: string | null } }).data;
+            
+            // Always use assignVariableWithType for direct assignments
+            const assignResult = assignVariableWithType(blockScope, lhs, newValue, rhsType);
+            if (!assignResult.success) {
+              return assignResult;
+            }
+            continue;
           }
-          continue;
         }
-      }
       const exprResult = interpretWithVariables(stmt, blockScope);
       if (!exprResult.success) {
         return exprResult;

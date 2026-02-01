@@ -1,4 +1,4 @@
-import { Result, Range, TYPE_RANGES, TYPE_ORDER, isPointerType, getBaseType } from "./types";
+import { Result, Range, TYPE_RANGES, TYPE_ORDER, isPointerType, getBaseType, isMutablePointerType, stripMutability } from "./types";
 
 function isInRange(value: number | bigint, range: Range): boolean {
   return value >= range.min && value <= range.max;
@@ -114,7 +114,18 @@ export function canCoerceType(sourceType: string, targetType: string): boolean {
     // Both are pointers - they must have same base type
     const sourceBase = getBaseType(sourceType);
     const targetBase = getBaseType(targetType);
-    return sourceBase === targetBase;
+    
+    if (sourceBase !== targetBase) {
+      return false;
+    }
+    
+    // For mutable pointers, mutability must match
+    const sourceMut = isMutablePointerType(sourceType);
+    const targetMut = isMutablePointerType(targetType);
+    
+    // Can assign immutable to mutable (gaining safety), but not vice versa
+    // For now, require exact match
+    return sourceMut === targetMut;
   }
 
   if (sourceIsPointer || targetIsPointer) {

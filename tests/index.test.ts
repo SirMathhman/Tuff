@@ -374,3 +374,41 @@ describe("interpret - pointers", () => {
     expectValid("let x : I32 = 10; let y : I32 = 20; let px : *I32 = &x; let py : *I32 = &y; *px + *py", 30);
   });
 });
+
+describe("interpret - mutable pointers", () => {
+  it("should handle simple mutable pointer reference and assignment", () => {
+    expectValid("let mut x : I32 = 100; let y : *mut I32 = &mut x; *y = 200; x", 200);
+  });
+
+  it("should handle mutable pointer to U32", () => {
+    expectValid("let mut x : U32 = 42; let ptr : *mut U32 = &mut x; *ptr = 100; x", 100);
+  });
+
+  it("should handle mutable pointer in expressions after assignment", () => {
+    expectValid("let mut x : I32 = 5; let ptr : *mut I32 = &mut x; *ptr = 10; *ptr + 5", 15);
+  });
+
+  it("should allow multiple mutable pointer assignments", () => {
+    expectValid("let mut x : I32 = 100; let y : *mut I32 = &mut x; *y = 200; let z : *mut I32 = &mut x; *z = 300; x", 300);
+  });
+
+  it("should return error when trying to create mutable reference to immutable variable", () => {
+    expectInvalid("let x : I32 = 100; let ptr : *mut I32 = &mut x; *ptr");
+  });
+
+  it("should return error when assigning wrong type through mutable pointer", () => {
+    expectInvalid("let mut x : U8 = 10; let ptr : *mut U8 = &mut x; *ptr = 300; x");
+  });
+
+  it("should return error when mutable pointer type doesn't match variable type", () => {
+    expectInvalid("let mut x : U8 = 5; let ptr : *mut I32 = &mut x; *ptr = 10");
+  });
+
+  it("should return error when dereferencing immutable pointer assignment", () => {
+    expectInvalid("let mut x : I32 = 100; let ptr : *I32 = &x; *ptr = 200; x");
+  });
+
+  it("should update original variable through mutable pointer", () => {
+    expectValid("let mut x : I32 = 0; let y : *mut I32 = &mut x; *y = 100; x", 100);
+  });
+});

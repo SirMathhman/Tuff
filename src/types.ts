@@ -32,11 +32,22 @@ export function isPointerType(type: string): boolean {
   return type.startsWith("*");
 }
 
+export function isMutablePointerType(type: string): boolean {
+  return type.startsWith("*mut ");
+}
+
+export function isImmutablePointerType(type: string): boolean {
+  return isPointerType(type) && !isMutablePointerType(type);
+}
+
 export function getPointeeType(type: string): string {
   if (!isPointerType(type)) {
     throw new Error("Not a pointer type: " + type);
   }
-  return type.slice(1);
+  if (isMutablePointerType(type)) {
+    return type.slice(5); // Remove "*mut "
+  }
+  return type.slice(1); // Remove "*"
 }
 
 export function getBaseType(type: string): string {
@@ -55,5 +66,12 @@ export function pointerDepth(type: string): number {
     current = getPointeeType(current);
   }
   return depth;
+}
+
+export function stripMutability(type: string): string {
+  if (isMutablePointerType(type)) {
+    return "*" + getPointeeType(type);
+  }
+  return type;
 }
 

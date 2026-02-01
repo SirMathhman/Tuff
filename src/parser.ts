@@ -1,4 +1,4 @@
-import { Result, VariableScope, Variable, FunctionParameter } from "./types";
+import { Result, VariableScope, Variable, FunctionParameter, isMutablePointerType, getPointeeType } from "./types";
 import { canCoerceType, getTypeForValue } from "./operators";
 import { lookupVariable, declareVariable, declareFunction } from "./executor";
 import { getInterpret } from "./lazy";
@@ -129,18 +129,29 @@ function parseVariableParts(rest: string): Result<{ varName: string; targetType:
 }
 
 function initializePointerVariable(varName: string, targetType: string, valueStr: string, scope: VariableScope, mutable: boolean): Result<void, string> {
-   if (!valueStr.startsWith("&")) {
-     return { success: false, error: "Pointer type requires reference operator (&)" };
+   const isMutablePtr = isMutablePointerType(targetType);
+   
+   // Determine expected reference syntax
+   const expectedRefPrefix = isMutablePtr ? "&mut" : "&";
+   if (!valueStr.startsWith(expectedRefPrefix)) {
+     return { success: false, error: "Pointer type requires " + expectedRefPrefix + " operator" };
    }
 
-   const referencedVarName = valueStr.slice(1).trim();
+   // Extract referenced variable name
+   const referencedVarName = valueStr.slice(expectedRefPrefix.length).trim();
    const refLookup = lookupVariable(scope, referencedVarName);
    if (!refLookup.success) {
      return { success: false, error: "Cannot reference undefined variable: " + referencedVarName };
    }
 
    const refVar = (refLookup as { success: true; data: Variable }).data;
-   const ptrPointeeType = targetType.slice(1);
+   
+   // For mutable pointers, the referenced variable must be mutable
+   if (isMutablePtr && !refVar.mutable) {
+     return { success: false, error: "Cannot create mutable reference to immutable variable: " + referencedVarName };
+   }
+
+   const ptrPointeeType = getPointeeType(targetType);
    if (ptrPointeeType !== refVar.type) {
      return { success: false, error: "Cannot create pointer to " + refVar.type + " from pointer to " + ptrPointeeType };
    }
