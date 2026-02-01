@@ -199,4 +199,8 @@ describe("interpret - arithmetic operations", () => {
   it("should return error for division by zero", () => {
     expectInvalid("10 / (2 - 2)");
   });
+
+  it("should handle curly braces like parentheses", () => {
+    expectValid("10 / { 5 }", 2);
+  });
 });

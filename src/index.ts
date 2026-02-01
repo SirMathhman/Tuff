@@ -169,7 +169,7 @@ function performOperation(left: number | bigint, right: number | bigint, leftPar
   return checkOperationRange(result_value, commonType, operation);
 }
 
-function evaluateParenthesizedExpressions(input: string): string {
+function evaluateGroupedExpressions(input: string): string {
   let result = input;
   let changed = true;
 
@@ -177,14 +177,20 @@ function evaluateParenthesizedExpressions(input: string): string {
     changed = false;
     let depth = 0;
     let start = -1;
+    let groupChar = "";
 
     for (let i = 0; i < result.length; i++) {
-      if (result[i] === "(") {
+      const char = result[i];
+      const isOpenBrace = char === "(" || char === "{";
+      const isCloseBrace = (char === ")" && groupChar === "(") || (char === "}" && groupChar === "{");
+
+      if (isOpenBrace) {
         if (depth === 0) {
           start = i;
+          groupChar = char;
         }
         depth++;
-      } else if (result[i] === ")") {
+      } else if (isCloseBrace) {
         depth--;
         if (depth === 0 && start !== -1) {
           const inner = result.substring(start + 1, i);
@@ -204,6 +210,10 @@ function evaluateParenthesizedExpressions(input: string): string {
   }
 
   return result;
+}
+
+function evaluateParenthesizedExpressions(input: string): string {
+  return evaluateGroupedExpressions(input);
 }
 
 function tokenizeExpression(input: string): Array<{ type: "operand" | "operator"; value: string }> {
@@ -329,10 +339,10 @@ function interpretAddSubtract(tokens: Array<{ type: "operand" | "operator"; valu
 export function interpret(input: string): Result<number | bigint, string> {
   const trimmedInput = input.trim();
 
-  if (trimmedInput.includes("(") || trimmedInput.includes(")")) {
+  if (trimmedInput.includes("(") || trimmedInput.includes(")") || trimmedInput.includes("{") || trimmedInput.includes("}")) {
     const evaluated = evaluateParenthesizedExpressions(trimmedInput);
     if (evaluated === "") {
-      return { success: false, error: "Invalid parenthesized expression" };
+      return { success: false, error: "Invalid grouped expression" };
     }
     return interpret(evaluated);
   }
