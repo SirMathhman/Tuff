@@ -1,70 +1,52 @@
-function isDigit(char: string): boolean {
-  return (
-    char === "0" ||
-    char === "1" ||
-    char === "2" ||
-    char === "3" ||
-    char === "4" ||
-    char === "5" ||
-    char === "6" ||
-    char === "7" ||
-    char === "8" ||
-    char === "9"
-  );
+type TypeSuffix = "U8" | "U16" | "U32" | "U64" | "I8" | "I16" | "I32" | "I64" | null;
+
+function extractTypeSuffix(source: string): TypeSuffix {
+  if (source.endsWith("U8")) return "U8";
+  if (source.endsWith("U16")) return "U16";
+  if (source.endsWith("U32")) return "U32";
+  if (source.endsWith("U64")) return "U64";
+  if (source.endsWith("I8")) return "I8";
+  if (source.endsWith("I16")) return "I16";
+  if (source.endsWith("I32")) return "I32";
+  if (source.endsWith("I64")) return "I64";
+  return null;
 }
 
-function findDigitEndIndex(str: string, index: number): number {
-  if (index >= str.length) {
-    return index;
+function extractNumberPart(source: string, suffix: TypeSuffix): string {
+  if (!suffix) {
+    return source;
   }
-  return isDigit(str[index]) ? findDigitEndIndex(str, index + 1) : index;
+  return source.slice(0, source.length - suffix.length);
 }
 
-function startsWithNegativeTypedLiteral(source: string): boolean {
-  if (!source.startsWith("-")) {
-    return false;
-  }
-  const afterMinus = source.slice(1);
-  if (!isDigit(afterMinus[0])) {
-    return false;
-  }
-  const rest = afterMinus.slice(findDigitEndIndex(afterMinus, 1));
-  return (
-    rest.startsWith("U8") ||
-    rest.startsWith("U16") ||
-    rest.startsWith("U32") ||
-    rest.startsWith("U64") ||
-    rest.startsWith("I8") ||
-    rest.startsWith("I16") ||
-    rest.startsWith("I32") ||
-    rest.startsWith("I64") ||
-    rest.startsWith("F32") ||
-    rest.startsWith("F64")
-  );
+function isSigned(suffix: TypeSuffix): boolean {
+  return suffix === "I8" || suffix === "I16" || suffix === "I32" || suffix === "I64";
 }
 
-function isU8OutOfRange(value: number): boolean {
-  return value > 255;
-}
-
-function extractNumberFromU8Literal(source: string): string {
-  const parts = source.split("U8");
-  return parts[0];
+function isInRange(value: number, suffix: TypeSuffix): boolean {
+  if (suffix === "U8") return value >= 0 && value <= 255;
+  if (suffix === "U16") return value >= 0 && value <= 65535;
+  if (suffix === "U32") return value >= 0 && value <= 4294967295;
+  if (suffix === "U64") return value >= 0;
+  if (suffix === "I8") return value >= -128 && value <= 127;
+  if (suffix === "I16") return value >= -32768 && value <= 32767;
+  if (suffix === "I32") return value >= -2147483648 && value <= 2147483647;
+  if (suffix === "I64") return value >= -9223372036854775808;
+  return true;
 }
 
 export function compileTuffToJS(source: string): string {
-  if (startsWithNegativeTypedLiteral(source)) {
-    throw new Error("Negative typed literals are not allowed");
+  const suffix = extractTypeSuffix(source);
+  if (!suffix) {
+    return "return " + source + ";";
   }
-  if (source.includes("U8")) {
-    const numStr = extractNumberFromU8Literal(source);
-    const num = Number(numStr);
-    if (isU8OutOfRange(num)) {
-      throw new Error("U8 literals must be in range 0-255");
-    }
-    return "return " + numStr + ";";
+  const numStr = extractNumberPart(source, suffix);
+  const num = Number(numStr);
+  if (!isSigned(suffix) && numStr.startsWith("-")) {
+    throw new Error("Negative literals are not allowed for unsigned types");
   }
-  const parts = source.split("U8");
-  const compiled = parts[0];
-  return "return " + compiled + ";";
+  if (!isInRange(num, suffix)) {
+    throw new Error(suffix + " literals must be in valid range");
+  }
+  return "return " + numStr + ";";
 }
