@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "cpd": "pmd cpd src tests --language typescript --minimum-tokens 35",
+    "cpd": "pmd cpd src tests --language typescript --minimum-tokens 35 --ignore-literals --ignore-identifiers",
     "prepare": "husky install",
     "build": "tsc",
     "start": "node dist/index.js",

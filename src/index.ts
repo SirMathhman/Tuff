@@ -231,14 +231,18 @@ function removeTypeAnnotations(source: string): string {
     .replace(new RegExp(':\\s*(' + validTypes + ')', 'g'), '');
 }
 
-// Remove curly braces from the source expression
+// Remove curly braces from the source expression (preserving function bodies)
 function removeCurlyBraces(source: string): string {
+  // If the source contains a function declaration (for mutations), don't remove its braces
+  if (/\(function\(\)/.test(source)) {
+    return source;
+  }
   return source.replace(/[{}]/g, '');
 }
 
 // Ensure no variable is redeclared in the same scope
 function validateNoDuplicates(content: string): void {
-  const letPattern = /let\s+([a-zA-Z_]\w*)/g;
+  const letPattern = /let\s+(?:mut\s+)?([a-zA-Z_]\w*)/g;
   Array.from(content.matchAll(letPattern)).reduce((seen, match) => {
     const id = match[1];
     if (seen.has(id)) {
@@ -259,6 +263,37 @@ function checkRedeclarations(source: string): void {
     return;
   }
   validateNoDuplicates(source);
+}
+
+// Process mutable variable declarations and reassignments
+function processMutableVariables(source: string): string {
+  const hasMut = /let\s+mut\s+/.test(source);
+  const hasReassignment = /\b([a-zA-Z_]\w*)\s*=\s*[^;=]/.test(
+    source.replace(/let\s+(?:mut\s+)?\w+\s*(?::\s*\w+)?\s*=/g, ''),
+  );
+
+  if (!hasMut && !hasReassignment) {
+    return source;
+  }
+
+  // Replace let mut with let
+  let transformed = source.replace(/let\s+mut\s+/g, 'let ');
+
+  // Extract the final return value (last standalone identifier)
+  const lastIdMatch = transformed.match(/;\s*([a-zA-Z_]\w*)\s*$/);
+  const returnVar = lastIdMatch ? lastIdMatch[1] : '';
+
+  if (!returnVar) {
+    return transformed;
+  }
+
+  // Remove the trailing variable reference
+  const withoutTrailing = transformed.replace(/;\s*[a-zA-Z_]\w*\s*$/, ';');
+
+  // Wrap in IIFE for mutation support
+  const wrapped =
+    '(function() { ' + withoutTrailing + ' return ' + returnVar + '; })()';
+  return wrapped;
 }
 
 // Validate the compiled expression result against type constraints
@@ -298,7 +333,11 @@ function validateExpressionResult(
 export function compileTuffToJS(source: string): string {
   checkRedeclarations(source);
   const allTypes = extractAndValidateAnnotations(source);
-  let compiled = processVariableDeclarations(source);
+  const hasMutation = /let\s+mut\s+/.test(source);
+  let compiled = processMutableVariables(source);
+  if (!hasMutation) {
+    compiled = processVariableDeclarations(compiled);
+  }
   compiled = removeTypeAnnotations(compiled);
   compiled = removeCurlyBraces(compiled);
   validateExpressionResult(compiled, allTypes);

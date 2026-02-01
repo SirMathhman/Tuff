@@ -122,4 +122,8 @@ describe('execute', () => {
   it('should throw an error when assigning wider type to narrower type: "let x = 10U16; let y : U8 = x; y"', () => {
     invalidate('let x = 10U16; let y : U8 = x; y');
   });
+
+  it('should execute "let mut x = 0; x = 100; x" and return 100', () => {
+    validate('let mut x = 0; x = 100; x', 100);
+  });
 });
