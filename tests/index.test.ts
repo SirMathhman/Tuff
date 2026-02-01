@@ -203,4 +203,8 @@ describe("interpret - arithmetic operations", () => {
   it("should handle curly braces like parentheses", () => {
     expectValid("10 / { 5 }", 2);
   });
+
+  it("should handle variable declarations in blocks", () => {
+    expectValid("10 / { let x : U8 = 5; x }", 2);
+  });
 });

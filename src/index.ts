@@ -1,5 +1,12 @@
 type Result<T, E> = { success: true; data: T } | { success: false; error: E };
 
+type Variable = { name: string; type: string; value: number | bigint };
+
+type VariableScope = {
+  variables: Map<string, Variable>;
+  parent: VariableScope | null;
+};
+
 type Range = { min: number | bigint; max: number | bigint; unsigned: boolean };
 
 const TYPE_RANGES: Record<string, Range> = {
@@ -14,6 +21,42 @@ const TYPE_RANGES: Record<string, Range> = {
 };
 
 const TYPE_ORDER: string[] = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
+
+function createScope(parent: VariableScope | null = null): VariableScope {
+  return { variables: new Map(), parent };
+}
+
+function declareVariable(scope: VariableScope, name: string, type: string, value: number | bigint): Result<void, string> {
+  if (scope.variables.has(name)) {
+    return { success: false, error: "Variable " + name + " already declared in this scope" };
+  }
+
+  const range = TYPE_RANGES[type];
+  if (!range) {
+    return { success: false, error: "Unknown type: " + type };
+  }
+
+  const validateResult = validateNumber(value, range, type);
+  if (!validateResult.success) {
+    return validateResult as unknown as Result<void, string>;
+  }
+
+  scope.variables.set(name, { name, type, value });
+  return { success: true, data: undefined };
+}
+
+function lookupVariable(scope: VariableScope, name: string): Result<Variable, string> {
+  let current: VariableScope | null = scope;
+
+  while (current !== null) {
+    if (current.variables.has(name)) {
+      return { success: true, data: current.variables.get(name) as Variable };
+    }
+    current = current.parent;
+  }
+
+  return { success: false, error: "Undefined variable: " + name };
+}
 
 function isInRange(value: number | bigint, range: Range): boolean {
   return value >= range.min && value <= range.max;
@@ -169,6 +212,98 @@ function performOperation(left: number | bigint, right: number | bigint, leftPar
   return checkOperationRange(result_value, commonType, operation);
 }
 
+function parseStatementBlock(input: string): Result<{ statements: string[]; finalExpr: string }, string> {
+  const trimmed = input.trim();
+  const parts = trimmed.split(";");
+
+  if (parts.length < 2) {
+    return { success: false, error: "Statement block must contain at least one statement and an expression" };
+  }
+
+  const statements = parts.slice(0, -1).map((s) => s.trim());
+  const finalExpr = parts[parts.length - 1].trim();
+
+  if (finalExpr === "") {
+    return { success: false, error: "Statement block must end with an expression" };
+  }
+
+  return { success: true, data: { statements, finalExpr } };
+}
+
+function interpretStatementBlock(input: string, parentScope: VariableScope | null = null): Result<number | bigint, string> {
+  const parseResult = parseStatementBlock(input);
+  if (!parseResult.success) {
+    return parseResult;
+  }
+
+  const { statements, finalExpr } = (parseResult as { success: true; data: { statements: string[]; finalExpr: string } }).data;
+  const blockScope = createScope(parentScope);
+
+  for (const stmt of statements) {
+    if (stmt.startsWith("let ")) {
+      const declResult = parseVariableDeclaration(stmt, blockScope);
+      if (!declResult.success) {
+        return declResult;
+      }
+    } else {
+      return { success: false, error: "Invalid statement: " + stmt };
+    }
+  }
+
+  return interpretWithVariables(finalExpr, blockScope);
+}
+
+function parseVariableDeclaration(stmt: string, scope: VariableScope): Result<void, string> {
+  const trimmed = stmt.trim();
+
+  if (!trimmed.startsWith("let ")) {
+    return { success: false, error: "Expected 'let' keyword" };
+  }
+
+  const rest = trimmed.slice(4).trim();
+  const colonIndex = rest.indexOf(":");
+
+  if (colonIndex === -1) {
+    return { success: false, error: "Expected ':' in variable declaration" };
+  }
+
+  const varName = rest.slice(0, colonIndex).trim();
+  const afterColon = rest.slice(colonIndex + 1).trim();
+  const equalsIndex = afterColon.indexOf("=");
+
+  if (equalsIndex === -1) {
+    return { success: false, error: "Expected '=' in variable declaration" };
+  }
+
+  const typeName = afterColon.slice(0, equalsIndex).trim();
+  const valueStr = afterColon.slice(equalsIndex + 1).trim();
+
+  if (!varName || !typeName || !valueStr) {
+    return { success: false, error: "Invalid variable declaration format" };
+  }
+
+  const valueResult = interpret(valueStr);
+  if (!valueResult.success) {
+    return valueResult;
+  }
+
+  const value = (valueResult as { success: true; data: number | bigint }).data;
+  return declareVariable(scope, varName, typeName, value);
+}
+
+function interpretWithVariables(input: string, scope: VariableScope): Result<number | bigint, string> {
+  const trimmed = input.trim();
+
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
+    const lookupResult = lookupVariable(scope, trimmed);
+    if (lookupResult.success) {
+      return { success: true, data: (lookupResult as { success: true; data: Variable }).data.value };
+    }
+  }
+
+  return interpret(trimmed);
+}
+
 function evaluateGroupedExpressions(input: string): string {
   let result = input;
   let changed = true;
@@ -194,7 +329,13 @@ function evaluateGroupedExpressions(input: string): string {
         depth--;
         if (depth === 0 && start !== -1) {
           const inner = result.substring(start + 1, i);
-          const innerResult = interpret(inner);
+          let innerResult: Result<number | bigint, string>;
+
+          if (groupChar === "{" && inner.includes("let ")) {
+            innerResult = interpretStatementBlock(inner);
+          } else {
+            innerResult = interpret(inner);
+          }
 
           if (!innerResult.success) {
             return "";
