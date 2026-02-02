@@ -130,52 +130,58 @@ The bootstrap compiler is deliberately minimal but **Turing complete** and **sel
 
 ```
 program     ::= { top_level_item }
-top_level_item ::= fn_decl | struct_decl | enum_decl | stmt
+top_level_item ::= extern_use_decl | fn_decl | struct_decl | enum_decl | stmt
+
+extern_use_decl ::= "extern" "use" "{" ident_list "}" "from" ident ";"
+ident_list ::= ident { "," ident }
 
 fn_decl     ::= "fn" ident "(" [param_list] ")" "=>" expr ";"
 param_list  ::= ident { "," ident }
 struct_decl ::= "struct" ident "{" { struct_field } "}"
-struct_field ::= ident [":" "mut"] ";"
+struct_field ::= ["mut"] ident ";"
 enum_decl   ::= "enum" ident "{" { enum_variant } "}"
-enum_variant ::= ident ["(" ident ")"]
+enum_variant ::= ident
 
-stmt        ::= let_stmt | assign_stmt | expr_stmt | if_stmt | while_stmt | for_stmt | break_stmt | continue_stmt | match_stmt
+stmt        ::= let_stmt | assign_stmt | expr_stmt | while_stmt | for_stmt | break_stmt | continue_stmt
 let_stmt    ::= "let" ["mut"] ident "=" expr ";"
 assign_stmt ::= lvalue ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" ) expr ";"
 lvalue      ::= ident | ident "." ident | ident "[" expr "]"
 expr_stmt   ::= expr ";"
-if_stmt     ::= "if" "(" expr ")" expr ["else" expr]
 while_stmt  ::= "while" "(" expr ")" expr
 for_stmt    ::= "for" "(" ident "in" expr ".." expr ")" expr
 break_stmt  ::= "break" ";"
 continue_stmt ::= "continue" ";"
-match_stmt  ::= "match" expr "{" { match_case } "}"
-match_case  ::= pattern "=>" expr ";"
 
 expr        ::= logical_or
 logical_or  ::= logical_and { "||" logical_and }
 logical_and ::= equality { "&&" equality }
-equality    ::= comparison { ( "==" | "!=" ) comparison }
-comparison  ::= additive { ( "<" | ">" | "<=" | ">=" | "is" ) additive }
+equality    ::= type_check { ( "==" | "!=" ) type_check }
+type_check  ::= comparison [ "is" scoped_variant ]
+comparison  ::= additive { ( "<" | ">" | "<=" | ">=" ) additive }
 additive    ::= multiplicative { ( "+" | "-" ) multiplicative }
 multiplicative ::= unary { ( "*" | "/" | "%" ) unary }
 unary       ::= [ "!" | "-" ] postfix
 postfix     ::= primary { ( "." ident [ "(" [expr_list] ")" ] | "[" expr "]" | "(" [expr_list] ")" ) }
 
 primary     ::= literal | ident | "(" expr ")" | array_literal | struct_literal |
-               block_expr | fn_expr | "null"
+               block_expr | fn_expr | if_expr | match_expr | "null"
 
 literal     ::= number | string | char | "true" | "false"
 number      ::= digit+ [ "." digit+ ]
 string      ::= "\"" char* "\""
 char        ::= "'" any_char "'"
 array_literal ::= "[" array_contents "]"
-array_contents ::= expr { "," expr } [ ";" expr ] [ ";" expr ]  // [elements; init; total] or [elems]
+array_contents ::= expr { "," expr } [ ";" expr ]  // [elements] or [value; count]
 struct_literal ::= ident "{" expr_list "}"
 block_expr  ::= "{" { stmt* } [ expr ] "}"
 fn_expr     ::= "fn" "(" [param_list] ")" "=>" expr
 
-pattern     ::= ident | literal | "null" | ident "(" ident ")" | "_"
+if_expr     ::= "if" "(" expr ")" expr ["else" expr]
+match_expr  ::= "match" "(" expr ")" "{" { match_case } "}"
+match_case  ::= "case" pattern "=>" expr ";"
+
+pattern     ::= ident | literal | "null" | "_" | scoped_variant
+scoped_variant ::= ident "::" ident
 
 expr_list   ::= expr { "," expr }
 ```
@@ -183,29 +189,34 @@ expr_list   ::= expr { "," expr }
 **Clarifications on grammar:**
 
 - **Array literals:**
-  - `[1, 2, 3]` — elements implicitly initialized to their position (init = 3, length = 3).
-  - `[Value; 10; 20]` — initialize 10 elements of type `Value`, total capacity 20.
+  - `[1, 2, 3]` — fixed-size array with 3 elements.
+  - `[value; count]` — evaluates `value` once, then repeats it `count` times.
   - `[x]` — single element array.
 - **Struct literals:** `Point { 3, 4 }` (positional), `Point { x: 3, y: 4 }` (NOT supported in bootstrap—use positional).
-- **Enum variants:** `Some(x)` or `None` pattern in match.
+- **Enum variants:** tag-only; use scoped `Color::Red` form in patterns and expressions.
 - **Range:** `0..10` is exclusive of right endpoint (0–9 inclusive).
 - **Comments:** `// single-line` and `/* block */` comments supported.
+- **Scope:** `{}` introduces a new scope; **no shadowing** is allowed (including function parameters).
+- **Conditions:** `if`/`while` require boolean expressions (no truthiness).
+- **Top-level:** statements execute in source order; `fn`/`struct`/`enum` declarations are hoisted.
+- **Array bounds:** unchecked in bootstrap (JS behavior).
+- **Escapes:** string/char literals support `\n`, `\t`, `\r`, `\\`, `\"`, and `\'`.
 
 ---
 
 ### **Core Data Types (Bootstrap-level)**
 
-| Concept    | Example                      | Notes                                                      |
-| ---------- | ---------------------------- | ---------------------------------------------------------- |
-| Numbers    | `42`, `3.14`                 | No type annotations; JS number semantics.                  |
-| Strings    | `"Hello"`                    | Unowned string literals; `*Str` type exists for reference. |
-| Characters | `'a'`                        | Single char literals.                                      |
-| Booleans   | `true`, `false`              | Standard truthiness.                                       |
-| Null       | `null`                       | Represents absence. Checked with `x == null`.              |
-| Arrays     | `[1, 2, 3]`                  | Fixed-size. Access: `arr[i]`. Property: `arr.length`.      |
-| Structs    | `struct Point { x; y; }`     | Positional fields. Mutable fields marked `mut`.            |
-| Enums      | `enum Opt { Some(v), None }` | Variant tags. Pattern match to destructure.                |
-| Functions  | `fn add(a, b) => a + b;`     | No type annotations. Return inferred. Recursion supported. |
+| Concept    | Example                     | Notes                                                      |
+| ---------- | --------------------------- | ---------------------------------------------------------- |
+| Numbers    | `42`, `3.14`                | No type annotations; JS number semantics.                  |
+| Strings    | `"Hello"`                   | Unowned string literals.                                   |
+| Characters | `'a'`                       | Single char literals.                                      |
+| Booleans   | `true`, `false`             | Required in `if`/`while` conditions.                       |
+| Null       | `null`                      | Represents absence. Checked with `x == null`.              |
+| Arrays     | `[1, 2, 3]`                 | Fixed-size. Access: `arr[i]`. Property: `arr.length`.      |
+| Structs    | `struct Point { x; y; }`    | Positional fields. Mutable fields marked `mut`.            |
+| Enums      | `enum Color { Red, Green }` | Tag-only variants; match on `Color::Red` style.            |
+| Functions  | `fn add(a, b) => a + b;`    | No type annotations. Return inferred. Recursion supported. |
 
 ---
 
@@ -235,6 +246,7 @@ arr[0] = 99;  // OK
 - `let x = ...;` creates an immutable binding.
 - `let mut x = ...;` creates a mutable binding.
 - Field mutation requires both the struct instance _and_ the field to be marked `mut`.
+- **No shadowing:** a new binding cannot reuse any name from an outer scope (including parameters).
 
 ---
 
@@ -251,6 +263,10 @@ let branch = if (x > 0) {
 } else {
   0
 };
+
+// Conditions must be boolean (no truthiness)
+let ok = true;
+if (ok) print("ok") else print("no");
 ```
 
 #### **While Loops**
@@ -288,23 +304,19 @@ for (i in 0..100) {
 #### **Match (Structural Pattern Matching)**
 
 ```tuff
-enum Result { Ok(v), Err(e) }
+enum Color { Red, Green, Blue }
 
-let res = Ok(42);
-match res {
-  Ok(x) => print(x);
-  Err(msg) => print(msg);
+let color = Color::Red;
+match (color) {
+  case Color::Red => print("red");
+  case Color::Green => print("green");
+  case Color::Blue => print("blue");
 }
 
-// Pattern: catch-all with _
-match value {
-  Some(x) => print(x);
-  None => print("Nothing");
-}
-
-// Type narrowing with `is`
-if (res is Ok) {
-  print(res.value);  // Narrowed type
+// Pattern: catch-all with _ (required for non-enum matches)
+match (value) {
+  case 0 => print("zero");
+  case _ => print("other");
 }
 ```
 
@@ -328,10 +340,8 @@ fn factorial(n) => {
   if (n <= 1) 1 else n * factorial(n - 1)
 };
 
-// Extern function (for I/O, syscalls)
-extern fn print(msg);
-extern fn readFile(path) => *Str;
-extern fn malloc(size) => *void;
+// Externs (CommonJS packages)
+extern use { print, readFile } from io;
 ```
 
 **Function rules (Bootstrap):**
@@ -342,6 +352,12 @@ extern fn malloc(size) => *void;
 - Recursion allowed (call stack is the only limit).
 - No default parameters.
 - No named arguments.
+
+**Extern uses (Bootstrap):**
+
+- `extern use { a, b } from lib;` imports from a **bare package identifier**.
+- The bootstrap compiler lowers this to CommonJS: `const { a, b } = require("./lib.js");`.
+- Extern uses are allowed only at the top level.
 
 ---
 
@@ -360,18 +376,9 @@ let p = Point { 3, 4 };
 let xCoord = p.x;
 p.y = 5;  // OK because y is mut
 
-// Method calls (both syntaxes valid)
-p.manhattan()   // obj.method()
-manhattan(p)    // method(obj)
-
-// Defining methods on structs (Phase 2 feature, but bootstrap uses module pattern)
-module Point {
-  fn manhattan(this) => {
-    let absX = if (this.x < 0) -this.x else this.x;
-    let absY = if (this.y < 0) -this.y else this.y;
-    absX + absY
-  }
-}
+// Method calls (member-first; extension fallback)
+p.manhattan()   // member-first; falls back to extension call if no member exists
+manhattan(p)    // extension-style call
 ```
 
 **Struct rules (Bootstrap):**
@@ -381,66 +388,62 @@ module Point {
 - Positional struct literals: `Point { 3, 4 }`.
 - Field mutation: `p.x = 5;` (requires `p` and field `x` both mutable).
 - Nested field access: `p.data.value`.
-- Method calls use module pattern (see Phase 2 for full module support).
+- Method calls resolve **member-first**; if no member exists, the compiler desugars to `method(obj, ...)`.
 
 ---
 
 ### **Enums & Pattern Matching**
 
 ```tuff
-enum Option {
-  Some(value),
-  None
-}
-
-enum Result {
-  Ok(data),
-  Err(error)
+enum Color {
+  Red,
+  Green,
+  Blue
 }
 
 // Pattern matching
-let opt = Some(42);
-match opt {
-  Some(x) => print(x);
-  None => print("No value");
-}
-
-// Type narrowing with `is`
-if (opt is Some) {
-  print(opt.value);  // Narrowed; can access value
+let color = Color::Red;
+match (color) {
+  case Color::Red => print("red");
+  case Color::Green => print("green");
+  case Color::Blue => print("blue");
 }
 
 // Wildcard pattern
-match some_value {
-  None => print("Empty");
-  _ => print("Something");  // Catch-all
+match (some_value) {
+  case Color::Red => print("red");
+  case _ => print("other");  // Catch-all
 }
+
+// Tag checks with `is`
+if (color is Color::Red) print("red");
 ```
 
 **Enum rules (Bootstrap):**
 
-- Enum variants can carry a single associated value: `Some(v)`, `Ok(d)`.
-- Match patterns must be exhaustive (unless `_` catch-all is present).
-- `is` operator narrows type; after `is Some`, `opt.value` is accessible.
-- Variants accessible as `VariantName(value)`.
+- Enum variants are **tag-only** (no payloads).
+- Variants are referenced as `EnumName::Variant`.
+- Match patterns must be exhaustive (unless `_` catch-all is present; required for non-enum values).
+- `is` operator checks for a specific variant tag, e.g., `color is Color::Red`.
+- `match` requires parentheses around the scrutinee: `match (value) { ... }`.
 
 ---
 
 ### **Arrays**
 
 ```tuff
-// Array literal (homogeneous, fixed-size)
-let nums = [1, 2, 3];        // 3 elements, init=3, length=3
+// Array literal (fixed-size)
+let nums = [1, 2, 3];        // 3 elements, length=3
 let empty = [];              // Empty array
 
-// Array with explicit init and capacity
-let buffer = [Value; 5; 10]; // Init 5 elements, total capacity 10
+// Array with repeat initialization
+let zeros = [0; 5];           // [0, 0, 0, 0, 0]
 
 // Indexing (0-based)
 let first = nums[0];
 
 // Built-in array properties
-let len = nums.length;       // Number of initialized elements
+let len = nums.length;       // Number of elements
 
 // Mutation
 let mut arr = [10, 20, 30];
@@ -455,24 +458,21 @@ for (i in 0..arr.length) {
 **Array rules (Bootstrap):**
 
 - Fixed-size at declaration.
-- Homogeneous element type (inferred from literals).
-- `array.length` = number of initialized elements.
-- `array.capacity` = total allocated size (deferred to Phase 2).
+- `array.length` = number of elements.
 - `0`-indexed access.
 - Arrays support iteration via for loops.
+- `[value; count]` evaluates `value` once and repeats it `count` times.
 
 ---
 
 ### **Strings & Characters**
 
 ```tuff
-let msg = "Hello, World!";   // String literal (unowned *Str)
+let msg = "Hello, World!";   // String literal (unowned)
 let ch = 'a';                // Character literal
 
-// String operations (via extern functions / stdlib)
-extern fn stringLength(s : *Str) => I32;
-extern fn stringConcat(a : *Str, b : *Str) => *Str;
-extern fn charAt(s : *Str, index : I32) => Char;
+// String operations (via extern uses / stdlib)
+extern use { stringLength, stringConcat, charAt } from strings;
 
 let len = stringLength(msg);
 
@@ -483,7 +483,6 @@ let isAlpha = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
 **String rules (Bootstrap):**
 
 - String literals are unowned: `"hello"` is read-only.
-- Type `*Str` denotes string reference.
 - Character literals: `'x'`.
 - String manipulation via extern functions (no built-in methods in bootstrap).
 
@@ -509,7 +508,7 @@ let isAlpha = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
 | `!`                          | Unary                             | Logical NOT                          | `!x`                        |
 | `=`                          | Binary                            | Assignment (statement)               | `x = 5;`                    |
 | `+=`, `-=`, `*=`, `/=`, `%=` | Binary                            | Compound assignment                  | `x += 1;`                   |
-| `is`                         | Binary                            | Type narrowing / tag check           | `x is Some`                 |
+| `is`                         | Binary                            | Tag check                            | `x is Color::Red`           |
 | `.`                          | Binary                            | Field/method access                  | `obj.field`, `obj.method()` |
 | `[]`                         | Binary                            | Array indexing                       | `arr[i]`                    |
 
@@ -552,19 +551,17 @@ struct Lexer {
 
 ```tuff
 enum Token {
-  Identifier(name),
-  Number(value),
-  Operator(op),
+  Identifier,
+  Number,
+  Operator,
   EOF
 }
 ```
 
-#### **Extern Function Declaration**
+#### **Extern Use Declaration**
 
 ```tuff
-extern fn print(msg);
-extern fn readFile(path) => *Str;
-extern fn writeFile(path, contents);
+extern use { print, readFile, writeFile } from io;
 ```
 
 ---
@@ -585,13 +582,13 @@ Together, these allow any Turing-computable algorithm to be expressed.
 ### **Why Bootstrap Can Self-Compile**
 
 1. **Structs**: Represent AST nodes (`Expr`, `Stmt`, `Token`).
-2. **Enums**: Tagged variants for different expression/statement types.
+2. **Enums**: Tagged variants for different expression/statement categories.
 3. **Arrays**: Store sequences of tokens, AST nodes.
-4. **Pattern Matching**: Destructure AST nodes to implement recursive descent parsing.
+4. **Pattern Matching**: Dispatch on tags to implement recursive descent parsing.
 5. **Recursion & Functions**: Implement parser, code generator, symbol table traversal.
-6. **Type Narrowing (`is`)**: Safely extract variant data without separate helper functions initially.
+6. **Tag Checks (`is`)**: Distinguish enum variants in control flow.
 7. **String Handling**: Read source code, build output.
-8. **Extern Functions**: I/O to read source files and write compiled JavaScript output.
+8. **Extern Uses**: I/O to read source files and write compiled JavaScript output.
 
 A minimal compiler can be written in ~500–1500 lines of bootstrap Tuff:
 
@@ -614,7 +611,7 @@ A minimal compiler can be written in ~500–1500 lines of bootstrap Tuff:
 | **Verification** (requires, ensures) | No SMT in bootstrap                      | Runtime assertions or skipped entirely                         |
 | **Async/Futures**                    | Not needed for single-threaded compiler  | Use recursion or callbacks for I/O                             |
 | **Type narrowing with guards**       | Complicates match exhaustiveness         | Use `is` for tag checks only                                   |
-| **Result/Option type aliases**       | Defined as struct/enum combinations      | Define as full types in bootstrap                              |
+| **Payload enums**                    | Tag-only enums in bootstrap              | Use separate structs or parallel arrays                        |
 
 ---
 
