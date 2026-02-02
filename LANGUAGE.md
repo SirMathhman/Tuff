@@ -12,11 +12,11 @@
 ## 2) Design Summary
 
 - **Typing:** Static, **dependent/linear** types with ML-like inference.
-- **Memory:** **Zero-runtime** with **linear/move** semantics (no GC). Ownership is enforced by the type system; runtime checks are only added when explicitly requested (e.g., `--sanitize`).
+- **Memory:** **Zero-runtime** with **linear/move** semantics (no GC). Ownership is enforced by the type system; runtime checks are only added when explicitly requested (e.g., `--sanitize`). Pointers and slices: slices use `*[T]`; mutable raw pointers use `*mut T`. Raw pointers are **guaranteed aligned and non-null** by construction.
 - **Verification:** **SMT-backed**, mostly-inferred proofs; `require`/`ensure`/`assert` annotations for explicit invariants.
 - **Concurrency:** Ownership-based across threads + linear types to statically prevent data races. The **async/futures** model is the primary concurrency abstraction to be supported and verified in the stdlib; message-passing channels and actor frameworks can be layered on top.
 - **Interop/Targets:** `extern` C-style FFI with **annotated verification contracts** (pre/post conditions checked at compile time). Primary backends: LLVM and JS. Supported targets include bare-metal, Linux, Windows, WebAssembly, Node.js, and RTOS. The compiler includes first-class cross-compilation tooling, per-target stdlib slices, and platform-specific ABI handling to support seamless multi-platform development and CI workflows.
-- **Ergonomics:** Expression-oriented, **braced** blocks, colon-style type annotations, concise syntax, and a focused standard library. Naming conventions: identifiers use `camelCase`; type, module, and constructor names use `PascalCase`. Method receivers (`this`) are inferred and optional; use `*this` for an explicit by-value receiver or `&this` for an explicit borrow when desired. Return types are inferred and may be omitted; the compiler infers the result type and any verification obligations are still checked.
+- **Ergonomics:** Expression-oriented, **braced** blocks, colon-style type annotations, concise syntax, and a focused standard library. Naming conventions: identifiers use `camelCase`; type, module, and constructor names use `PascalCase`. Visibility: items are **private by default**; use `out` to export individual items (e.g., `out fn foo()`). Method receivers (`this`) are inferred and optional; use `*this` for an explicit by-value receiver or `&this` for an explicit borrow when desired. Return types are inferred and may be omitted; the compiler infers the result type and any verification obligations are still checked.
 
 > Note: The compiler prioritizes helpful diagnostics and fast incremental cycles; proofs are inferred automatically and unresolved obligations produce clear diagnostics.
 
@@ -33,7 +33,7 @@
 - Externs:
   - `extern fn c_get() : I32;`
 - Match / enums:
-  - `enum Opt[T] { None, Some(T) }`
+  - `enum Opt<T> { None, Some(T) }`
   - `match opt { Some(v) => v, None => 0 }`
 - Verification annotations:
   - `fn safeRead(buf: &Buffer, idx: USize) : I8 requires idx < buf.len ensures true => ...`
@@ -96,6 +96,8 @@ expr        ::= literal | ident | "match" expr "{" case_list "}" | block | call
 ```
 
 **Naming conventions:** identifiers are `camelCase`; type, module, and constructor names are `PascalCase`.
+
+**Generics:** use angle-bracket syntax, e.g., `Opt<T>` and `fn f<T>(x: T)`; generic constraints use inline `:` notation, e.g., `fn f<T: Trait>(x: T)`.
 
 ---
 
@@ -165,6 +167,10 @@ extern fn putchar(c : I32) : I32;
 - **Bootstrap compiler:** **Limited initial feature set** — core syntax, minimal dependent fragments, buffers & slices, simple allocator, and verification limited to supported features.
 - **Stdlib bootstrap priority:** **Buffers & Slices** (verified first) — initial API scope: minimal verified slice view + indexing + length/bounds proofs.
 - **Toolchain/targets:** **LLVM/clang compatibility prioritized**; initial bootstrap targets: LLVM native and JS/Node. The toolchain will explicitly support **multi-platform development** via cross-compilation, per-target stdlib slices, and CI-ready verification pipelines.
+- **Visibility & exports:** items are **private by default**; use `out` to export individual items from a `module`.
+- **Generics & constraints:** generics use `<T>` and generic constraints use inline `:` syntax, e.g., `fn f<T: Trait>(x: T)`.
+- **Error model:** prefer `Result<T, E>` with module-local `E` types; there is no single required `Error` trait.
+- **Pointers & safety:** `*mut T` is the mutable raw pointer form; raw pointers are guaranteed aligned and non-null. **Dereference policy:** whether deref requires `unsafe` or may be proven safe by verification is pending decision.
 
 ---
 
