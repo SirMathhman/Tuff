@@ -147,4 +147,8 @@ describe("The compiler", () => {
   it("rejects type mismatch on reassignment to uninitialized variable", () => {
     invalidate("let x : I32; x = read U8; x = 0; x");
   });
+
+  it("supports mutable variable with type annotation and multiple reassignments", () => {
+    validate("let mut x : U8; x = 0; x = read U8; x", 42, "42");
+  });
 });
