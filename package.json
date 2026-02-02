@@ -1,0 +1,18 @@
+{
+  "name": "tuff-bootstrap-compiler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "bin": {
+    "tuffc": "src/cli.js"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "compile": "bun run src/cli.js",
+    "help": "bun run src/cli.js --help"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.6.0",
+    "eslint": "^9.6.0"
+  }
+}
