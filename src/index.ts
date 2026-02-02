@@ -1,5 +1,13 @@
 /* eslint-disable no-unused-vars */
-type Env = Record<string, { value: number; mutable: boolean }>;
+type Variable = { type: 'variable'; value: number; mutable: boolean };
+type FunctionDef = {
+  type: 'function';
+  params: string[];
+  body: string;
+  bodyPos: number;
+};
+type EnvEntry = Variable | FunctionDef;
+type Env = Record<string, EnvEntry>;
 
 type ParserFn = (
   _source: string,
@@ -262,6 +270,12 @@ function checkKeywordControlFlow(
   env: Env,
   parseIfHandler: ParserFn,
 ): ParserResult | null {
+  // Check for 'fn' keyword
+  const fnPos = skipKeyword(source, pos, 'fn');
+  if (fnPos !== null) {
+    return parseFunction(source, fnPos, env);
+  }
+
   // Check for 'let' keyword
   const letPos = skipKeyword(source, pos, 'let');
   if (letPos !== null) {
@@ -439,10 +453,60 @@ function parsePrimary(
     return { value: 0, pos: falsePos };
   }
 
-  // Check for identifier (variable lookup)
+  // Check for identifier (variable lookup or function call)
   const identifier = parseIdentifier(source, pos);
-  if (identifier && identifier.name in env) {
-    return { value: env[identifier.name]?.value ?? 0, pos: identifier.end };
+  if (identifier) {
+    const afterIdPos = skipWhitespace(source, identifier.end);
+    const entry = identifier.name in env ? env[identifier.name]! : null;
+
+    // Check for function call
+    if (
+      source.charCodeAt(afterIdPos) === 40 &&
+      entry &&
+      entry.type === 'function'
+    ) {
+      // '('
+      // Parse function arguments
+      let argPos = skipWhitespace(source, afterIdPos + 1);
+      const args: number[] = [];
+
+      while (source.charCodeAt(argPos) !== 41) {
+        // ')'
+        const argResult = parseLogicalOr(source, argPos, env);
+        args.push(argResult.value);
+        argPos = skipWhitespace(source, argResult.pos);
+
+        if (source.charCodeAt(argPos) === 44) {
+          // ','
+          argPos = skipWhitespace(source, argPos + 1);
+        }
+      }
+
+      argPos = skipWhitespace(source, argPos + 1); // skip ')'
+
+      // Create new environment with parameters bound to arguments
+      const callEnv: Env = { ...env };
+      const fnEntry = entry as FunctionDef;
+      for (let i = 0; i < fnEntry.params.length && i < args.length; i++) {
+        const paramName = fnEntry.params[i];
+        if (paramName !== undefined) {
+          callEnv[paramName] = {
+            type: 'variable',
+            value: args[i]!,
+            mutable: false,
+          };
+        }
+      }
+
+      // Evaluate function body
+      const bodyResult = parseLogicalOr(source, fnEntry.bodyPos, callEnv);
+      return { value: bodyResult.value, pos: argPos };
+    }
+
+    // Variable lookup
+    if (entry && entry.type === 'variable') {
+      return { value: entry.value, pos: identifier.end };
+    }
   }
 
   // Otherwise parse numeric literal
@@ -452,6 +516,124 @@ function parsePrimary(
   }
 
   return { value: 0, pos };
+}
+
+function skipTypeAnnotation(source: string, pos: number): number {
+  // Skip type annotation (: TypeName)
+  if (source.charCodeAt(pos) === 58) {
+    // ':'
+    pos = pos + 1;
+    pos = skipWhitespace(source, pos);
+
+    const typeId = parseIdentifier(source, pos);
+    if (typeId) {
+      pos = skipWhitespace(source, typeId.end);
+    }
+  }
+
+  return pos;
+}
+
+function skipOpeningParen(source: string, pos: number): number {
+  pos = skipWhitespace(source, pos);
+  // '('
+  return source.charCodeAt(pos) === 40 ? skipWhitespace(source, pos + 1) : -1;
+}
+
+function parseFunction(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult {
+  pos = skipWhitespace(source, pos);
+
+  // Parse function name
+  const fnName = parseIdentifier(source, pos);
+  if (!fnName) {
+    return { value: 0, pos };
+  }
+  pos = skipOpeningParen(source, fnName.end);
+  if (pos === -1) {
+    return { value: 0, pos: fnName.end };
+  }
+
+  // Parse parameters
+  const params: string[] = [];
+  while (source.charCodeAt(pos) !== 41) {
+    // ')'
+    const paramName = parseIdentifier(source, pos);
+    if (!paramName) {
+      return { value: 0, pos };
+    }
+    params.push(paramName.name);
+    pos = skipWhitespace(source, paramName.end);
+
+    // Skip type annotation
+    pos = skipTypeAnnotation(source, pos);
+
+    // Skip comma if present
+    if (source.charCodeAt(pos) === 44) {
+      // ','
+      pos = skipWhitespace(source, pos + 1);
+    }
+  }
+
+  pos = skipWhitespace(source, pos + 1); // skip ')'
+
+  // Skip return type annotation
+  pos = skipTypeAnnotation(source, pos);
+
+  // Expect '=>'
+  if (source.charCodeAt(pos) !== 61 || source.charCodeAt(pos + 1) !== 62) {
+    // '='  '>'
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, pos + 2);
+
+  // Find the end of the function body (up to semicolon)
+  const bodyStartPos = pos;
+  let bodyEndPos = pos;
+  let depth = 0;
+
+  while (bodyEndPos < source.length) {
+    const code = source.charCodeAt(bodyEndPos);
+
+    if (code === 40 || code === 123) {
+      // '(' or '{'
+      depth++;
+      bodyEndPos++;
+    } else if ((code === 41 || code === 125) && depth > 0) {
+      // ')' or '}'
+      depth--;
+      bodyEndPos++;
+    } else if (code === 59 && depth === 0) {
+      // ';'
+      break;
+    } else {
+      bodyEndPos++;
+    }
+  }
+
+  const body = source.substring(bodyStartPos, bodyEndPos);
+
+  // Store function in environment
+  env[fnName.name] = {
+    type: 'function',
+    params,
+    body,
+    bodyPos: bodyStartPos,
+  };
+
+  // Skip semicolon
+  pos = bodyEndPos;
+  if (source.charCodeAt(pos) === 59) {
+    pos = pos + 1;
+  }
+  pos = skipWhitespace(source, pos);
+
+  // Parse rest of statements
+  const restResult = parseStatement(source, pos, env);
+  return { value: restResult.value, pos: restResult.pos };
 }
 
 function parseLetBinding(
@@ -477,17 +659,7 @@ function parseLetBinding(
   pos = skipWhitespace(source, identifier.end);
 
   // Type annotation is optional
-  if (source.charCodeAt(pos) === 58) {
-    // ':'
-    pos = pos + 1;
-    pos = skipWhitespace(source, pos);
-
-    // Skip type name (e.g., "U8", "I32")
-    const typeId = parseIdentifier(source, pos);
-    if (typeId) {
-      pos = skipWhitespace(source, typeId.end);
-    }
-  }
+  pos = skipTypeAnnotation(source, pos);
 
   // Skip '='
   if (source.charCodeAt(pos) === 61) {
@@ -503,7 +675,7 @@ function parseLetBinding(
   pos = skipSemicolonAndWhitespace(source, pos);
 
   // Create new environment with the binding
-  const newEnv = { ...env, [identifier.name]: { value, mutable: isMutable } };
+  const newEnv: Env = { ...env, [identifier.name]: { type: 'variable', value, mutable: isMutable } };
 
   // Parse body statement (which may contain another let binding)
   const bodyResult = parseStatement(source, pos, newEnv);
@@ -676,12 +848,11 @@ function parseFor(
 ): ParserResult {
   pos = skipWhitespace(source, pos);
 
-  // Expect opening parenthesis
-  if (source.charCodeAt(pos) !== 40) {
-    // '('
+  // Check opening parenthesis
+  pos = skipOpeningParen(source, pos);
+  if (pos === -1) {
     return { value: 0, pos };
   }
-  pos = skipWhitespace(source, pos + 1);
 
   // Parse loop variable name
   const loopVarIdent = parseIdentifier(source, pos);
@@ -745,7 +916,7 @@ function parseFor(
     i++, iterations++
   ) {
     // Add loop variable to environment
-    env[loopVarName] = { value: i, mutable: false };
+    env[loopVarName] = { type: 'variable', value: i, mutable: false };
 
     // Execute body
     const bodyResult = parseStatement(source, bodyStartPos, env);
@@ -861,7 +1032,8 @@ function parseAssignmentOrExpression(
     const varName = identifier.name;
 
     // Check if variable is mutable
-    if (varName in env && env[varName]?.mutable) {
+    const entry = varName in env ? env[varName] : null;
+    if (entry && entry.type === 'variable' && entry.mutable) {
       // Check for compound assignment operators: +=, -=, *=, /=
       if (
         nextCode === 43 || // '+'
@@ -876,7 +1048,7 @@ function parseAssignmentOrExpression(
           // Parse RHS expression
           const rhsResult = parseLogicalOr(source, assignPos, env);
           const rhsValue = rhsResult.value;
-          const currentValue = env[varName]!.value;
+          const currentValue = entry.value;
 
           // Apply the operator
           let newValue = currentValue;
@@ -928,7 +1100,10 @@ function completeAssignment(
   exprPos = skipSemicolonAndWhitespace(source, exprPos);
 
   // Mutate the mutable variable in place
-  env[varName]!.value = newValue;
+  const entry = env[varName];
+  if (entry && entry.type === 'variable') {
+    entry.value = newValue;
+  }
 
   // Return the assigned value
   return { value: newValue, pos: exprPos };

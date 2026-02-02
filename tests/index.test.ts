@@ -135,4 +135,8 @@ describe("The interpreter can interpret", () => {
   test("for loop with range and block body", () => {
     expectValid("let mut sum = 0; for (i in 0..10) { sum += i; } sum", 45);
   });
+
+  test("function definition and call", () => {
+    expectValid("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)", 7);
+  });
 });
