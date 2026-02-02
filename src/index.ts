@@ -259,6 +259,15 @@ export function interpret(source: string): number {
     return 0;
   }
 
+  let pos = skipWhitespace(source, 0);
+
+  // Check for top-level 'let' keyword
+  const letPos = skipKeyword(source, pos, 'let');
+  if (letPos !== null) {
+    const result = parseLetBinding(source, letPos, {});
+    return result.value;
+  }
+
   const result = parseAdditive(source, 0, {});
   return result.value;
 }

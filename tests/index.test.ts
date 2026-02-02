@@ -52,4 +52,8 @@ describe("The interpreter can interpret", () => {
   test("variable binding with let", () => {
     expectValid("(2 + { let x : U8 = 3; x }) * 4", 20);
   });
+
+  test("top-level let binding", () => {
+    expectValid("let z : U8 = (2 + { let x : U8 = 3; x }) * 4; z", 20);
+  });
 });
