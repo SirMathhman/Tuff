@@ -706,26 +706,57 @@ function parseAssignmentOrExpression(
   const identifier = parseIdentifier(source, pos);
   if (identifier) {
     const afterIdPos = skipWhitespace(source, identifier.end);
+    const nextCode = source.charCodeAt(afterIdPos);
+    const varName = identifier.name;
 
-    // Check if this is followed by '='
-    if (source.charCodeAt(afterIdPos) === 61) {
-      // '=' - this is an assignment
-      const varName = identifier.name;
-      const assignPos = skipWhitespace(source, afterIdPos + 1);
+    // Check if variable is mutable
+    if (varName in env && env[varName]?.mutable) {
+      // Check for compound assignment operators: +=, -=, *=, /=
+      if (
+        nextCode === 43 || // '+'
+        nextCode === 45 || // '-'
+        nextCode === 42 || // '*'
+        nextCode === 47    // '/'
+      ) {
+        if (source.charCodeAt(afterIdPos + 1) === 61) {
+          // Compound assignment operator found
+          const assignPos = skipWhitespace(source, afterIdPos + 2);
 
-      // Check if variable is mutable
-      if (varName in env && env[varName]?.mutable) {
+          // Parse RHS expression
+          const rhsResult = parseLogicalOr(source, assignPos, env);
+          const rhsValue = rhsResult.value;
+          const currentValue = env[varName]!.value;
+
+          // Apply the operator
+          let newValue = currentValue;
+          if (nextCode === 43) {
+            // '+'
+            newValue = currentValue + rhsValue;
+          } else if (nextCode === 45) {
+            // '-'
+            newValue = currentValue - rhsValue;
+          } else if (nextCode === 42) {
+            // '*'
+            newValue = currentValue * rhsValue;
+          } else if (nextCode === 47) {
+            // '/'
+            newValue = currentValue / rhsValue;
+          }
+
+          return completeAssignment(source, rhsResult.pos, env, varName, newValue);
+        }
+      }
+
+      // Check if this is followed by '='
+      if (nextCode === 61) {
+        // '=' - this is an assignment
+        const assignPos = skipWhitespace(source, afterIdPos + 1);
+
         // Parse RHS expression
         const rhsResult = parseLogicalOr(source, assignPos, env);
         const newValue = rhsResult.value;
-        let exprPos = skipWhitespace(source, rhsResult.pos);
-        exprPos = skipSemicolonAndWhitespace(source, exprPos);
 
-        // Mutate the mutable variable in place
-        env[varName]!.value = newValue;
-
-        // Return the assigned value
-        return { value: newValue, pos: exprPos };
+        return completeAssignment(source, rhsResult.pos, env, varName, newValue);
       }
     }
   }
@@ -733,6 +764,23 @@ function parseAssignmentOrExpression(
   // Not an assignment, parse as normal expression
   const exprResult = parseLogicalOr(source, startPos, env);
   return exprResult;
+}
+
+function completeAssignment(
+  source: string,
+  pos: number,
+  env: Env,
+  varName: string,
+  newValue: number,
+): ParserResult {
+  let exprPos = skipWhitespace(source, pos);
+  exprPos = skipSemicolonAndWhitespace(source, exprPos);
+
+  // Mutate the mutable variable in place
+  env[varName]!.value = newValue;
+
+  // Return the assigned value
+  return { value: newValue, pos: exprPos };
 }
 
 function parseMultiplicative(

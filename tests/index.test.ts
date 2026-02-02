@@ -72,6 +72,10 @@ describe("The interpreter can interpret", () => {
     expectValid("let mut x = 0; x = 100; x", 100);
   });
 
+  test("compound assignment operator +=", () => {
+    expectValid("let mut x = 0; x += 3; x", 3);
+  });
+
   test("boolean literal true", () => {
     expectValid("let x = true; x", 1);
   });
