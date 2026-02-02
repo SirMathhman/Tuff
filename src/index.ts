@@ -32,6 +32,13 @@ function parseNumericLiteral(
   };
 }
 
+// Type alias for parser functions
+type Parser = (
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+) => { value: number; pos: number };
+
 function parseIdentifier(
   source: string,
   start: number,
@@ -73,6 +80,65 @@ function skipWhitespace(source: string, pos: number): number {
     pos++;
   }
   return pos;
+}
+
+// Helper for left-recursive binary operator parsing
+function parseBinaryOperator(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+  operandParser: Parser,
+  operatorCodes: Array<number | number[]>,
+  operators: Array<(left: number, right: number) => number>,
+): { value: number; pos: number } {
+  const left = operandParser(source, pos, env);
+  let result = left.value;
+  pos = left.pos;
+
+  while (pos < source.length) {
+    const savedPos = pos;
+    pos = skipWhitespace(source, pos);
+    const charCode = source.charCodeAt(pos);
+
+    let handlerIndex = -1;
+
+    for (let i = 0; i < operatorCodes.length; i++) {
+      const code = operatorCodes[i];
+      if (Array.isArray(code)) {
+        // Multi-character operator (e.g., [38, 38] for &&)
+        if (
+          charCode === code[0] &&
+          source.charCodeAt(pos + 1) === code[1]
+        ) {
+          handlerIndex = i;
+          pos = pos + code.length;
+          break;
+        }
+      } else {
+        // Single-character operator
+        if (charCode === code) {
+          handlerIndex = i;
+          pos = pos + 1;
+          break;
+        }
+      }
+    }
+
+    if (handlerIndex === -1) {
+      pos = savedPos;
+      break;
+    }
+
+    pos = skipWhitespace(source, pos);
+    const right = operandParser(source, pos, env);
+    const handler = operators[handlerIndex];
+    if (handler) {
+      result = handler(result, right.value);
+    }
+    pos = right.pos;
+  }
+
+  return { value: result, pos };
 }
 
 function parsePrimary(
@@ -183,7 +249,7 @@ function parseLetBinding(
   pos = skipWhitespace(source, pos);
 
   // Parse initializer expression
-  const initResult = parseAdditive(source, pos, env);
+  const initResult = parseLogicalAnd(source, pos, env);
   const value = initResult.value;
   pos = skipWhitespace(source, initResult.pos);
 
@@ -227,6 +293,24 @@ function parseStatement(
   return parseAssignmentOrExpression(source, pos, env);
 }
 
+function parseLogicalAnd(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+): { value: number; pos: number } {
+  return parseBinaryOperator(
+    source,
+    pos,
+    env,
+    parseAdditive,
+    [[38, 38]], // &&
+    [
+      (left: number, right: number) =>
+        left !== 0 && right !== 0 ? 1 : 0,
+    ],
+  );
+}
+
 function parseAssignmentOrExpression(
   source: string,
   pos: number,
@@ -249,7 +333,7 @@ function parseAssignmentOrExpression(
       // Check if variable is mutable
       if (varName in env && env[varName]?.mutable) {
         // Parse RHS expression
-        const rhsResult = parseAdditive(source, assignPos, env);
+        const rhsResult = parseLogicalAnd(source, assignPos, env);
         const newValue = rhsResult.value;
         let exprPos = skipWhitespace(source, rhsResult.pos);
 
@@ -271,7 +355,7 @@ function parseAssignmentOrExpression(
   }
 
   // Not an assignment, parse as normal expression
-  const exprResult = parseAdditive(source, startPos, env);
+  const exprResult = parseLogicalAnd(source, startPos, env);
   return exprResult;
 }
 
@@ -280,31 +364,17 @@ function parseMultiplicative(
   pos: number,
   env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
-  const left = parsePrimary(source, pos, env);
-  let result = left.value;
-  pos = left.pos;
-
-  while (pos < source.length) {
-    pos = skipWhitespace(source, pos);
-    const charCode = source.charCodeAt(pos);
-    if (charCode === 42) {
-      // '*'
-      pos = skipWhitespace(source, pos + 1);
-      const right = parsePrimary(source, pos, env);
-      result = result * right.value;
-      pos = right.pos;
-    } else if (charCode === 47) {
-      // '/'
-      pos = skipWhitespace(source, pos + 1);
-      const right = parsePrimary(source, pos, env);
-      result = result / right.value;
-      pos = right.pos;
-    } else {
-      break;
-    }
-  }
-
-  return { value: result, pos };
+  return parseBinaryOperator(
+    source,
+    pos,
+    env,
+    parsePrimary,
+    [42, 47], // * /
+    [
+      (left: number, right: number) => left * right,
+      (left: number, right: number) => left / right,
+    ],
+  );
 }
 
 function parseAdditive(
@@ -312,30 +382,17 @@ function parseAdditive(
   pos: number,
   env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
-  const left = parseMultiplicative(source, pos, env);
-  let result = left.value;
-  pos = left.pos;
-
-  while (pos < source.length) {
-    const charCode = source.charCodeAt(pos);
-    if (charCode === 43) {
-      // '+'
-      pos = skipWhitespace(source, pos + 1);
-      const right = parseMultiplicative(source, pos, env);
-      result = result + right.value;
-      pos = right.pos;
-    } else if (charCode === 45) {
-      // '-'
-      pos = skipWhitespace(source, pos + 1);
-      const right = parseMultiplicative(source, pos, env);
-      result = result - right.value;
-      pos = right.pos;
-    } else {
-      break;
-    }
-  }
-
-  return { value: result, pos };
+  return parseBinaryOperator(
+    source,
+    pos,
+    env,
+    parseMultiplicative,
+    [43, 45], // + -
+    [
+      (left: number, right: number) => left + right,
+      (left: number, right: number) => left - right,
+    ],
+  );
 }
 
 export function interpret(source: string): number {

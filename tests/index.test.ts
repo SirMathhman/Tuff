@@ -72,4 +72,8 @@ describe("The interpreter can interpret", () => {
   test("boolean literal true", () => {
     expectValid("let x = true; x", 1);
   });
+
+  test("logical AND operator", () => {
+    expectValid("let x = true; let y = false; x && y", 0);
+  });
 });
