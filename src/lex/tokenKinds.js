@@ -21,10 +21,10 @@ const KEYWORDS = new Set([
   "continue",
   "struct",
   "enum",
-  "is"
+  "is",
 ]);
 
-const TWO_CHAR = new Set(["==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", "&&", "||", "..", "::", "=>"]);
+const TWO_CHAR = new Set([
   "==",
   "!=",
   "<=",
@@ -38,6 +38,7 @@ const TWO_CHAR = new Set(["==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=", 
   "||",
   "..",
   "::",
+  "=>",
 ]);
 const ONE_CHAR = new Set([
   "(",
