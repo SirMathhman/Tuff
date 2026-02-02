@@ -107,4 +107,8 @@ describe("The interpreter can interpret", () => {
   test("nested if-else expressions", () => {
     expectValid("let x = if (false) 1 else if (false) 2 else 3; x", 3);
   });
+
+  test("nested if-else statements", () => {
+    expectValid("let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else x = 3; x", 3);
+  });
 });
