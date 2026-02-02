@@ -249,7 +249,7 @@ function parseLetBinding(
   pos = skipWhitespace(source, pos);
 
   // Parse initializer expression
-  const initResult = parseLogicalAnd(source, pos, env);
+  const initResult = parseLogicalOr(source, pos, env);
   const value = initResult.value;
   pos = skipWhitespace(source, initResult.pos);
 
@@ -311,6 +311,24 @@ function parseLogicalAnd(
   );
 }
 
+function parseLogicalOr(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+): { value: number; pos: number } {
+  return parseBinaryOperator(
+    source,
+    pos,
+    env,
+    parseLogicalAnd,
+    [[124, 124]], // ||
+    [
+      (left: number, right: number) =>
+        left !== 0 || right !== 0 ? 1 : 0,
+    ],
+  );
+}
+
 function parseAssignmentOrExpression(
   source: string,
   pos: number,
@@ -333,7 +351,7 @@ function parseAssignmentOrExpression(
       // Check if variable is mutable
       if (varName in env && env[varName]?.mutable) {
         // Parse RHS expression
-        const rhsResult = parseLogicalAnd(source, assignPos, env);
+        const rhsResult = parseLogicalOr(source, assignPos, env);
         const newValue = rhsResult.value;
         let exprPos = skipWhitespace(source, rhsResult.pos);
 
@@ -355,7 +373,7 @@ function parseAssignmentOrExpression(
   }
 
   // Not an assignment, parse as normal expression
-  const exprResult = parseLogicalAnd(source, startPos, env);
+  const exprResult = parseLogicalOr(source, startPos, env);
   return exprResult;
 }
 
