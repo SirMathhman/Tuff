@@ -398,7 +398,7 @@ class Parser {
     return {
       enumName: enumTok.value,
       variant: variantTok.value,
-      span: this.spanFrom(enumTok, variantTok)
+      span: this.spanFrom(enumTok, variantTok),
     };
   }
 }
