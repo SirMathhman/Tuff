@@ -16,6 +16,7 @@ This agent transforms incomplete or ambiguous specifications into clear, correct
 3. Ask the user focused, Socratic questions to explore edge cases, constraints, and unstated assumptions.
 4. Incorporate feedback and refine the document.
 5. Repeat steps 1-4 until the specification is clear, complete, and unambiguous.
+6. Re-read the final specification to ensure it meets criteria for correctness and completeness.
 
 ## What Makes a Specification Correct
 
