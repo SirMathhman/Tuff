@@ -738,7 +738,7 @@ export function compile(source: string): string {
 
   // Read Bool instruction
   if (source === "read Bool") {
-    return "process.exit(process.argv[2] === \"true\" ? 1 : 0)";
+    return 'process.exit(process.argv[2] === "true" ? 1 : 0)';
   }
 
   // Arithmetic operations with read U8 and mixed operators

@@ -157,4 +157,8 @@ describe("The compiler", () => {
   it("supports Bool type with read Bool", () => {
     validate("let x : Bool = read Bool; x", 1, "true");
   });
+
+  it("supports boolean OR operation with two read values", () => {
+    validate("let x = read Bool; let y = read Bool; x || y", 1, "true", "false");
+  });
 });
