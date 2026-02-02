@@ -123,4 +123,8 @@ describe("The interpreter can interpret", () => {
   test("while loop", () => {
     expectValid("let mut x = 0; while (x < 4) x += 1; x", 4);
   });
+
+  test("while loop with block body", () => {
+    expectValid("let mut x = 0; while (x < 4) { x += 1; } x", 4);
+  });
 });
