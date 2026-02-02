@@ -35,38 +35,33 @@ function skipWhitespace(source: string, pos: number): number {
   return pos;
 }
 
-export function interpret(source: string): number {
-  if (source === "") {
-    return 0;
+function parseMultiplicative(source: string, pos: number): { value: number; pos: number } {
+  pos = skipWhitespace(source, pos);
+  const left = parseNumericLiteral(source, pos);
+  if (!left) {
+    return { value: 0, pos };
   }
 
-  let pos = skipWhitespace(source, 0);
-  const first = parseNumericLiteral(source, pos);
-  if (!first) {
-    return parseInt(source, 10);
-  }
+  let result = left.value;
+  pos = skipWhitespace(source, left.end);
 
-  let result = first.value;
-  pos = skipWhitespace(source, first.end);
-
-  // Loop to handle chained operations
   while (pos < source.length) {
-    // Check for addition or subtraction operator
-    if (source.charCodeAt(pos) === 43) { // '+'
+    const charCode = source.charCodeAt(pos);
+    if (charCode === 42) { // '*'
       pos = skipWhitespace(source, pos + 1);
-      const operand = parseNumericLiteral(source, pos);
-      if (operand) {
-        result = result + operand.value;
-        pos = skipWhitespace(source, operand.end);
+      const right = parseNumericLiteral(source, pos);
+      if (right) {
+        result = result * right.value;
+        pos = skipWhitespace(source, right.end);
       } else {
         break;
       }
-    } else if (source.charCodeAt(pos) === 45) { // '-'
+    } else if (charCode === 47) { // '/'
       pos = skipWhitespace(source, pos + 1);
-      const operand = parseNumericLiteral(source, pos);
-      if (operand) {
-        result = result - operand.value;
-        pos = skipWhitespace(source, operand.end);
+      const right = parseNumericLiteral(source, pos);
+      if (right) {
+        result = result / right.value;
+        pos = skipWhitespace(source, right.end);
       } else {
         break;
       }
@@ -75,5 +70,39 @@ export function interpret(source: string): number {
     }
   }
 
-  return result;
+  return { value: result, pos };
+}
+
+function parseAdditive(source: string, pos: number): { value: number; pos: number } {
+  const left = parseMultiplicative(source, pos);
+  let result = left.value;
+  pos = left.pos;
+
+  while (pos < source.length) {
+    const charCode = source.charCodeAt(pos);
+    if (charCode === 43) { // '+'
+      pos = skipWhitespace(source, pos + 1);
+      const right = parseMultiplicative(source, pos);
+      result = result + right.value;
+      pos = right.pos;
+    } else if (charCode === 45) { // '-'
+      pos = skipWhitespace(source, pos + 1);
+      const right = parseMultiplicative(source, pos);
+      result = result - right.value;
+      pos = right.pos;
+    } else {
+      break;
+    }
+  }
+
+  return { value: result, pos };
+}
+
+export function interpret(source: string): number {
+  if (source === "") {
+    return 0;
+  }
+
+  const result = parseAdditive(source, 0);
+  return result.value;
 }

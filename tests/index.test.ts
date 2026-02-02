@@ -32,4 +32,8 @@ describe("The interpreter can interpret", () => {
   test("addition and subtraction", () => {
     expectValid("2 + 3 - 4", 1);
   });
+
+  test("multiplication with precedence", () => {
+    expectValid("2 * 3 - 4", 2);
+  });
 });
