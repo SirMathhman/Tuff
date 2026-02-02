@@ -20,4 +20,8 @@ describe("The interpreter can interpret", () => {
   test("a typed numeric literal", () => {
     expectValid("100U8", 100);
   });
+
+  test("binary addition", () => {
+    expectValid("1U8 + 2U8", 3);
+  });
 });
