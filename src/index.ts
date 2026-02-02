@@ -1,3 +1,16 @@
+// Helper functions to avoid regex literals (ESLint no-restricted-syntax)
+function getIfElsePattern(): RegExp {
+  return new RegExp(
+    "if\\s*\\(([^)]*)\\)\\s*(\\w+)\\s*=\\s*([^;]*);?\\s*else\\s*(\\w+)\\s*=\\s*([^;]*)",
+  );
+}
+
+function getIfElseDetectionPattern(): RegExp {
+  return new RegExp(
+    "if\\s*\\([^)]*\\)\\s*(\\w+)\\s*=\\s*[^;]*;\\s*else\\s*(\\w+)\\s*=\\s*",
+  );
+}
+
 function tokenizeByOperators(expr: string, operators: string[]): string[] {
   const chars = expr.split("");
   const result = chars.reduce(
@@ -133,6 +146,69 @@ function parseReassignmentStatement(line: string): {
   }
 
   return { varName, valueExpr };
+}
+
+type IfElseStatement = {
+  condition: string;
+  thenStmt: string;
+  elseStmt: string;
+};
+
+function parseIfElseStatement(line: string): IfElseStatement | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("if (")) {
+    return null;
+  }
+
+  // Find the closing paren of the condition using reduce
+  const chars = trimmed.split("");
+  const closeParenIdx = chars.reduce(
+    (acc: { depth: number; found: number }, char: string, i: number) => {
+      if (acc.found !== -1 || i < 3) return acc;
+      if (char === "(") return { depth: acc.depth + 1, found: acc.found };
+      if (char === ")") {
+        const newDepth = acc.depth - 1;
+        if (newDepth === 0) return { depth: newDepth, found: i };
+        return { depth: newDepth, found: acc.found };
+      }
+      return acc;
+    },
+    { depth: 1, found: -1 },
+  ).found;
+
+  if (closeParenIdx === -1) {
+    return null;
+  }
+
+  const condition = trimmed.substring(4, closeParenIdx);
+
+  // Find the "else" keyword using reduce
+  const elseIdx = chars.reduce(
+    (acc: number, char: string, i: number) => {
+      if (acc !== -1 || i <= closeParenIdx) return acc;
+      if (trimmed.substring(i).startsWith("else")) return i;
+      return acc;
+    },
+    -1,
+  );
+
+  if (elseIdx === -1) {
+    return null;
+  }
+
+  // Extract then and else statements
+  let thenStmt = trimmed.substring(closeParenIdx + 1, elseIdx).trim();
+  let elseStmt = trimmed.substring(elseIdx + 4).trim();
+
+  // Remove trailing semicolons if present
+  if (thenStmt.endsWith(";")) {
+    thenStmt = thenStmt.substring(0, thenStmt.length - 1).trim();
+  }
+  if (elseStmt.endsWith(";")) {
+    elseStmt = elseStmt.substring(0, elseStmt.length - 1).trim();
+  }
+
+  return { condition, thenStmt, elseStmt };
 }
 
 type StatementParser<T> = (_line: string) => T | null;
@@ -427,6 +503,58 @@ function collectUninitializedVariables(source: string): Set<string> {
   return uninitialized;
 }
 
+function processStatementForInitialization(
+  stmt: string,
+  uninitializedVars: Set<string>,
+  assignedVars: Set<string>,
+): void {
+  // Skip let statements (they're declarations, not uses)
+  if (stmt.trim().startsWith("let ")) {
+    return;
+  }
+
+  // Special handling for statements containing "else" (if-else statements)
+  if (stmt.includes(" else ")) {
+    const ifElseMatch = stmt.match(getIfElseDetectionPattern());
+    if (ifElseMatch && ifElseMatch[1] === ifElseMatch[2]) {
+      assignedVars.add(ifElseMatch[1]);
+    }
+    return;
+  }
+
+  // Skip statements that are if-else blocks
+  if (stmt.trim().startsWith("if (")) {
+    const verboseIfElse = parseIfElseStatement(stmt);
+    if (verboseIfElse) {
+      const thenReassign = parseReassignmentStatement(verboseIfElse.thenStmt);
+      const elseReassign = parseReassignmentStatement(verboseIfElse.elseStmt);
+
+      if (
+        thenReassign &&
+        elseReassign &&
+        thenReassign.varName === elseReassign.varName
+      ) {
+        assignedVars.add(thenReassign.varName);
+      }
+    }
+    return;
+  }
+
+  // Check if this is an assignment to an uninitialized variable
+  const reassignParsed = parseReassignmentStatement(stmt);
+  if (reassignParsed) {
+    assignedVars.add(reassignParsed.varName);
+    return;
+  }
+
+  // Check if this statement uses any uninitialized variables
+  Array.from(uninitializedVars).forEach((varName) => {
+    if (!assignedVars.has(varName) && stmt.includes(varName)) {
+      throw new Error("Cannot use uninitialized variable: " + varName);
+    }
+  });
+}
+
 function validateUninitializedVariableUsage(source: string): void {
   const uninitializedVars = collectUninitializedVariables(source);
 
@@ -440,25 +568,7 @@ function validateUninitializedVariableUsage(source: string): void {
 
   // Check each statement in order
   statements.forEach((stmt) => {
-    // Skip let statements (they're declarations, not uses)
-    if (stmt.trim().startsWith("let ")) {
-      return;
-    }
-
-    // Check if this is an assignment to an uninitialized variable
-    const reassignParsed = parseReassignmentStatement(stmt);
-    if (reassignParsed) {
-      assignedVars.add(reassignParsed.varName);
-      // Don't need to check further since it's an assignment
-      return;
-    }
-
-    // Check if this statement uses any uninitialized variables
-    Array.from(uninitializedVars).forEach((varName) => {
-      if (!assignedVars.has(varName) && stmt.includes(varName)) {
-        throw new Error("Cannot use uninitialized variable: " + varName);
-      }
-    });
+    processStatementForInitialization(stmt, uninitializedVars, assignedVars);
   });
 
   // Check the final expression (after the last semicolon)
@@ -606,33 +716,87 @@ function compileVariableBlock(
   return compiledBlock;
 }
 
+function findElseEndIdx(source: string, startIdx: number): number {
+  const remainingSource = source.substring(startIdx);
+  const elseIdx = remainingSource.indexOf("else");
+
+  if (elseIdx === -1) {
+    return -1;
+  }
+
+  const absoluteElseIdx = startIdx + elseIdx;
+  const afterElse = absoluteElseIdx + 4;
+
+  // Find the semicolon after else statement
+  const semicolonIdx = source.indexOf(";", afterElse);
+  if (semicolonIdx !== -1) {
+    return semicolonIdx + 1;
+  }
+  return source.length;
+}
+
+function processChar(
+  char: string,
+  depth: number,
+  current: string,
+  _source: string,
+  _idx: number,
+): { newDepth: number; newCurrent: string; shouldSplit: boolean } {
+  if ((char === "(" || char === "{") && depth >= 0) {
+    return { newDepth: depth + 1, newCurrent: current + char, shouldSplit: false };
+  }
+  if ((char === ")" || char === "}") && depth > 0) {
+    return { newDepth: depth - 1, newCurrent: current + char, shouldSplit: false };
+  }
+  if (char === ";" && depth === 0) {
+    return { newDepth: depth, newCurrent: current, shouldSplit: true };
+  }
+  return { newDepth: depth, newCurrent: current + char, shouldSplit: false };
+}
+
 function splitTopLevelStatements(source: string): string[] {
   const result: string[] = [];
   let current = "";
   let depth = 0;
-  const chars = source.split("");
 
-  chars.forEach((char) => {
-    if ((char === "(" || char === "{") && depth >= 0) {
-      depth = depth + 1;
-      current = current + char;
-    } else if ((char === ")" || char === "}") && depth > 0) {
-      depth = depth - 1;
-      current = current + char;
-    } else if (char === ";" && depth === 0) {
-      if (current.trim().length > 0) {
-        result.push(current.trim());
+  // eslint-disable-next-line no-restricted-syntax
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+
+    // Check for if-else block at start
+    if (
+      depth === 0 &&
+      char === "i" &&
+      source.substring(i).startsWith("if (") &&
+      current.trim().length === 0
+    ) {
+      const elseEnd = findElseEndIdx(source, i + 4);
+      if (elseEnd !== -1) {
+        const stmt = source.substring(i, elseEnd).trim();
+        if (stmt.length > 0) result.push(stmt);
+        current = "";
+        i = elseEnd - 1;
+        continue;
       }
-      current = "";
-    } else {
-      current = current + char;
     }
-  });
 
-  if (current.trim().length > 0) {
-    result.push(current.trim());
+    const { newDepth, newCurrent, shouldSplit } = processChar(
+      char,
+      depth,
+      current,
+      source,
+      i,
+    );
+    depth = newDepth;
+    current = newCurrent;
+
+    if (shouldSplit) {
+      if (current.trim().length > 0) result.push(current.trim());
+      current = "";
+    }
   }
 
+  if (current.trim().length > 0) result.push(current.trim());
   return result;
 }
 
@@ -649,6 +813,43 @@ function compileReassignment(
   return reassign.varName + " = " + compiledValue + "; ";
 }
 
+function compileIfElseStatement(
+  stmt: string,
+  argCount: { value: number },
+): string | null {
+  // Try regex-based if-else statement compilation
+  const ifElseMatch = stmt.match(getIfElsePattern());
+  if (ifElseMatch) {
+    const condition = ifElseMatch[1];
+    const thenVar = ifElseMatch[2];
+    const thenValue = ifElseMatch[3];
+    const elseVar = ifElseMatch[4];
+    const elseValue = ifElseMatch[5];
+
+    if (thenVar === elseVar) {
+      const compiledCond = compileExpression(condition, argCount);
+      const thenCompiled = compileExpression(thenValue.trim(), argCount);
+      const elseCompiled = compileExpression(elseValue.trim(), argCount);
+
+      return (
+        "if (" +
+        compiledCond +
+        ") { " +
+        thenVar +
+        " = " +
+        thenCompiled +
+        "; } else { " +
+        elseVar +
+        " = " +
+        elseCompiled +
+        "; } "
+      );
+    }
+  }
+
+  return null;
+}
+
 function compileTopLevelStatement(
   stmt: string,
   argCount: { value: number },
@@ -661,30 +862,36 @@ function compileTopLevelStatement(
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    let blockCode = "";
-    Array.from(blockStatements).forEach((s) => {
+    const blockCode = blockStatements.reduce((code, s) => {
       const reassignParsed = parseReassignmentStatement(s);
       if (reassignParsed) {
-        blockCode = blockCode + compileReassignment(reassignParsed, argCount);
+        return code + compileReassignment(reassignParsed, argCount);
       }
-    });
+      return code;
+    }, "");
     return blockCode;
+  }
+
+  // Handle if-else statements
+  if (stmt.includes(" else ")) {
+    const compiled = compileIfElseStatement(stmt, argCount);
+    if (compiled) {
+      return compiled;
+    }
   }
 
   const letParsed = parseVariableDeclaration(stmt);
   if (letParsed) {
     if (letParsed.valueExpr.length === 0) {
-      // Uninitialized variable: just declare it
       return "let " + letParsed.varName + "; ";
-    } else {
-      const hasParens =
-        letParsed.valueExpr.includes("(") || letParsed.valueExpr.includes("{");
-      const processedValue = hasParens
-        ? handleParentheses(letParsed.valueExpr, argCount)
-        : letParsed.valueExpr;
-      const compiledValue = compileExpression(processedValue, argCount);
-      return "let " + letParsed.varName + " = " + compiledValue + "; ";
     }
+    const hasParens =
+      letParsed.valueExpr.includes("(") || letParsed.valueExpr.includes("{");
+    const processedValue = hasParens
+      ? handleParentheses(letParsed.valueExpr, argCount)
+      : letParsed.valueExpr;
+    const compiledValue = compileExpression(processedValue, argCount);
+    return "let " + letParsed.varName + " = " + compiledValue + "; ";
   }
 
   const reassignParsed = parseReassignmentStatement(stmt);

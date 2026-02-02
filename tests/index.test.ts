@@ -178,4 +178,12 @@ describe("The compiler", () => {
   it("supports if-else expression with false condition", () => {
     validate("let x = if (read Bool) 2 else 3; x", 3, "false");
   });
+
+  it("supports if-else statement with true condition", () => {
+    validate("let x : I32; if (read Bool) x = 2; else x = 3; x", 2, "true");
+  });
+
+  it("supports if-else statement with false condition", () => {
+    validate("let x : I32; if (read Bool) x = 2; else x = 3; x", 3, "false");
+  });
 });
