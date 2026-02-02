@@ -338,6 +338,139 @@ function parseBlock(
   return { value: result, pos };
 }
 
+function skipStatement(
+  source: string,
+  pos: number,
+): number {
+  pos = skipWhitespace(source, pos);
+  
+  // Skip past the next statement-like construct
+  // This is a simple approach: find the next semicolon or closing brace
+  while (pos < source.length) {
+    const code = source.charCodeAt(pos);
+    
+    // Found end of statement
+    if (code === 59) {
+      // ';'
+      return pos + 1;
+    }
+    
+    // Found closing brace - don't consume it
+    if (code === 125) {
+      // '}'
+      return pos;
+    }
+    
+    // Skip over strings/literals by skipping parentheses and braces
+    if (code === 40 || code === 123) {
+      // '(' or '{'
+      const closeChar = code === 40 ? 41 : 125; // ')' or '}'
+      pos++;
+      let depth = 1;
+      while (pos < source.length && depth > 0) {
+        if (source.charCodeAt(pos) === code) {
+          depth++;
+        }
+        if (source.charCodeAt(pos) === closeChar) {
+          depth--;
+        }
+        pos++;
+      }
+    } else {
+      pos++;
+    }
+  }
+  
+  return pos;
+}
+
+function parseIfStatement(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+): { value: number; pos: number } {
+  pos = skipWhitespace(source, pos);
+
+  // Parse condition in parentheses
+  if (source.charCodeAt(pos) === 40) {
+    // '('
+    pos = skipWhitespace(source, pos + 1);
+    const condResult = parseLogicalOr(source, pos, env);
+    const condition = condResult.value;
+    pos = skipWhitespace(source, condResult.pos);
+
+    if (source.charCodeAt(pos) === 41) {
+      // ')'
+      pos = pos + 1;
+    }
+    pos = skipWhitespace(source, pos);
+
+    let result = 0;
+    
+    if (condition !== 0) {
+      // Execute then branch
+      const thenResult = parseStatement(source, pos, env);
+      result = thenResult.value;
+      pos = skipWhitespace(source, thenResult.pos);
+
+      // Skip ';' if present
+      if (source.charCodeAt(pos) === 59) {
+        pos = pos + 1;
+      }
+      pos = skipWhitespace(source, pos);
+
+      // Check for 'else' keyword and skip it
+      const elsePos = skipKeyword(source, pos, 'else');
+      if (elsePos !== null) {
+        pos = skipWhitespace(source, elsePos);
+        // Skip the else branch without executing it
+        pos = skipStatement(source, pos);
+        // Skip ';' if present
+        if (source.charCodeAt(pos) === 59) {
+          pos = pos + 1;
+        }
+      }
+    } else {
+      // Skip then branch without executing it
+      pos = skipStatement(source, pos);
+
+      // Skip ';' if present
+      if (source.charCodeAt(pos) === 59) {
+        pos = pos + 1;
+      }
+      pos = skipWhitespace(source, pos);
+
+      // Check for 'else' keyword
+      const elsePos = skipKeyword(source, pos, 'else');
+      if (elsePos !== null) {
+        pos = skipWhitespace(source, elsePos);
+        // Execute else branch
+        const elseResult = parseStatement(source, pos, env);
+        result = elseResult.value;
+        pos = skipWhitespace(source, elseResult.pos);
+
+        // Skip ';' if present
+        if (source.charCodeAt(pos) === 59) {
+          pos = pos + 1;
+        }
+      }
+    }
+
+    pos = skipWhitespace(source, pos);
+
+    // Check if there's more to parse (not at '}' or end)
+    if (pos < source.length && source.charCodeAt(pos) !== 125) {
+      // charCode 125 is '}'
+      const restResult = parseStatement(source, pos, env);
+      return { value: restResult.value, pos: restResult.pos };
+    } else {
+      return { value: result, pos };
+    }
+  }
+
+  return { value: 0, pos };
+}
+
 function parseStatement(
   source: string,
   pos: number,
@@ -349,6 +482,12 @@ function parseStatement(
   const letPos = skipKeyword(source, pos, 'let');
   if (letPos !== null) {
     return parseLetBinding(source, letPos, env);
+  }
+
+  // Check for 'if' keyword
+  const ifPos = skipKeyword(source, pos, 'if');
+  if (ifPos !== null) {
+    return parseIfStatement(source, ifPos, env);
   }
 
   // Try to parse assignment or expression
@@ -445,15 +584,8 @@ function parseAssignmentOrExpression(
         // Mutate the mutable variable in place
         env[varName]!.value = newValue;
 
-        // Check if there's more to parse (not at '}' or end)
-        if (exprPos < source.length && source.charCodeAt(exprPos) !== 125) {
-          // charCode 125 is '}'
-          const restResult = parseStatement(source, exprPos, env);
-          return { value: restResult.value, pos: restResult.pos };
-        } else {
-          // At block boundary or end, return the assigned value
-          return { value: newValue, pos: exprPos };
-        }
+        // Return the assigned value
+        return { value: newValue, pos: exprPos };
       }
     }
   }
