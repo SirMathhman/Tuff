@@ -78,7 +78,7 @@ function skipWhitespace(source: string, pos: number): number {
 function parsePrimary(
   source: string,
   pos: number,
-  env: Record<string, number>,
+  env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
   pos = skipWhitespace(source, pos);
 
@@ -117,7 +117,7 @@ function parsePrimary(
   // Check for identifier (variable lookup)
   const identifier = parseIdentifier(source, pos);
   if (identifier && identifier.name in env) {
-    return { value: env[identifier.name] ?? 0, pos: identifier.end };
+    return { value: env[identifier.name]?.value ?? 0, pos: identifier.end };
   }
 
   // Otherwise parse numeric literal
@@ -132,9 +132,17 @@ function parsePrimary(
 function parseLetBinding(
   source: string,
   pos: number,
-  env: Record<string, number>,
+  env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
   pos = skipWhitespace(source, pos);
+
+  // Check for 'mut' keyword
+  let isMutable = false;
+  const mutPos = skipKeyword(source, pos, 'mut');
+  if (mutPos !== null) {
+    isMutable = true;
+    pos = skipWhitespace(source, mutPos);
+  }
 
   // Parse variable name
   const identifier = parseIdentifier(source, pos);
@@ -176,7 +184,7 @@ function parseLetBinding(
   pos = skipWhitespace(source, pos);
 
   // Create new environment with the binding
-  const newEnv = { ...env, [identifier.name]: value };
+  const newEnv = { ...env, [identifier.name]: { value, mutable: isMutable } };
 
   // Parse body statement (which may contain another let binding)
   const bodyResult = parseStatement(source, pos, newEnv);
@@ -186,7 +194,7 @@ function parseLetBinding(
 function parseBlock(
   source: string,
   pos: number,
-  env: Record<string, number>,
+  env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
   return parseStatement(source, pos, env);
 }
@@ -194,7 +202,7 @@ function parseBlock(
 function parseStatement(
   source: string,
   pos: number,
-  env: Record<string, number>,
+  env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
   pos = skipWhitespace(source, pos);
 
@@ -204,14 +212,62 @@ function parseStatement(
     return parseLetBinding(source, letPos, env);
   }
 
-  // Otherwise parse expression
-  return parseAdditive(source, pos, env);
+  // Try to parse assignment or expression
+  return parseAssignmentOrExpression(source, pos, env);
+}
+
+function parseAssignmentOrExpression(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+): { value: number; pos: number } {
+  const startPos = pos;
+  pos = skipWhitespace(source, startPos);
+
+  // Try to parse an identifier (potential assignment target)
+  const identifier = parseIdentifier(source, pos);
+  if (identifier) {
+    const afterIdPos = skipWhitespace(source, identifier.end);
+
+    // Check if this is followed by '='
+    if (source.charCodeAt(afterIdPos) === 61) {
+      // '=' - this is an assignment
+      const varName = identifier.name;
+      const assignPos = skipWhitespace(source, afterIdPos + 1);
+
+      // Check if variable is mutable
+      if (varName in env && env[varName]?.mutable) {
+        // Parse RHS expression
+        const rhsResult = parseAdditive(source, assignPos, env);
+        const newValue = rhsResult.value;
+        let exprPos = skipWhitespace(source, rhsResult.pos);
+
+        // Skip ';'
+        if (source.charCodeAt(exprPos) === 59) {
+          // ';'
+          exprPos = exprPos + 1;
+        }
+        exprPos = skipWhitespace(source, exprPos);
+
+        // Update environment
+        const newEnv = { ...env, [varName]: { value: newValue, mutable: true } };
+
+        // Parse rest of statements with updated environment
+        const restResult = parseStatement(source, exprPos, newEnv);
+        return { value: restResult.value, pos: restResult.pos };
+      }
+    }
+  }
+
+  // Not an assignment, parse as normal expression
+  const exprResult = parseAdditive(source, startPos, env);
+  return exprResult;
 }
 
 function parseMultiplicative(
   source: string,
   pos: number,
-  env: Record<string, number>,
+  env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
   const left = parsePrimary(source, pos, env);
   let result = left.value;
@@ -243,7 +299,7 @@ function parseMultiplicative(
 function parseAdditive(
   source: string,
   pos: number,
-  env: Record<string, number>,
+  env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
   const left = parseMultiplicative(source, pos, env);
   let result = left.value;
