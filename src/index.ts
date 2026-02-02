@@ -143,17 +143,17 @@ function parseLetBinding(
   }
   pos = skipWhitespace(source, identifier.end);
 
-  // Skip ':'
+  // Type annotation is optional
   if (source.charCodeAt(pos) === 58) {
     // ':'
     pos = pos + 1;
-  }
-  pos = skipWhitespace(source, pos);
+    pos = skipWhitespace(source, pos);
 
-  // Skip type name (e.g., "U8", "I32")
-  const typeId = parseIdentifier(source, pos);
-  if (typeId) {
-    pos = skipWhitespace(source, typeId.end);
+    // Skip type name (e.g., "U8", "I32")
+    const typeId = parseIdentifier(source, pos);
+    if (typeId) {
+      pos = skipWhitespace(source, typeId.end);
+    }
   }
 
   // Skip '='

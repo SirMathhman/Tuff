@@ -60,4 +60,8 @@ describe("The interpreter can interpret", () => {
   test("sequential let bindings", () => {
     expectValid("let z : U8 = (2 + { let x : U8 = 3; let b : U8 = x; b }) * 4; let a : U8 = z; a", 20);
   });
+
+  test("let binding without type annotation", () => {
+    expectValid("let x = 100; x", 100);
+  });
 });
