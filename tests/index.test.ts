@@ -139,4 +139,12 @@ describe("The interpreter can interpret", () => {
   test("function definition and call", () => {
     expectValid("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)", 7);
   });
+
+  test("array declaration and element access", () => {
+    expectValid("let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]", 6);
+  });
+
+  test("struct definition and instantiation with field access", () => {
+    expectValid("struct Point { x : I32; y : I32; } let temp : Point = Point { 3, 4 }; temp.x + temp.y", 7);
+  });
 });

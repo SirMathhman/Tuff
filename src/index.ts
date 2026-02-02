@@ -6,7 +6,10 @@ type FunctionDef = {
   body: string;
   bodyPos: number;
 };
-type EnvEntry = Variable | FunctionDef;
+type ArrayDef = { type: 'array'; elements: number[] };
+type StructDef = { type: 'structDef'; fields: string[]; body: string; bodyPos: number };
+type StructInstance = { type: 'structInstance'; structName: string; fieldValues: Record<string, number> };
+type EnvEntry = Variable | FunctionDef | ArrayDef | StructDef | StructInstance;
 type Env = Record<string, EnvEntry>;
 
 type ParserFn = (
@@ -270,6 +273,12 @@ function checkKeywordControlFlow(
   env: Env,
   parseIfHandler: ParserFn,
 ): ParserResult | null {
+  // Check for 'struct' keyword
+  const structPos = skipKeyword(source, pos, 'struct');
+  if (structPos !== null) {
+    return parseStructDefinition(source, structPos, env);
+  }
+
   // Check for 'fn' keyword
   const fnPos = skipKeyword(source, pos, 'fn');
   if (fnPos !== null) {
@@ -329,14 +338,12 @@ function parseMatch(
 
   const matchValue = parenResult.value;
   pos = parenResult.pos;
-  pos = skipWhitespace(source, pos);
 
-  // Expect '{'
-  if (source.charCodeAt(pos) !== 123) {
-    // '{'
+  const bracePos = skipToOpenBrace(source, pos);
+  if (bracePos === null) {
     return { value: 0, pos };
   }
-  pos = skipWhitespace(source, pos + 1);
+  pos = bracePos;
 
   // Parse cases until closing brace
   let result = 0;
@@ -453,7 +460,7 @@ function parsePrimary(
     return { value: 0, pos: falsePos };
   }
 
-  // Check for identifier (variable lookup or function call)
+  // Check for identifier (variable lookup or function call or struct instantiation)
   const identifier = parseIdentifier(source, pos);
   if (identifier) {
     const afterIdPos = skipWhitespace(source, identifier.end);
@@ -507,6 +514,45 @@ function parsePrimary(
     if (entry && entry.type === 'variable') {
       return { value: entry.value, pos: identifier.end };
     }
+
+    // Struct instance lookup with field access
+    if (entry && entry.type === 'structInstance') {
+      let currentPos = identifier.end;
+      currentPos = skipWhitespace(source, currentPos);
+      if (source.charCodeAt(currentPos) === 46) {
+        // '.'
+        const fieldNamePos = skipWhitespace(source, currentPos + 1);
+        const fieldName = parseIdentifier(source, fieldNamePos);
+        if (fieldName) {
+          const structInst = entry as StructInstance;
+          const value = structInst.fieldValues[fieldName.name] ?? 0;
+          return { value, pos: fieldName.end };
+        }
+      }
+      return { value: 0, pos: identifier.end };
+    }
+
+    // Array indexing
+    if (
+      source.charCodeAt(afterIdPos) === 91 &&
+      entry &&
+      entry.type === 'array'
+    ) {
+      // '['
+      const indexPos = skipWhitespace(source, afterIdPos + 1);
+      const indexResult = parseLogicalOr(source, indexPos, env);
+      const index = Math.floor(indexResult.value);
+      let endPos = skipWhitespace(source, indexResult.pos);
+
+      // Expect ']'
+      if (source.charCodeAt(endPos) === 93) {
+        // ']'
+        endPos = skipWhitespace(source, endPos + 1);
+        const arrayEntry = entry as ArrayDef;
+        const value = arrayEntry.elements[index] ?? 0;
+        return { value, pos: endPos };
+      }
+    }
   }
 
   // Otherwise parse numeric literal
@@ -519,12 +565,19 @@ function parsePrimary(
 }
 
 function skipTypeAnnotation(source: string, pos: number): number {
-  // Skip type annotation (: TypeName)
-  if (source.charCodeAt(pos) === 58) {
-    // ':'
-    pos = pos + 1;
-    pos = skipWhitespace(source, pos);
+  // Skip type annotation (: TypeName or : [Type; N; M])
+  const typePos = parseTypeAnnotationColon(source, pos);
+  if (typePos === null) {
+    return pos;
+  }
+  pos = typePos;
 
+  // Check for array type annotation
+  if (source.charCodeAt(pos) === 91) {
+    // '[' - array type, skip to ']'
+    pos = skipBalancedBrackets(source, pos, 91, 93);
+  } else {
+    // Simple type identifier
     const typeId = parseIdentifier(source, pos);
     if (typeId) {
       pos = skipWhitespace(source, typeId.end);
@@ -538,6 +591,52 @@ function skipOpeningParen(source: string, pos: number): number {
   pos = skipWhitespace(source, pos);
   // '('
   return source.charCodeAt(pos) === 40 ? skipWhitespace(source, pos + 1) : -1;
+}
+
+function skipBalancedBrackets(source: string, pos: number, openChar: number, closeChar: number): number {
+  if (source.charCodeAt(pos) !== openChar) {
+    return pos;
+  }
+  let depth = 1;
+  pos = pos + 1;
+
+  while (pos < source.length && depth > 0) {
+    const code = source.charCodeAt(pos);
+    if (code === openChar) {
+      depth++;
+    } else if (code === closeChar) {
+      depth--;
+    }
+    pos++;
+  }
+
+  return pos;
+}
+
+function skipCommaAndWhitespace(source: string, pos: number): number {
+  if (source.charCodeAt(pos) === 44) {
+    // ','
+    pos = skipWhitespace(source, pos + 1);
+  }
+  return pos;
+}
+
+function skipToOpenBrace(source: string, pos: number): number | null {
+  pos = skipWhitespace(source, pos);
+  if (source.charCodeAt(pos) !== 123) {
+    // '{'
+    return null;
+  }
+  return skipWhitespace(source, pos + 1);
+}
+
+function parseTypeAnnotationColon(source: string, pos: number): number | null {
+  if (source.charCodeAt(pos) !== 58) {
+    // ':'
+    return null;
+  }
+  pos = pos + 1;
+  return skipWhitespace(source, pos);
 }
 
 function parseFunction(
@@ -572,10 +671,7 @@ function parseFunction(
     pos = skipTypeAnnotation(source, pos);
 
     // Skip comma if present
-    if (source.charCodeAt(pos) === 44) {
-      // ','
-      pos = skipWhitespace(source, pos + 1);
-    }
+    pos = skipCommaAndWhitespace(source, pos);
   }
 
   pos = skipWhitespace(source, pos + 1); // skip ')'
@@ -636,6 +732,68 @@ function parseFunction(
   return { value: restResult.value, pos: restResult.pos };
 }
 
+function parseStructDefinition(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult {
+  pos = skipWhitespace(source, pos);
+
+  // Parse struct name
+  const structName = parseIdentifier(source, pos);
+  if (!structName) {
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, structName.end);
+
+  // Expect '{'
+  const openPos = skipToOpenBrace(source, pos);
+  if (openPos === null) {
+    return { value: 0, pos };
+  }
+  pos = openPos;
+
+  // Parse field names (in order)
+  const fields: string[] = [];
+  while (source.charCodeAt(pos) !== 125) {
+    // '}'
+    const fieldName = parseIdentifier(source, pos);
+    if (!fieldName) {
+      return { value: 0, pos };
+    }
+    fields.push(fieldName.name);
+    pos = skipWhitespace(source, fieldName.end);
+
+    // Skip type annotation
+    pos = skipTypeAnnotation(source, pos);
+
+    // Skip semicolon if present
+    if (source.charCodeAt(pos) === 59) {
+      // ';'
+      pos = skipWhitespace(source, pos + 1);
+    } else if (source.charCodeAt(pos) === 44) {
+      // ','
+      pos = skipWhitespace(source, pos + 1);
+    }
+  }
+
+  pos = skipWhitespace(source, pos + 1); // skip '}'
+  pos = skipSemicolonAndWhitespace(source, pos);
+
+  // Store struct definition in environment
+  // We store it with a special marker - the body and bodyPos are empty for now
+  env[structName.name] = {
+    type: 'structDef',
+    fields,
+    body: '',
+    bodyPos: 0,
+  };
+
+  // Parse rest of statements
+  const restResult = parseStatement(source, pos, env);
+  return { value: restResult.value, pos: restResult.pos };
+}
+
 function parseLetBinding(
   source: string,
   pos: number,
@@ -658,24 +816,113 @@ function parseLetBinding(
   }
   pos = skipWhitespace(source, identifier.end);
 
-  // Type annotation is optional
-  pos = skipTypeAnnotation(source, pos);
+  // Parse type annotation and remember struct type if it is one
+  let structType: string | null = null;
+  const typePos = parseTypeAnnotationColon(source, pos);
+  if (typePos !== null) {
+    pos = typePos;
+    // Check if it's a struct type (simple identifier without brackets)
+    if (source.charCodeAt(pos) !== 91) {
+      // Not '[', so might be a struct type
+      const typeId = parseIdentifier(source, pos);
+      if (typeId && typeId.name in env && (env[typeId.name] as EnvEntry).type === 'structDef') {
+        structType = typeId.name;
+      }
+      pos = skipWhitespace(source, (typeId?.end ?? pos));
+    } else {
+      // It's an array type, skip it
+      pos = skipBalancedBrackets(source, pos, 91, 93);
+      pos = skipWhitespace(source, pos);
+    }
+  }
 
   // Skip '='
+  pos = skipWhitespace(source, pos);
   if (source.charCodeAt(pos) === 61) {
     // '='
     pos = pos + 1;
   }
   pos = skipWhitespace(source, pos);
 
-  // Parse initializer expression
-  const initResult = parseLogicalOr(source, pos, env);
-  const value = initResult.value;
-  pos = skipWhitespace(source, initResult.pos);
+  // Check for struct instantiation
+  let entry: EnvEntry;
+  if (structType !== null) {
+    // Check if this is a struct instantiation (StructName { ... })
+    const structInstId = parseIdentifier(source, pos);
+    if (structInstId && structInstId.name === structType) {
+      const afterStructName = skipWhitespace(source, structInstId.end);
+      if (source.charCodeAt(afterStructName) === 123) {
+        // '{' - this is struct instantiation
+        const structDef = env[structType] as StructDef;
+        let fieldPos = skipWhitespace(source, afterStructName + 1);
+        const fieldValues: Record<string, number> = {};
+        let fieldIndex = 0;
+
+        while (source.charCodeAt(fieldPos) !== 125) {
+          // '}'
+          const fieldResult = parseLogicalOr(source, fieldPos, env);
+          if (fieldIndex < structDef.fields.length) {
+            fieldValues[structDef.fields[fieldIndex]!] = fieldResult.value;
+            fieldIndex++;
+          }
+          fieldPos = skipWhitespace(source, fieldResult.pos);
+
+          if (source.charCodeAt(fieldPos) === 44) {
+            // ','
+            fieldPos = skipWhitespace(source, fieldPos + 1);
+          }
+        }
+
+        fieldPos = skipWhitespace(source, fieldPos + 1); // skip '}'
+        pos = fieldPos;
+        entry = {
+          type: 'structInstance',
+          structName: structType,
+          fieldValues,
+        };
+      } else {
+        // Not a struct instantiation, parse as normal expression
+        const initResult = parseLogicalOr(source, pos, env);
+        pos = skipWhitespace(source, initResult.pos);
+        entry = { type: 'variable', value: initResult.value, mutable: isMutable };
+      }
+    } else {
+      // Not a struct instantiation, parse as normal expression
+      const initResult = parseLogicalOr(source, pos, env);
+      pos = skipWhitespace(source, initResult.pos);
+      entry = { type: 'variable', value: initResult.value, mutable: isMutable };
+    }
+  } else if (source.charCodeAt(pos) === 91) {
+    // '[' - array literal
+    let bracketPos = skipWhitespace(source, pos + 1);
+    const elements: number[] = [];
+
+    while (source.charCodeAt(bracketPos) !== 93) {
+      // ']'
+      const elemResult = parseLogicalOr(source, bracketPos, env);
+      elements.push(elemResult.value);
+      bracketPos = skipWhitespace(source, elemResult.pos);
+
+      if (source.charCodeAt(bracketPos) === 44) {
+        // ','
+        bracketPos = skipWhitespace(source, bracketPos + 1);
+      }
+    }
+
+    pos = skipWhitespace(source, bracketPos + 1); // skip ']'
+    entry = { type: 'array', elements };
+  } else {
+    // Regular initializer expression
+    const initResult = parseLogicalOr(source, pos, env);
+    const value = initResult.value;
+    pos = skipWhitespace(source, initResult.pos);
+    entry = { type: 'variable', value, mutable: isMutable };
+  }
+
   pos = skipSemicolonAndWhitespace(source, pos);
 
   // Create new environment with the binding
-  const newEnv: Env = { ...env, [identifier.name]: { type: 'variable', value, mutable: isMutable } };
+  const newEnv: Env = { ...env, [identifier.name]: entry };
 
   // Parse body statement (which may contain another let binding)
   const bodyResult = parseStatement(source, pos, newEnv);
