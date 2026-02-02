@@ -159,6 +159,15 @@ describe("The compiler", () => {
   });
 
   it("supports boolean OR operation with two read values", () => {
-    validate("let x = read Bool; let y = read Bool; x || y", 1, "true", "false");
+    validate(
+      "let x = read Bool; let y = read Bool; x || y",
+      1,
+      "true",
+      "false",
+    );
+  });
+
+  it("supports less-than comparison operator", () => {
+    validate("let x = read U8; let y = read U8; x < y", 1, "5", "10");
   });
 });

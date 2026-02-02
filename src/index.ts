@@ -440,6 +440,27 @@ function validateReassignments(source: string): void {
   });
 }
 
+function compileReadExpression(
+  trimmed: string,
+  argCount: { value: number },
+): string {
+  if (
+    trimmed === "read U8" ||
+    trimmed === "read U16" ||
+    trimmed === "read I32"
+  ) {
+    argCount.value = argCount.value + 1;
+    return "parseInt(process.argv[" + (argCount.value + 1) + "], 10)";
+  }
+  if (trimmed === "read Bool") {
+    argCount.value = argCount.value + 1;
+    return (
+      "(process.argv[" + (argCount.value + 1) + '] === "true" ? 1 : 0)'
+    );
+  }
+  return trimmed;
+}
+
 function compileExpression(
   source: string,
   argCount: { value: number },
@@ -452,31 +473,17 @@ function compileExpression(
           return token;
         }
         const trimmed = token.trim();
-        if (
-          trimmed === "read U8" ||
-          trimmed === "read U16" ||
-          trimmed === "read I32"
-        ) {
-          argCount.value = argCount.value + 1;
-          return "parseInt(process.argv[" + (argCount.value + 1) + "], 10)";
-        }
-        if (trimmed === "read Bool") {
-          argCount.value = argCount.value + 1;
-          return (
-            "(process.argv[" + (argCount.value + 1) + '] === "true" ? 1 : 0)'
-          );
-        }
         if (trimmed.startsWith("(")) {
           return trimmed;
         }
-        return trimmed;
+        return compileReadExpression(trimmed, argCount);
       })
       .filter((t) => t.length > 0)
       .join(" ");
   };
 
   const tokens = tokenizeByOperators(source, ["+", "-"]);
-  return tokens
+  const result = tokens
     .map((token) => {
       if (token === "+" || token === "-") {
         return token;
@@ -485,6 +492,19 @@ function compileExpression(
     })
     .filter((t) => t.length > 0)
     .join(" ");
+
+  // Check if result contains comparison operators and wrap appropriately
+  const trimmedResult = result.trim();
+  if (
+    trimmedResult.includes(" < ") ||
+    trimmedResult.includes(" > ") ||
+    trimmedResult.includes(" <= ") ||
+    trimmedResult.includes(" >= ")
+  ) {
+    return "(" + trimmedResult + " ? 1 : 0)";
+  }
+
+  return result;
 }
 
 function parseVariableDeclaration(
@@ -649,7 +669,9 @@ function compileTopLevelVariableBlock(
     compiledBlock = compiledBlock + compileTopLevelStatement(stmt, argCount);
   });
 
-  compiledBlock = compiledBlock + "return " + finalPart + "; })()";
+  const compiledFinalPart = compileExpression(finalPart, argCount);
+  compiledBlock =
+    compiledBlock + "return " + compiledFinalPart + "; })()";
 
   return compiledBlock;
 }
