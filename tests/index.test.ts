@@ -139,4 +139,8 @@ describe("The compiler", () => {
   it("supports variable declaration with type annotation and no initial value", () => {
     validate("let x : I32; x = read I32; x", 100, "100");
   });
+
+  it("rejects using uninitialized variable without assignment", () => {
+    invalidate("let x : I32; x");
+  });
 });

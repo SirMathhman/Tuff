@@ -60,7 +60,7 @@ function parseLetStatement(line: string): {
     // Has type annotation
     varName = afterLet.substring(0, colonIndex).trim();
     const afterColon = afterLet.substring(colonIndex + 1);
-    
+
     if (equalIndex === -1) {
       // No initialization: let x : I32;
       declaredType = afterColon.trim();
@@ -83,7 +83,7 @@ function parseLetStatement(line: string): {
   if (varName.length === 0) {
     return null;
   }
-  
+
   if (!declaredType && valueExpr.length === 0) {
     return null;
   }
@@ -280,7 +280,7 @@ function collectVariableInfo(source: string): {
 
   forEachLetStatement(source, (parsed) => {
     let varType: string | null = null;
-    
+
     if (parsed.declaredType) {
       varType = parsed.declaredType;
     } else if (parsed.valueExpr.length > 0) {
@@ -333,6 +333,56 @@ function collectUninitializedVariables(source: string): Set<string> {
   });
 
   return uninitialized;
+}
+
+function validateUninitializedVariableUsage(source: string): void {
+  const uninitializedVars = collectUninitializedVariables(source);
+  
+  if (uninitializedVars.size === 0) {
+    return;
+  }
+
+  // Split into top-level statements
+  const statements = splitTopLevelStatements(source);
+  const assignedVars = new Set<string>();
+
+  // Check each statement in order
+  statements.forEach((stmt) => {
+    // Skip let statements (they're declarations, not uses)
+    if (stmt.trim().startsWith("let ")) {
+      return;
+    }
+
+    // Check if this is an assignment to an uninitialized variable
+    const reassignParsed = parseReassignmentStatement(stmt);
+    if (reassignParsed) {
+      assignedVars.add(reassignParsed.varName);
+      // Don't need to check further since it's an assignment
+      return;
+    }
+
+    // Check if this statement uses any uninitialized variables
+    Array.from(uninitializedVars).forEach((varName) => {
+      if (!assignedVars.has(varName) && stmt.includes(varName)) {
+        throw new Error(
+          "Cannot use uninitialized variable: " + varName
+        );
+      }
+    });
+  });
+
+  // Check the final expression (after the last semicolon)
+  const lastSemicolon = source.lastIndexOf(";");
+  if (lastSemicolon !== -1) {
+    const finalExpr = source.substring(lastSemicolon + 1).trim();
+    Array.from(uninitializedVars).forEach((varName) => {
+      if (!assignedVars.has(varName) && finalExpr.includes(varName)) {
+        throw new Error(
+          "Cannot use uninitialized variable: " + varName
+        );
+      }
+    });
+  }
 }
 
 function validateReassignments(source: string): void {
@@ -429,7 +479,12 @@ function compileVariableBlock(
       } else {
         const compiledValue = compileExpression(parsed.valueExpr, argCount);
         compiledBlock =
-          compiledBlock + "let " + parsed.varName + " = " + compiledValue + "; ";
+          compiledBlock +
+          "let " +
+          parsed.varName +
+          " = " +
+          compiledValue +
+          "; ";
       }
     }
   });
@@ -485,9 +540,7 @@ function compileTopLevelStatement(
         ? handleParentheses(letParsed.valueExpr, argCount)
         : letParsed.valueExpr;
       const compiledValue = compileExpression(processedValue, argCount);
-      return (
-        "let " + letParsed.varName + " = " + compiledValue + "; "
-      );
+      return "let " + letParsed.varName + " = " + compiledValue + "; ";
     }
   }
 
@@ -593,6 +646,7 @@ export function compile(source: string): string {
   validateNoDuplicateVariables(source);
   validateTypeAssignments(source);
   validateReassignments(source);
+  validateUninitializedVariableUsage(source);
 
   // Top-level variable declarations
   if (source.startsWith("let ")) {
