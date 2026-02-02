@@ -286,6 +286,7 @@ function validateTypeAssignments(source: string): void {
 
 function forEachReassignment(
   source: string,
+  // eslint-disable-next-line no-unused-vars
   callback: (reassignment: { varName: string; valueExpr: string }) => void,
 ): void {
   const lines = source.split(";").map((s) => s.trim());
