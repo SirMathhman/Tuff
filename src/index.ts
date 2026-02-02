@@ -35,36 +35,47 @@ function skipWhitespace(source: string, pos: number): number {
   return pos;
 }
 
-function parseMultiplicative(source: string, pos: number): { value: number; pos: number } {
+function parsePrimary(source: string, pos: number): { value: number; pos: number } {
   pos = skipWhitespace(source, pos);
-  const left = parseNumericLiteral(source, pos);
-  if (!left) {
-    return { value: 0, pos };
+
+  // Check for opening parenthesis
+  if (source.charCodeAt(pos) === 40) { // '('
+    pos = skipWhitespace(source, pos + 1);
+    const result = parseAdditive(source, pos);
+    pos = skipWhitespace(source, result.pos);
+    if (source.charCodeAt(pos) === 41) { // ')'
+      pos = pos + 1;
+    }
+    return { value: result.value, pos };
   }
 
+  // Otherwise parse numeric literal
+  const numLiteral = parseNumericLiteral(source, pos);
+  if (numLiteral) {
+    return { value: numLiteral.value, pos: numLiteral.end };
+  }
+
+  return { value: 0, pos };
+}
+
+function parseMultiplicative(source: string, pos: number): { value: number; pos: number } {
+  const left = parsePrimary(source, pos);
   let result = left.value;
-  pos = skipWhitespace(source, left.end);
+  pos = left.pos;
 
   while (pos < source.length) {
+    pos = skipWhitespace(source, pos);
     const charCode = source.charCodeAt(pos);
     if (charCode === 42) { // '*'
       pos = skipWhitespace(source, pos + 1);
-      const right = parseNumericLiteral(source, pos);
-      if (right) {
-        result = result * right.value;
-        pos = skipWhitespace(source, right.end);
-      } else {
-        break;
-      }
+      const right = parsePrimary(source, pos);
+      result = result * right.value;
+      pos = right.pos;
     } else if (charCode === 47) { // '/'
       pos = skipWhitespace(source, pos + 1);
-      const right = parseNumericLiteral(source, pos);
-      if (right) {
-        result = result / right.value;
-        pos = skipWhitespace(source, right.end);
-      } else {
-        break;
-      }
+      const right = parsePrimary(source, pos);
+      result = result / right.value;
+      pos = right.pos;
     } else {
       break;
     }

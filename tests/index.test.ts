@@ -40,4 +40,8 @@ describe("The interpreter can interpret", () => {
   test("addition with multiplication precedence", () => {
     expectValid("2 + 3 * 4", 14);
   });
+
+  test("parentheses grouping", () => {
+    expectValid("(2 + 3) * 4", 20);
+  });
 });
