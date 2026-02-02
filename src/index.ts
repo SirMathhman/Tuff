@@ -296,6 +296,18 @@ function collectVariableInfo(source: string): {
   return { varTypes, varMutability };
 }
 
+function collectDeclaredTypes(source: string): { [key: string]: string } {
+  const declaredTypes: { [key: string]: string } = {};
+
+  forEachLetStatement(source, (parsed) => {
+    if (parsed.declaredType) {
+      declaredTypes[parsed.varName] = parsed.declaredType;
+    }
+  });
+
+  return declaredTypes;
+}
+
 function validateTypeAssignments(source: string): void {
   const { varTypes } = collectVariableInfo(source);
   forEachLetStatement(source, (parsed) => {
@@ -323,6 +335,31 @@ function forEachReassignment(
   forEachStatement(source, parseReassignmentStatement, callback);
 }
 
+function validateReassignmentTypes(source: string): void {
+  const { varTypes } = collectVariableInfo(source);
+  const declaredTypes = collectDeclaredTypes(source);
+
+  forEachReassignment(source, (reassignment) => {
+    const varName = reassignment.varName;
+
+    // Only check type mismatches for variables with explicit type declarations
+    if (!declaredTypes[varName]) {
+      return;
+    }
+
+    const exprType = resolveExpressionType(reassignment.valueExpr, varTypes);
+
+    if (exprType && declaredTypes[varName] !== exprType) {
+      throw new Error(
+        "Type mismatch: cannot assign " +
+          exprType +
+          " to " +
+          declaredTypes[varName],
+      );
+    }
+  });
+}
+
 function collectUninitializedVariables(source: string): Set<string> {
   const uninitialized = new Set<string>();
 
@@ -337,7 +374,7 @@ function collectUninitializedVariables(source: string): Set<string> {
 
 function validateUninitializedVariableUsage(source: string): void {
   const uninitializedVars = collectUninitializedVariables(source);
-  
+
   if (uninitializedVars.size === 0) {
     return;
   }
@@ -364,9 +401,7 @@ function validateUninitializedVariableUsage(source: string): void {
     // Check if this statement uses any uninitialized variables
     Array.from(uninitializedVars).forEach((varName) => {
       if (!assignedVars.has(varName) && stmt.includes(varName)) {
-        throw new Error(
-          "Cannot use uninitialized variable: " + varName
-        );
+        throw new Error("Cannot use uninitialized variable: " + varName);
       }
     });
   });
@@ -377,9 +412,7 @@ function validateUninitializedVariableUsage(source: string): void {
     const finalExpr = source.substring(lastSemicolon + 1).trim();
     Array.from(uninitializedVars).forEach((varName) => {
       if (!assignedVars.has(varName) && finalExpr.includes(varName)) {
-        throw new Error(
-          "Cannot use uninitialized variable: " + varName
-        );
+        throw new Error("Cannot use uninitialized variable: " + varName);
       }
     });
   }
@@ -645,6 +678,7 @@ export function compile(source: string): string {
   validateNoZeroDivision(source);
   validateNoDuplicateVariables(source);
   validateTypeAssignments(source);
+  validateReassignmentTypes(source);
   validateReassignments(source);
   validateUninitializedVariableUsage(source);
 

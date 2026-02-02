@@ -143,4 +143,8 @@ describe("The compiler", () => {
   it("rejects using uninitialized variable without assignment", () => {
     invalidate("let x : I32; x");
   });
+
+  it("rejects type mismatch on reassignment to uninitialized variable", () => {
+    invalidate("let x : I32; x = read U8; x = 0; x");
+  });
 });
