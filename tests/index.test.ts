@@ -111,4 +111,8 @@ describe("The interpreter can interpret", () => {
   test("nested if-else statements", () => {
     expectValid("let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else x = 3; x", 3);
   });
+
+  test("match expression with case patterns", () => {
+    expectValid("let x = match (100) { case 100 => 2; case _ => 3; }; x", 2);
+  });
 });

@@ -4,13 +4,15 @@ type ParserFn = (
   source: string,
   pos: number,
   env: Env,
-) => { value: number; pos: number };
+) => ParserResult;
 
 type ConditionParserFn = (
   source: string,
   pos: number,
   env: Env,
 ) => { condition: number; pos: number } | null;
+
+type ParserResult = { value: number; pos: number };
 
 function parseNumericLiteral(
   source: string,
@@ -106,7 +108,7 @@ function parseBinaryOperator(
   operandParser: ParserFn,
   operatorCodes: Array<number | number[]>,
   operators: Array<(left: number, right: number) => number>,
-): { value: number; pos: number } {
+): ParserResult {
   const left = operandParser(source, pos, env);
   let result = left.value;
   pos = left.pos;
@@ -203,7 +205,7 @@ function parseIfConditional(
   pos: number,
   env: Env,
   branchParser: ParserFn,
-): { value: number; pos: number } {
+): ParserResult {
   const condAndPos = getIfConditionAndPos(source, pos, env);
   if (!condAndPos) {
     return { value: 0, pos };
@@ -247,7 +249,7 @@ function parseIfExpression(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   return parseIfConditional(source, pos, env, parseLogicalOr);
 }
 
@@ -255,8 +257,8 @@ function checkKeywordControlFlow(
   source: string,
   pos: number,
   env: Env,
-  parseIfHandler: (source: string, pos: number, env: Env) => { value: number; pos: number },
-): { value: number; pos: number } | null {
+  parseIfHandler: ParserFn,
+): ParserResult | null {
   // Check for 'let' keyword
   const letPos = skipKeyword(source, pos, 'let');
   if (letPos !== null) {
@@ -272,24 +274,130 @@ function checkKeywordControlFlow(
   return null;
 }
 
+function parseParenthesizedExpr(
+  source: string,
+  pos: number,
+  env: Env,
+  exprParser: ParserFn,
+): ParserResult {
+  pos = skipWhitespace(source, pos);
+
+  if (source.charCodeAt(pos) !== 40) {
+    // '('
+    return null;
+  }
+  pos = skipWhitespace(source, pos + 1);
+
+  const result = exprParser(source, pos, env);
+  pos = skipWhitespace(source, result.pos);
+
+  if (source.charCodeAt(pos) === 41) {
+    // ')'
+    pos = pos + 1;
+  }
+
+  return { value: result.value, pos };
+}
+
+function parseMatch(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult {
+  // Parse the value to match in parentheses
+  const parenResult = parseParenthesizedExpr(source, pos, env, parseLogicalOr);
+  if (!parenResult) {
+    return { value: 0, pos };
+  }
+
+  const matchValue = parenResult.value;
+  pos = parenResult.pos;
+  pos = skipWhitespace(source, pos);
+
+  // Expect '{'
+  if (source.charCodeAt(pos) !== 123) {
+    // '{'
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, pos + 1);
+
+  // Parse cases until closing brace
+  let result = 0;
+  let foundMatch = false;
+  while (pos < source.length && source.charCodeAt(pos) !== 125) {
+    // charCode 125 is '}'
+    pos = skipWhitespace(source, pos);
+
+    // Check for 'case' keyword
+    const casePos = skipKeyword(source, pos, 'case');
+    if (casePos === null) {
+      break;
+    }
+    pos = skipWhitespace(source, casePos);
+
+    // Parse pattern (either numeric literal or wildcard _)
+    let patternMatches = false;
+
+    // Check for wildcard pattern '_'
+    if (source.charCodeAt(pos) === 95) {
+      // '_'
+      patternMatches = !foundMatch; // Only matches if nothing else has matched yet
+      pos = pos + 1;
+    } else {
+      // Try to parse numeric literal pattern
+      const patternLit = parseNumericLiteral(source, pos);
+      if (patternLit) {
+        patternMatches = !foundMatch && patternLit.value === matchValue;
+        pos = patternLit.end;
+      }
+    }
+
+    pos = skipWhitespace(source, pos);
+
+    // Expect '=>'
+    if (
+      source.charCodeAt(pos) === 61 &&
+      source.charCodeAt(pos + 1) === 62
+    ) {
+      // '=>'
+      pos = pos + 2;
+    }
+    pos = skipWhitespace(source, pos);
+
+    // Parse result expression
+    const resultExpr = parseLogicalOr(source, pos, env);
+    pos = skipWhitespace(source, resultExpr.pos);
+
+    // If pattern matched, store result and mark as found
+    if (patternMatches) {
+      result = resultExpr.value;
+      foundMatch = true;
+    }
+
+    // Skip semicolon
+    pos = skipSemicolonAndWhitespace(source, pos);
+  }
+
+  // Expect closing brace '}'
+  if (source.charCodeAt(pos) === 125) {
+    // '}'
+    pos = pos + 1;
+  }
+
+  return { value: result, pos };
+}
+
 function parsePrimary(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   pos = skipWhitespace(source, pos);
 
   // Check for opening parenthesis
-  if (source.charCodeAt(pos) === 40) {
-    // '('
-    pos = skipWhitespace(source, pos + 1);
-    const result = parseAdditive(source, pos, env);
-    pos = skipWhitespace(source, result.pos);
-    if (source.charCodeAt(pos) === 41) {
-      // ')'
-      pos = pos + 1;
-    }
-    return { value: result.value, pos };
+  const parenResult = parseParenthesizedExpr(source, pos, env, parseAdditive);
+  if (parenResult !== null) {
+    return parenResult;
   }
 
   // Check for opening curly brace
@@ -309,6 +417,12 @@ function parsePrimary(
   const keywordResult = checkKeywordControlFlow(source, pos, env, parseIfExpression);
   if (keywordResult !== null) {
     return keywordResult;
+  }
+
+  // Check for 'match' keyword
+  const matchPos = skipKeyword(source, pos, 'match');
+  if (matchPos !== null) {
+    return parseMatch(source, matchPos, env);
   }
 
   // Check for boolean literals
@@ -341,7 +455,7 @@ function parseLetBinding(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   pos = skipWhitespace(source, pos);
 
   // Check for 'mut' keyword
@@ -397,7 +511,7 @@ function parseBlock(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   let result = 0;
   pos = skipWhitespace(source, pos);
 
@@ -495,7 +609,7 @@ function parseIfStatement(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   const ifResult = parseIfConditional(source, pos, env, parseStatement);
 
   // Check if there's more to parse (not at '}' or end)
@@ -513,7 +627,7 @@ function parseStatement(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   pos = skipWhitespace(source, pos);
 
   // Check for control flow keywords (let, if)
@@ -530,7 +644,7 @@ function parseComparison(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   return parseBinaryOperator(
     source,
     pos,
@@ -548,7 +662,7 @@ function parseLogicalAnd(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   return parseBinaryOperator(
     source,
     pos,
@@ -566,7 +680,7 @@ function parseLogicalOr(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   return parseBinaryOperator(
     source,
     pos,
@@ -584,7 +698,7 @@ function parseAssignmentOrExpression(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   const startPos = pos;
   pos = skipWhitespace(source, startPos);
 
@@ -625,7 +739,7 @@ function parseMultiplicative(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   return parseBinaryOperator(
     source,
     pos,
@@ -643,7 +757,7 @@ function parseAdditive(
   source: string,
   pos: number,
   env: Env,
-): { value: number; pos: number } {
+): ParserResult {
   return parseBinaryOperator(
     source,
     pos,
