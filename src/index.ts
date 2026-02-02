@@ -1,13 +1,15 @@
+type Env = Record<string, { value: number; mutable: boolean }>;
+
 type ParserFn = (
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ) => { value: number; pos: number };
 
 type ConditionParserFn = (
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ) => { condition: number; pos: number } | null;
 
 function parseNumericLiteral(
@@ -100,7 +102,7 @@ function skipSemicolonAndWhitespace(source: string, pos: number): number {
 function parseBinaryOperator(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
   operandParser: ParserFn,
   operatorCodes: Array<number | number[]>,
   operators: Array<(left: number, right: number) => number>,
@@ -158,7 +160,7 @@ function parseBinaryOperator(
 function parseIfCondition(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { condition: number; pos: number } | null {
   pos = skipWhitespace(source, pos);
 
@@ -185,7 +187,7 @@ function parseIfCondition(
 function getIfConditionAndPos(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { condition: number; pos: number } | null {
   const condResult = parseIfCondition(source, pos, env);
   if (!condResult) {
@@ -199,7 +201,7 @@ function getIfConditionAndPos(
 function parseIfConditional(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
   branchParser: ParserFn,
 ): { value: number; pos: number } {
   const condAndPos = getIfConditionAndPos(source, pos, env);
@@ -244,7 +246,7 @@ function parseIfConditional(
 function parseIfExpression(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   return parseIfConditional(source, pos, env, parseLogicalOr);
 }
@@ -252,8 +254,8 @@ function parseIfExpression(
 function checkKeywordControlFlow(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
-  parseIfHandler: (source: string, pos: number, env: Record<string, { value: number; mutable: boolean }>) => { value: number; pos: number },
+  env: Env,
+  parseIfHandler: (source: string, pos: number, env: Env) => { value: number; pos: number },
 ): { value: number; pos: number } | null {
   // Check for 'let' keyword
   const letPos = skipKeyword(source, pos, 'let');
@@ -273,7 +275,7 @@ function checkKeywordControlFlow(
 function parsePrimary(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   pos = skipWhitespace(source, pos);
 
@@ -338,7 +340,7 @@ function parsePrimary(
 function parseLetBinding(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   pos = skipWhitespace(source, pos);
 
@@ -394,7 +396,7 @@ function parseLetBinding(
 function parseBlock(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   let result = 0;
   pos = skipWhitespace(source, pos);
@@ -459,7 +461,7 @@ function skipStatement(
 function handleElseKeyword(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
   shouldExecute: boolean,
 ): { foundElse: boolean; value: number; pos: number } {
   const elsePos = skipKeyword(source, pos, 'else');
@@ -485,7 +487,7 @@ function handleElseKeyword(
 function parseIfStatement(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   const ifResult = parseIfConditional(source, pos, env, parseStatement);
 
@@ -503,7 +505,7 @@ function parseIfStatement(
 function parseStatement(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   pos = skipWhitespace(source, pos);
 
@@ -520,7 +522,7 @@ function parseStatement(
 function parseComparison(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   return parseBinaryOperator(
     source,
@@ -538,7 +540,7 @@ function parseComparison(
 function parseLogicalAnd(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   return parseBinaryOperator(
     source,
@@ -556,7 +558,7 @@ function parseLogicalAnd(
 function parseLogicalOr(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   return parseBinaryOperator(
     source,
@@ -574,7 +576,7 @@ function parseLogicalOr(
 function parseAssignmentOrExpression(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   const startPos = pos;
   pos = skipWhitespace(source, startPos);
@@ -615,7 +617,7 @@ function parseAssignmentOrExpression(
 function parseMultiplicative(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   return parseBinaryOperator(
     source,
@@ -633,7 +635,7 @@ function parseMultiplicative(
 function parseAdditive(
   source: string,
   pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
+  env: Env,
 ): { value: number; pos: number } {
   return parseBinaryOperator(
     source,
