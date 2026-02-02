@@ -273,7 +273,18 @@ function parseBlock(
   pos: number,
   env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
-  return parseStatement(source, pos, env);
+  let result = 0;
+  pos = skipWhitespace(source, pos);
+
+  // Parse statements until we hit closing brace
+  while (pos < source.length && source.charCodeAt(pos) !== 125) {
+    // charCode 125 is '}'
+    const stmtResult = parseStatement(source, pos, env);
+    result = stmtResult.value;
+    pos = skipWhitespace(source, stmtResult.pos);
+  }
+
+  return { value: result, pos };
 }
 
 function parseStatement(
@@ -362,12 +373,18 @@ function parseAssignmentOrExpression(
         }
         exprPos = skipWhitespace(source, exprPos);
 
-        // Update environment
-        const newEnv = { ...env, [varName]: { value: newValue, mutable: true } };
+        // Mutate the mutable variable in place
+        env[varName]!.value = newValue;
 
-        // Parse rest of statements with updated environment
-        const restResult = parseStatement(source, exprPos, newEnv);
-        return { value: restResult.value, pos: restResult.pos };
+        // Check if there's more to parse (not at '}' or end)
+        if (exprPos < source.length && source.charCodeAt(exprPos) !== 125) {
+          // charCode 125 is '}'
+          const restResult = parseStatement(source, exprPos, env);
+          return { value: restResult.value, pos: restResult.pos };
+        } else {
+          // At block boundary or end, return the assigned value
+          return { value: newValue, pos: exprPos };
+        }
       }
     }
   }

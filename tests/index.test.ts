@@ -80,4 +80,8 @@ describe("The interpreter can interpret", () => {
   test("logical OR operator", () => {
     expectValid("let x = true; let y = false; x || y", 1);
   });
+
+  test("block-scoped mutable variable mutation", () => {
+    expectValid("let mut x = 0; { x = 1; } x", 1);
+  });
 });
