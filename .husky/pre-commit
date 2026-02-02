@@ -1,1 +1,1 @@
-bun test && bun run lint
+bun test && npm run find-duplicates && bun run lint

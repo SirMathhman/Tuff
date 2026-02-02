@@ -24,4 +24,8 @@ describe("The interpreter can interpret", () => {
   test("binary addition", () => {
     expectValid("1U8 + 2U8", 3);
   });
+
+  test("chained addition", () => {
+    expectValid("1U8 + 2U8 + 3U8", 6);
+  });
 });

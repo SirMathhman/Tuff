@@ -41,24 +41,30 @@ export function interpret(source: string): number {
   }
 
   let pos = skipWhitespace(source, 0);
-  const left = parseNumericLiteral(source, pos);
-  if (!left) {
+  const first = parseNumericLiteral(source, pos);
+  if (!first) {
     return parseInt(source, 10);
   }
 
-  pos = skipWhitespace(source, left.end);
-  if (pos >= source.length) {
-    return left.value;
-  }
+  let result = first.value;
+  pos = skipWhitespace(source, first.end);
 
-  // Check for operators
-  if (source.charCodeAt(pos) === 43) { // '+'
-    pos = skipWhitespace(source, pos + 1);
-    const right = parseNumericLiteral(source, pos);
-    if (right) {
-      return left.value + right.value;
+  // Loop to handle chained operations
+  while (pos < source.length) {
+    // Check for addition operator
+    if (source.charCodeAt(pos) === 43) { // '+'
+      pos = skipWhitespace(source, pos + 1);
+      const operand = parseNumericLiteral(source, pos);
+      if (operand) {
+        result = result + operand.value;
+        pos = skipWhitespace(source, operand.end);
+      } else {
+        break;
+      }
+    } else {
+      break;
     }
   }
 
-  return left.value;
+  return result;
 }

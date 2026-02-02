@@ -9,6 +9,7 @@
     "typescript": "^5"
   },
   "scripts": {
+    "find-duplicates": "pmd cpd src tests --language typescript --minimum-tokens 35",
     "lint": "eslint . --ext .ts",
     "prepare": "husky"
   },
