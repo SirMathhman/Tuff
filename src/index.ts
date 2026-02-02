@@ -89,13 +89,80 @@ function forEachLetStatement(
   });
 }
 
-function validateNoDuplicateVariables(source: string): void {
-  const declaredVars: string[] = [];
-  forEachLetStatement(source, (parsed) => {
-    if (declaredVars.includes(parsed.varName)) {
-      throw new Error("Duplicate variable declaration: " + parsed.varName);
+function findLetStatementEnd(source: string, startIndex: number): number {
+  const restOfSource = source.substring(startIndex);
+  const semicolonIndex = restOfSource.indexOf(";");
+  const openBraceIndex = restOfSource.indexOf("{");
+
+  if (semicolonIndex === -1 && openBraceIndex === -1) {
+    return restOfSource.length;
+  }
+  if (semicolonIndex === -1) {
+    return openBraceIndex;
+  }
+  if (openBraceIndex === -1) {
+    return semicolonIndex;
+  }
+  return Math.min(semicolonIndex, openBraceIndex);
+}
+
+function findBlockEnd(source: string, startIndex: number): number {
+  let depth = 1;
+  let current = startIndex + 1;
+  // eslint-disable-next-line no-restricted-syntax
+  while (current < source.length && depth > 0) {
+    if (source[current] === "{") depth = depth + 1;
+    if (source[current] === "}") depth = depth - 1;
+    current = current + 1;
+  }
+  return current;
+}
+
+function extractAllLetStatements(source: string): string[] {
+  const vars: string[] = [];
+  let i = 0;
+  const chars = source.split("");
+
+  // eslint-disable-next-line no-restricted-syntax
+  while (i < chars.length) {
+    if (
+      i + 3 < chars.length &&
+      chars[i] === "l" &&
+      chars[i + 1] === "e" &&
+      chars[i + 2] === "t" &&
+      chars[i + 3] === " "
+    ) {
+      const endIndex = findLetStatementEnd(source, i);
+      const statement = source.substring(i, i + endIndex).trim();
+      const parsed = parseLetStatement(statement);
+      if (parsed) {
+        vars.push(parsed.varName);
+      }
+
+      i = i + 4;
+    } else if (chars[i] === "{") {
+      const blockEnd = findBlockEnd(source, i);
+      const blockContents = source.substring(i + 1, blockEnd - 1);
+      const innerVars = extractAllLetStatements(blockContents);
+      vars.push(...innerVars);
+
+      i = blockEnd;
+    } else {
+      i = i + 1;
     }
-    declaredVars.push(parsed.varName);
+  }
+
+  return vars;
+}
+
+function validateNoDuplicateVariables(source: string): void {
+  const allVars = extractAllLetStatements(source);
+  const seen: string[] = [];
+  allVars.forEach((varName) => {
+    if (seen.includes(varName)) {
+      throw new Error("Duplicate variable declaration: " + varName);
+    }
+    seen.push(varName);
   });
 }
 

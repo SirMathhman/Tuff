@@ -123,4 +123,8 @@ describe("The compiler", () => {
   it("rejects type mismatches at compile time", () => {
     invalidate("let x = read U16; let y : U8 = x; y");
   });
+
+  it("rejects variable shadowing across scopes", () => {
+    invalidate("let x = 0; let y = { let x = 0; x}; y");
+  });
 });
