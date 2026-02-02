@@ -669,6 +669,99 @@ function parseWhile(
   return { value, pos: finalPos };
 }
 
+function parseFor(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult {
+  pos = skipWhitespace(source, pos);
+
+  // Expect opening parenthesis
+  if (source.charCodeAt(pos) !== 40) {
+    // '('
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, pos + 1);
+
+  // Parse loop variable name
+  const loopVarIdent = parseIdentifier(source, pos);
+  if (!loopVarIdent) {
+    return { value: 0, pos };
+  }
+  const loopVarName = loopVarIdent.name;
+  pos = skipWhitespace(source, loopVarIdent.end);
+
+  // Expect 'in' keyword
+  const inPos = skipKeyword(source, pos, 'in');
+  if (inPos === null) {
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, inPos);
+
+  // Parse range start
+  const startNumResult = parseNumericLiteral(source, pos);
+  if (!startNumResult) {
+    return { value: 0, pos };
+  }
+  const rangeStart = startNumResult.value;
+  pos = skipWhitespace(source, startNumResult.end);
+
+  // Expect '..' (two dots)
+  if (
+    source.charCodeAt(pos) !== 46 ||
+    source.charCodeAt(pos + 1) !== 46
+  ) {
+    // '.'
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, pos + 2);
+
+  // Parse range end
+  const endNumResult = parseNumericLiteral(source, pos);
+  if (!endNumResult) {
+    return { value: 0, pos };
+  }
+  const rangeEnd = endNumResult.value;
+  pos = skipWhitespace(source, endNumResult.end);
+
+  // Expect closing parenthesis
+  if (source.charCodeAt(pos) !== 41) {
+    // ')'
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, pos + 1);
+
+  // Get body starting position
+  const bodyStartPos = pos;
+
+  let value = 0;
+  let iterations = 0;
+  const MAX_ITERATIONS = 1024;
+
+  // Loop through the range
+  for (
+    let i = rangeStart;
+    i < rangeEnd && iterations < MAX_ITERATIONS;
+    i++, iterations++
+  ) {
+    // Add loop variable to environment
+    env[loopVarName] = { value: i, mutable: false };
+
+    // Execute body
+    const bodyResult = parseStatement(source, bodyStartPos, env);
+    value = bodyResult.value;
+    pos = skipWhitespace(source, bodyResult.pos);
+
+    // Skip semicolon if present
+    pos = skipSemicolonAndWhitespace(source, pos);
+  }
+
+  // Remove loop variable from environment
+  delete env[loopVarName];
+
+  return { value, pos };
+}
+
 function parseStatement(
   source: string,
   pos: number,
@@ -686,6 +779,12 @@ function parseStatement(
   const whilePos = skipKeyword(source, pos, 'while');
   if (whilePos !== null) {
     return parseWhile(source, whilePos, env);
+  }
+
+  // Check for 'for' keyword
+  const forPos = skipKeyword(source, pos, 'for');
+  if (forPos !== null) {
+    return parseFor(source, forPos, env);
   }
 
   // Try to parse assignment or expression
