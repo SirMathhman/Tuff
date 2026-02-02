@@ -12,4 +12,8 @@ describe("The interpreter can interpret", () => {
   test("an empty program", () => {
     expectValid("", 0);
   });
+
+  test("a numeric literal", () => {
+    expectValid("100", 100);
+  });
 });
