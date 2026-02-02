@@ -28,4 +28,8 @@ describe("The interpreter can interpret", () => {
   test("chained addition", () => {
     expectValid("1U8 + 2U8 + 3U8", 6);
   });
+
+  test("addition and subtraction", () => {
+    expectValid("2 + 3 - 4", 1);
+  });
 });

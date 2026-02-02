@@ -51,12 +51,21 @@ export function interpret(source: string): number {
 
   // Loop to handle chained operations
   while (pos < source.length) {
-    // Check for addition operator
+    // Check for addition or subtraction operator
     if (source.charCodeAt(pos) === 43) { // '+'
       pos = skipWhitespace(source, pos + 1);
       const operand = parseNumericLiteral(source, pos);
       if (operand) {
         result = result + operand.value;
+        pos = skipWhitespace(source, operand.end);
+      } else {
+        break;
+      }
+    } else if (source.charCodeAt(pos) === 45) { // '-'
+      pos = skipWhitespace(source, pos + 1);
+      const operand = parseNumericLiteral(source, pos);
+      if (operand) {
+        result = result - operand.value;
         pos = skipWhitespace(source, operand.end);
       } else {
         break;
