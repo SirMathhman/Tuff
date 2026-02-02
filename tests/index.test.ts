@@ -96,4 +96,8 @@ describe("The interpreter can interpret", () => {
   test("if-else statement with assignments", () => {
     expectValid("let mut x = 0; if (true) x = 1; else x = 2; x", 1);
   });
+
+  test("if-else with block bodies", () => {
+    expectValid("let mut x = 0; if (true) { x = 1; } else { x = 2; } x", 1);
+  });
 });
