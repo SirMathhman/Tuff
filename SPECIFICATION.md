@@ -112,11 +112,509 @@ method_call ::= ident "." ident "(" [expr_list] ")"  // obj.method()
 binop       ::= expr ( "+" | "-" | "*" | "/" | "==" | "!=" | "<" | ">" | "&&" | "||" ) expr
 ```
 
-**Phase 1 (Bootstrap) EBNF differs:**
+---
 
-- No pointers, no slices, no type annotations in some contexts.
-- Simpler expressions (arithmetic, comparison, logical operators only).
-- No extern declarations.
+## 8b) Bootstrap (Phase 1) Detailed Syntax Specification
+
+### **Overview**
+
+The bootstrap compiler is deliberately minimal but **Turing complete** and **self-compiling**:
+
+- **Turing complete** via recursion, conditionals, arithmetic, and state variables.
+- **Self-compiling** via arrays, structs, pattern matching, and type narrowing to represent an AST and implement a parser/code generator in Tuff itself.
+- **No type system** (JS-like): untyped semantics at runtime.
+- **Targets only JavaScript** (Node.js-compatible).
+- **Syntax is largely a subset** of Phase 2+ with simplifications and exclusions noted below.
+
+### **Bootstrap EBNF**
+
+```
+program     ::= { top_level_item }
+top_level_item ::= fn_decl | struct_decl | enum_decl | stmt
+
+fn_decl     ::= "fn" ident "(" [param_list] ")" "=>" expr ";"
+param_list  ::= ident { "," ident }
+struct_decl ::= "struct" ident "{" { struct_field } "}"
+struct_field ::= ident [":" "mut"] ";"
+enum_decl   ::= "enum" ident "{" { enum_variant } "}"
+enum_variant ::= ident ["(" ident ")"]
+
+stmt        ::= let_stmt | assign_stmt | expr_stmt | if_stmt | while_stmt | for_stmt | break_stmt | continue_stmt | match_stmt
+let_stmt    ::= "let" ["mut"] ident "=" expr ";"
+assign_stmt ::= lvalue ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" ) expr ";"
+lvalue      ::= ident | ident "." ident | ident "[" expr "]"
+expr_stmt   ::= expr ";"
+if_stmt     ::= "if" "(" expr ")" expr ["else" expr]
+while_stmt  ::= "while" "(" expr ")" expr
+for_stmt    ::= "for" "(" ident "in" expr ".." expr ")" expr
+break_stmt  ::= "break" ";"
+continue_stmt ::= "continue" ";"
+match_stmt  ::= "match" expr "{" { match_case } "}"
+match_case  ::= pattern "=>" expr ";"
+
+expr        ::= logical_or
+logical_or  ::= logical_and { "||" logical_and }
+logical_and ::= equality { "&&" equality }
+equality    ::= comparison { ( "==" | "!=" ) comparison }
+comparison  ::= additive { ( "<" | ">" | "<=" | ">=" | "is" ) additive }
+additive    ::= multiplicative { ( "+" | "-" ) multiplicative }
+multiplicative ::= unary { ( "*" | "/" | "%" ) unary }
+unary       ::= [ "!" | "-" ] postfix
+postfix     ::= primary { ( "." ident [ "(" [expr_list] ")" ] | "[" expr "]" | "(" [expr_list] ")" ) }
+
+primary     ::= literal | ident | "(" expr ")" | array_literal | struct_literal |
+               block_expr | fn_expr | "null"
+
+literal     ::= number | string | char | "true" | "false"
+number      ::= digit+ [ "." digit+ ]
+string      ::= "\"" char* "\""
+char        ::= "'" any_char "'"
+array_literal ::= "[" array_contents "]"
+array_contents ::= expr { "," expr } [ ";" expr ] [ ";" expr ]  // [elements; init; total] or [elems]
+struct_literal ::= ident "{" expr_list "}"
+block_expr  ::= "{" { stmt* } [ expr ] "}"
+fn_expr     ::= "fn" "(" [param_list] ")" "=>" expr
+
+pattern     ::= ident | literal | "null" | ident "(" ident ")" | "_"
+
+expr_list   ::= expr { "," expr }
+```
+
+**Clarifications on grammar:**
+
+- **Array literals:**
+  - `[1, 2, 3]` — elements implicitly initialized to their position (init = 3, length = 3).
+  - `[Value; 10; 20]` — initialize 10 elements of type `Value`, total capacity 20.
+  - `[x]` — single element array.
+- **Struct literals:** `Point { 3, 4 }` (positional), `Point { x: 3, y: 4 }` (NOT supported in bootstrap—use positional).
+- **Enum variants:** `Some(x)` or `None` pattern in match.
+- **Range:** `0..10` is exclusive of right endpoint (0–9 inclusive).
+- **Comments:** `// single-line` and `/* block */` comments supported.
+
+---
+
+### **Core Data Types (Bootstrap-level)**
+
+| Concept    | Example                      | Notes                                                      |
+| ---------- | ---------------------------- | ---------------------------------------------------------- |
+| Numbers    | `42`, `3.14`                 | No type annotations; JS number semantics.                  |
+| Strings    | `"Hello"`                    | Unowned string literals; `*Str` type exists for reference. |
+| Characters | `'a'`                        | Single char literals.                                      |
+| Booleans   | `true`, `false`              | Standard truthiness.                                       |
+| Null       | `null`                       | Represents absence. Checked with `x == null`.              |
+| Arrays     | `[1, 2, 3]`                  | Fixed-size. Access: `arr[i]`. Property: `arr.length`.      |
+| Structs    | `struct Point { x; y; }`     | Positional fields. Mutable fields marked `mut`.            |
+| Enums      | `enum Opt { Some(v), None }` | Variant tags. Pattern match to destructure.                |
+| Functions  | `fn add(a, b) => a + b;`     | No type annotations. Return inferred. Recursion supported. |
+
+---
+
+### **Variable & Binding Semantics**
+
+```tuff
+// Immutable binding (default)
+let x = 5;
+
+// Mutable binding
+let mut y = 10;
+y = 15;  // OK
+
+// Field access and mutation (field must be `mut`)
+struct Point { mut x; mut y; }
+let mut p = Point { 3, 4 };
+p.x = 10;  // OK because p is mut and x is mut
+
+// Array mutation
+let mut arr = [1, 2, 3];
+arr[0] = 99;  // OK
+```
+
+**Binding rules:**
+
+- All variables **must be initialized** at declaration.
+- `let x = ...;` creates an immutable binding.
+- `let mut x = ...;` creates a mutable binding.
+- Field mutation requires both the struct instance _and_ the field to be marked `mut`.
+
+---
+
+### **Control Flow**
+
+#### **If Expressions**
+
+```tuff
+let x = 5;
+let result = if (x > 0) 1 else 0;  // Braces optional
+let branch = if (x > 0) {
+  let y = x + 1;
+  y * 2
+} else {
+  0
+};
+```
+
+#### **While Loops**
+
+```tuff
+let mut i = 0;
+while (i < 10) {
+  print(i);
+  i += 1;
+}
+```
+
+#### **For Loops (range-based)**
+
+```tuff
+for (i in 0..10) {  // i goes from 0 to 9
+  print(i);
+}
+
+for (i in 0..arr.length) {
+  print(arr[i]);
+}
+```
+
+#### **Break & Continue**
+
+```tuff
+for (i in 0..100) {
+  if (i == 50) break;
+  if (i % 2 == 0) continue;
+  print(i);
+}
+```
+
+#### **Match (Structural Pattern Matching)**
+
+```tuff
+enum Result { Ok(v), Err(e) }
+
+let res = Ok(42);
+match res {
+  Ok(x) => print(x);
+  Err(msg) => print(msg);
+}
+
+// Pattern: catch-all with _
+match value {
+  Some(x) => print(x);
+  None => print("Nothing");
+}
+
+// Type narrowing with `is`
+if (res is Ok) {
+  print(res.value);  // Narrowed type
+}
+```
+
+---
+
+### **Functions**
+
+```tuff
+// Simple function (no type annotations)
+fn add(a, b) => a + b;
+
+// Function with block body
+fn greet(name) => {
+  let greeting = "Hello, " + name;
+  print(greeting);
+  greeting
+};
+
+// Recursion (factorial)
+fn factorial(n) => {
+  if (n <= 1) 1 else n * factorial(n - 1)
+};
+
+// Extern function (for I/O, syscalls)
+extern fn print(msg);
+extern fn readFile(path) => *Str;
+extern fn malloc(size) => *void;
+```
+
+**Function rules (Bootstrap):**
+
+- No type annotations on parameters or return type.
+- Return type inferred from final expression in body.
+- Block body: wrap statements in `{ ... }`; last expression is return value.
+- Recursion allowed (call stack is the only limit).
+- No default parameters.
+- No named arguments.
+
+---
+
+### **Structs & Methods**
+
+```tuff
+struct Point {
+  x;
+  mut y;
+}
+
+// Instantiation (positional)
+let p = Point { 3, 4 };
+
+// Field access
+let xCoord = p.x;
+p.y = 5;  // OK because y is mut
+
+// Method calls (both syntaxes valid)
+p.manhattan()   // obj.method()
+manhattan(p)    // method(obj)
+
+// Defining methods on structs (Phase 2 feature, but bootstrap uses module pattern)
+module Point {
+  fn manhattan(this) => {
+    let absX = if (this.x < 0) -this.x else this.x;
+    let absY = if (this.y < 0) -this.y else this.y;
+    absX + absY
+  }
+}
+```
+
+**Struct rules (Bootstrap):**
+
+- Fields have no type annotations.
+- Fields are immutable by default; mark `mut` for mutable fields.
+- Positional struct literals: `Point { 3, 4 }`.
+- Field mutation: `p.x = 5;` (requires `p` and field `x` both mutable).
+- Nested field access: `p.data.value`.
+- Method calls use module pattern (see Phase 2 for full module support).
+
+---
+
+### **Enums & Pattern Matching**
+
+```tuff
+enum Option {
+  Some(value),
+  None
+}
+
+enum Result {
+  Ok(data),
+  Err(error)
+}
+
+// Pattern matching
+let opt = Some(42);
+match opt {
+  Some(x) => print(x);
+  None => print("No value");
+}
+
+// Type narrowing with `is`
+if (opt is Some) {
+  print(opt.value);  // Narrowed; can access value
+}
+
+// Wildcard pattern
+match some_value {
+  None => print("Empty");
+  _ => print("Something");  // Catch-all
+}
+```
+
+**Enum rules (Bootstrap):**
+
+- Enum variants can carry a single associated value: `Some(v)`, `Ok(d)`.
+- Match patterns must be exhaustive (unless `_` catch-all is present).
+- `is` operator narrows type; after `is Some`, `opt.value` is accessible.
+- Variants accessible as `VariantName(value)`.
+
+---
+
+### **Arrays**
+
+```tuff
+// Array literal (homogeneous, fixed-size)
+let nums = [1, 2, 3];        // 3 elements, init=3, length=3
+let empty = [];              // Empty array
+
+// Array with explicit init and capacity
+let buffer = [Value; 5; 10]; // Init 5 elements, total capacity 10
+
+// Indexing (0-based)
+let first = nums[0];
+
+// Built-in array properties
+let len = nums.length;       // Number of initialized elements
+
+// Mutation
+let mut arr = [10, 20, 30];
+arr[1] = 99;
+
+// Iteration
+for (i in 0..arr.length) {
+  print(arr[i]);
+}
+```
+
+**Array rules (Bootstrap):**
+
+- Fixed-size at declaration.
+- Homogeneous element type (inferred from literals).
+- `array.length` = number of initialized elements.
+- `array.capacity` = total allocated size (deferred to Phase 2).
+- `0`-indexed access.
+- Arrays support iteration via for loops.
+
+---
+
+### **Strings & Characters**
+
+```tuff
+let msg = "Hello, World!";   // String literal (unowned *Str)
+let ch = 'a';                // Character literal
+
+// String operations (via extern functions / stdlib)
+extern fn stringLength(s : *Str) => I32;
+extern fn stringConcat(a : *Str, b : *Str) => *Str;
+extern fn charAt(s : *Str, index : I32) => Char;
+
+let len = stringLength(msg);
+
+// Character operations
+let isAlpha = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z');
+```
+
+**String rules (Bootstrap):**
+
+- String literals are unowned: `"hello"` is read-only.
+- Type `*Str` denotes string reference.
+- Character literals: `'x'`.
+- String manipulation via extern functions (no built-in methods in bootstrap).
+
+---
+
+### **Operators (Bootstrap)**
+
+| Operator                     | Type                              | Meaning                              | Example                     |
+| ---------------------------- | --------------------------------- | ------------------------------------ | --------------------------- | -------------------------- | ---------- |
+| `+`                          | Binary (arithmetic/string concat) | Addition or concatenation            | `x + y`, `"a" + "b"`        |
+| `-`                          | Unary/Binary                      | Negation or subtraction              | `-x`, `a - b`               |
+| `*`                          | Binary                            | Multiplication                       | `a * b`                     |
+| `/`                          | Binary                            | Division (floating-point or integer) | `a / b`                     |
+| `%`                          | Binary                            | Modulo                               | `a % b`                     |
+| `==`                         | Binary                            | Equality                             | `a == b`                    |
+| `!=`                         | Binary                            | Inequality                           | `a != b`                    |
+| `<`                          | Binary                            | Less than                            | `a < b`                     |
+| `>`                          | Binary                            | Greater than                         | `a > b`                     |
+| `<=`                         | Binary                            | Less than or equal                   | `a <= b`                    |
+| `>=`                         | Binary                            | Greater than or equal                | `a >= b`                    |
+| `&&`                         | Binary                            | Logical AND (short-circuit)          | `a && b`                    |
+| `                            |                                   | `                                    | Binary                      | Logical OR (short-circuit) | `a \|\| b` |
+| `!`                          | Unary                             | Logical NOT                          | `!x`                        |
+| `=`                          | Binary                            | Assignment (statement)               | `x = 5;`                    |
+| `+=`, `-=`, `*=`, `/=`, `%=` | Binary                            | Compound assignment                  | `x += 1;`                   |
+| `is`                         | Binary                            | Type narrowing / tag check           | `x is Some`                 |
+| `.`                          | Binary                            | Field/method access                  | `obj.field`, `obj.method()` |
+| `[]`                         | Binary                            | Array indexing                       | `arr[i]`                    |
+
+**Operator precedence (highest to lowest):**
+
+1. Postfix: `.`, `[]`, method call `()`
+2. Unary: `!`, `-`
+3. Multiplicative: `*`, `/`, `%`
+4. Additive: `+`, `-`
+5. Comparison: `<`, `>`, `<=`, `>=`
+6. Equality: `==`, `!=`
+7. Type check: `is`
+8. Logical AND: `&&`
+9. Logical OR: `||`
+10. Assignment: `=`, `+=`, `-=`, etc. (right-associative, statement-only)
+
+---
+
+### **Declarations**
+
+#### **Function Declaration**
+
+```tuff
+fn fibonacci(n) => {
+  if (n <= 1) n else fibonacci(n - 1) + fibonacci(n - 2)
+};
+```
+
+#### **Struct Declaration**
+
+```tuff
+struct Lexer {
+  input;          // Immutable
+  mut position;   // Mutable
+  mut current;    // Mutable
+}
+```
+
+#### **Enum Declaration**
+
+```tuff
+enum Token {
+  Identifier(name),
+  Number(value),
+  Operator(op),
+  EOF
+}
+```
+
+#### **Extern Function Declaration**
+
+```tuff
+extern fn print(msg);
+extern fn readFile(path) => *Str;
+extern fn writeFile(path, contents);
+```
+
+---
+
+### **Why Bootstrap is Turing Complete**
+
+1. **Variables & State**: `let mut x = 0;` allows mutable state.
+2. **Conditionals**: `if`/`else` and `match` for branching.
+3. **Loops**: `while` and `for` for iteration.
+4. **Recursion**: Functions can call themselves; unbounded by language (stack-limited).
+5. **Arithmetic & Logic**: Full set of arithmetic and boolean operators.
+6. **Data Structures**: Arrays and structs for encoding complex values.
+
+Together, these allow any Turing-computable algorithm to be expressed.
+
+---
+
+### **Why Bootstrap Can Self-Compile**
+
+1. **Structs**: Represent AST nodes (`Expr`, `Stmt`, `Token`).
+2. **Enums**: Tagged variants for different expression/statement types.
+3. **Arrays**: Store sequences of tokens, AST nodes.
+4. **Pattern Matching**: Destructure AST nodes to implement recursive descent parsing.
+5. **Recursion & Functions**: Implement parser, code generator, symbol table traversal.
+6. **Type Narrowing (`is`)**: Safely extract variant data without separate helper functions initially.
+7. **String Handling**: Read source code, build output.
+8. **Extern Functions**: I/O to read source files and write compiled JavaScript output.
+
+A minimal compiler can be written in ~500–1500 lines of bootstrap Tuff:
+
+- **Lexer**: Tokenize source into `Token` array.
+- **Parser**: Recursively parse tokens into an `Expr`/`Stmt` AST.
+- **Code Generator**: Walk AST, emit equivalent JavaScript.
+
+---
+
+### **Exclusions from Bootstrap (Deferred to Phase 2+)**
+
+| Feature                              | Why Deferred                             | Alternative in Bootstrap                                       |
+| ------------------------------------ | ---------------------------------------- | -------------------------------------------------------------- |
+| **Generics**                         | No type system in bootstrap              | Monomorphization via code duplication or manual specialization |
+| **Type annotations**                 | Untyped semantics                        | Implicit dynamic typing (JS-like)                              |
+| **Modules** (`module M { ... }`)     | Namespacing handled by JS file structure | Use flat namespace, mangled names if needed                    |
+| **Visibility (`out`)**               | No module system                         | All top-level declarations implicitly global                   |
+| **Pointers** (`*T`, `*mut T`)        | N/A in JS target                         | Use objects/structs for indirection; arrays for sequences      |
+| **Slices** (`*[T]`)                  | N/A in JS                                | Use arrays with length field                                   |
+| **Verification** (requires, ensures) | No SMT in bootstrap                      | Runtime assertions or skipped entirely                         |
+| **Async/Futures**                    | Not needed for single-threaded compiler  | Use recursion or callbacks for I/O                             |
+| **Type narrowing with guards**       | Complicates match exhaustiveness         | Use `is` for tag checks only                                   |
+| **Result/Option type aliases**       | Defined as struct/enum combinations      | Define as full types in bootstrap                              |
 
 ---
 
