@@ -114,6 +114,17 @@ function parsePrimary(
     return parseLetBinding(source, letPos, env);
   }
 
+  // Check for boolean literals
+  const truePos = skipKeyword(source, pos, 'true');
+  if (truePos !== null) {
+    return { value: 1, pos: truePos };
+  }
+
+  const falsePos = skipKeyword(source, pos, 'false');
+  if (falsePos !== null) {
+    return { value: 0, pos: falsePos };
+  }
+
   // Check for identifier (variable lookup)
   const identifier = parseIdentifier(source, pos);
   if (identifier && identifier.name in env) {

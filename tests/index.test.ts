@@ -68,4 +68,8 @@ describe("The interpreter can interpret", () => {
   test("mutable variable binding and reassignment", () => {
     expectValid("let mut x = 0; x = 100; x", 100);
   });
+
+  test("boolean literal true", () => {
+    expectValid("let x = true; x", 1);
+  });
 });
