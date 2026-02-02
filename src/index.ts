@@ -557,10 +557,41 @@ function splitTopLevelStatements(source: string): string[] {
   return result;
 }
 
+function compileReassignment(
+  reassign: { varName: string; valueExpr: string },
+  argCount: { value: number },
+): string {
+  const hasParens =
+    reassign.valueExpr.includes("(") || reassign.valueExpr.includes("{");
+  const processedValue = hasParens
+    ? handleParentheses(reassign.valueExpr, argCount)
+    : reassign.valueExpr;
+  const compiledValue = compileExpression(processedValue, argCount);
+  return reassign.varName + " = " + compiledValue + "; ";
+}
+
 function compileTopLevelStatement(
   stmt: string,
   argCount: { value: number },
 ): string {
+  // Handle statement blocks { ... }
+  if (stmt.startsWith("{") && stmt.endsWith("}")) {
+    const blockContent = stmt.substring(1, stmt.length - 1).trim();
+    const blockStatements = blockContent
+      .split(";")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    let blockCode = "";
+    Array.from(blockStatements).forEach((s) => {
+      const reassignParsed = parseReassignmentStatement(s);
+      if (reassignParsed) {
+        blockCode = blockCode + compileReassignment(reassignParsed, argCount);
+      }
+    });
+    return blockCode;
+  }
+
   const letParsed = parseVariableDeclaration(stmt);
   if (letParsed) {
     if (letParsed.valueExpr.length === 0) {
@@ -579,14 +610,7 @@ function compileTopLevelStatement(
 
   const reassignParsed = parseReassignmentStatement(stmt);
   if (reassignParsed) {
-    const hasParens =
-      reassignParsed.valueExpr.includes("(") ||
-      reassignParsed.valueExpr.includes("{");
-    const processedValue = hasParens
-      ? handleParentheses(reassignParsed.valueExpr, argCount)
-      : reassignParsed.valueExpr;
-    const compiledValue = compileExpression(processedValue, argCount);
-    return reassignParsed.varName + " = " + compiledValue + "; ";
+    return compileReassignment(reassignParsed, argCount);
   }
 
   return "";

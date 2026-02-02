@@ -17,7 +17,7 @@ function executeJS(jsCode: string, ...args: string[]): number {
     if (typeof e.message === "string" && e.message.startsWith("exit:")) {
       exitCode = parseInt(e.message.substring(5), 10);
     } else {
-      throw e;
+      throw e;  
     }
   }
 
@@ -148,7 +148,7 @@ describe("The compiler", () => {
     invalidate("let x : I32; x = read U8; x = 0; x");
   });
 
-  it("supports mutable variable with type annotation and multiple reassignments", () => {
-    validate("let mut x : U8; x = 0; x = read U8; x", 42, "42");
+  it("supports mutable variable with nested block statement", () => {
+    validate("let mut x = 10; { x = read U8; }; x", 42, "42");
   });
 });
