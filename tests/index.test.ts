@@ -119,4 +119,8 @@ describe("The interpreter can interpret", () => {
   test("match expression with case patterns", () => {
     expectValid("let x = match (100) { case 100 => 2; case _ => 3; }; x", 2);
   });
+
+  test("while loop", () => {
+    expectValid("let mut x = 0; while (x < 4) x += 1; x", 4);
+  });
 });

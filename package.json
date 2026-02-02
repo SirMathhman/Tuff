@@ -10,7 +10,7 @@
   },
   "scripts": {
     "find-duplicates": "pmd cpd src tests --language typescript --minimum-tokens 35 --ignore-literals",
-    "lint": "eslint . --ext .ts",
+    "lint": "tsc --noEmit && eslint . --ext .ts",
     "prepare": "husky"
   },
   "dependencies": {

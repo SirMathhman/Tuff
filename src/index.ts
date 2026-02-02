@@ -1,18 +1,20 @@
+/* eslint-disable no-unused-vars */
 type Env = Record<string, { value: number; mutable: boolean }>;
 
 type ParserFn = (
-  source: string,
-  pos: number,
-  env: Env,
+  _source: string,
+  _pos: number,
+  _env: Env,
 ) => ParserResult;
 
 type ConditionParserFn = (
-  source: string,
-  pos: number,
-  env: Env,
+  _source: string,
+  _pos: number,
+  _env: Env,
 ) => { condition: number; pos: number } | null;
 
 type ParserResult = { value: number; pos: number };
+/* eslint-enable no-unused-vars */
 
 function parseNumericLiteral(
   source: string,
@@ -107,6 +109,7 @@ function parseBinaryOperator(
   env: Env,
   operandParser: ParserFn,
   operatorCodes: Array<number | number[]>,
+  // eslint-disable-next-line no-unused-vars
   operators: Array<(left: number, right: number) => number>,
 ): ParserResult {
   const left = operandParser(source, pos, env);
@@ -279,7 +282,7 @@ function parseParenthesizedExpr(
   pos: number,
   env: Env,
   exprParser: ParserFn,
-): ParserResult {
+): ParserResult | null {
   pos = skipWhitespace(source, pos);
 
   if (source.charCodeAt(pos) !== 40) {
@@ -623,6 +626,49 @@ function parseIfStatement(
   }
 }
 
+function parseWhile(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult {
+  // Parse initial condition to find where the body starts
+  const condResult = parseIfCondition(source, pos, env);
+  if (!condResult) {
+    return { value: 0, pos };
+  }
+
+  const bodyStartPos = condResult.pos;
+  let value = 0;
+  let iterations = 0;
+  const MAX_ITERATIONS = 1024;
+
+  while (iterations < MAX_ITERATIONS) {
+    // Re-evaluate the condition each iteration
+    const condCheckResult = parseIfCondition(source, pos, env);
+    if (!condCheckResult || condCheckResult.condition === 0) {
+      break;
+    }
+
+    // Execute body
+    const bodyResult = parseStatement(source, bodyStartPos, env);
+    value = bodyResult.value;
+    let bodyEndPos = skipWhitespace(source, bodyResult.pos);
+
+    // Skip semicolon if present
+    bodyEndPos = skipSemicolonAndWhitespace(source, bodyEndPos);
+
+    iterations++;
+  }
+
+  // Position after the while loop
+  let finalPos = bodyStartPos;
+  // Skip to the end of the loop body for final position
+  // This is a simplified approach - in real code we'd need better tracking
+  finalPos = skipStatement(source, bodyStartPos);
+
+  return { value, pos: finalPos };
+}
+
 function parseStatement(
   source: string,
   pos: number,
@@ -634,6 +680,12 @@ function parseStatement(
   const keywordResult = checkKeywordControlFlow(source, pos, env, parseIfStatement);
   if (keywordResult !== null) {
     return keywordResult;
+  }
+
+  // Check for 'while' keyword
+  const whilePos = skipKeyword(source, pos, 'while');
+  if (whilePos !== null) {
+    return parseWhile(source, whilePos, env);
   }
 
   // Try to parse assignment or expression
