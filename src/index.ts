@@ -304,7 +304,7 @@ function parseStatement(
   return parseAssignmentOrExpression(source, pos, env);
 }
 
-function parseLogicalAnd(
+function parseComparison(
   source: string,
   pos: number,
   env: Record<string, { value: number; mutable: boolean }>,
@@ -314,6 +314,24 @@ function parseLogicalAnd(
     pos,
     env,
     parseAdditive,
+    [60], // <
+    [
+      (left: number, right: number) =>
+        left < right ? 1 : 0,
+    ],
+  );
+}
+
+function parseLogicalAnd(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+): { value: number; pos: number } {
+  return parseBinaryOperator(
+    source,
+    pos,
+    env,
+    parseComparison,
     [[38, 38]], // &&
     [
       (left: number, right: number) =>

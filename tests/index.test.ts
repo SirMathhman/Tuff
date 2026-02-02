@@ -84,4 +84,8 @@ describe("The interpreter can interpret", () => {
   test("block-scoped mutable variable mutation", () => {
     expectValid("let mut x = 0; { x = 1; } x", 1);
   });
+
+  test("less-than comparison operator", () => {
+    expectValid("let x = 0; let y = 1; x < y", 1);
+  });
 });
