@@ -16,7 +16,7 @@
 - **Verification:** **SMT-backed**, mostly-inferred proofs; `require`/`ensure`/`assert` annotations for explicit invariants.
 - **Concurrency:** Ownership-based across threads + linear types to statically prevent data races. The **async/futures** model is the primary concurrency abstraction to be supported and verified in the stdlib; message-passing channels and actor frameworks can be layered on top.
 - **Interop/Targets:** `extern` C-style FFI with **annotated verification contracts** (pre/post conditions checked at compile time). Primary backends: LLVM and JS. Supported targets include bare-metal, Linux, Windows, WebAssembly, Node.js, and RTOS. The compiler includes first-class cross-compilation tooling, per-target stdlib slices, and platform-specific ABI handling to support seamless multi-platform development and CI workflows.
-- **Ergonomics:** Expression-oriented, **braced** blocks, colon-style type annotations, concise syntax, and a focused standard library. Naming conventions: identifiers use `camelCase`; type, module, and constructor names use `PascalCase`. Method receivers (`this`) are inferred and optional; use `&this` to be explicit when desired. Return types are inferred and may be omitted; the compiler infers the result type and any verification obligations are still checked.
+- **Ergonomics:** Expression-oriented, **braced** blocks, colon-style type annotations, concise syntax, and a focused standard library. Naming conventions: identifiers use `camelCase`; type, module, and constructor names use `PascalCase`. Method receivers (`this`) are inferred and optional; use `*this` for an explicit by-value receiver or `&this` for an explicit borrow when desired. Return types are inferred and may be omitted; the compiler infers the result type and any verification obligations are still checked.
 
 > Note: The compiler prioritizes helpful diagnostics and fast incremental cycles; proofs are inferred automatically and unresolved obligations produce clear diagnostics.
 
@@ -26,10 +26,10 @@
 
 - Bindings & functions:
   - `let x : I32 = 0;`
-  - `fn add(a : I32, b : I32) => a + b; // return type inferred`},{
+  - `fn add(a : I32, b : I32) => a + b; // return type inferred`
 - Structs / methods:
   - `struct Point { x : I32; y : I32; }`
-  - `impl Point { fn manhattan(&this) : I32 => abs(this.x) + abs(this.y); }`
+  - `module Point { fn manhattan(*this) : I32 => abs(this.x) + abs(this.y); }`
 - Externs:
   - `extern fn c_get() : I32;`
 - Match / enums:
@@ -83,7 +83,11 @@ program     ::= { item }
 item        ::= fn_decl | struct_decl | enum_decl | extern_decl
 fn_decl     ::= "fn" ident "(" [param_list] ")" [":" type] "=>" expr ";"
 param_list  ::= param { "," param }
-param       ::= ident ":" type
+param       ::= ident ":" type [ "<" refinement ">" ]
+refinement  ::= expr  // solver-backed boolean expression over parameters and expressions
+type        ::= "*" "[" type "]"        // slice type: *[T]
+           |  "*" type                       // pointer to single value: *T
+           |  ident                            // nominal types; generics handled elsewhere
 struct_decl ::= "struct" ident "{" { field } "}"
 field       ::= ident ":" type ";"
 enum_decl   ::= "enum" ident "{" { variant } "}"
@@ -102,8 +106,8 @@ expr        ::= literal | ident | "match" expr "{" case_list "}" | block | call
 ```rust
 struct Point { x : I32; y : I32; }
 module Point {
-  // `this` receiver is inferred and may be omitted
-  fn manhattan() : I32 => abs(this.x) + abs(this.y);
+  // `this` receiver is inferred and may be omitted; use `*this` or `&this` explicitly
+  fn manhattan(*this) : I32 => abs(this.x) + abs(this.y);
 }
 ```
 
