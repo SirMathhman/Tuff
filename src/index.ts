@@ -141,11 +141,11 @@ function parseBinaryOperator(
   return { value: result, pos };
 }
 
-function parseIfExpression(
+function parseIfCondition(
   source: string,
   pos: number,
   env: Record<string, { value: number; mutable: boolean }>,
-): { value: number; pos: number } {
+): { condition: number; pos: number } | null {
   pos = skipWhitespace(source, pos);
 
   // Parse condition in parentheses
@@ -162,25 +162,43 @@ function parseIfExpression(
     }
     pos = skipWhitespace(source, pos);
 
-    // Parse then branch (without allowing top-level let binding)
-    const thenResult = parseLogicalOr(source, pos, env);
-    const thenValue = thenResult.value;
-    pos = skipWhitespace(source, thenResult.pos);
+    return { condition, pos };
+  }
 
-    // Expect 'else' keyword
-    const elsePos = skipKeyword(source, pos, 'else');
-    if (elsePos !== null) {
-      pos = skipWhitespace(source, elsePos);
+  return null;
+}
 
-      // Parse else branch
-      const elseResult = parseLogicalOr(source, pos, env);
-      const elseValue = elseResult.value;
-      pos = elseResult.pos;
+function parseIfExpression(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+): { value: number; pos: number } {
+  const condResult = parseIfCondition(source, pos, env);
+  if (!condResult) {
+    return { value: 0, pos };
+  }
 
-      // Return the appropriate branch value
-      const result = condition !== 0 ? thenValue : elseValue;
-      return { value: result, pos };
-    }
+  const { condition, pos: afterCond } = condResult;
+  pos = afterCond;
+
+  // Parse then branch (without allowing top-level let binding)
+  const thenResult = parseLogicalOr(source, pos, env);
+  const thenValue = thenResult.value;
+  pos = skipWhitespace(source, thenResult.pos);
+
+  // Expect 'else' keyword
+  const elsePos = skipKeyword(source, pos, 'else');
+  if (elsePos !== null) {
+    pos = skipWhitespace(source, elsePos);
+
+    // Parse else branch
+    const elseResult = parseLogicalOr(source, pos, env);
+    const elseValue = elseResult.value;
+    pos = elseResult.pos;
+
+    // Return the appropriate branch value
+    const result = condition !== 0 ? thenValue : elseValue;
+    return { value: result, pos };
   }
 
   return { value: 0, pos };
@@ -389,86 +407,75 @@ function parseIfStatement(
   pos: number,
   env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
-  pos = skipWhitespace(source, pos);
+  const condResult = parseIfCondition(source, pos, env);
+  if (!condResult) {
+    return { value: 0, pos };
+  }
 
-  // Parse condition in parentheses
-  if (source.charCodeAt(pos) === 40) {
-    // '('
-    pos = skipWhitespace(source, pos + 1);
-    const condResult = parseLogicalOr(source, pos, env);
-    const condition = condResult.value;
-    pos = skipWhitespace(source, condResult.pos);
+  const { condition, pos: afterCond } = condResult;
+  pos = afterCond;
 
-    if (source.charCodeAt(pos) === 41) {
-      // ')'
+  let result = 0;
+
+  if (condition !== 0) {
+    // Execute then branch
+    const thenResult = parseStatement(source, pos, env);
+    result = thenResult.value;
+    pos = skipWhitespace(source, thenResult.pos);
+
+    // Skip ';' if present
+    if (source.charCodeAt(pos) === 59) {
       pos = pos + 1;
     }
     pos = skipWhitespace(source, pos);
 
-    let result = 0;
-    
-    if (condition !== 0) {
-      // Execute then branch
-      const thenResult = parseStatement(source, pos, env);
-      result = thenResult.value;
-      pos = skipWhitespace(source, thenResult.pos);
-
-      // Skip ';' if present
-      if (source.charCodeAt(pos) === 59) {
-        pos = pos + 1;
-      }
-      pos = skipWhitespace(source, pos);
-
-      // Check for 'else' keyword and skip it
-      const elsePos = skipKeyword(source, pos, 'else');
-      if (elsePos !== null) {
-        pos = skipWhitespace(source, elsePos);
-        // Skip the else branch without executing it
-        pos = skipStatement(source, pos);
-        // Skip ';' if present
-        if (source.charCodeAt(pos) === 59) {
-          pos = pos + 1;
-        }
-      }
-    } else {
-      // Skip then branch without executing it
+    // Check for 'else' keyword and skip it
+    const elsePos = skipKeyword(source, pos, 'else');
+    if (elsePos !== null) {
+      pos = skipWhitespace(source, elsePos);
+      // Skip the else branch without executing it
       pos = skipStatement(source, pos);
-
       // Skip ';' if present
       if (source.charCodeAt(pos) === 59) {
         pos = pos + 1;
-      }
-      pos = skipWhitespace(source, pos);
-
-      // Check for 'else' keyword
-      const elsePos = skipKeyword(source, pos, 'else');
-      if (elsePos !== null) {
-        pos = skipWhitespace(source, elsePos);
-        // Execute else branch
-        const elseResult = parseStatement(source, pos, env);
-        result = elseResult.value;
-        pos = skipWhitespace(source, elseResult.pos);
-
-        // Skip ';' if present
-        if (source.charCodeAt(pos) === 59) {
-          pos = pos + 1;
-        }
       }
     }
+  } else {
+    // Skip then branch without executing it
+    pos = skipStatement(source, pos);
 
+    // Skip ';' if present
+    if (source.charCodeAt(pos) === 59) {
+      pos = pos + 1;
+    }
     pos = skipWhitespace(source, pos);
 
-    // Check if there's more to parse (not at '}' or end)
-    if (pos < source.length && source.charCodeAt(pos) !== 125) {
-      // charCode 125 is '}'
-      const restResult = parseStatement(source, pos, env);
-      return { value: restResult.value, pos: restResult.pos };
-    } else {
-      return { value: result, pos };
+    // Check for 'else' keyword
+    const elsePos = skipKeyword(source, pos, 'else');
+    if (elsePos !== null) {
+      pos = skipWhitespace(source, elsePos);
+      // Execute else branch
+      const elseResult = parseStatement(source, pos, env);
+      result = elseResult.value;
+      pos = skipWhitespace(source, elseResult.pos);
+
+      // Skip ';' if present
+      if (source.charCodeAt(pos) === 59) {
+        pos = pos + 1;
+      }
     }
   }
 
-  return { value: 0, pos };
+  pos = skipWhitespace(source, pos);
+
+  // Check if there's more to parse (not at '}' or end)
+  if (pos < source.length && source.charCodeAt(pos) !== 125) {
+    // charCode 125 is '}'
+    const restResult = parseStatement(source, pos, env);
+    return { value: restResult.value, pos: restResult.pos };
+  } else {
+    return { value: result, pos };
+  }
 }
 
 function parseStatement(
