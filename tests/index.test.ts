@@ -127,4 +127,8 @@ describe("The compiler", () => {
   it("rejects variable shadowing across scopes", () => {
     invalidate("let x = 0; let y = { let x = 0; x}; y");
   });
+
+  it("supports mutable variables with reassignment", () => {
+    validate("let mut x = 0; x = read I32; x", 100, "100");
+  });
 });

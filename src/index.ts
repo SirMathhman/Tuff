@@ -34,12 +34,21 @@ function parseLetStatement(line: string): {
   varName: string;
   declaredType: string | null;
   valueExpr: string;
+  isMutable: boolean;
 } | null {
   const trimmed = line.trim();
   if (!trimmed.startsWith("let ")) {
     return null;
   }
-  const afterLet = trimmed.substring(4);
+  let afterLet = trimmed.substring(4);
+  let isMutable = false;
+
+  // Check for "mut" keyword
+  if (afterLet.startsWith("mut ")) {
+    isMutable = true;
+    afterLet = afterLet.substring(4);
+  }
+
   const colonIndex = afterLet.indexOf(":");
   const equalIndex = afterLet.indexOf("=");
 
@@ -66,7 +75,7 @@ function parseLetStatement(line: string): {
     return null;
   }
 
-  return { varName, declaredType, valueExpr };
+  return { varName, declaredType, valueExpr, isMutable };
 }
 
 // eslint-disable-next-line no-unused-vars
@@ -74,7 +83,44 @@ type LetStatementCallback = (parsed: {
   varName: string;
   declaredType: string | null;
   valueExpr: string;
+  isMutable: boolean;
 }) => void;
+
+function parseReassignmentStatement(line: string): {
+  varName: string;
+  valueExpr: string;
+} | null {
+  const trimmed = line.trim();
+  const equalIndex = trimmed.indexOf("=");
+
+  if (equalIndex === -1) {
+    return null;
+  }
+
+  const varName = trimmed.substring(0, equalIndex).trim();
+  const valueExpr = trimmed.substring(equalIndex + 1).trim();
+
+  if (varName.length === 0 || valueExpr.length === 0) {
+    return null;
+  }
+
+  // Only match simple identifiers (no spaces, no operators before =)
+  const isSimpleId = varName
+    .split("")
+    .every(
+      (c) =>
+        (c >= "a" && c <= "z") ||
+        (c >= "A" && c <= "Z") ||
+        (c >= "0" && c <= "9") ||
+        c === "_",
+    );
+
+  if (!isSimpleId) {
+    return null;
+  }
+
+  return { varName, valueExpr };
+}
 
 function forEachLetStatement(
   source: string,
@@ -174,6 +220,9 @@ function getExpressionType(expr: string): string | null {
   if (trimmed === "read U16") {
     return "U16";
   }
+  if (trimmed === "read I32") {
+    return "I32";
+  }
   const isNum =
     trimmed.length > 0 && trimmed.split("").every((c) => c >= "0" && c <= "9");
   if (isNum) {
@@ -181,7 +230,10 @@ function getExpressionType(expr: string): string | null {
     if (numVal <= 255) {
       return "U8";
     }
-    return "U16";
+    if (numVal <= 65535) {
+      return "U16";
+    }
+    return "I32";
   }
   return null;
 }
@@ -225,7 +277,7 @@ function compileExpression(
           return token;
         }
         const trimmed = token.trim();
-        if (trimmed === "read U8") {
+        if (trimmed === "read U8" || trimmed === "read U16" || trimmed === "read I32") {
           argCount.value = argCount.value + 1;
           return "parseInt(process.argv[" + (argCount.value + 1) + "], 10)";
         }
@@ -340,16 +392,28 @@ function compileTopLevelVariableBlock(
   let compiledBlock = "(() => { ";
 
   statements.forEach((stmt) => {
-    const parsed = parseVariableDeclaration(stmt);
-    if (parsed) {
+    const letParsed = parseVariableDeclaration(stmt);
+    if (letParsed) {
       const hasParens =
-        parsed.valueExpr.includes("(") || parsed.valueExpr.includes("{");
+        letParsed.valueExpr.includes("(") || letParsed.valueExpr.includes("{");
       const processedValue = hasParens
-        ? handleParentheses(parsed.valueExpr, argCount)
-        : parsed.valueExpr;
+        ? handleParentheses(letParsed.valueExpr, argCount)
+        : letParsed.valueExpr;
       const compiledValue = compileExpression(processedValue, argCount);
       compiledBlock =
-        compiledBlock + "let " + parsed.varName + " = " + compiledValue + "; ";
+        compiledBlock + "let " + letParsed.varName + " = " + compiledValue + "; ";
+    } else {
+      const reassignParsed = parseReassignmentStatement(stmt);
+      if (reassignParsed) {
+        const hasParens =
+          reassignParsed.valueExpr.includes("(") || reassignParsed.valueExpr.includes("{");
+        const processedValue = hasParens
+          ? handleParentheses(reassignParsed.valueExpr, argCount)
+          : reassignParsed.valueExpr;
+        const compiledValue = compileExpression(processedValue, argCount);
+        compiledBlock =
+          compiledBlock + reassignParsed.varName + " = " + compiledValue + "; ";
+      }
     }
   });
 
