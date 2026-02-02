@@ -14,9 +14,13 @@ function executeJS(jsCode: string, ...args: string[]): number {
     const func = new Function("process", jsCode);
     func(mockProcess);
   } catch (e: unknown) {
-    throw new Error(
-      "Unexpected error '" + e + "' occurred during execution of: " + jsCode,
-    );
+    if (e instanceof Error && e.message.startsWith("exit:")) {
+      exitCode = parseInt(e.message.substring(5), 10);
+    } else {
+      throw new Error(
+        "Unexpected error '" + e + "' occurred during execution of: " + jsCode,
+      );
+    }
   }
 
   return exitCode;
@@ -148,5 +152,9 @@ describe("The compiler", () => {
 
   it("supports mutable variable with nested block statement", () => {
     validate("let mut x = 10; { x = read U8; }; x", 42, "42");
+  });
+
+  it("supports Bool type with read Bool", () => {
+    validate("let x : Bool = read Bool; x", 1, "true");
   });
 });

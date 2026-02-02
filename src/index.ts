@@ -245,6 +245,9 @@ function getExpressionType(expr: string): string | null {
   if (trimmed === "read I32") {
     return "I32";
   }
+  if (trimmed === "read Bool") {
+    return "Bool";
+  }
   const isNum =
     trimmed.length > 0 && trimmed.split("").every((c) => c >= "0" && c <= "9");
   if (isNum) {
@@ -456,6 +459,12 @@ function compileExpression(
         ) {
           argCount.value = argCount.value + 1;
           return "parseInt(process.argv[" + (argCount.value + 1) + "], 10)";
+        }
+        if (trimmed === "read Bool") {
+          argCount.value = argCount.value + 1;
+          return (
+            "(process.argv[" + (argCount.value + 1) + '] === "true" ? 1 : 0)'
+          );
         }
         if (trimmed.startsWith("(")) {
           return trimmed;
@@ -725,6 +734,11 @@ export function compile(source: string): string {
   // Read U8 instruction
   if (source === "read U8") {
     return "process.exit(parseInt(process.argv[2], 10))";
+  }
+
+  // Read Bool instruction
+  if (source === "read Bool") {
+    return "process.exit(process.argv[2] === \"true\" ? 1 : 0)";
   }
 
   // Arithmetic operations with read U8 and mixed operators
