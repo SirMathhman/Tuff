@@ -141,6 +141,51 @@ function parseBinaryOperator(
   return { value: result, pos };
 }
 
+function parseIfExpression(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+): { value: number; pos: number } {
+  pos = skipWhitespace(source, pos);
+
+  // Parse condition in parentheses
+  if (source.charCodeAt(pos) === 40) {
+    // '('
+    pos = skipWhitespace(source, pos + 1);
+    const condResult = parseLogicalOr(source, pos, env);
+    const condition = condResult.value;
+    pos = skipWhitespace(source, condResult.pos);
+
+    if (source.charCodeAt(pos) === 41) {
+      // ')'
+      pos = pos + 1;
+    }
+    pos = skipWhitespace(source, pos);
+
+    // Parse then branch (without allowing top-level let binding)
+    const thenResult = parseLogicalOr(source, pos, env);
+    const thenValue = thenResult.value;
+    pos = skipWhitespace(source, thenResult.pos);
+
+    // Expect 'else' keyword
+    const elsePos = skipKeyword(source, pos, 'else');
+    if (elsePos !== null) {
+      pos = skipWhitespace(source, elsePos);
+
+      // Parse else branch
+      const elseResult = parseLogicalOr(source, pos, env);
+      const elseValue = elseResult.value;
+      pos = elseResult.pos;
+
+      // Return the appropriate branch value
+      const result = condition !== 0 ? thenValue : elseValue;
+      return { value: result, pos };
+    }
+  }
+
+  return { value: 0, pos };
+}
+
 function parsePrimary(
   source: string,
   pos: number,
@@ -178,6 +223,12 @@ function parsePrimary(
   const letPos = skipKeyword(source, pos, 'let');
   if (letPos !== null) {
     return parseLetBinding(source, letPos, env);
+  }
+
+  // Check for 'if' keyword
+  const ifPos = skipKeyword(source, pos, 'if');
+  if (ifPos !== null) {
+    return parseIfExpression(source, ifPos, env);
   }
 
   // Check for boolean literals

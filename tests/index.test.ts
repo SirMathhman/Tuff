@@ -88,4 +88,8 @@ describe("The interpreter can interpret", () => {
   test("less-than comparison operator", () => {
     expectValid("let x = 0; let y = 1; x < y", 1);
   });
+
+  test("if-else expression", () => {
+    expectValid("let x = if (true) 2 else 3; x", 2);
+  });
 });
