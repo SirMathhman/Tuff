@@ -56,4 +56,8 @@ describe("The interpreter can interpret", () => {
   test("top-level let binding", () => {
     expectValid("let z : U8 = (2 + { let x : U8 = 3; x }) * 4; z", 20);
   });
+
+  test("sequential let bindings", () => {
+    expectValid("let z : U8 = (2 + { let x : U8 = 3; let b : U8 = x; b }) * 4; let a : U8 = z; a", 20);
+  });
 });

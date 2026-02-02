@@ -178,8 +178,8 @@ function parseLetBinding(
   // Create new environment with the binding
   const newEnv = { ...env, [identifier.name]: value };
 
-  // Parse body expression
-  const bodyResult = parseAdditive(source, pos, newEnv);
+  // Parse body statement (which may contain another let binding)
+  const bodyResult = parseStatement(source, pos, newEnv);
   return { value: bodyResult.value, pos: bodyResult.pos };
 }
 
@@ -188,6 +188,23 @@ function parseBlock(
   pos: number,
   env: Record<string, number>,
 ): { value: number; pos: number } {
+  return parseStatement(source, pos, env);
+}
+
+function parseStatement(
+  source: string,
+  pos: number,
+  env: Record<string, number>,
+): { value: number; pos: number } {
+  pos = skipWhitespace(source, pos);
+
+  // Check for 'let' keyword
+  const letPos = skipKeyword(source, pos, 'let');
+  if (letPos !== null) {
+    return parseLetBinding(source, letPos, env);
+  }
+
+  // Otherwise parse expression
   return parseAdditive(source, pos, env);
 }
 
@@ -259,15 +276,6 @@ export function interpret(source: string): number {
     return 0;
   }
 
-  let pos = skipWhitespace(source, 0);
-
-  // Check for top-level 'let' keyword
-  const letPos = skipKeyword(source, pos, 'let');
-  if (letPos !== null) {
-    const result = parseLetBinding(source, letPos, {});
-    return result.value;
-  }
-
-  const result = parseAdditive(source, 0, {});
+  const result = parseStatement(source, 0, {});
   return result.value;
 }
