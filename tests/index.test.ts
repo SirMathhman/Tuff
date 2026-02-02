@@ -44,4 +44,8 @@ describe("The interpreter can interpret", () => {
   test("parentheses grouping", () => {
     expectValid("(2 + 3) * 4", 20);
   });
+
+  test("curly braces grouping", () => {
+    expectValid("(2 + { 3 }) * 4", 20);
+  });
 });
