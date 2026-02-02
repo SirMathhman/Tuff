@@ -131,4 +131,8 @@ describe("The interpreter can interpret", () => {
   test("for loop with range", () => {
     expectValid("let mut sum = 0; for (i in 0..10) sum += i; sum", 45);
   });
+
+  test("for loop with range and block body", () => {
+    expectValid("let mut sum = 0; for (i in 0..10) { sum += i; } sum", 45);
+  });
 });
