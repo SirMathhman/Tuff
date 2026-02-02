@@ -88,7 +88,8 @@ function parseLetStatement(line: string): {
     return null;
   }
 
-  return { varName, declaredType, valueExpr, isMutable };
+  const convertedExpr = convertIfElseToTernary(valueExpr);
+  return { varName, declaredType, valueExpr: convertedExpr, isMutable };
 }
 
 type LetStatementCallback = (parsed: {
@@ -232,6 +233,57 @@ function validateNoDuplicateVariables(source: string): void {
     }
     seen.push(varName);
   });
+}
+
+function convertIfElseToTernary(expr: string): string {
+  const trimmed = expr.trim();
+  if (!trimmed.startsWith("if ")) {
+    return expr;
+  }
+
+  const chars = trimmed.split("");
+  const openParenIdx = trimmed.indexOf("(");
+  if (openParenIdx === -1) {
+    return expr;
+  }
+
+  const search = chars.reduce(
+    (acc, char, i) => {
+      if (acc.condEnd !== -1 || i <= openParenIdx) {
+        return acc;
+      }
+      if (char === "(") {
+        return { depth: acc.depth + 1, condEnd: acc.condEnd };
+      }
+      if (char === ")") {
+        const nextDepth = acc.depth - 1;
+        if (nextDepth === 0) {
+          return { depth: nextDepth, condEnd: i };
+        }
+        return { depth: nextDepth, condEnd: acc.condEnd };
+      }
+      return acc;
+    },
+    { depth: 1, condEnd: -1 },
+  );
+  const condEnd = search.condEnd;
+
+  if (condEnd === -1) {
+    return expr;
+  }
+
+  const condition = trimmed.substring(openParenIdx + 1, condEnd);
+  const afterCond = trimmed.substring(condEnd + 1).trim();
+
+  const elseIdx = afterCond.indexOf(" else ");
+  if (elseIdx === -1) {
+    return expr;
+  }
+
+  const trueValue = afterCond.substring(0, elseIdx).trim();
+  const falseValue = afterCond.substring(elseIdx + 6).trim();
+
+  return "(" + condition + ") ? " + trueValue + " : " + falseValue;
 }
 
 function getExpressionType(expr: string): string | null {
@@ -454,9 +506,7 @@ function compileReadExpression(
   }
   if (trimmed === "read Bool") {
     argCount.value = argCount.value + 1;
-    return (
-      "(process.argv[" + (argCount.value + 1) + '] === "true" ? 1 : 0)'
-    );
+    return "(process.argv[" + (argCount.value + 1) + '] === "true" ? 1 : 0)';
   }
   return trimmed;
 }
@@ -670,8 +720,7 @@ function compileTopLevelVariableBlock(
   });
 
   const compiledFinalPart = compileExpression(finalPart, argCount);
-  compiledBlock =
-    compiledBlock + "return " + compiledFinalPart + "; })()";
+  compiledBlock = compiledBlock + "return " + compiledFinalPart + "; })()";
 
   return compiledBlock;
 }

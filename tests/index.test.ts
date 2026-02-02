@@ -170,4 +170,12 @@ describe("The compiler", () => {
   it("supports less-than comparison operator", () => {
     validate("let x = read U8; let y = read U8; x < y", 1, "5", "10");
   });
+
+  it("supports if-else expression with true condition", () => {
+    validate("let x = if (read Bool) 2 else 3; x", 2, "true");
+  });
+
+  it("supports if-else expression with false condition", () => {
+    validate("let x = if (read Bool) 2 else 3; x", 3, "false");
+  });
 });
