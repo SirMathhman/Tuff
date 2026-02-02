@@ -153,10 +153,7 @@ type IfElseStatement = {
   elseStmt: string;
 };
 
-function findClosingParenIndex(
-  chars: string[],
-  openParenIdx: number,
-): number {
+function findClosingParenIndex(chars: string[], openParenIdx: number): number {
   return chars.reduce(
     (acc: { depth: number; found: number }, char: string, i: number) => {
       if (acc.found !== -1 || i <= openParenIdx) return acc;
@@ -172,7 +169,11 @@ function findClosingParenIndex(
   ).found;
 }
 
-function findElseIndex(chars: string[], startIdx: number, source: string): number {
+function findElseIndex(
+  chars: string[],
+  startIdx: number,
+  source: string,
+): number {
   return chars.reduce((acc: number, _char: string, i: number) => {
     if (acc !== -1 || i <= startIdx) return acc;
     if (source.substring(i).startsWith("else")) return i;
@@ -846,7 +847,6 @@ function findElseEndIdx(source: string, startIdx: number): number {
     : searchStart + 1 + found.foundIdx + 1;
 }
 
-
 function findFirstNonSpaceIndex(source: string, startIdx: number): number {
   const tailChars = source.substring(startIdx).split("");
   const offset = tailChars.findIndex((c) => c !== " ");
@@ -921,7 +921,6 @@ function normalizeIfElseAssignmentsInSource(source: string): string {
 
   return result;
 }
-
 
 function splitTopLevelStatements(source: string): string[] {
   const result: string[] = [];
