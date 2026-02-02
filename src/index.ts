@@ -1,1 +1,3 @@
-console.log("Hello via Bun!");
+export function interpret(source: string): number {
+  return 0;
+}
