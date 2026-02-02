@@ -13,12 +13,10 @@ function executeJS(jsCode: string, ...args: string[]): number {
   try {
     const func = new Function("process", jsCode);
     func(mockProcess);
-  } catch (e: any) {
-    if (typeof e.message === "string" && e.message.startsWith("exit:")) {
-      exitCode = parseInt(e.message.substring(5), 10);
-    } else {
-      throw e;  
-    }
+  } catch (e: unknown) {
+    throw new Error(
+      "Unexpected error '" + e + "' occurred during execution of: " + jsCode,
+    );
   }
 
   return exitCode;
