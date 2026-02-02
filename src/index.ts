@@ -238,29 +238,79 @@ function getExpressionType(expr: string): string | null {
   return null;
 }
 
-function validateTypeAssignments(source: string): void {
+function collectVariableInfo(source: string): {
+  varTypes: { [key: string]: string };
+  varMutability: { [key: string]: boolean };
+} {
   const varTypes: { [key: string]: string } = {};
+  const varMutability: { [key: string]: boolean } = {};
+
   forEachLetStatement(source, (parsed) => {
     let exprType: string | null = getExpressionType(parsed.valueExpr);
 
-    // If not a literal or read expression, check if it's a variable
     if (!exprType && varTypes[parsed.valueExpr]) {
       exprType = varTypes[parsed.valueExpr];
     }
 
-    if (parsed.declaredType && exprType) {
-      if (parsed.declaredType !== exprType) {
-        throw new Error(
-          "Type mismatch: cannot assign " +
-            exprType +
-            " to " +
-            parsed.declaredType,
-        );
-      }
-    }
-
     if (exprType) {
       varTypes[parsed.varName] = exprType;
+      varMutability[parsed.varName] = parsed.isMutable;
+    }
+  });
+
+  return { varTypes, varMutability };
+}
+
+function validateTypeAssignments(source: string): void {
+  const { varTypes } = collectVariableInfo(source);
+  forEachLetStatement(source, (parsed) => {
+    if (!parsed.declaredType) {
+      return;
+    }
+
+    let exprType: string | null = getExpressionType(parsed.valueExpr);
+    if (!exprType && varTypes[parsed.valueExpr]) {
+      exprType = varTypes[parsed.valueExpr];
+    }
+
+    if (exprType && parsed.declaredType !== exprType) {
+      throw new Error(
+        "Type mismatch: cannot assign " +
+          exprType +
+          " to " +
+          parsed.declaredType,
+      );
+    }
+  });
+}
+
+function forEachReassignment(
+  source: string,
+  callback: (reassignment: { varName: string; valueExpr: string }) => void,
+): void {
+  const lines = source.split(";").map((s) => s.trim());
+  lines.forEach((line) => {
+    const parsed = parseReassignmentStatement(line);
+    if (parsed) {
+      callback(parsed);
+    }
+  });
+}
+
+function validateReassignments(source: string): void {
+  const { varTypes, varMutability } = collectVariableInfo(source);
+
+  forEachReassignment(source, (reassignment) => {
+    const varName = reassignment.varName;
+
+    // Check if variable exists
+    if (!varTypes[varName]) {
+      throw new Error("Cannot reassign undeclared variable: " + varName);
+    }
+
+    // Check if variable is mutable
+    if (!varMutability[varName]) {
+      throw new Error("Cannot reassign immutable variable: " + varName);
     }
   });
 }
@@ -277,7 +327,11 @@ function compileExpression(
           return token;
         }
         const trimmed = token.trim();
-        if (trimmed === "read U8" || trimmed === "read U16" || trimmed === "read I32") {
+        if (
+          trimmed === "read U8" ||
+          trimmed === "read U16" ||
+          trimmed === "read I32"
+        ) {
           argCount.value = argCount.value + 1;
           return "parseInt(process.argv[" + (argCount.value + 1) + "], 10)";
         }
@@ -401,12 +455,18 @@ function compileTopLevelVariableBlock(
         : letParsed.valueExpr;
       const compiledValue = compileExpression(processedValue, argCount);
       compiledBlock =
-        compiledBlock + "let " + letParsed.varName + " = " + compiledValue + "; ";
+        compiledBlock +
+        "let " +
+        letParsed.varName +
+        " = " +
+        compiledValue +
+        "; ";
     } else {
       const reassignParsed = parseReassignmentStatement(stmt);
       if (reassignParsed) {
         const hasParens =
-          reassignParsed.valueExpr.includes("(") || reassignParsed.valueExpr.includes("{");
+          reassignParsed.valueExpr.includes("(") ||
+          reassignParsed.valueExpr.includes("{");
         const processedValue = hasParens
           ? handleParentheses(reassignParsed.valueExpr, argCount)
           : reassignParsed.valueExpr;
@@ -479,6 +539,7 @@ export function compile(source: string): string {
   validateNoZeroDivision(source);
   validateNoDuplicateVariables(source);
   validateTypeAssignments(source);
+  validateReassignments(source);
 
   // Top-level variable declarations
   if (source.startsWith("let ")) {
