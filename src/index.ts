@@ -30,49 +30,73 @@ function validateNoZeroDivision(source: string): void {
   }
 }
 
-function validateNoDuplicateVariables(source: string): void {
-  const declaredVars: string[] = [];
+function parseLetStatement(line: string): {
+  varName: string;
+  declaredType: string | null;
+  valueExpr: string;
+} | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("let ")) {
+    return null;
+  }
+  const afterLet = trimmed.substring(4);
+  const colonIndex = afterLet.indexOf(":");
+  const equalIndex = afterLet.indexOf("=");
+
+  if (equalIndex === -1) {
+    return null;
+  }
+
+  let varName = "";
+  let declaredType: string | null = null;
+  let valueExpr = "";
+
+  if (colonIndex !== -1 && colonIndex < equalIndex) {
+    varName = afterLet.substring(0, colonIndex).trim();
+    const afterColon = afterLet.substring(colonIndex + 1);
+    const eqIdx = afterColon.indexOf("=");
+    declaredType = afterColon.substring(0, eqIdx).trim();
+    valueExpr = afterColon.substring(eqIdx + 1).trim();
+  } else {
+    varName = afterLet.substring(0, equalIndex).trim();
+    valueExpr = afterLet.substring(equalIndex + 1).trim();
+  }
+
+  if (varName.length === 0 || valueExpr.length === 0) {
+    return null;
+  }
+
+  return { varName, declaredType, valueExpr };
+}
+
+// eslint-disable-next-line no-unused-vars
+type LetStatementCallback = (parsed: {
+  varName: string;
+  declaredType: string | null;
+  valueExpr: string;
+}) => void;
+
+function forEachLetStatement(
+  source: string,
+  callback: LetStatementCallback,
+): void {
   const lines = source.split(";").map((s) => s.trim());
-
   lines.forEach((line) => {
-    if (line.startsWith("let ")) {
-      const afterLet = line.substring(4);
-      const colonIndex = afterLet.indexOf(":");
-      const equalIndex = afterLet.indexOf("=");
-
-      let varName = "";
-      if (colonIndex !== -1 && colonIndex < equalIndex) {
-        varName = afterLet.substring(0, colonIndex).trim();
-      } else if (equalIndex !== -1) {
-        varName = afterLet.substring(0, equalIndex).trim();
-      }
-
-      if (varName.length > 0) {
-        if (declaredVars.includes(varName)) {
-          throw new Error("Duplicate variable declaration: " + varName);
-        }
-        declaredVars.push(varName);
-      }
+    const parsed = parseLetStatement(line);
+    if (parsed) {
+      callback(parsed);
     }
   });
 }
 
-function extractDeclaredType(declLine: string): string | null {
-  if (!declLine.startsWith("let ")) {
-    return null;
-  }
-  const afterLet = declLine.substring(4);
-  const colonIndex = afterLet.indexOf(":");
-  if (colonIndex === -1) {
-    return null;
-  }
-  const afterColon = afterLet.substring(colonIndex + 1);
-  const equalIndex = afterColon.indexOf("=");
-  if (equalIndex === -1) {
-    return null;
-  }
-  const typeStr = afterColon.substring(0, equalIndex).trim();
-  return typeStr;
+function validateNoDuplicateVariables(source: string): void {
+  const declaredVars: string[] = [];
+  forEachLetStatement(source, (parsed) => {
+    if (declaredVars.includes(parsed.varName)) {
+      throw new Error("Duplicate variable declaration: " + parsed.varName);
+    }
+    declaredVars.push(parsed.varName);
+  });
 }
 
 function getExpressionType(expr: string): string | null {
@@ -97,52 +121,27 @@ function getExpressionType(expr: string): string | null {
 
 function validateTypeAssignments(source: string): void {
   const varTypes: { [key: string]: string } = {};
-  const lines = source.split(";").map((s) => s.trim());
+  forEachLetStatement(source, (parsed) => {
+    let exprType: string | null = getExpressionType(parsed.valueExpr);
 
-  lines.forEach((line) => {
-    if (line.startsWith("let ")) {
-      const afterLet = line.substring(4);
-      const colonIndex = afterLet.indexOf(":");
-      const equalIndex = afterLet.indexOf("=");
+    // If not a literal or read expression, check if it's a variable
+    if (!exprType && varTypes[parsed.valueExpr]) {
+      exprType = varTypes[parsed.valueExpr];
+    }
 
-      let varName = "";
-      let declaredType: string | null = null;
-      let valueExpr = "";
-
-      if (colonIndex !== -1 && colonIndex < equalIndex) {
-        varName = afterLet.substring(0, colonIndex).trim();
-        const afterColon = afterLet.substring(colonIndex + 1);
-        const eqIdx = afterColon.indexOf("=");
-        declaredType = afterColon.substring(0, eqIdx).trim();
-        valueExpr = afterColon.substring(eqIdx + 1).trim();
-      } else if (equalIndex !== -1) {
-        varName = afterLet.substring(0, equalIndex).trim();
-        valueExpr = afterLet.substring(equalIndex + 1).trim();
+    if (parsed.declaredType && exprType) {
+      if (parsed.declaredType !== exprType) {
+        throw new Error(
+          "Type mismatch: cannot assign " +
+            exprType +
+            " to " +
+            parsed.declaredType,
+        );
       }
+    }
 
-      if (varName.length > 0 && valueExpr.length > 0) {
-        let exprType: string | null = getExpressionType(valueExpr);
-
-        // If not a literal or read expression, check if it's a variable
-        if (!exprType && varTypes[valueExpr]) {
-          exprType = varTypes[valueExpr];
-        }
-
-        if (declaredType && exprType) {
-          if (declaredType !== exprType) {
-            throw new Error(
-              "Type mismatch: cannot assign " +
-                exprType +
-                " to " +
-                declaredType,
-            );
-          }
-        }
-
-        if (exprType) {
-          varTypes[varName] = exprType;
-        }
-      }
+    if (exprType) {
+      varTypes[parsed.varName] = exprType;
     }
   });
 }
@@ -187,36 +186,11 @@ function compileExpression(
 function parseVariableDeclaration(
   decl: string,
 ): { varName: string; valueExpr: string } | null {
-  const declTrimmed = decl.trim();
-  if (!declTrimmed.startsWith("let ")) {
+  const parsed = parseLetStatement(decl);
+  if (!parsed) {
     return null;
   }
-  const afterLet = declTrimmed.substring(4);
-  const colonIndex = afterLet.indexOf(":");
-  const equalIndex = afterLet.indexOf("=");
-
-  if (equalIndex === -1) {
-    return null;
-  }
-
-  let varName = "";
-  let valueExpr = "";
-
-  if (colonIndex !== -1 && colonIndex < equalIndex) {
-    // Format: let x : Type = expr
-    varName = afterLet.substring(0, colonIndex).trim();
-    valueExpr = afterLet.substring(equalIndex + 1).trim();
-  } else {
-    // Format: let x = expr
-    varName = afterLet.substring(0, equalIndex).trim();
-    valueExpr = afterLet.substring(equalIndex + 1).trim();
-  }
-
-  if (varName.length === 0 || valueExpr.length === 0) {
-    return null;
-  }
-
-  return { varName, valueExpr };
+  return { varName: parsed.varName, valueExpr: parsed.valueExpr };
 }
 
 function compileVariableBlock(
