@@ -78,7 +78,6 @@ function parseLetStatement(line: string): {
   return { varName, declaredType, valueExpr, isMutable };
 }
 
-// eslint-disable-next-line no-unused-vars
 type LetStatementCallback = (parsed: {
   varName: string;
   declaredType: string | null;
@@ -122,17 +121,27 @@ function parseReassignmentStatement(line: string): {
   return { varName, valueExpr };
 }
 
-function forEachLetStatement(
+type StatementParser<T> = (_line: string) => T | null;
+
+function forEachStatement<T>(
   source: string,
-  callback: LetStatementCallback,
+  parser: StatementParser<T>,
+  callback: (parsed: T) => void,
 ): void {
   const lines = source.split(";").map((s) => s.trim());
-  lines.forEach((line) => {
-    const parsed = parseLetStatement(line);
+  lines.forEach((_line) => {
+    const parsed = parser(_line);
     if (parsed) {
       callback(parsed);
     }
   });
+}
+
+function forEachLetStatement(
+  source: string,
+  callback: LetStatementCallback,
+): void {
+  forEachStatement(source, parseLetStatement, callback);
 }
 
 function findLetStatementEnd(source: string, startIndex: number): number {
@@ -238,6 +247,17 @@ function getExpressionType(expr: string): string | null {
   return null;
 }
 
+function resolveExpressionType(
+  expr: string,
+  varTypes: { [key: string]: string },
+): string | null {
+  let exprType: string | null = getExpressionType(expr);
+  if (!exprType && varTypes[expr]) {
+    exprType = varTypes[expr];
+  }
+  return exprType;
+}
+
 function collectVariableInfo(source: string): {
   varTypes: { [key: string]: string };
   varMutability: { [key: string]: boolean };
@@ -246,11 +266,7 @@ function collectVariableInfo(source: string): {
   const varMutability: { [key: string]: boolean } = {};
 
   forEachLetStatement(source, (parsed) => {
-    let exprType: string | null = getExpressionType(parsed.valueExpr);
-
-    if (!exprType && varTypes[parsed.valueExpr]) {
-      exprType = varTypes[parsed.valueExpr];
-    }
+    const exprType = resolveExpressionType(parsed.valueExpr, varTypes);
 
     if (exprType) {
       varTypes[parsed.varName] = exprType;
@@ -268,10 +284,7 @@ function validateTypeAssignments(source: string): void {
       return;
     }
 
-    let exprType: string | null = getExpressionType(parsed.valueExpr);
-    if (!exprType && varTypes[parsed.valueExpr]) {
-      exprType = varTypes[parsed.valueExpr];
-    }
+    const exprType = resolveExpressionType(parsed.valueExpr, varTypes);
 
     if (exprType && parsed.declaredType !== exprType) {
       throw new Error(
@@ -286,16 +299,9 @@ function validateTypeAssignments(source: string): void {
 
 function forEachReassignment(
   source: string,
-  // eslint-disable-next-line no-unused-vars
   callback: (reassignment: { varName: string; valueExpr: string }) => void,
 ): void {
-  const lines = source.split(";").map((s) => s.trim());
-  lines.forEach((line) => {
-    const parsed = parseReassignmentStatement(line);
-    if (parsed) {
-      callback(parsed);
-    }
-  });
+  forEachStatement(source, parseReassignmentStatement, callback);
 }
 
 function validateReassignments(source: string): void {
