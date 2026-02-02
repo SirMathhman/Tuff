@@ -103,4 +103,8 @@ describe("The interpreter can interpret", () => {
   test("if-else with block bodies", () => {
     expectValid("let mut x = 0; if (true) { x = 1; } else { x = 2; } x", 1);
   });
+
+  test("nested if-else expressions", () => {
+    expectValid("let x = if (false) 1 else if (false) 2 else 3; x", 3);
+  });
 });

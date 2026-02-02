@@ -223,7 +223,7 @@ function parseIfConditional(
     pos = skipSemicolonAndWhitespace(source, pos);
 
     // Handle else branch (skip it)
-    const elseResult = handleElseKeyword(source, pos, env, false);
+    const elseResult = handleElseKeyword(source, pos, env, false, branchParser);
     pos = elseResult.pos;
   } else {
     // Skip then branch without executing it
@@ -232,7 +232,7 @@ function parseIfConditional(
     pos = skipSemicolonAndWhitespace(source, pos);
 
     // Handle else branch (execute it)
-    const elseResult = handleElseKeyword(source, pos, env, true);
+    const elseResult = handleElseKeyword(source, pos, env, true, branchParser);
     if (elseResult.foundElse) {
       result = elseResult.value;
     }
@@ -420,36 +420,42 @@ function skipStatement(
   
   // Skip past the next statement-like construct
   // This is a simple approach: find the next semicolon or closing brace
+  // Also stops at 'else' keyword to handle if-else chains
+  let depth = 0;
   while (pos < source.length) {
     const code = source.charCodeAt(pos);
     
     // Found end of statement
-    if (code === 59) {
+    if (code === 59 && depth === 0) {
       // ';'
       return pos + 1;
     }
     
     // Found closing brace - don't consume it
-    if (code === 125) {
+    if (code === 125 && depth === 0) {
       // '}'
       return pos;
+    }
+
+    // Check for 'else' keyword at depth 0
+    if (depth === 0 && code >= 97 && code <= 122) {
+      // Potential identifier starting with lowercase letter
+      const potentialElse = skipKeyword(source, pos, 'else');
+      if (potentialElse !== null) {
+        // Found 'else', stop here
+        return pos;
+      }
     }
     
     // Skip over strings/literals by skipping parentheses and braces
     if (code === 40 || code === 123) {
       // '(' or '{'
-      const closeChar = code === 40 ? 41 : 125; // ')' or '}'
+      depth++;
       pos++;
-      let depth = 1;
-      while (pos < source.length && depth > 0) {
-        if (source.charCodeAt(pos) === code) {
-          depth++;
-        }
-        if (source.charCodeAt(pos) === closeChar) {
-          depth--;
-        }
-        pos++;
-      }
+    } else if ((code === 41 || code === 125) && depth > 0) {
+      // ')' or '}'
+      depth--;
+      pos++;
     } else {
       pos++;
     }
@@ -463,6 +469,7 @@ function handleElseKeyword(
   pos: number,
   env: Env,
   shouldExecute: boolean,
+  branchParser: ParserFn,
 ): { foundElse: boolean; value: number; pos: number } {
   const elsePos = skipKeyword(source, pos, 'else');
   if (elsePos === null) {
@@ -473,7 +480,7 @@ function handleElseKeyword(
   let value = 0;
 
   if (shouldExecute) {
-    const elseResult = parseStatement(source, pos, env);
+    const elseResult = branchParser(source, pos, env);
     value = elseResult.value;
     pos = skipWhitespace(source, elseResult.pos);
   } else {
