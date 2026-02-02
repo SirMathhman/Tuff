@@ -1,3 +1,15 @@
+type ParserFn = (
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+) => { value: number; pos: number };
+
+type ConditionParserFn = (
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+) => { condition: number; pos: number } | null;
+
 function parseNumericLiteral(
   source: string,
   start: number,
@@ -31,13 +43,6 @@ function parseNumericLiteral(
     end: suffixEnd,
   };
 }
-
-// Type alias for parser functions
-type Parser = (
-  source: string,
-  pos: number,
-  env: Record<string, { value: number; mutable: boolean }>,
-) => { value: number; pos: number };
 
 function parseIdentifier(
   source: string,
@@ -82,12 +87,21 @@ function skipWhitespace(source: string, pos: number): number {
   return pos;
 }
 
+function skipSemicolonAndWhitespace(source: string, pos: number): number {
+  // Skip ';' if present
+  if (source.charCodeAt(pos) === 59) {
+    // ';'
+    pos = pos + 1;
+  }
+  return skipWhitespace(source, pos);
+}
+
 // Helper for left-recursive binary operator parsing
 function parseBinaryOperator(
   source: string,
   pos: number,
   env: Record<string, { value: number; mutable: boolean }>,
-  operandParser: Parser,
+  operandParser: ParserFn,
   operatorCodes: Array<number | number[]>,
   operators: Array<(left: number, right: number) => number>,
 ): { value: number; pos: number } {
@@ -168,40 +182,92 @@ function parseIfCondition(
   return null;
 }
 
+function getIfConditionAndPos(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+): { condition: number; pos: number } | null {
+  const condResult = parseIfCondition(source, pos, env);
+  if (!condResult) {
+    return null;
+  }
+
+  const { condition, pos: afterCond } = condResult;
+  return { condition, pos: afterCond };
+}
+
+function parseIfConditional(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+  branchParser: ParserFn,
+): { value: number; pos: number } {
+  const condAndPos = getIfConditionAndPos(source, pos, env);
+  if (!condAndPos) {
+    return { value: 0, pos };
+  }
+
+  const { condition, pos: afterCond } = condAndPos;
+  pos = afterCond;
+
+  let result = 0;
+
+  if (condition !== 0) {
+    // Execute then branch
+    const thenResult = branchParser(source, pos, env);
+    result = thenResult.value;
+    pos = skipWhitespace(source, thenResult.pos);
+
+    pos = skipSemicolonAndWhitespace(source, pos);
+
+    // Handle else branch (skip it)
+    const elseResult = handleElseKeyword(source, pos, env, false);
+    pos = elseResult.pos;
+  } else {
+    // Skip then branch without executing it
+    pos = skipStatement(source, pos);
+
+    pos = skipSemicolonAndWhitespace(source, pos);
+
+    // Handle else branch (execute it)
+    const elseResult = handleElseKeyword(source, pos, env, true);
+    if (elseResult.foundElse) {
+      result = elseResult.value;
+    }
+    pos = elseResult.pos;
+  }
+
+  pos = skipWhitespace(source, pos);
+  return { value: result, pos };
+}
+
 function parseIfExpression(
   source: string,
   pos: number,
   env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
-  const condResult = parseIfCondition(source, pos, env);
-  if (!condResult) {
-    return { value: 0, pos };
+  return parseIfConditional(source, pos, env, parseLogicalOr);
+}
+
+function checkKeywordControlFlow(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+  parseIfHandler: (source: string, pos: number, env: Record<string, { value: number; mutable: boolean }>) => { value: number; pos: number },
+): { value: number; pos: number } | null {
+  // Check for 'let' keyword
+  const letPos = skipKeyword(source, pos, 'let');
+  if (letPos !== null) {
+    return parseLetBinding(source, letPos, env);
   }
 
-  const { condition, pos: afterCond } = condResult;
-  pos = afterCond;
-
-  // Parse then branch (without allowing top-level let binding)
-  const thenResult = parseLogicalOr(source, pos, env);
-  const thenValue = thenResult.value;
-  pos = skipWhitespace(source, thenResult.pos);
-
-  // Expect 'else' keyword
-  const elsePos = skipKeyword(source, pos, 'else');
-  if (elsePos !== null) {
-    pos = skipWhitespace(source, elsePos);
-
-    // Parse else branch
-    const elseResult = parseLogicalOr(source, pos, env);
-    const elseValue = elseResult.value;
-    pos = elseResult.pos;
-
-    // Return the appropriate branch value
-    const result = condition !== 0 ? thenValue : elseValue;
-    return { value: result, pos };
+  // Check for 'if' keyword
+  const ifPos = skipKeyword(source, pos, 'if');
+  if (ifPos !== null) {
+    return parseIfHandler(source, ifPos, env);
   }
 
-  return { value: 0, pos };
+  return null;
 }
 
 function parsePrimary(
@@ -237,16 +303,10 @@ function parsePrimary(
     return { value: result.value, pos };
   }
 
-  // Check for 'let' keyword
-  const letPos = skipKeyword(source, pos, 'let');
-  if (letPos !== null) {
-    return parseLetBinding(source, letPos, env);
-  }
-
-  // Check for 'if' keyword
-  const ifPos = skipKeyword(source, pos, 'if');
-  if (ifPos !== null) {
-    return parseIfExpression(source, ifPos, env);
+  // Check for control flow keywords (let, if)
+  const keywordResult = checkKeywordControlFlow(source, pos, env, parseIfExpression);
+  if (keywordResult !== null) {
+    return keywordResult;
   }
 
   // Check for boolean literals
@@ -321,13 +381,7 @@ function parseLetBinding(
   const initResult = parseLogicalOr(source, pos, env);
   const value = initResult.value;
   pos = skipWhitespace(source, initResult.pos);
-
-  // Skip ';'
-  if (source.charCodeAt(pos) === 59) {
-    // ';'
-    pos = pos + 1;
-  }
-  pos = skipWhitespace(source, pos);
+  pos = skipSemicolonAndWhitespace(source, pos);
 
   // Create new environment with the binding
   const newEnv = { ...env, [identifier.name]: { value, mutable: isMutable } };
@@ -402,79 +456,47 @@ function skipStatement(
   return pos;
 }
 
+function handleElseKeyword(
+  source: string,
+  pos: number,
+  env: Record<string, { value: number; mutable: boolean }>,
+  shouldExecute: boolean,
+): { foundElse: boolean; value: number; pos: number } {
+  const elsePos = skipKeyword(source, pos, 'else');
+  if (elsePos === null) {
+    return { foundElse: false, value: 0, pos };
+  }
+
+  pos = skipWhitespace(source, elsePos);
+  let value = 0;
+
+  if (shouldExecute) {
+    const elseResult = parseStatement(source, pos, env);
+    value = elseResult.value;
+    pos = skipWhitespace(source, elseResult.pos);
+  } else {
+    pos = skipStatement(source, pos);
+  }
+
+  pos = skipSemicolonAndWhitespace(source, pos);
+  return { foundElse: true, value, pos };
+}
+
 function parseIfStatement(
   source: string,
   pos: number,
   env: Record<string, { value: number; mutable: boolean }>,
 ): { value: number; pos: number } {
-  const condResult = parseIfCondition(source, pos, env);
-  if (!condResult) {
-    return { value: 0, pos };
-  }
-
-  const { condition, pos: afterCond } = condResult;
-  pos = afterCond;
-
-  let result = 0;
-
-  if (condition !== 0) {
-    // Execute then branch
-    const thenResult = parseStatement(source, pos, env);
-    result = thenResult.value;
-    pos = skipWhitespace(source, thenResult.pos);
-
-    // Skip ';' if present
-    if (source.charCodeAt(pos) === 59) {
-      pos = pos + 1;
-    }
-    pos = skipWhitespace(source, pos);
-
-    // Check for 'else' keyword and skip it
-    const elsePos = skipKeyword(source, pos, 'else');
-    if (elsePos !== null) {
-      pos = skipWhitespace(source, elsePos);
-      // Skip the else branch without executing it
-      pos = skipStatement(source, pos);
-      // Skip ';' if present
-      if (source.charCodeAt(pos) === 59) {
-        pos = pos + 1;
-      }
-    }
-  } else {
-    // Skip then branch without executing it
-    pos = skipStatement(source, pos);
-
-    // Skip ';' if present
-    if (source.charCodeAt(pos) === 59) {
-      pos = pos + 1;
-    }
-    pos = skipWhitespace(source, pos);
-
-    // Check for 'else' keyword
-    const elsePos = skipKeyword(source, pos, 'else');
-    if (elsePos !== null) {
-      pos = skipWhitespace(source, elsePos);
-      // Execute else branch
-      const elseResult = parseStatement(source, pos, env);
-      result = elseResult.value;
-      pos = skipWhitespace(source, elseResult.pos);
-
-      // Skip ';' if present
-      if (source.charCodeAt(pos) === 59) {
-        pos = pos + 1;
-      }
-    }
-  }
-
-  pos = skipWhitespace(source, pos);
+  const ifResult = parseIfConditional(source, pos, env, parseStatement);
 
   // Check if there's more to parse (not at '}' or end)
+  pos = ifResult.pos;
   if (pos < source.length && source.charCodeAt(pos) !== 125) {
     // charCode 125 is '}'
     const restResult = parseStatement(source, pos, env);
     return { value: restResult.value, pos: restResult.pos };
   } else {
-    return { value: result, pos };
+    return ifResult;
   }
 }
 
@@ -485,16 +507,10 @@ function parseStatement(
 ): { value: number; pos: number } {
   pos = skipWhitespace(source, pos);
 
-  // Check for 'let' keyword
-  const letPos = skipKeyword(source, pos, 'let');
-  if (letPos !== null) {
-    return parseLetBinding(source, letPos, env);
-  }
-
-  // Check for 'if' keyword
-  const ifPos = skipKeyword(source, pos, 'if');
-  if (ifPos !== null) {
-    return parseIfStatement(source, ifPos, env);
+  // Check for control flow keywords (let, if)
+  const keywordResult = checkKeywordControlFlow(source, pos, env, parseIfStatement);
+  if (keywordResult !== null) {
+    return keywordResult;
   }
 
   // Try to parse assignment or expression
@@ -580,13 +596,7 @@ function parseAssignmentOrExpression(
         const rhsResult = parseLogicalOr(source, assignPos, env);
         const newValue = rhsResult.value;
         let exprPos = skipWhitespace(source, rhsResult.pos);
-
-        // Skip ';'
-        if (source.charCodeAt(exprPos) === 59) {
-          // ';'
-          exprPos = exprPos + 1;
-        }
-        exprPos = skipWhitespace(source, exprPos);
+        exprPos = skipSemicolonAndWhitespace(source, exprPos);
 
         // Mutate the mutable variable in place
         env[varName]!.value = newValue;
