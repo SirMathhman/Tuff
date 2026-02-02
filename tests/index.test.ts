@@ -16,4 +16,8 @@ describe("The interpreter can interpret", () => {
   test("a numeric literal", () => {
     expectValid("100", 100);
   });
+
+  test("a typed numeric literal", () => {
+    expectValid("100U8", 100);
+  });
 });
