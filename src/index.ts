@@ -52,26 +52,39 @@ function parseLetStatement(line: string): {
   const colonIndex = afterLet.indexOf(":");
   const equalIndex = afterLet.indexOf("=");
 
-  if (equalIndex === -1) {
-    return null;
-  }
-
   let varName = "";
   let declaredType: string | null = null;
   let valueExpr = "";
 
-  if (colonIndex !== -1 && colonIndex < equalIndex) {
+  if (colonIndex !== -1) {
+    // Has type annotation
     varName = afterLet.substring(0, colonIndex).trim();
     const afterColon = afterLet.substring(colonIndex + 1);
-    const eqIdx = afterColon.indexOf("=");
-    declaredType = afterColon.substring(0, eqIdx).trim();
-    valueExpr = afterColon.substring(eqIdx + 1).trim();
+    
+    if (equalIndex === -1) {
+      // No initialization: let x : I32;
+      declaredType = afterColon.trim();
+      valueExpr = "";
+    } else {
+      // Has initialization: let x : I32 = ...
+      const eqIdx = afterColon.indexOf("=");
+      declaredType = afterColon.substring(0, eqIdx).trim();
+      valueExpr = afterColon.substring(eqIdx + 1).trim();
+    }
   } else {
+    // No type annotation
+    if (equalIndex === -1) {
+      return null;
+    }
     varName = afterLet.substring(0, equalIndex).trim();
     valueExpr = afterLet.substring(equalIndex + 1).trim();
   }
 
-  if (varName.length === 0 || valueExpr.length === 0) {
+  if (varName.length === 0) {
+    return null;
+  }
+  
+  if (!declaredType && valueExpr.length === 0) {
     return null;
   }
 
@@ -266,10 +279,16 @@ function collectVariableInfo(source: string): {
   const varMutability: { [key: string]: boolean } = {};
 
   forEachLetStatement(source, (parsed) => {
-    const exprType = resolveExpressionType(parsed.valueExpr, varTypes);
+    let varType: string | null = null;
+    
+    if (parsed.declaredType) {
+      varType = parsed.declaredType;
+    } else if (parsed.valueExpr.length > 0) {
+      varType = resolveExpressionType(parsed.valueExpr, varTypes);
+    }
 
-    if (exprType) {
-      varTypes[parsed.varName] = exprType;
+    if (varType) {
+      varTypes[parsed.varName] = varType;
       varMutability[parsed.varName] = parsed.isMutable;
     }
   });
@@ -304,8 +323,21 @@ function forEachReassignment(
   forEachStatement(source, parseReassignmentStatement, callback);
 }
 
+function collectUninitializedVariables(source: string): Set<string> {
+  const uninitialized = new Set<string>();
+
+  forEachLetStatement(source, (parsed) => {
+    if (parsed.valueExpr.length === 0) {
+      uninitialized.add(parsed.varName);
+    }
+  });
+
+  return uninitialized;
+}
+
 function validateReassignments(source: string): void {
   const { varTypes, varMutability } = collectVariableInfo(source);
+  const uninitializedVars = collectUninitializedVariables(source);
 
   forEachReassignment(source, (reassignment) => {
     const varName = reassignment.varName;
@@ -315,8 +347,8 @@ function validateReassignments(source: string): void {
       throw new Error("Cannot reassign undeclared variable: " + varName);
     }
 
-    // Check if variable is mutable
-    if (!varMutability[varName]) {
+    // Check if variable is mutable (or uninitialized)
+    if (!varMutability[varName] && !uninitializedVars.has(varName)) {
       throw new Error("Cannot reassign immutable variable: " + varName);
     }
   });
@@ -391,9 +423,14 @@ function compileVariableBlock(
   varDeclarations.forEach((decl) => {
     const parsed = parseVariableDeclaration(decl);
     if (parsed) {
-      const compiledValue = compileExpression(parsed.valueExpr, argCount);
-      compiledBlock =
-        compiledBlock + "let " + parsed.varName + " = " + compiledValue + "; ";
+      if (parsed.valueExpr.length === 0) {
+        // Uninitialized variable: just declare it
+        compiledBlock = compiledBlock + "let " + parsed.varName + "; ";
+      } else {
+        const compiledValue = compileExpression(parsed.valueExpr, argCount);
+        compiledBlock =
+          compiledBlock + "let " + parsed.varName + " = " + compiledValue + "; ";
+      }
     }
   });
 
@@ -432,6 +469,43 @@ function splitTopLevelStatements(source: string): string[] {
   return result;
 }
 
+function compileTopLevelStatement(
+  stmt: string,
+  argCount: { value: number },
+): string {
+  const letParsed = parseVariableDeclaration(stmt);
+  if (letParsed) {
+    if (letParsed.valueExpr.length === 0) {
+      // Uninitialized variable: just declare it
+      return "let " + letParsed.varName + "; ";
+    } else {
+      const hasParens =
+        letParsed.valueExpr.includes("(") || letParsed.valueExpr.includes("{");
+      const processedValue = hasParens
+        ? handleParentheses(letParsed.valueExpr, argCount)
+        : letParsed.valueExpr;
+      const compiledValue = compileExpression(processedValue, argCount);
+      return (
+        "let " + letParsed.varName + " = " + compiledValue + "; "
+      );
+    }
+  }
+
+  const reassignParsed = parseReassignmentStatement(stmt);
+  if (reassignParsed) {
+    const hasParens =
+      reassignParsed.valueExpr.includes("(") ||
+      reassignParsed.valueExpr.includes("{");
+    const processedValue = hasParens
+      ? handleParentheses(reassignParsed.valueExpr, argCount)
+      : reassignParsed.valueExpr;
+    const compiledValue = compileExpression(processedValue, argCount);
+    return reassignParsed.varName + " = " + compiledValue + "; ";
+  }
+
+  return "";
+}
+
 function compileTopLevelVariableBlock(
   source: string,
   argCount: { value: number },
@@ -453,35 +527,7 @@ function compileTopLevelVariableBlock(
   let compiledBlock = "(() => { ";
 
   statements.forEach((stmt) => {
-    const letParsed = parseVariableDeclaration(stmt);
-    if (letParsed) {
-      const hasParens =
-        letParsed.valueExpr.includes("(") || letParsed.valueExpr.includes("{");
-      const processedValue = hasParens
-        ? handleParentheses(letParsed.valueExpr, argCount)
-        : letParsed.valueExpr;
-      const compiledValue = compileExpression(processedValue, argCount);
-      compiledBlock =
-        compiledBlock +
-        "let " +
-        letParsed.varName +
-        " = " +
-        compiledValue +
-        "; ";
-    } else {
-      const reassignParsed = parseReassignmentStatement(stmt);
-      if (reassignParsed) {
-        const hasParens =
-          reassignParsed.valueExpr.includes("(") ||
-          reassignParsed.valueExpr.includes("{");
-        const processedValue = hasParens
-          ? handleParentheses(reassignParsed.valueExpr, argCount)
-          : reassignParsed.valueExpr;
-        const compiledValue = compileExpression(processedValue, argCount);
-        compiledBlock =
-          compiledBlock + reassignParsed.varName + " = " + compiledValue + "; ";
-      }
-    }
+    compiledBlock = compiledBlock + compileTopLevelStatement(stmt, argCount);
   });
 
   compiledBlock = compiledBlock + "return " + finalPart + "; })()";

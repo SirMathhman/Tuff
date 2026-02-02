@@ -135,4 +135,8 @@ describe("The compiler", () => {
   it("rejects reassignment to different type", () => {
     invalidate("let x = 0; x = read I32; x");
   });
+
+  it("supports variable declaration with type annotation and no initial value", () => {
+    validate("let x : I32; x = read I32; x", 100, "100");
+  });
 });
