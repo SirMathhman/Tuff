@@ -501,6 +501,36 @@ function parseMatch(source: string, pos: number, env: Env): ParserResult {
   }
   pos = bracePos;
 
+  // Get the struct type of the match value if it's a struct instance
+  let matchedStructType: string | undefined;
+  const parenExpr = source.substring(
+    source.lastIndexOf("(", parenResult.pos),
+    parenResult.pos,
+  );
+  
+  // Extract variable name from matched string (skip opening paren)
+  let matchVarName = "";
+  for (let i = 1; i < parenExpr.length; i++) {
+    const code = parenExpr.charCodeAt(i);
+    if (
+      (code >= 97 && code <= 122) || // a-z
+      (code >= 65 && code <= 90) || // A-Z
+      (code >= 48 && code <= 57) || // 0-9
+      code === 95 // _
+    ) {
+      matchVarName += parenExpr.charAt(i);
+    } else {
+      break;
+    }
+  }
+  
+  if (matchVarName && matchVarName in env) {
+    const entry = env[matchVarName];
+    if (entry && entry.type === "structInstance") {
+      matchedStructType = (entry as StructInstance).structName;
+    }
+  }
+
   // Parse cases until closing brace
   let result = 0;
   let foundMatch = false;
@@ -515,8 +545,9 @@ function parseMatch(source: string, pos: number, env: Env): ParserResult {
     }
     pos = skipWhitespace(source, casePos);
 
-    // Parse pattern (either numeric literal or wildcard _)
+    // Parse pattern (numeric literal, wildcard, or struct variant name)
     let patternMatches = false;
+    let patternName: string | null = null;
 
     // Check for wildcard pattern '_'
     if (source.charCodeAt(pos) === 95) {
@@ -524,11 +555,23 @@ function parseMatch(source: string, pos: number, env: Env): ParserResult {
       patternMatches = !foundMatch; // Only matches if nothing else has matched yet
       pos = pos + 1;
     } else {
-      // Try to parse numeric literal pattern
+      // Try to parse numeric literal pattern first
       const patternLit = parseNumericLiteral(source, pos);
       if (patternLit) {
         patternMatches = !foundMatch && patternLit.value === matchValue;
         pos = patternLit.end;
+      } else {
+        // Try to parse identifier pattern (struct variant name)
+        const patternId = parseIdentifier(source, pos);
+        if (patternId) {
+          patternName = patternId.name;
+          pos = patternId.end;
+
+          // It's a struct variant pattern - match against the struct type
+          if (matchedStructType) {
+            patternMatches = !foundMatch && patternName === matchedStructType;
+          }
+        }
       }
     }
 
