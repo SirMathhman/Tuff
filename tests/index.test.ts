@@ -399,7 +399,7 @@ describe("The interpreter can interpret operators", () => {
   });
 });
 
-describe("Boolean and Comparison Semantics", () => {
+function defineBooleanAndNegationTests(): void {
   describe("Boolean literals and negation", () => {
     test("boolean literal false", () => {
       expectValid("let x = false; x", 0);
@@ -517,7 +517,9 @@ describe("Boolean and Comparison Semantics", () => {
       expectValid("(5 < 3) || (2 > 4)", 0);
     });
   });
+}
 
+function defineComparisonTests(): void {
   describe("Comparison operators", () => {
     test("equality same numbers", () => {
       expectValid("0 == 0", 1);
@@ -601,7 +603,9 @@ describe("Boolean and Comparison Semantics", () => {
       expectValid("let mut x = true; x = false; x", 0);
     });
   });
+}
 
+function defineTypeAndErrorTests(): void {
   describe("Type interactions", () => {
     test("typed literal equality", () => {
       expectValid("100U8 == 100I32", 1);
@@ -687,6 +691,16 @@ describe("Boolean and Comparison Semantics", () => {
       expectValid("let x = 5; if (x > 10) 1 else if (x > 3) 2 else 3", 2);
     });
   });
+}
+
+function defineComparisonAndComplexTests(): void {
+  defineComparisonTests();
+  defineTypeAndErrorTests();
+}
+
+describe("Boolean and Comparison Semantics", () => {
+  defineBooleanAndNegationTests();
+  defineComparisonAndComplexTests();
 });
 
 describe("Numerical Literal Semantics: Number Bases", () => {
@@ -893,7 +907,7 @@ describe("Numerical Literal Semantics: Type Coercion", () => {
   });
 });
 
-describe("Let and Mut Semantics", () => {
+function defineImmutabilityTests(): void {
   describe("Immutability enforcement", () => {
     test("mutable variable can be reassigned", () => {
       expectValid("let mut x = 0; x = 42; x", 42);
@@ -915,7 +929,9 @@ describe("Let and Mut Semantics", () => {
       expectInvalid("let x = 10; x -= 5; x");
     });
   });
+}
 
+function defineScopingTests(): void {
   describe("Scoping and no-shadowing", () => {
     test("variable scoped to block is not accessible outside", () => {
       expectInvalid("{ let x = 5; } x");
@@ -949,7 +965,9 @@ describe("Let and Mut Semantics", () => {
       expectInvalid("let x = 1; { let x = 2; x }");
     });
   });
+}
 
+function defineTypeInteractionTests(): void {
   describe("Type interactions with let/mut", () => {
     test("let with explicit type annotation", () => {
       expectValid("let x : I32 = 100; x", 100);
@@ -983,7 +1001,9 @@ describe("Let and Mut Semantics", () => {
       expectValid("let x = 10 + 20; x", 30);
     });
   });
+}
 
+function defineControlFlowLetTests(): void {
   describe("Let/mut in control flow", () => {
     test("let binding in if expression", () => {
       expectValid("let x = if (true) 42 else 0; x", 42);
@@ -1009,7 +1029,9 @@ describe("Let and Mut Semantics", () => {
       expectValid("let mut x = 0; while (x < 5) x += 1; x", 5);
     });
   });
+}
 
+function defineEdgeCaseTests(): void {
   describe("Let/mut edge cases", () => {
     test("let binding uses value at binding time", () => {
       expectValid("let x = 10; let y = x; x", 10);
@@ -1035,6 +1057,14 @@ describe("Let and Mut Semantics", () => {
       expectValid("let mut x = 42; x = 42; x", 42);
     });
   });
+}
+
+describe("Let and Mut Semantics", () => {
+  defineImmutabilityTests();
+  defineScopingTests();
+  defineTypeInteractionTests();
+  defineControlFlowLetTests();
+  defineEdgeCaseTests();
 });
 
 describe("Numerical Literal Semantics: Edge Cases & Boundaries", () => {
@@ -1107,7 +1137,7 @@ describe("Numerical Literal Semantics: Edge Cases & Boundaries", () => {
   });
 });
 
-describe("Block Expressions Semantics", () => {
+function defineBasicBlockTests(): void {
   describe("Basic block values", () => {
     test("single expression block", () => {
       expectValid("{ 42 }", 42);
@@ -1133,7 +1163,9 @@ describe("Block Expressions Semantics", () => {
       expectValid("{ 2 + 3 }", 5);
     });
   });
+}
 
+function defineBlockArithmeticTests(): void {
   describe("Blocks in arithmetic", () => {
     test("block as left operand", () => {
       expectValid("{ 2 } + 3", 5);
@@ -1159,7 +1191,9 @@ describe("Block Expressions Semantics", () => {
       expectValid("{ 12 } / { 2 } * { 5 }", 30);
     });
   });
+}
 
+function defineBlockBindingTests(): void {
   describe("Blocks with variable bindings", () => {
     test("block with let binding", () => {
       expectValid("{ let x = 10; x }", 10);
@@ -1181,7 +1215,9 @@ describe("Block Expressions Semantics", () => {
       expectInvalid("let x = 100; { let x = 5; x }");
     });
   });
+}
 
+function defineBlockNestingTests(): void {
   describe("Nested blocks", () => {
     test("two level nesting", () => {
       expectValid("{ { 42 } }", 42);
@@ -1203,7 +1239,9 @@ describe("Block Expressions Semantics", () => {
       expectInvalid("let x = 100; { let x = 5; { let x = 2; x } }");
     });
   });
+}
 
+function defineBlockComparisonTests(): void {
   describe("Blocks with comparisons and booleans", () => {
     test("block with comparison", () => {
       expectValid("{ 5 > 3 }", 1);
@@ -1221,7 +1259,9 @@ describe("Block Expressions Semantics", () => {
       expectValid("{ if (true) 10 else 20 }", 10);
     });
   });
+}
 
+function defineBlockControlFlowTests(): void {
   describe("Blocks with control flow", () => {
     test("block with while loop", () => {
       expectValid("{ let mut x = 0; while (x < 5) x += 1; x }", 5);
@@ -1232,18 +1272,26 @@ describe("Block Expressions Semantics", () => {
     });
 
     test("block with break in loop", () => {
-      expectValid("{ let mut x = 0; while (true) { x += 1; if (x == 3) break; } x }", 3);
+      expectValid(
+        "{ let mut x = 0; while (true) { x += 1; if (x == 3) break; } x }",
+        3,
+      );
     });
 
     test("block with continue in loop", () => {
-      expectValid("{ let mut x = 0; let mut count = 0; while (count < 3) { count += 1; if (count == 2) continue; x += count; } x }", 6);
+      expectValid(
+        "{ let mut x = 0; let mut count = 0; while (count < 3) { count += 1; if (count == 2) continue; x += count; } x }",
+        6,
+      );
     });
 
     test("block with if-else statements", () => {
       expectValid("{ let x = 5; if (x > 3) { 100 } else { 200 } }", 100);
     });
   });
+}
 
+function defineBlockYieldTests(): void {
   describe("Blocks with yield and return", () => {
     test("block with yield returns early value", () => {
       expectValid("{ yield 42; 100 }", 0);
@@ -1257,7 +1305,9 @@ describe("Block Expressions Semantics", () => {
       expectValid("{ { yield 42; } 100 }", 0);
     });
   });
+}
 
+function defineBlockPrecedenceTests(): void {
   describe("Blocks and operator precedence", () => {
     test("block respects addition before multiplication", () => {
       expectValid("2 * { 3 + 4 }", 14);
@@ -1271,7 +1321,9 @@ describe("Block Expressions Semantics", () => {
       expectValid("{ 2 } + { 3 } * { 4 }", 14);
     });
   });
+}
 
+function defineBlockScopingTests(): void {
   describe("Variable scoping in blocks", () => {
     test("variable defined in block inaccessible outside", () => {
       expectInvalid("{ let x = 5; } x");
@@ -1289,7 +1341,9 @@ describe("Block Expressions Semantics", () => {
       expectValid("let mut x = 0; { x = 5; } { x + 3 }", 8);
     });
   });
+}
 
+function defineBlockTypeTests(): void {
   describe("Type interactions with blocks", () => {
     test("typed block binding", () => {
       expectValid("{ let x : I32 = 5; x }", 5);
@@ -1299,7 +1353,9 @@ describe("Block Expressions Semantics", () => {
       expectValid("{ let x : U8 = 10; let y : U8 = 5; x + y }", 15);
     });
   });
+}
 
+function defineBlockInvalidTests(): void {
   describe("Invalid block cases", () => {
     test("accessing undefined variable in block", () => {
       expectInvalid("{ x }");
@@ -1333,4 +1389,453 @@ describe("Block Expressions Semantics", () => {
       expectInvalid("{ x == y }");
     });
   });
+}
+
+describe("Block Expressions Semantics", () => {
+  defineBasicBlockTests();
+  defineBlockArithmeticTests();
+  defineBlockBindingTests();
+  defineBlockNestingTests();
+  defineBlockComparisonTests();
+  defineBlockControlFlowTests();
+  defineBlockYieldTests();
+  defineBlockPrecedenceTests();
+  defineBlockScopingTests();
+  defineBlockTypeTests();
+  defineBlockInvalidTests();
+});
+function defineConditionTests(): void {
+  describe("Condition evaluation with literals and values", () => {
+    test("condition false evaluates to 0", () => {
+      expectValid("if (false) 1 else 2", 2);
+    });
+
+    test("condition true evaluates to 1 path", () => {
+      expectValid("if (true) 1 else 2", 1);
+    });
+
+    test("numeric zero is falsy", () => {
+      expectValid("if (0) 10 else 20", 20);
+    });
+
+    test("numeric one is truthy", () => {
+      expectValid("if (1) 10 else 20", 10);
+    });
+
+    test("numeric positive non-one is truthy", () => {
+      expectValid("if (5) 10 else 20", 10);
+    });
+
+    test("numeric negative is truthy", () => {
+      expectValid("if (-1) 10 else 20", 10);
+    });
+
+    test("large positive number is truthy", () => {
+      expectValid("if (999) 10 else 20", 10);
+    });
+
+    test("large negative number is truthy", () => {
+      expectValid("if (-999) 10 else 20", 10);
+    });
+  });
+
+  describe("Comparisons as conditions", () => {
+    test("less-than comparison in condition", () => {
+      expectValid("if (3 < 5) 1 else 0", 1);
+    });
+
+    test("less-than false comparison", () => {
+      expectValid("if (5 < 3) 1 else 0", 0);
+    });
+
+    test("greater-than comparison true", () => {
+      expectValid("if (5 > 3) 1 else 0", 1);
+    });
+
+    test("greater-than comparison false", () => {
+      expectValid("if (3 > 5) 1 else 0", 0);
+    });
+
+    test("equality true comparison", () => {
+      expectValid("if (5 == 5) 1 else 0", 1);
+    });
+
+    test("equality false comparison", () => {
+      expectValid("if (5 == 3) 1 else 0", 0);
+    });
+
+    test("inequality true comparison", () => {
+      expectValid("if (5 != 3) 1 else 0", 1);
+    });
+
+    test("inequality false comparison", () => {
+      expectValid("if (5 != 5) 1 else 0", 0);
+    });
+
+    test("less-than-or-equal boundary", () => {
+      expectValid("if (5 <= 5) 1 else 0", 1);
+    });
+
+    test("greater-than-or-equal boundary", () => {
+      expectValid("if (5 >= 5) 1 else 0", 1);
+    });
+  });
+
+  describe("Boolean operators in conditions", () => {
+    test("AND both true", () => {
+      expectValid("if (true && true) 1 else 0", 1);
+    });
+
+    test("AND one false", () => {
+      expectValid("if (true && false) 1 else 0", 0);
+    });
+
+    test("OR both true", () => {
+      expectValid("if (true || false) 1 else 0", 1);
+    });
+
+    test("OR both false", () => {
+      expectValid("if (false || false) 1 else 0", 0);
+    });
+
+    test("NOT true", () => {
+      expectValid("if (!false) 1 else 0", 1);
+    });
+
+    test("NOT false", () => {
+      expectValid("if (!true) 1 else 0", 0);
+    });
+
+    test("double negation", () => {
+      expectValid("if (!!true) 1 else 0", 1);
+    });
+
+    test("complex boolean expression", () => {
+      expectValid("if ((true && true) || false) 1 else 0", 1);
+    });
+  });
+}
+
+function defineVariableAndExpressionTests(): void {
+  describe("Variables in conditions", () => {
+    test("variable holding true", () => {
+      expectValid("let x = 1; if (x) 10 else 20", 10);
+    });
+
+    test("variable holding false", () => {
+      expectValid("let x = 0; if (x) 10 else 20", 20);
+    });
+
+    test("variable in comparison", () => {
+      expectValid("let x = 5; if (x > 3) 1 else 0", 1);
+    });
+
+    test("multiple variables in condition", () => {
+      expectValid("let x = 5; let y = 3; if (x > y) 1 else 0", 1);
+    });
+
+    test("mutable variable in condition", () => {
+      expectValid("let mut x = 1; x = 0; if (x) 10 else 20", 20);
+    });
+  });
+
+  describe("If/Else as expression", () => {
+    test("if-else returns numeric value", () => {
+      expectValid("let x = if (true) 42 else 0; x", 42);
+    });
+
+    test("if-else in assignment from else branch", () => {
+      expectValid("let x = if (false) 10 else 20; x", 20);
+    });
+
+    test("if-else result in arithmetic", () => {
+      expectValid("let x = if (true) 10 else 20; x + 5", 15);
+    });
+
+    test("if-else result in arithmetic else branch", () => {
+      expectValid("let x = if (false) 10 else 20; x + 5", 25);
+    });
+
+    test("if-else in comparison", () => {
+      expectValid("let x = if (true) 10 else 5; if (x > 7) 1 else 0", 1);
+    });
+
+    test("nested if-else expressions", () => {
+      expectValid("if (true) { if (false) 1 else 2 } else 3", 2);
+    });
+  });
+
+  describe("If/Else as statement", () => {
+    test("if statement without else", () => {
+      expectValid("let mut x = 0; if (true) x = 10; x", 10);
+    });
+
+    test("if statement without else does not execute", () => {
+      expectValid("let mut x = 0; if (false) x = 10; x", 0);
+    });
+
+    test("if statement with single expression", () => {
+      expectValid("let mut x = 5; if (true) x = 10; x", 10);
+    });
+
+    test("if statement with block body", () => {
+      expectValid("let mut x = 0; if (true) { x = 10; } x", 10);
+    });
+
+    test("if-else statement", () => {
+      expectValid("let mut x = 0; if (false) x = 10; else x = 20; x", 20);
+    });
+
+    test("if-else with both block bodies", () => {
+      expectValid(
+        "let mut x = 0; if (false) { x = 10; } else { x = 20; } x",
+        20,
+      );
+    });
+
+    test("if-else mixed block and non-block", () => {
+      expectValid("let mut x = 0; if (true) { x = 1; } else x = 2; x", 1);
+    });
+
+    test("if-else-if chain three branches", () => {
+      expectValid(
+        "let mut x = 0; if (false) x = 1; else if (true) x = 2; else x = 3; x",
+        2,
+      );
+    });
+
+    test("if-else-if-else chain four branches", () => {
+      expectValid(
+        "let mut x = 0; if (false) x = 1; else if (false) x = 2; else if (true) x = 3; else x = 4; x",
+        3,
+      );
+    });
+  });
+}
+
+function defineControlFlowAndScopingTests(): void {
+  describe("Control flow in if/else branches", () => {
+    test("if with loop in branch", () => {
+      expectValid(
+        "let mut sum = 0; if (true) { for (i in 0..3) sum += i; } sum",
+        3,
+      );
+    });
+
+    test("if-else with loop in then branch", () => {
+      expectValid(
+        "let mut sum = 0; if (true) { for (i in 0..3) sum += i; } else { sum = 100; } sum",
+        3,
+      );
+    });
+
+    test("if-else with loop in else branch", () => {
+      expectValid(
+        "let mut sum = 0; if (false) { sum = 100; } else { for (i in 0..3) sum += i; } sum",
+        3,
+      );
+    });
+
+    test("if inside while loop", () => {
+      expectValid(
+        "let mut x = 0; let mut count = 0; while (count < 3) { if (count == 1) { x = 10; } else { x = x; } count = count + 1; } x",
+        10,
+      );
+    });
+
+    test("break in if branch", () => {
+      expectValid(
+        "let mut x = 0; let mut done = 0; while (done == 0) { if (x == 2) { done = 1; } else { x = x + 1; } } x",
+        1,
+      );
+    });
+
+    test("continue in if branch", () => {
+      expectValid(
+        "let mut x = 0; let mut count = 0; while (count < 3) { count = count + 1; if (count == 2) { x = 0; } else { x = x + count; } } x",
+        3,
+      );
+    });
+
+    test("nested if in loop", () => {
+      expectValid("let mut x = 0; for (i in 0..3) { if (i > 0) x += i; } x", 3);
+    });
+  });
+
+  describe("Scoping in if/else branches", () => {
+    test("variable in if branch inaccessible outside", () => {
+      expectInvalid("if (true) { let x = 5; } x");
+    });
+
+    test("variable in else branch inaccessible outside", () => {
+      expectInvalid("if (false) { let x = 5; } else { let y = 10; } y");
+    });
+
+    test("outer variable accessible in if branch", () => {
+      expectValid("let x = 5; if (true) { x } else 0", 5);
+    });
+
+    test("outer variable accessible in else branch", () => {
+      expectValid("let x = 5; if (false) 0 else { x }", 5);
+    });
+
+    test("mutable outer variable modified in if", () => {
+      expectValid("let mut x = 5; if (true) { x = 10; } x", 10);
+    });
+
+    test("mutable outer variable modified in else", () => {
+      expectValid(
+        "let mut x = 5; if (false) { x = 10; } else { x = 20; } x",
+        20,
+      );
+    });
+
+    test("variable shadowing in if branch", () => {
+      expectInvalid("let x = 5; if (true) { let x = 10; }");
+    });
+
+    test("variable shadowing in else branch", () => {
+      expectInvalid(
+        "let x = 5; if (false) { let y = 1; } else { let x = 10; }",
+      );
+    });
+
+    test("separate branches have independent bindings", () => {
+      expectValid("if (true) { let x = 5; 5 } else { let x = 10; 10 }", 5);
+    });
+
+    test("each if-else-if branch has independent scope", () => {
+      expectValid(
+        "if (false) { let a = 1; 1 } else if (true) { let a = 2; 2 } else { let a = 3; 3 }",
+        2,
+      );
+    });
+  });
+}
+
+function defineArithmeticAndTypeTests(): void {
+  describe("Arithmetic in if/else", () => {
+    test("compound assignment in if", () => {
+      expectValid("let mut x = 10; if (true) x += 5; x", 15);
+    });
+
+    test("multiple operations in if branch", () => {
+      expectValid("let mut x = 0; if (true) { x = 5; x = x + 3; } x", 8);
+    });
+
+    test("arithmetic in condition", () => {
+      expectValid("if (2 + 3 == 5) 1 else 0", 1);
+    });
+
+    test("arithmetic in then value", () => {
+      expectValid("if (true) 2 + 3 else 10", 5);
+    });
+
+    test("arithmetic in else value", () => {
+      expectValid("if (false) 10 else 2 + 3", 5);
+    });
+  });
+
+  describe("Type interactions with if/else", () => {
+    test("if-else with typed literals", () => {
+      expectValid("if (true) 42U8 else 0U8", 42);
+    });
+
+    test("if-else result in typed variable", () => {
+      expectValid("let x : I32 = if (true) 10 else 20; x", 10);
+    });
+
+    test("comparison with typed literals", () => {
+      expectValid("if (10U8 > 5U8) 1 else 0", 1);
+    });
+
+    test("if-else in arithmetic with typed values", () => {
+      expectValid("let x : I32 = 5; let y = if (x > 0) 10 else 20; y + x", 15);
+    });
+  });
+}
+
+function defineNestingAndErrorTests(): void {
+  describe("Nested if/else expressions", () => {
+    test("three-way branching through else-if", () => {
+      expectValid("let x = 2; if (x == 1) 10 else if (x == 2) 20 else 30", 20);
+    });
+
+    test("four-way branching through else-if-else", () => {
+      expectValid(
+        "let x = 3; if (x == 1) 10 else if (x == 2) 20 else if (x == 3) 30 else 40",
+        30,
+      );
+    });
+
+    test("nested if in then branch", () => {
+      expectValid("if (true) { if (true) 5 else 10 } else 20", 5);
+    });
+
+    test("nested if in else branch", () => {
+      expectValid("if (false) 10 else if (false) 15 else 20", 20);
+    });
+
+    test("deeply nested if-else", () => {
+      expectValid(
+        "if (true) { if (false) 1 else { if (true) 2 else 3 } } else 4",
+        2,
+      );
+    });
+
+    test("multiple nested if-else in loop", () => {
+      expectValid(
+        "let mut x = 0; let mut i = 0; while (i < 3) { if (i == 0) { x = 10; } else { if (i == 1) { x = 20; } else { x = 30; } } i = i + 1; } x",
+        10,
+      );
+    });
+  });
+
+  describe("If/Else with blocks", () => {
+    test("if-else wrapping block expressions", () => {
+      expectValid("if (true) { let x = 5; x + 3 } else { let y = 10; y }", 8);
+    });
+
+    test("if-else evaluating block expressions", () => {
+      expectValid("if (false) { 10 } else { 20 }", 20);
+    });
+
+    test("block with if-else inside", () => {
+      expectValid("{ if (true) 42 else 0 }", 42);
+    });
+
+    test("if in block with multiple statements", () => {
+      expectValid("{ let x = 5; if (x > 0) 10 else 20 }", 10);
+    });
+  });
+
+  describe("Invalid if/else cases", () => {
+    test("undefined variable in condition", () => {
+      expectInvalid("if (x) 1 else 0");
+    });
+
+    test("undefined variable in if branch", () => {
+      expectInvalid("if (true) x else 0");
+    });
+
+    test("undefined variable in else branch", () => {
+      expectInvalid("if (false) 0 else x");
+    });
+
+    test("reassigning immutable in if", () => {
+      expectInvalid("let x = 5; if (true) x = 10;");
+    });
+
+    test("reassigning immutable in else", () => {
+      expectInvalid("let x = 5; if (false) { x = 1; } else { x = 10; }");
+    });
+  });
+}
+
+describe("If/Else Semantics", () => {
+  defineConditionTests();
+  defineVariableAndExpressionTests();
+  defineControlFlowAndScopingTests();
+  defineArithmeticAndTypeTests();
+  defineNestingAndErrorTests();
 });

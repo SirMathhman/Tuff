@@ -447,13 +447,10 @@ function restoreAllowShadowing(
   }
 }
 
-function checkVariableDefined(
-  env: Env,
-  varName: string,
-): EnvEntry {
+function checkVariableDefined(env: Env, varName: string): EnvEntry {
   const entry = varName in env ? env[varName] : null;
   if (!entry) {
-    throw new Error(`Undefined variable: ${varName}`);
+    throw new Error('Undefined variable: ' + varName);
   }
   return entry;
 }
@@ -1761,30 +1758,26 @@ function tryParseInlineFunction(
   return { value: -1, pos: bodyEndPos, fnRefKey };
 }
 
-function parseFunctionCall(
+function parseArguments(
   source: string,
   afterParenPos: number,
   env: Env,
-  fnEntry: FunctionDef,
-  thisValue: number | null = null,
-): { value: number; pos: number } {
+): { args: number[]; argFnRefs: (string | null)[]; pos: number } {
   let argPos = skipWhitespace(source, afterParenPos + 1);
   const args: number[] = [];
-  const argFnRefs: (string | null)[] = []; // Track function references for each argument
+  const argFnRefs: (string | null)[] = [];
   let iterations = 0;
 
   while (source.charCodeAt(argPos) !== 41 && iterations < MAX_LOOP_ITERATIONS) {
-    // Try to parse inline function first
     const inlineResult = tryParseInlineFunction(source, argPos, env);
     if (inlineResult) {
       args.push(inlineResult.value);
       argFnRefs.push(inlineResult.fnRefKey);
       argPos = skipWhitespace(source, inlineResult.pos);
     } else {
-      // Parse regular argument
       const argResult = parseLogicalOr(source, argPos, env);
       args.push(argResult.value);
-      argFnRefs.push(null); // No function reference
+      argFnRefs.push(null);
       argPos = skipWhitespace(source, argResult.pos);
     }
 
@@ -1795,16 +1788,18 @@ function parseFunctionCall(
   }
 
   argPos = skipWhitespace(source, argPos + 1);
+  return { args, argFnRefs, pos: argPos };
+}
 
-  const callEnv: Env = env;
+function bindFunctionParameters(
+  callEnv: Env,
+  fnEntry: FunctionDef,
+  args: number[],
+  argFnRefs: (string | null)[],
+  thisValue: number | null,
+): Record<string, EnvEntry | undefined> {
   const previousBindings: Record<string, EnvEntry | undefined> = {};
-  const previousLastFunctionRef = (callEnv as any).__lastFunctionRef;
-  const previousAllowShadowing = (callEnv as any).__allowShadowing;
-  delete (callEnv as any).__lastFunctionRef;
-  // Set flag to allow shadowing in function local scope
-  (callEnv as any).__allowShadowing = true;
 
-  // Bind 'this' parameter if provided
   if (
     thisValue !== null &&
     fnEntry.params.length > 0 &&
@@ -1818,7 +1813,6 @@ function parseFunctionCall(
     };
   }
 
-  // Bind other parameters
   const argStartIndex =
     thisValue !== null && fnEntry.params[0] === "this" ? 1 : 0;
   for (
@@ -1832,14 +1826,12 @@ function parseFunctionCall(
     if (paramName !== undefined) {
       const argIndex = i - argStartIndex;
       previousBindings[paramName] = callEnv[paramName];
-      // If argument is a function reference, bind it as FunctionRef
       if (argFnRefs[argIndex]) {
         callEnv[paramName] = {
           type: "functionRef",
           functionName: argFnRefs[argIndex]!,
         };
       } else {
-        // Regular argument - bind as variable
         callEnv[paramName] = {
           type: "variable",
           value: args[argIndex]!,
@@ -1848,6 +1840,36 @@ function parseFunctionCall(
       }
     }
   }
+
+  return previousBindings;
+}
+
+function parseFunctionCall(
+  source: string,
+  afterParenPos: number,
+  env: Env,
+  fnEntry: FunctionDef,
+  thisValue: number | null = null,
+): { value: number; pos: number } {
+  const { args, argFnRefs, pos: argPos } = parseArguments(
+    source,
+    afterParenPos,
+    env,
+  );
+
+  const callEnv: Env = env;
+  const previousLastFunctionRef = (callEnv as any).__lastFunctionRef;
+  const previousAllowShadowing = (callEnv as any).__allowShadowing;
+  delete (callEnv as any).__lastFunctionRef;
+  (callEnv as any).__allowShadowing = true;
+
+  const previousBindings = bindFunctionParameters(
+    callEnv,
+    fnEntry,
+    args,
+    argFnRefs,
+    thisValue,
+  );
 
   const bodyResult = parseAssignmentOrExpression(
     source,
@@ -2940,7 +2962,7 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
     if (identifier.name in env) {
       // Check if this looks like we're in a function body by seeing if __isFunctionContext flag is set
       if (!(env as any).__allowShadowing) {
-        throw new Error(`Variable already declared: ${identifier.name}`);
+        throw new Error('Variable already declared: ' + identifier.name);
       }
     }
     pos = skipWhitespace(source, identifier.end);
@@ -3730,10 +3752,10 @@ function parseAssignmentOrExpression(
       // This is an assignment - check if variable exists and is mutable
       const entry = checkVariableDefined(env, varName);
       if (entry.type !== "variable") {
-        throw new Error(`Cannot assign to non-variable: ${varName}`);
+        throw new Error('Cannot assign to non-variable: ' + varName);
       }
       if (!entry.mutable) {
-        throw new Error(`Cannot reassign immutable variable: ${varName}`);
+        throw new Error('Cannot reassign immutable variable: ' + varName);
       }
 
       // Variable is mutable, process the assignment
