@@ -47,6 +47,7 @@ type PointerDef = {
   type: "pointer";
   value: number; // The address/reference (we store variable reference ID or a simple index)
   pointsToName?: string; // Optional: name of the variable this points to
+  isMutable?: boolean; // Whether this pointer can mutate its target
 };
 type EnvEntry =
   | Variable
@@ -1259,6 +1260,7 @@ function handlePointerTypeBinding(
   source: string,
   pos: number,
   env: Env,
+  isPointerMutable: boolean,
 ): { entry: EnvEntry; pos: number } {
   // First, check for string literal
   const checkPos = skipWhitespace(source, pos);
@@ -1271,6 +1273,7 @@ function handlePointerTypeBinding(
           type: "pointer",
           value: 0,
           pointsToName: undefined,
+          isMutable: isPointerMutable,
           __stringValue: stringResult.value,
         } as any,
         pos: skipWhitespace(source, stringResult.end),
@@ -1285,7 +1288,11 @@ function handlePointerTypeBinding(
   const pointerKey = (env as any).__lastPointerRef;
   if (pointerKey && pointerKey in env) {
     // Use the pointer created by & operator
-    const entry = env[pointerKey] as PointerDef;
+    const baseEntry = env[pointerKey] as PointerDef;
+    const entry = {
+      ...baseEntry,
+      isMutable: Boolean(baseEntry.isMutable) && isPointerMutable,
+    };
     (env as any).__lastPointerRef = undefined;
     return { entry, pos: skipWhitespace(source, valueResult.pos) };
   }
@@ -1295,6 +1302,7 @@ function handlePointerTypeBinding(
     entry: {
       type: "pointer",
       value: valueResult.value,
+      isMutable: isPointerMutable,
     },
     pos: skipWhitespace(source, valueResult.pos),
   };
@@ -1627,10 +1635,20 @@ function tryParseReferenceOperator(
     return null;
   }
 
-  const identifier = parseIdentifierAfterOperator(source, trimmedPos);
+  let currentPos = skipWhitespace(source, trimmedPos + 1);
+  let isMutableRef = false;
+  const mutPos = skipKeyword(source, currentPos, "mut");
+  if (mutPos !== null) {
+    isMutableRef = true;
+    currentPos = skipWhitespace(source, mutPos);
+  }
+  const identifier = parseIdentifier(source, currentPos);
   if (identifier && identifier.name in env) {
     const variable = env[identifier.name];
     if (variable && variable.type === "variable") {
+      if (isMutableRef && !variable.mutable) {
+        return null;
+      }
       // Create a pointer entry pointing to this variable
       const pointerRefKey =
         "__ptrref_" + Math.random().toString(36).substring(7);
@@ -1638,6 +1656,7 @@ function tryParseReferenceOperator(
         type: "pointer",
         value: 0,
         pointsToName: identifier.name,
+        isMutable: isMutableRef,
       };
       // Store reference for later retrieval
       (env as any).__lastPointerRef = pointerRefKey;
@@ -2214,14 +2233,16 @@ function parseLetTypeAnnotation(
   structType: string | null;
   isFunctionType: boolean;
   isPointerType: boolean;
+  isPointerMutable: boolean;
   pos: number;
 } {
   let structType: string | null = null;
   let isFunctionType = false;
   let isPointerType = false;
+  let isPointerMutable = false;
   const typePos = parseTypeAnnotationColon(source, pos);
   if (typePos === null) {
-    return { structType, isFunctionType, isPointerType, pos };
+    return { structType, isFunctionType, isPointerType, isPointerMutable, pos };
   }
 
   let currentPos = typePos;
@@ -2229,6 +2250,14 @@ function parseLetTypeAnnotation(
     // '*' - pointer
     isPointerType = true;
     currentPos = skipWhitespace(source, currentPos + 1);
+  }
+
+  if (isPointerType) {
+    const mutPos = skipKeyword(source, currentPos, "mut");
+    if (mutPos !== null) {
+      isPointerMutable = true;
+      currentPos = skipWhitespace(source, mutPos);
+    }
   }
 
   const functionTypePos = skipFunctionTypeAnnotation(source, currentPos);
@@ -2264,7 +2293,13 @@ function parseLetTypeAnnotation(
     currentPos = skipWhitespace(source, currentPos);
   }
 
-  return { structType, isFunctionType, isPointerType, pos: currentPos };
+  return {
+    structType,
+    isFunctionType,
+    isPointerType,
+    isPointerMutable,
+    pos: currentPos,
+  };
 }
 
 function tryParseStructInstantiation(
@@ -2422,6 +2457,7 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
   let structType: string | null = typeInfo.structType;
   const isFunctionType = typeInfo.isFunctionType;
   const isPointerType = typeInfo.isPointerType;
+  const isPointerMutable = typeInfo.isPointerMutable;
   pos = typeInfo.pos;
 
   // Skip '='
@@ -2436,7 +2472,12 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
 
   // Handle pointer types
   if (isPointerType) {
-    const pointerResult = handlePointerTypeBinding(source, pos, env);
+    const pointerResult = handlePointerTypeBinding(
+      source,
+      pos,
+      env,
+      isPointerMutable,
+    );
     entry = pointerResult.entry;
     pos = pointerResult.pos;
   } // Check if this is a function reference assignment
@@ -3056,6 +3097,51 @@ function parseShift(source: string, pos: number, env: Env): ParserResult {
   );
 }
 
+function tryParsePointerAssignment(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult | null {
+  const startPos = skipWhitespace(source, pos);
+  if (source.charCodeAt(startPos) !== 42) {
+    // '*'
+    return null;
+  }
+
+  const identifier = parseIdentifierAfterOperator(source, startPos);
+  if (!identifier) {
+    return null;
+  }
+
+  const afterIdPos = skipWhitespace(source, identifier.end);
+  if (source.charCodeAt(afterIdPos) !== 61) {
+    // '='
+    return null;
+  }
+
+  const entry = env[identifier.name];
+  if (!entry || entry.type !== "pointer") {
+    return null;
+  }
+
+  const assignPos = skipWhitespace(source, afterIdPos + 1);
+  const rhsResult = parseLogicalOr(source, assignPos, env);
+  const pointerEntry = entry as PointerDef;
+
+  if (pointerEntry.pointsToName && pointerEntry.pointsToName in env) {
+    const targetEntry = env[pointerEntry.pointsToName];
+    if (targetEntry && targetEntry.type === "variable") {
+      const targetVar = targetEntry as Variable;
+      if (pointerEntry.isMutable && targetVar.mutable) {
+        targetVar.value = rhsResult.value;
+      }
+    }
+  }
+
+  const endPos = skipSemicolonAndWhitespace(source, rhsResult.pos);
+  return { value: rhsResult.value, pos: endPos };
+}
+
 function parseAssignmentOrExpression(
   source: string,
   pos: number,
@@ -3063,6 +3149,11 @@ function parseAssignmentOrExpression(
 ): ParserResult {
   const startPos = pos;
   pos = skipWhitespace(source, startPos);
+
+  const pointerAssignResult = tryParsePointerAssignment(source, pos, env);
+  if (pointerAssignResult) {
+    return pointerAssignResult;
+  }
 
   // Try to parse an identifier (potential assignment target)
   const identifier = parseIdentifier(source, pos);

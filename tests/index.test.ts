@@ -211,6 +211,10 @@ describe("The interpreter can interpret functions", () => {
   test("pointer reference and dereference", () => {
     expectValid("let x = 100; let y : *I32 = &x; *y", 100);
    });
+
+  test("mutable pointer reference, dereference, and assignment", () => {
+    expectValid("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x", 100);
+  });
 });
 
 describe("The interpreter can interpret data", () => {
