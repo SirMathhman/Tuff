@@ -139,6 +139,10 @@ describe("The interpreter can interpret loops", () => {
     expectValid("let mut x = 0; while (x < 4) { x += 1; break; } x", 1);
   });
 
+  test("while loop with simple continue", () => {
+    expectValid("let mut x = 0; while (x < 4) { x += 1; continue; } x", 4);
+  });
+
   test("for loop with range", () => {
     expectValid("let mut sum = 0; for (i in 0..10) sum += i; sum", 45);
   });

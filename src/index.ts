@@ -44,6 +44,7 @@ type EnvEntry =
   | TypeAlias;
 type Env = Record<string, EnvEntry> & {
   breakRequested?: boolean;
+  continueRequested?: boolean;
 };
 
 type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
@@ -277,10 +278,21 @@ function parseBinaryOperator(
   operators: Array<(left: number, right: number) => number>,
 ): ParserResult {
   const left = operandParser(source, pos, env);
+  
+  // If break or continue was requested during operand parsing, stop here
+  if ((env as any).breakRequested || (env as any).continueRequested) {
+    return left;
+  }
+  
   let result = left.value;
   pos = left.pos;
 
   while (pos < source.length) {
+    // Check for break or continue before processing operators
+    if ((env as any).breakRequested || (env as any).continueRequested) {
+      break;
+    }
+    
     const savedPos = pos;
     pos = skipWhitespace(source, pos);
     const charCode = source.charCodeAt(pos);
@@ -483,6 +495,11 @@ function parseIfConditional(
     const thenResult = branchParser(source, pos, branchEnv);
     result = thenResult.value;
     pos = skipWhitespace(source, thenResult.pos);
+
+    // Check for break or continue that bubbled up
+    if ((env as any).breakRequested || (env as any).continueRequested) {
+      return { value: result, pos };
+    }
 
     pos = skipSemicolonAndWhitespace(source, pos);
 
@@ -1829,14 +1846,21 @@ function parseBlock(source: string, pos: number, env: Env): ParserResult {
     // charCode 125 is '}'
     const previousResult = result;
     const stmtResult = parseStatement(source, pos, env);
-    
-    // Restore previous result if this was a break statement
+
+    // Handle break statement
     if ((env as any).breakRequested) {
       result = previousResult;
       pos = stmtResult.pos;
       break;
     }
-    
+
+    // Handle continue statement
+    if ((env as any).continueRequested) {
+      result = previousResult;
+      pos = stmtResult.pos;
+      break;
+    }
+
     result = stmtResult.value;
     pos = skipWhitespace(source, stmtResult.pos);
   }
@@ -1962,6 +1986,13 @@ function parseWhile(source: string, pos: number, env: Env): ParserResult {
     if ((env as any).breakRequested) {
       (env as any).breakRequested = false;
       break;
+    }
+
+    // Check for continue statement
+    if ((env as any).continueRequested) {
+      (env as any).continueRequested = false;
+      iterations++;
+      continue;
     }
 
     // Skip semicolon if present
@@ -2097,6 +2128,20 @@ function parseStatement(source: string, pos: number, env: Env): ParserResult {
     (env as any).breakRequested = true;
     pos = skipWhitespace(source, breakPos);
     // Skip semicolon after break
+    if (source.charCodeAt(pos) === 59) {
+      // ';'
+      pos = pos + 1;
+    }
+    return { value: 0, pos };
+  }
+
+  // Check for 'continue' keyword
+  const continuePos = skipKeyword(source, pos, "continue");
+  if (continuePos !== null) {
+    // Set continueRequested flag in environment
+    (env as any).continueRequested = true;
+    pos = skipWhitespace(source, continuePos);
+    // Skip semicolon after continue
     if (source.charCodeAt(pos) === 59) {
       // ';'
       pos = pos + 1;
