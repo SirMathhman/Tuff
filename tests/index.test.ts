@@ -167,4 +167,8 @@ describe("The interpreter can interpret", () => {
   test("string literal and indexing", () => {
     expectValid('let c : *Str = "test"; c[1]', 101);
   });
+
+  test("logical NOT operator", () => {
+    expectValid("let x = true; !x", 0);
+  });
 });

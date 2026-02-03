@@ -1535,13 +1535,27 @@ function parseMultiplicative(
     source,
     pos,
     env,
-    parsePrimary,
+    parseUnary,
     [42, 47], // * /
     [
       (left: number, right: number) => left * right,
       (left: number, right: number) => left / right,
     ],
   );
+}
+
+function parseUnary(source: string, pos: number, env: Env): ParserResult {
+  pos = skipWhitespace(source, pos);
+
+  // Check for unary NOT operator (!)
+  if (source.charCodeAt(pos) === 33) {
+    // '!'
+    pos = skipWhitespace(source, pos + 1);
+    const result = parseUnary(source, pos, env); // Allow chaining of unary operators
+    return { value: result.value !== 0 ? 0 : 1, pos: result.pos };
+  }
+
+  return parsePrimary(source, pos, env);
 }
 
 function parseAdditive(source: string, pos: number, env: Env): ParserResult {
