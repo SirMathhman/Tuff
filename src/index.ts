@@ -1393,7 +1393,7 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
     source,
     pos,
     env,
-    parseAdditive,
+    parseShift,
     [
       [60, 61], // <=
       [62, 61], // >=
@@ -1418,7 +1418,7 @@ function parseLogicalAnd(source: string, pos: number, env: Env): ParserResult {
     source,
     pos,
     env,
-    parseComparison,
+    parseBitwiseOr,
     [[38, 38]], // &&
     [(left: number, right: number) => (left !== 0 && right !== 0 ? 1 : 0)],
   );
@@ -1432,6 +1432,53 @@ function parseLogicalOr(source: string, pos: number, env: Env): ParserResult {
     parseLogicalAnd,
     [[124, 124]], // ||
     [(left: number, right: number) => (left !== 0 || right !== 0 ? 1 : 0)],
+  );
+}
+
+function parseBitwiseOr(source: string, pos: number, env: Env): ParserResult {
+  return parseBinaryOperator(
+    source,
+    pos,
+    env,
+    parseBitwiseXor,
+    [124], // |
+    [(left: number, right: number) => left | right],
+  );
+}
+
+function parseBitwiseXor(source: string, pos: number, env: Env): ParserResult {
+  return parseBinaryOperator(
+    source,
+    pos,
+    env,
+    parseBitwiseAnd,
+    [94], // ^
+    [(left: number, right: number) => left ^ right],
+  );
+}
+
+function parseBitwiseAnd(source: string, pos: number, env: Env): ParserResult {
+  return parseBinaryOperator(
+    source,
+    pos,
+    env,
+    parseComparison,
+    [38], // &
+    [(left: number, right: number) => left & right],
+  );
+}
+
+function parseShift(source: string, pos: number, env: Env): ParserResult {
+  return parseBinaryOperator(
+    source,
+    pos,
+    env,
+    parseAdditive,
+    [[60, 60], [62, 62]], // << >>
+    [
+      (left: number, right: number) => left << right,
+      (left: number, right: number) => left >> right,
+    ],
   );
 }
 

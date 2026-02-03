@@ -199,4 +199,24 @@ describe("The interpreter can interpret", () => {
   test("modulo operator", () => {
     expectValid("let x = 10; let y = 3; x % y", 1);
   });
+
+  test("bitwise AND operator", () => {
+    expectValid("let x = 5; let y = 3; x & y", 1);
+  });
+
+  test("bitwise OR operator", () => {
+    expectValid("let x = 5; let y = 3; x | y", 7);
+  });
+
+  test("bitwise XOR operator", () => {
+    expectValid("let x = 5; let y = 3; x ^ y", 6);
+  });
+
+  test("bitwise left shift operator", () => {
+    expectValid("let x = 5; let y = 1; x << y", 10);
+  });
+
+  test("bitwise right shift operator", () => {
+    expectValid("let x = 10; let y = 1; x >> y", 5);
+  });
 });
