@@ -75,6 +75,10 @@ describe("The interpreter can interpret basics", () => {
   test("compound assignment operator +=", () => {
     expectValid("let mut x = 0; x += 3; x", 3);
   });
+
+  test("function in block scope can mutate outer variable", () => {
+    expectValid("let mut x = 0; fn add() => x += 1; add(); x", 1);
+  });
 });
 
 describe("The interpreter can interpret control flow", () => {
@@ -151,6 +155,13 @@ describe("The interpreter can interpret loops", () => {
     expectValid(
       "fn get() : I32 => { if (true) yield 100; 20 } + 1; get()",
       101,
+    );
+  });
+
+  test("function with return statement", () => {
+    expectValid(
+      "fn get() : I32 => { if (true) return 100; 20 } + 5; get()",
+      100,
     );
   });
 

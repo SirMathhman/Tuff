@@ -47,6 +47,8 @@ type Env = Record<string, EnvEntry> & {
   continueRequested?: boolean;
   yieldRequested?: boolean;
   yieldValue?: number;
+  returnRequested?: boolean;
+  returnValue?: number;
 };
 
 type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
@@ -282,7 +284,11 @@ function parseBinaryOperator(
   const left = operandParser(source, pos, env);
 
   // If break or continue was requested during operand parsing, stop here
-  if ((env as any).breakRequested || (env as any).continueRequested) {
+  if (
+    (env as any).breakRequested ||
+    (env as any).continueRequested ||
+    (env as any).returnRequested
+  ) {
     return left;
   }
 
@@ -291,7 +297,11 @@ function parseBinaryOperator(
 
   while (pos < source.length) {
     // Check for break or continue before processing operators
-    if ((env as any).breakRequested || (env as any).continueRequested) {
+    if (
+      (env as any).breakRequested ||
+      (env as any).continueRequested ||
+      (env as any).returnRequested
+    ) {
       break;
     }
 
@@ -1092,7 +1102,7 @@ function parseFunctionCall(
     }
   }
 
-  const bodyResult = parseLogicalOr(source, fnEntry.bodyPos, callEnv);
+  const bodyResult = parseAssignmentOrExpression(source, fnEntry.bodyPos, callEnv);
   return { value: bodyResult.value, pos: argPos };
 }
 
@@ -1874,6 +1884,13 @@ function parseBlock(source: string, pos: number, env: Env): ParserResult {
       break;
     }
 
+    // Handle return statement
+    if ((env as any).returnRequested) {
+      result = (env as any).returnValue;
+      pos = stmtResult.pos;
+      break;
+    }
+
     result = stmtResult.value;
     pos = skipWhitespace(source, stmtResult.pos);
   }
@@ -2165,22 +2182,35 @@ function parseStatement(source: string, pos: number, env: Env): ParserResult {
   // Check for 'yield' keyword
   const yieldPos = skipKeyword(source, pos, "yield");
   if (yieldPos !== null) {
-    pos = skipWhitespace(source, yieldPos);
-    // Parse the expression to yield
-    const exprResult = parseLogicalOr(source, pos, env);
-    (env as any).yieldRequested = true;
-    (env as any).yieldValue = exprResult.value;
-    pos = skipWhitespace(source, exprResult.pos);
-    // Skip semicolon after yield
-    if (source.charCodeAt(pos) === 59) {
-      // ';'
-      pos = pos + 1;
-    }
-    return { value: exprResult.value, pos };
+    return parseYieldOrReturn(source, yieldPos, env, "yield");
+  }
+
+  // Check for 'return' keyword
+  const returnPos = skipKeyword(source, pos, "return");
+  if (returnPos !== null) {
+    return parseYieldOrReturn(source, returnPos, env, "return");
   }
 
   // Try to parse assignment or expression
   return parseAssignmentOrExpression(source, pos, env);
+}
+
+function parseYieldOrReturn(
+  source: string,
+  pos: number,
+  env: Env,
+  type: "yield" | "return",
+): ParserResult {
+  pos = skipWhitespace(source, pos);
+  const exprResult = parseLogicalOr(source, pos, env);
+  const flagName =
+    type === "yield" ? "yieldRequested" : "returnRequested";
+  const valueName = type === "yield" ? "yieldValue" : "returnValue";
+  (env as any)[flagName] = true;
+  (env as any)[valueName] = exprResult.value;
+  pos = skipWhitespace(source, exprResult.pos);
+  if (source.charCodeAt(pos) === 59) pos = pos + 1;
+  return { value: exprResult.value, pos };
 }
 
 function parseComparison(source: string, pos: number, env: Env): ParserResult {
