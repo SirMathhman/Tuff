@@ -399,6 +399,296 @@ describe("The interpreter can interpret operators", () => {
   });
 });
 
+describe("Boolean and Comparison Semantics", () => {
+  describe("Boolean literals and negation", () => {
+    test("boolean literal false", () => {
+      expectValid("let x = false; x", 0);
+    });
+
+    test("negation of false", () => {
+      expectValid("!false", 1);
+    });
+
+    test("negation of true", () => {
+      expectValid("!true", 0);
+    });
+
+    test("double negation of true", () => {
+      expectValid("!!true", 1);
+    });
+
+    test("triple negation of true", () => {
+      expectValid("!!!true", 0);
+    });
+
+    test("boolean false in arithmetic", () => {
+      expectValid("false + 5", 5);
+    });
+
+    test("boolean true in arithmetic", () => {
+      expectValid("true + 5", 6);
+    });
+  });
+
+  describe("Logical AND semantics", () => {
+    test("both true", () => {
+      expectValid("true && true", 1);
+    });
+
+    test("both false", () => {
+      expectValid("false && false", 0);
+    });
+
+    test("left true, right false", () => {
+      expectValid("true && false", 0);
+    });
+
+    test("left false, right true", () => {
+      expectValid("false && true", 0);
+    });
+
+    test("numeric truthy values", () => {
+      expectValid("5 && 3", 1);
+    });
+
+    test("numeric with zero on left", () => {
+      expectValid("0 && 5", 0);
+    });
+
+    test("numeric with zero on right", () => {
+      expectValid("5 && 0", 0);
+    });
+
+    test("both zero", () => {
+      expectValid("0 && 0", 0);
+    });
+
+    test("AND with comparison results", () => {
+      expectValid("(5 > 3) && (2 < 4)", 1);
+    });
+
+    test("AND with one false comparison", () => {
+      expectValid("(5 > 10) && (2 < 4)", 0);
+    });
+
+    test("AND short-circuit behavior value", () => {
+      expectValid("let x = false; (x && (3 + 5)) == 0", 1);
+    });
+  });
+
+  describe("Logical OR semantics", () => {
+    test("both true", () => {
+      expectValid("true || true", 1);
+    });
+
+    test("both false", () => {
+      expectValid("false || false", 0);
+    });
+
+    test("left true, right false", () => {
+      expectValid("true || false", 1);
+    });
+
+    test("left false, right true", () => {
+      expectValid("false || true", 1);
+    });
+
+    test("numeric truthy values", () => {
+      expectValid("5 || 3", 1);
+    });
+
+    test("zero on left with truthy right", () => {
+      expectValid("0 || 5", 1);
+    });
+
+    test("truthy left with zero on right", () => {
+      expectValid("5 || 0", 1);
+    });
+
+    test("both zero", () => {
+      expectValid("0 || 0", 0);
+    });
+
+    test("OR with comparison results", () => {
+      expectValid("(5 < 3) || (2 < 4)", 1);
+    });
+
+    test("OR with both false comparisons", () => {
+      expectValid("(5 < 3) || (2 > 4)", 0);
+    });
+  });
+
+  describe("Comparison operators", () => {
+    test("equality same numbers", () => {
+      expectValid("0 == 0", 1);
+    });
+
+    test("inequality same numbers", () => {
+      expectValid("0 != 0", 0);
+    });
+
+    test("negative number comparison", () => {
+      expectValid("-5 < -3", 1);
+    });
+
+    test("negative to positive comparison", () => {
+      expectValid("-5 < 3", 1);
+    });
+
+    test("large number equality", () => {
+      expectValid("999999 == 999999", 1);
+    });
+
+    test("less-than with equal numbers", () => {
+      expectValid("5 < 5", 0);
+    });
+
+    test("greater-than with equal numbers", () => {
+      expectValid("5 > 5", 0);
+    });
+
+    test("less-than-or-equal equal numbers", () => {
+      expectValid("5 <= 5", 1);
+    });
+
+    test("greater-than-or-equal equal numbers", () => {
+      expectValid("5 >= 5", 1);
+    });
+
+    test("chained comparisons left-to-right", () => {
+      expectValid("1 < 2 < 3", 1);
+    });
+  });
+
+  describe("Operator precedence and combinations", () => {
+    test("AND has higher precedence than OR", () => {
+      expectValid("true && false || true", 1);
+    });
+
+    test("AND higher precedence than OR variant 2", () => {
+      expectValid("false || true && false", 0);
+    });
+
+    test("NOT has highest precedence", () => {
+      expectValid("!true || true", 1);
+    });
+
+    test("negated AND expression", () => {
+      expectValid("!(true && false)", 1);
+    });
+
+    test("comparison in OR", () => {
+      expectValid("(5 > 10) || (3 < 5)", 1);
+    });
+
+    test("comparison in AND", () => {
+      expectValid("(5 > 3) && (3 < 5)", 1);
+    });
+
+    test("mixed operators with negation", () => {
+      expectValid("!(5 > 10) && (3 < 5)", 1);
+    });
+
+    test("boolean in if expression", () => {
+      expectValid("if (true && true) 42 else 0", 42);
+    });
+
+    test("boolean assignment and use", () => {
+      expectValid("let x = (5 > 3); x", 1);
+    });
+
+    test("mutable boolean reassignment", () => {
+      expectValid("let mut x = true; x = false; x", 0);
+    });
+  });
+
+  describe("Type interactions", () => {
+    test("typed literal equality", () => {
+      expectValid("100U8 == 100I32", 1);
+    });
+
+    test("typed literal comparison", () => {
+      expectValid("100U8 < 150I32", 1);
+    });
+
+    test("comparison result in arithmetic", () => {
+      expectValid("(5 > 3) + 5", 6);
+    });
+
+    test("boolean AND result in arithmetic", () => {
+      expectValid("(true && false) + 10", 10);
+    });
+
+    test("boolean OR result in arithmetic", () => {
+      expectValid("(true || false) + 10", 11);
+    });
+
+    test("negation result in arithmetic", () => {
+      expectValid("!false + 5", 6);
+    });
+
+    test("comparison in let with type annotation", () => {
+      expectValid("let x : I32 = (5 > 3); x", 1);
+    });
+  });
+
+  describe("Error cases: undefined variables", () => {
+    test("undefined variable in comparison", () => {
+      expectInvalid("x > 5");
+    });
+
+    test("undefined variable in AND", () => {
+      expectInvalid("undefined && true");
+    });
+
+    test("undefined variable in OR", () => {
+      expectInvalid("missingVar || false");
+    });
+
+    test("undefined variable in negation", () => {
+      expectInvalid("!unknown");
+    });
+
+    test("undefined in let binding comparison", () => {
+      expectInvalid("let x = (y > 5); x");
+    });
+
+    test("variable undefined after block scope", () => {
+      expectInvalid("{ let x = 5; } x > 3");
+    });
+  });
+
+  describe("Complex boolean expressions", () => {
+    test("nested logical operators", () => {
+      expectValid("(true && (false || true)) || false", 1);
+    });
+
+    test("multiple negations", () => {
+      expectValid("!(!(true))", 1);
+    });
+
+    test("boolean with comparison chains", () => {
+      expectValid("(1 < 2) && (2 < 3) && (3 < 4)", 1);
+    });
+
+    test("mixed comparisons in AND", () => {
+      expectValid("(5 > 3) && (5 == 5) && (5 >= 5)", 1);
+    });
+
+    test("boolean variable in multiple operations", () => {
+      expectValid("let x = true; let y = false; (x || y) && x", 1);
+    });
+
+    test("boolean in loop condition", () => {
+      expectValid("let mut x = 0; while (x < 5 && x != 3) x += 1; x", 3);
+    });
+
+    test("boolean in if-else chain", () => {
+      expectValid("let x = 5; if (x > 10) 1 else if (x > 3) 2 else 3", 2);
+    });
+  });
+});
+
 describe("Numerical Literal Semantics: Number Bases", () => {
   test("decimal literal zero", () => {
     expectValid("0", 0);
