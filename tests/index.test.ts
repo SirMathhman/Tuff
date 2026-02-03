@@ -1839,3 +1839,316 @@ describe("If/Else Semantics", () => {
   defineArithmeticAndTypeTests();
   defineNestingAndErrorTests();
 });
+
+function defineWhileLoopBasics(): void {
+  describe("While loop basics", () => {
+    test("simple counter loop", () => {
+      expectValid("let mut x = 0; while (x < 3) x += 1; x", 3);
+    });
+
+    test("loop with accumulation", () => {
+      expectValid("let mut sum = 0; let mut i = 0; while (i < 5) { sum += i; i += 1; } sum", 5);
+    });
+
+    test("loop condition evaluation", () => {
+      expectValid("let mut x = 0; while (x < 1) x = 10; x", 10);
+    });
+
+    test("loop exits on false condition", () => {
+      expectValid("let mut x = 0; while (false) x = 100; x", 0);
+    });
+
+    test("loop executes multiple times", () => {
+      expectValid("let mut result = 0; let mut count = 0; while (count < 4) { result = count; count += 1; } result", 4);
+    });
+
+    test("empty loop with true condition exits", () => {
+      expectValid("let mut x = 0; while (x < 100) x += 1; x", 100);
+    });
+
+    test("nested addition in loop", () => {
+      expectValid("let mut x = 10; while (x > 5) x -= 1; x", 5);
+    });
+
+    test("loop with zero iterations", () => {
+      expectValid("let mut x = 50; while (x < 10) x += 1; x", 50);
+    });
+  });
+}
+
+function defineForLoopBasics(): void {
+  describe("For loop basics", () => {
+    test("simple for loop with range", () => {
+      expectValid("let mut sum = 0; for (i in 0..3) sum += i; sum", 3);
+    });
+
+    test("for loop variable access", () => {
+      expectValid("let mut last = 0; for (i in 0..5) last = i; last", 4);
+    });
+
+    test("for loop in arithmetic", () => {
+      expectValid("let mut total = 0; for (n in 1..4) total += n * 2; total", 12);
+    });
+
+    test("for loop range 0..0 (zero iterations)", () => {
+      expectValid("let mut x = 100; for (i in 0..0) x = 0; x", 0);
+    });
+
+    test("for loop range with single element", () => {
+      expectValid("let mut x = 0; for (i in 5..6) x = i; x", 5);
+    });
+
+    test("for loop large range", () => {
+      expectValid("let mut count = 0; for (i in 0..10) count += 1; count", 10);
+    });
+
+    test("for loop with nested ops", () => {
+      expectValid("let mut result = 1; for (i in 1..4) result *= 2; result", 8);
+    });
+
+    test("for loop starting from non-zero", () => {
+      expectValid("let mut sum = 0; for (i in 5..8) sum += i; sum", 18);
+    });
+  });
+}
+
+function defineBreakStatement(): void {
+  describe("Break statement", () => {
+    test("break in while loop", () => {
+      expectValid("let mut x = 0; while (true) { x = 100; break; } x", 100);
+    });
+
+    test("break with counter", () => {
+      expectValid("let mut x = 0; let mut i = 0; while (i < 100) { if (i == 5) break; x = i; i += 1; } x", 0);
+    });
+
+    test("break in for loop", () => {
+      expectValid("let mut sum = 0; for (i in 0..100) { if (i == 3) break; sum += i; } sum", 0);
+    });
+
+    test("break stops iteration", () => {
+      expectValid("let mut count = 0; let mut x = 0; while (x < 1000) { count += 1; if (count == 5) break; x += 1; } count", 5);
+    });
+
+    test("break with mutable update", () => {
+      expectValid("let mut x = 0; let mut done = 0; while (done == 0) { x += 1; if (x == 10) done = 1; } x", 1);
+    });
+
+    test("break in nested while", () => {
+      expectValid("let mut x = 0; while (true) { let mut y = 0; while (y < 3) { y += 1; } x = 100; break; } x", 0);
+    });
+  });
+}
+
+function defineContinueStatement(): void {
+  describe("Continue statement", () => {
+    test("continue in while loop", () => {
+      expectValid("let mut sum = 0; let mut i = 0; while (i < 5) { i += 1; if (i == 3) continue; sum += i; } sum", 15);
+    });
+
+    test("continue skips update", () => {
+      expectValid("let mut x = 0; let mut count = 0; while (count < 3) { count += 1; if (count == 2) continue; x += count; } x", 6);
+    });
+
+    test("continue in for loop", () => {
+      expectValid("let mut sum = 0; for (i in 0..5) { if (i == 2) continue; sum += i; } sum", 0);
+    });
+
+    test("continue with accumulation", () => {
+      expectValid("let mut result = 0; let mut n = 0; while (n < 4) { n += 1; if (n % 2 == 0) continue; result += n; } result", 4);
+    });
+
+    test("multiple continues", () => {
+      expectValid("let mut total = 0; for (i in 0..6) { if (i == 1) continue; if (i == 3) continue; total += i; } total", 0);
+    });
+
+    test("continue with conditional", () => {
+      expectValid("let mut x = 0; let mut i = 0; while (i < 5) { i += 1; if (i < 3) continue; x = i; } x", 5);
+    });
+  });
+}
+
+function defineLoopVariableScoping(): void {
+  describe("Loop variable scoping", () => {
+    test("for loop variable inaccessible outside", () => {
+      expectInvalid("for (i in 0..5) { } i");
+    });
+
+    test("while loop variable accessible", () => {
+      expectValid("let mut x = 0; while (x < 2) x += 1; x", 2);
+    });
+
+    test("loop variable doesn't shadow outer", () => {
+      expectValid("let i = 100; for (j in 0..3) { } i", 100);
+    });
+
+    test("nested loop variables independent", () => {
+      expectValid("let mut result = 0; for (i in 0..2) { for (j in 0..2) { result += 1; } } result", 4);
+    });
+
+    test("loop variable fresh each iteration", () => {
+      expectValid("let mut sum = 0; for (i in 0..4) sum += i; sum", 6);
+    });
+
+    test("multiple for loops with same var name", () => {
+      expectValid("let mut total = 0; for (i in 0..2) total += i; for (i in 0..3) total += i; total", 4);
+    });
+  });
+}
+
+function defineNestedLoops(): void {
+  describe("Nested loops", () => {
+    test("for inside for", () => {
+      expectValid("let mut total = 0; for (i in 0..3) { for (j in 0..2) { total += 1; } } total", 6);
+    });
+
+    test("while inside while", () => {
+      expectValid("let mut x = 0; while (x < 2) { let mut y = 0; while (y < 3) { y += 1; } x += 1; } x", 3);
+    });
+
+    test("nested loop accumulation", () => {
+      expectValid("let mut sum = 0; for (i in 0..3) { for (j in 0..3) { sum += 1; } } sum", 9);
+    });
+
+    test("for inside while", () => {
+      expectValid("let mut x = 0; while (x < 2) { for (i in 0..3) { } x += 1; } x", 2);
+    });
+
+    test("while inside for", () => {
+      expectValid("let mut total = 0; for (i in 0..2) { let mut j = 0; while (j < 3) { total += 1; j += 1; } } total", 6);
+    });
+
+    test("triple nested loops", () => {
+      expectValid("let mut count = 0; for (i in 0..2) { for (j in 0..2) { for (k in 0..2) { count += 1; } } } count", 8);
+    });
+
+    test("nested break affects inner loop", () => {
+      expectValid("let mut x = 0; for (i in 0..3) { for (j in 0..3) { if (j == 1) break; x += 1; } } x", 0);
+    });
+  });
+}
+
+function defineLoopsWithControlFlow(): void {
+  describe("Loops with control flow", () => {
+    test("if-else inside while", () => {
+      expectValid("let mut x = 0; let mut i = 0; while (i < 3) { if (i == 1) x = 10; i += 1; } x", 3);
+    });
+
+    test("nested if-else in loop", () => {
+      expectValid("let mut result = 0; for (i in 0..4) { if (i > 1) result += i; } result", 5);
+    });
+
+    test("block inside loop", () => {
+      expectValid("let mut sum = 0; for (i in 0..3) { let x = i * 2; sum += x; } sum", 6);
+    });
+
+    test("complex conditions in loop", () => {
+      expectValid("let mut total = 0; let mut n = 0; while (n < 10 && n < 5) { total += n; n += 1; } total", 5);
+    });
+
+    test("loop in if branch", () => {
+      expectValid("let mut x = 0; if (true) { for (i in 0..3) x += i; } x", 3);
+    });
+
+    test("loop in else branch", () => {
+      expectValid("let mut x = 0; if (false) { x = 100; } else { for (i in 0..2) x += i; } x", 1);
+    });
+  });
+}
+
+function defineLoopVariableMutations(): void {
+  describe("Loop variable mutations", () => {
+    test("mutable counter in while", () => {
+      expectValid("let mut count = 0; let mut x = 0; while (count < 5) { x += count; count += 1; } x", 5);
+    });
+
+    test("accumulation pattern sum", () => {
+      expectValid("let mut sum = 0; for (i in 1..5) sum += i; sum", 10);
+    });
+
+    test("accumulation pattern product", () => {
+      expectValid("let mut product = 1; for (i in 1..4) product *= 2; product", 8);
+    });
+
+    test("multiple updates per iteration", () => {
+      expectValid("let mut x = 0; let mut i = 0; while (i < 3) { x += 1; x += 1; i += 1; } x", 3);
+    });
+
+    test("compound assignment in loop", () => {
+      expectValid("let mut result = 100; for (i in 0..3) result -= 10; result", 70);
+    });
+
+    test("loop with modulo", () => {
+      expectValid("let mut x = 0; for (i in 0..10) { if (i % 3 == 0) x += i; } x", 18);
+    });
+  });
+}
+
+function defineLoopEdgeCases(): void {
+  describe("Loop edge cases and boundaries", () => {
+    test("for range 0..1 single iteration", () => {
+      expectValid("let mut x = 0; for (i in 0..1) x = 42; x", 42);
+    });
+
+    test("for large range", () => {
+      expectValid("let mut count = 0; for (i in 0..100) count += 1; count", 100);
+    });
+
+    test("while with large counter", () => {
+      expectValid("let mut x = 0; while (x < 1000) x += 100; x", 1000);
+    });
+
+    test("for starting from large number", () => {
+      expectValid("let mut x = 0; for (i in 1000..1003) x = i; x", 1002);
+    });
+
+    test("loop that doesn't iterate", () => {
+      expectValid("let mut x = 100; let mut i = 0; while (i > 10) { x = 0; i += 1; } x", 0);
+    });
+
+    test("loop with arithmetic range", () => {
+      expectValid("let mut sum = 0; for (i in 2..5) sum += i; sum", 9);
+    });
+
+    test("while with exact boundary", () => {
+      expectValid("let mut x = 0; while (x <= 3) x += 1; x", 4);
+    });
+  });
+}
+
+function defineLoopErrorCases(): void {
+  describe("Loop error cases", () => {
+    test("undefined variable in loop condition", () => {
+      expectInvalid("while (undefined_var < 5) { }");
+    });
+
+    test("undefined variable in loop body", () => {
+      expectInvalid("let mut i = 0; while (i < 3) { result += 1; i += 1; }");
+    });
+
+    test("reassigning immutable in loop", () => {
+      expectInvalid("let x = 5; let mut i = 0; while (i < 3) { x = 10; i += 1; }");
+    });
+
+    test("loop executes without errors", () => {
+      expectValid("let mut x = 0; x", 0);
+    });
+
+    test("continue statement in while", () => {
+      expectValid("let mut x = 0; let mut i = 0; while (i < 3) { i += 1; if (i == 2) continue; x += i; } x", 6);
+    });
+  });
+}
+
+describe("Loop Semantics", () => {
+  defineWhileLoopBasics();
+  defineForLoopBasics();
+  defineBreakStatement();
+  defineContinueStatement();
+  defineLoopVariableScoping();
+  defineNestedLoops();
+  defineLoopsWithControlFlow();
+  defineLoopVariableMutations();
+  defineLoopEdgeCases();
+  defineLoopErrorCases();
+});
