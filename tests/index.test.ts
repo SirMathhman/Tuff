@@ -145,6 +145,10 @@ describe("The interpreter can interpret loops", () => {
 });
 
 describe("The interpreter can interpret data", () => {
+  test("extension method with this parameter", () => {
+    expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
+  });
+
   test("function definition and call", () => {
     expectValid(
       "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",

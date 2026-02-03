@@ -635,36 +635,9 @@ function parsePrimaryIdentifier(
     entry &&
     entry.type === "function"
   ) {
-    let argPos = skipWhitespace(source, afterIdPos + 1);
-    const args: number[] = [];
-
-    while (source.charCodeAt(argPos) !== 41) {
-      const argResult = parseLogicalOr(source, argPos, env);
-      args.push(argResult.value);
-      argPos = skipWhitespace(source, argResult.pos);
-
-      if (source.charCodeAt(argPos) === 44) {
-        argPos = skipWhitespace(source, argPos + 1);
-      }
-    }
-
-    argPos = skipWhitespace(source, argPos + 1);
-
-    const callEnv: Env = { ...env };
     const fnEntry = entry as FunctionDef;
-    for (let i = 0; i < fnEntry.params.length && i < args.length; i++) {
-      const paramName = fnEntry.params[i];
-      if (paramName !== undefined) {
-        callEnv[paramName] = {
-          type: "variable",
-          value: args[i]!,
-          mutable: false,
-        };
-      }
-    }
-
-    const bodyResult = parseLogicalOr(source, fnEntry.bodyPos, callEnv);
-    return { value: bodyResult.value, pos: argPos };
+    const result = parseFunctionCall(source, afterIdPos, env, fnEntry);
+    return { value: result.value, pos: result.pos };
   }
 
   if (entry && entry.type === "variable") {
@@ -723,7 +696,10 @@ function parsePrimaryIdentifier(
   return null;
 }
 
-function parsePrimaryLiterals(source: string, pos: number): ParserResult | null {
+function parsePrimaryLiterals(
+  source: string,
+  pos: number,
+): ParserResult | null {
   const numLiteral = parseNumericLiteral(source, pos);
   if (numLiteral) {
     return { value: numLiteral.value, pos: numLiteral.end };
@@ -735,6 +711,96 @@ function parsePrimaryLiterals(source: string, pos: number): ParserResult | null 
   }
 
   return null;
+}
+
+function parseFunctionCall(
+  source: string,
+  afterParenPos: number,
+  env: Env,
+  fnEntry: FunctionDef,
+  thisValue: number | null = null,
+): { value: number; pos: number } {
+  let argPos = skipWhitespace(source, afterParenPos + 1);
+  const args: number[] = [];
+
+  while (source.charCodeAt(argPos) !== 41) {
+    const argResult = parseLogicalOr(source, argPos, env);
+    args.push(argResult.value);
+    argPos = skipWhitespace(source, argResult.pos);
+
+    if (source.charCodeAt(argPos) === 44) {
+      argPos = skipWhitespace(source, argPos + 1);
+    }
+  }
+
+  argPos = skipWhitespace(source, argPos + 1);
+
+  const callEnv: Env = { ...env };
+
+  // Bind 'this' parameter if provided
+  if (thisValue !== null && fnEntry.params.length > 0 && fnEntry.params[0] === "this") {
+    callEnv["this"] = {
+      type: "variable",
+      value: thisValue,
+      mutable: false,
+    };
+  }
+
+  // Bind other parameters
+  const argStartIndex = thisValue !== null && fnEntry.params[0] === "this" ? 1 : 0;
+  for (let i = argStartIndex; i < fnEntry.params.length && i - argStartIndex < args.length; i++) {
+    const paramName = fnEntry.params[i];
+    if (paramName !== undefined) {
+      callEnv[paramName] = {
+        type: "variable",
+        value: args[i - argStartIndex]!,
+        mutable: false,
+      };
+    }
+  }
+
+  const bodyResult = parseLogicalOr(source, fnEntry.bodyPos, callEnv);
+  return { value: bodyResult.value, pos: argPos };
+}
+
+function parseMethodCall(
+  source: string,
+  pos: number,
+  env: Env,
+  thisValue: number,
+): ParserResult | null {
+  // Check if there is a dot followed by method name and parentheses
+  pos = skipWhitespace(source, pos);
+
+  if (source.charCodeAt(pos) !== 46) {
+    // '.'
+    return null;
+  }
+
+  const methodPos = skipWhitespace(source, pos + 1);
+  const methodName = parseIdentifier(source, methodPos);
+
+  if (!methodName) {
+    return null;
+  }
+
+  const afterMethodPos = skipWhitespace(source, methodName.end);
+
+  // Check if it's a method call (has parentheses)
+  if (source.charCodeAt(afterMethodPos) !== 40) {
+    // '('
+    return null;
+  }
+
+  // Look up the function in the environment
+  const entry = methodName.name in env ? env[methodName.name] : null;
+  if (!entry || entry.type !== "function") {
+    return null;
+  }
+
+  const fnEntry = entry as FunctionDef;
+  const result = parseFunctionCall(source, afterMethodPos, env, fnEntry, thisValue);
+  return { value: result.value, pos: result.pos };
 }
 
 function parsePrimary(source: string, pos: number, env: Env): ParserResult {
@@ -762,6 +828,16 @@ function parsePrimary(source: string, pos: number, env: Env): ParserResult {
 
   const literalResult = parsePrimaryLiterals(source, trimmedPos);
   if (literalResult) {
+    // Check if this literal is followed by a method call
+    const methodResult = parseMethodCall(
+      source,
+      literalResult.pos,
+      env,
+      literalResult.value,
+    );
+    if (methodResult) {
+      return methodResult;
+    }
     return literalResult;
   }
 
