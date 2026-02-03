@@ -37,6 +37,12 @@ type TypeAlias = {
   aliasName?: string; // For simple type aliases: type Alias = I32;
   unionTypes?: string[]; // For union types: type Option = Some | None;
 };
+type ModuleDef = {
+  type: "module";
+  body: string;
+  bodyPos: number;
+  env: Env; // Module's own environment with its functions
+};
 type EnvEntry =
   | Variable
   | FunctionDef
@@ -46,7 +52,8 @@ type EnvEntry =
   | StructDef
   | StructInstance
   | EnumDef
-  | TypeAlias;
+  | TypeAlias
+  | ModuleDef;
 type Env = Record<string, EnvEntry> & {
   breakRequested?: boolean;
   continueRequested?: boolean;
@@ -578,6 +585,12 @@ function checkKeywordControlFlow(
     return parseTypeAliasDefinition(source, typePos, env);
   }
 
+  // Check for 'module' keyword
+  const modulePos = skipKeyword(source, pos, "module");
+  if (modulePos !== null) {
+    return parseModule(source, modulePos, env);
+  }
+
   // Check for 'fn' keyword
   const fnPos = skipKeyword(source, pos, "fn");
   if (fnPos !== null) {
@@ -920,6 +933,65 @@ function tryParseFunctionCall(
   return null;
 }
 
+function parseRestOfStatements(
+  source: string,
+  pos: number,
+  endPos: number,
+  env: Env,
+): ParserResult {
+  // Skip any closing brace that was already counted
+  pos = endPos + 1;
+  if (source.charCodeAt(pos) === 59) {
+    // ';'
+    pos = pos + 1;
+  }
+  pos = skipWhitespace(source, pos);
+
+  // Parse rest of statements
+  const restResult = parseStatement(source, pos, env);
+  return { value: restResult.value, pos: restResult.pos };
+}
+
+function tryParseModuleFunction(
+  source: string,
+  afterIdPos: number,
+  env: Env,
+  moduleDef: ModuleDef,
+): ParserResult | null {
+  let currentPos = afterIdPos;
+  if (
+    source.charCodeAt(currentPos) !== 58 ||
+    source.charCodeAt(currentPos + 1) !== 58
+  ) {
+    // No :: operator
+    return null;
+  }
+
+  currentPos = skipWhitespace(source, currentPos + 2);
+  const functionName = parseIdentifier(source, currentPos);
+  if (!functionName) {
+    return null;
+  }
+
+  currentPos = skipWhitespace(source, functionName.end);
+
+  // Check if followed by ( for function call
+  if (source.charCodeAt(currentPos) !== 40) {
+    // '('
+    return null;
+  }
+
+  // Look up function in module environment
+  const fnEntry = moduleDef.env[functionName.name];
+  if (!fnEntry || fnEntry.type !== "function") {
+    return null;
+  }
+
+  const fnDef = fnEntry as FunctionDef;
+  const result = parseFunctionCall(source, currentPos, env, fnDef);
+  return { value: result.value, pos: result.pos };
+}
+
 function tryParseEnumVariant(
   source: string,
   afterIdPos: number,
@@ -1078,6 +1150,19 @@ function parsePrimaryIdentifier(
   const enumResult = tryParseEnumVariant(source, afterIdPos, entry);
   if (enumResult) {
     return enumResult;
+  }
+
+  // Check for module function access (Module::function())
+  if (entry.type === "module") {
+    const moduleFnResult = tryParseModuleFunction(
+      source,
+      afterIdPos,
+      env,
+      entry as ModuleDef,
+    );
+    if (moduleFnResult) {
+      return moduleFnResult;
+    }
   }
 
   if (entry.type === "variable") {
@@ -1247,8 +1332,10 @@ function tryParseInlineFunction(
 
   // Find the end of the body (up to comma or closing paren)
   const bodyStartPos = currentPos;
-  const bodyEndPos = findBodyEndPosition(source, currentPos, (code, depth) =>
-    (code === 44 || code === 41) && depth === 0
+  const bodyEndPos = findBodyEndPosition(
+    source,
+    currentPos,
+    (code, depth) => (code === 44 || code === 41) && depth === 0,
   );
 
   const body = source.substring(bodyStartPos, bodyEndPos);
@@ -1594,6 +1681,70 @@ function skipTypeParameterList(source: string, pos: number): number {
   return skipWhitespace(source, pos);
 }
 
+function parseModule(source: string, pos: number, env: Env): ParserResult {
+  pos = skipWhitespace(source, pos);
+
+  // Parse module name
+  const moduleName = parseIdentifier(source, pos);
+  if (!moduleName) {
+    return { value: 0, pos };
+  }
+
+  pos = skipWhitespace(source, moduleName.end);
+
+  // Expect opening brace
+  if (source.charCodeAt(pos) !== 123) {
+    // '{'
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, pos + 1);
+
+  // Find the end of the module body (balanced braces)
+  const bodyStartPos = pos;
+  let bodyEndPos = pos;
+  let depth = 1; // We've already seen the opening brace
+
+  while (bodyEndPos < source.length && depth > 0) {
+    const charCode = source.charCodeAt(bodyEndPos);
+    if (charCode === 123) {
+      // '{'
+      depth++;
+    } else if (charCode === 125) {
+      // '}'
+      depth--;
+    }
+    if (depth > 0) {
+      bodyEndPos++;
+    }
+  }
+
+  const body = source.substring(bodyStartPos, bodyEndPos);
+
+  // Create module environment and execute body in it
+  // Parse the body and then adjust all bodyPos values
+  const moduleEnv: Env = {};
+  parseStatement(body, 0, moduleEnv);
+  
+  // Adjust all bodyPos values in moduleEnv to be relative to original source
+  for (const entry of Object.values(moduleEnv)) {
+    if (entry && typeof entry === "object" && (entry as any).type === "function") {
+      const fnDef = entry as FunctionDef;
+      fnDef.bodyPos = (fnDef.bodyPos ?? 0) + bodyStartPos;
+    }
+  }
+
+  // Store module definition
+  env[moduleName.name] = {
+    type: "module",
+    body,
+    bodyPos: bodyStartPos,
+    env: moduleEnv,
+  };
+
+  // Parse rest of statements using helper
+  return parseRestOfStatements(source, pos, bodyEndPos, env);
+}
+
 function parseFunction(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
@@ -1643,8 +1794,10 @@ function parseFunction(source: string, pos: number, env: Env): ParserResult {
 
   // Find the end of the function body (up to semicolon)
   const bodyStartPos = pos;
-  const bodyEndPos = findBodyEndPosition(source, pos, (code, depth) =>
-    code === 59 && depth === 0 // 59 = ';'
+  const bodyEndPos = findBodyEndPosition(
+    source,
+    pos,
+    (code, depth) => code === 59 && depth === 0, // 59 = ';'
   );
 
   const body = source.substring(bodyStartPos, bodyEndPos);
@@ -1657,16 +1810,8 @@ function parseFunction(source: string, pos: number, env: Env): ParserResult {
     bodyPos: bodyStartPos,
   };
 
-  // Skip semicolon
-  pos = bodyEndPos;
-  if (source.charCodeAt(pos) === 59) {
-    pos = pos + 1;
-  }
-  pos = skipWhitespace(source, pos);
-
-  // Parse rest of statements
-  const restResult = parseStatement(source, pos, env);
-  return { value: restResult.value, pos: restResult.pos };
+  // Parse rest of statements using helper
+  return parseRestOfStatements(source, bodyEndPos, bodyEndPos, env);
 }
 
 function parseIdentifierList(

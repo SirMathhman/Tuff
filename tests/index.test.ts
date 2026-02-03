@@ -201,10 +201,11 @@ describe("The interpreter can interpret functions", () => {
   });
 
   test("function parameter with function type and inline function argument", () => {
-    expectValid(
-      "fn get0(get : () => I32) => get() + 1; get0(() => 100)",
-      101,
-    );
+    expectValid("fn get0(get : () => I32) => get() + 1; get0(() => 100)", 101);
+  });
+
+  test("module definition and function call", () => {
+    expectValid("module MyModule { fn get() => 100; } MyModule::get()", 100);
   });
 });
 
