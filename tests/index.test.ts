@@ -239,6 +239,13 @@ describe("The interpreter can interpret data", () => {
     );
   });
 
+  test("variable destructuring in let binding", () => {
+    expectValid(
+      "struct Wrapper { value : I32; } let { value } = Wrapper { 100 }; value",
+      100,
+    );
+  });
+
   test("character literal", () => {
     expectValid("let c : Char = 'a'; c", 97);
   });

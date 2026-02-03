@@ -1731,12 +1731,26 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
     pos = skipWhitespace(source, mutPos);
   }
 
-  // Parse variable name
-  const identifier = parseIdentifier(source, pos);
-  if (!identifier) {
-    return { value: 0, pos };
+  // Check for destructuring pattern: { field1, field2, ... }
+  let destructureFields: string[] | null = null;
+  if (source.charCodeAt(pos) === 123) {
+    // '{'
+    const destructList = parseIdentifierList(source, pos, false);
+    if (destructList) {
+      destructureFields = destructList.names;
+      pos = skipWhitespace(source, destructList.pos);
+    }
   }
-  pos = skipWhitespace(source, identifier.end);
+
+  // Parse variable name (skip if we're doing destructuring)
+  let identifier: { name: string; end: number } | null = null;
+  if (!destructureFields) {
+    identifier = parseIdentifier(source, pos);
+    if (!identifier) {
+      return { value: 0, pos };
+    }
+    pos = skipWhitespace(source, identifier.end);
+  }
 
   const typeInfo = parseLetTypeAnnotation(source, pos, env);
   let structType: string | null = typeInfo.structType;
@@ -1780,8 +1794,24 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
 
   pos = skipSemicolonAndWhitespace(source, pos);
 
-  // Create new environment with the binding
-  const newEnv: Env = { ...env, [identifier.name]: entry };
+  // Create new environment with the binding(s)
+  let newEnv: Env = { ...env };
+
+  if (destructureFields && entry.type === "structInstance") {
+    // Destructuring: extract fields from struct instance
+    const instance = entry as StructInstance;
+    destructureFields.forEach((fieldName) => {
+      const fieldValue = instance.fieldValues[fieldName] ?? 0;
+      newEnv[fieldName] = {
+        type: "variable",
+        value: fieldValue,
+        mutable: isMutable,
+      };
+    });
+  } else if (identifier) {
+    // Regular binding
+    newEnv = { ...env, [identifier.name]: entry };
+  }
 
   // Parse body statement (which may contain another let binding)
   const bodyResult = parseStatement(source, pos, newEnv);
