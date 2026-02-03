@@ -301,6 +301,13 @@ describe("The interpreter can interpret data", () => {
     );
   });
 
+  test("mutable array slicing with pointer reference, indexed assignment, and original array mutation", () => {
+    expectValid(
+      "let mut array : [I32; 3; 3] = [1, 2, 3]; let mut slice : *mut [I32; 2; 2] = &mut array[0..2]; slice[1] = 100; array[1]",
+      100,
+    );
+  });
+
   test("struct definition and instantiation with field access", () => {
     expectValid(
       "struct Point { x : I32; y : I32; } let temp : Point = Point { 3, 4 }; temp.x + temp.y",

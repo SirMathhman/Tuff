@@ -844,12 +844,15 @@ function handleIndexing(
   let endPos = skipWhitespace(source, indexResult.pos);
 
   // Check for range syntax '..'
-  if (source.charCodeAt(endPos) === 46 && source.charCodeAt(endPos + 1) === 46) {
+  if (
+    source.charCodeAt(endPos) === 46 &&
+    source.charCodeAt(endPos + 1) === 46
+  ) {
     // ']' - range syntax detected
     endPos = skipWhitespace(source, endPos + 2);
     const rangeEndResult = parseLogicalOr(source, endPos, env);
     endPos = skipWhitespace(source, rangeEndResult.pos);
-    
+
     if (source.charCodeAt(endPos) === 93) {
       // ']'
       endPos = skipWhitespace(source, endPos + 1);
@@ -1263,19 +1266,31 @@ function handlePointerIndexing(
   entry: EnvEntry,
 ): ParserResult | null {
   const pointerEntry = entry as any;
-  
+
+  // Check if pointer is a mutable slice - read from original array
+  if (pointerEntry.__sliceSourceName && pointerEntry.__sliceStart !== undefined) {
+    const sourceArray = env[pointerEntry.__sliceSourceName];
+    if (sourceArray && sourceArray.type === "array") {
+      const arrayDef = sourceArray as ArrayDef;
+      return handleIndexing(source, afterIdPos, env, entry, (index: number) => {
+        const actualIndex =
+          pointerEntry.__sliceStart + Math.floor(index);
+        return actualIndex >= 0 && actualIndex < arrayDef.elements.length
+          ? arrayDef.elements[actualIndex] ?? 0
+          : 0;
+      });
+    }
+  }
+
   // Check if pointer has a stored array value for indexing
-  if (
-    pointerEntry.__arrayValue &&
-    Array.isArray(pointerEntry.__arrayValue)
-  ) {
+  if (pointerEntry.__arrayValue && Array.isArray(pointerEntry.__arrayValue)) {
     return handleIndexing(source, afterIdPos, env, entry, (index: number) => {
       return index >= 0 && index < pointerEntry.__arrayValue.length
-        ? pointerEntry.__arrayValue[index]
+        ? pointerEntry.__arrayValue[index] ?? 0
         : 0;
     });
   }
-  
+
   // Check if pointer has a stored string value for indexing
   if (
     pointerEntry.__stringValue &&
@@ -1664,20 +1679,28 @@ function createPointerReference(
   isMutable: boolean,
   pointsToName?: string,
   arrayValue?: number[],
+  sliceSourceName?: string,
+  sliceStart?: number,
+  sliceEnd?: number,
 ): string {
-  const pointerRefKey =
-    "__ptrref_" + Math.random().toString(36).substring(7);
+  const pointerRefKey = "__ptrref_" + Math.random().toString(36).substring(7);
   const pointerDef: any = {
     type: "pointer",
     value: 0,
     pointsToName,
     isMutable,
   };
-  
+
   if (arrayValue) {
     pointerDef.__arrayValue = arrayValue;
   }
-  
+
+  if (isMutable && sliceSourceName) {
+    pointerDef.__sliceSourceName = sliceSourceName;
+    pointerDef.__sliceStart = sliceStart;
+    pointerDef.__sliceEnd = sliceEnd;
+  }
+
   env[pointerRefKey] = pointerDef;
   return pointerRefKey;
 }
@@ -1717,7 +1740,7 @@ function tryParseReferenceOperator(
     } else if (variable && variable.type === "array") {
       // Handle array reference with potential slicing
       let refEndPos = identifier.end;
-      
+
       // Check if this is followed by array indexing with slicing
       if (source.charCodeAt(refEndPos) === 91) {
         // '[' - potential slice
@@ -1728,7 +1751,7 @@ function tryParseReferenceOperator(
           variable,
           () => 0, // getValue not used for slicing detection
         );
-        
+
         if (arrayIndexResult) {
           // Check if a slice was detected
           const sliceInfo = (env as any).__lastArraySlice;
@@ -1737,19 +1760,26 @@ function tryParseReferenceOperator(
             // Create sliced array
             const sliceStart = sliceInfo.startIdx;
             const sliceEnd = sliceInfo.endIdx;
-            const slicedElements = arrayDef.elements.slice(sliceStart, sliceEnd);
-            
+            const slicedElements = arrayDef.elements.slice(
+              sliceStart,
+              sliceEnd,
+            );
+
+            // For mutable slices, store reference to original array
             const pointerRefKey = createPointerReference(
               env,
               isMutableRef,
               undefined,
-              slicedElements,
+              isMutableRef ? undefined : slicedElements,
+              isMutableRef ? identifier.name : undefined,
+              isMutableRef ? sliceStart : undefined,
+              isMutableRef ? sliceEnd : undefined,
             );
-            
+
             // Clean up slice info
             delete (env as any).__lastArraySlice;
             delete (env as any).__lastArraySliceEntry;
-            
+
             // Store reference for later retrieval
             (env as any).__lastPointerRef = pointerRefKey;
             return { value: Math.random(), pos: arrayIndexResult.pos };
@@ -3192,6 +3222,18 @@ function parseShift(source: string, pos: number, env: Env): ParserResult {
   );
 }
 
+function parseIdentifierWithPosition(
+  source: string,
+  pos: number,
+): { identifier: { name: string; end: number } | null; pos: number } {
+  const identifier = parseIdentifier(source, pos);
+  if (!identifier) {
+    return { identifier: null, pos };
+  }
+  const afterIdPos = skipWhitespace(source, identifier.end);
+  return { identifier, pos: afterIdPos };
+}
+
 function tryParsePointerAssignment(
   source: string,
   pos: number,
@@ -3237,6 +3279,79 @@ function tryParsePointerAssignment(
   return { value: rhsResult.value, pos: endPos };
 }
 
+function tryParseArraySliceAssignment(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult | null {
+  const startPos = skipWhitespace(source, pos);
+  
+  // Try to parse identifier
+  const { identifier, pos: afterIdPos } = parseIdentifierWithPosition(
+    source,
+    startPos,
+  );
+  if (!identifier) {
+    return null;
+  }
+
+  // Check if followed by '['
+  if (source.charCodeAt(afterIdPos) !== 91) {
+    return null;
+  }
+
+  // Check if this identifier is a mutable slice pointer
+  const entry = env[identifier.name];
+  if (!entry || entry.type !== "pointer") {
+    return null;
+  }
+
+  const pointerEntry = entry as any;
+  if (
+    !pointerEntry.isMutable ||
+    !pointerEntry.__sliceSourceName ||
+    pointerEntry.__sliceStart === undefined
+  ) {
+    return null;
+  }
+
+  // Parse the index
+  let indexPos = skipWhitespace(source, afterIdPos + 1);
+  const indexResult = parseLogicalOr(source, indexPos, env);
+  indexPos = skipWhitespace(source, indexResult.pos);
+
+  // Expect ']'
+  if (source.charCodeAt(indexPos) !== 93) {
+    return null;
+  }
+
+  const afterBracketPos = skipWhitespace(source, indexPos + 1);
+  
+  // Expect '='
+  if (source.charCodeAt(afterBracketPos) !== 61) {
+    return null;
+  }
+
+  // Parse RHS
+  const assignPos = skipWhitespace(source, afterBracketPos + 1);
+  const rhsResult = parseLogicalOr(source, assignPos, env);
+
+  // Update the original array
+  const sourceArray = env[pointerEntry.__sliceSourceName];
+  if (sourceArray && sourceArray.type === "array") {
+    const arrayDef = sourceArray as ArrayDef;
+    const sliceIndex = Math.floor(indexResult.value);
+    const actualIndex = pointerEntry.__sliceStart + sliceIndex;
+
+    if (actualIndex >= 0 && actualIndex < arrayDef.elements.length) {
+      arrayDef.elements[actualIndex] = rhsResult.value;
+    }
+  }
+
+  const endPos = skipSemicolonAndWhitespace(source, rhsResult.pos);
+  return { value: rhsResult.value, pos: endPos };
+}
+
 function parseAssignmentOrExpression(
   source: string,
   pos: number,
@@ -3248,6 +3363,11 @@ function parseAssignmentOrExpression(
   const pointerAssignResult = tryParsePointerAssignment(source, pos, env);
   if (pointerAssignResult) {
     return pointerAssignResult;
+  }
+
+  const arraySliceAssignResult = tryParseArraySliceAssignment(source, pos, env);
+  if (arraySliceAssignResult) {
+    return arraySliceAssignResult;
   }
 
   // Try to parse an identifier (potential assignment target)
