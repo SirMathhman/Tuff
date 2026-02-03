@@ -1,0 +1,378 @@
+bun test v1.2.21 (7c45ed97)
+
+tests\index.test.ts:
+(pass) The interpreter can interpret basics > an empty program
+(pass) The interpreter can interpret basics > a numeric literal
+(pass) The interpreter can interpret basics > a typed numeric literal
+(pass) The interpreter can interpret basics > binary addition
+(pass) The interpreter can interpret basics > chained addition
+(pass) The interpreter can interpret basics > addition and subtraction
+(pass) The interpreter can interpret basics > multiplication with precedence
+(pass) The interpreter can interpret basics > addition with multiplication precedence
+(pass) The interpreter can interpret basics > parentheses grouping
+(pass) The interpreter can interpret basics > curly braces grouping
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret basics > variable binding with let [16.00ms]
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: z
+  entry.type: variable
+(pass) The interpreter can interpret basics > top-level let binding
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: b
+  entry.type: variable
+parsePrimaryIdentifier: z
+  entry.type: variable
+parsePrimaryIdentifier: a
+  entry.type: variable
+(pass) The interpreter can interpret basics > sequential let bindings
+parsePrimaryIdentifier: x
+(pass) The interpreter can interpret basics > let binding without type annotation
+(pass) The interpreter can interpret basics > mutable variable binding and reassignment
+  entry.type: variable
+(pass) The interpreter can interpret basics > compound assignment operator +=
+parsePrimaryIdentifier: add
+  entry.type: function
+parseFunctionCall - bodyResult: {
+  value: 1,
+  pos: 35,
+} returnedFunctionRef: undefined
+  tryParseFunctionCall result: {
+  value: 1,
+  pos: 40,
+}
+tryCallChainedFunction: fnResult.value = 1 __lastFunctionRef = undefined
+(pass) The interpreter can interpret basics > function in block scope can mutate outer variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret control flow > boolean literal true
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret control flow > logical AND operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret control flow > logical OR operator
+(pass) The interpreter can interpret control flow > block-scoped mutable variable mutation
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret control flow > less-than comparison operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret control flow > if-else expression
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret control flow > if-else statement with assignments
+(pass) The interpreter can interpret control flow > if-else with block bodies
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret control flow > nested if-else expressions
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret control flow > nested if-else statements
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret control flow > match expression with case patterns
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret loops > while loop
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret loops > while loop with block body
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret loops > while loop with break statement
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret loops > while loop with simple continue
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret loops > yield statement in block expression
+parsePrimaryIdentifier: get
+  entry.type: function
+parseFunctionCall - bodyResult: {
+  value: 101,
+  pos: 49,
+} returnedFunctionRef: undefined
+  tryParseFunctionCall result: {
+  value: 101,
+  pos: 56,
+}
+tryCallChainedFunction: fnResult.value = 101 __lastFunctionRef = undefined
+(pass) The interpreter can interpret loops > function with yield expression in body
+parsePrimaryIdentifier: get
+  entry.type: function
+parseFunctionCall - bodyResult: {
+  value: 100,
+  pos: 46,
+} returnedFunctionRef: undefined
+  tryParseFunctionCall result: {
+  value: 100,
+  pos: 57,
+}
+tryCallChainedFunction: fnResult.value = 100 __lastFunctionRef = undefined
+(pass) The interpreter can interpret loops > function with return statement
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+(pass) The interpreter can interpret loops > for loop with range [16.00ms]
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+parsePrimaryIdentifier: i
+  entry.type: variable
+(pass) The interpreter can interpret loops > for loop with range and block body
+parsePrimaryIdentifier: add
+  entry.type: function
+parsePrimaryIdentifier: first
+  entry.type: variable
+parsePrimaryIdentifier: second
+  entry.type: variable
+parseFunctionCall - bodyResult: {
+  value: 7,
+  pos: 57,
+} returnedFunctionRef: undefined
+  tryParseFunctionCall result: {
+  value: 7,
+  pos: 68,
+}
+tryCallChainedFunction: fnResult.value = 7 __lastFunctionRef = undefined
+(pass) The interpreter can interpret functions > function definition and call
+parsePrimaryIdentifier: this
+  entry.type: variable
+parseFunctionCall - bodyResult: {
+  value: 101,
+  pos: 33,
+} returnedFunctionRef: undefined
+(pass) The interpreter can interpret functions > extension method with this parameter
+parsePrimaryIdentifier: temp
+  entry.type: functionRef
+parseFunctionCall - bodyResult: {
+  value: 1,
+  pos: 42,
+} returnedFunctionRef: undefined
+tryCallChainedFunction: fnResult.value = 1 __lastFunctionRef = undefined
+(pass) The interpreter can interpret functions > function reference assignment and call
+1 | import { interpret } from "../src";
+2 | 
+3 | function expectValid(source: string, exitCode: number) {
+4 |   expect(interpret(source)).toBe(exitCode);
+                                ^
+error: expect(received).toBe(expected)
+
+Expected: 1
+Received: 0
+
+      at expectValid (C:\Users\mathm\Documents\Projects\Tuff\tests\index.test.ts:4:29)
+      at <anonymous> (C:\Users\mathm\Documents\Projects\Tuff\tests\index.test.ts:197:5)
+(fail) The interpreter can interpret functions > function returning function reference
+parsePrimaryIdentifier: Color
+  entry.type: enumDef
+parsePrimaryIdentifier: Color
+  entry.type: enumDef
+(pass) The interpreter can interpret data > enum definition and variant access with equality
+parsePrimaryIdentifier: pass
+  entry.type: function
+parsePrimaryIdentifier: value
+  entry.type: variable
+parseFunctionCall - bodyResult: {
+  value: 100,
+  pos: 34,
+} returnedFunctionRef: undefined
+  tryParseFunctionCall result: {
+  value: 100,
+  pos: 50,
+}
+tryCallChainedFunction: fnResult.value = 100 __lastFunctionRef = undefined
+(pass) The interpreter can interpret data > generic function definition and call
+parsePrimaryIdentifier: wrapper
+  entry.type: structInstance
+(pass) The interpreter can interpret data > generic struct definition and instantiation with field access
+parsePrimaryIdentifier: temp
+  entry.type: variable
+(pass) The interpreter can interpret data > type alias definition and usage
+(pass) The interpreter can interpret data > is operator with I32 type
+(pass) The interpreter can interpret data > is operator with type alias combination
+parsePrimaryIdentifier: temp
+  entry.type: variable
+(pass) The interpreter can interpret data > is operator with type alias
+(pass) The interpreter can interpret data > union type and struct instance type checking
+parsePrimaryIdentifier: temp
+  entry.type: structInstance
+(pass) The interpreter can interpret data > union type with struct field access in if-else
+parsePrimaryIdentifier: temp
+  entry.type: structInstance
+parsePrimaryIdentifier: temp
+  entry.type: structInstance
+(pass) The interpreter can interpret data > union type pattern matching with struct variant matching
+parsePrimaryIdentifier: temp
+  entry.type: structInstance
+parsePrimaryIdentifier: value
+  entry.type: variable
+(pass) The interpreter can interpret data > union type pattern matching with destructuring
+parsePrimaryIdentifier: value
+  entry.type: variable
+(pass) The interpreter can interpret data > is operator with destructuring pattern
+parsePrimaryIdentifier: array
+  entry.type: array
+parsePrimaryIdentifier: array
+  entry.type: array
+parsePrimaryIdentifier: array
+  entry.type: array
+(pass) The interpreter can interpret data > array declaration and element access
+parsePrimaryIdentifier: temp
+  entry.type: structInstance
+parsePrimaryIdentifier: temp
+  entry.type: structInstance
+(pass) The interpreter can interpret data > struct definition and instantiation with field access
+parsePrimaryIdentifier: value
+  entry.type: variable
+(pass) The interpreter can interpret data > variable destructuring in let binding
+parsePrimaryIdentifier: c
+  entry.type: variable
+(pass) The interpreter can interpret data > character literal
+parsePrimaryIdentifier: c
+  entry.type: string
+(pass) The interpreter can interpret data > string literal and indexing
+parsePrimaryIdentifier: x
+  entry.type: variable
+(pass) The interpreter can interpret operators > logical NOT operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > greater-than comparison operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > greater-than-or-equal comparison operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > less-than-or-equal comparison operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > equality comparison operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > not-equal comparison operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > division operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > modulo operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > bitwise AND operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > bitwise OR operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > bitwise XOR operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > bitwise left shift operator
+parsePrimaryIdentifier: x
+  entry.type: variable
+parsePrimaryIdentifier: y
+  entry.type: variable
+(pass) The interpreter can interpret operators > bitwise right shift operator
+
+1 tests failed:
+(fail) The interpreter can interpret functions > function returning function reference
+
+ 70 pass
+ 1 fail
+ 71 expect() calls
+Ran 71 tests across 1 file. [59.00ms]

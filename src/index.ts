@@ -54,6 +54,7 @@ type Env = Record<string, EnvEntry> & {
   yieldValue?: number;
   returnRequested?: boolean;
   returnValue?: number;
+  returnedFunctionRef?: string; // For functions that return function references
 };
 
 type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
@@ -948,6 +949,103 @@ function tryParseEnumVariant(
   return null;
 }
 
+function tryCallChainedFunction(
+  source: string,
+  fnResult: ParserResult,
+  env: Env,
+): ParserResult | null {
+  if (fnResult.value === -1 && (env as any).__lastFunctionRef) {
+    const fnRefKey = (env as any).__lastFunctionRef;
+    const fnRefEntry = env[fnRefKey] as FunctionRef;
+    const nextPos = skipWhitespace(source, fnResult.pos);
+    if (source.charCodeAt(nextPos) === 40) {
+      // '(' - chained call
+      const referencedFn = env[fnRefEntry.functionName];
+      if (referencedFn && referencedFn.type === "function") {
+        const referencedFnDef = referencedFn as FunctionDef;
+        const chainedResult = parseFunctionCall(
+          source,
+          nextPos,
+          env,
+          referencedFnDef,
+        );
+        return chainedResult;
+      }
+    }
+  }
+  return null;
+}
+
+function tryParseFunctionCallWithChain(
+  source: string,
+  afterIdPos: number,
+  env: Env,
+  fnEntry: FunctionDef,
+): ParserResult | null {
+  const fnResult = tryParseFunctionCall(source, afterIdPos, env, fnEntry);
+  if (!fnResult) {
+    return null;
+  }
+  const chainedResult = tryCallChainedFunction(source, fnResult, env);
+  return chainedResult ?? fnResult;
+}
+
+function handleFunctionEntry(
+  source: string,
+  afterIdPos: number,
+  env: Env,
+  identifierName: string,
+  identifierEnd: number,
+  entry: EnvEntry,
+): ParserResult | null {
+  if (entry.type === "function") {
+    const fnEntry = entry as FunctionDef;
+    const fnResult = tryParseFunctionCallWithChain(
+      source,
+      afterIdPos,
+      env,
+      fnEntry,
+    );
+    if (fnResult) {
+      return fnResult;
+    }
+    const tempRefKey = "__fnref_" + Math.random().toString(36).substring(7);
+    env[tempRefKey] = {
+      type: "functionRef",
+      functionName: identifierName,
+    };
+    (env as any).__lastFunctionRef = tempRefKey;
+    (env as any).returnedFunctionRef = identifierName;
+    return { value: -1, pos: identifierEnd };
+  }
+
+  if (entry.type === "functionRef") {
+    const fnRef = entry as FunctionRef;
+    const referencedFn = env[fnRef.functionName];
+    if (referencedFn && referencedFn.type === "function") {
+      const fnEntry = referencedFn as FunctionDef;
+      const fnResult = tryParseFunctionCallWithChain(
+        source,
+        afterIdPos,
+        env,
+        fnEntry,
+      );
+      if (fnResult) {
+        return fnResult;
+      }
+    }
+    const tempRefKey = "__fnref_" + Math.random().toString(36).substring(7);
+    env[tempRefKey] = {
+      type: "functionRef",
+      functionName: fnRef.functionName,
+    };
+    (env as any).__lastFunctionRef = tempRefKey;
+    return { value: -1, pos: identifierEnd };
+  }
+
+  return null;
+}
+
 function parsePrimaryIdentifier(
   source: string,
   pos: number,
@@ -964,26 +1062,16 @@ function parsePrimaryIdentifier(
     return null;
   }
 
-  // Check for function call (generic or regular)
-  if (entry.type === "function") {
-    const fnEntry = entry as FunctionDef;
-    const fnResult = tryParseFunctionCall(source, afterIdPos, env, fnEntry);
-    if (fnResult) {
-      return fnResult;
-    }
-  }
-
-  // Check for function reference call
-  if (entry.type === "functionRef") {
-    const fnRef = entry as FunctionRef;
-    const referencedFn = env[fnRef.functionName];
-    if (referencedFn && referencedFn.type === "function") {
-      const fnEntry = referencedFn as FunctionDef;
-      const fnResult = tryParseFunctionCall(source, afterIdPos, env, fnEntry);
-      if (fnResult) {
-        return fnResult;
-      }
-    }
+  const functionResult = handleFunctionEntry(
+    source,
+    afterIdPos,
+    env,
+    identifier.name,
+    identifier.end,
+    entry,
+  );
+  if (functionResult) {
+    return functionResult;
   }
 
   // Check for enum variant access
@@ -1088,6 +1176,7 @@ function parseFunctionCall(
   argPos = skipWhitespace(source, argPos + 1);
 
   const callEnv: Env = { ...env };
+  delete (callEnv as any).__lastFunctionRef;
 
   // Bind 'this' parameter if provided
   if (
@@ -1125,6 +1214,27 @@ function parseFunctionCall(
     fnEntry.bodyPos,
     callEnv,
   );
+
+  // Check if body returned a function reference
+  if ((callEnv as any).__lastFunctionRef) {
+    const fnRefKey = (callEnv as any).__lastFunctionRef;
+    const fnRefEntry = callEnv[fnRefKey] as FunctionRef;
+    if (fnRefEntry) {
+      const tempRefKey = "__fnref_" + Math.random().toString(36).substring(7);
+      env[tempRefKey] = {
+        type: "functionRef",
+        functionName: fnRefEntry.functionName,
+      };
+      (env as any).__lastFunctionRef = tempRefKey;
+      const chainedResult = tryCallChainedFunction(
+        source,
+        { value: -1, pos: argPos },
+        env,
+      );
+      return chainedResult ?? { value: -1, pos: argPos };
+    }
+  }
+
   return { value: bodyResult.value, pos: argPos };
 }
 
@@ -1215,6 +1325,29 @@ function parsePrimary(source: string, pos: number, env: Env): ParserResult {
   return { value: 0, pos: trimmedPos };
 }
 
+function skipFunctionTypeAnnotation(
+  source: string,
+  pos: number,
+): number | null {
+  if (source.charCodeAt(pos) !== 40) {
+    return null;
+  }
+  const afterParen = skipBalancedBrackets(source, pos, 40, 41);
+  const afterParenClean = skipWhitespace(source, afterParen);
+  if (
+    source.charCodeAt(afterParenClean) === 61 &&
+    source.charCodeAt(afterParenClean + 1) === 62
+  ) {
+    let currentPos = skipWhitespace(source, afterParenClean + 2);
+    const returnType = parseIdentifier(source, currentPos);
+    if (returnType) {
+      currentPos = skipWhitespace(source, returnType.end);
+    }
+    return currentPos;
+  }
+  return null;
+}
+
 function skipTypeAnnotation(source: string, pos: number): number {
   // Skip type annotation (: TypeName or : [Type; N; M])
   const typePos = parseTypeAnnotationColon(source, pos);
@@ -1222,6 +1355,11 @@ function skipTypeAnnotation(source: string, pos: number): number {
     return pos;
   }
   pos = typePos;
+
+  const functionTypePos = skipFunctionTypeAnnotation(source, pos);
+  if (functionTypePos !== null) {
+    return functionTypePos;
+  }
 
   // Check for array type annotation
   if (source.charCodeAt(pos) === 91) {
@@ -1627,24 +1765,10 @@ function parseLetTypeAnnotation(
     currentPos = skipWhitespace(source, currentPos + 1);
   }
 
-  // Check for function type: ( ... ) => ...
-  if (source.charCodeAt(currentPos) === 40) {
-    // '('
-    const afterParen = skipBalancedBrackets(source, currentPos, 40, 41);
-    const afterParenClean = skipWhitespace(source, afterParen);
-    if (
-      source.charCodeAt(afterParenClean) === 61 &&
-      source.charCodeAt(afterParenClean + 1) === 62
-    ) {
-      // '=>' found - this is a function type
-      isFunctionType = true;
-      currentPos = skipWhitespace(source, afterParenClean + 2);
-      // Skip the return type
-      const returnType = parseIdentifier(source, currentPos);
-      if (returnType) {
-        currentPos = skipWhitespace(source, returnType.end);
-      }
-    }
+  const functionTypePos = skipFunctionTypeAnnotation(source, currentPos);
+  if (functionTypePos !== null) {
+    isFunctionType = true;
+    currentPos = functionTypePos;
   } else if (source.charCodeAt(currentPos) !== 91) {
     const typeId = parseIdentifier(source, currentPos);
     if (typeId) {

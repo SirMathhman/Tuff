@@ -174,6 +174,33 @@ describe("The interpreter can interpret loops", () => {
   });
 });
 
+describe("The interpreter can interpret functions", () => {
+  test("function definition and call", () => {
+    expectValid(
+      "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",
+      7,
+    );
+  });
+
+  test("extension method with this parameter", () => {
+    expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
+  });
+
+  test("function reference assignment and call", () => {
+    expectValid(
+      "let mut x = 0; fn add() : Void => x += 1; let temp : () => Void = add; temp(); x",
+      1,
+    );
+  });
+
+  test("function returning function reference", () => {
+    expectValid(
+      "let mut x = 0; fn add() : Void => x += 1; fn get() : () => Void => add; get()(); x",
+      1,
+    );
+  });
+});
+
 describe("The interpreter can interpret data", () => {
   test("enum definition and variant access with equality", () => {
     expectValid("enum Color { Red; Green; } Color::Red == Color::Red", 1);
@@ -244,17 +271,6 @@ describe("The interpreter can interpret data", () => {
     );
   });
 
-  test("extension method with this parameter", () => {
-    expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
-  });
-
-  test("function definition and call", () => {
-    expectValid(
-      "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",
-      7,
-    );
-  });
-
   test("array declaration and element access", () => {
     expectValid(
       "let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]",
@@ -282,13 +298,6 @@ describe("The interpreter can interpret data", () => {
 
   test("string literal and indexing", () => {
     expectValid('let c : *Str = "test"; c[1]', 101);
-  });
-
-  test("function reference assignment and call", () => {
-    expectValid(
-      "let mut x = 0; fn add() : Void => x += 1; let temp : () => Void = add; temp(); x",
-      1,
-    );
   });
 });
 
