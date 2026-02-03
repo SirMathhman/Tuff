@@ -1106,3 +1106,231 @@ describe("Numerical Literal Semantics: Edge Cases & Boundaries", () => {
     expectValid("0 == 0x0 && 0x0 == 0o0 && 0o0 == 0b0", 1);
   });
 });
+
+describe("Block Expressions Semantics", () => {
+  describe("Basic block values", () => {
+    test("single expression block", () => {
+      expectValid("{ 42 }", 42);
+    });
+
+    test("block with trailing semicolon", () => {
+      expectValid("{ 42; }", 0);
+    });
+
+    test("block with multiple statements returns last", () => {
+      expectValid("{ 1; 2; 3; }", 0);
+    });
+
+    test("block with multiple expressions returns last non-void", () => {
+      expectValid("{ 10; 20 }", 20);
+    });
+
+    test("empty block returns zero", () => {
+      expectValid("{ }", 0);
+    });
+
+    test("nested expression in block", () => {
+      expectValid("{ 2 + 3 }", 5);
+    });
+  });
+
+  describe("Blocks in arithmetic", () => {
+    test("block as left operand", () => {
+      expectValid("{ 2 } + 3", 5);
+    });
+
+    test("block as right operand", () => {
+      expectValid("2 + { 3 }", 5);
+    });
+
+    test("block in both operands", () => {
+      expectValid("{ 2 } + { 3 }", 5);
+    });
+
+    test("block in complex expression", () => {
+      expectValid("{ 2 } + { 3 } * { 4 }", 14);
+    });
+
+    test("block with subtraction", () => {
+      expectValid("{ 10 } - { 3 }", 7);
+    });
+
+    test("block with division and multiplication", () => {
+      expectValid("{ 12 } / { 2 } * { 5 }", 30);
+    });
+  });
+
+  describe("Blocks with variable bindings", () => {
+    test("block with let binding", () => {
+      expectValid("{ let x = 10; x }", 10);
+    });
+
+    test("block with multiple let bindings", () => {
+      expectValid("{ let x = 5; let y = 3; x + y }", 8);
+    });
+
+    test("block with let binding in arithmetic", () => {
+      expectValid("2 + { let x = 3; x }", 5);
+    });
+
+    test("block with mut binding", () => {
+      expectValid("{ let mut x = 10; x = 20; x }", 20);
+    });
+
+    test("block with shadowing of outer variable", () => {
+      expectInvalid("let x = 100; { let x = 5; x }");
+    });
+  });
+
+  describe("Nested blocks", () => {
+    test("two level nesting", () => {
+      expectValid("{ { 42 } }", 42);
+    });
+
+    test("three level nesting", () => {
+      expectValid("{ { { 7 } } }", 7);
+    });
+
+    test("nested blocks in arithmetic", () => {
+      expectValid("{ { 2 } + { 3 } }", 5);
+    });
+
+    test("nested blocks with bindings", () => {
+      expectValid("{ let x = 5; { let y = 3; x + y } }", 8);
+    });
+
+    test("inner block shadows outer variable", () => {
+      expectInvalid("let x = 100; { let x = 5; { let x = 2; x } }");
+    });
+  });
+
+  describe("Blocks with comparisons and booleans", () => {
+    test("block with comparison", () => {
+      expectValid("{ 5 > 3 }", 1);
+    });
+
+    test("block with boolean expression", () => {
+      expectValid("{ true && false }", 0);
+    });
+
+    test("block in comparison", () => {
+      expectValid("{ 5 } > { 3 }", 1);
+    });
+
+    test("block with if expression", () => {
+      expectValid("{ if (true) 10 else 20 }", 10);
+    });
+  });
+
+  describe("Blocks with control flow", () => {
+    test("block with while loop", () => {
+      expectValid("{ let mut x = 0; while (x < 5) x += 1; x }", 5);
+    });
+
+    test("block with for loop", () => {
+      expectValid("{ let mut sum = 0; for (i in 0..3) sum += i; sum }", 3);
+    });
+
+    test("block with break in loop", () => {
+      expectValid("{ let mut x = 0; while (true) { x += 1; if (x == 3) break; } x }", 3);
+    });
+
+    test("block with continue in loop", () => {
+      expectValid("{ let mut x = 0; let mut count = 0; while (count < 3) { count += 1; if (count == 2) continue; x += count; } x }", 6);
+    });
+
+    test("block with if-else statements", () => {
+      expectValid("{ let x = 5; if (x > 3) { 100 } else { 200 } }", 100);
+    });
+  });
+
+  describe("Blocks with yield and return", () => {
+    test("block with yield returns early value", () => {
+      expectValid("{ yield 42; 100 }", 0);
+    });
+
+    test("block with multiple statements before yield", () => {
+      expectValid("{ let x = 5; let y = 3; yield x + y; 100 }", 100);
+    });
+
+    test("nested block with yield affects outer block", () => {
+      expectValid("{ { yield 42; } 100 }", 0);
+    });
+  });
+
+  describe("Blocks and operator precedence", () => {
+    test("block respects addition before multiplication", () => {
+      expectValid("2 * { 3 + 4 }", 14);
+    });
+
+    test("block with parenthesized arithmetic", () => {
+      expectValid("{ (2 + 3) * 4 }", 20);
+    });
+
+    test("multiple blocks follow precedence", () => {
+      expectValid("{ 2 } + { 3 } * { 4 }", 14);
+    });
+  });
+
+  describe("Variable scoping in blocks", () => {
+    test("variable defined in block inaccessible outside", () => {
+      expectInvalid("{ let x = 5; } x");
+    });
+
+    test("outer variable accessible in inner block", () => {
+      expectValid("let x = 10; { x }", 10);
+    });
+
+    test("outer variable modified in inner block affects outer", () => {
+      expectValid("let mut x = 10; { x = 20; } x", 20);
+    });
+
+    test("multiple blocks share outer scope", () => {
+      expectValid("let mut x = 0; { x = 5; } { x + 3 }", 8);
+    });
+  });
+
+  describe("Type interactions with blocks", () => {
+    test("typed block binding", () => {
+      expectValid("{ let x : I32 = 5; x }", 5);
+    });
+
+    test("block with typed arithmetic", () => {
+      expectValid("{ let x : U8 = 10; let y : U8 = 5; x + y }", 15);
+    });
+  });
+
+  describe("Invalid block cases", () => {
+    test("accessing undefined variable in block", () => {
+      expectInvalid("{ x }");
+    });
+
+    test("reassigning immutable variable in block", () => {
+      expectInvalid("let x = 5; { x = 10; }");
+    });
+
+    test("using undefined variable in block arithmetic", () => {
+      expectInvalid("{ y + 5 }");
+    });
+
+    test("variable shadowing prevented in block", () => {
+      expectInvalid("let x = 5; { let x = 10; }");
+    });
+
+    test("accessing block-local variable outside block", () => {
+      expectInvalid("{ let y = 5; let z = y; } z");
+    });
+
+    test("undefined variable in nested block", () => {
+      expectInvalid("{ { undefined_var } }");
+    });
+
+    test("immutable variable reassignment in nested block", () => {
+      expectInvalid("let a = 5; { { a = 10; } }");
+    });
+
+    test("comparing undefined variables in block", () => {
+      expectInvalid("{ x == y }");
+    });
+  });
+});

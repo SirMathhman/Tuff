@@ -436,6 +436,28 @@ function restoreBindings(
   }
 }
 
+function restoreAllowShadowing(
+  env: Env,
+  previousAllowShadowing: boolean | undefined,
+): void {
+  if (previousAllowShadowing !== undefined) {
+    (env as any).__allowShadowing = previousAllowShadowing;
+  } else {
+    delete (env as any).__allowShadowing;
+  }
+}
+
+function checkVariableDefined(
+  env: Env,
+  varName: string,
+): EnvEntry {
+  const entry = varName in env ? env[varName] : null;
+  if (!entry) {
+    throw new Error(`Undefined variable: ${varName}`);
+  }
+  return entry;
+}
+
 function checkControlFlowFlags(
   env: Env,
   previousResult: number,
@@ -1371,11 +1393,7 @@ function parsePrimaryIdentifier(
   }
 
   const afterIdPos = skipWhitespace(source, identifier.end);
-  const entry = identifier.name in env ? env[identifier.name]! : null;
-  if (!entry) {
-    // Identifier found but not in environment - this is an undefined variable error
-    throw new Error(`Undefined variable: ${identifier.name}`);
-  }
+  const entry = checkVariableDefined(env, identifier.name);
 
   const functionResult = handleFunctionEntry(
     source,
@@ -1855,25 +1873,17 @@ function parseFunctionCall(
       );
       const finalResult = chainedResult ?? { value: -1, pos: argPos };
 
-      // Restore bindings
+      // Restore bindings and allow shadowing flag
       restoreBindings(callEnv, previousBindings, previousLastFunctionRef);
-      if (previousAllowShadowing !== undefined) {
-        (callEnv as any).__allowShadowing = previousAllowShadowing;
-      } else {
-        delete (callEnv as any).__allowShadowing;
-      }
+      restoreAllowShadowing(callEnv, previousAllowShadowing);
 
       return finalResult;
     }
   }
 
-  // Restore bindings after call
+  // Restore bindings and allow shadowing flag after call
   restoreBindings(callEnv, previousBindings, previousLastFunctionRef);
-  if (previousAllowShadowing !== undefined) {
-    (callEnv as any).__allowShadowing = previousAllowShadowing;
-  } else {
-    delete (callEnv as any).__allowShadowing;
-  }
+  restoreAllowShadowing(callEnv, previousAllowShadowing);
 
   return { value: bodyResult.value, pos: argPos };
 }
@@ -3718,10 +3728,7 @@ function parseAssignmentOrExpression(
 
     if (isCompoundAssignment || isSimpleAssignment) {
       // This is an assignment - check if variable exists and is mutable
-      const entry = varName in env ? env[varName] : null;
-      if (!entry) {
-        throw new Error(`Undefined variable: ${varName}`);
-      }
+      const entry = checkVariableDefined(env, varName);
       if (entry.type !== "variable") {
         throw new Error(`Cannot assign to non-variable: ${varName}`);
       }
