@@ -42,7 +42,9 @@ type EnvEntry =
   | StructInstance
   | EnumDef
   | TypeAlias;
-type Env = Record<string, EnvEntry>;
+type Env = Record<string, EnvEntry> & {
+  breakRequested?: boolean;
+};
 
 type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
 
@@ -1825,7 +1827,16 @@ function parseBlock(source: string, pos: number, env: Env): ParserResult {
   // Parse statements until we hit closing brace
   while (pos < source.length && source.charCodeAt(pos) !== 125) {
     // charCode 125 is '}'
+    const previousResult = result;
     const stmtResult = parseStatement(source, pos, env);
+    
+    // Restore previous result if this was a break statement
+    if ((env as any).breakRequested) {
+      result = previousResult;
+      pos = stmtResult.pos;
+      break;
+    }
+    
     result = stmtResult.value;
     pos = skipWhitespace(source, stmtResult.pos);
   }
@@ -1946,6 +1957,12 @@ function parseWhile(source: string, pos: number, env: Env): ParserResult {
     const bodyResult = parseStatement(source, bodyStartPos, env);
     value = bodyResult.value;
     let bodyEndPos = skipWhitespace(source, bodyResult.pos);
+
+    // Check for break statement
+    if ((env as any).breakRequested) {
+      (env as any).breakRequested = false;
+      break;
+    }
 
     // Skip semicolon if present
     bodyEndPos = skipSemicolonAndWhitespace(source, bodyEndPos);
@@ -2071,6 +2088,20 @@ function parseStatement(source: string, pos: number, env: Env): ParserResult {
   const forPos = skipKeyword(source, pos, "for");
   if (forPos !== null) {
     return parseFor(source, forPos, env);
+  }
+
+  // Check for 'break' keyword
+  const breakPos = skipKeyword(source, pos, "break");
+  if (breakPos !== null) {
+    // Set breakRequested flag in environment
+    (env as any).breakRequested = true;
+    pos = skipWhitespace(source, breakPos);
+    // Skip semicolon after break
+    if (source.charCodeAt(pos) === 59) {
+      // ';'
+      pos = pos + 1;
+    }
+    return { value: 0, pos };
   }
 
   // Try to parse assignment or expression
