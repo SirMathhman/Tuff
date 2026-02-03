@@ -23,6 +23,10 @@ type EnumDef = {
   type: "enumDef";
   variants: string[];
 };
+type TypeAlias = {
+  type: "typeAlias";
+  aliasName: string;
+};
 type EnvEntry =
   | Variable
   | FunctionDef
@@ -30,7 +34,8 @@ type EnvEntry =
   | StringDef
   | StructDef
   | StructInstance
-  | EnumDef;
+  | EnumDef
+  | TypeAlias;
 type Env = Record<string, EnvEntry>;
 
 type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
@@ -412,6 +417,12 @@ function checkKeywordControlFlow(
   const enumPos = skipKeyword(source, pos, "enum");
   if (enumPos !== null) {
     return parseEnumDefinition(source, enumPos, env);
+  }
+
+  // Check for 'type' keyword
+  const typePos = skipKeyword(source, pos, "type");
+  if (typePos !== null) {
+    return parseTypeAliasDefinition(source, typePos, env);
   }
 
   // Check for 'fn' keyword
@@ -1245,6 +1256,48 @@ function parseEnumDefinition(
   return { value: restResult.value, pos: restResult.pos };
 }
 
+function parseTypeAliasDefinition(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult {
+  pos = skipWhitespace(source, pos);
+
+  // Parse type alias name
+  const aliasName = parseIdentifier(source, pos);
+  if (!aliasName) {
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, aliasName.end);
+
+  // Expect '='
+  if (source.charCodeAt(pos) !== 61) {
+    // '='
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, pos + 1);
+
+  // Parse target type name
+  const targetType = parseIdentifier(source, pos);
+  if (!targetType) {
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, targetType.end);
+
+  // Skip semicolon and whitespace
+  pos = skipSemicolonAndWhitespace(source, pos);
+
+  // Store type alias in environment
+  env[aliasName.name] = {
+    type: "typeAlias",
+    aliasName: targetType.name,
+  };
+
+  // Parse rest of statements
+  const restResult = parseStatement(source, pos, env);
+  return { value: restResult.value, pos: restResult.pos };
+}
+
 function createVariableEntry(
   source: string,
   pos: number,
@@ -1286,11 +1339,18 @@ function parseLetTypeAnnotation(
       // Skip generic type parameters if present: <I32>, etc.
       let afterTypeParams = skipTypeParameterList(source, typeId.end);
 
+      // Resolve type aliases
+      let resolvedTypeName = typeId.name;
+      const typeEntry = env[resolvedTypeName];
+      if (typeEntry && typeEntry.type === "typeAlias") {
+        resolvedTypeName = (typeEntry as TypeAlias).aliasName;
+      }
+
       if (
-        typeId.name in env &&
-        (env[typeId.name] as EnvEntry).type === "structDef"
+        resolvedTypeName in env &&
+        (env[resolvedTypeName] as EnvEntry).type === "structDef"
       ) {
-        structType = typeId.name;
+        structType = resolvedTypeName;
       }
       currentPos = skipWhitespace(source, afterTypeParams);
     }

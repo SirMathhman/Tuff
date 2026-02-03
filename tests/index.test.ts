@@ -154,7 +154,14 @@ describe("The interpreter can interpret data", () => {
   });
 
   test("generic struct definition and instantiation with field access", () => {
-    expectValid("struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field", 100);
+    expectValid(
+      "struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field",
+      100,
+    );
+  });
+
+  test("type alias definition and usage", () => {
+    expectValid("type Alias = I32; let temp : Alias = 100; temp", 100);
   });
 
   test("extension method with this parameter", () => {
