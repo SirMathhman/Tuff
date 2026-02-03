@@ -164,6 +164,21 @@ describe("The interpreter can interpret data", () => {
     expectValid("type Alias = I32; let temp : Alias = 100; temp", 100);
   });
 
+  test("is operator with I32 type", () => {
+    expectValid("100 is I32", 1);
+  });
+
+  test("is operator with type alias combination", () => {
+    expectValid("(100 is I32) && (100 is I32)", 1);
+  });
+
+  test("is operator with type alias", () => {
+    expectValid(
+      "type Alias = I32; let temp : Alias = 100; (temp is I32) && (temp is Alias)",
+      1,
+    );
+  });
+
   test("extension method with this parameter", () => {
     expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
   });

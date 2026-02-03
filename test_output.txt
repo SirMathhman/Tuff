@@ -1,0 +1,79 @@
+bun test v1.2.21 (7c45ed97)
+
+tests\index.test.ts:
+(pass) The interpreter can interpret basics > an empty program
+(pass) The interpreter can interpret basics > a numeric literal
+(pass) The interpreter can interpret basics > a typed numeric literal
+(pass) The interpreter can interpret basics > binary addition
+(pass) The interpreter can interpret basics > chained addition
+(pass) The interpreter can interpret basics > addition and subtraction [16.00ms]
+(pass) The interpreter can interpret basics > multiplication with precedence
+(pass) The interpreter can interpret basics > addition with multiplication precedence
+(pass) The interpreter can interpret basics > parentheses grouping
+(pass) The interpreter can interpret basics > curly braces grouping
+(pass) The interpreter can interpret basics > variable binding with let
+(pass) The interpreter can interpret basics > top-level let binding
+(pass) The interpreter can interpret basics > sequential let bindings
+(pass) The interpreter can interpret basics > let binding without type annotation
+(pass) The interpreter can interpret basics > mutable variable binding and reassignment
+(pass) The interpreter can interpret basics > compound assignment operator +=
+(pass) The interpreter can interpret control flow > boolean literal true
+(pass) The interpreter can interpret control flow > logical AND operator
+(pass) The interpreter can interpret control flow > logical OR operator
+(pass) The interpreter can interpret control flow > block-scoped mutable variable mutation
+(pass) The interpreter can interpret control flow > less-than comparison operator
+(pass) The interpreter can interpret control flow > if-else expression
+(pass) The interpreter can interpret control flow > if-else statement with assignments
+(pass) The interpreter can interpret control flow > if-else with block bodies
+(pass) The interpreter can interpret control flow > nested if-else expressions
+(pass) The interpreter can interpret control flow > nested if-else statements
+(pass) The interpreter can interpret control flow > match expression with case patterns
+(pass) The interpreter can interpret loops > while loop
+(pass) The interpreter can interpret loops > while loop with block body
+(pass) The interpreter can interpret loops > for loop with range
+(pass) The interpreter can interpret loops > for loop with range and block body
+(pass) The interpreter can interpret data > enum definition and variant access with equality
+(pass) The interpreter can interpret data > generic function definition and call
+(pass) The interpreter can interpret data > generic struct definition and instantiation with field access
+(pass) The interpreter can interpret data > type alias definition and usage
+(pass) The interpreter can interpret data > is operator with I32 type
+1 | import { interpret } from "../src";
+2 | 
+3 | function expectValid(source: string, exitCode: number) {
+4 |   expect(interpret(source)).toBe(exitCode);
+                                ^
+error: expect(received).toBe(expected)
+
+Expected: 1
+Received: 0
+
+      at expectValid (C:\Users\mathm\Documents\Projects\Tuff\tests\index.test.ts:4:29)
+      at <anonymous> (C:\Users\mathm\Documents\Projects\Tuff\tests\index.test.ts:172:5)
+(fail) The interpreter can interpret data > is operator with type alias
+(pass) The interpreter can interpret data > extension method with this parameter
+(pass) The interpreter can interpret data > function definition and call
+(pass) The interpreter can interpret data > array declaration and element access
+(pass) The interpreter can interpret data > struct definition and instantiation with field access
+(pass) The interpreter can interpret data > character literal
+(pass) The interpreter can interpret data > string literal and indexing
+(pass) The interpreter can interpret operators > logical NOT operator
+(pass) The interpreter can interpret operators > greater-than comparison operator
+(pass) The interpreter can interpret operators > greater-than-or-equal comparison operator
+(pass) The interpreter can interpret operators > less-than-or-equal comparison operator
+(pass) The interpreter can interpret operators > equality comparison operator
+(pass) The interpreter can interpret operators > not-equal comparison operator
+(pass) The interpreter can interpret operators > division operator
+(pass) The interpreter can interpret operators > modulo operator
+(pass) The interpreter can interpret operators > bitwise AND operator
+(pass) The interpreter can interpret operators > bitwise OR operator
+(pass) The interpreter can interpret operators > bitwise XOR operator
+(pass) The interpreter can interpret operators > bitwise left shift operator
+(pass) The interpreter can interpret operators > bitwise right shift operator
+
+1 tests failed:
+(fail) The interpreter can interpret data > is operator with type alias
+
+ 55 pass
+ 1 fail
+ 56 expect() calls
+Ran 56 tests across 1 file. [41.00ms]

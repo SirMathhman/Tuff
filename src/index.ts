@@ -1801,7 +1801,7 @@ function parseStatement(source: string, pos: number, env: Env): ParserResult {
 }
 
 function parseComparison(source: string, pos: number, env: Env): ParserResult {
-  return parseBinaryOperator(
+  let result = parseBinaryOperator(
     source,
     pos,
     env,
@@ -1823,6 +1823,43 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
       (left: number, right: number) => (left > right ? 1 : 0),
     ],
   );
+
+  // Handle 'is' operator as postfix (higher precedence than comparisons)
+  while (true) {
+    const keywordPos = skipWhitespace(source, result.pos);
+    const isKeyword = skipKeyword(source, keywordPos, "is");
+
+    if (isKeyword === null) {
+      break;
+    }
+
+    const typePos = skipWhitespace(source, isKeyword);
+    const typeName = parseIdentifier(source, typePos);
+
+    if (!typeName) {
+      break;
+    }
+
+    // Resolve type alias if it exists
+    let resolvedType = typeName.name;
+    const typeEntry = env[typeName.name];
+    if (typeEntry && typeEntry.type === "typeAlias") {
+      resolvedType = (typeEntry as TypeAlias).aliasName;
+    }
+
+    // For untyped interpreter, check if resolved type is numeric (I32, etc)
+    const isNumericType =
+      resolvedType === "I32" ||
+      resolvedType === "I64" ||
+      resolvedType === "F32" ||
+      resolvedType === "F64" ||
+      resolvedType === "U32" ||
+      resolvedType === "U64";
+
+    result = { value: isNumericType ? 1 : 0, pos: typeName.end };
+  }
+
+  return result;
 }
 
 function parseLogicalAnd(source: string, pos: number, env: Env): ParserResult {
