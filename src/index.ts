@@ -1550,10 +1550,11 @@ function parseMultiplicative(
     pos,
     env,
     parseUnary,
-    [42, 47], // * /
+    [42, 47, 37], // * / %
     [
       (left: number, right: number) => left * right,
       (left: number, right: number) => left / right,
+      (left: number, right: number) => left % right,
     ],
   );
 }

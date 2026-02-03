@@ -191,4 +191,12 @@ describe("The interpreter can interpret", () => {
   test("not-equal comparison operator", () => {
     expectValid("let x = 5; let y = 3; x != y", 1);
   });
+
+  test("division operator", () => {
+    expectValid("let x = 10; let y = 2; x / y", 5);
+  });
+
+  test("modulo operator", () => {
+    expectValid("let x = 10; let y = 3; x % y", 1);
+  });
 });
