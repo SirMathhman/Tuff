@@ -499,7 +499,11 @@ function parseIfConditional(
     pos = skipWhitespace(source, thenResult.pos);
 
     // Check for break or continue that bubbled up
-    if ((env as any).breakRequested || (env as any).continueRequested || (env as any).yieldRequested) {
+    if (
+      (env as any).breakRequested ||
+      (env as any).continueRequested ||
+      (env as any).yieldRequested
+    ) {
       return { value: result, pos };
     }
 

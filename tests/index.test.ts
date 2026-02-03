@@ -144,8 +144,12 @@ describe("The interpreter can interpret loops", () => {
   });
 
   test("yield statement in block expression", () => {
+    expectValid("let x = { if (true) yield 100; 20 } + 1; x", 101);
+  });
+
+  test("function with yield expression in body", () => {
     expectValid(
-      "let x = { if (true) yield 100; 20 } + 1; x",
+      "fn get() : I32 => { if (true) yield 100; 20 } + 1; get()",
       101,
     );
   });
