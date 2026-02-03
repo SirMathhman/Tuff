@@ -207,6 +207,10 @@ describe("The interpreter can interpret functions", () => {
   test("module definition and function call", () => {
     expectValid("module MyModule { fn get() => 100; } MyModule::get()", 100);
   });
+
+  test("pointer reference and dereference", () => {
+    expectValid("let x = 100; let y : *I32 = &x; *y", 100);
+   });
 });
 
 describe("The interpreter can interpret data", () => {
