@@ -398,3 +398,277 @@ describe("The interpreter can interpret operators", () => {
     expectValid("let x = 10; let y = 1; x >> y", 5);
   });
 });
+
+describe("Numerical Literal Semantics: Number Bases", () => {
+  test("decimal literal zero", () => {
+    expectValid("0", 0);
+  });
+
+  test("decimal literal single digit", () => {
+    expectValid("5", 5);
+  });
+
+  test("decimal literal multi-digit", () => {
+    expectValid("12345", 12345);
+  });
+
+  test("hexadecimal literal basic", () => {
+    expectValid("0x10", 16);
+  });
+
+  test("hexadecimal literal uppercase", () => {
+    expectValid("0xFF", 255);
+  });
+
+  test("hexadecimal literal lowercase", () => {
+    expectValid("0xdeadbeef", 0xdeadbeef);
+  });
+
+  test("hexadecimal literal zero", () => {
+    expectValid("0x0", 0);
+  });
+
+  test("octal literal basic", () => {
+    expectValid("0o10", 8);
+  });
+
+  test("octal literal max digit", () => {
+    expectValid("0o777", 511);
+  });
+
+  test("octal literal zero", () => {
+    expectValid("0o0", 0);
+  });
+
+  test("binary literal basic", () => {
+    expectValid("0b10", 2);
+  });
+
+  test("binary literal all ones", () => {
+    expectValid("0b1111", 15);
+  });
+
+  test("binary literal zero", () => {
+    expectValid("0b0", 0);
+  });
+
+  test("binary literal large", () => {
+    expectValid("0b11111111", 255);
+  });
+});
+
+describe("Numerical Literal Semantics: Type Suffixes", () => {
+  test("decimal with U8 suffix", () => {
+    expectValid("100U8", 100);
+  });
+
+  test("decimal with I32 suffix", () => {
+    expectValid("42I32", 42);
+  });
+
+  test("hexadecimal with U8 suffix", () => {
+    expectValid("0xFFU8", 255);
+  });
+
+  test("hexadecimal with I32 suffix", () => {
+    expectValid("0xDEADBEEFI32", 0xdeadbeef);
+  });
+
+  test("octal with U8 suffix", () => {
+    expectValid("0o377U8", 255);
+  });
+
+  test("octal with I32 suffix", () => {
+    expectValid("0o1000I32", 512);
+  });
+
+  test("binary with U8 suffix", () => {
+    expectValid("0b11111111U8", 255);
+  });
+
+  test("binary with I32 suffix", () => {
+    expectValid("0b11110000I32", 240);
+  });
+
+  test("zero with type suffix U8", () => {
+    expectValid("0U8", 0);
+  });
+
+  test("zero with type suffix I32", () => {
+    expectValid("0I32", 0);
+  });
+
+  test("single digit with type suffix", () => {
+    expectValid("7U8", 7);
+  });
+
+  test("type suffix applies correctly in expression", () => {
+    expectValid("100U8 + 50U8", 150);
+  });
+});
+
+describe("Numerical Literal Semantics: Negative Numbers", () => {
+  test("negative decimal literal", () => {
+    expectValid("-42", -42);
+  });
+
+  test("negative zero", () => {
+    expectValid("-0", 0);
+  });
+
+  test("negative single digit", () => {
+    expectValid("-5", -5);
+  });
+
+  test("negative hexadecimal", () => {
+    expectValid("-0xFF", -255);
+  });
+
+  test("negative octal", () => {
+    expectValid("-0o10", -8);
+  });
+
+  test("negative binary", () => {
+    expectValid("-0b1010", -10);
+  });
+
+  test("negative with type suffix", () => {
+    expectValid("-42I32", -42);
+  });
+
+  test("negative hexadecimal with type suffix", () => {
+    expectValid("-0xFFU8", -255);
+  });
+
+  test("double negation", () => {
+    expectValid("--5", 5);
+  });
+
+  test("triple negation", () => {
+    expectValid("---5", -5);
+  });
+
+  test("negative in arithmetic expression", () => {
+    expectValid("-10 + 20", 10);
+  });
+
+  test("negative in let binding", () => {
+    expectValid("let x = -42; x", -42);
+  });
+
+  test("negative in comparison", () => {
+    expectValid("-5 < 0", 1);
+  });
+});
+
+describe("Numerical Literal Semantics: Type Coercion", () => {
+  test("same type addition", () => {
+    expectValid("100I32 + 50I32", 150);
+  });
+
+  test("narrow type with wide type promotes to wide", () => {
+    expectValid("100U8 + 150I32", 250);
+  });
+
+  test("wide type with narrow type promotes to wide", () => {
+    expectValid("150I32 + 100U8", 250);
+  });
+
+  test("untyped literal with typed literal", () => {
+    expectValid("100 + 50I32", 150);
+  });
+
+  test("multiple untyped literals", () => {
+    expectValid("100 + 50 + 25", 175);
+  });
+
+  test("untyped literal in let binding with type", () => {
+    expectValid("let x : I32 = 100; x", 100);
+  });
+
+  test("type suffix enforces specific type", () => {
+    expectValid("let x : U8 = 100U8; x", 100);
+  });
+
+  test("operation with consistent types", () => {
+    expectValid("(10U8 + 20U8) * 2U8", 60);
+  });
+
+  test("mixed bases with same type", () => {
+    expectValid("0xFFU8 + 0b1U8", 256);
+  });
+
+  test("negation preserves type in coercion", () => {
+    expectValid("-42I32 + 10I32", -32);
+  });
+});
+
+describe("Numerical Literal Semantics: Edge Cases & Boundaries", () => {
+  test("U8 minimum value", () => {
+    expectValid("0U8", 0);
+  });
+
+  test("U8 maximum value", () => {
+    expectValid("255U8", 255);
+  });
+
+  test("I32 positive maximum", () => {
+    expectValid("2147483647I32", 2147483647);
+  });
+
+  test("I32 negative minimum", () => {
+    expectValid("-2147483648I32", -2147483648);
+  });
+
+  test("binary all zeros", () => {
+    expectValid("0b0", 0);
+  });
+
+  test("binary all ones byte", () => {
+    expectValid("0b11111111", 255);
+  });
+
+  test("octal all zeros", () => {
+    expectValid("0o0", 0);
+  });
+
+  test("octal all sevens", () => {
+    expectValid("0o7777", 4095);
+  });
+
+  test("hexadecimal all zeros", () => {
+    expectValid("0x0", 0);
+  });
+
+  test("hexadecimal all F's", () => {
+    expectValid("0xFFFFFFFF", 4294967295);
+  });
+
+  test("decimal one", () => {
+    expectValid("1", 1);
+  });
+
+  test("large decimal number", () => {
+    expectValid("999999999", 999999999);
+  });
+
+  test("leading zero octal interpretation", () => {
+    expectValid("0o10", 8);
+  });
+
+  test("single bit binary", () => {
+    expectValid("0b1", 1);
+  });
+
+  test("power of two in hex", () => {
+    expectValid("0x100", 256);
+  });
+
+  test("max U8 in octal", () => {
+    expectValid("0o377U8", 255);
+  });
+
+  test("zero appears same in all bases", () => {
+    expectValid("0 == 0x0 && 0x0 == 0o0 && 0o0 == 0b0", 1);
+  });
+});

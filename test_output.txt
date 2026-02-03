@@ -1,19 +1,728 @@
-bun test v1.2.21 (7c45ed97)
 
-tests\index.test.ts:
-(pass) The interpreter can interpret basics > an empty program
-(pass) The interpreter can interpret basics > a numeric literal
-(pass) The interpreter can interpret basics > a typed numeric literal
-(pass) The interpreter can interpret basics > binary addition
-(pass) The interpreter can interpret basics > chained addition
-(pass) The interpreter can interpret basics > addition and subtraction
-(pass) The interpreter can interpret basics > multiplication with precedence
-(pass) The interpreter can interpret basics > addition with multiplication precedence
-(pass) The interpreter can interpret basics > parentheses grouping
-(pass) The interpreter can interpret basics > curly braces grouping
-(pass) The interpreter can interpret basics > variable binding with let
-(pass) The interpreter can interpret basics > top-level let binding
-(pass) The interpreter can interpret basics > sequential let bindings
-(pass) The interpreter can interpret basics > let binding without type annotation
-(pass) The interpreter can interpret basics > mutable variable binding and reassignment
-(pass) The interpreter can interpret basics > compound assignment operator +=
+> test
+> vitest run
+
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/mathm/Documents/Projects/Tuff[39m
+
+ [31mΓ¥»[39m tests/index.test.ts [2m([22m[2m144 tests[22m[2m | [22m[31m27 failed[39m[2m)[22m[32m 38[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22man empty program[32m 1[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22ma numeric literal[32m 1[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22ma typed numeric literal[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mbinary addition[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mchained addition[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22maddition and subtraction[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mmultiplication with precedence[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22maddition with multiplication precedence[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mparentheses grouping[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mcurly braces grouping[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mvariable binding with let[32m 1[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mtop-level let binding[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22msequential let bindings[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mlet binding without type annotation[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mmutable variable binding and reassignment[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mcompound assignment operator +=[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret basics[2m > [22mfunction in block scope can mutate outer variable[32m 1[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mboolean literal true[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mlogical AND operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mlogical OR operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mblock-scoped mutable variable mutation[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mless-than comparison operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mif-else expression[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mif-else statement with assignments[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mif-else with block bodies[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mnested if-else expressions[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mnested if-else statements[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret control flow[2m > [22mmatch expression with case patterns[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret loops[2m > [22mwhile loop[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret loops[2m > [22mwhile loop with block body[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret loops[2m > [22mwhile loop with break statement[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret loops[2m > [22mwhile loop with simple continue[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret loops[2m > [22myield statement in block expression[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret loops[2m > [22mfunction with yield expression in body[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret loops[2m > [22mfunction with return statement[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret loops[2m > [22mfor loop with range[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret loops[2m > [22mfor loop with range and block body[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret functions[2m > [22mfunction definition and call[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret functions[2m > [22mextension method with this parameter[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret functions[2m > [22mfunction reference assignment and call[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret functions[2m > [22mfunction returning function reference[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret functions[2m > [22mfunction parameter with function type and inline function argument[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret functions[2m > [22mmodule definition and function call[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret functions[2m > [22mpointer reference and dereference[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret functions[2m > [22mmutable pointer reference, dereference, and assignment[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: enums and generics[2m > [22menum definition and variant access with equality[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: enums and generics[2m > [22mgeneric function definition and call[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: enums and generics[2m > [22mgeneric struct definition and instantiation with field access[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: type aliases and is[2m > [22mtype alias definition and usage[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: type aliases and is[2m > [22mis operator with I32 type[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: type aliases and is[2m > [22mis operator with type alias combination[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: type aliases and is[2m > [22mis operator with type alias[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: unions[2m > [22munion type and struct instance type checking[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: unions[2m > [22munion type with struct field access in if-else[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: unions[2m > [22munion type pattern matching with struct variant matching[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: unions[2m > [22munion type pattern matching with destructuring[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret data: unions[2m > [22mis operator with destructuring pattern[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret collections: arrays[2m > [22marray declaration and element access[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret collections: arrays[2m > [22marray slicing with pointer reference and indexed dereference[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret collections: arrays[2m > [22mmutable array slicing with pointer reference, indexed assignment, and original array mutation[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret collections: arrays[2m > [22mmutable array slicing with non-zero starting index[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret structures and literals[2m > [22mstruct definition and instantiation with field access[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret structures and literals[2m > [22mvariable destructuring in let binding[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret structures and literals[2m > [22mcharacter literal[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret structures and literals[2m > [22mstring literal and indexing[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mlogical NOT operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mgreater-than comparison operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mgreater-than-or-equal comparison operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mless-than-or-equal comparison operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mequality comparison operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mnot-equal comparison operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mdivision operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mmodulo operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mbitwise AND operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mbitwise OR operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mbitwise XOR operator[32m 1[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mbitwise left shift operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m The interpreter can interpret operators[2m > [22mbitwise right shift operator[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Number Bases[2m > [22mdecimal literal zero[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Number Bases[2m > [22mdecimal literal single digit[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Number Bases[2m > [22mdecimal literal multi-digit[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Number Bases[2m > [22mhexadecimal literal basic[39m[32m 6[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 16 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Number Bases[2m > [22mhexadecimal literal uppercase[39m[32m 1[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 255 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Number Bases[2m > [22mhexadecimal literal lowercase[39m[32m 1[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 3735928559 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Number Bases[2m > [22mhexadecimal literal zero[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Number Bases[2m > [22moctal literal basic[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 8 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Number Bases[2m > [22moctal literal max digit[39m[32m 1[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 511 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Number Bases[2m > [22moctal literal zero[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Number Bases[2m > [22mbinary literal basic[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 2 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Number Bases[2m > [22mbinary literal all ones[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 15 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Number Bases[2m > [22mbinary literal zero[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Number Bases[2m > [22mbinary literal large[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 255 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Suffixes[2m > [22mdecimal with U8 suffix[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Suffixes[2m > [22mdecimal with I32 suffix[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Type Suffixes[2m > [22mhexadecimal with U8 suffix[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 255 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Type Suffixes[2m > [22mhexadecimal with I32 suffix[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 3735928559 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Type Suffixes[2m > [22moctal with U8 suffix[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 255 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Type Suffixes[2m > [22moctal with I32 suffix[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 512 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Type Suffixes[2m > [22mbinary with U8 suffix[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 255 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Type Suffixes[2m > [22mbinary with I32 suffix[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 240 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Suffixes[2m > [22mzero with type suffix U8[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Suffixes[2m > [22mzero with type suffix I32[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Suffixes[2m > [22msingle digit with type suffix[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Suffixes[2m > [22mtype suffix applies correctly in expression[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative decimal literal[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative zero[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative single digit[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative hexadecimal[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be -255 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative octal[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be -8 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative binary[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be -10 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative with type suffix[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative hexadecimal with type suffix[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be -255 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Negative Numbers[2m > [22mdouble negation[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected -5 to be 5 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Negative Numbers[2m > [22mtriple negation[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative in arithmetic expression[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative in let binding[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Negative Numbers[2m > [22mnegative in comparison[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Coercion[2m > [22msame type addition[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Coercion[2m > [22mnarrow type with wide type promotes to wide[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Coercion[2m > [22mwide type with narrow type promotes to wide[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Coercion[2m > [22muntyped literal with typed literal[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Coercion[2m > [22mmultiple untyped literals[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Coercion[2m > [22muntyped literal in let binding with type[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Coercion[2m > [22mtype suffix enforces specific type[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Coercion[2m > [22moperation with consistent types[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Type Coercion[2m > [22mmixed bases with same type[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 256 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Type Coercion[2m > [22mnegation preserves type in coercion[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mU8 minimum value[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mU8 maximum value[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mI32 positive maximum[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mI32 negative minimum[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mbinary all zeros[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mbinary all ones byte[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 255 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22moctal all zeros[32m 1[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22moctal all sevens[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 4095 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mhexadecimal all zeros[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mhexadecimal all F's[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 4294967295 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mdecimal one[32m 0[2mms[22m[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mlarge decimal number[32m 0[2mms[22m[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mleading zero octal interpretation[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 8 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22msingle bit binary[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 1 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mpower of two in hex[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 256 // Object.is equality[39m
+[31m   [31m├ù[31m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mmax U8 in octal[39m[32m 0[2mms[22m[39m
+[31m     ΓåÆ expected +0 to be 255 // Object.is equality[39m
+   [32mΓ£ô[39m Numerical Literal Semantics: Edge Cases & Boundaries[2m > [22mzero appears same in all bases[32m 0[2mms[22m[39m
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 27 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Number Bases > hexadecimal literal basic
+AssertionError: expected +0 to be 16 // Object.is equality
+
+- Expected
++ Received
+
+- 16
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:416:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Number Bases > hexadecimal literal uppercase
+AssertionError: expected +0 to be 255 // Object.is equality
+
+- Expected
++ Received
+
+- 255
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:420:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[2/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Number Bases > hexadecimal literal lowercase
+AssertionError: expected +0 to be 3735928559 // Object.is equality
+
+- Expected
++ Received
+
+- 3735928559
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:424:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[3/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Number Bases > octal literal basic
+AssertionError: expected +0 to be 8 // Object.is equality
+
+- Expected
++ Received
+
+- 8
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:432:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[4/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Number Bases > octal literal max digit
+AssertionError: expected +0 to be 511 // Object.is equality
+
+- Expected
++ Received
+
+- 511
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:436:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[5/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Number Bases > binary literal basic
+AssertionError: expected +0 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:444:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[6/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Number Bases > binary literal all ones
+AssertionError: expected +0 to be 15 // Object.is equality
+
+- Expected
++ Received
+
+- 15
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:448:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[7/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Number Bases > binary literal large
+AssertionError: expected +0 to be 255 // Object.is equality
+
+- Expected
++ Received
+
+- 255
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:456:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[8/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Type Suffixes > hexadecimal with U8 suffix
+AssertionError: expected +0 to be 255 // Object.is equality
+
+- Expected
++ Received
+
+- 255
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:470:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[9/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Type Suffixes > hexadecimal with I32 suffix
+AssertionError: expected +0 to be 3735928559 // Object.is equality
+
+- Expected
++ Received
+
+- 3735928559
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:474:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[10/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Type Suffixes > octal with U8 suffix
+AssertionError: expected +0 to be 255 // Object.is equality
+
+- Expected
++ Received
+
+- 255
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:478:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[11/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Type Suffixes > octal with I32 suffix
+AssertionError: expected +0 to be 512 // Object.is equality
+
+- Expected
++ Received
+
+- 512
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:482:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[12/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Type Suffixes > binary with U8 suffix
+AssertionError: expected +0 to be 255 // Object.is equality
+
+- Expected
++ Received
+
+- 255
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:486:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[13/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Type Suffixes > binary with I32 suffix
+AssertionError: expected +0 to be 240 // Object.is equality
+
+- Expected
++ Received
+
+- 240
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:490:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[14/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Negative Numbers > negative hexadecimal
+AssertionError: expected +0 to be -255 // Object.is equality
+
+- Expected
++ Received
+
+- -255
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:524:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[15/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Negative Numbers > negative octal
+AssertionError: expected +0 to be -8 // Object.is equality
+
+- Expected
++ Received
+
+- -8
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:528:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[16/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Negative Numbers > negative binary
+AssertionError: expected +0 to be -10 // Object.is equality
+
+- Expected
++ Received
+
+- -10
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:532:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[17/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Negative Numbers > negative hexadecimal with type suffix
+AssertionError: expected +0 to be -255 // Object.is equality
+
+- Expected
++ Received
+
+- -255
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:540:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[18/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Negative Numbers > double negation
+AssertionError: expected -5 to be 5 // Object.is equality
+
+- Expected
++ Received
+
+- 5
++ -5
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:544:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[19/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Type Coercion > mixed bases with same type
+AssertionError: expected +0 to be 256 // Object.is equality
+
+- Expected
++ Received
+
+- 256
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:598:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[20/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Edge Cases & Boundaries > binary all ones byte
+AssertionError: expected +0 to be 255 // Object.is equality
+
+- Expected
++ Received
+
+- 255
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:628:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[21/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Edge Cases & Boundaries > octal all sevens
+AssertionError: expected +0 to be 4095 // Object.is equality
+
+- Expected
++ Received
+
+- 4095
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:636:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[22/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Edge Cases & Boundaries > hexadecimal all F's
+AssertionError: expected +0 to be 4294967295 // Object.is equality
+
+- Expected
++ Received
+
+- 4294967295
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:644:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[23/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Edge Cases & Boundaries > leading zero octal interpretation
+AssertionError: expected +0 to be 8 // Object.is equality
+
+- Expected
++ Received
+
+- 8
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:656:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[24/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Edge Cases & Boundaries > single bit binary
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:660:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[25/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Edge Cases & Boundaries > power of two in hex
+AssertionError: expected +0 to be 256 // Object.is equality
+
+- Expected
++ Received
+
+- 256
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:664:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[26/27]ΓÄ»
+
+ FAIL  tests/index.test.ts > Numerical Literal Semantics: Edge Cases & Boundaries > max U8 in octal
+AssertionError: expected +0 to be 255 // Object.is equality
+
+- Expected
++ Received
+
+- 255
++ 0
+
+ Γ¥» expectValid tests/index.test.ts:4:29
+      2| 
+      3| function expectValid(source: string, exitCode: number) {
+      4|   expect(interpret(source)).toBe(exitCode);
+       |                             ^
+      5| }
+      6| 
+ Γ¥» tests/index.test.ts:668:5
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[27/27]ΓÄ»
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m27 failed[39m[22m[2m | [22m[1m[32m117 passed[39m[22m[90m (144)[39m
+[2m   Start at [22m 15:26:55
+[2m   Duration [22m 360ms[2m (transform 74ms, setup 0ms, collect 75ms, tests 38ms, environment 0ms, prepare 95ms)[22m
+

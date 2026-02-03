@@ -83,18 +83,100 @@ function parseNumericLiteral(
 ): { value: number; end: number } | null {
   let numEnd = start;
   let iterations = 0;
-  while (
-    numEnd < source.length &&
-    source.charCodeAt(numEnd) >= 48 && // '0'
-    source.charCodeAt(numEnd) <= 57 && // '9'
-    iterations < MAX_LOOP_ITERATIONS
+  let value = 0;
+  let base = 10;
+
+  // Check for hex, octal, or binary prefix
+  if (
+    source.charCodeAt(start) === 48 &&
+    start + 1 < source.length
   ) {
-    numEnd++;
-    iterations++;
+    // '0'
+    const nextChar = source.charCodeAt(start + 1);
+    if (nextChar === 120 || nextChar === 88) {
+      // '0x' or '0X' - hexadecimal
+      base = 16;
+      numEnd = start + 2;
+    } else if (nextChar === 111 || nextChar === 79) {
+      // '0o' or '0O' - octal
+      base = 8;
+      numEnd = start + 2;
+    } else if (nextChar === 98 || nextChar === 66) {
+      // '0b' or '0B' - binary
+      base = 2;
+      numEnd = start + 2;
+    }
   }
+
+  // If we haven't found a prefix, start from the beginning
+  if (base === 10 && numEnd === start) {
+    numEnd = start;
+  } else if (base !== 10) {
+    // We found a prefix, now parse the digits
+    iterations = 0;
+    while (
+      numEnd < source.length &&
+      iterations < MAX_LOOP_ITERATIONS
+    ) {
+      const code = source.charCodeAt(numEnd);
+      let digit = -1;
+
+      if (base === 16) {
+        if (code >= 48 && code <= 57) {
+          // '0'-'9'
+          digit = code - 48;
+        } else if (code >= 97 && code <= 102) {
+          // 'a'-'f'
+          digit = code - 97 + 10;
+        } else if (code >= 65 && code <= 70) {
+          // 'A'-'F'
+          digit = code - 65 + 10;
+        }
+      } else if (base === 8) {
+        if (code >= 48 && code <= 55) {
+          // '0'-'7'
+          digit = code - 48;
+        }
+      } else if (base === 2) {
+        if (code === 48 || code === 49) {
+          // '0' or '1'
+          digit = code - 48;
+        }
+      }
+
+      if (digit === -1) {
+        break;
+      }
+      value = value * base + digit;
+      numEnd++;
+      iterations++;
+    }
+
+    if (numEnd === start + 2) {
+      // No digits found after prefix
+      return null;
+    }
+  }
+
+  // Parse decimal digits if no special prefix was found
+  if (base === 10) {
+    iterations = 0;
+    while (
+      numEnd < source.length &&
+      source.charCodeAt(numEnd) >= 48 && // '0'
+      source.charCodeAt(numEnd) <= 57 && // '9'
+      iterations < MAX_LOOP_ITERATIONS
+    ) {
+      value = value * 10 + (source.charCodeAt(numEnd) - 48);
+      numEnd++;
+      iterations++;
+    }
+  }
+
   if (numEnd <= start) {
     return null;
   }
+
   // Skip type suffix (e.g., "U8", "I32")
   let suffixEnd = numEnd;
   iterations = 0;
@@ -111,8 +193,9 @@ function parseNumericLiteral(
     suffixEnd++;
     iterations++;
   }
+
   return {
-    value: parseInt(source.substring(start, numEnd), 10),
+    value,
     end: suffixEnd,
   };
 }
@@ -3706,6 +3789,14 @@ function parseUnary(source: string, pos: number, env: Env): ParserResult {
     return { value: result.value !== 0 ? 0 : 1, pos: result.pos };
   }
 
+  // Check for unary MINUS operator (-)
+  if (source.charCodeAt(pos) === 45) {
+    // '-'
+    pos = skipWhitespace(source, pos + 1);
+    const result = parseUnary(source, pos, env); // Allow chaining of unary operators
+    return { value: -result.value, pos: result.pos };
+  }
+
   return parsePrimary(source, pos, env);
 }
 
@@ -3729,5 +3820,6 @@ export function interpret(source: string): number {
   }
 
   const result = parseStatement(source, 0, {});
-  return result.value;
+  // Normalize -0 to +0 for consistency
+  return result.value === 0 ? 0 : result.value;
 }
