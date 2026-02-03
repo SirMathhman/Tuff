@@ -1,5 +1,10 @@
 /* eslint-disable no-unused-vars */
-type Variable = { type: "variable"; value: number; mutable: boolean };
+type Variable = {
+  type: "variable";
+  value: number;
+  mutable: boolean;
+  structType?: string; // Track if this variable holds a struct instance
+};
 type FunctionDef = {
   type: "function";
   params: string[];
@@ -25,7 +30,8 @@ type EnumDef = {
 };
 type TypeAlias = {
   type: "typeAlias";
-  aliasName: string;
+  aliasName?: string; // For simple type aliases: type Alias = I32;
+  unionTypes?: string[]; // For union types: type Option = Some | None;
 };
 type EnvEntry =
   | Variable
@@ -202,7 +208,23 @@ function parseIdentifier(
   source: string,
   start: number,
 ): { name: string; end: number } | null {
-  let end = start;
+  // First character must be a letter or underscore
+  if (start >= source.length) {
+    return null;
+  }
+  const firstChar = source.charCodeAt(start);
+  if (
+    !(
+      (firstChar >= 97 && firstChar <= 122) || // 'a'-'z'
+      (firstChar >= 65 && firstChar <= 90) || // 'A'-'Z'
+      firstChar === 95
+    ) // '_'
+  ) {
+    return null;
+  }
+
+  // Subsequent characters can be letters, digits, or underscores
+  let end = start + 1;
   while (
     end < source.length &&
     ((source.charCodeAt(end) >= 97 && source.charCodeAt(end) <= 122) || // 'a'-'z'
@@ -212,9 +234,7 @@ function parseIdentifier(
   ) {
     end++;
   }
-  if (end <= start) {
-    return null;
-  }
+
   return {
     name: source.substring(start, end),
     end,
@@ -1277,21 +1297,42 @@ function parseTypeAliasDefinition(
   }
   pos = skipWhitespace(source, pos + 1);
 
-  // Parse target type name
-  const targetType = parseIdentifier(source, pos);
-  if (!targetType) {
+  // Parse first type name
+  const firstType = parseIdentifier(source, pos);
+  if (!firstType) {
     return { value: 0, pos };
   }
-  pos = skipWhitespace(source, targetType.end);
+  pos = skipWhitespace(source, firstType.end);
+
+  const types: string[] = [firstType.name];
+
+  // Check for union types (separated by |)
+  while (source.charCodeAt(pos) === 124) {
+    // '|'
+    pos = skipWhitespace(source, pos + 1);
+    const nextType = parseIdentifier(source, pos);
+    if (!nextType) {
+      break;
+    }
+    types.push(nextType.name);
+    pos = skipWhitespace(source, nextType.end);
+  }
 
   // Skip semicolon and whitespace
   pos = skipSemicolonAndWhitespace(source, pos);
 
   // Store type alias in environment
-  env[aliasName.name] = {
-    type: "typeAlias",
-    aliasName: targetType.name,
-  };
+  if (types.length === 1) {
+    env[aliasName.name] = {
+      type: "typeAlias",
+      aliasName: types[0],
+    };
+  } else {
+    env[aliasName.name] = {
+      type: "typeAlias",
+      unionTypes: types,
+    };
+  }
 
   // Parse rest of statements
   const restResult = parseStatement(source, pos, env);
@@ -1343,7 +1384,10 @@ function parseLetTypeAnnotation(
       let resolvedTypeName = typeId.name;
       const typeEntry = env[resolvedTypeName];
       if (typeEntry && typeEntry.type === "typeAlias") {
-        resolvedTypeName = (typeEntry as TypeAlias).aliasName;
+        const alias = typeEntry as TypeAlias;
+        if (alias.aliasName) {
+          resolvedTypeName = alias.aliasName;
+        }
       }
 
       if (
@@ -1368,10 +1412,6 @@ function tryParseStructInstantiation(
   env: Env,
   structType: string | null,
 ): { entry: EnvEntry; pos: number } | null {
-  if (structType === null) {
-    return null;
-  }
-
   const structInstId = parseIdentifier(source, pos);
   if (!structInstId) {
     return null;
@@ -1380,9 +1420,20 @@ function tryParseStructInstantiation(
   // Skip generic type parameters if present: <I32>, <String, I32>, etc.
   let afterTypeParams = skipTypeParameterList(source, structInstId.end);
 
-  // Now check if the struct name matches
-  if (structInstId.name !== structType) {
-    return null;
+  // Check if the struct name is valid
+  // If structType is provided (simple type), check if it matches
+  // If structType is null (union type or no annotation), accept any valid struct
+  if (structType !== null) {
+    // Simple type annotation - struct name must match
+    if (structInstId.name !== structType) {
+      return null;
+    }
+  } else {
+    // No specific type annotation - the struct name must be defined
+    const potentialStructDef = env[structInstId.name];
+    if (!potentialStructDef || potentialStructDef.type !== "structDef") {
+      return null;
+    }
   }
 
   afterTypeParams = skipWhitespace(source, afterTypeParams);
@@ -1391,7 +1442,8 @@ function tryParseStructInstantiation(
     return null;
   }
 
-  const structDef = env[structType] as StructDef;
+  const actualStructType = structType || structInstId.name;
+  const structDef = env[actualStructType] as StructDef;
   let fieldPos = skipWhitespace(source, afterTypeParams + 1);
   const fieldValues: Record<string, number> = {};
   let fieldIndex = 0;
@@ -1415,7 +1467,7 @@ function tryParseStructInstantiation(
   return {
     entry: {
       type: "structInstance",
-      structName: structType,
+      structName: actualStructType,
       fieldValues,
     },
     pos: fieldPos,
@@ -1801,7 +1853,58 @@ function parseStatement(source: string, pos: number, env: Env): ParserResult {
 }
 
 function parseComparison(source: string, pos: number, env: Env): ParserResult {
-  let result = parseBinaryOperator(
+  // Special handling for "identifier is Type" pattern
+  const trimmedPos = skipWhitespace(source, pos);
+  const potentialId = parseIdentifier(source, trimmedPos);
+
+  if (potentialId) {
+    const afterIdPos = skipWhitespace(source, potentialId.end);
+    const isKeyword = skipKeyword(source, afterIdPos, "is");
+
+    if (isKeyword !== null) {
+      // This is an "identifier is Type" pattern
+      const typePos = skipWhitespace(source, isKeyword);
+      const typeName = parseIdentifier(source, typePos);
+
+      if (typeName) {
+        // Look up the identifier to get its struct type if any
+        const idEntry = env[potentialId.name];
+        let checkResult = 0;
+        let structName: string | undefined;
+
+        if (idEntry && idEntry.type === "structInstance") {
+          // Direct struct instance entry
+          const instance = idEntry as StructInstance;
+          structName = instance.structName;
+        } else if (idEntry && idEntry.type === "variable") {
+          // Variable with struct type
+          const variable = idEntry as Variable;
+          structName = variable.structType;
+        }
+
+        if (structName) {
+          // Variable/instance holds a struct - check if type matches
+          if (structName === typeName.name) {
+            checkResult = 1;
+          } else {
+            // Check if typeName is a union type alias containing this struct
+            const typeEntry = env[typeName.name];
+            if (typeEntry && typeEntry.type === "typeAlias") {
+              const alias = typeEntry as TypeAlias;
+              if (alias.unionTypes && alias.unionTypes.includes(structName)) {
+                checkResult = 1;
+              }
+            }
+          }
+        }
+
+        return { value: checkResult, pos: typeName.end };
+      }
+    }
+  }
+
+  // Standard comparison parsing for other expressions
+  const result = parseBinaryOperator(
     source,
     pos,
     env,
@@ -1824,9 +1927,10 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
     ],
   );
 
-  // Handle 'is' operator as postfix (higher precedence than comparisons)
+  // Handle 'is' operator as postfix for non-variable expressions (like literals)
+  let currentResult = result;
   while (true) {
-    const keywordPos = skipWhitespace(source, result.pos);
+    const keywordPos = skipWhitespace(source, currentResult.pos);
     const isKeyword = skipKeyword(source, keywordPos, "is");
 
     if (isKeyword === null) {
@@ -1840,26 +1944,20 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
       break;
     }
 
-    // Resolve type alias if it exists
-    let resolvedType = typeName.name;
-    const typeEntry = env[typeName.name];
-    if (typeEntry && typeEntry.type === "typeAlias") {
-      resolvedType = (typeEntry as TypeAlias).aliasName;
-    }
-
-    // For untyped interpreter, check if resolved type is numeric (I32, etc)
+    // Check if resolved type is numeric (I32, etc)
     const isNumericType =
-      resolvedType === "I32" ||
-      resolvedType === "I64" ||
-      resolvedType === "F32" ||
-      resolvedType === "F64" ||
-      resolvedType === "U32" ||
-      resolvedType === "U64";
+      typeName.name === "I32" ||
+      typeName.name === "I64" ||
+      typeName.name === "F32" ||
+      typeName.name === "F64" ||
+      typeName.name === "U32" ||
+      typeName.name === "U64";
 
-    result = { value: isNumericType ? 1 : 0, pos: typeName.end };
+    const checkResult = isNumericType ? 1 : 0;
+    currentResult = { value: checkResult, pos: typeName.end };
   }
 
-  return result;
+  return currentResult;
 }
 
 function parseLogicalAnd(source: string, pos: number, env: Env): ParserResult {

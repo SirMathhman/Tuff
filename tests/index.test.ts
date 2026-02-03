@@ -179,6 +179,13 @@ describe("The interpreter can interpret data", () => {
     );
   });
 
+  test("union type and struct instance type checking", () => {
+    expectValid(
+      "struct Some { value : I32; } struct None {} type Option = Some | None; let temp : Option = Some { 100 }; temp is Some",
+      1,
+    );
+  });
+
   test("extension method with this parameter", () => {
     expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
   });
