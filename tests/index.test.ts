@@ -147,4 +147,8 @@ describe("The interpreter can interpret", () => {
   test("struct definition and instantiation with field access", () => {
     expectValid("struct Point { x : I32; y : I32; } let temp : Point = Point { 3, 4 }; temp.x + temp.y", 7);
   });
+
+  test("character literal", () => {
+    expectValid("let c : Char = 'a'; c", 97);
+  });
 });

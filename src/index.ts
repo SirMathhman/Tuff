@@ -61,6 +61,62 @@ function parseNumericLiteral(
   };
 }
 
+function parseCharacterLiteral(
+  source: string,
+  start: number,
+): { value: number; end: number } | null {
+  // Check for opening single quote
+  if (source.charCodeAt(start) !== 39) {
+    // "'"
+    return null;
+  }
+
+  let charIndex = start + 1;
+
+  // Handle escape sequences
+  let charCode = 0;
+  if (source.charCodeAt(charIndex) === 92) {
+    // '\' - escape sequence
+    charIndex++;
+    const escapeChar = source.charCodeAt(charIndex);
+    if (escapeChar === 110) {
+      // 'n' - newline
+      charCode = 10;
+    } else if (escapeChar === 116) {
+      // 't' - tab
+      charCode = 9;
+    } else if (escapeChar === 114) {
+      // 'r' - carriage return
+      charCode = 13;
+    } else if (escapeChar === 92) {
+      // '\' - backslash
+      charCode = 92;
+    } else if (escapeChar === 39) {
+      // "'" - single quote
+      charCode = 39;
+    } else {
+      // Unknown escape, treat as the character itself
+      charCode = escapeChar;
+    }
+    charIndex++;
+  } else {
+    // Regular character
+    charCode = source.charCodeAt(charIndex);
+    charIndex++;
+  }
+
+  // Check for closing single quote
+  if (source.charCodeAt(charIndex) !== 39) {
+    // "'"
+    return null;
+  }
+
+  return {
+    value: charCode,
+    end: charIndex + 1,
+  };
+}
+
 function parseIdentifier(
   source: string,
   start: number,
@@ -559,6 +615,12 @@ function parsePrimary(
   const numLiteral = parseNumericLiteral(source, pos);
   if (numLiteral) {
     return { value: numLiteral.value, pos: numLiteral.end };
+  }
+
+  // Parse character literal
+  const charLiteral = parseCharacterLiteral(source, pos);
+  if (charLiteral) {
+    return { value: charLiteral.value, pos: charLiteral.end };
   }
 
   return { value: 0, pos };
