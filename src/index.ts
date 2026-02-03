@@ -19,13 +19,18 @@ type StructInstance = {
   structName: string;
   fieldValues: Record<string, number>;
 };
+type EnumDef = {
+  type: "enumDef";
+  variants: string[];
+};
 type EnvEntry =
   | Variable
   | FunctionDef
   | ArrayDef
   | StringDef
   | StructDef
-  | StructInstance;
+  | StructInstance
+  | EnumDef;
 type Env = Record<string, EnvEntry>;
 
 type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
@@ -403,6 +408,12 @@ function checkKeywordControlFlow(
     return parseStructDefinition(source, structPos, env);
   }
 
+  // Check for 'enum' keyword
+  const enumPos = skipKeyword(source, pos, "enum");
+  if (enumPos !== null) {
+    return parseEnumDefinition(source, enumPos, env);
+  }
+
   // Check for 'fn' keyword
   const fnPos = skipKeyword(source, pos, "fn");
   if (fnPos !== null) {
@@ -640,6 +651,26 @@ function parsePrimaryIdentifier(
     return { value: result.value, pos: result.pos };
   }
 
+  // Check for enum variant access: EnumName::Variant
+  if (entry && entry.type === "enumDef") {
+    let currentPos = afterIdPos;
+    if (
+      source.charCodeAt(currentPos) === 58 &&
+      source.charCodeAt(currentPos + 1) === 58
+    ) {
+      // '::'
+      currentPos = skipWhitespace(source, currentPos + 2);
+      const variantName = parseIdentifier(source, currentPos);
+      if (variantName) {
+        const enumDef = entry as EnumDef;
+        const variantIndex = enumDef.variants.indexOf(variantName.name);
+        if (variantIndex !== -1) {
+          return { value: variantIndex, pos: variantName.end };
+        }
+      }
+    }
+  }
+
   if (entry && entry.type === "variable") {
     return { value: entry.value, pos: identifier.end };
   }
@@ -738,7 +769,11 @@ function parseFunctionCall(
   const callEnv: Env = { ...env };
 
   // Bind 'this' parameter if provided
-  if (thisValue !== null && fnEntry.params.length > 0 && fnEntry.params[0] === "this") {
+  if (
+    thisValue !== null &&
+    fnEntry.params.length > 0 &&
+    fnEntry.params[0] === "this"
+  ) {
     callEnv["this"] = {
       type: "variable",
       value: thisValue,
@@ -747,8 +782,13 @@ function parseFunctionCall(
   }
 
   // Bind other parameters
-  const argStartIndex = thisValue !== null && fnEntry.params[0] === "this" ? 1 : 0;
-  for (let i = argStartIndex; i < fnEntry.params.length && i - argStartIndex < args.length; i++) {
+  const argStartIndex =
+    thisValue !== null && fnEntry.params[0] === "this" ? 1 : 0;
+  for (
+    let i = argStartIndex;
+    i < fnEntry.params.length && i - argStartIndex < args.length;
+    i++
+  ) {
     const paramName = fnEntry.params[i];
     if (paramName !== undefined) {
       callEnv[paramName] = {
@@ -799,7 +839,13 @@ function parseMethodCall(
   }
 
   const fnEntry = entry as FunctionDef;
-  const result = parseFunctionCall(source, afterMethodPos, env, fnEntry, thisValue);
+  const result = parseFunctionCall(
+    source,
+    afterMethodPos,
+    env,
+    fnEntry,
+    thisValue,
+  );
   return { value: result.value, pos: result.pos };
 }
 
@@ -1013,6 +1059,50 @@ function parseFunction(source: string, pos: number, env: Env): ParserResult {
   return { value: restResult.value, pos: restResult.pos };
 }
 
+function parseIdentifierList(
+  source: string,
+  pos: number,
+  skipTypeAnnotations: boolean = false,
+): { names: string[]; pos: number } | null {
+  // Expect '{'
+  const openPos = skipToOpenBrace(source, pos);
+  if (openPos === null) {
+    return null;
+  }
+  pos = openPos;
+
+  // Parse identifier names
+  const names: string[] = [];
+  while (source.charCodeAt(pos) !== 125) {
+    // '}'
+    const name = parseIdentifier(source, pos);
+    if (!name) {
+      return null;
+    }
+    names.push(name.name);
+    pos = skipWhitespace(source, name.end);
+
+    // Skip type annotation if requested
+    if (skipTypeAnnotations) {
+      pos = skipTypeAnnotation(source, pos);
+    }
+
+    // Skip semicolon or comma if present
+    if (source.charCodeAt(pos) === 59) {
+      // ';'
+      pos = skipWhitespace(source, pos + 1);
+    } else if (source.charCodeAt(pos) === 44) {
+      // ','
+      pos = skipWhitespace(source, pos + 1);
+    }
+  }
+
+  pos = skipWhitespace(source, pos + 1); // skip '}'
+  pos = skipSemicolonAndWhitespace(source, pos);
+
+  return { names, pos };
+}
+
 function parseStructDefinition(
   source: string,
   pos: number,
@@ -1027,47 +1117,53 @@ function parseStructDefinition(
   }
   pos = skipWhitespace(source, structName.end);
 
-  // Expect '{'
-  const openPos = skipToOpenBrace(source, pos);
-  if (openPos === null) {
+  // Parse field names with type annotations
+  const result = parseIdentifierList(source, pos, true);
+  if (!result) {
     return { value: 0, pos };
   }
-  pos = openPos;
 
-  // Parse field names (in order)
-  const fields: string[] = [];
-  while (source.charCodeAt(pos) !== 125) {
-    // '}'
-    const fieldName = parseIdentifier(source, pos);
-    if (!fieldName) {
-      return { value: 0, pos };
-    }
-    fields.push(fieldName.name);
-    pos = skipWhitespace(source, fieldName.end);
-
-    // Skip type annotation
-    pos = skipTypeAnnotation(source, pos);
-
-    // Skip semicolon if present
-    if (source.charCodeAt(pos) === 59) {
-      // ';'
-      pos = skipWhitespace(source, pos + 1);
-    } else if (source.charCodeAt(pos) === 44) {
-      // ','
-      pos = skipWhitespace(source, pos + 1);
-    }
-  }
-
-  pos = skipWhitespace(source, pos + 1); // skip '}'
-  pos = skipSemicolonAndWhitespace(source, pos);
+  pos = result.pos;
 
   // Store struct definition in environment
-  // We store it with a special marker - the body and bodyPos are empty for now
   env[structName.name] = {
     type: "structDef",
-    fields,
+    fields: result.names,
     body: "",
     bodyPos: 0,
+  };
+
+  // Parse rest of statements
+  const restResult = parseStatement(source, pos, env);
+  return { value: restResult.value, pos: restResult.pos };
+}
+
+function parseEnumDefinition(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult {
+  pos = skipWhitespace(source, pos);
+
+  // Parse enum name
+  const enumName = parseIdentifier(source, pos);
+  if (!enumName) {
+    return { value: 0, pos };
+  }
+  pos = skipWhitespace(source, enumName.end);
+
+  // Parse variant names (without type annotations)
+  const result = parseIdentifierList(source, pos, false);
+  if (!result) {
+    return { value: 0, pos };
+  }
+
+  pos = result.pos;
+
+  // Store enum definition in environment
+  env[enumName.name] = {
+    type: "enumDef",
+    variants: result.names,
   };
 
   // Parse rest of statements

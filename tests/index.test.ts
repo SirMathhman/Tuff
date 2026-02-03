@@ -145,6 +145,10 @@ describe("The interpreter can interpret loops", () => {
 });
 
 describe("The interpreter can interpret data", () => {
+  test("enum definition and variant access with equality", () => {
+    expectValid("enum Color { Red; Green; } Color::Red == Color::Red", 1);
+  });
+
   test("extension method with this parameter", () => {
     expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
   });
