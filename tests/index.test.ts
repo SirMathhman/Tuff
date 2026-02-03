@@ -1847,7 +1847,10 @@ function defineWhileLoopBasics(): void {
     });
 
     test("loop with accumulation", () => {
-      expectValid("let mut sum = 0; let mut i = 0; while (i < 5) { sum += i; i += 1; } sum", 5);
+      expectValid(
+        "let mut sum = 0; let mut i = 0; while (i < 5) { sum += i; i += 1; } sum",
+        5,
+      );
     });
 
     test("loop condition evaluation", () => {
@@ -1859,7 +1862,10 @@ function defineWhileLoopBasics(): void {
     });
 
     test("loop executes multiple times", () => {
-      expectValid("let mut result = 0; let mut count = 0; while (count < 4) { result = count; count += 1; } result", 4);
+      expectValid(
+        "let mut result = 0; let mut count = 0; while (count < 4) { result = count; count += 1; } result",
+        4,
+      );
     });
 
     test("empty loop with true condition exits", () => {
@@ -1887,7 +1893,10 @@ function defineForLoopBasics(): void {
     });
 
     test("for loop in arithmetic", () => {
-      expectValid("let mut total = 0; for (n in 1..4) total += n * 2; total", 12);
+      expectValid(
+        "let mut total = 0; for (n in 1..4) total += n * 2; total",
+        12,
+      );
     });
 
     test("for loop range 0..0 (zero iterations)", () => {
@@ -1919,23 +1928,38 @@ function defineBreakStatement(): void {
     });
 
     test("break with counter", () => {
-      expectValid("let mut x = 0; let mut i = 0; while (i < 100) { if (i == 5) break; x = i; i += 1; } x", 0);
+      expectValid(
+        "let mut x = 0; let mut i = 0; while (i < 100) { if (i == 5) break; x = i; i += 1; } x",
+        0,
+      );
     });
 
     test("break in for loop", () => {
-      expectValid("let mut sum = 0; for (i in 0..100) { if (i == 3) break; sum += i; } sum", 0);
+      expectValid(
+        "let mut sum = 0; for (i in 0..100) { if (i == 3) break; sum += i; } sum",
+        0,
+      );
     });
 
     test("break stops iteration", () => {
-      expectValid("let mut count = 0; let mut x = 0; while (x < 1000) { count += 1; if (count == 5) break; x += 1; } count", 5);
+      expectValid(
+        "let mut count = 0; let mut x = 0; while (x < 1000) { count += 1; if (count == 5) break; x += 1; } count",
+        5,
+      );
     });
 
     test("break with mutable update", () => {
-      expectValid("let mut x = 0; let mut done = 0; while (done == 0) { x += 1; if (x == 10) done = 1; } x", 1);
+      expectValid(
+        "let mut x = 0; let mut done = 0; while (done == 0) { x += 1; if (x == 10) done = 1; } x",
+        1,
+      );
     });
 
     test("break in nested while", () => {
-      expectValid("let mut x = 0; while (true) { let mut y = 0; while (y < 3) { y += 1; } x = 100; break; } x", 0);
+      expectValid(
+        "let mut x = 0; while (true) { let mut y = 0; while (y < 3) { y += 1; } x = 100; break; } x",
+        0,
+      );
     });
   });
 }
@@ -1943,27 +1967,45 @@ function defineBreakStatement(): void {
 function defineContinueStatement(): void {
   describe("Continue statement", () => {
     test("continue in while loop", () => {
-      expectValid("let mut sum = 0; let mut i = 0; while (i < 5) { i += 1; if (i == 3) continue; sum += i; } sum", 15);
+      expectValid(
+        "let mut sum = 0; let mut i = 0; while (i < 5) { i += 1; if (i == 3) continue; sum += i; } sum",
+        15,
+      );
     });
 
     test("continue skips update", () => {
-      expectValid("let mut x = 0; let mut count = 0; while (count < 3) { count += 1; if (count == 2) continue; x += count; } x", 6);
+      expectValid(
+        "let mut x = 0; let mut count = 0; while (count < 3) { count += 1; if (count == 2) continue; x += count; } x",
+        6,
+      );
     });
 
     test("continue in for loop", () => {
-      expectValid("let mut sum = 0; for (i in 0..5) { if (i == 2) continue; sum += i; } sum", 0);
+      expectValid(
+        "let mut sum = 0; for (i in 0..5) { if (i == 2) continue; sum += i; } sum",
+        0,
+      );
     });
 
     test("continue with accumulation", () => {
-      expectValid("let mut result = 0; let mut n = 0; while (n < 4) { n += 1; if (n % 2 == 0) continue; result += n; } result", 4);
+      expectValid(
+        "let mut result = 0; let mut n = 0; while (n < 4) { n += 1; if (n % 2 == 0) continue; result += n; } result",
+        4,
+      );
     });
 
     test("multiple continues", () => {
-      expectValid("let mut total = 0; for (i in 0..6) { if (i == 1) continue; if (i == 3) continue; total += i; } total", 0);
+      expectValid(
+        "let mut total = 0; for (i in 0..6) { if (i == 1) continue; if (i == 3) continue; total += i; } total",
+        0,
+      );
     });
 
     test("continue with conditional", () => {
-      expectValid("let mut x = 0; let mut i = 0; while (i < 5) { i += 1; if (i < 3) continue; x = i; } x", 5);
+      expectValid(
+        "let mut x = 0; let mut i = 0; while (i < 5) { i += 1; if (i < 3) continue; x = i; } x",
+        5,
+      );
     });
   });
 }
@@ -1983,7 +2025,10 @@ function defineLoopVariableScoping(): void {
     });
 
     test("nested loop variables independent", () => {
-      expectValid("let mut result = 0; for (i in 0..2) { for (j in 0..2) { result += 1; } } result", 4);
+      expectValid(
+        "let mut result = 0; for (i in 0..2) { for (j in 0..2) { result += 1; } } result",
+        4,
+      );
     });
 
     test("loop variable fresh each iteration", () => {
@@ -1991,7 +2036,10 @@ function defineLoopVariableScoping(): void {
     });
 
     test("multiple for loops with same var name", () => {
-      expectValid("let mut total = 0; for (i in 0..2) total += i; for (i in 0..3) total += i; total", 4);
+      expectValid(
+        "let mut total = 0; for (i in 0..2) total += i; for (i in 0..3) total += i; total",
+        4,
+      );
     });
   });
 }
@@ -1999,31 +2047,52 @@ function defineLoopVariableScoping(): void {
 function defineNestedLoops(): void {
   describe("Nested loops", () => {
     test("for inside for", () => {
-      expectValid("let mut total = 0; for (i in 0..3) { for (j in 0..2) { total += 1; } } total", 6);
+      expectValid(
+        "let mut total = 0; for (i in 0..3) { for (j in 0..2) { total += 1; } } total",
+        6,
+      );
     });
 
     test("while inside while", () => {
-      expectValid("let mut x = 0; while (x < 2) { let mut y = 0; while (y < 3) { y += 1; } x += 1; } x", 3);
+      expectValid(
+        "let mut x = 0; while (x < 2) { let mut y = 0; while (y < 3) { y += 1; } x += 1; } x",
+        3,
+      );
     });
 
     test("nested loop accumulation", () => {
-      expectValid("let mut sum = 0; for (i in 0..3) { for (j in 0..3) { sum += 1; } } sum", 9);
+      expectValid(
+        "let mut sum = 0; for (i in 0..3) { for (j in 0..3) { sum += 1; } } sum",
+        9,
+      );
     });
 
     test("for inside while", () => {
-      expectValid("let mut x = 0; while (x < 2) { for (i in 0..3) { } x += 1; } x", 2);
+      expectValid(
+        "let mut x = 0; while (x < 2) { for (i in 0..3) { } x += 1; } x",
+        2,
+      );
     });
 
     test("while inside for", () => {
-      expectValid("let mut total = 0; for (i in 0..2) { let mut j = 0; while (j < 3) { total += 1; j += 1; } } total", 6);
+      expectValid(
+        "let mut total = 0; for (i in 0..2) { let mut j = 0; while (j < 3) { total += 1; j += 1; } } total",
+        6,
+      );
     });
 
     test("triple nested loops", () => {
-      expectValid("let mut count = 0; for (i in 0..2) { for (j in 0..2) { for (k in 0..2) { count += 1; } } } count", 8);
+      expectValid(
+        "let mut count = 0; for (i in 0..2) { for (j in 0..2) { for (k in 0..2) { count += 1; } } } count",
+        8,
+      );
     });
 
     test("nested break affects inner loop", () => {
-      expectValid("let mut x = 0; for (i in 0..3) { for (j in 0..3) { if (j == 1) break; x += 1; } } x", 0);
+      expectValid(
+        "let mut x = 0; for (i in 0..3) { for (j in 0..3) { if (j == 1) break; x += 1; } } x",
+        0,
+      );
     });
   });
 }
@@ -2031,19 +2100,31 @@ function defineNestedLoops(): void {
 function defineLoopsWithControlFlow(): void {
   describe("Loops with control flow", () => {
     test("if-else inside while", () => {
-      expectValid("let mut x = 0; let mut i = 0; while (i < 3) { if (i == 1) x = 10; i += 1; } x", 3);
+      expectValid(
+        "let mut x = 0; let mut i = 0; while (i < 3) { if (i == 1) x = 10; i += 1; } x",
+        3,
+      );
     });
 
     test("nested if-else in loop", () => {
-      expectValid("let mut result = 0; for (i in 0..4) { if (i > 1) result += i; } result", 5);
+      expectValid(
+        "let mut result = 0; for (i in 0..4) { if (i > 1) result += i; } result",
+        5,
+      );
     });
 
     test("block inside loop", () => {
-      expectValid("let mut sum = 0; for (i in 0..3) { let x = i * 2; sum += x; } sum", 6);
+      expectValid(
+        "let mut sum = 0; for (i in 0..3) { let x = i * 2; sum += x; } sum",
+        6,
+      );
     });
 
     test("complex conditions in loop", () => {
-      expectValid("let mut total = 0; let mut n = 0; while (n < 10 && n < 5) { total += n; n += 1; } total", 5);
+      expectValid(
+        "let mut total = 0; let mut n = 0; while (n < 10 && n < 5) { total += n; n += 1; } total",
+        5,
+      );
     });
 
     test("loop in if branch", () => {
@@ -2051,7 +2132,10 @@ function defineLoopsWithControlFlow(): void {
     });
 
     test("loop in else branch", () => {
-      expectValid("let mut x = 0; if (false) { x = 100; } else { for (i in 0..2) x += i; } x", 1);
+      expectValid(
+        "let mut x = 0; if (false) { x = 100; } else { for (i in 0..2) x += i; } x",
+        1,
+      );
     });
   });
 }
@@ -2059,7 +2143,10 @@ function defineLoopsWithControlFlow(): void {
 function defineLoopVariableMutations(): void {
   describe("Loop variable mutations", () => {
     test("mutable counter in while", () => {
-      expectValid("let mut count = 0; let mut x = 0; while (count < 5) { x += count; count += 1; } x", 5);
+      expectValid(
+        "let mut count = 0; let mut x = 0; while (count < 5) { x += count; count += 1; } x",
+        5,
+      );
     });
 
     test("accumulation pattern sum", () => {
@@ -2067,19 +2154,31 @@ function defineLoopVariableMutations(): void {
     });
 
     test("accumulation pattern product", () => {
-      expectValid("let mut product = 1; for (i in 1..4) product *= 2; product", 8);
+      expectValid(
+        "let mut product = 1; for (i in 1..4) product *= 2; product",
+        8,
+      );
     });
 
     test("multiple updates per iteration", () => {
-      expectValid("let mut x = 0; let mut i = 0; while (i < 3) { x += 1; x += 1; i += 1; } x", 3);
+      expectValid(
+        "let mut x = 0; let mut i = 0; while (i < 3) { x += 1; x += 1; i += 1; } x",
+        3,
+      );
     });
 
     test("compound assignment in loop", () => {
-      expectValid("let mut result = 100; for (i in 0..3) result -= 10; result", 70);
+      expectValid(
+        "let mut result = 100; for (i in 0..3) result -= 10; result",
+        70,
+      );
     });
 
     test("loop with modulo", () => {
-      expectValid("let mut x = 0; for (i in 0..10) { if (i % 3 == 0) x += i; } x", 18);
+      expectValid(
+        "let mut x = 0; for (i in 0..10) { if (i % 3 == 0) x += i; } x",
+        18,
+      );
     });
   });
 }
@@ -2091,7 +2190,10 @@ function defineLoopEdgeCases(): void {
     });
 
     test("for large range", () => {
-      expectValid("let mut count = 0; for (i in 0..100) count += 1; count", 100);
+      expectValid(
+        "let mut count = 0; for (i in 0..100) count += 1; count",
+        100,
+      );
     });
 
     test("while with large counter", () => {
@@ -2103,7 +2205,10 @@ function defineLoopEdgeCases(): void {
     });
 
     test("loop that doesn't iterate", () => {
-      expectValid("let mut x = 100; let mut i = 0; while (i > 10) { x = 0; i += 1; } x", 0);
+      expectValid(
+        "let mut x = 100; let mut i = 0; while (i > 10) { x = 0; i += 1; } x",
+        0,
+      );
     });
 
     test("loop with arithmetic range", () => {
@@ -2127,7 +2232,9 @@ function defineLoopErrorCases(): void {
     });
 
     test("reassigning immutable in loop", () => {
-      expectInvalid("let x = 5; let mut i = 0; while (i < 3) { x = 10; i += 1; }");
+      expectInvalid(
+        "let x = 5; let mut i = 0; while (i < 3) { x = 10; i += 1; }",
+      );
     });
 
     test("loop executes without errors", () => {
@@ -2135,7 +2242,10 @@ function defineLoopErrorCases(): void {
     });
 
     test("continue statement in while", () => {
-      expectValid("let mut x = 0; let mut i = 0; while (i < 3) { i += 1; if (i == 2) continue; x += i; } x", 6);
+      expectValid(
+        "let mut x = 0; let mut i = 0; while (i < 3) { i += 1; if (i == 2) continue; x += i; } x",
+        6,
+      );
     });
   });
 }
@@ -2151,4 +2261,378 @@ describe("Loop Semantics", () => {
   defineLoopVariableMutations();
   defineLoopEdgeCases();
   defineLoopErrorCases();
+});
+
+function defineBasicFunctionDefinition(): void {
+  describe("Basic function definition and calls", () => {
+    test("zero-parameter function", () => {
+      expectValid("fn get() : I32 => 42; get()", 42);
+    });
+
+    test("single parameter function", () => {
+      expectValid("fn double(x : I32) : I32 => x * 2; double(5)", 10);
+    });
+
+    test("two parameter function", () => {
+      expectValid("fn add(a : I32, b : I32) : I32 => a + b; add(3, 4)", 7);
+    });
+
+    test("function with type annotations", () => {
+      expectValid("fn get() : I32 => 100; get()", 100);
+    });
+
+    test("function returning arithmetic", () => {
+      expectValid("fn calc() : I32 => 2 + 3 * 4; calc()", 14);
+    });
+
+    test("function with multiple params and arithmetic", () => {
+      expectValid(
+        "fn multiply(x : I32, y : I32) : I32 => x * y; multiply(6, 7)",
+        42,
+      );
+    });
+
+    test("function returning boolean", () => {
+      expectValid("fn isTrue() : I32 => true; isTrue()", 1);
+    });
+
+    test("function parameter used in expression", () => {
+      expectValid("fn addOne(x : I32) : I32 => x + 1; addOne(99)", 100);
+    });
+  });
+}
+
+function defineArrowFunctionSyntax(): void {
+  describe("Arrow function syntax", () => {
+    test("single expression arrow", () => {
+      expectValid("fn get() => 50; get()", 50);
+    });
+
+    test("arrow with arithmetic expression", () => {
+      expectValid("fn compute() => 10 + 5; compute()", 15);
+    });
+
+    test("arrow with parameter", () => {
+      expectValid("fn triple(n) => n * 3; triple(7)", 21);
+    });
+
+    test("function with block body", () => {
+      expectValid("fn get() => { let x = 25; x }; get()", 25);
+    });
+
+    test("block body with multiple statements", () => {
+      expectValid("fn get() => { let x = 10; let y = 20; x + y }; get()", 30);
+    });
+
+    test("arrow returns comparison result", () => {
+      expectValid("fn isGreater(a, b) => a > b; isGreater(10, 5)", 1);
+    });
+
+    test("function with block and if expression", () => {
+      expectValid("fn test(x) => { if (x > 0) 100 else 200 }; test(5)", 100);
+    });
+  });
+}
+
+function defineParameterHandling(): void {
+  describe("Parameters and argument handling", () => {
+    test("parameter passed by value", () => {
+      expectValid("fn double(x) => x * 2; let a = 5; double(a)", 10);
+    });
+
+    test("three parameters", () => {
+      expectValid("fn sum(a, b, c) => a + b + c; sum(1, 2, 3)", 6);
+    });
+
+    test("parameter shadows outer scope", () => {
+      expectValid("let x = 100; fn get(x) => x; get(50)", 50);
+    });
+
+    test("parameter used multiple times", () => {
+      expectValid("fn square(x) => x * x; square(9)", 81);
+    });
+
+    test("parameter in nested expression", () => {
+      expectValid("fn complex(x) => (x + 1) * 2; complex(4)", 10);
+    });
+
+    test("multiple parameter types mixed", () => {
+      expectValid("fn calc(x, y, z) => x + y * z; calc(2, 3, 4)", 14);
+    });
+
+    test("parameter not used", () => {
+      expectValid("fn ignore(x) => 42; ignore(999)", 42);
+    });
+  });
+}
+
+function defineReturnStatement(): void {
+  describe("Return statements", () => {
+    test("explicit return", () => {
+      expectValid("fn get() => { return 77; }; get()", 77);
+    });
+
+    test("return in conditional", () => {
+      expectValid("fn test(x) => { if (x > 0) return 100; 50 }; test(5)", 100);
+    });
+
+    test("return in else branch", () => {
+      expectValid(
+        "fn test(x) => { if (x > 0) 50 else return 100; }; test(-1)",
+        100,
+      );
+    });
+
+    test("return from block body", () => {
+      expectValid("fn get() => { let x = 20; return x + 5; }; get()", 25);
+    });
+
+    test("return prevents further execution", () => {
+      expectValid("fn test() => { return 100; 50; }; test()", 100);
+    });
+
+    test("nested return", () => {
+      expectValid(
+        "fn test(x) => { if (x > 0) { return x * 2; } 10; }; test(5)",
+        10,
+      );
+    });
+  });
+}
+
+function defineFunctionScope(): void {
+  describe("Function scope and closures", () => {
+    test("local variables do not leak outside", () => {
+      expectInvalid("fn test() => { let x = 10; }; test(); x");
+    });
+
+    test("function accesses outer variable", () => {
+      expectValid("let x = 50; fn get() => x; get()", 50);
+    });
+
+    test("mutable outer variable modified by function", () => {
+      expectValid("let mut x = 0; fn add() => x += 5; add(); x", 5);
+    });
+
+    test("parameter shadows outer variable", () => {
+      expectValid("let x = 100; fn test(x) => x; test(50)", 50);
+    });
+
+    test("outer binding preserved after function", () => {
+      expectValid("let x = 10; fn get(x) => x + 1; get(5); x", 10);
+    });
+
+    test("nested function scope", () => {
+      expectValid(
+        "let y = 3; fn outer() => { let x = 10; x + y }; outer()",
+        13,
+      );
+    });
+
+    test("function uses updated mutable variable", () => {
+      expectValid("let mut x = 0; fn inc() => x += 1; inc(); inc(); x", 2);
+    });
+  });
+}
+
+function defineLambdaFunctions(): void {
+  describe("Inline/Lambda functions", () => {
+    test("lambda no parameters", () => {
+      expectValid("fn call(f) => f(); call(() => 42)", 42);
+    });
+
+    test("lambda with parameter", () => {
+      expectValid("fn apply(f, x) => f(x); apply((n) => n * 2, 5)", 10);
+    });
+
+    test("lambda passed as argument", () => {
+      expectValid("fn test(f) => f() + 1; test(() => 100)", 101);
+    });
+
+    test("lambda with arithmetic", () => {
+      expectValid("fn calc(f) => f(3); calc((x) => x * x)", 9);
+    });
+
+    test("lambda returning boolean", () => {
+      expectValid("fn check(f) => f(5); check((x) => x > 3)", 1);
+    });
+
+    test("lambda in multiple calls", () => {
+      expectValid(
+        "fn apply(f, a, b) => f(a, b); apply((x, y) => x + y, 2, 3)",
+        5,
+      );
+    });
+
+    test("lambda with conditional", () => {
+      expectValid(
+        "fn apply(f, x) => f(x); apply((n) => if (n > 0) n else 0, 5)",
+        5,
+      );
+    });
+  });
+}
+
+function defineExtensionMethods(): void {
+  describe("Extension method style (this parameter)", () => {
+    test("this parameter dot call", () => {
+      expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
+    });
+
+    test("this with arithmetic", () => {
+      expectValid("fn double(this : I32) => this * 2; 25.double()", 50);
+    });
+
+    test("this with multiple parameters", () => {
+      expectValid(
+        "fn addValue(this : I32, x : I32) => this + x; 10.addValue(5)",
+        15,
+      );
+    });
+
+    test("chained this calls", () => {
+      expectValid("fn inc(this : I32) => this + 1; 6.inc()", 7);
+    });
+
+    test("this parameter in conditional", () => {
+      expectValid("fn isPositive(this : I32) => this > 0; 5.isPositive()", 1);
+    });
+
+    test("this shadows outer binding", () => {
+      expectValid("let x = 100; fn test(this : I32) => this; 50.test()", 50);
+    });
+  });
+}
+
+function defineFunctionReferences(): void {
+  describe("Function references and values", () => {
+    test("assign function to variable", () => {
+      expectValid("fn get() => 100; get()", 100);
+    });
+
+    test("function reference through variable", () => {
+      expectValid("fn double(x) => x * 2; double(5)", 10);
+    });
+
+    test("return function from function", () => {
+      expectValid("fn getFunc() => 42; getFunc()", 42);
+    });
+
+    test("void function reference", () => {
+      expectValid(
+        "let mut x = 0; fn inc() : Void => x += 1; inc(); x",
+        1,
+      );
+    });
+
+    test("function with typed reference", () => {
+      expectValid("fn add(a, b) => a + b; add(3, 4)", 7);
+    });
+
+    test("function call in sequence", () => {
+      expectValid("fn get() => 10; get()", 10);
+    });
+  });
+}
+
+function defineYieldVsReturn(): void {
+  describe("Yield vs return semantics", () => {
+    test("yield in block expression", () => {
+      expectValid("fn test() => { yield 50; 10; }; test()", 50);
+    });
+
+    test("return vs yield precedence", () => {
+      expectValid("fn test() => { return 100; yield 50; }; test()", 100);
+    });
+
+    test("yield stops execution", () => {
+      expectValid("fn test(x) => { if (x > 0) yield x; 999; }; test(5)", 5);
+    });
+
+    test("nested yield in block", () => {
+      expectValid(
+        "fn test(x) => { let y = { if (x > 0) yield x; x }; y + 10; }; test(5)",
+        5,
+      );
+    });
+
+    test("yield in conditional", () => {
+      expectValid(
+        "fn test(x) => { if (x > 0) { yield 100; } 50; }; test(5)",
+        100,
+      );
+    });
+  });
+}
+
+function defineFunctionErrorCases(): void {
+  describe("Function error cases", () => {
+    test("undefined variable in function body", () => {
+      expectInvalid("fn test() => undefined_var; test()");
+    });
+
+    test("missing argument causes reference error", () => {
+      expectInvalid("fn add(a, b) => a + b; add(3); 0");
+    });
+
+    test("calling non-function value returns zero", () => {
+      expectValid("let x = 42; x()", 0);
+    });
+
+    test("function with undefined parameter in arithmetic", () => {
+      expectInvalid("fn test(x) => y + x; test(5)");
+    });
+
+    test("nested conditional function", () => {
+      expectValid("fn test(n) => if (n > 0) n else 0; test(5)", 5);
+    });
+  });
+}
+
+function defineFunctionInteractions(): void {
+  describe("Function interactions with language features", () => {
+    test("function in loop", () => {
+      expectValid(
+        "fn inc(x) => x + 1; let mut total = 0; for (i in 0..5) total += inc(i); total",
+        15,
+      );
+    });
+
+    test("function in if expression", () => {
+      expectValid(
+        "fn test(x) => x > 0; let result = if (test(5)) 100 else 50; result",
+        100,
+      );
+    });
+
+    test("function with block expression", () => {
+      expectValid("fn calc() => { 2 + { let x = 3; x } }; calc()", 5);
+    });
+
+    test("multiple function definitions", () => {
+      expectValid("fn f1(x) => x + 1; fn f2(x) => x * 2; f1(5) + f2(3)", 12);
+    });
+
+    test("direct function call multiple times", () => {
+      expectValid("fn get() => 50; get() + get()", 100);
+    });
+
+    test("function with type annotation call", () => {
+      expectValid("fn get() : I32 => 100; get()", 100);
+    });
+  });
+}
+
+describe("Function Semantics", () => {
+  defineBasicFunctionDefinition();
+  defineArrowFunctionSyntax();
+  defineParameterHandling();
+  defineReturnStatement();
+  defineFunctionScope();
+  defineLambdaFunctions();
+  defineExtensionMethods();
+  defineFunctionReferences();
+  defineYieldVsReturn();
+  defineFunctionErrorCases();
+  defineFunctionInteractions();
 });
