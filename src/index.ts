@@ -843,7 +843,28 @@ function handleIndexing(
   const indexResult = parseLogicalOr(source, indexPos, env);
   let endPos = skipWhitespace(source, indexResult.pos);
 
-  // Expect ']'
+  // Check for range syntax '..'
+  if (source.charCodeAt(endPos) === 46 && source.charCodeAt(endPos + 1) === 46) {
+    // ']' - range syntax detected
+    endPos = skipWhitespace(source, endPos + 2);
+    const rangeEndResult = parseLogicalOr(source, endPos, env);
+    endPos = skipWhitespace(source, rangeEndResult.pos);
+    
+    if (source.charCodeAt(endPos) === 93) {
+      // ']'
+      endPos = skipWhitespace(source, endPos + 1);
+      // Store slice info in a special marker for reference operator
+      const sliceInfo = {
+        startIdx: Math.floor(indexResult.value),
+        endIdx: Math.floor(rangeEndResult.value),
+      };
+      (env as any).__lastArraySlice = sliceInfo;
+      (env as any).__lastArraySliceEntry = entry;
+      return { value: 0, pos: endPos };
+    }
+  }
+
+  // Expect ']' for regular index
   if (source.charCodeAt(endPos) === 93) {
     // ']'
     endPos = skipWhitespace(source, endPos + 1);
@@ -1242,6 +1263,19 @@ function handlePointerIndexing(
   entry: EnvEntry,
 ): ParserResult | null {
   const pointerEntry = entry as any;
+  
+  // Check if pointer has a stored array value for indexing
+  if (
+    pointerEntry.__arrayValue &&
+    Array.isArray(pointerEntry.__arrayValue)
+  ) {
+    return handleIndexing(source, afterIdPos, env, entry, (index: number) => {
+      return index >= 0 && index < pointerEntry.__arrayValue.length
+        ? pointerEntry.__arrayValue[index]
+        : 0;
+    });
+  }
+  
   // Check if pointer has a stored string value for indexing
   if (
     pointerEntry.__stringValue &&
@@ -1625,6 +1659,29 @@ function parseMethodCall(
   return { value: result.value, pos: result.pos };
 }
 
+function createPointerReference(
+  env: Env,
+  isMutable: boolean,
+  pointsToName?: string,
+  arrayValue?: number[],
+): string {
+  const pointerRefKey =
+    "__ptrref_" + Math.random().toString(36).substring(7);
+  const pointerDef: any = {
+    type: "pointer",
+    value: 0,
+    pointsToName,
+    isMutable,
+  };
+  
+  if (arrayValue) {
+    pointerDef.__arrayValue = arrayValue;
+  }
+  
+  env[pointerRefKey] = pointerDef;
+  return pointerRefKey;
+}
+
 function tryParseReferenceOperator(
   source: string,
   trimmedPos: number,
@@ -1649,18 +1706,56 @@ function tryParseReferenceOperator(
       if (isMutableRef && !variable.mutable) {
         return null;
       }
-      // Create a pointer entry pointing to this variable
-      const pointerRefKey =
-        "__ptrref_" + Math.random().toString(36).substring(7);
-      env[pointerRefKey] = {
-        type: "pointer",
-        value: 0,
-        pointsToName: identifier.name,
-        isMutable: isMutableRef,
-      };
+      const pointerRefKey = createPointerReference(
+        env,
+        isMutableRef,
+        identifier.name,
+      );
       // Store reference for later retrieval
       (env as any).__lastPointerRef = pointerRefKey;
       return { value: Math.random(), pos: identifier.end }; // Return unique value
+    } else if (variable && variable.type === "array") {
+      // Handle array reference with potential slicing
+      let refEndPos = identifier.end;
+      
+      // Check if this is followed by array indexing with slicing
+      if (source.charCodeAt(refEndPos) === 91) {
+        // '[' - potential slice
+        const arrayIndexResult = handleIndexing(
+          source,
+          refEndPos,
+          env,
+          variable,
+          () => 0, // getValue not used for slicing detection
+        );
+        
+        if (arrayIndexResult) {
+          // Check if a slice was detected
+          const sliceInfo = (env as any).__lastArraySlice;
+          if (sliceInfo) {
+            const arrayDef = variable as ArrayDef;
+            // Create sliced array
+            const sliceStart = sliceInfo.startIdx;
+            const sliceEnd = sliceInfo.endIdx;
+            const slicedElements = arrayDef.elements.slice(sliceStart, sliceEnd);
+            
+            const pointerRefKey = createPointerReference(
+              env,
+              isMutableRef,
+              undefined,
+              slicedElements,
+            );
+            
+            // Clean up slice info
+            delete (env as any).__lastArraySlice;
+            delete (env as any).__lastArraySliceEntry;
+            
+            // Store reference for later retrieval
+            (env as any).__lastPointerRef = pointerRefKey;
+            return { value: Math.random(), pos: arrayIndexResult.pos };
+          }
+        }
+      }
     }
   }
 

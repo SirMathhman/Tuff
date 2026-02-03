@@ -210,7 +210,7 @@ describe("The interpreter can interpret functions", () => {
 
   test("pointer reference and dereference", () => {
     expectValid("let x = 100; let y : *I32 = &x; *y", 100);
-   });
+  });
 
   test("mutable pointer reference, dereference, and assignment", () => {
     expectValid("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x", 100);
@@ -291,6 +291,13 @@ describe("The interpreter can interpret data", () => {
     expectValid(
       "let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]",
       6,
+    );
+  });
+
+  test("array slicing with pointer reference and indexed dereference", () => {
+    expectValid(
+      "let array : [I32; 3; 3] = [1, 2, 3]; let slice : *[I32; 2; 2] = &array[0..2]; slice[0] + slice[1]",
+      3,
     );
   });
 
