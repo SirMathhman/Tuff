@@ -1394,8 +1394,22 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
     pos,
     env,
     parseAdditive,
-    [60], // <
-    [(left: number, right: number) => (left < right ? 1 : 0)],
+    [
+      [60, 61], // <=
+      [62, 61], // >=
+      [61, 61], // ==
+      [33, 61], // !=
+      60, // <
+      62, // >
+    ],
+    [
+      (left: number, right: number) => (left <= right ? 1 : 0),
+      (left: number, right: number) => (left >= right ? 1 : 0),
+      (left: number, right: number) => (left === right ? 1 : 0),
+      (left: number, right: number) => (left !== right ? 1 : 0),
+      (left: number, right: number) => (left < right ? 1 : 0),
+      (left: number, right: number) => (left > right ? 1 : 0),
+    ],
   );
 }
 

@@ -171,4 +171,24 @@ describe("The interpreter can interpret", () => {
   test("logical NOT operator", () => {
     expectValid("let x = true; !x", 0);
   });
+
+  test("greater-than comparison operator", () => {
+    expectValid("let x = 5; let y = 3; x > y", 1);
+  });
+
+  test("greater-than-or-equal comparison operator", () => {
+    expectValid("let x = 5; let y = 5; x >= y", 1);
+  });
+
+  test("less-than-or-equal comparison operator", () => {
+    expectValid("let x = 3; let y = 5; x <= y", 1);
+  });
+
+  test("equality comparison operator", () => {
+    expectValid("let x = 5; let y = 5; x == y", 1);
+  });
+
+  test("not-equal comparison operator", () => {
+    expectValid("let x = 5; let y = 3; x != y", 1);
+  });
 });
