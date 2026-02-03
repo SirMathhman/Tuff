@@ -153,6 +153,10 @@ describe("The interpreter can interpret data", () => {
     expectValid("fn pass<T>(value : T) : T => value; pass<I32>(100)", 100);
   });
 
+  test("generic struct definition and instantiation with field access", () => {
+    expectValid("struct Wrapper<T> { field : T; } let wrapper : Wrapper<I32> = Wrapper<I32> { 100 }; wrapper.field", 100);
+  });
+
   test("extension method with this parameter", () => {
     expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
   });

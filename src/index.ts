@@ -1188,6 +1188,9 @@ function parseStructDefinition(
   }
   pos = skipWhitespace(source, structName.end);
 
+  // Skip generic type parameters if present: <T>, <T, U>, etc.
+  pos = skipTypeParameterList(source, pos);
+
   // Parse field names with type annotations
   const result = parseIdentifierList(source, pos, true);
   if (!result) {
@@ -1279,14 +1282,18 @@ function parseLetTypeAnnotation(
 
   if (source.charCodeAt(currentPos) !== 91) {
     const typeId = parseIdentifier(source, currentPos);
-    if (
-      typeId &&
-      typeId.name in env &&
-      (env[typeId.name] as EnvEntry).type === "structDef"
-    ) {
-      structType = typeId.name;
+    if (typeId) {
+      // Skip generic type parameters if present: <I32>, etc.
+      let afterTypeParams = skipTypeParameterList(source, typeId.end);
+
+      if (
+        typeId.name in env &&
+        (env[typeId.name] as EnvEntry).type === "structDef"
+      ) {
+        structType = typeId.name;
+      }
+      currentPos = skipWhitespace(source, afterTypeParams);
     }
-    currentPos = skipWhitespace(source, typeId?.end ?? currentPos);
   } else {
     currentPos = skipBalancedBrackets(source, currentPos, 91, 93);
     currentPos = skipWhitespace(source, currentPos);
@@ -1306,21 +1313,31 @@ function tryParseStructInstantiation(
   }
 
   const structInstId = parseIdentifier(source, pos);
-  if (!structInstId || structInstId.name !== structType) {
+  if (!structInstId) {
     return null;
   }
 
-  const afterStructName = skipWhitespace(source, structInstId.end);
-  if (source.charCodeAt(afterStructName) !== 123) {
+  // Skip generic type parameters if present: <I32>, <String, I32>, etc.
+  let afterTypeParams = skipTypeParameterList(source, structInstId.end);
+
+  // Now check if the struct name matches
+  if (structInstId.name !== structType) {
+    return null;
+  }
+
+  afterTypeParams = skipWhitespace(source, afterTypeParams);
+  if (source.charCodeAt(afterTypeParams) !== 123) {
+    // '{'
     return null;
   }
 
   const structDef = env[structType] as StructDef;
-  let fieldPos = skipWhitespace(source, afterStructName + 1);
+  let fieldPos = skipWhitespace(source, afterTypeParams + 1);
   const fieldValues: Record<string, number> = {};
   let fieldIndex = 0;
 
   while (source.charCodeAt(fieldPos) !== 125) {
+    // '}'
     const fieldResult = parseLogicalOr(source, fieldPos, env);
     if (fieldIndex < structDef.fields.length) {
       fieldValues[structDef.fields[fieldIndex]!] = fieldResult.value;
@@ -1329,11 +1346,12 @@ function tryParseStructInstantiation(
     fieldPos = skipWhitespace(source, fieldResult.pos);
 
     if (source.charCodeAt(fieldPos) === 44) {
+      // ','
       fieldPos = skipWhitespace(source, fieldPos + 1);
     }
   }
 
-  fieldPos = skipWhitespace(source, fieldPos + 1);
+  fieldPos = skipWhitespace(source, fieldPos + 1); // skip '}'
   return {
     entry: {
       type: "structInstance",
