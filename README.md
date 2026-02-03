@@ -1,5 +1,9 @@
 # tuff
 
+## Tutorial
+
+Start here: [`TUTORIAL.md`](./TUTORIAL.md)
+
 To install dependencies:
 
 ```bash

@@ -74,6 +74,7 @@ type Env = Record<string, EnvEntry> & {
 type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
 
 type ParserResult = { value: number; pos: number };
+const MAX_LOOP_ITERATIONS = 1024;
 /* eslint-enable no-unused-vars */
 
 function parseNumericLiteral(
@@ -81,18 +82,22 @@ function parseNumericLiteral(
   start: number,
 ): { value: number; end: number } | null {
   let numEnd = start;
+  let iterations = 0;
   while (
     numEnd < source.length &&
     source.charCodeAt(numEnd) >= 48 && // '0'
-    source.charCodeAt(numEnd) <= 57 // '9'
+    source.charCodeAt(numEnd) <= 57 && // '9'
+    iterations < MAX_LOOP_ITERATIONS
   ) {
     numEnd++;
+    iterations++;
   }
   if (numEnd <= start) {
     return null;
   }
   // Skip type suffix (e.g., "U8", "I32")
   let suffixEnd = numEnd;
+  iterations = 0;
   while (
     suffixEnd < source.length &&
     ((source.charCodeAt(suffixEnd) >= 65 &&
@@ -100,9 +105,11 @@ function parseNumericLiteral(
       (source.charCodeAt(suffixEnd) >= 97 &&
         source.charCodeAt(suffixEnd) <= 122) || // 'a'-'z'
       (source.charCodeAt(suffixEnd) >= 48 &&
-        source.charCodeAt(suffixEnd) <= 57)) // '0'-'9'
+        source.charCodeAt(suffixEnd) <= 57)) && // '0'-'9'
+    iterations < MAX_LOOP_ITERATIONS
   ) {
     suffixEnd++;
+    iterations++;
   }
   return {
     value: parseInt(source.substring(start, numEnd), 10),
@@ -178,9 +185,14 @@ function parseStringLiteral(
 
   let stringIndex = start + 1;
   let result = "";
+  let iterations = 0;
 
   // Parse string content until closing quote
-  while (stringIndex < source.length && source.charCodeAt(stringIndex) !== 34) {
+  while (
+    stringIndex < source.length &&
+    source.charCodeAt(stringIndex) !== 34 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     // '"'
     if (source.charCodeAt(stringIndex) === 92) {
       // '\' - escape sequence
@@ -211,6 +223,7 @@ function parseStringLiteral(
       result += String.fromCharCode(source.charCodeAt(stringIndex));
       stringIndex++;
     }
+    iterations++;
   }
 
   // Check for closing double quote
@@ -246,14 +259,17 @@ function parseIdentifier(
 
   // Subsequent characters can be letters, digits, or underscores
   let end = start + 1;
+  let iterations = 0;
   while (
     end < source.length &&
     ((source.charCodeAt(end) >= 97 && source.charCodeAt(end) <= 122) || // 'a'-'z'
       (source.charCodeAt(end) >= 65 && source.charCodeAt(end) <= 90) || // 'A'-'Z'
       (source.charCodeAt(end) >= 48 && source.charCodeAt(end) <= 57) || // '0'-'9'
-      source.charCodeAt(end) === 95) // '_'
+      source.charCodeAt(end) === 95) && // '_'
+    iterations < MAX_LOOP_ITERATIONS
   ) {
     end++;
+    iterations++;
   }
 
   return {
@@ -275,9 +291,15 @@ function skipKeyword(
 }
 
 function skipWhitespace(source: string, pos: number): number {
-  while (pos < source.length && source.charCodeAt(pos) === 32) {
+  let iterations = 0;
+  while (
+    pos < source.length &&
+    source.charCodeAt(pos) === 32 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     // ' '
     pos++;
+    iterations++;
   }
   return pos;
 }
@@ -289,6 +311,104 @@ function skipSemicolonAndWhitespace(source: string, pos: number): number {
     pos = pos + 1;
   }
   return skipWhitespace(source, pos);
+}
+
+function resolveTypeAlias(typeName: string, env: Env): string {
+  const typeEntry = env[typeName];
+  if (typeEntry && typeEntry.type === "typeAlias") {
+    const alias = typeEntry as TypeAlias;
+    if (alias.aliasName) {
+      return alias.aliasName;
+    }
+  }
+  return typeName;
+}
+
+function isNumericType(typeName: string): boolean {
+  return (
+    typeName === "I32" ||
+    typeName === "I64" ||
+    typeName === "F32" ||
+    typeName === "F64" ||
+    typeName === "U32" ||
+    typeName === "U64"
+  );
+}
+
+function restoreBindings(
+  env: Env,
+  previousBindings: Record<string, EnvEntry | undefined>,
+  previousLastFunctionRef: string | undefined,
+): void {
+  let restoreIterations = 0;
+  for (const [name, previous] of Object.entries(previousBindings)) {
+    if (restoreIterations >= MAX_LOOP_ITERATIONS) {
+      break;
+    }
+    if (previous === undefined) {
+      delete env[name];
+    } else {
+      env[name] = previous;
+    }
+    restoreIterations++;
+  }
+  if (previousLastFunctionRef === undefined) {
+    delete (env as any).__lastFunctionRef;
+  } else {
+    (env as any).__lastFunctionRef = previousLastFunctionRef;
+  }
+}
+
+function checkControlFlowFlags(
+  env: Env,
+  previousResult: number,
+  stmtResult: ParserResult,
+): { shouldBreak: boolean; result: number; pos: number } | null {
+  if ((env as any).breakRequested) {
+    return { shouldBreak: true, result: previousResult, pos: stmtResult.pos };
+  }
+
+  if ((env as any).continueRequested) {
+    return { shouldBreak: true, result: previousResult, pos: stmtResult.pos };
+  }
+
+  if ((env as any).yieldRequested) {
+    return {
+      shouldBreak: true,
+      result: (env as any).yieldValue,
+      pos: stmtResult.pos,
+    };
+  }
+
+  if ((env as any).returnRequested) {
+    return {
+      shouldBreak: true,
+      result: (env as any).returnValue,
+      pos: stmtResult.pos,
+    };
+  }
+
+  return null;
+}
+
+function completeAssignment(
+  source: string,
+  pos: number,
+  env: Env,
+  varName: string,
+  newValue: number,
+): ParserResult {
+  let exprPos = skipWhitespace(source, pos);
+  exprPos = skipSemicolonAndWhitespace(source, exprPos);
+
+  // Mutate the mutable variable in place
+  const entry = env[varName];
+  if (entry && entry.type === "variable") {
+    entry.value = newValue;
+  }
+
+  // Return the assigned value
+  return { value: newValue, pos: exprPos };
 }
 
 // Helper for left-recursive binary operator parsing
@@ -315,7 +435,8 @@ function parseBinaryOperator(
   let result = left.value;
   pos = left.pos;
 
-  while (pos < source.length) {
+  let iterations = 0;
+  while (pos < source.length && iterations < MAX_LOOP_ITERATIONS) {
     // Check for break or continue before processing operators
     if (
       (env as any).breakRequested ||
@@ -331,7 +452,7 @@ function parseBinaryOperator(
 
     let handlerIndex = -1;
 
-    for (let i = 0; i < operatorCodes.length; i++) {
+    for (let i = 0; i < operatorCodes.length && i < MAX_LOOP_ITERATIONS; i++) {
       const code = operatorCodes[i];
       if (Array.isArray(code)) {
         // Multi-character operator (e.g., [38, 38] for &&)
@@ -342,7 +463,13 @@ function parseBinaryOperator(
         }
       } else {
         // Single-character operator
-        if (charCode === code) {
+        if (
+          charCode === code &&
+          !(
+            (code === 38 && source.charCodeAt(pos + 1) === 38) ||
+            (code === 124 && source.charCodeAt(pos + 1) === 124)
+          )
+        ) {
           handlerIndex = i;
           pos = pos + 1;
           break;
@@ -362,6 +489,7 @@ function parseBinaryOperator(
       result = handler(result, right.value);
     }
     pos = right.pos;
+    iterations++;
   }
 
   return { value: result, pos };
@@ -725,7 +853,7 @@ function parseMatch(source: string, pos: number, env: Env): ParserResult {
 
   // Extract variable name from matched string (skip opening paren)
   let matchVarName = "";
-  for (let i = 1; i < parenExpr.length; i++) {
+  for (let i = 1; i < parenExpr.length && i < MAX_LOOP_ITERATIONS; i++) {
     const code = parenExpr.charCodeAt(i);
     if (
       (code >= 97 && code <= 122) || // a-z
@@ -751,7 +879,12 @@ function parseMatch(source: string, pos: number, env: Env): ParserResult {
   // Parse cases until closing brace
   let result = 0;
   let foundMatch = false;
-  while (pos < source.length && source.charCodeAt(pos) !== 125) {
+  let iterations = 0;
+  while (
+    pos < source.length &&
+    source.charCodeAt(pos) !== 125 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     // charCode 125 is '}'
     pos = skipWhitespace(source, pos);
 
@@ -815,6 +948,7 @@ function parseMatch(source: string, pos: number, env: Env): ParserResult {
 
     // Skip semicolon
     pos = skipSemicolonAndWhitespace(source, pos);
+    iterations++;
   }
 
   // Expect closing brace '}'
@@ -884,7 +1018,7 @@ function parsePrimaryParenOrBlock(
   env: Env,
 ): ParserResult | null {
   // Check for opening parenthesis
-  const parenResult = parseParenthesizedExpr(source, pos, env, parseAdditive);
+  const parenResult = parseParenthesizedExpr(source, pos, env, parseLogicalOr);
   if (parenResult !== null) {
     return parenResult;
   }
@@ -1268,15 +1402,17 @@ function handlePointerIndexing(
   const pointerEntry = entry as any;
 
   // Check if pointer is a mutable slice - read from original array
-  if (pointerEntry.__sliceSourceName && pointerEntry.__sliceStart !== undefined) {
+  if (
+    pointerEntry.__sliceSourceName &&
+    pointerEntry.__sliceStart !== undefined
+  ) {
     const sourceArray = env[pointerEntry.__sliceSourceName];
     if (sourceArray && sourceArray.type === "array") {
       const arrayDef = sourceArray as ArrayDef;
       return handleIndexing(source, afterIdPos, env, entry, (index: number) => {
-        const actualIndex =
-          pointerEntry.__sliceStart + Math.floor(index);
+        const actualIndex = pointerEntry.__sliceStart + Math.floor(index);
         return actualIndex >= 0 && actualIndex < arrayDef.elements.length
-          ? arrayDef.elements[actualIndex] ?? 0
+          ? (arrayDef.elements[actualIndex] ?? 0)
           : 0;
       });
     }
@@ -1286,7 +1422,7 @@ function handlePointerIndexing(
   if (pointerEntry.__arrayValue && Array.isArray(pointerEntry.__arrayValue)) {
     return handleIndexing(source, afterIdPos, env, entry, (index: number) => {
       return index >= 0 && index < pointerEntry.__arrayValue.length
-        ? pointerEntry.__arrayValue[index] ?? 0
+        ? (pointerEntry.__arrayValue[index] ?? 0)
         : 0;
     });
   }
@@ -1415,8 +1551,9 @@ function findBodyEndPosition(
 ): number {
   let bodyEndPos = startPos;
   let depth = 0;
+  let iterations = 0;
 
-  while (bodyEndPos < source.length) {
+  while (bodyEndPos < source.length && iterations < MAX_LOOP_ITERATIONS) {
     const charCode = source.charCodeAt(bodyEndPos);
 
     if (charCode === 40 || charCode === 123) {
@@ -1432,6 +1569,7 @@ function findBodyEndPosition(
     } else {
       bodyEndPos++;
     }
+    iterations++;
   }
 
   return bodyEndPos;
@@ -1465,8 +1603,12 @@ function tryParseInlineFunction(
   // Parse the parameters inside ()
   let currentPos = parenStart + 1;
   const params: string[] = [];
+  let iterations = 0;
 
-  while (source.charCodeAt(currentPos) !== 41) {
+  while (
+    source.charCodeAt(currentPos) !== 41 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     // ')'
     currentPos = skipWhitespace(source, currentPos);
     const paramId = parseIdentifier(source, currentPos);
@@ -1483,6 +1625,7 @@ function tryParseInlineFunction(
     if (source.charCodeAt(currentPos) === 44) {
       currentPos = skipWhitespace(source, currentPos + 1);
     }
+    iterations++;
   }
 
   currentPos = skipWhitespace(source, currentPos + 1); // skip ')'
@@ -1532,8 +1675,9 @@ function parseFunctionCall(
   let argPos = skipWhitespace(source, afterParenPos + 1);
   const args: number[] = [];
   const argFnRefs: (string | null)[] = []; // Track function references for each argument
+  let iterations = 0;
 
-  while (source.charCodeAt(argPos) !== 41) {
+  while (source.charCodeAt(argPos) !== 41 && iterations < MAX_LOOP_ITERATIONS) {
     // Try to parse inline function first
     const inlineResult = tryParseInlineFunction(source, argPos, env);
     if (inlineResult) {
@@ -1551,11 +1695,14 @@ function parseFunctionCall(
     if (source.charCodeAt(argPos) === 44) {
       argPos = skipWhitespace(source, argPos + 1);
     }
+    iterations++;
   }
 
   argPos = skipWhitespace(source, argPos + 1);
 
-  const callEnv: Env = { ...env };
+  const callEnv: Env = env;
+  const previousBindings: Record<string, EnvEntry | undefined> = {};
+  const previousLastFunctionRef = (callEnv as any).__lastFunctionRef;
   delete (callEnv as any).__lastFunctionRef;
 
   // Bind 'this' parameter if provided
@@ -1564,6 +1711,7 @@ function parseFunctionCall(
     fnEntry.params.length > 0 &&
     fnEntry.params[0] === "this"
   ) {
+    previousBindings["this"] = callEnv["this"];
     callEnv["this"] = {
       type: "variable",
       value: thisValue,
@@ -1576,12 +1724,15 @@ function parseFunctionCall(
     thisValue !== null && fnEntry.params[0] === "this" ? 1 : 0;
   for (
     let i = argStartIndex;
-    i < fnEntry.params.length && i - argStartIndex < args.length;
+    i < fnEntry.params.length &&
+    i - argStartIndex < args.length &&
+    i - argStartIndex < MAX_LOOP_ITERATIONS;
     i++
   ) {
     const paramName = fnEntry.params[i];
     if (paramName !== undefined) {
       const argIndex = i - argStartIndex;
+      previousBindings[paramName] = callEnv[paramName];
       // If argument is a function reference, bind it as FunctionRef
       if (argFnRefs[argIndex]) {
         callEnv[paramName] = {
@@ -1621,9 +1772,17 @@ function parseFunctionCall(
         { value: -1, pos: argPos },
         env,
       );
-      return chainedResult ?? { value: -1, pos: argPos };
+      const finalResult = chainedResult ?? { value: -1, pos: argPos };
+
+      // Restore bindings
+      restoreBindings(callEnv, previousBindings, previousLastFunctionRef);
+
+      return finalResult;
     }
   }
+
+  // Restore bindings after call
+  restoreBindings(callEnv, previousBindings, previousLastFunctionRef);
 
   return { value: bodyResult.value, pos: argPos };
 }
@@ -1951,8 +2110,9 @@ function skipBalancedBrackets(
   }
   let depth = 1;
   pos = pos + 1;
+  let iterations = 0;
 
-  while (pos < source.length && depth > 0) {
+  while (pos < source.length && depth > 0 && iterations < MAX_LOOP_ITERATIONS) {
     const code = source.charCodeAt(pos);
     if (code === openChar) {
       depth++;
@@ -1960,6 +2120,7 @@ function skipBalancedBrackets(
       depth--;
     }
     pos++;
+    iterations++;
   }
 
   return pos;
@@ -2000,8 +2161,13 @@ function skipTypeParameterList(source: string, pos: number): number {
 
   pos = pos + 1;
   let angleDepth = 1;
+  let iterations = 0;
 
-  while (pos < source.length && angleDepth > 0) {
+  while (
+    pos < source.length &&
+    angleDepth > 0 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     const code = source.charCodeAt(pos);
     if (code === 60) {
       // '<'
@@ -2011,6 +2177,7 @@ function skipTypeParameterList(source: string, pos: number): number {
       angleDepth--;
     }
     pos++;
+    iterations++;
   }
 
   return skipWhitespace(source, pos);
@@ -2038,8 +2205,13 @@ function parseModule(source: string, pos: number, env: Env): ParserResult {
   const bodyStartPos = pos;
   let bodyEndPos = pos;
   let depth = 1; // We've already seen the opening brace
+  let iterations = 0;
 
-  while (bodyEndPos < source.length && depth > 0) {
+  while (
+    bodyEndPos < source.length &&
+    depth > 0 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     const charCode = source.charCodeAt(bodyEndPos);
     if (charCode === 123) {
       // '{'
@@ -2051,6 +2223,7 @@ function parseModule(source: string, pos: number, env: Env): ParserResult {
     if (depth > 0) {
       bodyEndPos++;
     }
+    iterations++;
   }
 
   const body = source.substring(bodyStartPos, bodyEndPos);
@@ -2061,7 +2234,11 @@ function parseModule(source: string, pos: number, env: Env): ParserResult {
   parseStatement(body, 0, moduleEnv);
 
   // Adjust all bodyPos values in moduleEnv to be relative to original source
+  iterations = 0;
   for (const entry of Object.values(moduleEnv)) {
+    if (iterations >= MAX_LOOP_ITERATIONS) {
+      break;
+    }
     if (
       entry &&
       typeof entry === "object" &&
@@ -2070,6 +2247,7 @@ function parseModule(source: string, pos: number, env: Env): ParserResult {
       const fnDef = entry as FunctionDef;
       fnDef.bodyPos = (fnDef.bodyPos ?? 0) + bodyStartPos;
     }
+    iterations++;
   }
 
   // Store module definition
@@ -2086,6 +2264,7 @@ function parseModule(source: string, pos: number, env: Env): ParserResult {
 
 function parseFunction(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
+  let iterations = 0;
 
   // Parse function name
   const fnName = parseIdentifier(source, pos);
@@ -2103,7 +2282,7 @@ function parseFunction(source: string, pos: number, env: Env): ParserResult {
 
   // Parse parameters
   const params: string[] = [];
-  while (source.charCodeAt(pos) !== 41) {
+  while (source.charCodeAt(pos) !== 41 && iterations < MAX_LOOP_ITERATIONS) {
     // ')'
     const paramName = parseIdentifier(source, pos);
     if (!paramName) {
@@ -2117,6 +2296,7 @@ function parseFunction(source: string, pos: number, env: Env): ParserResult {
 
     // Skip comma if present
     pos = skipCommaAndWhitespace(source, pos);
+    iterations++;
   }
 
   pos = skipWhitespace(source, pos + 1); // skip ')'
@@ -2158,6 +2338,7 @@ function parseIdentifierList(
   pos: number,
   skipTypeAnnotations: boolean = false,
 ): { names: string[]; pos: number } | null {
+  let iterations = 0;
   // Expect '{'
   const openPos = skipToOpenBrace(source, pos);
   if (openPos === null) {
@@ -2167,7 +2348,7 @@ function parseIdentifierList(
 
   // Parse identifier names
   const names: string[] = [];
-  while (source.charCodeAt(pos) !== 125) {
+  while (source.charCodeAt(pos) !== 125 && iterations < MAX_LOOP_ITERATIONS) {
     // '}'
     const name = parseIdentifier(source, pos);
     if (!name) {
@@ -2189,6 +2370,7 @@ function parseIdentifierList(
       // ','
       pos = skipWhitespace(source, pos + 1);
     }
+    iterations++;
   }
 
   pos = skipWhitespace(source, pos + 1); // skip '}'
@@ -2274,6 +2456,7 @@ function parseTypeAliasDefinition(
   env: Env,
 ): ParserResult {
   pos = skipWhitespace(source, pos);
+  let iterations = 0;
 
   // Parse type alias name
   const aliasName = parseIdentifier(source, pos);
@@ -2299,7 +2482,8 @@ function parseTypeAliasDefinition(
   const types: string[] = [firstType.name];
 
   // Check for union types (separated by |)
-  while (source.charCodeAt(pos) === 124) {
+  iterations = 0;
+  while (source.charCodeAt(pos) === 124 && iterations < MAX_LOOP_ITERATIONS) {
     // '|'
     pos = skipWhitespace(source, pos + 1);
     const nextType = parseIdentifier(source, pos);
@@ -2308,6 +2492,7 @@ function parseTypeAliasDefinition(
     }
     types.push(nextType.name);
     pos = skipWhitespace(source, nextType.end);
+    iterations++;
   }
 
   // Skip semicolon and whitespace
@@ -2365,16 +2550,22 @@ function parseLetTypeAnnotation(
   let isFunctionType = false;
   let isPointerType = false;
   let isPointerMutable = false;
+  let iterations = 0;
   const typePos = parseTypeAnnotationColon(source, pos);
   if (typePos === null) {
     return { structType, isFunctionType, isPointerType, isPointerMutable, pos };
   }
 
   let currentPos = typePos;
-  while (source.charCodeAt(currentPos) === 42) {
+  iterations = 0;
+  while (
+    source.charCodeAt(currentPos) === 42 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     // '*' - pointer
     isPointerType = true;
     currentPos = skipWhitespace(source, currentPos + 1);
+    iterations++;
   }
 
   if (isPointerType) {
@@ -2396,14 +2587,7 @@ function parseLetTypeAnnotation(
       let afterTypeParams = skipTypeParameterList(source, typeId.end);
 
       // Resolve type aliases
-      let resolvedTypeName = typeId.name;
-      const typeEntry = env[resolvedTypeName];
-      if (typeEntry && typeEntry.type === "typeAlias") {
-        const alias = typeEntry as TypeAlias;
-        if (alias.aliasName) {
-          resolvedTypeName = alias.aliasName;
-        }
-      }
+      let resolvedTypeName = resolveTypeAlias(typeId.name, env);
 
       if (
         resolvedTypeName in env &&
@@ -2433,6 +2617,7 @@ function tryParseStructInstantiation(
   env: Env,
   structType: string | null,
 ): { entry: EnvEntry; pos: number } | null {
+  let iterations = 0;
   const structInstId = parseIdentifier(source, pos);
   if (!structInstId) {
     return null;
@@ -2468,8 +2653,12 @@ function tryParseStructInstantiation(
   let fieldPos = skipWhitespace(source, afterTypeParams + 1);
   const fieldValues: Record<string, number> = {};
   let fieldIndex = 0;
+  iterations = 0;
 
-  while (source.charCodeAt(fieldPos) !== 125) {
+  while (
+    source.charCodeAt(fieldPos) !== 125 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     // '}'
     const fieldResult = parseLogicalOr(source, fieldPos, env);
     if (fieldIndex < structDef.fields.length) {
@@ -2482,6 +2671,7 @@ function tryParseStructInstantiation(
       // ','
       fieldPos = skipWhitespace(source, fieldPos + 1);
     }
+    iterations++;
   }
 
   fieldPos = skipWhitespace(source, fieldPos + 1); // skip '}'
@@ -2500,14 +2690,19 @@ function tryParseArrayLiteral(
   pos: number,
   env: Env,
 ): { entry: EnvEntry; pos: number } | null {
+  let iterations = 0;
   if (source.charCodeAt(pos) !== 91) {
     return null;
   }
 
   let bracketPos = skipWhitespace(source, pos + 1);
   const elements: number[] = [];
+  iterations = 0;
 
-  while (source.charCodeAt(bracketPos) !== 93) {
+  while (
+    source.charCodeAt(bracketPos) !== 93 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     const elemResult = parseLogicalOr(source, bracketPos, env);
     elements.push(elemResult.value);
     bracketPos = skipWhitespace(source, elemResult.pos);
@@ -2515,6 +2710,7 @@ function tryParseArrayLiteral(
     if (source.charCodeAt(bracketPos) === 44) {
       bracketPos = skipWhitespace(source, bracketPos + 1);
     }
+    iterations++;
   }
 
   return {
@@ -2546,53 +2742,16 @@ function tryParseStringLiteral(
   };
 }
 
-function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
-  pos = skipWhitespace(source, pos);
-
-  // Check for 'mut' keyword
-  let isMutable = false;
-  const mutPos = skipKeyword(source, pos, "mut");
-  if (mutPos !== null) {
-    isMutable = true;
-    pos = skipWhitespace(source, mutPos);
-  }
-
-  // Check for destructuring pattern: { field1, field2, ... }
-  let destructureFields: string[] | null = null;
-  if (source.charCodeAt(pos) === 123) {
-    // '{'
-    const destructList = parseIdentifierList(source, pos, false);
-    if (destructList) {
-      destructureFields = destructList.names;
-      pos = skipWhitespace(source, destructList.pos);
-    }
-  }
-
-  // Parse variable name (skip if we're doing destructuring)
-  let identifier: { name: string; end: number } | null = null;
-  if (!destructureFields) {
-    identifier = parseIdentifier(source, pos);
-    if (!identifier) {
-      return { value: 0, pos };
-    }
-    pos = skipWhitespace(source, identifier.end);
-  }
-
-  const typeInfo = parseLetTypeAnnotation(source, pos, env);
-  let structType: string | null = typeInfo.structType;
-  const isFunctionType = typeInfo.isFunctionType;
-  const isPointerType = typeInfo.isPointerType;
-  const isPointerMutable = typeInfo.isPointerMutable;
-  pos = typeInfo.pos;
-
-  // Skip '='
-  pos = skipWhitespace(source, pos);
-  if (source.charCodeAt(pos) === 61) {
-    // '='
-    pos = pos + 1;
-  }
-  pos = skipWhitespace(source, pos);
-
+function handleEntryBinding(
+  source: string,
+  pos: number,
+  env: Env,
+  isMutable: boolean,
+  structType: string | null,
+  isFunctionType: boolean,
+  isPointerType: boolean,
+  isPointerMutable: boolean,
+): { entry: EnvEntry; pos: number } {
   let entry: EnvEntry;
 
   // Handle pointer types
@@ -2642,6 +2801,73 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
     pos = normalResult.pos;
   }
 
+  return { entry, pos };
+}
+
+function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
+  pos = skipWhitespace(source, pos);
+  let iterations = 0;
+
+  // Check for 'mut' keyword
+  let isMutable = false;
+  const mutPos = skipKeyword(source, pos, "mut");
+  if (mutPos !== null) {
+    isMutable = true;
+    pos = skipWhitespace(source, mutPos);
+  }
+
+  // Check for destructuring pattern: { field1, field2, ... }
+  let destructureFields: string[] | null = null;
+  if (source.charCodeAt(pos) === 123) {
+    // '{'
+    const destructList = parseIdentifierList(source, pos, false);
+    if (destructList) {
+      destructureFields = destructList.names;
+      pos = skipWhitespace(source, destructList.pos);
+    }
+  }
+
+  // Parse variable name (skip if we're doing destructuring)
+  let identifier: { name: string; end: number } | null = null;
+  if (!destructureFields) {
+    identifier = parseIdentifier(source, pos);
+    if (!identifier) {
+      return { value: 0, pos };
+    }
+    pos = skipWhitespace(source, identifier.end);
+  }
+
+  const typeInfo = parseLetTypeAnnotation(source, pos, env);
+  let structType: string | null = typeInfo.structType;
+  const isFunctionType = typeInfo.isFunctionType;
+  const isPointerType = typeInfo.isPointerType;
+  const isPointerMutable = typeInfo.isPointerMutable;
+  pos = typeInfo.pos;
+
+  // Skip '='
+  pos = skipWhitespace(source, pos);
+  if (source.charCodeAt(pos) === 61) {
+    // '='
+    pos = pos + 1;
+  }
+  pos = skipWhitespace(source, pos);
+
+  let entry: EnvEntry;
+
+  // Use helper to create the entry
+  const entryResult = handleEntryBinding(
+    source,
+    pos,
+    env,
+    isMutable,
+    structType,
+    isFunctionType,
+    isPointerType,
+    isPointerMutable,
+  );
+  entry = entryResult.entry;
+  pos = entryResult.pos;
+
   pos = skipSemicolonAndWhitespace(source, pos);
 
   // Create new environment with the binding(s)
@@ -2663,9 +2889,20 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
     newEnv = { ...env, [identifier.name]: entry };
   }
 
-  // Parse body statement (which may contain another let binding)
-  const bodyResult = parseStatement(source, pos, newEnv);
-  return { value: bodyResult.value, pos: bodyResult.pos };
+  // Parse body statement(s) - may contain multiple statements after the let binding
+  let bodyResult = parseStatement(source, pos, newEnv);
+  let currentPos = skipWhitespace(source, bodyResult.pos);
+  // Continue parsing additional statements until EOF
+  while (
+    currentPos < source.length &&
+    source.charCodeAt(currentPos) !== 125 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
+    bodyResult = parseStatement(source, currentPos, newEnv); // Keep the last value
+    currentPos = skipWhitespace(source, bodyResult.pos);
+    iterations++;
+  }
+  return { value: bodyResult.value, pos: currentPos };
 }
 
 function parseBlock(source: string, pos: number, env: Env): ParserResult {
@@ -2673,41 +2910,27 @@ function parseBlock(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
   // Parse statements until we hit closing brace
-  while (pos < source.length && source.charCodeAt(pos) !== 125) {
+  let iterations = 0;
+  while (
+    pos < source.length &&
+    source.charCodeAt(pos) !== 125 &&
+    iterations < MAX_LOOP_ITERATIONS
+  ) {
     // charCode 125 is '}'
     const previousResult = result;
     const stmtResult = parseStatement(source, pos, env);
 
-    // Handle break statement
-    if ((env as any).breakRequested) {
-      result = previousResult;
-      pos = stmtResult.pos;
-      break;
-    }
-
-    // Handle continue statement
-    if ((env as any).continueRequested) {
-      result = previousResult;
-      pos = stmtResult.pos;
-      break;
-    }
-
-    // Handle yield statement
-    if ((env as any).yieldRequested) {
-      result = (env as any).yieldValue;
-      pos = stmtResult.pos;
-      break;
-    }
-
-    // Handle return statement
-    if ((env as any).returnRequested) {
-      result = (env as any).returnValue;
-      pos = stmtResult.pos;
+    // Check control flow flags
+    const flagCheck = checkControlFlowFlags(env, previousResult, stmtResult);
+    if (flagCheck) {
+      result = flagCheck.result;
+      pos = flagCheck.pos;
       break;
     }
 
     result = stmtResult.value;
     pos = skipWhitespace(source, stmtResult.pos);
+    iterations++;
   }
 
   return { value: result, pos };
@@ -2720,7 +2943,8 @@ function skipStatement(source: string, pos: number): number {
   // This is a simple approach: find the next semicolon or closing brace
   // Also stops at 'else' keyword to handle if-else chains
   let depth = 0;
-  while (pos < source.length) {
+  let iterations = 0;
+  while (pos < source.length && iterations < MAX_LOOP_ITERATIONS) {
     const code = source.charCodeAt(pos);
 
     // Found end of statement
@@ -2757,6 +2981,7 @@ function skipStatement(source: string, pos: number): number {
     } else {
       pos++;
     }
+    iterations++;
   }
 
   return pos;
@@ -2813,9 +3038,7 @@ function parseWhile(source: string, pos: number, env: Env): ParserResult {
   const bodyStartPos = condResult.pos;
   let value = 0;
   let iterations = 0;
-  const MAX_ITERATIONS = 1024;
-
-  while (iterations < MAX_ITERATIONS) {
+  while (iterations < MAX_LOOP_ITERATIONS) {
     // Re-evaluate the condition each iteration
     const condCheckResult = parseIfCondition(source, pos, env);
     if (!condCheckResult || condCheckResult.condition === 0) {
@@ -2914,12 +3137,11 @@ function parseFor(source: string, pos: number, env: Env): ParserResult {
 
   let value = 0;
   let iterations = 0;
-  const MAX_ITERATIONS = 1024;
 
   // Loop through the range
   for (
     let i = rangeStart;
-    i < rangeEnd && iterations < MAX_ITERATIONS;
+    i < rangeEnd && iterations < MAX_LOOP_ITERATIONS;
     i++, iterations++
   ) {
     // Add loop variable to environment
@@ -2942,6 +3164,12 @@ function parseFor(source: string, pos: number, env: Env): ParserResult {
 
 function parseStatement(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
+  let iterations = 0;
+  while (source.charCodeAt(pos) === 59 && iterations < MAX_LOOP_ITERATIONS) {
+    // ';'
+    pos = skipWhitespace(source, pos + 1);
+    iterations++;
+  }
 
   // Check for control flow keywords (let, if)
   const keywordResult = checkKeywordControlFlow(
@@ -3047,6 +3275,7 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
         let checkResult = 0;
         let structName: string | undefined;
         let endPos = typeName.end;
+        let resolvedTypeName = resolveTypeAlias(typeName.name, env);
 
         if (idEntry && idEntry.type === "structInstance") {
           // Direct struct instance entry
@@ -3060,17 +3289,21 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
 
         if (structName) {
           // Variable/instance holds a struct - check if type matches
-          if (structName === typeName.name) {
+          if (structName === resolvedTypeName) {
             checkResult = 1;
           } else {
             // Check if typeName is a union type alias containing this struct
-            const typeEntry = env[typeName.name];
+            const typeEntry = env[resolvedTypeName];
             if (typeEntry && typeEntry.type === "typeAlias") {
               const alias = typeEntry as TypeAlias;
               if (alias.unionTypes && alias.unionTypes.includes(structName)) {
                 checkResult = 1;
               }
             }
+          }
+        } else {
+          if (isNumericType(resolvedTypeName)) {
+            checkResult = 1;
           }
         }
 
@@ -3119,7 +3352,8 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
 
   // Handle 'is' operator as postfix for non-variable expressions (like literals)
   let currentResult = result;
-  while (true) {
+  let iterations = 0;
+  while (iterations < MAX_LOOP_ITERATIONS) {
     const keywordPos = skipWhitespace(source, currentResult.pos);
     const isKeyword = skipKeyword(source, keywordPos, "is");
 
@@ -3134,17 +3368,12 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
       break;
     }
 
-    // Check if resolved type is numeric (I32, etc)
-    const isNumericType =
-      typeName.name === "I32" ||
-      typeName.name === "I64" ||
-      typeName.name === "F32" ||
-      typeName.name === "F64" ||
-      typeName.name === "U32" ||
-      typeName.name === "U64";
+    let resolvedTypeName = resolveTypeAlias(typeName.name, env);
 
-    const checkResult = isNumericType ? 1 : 0;
+    // Check if resolved type is numeric (I32, etc)
+    const checkResult = isNumericType(resolvedTypeName) ? 1 : 0;
     currentResult = { value: checkResult, pos: typeName.end };
+    iterations++;
   }
 
   return currentResult;
@@ -3285,7 +3514,7 @@ function tryParseArraySliceAssignment(
   env: Env,
 ): ParserResult | null {
   const startPos = skipWhitespace(source, pos);
-  
+
   // Try to parse identifier
   const { identifier, pos: afterIdPos } = parseIdentifierWithPosition(
     source,
@@ -3326,7 +3555,7 @@ function tryParseArraySliceAssignment(
   }
 
   const afterBracketPos = skipWhitespace(source, indexPos + 1);
-  
+
   // Expect '='
   if (source.charCodeAt(afterBracketPos) !== 61) {
     return null;
@@ -3445,26 +3674,6 @@ function parseAssignmentOrExpression(
   // Not an assignment, parse as normal expression
   const exprResult = parseLogicalOr(source, startPos, env);
   return exprResult;
-}
-
-function completeAssignment(
-  source: string,
-  pos: number,
-  env: Env,
-  varName: string,
-  newValue: number,
-): ParserResult {
-  let exprPos = skipWhitespace(source, pos);
-  exprPos = skipSemicolonAndWhitespace(source, exprPos);
-
-  // Mutate the mutable variable in place
-  const entry = env[varName];
-  if (entry && entry.type === "variable") {
-    entry.value = newValue;
-  }
-
-  // Return the assigned value
-  return { value: newValue, pos: exprPos };
 }
 
 function parseMultiplicative(

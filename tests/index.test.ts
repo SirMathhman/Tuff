@@ -217,7 +217,7 @@ describe("The interpreter can interpret functions", () => {
   });
 });
 
-describe("The interpreter can interpret data", () => {
+describe("The interpreter can interpret data: enums and generics", () => {
   test("enum definition and variant access with equality", () => {
     expectValid("enum Color { Red; Green; } Color::Red == Color::Red", 1);
   });
@@ -232,7 +232,9 @@ describe("The interpreter can interpret data", () => {
       100,
     );
   });
+});
 
+describe("The interpreter can interpret data: type aliases and is", () => {
   test("type alias definition and usage", () => {
     expectValid("type Alias = I32; let temp : Alias = 100; temp", 100);
   });
@@ -251,7 +253,9 @@ describe("The interpreter can interpret data", () => {
       1,
     );
   });
+});
 
+describe("The interpreter can interpret data: unions", () => {
   test("union type and struct instance type checking", () => {
     expectValid(
       "struct Some { value : I32; } struct None {} type Option = Some | None; let temp : Option = Some { 100 }; temp is Some",
@@ -286,7 +290,9 @@ describe("The interpreter can interpret data", () => {
       100,
     );
   });
+});
 
+describe("The interpreter can interpret collections: arrays", () => {
   test("array declaration and element access", () => {
     expectValid(
       "let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]",
@@ -308,13 +314,21 @@ describe("The interpreter can interpret data", () => {
     );
   });
 
+  test("mutable array slicing with non-zero starting index", () => {
+    expectValid(
+      "let mut array : [I32; 3; 3] = [1, 2, 3]; let mut slice : *mut [I32; 2; 2] = &mut array[1..3]; slice[1] = 100; array[1]",
+      2,
+    );
+  });
+});
+
+describe("The interpreter can interpret structures and literals", () => {
   test("struct definition and instantiation with field access", () => {
     expectValid(
       "struct Point { x : I32; y : I32; } let temp : Point = Point { 3, 4 }; temp.x + temp.y",
       7,
     );
   });
-
   test("variable destructuring in let binding", () => {
     expectValid(
       "struct Wrapper { value : I32; } let { value } = Wrapper { 100 }; value",
