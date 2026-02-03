@@ -556,9 +556,11 @@ function handleIndexing(
   return null;
 }
 
-function parsePrimary(source: string, pos: number, env: Env): ParserResult {
-  pos = skipWhitespace(source, pos);
-
+function parsePrimaryParenOrBlock(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult | null {
   // Check for opening parenthesis
   const parenResult = parseParenthesizedExpr(source, pos, env, parseAdditive);
   if (parenResult !== null) {
@@ -568,34 +570,37 @@ function parsePrimary(source: string, pos: number, env: Env): ParserResult {
   // Check for opening curly brace
   if (source.charCodeAt(pos) === 123) {
     // '{'
-    pos = skipWhitespace(source, pos + 1);
-    const result = parseBlock(source, pos, env);
-    pos = skipWhitespace(source, result.pos);
-    if (source.charCodeAt(pos) === 125) {
+    let currentPos = skipWhitespace(source, pos + 1);
+    const result = parseBlock(source, currentPos, env);
+    currentPos = skipWhitespace(source, result.pos);
+    if (source.charCodeAt(currentPos) === 125) {
       // '}'
-      pos = pos + 1;
+      currentPos = currentPos + 1;
     }
-    return { value: result.value, pos };
+    return { value: result.value, pos: currentPos };
   }
 
-  // Check for control flow keywords (let, if)
-  const keywordResult = checkKeywordControlFlow(
-    source,
-    pos,
-    env,
-    parseIfExpression,
-  );
-  if (keywordResult !== null) {
-    return keywordResult;
-  }
+  return null;
+}
 
-  // Check for 'match' keyword
+function parsePrimaryControlFlow(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult | null {
+  return checkKeywordControlFlow(source, pos, env, parseIfExpression);
+}
+
+function parsePrimaryMatchOrBoolean(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult | null {
   const matchPos = skipKeyword(source, pos, "match");
   if (matchPos !== null) {
     return parseMatch(source, matchPos, env);
   }
 
-  // Check for boolean literals
   const truePos = skipKeyword(source, pos, "true");
   if (truePos !== null) {
     return { value: 1, pos: truePos };
@@ -606,128 +611,161 @@ function parsePrimary(source: string, pos: number, env: Env): ParserResult {
     return { value: 0, pos: falsePos };
   }
 
-  // Check for identifier (variable lookup or function call or struct instantiation)
+  return null;
+}
+
+function parsePrimaryIdentifier(
+  source: string,
+  pos: number,
+  env: Env,
+): ParserResult | null {
   const identifier = parseIdentifier(source, pos);
-  if (identifier) {
-    const afterIdPos = skipWhitespace(source, identifier.end);
-    const entry = identifier.name in env ? env[identifier.name]! : null;
+  if (!identifier) {
+    return null;
+  }
 
-    // Check for function call
-    if (
-      source.charCodeAt(afterIdPos) === 40 &&
-      entry &&
-      entry.type === "function"
-    ) {
-      // '('
-      // Parse function arguments
-      let argPos = skipWhitespace(source, afterIdPos + 1);
-      const args: number[] = [];
+  const afterIdPos = skipWhitespace(source, identifier.end);
+  const entry = identifier.name in env ? env[identifier.name]! : null;
+  if (!entry) {
+    return null;
+  }
 
-      while (source.charCodeAt(argPos) !== 41) {
-        // ')'
-        const argResult = parseLogicalOr(source, argPos, env);
-        args.push(argResult.value);
-        argPos = skipWhitespace(source, argResult.pos);
+  if (
+    source.charCodeAt(afterIdPos) === 40 &&
+    entry &&
+    entry.type === "function"
+  ) {
+    let argPos = skipWhitespace(source, afterIdPos + 1);
+    const args: number[] = [];
 
-        if (source.charCodeAt(argPos) === 44) {
-          // ','
-          argPos = skipWhitespace(source, argPos + 1);
-        }
-      }
+    while (source.charCodeAt(argPos) !== 41) {
+      const argResult = parseLogicalOr(source, argPos, env);
+      args.push(argResult.value);
+      argPos = skipWhitespace(source, argResult.pos);
 
-      argPos = skipWhitespace(source, argPos + 1); // skip ')'
-
-      // Create new environment with parameters bound to arguments
-      const callEnv: Env = { ...env };
-      const fnEntry = entry as FunctionDef;
-      for (let i = 0; i < fnEntry.params.length && i < args.length; i++) {
-        const paramName = fnEntry.params[i];
-        if (paramName !== undefined) {
-          callEnv[paramName] = {
-            type: "variable",
-            value: args[i]!,
-            mutable: false,
-          };
-        }
-      }
-
-      // Evaluate function body
-      const bodyResult = parseLogicalOr(source, fnEntry.bodyPos, callEnv);
-      return { value: bodyResult.value, pos: argPos };
-    }
-
-    // Variable lookup
-    if (entry && entry.type === "variable") {
-      return { value: entry.value, pos: identifier.end };
-    }
-
-    // Struct instance lookup with field access
-    if (entry && entry.type === "structInstance") {
-      let currentPos = identifier.end;
-      currentPos = skipWhitespace(source, currentPos);
-      if (source.charCodeAt(currentPos) === 46) {
-        // '.'
-        const fieldNamePos = skipWhitespace(source, currentPos + 1);
-        const fieldName = parseIdentifier(source, fieldNamePos);
-        if (fieldName) {
-          const structInst = entry as StructInstance;
-          const value = structInst.fieldValues[fieldName.name] ?? 0;
-          return { value, pos: fieldName.end };
-        }
-      }
-      return { value: 0, pos: identifier.end };
-    }
-
-    // Array indexing
-    if (entry && entry.type === "array") {
-      const arrayIndexResult = handleIndexing(
-        source,
-        afterIdPos,
-        env,
-        entry,
-        (index: number) => {
-          const arrayEntry = entry as ArrayDef;
-          return arrayEntry.elements[index] ?? 0;
-        },
-      );
-      if (arrayIndexResult) {
-        return arrayIndexResult;
+      if (source.charCodeAt(argPos) === 44) {
+        argPos = skipWhitespace(source, argPos + 1);
       }
     }
 
-    // String indexing
-    if (entry && entry.type === "string") {
-      const stringIndexResult = handleIndexing(
-        source,
-        afterIdPos,
-        env,
-        entry,
-        (index: number) => {
-          const stringEntry = entry as StringDef;
-          return index >= 0 && index < stringEntry.value.length
-            ? stringEntry.value.charCodeAt(index)
-            : 0;
-        },
-      );
-      if (stringIndexResult) {
-        return stringIndexResult;
+    argPos = skipWhitespace(source, argPos + 1);
+
+    const callEnv: Env = { ...env };
+    const fnEntry = entry as FunctionDef;
+    for (let i = 0; i < fnEntry.params.length && i < args.length; i++) {
+      const paramName = fnEntry.params[i];
+      if (paramName !== undefined) {
+        callEnv[paramName] = {
+          type: "variable",
+          value: args[i]!,
+          mutable: false,
+        };
       }
+    }
+
+    const bodyResult = parseLogicalOr(source, fnEntry.bodyPos, callEnv);
+    return { value: bodyResult.value, pos: argPos };
+  }
+
+  if (entry && entry.type === "variable") {
+    return { value: entry.value, pos: identifier.end };
+  }
+
+  if (entry && entry.type === "structInstance") {
+    let currentPos = identifier.end;
+    currentPos = skipWhitespace(source, currentPos);
+    if (source.charCodeAt(currentPos) === 46) {
+      const fieldNamePos = skipWhitespace(source, currentPos + 1);
+      const fieldName = parseIdentifier(source, fieldNamePos);
+      if (fieldName) {
+        const structInst = entry as StructInstance;
+        const value = structInst.fieldValues[fieldName.name] ?? 0;
+        return { value, pos: fieldName.end };
+      }
+    }
+    return { value: 0, pos: identifier.end };
+  }
+
+  if (entry && entry.type === "array") {
+    const arrayIndexResult = handleIndexing(
+      source,
+      afterIdPos,
+      env,
+      entry,
+      (index: number) => {
+        const arrayEntry = entry as ArrayDef;
+        return arrayEntry.elements[index] ?? 0;
+      },
+    );
+    if (arrayIndexResult) {
+      return arrayIndexResult;
     }
   }
 
-  // Otherwise parse numeric literal
+  if (entry && entry.type === "string") {
+    const stringIndexResult = handleIndexing(
+      source,
+      afterIdPos,
+      env,
+      entry,
+      (index: number) => {
+        const stringEntry = entry as StringDef;
+        return index >= 0 && index < stringEntry.value.length
+          ? stringEntry.value.charCodeAt(index)
+          : 0;
+      },
+    );
+    if (stringIndexResult) {
+      return stringIndexResult;
+    }
+  }
+
+  return null;
+}
+
+function parsePrimaryLiterals(source: string, pos: number): ParserResult | null {
   const numLiteral = parseNumericLiteral(source, pos);
   if (numLiteral) {
     return { value: numLiteral.value, pos: numLiteral.end };
   }
 
-  // Parse character literal
   const charLiteral = parseCharacterLiteral(source, pos);
   if (charLiteral) {
     return { value: charLiteral.value, pos: charLiteral.end };
   }
 
-  return { value: 0, pos };
+  return null;
+}
+
+function parsePrimary(source: string, pos: number, env: Env): ParserResult {
+  const trimmedPos = skipWhitespace(source, pos);
+
+  const parenOrBlock = parsePrimaryParenOrBlock(source, trimmedPos, env);
+  if (parenOrBlock) {
+    return parenOrBlock;
+  }
+
+  const controlFlow = parsePrimaryControlFlow(source, trimmedPos, env);
+  if (controlFlow) {
+    return controlFlow;
+  }
+
+  const matchOrBoolean = parsePrimaryMatchOrBoolean(source, trimmedPos, env);
+  if (matchOrBoolean) {
+    return matchOrBoolean;
+  }
+
+  const identifierResult = parsePrimaryIdentifier(source, trimmedPos, env);
+  if (identifierResult) {
+    return identifierResult;
+  }
+
+  const literalResult = parsePrimaryLiterals(source, trimmedPos);
+  if (literalResult) {
+    return literalResult;
+  }
+
+  return { value: 0, pos: trimmedPos };
 }
 
 function skipTypeAnnotation(source: string, pos: number): number {
@@ -980,6 +1018,140 @@ function createVariableEntry(
   return { entry, pos: newPos };
 }
 
+function parseLetTypeAnnotation(
+  source: string,
+  pos: number,
+  env: Env,
+): { structType: string | null; pos: number } {
+  let structType: string | null = null;
+  const typePos = parseTypeAnnotationColon(source, pos);
+  if (typePos === null) {
+    return { structType, pos };
+  }
+
+  let currentPos = typePos;
+  while (source.charCodeAt(currentPos) === 42) {
+    currentPos = skipWhitespace(source, currentPos + 1);
+  }
+
+  if (source.charCodeAt(currentPos) !== 91) {
+    const typeId = parseIdentifier(source, currentPos);
+    if (
+      typeId &&
+      typeId.name in env &&
+      (env[typeId.name] as EnvEntry).type === "structDef"
+    ) {
+      structType = typeId.name;
+    }
+    currentPos = skipWhitespace(source, typeId?.end ?? currentPos);
+  } else {
+    currentPos = skipBalancedBrackets(source, currentPos, 91, 93);
+    currentPos = skipWhitespace(source, currentPos);
+  }
+
+  return { structType, pos: currentPos };
+}
+
+function tryParseStructInstantiation(
+  source: string,
+  pos: number,
+  env: Env,
+  structType: string | null,
+): { entry: EnvEntry; pos: number } | null {
+  if (structType === null) {
+    return null;
+  }
+
+  const structInstId = parseIdentifier(source, pos);
+  if (!structInstId || structInstId.name !== structType) {
+    return null;
+  }
+
+  const afterStructName = skipWhitespace(source, structInstId.end);
+  if (source.charCodeAt(afterStructName) !== 123) {
+    return null;
+  }
+
+  const structDef = env[structType] as StructDef;
+  let fieldPos = skipWhitespace(source, afterStructName + 1);
+  const fieldValues: Record<string, number> = {};
+  let fieldIndex = 0;
+
+  while (source.charCodeAt(fieldPos) !== 125) {
+    const fieldResult = parseLogicalOr(source, fieldPos, env);
+    if (fieldIndex < structDef.fields.length) {
+      fieldValues[structDef.fields[fieldIndex]!] = fieldResult.value;
+      fieldIndex++;
+    }
+    fieldPos = skipWhitespace(source, fieldResult.pos);
+
+    if (source.charCodeAt(fieldPos) === 44) {
+      fieldPos = skipWhitespace(source, fieldPos + 1);
+    }
+  }
+
+  fieldPos = skipWhitespace(source, fieldPos + 1);
+  return {
+    entry: {
+      type: "structInstance",
+      structName: structType,
+      fieldValues,
+    },
+    pos: fieldPos,
+  };
+}
+
+function tryParseArrayLiteral(
+  source: string,
+  pos: number,
+  env: Env,
+): { entry: EnvEntry; pos: number } | null {
+  if (source.charCodeAt(pos) !== 91) {
+    return null;
+  }
+
+  let bracketPos = skipWhitespace(source, pos + 1);
+  const elements: number[] = [];
+
+  while (source.charCodeAt(bracketPos) !== 93) {
+    const elemResult = parseLogicalOr(source, bracketPos, env);
+    elements.push(elemResult.value);
+    bracketPos = skipWhitespace(source, elemResult.pos);
+
+    if (source.charCodeAt(bracketPos) === 44) {
+      bracketPos = skipWhitespace(source, bracketPos + 1);
+    }
+  }
+
+  return {
+    entry: { type: "array", elements },
+    pos: skipWhitespace(source, bracketPos + 1),
+  };
+}
+
+function tryParseStringLiteral(
+  source: string,
+  pos: number,
+  mutable: boolean,
+): { entry: EnvEntry; pos: number } | null {
+  if (source.charCodeAt(pos) !== 34) {
+    return null;
+  }
+
+  const stringResult = parseStringLiteral(source, pos);
+  if (!stringResult) {
+    return {
+      entry: { type: "variable", value: 0, mutable },
+      pos,
+    };
+  }
+
+  return {
+    entry: { type: "string", value: stringResult.value },
+    pos: skipWhitespace(source, stringResult.end),
+  };
+}
+
 function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
@@ -998,34 +1170,9 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
   }
   pos = skipWhitespace(source, identifier.end);
 
-  // Parse type annotation and remember struct type if it is one
-  let structType: string | null = null;
-  const typePos = parseTypeAnnotationColon(source, pos);
-  if (typePos !== null) {
-    pos = typePos;
-    // Skip pointer indicators (*)
-    while (source.charCodeAt(pos) === 42) {
-      // '*'
-      pos = skipWhitespace(source, pos + 1);
-    }
-    // Check if it's a struct type (simple identifier without brackets)
-    if (source.charCodeAt(pos) !== 91) {
-      // Not '[', so might be a struct type
-      const typeId = parseIdentifier(source, pos);
-      if (
-        typeId &&
-        typeId.name in env &&
-        (env[typeId.name] as EnvEntry).type === "structDef"
-      ) {
-        structType = typeId.name;
-      }
-      pos = skipWhitespace(source, typeId?.end ?? pos);
-    } else {
-      // It's an array type, skip it
-      pos = skipBalancedBrackets(source, pos, 91, 93);
-      pos = skipWhitespace(source, pos);
-    }
-  }
+  const typeInfo = parseLetTypeAnnotation(source, pos, env);
+  let structType: string | null = typeInfo.structType;
+  pos = typeInfo.pos;
 
   // Skip '='
   pos = skipWhitespace(source, pos);
@@ -1035,88 +1182,32 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
   }
   pos = skipWhitespace(source, pos);
 
-  // Check for struct instantiation
   let entry: EnvEntry;
-  if (structType !== null) {
-    // Check if this is a struct instantiation (StructName { ... })
-    const structInstId = parseIdentifier(source, pos);
-    if (structInstId && structInstId.name === structType) {
-      const afterStructName = skipWhitespace(source, structInstId.end);
-      if (source.charCodeAt(afterStructName) === 123) {
-        // '{' - this is struct instantiation
-        const structDef = env[structType] as StructDef;
-        let fieldPos = skipWhitespace(source, afterStructName + 1);
-        const fieldValues: Record<string, number> = {};
-        let fieldIndex = 0;
-
-        while (source.charCodeAt(fieldPos) !== 125) {
-          // '}'
-          const fieldResult = parseLogicalOr(source, fieldPos, env);
-          if (fieldIndex < structDef.fields.length) {
-            fieldValues[structDef.fields[fieldIndex]!] = fieldResult.value;
-            fieldIndex++;
-          }
-          fieldPos = skipWhitespace(source, fieldResult.pos);
-
-          if (source.charCodeAt(fieldPos) === 44) {
-            // ','
-            fieldPos = skipWhitespace(source, fieldPos + 1);
-          }
-        }
-
-        fieldPos = skipWhitespace(source, fieldPos + 1); // skip '}'
-        pos = fieldPos;
-        entry = {
-          type: "structInstance",
-          structName: structType,
-          fieldValues,
-        };
+  const structResult = tryParseStructInstantiation(
+    source,
+    pos,
+    env,
+    structType,
+  );
+  if (structResult) {
+    entry = structResult.entry;
+    pos = structResult.pos;
+  } else {
+    const arrayResult = tryParseArrayLiteral(source, pos, env);
+    if (arrayResult) {
+      entry = arrayResult.entry;
+      pos = arrayResult.pos;
+    } else {
+      const stringResult = tryParseStringLiteral(source, pos, isMutable);
+      if (stringResult) {
+        entry = stringResult.entry;
+        pos = stringResult.pos;
       } else {
-        // Not a struct instantiation, parse as normal expression
         const result = createVariableEntry(source, pos, env, isMutable);
         entry = result.entry;
         pos = result.pos;
       }
-    } else {
-      // Not a struct instantiation, parse as normal expression
-      const result = createVariableEntry(source, pos, env, isMutable);
-      entry = result.entry;
-      pos = result.pos;
     }
-  } else if (source.charCodeAt(pos) === 91) {
-    // '[' - array literal
-    let bracketPos = skipWhitespace(source, pos + 1);
-    const elements: number[] = [];
-
-    while (source.charCodeAt(bracketPos) !== 93) {
-      // ']'
-      const elemResult = parseLogicalOr(source, bracketPos, env);
-      elements.push(elemResult.value);
-      bracketPos = skipWhitespace(source, elemResult.pos);
-
-      if (source.charCodeAt(bracketPos) === 44) {
-        // ','
-        bracketPos = skipWhitespace(source, bracketPos + 1);
-      }
-    }
-
-    pos = skipWhitespace(source, bracketPos + 1); // skip ']'
-    entry = { type: "array", elements };
-  } else if (source.charCodeAt(pos) === 34) {
-    // '"' - string literal
-    const stringResult = parseStringLiteral(source, pos);
-    if (stringResult) {
-      entry = { type: "string", value: stringResult.value };
-      pos = skipWhitespace(source, stringResult.end);
-    } else {
-      entry = { type: "variable", value: 0, mutable: isMutable };
-    }
-  } else {
-    // Regular initializer expression
-    const initResult = parseLogicalOr(source, pos, env);
-    const value = initResult.value;
-    pos = skipWhitespace(source, initResult.pos);
-    entry = { type: "variable", value, mutable: isMutable };
   }
 
   pos = skipSemicolonAndWhitespace(source, pos);
@@ -1474,7 +1565,10 @@ function parseShift(source: string, pos: number, env: Env): ParserResult {
     pos,
     env,
     parseAdditive,
-    [[60, 60], [62, 62]], // << >>
+    [
+      [60, 60],
+      [62, 62],
+    ], // << >>
     [
       (left: number, right: number) => left << right,
       (left: number, right: number) => left >> right,

@@ -8,6 +8,10 @@ export default [
     },
     rules: {
       "no-unused-vars": "error",
+      "max-lines-per-function": [
+        "error",
+        { max: 100, skipBlankLines: true, skipComments: true },
+      ],
       "no-restricted-syntax": [
         "error",
         {

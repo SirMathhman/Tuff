@@ -8,7 +8,7 @@ function expectValid(source: string, exitCode: number) {
 //   expect(() => interpret(source)).toThrow();
 // }
 
-describe("The interpreter can interpret", () => {
+describe("The interpreter can interpret basics", () => {
   test("an empty program", () => {
     expectValid("", 0);
   });
@@ -75,7 +75,9 @@ describe("The interpreter can interpret", () => {
   test("compound assignment operator +=", () => {
     expectValid("let mut x = 0; x += 3; x", 3);
   });
+});
 
+describe("The interpreter can interpret control flow", () => {
   test("boolean literal true", () => {
     expectValid("let x = true; x", 1);
   });
@@ -122,7 +124,9 @@ describe("The interpreter can interpret", () => {
   test("match expression with case patterns", () => {
     expectValid("let x = match (100) { case 100 => 2; case _ => 3; }; x", 2);
   });
+});
 
+describe("The interpreter can interpret loops", () => {
   test("while loop", () => {
     expectValid("let mut x = 0; while (x < 4) x += 1; x", 4);
   });
@@ -138,7 +142,9 @@ describe("The interpreter can interpret", () => {
   test("for loop with range and block body", () => {
     expectValid("let mut sum = 0; for (i in 0..10) { sum += i; } sum", 45);
   });
+});
 
+describe("The interpreter can interpret data", () => {
   test("function definition and call", () => {
     expectValid(
       "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",
@@ -167,7 +173,9 @@ describe("The interpreter can interpret", () => {
   test("string literal and indexing", () => {
     expectValid('let c : *Str = "test"; c[1]', 101);
   });
+});
 
+describe("The interpreter can interpret operators", () => {
   test("logical NOT operator", () => {
     expectValid("let x = true; !x", 0);
   });
