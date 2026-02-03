@@ -149,6 +149,10 @@ describe("The interpreter can interpret data", () => {
     expectValid("enum Color { Red; Green; } Color::Red == Color::Red", 1);
   });
 
+  test("generic function definition and call", () => {
+    expectValid("fn pass<T>(value : T) : T => value; pass<I32>(100)", 100);
+  });
+
   test("extension method with this parameter", () => {
     expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
   });

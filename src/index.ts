@@ -625,6 +625,63 @@ function parsePrimaryMatchOrBoolean(
   return null;
 }
 
+function tryParseFunctionCall(
+  source: string,
+  afterIdPos: number,
+  env: Env,
+  fnEntry: FunctionDef,
+): ParserResult | null {
+  // Check for generic function call: functionName<Type>(args)
+  let callCheckPos = afterIdPos;
+  if (source.charCodeAt(callCheckPos) === 60) {
+    // '<' - could be generic
+    const afterTypeParams = skipTypeParameterList(source, callCheckPos);
+    if (source.charCodeAt(afterTypeParams) === 40) {
+      // '(' - confirmed generic function call
+      const result = parseFunctionCall(source, afterTypeParams, env, fnEntry);
+      return { value: result.value, pos: result.pos };
+    }
+  }
+
+  // Check for regular function call
+  if (source.charCodeAt(callCheckPos) === 40) {
+    // '('
+    const result = parseFunctionCall(source, callCheckPos, env, fnEntry);
+    return { value: result.value, pos: result.pos };
+  }
+
+  return null;
+}
+
+function tryParseEnumVariant(
+  source: string,
+  afterIdPos: number,
+  entry: EnvEntry,
+): ParserResult | null {
+  if (entry.type !== "enumDef") {
+    return null;
+  }
+
+  let currentPos = afterIdPos;
+  if (
+    source.charCodeAt(currentPos) === 58 &&
+    source.charCodeAt(currentPos + 1) === 58
+  ) {
+    // '::'
+    currentPos = skipWhitespace(source, currentPos + 2);
+    const variantName = parseIdentifier(source, currentPos);
+    if (variantName) {
+      const enumDef = entry as EnumDef;
+      const variantIndex = enumDef.variants.indexOf(variantName.name);
+      if (variantIndex !== -1) {
+        return { value: variantIndex, pos: variantName.end };
+      }
+    }
+  }
+
+  return null;
+}
+
 function parsePrimaryIdentifier(
   source: string,
   pos: number,
@@ -641,41 +698,26 @@ function parsePrimaryIdentifier(
     return null;
   }
 
-  if (
-    source.charCodeAt(afterIdPos) === 40 &&
-    entry &&
-    entry.type === "function"
-  ) {
+  // Check for function call (generic or regular)
+  if (entry.type === "function") {
     const fnEntry = entry as FunctionDef;
-    const result = parseFunctionCall(source, afterIdPos, env, fnEntry);
-    return { value: result.value, pos: result.pos };
-  }
-
-  // Check for enum variant access: EnumName::Variant
-  if (entry && entry.type === "enumDef") {
-    let currentPos = afterIdPos;
-    if (
-      source.charCodeAt(currentPos) === 58 &&
-      source.charCodeAt(currentPos + 1) === 58
-    ) {
-      // '::'
-      currentPos = skipWhitespace(source, currentPos + 2);
-      const variantName = parseIdentifier(source, currentPos);
-      if (variantName) {
-        const enumDef = entry as EnumDef;
-        const variantIndex = enumDef.variants.indexOf(variantName.name);
-        if (variantIndex !== -1) {
-          return { value: variantIndex, pos: variantName.end };
-        }
-      }
+    const fnResult = tryParseFunctionCall(source, afterIdPos, env, fnEntry);
+    if (fnResult) {
+      return fnResult;
     }
   }
 
-  if (entry && entry.type === "variable") {
+  // Check for enum variant access
+  const enumResult = tryParseEnumVariant(source, afterIdPos, entry);
+  if (enumResult) {
+    return enumResult;
+  }
+
+  if (entry.type === "variable") {
     return { value: entry.value, pos: identifier.end };
   }
 
-  if (entry && entry.type === "structInstance") {
+  if (entry.type === "structInstance") {
     let currentPos = identifier.end;
     currentPos = skipWhitespace(source, currentPos);
     if (source.charCodeAt(currentPos) === 46) {
@@ -690,7 +732,7 @@ function parsePrimaryIdentifier(
     return { value: 0, pos: identifier.end };
   }
 
-  if (entry && entry.type === "array") {
+  if (entry.type === "array") {
     const arrayIndexResult = handleIndexing(
       source,
       afterIdPos,
@@ -706,7 +748,7 @@ function parsePrimaryIdentifier(
     }
   }
 
-  if (entry && entry.type === "string") {
+  if (entry.type === "string") {
     const stringIndexResult = handleIndexing(
       source,
       afterIdPos,
@@ -970,6 +1012,31 @@ function parseTypeAnnotationColon(source: string, pos: number): number | null {
   return skipWhitespace(source, pos);
 }
 
+function skipTypeParameterList(source: string, pos: number): number {
+  pos = skipWhitespace(source, pos);
+  if (source.charCodeAt(pos) !== 60) {
+    // '<'
+    return pos;
+  }
+
+  pos = pos + 1;
+  let angleDepth = 1;
+
+  while (pos < source.length && angleDepth > 0) {
+    const code = source.charCodeAt(pos);
+    if (code === 60) {
+      // '<'
+      angleDepth++;
+    } else if (code === 62) {
+      // '>'
+      angleDepth--;
+    }
+    pos++;
+  }
+
+  return skipWhitespace(source, pos);
+}
+
 function parseFunction(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
@@ -978,7 +1045,11 @@ function parseFunction(source: string, pos: number, env: Env): ParserResult {
   if (!fnName) {
     return { value: 0, pos };
   }
-  pos = skipOpeningParen(source, fnName.end);
+
+  // Skip generic type parameters if present: <T>, <T, U>, etc.
+  pos = skipTypeParameterList(source, fnName.end);
+
+  pos = skipOpeningParen(source, pos);
   if (pos === -1) {
     return { value: 0, pos: fnName.end };
   }
