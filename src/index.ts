@@ -45,6 +45,8 @@ type EnvEntry =
 type Env = Record<string, EnvEntry> & {
   breakRequested?: boolean;
   continueRequested?: boolean;
+  yieldRequested?: boolean;
+  yieldValue?: number;
 };
 
 type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
@@ -278,12 +280,12 @@ function parseBinaryOperator(
   operators: Array<(left: number, right: number) => number>,
 ): ParserResult {
   const left = operandParser(source, pos, env);
-  
+
   // If break or continue was requested during operand parsing, stop here
   if ((env as any).breakRequested || (env as any).continueRequested) {
     return left;
   }
-  
+
   let result = left.value;
   pos = left.pos;
 
@@ -292,7 +294,7 @@ function parseBinaryOperator(
     if ((env as any).breakRequested || (env as any).continueRequested) {
       break;
     }
-    
+
     const savedPos = pos;
     pos = skipWhitespace(source, pos);
     const charCode = source.charCodeAt(pos);
@@ -497,7 +499,7 @@ function parseIfConditional(
     pos = skipWhitespace(source, thenResult.pos);
 
     // Check for break or continue that bubbled up
-    if ((env as any).breakRequested || (env as any).continueRequested) {
+    if ((env as any).breakRequested || (env as any).continueRequested || (env as any).yieldRequested) {
       return { value: result, pos };
     }
 
@@ -1861,6 +1863,13 @@ function parseBlock(source: string, pos: number, env: Env): ParserResult {
       break;
     }
 
+    // Handle yield statement
+    if ((env as any).yieldRequested) {
+      result = (env as any).yieldValue;
+      pos = stmtResult.pos;
+      break;
+    }
+
     result = stmtResult.value;
     pos = skipWhitespace(source, stmtResult.pos);
   }
@@ -2147,6 +2156,23 @@ function parseStatement(source: string, pos: number, env: Env): ParserResult {
       pos = pos + 1;
     }
     return { value: 0, pos };
+  }
+
+  // Check for 'yield' keyword
+  const yieldPos = skipKeyword(source, pos, "yield");
+  if (yieldPos !== null) {
+    pos = skipWhitespace(source, yieldPos);
+    // Parse the expression to yield
+    const exprResult = parseLogicalOr(source, pos, env);
+    (env as any).yieldRequested = true;
+    (env as any).yieldValue = exprResult.value;
+    pos = skipWhitespace(source, exprResult.pos);
+    // Skip semicolon after yield
+    if (source.charCodeAt(pos) === 59) {
+      // ';'
+      pos = pos + 1;
+    }
+    return { value: exprResult.value, pos };
   }
 
   // Try to parse assignment or expression

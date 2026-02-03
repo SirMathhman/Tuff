@@ -143,6 +143,13 @@ describe("The interpreter can interpret loops", () => {
     expectValid("let mut x = 0; while (x < 4) { x += 1; continue; } x", 4);
   });
 
+  test("yield statement in block expression", () => {
+    expectValid(
+      "let x = { if (true) yield 100; 20 } + 1; x",
+      101,
+    );
+  });
+
   test("for loop with range", () => {
     expectValid("let mut sum = 0; for (i in 0..10) sum += i; sum", 45);
   });
