@@ -1153,6 +1153,121 @@ function parsePrimaryLiterals(
   return null;
 }
 
+// eslint-disable-next-line no-unused-vars
+type BodyStopCondition = (charCode: number, depth: number) => boolean;
+
+function findBodyEndPosition(
+  source: string,
+  startPos: number,
+  shouldStop: BodyStopCondition,
+): number {
+  let bodyEndPos = startPos;
+  let depth = 0;
+
+  while (bodyEndPos < source.length) {
+    const charCode = source.charCodeAt(bodyEndPos);
+
+    if (charCode === 40 || charCode === 123) {
+      // '(' or '{'
+      depth++;
+      bodyEndPos++;
+    } else if ((charCode === 41 || charCode === 125) && depth > 0) {
+      // ')' or '}'
+      depth--;
+      bodyEndPos++;
+    } else if (shouldStop(charCode, depth)) {
+      break;
+    } else {
+      bodyEndPos++;
+    }
+  }
+
+  return bodyEndPos;
+}
+
+function tryParseInlineFunction(
+  source: string,
+  pos: number,
+  env: Env,
+): { value: number; pos: number; fnRefKey: string } | null {
+  pos = skipWhitespace(source, pos);
+
+  // Check for inline function: () => expr or (params) => expr
+  if (source.charCodeAt(pos) !== 40) {
+    // '('
+    return null;
+  }
+
+  const parenStart = pos;
+  const afterOpenParen = skipBalancedBrackets(source, pos, 40, 41);
+  const afterParenClean = skipWhitespace(source, afterOpenParen);
+
+  // Check if this is followed by '=>'
+  if (
+    source.charCodeAt(afterParenClean) !== 61 ||
+    source.charCodeAt(afterParenClean + 1) !== 62
+  ) {
+    return null; // Not an inline function
+  }
+
+  // Parse the parameters inside ()
+  let currentPos = parenStart + 1;
+  const params: string[] = [];
+
+  while (source.charCodeAt(currentPos) !== 41) {
+    // ')'
+    currentPos = skipWhitespace(source, currentPos);
+    const paramId = parseIdentifier(source, currentPos);
+    if (!paramId) {
+      break; // No parameters
+    }
+    params.push(paramId.name);
+    currentPos = skipWhitespace(source, paramId.end);
+
+    // Skip type annotation if present
+    currentPos = skipTypeAnnotation(source, currentPos);
+
+    // Skip comma if present
+    if (source.charCodeAt(currentPos) === 44) {
+      currentPos = skipWhitespace(source, currentPos + 1);
+    }
+  }
+
+  currentPos = skipWhitespace(source, currentPos + 1); // skip ')'
+
+  // Expect '=>'
+  if (
+    source.charCodeAt(currentPos) !== 61 ||
+    source.charCodeAt(currentPos + 1) !== 62
+  ) {
+    return null;
+  }
+
+  currentPos = skipWhitespace(source, currentPos + 2); // skip '=>'
+
+  // Find the end of the body (up to comma or closing paren)
+  const bodyStartPos = currentPos;
+  const bodyEndPos = findBodyEndPosition(source, currentPos, (code, depth) =>
+    (code === 44 || code === 41) && depth === 0
+  );
+
+  const body = source.substring(bodyStartPos, bodyEndPos);
+
+  // Create a temporary function for this inline function
+  const fnRefKey = "__inline_" + Math.random().toString(36).substring(7);
+  env[fnRefKey] = {
+    type: "function",
+    params,
+    body,
+    bodyPos: bodyStartPos,
+  };
+
+  // Return -1 and store function reference metadata
+  (env as any).__lastFunctionRef = fnRefKey;
+
+  return { value: -1, pos: bodyEndPos, fnRefKey };
+}
+
 function parseFunctionCall(
   source: string,
   afterParenPos: number,
@@ -1162,11 +1277,22 @@ function parseFunctionCall(
 ): { value: number; pos: number } {
   let argPos = skipWhitespace(source, afterParenPos + 1);
   const args: number[] = [];
+  const argFnRefs: (string | null)[] = []; // Track function references for each argument
 
   while (source.charCodeAt(argPos) !== 41) {
-    const argResult = parseLogicalOr(source, argPos, env);
-    args.push(argResult.value);
-    argPos = skipWhitespace(source, argResult.pos);
+    // Try to parse inline function first
+    const inlineResult = tryParseInlineFunction(source, argPos, env);
+    if (inlineResult) {
+      args.push(inlineResult.value);
+      argFnRefs.push(inlineResult.fnRefKey);
+      argPos = skipWhitespace(source, inlineResult.pos);
+    } else {
+      // Parse regular argument
+      const argResult = parseLogicalOr(source, argPos, env);
+      args.push(argResult.value);
+      argFnRefs.push(null); // No function reference
+      argPos = skipWhitespace(source, argResult.pos);
+    }
 
     if (source.charCodeAt(argPos) === 44) {
       argPos = skipWhitespace(source, argPos + 1);
@@ -1201,11 +1327,21 @@ function parseFunctionCall(
   ) {
     const paramName = fnEntry.params[i];
     if (paramName !== undefined) {
-      callEnv[paramName] = {
-        type: "variable",
-        value: args[i - argStartIndex]!,
-        mutable: false,
-      };
+      const argIndex = i - argStartIndex;
+      // If argument is a function reference, bind it as FunctionRef
+      if (argFnRefs[argIndex]) {
+        callEnv[paramName] = {
+          type: "functionRef",
+          functionName: argFnRefs[argIndex]!,
+        };
+      } else {
+        // Regular argument - bind as variable
+        callEnv[paramName] = {
+          type: "variable",
+          value: args[argIndex]!,
+          mutable: false,
+        };
+      }
     }
   }
 
@@ -1507,27 +1643,9 @@ function parseFunction(source: string, pos: number, env: Env): ParserResult {
 
   // Find the end of the function body (up to semicolon)
   const bodyStartPos = pos;
-  let bodyEndPos = pos;
-  let depth = 0;
-
-  while (bodyEndPos < source.length) {
-    const code = source.charCodeAt(bodyEndPos);
-
-    if (code === 40 || code === 123) {
-      // '(' or '{'
-      depth++;
-      bodyEndPos++;
-    } else if ((code === 41 || code === 125) && depth > 0) {
-      // ')' or '}'
-      depth--;
-      bodyEndPos++;
-    } else if (code === 59 && depth === 0) {
-      // ';'
-      break;
-    } else {
-      bodyEndPos++;
-    }
-  }
+  const bodyEndPos = findBodyEndPosition(source, pos, (code, depth) =>
+    code === 59 && depth === 0 // 59 = ';'
+  );
 
   const body = source.substring(bodyStartPos, bodyEndPos);
 

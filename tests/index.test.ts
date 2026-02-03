@@ -199,6 +199,13 @@ describe("The interpreter can interpret functions", () => {
       1,
     );
   });
+
+  test("function parameter with function type and inline function argument", () => {
+    expectValid(
+      "fn get0(get : () => I32) => get() + 1; get0(() => 100)",
+      101,
+    );
+  });
 });
 
 describe("The interpreter can interpret data", () => {
