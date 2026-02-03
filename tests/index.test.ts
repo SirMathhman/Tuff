@@ -113,7 +113,10 @@ describe("The interpreter can interpret", () => {
   });
 
   test("nested if-else statements", () => {
-    expectValid("let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else x = 3; x", 3);
+    expectValid(
+      "let mut x = 0; if (false) { x = 1; } else if (false) { x = 2; } else x = 3; x",
+      3,
+    );
   });
 
   test("match expression with case patterns", () => {
@@ -137,18 +140,31 @@ describe("The interpreter can interpret", () => {
   });
 
   test("function definition and call", () => {
-    expectValid("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)", 7);
+    expectValid(
+      "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",
+      7,
+    );
   });
 
   test("array declaration and element access", () => {
-    expectValid("let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]", 6);
+    expectValid(
+      "let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]",
+      6,
+    );
   });
 
   test("struct definition and instantiation with field access", () => {
-    expectValid("struct Point { x : I32; y : I32; } let temp : Point = Point { 3, 4 }; temp.x + temp.y", 7);
+    expectValid(
+      "struct Point { x : I32; y : I32; } let temp : Point = Point { 3, 4 }; temp.x + temp.y",
+      7,
+    );
   });
 
   test("character literal", () => {
     expectValid("let c : Char = 'a'; c", 97);
+  });
+
+  test("string literal and indexing", () => {
+    expectValid('let c : *Str = "test"; c[1]', 101);
   });
 });

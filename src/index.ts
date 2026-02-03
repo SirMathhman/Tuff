@@ -1,22 +1,34 @@
 /* eslint-disable no-unused-vars */
-type Variable = { type: 'variable'; value: number; mutable: boolean };
+type Variable = { type: "variable"; value: number; mutable: boolean };
 type FunctionDef = {
-  type: 'function';
+  type: "function";
   params: string[];
   body: string;
   bodyPos: number;
 };
-type ArrayDef = { type: 'array'; elements: number[] };
-type StructDef = { type: 'structDef'; fields: string[]; body: string; bodyPos: number };
-type StructInstance = { type: 'structInstance'; structName: string; fieldValues: Record<string, number> };
-type EnvEntry = Variable | FunctionDef | ArrayDef | StructDef | StructInstance;
+type ArrayDef = { type: "array"; elements: number[] };
+type StringDef = { type: "string"; value: string };
+type StructDef = {
+  type: "structDef";
+  fields: string[];
+  body: string;
+  bodyPos: number;
+};
+type StructInstance = {
+  type: "structInstance";
+  structName: string;
+  fieldValues: Record<string, number>;
+};
+type EnvEntry =
+  | Variable
+  | FunctionDef
+  | ArrayDef
+  | StringDef
+  | StructDef
+  | StructInstance;
 type Env = Record<string, EnvEntry>;
 
-type ParserFn = (
-  _source: string,
-  _pos: number,
-  _env: Env,
-) => ParserResult;
+type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
 
 type ConditionParserFn = (
   _source: string,
@@ -117,6 +129,65 @@ function parseCharacterLiteral(
   };
 }
 
+function parseStringLiteral(
+  source: string,
+  start: number,
+): { value: string; end: number } | null {
+  // Check for opening double quote
+  if (source.charCodeAt(start) !== 34) {
+    // '"'
+    return null;
+  }
+
+  let stringIndex = start + 1;
+  let result = "";
+
+  // Parse string content until closing quote
+  while (stringIndex < source.length && source.charCodeAt(stringIndex) !== 34) {
+    // '"'
+    if (source.charCodeAt(stringIndex) === 92) {
+      // '\' - escape sequence
+      stringIndex++;
+      const escapeChar = source.charCodeAt(stringIndex);
+      if (escapeChar === 110) {
+        // 'n' - newline
+        result += "\n";
+      } else if (escapeChar === 116) {
+        // 't' - tab
+        result += "\t";
+      } else if (escapeChar === 114) {
+        // 'r' - carriage return
+        result += "\r";
+      } else if (escapeChar === 92) {
+        // '\' - backslash
+        result += "\\";
+      } else if (escapeChar === 34) {
+        // '"' - double quote
+        result += '"';
+      } else {
+        // Unknown escape, treat as the character itself
+        result += String.fromCharCode(escapeChar);
+      }
+      stringIndex++;
+    } else {
+      // Regular character
+      result += String.fromCharCode(source.charCodeAt(stringIndex));
+      stringIndex++;
+    }
+  }
+
+  // Check for closing double quote
+  if (source.charCodeAt(stringIndex) !== 34) {
+    // '"'
+    return null;
+  }
+
+  return {
+    value: result,
+    end: stringIndex + 1,
+  };
+}
+
 function parseIdentifier(
   source: string,
   start: number,
@@ -194,10 +265,7 @@ function parseBinaryOperator(
       const code = operatorCodes[i];
       if (Array.isArray(code)) {
         // Multi-character operator (e.g., [38, 38] for &&)
-        if (
-          charCode === code[0] &&
-          source.charCodeAt(pos + 1) === code[1]
-        ) {
+        if (charCode === code[0] && source.charCodeAt(pos + 1) === code[1]) {
           handlerIndex = i;
           pos = pos + code.length;
           break;
@@ -330,25 +398,25 @@ function checkKeywordControlFlow(
   parseIfHandler: ParserFn,
 ): ParserResult | null {
   // Check for 'struct' keyword
-  const structPos = skipKeyword(source, pos, 'struct');
+  const structPos = skipKeyword(source, pos, "struct");
   if (structPos !== null) {
     return parseStructDefinition(source, structPos, env);
   }
 
   // Check for 'fn' keyword
-  const fnPos = skipKeyword(source, pos, 'fn');
+  const fnPos = skipKeyword(source, pos, "fn");
   if (fnPos !== null) {
     return parseFunction(source, fnPos, env);
   }
 
   // Check for 'let' keyword
-  const letPos = skipKeyword(source, pos, 'let');
+  const letPos = skipKeyword(source, pos, "let");
   if (letPos !== null) {
     return parseLetBinding(source, letPos, env);
   }
 
   // Check for 'if' keyword
-  const ifPos = skipKeyword(source, pos, 'if');
+  const ifPos = skipKeyword(source, pos, "if");
   if (ifPos !== null) {
     return parseIfHandler(source, ifPos, env);
   }
@@ -381,11 +449,7 @@ function parseParenthesizedExpr(
   return { value: result.value, pos };
 }
 
-function parseMatch(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseMatch(source: string, pos: number, env: Env): ParserResult {
   // Parse the value to match in parentheses
   const parenResult = parseParenthesizedExpr(source, pos, env, parseLogicalOr);
   if (!parenResult) {
@@ -409,7 +473,7 @@ function parseMatch(
     pos = skipWhitespace(source, pos);
 
     // Check for 'case' keyword
-    const casePos = skipKeyword(source, pos, 'case');
+    const casePos = skipKeyword(source, pos, "case");
     if (casePos === null) {
       break;
     }
@@ -435,10 +499,7 @@ function parseMatch(
     pos = skipWhitespace(source, pos);
 
     // Expect '=>'
-    if (
-      source.charCodeAt(pos) === 61 &&
-      source.charCodeAt(pos + 1) === 62
-    ) {
+    if (source.charCodeAt(pos) === 61 && source.charCodeAt(pos + 1) === 62) {
       // '=>'
       pos = pos + 2;
     }
@@ -467,11 +528,35 @@ function parseMatch(
   return { value: result, pos };
 }
 
-function parsePrimary(
+function handleIndexing(
   source: string,
-  pos: number,
+  afterIdPos: number,
   env: Env,
-): ParserResult {
+  entry: EnvEntry | null,
+  // eslint-disable-next-line no-unused-vars
+  getValue: (_index: number) => number,
+): ParserResult | null {
+  if (source.charCodeAt(afterIdPos) !== 91 || !entry) {
+    return null;
+  }
+
+  // '['
+  const indexPos = skipWhitespace(source, afterIdPos + 1);
+  const indexResult = parseLogicalOr(source, indexPos, env);
+  let endPos = skipWhitespace(source, indexResult.pos);
+
+  // Expect ']'
+  if (source.charCodeAt(endPos) === 93) {
+    // ']'
+    endPos = skipWhitespace(source, endPos + 1);
+    const value = getValue(Math.floor(indexResult.value));
+    return { value, pos: endPos };
+  }
+
+  return null;
+}
+
+function parsePrimary(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
   // Check for opening parenthesis
@@ -494,24 +579,29 @@ function parsePrimary(
   }
 
   // Check for control flow keywords (let, if)
-  const keywordResult = checkKeywordControlFlow(source, pos, env, parseIfExpression);
+  const keywordResult = checkKeywordControlFlow(
+    source,
+    pos,
+    env,
+    parseIfExpression,
+  );
   if (keywordResult !== null) {
     return keywordResult;
   }
 
   // Check for 'match' keyword
-  const matchPos = skipKeyword(source, pos, 'match');
+  const matchPos = skipKeyword(source, pos, "match");
   if (matchPos !== null) {
     return parseMatch(source, matchPos, env);
   }
 
   // Check for boolean literals
-  const truePos = skipKeyword(source, pos, 'true');
+  const truePos = skipKeyword(source, pos, "true");
   if (truePos !== null) {
     return { value: 1, pos: truePos };
   }
 
-  const falsePos = skipKeyword(source, pos, 'false');
+  const falsePos = skipKeyword(source, pos, "false");
   if (falsePos !== null) {
     return { value: 0, pos: falsePos };
   }
@@ -526,7 +616,7 @@ function parsePrimary(
     if (
       source.charCodeAt(afterIdPos) === 40 &&
       entry &&
-      entry.type === 'function'
+      entry.type === "function"
     ) {
       // '('
       // Parse function arguments
@@ -554,7 +644,7 @@ function parsePrimary(
         const paramName = fnEntry.params[i];
         if (paramName !== undefined) {
           callEnv[paramName] = {
-            type: 'variable',
+            type: "variable",
             value: args[i]!,
             mutable: false,
           };
@@ -567,12 +657,12 @@ function parsePrimary(
     }
 
     // Variable lookup
-    if (entry && entry.type === 'variable') {
+    if (entry && entry.type === "variable") {
       return { value: entry.value, pos: identifier.end };
     }
 
     // Struct instance lookup with field access
-    if (entry && entry.type === 'structInstance') {
+    if (entry && entry.type === "structInstance") {
       let currentPos = identifier.end;
       currentPos = skipWhitespace(source, currentPos);
       if (source.charCodeAt(currentPos) === 46) {
@@ -589,24 +679,38 @@ function parsePrimary(
     }
 
     // Array indexing
-    if (
-      source.charCodeAt(afterIdPos) === 91 &&
-      entry &&
-      entry.type === 'array'
-    ) {
-      // '['
-      const indexPos = skipWhitespace(source, afterIdPos + 1);
-      const indexResult = parseLogicalOr(source, indexPos, env);
-      const index = Math.floor(indexResult.value);
-      let endPos = skipWhitespace(source, indexResult.pos);
+    if (entry && entry.type === "array") {
+      const arrayIndexResult = handleIndexing(
+        source,
+        afterIdPos,
+        env,
+        entry,
+        (index: number) => {
+          const arrayEntry = entry as ArrayDef;
+          return arrayEntry.elements[index] ?? 0;
+        },
+      );
+      if (arrayIndexResult) {
+        return arrayIndexResult;
+      }
+    }
 
-      // Expect ']'
-      if (source.charCodeAt(endPos) === 93) {
-        // ']'
-        endPos = skipWhitespace(source, endPos + 1);
-        const arrayEntry = entry as ArrayDef;
-        const value = arrayEntry.elements[index] ?? 0;
-        return { value, pos: endPos };
+    // String indexing
+    if (entry && entry.type === "string") {
+      const stringIndexResult = handleIndexing(
+        source,
+        afterIdPos,
+        env,
+        entry,
+        (index: number) => {
+          const stringEntry = entry as StringDef;
+          return index >= 0 && index < stringEntry.value.length
+            ? stringEntry.value.charCodeAt(index)
+            : 0;
+        },
+      );
+      if (stringIndexResult) {
+        return stringIndexResult;
       }
     }
   }
@@ -655,7 +759,12 @@ function skipOpeningParen(source: string, pos: number): number {
   return source.charCodeAt(pos) === 40 ? skipWhitespace(source, pos + 1) : -1;
 }
 
-function skipBalancedBrackets(source: string, pos: number, openChar: number, closeChar: number): number {
+function skipBalancedBrackets(
+  source: string,
+  pos: number,
+  openChar: number,
+  closeChar: number,
+): number {
   if (source.charCodeAt(pos) !== openChar) {
     return pos;
   }
@@ -701,11 +810,7 @@ function parseTypeAnnotationColon(source: string, pos: number): number | null {
   return skipWhitespace(source, pos);
 }
 
-function parseFunction(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseFunction(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
   // Parse function name
@@ -776,7 +881,7 @@ function parseFunction(
 
   // Store function in environment
   env[fnName.name] = {
-    type: 'function',
+    type: "function",
     params,
     body,
     bodyPos: bodyStartPos,
@@ -845,9 +950,9 @@ function parseStructDefinition(
   // Store struct definition in environment
   // We store it with a special marker - the body and bodyPos are empty for now
   env[structName.name] = {
-    type: 'structDef',
+    type: "structDef",
     fields,
-    body: '',
+    body: "",
     bodyPos: 0,
   };
 
@@ -856,16 +961,31 @@ function parseStructDefinition(
   return { value: restResult.value, pos: restResult.pos };
 }
 
-function parseLetBinding(
+function createVariableEntry(
   source: string,
   pos: number,
   env: Env,
-): ParserResult {
+  mutable: boolean,
+): {
+  entry: EnvEntry;
+  pos: number;
+} {
+  const initResult = parseLogicalOr(source, pos, env);
+  const newPos = skipWhitespace(source, initResult.pos);
+  const entry: EnvEntry = {
+    type: "variable",
+    value: initResult.value,
+    mutable,
+  };
+  return { entry, pos: newPos };
+}
+
+function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
   // Check for 'mut' keyword
   let isMutable = false;
-  const mutPos = skipKeyword(source, pos, 'mut');
+  const mutPos = skipKeyword(source, pos, "mut");
   if (mutPos !== null) {
     isMutable = true;
     pos = skipWhitespace(source, mutPos);
@@ -883,14 +1003,23 @@ function parseLetBinding(
   const typePos = parseTypeAnnotationColon(source, pos);
   if (typePos !== null) {
     pos = typePos;
+    // Skip pointer indicators (*)
+    while (source.charCodeAt(pos) === 42) {
+      // '*'
+      pos = skipWhitespace(source, pos + 1);
+    }
     // Check if it's a struct type (simple identifier without brackets)
     if (source.charCodeAt(pos) !== 91) {
       // Not '[', so might be a struct type
       const typeId = parseIdentifier(source, pos);
-      if (typeId && typeId.name in env && (env[typeId.name] as EnvEntry).type === 'structDef') {
+      if (
+        typeId &&
+        typeId.name in env &&
+        (env[typeId.name] as EnvEntry).type === "structDef"
+      ) {
         structType = typeId.name;
       }
-      pos = skipWhitespace(source, (typeId?.end ?? pos));
+      pos = skipWhitespace(source, typeId?.end ?? pos);
     } else {
       // It's an array type, skip it
       pos = skipBalancedBrackets(source, pos, 91, 93);
@@ -938,21 +1067,21 @@ function parseLetBinding(
         fieldPos = skipWhitespace(source, fieldPos + 1); // skip '}'
         pos = fieldPos;
         entry = {
-          type: 'structInstance',
+          type: "structInstance",
           structName: structType,
           fieldValues,
         };
       } else {
         // Not a struct instantiation, parse as normal expression
-        const initResult = parseLogicalOr(source, pos, env);
-        pos = skipWhitespace(source, initResult.pos);
-        entry = { type: 'variable', value: initResult.value, mutable: isMutable };
+        const result = createVariableEntry(source, pos, env, isMutable);
+        entry = result.entry;
+        pos = result.pos;
       }
     } else {
       // Not a struct instantiation, parse as normal expression
-      const initResult = parseLogicalOr(source, pos, env);
-      pos = skipWhitespace(source, initResult.pos);
-      entry = { type: 'variable', value: initResult.value, mutable: isMutable };
+      const result = createVariableEntry(source, pos, env, isMutable);
+      entry = result.entry;
+      pos = result.pos;
     }
   } else if (source.charCodeAt(pos) === 91) {
     // '[' - array literal
@@ -972,13 +1101,22 @@ function parseLetBinding(
     }
 
     pos = skipWhitespace(source, bracketPos + 1); // skip ']'
-    entry = { type: 'array', elements };
+    entry = { type: "array", elements };
+  } else if (source.charCodeAt(pos) === 34) {
+    // '"' - string literal
+    const stringResult = parseStringLiteral(source, pos);
+    if (stringResult) {
+      entry = { type: "string", value: stringResult.value };
+      pos = skipWhitespace(source, stringResult.end);
+    } else {
+      entry = { type: "variable", value: 0, mutable: isMutable };
+    }
   } else {
     // Regular initializer expression
     const initResult = parseLogicalOr(source, pos, env);
     const value = initResult.value;
     pos = skipWhitespace(source, initResult.pos);
-    entry = { type: 'variable', value, mutable: isMutable };
+    entry = { type: "variable", value, mutable: isMutable };
   }
 
   pos = skipSemicolonAndWhitespace(source, pos);
@@ -991,11 +1129,7 @@ function parseLetBinding(
   return { value: bodyResult.value, pos: bodyResult.pos };
 }
 
-function parseBlock(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseBlock(source: string, pos: number, env: Env): ParserResult {
   let result = 0;
   pos = skipWhitespace(source, pos);
 
@@ -1010,25 +1144,22 @@ function parseBlock(
   return { value: result, pos };
 }
 
-function skipStatement(
-  source: string,
-  pos: number,
-): number {
+function skipStatement(source: string, pos: number): number {
   pos = skipWhitespace(source, pos);
-  
+
   // Skip past the next statement-like construct
   // This is a simple approach: find the next semicolon or closing brace
   // Also stops at 'else' keyword to handle if-else chains
   let depth = 0;
   while (pos < source.length) {
     const code = source.charCodeAt(pos);
-    
+
     // Found end of statement
     if (code === 59 && depth === 0) {
       // ';'
       return pos + 1;
     }
-    
+
     // Found closing brace - don't consume it
     if (code === 125 && depth === 0) {
       // '}'
@@ -1038,13 +1169,13 @@ function skipStatement(
     // Check for 'else' keyword at depth 0
     if (depth === 0 && code >= 97 && code <= 122) {
       // Potential identifier starting with lowercase letter
-      const potentialElse = skipKeyword(source, pos, 'else');
+      const potentialElse = skipKeyword(source, pos, "else");
       if (potentialElse !== null) {
         // Found 'else', stop here
         return pos;
       }
     }
-    
+
     // Skip over strings/literals by skipping parentheses and braces
     if (code === 40 || code === 123) {
       // '(' or '{'
@@ -1058,7 +1189,7 @@ function skipStatement(
       pos++;
     }
   }
-  
+
   return pos;
 }
 
@@ -1069,7 +1200,7 @@ function handleElseKeyword(
   shouldExecute: boolean,
   branchParser: ParserFn,
 ): { foundElse: boolean; value: number; pos: number } {
-  const elsePos = skipKeyword(source, pos, 'else');
+  const elsePos = skipKeyword(source, pos, "else");
   if (elsePos === null) {
     return { foundElse: false, value: 0, pos };
   }
@@ -1089,11 +1220,7 @@ function handleElseKeyword(
   return { foundElse: true, value, pos };
 }
 
-function parseIfStatement(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseIfStatement(source: string, pos: number, env: Env): ParserResult {
   const ifResult = parseIfConditional(source, pos, env, parseStatement);
 
   // Check if there's more to parse (not at '}' or end)
@@ -1107,11 +1234,7 @@ function parseIfStatement(
   }
 }
 
-function parseWhile(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseWhile(source: string, pos: number, env: Env): ParserResult {
   // Parse initial condition to find where the body starts
   const condResult = parseIfCondition(source, pos, env);
   if (!condResult) {
@@ -1150,11 +1273,7 @@ function parseWhile(
   return { value, pos: finalPos };
 }
 
-function parseFor(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseFor(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
   // Check opening parenthesis
@@ -1172,7 +1291,7 @@ function parseFor(
   pos = skipWhitespace(source, loopVarIdent.end);
 
   // Expect 'in' keyword
-  const inPos = skipKeyword(source, pos, 'in');
+  const inPos = skipKeyword(source, pos, "in");
   if (inPos === null) {
     return { value: 0, pos };
   }
@@ -1187,10 +1306,7 @@ function parseFor(
   pos = skipWhitespace(source, startNumResult.end);
 
   // Expect '..' (two dots)
-  if (
-    source.charCodeAt(pos) !== 46 ||
-    source.charCodeAt(pos + 1) !== 46
-  ) {
+  if (source.charCodeAt(pos) !== 46 || source.charCodeAt(pos + 1) !== 46) {
     // '.'
     return { value: 0, pos };
   }
@@ -1225,7 +1341,7 @@ function parseFor(
     i++, iterations++
   ) {
     // Add loop variable to environment
-    env[loopVarName] = { type: 'variable', value: i, mutable: false };
+    env[loopVarName] = { type: "variable", value: i, mutable: false };
 
     // Execute body
     const bodyResult = parseStatement(source, bodyStartPos, env);
@@ -1242,27 +1358,28 @@ function parseFor(
   return { value, pos };
 }
 
-function parseStatement(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseStatement(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
   // Check for control flow keywords (let, if)
-  const keywordResult = checkKeywordControlFlow(source, pos, env, parseIfStatement);
+  const keywordResult = checkKeywordControlFlow(
+    source,
+    pos,
+    env,
+    parseIfStatement,
+  );
   if (keywordResult !== null) {
     return keywordResult;
   }
 
   // Check for 'while' keyword
-  const whilePos = skipKeyword(source, pos, 'while');
+  const whilePos = skipKeyword(source, pos, "while");
   if (whilePos !== null) {
     return parseWhile(source, whilePos, env);
   }
 
   // Check for 'for' keyword
-  const forPos = skipKeyword(source, pos, 'for');
+  const forPos = skipKeyword(source, pos, "for");
   if (forPos !== null) {
     return parseFor(source, forPos, env);
   }
@@ -1271,57 +1388,36 @@ function parseStatement(
   return parseAssignmentOrExpression(source, pos, env);
 }
 
-function parseComparison(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseComparison(source: string, pos: number, env: Env): ParserResult {
   return parseBinaryOperator(
     source,
     pos,
     env,
     parseAdditive,
     [60], // <
-    [
-      (left: number, right: number) =>
-        left < right ? 1 : 0,
-    ],
+    [(left: number, right: number) => (left < right ? 1 : 0)],
   );
 }
 
-function parseLogicalAnd(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseLogicalAnd(source: string, pos: number, env: Env): ParserResult {
   return parseBinaryOperator(
     source,
     pos,
     env,
     parseComparison,
     [[38, 38]], // &&
-    [
-      (left: number, right: number) =>
-        left !== 0 && right !== 0 ? 1 : 0,
-    ],
+    [(left: number, right: number) => (left !== 0 && right !== 0 ? 1 : 0)],
   );
 }
 
-function parseLogicalOr(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseLogicalOr(source: string, pos: number, env: Env): ParserResult {
   return parseBinaryOperator(
     source,
     pos,
     env,
     parseLogicalAnd,
     [[124, 124]], // ||
-    [
-      (left: number, right: number) =>
-        left !== 0 || right !== 0 ? 1 : 0,
-    ],
+    [(left: number, right: number) => (left !== 0 || right !== 0 ? 1 : 0)],
   );
 }
 
@@ -1342,13 +1438,13 @@ function parseAssignmentOrExpression(
 
     // Check if variable is mutable
     const entry = varName in env ? env[varName] : null;
-    if (entry && entry.type === 'variable' && entry.mutable) {
+    if (entry && entry.type === "variable" && entry.mutable) {
       // Check for compound assignment operators: +=, -=, *=, /=
       if (
         nextCode === 43 || // '+'
         nextCode === 45 || // '-'
         nextCode === 42 || // '*'
-        nextCode === 47    // '/'
+        nextCode === 47 // '/'
       ) {
         if (source.charCodeAt(afterIdPos + 1) === 61) {
           // Compound assignment operator found
@@ -1375,7 +1471,13 @@ function parseAssignmentOrExpression(
             newValue = currentValue / rhsValue;
           }
 
-          return completeAssignment(source, rhsResult.pos, env, varName, newValue);
+          return completeAssignment(
+            source,
+            rhsResult.pos,
+            env,
+            varName,
+            newValue,
+          );
         }
       }
 
@@ -1388,7 +1490,13 @@ function parseAssignmentOrExpression(
         const rhsResult = parseLogicalOr(source, assignPos, env);
         const newValue = rhsResult.value;
 
-        return completeAssignment(source, rhsResult.pos, env, varName, newValue);
+        return completeAssignment(
+          source,
+          rhsResult.pos,
+          env,
+          varName,
+          newValue,
+        );
       }
     }
   }
@@ -1410,7 +1518,7 @@ function completeAssignment(
 
   // Mutate the mutable variable in place
   const entry = env[varName];
-  if (entry && entry.type === 'variable') {
+  if (entry && entry.type === "variable") {
     entry.value = newValue;
   }
 
@@ -1436,11 +1544,7 @@ function parseMultiplicative(
   );
 }
 
-function parseAdditive(
-  source: string,
-  pos: number,
-  env: Env,
-): ParserResult {
+function parseAdditive(source: string, pos: number, env: Env): ParserResult {
   return parseBinaryOperator(
     source,
     pos,
