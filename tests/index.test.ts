@@ -207,6 +207,13 @@ describe("The interpreter can interpret data", () => {
     );
   });
 
+  test("is operator with destructuring pattern", () => {
+    expectValid(
+      "struct Some { value : I32; } struct None {} type Option = Some | None; let temp : Option = Some { 100 }; if (temp is Some { value }) value else 20",
+      100,
+    );
+  });
+
   test("extension method with this parameter", () => {
     expectValid("fn addOne(this : I32) => this + 1; 100.addOne()", 101);
   });

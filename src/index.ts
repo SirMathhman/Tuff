@@ -362,12 +362,109 @@ function getIfConditionAndPos(
   return { condition, pos: afterCond };
 }
 
+function parseIsPatternWithDestructuring(
+  source: string,
+  pos: number,
+): {
+  potentialId: { name: string; end: number } | null;
+  typeName: { name: string; end: number } | null;
+  destructResult: { names: string[]; pos: number } | null;
+  endPos: number;
+} | null {
+  const potentialId = parseIdentifier(source, pos);
+  if (!potentialId) {
+    return null;
+  }
+
+  const afterIdPos = skipWhitespace(source, potentialId.end);
+  const isKeyword = skipKeyword(source, afterIdPos, "is");
+  if (isKeyword === null) {
+    return null;
+  }
+
+  const typePos = skipWhitespace(source, isKeyword);
+  const typeName = parseIdentifier(source, typePos);
+  if (!typeName) {
+    return null;
+  }
+
+  let endPos = typeName.end;
+  let destructResult: { names: string[]; pos: number } | null = null;
+
+  // Check for destructuring pattern: { field1, field2 }
+  const afterTypePos = skipWhitespace(source, endPos);
+  if (source.charCodeAt(afterTypePos) === 123) {
+    // '{'
+    const destructParse = parseIdentifierList(source, afterTypePos, false);
+    if (destructParse) {
+      destructResult = destructParse;
+      endPos = destructParse.pos;
+    }
+  }
+
+  return {
+    potentialId,
+    typeName,
+    destructResult,
+    endPos,
+  };
+}
+
 function parseIfConditional(
   source: string,
   pos: number,
   env: Env,
   branchParser: ParserFn,
 ): ParserResult {
+  // Check for special case: "identifier is Type { field }" pattern with destructuring
+  let thenEnv = env;
+  let isDestructuringPattern = false;
+
+  const checkPos = skipWhitespace(source, pos);
+  if (source.charCodeAt(checkPos) === 40) {
+    // '('  - look for destructuring pattern inside
+    const insideParenPos = skipWhitespace(source, checkPos + 1);
+    const patternMatch = parseIsPatternWithDestructuring(
+      source,
+      insideParenPos,
+    );
+
+    if (patternMatch) {
+      const { potentialId, typeName, destructResult, endPos } = patternMatch;
+
+      // Check if we can close the parenthesis
+      const afterPatternPos = skipWhitespace(source, endPos);
+      if (
+        source.charCodeAt(afterPatternPos) === 41 &&
+        destructResult &&
+        potentialId &&
+        typeName
+      ) {
+        // ')' and destructuring found - valid pattern
+        // Look up the identifier to get its struct instance
+        const idEntry = env[potentialId.name];
+
+        if (idEntry && idEntry.type === "structInstance") {
+          const instance = idEntry as StructInstance;
+          if (instance.structName === typeName.name) {
+            // Pattern matches - create environment with destructured fields
+            thenEnv = { ...env };
+            isDestructuringPattern = true;
+
+            destructResult.names.forEach((fieldName) => {
+              const fieldValue = instance.fieldValues[fieldName] ?? 0;
+              thenEnv[fieldName] = {
+                type: "variable",
+                value: fieldValue,
+                mutable: false,
+              };
+            });
+          }
+        }
+      }
+    }
+  }
+
   const condAndPos = getIfConditionAndPos(source, pos, env);
   if (!condAndPos) {
     return { value: 0, pos };
@@ -380,7 +477,8 @@ function parseIfConditional(
 
   if (condition !== 0) {
     // Execute then branch
-    const thenResult = branchParser(source, pos, env);
+    const branchEnv = isDestructuringPattern ? thenEnv : env;
+    const thenResult = branchParser(source, pos, branchEnv);
     result = thenResult.value;
     pos = skipWhitespace(source, thenResult.pos);
 
@@ -615,11 +713,7 @@ function parseMatch(source: string, pos: number, env: Env): ParserResult {
       pos = patternLit.end;
     } else {
       // Try struct or wildcard patterns
-      structPatternInfo = parseMatchPattern(
-        source,
-        pos,
-        matchedStructType,
-      );
+      structPatternInfo = parseMatchPattern(source, pos, matchedStructType);
       pos = structPatternInfo.pos;
       patternMatches = !foundMatch && structPatternInfo.patternMatches;
       destructResult = structPatternInfo.destructResult;
@@ -1972,6 +2066,7 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
         const idEntry = env[potentialId.name];
         let checkResult = 0;
         let structName: string | undefined;
+        let endPos = typeName.end;
 
         if (idEntry && idEntry.type === "structInstance") {
           // Direct struct instance entry
@@ -1999,7 +2094,21 @@ function parseComparison(source: string, pos: number, env: Env): ParserResult {
           }
         }
 
-        return { value: checkResult, pos: typeName.end };
+        // Skip destructuring pattern if present: { field1, field2 }
+        const afterTypePos = skipWhitespace(source, endPos);
+        if (source.charCodeAt(afterTypePos) === 123) {
+          // '{'
+          const destructResult = parseIdentifierList(
+            source,
+            afterTypePos,
+            false,
+          );
+          if (destructResult) {
+            endPos = destructResult.pos;
+          }
+        }
+
+        return { value: checkResult, pos: endPos };
       }
     }
   }
