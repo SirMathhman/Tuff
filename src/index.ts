@@ -87,10 +87,7 @@ function parseNumericLiteral(
   let base = 10;
 
   // Check for hex, octal, or binary prefix
-  if (
-    source.charCodeAt(start) === 48 &&
-    start + 1 < source.length
-  ) {
+  if (source.charCodeAt(start) === 48 && start + 1 < source.length) {
     // '0'
     const nextChar = source.charCodeAt(start + 1);
     if (nextChar === 120 || nextChar === 88) {
@@ -114,10 +111,7 @@ function parseNumericLiteral(
   } else if (base !== 10) {
     // We found a prefix, now parse the digits
     iterations = 0;
-    while (
-      numEnd < source.length &&
-      iterations < MAX_LOOP_ITERATIONS
-    ) {
+    while (numEnd < source.length && iterations < MAX_LOOP_ITERATIONS) {
       const code = source.charCodeAt(numEnd);
       let digit = -1;
 
@@ -1379,7 +1373,8 @@ function parsePrimaryIdentifier(
   const afterIdPos = skipWhitespace(source, identifier.end);
   const entry = identifier.name in env ? env[identifier.name]! : null;
   if (!entry) {
-    return null;
+    // Identifier found but not in environment - this is an undefined variable error
+    throw new Error(`Undefined variable: ${identifier.name}`);
   }
 
   const functionResult = handleFunctionEntry(
@@ -1786,7 +1781,10 @@ function parseFunctionCall(
   const callEnv: Env = env;
   const previousBindings: Record<string, EnvEntry | undefined> = {};
   const previousLastFunctionRef = (callEnv as any).__lastFunctionRef;
+  const previousAllowShadowing = (callEnv as any).__allowShadowing;
   delete (callEnv as any).__lastFunctionRef;
+  // Set flag to allow shadowing in function local scope
+  (callEnv as any).__allowShadowing = true;
 
   // Bind 'this' parameter if provided
   if (
@@ -1859,6 +1857,11 @@ function parseFunctionCall(
 
       // Restore bindings
       restoreBindings(callEnv, previousBindings, previousLastFunctionRef);
+      if (previousAllowShadowing !== undefined) {
+        (callEnv as any).__allowShadowing = previousAllowShadowing;
+      } else {
+        delete (callEnv as any).__allowShadowing;
+      }
 
       return finalResult;
     }
@@ -1866,6 +1869,11 @@ function parseFunctionCall(
 
   // Restore bindings after call
   restoreBindings(callEnv, previousBindings, previousLastFunctionRef);
+  if (previousAllowShadowing !== undefined) {
+    (callEnv as any).__allowShadowing = previousAllowShadowing;
+  } else {
+    delete (callEnv as any).__allowShadowing;
+  }
 
   return { value: bodyResult.value, pos: argPos };
 }
@@ -2917,6 +2925,14 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
     if (!identifier) {
       return { value: 0, pos };
     }
+    // Check for shadowing - variable already exists in current environment
+    // Allow shadowing across function boundaries
+    if (identifier.name in env) {
+      // Check if this looks like we're in a function body by seeing if __isFunctionContext flag is set
+      if (!(env as any).__allowShadowing) {
+        throw new Error(`Variable already declared: ${identifier.name}`);
+      }
+    }
     pos = skipWhitespace(source, identifier.end);
   }
 
@@ -3689,57 +3705,63 @@ function parseAssignmentOrExpression(
     const nextCode = source.charCodeAt(afterIdPos);
     const varName = identifier.name;
 
-    // Check if variable is mutable
-    const entry = varName in env ? env[varName] : null;
-    if (entry && entry.type === "variable" && entry.mutable) {
-      // Check for compound assignment operators: +=, -=, *=, /=
-      if (
-        nextCode === 43 || // '+'
-        nextCode === 45 || // '-'
-        nextCode === 42 || // '*'
-        nextCode === 47 // '/'
-      ) {
-        if (source.charCodeAt(afterIdPos + 1) === 61) {
-          // Compound assignment operator found
-          const assignPos = skipWhitespace(source, afterIdPos + 2);
+    // Check if this is an assignment attempt
+    const isCompoundAssignment =
+      (nextCode === 43 ||
+        nextCode === 45 ||
+        nextCode === 42 ||
+        nextCode === 47) &&
+      source.charCodeAt(afterIdPos + 1) === 61;
+    // Simple assignment is '=' but not '==' or '=>' or other operators ending in '='
+    const isSimpleAssignment =
+      nextCode === 61 && source.charCodeAt(afterIdPos + 1) !== 61;
 
-          // Parse RHS expression
-          const rhsResult = parseLogicalOr(source, assignPos, env);
-          const rhsValue = rhsResult.value;
-          const currentValue = entry.value;
-
-          // Apply the operator
-          let newValue = currentValue;
-          if (nextCode === 43) {
-            // '+'
-            newValue = currentValue + rhsValue;
-          } else if (nextCode === 45) {
-            // '-'
-            newValue = currentValue - rhsValue;
-          } else if (nextCode === 42) {
-            // '*'
-            newValue = currentValue * rhsValue;
-          } else if (nextCode === 47) {
-            // '/'
-            newValue = currentValue / rhsValue;
-          }
-
-          return completeAssignment(
-            source,
-            rhsResult.pos,
-            env,
-            varName,
-            newValue,
-          );
-        }
+    if (isCompoundAssignment || isSimpleAssignment) {
+      // This is an assignment - check if variable exists and is mutable
+      const entry = varName in env ? env[varName] : null;
+      if (!entry) {
+        throw new Error(`Undefined variable: ${varName}`);
+      }
+      if (entry.type !== "variable") {
+        throw new Error(`Cannot assign to non-variable: ${varName}`);
+      }
+      if (!entry.mutable) {
+        throw new Error(`Cannot reassign immutable variable: ${varName}`);
       }
 
-      // Check if this is followed by '='
-      if (nextCode === 61) {
-        // '=' - this is an assignment
-        const assignPos = skipWhitespace(source, afterIdPos + 1);
+      // Variable is mutable, process the assignment
+      if (isCompoundAssignment) {
+        // Compound assignment operators: +=, -=, *=, /=
+        const assignPos = skipWhitespace(source, afterIdPos + 2);
+        const rhsResult = parseLogicalOr(source, assignPos, env);
+        const rhsValue = rhsResult.value;
+        const currentValue = entry.value;
 
-        // Parse RHS expression
+        let newValue = currentValue;
+        if (nextCode === 43) {
+          // '+'
+          newValue = currentValue + rhsValue;
+        } else if (nextCode === 45) {
+          // '-'
+          newValue = currentValue - rhsValue;
+        } else if (nextCode === 42) {
+          // '*'
+          newValue = currentValue * rhsValue;
+        } else if (nextCode === 47) {
+          // '/'
+          newValue = currentValue / rhsValue;
+        }
+
+        return completeAssignment(
+          source,
+          rhsResult.pos,
+          env,
+          varName,
+          newValue,
+        );
+      } else {
+        // Simple assignment
+        const assignPos = skipWhitespace(source, afterIdPos + 1);
         const rhsResult = parseLogicalOr(source, assignPos, env);
         const newValue = rhsResult.value;
 
@@ -3819,7 +3841,18 @@ export function interpret(source: string): number {
     return 0;
   }
 
-  const result = parseStatement(source, 0, {});
+  const globalEnv: Env = {};
+  let result = parseStatement(source, 0, globalEnv);
+  let pos = skipWhitespace(source, result.pos);
+
+  // Continue parsing additional top-level statements/expressions until EOF
+  let iterations = 0;
+  while (pos < source.length && iterations < MAX_LOOP_ITERATIONS) {
+    result = parseStatement(source, pos, globalEnv);
+    pos = skipWhitespace(source, result.pos);
+    iterations++;
+  }
+
   // Normalize -0 to +0 for consistency
   return result.value === 0 ? 0 : result.value;
 }

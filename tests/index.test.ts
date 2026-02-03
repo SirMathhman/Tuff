@@ -4,9 +4,9 @@ function expectValid(source: string, exitCode: number) {
   expect(interpret(source)).toBe(exitCode);
 }
 
-// function expectInvalid(source: string) {
-//   expect(() => interpret(source)).toThrow();
-// }
+function expectInvalid(source: string) {
+  expect(() => interpret(source)).toThrow();
+}
 
 describe("The interpreter can interpret basics", () => {
   test("an empty program", () => {
@@ -600,6 +600,150 @@ describe("Numerical Literal Semantics: Type Coercion", () => {
 
   test("negation preserves type in coercion", () => {
     expectValid("-42I32 + 10I32", -32);
+  });
+});
+
+describe("Let and Mut Semantics", () => {
+  describe("Immutability enforcement", () => {
+    test("mutable variable can be reassigned", () => {
+      expectValid("let mut x = 0; x = 42; x", 42);
+    });
+
+    test("immutable variable cannot be reassigned", () => {
+      expectInvalid("let x = 0; x = 42; x");
+    });
+
+    test("attempt to reassign immutable let when already bound", () => {
+      expectInvalid("let x = 5; x = 10; x");
+    });
+
+    test("mut keyword required to enable reassignment", () => {
+      expectInvalid("let x = 1; x += 5; x");
+    });
+
+    test("compound assignment on immutable fails", () => {
+      expectInvalid("let x = 10; x -= 5; x");
+    });
+  });
+
+  describe("Scoping and no-shadowing", () => {
+    test("variable scoped to block is not accessible outside", () => {
+      expectInvalid("{ let x = 5; } x");
+    });
+
+    test("nested block can access outer scope variable", () => {
+      expectValid("let x = 5; { x }", 5);
+    });
+
+    test("mutable variable in outer scope mutated in inner block", () => {
+      expectValid("let mut x = 5; { x = 10; } x", 10);
+    });
+
+    test("shadowing in same scope is not allowed", () => {
+      expectInvalid("let x = 0; let x = 0; x");
+    });
+
+    test("shadowing with different names in same scope is allowed", () => {
+      expectValid("let x = 5; let y = 10; x + y", 15);
+    });
+
+    test("variable from outer scope preserved after inner block", () => {
+      expectValid("let x = 5; { let y = 10; } x", 5);
+    });
+
+    test("in nested scopes, inner scope bindings do not affect outer", () => {
+      expectValid("let x = 5; { let y = 10; y } x", 5);
+    });
+
+    test("nested blocks cannot shadow outer in same declaration block", () => {
+      expectInvalid("let x = 1; { let x = 2; x }");
+    });
+  });
+
+  describe("Type interactions with let/mut", () => {
+    test("let with explicit type annotation", () => {
+      expectValid("let x : I32 = 100; x", 100);
+    });
+
+    test("let with type annotation and reassignment (mut)", () => {
+      expectValid("let mut x : I32 = 100; x = 200; x", 200);
+    });
+
+    test("let type inference from literal", () => {
+      expectValid("let x = 42; x", 42);
+    });
+
+    test("mut type inference from literal with reassignment", () => {
+      expectValid("let mut x = 42; x = 99; x", 99);
+    });
+
+    test("let with typed literal suffix", () => {
+      expectValid("let x = 100U8; x", 100);
+    });
+
+    test("let mut with type coercion on reassignment", () => {
+      expectValid("let mut x : I32 = 10U8; x = 20; x", 20);
+    });
+
+    test("multiple type annotations in sequence", () => {
+      expectValid("let x : I32 = 10; let y : I32 = 20; x + y", 30);
+    });
+
+    test("type inference from binary operation", () => {
+      expectValid("let x = 10 + 20; x", 30);
+    });
+  });
+
+  describe("Let/mut in control flow", () => {
+    test("let binding in if expression", () => {
+      expectValid("let x = if (true) 42 else 0; x", 42);
+    });
+
+    test("mutable binding in loop with reassignment", () => {
+      expectValid("let mut sum = 0; for (i in 0..5) sum += i; sum", 10);
+    });
+
+    test("let binding in function parameter does not shadow outer let", () => {
+      expectValid("let x = 5; fn getId(x : I32) => x; getId(10)", 10);
+    });
+
+    test("function local let does not affect outer let", () => {
+      expectValid("let x = 5; fn test() => { let x = 10; x }; test(); x", 5);
+    });
+
+    test("mutable binding in function modifying outer mutable", () => {
+      expectValid("let mut x = 0; fn add() => x += 1; add(); x", 1);
+    });
+
+    test("let in while loop condition and body", () => {
+      expectValid("let mut x = 0; while (x < 5) x += 1; x", 5);
+    });
+  });
+
+  describe("Let/mut edge cases", () => {
+    test("let binding uses value at binding time", () => {
+      expectValid("let x = 10; let y = x; x", 10);
+    });
+
+    test("mut binding preserves previous value until reassignment", () => {
+      expectValid("let mut x = 10; let y = x; x = 20; y", 10);
+    });
+
+    test("reassignment does not affect previous bindings", () => {
+      expectValid("let mut x = 5; let y = x; x = 10; (y + x)", 15);
+    });
+
+    test("multiple sequential let bindings", () => {
+      expectValid("let a = 1; let b = 2; let c = 3; a + b + c", 6);
+    });
+
+    test("let and mut can coexist", () => {
+      expectValid("let x = 5; let mut y = 10; y = 15; x + y", 20);
+    });
+
+    test("reassignment to same value is allowed", () => {
+      expectValid("let mut x = 42; x = 42; x", 42);
+    });
   });
 });
 
