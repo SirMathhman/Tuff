@@ -46,12 +46,6 @@ type Env = Record<string, EnvEntry>;
 
 type ParserFn = (_source: string, _pos: number, _env: Env) => ParserResult;
 
-type ConditionParserFn = (
-  _source: string,
-  _pos: number,
-  _env: Env,
-) => { condition: number; pos: number } | null;
-
 type ParserResult = { value: number; pos: number };
 /* eslint-enable no-unused-vars */
 
