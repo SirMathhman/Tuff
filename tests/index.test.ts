@@ -283,6 +283,13 @@ describe("The interpreter can interpret data", () => {
   test("string literal and indexing", () => {
     expectValid('let c : *Str = "test"; c[1]', 101);
   });
+
+  test("function reference assignment and call", () => {
+    expectValid(
+      "let mut x = 0; fn add() : Void => x += 1; let temp : () => Void = add; temp(); x",
+      1,
+    );
+  });
 });
 
 describe("The interpreter can interpret operators", () => {

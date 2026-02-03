@@ -11,6 +11,10 @@ type FunctionDef = {
   body: string;
   bodyPos: number;
 };
+type FunctionRef = {
+  type: "functionRef";
+  functionName: string;
+};
 type ArrayDef = { type: "array"; elements: number[] };
 type StringDef = { type: "string"; value: string };
 type StructDef = {
@@ -36,6 +40,7 @@ type TypeAlias = {
 type EnvEntry =
   | Variable
   | FunctionDef
+  | FunctionRef
   | ArrayDef
   | StringDef
   | StructDef
@@ -968,6 +973,19 @@ function parsePrimaryIdentifier(
     }
   }
 
+  // Check for function reference call
+  if (entry.type === "functionRef") {
+    const fnRef = entry as FunctionRef;
+    const referencedFn = env[fnRef.functionName];
+    if (referencedFn && referencedFn.type === "function") {
+      const fnEntry = referencedFn as FunctionDef;
+      const fnResult = tryParseFunctionCall(source, afterIdPos, env, fnEntry);
+      if (fnResult) {
+        return fnResult;
+      }
+    }
+  }
+
   // Check for enum variant access
   const enumResult = tryParseEnumVariant(source, afterIdPos, entry);
   if (enumResult) {
@@ -1102,7 +1120,11 @@ function parseFunctionCall(
     }
   }
 
-  const bodyResult = parseAssignmentOrExpression(source, fnEntry.bodyPos, callEnv);
+  const bodyResult = parseAssignmentOrExpression(
+    source,
+    fnEntry.bodyPos,
+    callEnv,
+  );
   return { value: bodyResult.value, pos: argPos };
 }
 
@@ -1592,11 +1614,12 @@ function parseLetTypeAnnotation(
   source: string,
   pos: number,
   env: Env,
-): { structType: string | null; pos: number } {
+): { structType: string | null; isFunctionType: boolean; pos: number } {
   let structType: string | null = null;
+  let isFunctionType = false;
   const typePos = parseTypeAnnotationColon(source, pos);
   if (typePos === null) {
-    return { structType, pos };
+    return { structType, isFunctionType, pos };
   }
 
   let currentPos = typePos;
@@ -1604,7 +1627,25 @@ function parseLetTypeAnnotation(
     currentPos = skipWhitespace(source, currentPos + 1);
   }
 
-  if (source.charCodeAt(currentPos) !== 91) {
+  // Check for function type: ( ... ) => ...
+  if (source.charCodeAt(currentPos) === 40) {
+    // '('
+    const afterParen = skipBalancedBrackets(source, currentPos, 40, 41);
+    const afterParenClean = skipWhitespace(source, afterParen);
+    if (
+      source.charCodeAt(afterParenClean) === 61 &&
+      source.charCodeAt(afterParenClean + 1) === 62
+    ) {
+      // '=>' found - this is a function type
+      isFunctionType = true;
+      currentPos = skipWhitespace(source, afterParenClean + 2);
+      // Skip the return type
+      const returnType = parseIdentifier(source, currentPos);
+      if (returnType) {
+        currentPos = skipWhitespace(source, returnType.end);
+      }
+    }
+  } else if (source.charCodeAt(currentPos) !== 91) {
     const typeId = parseIdentifier(source, currentPos);
     if (typeId) {
       // Skip generic type parameters if present: <I32>, etc.
@@ -1633,7 +1674,7 @@ function parseLetTypeAnnotation(
     currentPos = skipWhitespace(source, currentPos);
   }
 
-  return { structType, pos: currentPos };
+  return { structType, isFunctionType, pos: currentPos };
 }
 
 function tryParseStructInstantiation(
@@ -1789,6 +1830,7 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
 
   const typeInfo = parseLetTypeAnnotation(source, pos, env);
   let structType: string | null = typeInfo.structType;
+  const isFunctionType = typeInfo.isFunctionType;
   pos = typeInfo.pos;
 
   // Skip '='
@@ -1800,29 +1842,57 @@ function parseLetBinding(source: string, pos: number, env: Env): ParserResult {
   pos = skipWhitespace(source, pos);
 
   let entry: EnvEntry;
-  const structResult = tryParseStructInstantiation(
-    source,
-    pos,
-    env,
-    structType,
-  );
-  if (structResult) {
-    entry = structResult.entry;
-    pos = structResult.pos;
-  } else {
-    const arrayResult = tryParseArrayLiteral(source, pos, env);
-    if (arrayResult) {
-      entry = arrayResult.entry;
-      pos = arrayResult.pos;
-    } else {
-      const stringResult = tryParseStringLiteral(source, pos, isMutable);
-      if (stringResult) {
-        entry = stringResult.entry;
-        pos = stringResult.pos;
+
+  // Check if this is a function reference assignment
+  if (isFunctionType) {
+    const functionNameId = parseIdentifier(source, pos);
+    if (functionNameId && functionNameId.name in env) {
+      const potentialFn = env[functionNameId.name];
+      if (potentialFn && potentialFn.type === "function") {
+        // This is a function reference - create FunctionRef entry
+        entry = {
+          type: "functionRef",
+          functionName: functionNameId.name,
+        };
+        pos = skipWhitespace(source, functionNameId.end);
       } else {
+        // Not a function, fall through to normal parsing
         const result = createVariableEntry(source, pos, env, isMutable);
         entry = result.entry;
         pos = result.pos;
+      }
+    } else {
+      // Function not found, fall through to normal parsing
+      const result = createVariableEntry(source, pos, env, isMutable);
+      entry = result.entry;
+      pos = result.pos;
+    }
+  } else {
+    // Not a function type, parse normally
+    const structResult = tryParseStructInstantiation(
+      source,
+      pos,
+      env,
+      structType,
+    );
+    if (structResult) {
+      entry = structResult.entry;
+      pos = structResult.pos;
+    } else {
+      const arrayResult = tryParseArrayLiteral(source, pos, env);
+      if (arrayResult) {
+        entry = arrayResult.entry;
+        pos = arrayResult.pos;
+      } else {
+        const stringResult = tryParseStringLiteral(source, pos, isMutable);
+        if (stringResult) {
+          entry = stringResult.entry;
+          pos = stringResult.pos;
+        } else {
+          const result = createVariableEntry(source, pos, env, isMutable);
+          entry = result.entry;
+          pos = result.pos;
+        }
       }
     }
   }
@@ -2203,8 +2273,7 @@ function parseYieldOrReturn(
 ): ParserResult {
   pos = skipWhitespace(source, pos);
   const exprResult = parseLogicalOr(source, pos, env);
-  const flagName =
-    type === "yield" ? "yieldRequested" : "returnRequested";
+  const flagName = type === "yield" ? "yieldRequested" : "returnRequested";
   const valueName = type === "yield" ? "yieldValue" : "returnValue";
   (env as any)[flagName] = true;
   (env as any)[valueName] = exprResult.value;
