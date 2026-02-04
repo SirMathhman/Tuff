@@ -59,14 +59,36 @@ fn extract_first_term(input: &str) -> String {
     current_term
 }
 
-fn get_first_term_type(input: &str) -> String {
-    extract_type_suffix(extract_first_term(input).trim())
+fn type_rank(type_suffix: &str) -> (u32, bool) {
+    match type_suffix.to_uppercase().as_str() {
+        "U8" => (1, false),
+        "U16" => (2, false),
+        "U32" => (3, false),
+        "U64" => (4, false),
+        "I8" => (1, true),
+        "I16" => (2, true),
+        "I32" => (3, true),
+        "I64" => (4, true),
+        "" => (0, true),
+        _ => (0, true),
+    }
 }
 
-fn evaluate_expression(input: &str) -> Result<i32, String> {
-    let first_type_suffix = get_first_term_type(input);
+fn is_type_wider(new_rank: (u32, bool), old_rank: (u32, bool)) -> bool {
+    if new_rank.0 == 0 || old_rank.0 == 0 {
+        return new_rank.0 > old_rank.0;
+    }
+    if new_rank.1 != old_rank.1 {
+        return false;
+    }
+    new_rank.0 > old_rank.0
+}
+
+fn extract_all_terms(input: &str) -> Vec<String> {
+    let mut terms = Vec::new();
     let first_term = extract_first_term(input);
-    let mut result = parse_term(&first_term)?;
+    terms.push(first_term.clone());
+
     let chars: Vec<char> = input.chars().collect();
     let mut idx = first_term.len();
 
@@ -79,35 +101,72 @@ fn evaluate_expression(input: &str) -> Result<i32, String> {
             break;
         }
 
-        let current_op = if chars[idx] == '+' || chars[idx] == '-' {
-            let op = chars[idx];
+        if chars[idx] == '+' || chars[idx] == '-' {
             idx += 1;
-            op
         } else {
             break;
-        };
+        }
 
         while idx < chars.len() && chars[idx].is_whitespace() {
             idx += 1;
         }
 
-        let mut term_str = String::new();
+        let term_start = idx;
         while idx < chars.len() && (chars[idx].is_numeric() || chars[idx] == '-') {
-            term_str.push(chars[idx]);
             idx += 1;
         }
 
         while idx < chars.len() && (chars[idx].is_alphabetic() || chars[idx].is_numeric()) {
-            term_str.push(chars[idx]);
             idx += 1;
         }
 
-        let term_value = parse_term(&term_str)?;
-        result = apply_operation(result, term_value, current_op);
+        let term_str: String = chars[term_start..idx].iter().collect();
+        if !term_str.trim().is_empty() {
+            terms.push(term_str);
+        }
     }
 
-    if !first_type_suffix.is_empty() {
-        validate_and_convert(result as i64, &first_type_suffix)?;
+    terms
+}
+
+fn get_max_type_in_expression(input: &str) -> String {
+    let terms = extract_all_terms(input);
+    let mut max_type = extract_type_suffix(terms[0].trim());
+    let mut max_rank = type_rank(&max_type);
+
+    for i in 1..terms.len() {
+        let term_type = extract_type_suffix(terms[i].trim());
+        let term_rank = type_rank(&term_type);
+
+        if is_type_wider(term_rank, max_rank) {
+            max_type = term_type;
+            max_rank = term_rank;
+        }
+    }
+
+    max_type
+}
+
+fn evaluate_expression(input: &str) -> Result<i32, String> {
+    let terms = extract_all_terms(input);
+    let mut ops = Vec::new();
+
+    for ch in input.chars() {
+        if ch == '+' || ch == '-' {
+            ops.push(ch);
+        }
+    }
+
+    let mut result = parse_term(&terms[0])?;
+    for (i, term) in terms.iter().enumerate().skip(1) {
+        let term_value = parse_term(term)?;
+        let op = ops.get(i - 1).copied().unwrap_or('+');
+        result = apply_operation(result, term_value, op);
+    }
+
+    let max_type = get_max_type_in_expression(input);
+    if !max_type.is_empty() {
+        validate_and_convert(result as i64, &max_type)?;
     }
 
     Ok(result)
@@ -373,5 +432,10 @@ mod tests {
     #[test]
     fn test_interpret_expression_overflow_same_type() {
         assert!(interpret("1U8 + 255U8").is_err());
+    }
+
+    #[test]
+    fn test_interpret_expression_mixed_type_expansion() {
+        assert_eq!(interpret("1U8 + 255U16"), Ok(256));
     }
 }
