@@ -33,6 +33,7 @@ public class Main {
 
 	private static String compile(String input) {
 		final var stripped = input.strip();
-		return "/*" + stripped + "*/";
+		final var replaced = stripped.replace("/*", "start").replace("*/", "end");
+		return "/*" + replaced + "*/";
 	}
 }

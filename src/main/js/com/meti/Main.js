@@ -4,14 +4,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
-/**
+start*
  *
- */
+ end
 public class Main {
-	/**
+	start*
 	 *
 	 * @param args
-	 */
+	 end
 	public static void main(String[] args) {
 		try {
 			final var rootDirectory = Paths.get("./src/main");
@@ -33,6 +33,6 @@ public class Main {
 
 	private static String compile(String input) {
 		final var stripped = input.strip();
-		return "/*" + stripped + "*/";
+		return "start" + stripped.replace("start", "start").replace("end", "end") + "end";
 	}
 }*/
