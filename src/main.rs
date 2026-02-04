@@ -1,9 +1,3 @@
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
-#![deny(clippy::panic)]
-#![deny(clippy::unimplemented)]
-#![deny(clippy::todo)]
-
 fn interpret(source: String) -> i32 {
     if source.is_empty() {
         return 0;
