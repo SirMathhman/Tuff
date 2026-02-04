@@ -523,4 +523,9 @@ mod tests {
     fn test_interpret_expression_multiplication() {
         assert_eq!(interpret("2 * 3 - 4"), Ok(2));
     }
+
+    #[test]
+    fn test_interpret_expression_add_then_multiply() {
+        assert_eq!(interpret("4 + 2 * 3"), Ok(10));
+    }
 }
