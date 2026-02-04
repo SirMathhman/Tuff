@@ -17,7 +17,6 @@ fn parse_input(input: &str) -> (&str, String) {
     (number_part, type_suffix)
 }
 
-#[allow(dead_code)]
 fn parse_and_validate(input: &str) -> Result<i32, String> {
     let (number_part, type_suffix) = parse_input(input);
 
@@ -32,12 +31,10 @@ fn parse_and_validate(input: &str) -> Result<i32, String> {
     validate_and_convert(value, &type_suffix)
 }
 
-#[allow(dead_code)]
 fn parse_term(term: &str) -> Result<i32, String> {
     parse_and_validate(term.trim())
 }
 
-#[allow(dead_code)]
 fn apply_operation(left: i32, right: i32, op: char) -> i32 {
     match op {
         '+' => left.saturating_add(right),
@@ -46,7 +43,6 @@ fn apply_operation(left: i32, right: i32, op: char) -> i32 {
     }
 }
 
-#[allow(dead_code)]
 fn evaluate_expression(input: &str) -> Result<i32, String> {
     let mut result = 0i32;
     let mut current_op = '+';
@@ -130,7 +126,6 @@ fn validate_and_convert(value: i64, type_suffix: &str) -> Result<i32, String> {
     }
 }
 
-#[allow(dead_code)]
 fn interpret(input: &str) -> Result<i32, String> {
     if input.is_empty() {
         return Ok(0);
@@ -144,7 +139,27 @@ fn interpret(input: &str) -> Result<i32, String> {
 }
 
 fn main() {
-    println!("Hello, world!");
+    // Simple REPL for interpret
+
+    use std::io::{self, Write};
+
+    loop {
+        print!("Enter expression (or 'exit' to quit): ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        let input = input.trim();
+
+        if input.eq_ignore_ascii_case("exit") {
+            break;
+        }
+
+        match interpret(input) {
+            Ok(result) => println!("Result: {}", result),
+            Err(e) => println!("Error: {}", e),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -298,5 +313,10 @@ mod tests {
     #[test]
     fn test_interpret_expression_addition() {
         assert_eq!(interpret("1U8 + 2U8"), Ok(3));
+    }
+
+    #[test]
+    fn test_interpret_expression_mixed_types() {
+        assert_eq!(interpret("1U8 + 2"), Ok(3));
     }
 }
