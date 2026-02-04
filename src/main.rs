@@ -39,8 +39,59 @@ fn apply_operation(left: i32, right: i32, op: char) -> i32 {
     match op {
         '+' => left.saturating_add(right),
         '-' => left.saturating_sub(right),
+        '*' => left.saturating_mul(right),
         _ => left,
     }
+}
+
+fn is_high_precedence(op: char) -> bool {
+    op == '*'
+}
+
+fn skip_term_and_get_op(input: &str, idx: &mut usize) -> Option<char> {
+    let chars: Vec<char> = input.chars().collect();
+
+    while *idx < chars.len() && chars[*idx].is_whitespace() {
+        *idx += 1;
+    }
+
+    if *idx >= chars.len() {
+        return None;
+    }
+
+    let op = if chars[*idx] == '+' || chars[*idx] == '-' || chars[*idx] == '*' {
+        let op = chars[*idx];
+        *idx += 1;
+        op
+    } else {
+        return None;
+    };
+
+    while *idx < chars.len() && chars[*idx].is_whitespace() {
+        *idx += 1;
+    }
+
+    while *idx < chars.len() && (chars[*idx].is_numeric() || chars[*idx] == '-') {
+        *idx += 1;
+    }
+
+    while *idx < chars.len() && (chars[*idx].is_alphabetic() || chars[*idx].is_numeric()) {
+        *idx += 1;
+    }
+
+    Some(op)
+}
+
+fn extract_operators(input: &str) -> Vec<char> {
+    let first_term = extract_first_term(input);
+    let mut idx = first_term.len();
+    let mut ops = Vec::new();
+
+    while let Some(op) = skip_term_and_get_op(input, &mut idx) {
+        ops.push(op);
+    }
+
+    ops
 }
 
 fn extract_type_suffix(term: &str) -> String {
@@ -52,7 +103,7 @@ fn extract_first_term(input: &str) -> String {
     let mut current_term = String::new();
     for ch in input.chars() {
         match ch {
-            '+' | '-' if !current_term.trim().is_empty() => break,
+            '+' | '-' | '*' if !current_term.trim().is_empty() => break,
             _ => current_term.push(ch),
         }
     }
@@ -101,7 +152,7 @@ fn extract_all_terms(input: &str) -> Vec<String> {
             break;
         }
 
-        if chars[idx] == '+' || chars[idx] == '-' {
+        if chars[idx] == '+' || chars[idx] == '-' || chars[idx] == '*' {
             idx += 1;
         } else {
             break;
@@ -149,19 +200,30 @@ fn get_max_type_in_expression(input: &str) -> String {
 
 fn evaluate_expression(input: &str) -> Result<i32, String> {
     let terms = extract_all_terms(input);
-    let mut ops = Vec::new();
+    let ops = extract_operators(input);
 
-    for ch in input.chars() {
-        if ch == '+' || ch == '-' {
-            ops.push(ch);
+    let mut parsed_terms: Vec<i32> = Vec::new();
+    for term in &terms {
+        parsed_terms.push(parse_term(term)?);
+    }
+
+    let mut current_ops = ops.clone();
+
+    let mut i = 0;
+    while i < current_ops.len() {
+        if is_high_precedence(current_ops[i]) {
+            let result = apply_operation(parsed_terms[i], parsed_terms[i + 1], current_ops[i]);
+            parsed_terms.remove(i + 1);
+            parsed_terms[i] = result;
+            current_ops.remove(i);
+        } else {
+            i += 1;
         }
     }
 
-    let mut result = parse_term(&terms[0])?;
-    for (i, term) in terms.iter().enumerate().skip(1) {
-        let term_value = parse_term(term)?;
-        let op = ops.get(i - 1).copied().unwrap_or('+');
-        result = apply_operation(result, term_value, op);
+    let mut result = parsed_terms[0];
+    for (i, op) in current_ops.iter().enumerate() {
+        result = apply_operation(result, parsed_terms[i + 1], *op);
     }
 
     let max_type = get_max_type_in_expression(input);
@@ -235,7 +297,10 @@ fn interpret(input: &str) -> Result<i32, String> {
         return Ok(0);
     }
 
-    if input.contains('+') || (input.contains('-') && input.match_indices('-').count() > 1) {
+    if input.contains('+')
+        || input.contains('*')
+        || (input.contains('-') && input.match_indices('-').count() > 1)
+    {
         return evaluate_expression(input);
     }
 
@@ -452,5 +517,10 @@ mod tests {
     #[test]
     fn test_interpret_expression_subtraction() {
         assert_eq!(interpret("2 + 3 - 4"), Ok(1));
+    }
+
+    #[test]
+    fn test_interpret_expression_multiplication() {
+        assert_eq!(interpret("2 * 3 - 4"), Ok(2));
     }
 }
