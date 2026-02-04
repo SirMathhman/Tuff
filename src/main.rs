@@ -1,15 +1,29 @@
 fn compile_tuff_to_js(inpsourceut: String) -> Result<String, String> {
     // Strip type suffixes from numeric literals
     // E.g., "100U8" -> "100", "42I32" -> "42", "-100I8" -> "-100"
+    // Error on negative unsigned types: "-100U8" -> Err
     let mut result = inpsourceut.clone();
 
-    // Remove type suffixes at the end
+    // Check for unsigned type suffixes
+    let unsigned_types = ["U8", "U16", "U32", "U64"];
+    for unsigned_type in &unsigned_types {
+        if result.ends_with(unsigned_type) {
+            if let Some(captured) = result.strip_suffix(unsigned_type) {
+                if captured.starts_with('-') {
+                    return Err(format!(
+                        "Negative numbers cannot have unsigned type suffixes: {}",
+                        inpsourceut
+                    ));
+                }
+                result = captured.to_string();
+                return Ok(result);
+            }
+        }
+    }
+
+    // Remove type suffixes at the end for signed and float types
     if let Some(captured) = result
-        .strip_suffix("U8")
-        .or_else(|| result.strip_suffix("U16"))
-        .or_else(|| result.strip_suffix("U32"))
-        .or_else(|| result.strip_suffix("U64"))
-        .or_else(|| result.strip_suffix("I8"))
+        .strip_suffix("I8")
         .or_else(|| result.strip_suffix("I16"))
         .or_else(|| result.strip_suffix("I32"))
         .or_else(|| result.strip_suffix("I64"))
@@ -90,7 +104,12 @@ mod tests {
     }
 
     #[test]
-    fn test_run_negative_typed_numeric_literal() {
+    fn test_run_negative_unsigned_typed_literal() {
+        assert_eq!(run("-100U8".to_string()), 1); // Error code
+    }
+
+    #[test]
+    fn test_run_negative_signed_typed_literal() {
         assert_eq!(run("-100I8".to_string()), -100);
     }
 }
