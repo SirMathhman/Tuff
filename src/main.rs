@@ -297,14 +297,59 @@ fn interpret(input: &str) -> Result<i32, String> {
         return Ok(0);
     }
 
+    let expanded = expand_parentheses(input)?;
+
+    if expanded.contains('+')
+        || expanded.contains('*')
+        || (expanded.contains('-') && expanded.match_indices('-').count() > 1)
+    {
+        return evaluate_expression(&expanded);
+    }
+
+    parse_and_validate(&expanded)
+}
+
+fn expand_parentheses(input: &str) -> Result<String, String> {
+    let mut result = input.to_string();
+
+    while result.contains('(') {
+        let open_idx = result.rfind('(').unwrap();
+        let close_idx = result.find(')').ok_or("Mismatched parentheses")?;
+
+        if close_idx <= open_idx {
+            return Err("Mismatched parentheses".to_string());
+        }
+
+        let inner = &result[open_idx + 1..close_idx];
+        let expanded_inner = expand_parentheses(inner)?;
+        let inner_value = evaluate_inner(&expanded_inner)?;
+
+        result = format!(
+            "{}{}{}",
+            &result[..open_idx],
+            inner_value,
+            &result[close_idx + 1..]
+        );
+    }
+
+    Ok(result)
+}
+
+fn evaluate_inner(input: &str) -> Result<String, String> {
+    if input.is_empty() {
+        return Ok("0".to_string());
+    }
+
     if input.contains('+')
         || input.contains('*')
         || (input.contains('-') && input.match_indices('-').count() > 1)
     {
-        return evaluate_expression(input);
+        let value = evaluate_expression(input)?;
+        Ok(value.to_string())
+    } else {
+        let value = parse_and_validate(input)?;
+        Ok(value.to_string())
     }
-
-    parse_and_validate(input)
 }
 
 fn main() {
@@ -527,5 +572,10 @@ mod tests {
     #[test]
     fn test_interpret_expression_add_then_multiply() {
         assert_eq!(interpret("4 + 2 * 3"), Ok(10));
+    }
+
+    #[test]
+    fn test_interpret_expression_with_parentheses() {
+        assert_eq!(interpret("(4 + 2) * 3"), Ok(18));
     }
 }
