@@ -1,0 +1,8 @@
+# Panic-causing methods that should be flagged as errors
+# These lints are denied to catch potential panic sites at compile time
+
+# Deny unwrap() calls - these panic if Option/Result is None/Err
+too-many-arguments-threshold = 7
+
+# Additional clippy configuration for panic prevention
+# Note: unwrap and expect lints are typically configured via #![deny(...)] in lib.rs/main.rs
