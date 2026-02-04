@@ -17,6 +17,61 @@ fn parse_input(input: &str) -> (&str, String) {
     (number_part, type_suffix)
 }
 
+#[allow(dead_code)]
+fn parse_and_validate(input: &str) -> Result<i32, String> {
+    let (number_part, type_suffix) = parse_input(input);
+
+    if number_part.is_empty() || number_part == "-" {
+        return Ok(0);
+    }
+
+    let value = number_part
+        .parse::<i64>()
+        .map_err(|_| "Failed to parse number".to_string())?;
+
+    validate_and_convert(value, &type_suffix)
+}
+
+#[allow(dead_code)]
+fn parse_term(term: &str) -> Result<i32, String> {
+    parse_and_validate(term.trim())
+}
+
+#[allow(dead_code)]
+fn apply_operation(left: i32, right: i32, op: char) -> i32 {
+    match op {
+        '+' => left.saturating_add(right),
+        '-' => left.saturating_sub(right),
+        _ => left,
+    }
+}
+
+#[allow(dead_code)]
+fn evaluate_expression(input: &str) -> Result<i32, String> {
+    let mut result = 0i32;
+    let mut current_op = '+';
+    let mut current_term = String::new();
+
+    for ch in input.chars() {
+        match ch {
+            '+' | '-' if !current_term.trim().is_empty() => {
+                let term_value = parse_term(&current_term)?;
+                result = apply_operation(result, term_value, current_op);
+                current_op = ch;
+                current_term.clear();
+            }
+            _ => current_term.push(ch),
+        }
+    }
+
+    if !current_term.trim().is_empty() {
+        let term_value = parse_term(&current_term)?;
+        result = apply_operation(result, term_value, current_op);
+    }
+
+    Ok(result)
+}
+
 fn validate_unsigned(value: i64, bits: u32) -> Result<i32, String> {
     let max = (1i64 << bits) - 1;
     if (0..=max).contains(&value) {
@@ -81,17 +136,11 @@ fn interpret(input: &str) -> Result<i32, String> {
         return Ok(0);
     }
 
-    let (number_part, type_suffix) = parse_input(input);
-
-    if number_part.is_empty() || number_part == "-" {
-        return Ok(0);
+    if input.contains('+') || (input.contains('-') && input.match_indices('-').count() > 1) {
+        return evaluate_expression(input);
     }
 
-    let value = number_part
-        .parse::<i64>()
-        .map_err(|_| "Failed to parse number".to_string())?;
-
-    validate_and_convert(value, &type_suffix)
+    parse_and_validate(input)
 }
 
 fn main() {
@@ -243,5 +292,11 @@ mod tests {
     #[test]
     fn test_interpret_100u8_lowercase() {
         assert_eq!(interpret("100u8"), Ok(100));
+    }
+
+    // Expression tests
+    #[test]
+    fn test_interpret_expression_addition() {
+        assert_eq!(interpret("1U8 + 2U8"), Ok(3));
     }
 }
