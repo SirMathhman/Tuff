@@ -3,6 +3,8 @@ package com.meti;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 /**
  *
@@ -33,6 +35,32 @@ public class Main {
 
 	private static String compile(String input) {
 		final var stripped = input.strip();
+
+		final var segments = new ArrayList<String>();
+		var buffer = new StringBuilder();
+		var depth = 0;
+		for (var i = 0; i < stripped.length(); i++) {
+			final var c = stripped.charAt(i);
+			buffer.append(c);
+			if (c == ';' && depth == 0) {
+				segments.add(buffer.toString());
+				buffer = new StringBuilder();
+			} else {
+				if (c == '{') {
+					depth++;
+				}
+				if (c == '}') {
+					depth--;
+				}
+			}
+		}
+
+		segments.add(buffer.toString());
+
+		return segments.stream().map(Main::wrap).collect(Collectors.joining());
+	}
+
+	private static String wrap(String stripped) {
 		final var replaced = stripped.replace("/*", "start").replace("*/", "end");
 		return "/*" + replaced + "*/";
 	}
