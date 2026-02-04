@@ -12,12 +12,21 @@ fn interpret(input: &str) -> Result<i32, String> {
             .chars()
             .take_while(|c| c.is_numeric())
             .collect::<String>();
+        let type_suffix = input[number_part.len()..].to_uppercase();
+
         if number_part.is_empty() {
             Ok(0)
         } else {
-            number_part
+            let value: i32 = number_part
                 .parse::<i32>()
-                .map_err(|_| "Failed to parse number".to_string())
+                .map_err(|_| "Failed to parse number".to_string())?;
+
+            // Validate U8 type suffix range
+            if type_suffix == "U8" && value > 255 {
+                return Err("Value exceeds U8 range (0-255)".to_string());
+            }
+
+            Ok(value)
         }
     }
 }
@@ -48,5 +57,10 @@ mod tests {
     #[test]
     fn test_interpret_negative_100u8() {
         assert!(interpret("-100U8").is_err());
+    }
+
+    #[test]
+    fn test_interpret_256u8() {
+        assert!(interpret("256U8").is_err());
     }
 }
