@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -19,11 +20,6 @@ namespace Tuff
         {
             // TODO: Implement Tuff DSL to C compiler
             // This is a stub implementation
-
-            if (string.IsNullOrWhiteSpace(tuffCode))
-            {
-                throw new ArgumentException("Tuff code cannot be empty", nameof(tuffCode));
-            }
 
             // Placeholder: return a simple C program
             return GenerateCStub(tuffCode);
@@ -79,30 +75,93 @@ namespace Tuff
         /// </summary>
         private static void CompileCToExecutable(string cFilePath, string exePath)
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "gcc",
-                Arguments = $"-o \"{exePath}\" \"{cFilePath}\"",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+            // Try common C compilers in order.
+            if (TryCompileWithGccLike("gcc", cFilePath, exePath)) return;
+            if (TryCompileWithGccLike("clang", cFilePath, exePath)) return;
+            if (TryCompileWithGccLike("cc", cFilePath, exePath)) return;
 
-            using (var process = Process.Start(psi))
+            if (OperatingSystem.IsWindows() && TryCompileWithCl(cFilePath, exePath)) return;
+
+            throw new InvalidOperationException(
+                "No supported C compiler found. Install gcc/clang (recommended) or ensure cl.exe is available (VS Developer Command Prompt)."
+            );
+        }
+
+        private static bool TryCompileWithGccLike(string compiler, string cFilePath, string exePath)
+        {
+            try
             {
-                if (process == null)
+                var psi = new ProcessStartInfo
                 {
-                    throw new InvalidOperationException("Failed to start gcc compiler process");
-                }
+                    FileName = compiler,
+                    Arguments = $"-o \"{exePath}\" \"{cFilePath}\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
 
+                using var process = Process.Start(psi);
+                if (process == null) return false;
                 process.WaitForExit();
 
                 if (process.ExitCode != 0)
                 {
                     string errorOutput = process.StandardError.ReadToEnd();
-                    throw new InvalidOperationException($"C compilation failed with exit code {process.ExitCode}: {errorOutput}");
+                    throw new InvalidOperationException($"C compilation with '{compiler}' failed (exit {process.ExitCode}): {errorOutput}");
                 }
+
+                return true;
+            }
+            catch (Win32Exception)
+            {
+                // compiler not found
+                return false;
+            }
+        }
+
+        private static bool TryCompileWithCl(string cFilePath, string exePath)
+        {
+            // cl.exe requires a VC toolchain environment. If it isn't available, starting the process will throw.
+            string workingDir = Path.GetDirectoryName(exePath) ?? Path.GetTempPath();
+            string objPath = Path.Combine(workingDir, Path.GetFileNameWithoutExtension(exePath) + ".obj");
+
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "cl",
+                    // /TC forces C mode. /Fo sets .obj output, /Fe sets .exe output.
+                    Arguments = $"/nologo /TC \"{cFilePath}\" /Fo\"{objPath}\" /Fe\"{exePath}\"",
+                    WorkingDirectory = workingDir,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                using var process = Process.Start(psi);
+                if (process == null) return false;
+                process.WaitForExit();
+
+                if (process.ExitCode != 0)
+                {
+                    string errorOutput = process.StandardError.ReadToEnd();
+                    string stdOutput = process.StandardOutput.ReadToEnd();
+                    throw new InvalidOperationException($"C compilation with 'cl' failed (exit {process.ExitCode}).\n{stdOutput}\n{errorOutput}");
+                }
+
+                // Best-effort cleanup of .obj
+                if (File.Exists(objPath))
+                {
+                    try { File.Delete(objPath); } catch { /* ignore */ }
+                }
+
+                return true;
+            }
+            catch (Win32Exception)
+            {
+                return false;
             }
         }
 
@@ -141,7 +200,6 @@ namespace Tuff
             sb.AppendLine();
             sb.AppendLine("int main(void) {");
             sb.AppendLine("    // Stub implementation of Tuff DSL");
-            sb.AppendLine("    printf(\"Tuff code executed\\n\");");
             sb.AppendLine("    return 0;");
             sb.AppendLine("}");
             return sb.ToString();
