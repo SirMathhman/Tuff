@@ -443,4 +443,9 @@ mod tests {
     fn test_interpret_expression_multiple_terms() {
         assert_eq!(interpret("1 + 2 + 3"), Ok(6));
     }
+
+    #[test]
+    fn test_interpret_expression_three_mixed_types() {
+        assert_eq!(interpret("1U8 + 254 + 1U16"), Ok(256));
+    }
 }
