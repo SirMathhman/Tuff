@@ -18,6 +18,7 @@ fn parse_input(input: &str) -> (&str, String) {
 }
 
 fn parse_and_validate(input: &str) -> Result<i32, String> {
+    let input = input.trim();
     let (number_part, type_suffix) = parse_input(input);
 
     if number_part.is_empty() || number_part == "-" {
@@ -185,8 +186,8 @@ fn get_max_type_in_expression(input: &str) -> String {
     let mut max_type = extract_type_suffix(terms[0].trim());
     let mut max_rank = type_rank(&max_type);
 
-    for i in 1..terms.len() {
-        let term_type = extract_type_suffix(terms[i].trim());
+    for term in terms.iter().skip(1) {
+        let term_type = extract_type_suffix(term.trim());
         let term_rank = type_rank(&term_type);
 
         if is_type_wider(term_rank, max_rank) {
@@ -312,12 +313,27 @@ fn interpret(input: &str) -> Result<i32, String> {
 fn expand_parentheses(input: &str) -> Result<String, String> {
     let mut result = input.to_string();
 
-    while result.contains('(') {
-        let open_idx = result.rfind('(').unwrap();
-        let close_idx = result.find(')').ok_or("Mismatched parentheses")?;
+    loop {
+        let next_open_paren = result.rfind('(');
+        let next_open_brace = result.rfind('{');
+
+        let (open_idx, bracket_type) = match (next_open_paren, next_open_brace) {
+            (Some(p), Some(b)) if p > b => (p, '('),
+            (Some(_), Some(b)) => (b, '{'),
+            (Some(p), None) => (p, '('),
+            (None, Some(b)) => (b, '{'),
+            (None, None) => break,
+        };
+
+        let close_char = if bracket_type == '(' { ')' } else { '}' };
+        let close_idx = result[open_idx + 1..]
+            .find(close_char)
+            .ok_or(format!("Mismatched {:?}", bracket_type))?
+            + open_idx
+            + 1;
 
         if close_idx <= open_idx {
-            return Err("Mismatched parentheses".to_string());
+            return Err(format!("Mismatched {:?}", bracket_type));
         }
 
         let inner = &result[open_idx + 1..close_idx];
@@ -577,5 +593,10 @@ mod tests {
     #[test]
     fn test_interpret_expression_with_parentheses() {
         assert_eq!(interpret("(4 + 2) * 3"), Ok(18));
+    }
+
+    #[test]
+    fn test_interpret_expression_with_braces() {
+        assert_eq!(interpret("(4 + { 2 }) * 3"), Ok(18));
     }
 }
