@@ -1,9 +1,25 @@
 fn compile_tuff_to_js(inpsourceut: String) -> String {
-    // For now, just return empty string for empty input
-    if inpsourceut.is_empty() {
-        return String::new();
+    // Strip type suffixes from numeric literals
+    // E.g., "100U8" -> "100", "42I32" -> "42"
+    let mut result = inpsourceut.clone();
+
+    // Remove type suffixes at the end (U8, U16, U32, U64, I8, I16, I32, I64, F32, F64, etc.)
+    if let Some(captured) = result
+        .strip_suffix("U8")
+        .or_else(|| result.strip_suffix("U16"))
+        .or_else(|| result.strip_suffix("U32"))
+        .or_else(|| result.strip_suffix("U64"))
+        .or_else(|| result.strip_suffix("I8"))
+        .or_else(|| result.strip_suffix("I16"))
+        .or_else(|| result.strip_suffix("I32"))
+        .or_else(|| result.strip_suffix("I64"))
+        .or_else(|| result.strip_suffix("F32"))
+        .or_else(|| result.strip_suffix("F64"))
+    {
+        result = captured.to_string();
     }
-    todo!("not implemented")
+
+    result
 }
 
 fn execute_js(source: &str) -> i32 {
@@ -32,7 +48,7 @@ fn execute_js(source: &str) -> i32 {
 
 fn run(source: String) -> i32 {
     let js_source: String = compile_tuff_to_js(source);
-    return execute_js(&js_source);
+    execute_js(&js_source)
 }
 
 fn main() {
@@ -59,5 +75,15 @@ mod tests {
     #[test]
     fn test_run_empty_string() {
         assert_eq!(run("".to_string()), 0);
+    }
+
+    #[test]
+    fn test_run_numeric_literal() {
+        assert_eq!(run("100".to_string()), 100);
+    }
+
+    #[test]
+    fn test_run_typed_numeric_literal() {
+        assert_eq!(run("100U8".to_string()), 100);
     }
 }
