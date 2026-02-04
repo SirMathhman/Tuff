@@ -10,7 +10,7 @@ repos:
 
       - id: pmd-cpd
         name: PMD CPD
-        entry: pmd cpd src --language rust --minimum-tokens 35
+        entry: pmd cpd src --language rust --minimum-tokens 35 --ignore-literals --ignore-identifiers
         language: system
         pass_filenames: false
         stages: [pre-commit]
