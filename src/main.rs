@@ -1,43 +1,22 @@
 fn compile_tuff_to_js(inpsourceut: String) -> Result<String, String> {
     // Strip type suffixes from numeric literals
-    // E.g., "100U8" -> "100", "42I32" -> "42"
-    // Error on negative numbers with type suffixes: "-100U8" -> Err
+    // E.g., "100U8" -> "100", "42I32" -> "42", "-100I8" -> "-100"
     let mut result = inpsourceut.clone();
 
-    // Check if it has a type suffix
-    let has_suffix = result.ends_with("U8")
-        || result.ends_with("U16")
-        || result.ends_with("U32")
-        || result.ends_with("U64")
-        || result.ends_with("I8")
-        || result.ends_with("I16")
-        || result.ends_with("I32")
-        || result.ends_with("I64")
-        || result.ends_with("F32")
-        || result.ends_with("F64");
-
-    if has_suffix {
-        // Check if the number (without suffix) is negative
-        if let Some(captured) = result
-            .strip_suffix("U8")
-            .or_else(|| result.strip_suffix("U16"))
-            .or_else(|| result.strip_suffix("U32"))
-            .or_else(|| result.strip_suffix("U64"))
-            .or_else(|| result.strip_suffix("I8"))
-            .or_else(|| result.strip_suffix("I16"))
-            .or_else(|| result.strip_suffix("I32"))
-            .or_else(|| result.strip_suffix("I64"))
-            .or_else(|| result.strip_suffix("F32"))
-            .or_else(|| result.strip_suffix("F64"))
-        {
-            if captured.starts_with('-') {
-                return Err(format!(
-                    "Negative numbers cannot have explicit type suffixes: {}",
-                    inpsourceut
-                ));
-            }
-            result = captured.to_string();
-        }
+    // Remove type suffixes at the end
+    if let Some(captured) = result
+        .strip_suffix("U8")
+        .or_else(|| result.strip_suffix("U16"))
+        .or_else(|| result.strip_suffix("U32"))
+        .or_else(|| result.strip_suffix("U64"))
+        .or_else(|| result.strip_suffix("I8"))
+        .or_else(|| result.strip_suffix("I16"))
+        .or_else(|| result.strip_suffix("I32"))
+        .or_else(|| result.strip_suffix("I64"))
+        .or_else(|| result.strip_suffix("F32"))
+        .or_else(|| result.strip_suffix("F64"))
+    {
+        result = captured.to_string();
     }
 
     Ok(result)
@@ -111,8 +90,7 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_negative_typed_numeric_literal() {
-        let result = compile_tuff_to_js("-100U8".to_string());
-        assert!(result.is_err());
+    fn test_run_negative_typed_numeric_literal() {
+        assert_eq!(run("-100I8".to_string()), -100);
     }
 }
