@@ -3,7 +3,7 @@ fn interpret(input: &str) -> i32 {
     if input.is_empty() {
         0
     } else {
-        todo!()
+        input.parse().unwrap_or(0)
     }
 }
 
@@ -18,5 +18,10 @@ mod tests {
     #[test]
     fn test_interpret_empty_string() {
         assert_eq!(interpret(""), 0);
+    }
+
+    #[test]
+    fn test_interpret_100() {
+        assert_eq!(interpret("100"), 100);
     }
 }
