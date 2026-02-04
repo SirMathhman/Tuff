@@ -1,4 +1,4 @@
-#![warn(clippy::too_many_lines)]
+#![deny(clippy::too_many_lines)]
 
 #[allow(dead_code)]
 fn interpret(input: &str) -> Result<i32, String> {
