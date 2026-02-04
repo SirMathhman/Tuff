@@ -43,12 +43,35 @@ fn apply_operation(left: i32, right: i32, op: char) -> i32 {
     }
 }
 
+fn extract_type_suffix(term: &str) -> String {
+    let (_, type_suffix) = parse_input(term.trim());
+    type_suffix
+}
+
+fn extract_first_term(input: &str) -> String {
+    let mut current_term = String::new();
+    for ch in input.chars() {
+        match ch {
+            '+' | '-' if !current_term.trim().is_empty() => break,
+            _ => current_term.push(ch),
+        }
+    }
+    current_term
+}
+
+fn get_first_term_type(input: &str) -> String {
+    extract_type_suffix(extract_first_term(input).trim())
+}
+
 fn evaluate_expression(input: &str) -> Result<i32, String> {
-    let mut result = 0i32;
+    let first_type_suffix = get_first_term_type(input);
+    let first_term = extract_first_term(input);
+    let mut result = parse_term(&first_term)?;
     let mut current_op = '+';
     let mut current_term = String::new();
+    let remaining = &input[first_term.len()..];
 
-    for ch in input.chars() {
+    for ch in remaining.chars() {
         match ch {
             '+' | '-' if !current_term.trim().is_empty() => {
                 let term_value = parse_term(&current_term)?;
@@ -63,6 +86,10 @@ fn evaluate_expression(input: &str) -> Result<i32, String> {
     if !current_term.trim().is_empty() {
         let term_value = parse_term(&current_term)?;
         result = apply_operation(result, term_value, current_op);
+    }
+
+    if !first_type_suffix.is_empty() {
+        validate_and_convert(result as i64, &first_type_suffix)?;
     }
 
     Ok(result)
@@ -318,5 +345,10 @@ mod tests {
     #[test]
     fn test_interpret_expression_mixed_types() {
         assert_eq!(interpret("1U8 + 2"), Ok(3));
+    }
+
+    #[test]
+    fn test_interpret_expression_overflow() {
+        assert!(interpret("1U8 + 255").is_err());
     }
 }
