@@ -438,4 +438,9 @@ mod tests {
     fn test_interpret_expression_mixed_type_expansion() {
         assert_eq!(interpret("1U8 + 255U16"), Ok(256));
     }
+
+    #[test]
+    fn test_interpret_expression_multiple_terms() {
+        assert_eq!(interpret("1 + 2 + 3"), Ok(6));
+    }
 }
