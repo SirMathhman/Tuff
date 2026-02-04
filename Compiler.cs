@@ -192,15 +192,25 @@ namespace Tuff
         /// <summary>
         /// Generates a stub C program from Tuff code.
         /// TODO: Replace with actual Tuff-to-C compilation logic.
+        /// 
+        /// For now, if the Tuff code is a valid integer, treat it as an exit code.
+        /// Otherwise, default to exit code 0.
         /// </summary>
         private static string GenerateCStub(string tuffCode)
         {
+            int exitCode = 0;
+
+            // Try to parse Tuff code as an integer exit code
+            if (!string.IsNullOrWhiteSpace(tuffCode) && int.TryParse(tuffCode.Trim(), out var parsed))
+            {
+                exitCode = parsed;
+            }
+
             var sb = new StringBuilder();
             sb.AppendLine("#include <stdio.h>");
             sb.AppendLine();
             sb.AppendLine("int main(void) {");
-            sb.AppendLine("    // Stub implementation of Tuff DSL");
-            sb.AppendLine("    return 0;");
+            sb.AppendLine($"    return {exitCode};");
             sb.AppendLine("}");
             return sb.ToString();
         }
