@@ -369,4 +369,9 @@ mod tests {
     fn test_interpret_expression_overflow() {
         assert!(interpret("1U8 + 255").is_err());
     }
+
+    #[test]
+    fn test_interpret_expression_overflow_same_type() {
+        assert!(interpret("1U8 + 255U8").is_err());
+    }
 }
