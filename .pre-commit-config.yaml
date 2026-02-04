@@ -26,3 +26,13 @@ repos:
         name: Check YAML
       - id: check-added-large-files
         name: Check for Large Files
+
+  - repo: local
+    hooks:
+      - id: pmd-cpd
+        name: PMD Copy-Paste Detector
+        description: "Detect code duplication using PMD CPD"
+        entry: pmd cpd src --language rust --minimum-tokens 35
+        language: system
+        stages: [pre-commit]
+        types: [rust]
