@@ -67,24 +67,42 @@ fn evaluate_expression(input: &str) -> Result<i32, String> {
     let first_type_suffix = get_first_term_type(input);
     let first_term = extract_first_term(input);
     let mut result = parse_term(&first_term)?;
-    let mut current_op = '+';
-    let mut current_term = String::new();
-    let remaining = &input[first_term.len()..];
+    let chars: Vec<char> = input.chars().collect();
+    let mut idx = first_term.len();
 
-    for ch in remaining.chars() {
-        match ch {
-            '+' | '-' if !current_term.trim().is_empty() => {
-                let term_value = parse_term(&current_term)?;
-                result = apply_operation(result, term_value, current_op);
-                current_op = ch;
-                current_term.clear();
-            }
-            _ => current_term.push(ch),
+    while idx < chars.len() {
+        while idx < chars.len() && chars[idx].is_whitespace() {
+            idx += 1;
         }
-    }
 
-    if !current_term.trim().is_empty() {
-        let term_value = parse_term(&current_term)?;
+        if idx >= chars.len() {
+            break;
+        }
+
+        let current_op = if chars[idx] == '+' || chars[idx] == '-' {
+            let op = chars[idx];
+            idx += 1;
+            op
+        } else {
+            break;
+        };
+
+        while idx < chars.len() && chars[idx].is_whitespace() {
+            idx += 1;
+        }
+
+        let mut term_str = String::new();
+        while idx < chars.len() && (chars[idx].is_numeric() || chars[idx] == '-') {
+            term_str.push(chars[idx]);
+            idx += 1;
+        }
+
+        while idx < chars.len() && (chars[idx].is_alphabetic() || chars[idx].is_numeric()) {
+            term_str.push(chars[idx]);
+            idx += 1;
+        }
+
+        let term_value = parse_term(&term_str)?;
         result = apply_operation(result, term_value, current_op);
     }
 
