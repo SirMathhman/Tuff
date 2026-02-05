@@ -692,6 +692,7 @@ static InterpretResult parse_additive(Parser *p);
 static InterpretResult parse_logical_and(Parser *p);
 static InterpretResult parse_logical_or(Parser *p);
 static InterpretResult parse_if_else(Parser *p);
+static InterpretResult parse_assignment_or_if_else(Parser *p);
 static InterpretResult parse_assignment_statement_in_block(Parser *p);
 
 // Helper: Parse a let statement in a block
@@ -800,6 +801,10 @@ static InterpretResult parse_let_statements_loop(Parser *p)
 {
     skip_whitespace(p);
 
+    // Track the last statement value to return it if it's a block
+    int last_statement_value = 0;
+    int has_last_statement = 0;
+
     // Parse let statements and assignments until none are found
     while (1)
     {
@@ -812,6 +817,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             if (let_result.has_error)
                 return let_result;
             skip_whitespace(p);
+            has_last_statement = 0; // let statements don't have values
         }
         // Check for assignment statement (identifier followed by '=')
         else if (isalpha(p->input[p->pos]))
@@ -840,6 +846,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 if (assign_result.has_error)
                     return assign_result;
                 skip_whitespace(p);
+                has_last_statement = 0; // assignments at this level don't have values to return
             }
             else
             {
@@ -866,10 +873,11 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             skip_whitespace(p);
 
             // Check for closing brace
+            InterpretResult block_expr_result = (InterpretResult){.value = 0, .has_error = false};
             if (p->input[p->pos] != '}')
             {
                 // Parse the expression in the block
-                InterpretResult block_expr_result = parse_additive(p);
+                block_expr_result = parse_assignment_or_if_else(p);
                 if (block_expr_result.has_error)
                 {
                     p->var_count = saved_var_count_block;
@@ -897,7 +905,10 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             p->var_count = saved_var_count_block;
 
             skip_whitespace(p);
-            // Continue the loop to check for more statements
+            
+            // Save the block's value to return it if this is the final statement
+            last_statement_value = block_expr_result.value;
+            has_last_statement = 1;
         }
         else if (p->input[p->pos] == '{')
         {
@@ -927,7 +938,8 @@ static InterpretResult parse_let_statements_loop(Parser *p)
         }
     }
 
-    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+    // Return the last statement's value if it was a block, otherwise 0
+    return (InterpretResult){.value = has_last_statement ? last_statement_value : 0, .has_error = false, .error_message = NULL};
 }
 
 // Helper: Parse an assignment statement in a block
@@ -1094,8 +1106,8 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
             return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
         }
 
-        // Parse the inner expression
-        InterpretResult result = parse_additive(p);
+        // Parse the inner expression (can be assignment, if-else, or other expressions)
+        InterpretResult result = parse_assignment_or_if_else(p);
         if (result.has_error)
         {
             p->var_count = saved_var_count;
@@ -1291,7 +1303,15 @@ static InterpretResult parse_if_else(Parser *p)
         return close_paren;
     skip_whitespace(p);
 
-    // Parse then expression
+    // Save variable state before executing branches
+    Variable saved_vars[10];
+    int saved_var_count = p->var_count;
+    for (int i = 0; i < p->var_count; i++)
+    {
+        saved_vars[i] = p->variables[i];
+    }
+
+    // Parse and execute then expression
     InterpretResult then_expr = parse_assignment_or_if_else(p);
     if (then_expr.has_error)
         return then_expr;
@@ -1305,6 +1325,21 @@ static InterpretResult parse_if_else(Parser *p)
         then_type[sizeof(then_type) - 1] = '\0';
     }
 
+    // Save the state after executing then branch
+    Variable then_state_vars[10];
+    int then_state_var_count = p->var_count;
+    for (int i = 0; i < p->var_count; i++)
+    {
+        then_state_vars[i] = p->variables[i];
+    }
+
+    // Restore pre-then state before executing else
+    p->var_count = saved_var_count;
+    for (int i = 0; i < saved_var_count; i++)
+    {
+        p->variables[i] = saved_vars[i];
+    }
+
     skip_whitespace(p);
 
     // Expect 'else' keyword
@@ -1314,7 +1349,7 @@ static InterpretResult parse_if_else(Parser *p)
     p->pos += 4; // Skip 'else'
     skip_whitespace(p);
 
-    // Parse else expression
+    // Parse and execute else expression
     InterpretResult else_expr = parse_assignment_or_if_else(p);
     if (else_expr.has_error)
         return else_expr;
@@ -1339,10 +1374,22 @@ static InterpretResult parse_if_else(Parser *p)
         return make_error("if-else branches must have the same type");
     }
 
-    // Evaluate: if condition is non-zero (true), return then value, else return else value
-    long result = (condition.value != 0) ? then_expr.value : else_expr.value;
-
-    return (InterpretResult){.value = (int)result, .has_error = false, .error_message = NULL};
+    // Now apply the correct mutations based on condition
+    if (condition.value != 0)
+    {
+        // Condition is true, use then branch state
+        p->var_count = then_state_var_count;
+        for (int i = 0; i < then_state_var_count; i++)
+        {
+            p->variables[i] = then_state_vars[i];
+        }
+        return (InterpretResult){.value = then_expr.value, .has_error = false, .error_message = NULL};
+    }
+    else
+    {
+        // Condition is false, use else branch state (already applied)
+        return (InterpretResult){.value = else_expr.value, .has_error = false, .error_message = NULL};
+    }
 }
 
 static InterpretResult parse_additive(Parser *p)
@@ -1497,13 +1544,29 @@ static InterpretResult parse_additive(Parser *p)
 
 static InterpretResult parse_expression(Parser *p)
 {
-    // Check for top-level let statements
+    // Check for top-level let statements and blocks
     InterpretResult let_statements_result = parse_let_statements_loop(p);
     if (let_statements_result.has_error)
         return let_statements_result;
 
-    // Parse the final expression (can be if-else, logical OR, or other expressions)
-    return parse_if_else(p);
+    // Skip whitespace to check if there's anything left
+    int save_pos = p->pos;
+    skip_whitespace(p);
+    int has_remaining = (p->input[p->pos] != '\0');
+    p->pos = save_pos;
+
+    // If there's remaining input, parse it as the final expression
+    // Otherwise, return the result from parse_let_statements_loop
+    if (has_remaining)
+    {
+        // Parse the final expression (can be if-else, logical OR, or other expressions)
+        return parse_if_else(p);
+    }
+    else
+    {
+        // No remaining expression, return the value from let statements/blocks
+        return let_statements_result;
+    }
 }
 
 static int is_expression(const char *str)
