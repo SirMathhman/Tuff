@@ -772,7 +772,12 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                 return make_error("Variable type mismatch: declared type does not match assigned value type");
             }
         }
-        // If value has no suffix, it's compatible with any declared type
+        else if (strcmp(declared_type, "Bool") == 0)
+        {
+            // Untyped values (e.g. plain numbers) are not compatible with Bool
+            return make_error("Variable type mismatch: declared type does not match assigned value type");
+        }
+        // If value has no suffix and declared type is not Bool, it's compatible with any declared type
         // Store variable with declared type
         set_variable_with_mutability(p, var_name, name_len, val_result.value, declared_type, is_mutable);
     }
@@ -1189,12 +1194,10 @@ static InterpretResult parse_if_else(Parser *p)
     }
 
     p->pos += 2; // Skip 'if'
-    skip_whitespace(p);
 
     // Expect opening parenthesis
-    if (p->input[p->pos] != '(')
-        return make_error("Expected '(' after 'if'");
-    p->pos++;
+    InterpretResult open_paren = expect_char(p, '(', "Expected '(' after 'if'");
+    if (open_paren.has_error) return open_paren;
     skip_whitespace(p);
 
     // Parse condition expression
@@ -1208,12 +1211,9 @@ static InterpretResult parse_if_else(Parser *p)
         return make_error("if-else condition must be a boolean value");
     }
 
-    skip_whitespace(p);
-
     // Expect closing parenthesis
-    if (p->input[p->pos] != ')')
-        return make_error("Expected ')' after if condition");
-    p->pos++;
+    InterpretResult close_paren = expect_char(p, ')', "Expected ')' after if condition");
+    if (close_paren.has_error) return close_paren;
     skip_whitespace(p);
 
     // Parse then expression
