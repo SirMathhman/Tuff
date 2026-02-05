@@ -773,14 +773,65 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 break;
             }
         }
-        // Check for empty block {}
+        // Check for block statement {}
+        else if (p->input[p->pos] == '{')
+        {
+            // Parse block as a statement
+            int saved_pos = p->pos;
+            int saved_var_count_block = p->var_count;
+            p->pos++; // Skip '{'
+
+            // Check for let statements in the block
+            InterpretResult let_statements_result = parse_let_statements_loop(p);
+            if (let_statements_result.has_error)
+            {
+                p->var_count = saved_var_count_block;
+                return let_statements_result;
+            }
+
+            skip_whitespace(p);
+
+            // Check for closing brace
+            if (p->input[p->pos] != '}')
+            {
+                // Parse the expression in the block
+                InterpretResult block_expr_result = parse_additive(p);
+                if (block_expr_result.has_error)
+                {
+                    p->var_count = saved_var_count_block;
+                    return block_expr_result;
+                }
+
+                skip_whitespace(p);
+            }
+
+            // Expect closing brace
+            if (p->input[p->pos] != '}')
+            {
+                p->var_count = saved_var_count_block;
+                return make_error("Expected closing brace");
+            }
+            p->pos++; // Skip '}'
+
+            // Preserve mutations to outer-scope variables before restoring scope
+            for (int i = 0; i < saved_var_count_block; i++)
+            {
+                // Values are already updated in place
+            }
+
+            // Restore variable scope (remove variables declared inside the block)
+            p->var_count = saved_var_count_block;
+
+            skip_whitespace(p);
+            // Continue the loop to check for more statements
+        }
         else if (p->input[p->pos] == '{')
         {
             // Look ahead to see if this is an empty block
             int saved_pos = p->pos;
             p->pos++; // Skip '{'
             skip_whitespace(p);
-            
+
             if (p->input[p->pos] == '}')
             {
                 // Empty block, skip it and continue looking for the final expression
@@ -797,7 +848,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
         }
         else
         {
-            // Not a let, assignment, or empty block statement, exit the loop
+            // Not a let, assignment, or block statement, exit the loop
             break;
         }
     }
@@ -893,7 +944,22 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
         {
             // Empty block/parens, return 0
             p->pos++; // Skip ')' or '}'
-            // Don't restore variable scope for blocks yet - it will be done below
+
+            // Before restoring variable scope, preserve mutations to outer-scope variables
+            if (is_block)
+            {
+                // Copy back the values of outer-scope variables (0 to saved_var_count-1)
+                // to preserve any mutations that occurred in the block
+                for (int i = 0; i < saved_var_count; i++)
+                {
+                    // Values in p->variables[i] are already updated, var_count will be reset
+                    // The values persist because they're stored directly in the array
+                }
+            }
+
+            // Restore variable scope
+            p->var_count = saved_var_count;
+
             return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
         }
 
@@ -914,6 +980,19 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
             return make_error(closing_char == ')' ? "Expected closing parenthesis" : "Expected closing brace");
         }
         p->pos++; // Skip ')' or '}'
+
+        // Before restoring variable scope, preserve mutations to outer-scope variables
+        if (is_block)
+        {
+            // Copy back the values of outer-scope variables (0 to saved_var_count-1)
+            // to preserve any mutations that occurred in the block
+            for (int i = 0; i < saved_var_count; i++)
+            {
+                // The variable at index i may have been modified in the block
+                // We keep its current value, don't restore the old one
+                // (no action needed - values are already updated)
+            }
+        }
 
         // Restore variable scope
         p->var_count = saved_var_count;

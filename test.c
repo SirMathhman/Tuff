@@ -188,6 +188,11 @@ void test_interpret_empty_block_before_let(void)
     assert_success("{} let x = 100; x", 100, "test_interpret_empty_block_before_let");
 }
 
+void test_interpret_mutable_variable_block_mutation(void)
+{
+    assert_success("let mut x = 0; { x = 100; } x", 100, "test_interpret_mutable_variable_block_mutation");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -224,6 +229,7 @@ int main(void)
     test_interpret_mutable_variable_type_mismatch();
     test_interpret_empty_block_variable_access();
     test_interpret_empty_block_before_let();
+    test_interpret_mutable_variable_block_mutation();
     printf("All tests passed!\n");
     return 0;
 }
