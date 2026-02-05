@@ -144,6 +144,73 @@ static int get_type_info_index(const char *suffix)
     return -1;
 }
 
+// Type hierarchy definitions for compatibility checking
+typedef struct
+{
+    char type_char;  // 'U' for unsigned, 'I' for signed
+    const char *source_type;
+    const char *wider_types[3];
+} TypeHierarchy;
+
+static const TypeHierarchy type_hierarchies[] = {
+    {'U', "U8", {"U16", "U32", "U64"}},
+    {'U', "U16", {"U32", "U64", NULL}},
+    {'U', "U32", {"U64", NULL, NULL}},
+    {'I', "I8", {"I16", "I32", "I64"}},
+    {'I', "I16", {"I32", "I64", NULL}},
+    {'I', "I32", {"I64", NULL, NULL}},
+    {0, NULL, {NULL, NULL, NULL}}};
+
+// Helper: Check if source type can be assigned to destination type
+// using the unified type hierarchy
+static int check_type_hierarchy(char type_char, const char *dest, const char *src)
+{
+    for (int i = 0; type_hierarchies[i].type_char != 0; i++)
+    {
+        if (type_hierarchies[i].type_char == type_char && contains_suffix(src, type_hierarchies[i].source_type))
+        {
+            for (int j = 0; type_hierarchies[i].wider_types[j] != NULL; j++)
+            {
+                if (contains_suffix(dest, type_hierarchies[i].wider_types[j]))
+                    return 1;
+            }
+            return 0;
+        }
+    }
+    return 0;
+}
+
+// Helper: Check if a source type can be assigned to a destination type
+// Returns 1 if compatible, 0 if not
+static int is_type_compatible(const char *dest_type, const char *source_type)
+{
+    if (!dest_type || !source_type || !dest_type[0] || !source_type[0])
+        return 0;
+
+    int dest_idx = get_type_info_index(dest_type);
+    int src_idx = get_type_info_index(source_type);
+
+    if (dest_idx < 0 || src_idx < 0)
+        return 0;
+
+    // Same type is always compatible
+    if (dest_idx == src_idx)
+        return 1;
+
+    const char *dest = type_info[dest_idx].suffix;
+    const char *src = type_info[src_idx].suffix;
+
+    // Both must have same signedness
+    if (dest[0] != src[0])
+        return 0;
+
+    // Both must be typed (U or I)
+    if (dest[0] != 'U' && dest[0] != 'I')
+        return 0;
+
+    return check_type_hierarchy(dest[0], dest, src);
+}
+
 static void skip_whitespace(Parser *p)
 {
     while (p->input[p->pos] && isspace(p->input[p->pos]))
@@ -511,10 +578,8 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         // Only validate if the value has a type suffix
         if (p->has_tracked_suffix)
         {
-            // Compare declared type with actual value's type
-            // Use strncmp with the length of the declared type
-            int decl_len = suffix_length(declared_type);
-            if (strncmp(p->tracked_suffix, declared_type, decl_len) != 0)
+            // Check if the value's type is compatible with the declared type
+            if (!is_type_compatible(declared_type, p->tracked_suffix))
             {
                 return make_error("Variable type mismatch: declared type does not match assigned value type");
             }
