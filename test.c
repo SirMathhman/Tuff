@@ -4,7 +4,6 @@
 
 static void assert_success(const char *input, int expected_value, const char *test_name)
 {
-    printf("Testing %s...\n", test_name);
     InterpretResult result = interpret(input);
     if (result.has_error)
     {
@@ -17,7 +16,6 @@ static void assert_success(const char *input, int expected_value, const char *te
 
 static void assert_error(const char *input, const char *test_name)
 {
-    printf("Testing %s...\n", test_name);
     InterpretResult result = interpret(input);
     if (!result.has_error)
     {
@@ -277,6 +275,11 @@ void test_interpret_nested_if_else(void)
     assert_success("if (false) 1 else if (false) 2 else 3", 3, "test_interpret_nested_if_else");
 }
 
+void test_interpret_if_else_with_assignments(void)
+{
+    assert_success("let mut x = 0; if (true) x = 1; else x = 2; x", 1, "test_interpret_if_else_with_assignments");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -330,6 +333,7 @@ int main(void)
     test_interpret_if_else_branch_types_must_match_error();
     test_interpret_if_else_bool_var_numeric_branches_error();
     test_interpret_nested_if_else();
+    test_interpret_if_else_with_assignments();
     printf("All tests passed!\n");
     return 0;
 }

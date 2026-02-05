@@ -931,13 +931,10 @@ static InterpretResult parse_let_statements_loop(Parser *p)
 }
 
 // Helper: Parse an assignment statement in a block
-static InterpretResult parse_assignment_statement_in_block(Parser *p)
+// Helper: Parse and apply an assignment, returning the assigned value
+// Assumes variable name is already parsed and position is at variable name
+static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_name, int name_len)
 {
-    // Parse variable name
-    char var_name[32];
-    int name_len = 0;
-    PARSE_VAR_NAME_OR_RETURN(p, var_name, name_len);
-
     // Find the variable
     int idx = find_variable(p, var_name, name_len);
     if (idx < 0)
@@ -983,6 +980,66 @@ static InterpretResult parse_assignment_statement_in_block(Parser *p)
 
     // Update the variable's value
     p->variables[idx].value = val_result.value;
+
+    return val_result;
+}
+
+// Helper: Try to parse an assignment as an expression (returns the assigned value)
+// Returns error if this is not an assignment
+static InterpretResult try_parse_assignment_expression(Parser *p)
+{
+    int saved_pos = p->pos;
+
+    // Try to parse an identifier
+    char var_name[32];
+    int name_len = 0;
+    if (!isalpha(p->input[p->pos]))
+    {
+        p->pos = saved_pos;
+        return make_error("not_an_assignment");
+    }
+
+    name_len = parse_identifier(p, var_name, sizeof(var_name));
+
+    // Check for '='
+    skip_whitespace(p);
+    if (p->input[p->pos] != '=')
+    {
+        p->pos = saved_pos;
+        return make_error("not_an_assignment");
+    }
+
+    // This is an assignment - reset and parse it
+    p->pos = saved_pos;
+    name_len = parse_identifier(p, var_name, sizeof(var_name));
+
+    // Parse and apply the assignment
+    InterpretResult assign_result = parse_and_apply_assignment(p, var_name, name_len);
+    if (assign_result.has_error)
+        return assign_result;
+
+    // Consume optional semicolon (for use in if-else branches like "x = 1;")
+    skip_whitespace(p);
+    if (p->input[p->pos] == ';')
+    {
+        p->pos++;
+    }
+
+    // Return the assigned value
+    return assign_result;
+}
+
+static InterpretResult parse_assignment_statement_in_block(Parser *p)
+{
+    // Parse variable name
+    char var_name[32];
+    int name_len = 0;
+    PARSE_VAR_NAME_OR_RETURN(p, var_name, name_len);
+
+    // Parse and apply the assignment
+    InterpretResult assign_result = parse_and_apply_assignment(p, var_name, name_len);
+    if (assign_result.has_error)
+        return assign_result;
 
     return finalize_statement(p, "Expected ';' after assignment");
 }
@@ -1180,6 +1237,22 @@ static InterpretResult parse_logical_or(Parser *p)
     return parse_binary_logical_op_generic(p, '|', 1, parse_logical_and);
 }
 
+// Helper: Parse assignment or if-else expression (for use in if-else branches)
+// Tries to parse an assignment first, falls back to if-else
+static InterpretResult parse_assignment_or_if_else(Parser *p)
+{
+    // Try to parse an assignment expression
+    InterpretResult assign_result = try_parse_assignment_expression(p);
+    if (!assign_result.has_error)
+    {
+        // It was an assignment, return the result
+        return assign_result;
+    }
+
+    // Not an assignment, parse as if-else
+    return parse_if_else(p);
+}
+
 // Helper: Parse if-else expression
 // Syntax: if (condition) then_expr else else_expr
 static InterpretResult parse_if_else(Parser *p)
@@ -1219,7 +1292,7 @@ static InterpretResult parse_if_else(Parser *p)
     skip_whitespace(p);
 
     // Parse then expression
-    InterpretResult then_expr = parse_if_else(p);
+    InterpretResult then_expr = parse_assignment_or_if_else(p);
     if (then_expr.has_error)
         return then_expr;
 
@@ -1242,7 +1315,7 @@ static InterpretResult parse_if_else(Parser *p)
     skip_whitespace(p);
 
     // Parse else expression
-    InterpretResult else_expr = parse_if_else(p);
+    InterpretResult else_expr = parse_assignment_or_if_else(p);
     if (else_expr.has_error)
         return else_expr;
 
