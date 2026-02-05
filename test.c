@@ -208,6 +208,11 @@ void test_interpret_block_then_let_and_expression(void)
     assert_success("{ let x = 100; } let y = 100; y", 100, "test_interpret_block_then_let_and_expression");
 }
 
+void test_interpret_block_x_then_toplevel_x(void)
+{
+    assert_error("{ let x = 100; } let x = 100;", "test_interpret_block_x_then_toplevel_x");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -248,6 +253,7 @@ int main(void)
     test_interpret_let_statement_no_expression();
     test_interpret_block_let_statement_no_expression();
     test_interpret_block_then_let_and_expression();
+    test_interpret_block_x_then_toplevel_x();
     printf("All tests passed!\n");
     return 0;
 }

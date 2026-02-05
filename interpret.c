@@ -28,6 +28,8 @@ typedef struct
     int has_tracked_suffix;
     Variable variables[10];
     int var_count;
+    char all_declared_names[10][32];  // Track all variable names ever declared
+    int all_declared_count;           // Count of all declared names
 } Parser;
 
 typedef struct
@@ -459,6 +461,20 @@ static int find_variable(Parser *p, const char *name, int name_len)
     return -1;
 }
 
+// Helper: Check if a variable name was ever declared (across all scopes)
+static int has_variable_been_declared(Parser *p, const char *name, int name_len)
+{
+    for (int i = 0; i < p->all_declared_count; i++)
+    {
+        if (strncmp(p->all_declared_names[i], name, name_len) == 0 &&
+            p->all_declared_names[i][name_len] == '\0')
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 // Helper: Create an error result
 static InterpretResult make_error(const char *message)
 {
@@ -520,6 +536,15 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
     {
         p->variables[p->var_count].type[0] = '\0';
     }
+    
+    // Track this name in the all_declared_names array for duplicate checking across scopes
+    if (p->all_declared_count < 10)
+    {
+        strncpy(p->all_declared_names[p->all_declared_count], name, name_len);
+        p->all_declared_names[p->all_declared_count][name_len] = '\0';
+        p->all_declared_count++;
+    }
+    
     return p->var_count++;
 }
 
@@ -643,8 +668,12 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     int name_len = 0;
     PARSE_VAR_NAME_OR_RETURN(p, var_name, name_len);
 
-    // Check if variable already exists (duplicate declaration)
+    // Check if variable already exists in current scope OR was declared before (across all scopes)
     if (find_variable(p, var_name, name_len) >= 0)
+    {
+        return make_error("Variable already declared");
+    }
+    if (has_variable_been_declared(p, var_name, name_len))
     {
         return make_error("Variable already declared");
     }
