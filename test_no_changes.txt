@@ -160,8 +160,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:1151:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
- 1151 |         strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
+interpret.c:1150:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 1150 |         strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -175,8 +175,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:1195:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
- 1195 |         strncpy(tracked_suffix, first_num.suffix, first_num.suffix_len);
+interpret.c:1194:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 1194 |         strncpy(tracked_suffix, first_num.suffix, first_num.suffix_len);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -190,8 +190,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:1197:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
- 1197 |         strncpy(last_suffix, first_num.suffix, first_num.suffix_len);
+interpret.c:1196:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 1196 |         strncpy(last_suffix, first_num.suffix, first_num.suffix_len);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -205,8 +205,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:1223:13: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
- 1223 |             strncpy(last_suffix, right_num.suffix, right_num.suffix_len);
+interpret.c:1216:13: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 1216 |             strncpy(last_suffix, right_num.suffix, right_num.suffix_len);
       |             ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -220,8 +220,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:1306:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
- 1306 |         strncpy(p->tracked_suffix, tracked_suffix, sizeof(p->tracked_suffix) - 1);
+interpret.c:1293:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 1293 |         strncpy(p->tracked_suffix, tracked_suffix, sizeof(p->tracked_suffix) - 1);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -236,4 +236,92 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
 19 warnings generated.
-Assertion failed: !result.has_error, file test.c, line 13
+Running tests...
+Testing test_interpret_empty_string...
+Γ£ô test_interpret_empty_string passed
+Testing test_interpret_one_hundred...
+Γ£ô test_interpret_one_hundred passed
+Testing test_interpret_one_hundred_u8...
+Γ£ô test_interpret_one_hundred_u8 passed
+Testing test_interpret_negative_u8...
+Γ£ô test_interpret_negative_u8 passed
+Testing test_interpret_negative_i8...
+Γ£ô test_interpret_negative_i8 passed
+Testing test_interpret_out_of_range_u8...
+Γ£ô test_interpret_out_of_range_u8 passed
+Testing test_interpret_addition...
+Γ£ô test_interpret_addition passed
+Testing test_interpret_mixed_types...
+Γ£ô test_interpret_mixed_types passed
+Testing test_interpret_overflow...
+Γ£ô test_interpret_overflow passed
+Testing test_interpret_overflow_untyped...
+Γ£ô test_interpret_overflow_untyped passed
+Testing test_interpret_mixed_type_sizes...
+Γ£ô test_interpret_mixed_type_sizes passed
+Testing test_interpret_overflow_right_typed...
+Γ£ô test_interpret_overflow_right_typed passed
+Testing test_interpret_chained_mixed_types...
+Γ£ô test_interpret_chained_mixed_types passed
+Testing test_interpret_chained_overflow...
+Γ£ô test_interpret_chained_overflow passed
+Testing test_interpret_subtraction...
+Γ£ô test_interpret_subtraction passed
+Testing test_interpret_multiplication...
+Γ£ô test_interpret_multiplication passed
+Testing test_interpret_precedence...
+Γ£ô test_interpret_precedence passed
+Testing test_interpret_parentheses...
+Γ£ô test_interpret_parentheses passed
+Testing test_interpret_curly_braces...
+Γ£ô test_interpret_curly_braces passed
+Testing test_interpret_variable_declaration...
+Γ£ô test_interpret_variable_declaration passed
+Testing test_interpret_multiple_variable_declarations...
+Γ£ô test_interpret_multiple_variable_declarations passed
+Testing test_interpret_top_level_variable_declaration...
+Γ£ô test_interpret_top_level_variable_declaration passed
+Testing test_interpret_typeless_variable_declaration...
+Γ£ô test_interpret_typeless_variable_declaration passed
+Assertion failed: result.has_error, file test.c, line 26
+Testing test_interpret_duplicate_variable_declaration...
+Γ£ô test_interpret_duplicate_variable_declaration passed
+Testing test_interpret_variable_type_mismatch...
+Γ£ô test_interpret_variable_type_mismatch passed
+Testing test_interpret_variable_type_compatible...
+Γ£ô test_interpret_variable_type_compatible passed
+Testing test_interpret_variable_assignment_type_check...
+Γ£ô test_interpret_variable_assignment_type_check passed
+Testing test_interpret_mutable_variable...
+Γ£ô test_interpret_mutable_variable passed
+Testing test_interpret_immutable_variable_reassignment...
+Γ£ô test_interpret_immutable_variable_reassignment passed
+Testing test_interpret_undeclared_variable_assignment...
+Γ£ô test_interpret_undeclared_variable_assignment passed
+Testing test_interpret_mutable_variable_type_mismatch...
+Γ£ô test_interpret_mutable_variable_type_mismatch passed
+Testing test_interpret_empty_block_variable_access...
+Γ£ô test_interpret_empty_block_variable_access passed
+Testing test_interpret_empty_block_before_let...
+Γ£ô test_interpret_empty_block_before_let passed
+Testing test_interpret_mutable_variable_block_mutation...
+Γ£ô test_interpret_mutable_variable_block_mutation passed
+Testing test_interpret_let_statement_no_expression...
+Γ£ô test_interpret_let_statement_no_expression passed
+Testing test_interpret_block_let_statement_no_expression...
+Γ£ô test_interpret_block_let_statement_no_expression passed
+Testing test_interpret_block_then_let_and_expression...
+Γ£ô test_interpret_block_then_let_and_expression passed
+Testing test_interpret_block_x_then_toplevel_x...
+Γ£ô test_interpret_block_x_then_toplevel_x passed
+Testing test_interpret_nested_blocks_x_then_toplevel_x...
+Γ£ô test_interpret_nested_blocks_x_then_toplevel_x passed
+Testing test_interpret_bool_true...
+Γ£ô test_interpret_bool_true passed
+Testing test_interpret_bool_or_operator...
+Γ£ô test_interpret_bool_or_operator passed
+Testing test_interpret_bool_and_operator...
+Γ£ô test_interpret_bool_and_operator passed
+Testing test_interpret_and_operator_numeric_types_error...
+Γ£ô test_interpret_and_operator_numeric_types_error passed
+Testing test_interpret_bool

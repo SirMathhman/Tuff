@@ -1137,7 +1137,7 @@ static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, 
         long result;
         if (is_or)
             result = (left.value != 0) || (right.value != 0) ? 1 : 0;
-        else  // AND
+        else // AND
             result = (left.value != 0) && (right.value != 0) ? 1 : 0;
 
         left = (InterpretResult){.value = result, .has_error = false, .error_message = NULL};
@@ -1146,7 +1146,8 @@ static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, 
     }
 
     // Result of AND/OR is boolean only if we found the operator
-    if (found_operator) {
+    if (found_operator)
+    {
         strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
         p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
         p->has_tracked_suffix = 1;
@@ -1209,6 +1210,27 @@ static InterpretResult parse_additive(Parser *p)
 
         char op = next.op;
         NumberValue right_num = next.operand;
+
+        // Reject boolean operands in arithmetic operations - only reject when operators are found
+        if (first_num.suffix_len == 4 && first_num.suffix != NULL)
+        {
+            if (strncmp(first_num.suffix, "Bool", 4) == 0)
+            {
+                return make_error("Boolean values cannot be used in arithmetic operations");
+            }
+        }
+        if (right_num.suffix_len == 4 && right_num.suffix != NULL)
+        {
+            if (strncmp(right_num.suffix, "Bool", 4) == 0)
+            {
+                return make_error("Boolean values cannot be used in arithmetic operations");
+            }
+        }
+        if (right_num.suffix_len == 4 && right_num.suffix != NULL &&
+            strncmp(right_num.suffix, "Bool", 4) == 0)
+        {
+            return make_error("Boolean values cannot be used in arithmetic operations");
+        }
 
         // Track last suffix if this operand has one
         if (right_num.suffix_len > 0)
@@ -1324,6 +1346,16 @@ static int is_expression(const char *str)
 
     // Check if it's a let statement
     if (str[0] == 'l' && str[1] == 'e' && str[2] == 't')
+    {
+        return 1;
+    }
+
+    // Check for boolean literals
+    if (strncmp(str, "true", 4) == 0 && (isspace(str[4]) || str[4] == '\0' || !isalnum(str[4])))
+    {
+        return 1;
+    }
+    if (strncmp(str, "false", 5) == 0 && (isspace(str[5]) || str[5] == '\0' || !isalnum(str[5])))
     {
         return 1;
     }
