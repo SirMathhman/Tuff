@@ -116,6 +116,11 @@ void test_interpret_curly_braces(void)
     assert_success("(2 + { 3 }) * 4", 20, "test_interpret_curly_braces");
 }
 
+void test_interpret_variable_declaration(void)
+{
+    assert_success("(2 + { let x : U8 = 3; x }) * 4", 20, "test_interpret_variable_declaration");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -138,6 +143,7 @@ int main(void)
     test_interpret_precedence();
     test_interpret_parentheses();
     test_interpret_curly_braces();
+    test_interpret_variable_declaration();
     printf("All tests passed!\n");
     return 0;
 }

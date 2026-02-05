@@ -13,11 +13,19 @@ typedef struct
 
 typedef struct
 {
+    char name[32];
+    long value;
+} Variable;
+
+typedef struct
+{
     const char *input;
     int pos;
     InterpretResult last_error;
     char tracked_suffix[4];
     int has_tracked_suffix;
+    Variable variables[10];
+    int var_count;
 } Parser;
 
 typedef struct
@@ -301,10 +309,149 @@ static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_nu
     return validate_type(num.value, num.suffix_len > 0 ? suffix_buf : NULL);
 }
 
+// Helper: Find a variable by name
+static int find_variable(Parser *p, const char *name, int name_len)
+{
+    for (int i = 0; i < p->var_count; i++)
+    {
+        if (strncmp(p->variables[i].name, name, name_len) == 0 && 
+            p->variables[i].name[name_len] == '\0')
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Helper: Create an error result
+static InterpretResult make_error(const char *message)
+{
+    return (InterpretResult){
+        .value = 0,
+        .has_error = true,
+        .error_message = message};
+}
+
+// Forward declaration for parse_identifier
+static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len);
+
+// Helper: Parse identifier and check for error
+static InterpretResult parse_identifier_or_error(Parser *p, char *out_name, int max_name_len, const char *error_msg)
+{
+    int len = parse_identifier(p, out_name, max_name_len);
+    if (len <= 0)
+        return make_error(error_msg);
+    return (InterpretResult){.value = len, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Expect a character and skip, return error if not found
+static InterpretResult expect_char(Parser *p, char expected, const char *error_msg)
+{
+    skip_whitespace(p);
+    if (p->input[p->pos] != expected)
+        return make_error(error_msg);
+    p->pos++;
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+
+// Helper: Set or add a variable
+static int set_variable(Parser *p, const char *name, int name_len, long value)
+{
+    int idx = find_variable(p, name, name_len);
+    if (idx >= 0)
+    {
+        p->variables[idx].value = value;
+        return idx;
+    }
+    
+    if (p->var_count >= 10)
+        return -1; // Too many variables
+    
+    strncpy(p->variables[p->var_count].name, name, name_len);
+    p->variables[p->var_count].name[name_len] = '\0';
+    p->variables[p->var_count].value = value;
+    return p->var_count++;
+}
+
+// Helper: Parse an identifier (variable name)
+static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len)
+{
+    skip_whitespace(p);
+    
+    if (!isalpha(p->input[p->pos]))
+        return 0;
+    
+    int start = p->pos;
+    while (isalnum(p->input[p->pos]) || p->input[p->pos] == '_')
+    {
+        p->pos++;
+    }
+    
+    int len = p->pos - start;
+    if (len >= max_name_len)
+        return -1;
+    
+    strncpy(out_name, &p->input[start], len);
+    out_name[len] = '\0';
+    return len;
+}
+
 // Forward declaration for recursion
 static InterpretResult parse_additive(Parser *p);
 
-// Helper: Parse a primary expression (number or parenthesized/braced expression)
+// Helper: Parse a let statement in a block
+static InterpretResult parse_let_statement_in_block(Parser *p)
+{
+    p->pos += 3; // Skip 'let'
+    skip_whitespace(p);
+    
+    // Parse variable name
+    char var_name[32];
+    InterpretResult name_result = parse_identifier_or_error(p, var_name, sizeof(var_name), "Expected variable name");
+    if (name_result.has_error)
+        return name_result;
+    int name_len = name_result.value;
+    
+    // Expect ':'
+    InterpretResult colon_result = expect_char(p, ':', "Expected ':' in variable declaration");
+    if (colon_result.has_error)
+        return colon_result;
+    skip_whitespace(p);
+    
+    // Parse type
+    char type_name[8];
+    InterpretResult type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected type name");
+    if (type_result.has_error)
+        return type_result;
+    
+    // Expect '='
+    InterpretResult eq_result = expect_char(p, '=', "Expected '=' in variable declaration");
+    if (eq_result.has_error)
+        return eq_result;
+    skip_whitespace(p);
+    
+    // Parse the value expression
+    NumberValue var_num = {0};
+    InterpretResult val_result = parse_and_validate_operand(p, &var_num);
+    if (val_result.has_error)
+        return val_result;
+    
+    // Store the variable
+    set_variable(p, var_name, name_len, var_num.value);
+    
+    skip_whitespace(p);
+    
+    // Expect ';'
+    InterpretResult semi_result = expect_char(p, ';', "Expected ';' after variable declaration");
+    if (semi_result.has_error)
+        return semi_result;
+    skip_whitespace(p);
+    
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Parse a primary expression (number, variable reference, or parenthesized/braced expression)
 static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
 {
     skip_whitespace(p);
@@ -313,30 +460,79 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
     {
         // Parse parenthesized or braced expression
         char closing_char = p->input[p->pos] == '(' ? ')' : '}';
+        int is_block = p->input[p->pos] == '{';
+        int saved_var_count = p->var_count;
         p->pos++; // Skip '(' or '{'
+
+        // For blocks, check for let statements
+        if (is_block)
+        {
+            skip_whitespace(p);
+            
+            // Parse let statements
+            while (p->input[p->pos] == 'l' && 
+                   p->input[p->pos+1] == 'e' && 
+                   p->input[p->pos+2] == 't')
+            {
+                InterpretResult let_result = parse_let_statement_in_block(p);
+                if (let_result.has_error)
+                {
+                    p->var_count = saved_var_count;
+                    return let_result;
+                }
+                skip_whitespace(p);
+            }
+        }
 
         // Parse the inner expression
         InterpretResult result = parse_additive(p);
         if (result.has_error)
+        {
+            p->var_count = saved_var_count;
             return result;
+        }
 
         skip_whitespace(p);
 
         // Expect closing bracket
         if (p->input[p->pos] != closing_char)
         {
-            return (InterpretResult){
-                .value = 0,
-                .has_error = true,
-                .error_message = closing_char == ')' ? "Expected closing parenthesis" : "Expected closing brace"};
+            p->var_count = saved_var_count;
+            return make_error(closing_char == ')' ? "Expected closing parenthesis" : "Expected closing brace");
         }
         p->pos++; // Skip ')' or '}'
+
+        // Restore variable scope
+        p->var_count = saved_var_count;
 
         // Return result with no type suffix (parenthesized/braced expressions don't have suffixes)
         if (out_num)
             out_num->suffix_len = 0;
 
         return result;
+    }
+
+    // Check for variable reference
+    if (isalpha(p->input[p->pos]))
+    {
+        char var_name[32];
+        int name_len = parse_identifier(p, var_name, sizeof(var_name));
+        if (name_len > 0)
+        {
+            int idx = find_variable(p, var_name, name_len);
+            if (idx >= 0)
+            {
+                if (out_num)
+                {
+                    out_num->value = p->variables[idx].value;
+                    out_num->suffix_len = 0;
+                }
+                return (InterpretResult){
+                    .value = (int)p->variables[idx].value,
+                    .has_error = false,
+                    .error_message = NULL};
+            }
+        }
     }
 
     // Parse a number
