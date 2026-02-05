@@ -595,14 +595,14 @@ static InterpretResult parse_and_validate_var_name(Parser *p, char *out_name, in
     return (InterpretResult){.value = name_len, .has_error = false, .error_message = NULL};
 }
 
-#define PARSE_VAR_NAME_OR_RETURN(p, name_buf, name_len)         \
-    do                                                         \
-    {                                                          \
-        InterpretResult _name_result =                         \
+#define PARSE_VAR_NAME_OR_RETURN(p, name_buf, name_len)                 \
+    do                                                                  \
+    {                                                                   \
+        InterpretResult _name_result =                                  \
             parse_and_validate_var_name(p, name_buf, sizeof(name_buf)); \
-        if (_name_result.has_error)                            \
-            return _name_result;                               \
-        name_len = _name_result.value;                         \
+        if (_name_result.has_error)                                     \
+            return _name_result;                                        \
+        name_len = _name_result.value;                                  \
     } while (0)
 
 // Helper: Expect and consume a semicolon, then skip whitespace

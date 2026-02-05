@@ -163,6 +163,11 @@ void test_interpret_mutable_variable(void)
     assert_success("let mut x = 0; x = 100; x", 100, "test_interpret_mutable_variable");
 }
 
+void test_interpret_immutable_variable_reassignment(void)
+{
+    assert_error("let x = 0; x = 100; x", "test_interpret_immutable_variable_reassignment");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -194,6 +199,7 @@ int main(void)
     test_interpret_variable_type_compatible();
     test_interpret_variable_assignment_type_check();
     test_interpret_mutable_variable();
+    test_interpret_immutable_variable_reassignment();
     printf("All tests passed!\n");
     return 0;
 }
