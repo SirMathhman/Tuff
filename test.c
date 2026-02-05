@@ -2,50 +2,54 @@
 #include <stdio.h>
 #include "interpret.h"
 
+static void assert_success(const char *input, int expected_value, const char *test_name)
+{
+    InterpretResult result = interpret(input);
+    assert(!result.has_error);
+    assert(result.value == expected_value);
+    printf("✓ %s passed\n", test_name);
+}
+
+static void assert_error(const char *input, const char *test_name)
+{
+    InterpretResult result = interpret(input);
+    assert(result.has_error);
+    printf("✓ %s passed\n", test_name);
+}
+
 void test_interpret_empty_string(void)
 {
-    InterpretResult result = interpret("");
-    assert(!result.has_error);
-    assert(result.value == 0);
-    printf("✓ test_interpret_empty_string passed\n");
+    assert_success("", 0, "test_interpret_empty_string");
 }
 
 void test_interpret_one_hundred(void)
 {
-    InterpretResult result = interpret("100");
-    assert(!result.has_error);
-    assert(result.value == 100);
-    printf("✓ test_interpret_one_hundred passed\n");
+    assert_success("100", 100, "test_interpret_one_hundred");
 }
 
 void test_interpret_one_hundred_u8(void)
 {
-    InterpretResult result = interpret("100U8");
-    assert(!result.has_error);
-    assert(result.value == 100);
-    printf("✓ test_interpret_one_hundred_u8 passed\n");
+    assert_success("100U8", 100, "test_interpret_one_hundred_u8");
 }
 
 void test_interpret_negative_u8(void)
 {
-    InterpretResult result = interpret("-100U8");
-    assert(result.has_error);
-    printf("✓ test_interpret_negative_u8 passed\n");
+    assert_error("-100U8", "test_interpret_negative_u8");
 }
 
 void test_interpret_negative_i8(void)
 {
-    InterpretResult result = interpret("-100I8");
-    assert(!result.has_error);
-    assert(result.value == -100);
-    printf("✓ test_interpret_negative_i8 passed\n");
+    assert_success("-100I8", -100, "test_interpret_negative_i8");
 }
 
 void test_interpret_out_of_range_u8(void)
 {
-    InterpretResult result = interpret("256U8");
-    assert(result.has_error);
-    printf("✓ test_interpret_out_of_range_u8 passed\n");
+    assert_error("256U8", "test_interpret_out_of_range_u8");
+}
+
+void test_interpret_addition(void)
+{
+    assert_success("1U8 + 2U8", 3, "test_interpret_addition");
 }
 
 int main(void)
@@ -57,6 +61,7 @@ int main(void)
     test_interpret_negative_u8();
     test_interpret_negative_i8();
     test_interpret_out_of_range_u8();
+    test_interpret_addition();
     printf("All tests passed!\n");
     return 0;
 }

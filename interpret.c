@@ -11,6 +11,13 @@ typedef struct
     const char *error_message;
 } TypeInfo;
 
+typedef struct
+{
+    const char *input;
+    int pos;
+    InterpretResult last_error;
+} Parser;
+
 static const TypeInfo type_info[] = {
     {"U8", 0, 255, "Value out of range for U8 (0-255)"},
     {"U16", 0, 65535, "Value out of range for U16 (0-65535)"},
@@ -60,6 +67,122 @@ static InterpretResult validate_type(long value, const char *suffix)
     return (InterpretResult){.value = (int)value, .has_error = false, .error_message = NULL};
 }
 
+static void skip_whitespace(Parser *p)
+{
+    while (p->input[p->pos] && isspace(p->input[p->pos]))
+    {
+        p->pos++;
+    }
+}
+
+static InterpretResult parse_number(Parser *p)
+{
+    skip_whitespace(p);
+
+    if (!isdigit(p->input[p->pos]))
+    {
+        return (InterpretResult){
+            .value = 0,
+            .has_error = true,
+            .error_message = "Expected number"};
+    }
+
+    long value = 0;
+    while (isdigit(p->input[p->pos]))
+    {
+        value = value * 10 + (p->input[p->pos] - '0');
+        p->pos++;
+    }
+
+    // Check for type suffix
+    const char *suffix_start = &p->input[p->pos];
+    if (isalpha(suffix_start[0]))
+    {
+        p->pos += suffix_length(suffix_start);
+    }
+
+    return validate_type(value, suffix_start);
+}
+
+static InterpretResult parse_expression(Parser *p);
+
+static InterpretResult parse_additive(Parser *p)
+{
+    InterpretResult left = parse_number(p);
+    if (left.has_error)
+        return left;
+
+    skip_whitespace(p);
+
+    while (p->input[p->pos] == '+' || p->input[p->pos] == '-')
+    {
+        char op = p->input[p->pos];
+        p->pos++;
+
+        InterpretResult right = parse_number(p);
+        if (right.has_error)
+            return right;
+
+        if (op == '+')
+            left.value = left.value + right.value;
+        else
+            left.value = left.value - right.value;
+
+        skip_whitespace(p);
+    }
+
+    return left;
+}
+
+static InterpretResult parse_expression(Parser *p)
+{
+    return parse_additive(p);
+}
+
+static int is_expression(const char *str)
+{
+    int in_number = 0;
+    for (int i = 0; str[i]; i++)
+    {
+        // Skip whitespace
+        if (isspace(str[i]))
+        {
+            continue;
+        }
+
+        // Handle minus sign
+        if (str[i] == '-')
+        {
+            // If it's at the start or after whitespace/operator, it's a negative sign
+            if (i == 0 || !in_number)
+            {
+                continue;
+            }
+            // If we're in a number and see '-', it might be a subtraction operator
+            // Check if there's a number before it
+            if (in_number)
+            {
+                return 1;
+            }
+        }
+        else if (str[i] == '+' || str[i] == '*' || str[i] == '/')
+        {
+            if (in_number)
+                return 1;
+        }
+        else if (isdigit(str[i]))
+        {
+            in_number = 1;
+        }
+        else if (isalpha(str[i]))
+        {
+            // Part of a type suffix
+            continue;
+        }
+    }
+    return 0;
+}
+
 InterpretResult interpret(const char *str)
 {
     if (str == NULL || *str == '\0')
@@ -67,7 +190,14 @@ InterpretResult interpret(const char *str)
         return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
     }
 
-    // Check if the string starts with a negative sign
+    // Check if this is an expression (contains operators)
+    if (is_expression(str))
+    {
+        Parser p = {.input = str, .pos = 0};
+        return parse_expression(&p);
+    }
+
+    // Single value parsing
     bool is_negative = (str[0] == '-');
     const char *num_start = is_negative ? str + 1 : str;
 
