@@ -10,8 +10,8 @@ interpret.c:46:16: warning: implicit conversion from 'long long' to 'long' chang
 interpret.c:45:16: warning: implicit conversion from 'long long' to 'long' changes value from 4294967295 to -1 [-Wconstant-conversion]
    45 |     {"U32", 0, 4294967295L, "Value out of range for U32 (0-4294967295)"},
       |     ~          ^~~~~~~~~~~
-interpret.c:232:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  232 |         strncpy(suffix_buf, &str[pos], len);
+interpret.c:236:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  236 |         strncpy(suffix_buf, &str[pos], len);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -25,8 +25,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:296:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  296 |         strncpy(suffix_buf, num.suffix, num.suffix_len);
+interpret.c:300:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  300 |         strncpy(suffix_buf, num.suffix, num.suffix_len);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -40,8 +40,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:413:17: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  413 |                 strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
+interpret.c:417:17: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  417 |                 strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
       |                 ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -55,8 +55,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:426:17: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  426 |                 strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
+interpret.c:430:17: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  430 |                 strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
       |                 ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -70,8 +70,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:442:21: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  442 |                     strncpy(p->tracked_suffix, p->variables[idx].type, sizeof(p->tracked_suffix) - 1);
+interpret.c:446:21: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  446 |                     strncpy(p->tracked_suffix, p->variables[idx].type, sizeof(p->tracked_suffix) - 1);
       |                     ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -85,8 +85,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:546:13: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  546 |             strncpy(p->variables[idx].type, type, sizeof(p->variables[idx].type) - 1);
+interpret.c:550:13: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  550 |             strncpy(p->variables[idx].type, type, sizeof(p->variables[idx].type) - 1);
       |             ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -100,8 +100,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:555:5: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  555 |     strncpy(p->variables[p->var_count].name, name, name_len);
+interpret.c:559:5: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  559 |     strncpy(p->variables[p->var_count].name, name, name_len);
       |     ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -115,8 +115,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:561:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  561 |         strncpy(p->variables[p->var_count].type, type, sizeof(p->variables[p->var_count].type) - 1);
+interpret.c:565:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  565 |         strncpy(p->variables[p->var_count].type, type, sizeof(p->variables[p->var_count].type) - 1);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -130,8 +130,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:572:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  572 |         strncpy(p->all_declared_names[p->all_declared_count], name, name_len);
+interpret.c:576:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  576 |         strncpy(p->all_declared_names[p->all_declared_count], name, name_len);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -145,8 +145,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:610:5: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  610 |     strncpy(out_name, &p->input[start], len);
+interpret.c:614:5: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  614 |     strncpy(out_name, &p->input[start], len);
       |     ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -160,8 +160,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:733:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
-  733 |         strncpy(declared_type, type_name, sizeof(declared_type) - 1);
+interpret.c:737:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+  737 |         strncpy(declared_type, type_name, sizeof(declared_type) - 1);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -175,8 +175,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:1108:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
- 1108 |         strncpy(tracked_suffix, first_num.suffix, first_num.suffix_len);
+interpret.c:1112:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 1112 |         strncpy(tracked_suffix, first_num.suffix, first_num.suffix_len);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -190,8 +190,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:1110:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
- 1110 |         strncpy(last_suffix, first_num.suffix, first_num.suffix_len);
+interpret.c:1114:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 1114 |         strncpy(last_suffix, first_num.suffix, first_num.suffix_len);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -205,8 +205,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:1130:13: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
- 1130 |             strncpy(last_suffix, right_num.suffix, right_num.suffix_len);
+interpret.c:1134:13: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 1134 |             strncpy(last_suffix, right_num.suffix, right_num.suffix_len);
       |             ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(
@@ -220,8 +220,8 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.3443
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\vcruntime.h:346:47: note: expanded from macro '_CRT_DEPRECATE_TEXT'
   346 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
       |                                               ^
-interpret.c:1207:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
- 1207 |         strncpy(p->tracked_suffix, tracked_suffix, sizeof(p->tracked_suffix) - 1);
+interpret.c:1211:9: warning: 'strncpy' is deprecated: This function or variable may be unsafe. Consider using strncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 1211 |         strncpy(p->tracked_suffix, tracked_suffix, sizeof(p->tracked_suffix) - 1);
       |         ^
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\string.h:334:1: note: 'strncpy' has been explicitly marked deprecated here
   334 | __DEFINE_CPP_OVERLOAD_STANDARD_NFUNC_0_2_EX(

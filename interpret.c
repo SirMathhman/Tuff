@@ -1112,8 +1112,15 @@ static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, 
     skip_whitespace(p);
 
     // Look for operator (both && and || repeat the character)
+    int found_operator = 0;
     while (p->input[p->pos] == op_char && p->input[p->pos + 1] == op_char)
     {
+        found_operator = 1;
+
+        // Validate left operand is boolean (only when we actually have the operator)
+        if (strcmp(p->tracked_suffix, "Bool") != 0)
+            return make_error("Operand must be a boolean value");
+
         p->pos += 2;
         skip_whitespace(p);
 
@@ -1121,6 +1128,10 @@ static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, 
         InterpretResult right = operand_parser(p);
         if (right.has_error)
             return right;
+
+        // Validate right operand is boolean
+        if (strcmp(p->tracked_suffix, "Bool") != 0)
+            return make_error("Operand must be a boolean value");
 
         // Evaluate operation
         long result;
@@ -1132,6 +1143,13 @@ static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, 
         left = (InterpretResult){.value = result, .has_error = false, .error_message = NULL};
 
         skip_whitespace(p);
+    }
+
+    // Result of AND/OR is boolean only if we found the operator
+    if (found_operator) {
+        strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
+        p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+        p->has_tracked_suffix = 1;
     }
 
     return left;

@@ -19,6 +19,9 @@ static void assert_error(const char *input, const char *test_name)
 {
     printf("Testing %s...\n", test_name);
     InterpretResult result = interpret(input);
+    if(!result.has_error) {
+        printf("ERROR in %s: Expected error but got value %d\n", test_name, result.value);
+    }
     assert(result.has_error);
     printf("✓ %s passed\n", test_name);
 }
@@ -233,6 +236,11 @@ void test_interpret_bool_and_operator(void)
     assert_success("let x = true; let y = false; x && y", 0, "test_interpret_bool_and_operator");
 }
 
+void test_interpret_and_operator_numeric_types_error(void)
+{
+    assert_error("1 && 2", "test_interpret_and_operator_numeric_types_error");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -278,6 +286,7 @@ int main(void)
     test_interpret_bool_true();
     test_interpret_bool_or_operator();
     test_interpret_bool_and_operator();
+    test_interpret_and_operator_numeric_types_error();
     printf("All tests passed!\n");
     return 0;
 }
