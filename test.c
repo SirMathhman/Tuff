@@ -2,27 +2,34 @@
 #include <stdio.h>
 #include "interpret.h"
 
+static int passed_asserts = 0;
+static int total_asserts = 0;
+
 static void assert_success(const char *input, int expected_value, const char *test_name)
 {
+    total_asserts++;
     InterpretResult result = interpret(input);
     if (result.has_error)
     {
-        printf("ERROR in %s: %s\n", test_name, result.error_message);
+        printf("'%s' failed!\n", test_name);
+        printf("ERROR in '%s': %s\n", test_name, result.error_message);
     }
     assert(!result.has_error);
     assert(result.value == expected_value);
-    printf("✓ %s passed\n", test_name);
+    passed_asserts++;
 }
 
 static void assert_error(const char *input, const char *test_name)
 {
+    total_asserts++;
     InterpretResult result = interpret(input);
     if (!result.has_error)
     {
-        printf("ERROR in %s: Expected error but got value %d\n", test_name, result.value);
+        printf("'%s' failed!\n", test_name);
+        printf("ERROR in '%s': Expected error but got value %d\n", test_name, result.value);
     }
     assert(result.has_error);
-    printf("✓ %s passed\n", test_name);
+    passed_asserts++;
 }
 
 void test_interpret_empty_string(void)
@@ -385,6 +392,16 @@ void test_interpret_match_no_match_error(void)
     assert_error("let x = match (100) { case 1 => 2; case 2 => 3; }; x", "test_interpret_match_no_match_error");
 }
 
+void test_interpret_match_bool_value_numeric_patterns_error(void)
+{
+    assert_error("let x = match (true) { case 100 => 2; case _ => 3; }; x", "test_interpret_match_bool_value_numeric_patterns_error");
+}
+
+void test_interpret_match_numeric_value_bool_patterns_error(void)
+{
+    assert_error("let x = match (100) { case true => 2; case _ => 3; }; x", "test_interpret_match_numeric_value_bool_patterns_error");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -460,6 +477,16 @@ int main(void)
     test_interpret_match_wildcard_default();
     test_interpret_match_multiple_cases();
     test_interpret_match_no_match_error();
-    printf("All tests passed!\n");
+    test_interpret_match_bool_value_numeric_patterns_error();
+    test_interpret_match_numeric_value_bool_patterns_error();
+
+    if (passed_asserts == total_asserts)
+    {
+        printf("All %d tests passed!\n", passed_asserts);
+    }
+    else
+    {
+        printf("%d out of %d tests passed.\n", passed_asserts, total_asserts);
+    }
     return 0;
 }

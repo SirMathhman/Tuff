@@ -1549,6 +1549,35 @@ static InterpretResult apply_branch_state(Parser *p, Variable then_state_vars[10
     return (InterpretResult){.value = then_expr.value, .has_error = false, .error_message = NULL};
 }
 
+// Helper: Parse boolean pattern (true/false) with type validation
+// Returns pattern_value (1 for true, 0 for false) or error if type mismatch
+static InterpretResult parse_bool_pattern(Parser *p, int match_value_is_bool, long *out_pattern_value)
+{
+    if (is_keyword_at(p, "true"))
+    {
+        // Validate: boolean patterns require boolean match values
+        if (!match_value_is_bool)
+        {
+            return make_error("Cannot match boolean patterns against numeric value");
+        }
+        *out_pattern_value = 1;
+        p->pos += 4; // Skip 'true'
+        return (InterpretResult){.value = 1, .has_error = false, .error_message = NULL};
+    }
+    else if (is_keyword_at(p, "false"))
+    {
+        // Validate: boolean patterns require boolean match values
+        if (!match_value_is_bool)
+        {
+            return make_error("Cannot match boolean patterns against numeric value");
+        }
+        *out_pattern_value = 0;
+        p->pos += 5; // Skip 'false'
+        return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+    }
+    return make_error("Expected boolean pattern (true or false)");
+}
+
 // Helper: Parse match expression
 // Syntax: match (value) { case pattern => result; case pattern => result; ... case _ => default; }
 static InterpretResult parse_match(Parser *p)
@@ -1568,6 +1597,9 @@ static InterpretResult parse_match(Parser *p)
     if (match_value.has_error)
         return match_value;
 
+    // Determine match value type (boolean or numeric)
+    int match_value_is_bool = (p->has_tracked_suffix && strcmp(p->tracked_suffix, "Bool") == 0);
+
     // Expect closing parenthesis
     InterpretResult close_paren = expect_char(p, ')', "Expected ')' after match condition");
     if (close_paren.has_error)
@@ -1584,6 +1616,7 @@ static InterpretResult parse_match(Parser *p)
     InterpretResult wildcard_result = {.value = 0, .has_error = true, .error_message = NULL};
     int found_match = 0;
     InterpretResult match_result = {.value = 0, .has_error = true, .error_message = NULL};
+    int has_non_wildcard_cases = 0;
 
     while (p->input[p->pos] && p->input[p->pos] != '}')
     {
@@ -1597,7 +1630,7 @@ static InterpretResult parse_match(Parser *p)
         p->pos += 4; // Skip 'case'
         skip_whitespace(p);
 
-        // Parse pattern (either a number or wildcard _)
+        // Parse pattern (either a number, boolean literal, or wildcard _)
         int is_wildcard = 0;
         long pattern_value = 0;
 
@@ -1606,9 +1639,25 @@ static InterpretResult parse_match(Parser *p)
             is_wildcard = 1;
             p->pos++;
         }
+        else if (is_keyword_at(p, "true") || is_keyword_at(p, "false"))
+        {
+            // Boolean pattern: true/false
+            has_non_wildcard_cases = 1;
+            InterpretResult bool_pattern_result = parse_bool_pattern(p, match_value_is_bool, &pattern_value);
+            if (bool_pattern_result.has_error)
+                return bool_pattern_result;
+        }
         else if (isdigit(p->input[p->pos]))
         {
             // Parse numeric pattern
+            has_non_wildcard_cases = 1;
+
+            // Validate: numeric patterns require numeric match values
+            if (match_value_is_bool)
+            {
+                return make_error("Cannot match numeric patterns against boolean value");
+            }
+
             pattern_value = 0;
             while (isdigit(p->input[p->pos]))
             {
@@ -1618,7 +1667,7 @@ static InterpretResult parse_match(Parser *p)
         }
         else
         {
-            return make_error("Expected pattern in case (number or _)");
+            return make_error("Expected pattern in case (number, true, false, or _)");
         }
 
         skip_whitespace(p);
