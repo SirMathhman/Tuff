@@ -689,6 +689,7 @@ static InterpretResult finalize_statement(Parser *p, const char *context)
 
 // Forward declaration for recursion
 static InterpretResult parse_additive(Parser *p);
+static InterpretResult parse_logical_or(Parser *p);
 static InterpretResult parse_assignment_statement_in_block(Parser *p);
 
 // Helper: Parse a let statement in a block
@@ -1095,6 +1096,39 @@ static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_nu
     return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};
 }
 
+// Helper: Parse logical OR operator (lowest precedence)
+static InterpretResult parse_logical_or(Parser *p)
+{
+    skip_whitespace(p);
+
+    // Parse first additive term
+    InterpretResult left = parse_additive(p);
+    if (left.has_error)
+        return left;
+
+    skip_whitespace(p);
+
+    // Look for || operator
+    while (p->input[p->pos] == '|' && p->input[p->pos + 1] == '|')
+    {
+        p->pos += 2; // Skip ||
+        skip_whitespace(p);
+
+        // Parse right operand
+        InterpretResult right = parse_additive(p);
+        if (right.has_error)
+            return right;
+
+        // Evaluate OR
+        long result = (left.value != 0) || (right.value != 0) ? 1 : 0;
+        left = (InterpretResult){.value = result, .has_error = false, .error_message = NULL};
+
+        skip_whitespace(p);
+    }
+
+    return left;
+}
+
 static InterpretResult parse_additive(Parser *p)
 {
     skip_whitespace(p);
@@ -1231,8 +1265,8 @@ static InterpretResult parse_expression(Parser *p)
     if (let_statements_result.has_error)
         return let_statements_result;
 
-    // Parse the final expression (can be a variable reference or a complex expression)
-    return parse_additive(p);
+    // Parse the final expression (can be a variable reference, arithmetic expression, or logical OR)
+    return parse_logical_or(p);
 }
 
 static int is_expression(const char *str)
@@ -1277,6 +1311,11 @@ static int is_expression(const char *str)
         {
             if (in_number)
                 return 1;
+        }
+        else if (str[i] == '|' && str[i + 1] == '|')
+        {
+            // Logical OR operator
+            return 1;
         }
         else if (str[i] == '=' && in_identifier)
         {
