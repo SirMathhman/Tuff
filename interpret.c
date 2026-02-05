@@ -225,8 +225,9 @@ static InterpretResult parse_additive(Parser *p)
             result_value = result_value - right_num.value;
 
         // Determine which type constraint applies:
-        // 1. If left operand has a type suffix, use its type (unless right has different type)
+        // 1. If left operand had a type suffix, use its type (unless right has different type)
         // 2. Otherwise, if right operand has a type suffix, use its type
+        // 3. If there's a future operand with a different type, don't validate
         char validation_suffix[4] = {0};
         int should_validate = 0;
 
@@ -239,6 +240,7 @@ static InterpretResult parse_additive(Parser *p)
             if (right_num.suffix_len > 0 && right_num.suffix_len != left_num.suffix_len)
             {
                 should_validate = 0;
+                has_tracked_suffix = 0;  // Clear constraint for future operations
             }
             else if (right_num.suffix_len > 0 && left_num.suffix_len > 0)
             {
@@ -246,6 +248,69 @@ static InterpretResult parse_additive(Parser *p)
                 if (strncmp(left_num.suffix, right_num.suffix, left_num.suffix_len) != 0)
                 {
                     should_validate = 0;
+                    has_tracked_suffix = 0;  // Clear constraint for future operations
+                }
+            }
+            else if (right_num.suffix_len == 0)
+            {
+                // Right is untyped - check if next operand (if exists) has different type
+                // by peeking ahead
+                int next_pos = p->pos;
+                int has_future_op = 0;
+                int future_has_different_type = 0;
+                
+                while (next_pos < 1000 && p->input[next_pos])  // arbitrary limit to prevent infinity
+                {
+                    if (p->input[next_pos] == '+' || p->input[next_pos] == '-')
+                    {
+                        has_future_op = 1;
+                        next_pos++;
+                        // Skip whitespace
+                        while (isspace(p->input[next_pos]))
+                            next_pos++;
+                        // Check if next operand has a type
+                        // Peek for suffix in the next number
+                        while (next_pos < 1000 && p->input[next_pos] && isdigit(p->input[next_pos]))
+                            next_pos++;
+                        // Now check for suffix
+                        if (next_pos < 1000 && p->input[next_pos] && (isalpha(p->input[next_pos]) || p->input[next_pos] == 'U' || p->input[next_pos] == 'I'))
+                        {
+                            // There's a suffix in the next operand
+                            int suffix_len = 0;
+                            const char *future_suffix = &p->input[next_pos];
+                            if (future_suffix[0] && isalpha(future_suffix[0]))
+                            {
+                                suffix_len++;
+                                if (future_suffix[1] && isdigit(future_suffix[1]))
+                                {
+                                    suffix_len++;
+                                    if (future_suffix[2] && isdigit(future_suffix[2]))
+                                        suffix_len++;
+                                }
+                            }
+                            // Check if this suffix differs from tracked_suffix
+                            if (suffix_len != left_num.suffix_len || 
+                                strncmp(future_suffix, left_num.suffix, left_num.suffix_len) != 0)
+                            {
+                                future_has_different_type = 1;
+                            }
+                        }
+                        break;
+                    }
+                    else if (isspace(p->input[next_pos]) || isdigit(p->input[next_pos]) || isalpha(p->input[next_pos]))
+                    {
+                        next_pos++;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                
+                if (future_has_different_type)
+                {
+                    should_validate = 0;
+                    has_tracked_suffix = 0;  // Clear constraint
                 }
             }
 
