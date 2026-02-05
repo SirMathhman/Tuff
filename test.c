@@ -228,6 +228,11 @@ void test_interpret_bool_or_operator(void)
     assert_success("let x = true; let y = false; x || y", 1, "test_interpret_bool_or_operator");
 }
 
+void test_interpret_bool_and_operator(void)
+{
+    assert_success("let x = true; let y = false; x && y", 0, "test_interpret_bool_and_operator");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -272,6 +277,7 @@ int main(void)
     test_interpret_nested_blocks_x_then_toplevel_x();
     test_interpret_bool_true();
     test_interpret_bool_or_operator();
+    test_interpret_bool_and_operator();
     printf("All tests passed!\n");
     return 0;
 }

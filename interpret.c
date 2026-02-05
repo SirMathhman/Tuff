@@ -689,6 +689,7 @@ static InterpretResult finalize_statement(Parser *p, const char *context)
 
 // Forward declaration for recursion
 static InterpretResult parse_additive(Parser *p);
+static InterpretResult parse_logical_and(Parser *p);
 static InterpretResult parse_logical_or(Parser *p);
 static InterpretResult parse_assignment_statement_in_block(Parser *p);
 
@@ -1096,37 +1097,62 @@ static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_nu
     return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};
 }
 
-// Helper: Parse logical OR operator (lowest precedence)
-static InterpretResult parse_logical_or(Parser *p)
+// Type definition for single-argument operand parser function
+typedef InterpretResult (*BinaryOpParser)(Parser *p);
+
+// Helper: Parse binary logical operation with custom operand parser
+static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, int is_or, BinaryOpParser operand_parser)
 {
     skip_whitespace(p);
 
-    // Parse first additive term
-    InterpretResult left = parse_additive(p);
+    InterpretResult left = operand_parser(p);
     if (left.has_error)
         return left;
 
     skip_whitespace(p);
 
-    // Look for || operator
-    while (p->input[p->pos] == '|' && p->input[p->pos + 1] == '|')
+    // Look for operator (both && and || repeat the character)
+    while (p->input[p->pos] == op_char && p->input[p->pos + 1] == op_char)
     {
-        p->pos += 2; // Skip ||
+        p->pos += 2;
         skip_whitespace(p);
 
         // Parse right operand
-        InterpretResult right = parse_additive(p);
+        InterpretResult right = operand_parser(p);
         if (right.has_error)
             return right;
 
-        // Evaluate OR
-        long result = (left.value != 0) || (right.value != 0) ? 1 : 0;
+        // Evaluate operation
+        long result;
+        if (is_or)
+            result = (left.value != 0) || (right.value != 0) ? 1 : 0;
+        else  // AND
+            result = (left.value != 0) && (right.value != 0) ? 1 : 0;
+
         left = (InterpretResult){.value = result, .has_error = false, .error_message = NULL};
 
         skip_whitespace(p);
     }
 
     return left;
+}
+
+// Helper: Parse binary logical operation (AND or OR)
+static InterpretResult parse_logical_binary_op(Parser *p, char op_char, int is_or)
+{
+    return parse_binary_logical_op_generic(p, op_char, is_or, parse_additive);
+}
+
+// Helper: Parse logical AND operator (higher precedence than OR)
+static InterpretResult parse_logical_and(Parser *p)
+{
+    return parse_logical_binary_op(p, '&', 0);
+}
+
+// Helper: Parse logical OR operator (lowest precedence)
+static InterpretResult parse_logical_or(Parser *p)
+{
+    return parse_binary_logical_op_generic(p, '|', 1, parse_logical_and);
 }
 
 static InterpretResult parse_additive(Parser *p)
@@ -1315,6 +1341,11 @@ static int is_expression(const char *str)
         else if (str[i] == '|' && str[i + 1] == '|')
         {
             // Logical OR operator
+            return 1;
+        }
+        else if (str[i] == '&' && str[i + 1] == '&')
+        {
+            // Logical AND operator
             return 1;
         }
         else if (str[i] == '=' && in_identifier)
