@@ -91,6 +91,11 @@ void test_interpret_chained_overflow(void)
     assert_error("1U8 + 65534 + 1U16", "test_interpret_chained_overflow");
 }
 
+void test_interpret_subtraction(void)
+{
+    assert_success("2 + 3 - 4", 1, "test_interpret_subtraction");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -108,6 +113,7 @@ int main(void)
     test_interpret_overflow_right_typed();
     test_interpret_chained_mixed_types();
     test_interpret_chained_overflow();
+    test_interpret_subtraction();
     printf("All tests passed!\n");
     return 0;
 }
