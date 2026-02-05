@@ -28,8 +28,8 @@ typedef struct
     int has_tracked_suffix;
     Variable variables[10];
     int var_count;
-    char all_declared_names[10][32];  // Track all variable names ever declared
-    int all_declared_count;           // Count of all declared names
+    char all_declared_names[10][32]; // Track all variable names ever declared
+    int all_declared_count;          // Count of all declared names
 } Parser;
 
 typedef struct
@@ -536,7 +536,7 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
     {
         p->variables[p->var_count].type[0] = '\0';
     }
-    
+
     // Track this name in the all_declared_names array for duplicate checking across scopes
     if (p->all_declared_count < 10)
     {
@@ -544,7 +544,7 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
         p->all_declared_names[p->all_declared_count][name_len] = '\0';
         p->all_declared_count++;
     }
-    
+
     return p->var_count++;
 }
 
