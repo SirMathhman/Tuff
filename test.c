@@ -52,6 +52,11 @@ void test_interpret_addition(void)
     assert_success("1U8 + 2U8", 3, "test_interpret_addition");
 }
 
+void test_interpret_mixed_types(void)
+{
+    assert_success("1U8 + 2", 3, "test_interpret_mixed_types");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -62,6 +67,7 @@ int main(void)
     test_interpret_negative_i8();
     test_interpret_out_of_range_u8();
     test_interpret_addition();
+    test_interpret_mixed_types();
     printf("All tests passed!\n");
     return 0;
 }
