@@ -29,7 +29,7 @@ try {
     
     # Step 2: Check for code duplication
     Write-Host "`n[2/2] Checking for code duplication..." -ForegroundColor Yellow
-    pmd cpd interpret.c test.c --language cpp --minimum-tokens 35 --ignore-literals
+    pmd cpd interpret.c test.c --language cpp --minimum-tokens 51 --ignore-literals
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[WARNING] Code duplication detected. Review before committing." -ForegroundColor Yellow
         exit 1

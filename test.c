@@ -498,6 +498,36 @@ void test_interpret_while_loop_multiple_conditions(void)
     assert_success("let mut i = 0; let mut j = 10; while (i < 5) { i += 1; j -= 1; } j", 5, "test_interpret_while_loop_multiple_conditions");
 }
 
+void test_interpret_for_loop_sum(void)
+{
+    assert_success("let mut sum = 0; for (i in 0..10) sum += i; sum", 45, "test_interpret_for_loop_sum");
+}
+
+void test_interpret_for_loop_single_iteration(void)
+{
+    assert_success("let mut count = 0; for (i in 0..1) count += 1; count", 1, "test_interpret_for_loop_single_iteration");
+}
+
+void test_interpret_for_loop_no_iterations(void)
+{
+    assert_success("let mut count = 0; for (i in 0..0) count += 1; count", 0, "test_interpret_for_loop_no_iterations");
+}
+
+void test_interpret_for_loop_negative_range(void)
+{
+    assert_success("let mut sum = 0; for (i in -5..5) sum += i; sum", -5, "test_interpret_for_loop_negative_range");
+}
+
+void test_interpret_for_loop_large_range(void)
+{
+    assert_success("let mut product = 1; for (i in 2..5) product *= i; product", 24, "test_interpret_for_loop_large_range");
+}
+
+void test_interpret_for_loop_without_final_expression(void)
+{
+    assert_success("let mut i = 0; for (j in 0..3) i += 1;", 0, "test_interpret_for_loop_without_final_expression");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -593,6 +623,12 @@ int main(void)
     test_interpret_while_loop_numeric_condition_error();
     test_interpret_while_loop_with_multiplication();
     test_interpret_while_loop_multiple_conditions();
+    test_interpret_for_loop_sum();
+    test_interpret_for_loop_single_iteration();
+    test_interpret_for_loop_no_iterations();
+    test_interpret_for_loop_negative_range();
+    test_interpret_for_loop_large_range();
+    test_interpret_for_loop_without_final_expression();
 
     if (passed_asserts == total_asserts)
     {

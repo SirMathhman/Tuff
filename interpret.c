@@ -758,9 +758,60 @@ static InterpretResult parse_if_else(Parser *p);
 static InterpretResult parse_match(Parser *p);
 static InterpretResult parse_if_statement(Parser *p);
 static InterpretResult parse_while_statement(Parser *p);
+static InterpretResult parse_for_statement(Parser *p);
 static InterpretResult parse_assignment_or_if_else(Parser *p);
 static InterpretResult parse_assignment_statement_in_block(Parser *p);
 static int has_assignment_operator(Parser *p);
+
+// Helper: Parse body to skip past it, restoring variable state
+// Returns the position where the body ends
+static int parse_and_skip_body_restoring_state(Parser *p, int body_start_pos)
+{
+    Variable saved_vars[10];
+    int saved_var_count;
+    save_variable_state(p, saved_vars, &saved_var_count);
+
+    p->pos = body_start_pos;
+    InterpretResult body_result = parse_assignment_or_if_else(p);
+    if (body_result.has_error) {
+        // Note: caller must handle error since we can't return it from this helper
+        return -1;
+    }
+    int body_end_pos = p->pos;
+
+    restore_saved_vars(p, saved_vars, saved_var_count);
+    
+    return body_end_pos;
+}
+
+// Helper: Parse loop keyword header (while/for)
+// Helper: Parse range operator (..)
+static InterpretResult expect_range_operator(Parser *p)
+{
+    skip_whitespace(p);
+    if (p->input[p->pos] != '.' || p->input[p->pos + 1] != '.')
+    {
+        return make_error("Expected '..' range operator");
+    }
+    p->pos += 2; // Skip '..'
+    skip_whitespace(p);
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Initialize loop execution state
+// Returns initialized body tracking variables
+typedef struct
+{
+    int body_start_pos;
+    int body_end_pos;
+} LoopState;
+
+static LoopState init_loop_state(Parser *p)
+{
+    int body_start_pos = p->pos;
+    int body_end_pos = body_start_pos;
+    return (LoopState){.body_start_pos = body_start_pos, .body_end_pos = body_end_pos};
+}
 
 // Helper: Parse a let statement in a block
 static InterpretResult parse_let_statement_in_block(Parser *p)
@@ -909,7 +960,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             saw_statement = 1;
         }
         // Check for assignment statement (identifier followed by '=')
-        else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match"))
+        else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match") && !is_keyword_at(p, "for"))
         {
             // Look ahead to see if this is an assignment
             int saved_pos = p->pos;
@@ -1047,9 +1098,21 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             has_last_statement = 0; // while statements don't produce values
             saw_statement = 1;
         }
+        // Check for for statement
+        else if (is_keyword_at(p, "for"))
+        {
+            InterpretResult for_result = parse_for_statement(p);
+            if (for_result.has_error)
+                return for_result;
+
+            consume_optional_semicolon(p);
+
+            has_last_statement = 0; // for statements don't produce values
+            saw_statement = 1;
+        }
         else
         {
-            // Not a let, assignment, block, if statement, or while statement, exit the loop
+            // Not a let, assignment, block, if statement, while statement, or for statement, exit the loop
             break;
         }
     }
@@ -1707,17 +1770,9 @@ static InterpretResult parse_if_statement(Parser *p)
 // Syntax: while (condition) body
 static InterpretResult parse_while_statement(Parser *p)
 {
-    if (!is_keyword_at(p, "while"))
-    {
-        return make_error("Expected 'while' keyword");
-    }
-    p->pos += 5; // Skip 'while'
-
-    // Expect opening parenthesis
-    InterpretResult open_paren = expect_char(p, '(', "Expected '(' after 'while'");
-    if (open_paren.has_error)
-        return open_paren;
-    skip_whitespace(p);
+    InterpretResult header = parse_keyword_header(p, "while", 5, "Expected 'while' keyword");
+    if (header.has_error)
+        return header;
 
     // Save position before condition
     int cond_start_pos = p->pos;
@@ -1739,11 +1794,12 @@ static InterpretResult parse_while_statement(Parser *p)
         return close_paren;
 
     // Save position where body starts
-    int body_start_pos = p->pos;
+    LoopState loop_state = init_loop_state(p);
+    int body_start_pos = loop_state.body_start_pos;
+    int body_end_pos = loop_state.body_end_pos;
 
     // Execute while loop with iteration cap
     static const int MAX_ITERATIONS = 1024;
-    int body_end_pos = body_start_pos; // Track where body ends
 
     for (int iter = 0; iter < MAX_ITERATIONS; iter++)
     {
@@ -1763,19 +1819,9 @@ static InterpretResult parse_while_statement(Parser *p)
             // But save/restore variable state since condition is false
             if (iter == 0)
             {
-                // Save variable state before parsing body
-                Variable saved_vars[10];
-                int saved_var_count;
-                save_variable_state(p, saved_vars, &saved_var_count);
-
-                p->pos = body_start_pos;
-                InterpretResult body_result = parse_assignment_or_if_else(p);
-                if (body_result.has_error)
-                    return body_result;
-                body_end_pos = p->pos;
-
-                // Restore variable state (undo mutations from false condition body)
-                restore_saved_vars(p, saved_vars, saved_var_count);
+                body_end_pos = parse_and_skip_body_restoring_state(p, body_start_pos);
+                if (body_end_pos == -1)
+                    return make_error("Error parsing loop body");
             }
             else
             {
@@ -1795,6 +1841,108 @@ static InterpretResult parse_while_statement(Parser *p)
     }
 
     // While loop returns 0 (statements don't have values)
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Parse for loop
+// Syntax: for (identifier in start..end) body
+static InterpretResult parse_for_statement(Parser *p)
+{
+    InterpretResult header = parse_keyword_header(p, "for", 3, "Expected 'for' keyword");
+    if (header.has_error)
+        return header;
+
+    // Parse loop variable name
+    char loop_var_name[32];
+    int name_len = parse_identifier(p, loop_var_name, sizeof(loop_var_name));
+    if (name_len <= 0)
+    {
+        return make_error("Expected loop variable name in for loop");
+    }
+    skip_whitespace(p);
+
+    // Expect 'in' keyword
+    if (!is_keyword_at(p, "in"))
+    {
+        return make_error("Expected 'in' keyword in for loop");
+    }
+    p->pos += 2; // Skip 'in'
+    skip_whitespace(p);
+
+    // Parse start value
+    InterpretResult start_result = parse_additive(p);
+    if (start_result.has_error)
+        return start_result;
+    long start_value = start_result.value;
+
+    // Expect '..' operator
+    InterpretResult range_op = expect_range_operator(p);
+    if (range_op.has_error)
+        return range_op;
+
+    // Parse end value
+    InterpretResult end_result = parse_additive(p);
+    if (end_result.has_error)
+        return end_result;
+    long end_value = end_result.value;
+    skip_whitespace(p);
+
+    // Expect closing parenthesis
+    InterpretResult close_paren = expect_closing_paren(p, "for loop range");
+    if (close_paren.has_error)
+        return close_paren;
+
+    // Save position where body starts
+    LoopState loop_state = init_loop_state(p);
+    int body_start_pos = loop_state.body_start_pos;
+    int body_end_pos = loop_state.body_end_pos;
+
+    // Execute for loop with iteration cap
+    static const int MAX_ITERATIONS = 1024;
+
+    // Check that loop variable hasn't been declared before
+    if (has_variable_been_declared(p, loop_var_name, name_len))
+    {
+        return make_error("Variable already declared");
+    }
+
+    for (long i = start_value; i < end_value && (i - start_value) < MAX_ITERATIONS; i++)
+    {
+        // Set loop variable to current value (immutable, typeless)
+        set_variable(p, loop_var_name, name_len, i);
+
+        // Parse body on first iteration to find end position
+        if (i == start_value)
+        {
+            p->pos = body_start_pos;
+            InterpretResult body_result = parse_assignment_or_if_else(p);
+            if (body_result.has_error)
+                return body_result;
+            body_end_pos = p->pos;
+        }
+        else
+        {
+            // Subsequent iterations: reset to body start and execute
+            p->pos = body_start_pos;
+            InterpretResult body_result = parse_assignment_or_if_else(p);
+            if (body_result.has_error)
+                return body_result;
+            body_end_pos = p->pos;
+        }
+    }
+
+    // If loop didn't execute (start >= end), we still need to parse the body to skip past it
+    if (start_value >= end_value)
+    {
+        body_end_pos = parse_and_skip_body_restoring_state(p, body_start_pos);
+        if (body_end_pos == -1)
+            return make_error("Error parsing loop body");
+    }
+
+    // Set position to end of body for next parsing
+    p->pos = body_end_pos;
+
+    // For loop returns 0 (statements don't have values)
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
