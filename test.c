@@ -5,6 +5,10 @@
 static void assert_success(const char *input, int expected_value, const char *test_name)
 {
     InterpretResult result = interpret(input);
+    if (result.has_error)
+    {
+        printf("ERROR in %s: %s\n", test_name, result.error_message);
+    }
     assert(!result.has_error);
     assert(result.value == expected_value);
     printf("✓ %s passed\n", test_name);
@@ -62,6 +66,11 @@ void test_interpret_overflow(void)
     assert_error("1U8 + 255U8", "test_interpret_overflow");
 }
 
+void test_interpret_overflow_untyped(void)
+{
+    assert_error("1U8 + 255", "test_interpret_overflow_untyped");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -74,6 +83,7 @@ int main(void)
     test_interpret_addition();
     test_interpret_mixed_types();
     test_interpret_overflow();
+    test_interpret_overflow_untyped();
     printf("All tests passed!\n");
     return 0;
 }
