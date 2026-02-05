@@ -57,6 +57,11 @@ void test_interpret_mixed_types(void)
     assert_success("1U8 + 2", 3, "test_interpret_mixed_types");
 }
 
+void test_interpret_overflow(void)
+{
+    assert_error("1U8 + 255U8", "test_interpret_overflow");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -68,6 +73,7 @@ int main(void)
     test_interpret_out_of_range_u8();
     test_interpret_addition();
     test_interpret_mixed_types();
+    test_interpret_overflow();
     printf("All tests passed!\n");
     return 0;
 }

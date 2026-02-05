@@ -16,7 +16,16 @@ typedef struct
     const char *input;
     int pos;
     InterpretResult last_error;
+    char tracked_suffix[4];
+    int has_tracked_suffix;
 } Parser;
+
+typedef struct
+{
+    long value;
+    const char *suffix;
+    int suffix_len;
+} NumberValue;
 
 static const TypeInfo type_info[] = {
     {"U8", 0, 255, "Value out of range for U8 (0-255)"},
@@ -33,7 +42,18 @@ static int suffix_length(const char *suffix)
 {
     if (!suffix || !suffix[0])
         return 0;
-    return (suffix[1] != '\0') ? 3 : 2;
+    // U8, I8 are 2 chars, U16, I16, U32, I32, U64, I64 are 3 chars
+    // Check if second char is a digit (2-char suffix) or a digit and another char (3-char)
+    if (isdigit(suffix[1]))
+    {
+        // Could be 2 chars (U8, I8) or 3 chars (I16, U16, etc.)
+        if (suffix[2] && isdigit(suffix[2]))
+        {
+            return 3; // I16, U16, I32, U32, I64, U64
+        }
+        return 2; // I8, U8
+    }
+    return 0;
 }
 
 static int contains_suffix(const char *suffix, const char *search_suffix)
@@ -42,29 +62,45 @@ static int contains_suffix(const char *suffix, const char *search_suffix)
     return strncmp(suffix, search_suffix, len) == 0;
 }
 
-static InterpretResult validate_type(long value, const char *suffix)
+static int get_type_info_index(const char *suffix);
+
+static InterpretResult validate_value_by_index(long value, int type_idx)
 {
-    if (!suffix || !suffix[0])
+    if (type_idx < 0)
     {
         return (InterpretResult){.value = (int)value, .has_error = false, .error_message = NULL};
     }
+
+    if (value < type_info[type_idx].min_value || value > type_info[type_idx].max_value)
+    {
+        return (InterpretResult){
+            .value = 0,
+            .has_error = true,
+            .error_message = type_info[type_idx].error_message};
+    }
+
+    return (InterpretResult){.value = (int)value, .has_error = false, .error_message = NULL};
+}
+
+static InterpretResult validate_type(long value, const char *suffix)
+{
+    int type_idx = get_type_info_index(suffix);
+    return validate_value_by_index(value, type_idx);
+}
+
+static int get_type_info_index(const char *suffix)
+{
+    if (!suffix || !suffix[0])
+        return -1;
 
     for (int i = 0; type_info[i].suffix != NULL; i++)
     {
         if (contains_suffix(suffix, type_info[i].suffix))
         {
-            if (value < type_info[i].min_value || value > type_info[i].max_value)
-            {
-                return (InterpretResult){
-                    .value = 0,
-                    .has_error = true,
-                    .error_message = type_info[i].error_message};
-            }
-            break;
+            return i;
         }
     }
-
-    return (InterpretResult){.value = (int)value, .has_error = false, .error_message = NULL};
+    return -1;
 }
 
 static void skip_whitespace(Parser *p)
@@ -75,16 +111,24 @@ static void skip_whitespace(Parser *p)
     }
 }
 
-static InterpretResult parse_number(Parser *p)
+static void extract_suffix(const char *str, int pos, char *suffix_buf)
+{
+    suffix_buf[0] = '\0';
+    if (isalpha(str[pos]))
+    {
+        int len = suffix_length(&str[pos]);
+        strncpy(suffix_buf, &str[pos], len);
+        suffix_buf[len] = '\0';
+    }
+}
+
+static NumberValue parse_number_raw(Parser *p)
 {
     skip_whitespace(p);
 
     if (!isdigit(p->input[p->pos]))
     {
-        return (InterpretResult){
-            .value = 0,
-            .has_error = true,
-            .error_message = "Expected number"};
+        return (NumberValue){.value = 0, .suffix = NULL, .suffix_len = 0};
     }
 
     long value = 0;
@@ -96,21 +140,61 @@ static InterpretResult parse_number(Parser *p)
 
     // Check for type suffix
     const char *suffix_start = &p->input[p->pos];
+    int suffix_len = 0;
     if (isalpha(suffix_start[0]))
     {
-        p->pos += suffix_length(suffix_start);
+        suffix_len = suffix_length(suffix_start);
+        p->pos += suffix_len;
     }
 
-    return validate_type(value, suffix_start);
+    return (NumberValue){.value = value, .suffix = suffix_start, .suffix_len = suffix_len};
+}
+
+static InterpretResult parse_number(Parser *p)
+{
+    NumberValue num = parse_number_raw(p);
+
+    // Validate the parsed number
+    char suffix_buf[4] = {0};
+    if (num.suffix_len > 0)
+    {
+        memcpy(suffix_buf, num.suffix, num.suffix_len);
+    }
+
+    return validate_type(num.value, num.suffix_len > 0 ? suffix_buf : NULL);
 }
 
 static InterpretResult parse_expression(Parser *p);
 
 static InterpretResult parse_additive(Parser *p)
 {
-    InterpretResult left = parse_number(p);
+    skip_whitespace(p);
+
+    // Parse first number and get its suffix
+    NumberValue left_num = parse_number_raw(p);
+
+    // Validate left operand
+    char left_suffix[4] = {0};
+    if (left_num.suffix_len > 0)
+    {
+        strncpy(left_suffix, left_num.suffix, left_num.suffix_len);
+        left_suffix[left_num.suffix_len] = '\0';
+    }
+
+    InterpretResult left = validate_type(left_num.value, left_num.suffix_len > 0 ? left_suffix : NULL);
     if (left.has_error)
         return left;
+
+    long result_value = left_num.value;
+    char tracked_suffix[4] = {0};
+    int has_tracked_suffix = 0;
+
+    if (left_num.suffix_len > 0)
+    {
+        strncpy(tracked_suffix, left_num.suffix, left_num.suffix_len);
+        tracked_suffix[left_num.suffix_len] = '\0';
+        has_tracked_suffix = 1;
+    }
 
     skip_whitespace(p);
 
@@ -119,19 +203,42 @@ static InterpretResult parse_additive(Parser *p)
         char op = p->input[p->pos];
         p->pos++;
 
-        InterpretResult right = parse_number(p);
+        // Parse right number
+        NumberValue right_num = parse_number_raw(p);
+
+        // Validate right operand
+        char right_suffix[4] = {0};
+        if (right_num.suffix_len > 0)
+        {
+            strncpy(right_suffix, right_num.suffix, right_num.suffix_len);
+            right_suffix[right_num.suffix_len] = '\0';
+        }
+
+        InterpretResult right = validate_type(right_num.value, right_num.suffix_len > 0 ? right_suffix : NULL);
         if (right.has_error)
             return right;
 
+        // Perform operation
         if (op == '+')
-            left.value = left.value + right.value;
+            result_value = result_value + right_num.value;
         else
-            left.value = left.value - right.value;
+            result_value = result_value - right_num.value;
+
+        // If the first operand had a type suffix, validate that the result fits
+        if (has_tracked_suffix)
+        {
+            int type_idx = get_type_info_index(tracked_suffix);
+            InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
+            if (validation_result.has_error)
+            {
+                return validation_result;
+            }
+        }
 
         skip_whitespace(p);
     }
 
-    return left;
+    return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};
 }
 
 static InterpretResult parse_expression(Parser *p)
