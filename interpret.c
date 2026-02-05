@@ -692,6 +692,7 @@ static InterpretResult parse_additive(Parser *p);
 static InterpretResult parse_logical_and(Parser *p);
 static InterpretResult parse_logical_or(Parser *p);
 static InterpretResult parse_if_else(Parser *p);
+static InterpretResult parse_if_statement(Parser *p);
 static InterpretResult parse_assignment_or_if_else(Parser *p);
 static InterpretResult parse_assignment_statement_in_block(Parser *p);
 
@@ -804,6 +805,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
     // Track the last statement value to return it if it's a block
     int last_statement_value = 0;
     int has_last_statement = 0;
+    int saw_statement = 0;
 
     // Parse let statements and assignments until none are found
     while (1)
@@ -818,9 +820,10 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 return let_result;
             skip_whitespace(p);
             has_last_statement = 0; // let statements don't have values
+            saw_statement = 1;
         }
         // Check for assignment statement (identifier followed by '=')
-        else if (isalpha(p->input[p->pos]))
+        else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else"))
         {
             // Look ahead to see if this is an assignment
             int saved_pos = p->pos;
@@ -847,10 +850,11 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                     return assign_result;
                 skip_whitespace(p);
                 has_last_statement = 0; // assignments at this level don't have values to return
+                saw_statement = 1;
             }
             else
             {
-                // Not an assignment, exit the loop
+                // Not an assignment and not a keyword, exit the loop
                 break;
             }
         }
@@ -909,6 +913,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             // Save the block's value to return it if this is the final statement
             last_statement_value = block_expr_result.value;
             has_last_statement = 1;
+            saw_statement = 1;
         }
         else if (p->input[p->pos] == '{')
         {
@@ -931,9 +936,36 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 break;
             }
         }
+        // Check for if statement (after we've determined it's not a let/assignment/block)
+        else if (is_keyword_at(p, "if"))
+        {
+            // This handles if-statements at statement level within sequences
+            // (e.g., after let statements or other statements)
+            if (!saw_statement)
+            {
+                // At the start of a sequence, treat `if` as an expression-level construct
+                break;
+            }
+
+            InterpretResult if_result = parse_if_statement(p);
+            if (if_result.has_error)
+                return if_result;
+
+            skip_whitespace(p);
+
+            // Consume optional semicolon after if statement
+            if (p->input[p->pos] == ';')
+            {
+                p->pos++;
+                skip_whitespace(p);
+            }
+
+            has_last_statement = 0; // if statements as statements don't produce values
+            saw_statement = 1;
+        }
         else
         {
-            // Not a let, assignment, or block statement, exit the loop
+            // Not a let, assignment, block, or if statement, exit the loop
             break;
         }
     }
@@ -1249,6 +1281,143 @@ static InterpretResult parse_logical_or(Parser *p)
     return parse_binary_logical_op_generic(p, '|', 1, parse_logical_and);
 }
 
+// Helper: Parse shared if-condition header and save state
+// Parses: if (condition)
+static InterpretResult parse_if_header(Parser *p, InterpretResult *condition, Variable saved_vars[10], int *saved_var_count)
+{
+    skip_whitespace(p);
+
+    if (!is_keyword_at(p, "if"))
+    {
+        return make_error("Expected 'if' keyword");
+    }
+
+    p->pos += 2; // Skip 'if'
+
+    InterpretResult open_paren = expect_char(p, '(', "Expected '(' after 'if'");
+    if (open_paren.has_error)
+        return open_paren;
+    skip_whitespace(p);
+
+    *condition = parse_logical_or(p);
+    if (condition->has_error)
+        return *condition;
+
+    if (!p->has_tracked_suffix || strcmp(p->tracked_suffix, "Bool") != 0)
+    {
+        return make_error("if-else condition must be a boolean value");
+    }
+
+    InterpretResult close_paren = expect_char(p, ')', "Expected ')' after if condition");
+    if (close_paren.has_error)
+        return close_paren;
+    skip_whitespace(p);
+
+    *saved_var_count = p->var_count;
+    for (int i = 0; i < p->var_count; i++)
+    {
+        saved_vars[i] = p->variables[i];
+    }
+
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+typedef struct
+{
+    InterpretResult header;
+    InterpretResult condition;
+    Variable saved_vars[10];
+    int saved_var_count;
+} IfHeaderState;
+
+static IfHeaderState parse_if_header_state(Parser *p)
+{
+    IfHeaderState state = {0};
+    state.header = parse_if_header(p, &state.condition, state.saved_vars, &state.saved_var_count);
+    return state;
+}
+
+static void restore_saved_vars(Parser *p, Variable saved_vars[10], int saved_var_count)
+{
+    p->var_count = saved_var_count;
+    for (int i = 0; i < saved_var_count; i++)
+    {
+        p->variables[i] = saved_vars[i];
+    }
+}
+
+// Helper: Parse if-statement at statement level (not as expression)
+// This handles if statements as standalone statements
+// Unlike parse_if_else, we want to keep mutations from the taken branch
+static InterpretResult parse_if_statement(Parser *p)
+{
+    IfHeaderState header_state = parse_if_header_state(p);
+    if (header_state.header.has_error)
+        return header_state.header;
+
+    // If condition is true, execute the then branch (keeping mutations)
+    // If condition is false, execute it but then restore state
+    if (header_state.condition.value != 0)
+    {
+        // Parse and execute the then statement (mutations are kept)
+        InterpretResult then_result = parse_assignment_or_if_else(p);
+        if (then_result.has_error)
+            return then_result;
+    }
+    else
+    {
+        // Condition is false: parse then branch but restore state (discard mutations)
+        InterpretResult then_result = parse_assignment_or_if_else(p);
+        if (then_result.has_error)
+            return then_result;
+        // Restore the saved variable state (undo then branch mutations)
+        restore_saved_vars(p, header_state.saved_vars, header_state.saved_var_count);
+    }
+
+    skip_whitespace(p);
+
+    // Check for optional else clause
+    if (is_keyword_at(p, "else"))
+    {
+        p->pos += 4; // Skip 'else'
+        skip_whitespace(p);
+
+        // Save current state before else (in case condition was true)
+        Variable saved_vars_before_else[10];
+        int saved_var_count_before_else = p->var_count;
+        for (int i = 0; i < p->var_count; i++)
+        {
+            saved_vars_before_else[i] = p->variables[i];
+        }
+
+        if (header_state.condition.value == 0)
+        {
+            // Condition was false, so execute the else branch (keeping mutations)
+            InterpretResult else_result = parse_assignment_or_if_else(p);
+            if (else_result.has_error)
+                return else_result;
+        }
+        else
+        {
+            // Condition was true, parse else but restore state (discard mutations)
+            InterpretResult else_result = parse_assignment_or_if_else(p);
+            if (else_result.has_error)
+                return else_result;
+            // Restore the state before the else (undo else branch mutations)
+            p->var_count = saved_var_count_before_else;
+            for (int i = 0; i < saved_var_count_before_else; i++)
+            {
+                p->variables[i] = saved_vars_before_else[i];
+            }
+        }
+
+        skip_whitespace(p);
+    }
+
+    // If-statement returns 0 (statements don't have values)
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
 // Helper: Parse assignment or if-else expression (for use in if-else branches)
 // Tries to parse an assignment first, falls back to if-else
 static InterpretResult parse_assignment_or_if_else(Parser *p)
@@ -1280,47 +1449,15 @@ static InterpretResult apply_branch_state(Parser *p, Variable then_state_vars[10
 // Syntax: if (condition) then_expr else else_expr
 static InterpretResult parse_if_else(Parser *p)
 {
-    skip_whitespace(p);
-
-    // Check for 'if' keyword
     if (!is_keyword_at(p, "if"))
     {
         // Not an if expression, parse as logical or
         return parse_logical_or(p);
     }
 
-    p->pos += 2; // Skip 'if'
-
-    // Expect opening parenthesis
-    InterpretResult open_paren = expect_char(p, '(', "Expected '(' after 'if'");
-    if (open_paren.has_error)
-        return open_paren;
-    skip_whitespace(p);
-
-    // Parse condition expression
-    InterpretResult condition = parse_logical_or(p);
-    if (condition.has_error)
-        return condition;
-
-    // Require that the condition is a boolean value
-    if (!p->has_tracked_suffix || strcmp(p->tracked_suffix, "Bool") != 0)
-    {
-        return make_error("if-else condition must be a boolean value");
-    }
-
-    // Expect closing parenthesis
-    InterpretResult close_paren = expect_char(p, ')', "Expected ')' after if condition");
-    if (close_paren.has_error)
-        return close_paren;
-    skip_whitespace(p);
-
-    // Save variable state before executing branches
-    Variable saved_vars[10];
-    int saved_var_count = p->var_count;
-    for (int i = 0; i < p->var_count; i++)
-    {
-        saved_vars[i] = p->variables[i];
-    }
+    IfHeaderState header_state = parse_if_header_state(p);
+    if (header_state.header.has_error)
+        return header_state.header;
 
     // Parse and execute then expression
     InterpretResult then_expr = parse_assignment_or_if_else(p);
@@ -1345,11 +1482,7 @@ static InterpretResult parse_if_else(Parser *p)
     }
 
     // Restore pre-then state before executing else
-    p->var_count = saved_var_count;
-    for (int i = 0; i < saved_var_count; i++)
-    {
-        p->variables[i] = saved_vars[i];
-    }
+    restore_saved_vars(p, header_state.saved_vars, header_state.saved_var_count);
 
     skip_whitespace(p);
 
@@ -1386,7 +1519,7 @@ static InterpretResult parse_if_else(Parser *p)
         }
 
         // Now apply the correct mutations based on condition
-        if (condition.value != 0)
+        if (header_state.condition.value != 0)
         {
             // Condition is true, use then branch state
             return apply_branch_state(p, then_state_vars, then_state_var_count, then_expr);
@@ -1402,7 +1535,7 @@ static InterpretResult parse_if_else(Parser *p)
         // No else clause - this is an optional if statement
         // If condition is true, use then branch state
         // If condition is false, use original pre-condition state (then branch was never executed)
-        if (condition.value != 0)
+        if (header_state.condition.value != 0)
         {
             // Condition is true, use then branch state
             return apply_branch_state(p, then_state_vars, then_state_var_count, then_expr);
@@ -1410,11 +1543,7 @@ static InterpretResult parse_if_else(Parser *p)
         else
         {
             // Condition is false, don't apply then branch, return pre-condition state
-            p->var_count = saved_var_count;
-            for (int i = 0; i < saved_var_count; i++)
-            {
-                p->variables[i] = saved_vars[i];
-            }
+            restore_saved_vars(p, header_state.saved_vars, header_state.saved_var_count);
             // For if-only (no else), return 0 when condition is false
             return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
         }
