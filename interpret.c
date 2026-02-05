@@ -304,15 +304,16 @@ static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_nu
 // Forward declaration for recursion
 static InterpretResult parse_additive(Parser *p);
 
-// Helper: Parse a primary expression (number or parenthesized expression)
+// Helper: Parse a primary expression (number or parenthesized/braced expression)
 static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
 {
     skip_whitespace(p);
 
-    if (p->input[p->pos] == '(')
+    if (p->input[p->pos] == '(' || p->input[p->pos] == '{')
     {
-        // Parse parenthesized expression
-        p->pos++;  // Skip '('
+        // Parse parenthesized or braced expression
+        char closing_char = p->input[p->pos] == '(' ? ')' : '}';
+        p->pos++; // Skip '(' or '{'
 
         // Parse the inner expression
         InterpretResult result = parse_additive(p);
@@ -321,17 +322,17 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
 
         skip_whitespace(p);
 
-        // Expect closing parenthesis
-        if (p->input[p->pos] != ')')
+        // Expect closing bracket
+        if (p->input[p->pos] != closing_char)
         {
             return (InterpretResult){
                 .value = 0,
                 .has_error = true,
-                .error_message = "Expected closing parenthesis"};
+                .error_message = closing_char == ')' ? "Expected closing parenthesis" : "Expected closing brace"};
         }
-        p->pos++;  // Skip ')'
+        p->pos++; // Skip ')' or '}'
 
-        // Return result with no type suffix (parenthesized expressions don't have suffixes)
+        // Return result with no type suffix (parenthesized/braced expressions don't have suffixes)
         if (out_num)
             out_num->suffix_len = 0;
 
@@ -516,7 +517,7 @@ static int is_expression(const char *str)
             if (in_number)
                 return 1;
         }
-        else if (str[i] == '(' || str[i] == ')')
+        else if (str[i] == '(' || str[i] == ')' || str[i] == '{' || str[i] == '}')
         {
             return 1;
         }

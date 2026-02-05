@@ -111,6 +111,11 @@ void test_interpret_parentheses(void)
     assert_success("(2 + 3) * 4", 20, "test_interpret_parentheses");
 }
 
+void test_interpret_curly_braces(void)
+{
+    assert_success("(2 + { 3 }) * 4", 20, "test_interpret_curly_braces");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -132,6 +137,7 @@ int main(void)
     test_interpret_multiplication();
     test_interpret_precedence();
     test_interpret_parentheses();
+    test_interpret_curly_braces();
     printf("All tests passed!\n");
     return 0;
 }
