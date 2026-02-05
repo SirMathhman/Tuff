@@ -278,6 +278,11 @@ void test_interpret_bool_addition_type_error(void)
     assert_error("true + false", "test_interpret_bool_addition_type_error");
 }
 
+void test_interpret_bool_compound_assignment_error(void)
+{
+    assert_error("let mut x = true; x += 1; x", "test_interpret_bool_compound_assignment_error");
+}
+
 void test_interpret_if_else_expression(void)
 {
     assert_success("let x = if (true) 3 else 5; x", 3, "test_interpret_if_else_expression");
@@ -484,6 +489,7 @@ int main(void)
     test_interpret_bool_and_operator();
     test_interpret_and_operator_numeric_types_error();
     test_interpret_bool_addition_type_error();
+    test_interpret_bool_compound_assignment_error();
     test_interpret_if_else_expression();
     test_interpret_if_else_numeric_condition_error();
     test_interpret_if_else_branch_type_mismatch_error();
