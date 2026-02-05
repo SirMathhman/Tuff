@@ -106,6 +106,11 @@ void test_interpret_precedence(void)
     assert_success("2 + 3 * 4", 14, "test_interpret_precedence");
 }
 
+void test_interpret_parentheses(void)
+{
+    assert_success("(2 + 3) * 4", 20, "test_interpret_parentheses");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -126,6 +131,7 @@ int main(void)
     test_interpret_subtraction();
     test_interpret_multiplication();
     test_interpret_precedence();
+    test_interpret_parentheses();
     printf("All tests passed!\n");
     return 0;
 }

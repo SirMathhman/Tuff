@@ -223,6 +223,11 @@ static int should_continue_binary_op(Parser *p, const char *operators)
     return is_binary_operator(p->input[p->pos], operators);
 }
 
+// Forward declarations for callbacks
+static InterpretResult parse_primary(Parser *p, NumberValue *out_num);
+static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_num);
+static InterpretResult parse_additive(Parser *p);
+
 // Helper: Parse the next operator and its right operand (for multiplicative level)
 typedef struct
 {
@@ -258,7 +263,7 @@ static OperatorAndOperand get_next_operator_and_operand_generic(
 // Specialization for single operands (used by multiplicative level)
 static OperatorAndOperand get_next_operator_and_operand(Parser *p, const char *operators)
 {
-    return get_next_operator_and_operand_generic(p, operators, parse_and_validate_operand);
+    return get_next_operator_and_operand_generic(p, operators, parse_primary);
 }
 
 // Specialization for multiplicative chains (used by additive level)
@@ -296,12 +301,53 @@ static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_nu
     return validate_type(num.value, num.suffix_len > 0 ? suffix_buf : NULL);
 }
 
+// Forward declaration for recursion
+static InterpretResult parse_additive(Parser *p);
+
+// Helper: Parse a primary expression (number or parenthesized expression)
+static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
+{
+    skip_whitespace(p);
+
+    if (p->input[p->pos] == '(')
+    {
+        // Parse parenthesized expression
+        p->pos++;  // Skip '('
+
+        // Parse the inner expression
+        InterpretResult result = parse_additive(p);
+        if (result.has_error)
+            return result;
+
+        skip_whitespace(p);
+
+        // Expect closing parenthesis
+        if (p->input[p->pos] != ')')
+        {
+            return (InterpretResult){
+                .value = 0,
+                .has_error = true,
+                .error_message = "Expected closing parenthesis"};
+        }
+        p->pos++;  // Skip ')'
+
+        // Return result with no type suffix (parenthesized expressions don't have suffixes)
+        if (out_num)
+            out_num->suffix_len = 0;
+
+        return result;
+    }
+
+    // Parse a number
+    return parse_and_validate_operand(p, out_num);
+}
+
 static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_num)
 {
     skip_whitespace(p);
 
-    // Parse first number and validate it
-    InterpretResult left = parse_and_validate_operand(p, out_first_num);
+    // Parse first primary (number or parenthesized expression) and validate it
+    InterpretResult left = parse_primary(p, out_first_num);
     if (left.has_error)
         return left;
 
@@ -469,6 +515,10 @@ static int is_expression(const char *str)
         {
             if (in_number)
                 return 1;
+        }
+        else if (str[i] == '(' || str[i] == ')')
+        {
+            return 1;
         }
         else if (isdigit(str[i]))
         {
