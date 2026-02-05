@@ -86,6 +86,11 @@ void test_interpret_chained_mixed_types(void)
     assert_success("1U8 + 255 + 1U16", 257, "test_interpret_chained_mixed_types");
 }
 
+void test_interpret_chained_overflow(void)
+{
+    assert_error("1U8 + 65534 + 1U16", "test_interpret_chained_overflow");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -102,6 +107,7 @@ int main(void)
     test_interpret_mixed_type_sizes();
     test_interpret_overflow_right_typed();
     test_interpret_chained_mixed_types();
+    test_interpret_chained_overflow();
     printf("All tests passed!\n");
     return 0;
 }

@@ -240,7 +240,7 @@ static InterpretResult parse_additive(Parser *p)
             if (right_num.suffix_len > 0 && right_num.suffix_len != left_num.suffix_len)
             {
                 should_validate = 0;
-                has_tracked_suffix = 0;  // Clear constraint for future operations
+                has_tracked_suffix = 0; // Clear constraint for future operations
             }
             else if (right_num.suffix_len > 0 && left_num.suffix_len > 0)
             {
@@ -248,7 +248,7 @@ static InterpretResult parse_additive(Parser *p)
                 if (strncmp(left_num.suffix, right_num.suffix, left_num.suffix_len) != 0)
                 {
                     should_validate = 0;
-                    has_tracked_suffix = 0;  // Clear constraint for future operations
+                    has_tracked_suffix = 0; // Clear constraint for future operations
                 }
             }
             else if (right_num.suffix_len == 0)
@@ -258,8 +258,8 @@ static InterpretResult parse_additive(Parser *p)
                 int next_pos = p->pos;
                 int has_future_op = 0;
                 int future_has_different_type = 0;
-                
-                while (next_pos < 1000 && p->input[next_pos])  // arbitrary limit to prevent infinity
+
+                while (next_pos < 1000 && p->input[next_pos]) // arbitrary limit to prevent infinity
                 {
                     if (p->input[next_pos] == '+' || p->input[next_pos] == '-')
                     {
@@ -289,7 +289,7 @@ static InterpretResult parse_additive(Parser *p)
                                 }
                             }
                             // Check if this suffix differs from tracked_suffix
-                            if (suffix_len != left_num.suffix_len || 
+                            if (suffix_len != left_num.suffix_len ||
                                 strncmp(future_suffix, left_num.suffix, left_num.suffix_len) != 0)
                             {
                                 future_has_different_type = 1;
@@ -306,11 +306,11 @@ static InterpretResult parse_additive(Parser *p)
                         break;
                     }
                 }
-                
+
                 if (future_has_different_type)
                 {
                     should_validate = 0;
-                    has_tracked_suffix = 0;  // Clear constraint
+                    has_tracked_suffix = 0; // Clear constraint
                 }
             }
 
