@@ -463,6 +463,9 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         return make_error("Variable already declared");
     }
 
+    // Variable to store the declared type (for typed declarations)
+    char declared_type[8] = {0};
+
     // Check if this is a typed or typeless declaration
     if (p->input[p->pos] == '=')
     {
@@ -482,6 +485,10 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         if (type_result.has_error)
             return type_result;
 
+        // Store the declared type for validation later
+        strncpy(declared_type, type_name, sizeof(declared_type) - 1);
+        declared_type[sizeof(declared_type) - 1] = '\0';
+
         // Expect '='
         InterpretResult eq_result = expect_char(p, '=', "Expected '=' in variable declaration");
         if (eq_result.has_error)
@@ -497,6 +504,23 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     InterpretResult val_result = parse_additive(p);
     if (val_result.has_error)
         return val_result;
+
+    // If declared type is specified, validate that the value matches the type
+    if (declared_type[0] != '\0')
+    {
+        // Only validate if the value has a type suffix
+        if (p->has_tracked_suffix)
+        {
+            // Compare declared type with actual value's type
+            // Use strncmp with the length of the declared type
+            int decl_len = suffix_length(declared_type);
+            if (strncmp(p->tracked_suffix, declared_type, decl_len) != 0)
+            {
+                return make_error("Variable type mismatch: declared type does not match assigned value type");
+            }
+        }
+        // If value has no suffix, it's compatible with any declared type
+    }
 
     // Store the variable
     set_variable(p, var_name, name_len, val_result.value);
@@ -720,6 +744,18 @@ static InterpretResult parse_additive(Parser *p)
         {
             return validation_result;
         }
+    }
+
+    // Update the Parser struct with the tracked suffix information
+    if (has_tracked_suffix)
+    {
+        strncpy(p->tracked_suffix, tracked_suffix, sizeof(p->tracked_suffix) - 1);
+        p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+        p->has_tracked_suffix = 1;
+    }
+    else
+    {
+        p->has_tracked_suffix = 0;
     }
 
     return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};

@@ -141,6 +141,11 @@ void test_interpret_duplicate_variable_declaration(void)
     assert_error("let x = 100; let x = 100; x", "test_interpret_duplicate_variable_declaration");
 }
 
+void test_interpret_variable_type_mismatch(void)
+{
+    assert_error("let x : U8 = 100U16; x", "test_interpret_variable_type_mismatch");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -168,6 +173,7 @@ int main(void)
     test_interpret_top_level_variable_declaration();
     test_interpret_typeless_variable_declaration();
     test_interpret_duplicate_variable_declaration();
+    test_interpret_variable_type_mismatch();
     printf("All tests passed!\n");
     return 0;
 }
