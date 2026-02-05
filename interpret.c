@@ -62,6 +62,39 @@ static int contains_suffix(const char *suffix, const char *search_suffix)
     return strncmp(suffix, search_suffix, len) == 0;
 }
 
+// Helper: Check if there's a typed operand ahead in the remaining input
+// Scans ahead looking for "+ number_with_suffix" or "- number_with_suffix" patterns
+static int has_typed_operand_ahead(const char *input, int pos)
+{
+    while (input[pos])
+    {
+        // Skip whitespace
+        while (isspace(input[pos]))
+            pos++;
+
+        if (input[pos] == '+' || input[pos] == '-')
+        {
+            pos++; // skip operator
+            // Skip whitespace after operator
+            while (isspace(input[pos]))
+                pos++;
+
+            // Skip digits
+            while (isdigit(input[pos]))
+                pos++;
+
+            // Check if there's a type suffix
+            if (isalpha(input[pos]))
+                return 1; // Found typed operand
+        }
+        else
+        {
+            break;
+        }
+    }
+    return 0;
+}
+
 static int get_type_info_index(const char *suffix);
 
 static InterpretResult validate_value_by_index(long value, int type_idx)
@@ -166,14 +199,16 @@ static InterpretResult parse_number(Parser *p)
 
 static InterpretResult parse_expression(Parser *p);
 
-static InterpretResult parse_additive(Parser *p)
+static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_num)
 {
     skip_whitespace(p);
 
-    // Parse first number and get its suffix
+    // Parse first number and validate it
     NumberValue left_num = parse_number_raw(p);
+    
+    if (out_first_num)
+        *out_first_num = left_num;
 
-    // Validate left operand
     char left_suffix[4] = {0};
     if (left_num.suffix_len > 0)
     {
@@ -186,27 +221,17 @@ static InterpretResult parse_additive(Parser *p)
         return left;
 
     long result_value = left_num.value;
-    char tracked_suffix[4] = {0};
-    int has_tracked_suffix = 0;
-
-    if (left_num.suffix_len > 0)
-    {
-        strncpy(tracked_suffix, left_num.suffix, left_num.suffix_len);
-        tracked_suffix[left_num.suffix_len] = '\0';
-        has_tracked_suffix = 1;
-    }
-
     skip_whitespace(p);
 
-    while (p->input[p->pos] == '+' || p->input[p->pos] == '-')
+    // Handle multiplicative operations (* and /)
+    while (p->input[p->pos] == '*' || p->input[p->pos] == '/')
     {
         char op = p->input[p->pos];
         p->pos++;
 
-        // Parse right number
+        // Parse right number and validate it
         NumberValue right_num = parse_number_raw(p);
 
-        // Validate right operand
         char right_suffix[4] = {0};
         if (right_num.suffix_len > 0)
         {
@@ -219,124 +244,132 @@ static InterpretResult parse_additive(Parser *p)
             return right;
 
         // Perform operation
+        if (op == '*')
+            result_value = result_value * right_num.value;
+        else if (right_num.value != 0)
+            result_value = result_value / right_num.value;
+
+        skip_whitespace(p);
+    }
+
+    return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};
+}
+
+static InterpretResult parse_additive(Parser *p)
+{
+    skip_whitespace(p);
+
+    // Parse first multiplicative term and capture first number's info
+    NumberValue first_num = {0};
+    InterpretResult left = parse_multiplicative(p, &first_num);
+    if (left.has_error)
+        return left;
+
+    long result_value = left.value;
+    char tracked_suffix[4] = {0};
+    char last_suffix[4] = {0};
+    int has_tracked_suffix = 0;
+    int in_mixed_types = 0;  // Track if we've seen mixed types
+
+    if (first_num.suffix_len > 0)
+    {
+        strncpy(tracked_suffix, first_num.suffix, first_num.suffix_len);
+        tracked_suffix[first_num.suffix_len] = '\0';
+        strncpy(last_suffix, first_num.suffix, first_num.suffix_len);
+        last_suffix[first_num.suffix_len] = '\0';
+        has_tracked_suffix = 1;
+    }
+
+    skip_whitespace(p);
+
+    while (p->input[p->pos] == '+' || p->input[p->pos] == '-')
+    {
+        char op = p->input[p->pos];
+        p->pos++;
+
+        // Parse right multiplicative term and capture its info
+        NumberValue right_num = {0};
+        InterpretResult right = parse_multiplicative(p, &right_num);
+        if (right.has_error)
+            return right;
+
+        // Track last suffix if this operand has one
+        if (right_num.suffix_len > 0)
+        {
+            strncpy(last_suffix, right_num.suffix, right_num.suffix_len);
+            last_suffix[right_num.suffix_len] = '\0';
+        }
+
+        // Check for invalid type combinations (only if not in mixed types):
+        // - Untyped left with typed right: always error
+        if (!in_mixed_types && !has_tracked_suffix && right_num.suffix_len > 0)
+        {
+            return (InterpretResult){
+                .value = 0,
+                .has_error = true,
+                .error_message = "Untyped operand cannot be combined with typed operand"};
+        }
+
+        // Perform operation
         if (op == '+')
-            result_value = result_value + right_num.value;
+            result_value = result_value + right.value;
         else
-            result_value = result_value - right_num.value;
+            result_value = result_value - right.value;
 
-        // Determine which type constraint applies:
-        // 1. If left operand had a type suffix, use its type (unless right has different type)
-        // 2. Otherwise, if right operand has a type suffix, use its type
-        // 3. If there's a future operand with a different type, don't validate
-        char validation_suffix[4] = {0};
-        int should_validate = 0;
-
-        if (has_tracked_suffix)
+        // Validate result against first operand's type if not in mixed types
+        if (!in_mixed_types && has_tracked_suffix)
         {
-            // Left has a type suffix
-            should_validate = 1;
-
-            // But only validate if right operand is untyped or same type as left
-            if (right_num.suffix_len > 0 && right_num.suffix_len != left_num.suffix_len)
+            if (right_num.suffix_len == 0)
             {
-                should_validate = 0;
-                has_tracked_suffix = 0; // Clear constraint for future operations
-            }
-            else if (right_num.suffix_len > 0 && left_num.suffix_len > 0)
-            {
-                // Both have suffixes - check if they're the same
-                if (strncmp(left_num.suffix, right_num.suffix, left_num.suffix_len) != 0)
+                // Typed + untyped: check if there's a different typed operand ahead
+                if (!has_typed_operand_ahead(p->input, p->pos))
                 {
-                    should_validate = 0;
-                    has_tracked_suffix = 0; // Clear constraint for future operations
-                }
-            }
-            else if (right_num.suffix_len == 0)
-            {
-                // Right is untyped - check if next operand (if exists) has different type
-                // by peeking ahead
-                int next_pos = p->pos;
-                int has_future_op = 0;
-                int future_has_different_type = 0;
-
-                while (next_pos < 1000 && p->input[next_pos]) // arbitrary limit to prevent infinity
-                {
-                    if (p->input[next_pos] == '+' || p->input[next_pos] == '-')
+                    // No typed operand ahead: validate result fits in type
+                    int type_idx = get_type_info_index(tracked_suffix);
+                    InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
+                    if (validation_result.has_error)
                     {
-                        has_future_op = 1;
-                        next_pos++;
-                        // Skip whitespace
-                        while (isspace(p->input[next_pos]))
-                            next_pos++;
-                        // Check if next operand has a type
-                        // Peek for suffix in the next number
-                        while (next_pos < 1000 && p->input[next_pos] && isdigit(p->input[next_pos]))
-                            next_pos++;
-                        // Now check for suffix
-                        if (next_pos < 1000 && p->input[next_pos] && (isalpha(p->input[next_pos]) || p->input[next_pos] == 'U' || p->input[next_pos] == 'I'))
-                        {
-                            // There's a suffix in the next operand
-                            int suffix_len = 0;
-                            const char *future_suffix = &p->input[next_pos];
-                            if (future_suffix[0] && isalpha(future_suffix[0]))
-                            {
-                                suffix_len++;
-                                if (future_suffix[1] && isdigit(future_suffix[1]))
-                                {
-                                    suffix_len++;
-                                    if (future_suffix[2] && isdigit(future_suffix[2]))
-                                        suffix_len++;
-                                }
-                            }
-                            // Check if this suffix differs from tracked_suffix
-                            if (suffix_len != left_num.suffix_len ||
-                                strncmp(future_suffix, left_num.suffix, left_num.suffix_len) != 0)
-                            {
-                                future_has_different_type = 1;
-                            }
-                        }
-                        break;
-                    }
-                    else if (isspace(p->input[next_pos]) || isdigit(p->input[next_pos]) || isalpha(p->input[next_pos]))
-                    {
-                        next_pos++;
-                    }
-                    else
-                    {
-                        break;
+                        return validation_result;
                     }
                 }
-
-                if (future_has_different_type)
+                else
                 {
-                    should_validate = 0;
-                    has_tracked_suffix = 0; // Clear constraint
+                    // Typed operand ahead: enter mixed-type territory
+                    in_mixed_types = 1;
+                    has_tracked_suffix = 0;
                 }
             }
-
-            if (should_validate)
+            else if (right_num.suffix_len == first_num.suffix_len && 
+                     strncmp(right_num.suffix, first_num.suffix, first_num.suffix_len) == 0)
             {
-                strncpy(validation_suffix, tracked_suffix, sizeof(validation_suffix) - 1);
+                // Same type: validate result fits in type
+                int type_idx = get_type_info_index(tracked_suffix);
+                InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
+                if (validation_result.has_error)
+                {
+                    return validation_result;
+                }
             }
-        }
-        else if (right_num.suffix_len > 0)
-        {
-            // Left is untyped but right has a type suffix - validate against right
-            should_validate = 1;
-            strncpy(validation_suffix, right_suffix, sizeof(validation_suffix) - 1);
-        }
-
-        if (should_validate)
-        {
-            int type_idx = get_type_info_index(validation_suffix);
-            InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
-            if (validation_result.has_error)
+            else if (right_num.suffix_len > 0)
             {
-                return validation_result;
+                // Different type suffix: enter mixed-type territory  
+                in_mixed_types = 1;
+                has_tracked_suffix = 0;
             }
         }
 
         skip_whitespace(p);
+    }
+
+    // If we're in mixed types, validate final result against last operand's type
+    if (in_mixed_types && last_suffix[0] != '\0')
+    {
+        int type_idx = get_type_info_index(last_suffix);
+        InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
+        if (validation_result.has_error)
+        {
+            return validation_result;
+        }
     }
 
     return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};
