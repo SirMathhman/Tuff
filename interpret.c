@@ -224,14 +224,35 @@ static InterpretResult parse_additive(Parser *p)
         else
             result_value = result_value - right_num.value;
 
-        // If the first operand had a type suffix, validate that the result fits
+        // If the first operand had a type suffix, validate result ONLY if:
+        // - Right operand is untyped (suffix_len == 0), OR
+        // - Right operand has same type as left operand
         if (has_tracked_suffix)
         {
-            int type_idx = get_type_info_index(tracked_suffix);
-            InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
-            if (validation_result.has_error)
+            int should_validate = 1;
+            
+            // If right operand has a different type suffix, don't validate
+            if (right_num.suffix_len > 0 && right_num.suffix_len != left_num.suffix_len)
             {
-                return validation_result;
+                should_validate = 0;
+            }
+            else if (right_num.suffix_len > 0 && left_num.suffix_len > 0)
+            {
+                // Both have suffixes - check if they're the same
+                if (strncmp(left_num.suffix, right_num.suffix, left_num.suffix_len) != 0)
+                {
+                    should_validate = 0;
+                }
+            }
+            
+            if (should_validate)
+            {
+                int type_idx = get_type_info_index(tracked_suffix);
+                InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
+                if (validation_result.has_error)
+                {
+                    return validation_result;
+                }
             }
         }
 

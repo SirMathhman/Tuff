@@ -71,6 +71,11 @@ void test_interpret_overflow_untyped(void)
     assert_error("1U8 + 255", "test_interpret_overflow_untyped");
 }
 
+void test_interpret_mixed_type_sizes(void)
+{
+    assert_success("1U8 + 255U16", 256, "test_interpret_mixed_type_sizes");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -84,6 +89,7 @@ int main(void)
     test_interpret_mixed_types();
     test_interpret_overflow();
     test_interpret_overflow_untyped();
+    test_interpret_mixed_type_sizes();
     printf("All tests passed!\n");
     return 0;
 }
