@@ -247,6 +247,11 @@ void test_interpret_bool_addition_type_error(void)
     assert_error("true + false", "test_interpret_bool_addition_type_error");
 }
 
+void test_interpret_if_else_expression(void)
+{
+    assert_success("let x = if (true) 3 else 5; x", 3, "test_interpret_if_else_expression");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -294,6 +299,7 @@ int main(void)
     test_interpret_bool_and_operator();
     test_interpret_and_operator_numeric_types_error();
     test_interpret_bool_addition_type_error();
+    test_interpret_if_else_expression();
     printf("All tests passed!\n");
     return 0;
 }

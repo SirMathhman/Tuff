@@ -691,6 +691,7 @@ static InterpretResult finalize_statement(Parser *p, const char *context)
 static InterpretResult parse_additive(Parser *p);
 static InterpretResult parse_logical_and(Parser *p);
 static InterpretResult parse_logical_or(Parser *p);
+static InterpretResult parse_if_else(Parser *p);
 static InterpretResult parse_assignment_statement_in_block(Parser *p);
 
 // Helper: Parse a let statement in a block
@@ -754,8 +755,8 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         return make_error("Expected '=' or ':' after variable name");
     }
 
-    // Parse the value expression (can be a simple operand or a complex expression)
-    InterpretResult val_result = parse_additive(p);
+    // Parse the value expression (can be a simple operand or a complex expression, including if-else)
+    InterpretResult val_result = parse_if_else(p);
     if (val_result.has_error)
         return val_result;
 
@@ -1174,6 +1175,66 @@ static InterpretResult parse_logical_or(Parser *p)
     return parse_binary_logical_op_generic(p, '|', 1, parse_logical_and);
 }
 
+// Helper: Parse if-else expression
+// Syntax: if (condition) then_expr else else_expr
+static InterpretResult parse_if_else(Parser *p)
+{
+    skip_whitespace(p);
+
+    // Check for 'if' keyword
+    if (!is_keyword_at(p, "if"))
+    {
+        // Not an if expression, parse as logical or
+        return parse_logical_or(p);
+    }
+
+    p->pos += 2; // Skip 'if'
+    skip_whitespace(p);
+
+    // Expect opening parenthesis
+    if (p->input[p->pos] != '(')
+        return make_error("Expected '(' after 'if'");
+    p->pos++;
+    skip_whitespace(p);
+
+    // Parse condition expression
+    InterpretResult condition = parse_logical_or(p);
+    if (condition.has_error)
+        return condition;
+
+    skip_whitespace(p);
+
+    // Expect closing parenthesis
+    if (p->input[p->pos] != ')')
+        return make_error("Expected ')' after if condition");
+    p->pos++;
+    skip_whitespace(p);
+
+    // Parse then expression
+    InterpretResult then_expr = parse_additive(p);
+    if (then_expr.has_error)
+        return then_expr;
+
+    skip_whitespace(p);
+
+    // Expect 'else' keyword
+    if (!is_keyword_at(p, "else"))
+        return make_error("Expected 'else' in if-else expression");
+
+    p->pos += 4; // Skip 'else'
+    skip_whitespace(p);
+
+    // Parse else expression
+    InterpretResult else_expr = parse_additive(p);
+    if (else_expr.has_error)
+        return else_expr;
+
+    // Evaluate: if condition is non-zero (true), return then value, else return else value
+    long result = (condition.value != 0) ? then_expr.value : else_expr.value;
+
+    return (InterpretResult){.value = (int)result, .has_error = false, .error_message = NULL};
+}
+
 static InterpretResult parse_additive(Parser *p)
 {
     skip_whitespace(p);
@@ -1331,8 +1392,8 @@ static InterpretResult parse_expression(Parser *p)
     if (let_statements_result.has_error)
         return let_statements_result;
 
-    // Parse the final expression (can be a variable reference, arithmetic expression, or logical OR)
-    return parse_logical_or(p);
+    // Parse the final expression (can be if-else, logical OR, or other expressions)
+    return parse_if_else(p);
 }
 
 static int is_expression(const char *str)
@@ -1346,6 +1407,12 @@ static int is_expression(const char *str)
 
     // Check if it's a let statement
     if (str[0] == 'l' && str[1] == 'e' && str[2] == 't')
+    {
+        return 1;
+    }
+
+    // Check for if expression
+    if (strncmp(str, "if", 2) == 0 && (isspace(str[2]) || str[2] == '('))
     {
         return 1;
     }
