@@ -233,6 +233,11 @@ void test_interpret_compound_assignment_divide(void)
     assert_success("let mut x = 20; x /= 4; x", 5, "test_interpret_compound_assignment_divide");
 }
 
+void test_interpret_compound_assignment_type_overflow(void)
+{
+    assert_error("let mut x : U8 = 1; x += 255; x", "test_interpret_compound_assignment_type_overflow");
+}
+
 void test_interpret_let_statement_no_expression(void)
 {
     assert_success("let x = 100;", 0, "test_interpret_let_statement_no_expression");
@@ -485,6 +490,7 @@ int main(void)
     test_interpret_compound_assignment_minus();
     test_interpret_compound_assignment_multiply();
     test_interpret_compound_assignment_divide();
+    test_interpret_compound_assignment_type_overflow();
     test_interpret_let_statement_no_expression();
     test_interpret_block_let_statement_no_expression();
     test_interpret_block_then_let_and_expression();

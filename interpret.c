@@ -1087,19 +1087,31 @@ static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_nam
     // If variable has a declared type, check type compatibility
     if (p->variables[idx].type[0] != '\0')
     {
-        // If the assigned value has a type suffix
-        if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+        // For compound operators, validate the result fits in the type
+        if (compound_op != '=')
         {
-            // Check if the value's type is compatible with the variable's type
-            if (!is_type_compatible(p->variables[idx].type, p->tracked_suffix))
-            {
-                return make_error("Assignment type mismatch: assigned value type does not match variable type");
-            }
+            // Validate that the final value fits in the variable's type
+            InterpretResult validation = validate_type(final_value, p->variables[idx].type);
+            if (validation.has_error)
+                return validation;
         }
-        // If value has no suffix, it's incompatible with a typed variable
         else
         {
-            return make_error("Cannot assign untyped value to a typed variable");
+            // For simple assignment, check type compatibility of RHS
+            // If the assigned value has a type suffix
+            if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+            {
+                // Check if the value's type is compatible with the variable's type
+                if (!is_type_compatible(p->variables[idx].type, p->tracked_suffix))
+                {
+                    return make_error("Assignment type mismatch: assigned value type does not match variable type");
+                }
+            }
+            // If value has no suffix, it's incompatible with a typed variable
+            else
+            {
+                return make_error("Cannot assign untyped value to a typed variable");
+            }
         }
     }
 
