@@ -15,6 +15,12 @@ static void assert_success(const char *input, int expected_value, const char *te
         printf("ERROR in '%s': %s\n", test_name, result.error_message);
     }
     assert(!result.has_error);
+
+    if (result.value != expected_value)
+    {
+        printf("'%s' failed!\n", test_name);
+        printf("ERROR in '%s': Expected value %d but got %d\n", test_name, expected_value, result.value);
+    }
     assert(result.value == expected_value);
     passed_asserts++;
 }
@@ -200,6 +206,26 @@ void test_interpret_empty_block_before_let(void)
 void test_interpret_mutable_variable_block_mutation(void)
 {
     assert_success("let mut x = 0; { x = 100; } x", 100, "test_interpret_mutable_variable_block_mutation");
+}
+
+void test_interpret_compound_assignment_plus(void)
+{
+    assert_success("let mut x = 5; x += 3; x", 8, "test_interpret_compound_assignment_plus");
+}
+
+void test_interpret_compound_assignment_minus(void)
+{
+    assert_success("let mut x = 10; x -= 3; x", 7, "test_interpret_compound_assignment_minus");
+}
+
+void test_interpret_compound_assignment_multiply(void)
+{
+    assert_success("let mut x = 4; x *= 2; x", 8, "test_interpret_compound_assignment_multiply");
+}
+
+void test_interpret_compound_assignment_divide(void)
+{
+    assert_success("let mut x = 20; x /= 4; x", 5, "test_interpret_compound_assignment_divide");
 }
 
 void test_interpret_let_statement_no_expression(void)
@@ -444,6 +470,10 @@ int main(void)
     test_interpret_empty_block_variable_access();
     test_interpret_empty_block_before_let();
     test_interpret_mutable_variable_block_mutation();
+    test_interpret_compound_assignment_plus();
+    test_interpret_compound_assignment_minus();
+    test_interpret_compound_assignment_multiply();
+    test_interpret_compound_assignment_divide();
     test_interpret_let_statement_no_expression();
     test_interpret_block_let_statement_no_expression();
     test_interpret_block_then_let_and_expression();
