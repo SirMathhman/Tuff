@@ -101,6 +101,11 @@ void test_interpret_multiplication(void)
     assert_success("2 * 3 - 4", 2, "test_interpret_multiplication");
 }
 
+void test_interpret_precedence(void)
+{
+    assert_success("2 + 3 * 4", 14, "test_interpret_precedence");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -120,6 +125,7 @@ int main(void)
     test_interpret_chained_overflow();
     test_interpret_subtraction();
     test_interpret_multiplication();
+    test_interpret_precedence();
     printf("All tests passed!\n");
     return 0;
 }

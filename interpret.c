@@ -199,7 +199,8 @@ static InterpretResult parse_number(Parser *p)
 
 static InterpretResult parse_expression(Parser *p);
 
-// Forward declaration
+// Forward declarations
+static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_num);
 static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num);
 
 // Helper: Check if operator matches a set of operators (e.g., "*/" or "+-")
@@ -222,7 +223,7 @@ static int should_continue_binary_op(Parser *p, const char *operators)
     return is_binary_operator(p->input[p->pos], operators);
 }
 
-// Helper: Parse the next operator and its right operand
+// Helper: Parse the next operator and its right operand (for multiplicative level)
 typedef struct
 {
     int has_operator;
@@ -231,7 +232,12 @@ typedef struct
     InterpretResult validation;
 } OperatorAndOperand;
 
-static OperatorAndOperand get_next_operator_and_operand(Parser *p, const char *operators)
+// Generic helper for parsing operator and operand
+// Takes a callback function to parse the operand portion
+typedef InterpretResult (*OperandParser)(Parser *p, NumberValue *out_num);
+
+static OperatorAndOperand get_next_operator_and_operand_generic(
+    Parser *p, const char *operators, OperandParser parser_fn)
 {
     if (!should_continue_binary_op(p, operators))
         return (OperatorAndOperand){.has_operator = 0};
@@ -240,7 +246,7 @@ static OperatorAndOperand get_next_operator_and_operand(Parser *p, const char *o
     p->pos++;
 
     NumberValue operand = {0};
-    InterpretResult validation = parse_and_validate_operand(p, &operand);
+    InterpretResult validation = parser_fn(p, &operand);
 
     return (OperatorAndOperand){
         .has_operator = 1,
@@ -249,13 +255,25 @@ static OperatorAndOperand get_next_operator_and_operand(Parser *p, const char *o
         .validation = validation};
 }
 
+// Specialization for single operands (used by multiplicative level)
+static OperatorAndOperand get_next_operator_and_operand(Parser *p, const char *operators)
+{
+    return get_next_operator_and_operand_generic(p, operators, parse_and_validate_operand);
+}
+
+// Specialization for multiplicative chains (used by additive level)
+static OperatorAndOperand get_next_operator_and_multiplicative(Parser *p, const char *operators)
+{
+    return get_next_operator_and_operand_generic(p, operators, parse_multiplicative);
+}
+
 // Macro: Iterate through binary operations with common pattern
-#define BINARY_OP_LOOP_START(operators) \
+#define BINARY_OP_LOOP_START(operators)                                         \
     for (OperatorAndOperand next = get_next_operator_and_operand(p, operators); \
-         next.has_operator; \
-         next = get_next_operator_and_operand(p, operators)) \
-    { \
-        if (next.validation.has_error) \
+         next.has_operator;                                                     \
+         next = get_next_operator_and_operand(p, operators))                    \
+    {                                                                           \
+        if (next.validation.has_error)                                          \
             return next.validation;
 
 #define BINARY_OP_LOOP_END }
@@ -290,10 +308,10 @@ static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_nu
     long result_value = (out_first_num && out_first_num->value) ? out_first_num->value : left.value;
 
     BINARY_OP_LOOP_START("*/")
-        if (next.op == '*')
-            result_value = result_value * next.operand.value;
-        else if (next.operand.value != 0)
-            result_value = result_value / next.operand.value;
+    if (next.op == '*')
+        result_value = result_value * next.operand.value;
+    else if (next.operand.value != 0)
+        result_value = result_value / next.operand.value;
     BINARY_OP_LOOP_END
 
     return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};
@@ -326,7 +344,13 @@ static InterpretResult parse_additive(Parser *p)
 
     skip_whitespace(p);
 
-    BINARY_OP_LOOP_START("+-")
+    for (OperatorAndOperand next = get_next_operator_and_multiplicative(p, "+-");
+         next.has_operator;
+         next = get_next_operator_and_multiplicative(p, "+-"))
+    {
+        if (next.validation.has_error)
+            return next.validation;
+
         char op = next.op;
         NumberValue right_num = next.operand;
 
@@ -394,7 +418,7 @@ static InterpretResult parse_additive(Parser *p)
                 has_tracked_suffix = 0;
             }
         }
-    BINARY_OP_LOOP_END
+    }
 
     // If we're in mixed types, validate final result against last operand's type
     if (in_mixed_types && last_suffix[0] != '\0')
