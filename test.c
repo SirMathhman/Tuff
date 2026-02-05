@@ -4,6 +4,7 @@
 
 static void assert_success(const char *input, int expected_value, const char *test_name)
 {
+    printf("Testing %s...\n", test_name);
     InterpretResult result = interpret(input);
     if (result.has_error)
     {
@@ -16,6 +17,7 @@ static void assert_success(const char *input, int expected_value, const char *te
 
 static void assert_error(const char *input, const char *test_name)
 {
+    printf("Testing %s...\n", test_name);
     InterpretResult result = interpret(input);
     assert(result.has_error);
     printf("✓ %s passed\n", test_name);
@@ -151,6 +153,11 @@ void test_interpret_variable_type_compatible(void)
     assert_success("let x : U16 = 100U8; x", 100, "test_interpret_variable_type_compatible");
 }
 
+void test_interpret_variable_assignment_type_check(void)
+{
+    assert_error("let x = 100U16; let y : U8 = x; y", "test_interpret_variable_assignment_type_check");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -180,6 +187,7 @@ int main(void)
     test_interpret_duplicate_variable_declaration();
     test_interpret_variable_type_mismatch();
     test_interpret_variable_type_compatible();
+    test_interpret_variable_assignment_type_check();
     printf("All tests passed!\n");
     return 0;
 }

@@ -15,6 +15,7 @@ typedef struct
 {
     char name[32];
     long value;
+    char type[8]; // Store variable's type (e.g., "U8", "U16", empty if typeless)
 } Variable;
 
 typedef struct
@@ -147,7 +148,7 @@ static int get_type_info_index(const char *suffix)
 // Type hierarchy definitions for compatibility checking
 typedef struct
 {
-    char type_char;  // 'U' for unsigned, 'I' for signed
+    char type_char; // 'U' for unsigned, 'I' for signed
     const char *source_type;
     const char *wider_types[3];
 } TypeHierarchy;
@@ -402,7 +403,28 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 if (out_num)
                 {
                     out_num->value = p->variables[idx].value;
-                    out_num->suffix_len = 0;
+                }
+                // Track the variable's type if it has one
+                if (p->variables[idx].type[0] != '\0')
+                {
+                    strncpy(p->tracked_suffix, p->variables[idx].type, sizeof(p->tracked_suffix) - 1);
+                    p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+                    p->has_tracked_suffix = 1;
+                    // Also set the output number's suffix info
+                    if (out_num)
+                    {
+                        out_num->suffix = p->tracked_suffix;
+                        out_num->suffix_len = strlen(p->tracked_suffix);
+                    }
+                }
+                else
+                {
+                    p->has_tracked_suffix = 0;
+                    if (out_num)
+                    {
+                        out_num->suffix_len = 0;
+                        out_num->suffix = NULL;
+                    }
                 }
                 return (InterpretResult){
                     .value = (int)p->variables[idx].value,
@@ -464,13 +486,18 @@ static InterpretResult expect_char(Parser *p, char expected, const char *error_m
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
-// Helper: Set or add a variable
-static int set_variable(Parser *p, const char *name, int name_len, long value)
+// Helper: Set or add a variable with optional type information
+static int set_variable_with_type(Parser *p, const char *name, int name_len, long value, const char *type)
 {
     int idx = find_variable(p, name, name_len);
     if (idx >= 0)
     {
         p->variables[idx].value = value;
+        if (type && type[0])
+        {
+            strncpy(p->variables[idx].type, type, sizeof(p->variables[idx].type) - 1);
+            p->variables[idx].type[sizeof(p->variables[idx].type) - 1] = '\0';
+        }
         return idx;
     }
 
@@ -480,7 +507,22 @@ static int set_variable(Parser *p, const char *name, int name_len, long value)
     strncpy(p->variables[p->var_count].name, name, name_len);
     p->variables[p->var_count].name[name_len] = '\0';
     p->variables[p->var_count].value = value;
+    if (type && type[0])
+    {
+        strncpy(p->variables[p->var_count].type, type, sizeof(p->variables[p->var_count].type) - 1);
+        p->variables[p->var_count].type[sizeof(p->variables[p->var_count].type) - 1] = '\0';
+    }
+    else
+    {
+        p->variables[p->var_count].type[0] = '\0';
+    }
     return p->var_count++;
+}
+
+// Helper: Set or add a variable without type information
+static int set_variable(Parser *p, const char *name, int name_len, long value)
+{
+    return set_variable_with_type(p, name, name_len, value, NULL);
 }
 
 // Helper: Parse an identifier (variable name)
@@ -585,10 +627,19 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
             }
         }
         // If value has no suffix, it's compatible with any declared type
+        // Store variable with declared type
+        set_variable_with_type(p, var_name, name_len, val_result.value, declared_type);
     }
-
-    // Store the variable
-    set_variable(p, var_name, name_len, val_result.value);
+    else if (p->has_tracked_suffix)
+    {
+        // No declared type, but value has a type - store with value's type
+        set_variable_with_type(p, var_name, name_len, val_result.value, p->tracked_suffix);
+    }
+    else
+    {
+        // No declared type, typeless value
+        set_variable(p, var_name, name_len, val_result.value);
+    }
 
     skip_whitespace(p);
 
