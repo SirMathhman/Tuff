@@ -295,6 +295,71 @@ void test_interpret_if_without_else_false(void)
     assert_success("let mut x = 2; if (false) x = 1; x", 2, "test_interpret_if_without_else_false");
 }
 
+void test_interpret_less_than_true(void)
+{
+    assert_success("let x = 0; let y = 1; x < y", 1, "test_interpret_less_than_true");
+}
+
+void test_interpret_less_than_false(void)
+{
+    assert_success("let x = 1; let y = 0; x < y", 0, "test_interpret_less_than_false");
+}
+
+void test_interpret_less_than_equal(void)
+{
+    assert_success("let x = 1; let y = 1; x < y", 0, "test_interpret_less_than_equal");
+}
+
+void test_interpret_greater_than_true(void)
+{
+    assert_success("let x = 1; let y = 0; x > y", 1, "test_interpret_greater_than_true");
+}
+
+void test_interpret_greater_than_false(void)
+{
+    assert_success("let x = 0; let y = 1; x > y", 0, "test_interpret_greater_than_false");
+}
+
+void test_interpret_less_equal_true(void)
+{
+    assert_success("let x = 0; let y = 1; x <= y", 1, "test_interpret_less_equal_true");
+}
+
+void test_interpret_less_equal_equal(void)
+{
+    assert_success("let x = 1; let y = 1; x <= y", 1, "test_interpret_less_equal_equal");
+}
+
+void test_interpret_greater_equal_true(void)
+{
+    assert_success("let x = 1; let y = 0; x >= y", 1, "test_interpret_greater_equal_true");
+}
+
+void test_interpret_greater_equal_equal(void)
+{
+    assert_success("let x = 1; let y = 1; x >= y", 1, "test_interpret_greater_equal_equal");
+}
+
+void test_interpret_equal_true(void)
+{
+    assert_success("let x = 1; let y = 1; x == y", 1, "test_interpret_equal_true");
+}
+
+void test_interpret_equal_false(void)
+{
+    assert_success("let x = 1; let y = 2; x == y", 0, "test_interpret_equal_false");
+}
+
+void test_interpret_not_equal_true(void)
+{
+    assert_success("let x = 1; let y = 2; x != y", 1, "test_interpret_not_equal_true");
+}
+
+void test_interpret_not_equal_false(void)
+{
+    assert_success("let x = 1; let y = 1; x != y", 0, "test_interpret_not_equal_false");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -352,6 +417,19 @@ int main(void)
     test_interpret_block_with_if_else_assignments();
     test_interpret_if_without_else();
     test_interpret_if_without_else_false();
+    test_interpret_less_than_true();
+    test_interpret_less_than_false();
+    test_interpret_less_than_equal();
+    test_interpret_greater_than_true();
+    test_interpret_greater_than_false();
+    test_interpret_less_equal_true();
+    test_interpret_less_equal_equal();
+    test_interpret_greater_equal_true();
+    test_interpret_greater_equal_equal();
+    test_interpret_equal_true();
+    test_interpret_equal_false();
+    test_interpret_not_equal_true();
+    test_interpret_not_equal_false();
     printf("All tests passed!\n");
     return 0;
 }

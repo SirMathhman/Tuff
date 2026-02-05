@@ -831,11 +831,12 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             int name_len = parse_identifier(p, temp_name, sizeof(temp_name));
 
             // Check if found identifier is followed by '=' (with possible whitespace)
+            // Make sure it's a single '=', not '==' or '=>'
             int is_assignment = 0;
             int temp_pos = p->pos;
             while (isspace(p->input[temp_pos]))
                 temp_pos++;
-            if (p->input[temp_pos] == '=')
+            if (p->input[temp_pos] == '=' && p->input[temp_pos + 1] != '=')
             {
                 is_assignment = 1;
             }
@@ -1045,9 +1046,9 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
 
     name_len = parse_identifier(p, var_name, sizeof(var_name));
 
-    // Check for '='
+    // Check for '=' (single equals, not ==)
     skip_whitespace(p);
-    if (p->input[p->pos] != '=')
+    if (p->input[p->pos] != '=' || p->input[p->pos + 1] == '=')
     {
         p->pos = saved_pos;
         return make_error("not_an_assignment");
@@ -1263,10 +1264,90 @@ static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, 
     return left;
 }
 
+// Helper: Parse comparison operators (<, >, <=, >=, ==, !=)
+static InterpretResult parse_comparison(Parser *p)
+{
+    skip_whitespace(p);
+
+    // Parse first additive term
+    InterpretResult left = parse_additive(p);
+    if (left.has_error)
+        return left;
+
+    skip_whitespace(p);
+
+    // Check for comparison operators
+    int is_comparison = 0;
+    int is_two_char = 0;
+    char op1 = '\0';
+    char op = '\0';
+    long result = 0;
+
+    // Check for two-character operators first (<=, >=, ==, !=)
+    if (p->input[p->pos] && p->input[p->pos + 1])
+    {
+        char curr = p->input[p->pos];
+        char next = p->input[p->pos + 1];
+        
+        if ((curr == '<' || curr == '>' || curr == '=' || curr == '!') && next == '=')
+        {
+            is_two_char = 1;
+            is_comparison = 1;
+            op1 = curr;
+            p->pos += 2;
+            skip_whitespace(p);
+        }
+    }
+    
+    // If not two-char, check for single-character operators (< or >)
+    if (!is_comparison && (p->input[p->pos] == '<' || p->input[p->pos] == '>'))
+    {
+        is_comparison = 1;
+        op = p->input[p->pos];
+        p->pos++;
+        skip_whitespace(p);
+    }
+
+    if (is_comparison)
+    {
+        // Parse right operand
+        InterpretResult right = parse_additive(p);
+        if (right.has_error)
+            return right;
+
+        // Perform comparison
+        if (is_two_char)
+        {
+            if (op1 == '<')
+                result = left.value <= right.value ? 1 : 0; // <=
+            else if (op1 == '>')
+                result = left.value >= right.value ? 1 : 0; // >=
+            else if (op1 == '=')
+                result = left.value == right.value ? 1 : 0; // ==
+            else if (op1 == '!')
+                result = left.value != right.value ? 1 : 0; // !=
+        }
+        else
+        {
+            if (op == '<')
+                result = left.value < right.value ? 1 : 0;
+            else if (op == '>')
+                result = left.value > right.value ? 1 : 0;
+        }
+
+        // Set Bool type for result and return
+        set_bool_tracked_suffix(p);
+        return (InterpretResult){.value = (int)result, .has_error = false, .error_message = NULL};
+    }
+
+    // No comparison operator, return left operand as-is
+    return left;
+}
+
 // Helper: Parse binary logical operation (AND or OR)
 static InterpretResult parse_logical_binary_op(Parser *p, char op_char, int is_or)
 {
-    return parse_binary_logical_op_generic(p, op_char, is_or, parse_additive);
+    return parse_binary_logical_op_generic(p, op_char, is_or, parse_comparison);
 }
 
 // Helper: Parse logical AND operator (higher precedence than OR)
@@ -1786,6 +1867,22 @@ static int is_expression(const char *str)
             if (in_number)
                 return 1;
         }
+        else if (str[i] == '<' || str[i] == '>')
+        {
+            // Comparison operators < > <= >=
+            if (in_number || in_identifier)
+                return 1;
+        }
+        else if ((str[i] == '=' || str[i] == '!') && str[i + 1] == '=')
+        {
+            // Comparison operators == !=
+            return 1;
+        }
+        else if (str[i] == '=' && in_identifier)
+        {
+            // Assignment statement (variable = value)
+            return 1;
+        }
         else if (str[i] == '|' && str[i + 1] == '|')
         {
             // Logical OR operator
@@ -1794,11 +1891,6 @@ static int is_expression(const char *str)
         else if (str[i] == '&' && str[i + 1] == '&')
         {
             // Logical AND operator
-            return 1;
-        }
-        else if (str[i] == '=' && in_identifier)
-        {
-            // Assignment statement (variable = value)
             return 1;
         }
         else if (str[i] == '(' || str[i] == ')' || str[i] == '{' || str[i] == '}')
