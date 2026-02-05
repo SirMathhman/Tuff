@@ -773,9 +773,31 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 break;
             }
         }
+        // Check for empty block {}
+        else if (p->input[p->pos] == '{')
+        {
+            // Look ahead to see if this is an empty block
+            int saved_pos = p->pos;
+            p->pos++; // Skip '{'
+            skip_whitespace(p);
+            
+            if (p->input[p->pos] == '}')
+            {
+                // Empty block, skip it and continue looking for the final expression
+                p->pos++; // Skip '}'
+                skip_whitespace(p);
+                // Continue the loop to check for more statements
+            }
+            else
+            {
+                // Not an empty block, reset position and break
+                p->pos = saved_pos;
+                break;
+            }
+        }
         else
         {
-            // Not a let or assignment statement, exit the loop
+            // Not a let, assignment, or empty block statement, exit the loop
             break;
         }
     }
@@ -862,6 +884,17 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
                 p->var_count = saved_var_count;
                 return let_statements_result;
             }
+        }
+
+        skip_whitespace(p);
+
+        // Check if the block/parens is empty
+        if (p->input[p->pos] == closing_char)
+        {
+            // Empty block/parens, return 0
+            p->pos++; // Skip ')' or '}'
+            // Don't restore variable scope for blocks yet - it will be done below
+            return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
         }
 
         // Parse the inner expression
