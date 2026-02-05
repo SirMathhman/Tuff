@@ -1202,6 +1202,12 @@ static InterpretResult parse_if_else(Parser *p)
     if (condition.has_error)
         return condition;
 
+    // Require that the condition is a boolean value
+    if (!p->has_tracked_suffix || strcmp(p->tracked_suffix, "Bool") != 0)
+    {
+        return make_error("if-else condition must be a boolean value");
+    }
+
     skip_whitespace(p);
 
     // Expect closing parenthesis

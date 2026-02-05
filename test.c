@@ -252,6 +252,11 @@ void test_interpret_if_else_expression(void)
     assert_success("let x = if (true) 3 else 5; x", 3, "test_interpret_if_else_expression");
 }
 
+void test_interpret_if_else_numeric_condition_error(void)
+{
+    assert_error("let x = if (100) 3 else 5; x", "test_interpret_if_else_numeric_condition_error");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -300,6 +305,7 @@ int main(void)
     test_interpret_and_operator_numeric_types_error();
     test_interpret_bool_addition_type_error();
     test_interpret_if_else_expression();
+    test_interpret_if_else_numeric_condition_error();
     printf("All tests passed!\n");
     return 0;
 }
