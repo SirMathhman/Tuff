@@ -463,6 +463,41 @@ void test_interpret_match_numeric_value_bool_patterns_error(void)
     assert_error("let x = match (100) { case true => 2; case _ => 3; }; x", "test_interpret_match_numeric_value_bool_patterns_error");
 }
 
+void test_interpret_while_loop_increment(void)
+{
+    assert_success("let mut i = 0; while (i < 4) i += 1; i", 4, "test_interpret_while_loop_increment");
+}
+
+void test_interpret_while_loop_decrement(void)
+{
+    assert_success("let mut i = 5; while (i > 0) i -= 1; i", 0, "test_interpret_while_loop_decrement");
+}
+
+void test_interpret_while_loop_false_condition(void)
+{
+    assert_success("let mut i = 0; while (false) i += 1; i", 0, "test_interpret_while_loop_false_condition");
+}
+
+void test_interpret_while_loop_without_final_expression(void)
+{
+    assert_success("let mut i = 0; while (i < 3) i += 1;", 0, "test_interpret_while_loop_without_final_expression");
+}
+
+void test_interpret_while_loop_numeric_condition_error(void)
+{
+    assert_error("let mut i = 0; while (1) i += 1; i", "test_interpret_while_loop_numeric_condition_error");
+}
+
+void test_interpret_while_loop_with_multiplication(void)
+{
+    assert_success("let mut i = 1; while (i < 16) i *= 2; i", 16, "test_interpret_while_loop_with_multiplication");
+}
+
+void test_interpret_while_loop_multiple_conditions(void)
+{
+    assert_success("let mut i = 0; let mut j = 10; while (i < 5) { i += 1; j -= 1; } j", 5, "test_interpret_while_loop_multiple_conditions");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -551,6 +586,13 @@ int main(void)
     test_interpret_match_without_wildcard();
     test_interpret_match_bool_value_numeric_patterns_error();
     test_interpret_match_numeric_value_bool_patterns_error();
+    test_interpret_while_loop_increment();
+    test_interpret_while_loop_decrement();
+    test_interpret_while_loop_false_condition();
+    test_interpret_while_loop_without_final_expression();
+    test_interpret_while_loop_numeric_condition_error();
+    test_interpret_while_loop_with_multiplication();
+    test_interpret_while_loop_multiple_conditions();
 
     if (passed_asserts == total_asserts)
     {

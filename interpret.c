@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdio.h>
 
 typedef struct
 {
@@ -235,6 +236,37 @@ static void extract_suffix(const char *str, int pos, char *suffix_buf)
         int len = suffix_length(&str[pos]);
         strncpy_s(suffix_buf, sizeof(suffix_buf), &str[pos], len);
         suffix_buf[len] = '\0';
+    }
+}
+
+// Helper: Consume optional semicolon and skip whitespace
+static void consume_optional_semicolon(Parser *p)
+{
+    skip_whitespace(p);
+    if (p->input[p->pos] == ';')
+    {
+        p->pos++;
+        skip_whitespace(p);
+    }
+}
+
+// Helper: Save variable state
+static void save_variable_state(Parser *p, Variable saved_vars[10], int *saved_var_count)
+{
+    *saved_var_count = p->var_count;
+    for (int i = 0; i < p->var_count; i++)
+    {
+        saved_vars[i] = p->variables[i];
+    }
+}
+
+// Helper: Restore variable state
+static void restore_saved_vars(Parser *p, Variable saved_vars[10], int saved_var_count)
+{
+    p->var_count = saved_var_count;
+    for (int i = 0; i < saved_var_count; i++)
+    {
+        p->variables[i] = saved_vars[i];
     }
 }
 
@@ -537,6 +569,21 @@ static InterpretResult make_error(const char *message)
         .error_message = message};
 }
 
+// Helper: Expect and consume closing parenthesis with context message
+static InterpretResult expect_closing_paren(Parser *p, const char *context)
+{
+    skip_whitespace(p);
+    if (p->input[p->pos] != ')')
+    {
+        char buffer[100];
+        snprintf(buffer, sizeof(buffer), "Expected ')' after %s", context);
+        return make_error(buffer);
+    }
+    p->pos++;
+    skip_whitespace(p);
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
 // Helper: Parse identifier and check for error
 static InterpretResult parse_identifier_or_error(Parser *p, char *out_name, int max_name_len, const char *error_msg)
 {
@@ -710,6 +757,7 @@ static InterpretResult parse_logical_or(Parser *p);
 static InterpretResult parse_if_else(Parser *p);
 static InterpretResult parse_match(Parser *p);
 static InterpretResult parse_if_statement(Parser *p);
+static InterpretResult parse_while_statement(Parser *p);
 static InterpretResult parse_assignment_or_if_else(Parser *p);
 static InterpretResult parse_assignment_statement_in_block(Parser *p);
 static int has_assignment_operator(Parser *p);
@@ -861,7 +909,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             saw_statement = 1;
         }
         // Check for assignment statement (identifier followed by '=')
-        else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else"))
+        else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match"))
         {
             // Look ahead to see if this is an assignment
             int saved_pos = p->pos;
@@ -982,21 +1030,26 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             if (if_result.has_error)
                 return if_result;
 
-            skip_whitespace(p);
-
-            // Consume optional semicolon after if statement
-            if (p->input[p->pos] == ';')
-            {
-                p->pos++;
-                skip_whitespace(p);
-            }
+            consume_optional_semicolon(p);
 
             has_last_statement = 0; // if statements as statements don't produce values
             saw_statement = 1;
         }
+        // Check for while statement
+        else if (is_keyword_at(p, "while"))
+        {
+            InterpretResult while_result = parse_while_statement(p);
+            if (while_result.has_error)
+                return while_result;
+
+            consume_optional_semicolon(p);
+
+            has_last_statement = 0; // while statements don't produce values
+            saw_statement = 1;
+        }
         else
         {
-            // Not a let, assignment, block, or if statement, exit the loop
+            // Not a let, assignment, block, if statement, or while statement, exit the loop
             break;
         }
     }
@@ -1558,11 +1611,7 @@ static InterpretResult parse_if_header(Parser *p, InterpretResult *condition, Va
         return close_paren;
     skip_whitespace(p);
 
-    *saved_var_count = p->var_count;
-    for (int i = 0; i < p->var_count; i++)
-    {
-        saved_vars[i] = p->variables[i];
-    }
+    save_variable_state(p, saved_vars, saved_var_count);
 
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
@@ -1580,15 +1629,6 @@ static IfHeaderState parse_if_header_state(Parser *p)
     IfHeaderState state = {0};
     state.header = parse_if_header(p, &state.condition, state.saved_vars, &state.saved_var_count);
     return state;
-}
-
-static void restore_saved_vars(Parser *p, Variable saved_vars[10], int saved_var_count)
-{
-    p->var_count = saved_var_count;
-    for (int i = 0; i < saved_var_count; i++)
-    {
-        p->variables[i] = saved_vars[i];
-    }
 }
 
 // Helper: Parse if-statement at statement level (not as expression)
@@ -1660,6 +1700,101 @@ static InterpretResult parse_if_statement(Parser *p)
     }
 
     // If-statement returns 0 (statements don't have values)
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Parse while statement
+// Syntax: while (condition) body
+static InterpretResult parse_while_statement(Parser *p)
+{
+    if (!is_keyword_at(p, "while"))
+    {
+        return make_error("Expected 'while' keyword");
+    }
+    p->pos += 5; // Skip 'while'
+
+    // Expect opening parenthesis
+    InterpretResult open_paren = expect_char(p, '(', "Expected '(' after 'while'");
+    if (open_paren.has_error)
+        return open_paren;
+    skip_whitespace(p);
+
+    // Save position before condition
+    int cond_start_pos = p->pos;
+
+    // Parse condition expression
+    InterpretResult cond_result = parse_logical_or(p);
+    if (cond_result.has_error)
+        return cond_result;
+
+    // Validate condition is boolean
+    if (!p->has_tracked_suffix || strcmp(p->tracked_suffix, "Bool") != 0)
+    {
+        return make_error("while condition must be a boolean value");
+    }
+
+    // Expect closing parenthesis
+    InterpretResult close_paren = expect_closing_paren(p, "while condition");
+    if (close_paren.has_error)
+        return close_paren;
+
+    // Save position where body starts
+    int body_start_pos = p->pos;
+
+    // Execute while loop with iteration cap
+    static const int MAX_ITERATIONS = 1024;
+    int body_end_pos = body_start_pos; // Track where body ends
+
+    for (int iter = 0; iter < MAX_ITERATIONS; iter++)
+    {
+        // Reset to condition start and re-evaluate condition
+        int saved_pos = p->pos;
+        p->pos = cond_start_pos;
+
+        // Re-parse condition
+        InterpretResult loop_cond = parse_logical_or(p);
+        if (loop_cond.has_error)
+            return loop_cond;
+
+        // If condition is false, break
+        if (loop_cond.value == 0)
+        {
+            // If first iteration and body hasn't been parsed yet, parse it to skip past it
+            // But save/restore variable state since condition is false
+            if (iter == 0)
+            {
+                // Save variable state before parsing body
+                Variable saved_vars[10];
+                int saved_var_count;
+                save_variable_state(p, saved_vars, &saved_var_count);
+
+                p->pos = body_start_pos;
+                InterpretResult body_result = parse_assignment_or_if_else(p);
+                if (body_result.has_error)
+                    return body_result;
+                body_end_pos = p->pos;
+
+                // Restore variable state (undo mutations from false condition body)
+                restore_saved_vars(p, saved_vars, saved_var_count);
+            }
+            else
+            {
+                p->pos = body_end_pos;
+            }
+            break;
+        }
+
+        // Condition is true, reset to body start and execute body
+        p->pos = body_start_pos;
+        InterpretResult body_result = parse_assignment_or_if_else(p);
+        if (body_result.has_error)
+            return body_result;
+
+        // Save position after body execution for next condition check
+        body_end_pos = p->pos;
+    }
+
+    // While loop returns 0 (statements don't have values)
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
