@@ -365,6 +365,26 @@ void test_interpret_bool_comparison_error(void)
     assert_error("true < false", "test_interpret_bool_comparison_error");
 }
 
+void test_interpret_match_basic(void)
+{
+    assert_success("let x = match (100) { case 100 => 2; case _ => 3; }; x", 2, "test_interpret_match_basic");
+}
+
+void test_interpret_match_wildcard_default(void)
+{
+    assert_success("let x = match (50) { case 100 => 2; case _ => 3; }; x", 3, "test_interpret_match_wildcard_default");
+}
+
+void test_interpret_match_multiple_cases(void)
+{
+    assert_success("let x = match (2) { case 1 => 10; case 2 => 20; case 3 => 30; case _ => 0; }; x", 20, "test_interpret_match_multiple_cases");
+}
+
+void test_interpret_match_no_match_error(void)
+{
+    assert_error("let x = match (100) { case 1 => 2; case 2 => 3; }; x", "test_interpret_match_no_match_error");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -436,6 +456,10 @@ int main(void)
     test_interpret_not_equal_true();
     test_interpret_not_equal_false();
     test_interpret_bool_comparison_error();
+    test_interpret_match_basic();
+    test_interpret_match_wildcard_default();
+    test_interpret_match_multiple_cases();
+    test_interpret_match_no_match_error();
     printf("All tests passed!\n");
     return 0;
 }

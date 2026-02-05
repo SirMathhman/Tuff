@@ -692,6 +692,7 @@ static InterpretResult parse_additive(Parser *p);
 static InterpretResult parse_logical_and(Parser *p);
 static InterpretResult parse_logical_or(Parser *p);
 static InterpretResult parse_if_else(Parser *p);
+static InterpretResult parse_match(Parser *p);
 static InterpretResult parse_if_statement(Parser *p);
 static InterpretResult parse_assignment_or_if_else(Parser *p);
 static InterpretResult parse_assignment_statement_in_block(Parser *p);
@@ -1376,21 +1377,31 @@ static InterpretResult parse_logical_or(Parser *p)
 
 // Helper: Parse shared if-condition header and save state
 // Parses: if (condition)
-static InterpretResult parse_if_header(Parser *p, InterpretResult *condition, Variable saved_vars[10], int *saved_var_count)
+// Helper: Parse keyword followed by '(' and expect opening paren - used by both if and match parsing
+static InterpretResult parse_keyword_header(Parser *p, const char *keyword, int keyword_len, const char *context_msg)
 {
     skip_whitespace(p);
 
-    if (!is_keyword_at(p, "if"))
+    if (!is_keyword_at(p, keyword))
     {
-        return make_error("Expected 'if' keyword");
+        return make_error(context_msg);
     }
 
-    p->pos += 2; // Skip 'if'
+    p->pos += keyword_len; // Skip keyword
 
-    InterpretResult open_paren = expect_char(p, '(', "Expected '(' after 'if'");
+    InterpretResult open_paren = expect_char(p, '(', "Expected '(' after keyword");
     if (open_paren.has_error)
         return open_paren;
     skip_whitespace(p);
+    
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+static InterpretResult parse_if_header(Parser *p, InterpretResult *condition, Variable saved_vars[10], int *saved_var_count)
+{
+    InterpretResult header = parse_keyword_header(p, "if", 2, "Expected 'if' keyword");
+    if (header.has_error)
+        return header;
 
     *condition = parse_logical_or(p);
     if (condition->has_error)
@@ -1523,7 +1534,7 @@ static InterpretResult parse_assignment_or_if_else(Parser *p)
         return assign_result;
     }
 
-    // Not an assignment, parse as if-else
+    // Not an assignment, parse as if-else (which delegates to match then logical_or as needed)
     return parse_if_else(p);
 }
 
@@ -1538,14 +1549,150 @@ static InterpretResult apply_branch_state(Parser *p, Variable then_state_vars[10
     return (InterpretResult){.value = then_expr.value, .has_error = false, .error_message = NULL};
 }
 
+// Helper: Parse match expression
+// Syntax: match (value) { case pattern => result; case pattern => result; ... case _ => default; }
+static InterpretResult parse_match(Parser *p)
+{
+    if (!is_keyword_at(p, "match"))
+    {
+        // Not a match expression, parse as logical or
+        return parse_logical_or(p);
+    }
+
+    InterpretResult header = parse_keyword_header(p, "match", 5, "Expected 'match' keyword");
+    if (header.has_error)
+        return header;
+
+    // Parse the match value/condition
+    InterpretResult match_value = parse_logical_or(p);
+    if (match_value.has_error)
+        return match_value;
+
+    // Expect closing parenthesis
+    InterpretResult close_paren = expect_char(p, ')', "Expected ')' after match condition");
+    if (close_paren.has_error)
+        return close_paren;
+    skip_whitespace(p);
+
+    // Expect opening brace
+    InterpretResult open_brace = expect_char(p, '{', "Expected '{' after match condition");
+    if (open_brace.has_error)
+        return open_brace;
+    skip_whitespace(p);
+
+    // Parse case branches
+    InterpretResult wildcard_result = {.value = 0, .has_error = true, .error_message = NULL};
+    int found_match = 0;
+    InterpretResult match_result = {.value = 0, .has_error = true, .error_message = NULL};
+
+    while (p->input[p->pos] && p->input[p->pos] != '}')
+    {
+        skip_whitespace(p);
+
+        // Expect "case" keyword
+        if (!is_keyword_at(p, "case"))
+        {
+            return make_error("Expected 'case' keyword in match expression");
+        }
+        p->pos += 4; // Skip 'case'
+        skip_whitespace(p);
+
+        // Parse pattern (either a number or wildcard _)
+        int is_wildcard = 0;
+        long pattern_value = 0;
+
+        if (p->input[p->pos] == '_')
+        {
+            is_wildcard = 1;
+            p->pos++;
+        }
+        else if (isdigit(p->input[p->pos]))
+        {
+            // Parse numeric pattern
+            pattern_value = 0;
+            while (isdigit(p->input[p->pos]))
+            {
+                pattern_value = pattern_value * 10 + (p->input[p->pos] - '0');
+                p->pos++;
+            }
+        }
+        else
+        {
+            return make_error("Expected pattern in case (number or _)");
+        }
+
+        skip_whitespace(p);
+
+        // Expect '=>'
+        if (p->input[p->pos] != '=' || p->input[p->pos + 1] != '>')
+        {
+            return make_error("Expected '=>' in case branch");
+        }
+        p->pos += 2;
+        skip_whitespace(p);
+
+        // Parse the result expression
+        InterpretResult case_result = parse_logical_or(p);
+        if (case_result.has_error)
+            return case_result;
+
+        skip_whitespace(p);
+
+        // Expect semicolon
+        if (p->input[p->pos] != ';')
+        {
+            return make_error("Expected ';' after case result");
+        }
+        p->pos++;
+        skip_whitespace(p);
+
+        // Check if this case matches
+        if (!found_match)
+        {
+            if (is_wildcard)
+            {
+                // Save wildcard result as fallback
+                wildcard_result = case_result;
+            }
+            else if (pattern_value == match_value.value)
+            {
+                // Found a matching case
+                found_match = 1;
+                match_result = case_result;
+            }
+        }
+    }
+
+    // Expect closing brace
+    if (p->input[p->pos] != '}')
+    {
+        return make_error("Expected '}' after match cases");
+    }
+    p->pos++;
+
+    // Return the matched result or wildcard result
+    if (found_match)
+    {
+        return match_result;
+    }
+    else if (!wildcard_result.has_error)
+    {
+        return wildcard_result;
+    }
+    else
+    {
+        return make_error("No matching case in match expression");
+    }
+}
+
 // Helper: Parse if-else expression
 // Syntax: if (condition) then_expr else else_expr
 static InterpretResult parse_if_else(Parser *p)
 {
     if (!is_keyword_at(p, "if"))
     {
-        // Not an if expression, parse as logical or
-        return parse_logical_or(p);
+        // Not an if expression, parse as match
+        return parse_match(p);
     }
 
     IfHeaderState header_state = parse_if_header_state(p);
@@ -1810,7 +1957,7 @@ static InterpretResult parse_expression(Parser *p)
     // Otherwise, return the result from parse_let_statements_loop
     if (has_remaining)
     {
-        // Parse the final expression (can be if-else, logical OR, or other expressions)
+        // Parse the final expression (can be if-else, match, logical OR, or other expressions)
         return parse_if_else(p);
     }
     else
@@ -1818,6 +1965,12 @@ static InterpretResult parse_expression(Parser *p)
         // No remaining expression, return the value from let statements/blocks
         return let_statements_result;
     }
+}
+
+static int is_keyword_lookahead(const char *str, const char *keyword, int keyword_len)
+{
+    return strncmp(str, keyword, keyword_len) == 0 && 
+           (isspace(str[keyword_len]) || str[keyword_len] == '(' || str[keyword_len] == '\0');
 }
 
 static int is_expression(const char *str)
@@ -1830,13 +1983,19 @@ static int is_expression(const char *str)
         str++;
 
     // Check if it's a let statement
-    if (str[0] == 'l' && str[1] == 'e' && str[2] == 't')
+    if (is_keyword_lookahead(str, "let", 3))
     {
         return 1;
     }
 
     // Check for if expression
-    if (strncmp(str, "if", 2) == 0 && (isspace(str[2]) || str[2] == '('))
+    if (is_keyword_lookahead(str, "if", 2))
+    {
+        return 1;
+    }
+
+    // Check for match expression
+    if (is_keyword_lookahead(str, "match", 5))
     {
         return 1;
     }
