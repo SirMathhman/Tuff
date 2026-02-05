@@ -183,6 +183,11 @@ void test_interpret_immutable_variable_reassignment(void)
     assert_error("let x = 0; x = 100; x", "test_interpret_immutable_variable_reassignment");
 }
 
+void test_interpret_immutable_variable_compound_assignment(void)
+{
+    assert_error("let x = 0; x += 1; x", "test_interpret_immutable_variable_compound_assignment");
+}
+
 void test_interpret_undeclared_variable_assignment(void)
 {
     assert_error("x = 100; x", "test_interpret_undeclared_variable_assignment");
@@ -470,6 +475,7 @@ int main(void)
     test_interpret_variable_assignment_type_check();
     test_interpret_mutable_variable();
     test_interpret_immutable_variable_reassignment();
+    test_interpret_immutable_variable_compound_assignment();
     test_interpret_undeclared_variable_assignment();
     test_interpret_mutable_variable_type_mismatch();
     test_interpret_empty_block_variable_access();
