@@ -392,6 +392,11 @@ void test_interpret_match_no_match_error(void)
     assert_error("let x = match (100) { case 1 => 2; case 2 => 3; }; x", "test_interpret_match_no_match_error");
 }
 
+void test_interpret_match_without_wildcard(void)
+{
+    assert_success("let x = match (100) { case 100 => 2; }; x", 2, "test_interpret_match_without_wildcard");
+}
+
 void test_interpret_match_bool_value_numeric_patterns_error(void)
 {
     assert_error("let x = match (true) { case 100 => 2; case _ => 3; }; x", "test_interpret_match_bool_value_numeric_patterns_error");
@@ -477,6 +482,7 @@ int main(void)
     test_interpret_match_wildcard_default();
     test_interpret_match_multiple_cases();
     test_interpret_match_no_match_error();
+    test_interpret_match_without_wildcard();
     test_interpret_match_bool_value_numeric_patterns_error();
     test_interpret_match_numeric_value_bool_patterns_error();
 
