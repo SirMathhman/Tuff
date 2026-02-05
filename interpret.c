@@ -224,14 +224,18 @@ static InterpretResult parse_additive(Parser *p)
         else
             result_value = result_value - right_num.value;
 
-        // If the first operand had a type suffix, validate result ONLY if:
-        // - Right operand is untyped (suffix_len == 0), OR
-        // - Right operand has same type as left operand
+        // Determine which type constraint applies:
+        // 1. If left operand has a type suffix, use its type (unless right has different type)
+        // 2. Otherwise, if right operand has a type suffix, use its type
+        char validation_suffix[4] = {0};
+        int should_validate = 0;
+
         if (has_tracked_suffix)
         {
-            int should_validate = 1;
-            
-            // If right operand has a different type suffix, don't validate
+            // Left has a type suffix
+            should_validate = 1;
+
+            // But only validate if right operand is untyped or same type as left
             if (right_num.suffix_len > 0 && right_num.suffix_len != left_num.suffix_len)
             {
                 should_validate = 0;
@@ -244,15 +248,26 @@ static InterpretResult parse_additive(Parser *p)
                     should_validate = 0;
                 }
             }
-            
+
             if (should_validate)
             {
-                int type_idx = get_type_info_index(tracked_suffix);
-                InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
-                if (validation_result.has_error)
-                {
-                    return validation_result;
-                }
+                strncpy(validation_suffix, tracked_suffix, sizeof(validation_suffix) - 1);
+            }
+        }
+        else if (right_num.suffix_len > 0)
+        {
+            // Left is untyped but right has a type suffix - validate against right
+            should_validate = 1;
+            strncpy(validation_suffix, right_suffix, sizeof(validation_suffix) - 1);
+        }
+
+        if (should_validate)
+        {
+            int type_idx = get_type_info_index(validation_suffix);
+            InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
+            if (validation_result.has_error)
+            {
+                return validation_result;
             }
         }
 
