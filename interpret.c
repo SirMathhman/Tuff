@@ -199,58 +199,102 @@ static InterpretResult parse_number(Parser *p)
 
 static InterpretResult parse_expression(Parser *p);
 
+// Forward declaration
+static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num);
+
+// Helper: Check if operator matches a set of operators (e.g., "*/" or "+-")
+static int is_binary_operator(char c, const char *operators)
+{
+    while (*operators)
+    {
+        if (c == *operators)
+            return 1;
+        operators++;
+    }
+    return 0;
+}
+
+// Helper: Check if we should continue parsing binary operators
+// Skips whitespace and returns whether input has one of the operators
+static int should_continue_binary_op(Parser *p, const char *operators)
+{
+    skip_whitespace(p);
+    return is_binary_operator(p->input[p->pos], operators);
+}
+
+// Helper: Parse the next operator and its right operand
+typedef struct
+{
+    int has_operator;
+    char op;
+    NumberValue operand;
+    InterpretResult validation;
+} OperatorAndOperand;
+
+static OperatorAndOperand get_next_operator_and_operand(Parser *p, const char *operators)
+{
+    if (!should_continue_binary_op(p, operators))
+        return (OperatorAndOperand){.has_operator = 0};
+
+    char op = p->input[p->pos];
+    p->pos++;
+
+    NumberValue operand = {0};
+    InterpretResult validation = parse_and_validate_operand(p, &operand);
+
+    return (OperatorAndOperand){
+        .has_operator = 1,
+        .op = op,
+        .operand = operand,
+        .validation = validation};
+}
+
+// Macro: Iterate through binary operations with common pattern
+#define BINARY_OP_LOOP_START(operators) \
+    for (OperatorAndOperand next = get_next_operator_and_operand(p, operators); \
+         next.has_operator; \
+         next = get_next_operator_and_operand(p, operators)) \
+    { \
+        if (next.validation.has_error) \
+            return next.validation;
+
+#define BINARY_OP_LOOP_END }
+
+// Helper: Parse next operand, validate it, and return the validation result
+static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num)
+{
+    NumberValue num = parse_number_raw(p);
+
+    if (out_num)
+        *out_num = num;
+
+    char suffix_buf[4] = {0};
+    if (num.suffix_len > 0)
+    {
+        strncpy(suffix_buf, num.suffix, num.suffix_len);
+        suffix_buf[num.suffix_len] = '\0';
+    }
+
+    return validate_type(num.value, num.suffix_len > 0 ? suffix_buf : NULL);
+}
+
 static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_num)
 {
     skip_whitespace(p);
 
     // Parse first number and validate it
-    NumberValue left_num = parse_number_raw(p);
-    
-    if (out_first_num)
-        *out_first_num = left_num;
-
-    char left_suffix[4] = {0};
-    if (left_num.suffix_len > 0)
-    {
-        strncpy(left_suffix, left_num.suffix, left_num.suffix_len);
-        left_suffix[left_num.suffix_len] = '\0';
-    }
-
-    InterpretResult left = validate_type(left_num.value, left_num.suffix_len > 0 ? left_suffix : NULL);
+    InterpretResult left = parse_and_validate_operand(p, out_first_num);
     if (left.has_error)
         return left;
 
-    long result_value = left_num.value;
-    skip_whitespace(p);
+    long result_value = (out_first_num && out_first_num->value) ? out_first_num->value : left.value;
 
-    // Handle multiplicative operations (* and /)
-    while (p->input[p->pos] == '*' || p->input[p->pos] == '/')
-    {
-        char op = p->input[p->pos];
-        p->pos++;
-
-        // Parse right number and validate it
-        NumberValue right_num = parse_number_raw(p);
-
-        char right_suffix[4] = {0};
-        if (right_num.suffix_len > 0)
-        {
-            strncpy(right_suffix, right_num.suffix, right_num.suffix_len);
-            right_suffix[right_num.suffix_len] = '\0';
-        }
-
-        InterpretResult right = validate_type(right_num.value, right_num.suffix_len > 0 ? right_suffix : NULL);
-        if (right.has_error)
-            return right;
-
-        // Perform operation
-        if (op == '*')
-            result_value = result_value * right_num.value;
-        else if (right_num.value != 0)
-            result_value = result_value / right_num.value;
-
-        skip_whitespace(p);
-    }
+    BINARY_OP_LOOP_START("*/")
+        if (next.op == '*')
+            result_value = result_value * next.operand.value;
+        else if (next.operand.value != 0)
+            result_value = result_value / next.operand.value;
+    BINARY_OP_LOOP_END
 
     return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};
 }
@@ -269,7 +313,7 @@ static InterpretResult parse_additive(Parser *p)
     char tracked_suffix[4] = {0};
     char last_suffix[4] = {0};
     int has_tracked_suffix = 0;
-    int in_mixed_types = 0;  // Track if we've seen mixed types
+    int in_mixed_types = 0; // Track if we've seen mixed types
 
     if (first_num.suffix_len > 0)
     {
@@ -282,16 +326,9 @@ static InterpretResult parse_additive(Parser *p)
 
     skip_whitespace(p);
 
-    while (p->input[p->pos] == '+' || p->input[p->pos] == '-')
-    {
-        char op = p->input[p->pos];
-        p->pos++;
-
-        // Parse right multiplicative term and capture its info
-        NumberValue right_num = {0};
-        InterpretResult right = parse_multiplicative(p, &right_num);
-        if (right.has_error)
-            return right;
+    BINARY_OP_LOOP_START("+-")
+        char op = next.op;
+        NumberValue right_num = next.operand;
 
         // Track last suffix if this operand has one
         if (right_num.suffix_len > 0)
@@ -312,9 +349,9 @@ static InterpretResult parse_additive(Parser *p)
 
         // Perform operation
         if (op == '+')
-            result_value = result_value + right.value;
+            result_value = result_value + next.validation.value;
         else
-            result_value = result_value - right.value;
+            result_value = result_value - next.validation.value;
 
         // Validate result against first operand's type if not in mixed types
         if (!in_mixed_types && has_tracked_suffix)
@@ -339,7 +376,7 @@ static InterpretResult parse_additive(Parser *p)
                     has_tracked_suffix = 0;
                 }
             }
-            else if (right_num.suffix_len == first_num.suffix_len && 
+            else if (right_num.suffix_len == first_num.suffix_len &&
                      strncmp(right_num.suffix, first_num.suffix, first_num.suffix_len) == 0)
             {
                 // Same type: validate result fits in type
@@ -352,14 +389,12 @@ static InterpretResult parse_additive(Parser *p)
             }
             else if (right_num.suffix_len > 0)
             {
-                // Different type suffix: enter mixed-type territory  
+                // Different type suffix: enter mixed-type territory
                 in_mixed_types = 1;
                 has_tracked_suffix = 0;
             }
         }
-
-        skip_whitespace(p);
-    }
+    BINARY_OP_LOOP_END
 
     // If we're in mixed types, validate final result against last operand's type
     if (in_mixed_types && last_suffix[0] != '\0')
