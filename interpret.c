@@ -233,7 +233,7 @@ static void extract_suffix(const char *str, int pos, char *suffix_buf)
     if (isalpha(str[pos]))
     {
         int len = suffix_length(&str[pos]);
-        strncpy(suffix_buf, &str[pos], len);
+        strncpy_s(suffix_buf, sizeof(suffix_buf), &str[pos], len);
         suffix_buf[len] = '\0';
     }
 }
@@ -297,7 +297,7 @@ static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_nu
     char suffix_buf[8] = {0};
     if (num.suffix_len > 0)
     {
-        strncpy(suffix_buf, num.suffix, num.suffix_len);
+        strncpy_s(suffix_buf, sizeof(suffix_buf), num.suffix, num.suffix_len);
         suffix_buf[num.suffix_len] = '\0';
     }
 
@@ -395,7 +395,7 @@ static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len);
 static void set_bool_tracked_suffix(Parser *p)
 {
     p->has_tracked_suffix = 1;
-    strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
+    strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "Bool", _TRUNCATE);
     p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
 }
 
@@ -447,7 +447,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 // Track the variable's type if it has one
                 if (p->variables[idx].type[0] != '\0')
                 {
-                    strncpy(p->tracked_suffix, p->variables[idx].type, sizeof(p->tracked_suffix) - 1);
+                    strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), p->variables[idx].type, _TRUNCATE);
                     p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
                     p->has_tracked_suffix = 1;
                     // Also set the output number's suffix info
@@ -551,7 +551,7 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
         p->variables[idx].is_mutable = is_mutable;
         if (type && type[0])
         {
-            strncpy(p->variables[idx].type, type, sizeof(p->variables[idx].type) - 1);
+            strncpy_s(p->variables[idx].type, sizeof(p->variables[idx].type), type, _TRUNCATE);
             p->variables[idx].type[sizeof(p->variables[idx].type) - 1] = '\0';
         }
         return idx;
@@ -560,13 +560,13 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
     if (p->var_count >= 10)
         return -1; // Too many variables
 
-    strncpy(p->variables[p->var_count].name, name, name_len);
+    strncpy_s(p->variables[p->var_count].name, sizeof(p->variables[p->var_count].name), name, name_len);
     p->variables[p->var_count].name[name_len] = '\0';
     p->variables[p->var_count].value = value;
     p->variables[p->var_count].is_mutable = is_mutable;
     if (type && type[0])
     {
-        strncpy(p->variables[p->var_count].type, type, sizeof(p->variables[p->var_count].type) - 1);
+        strncpy_s(p->variables[p->var_count].type, sizeof(p->variables[p->var_count].type), type, _TRUNCATE);
         p->variables[p->var_count].type[sizeof(p->variables[p->var_count].type) - 1] = '\0';
     }
     else
@@ -577,7 +577,7 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
     // Track this name in the all_declared_names array for duplicate checking across scopes
     if (p->all_declared_count < 10)
     {
-        strncpy(p->all_declared_names[p->all_declared_count], name, name_len);
+        strncpy_s(p->all_declared_names[p->all_declared_count], sizeof(p->all_declared_names[p->all_declared_count]), name, name_len);
         p->all_declared_names[p->all_declared_count][name_len] = '\0';
         p->all_declared_count++;
     }
@@ -615,7 +615,7 @@ static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len)
     if (len >= max_name_len)
         return -1;
 
-    strncpy(out_name, &p->input[start], len);
+    strncpy_s(out_name, max_name_len, &p->input[start], len);
     out_name[len] = '\0';
     return len;
 }
@@ -744,7 +744,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
             return type_result;
 
         // Store the declared type for validation later
-        strncpy(declared_type, type_name, sizeof(declared_type) - 1);
+        strncpy_s(declared_type, sizeof(declared_type), type_name, _TRUNCATE);
         declared_type[sizeof(declared_type) - 1] = '\0';
 
         // Expect '='
@@ -1257,7 +1257,7 @@ static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, 
     // Result of AND/OR is boolean only if we found the operator
     if (found_operator)
     {
-        strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
+        strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "Bool", _TRUNCATE);
         p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
         p->has_tracked_suffix = 1;
     }
@@ -1393,7 +1393,7 @@ static InterpretResult parse_keyword_header(Parser *p, const char *keyword, int 
     if (open_paren.has_error)
         return open_paren;
     skip_whitespace(p);
-    
+
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
@@ -1709,7 +1709,7 @@ static InterpretResult parse_if_else(Parser *p)
     int then_has_type = p->has_tracked_suffix;
     if (p->has_tracked_suffix)
     {
-        strncpy(then_type, p->tracked_suffix, sizeof(then_type) - 1);
+        strncpy_s(then_type, sizeof(then_type), p->tracked_suffix, _TRUNCATE);
         then_type[sizeof(then_type) - 1] = '\0';
     }
 
@@ -1743,7 +1743,7 @@ static InterpretResult parse_if_else(Parser *p)
         int else_has_type = p->has_tracked_suffix;
         if (p->has_tracked_suffix)
         {
-            strncpy(else_type, p->tracked_suffix, sizeof(else_type) - 1);
+            strncpy_s(else_type, sizeof(else_type), p->tracked_suffix, _TRUNCATE);
             else_type[sizeof(else_type) - 1] = '\0';
         }
 
@@ -1808,9 +1808,9 @@ static InterpretResult parse_additive(Parser *p)
 
     if (first_num.suffix_len > 0)
     {
-        strncpy(tracked_suffix, first_num.suffix, first_num.suffix_len);
+        strncpy_s(tracked_suffix, sizeof(tracked_suffix), first_num.suffix, first_num.suffix_len);
         tracked_suffix[first_num.suffix_len] = '\0';
-        strncpy(last_suffix, first_num.suffix, first_num.suffix_len);
+        strncpy_s(last_suffix, sizeof(last_suffix), first_num.suffix, first_num.suffix_len);
         last_suffix[first_num.suffix_len] = '\0';
         has_tracked_suffix = 1;
     }
@@ -1851,7 +1851,7 @@ static InterpretResult parse_additive(Parser *p)
         // Track last suffix if this operand has one
         if (right_num.suffix_len > 0)
         {
-            strncpy(last_suffix, right_num.suffix, right_num.suffix_len);
+            strncpy_s(last_suffix, sizeof(last_suffix), right_num.suffix, right_num.suffix_len);
             last_suffix[right_num.suffix_len] = '\0';
         }
 
@@ -1928,7 +1928,7 @@ static InterpretResult parse_additive(Parser *p)
     // Update the Parser struct with the tracked suffix information
     if (has_tracked_suffix)
     {
-        strncpy(p->tracked_suffix, tracked_suffix, sizeof(p->tracked_suffix) - 1);
+        strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), tracked_suffix, _TRUNCATE);
         p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
         p->has_tracked_suffix = 1;
     }
@@ -1969,7 +1969,7 @@ static InterpretResult parse_expression(Parser *p)
 
 static int is_keyword_lookahead(const char *str, const char *keyword, int keyword_len)
 {
-    return strncmp(str, keyword, keyword_len) == 0 && 
+    return strncmp(str, keyword, keyword_len) == 0 &&
            (isspace(str[keyword_len]) || str[keyword_len] == '(' || str[keyword_len] == '\0');
 }
 
