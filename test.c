@@ -285,6 +285,11 @@ void test_interpret_block_with_if_else_assignments(void)
     assert_success("let mut x = 0; { if (true) x = 1; else x = 2; } x", 1, "test_interpret_block_with_if_else_assignments");
 }
 
+void test_interpret_if_without_else(void)
+{
+    assert_success("let mut x = 0; if (true) x = 1; x", 1, "test_interpret_if_without_else");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -340,6 +345,7 @@ int main(void)
     test_interpret_nested_if_else();
     test_interpret_if_else_with_assignments();
     test_interpret_block_with_if_else_assignments();
+    test_interpret_if_without_else();
     printf("All tests passed!\n");
     return 0;
 }

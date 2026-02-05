@@ -905,7 +905,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             p->var_count = saved_var_count_block;
 
             skip_whitespace(p);
-            
+
             // Save the block's value to return it if this is the final statement
             last_statement_value = block_expr_result.value;
             has_last_statement = 1;
@@ -1265,6 +1265,17 @@ static InterpretResult parse_assignment_or_if_else(Parser *p)
     return parse_if_else(p);
 }
 
+// Helper: Apply branch state after executing an if/else branch
+static InterpretResult apply_branch_state(Parser *p, Variable then_state_vars[10], int then_state_var_count, InterpretResult then_expr)
+{
+    p->var_count = then_state_var_count;
+    for (int i = 0; i < then_state_var_count; i++)
+    {
+        p->variables[i] = then_state_vars[i];
+    }
+    return (InterpretResult){.value = then_expr.value, .has_error = false, .error_message = NULL};
+}
+
 // Helper: Parse if-else expression
 // Syntax: if (condition) then_expr else else_expr
 static InterpretResult parse_if_else(Parser *p)
@@ -1342,53 +1353,71 @@ static InterpretResult parse_if_else(Parser *p)
 
     skip_whitespace(p);
 
-    // Expect 'else' keyword
-    if (!is_keyword_at(p, "else"))
-        return make_error("Expected 'else' in if-else expression");
-
-    p->pos += 4; // Skip 'else'
-    skip_whitespace(p);
-
-    // Parse and execute else expression
-    InterpretResult else_expr = parse_assignment_or_if_else(p);
-    if (else_expr.has_error)
-        return else_expr;
-
-    // Capture the type of the else branch
-    char else_type[8] = {0};
-    int else_has_type = p->has_tracked_suffix;
-    if (p->has_tracked_suffix)
+    // Check if 'else' keyword is present (optional)
+    if (is_keyword_at(p, "else"))
     {
-        strncpy(else_type, p->tracked_suffix, sizeof(else_type) - 1);
-        else_type[sizeof(else_type) - 1] = '\0';
-    }
+        // else clause is present, parse it
+        p->pos += 4; // Skip 'else'
+        skip_whitespace(p);
 
-    // Check that both branches have the same type
-    if (then_has_type != else_has_type)
-    {
-        return make_error("if-else branches must have the same type");
-    }
+        // Parse and execute else expression
+        InterpretResult else_expr = parse_assignment_or_if_else(p);
+        if (else_expr.has_error)
+            return else_expr;
 
-    if (then_has_type && strncmp(then_type, else_type, sizeof(then_type)) != 0)
-    {
-        return make_error("if-else branches must have the same type");
-    }
-
-    // Now apply the correct mutations based on condition
-    if (condition.value != 0)
-    {
-        // Condition is true, use then branch state
-        p->var_count = then_state_var_count;
-        for (int i = 0; i < then_state_var_count; i++)
+        // Capture the type of the else branch
+        char else_type[8] = {0};
+        int else_has_type = p->has_tracked_suffix;
+        if (p->has_tracked_suffix)
         {
-            p->variables[i] = then_state_vars[i];
+            strncpy(else_type, p->tracked_suffix, sizeof(else_type) - 1);
+            else_type[sizeof(else_type) - 1] = '\0';
         }
-        return (InterpretResult){.value = then_expr.value, .has_error = false, .error_message = NULL};
+
+        // Check that both branches have the same type
+        if (then_has_type != else_has_type)
+        {
+            return make_error("if-else branches must have the same type");
+        }
+
+        if (then_has_type && strncmp(then_type, else_type, sizeof(then_type)) != 0)
+        {
+            return make_error("if-else branches must have the same type");
+        }
+
+        // Now apply the correct mutations based on condition
+        if (condition.value != 0)
+        {
+            // Condition is true, use then branch state
+            return apply_branch_state(p, then_state_vars, then_state_var_count, then_expr);
+        }
+        else
+        {
+            // Condition is false, use else branch state (already applied)
+            return (InterpretResult){.value = else_expr.value, .has_error = false, .error_message = NULL};
+        }
     }
     else
     {
-        // Condition is false, use else branch state (already applied)
-        return (InterpretResult){.value = else_expr.value, .has_error = false, .error_message = NULL};
+        // No else clause - this is an optional if statement
+        // If condition is true, use then branch state
+        // If condition is false, use original pre-condition state (then branch was never executed)
+        if (condition.value != 0)
+        {
+            // Condition is true, use then branch state
+            return apply_branch_state(p, then_state_vars, then_state_var_count, then_expr);
+        }
+        else
+        {
+            // Condition is false, don't apply then branch, return pre-condition state
+            p->var_count = saved_var_count;
+            for (int i = 0; i < saved_var_count; i++)
+            {
+                p->variables[i] = saved_vars[i];
+            }
+            // For if-only (no else), return 0 when condition is false
+            return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+        }
     }
 }
 
