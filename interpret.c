@@ -6,8 +6,8 @@
 typedef struct
 {
     const char *suffix;
-    long min_value;
-    long max_value;
+    long long min_value;
+    long long max_value;
     const char *error_message;
 } TypeInfo;
 
@@ -42,12 +42,12 @@ typedef struct
 static const TypeInfo type_info[] = {
     {"U8", 0, 255, "Value out of range for U8 (0-255)"},
     {"U16", 0, 65535, "Value out of range for U16 (0-65535)"},
-    {"U32", 0, 4294967295L, "Value out of range for U32 (0-4294967295)"},
-    {"U64", 0, 9223372036854775807L, "Value out of range for U64"},
+    {"U32", 0, 4294967295LL, "Value out of range for U32 (0-4294967295)"},
+    {"U64", 0, 9223372036854775807LL, "Value out of range for U64"},
     {"I8", -128, 127, "Value out of range for I8 (-128 to 127)"},
     {"I16", -32768, 32767, "Value out of range for I16 (-32768 to 32767)"},
-    {"I32", -2147483648L, 2147483647L, "Value out of range for I32"},
-    {"I64", -9223372036854775807L - 1, 9223372036854775807L, "Value out of range for I64"},
+    {"I32", -2147483648LL, 2147483647LL, "Value out of range for I32"},
+    {"I64", -9223372036854775807LL - 1, 9223372036854775807LL, "Value out of range for I64"},
     {NULL, 0, 0, NULL}};
 
 static int suffix_length(const char *suffix)
@@ -109,7 +109,7 @@ static int has_typed_operand_ahead(const char *input, int pos)
 
 static int get_type_info_index(const char *suffix);
 
-static InterpretResult validate_value_by_index(long value, int type_idx)
+static InterpretResult validate_value_by_index(long long value, int type_idx)
 {
     if (type_idx < 0)
     {
@@ -127,7 +127,7 @@ static InterpretResult validate_value_by_index(long value, int type_idx)
     return (InterpretResult){.value = (int)value, .has_error = false, .error_message = NULL};
 }
 
-static InterpretResult validate_type(long value, const char *suffix)
+static InterpretResult validate_type(long long value, const char *suffix)
 {
     int type_idx = get_type_info_index(suffix);
     return validate_value_by_index(value, type_idx);
