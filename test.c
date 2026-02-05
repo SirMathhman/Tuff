@@ -272,6 +272,11 @@ void test_interpret_if_else_bool_var_numeric_branches_error(void)
     assert_error("let x : Bool = if (true) 3 else 5; x", "test_interpret_if_else_bool_var_numeric_branches_error");
 }
 
+void test_interpret_nested_if_else(void)
+{
+    assert_success("if (false) 1 else if (false) 2 else 3", 3, "test_interpret_nested_if_else");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -324,6 +329,7 @@ int main(void)
     test_interpret_if_else_branch_type_mismatch_error();
     test_interpret_if_else_branch_types_must_match_error();
     test_interpret_if_else_bool_var_numeric_branches_error();
+    test_interpret_nested_if_else();
     printf("All tests passed!\n");
     return 0;
 }

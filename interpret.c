@@ -1197,7 +1197,8 @@ static InterpretResult parse_if_else(Parser *p)
 
     // Expect opening parenthesis
     InterpretResult open_paren = expect_char(p, '(', "Expected '(' after 'if'");
-    if (open_paren.has_error) return open_paren;
+    if (open_paren.has_error)
+        return open_paren;
     skip_whitespace(p);
 
     // Parse condition expression
@@ -1213,11 +1214,12 @@ static InterpretResult parse_if_else(Parser *p)
 
     // Expect closing parenthesis
     InterpretResult close_paren = expect_char(p, ')', "Expected ')' after if condition");
-    if (close_paren.has_error) return close_paren;
+    if (close_paren.has_error)
+        return close_paren;
     skip_whitespace(p);
 
     // Parse then expression
-    InterpretResult then_expr = parse_additive(p);
+    InterpretResult then_expr = parse_if_else(p);
     if (then_expr.has_error)
         return then_expr;
 
@@ -1240,7 +1242,7 @@ static InterpretResult parse_if_else(Parser *p)
     skip_whitespace(p);
 
     // Parse else expression
-    InterpretResult else_expr = parse_additive(p);
+    InterpretResult else_expr = parse_if_else(p);
     if (else_expr.has_error)
         return else_expr;
 
