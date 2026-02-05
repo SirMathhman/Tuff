@@ -815,6 +815,25 @@ static InterpretResult parse_assignment_statement_in_block(Parser *p)
     if (val_result.has_error)
         return val_result;
 
+    // If variable has a declared type, check type compatibility
+    if (p->variables[idx].type[0] != '\0')
+    {
+        // If the assigned value has a type suffix
+        if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+        {
+            // Check if the value's type is compatible with the variable's type
+            if (!is_type_compatible(p->variables[idx].type, p->tracked_suffix))
+            {
+                return make_error("Assignment type mismatch: assigned value type does not match variable type");
+            }
+        }
+        // If value has no suffix, it's incompatible with a typed variable
+        else
+        {
+            return make_error("Cannot assign untyped value to a typed variable");
+        }
+    }
+
     // Update the variable's value
     p->variables[idx].value = val_result.value;
 

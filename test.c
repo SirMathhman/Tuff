@@ -173,6 +173,11 @@ void test_interpret_undeclared_variable_assignment(void)
     assert_error("x = 100; x", "test_interpret_undeclared_variable_assignment");
 }
 
+void test_interpret_mutable_variable_type_mismatch(void)
+{
+    assert_error("let mut x : U8 = 0; x = 100U16; x", "test_interpret_mutable_variable_type_mismatch");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -206,6 +211,7 @@ int main(void)
     test_interpret_mutable_variable();
     test_interpret_immutable_variable_reassignment();
     test_interpret_undeclared_variable_assignment();
+    test_interpret_mutable_variable_type_mismatch();
     printf("All tests passed!\n");
     return 0;
 }
