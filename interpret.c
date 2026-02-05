@@ -473,14 +473,13 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         return eq_result;
     skip_whitespace(p);
 
-    // Parse the value expression (number or variable reference)
-    NumberValue var_num = {0};
-    InterpretResult val_result = parse_simple_operand(p, &var_num);
+    // Parse the value expression (can be a simple operand or a complex expression)
+    InterpretResult val_result = parse_additive(p);
     if (val_result.has_error)
         return val_result;
 
     // Store the variable
-    set_variable(p, var_name, name_len, var_num.value);
+    set_variable(p, var_name, name_len, val_result.value);
 
     skip_whitespace(p);
 
@@ -489,6 +488,25 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     if (semi_result.has_error)
         return semi_result;
     skip_whitespace(p);
+
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Parse a sequence of let statements
+static InterpretResult parse_let_statements_loop(Parser *p)
+{
+    skip_whitespace(p);
+
+    // Parse let statements until none are found
+    while (p->input[p->pos] == 'l' &&
+           p->input[p->pos + 1] == 'e' &&
+           p->input[p->pos + 2] == 't')
+    {
+        InterpretResult let_result = parse_let_statement_in_block(p);
+        if (let_result.has_error)
+            return let_result;
+        skip_whitespace(p);
+    }
 
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
@@ -509,20 +527,11 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
         // For blocks, check for let statements
         if (is_block)
         {
-            skip_whitespace(p);
-
-            // Parse let statements
-            while (p->input[p->pos] == 'l' &&
-                   p->input[p->pos + 1] == 'e' &&
-                   p->input[p->pos + 2] == 't')
+            InterpretResult let_statements_result = parse_let_statements_loop(p);
+            if (let_statements_result.has_error)
             {
-                InterpretResult let_result = parse_let_statement_in_block(p);
-                if (let_result.has_error)
-                {
-                    p->var_count = saved_var_count;
-                    return let_result;
-                }
-                skip_whitespace(p);
+                p->var_count = saved_var_count;
+                return let_statements_result;
             }
         }
 
@@ -698,12 +707,29 @@ static InterpretResult parse_additive(Parser *p)
 
 static InterpretResult parse_expression(Parser *p)
 {
+    // Check for top-level let statements
+    InterpretResult let_statements_result = parse_let_statements_loop(p);
+    if (let_statements_result.has_error)
+        return let_statements_result;
+
+    // Parse the final expression (can be a variable reference or a complex expression)
     return parse_additive(p);
 }
 
 static int is_expression(const char *str)
 {
     int in_number = 0;
+
+    // Skip leading whitespace
+    while (isspace(*str))
+        str++;
+
+    // Check if it's a let statement
+    if (str[0] == 'l' && str[1] == 'e' && str[2] == 't')
+    {
+        return 1;
+    }
+
     for (int i = 0; str[i]; i++)
     {
         // Skip whitespace
