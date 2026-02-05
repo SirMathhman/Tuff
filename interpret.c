@@ -24,7 +24,7 @@ typedef struct
     const char *input;
     int pos;
     InterpretResult last_error;
-    char tracked_suffix[4];
+    char tracked_suffix[8]; // Increased to accommodate "Bool" (4 chars + null)
     int has_tracked_suffix;
     Variable variables[10];
     int var_count;
@@ -191,6 +191,10 @@ static int is_type_compatible(const char *dest_type, const char *source_type)
     if (!dest_type || !source_type || !dest_type[0] || !source_type[0])
         return 0;
 
+    // Check for Bool type (special case)
+    if (strcmp(dest_type, "Bool") == 0 && strcmp(source_type, "Bool") == 0)
+        return 1;
+
     int dest_idx = get_type_info_index(dest_type);
     int src_idx = get_type_info_index(source_type);
 
@@ -267,7 +271,7 @@ static InterpretResult parse_number(Parser *p)
     NumberValue num = parse_number_raw(p);
 
     // Validate the parsed number
-    char suffix_buf[4] = {0};
+    char suffix_buf[8] = {0};
     if (num.suffix_len > 0)
     {
         memcpy(suffix_buf, num.suffix, num.suffix_len);
@@ -290,7 +294,7 @@ static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_nu
     if (out_num)
         *out_num = num;
 
-    char suffix_buf[4] = {0};
+    char suffix_buf[8] = {0};
     if (num.suffix_len > 0)
     {
         strncpy(suffix_buf, num.suffix, num.suffix_len);
@@ -387,12 +391,20 @@ static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_nu
 static int find_variable(Parser *p, const char *name, int name_len);
 static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len);
 
+// Helper: Set Bool type tracking on parser
+static void set_bool_tracked_suffix(Parser *p)
+{
+    p->has_tracked_suffix = 1;
+    strncpy(p->tracked_suffix, "Bool", sizeof(p->tracked_suffix) - 1);
+    p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+}
+
 // Helper: Parse a simple operand (number or variable reference)
 static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 {
     skip_whitespace(p);
 
-    // Check for variable reference
+    // Check for variable reference or boolean literal
     if (isalpha(p->input[p->pos]))
     {
         int saved_pos = p->pos;
@@ -400,6 +412,31 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
         int name_len = parse_identifier(p, var_name, sizeof(var_name));
         if (name_len > 0)
         {
+            // Check for boolean literals
+            if (strncmp(var_name, "true", name_len) == 0 && name_len == 4)
+            {
+                if (out_num)
+                {
+                    out_num->value = 1;
+                    out_num->suffix = "Bool";
+                    out_num->suffix_len = 4;
+                }
+                set_bool_tracked_suffix(p);
+                return (InterpretResult){.value = 1, .has_error = false, .error_message = NULL};
+            }
+            if (strncmp(var_name, "false", name_len) == 0 && name_len == 5)
+            {
+                if (out_num)
+                {
+                    out_num->value = 0;
+                    out_num->suffix = "Bool";
+                    out_num->suffix_len = 4;
+                }
+                set_bool_tracked_suffix(p);
+                return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+            }
+
+            // Check for variable reference
             int idx = find_variable(p, var_name, name_len);
             if (idx >= 0)
             {
@@ -1069,8 +1106,8 @@ static InterpretResult parse_additive(Parser *p)
         return left;
 
     long result_value = left.value;
-    char tracked_suffix[4] = {0};
-    char last_suffix[4] = {0};
+    char tracked_suffix[8] = {0}; // Increased to accommodate "Bool"
+    char last_suffix[8] = {0};    // Increased to accommodate "Bool"
     int has_tracked_suffix = 0;
     int in_mixed_types = 0; // Track if we've seen mixed types
 
