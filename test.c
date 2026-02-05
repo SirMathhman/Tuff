@@ -136,6 +136,11 @@ void test_interpret_typeless_variable_declaration(void)
     assert_success("let x = 100; x", 100, "test_interpret_typeless_variable_declaration");
 }
 
+void test_interpret_duplicate_variable_declaration(void)
+{
+    assert_error("let x = 100; let x = 100; x", "test_interpret_duplicate_variable_declaration");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -162,6 +167,7 @@ int main(void)
     test_interpret_multiple_variable_declarations();
     test_interpret_top_level_variable_declaration();
     test_interpret_typeless_variable_declaration();
+    test_interpret_duplicate_variable_declaration();
     printf("All tests passed!\n");
     return 0;
 }

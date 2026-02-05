@@ -457,6 +457,12 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
 
     skip_whitespace(p);
 
+    // Check if variable already exists (duplicate declaration)
+    if (find_variable(p, var_name, name_len) >= 0)
+    {
+        return make_error("Variable already declared");
+    }
+
     // Check if this is a typed or typeless declaration
     if (p->input[p->pos] == '=')
     {
