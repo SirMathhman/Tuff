@@ -1221,6 +1221,15 @@ static InterpretResult parse_if_else(Parser *p)
     if (then_expr.has_error)
         return then_expr;
 
+    // Capture the type of the then branch
+    char then_type[8] = {0};
+    int then_has_type = p->has_tracked_suffix;
+    if (p->has_tracked_suffix)
+    {
+        strncpy(then_type, p->tracked_suffix, sizeof(then_type) - 1);
+        then_type[sizeof(then_type) - 1] = '\0';
+    }
+
     skip_whitespace(p);
 
     // Expect 'else' keyword
@@ -1234,6 +1243,26 @@ static InterpretResult parse_if_else(Parser *p)
     InterpretResult else_expr = parse_additive(p);
     if (else_expr.has_error)
         return else_expr;
+
+    // Capture the type of the else branch
+    char else_type[8] = {0};
+    int else_has_type = p->has_tracked_suffix;
+    if (p->has_tracked_suffix)
+    {
+        strncpy(else_type, p->tracked_suffix, sizeof(else_type) - 1);
+        else_type[sizeof(else_type) - 1] = '\0';
+    }
+
+    // Check that both branches have the same type
+    if (then_has_type != else_has_type)
+    {
+        return make_error("if-else branches must have the same type");
+    }
+
+    if (then_has_type && strncmp(then_type, else_type, sizeof(then_type)) != 0)
+    {
+        return make_error("if-else branches must have the same type");
+    }
 
     // Evaluate: if condition is non-zero (true), return then value, else return else value
     long result = (condition.value != 0) ? then_expr.value : else_expr.value;

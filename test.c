@@ -262,6 +262,11 @@ void test_interpret_if_else_branch_type_mismatch_error(void)
     assert_error("if (100) 3 else true", "test_interpret_if_else_branch_type_mismatch_error");
 }
 
+void test_interpret_if_else_branch_types_must_match_error(void)
+{
+    assert_error("if (true) 3 else true", "test_interpret_if_else_branch_types_must_match_error");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -312,6 +317,7 @@ int main(void)
     test_interpret_if_else_expression();
     test_interpret_if_else_numeric_condition_error();
     test_interpret_if_else_branch_type_mismatch_error();
+    test_interpret_if_else_branch_types_must_match_error();
     printf("All tests passed!\n");
     return 0;
 }
