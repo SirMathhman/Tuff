@@ -1,7 +1,11 @@
 #include "interpret.h"
+#include <stdlib.h>
 
 int interpret(const char *str)
 {
-    // TODO: Implement interpretation logic
-    return 0;
+    if (str == NULL || *str == '\0')
+    {
+        return 0;
+    }
+    return (int)strtol(str, NULL, 10);
 }
