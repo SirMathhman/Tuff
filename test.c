@@ -131,6 +131,11 @@ void test_interpret_top_level_variable_declaration(void)
     assert_success("let z : U8 = (2 + { let x : U8 = 3; let y : U8 = x; y }) * 4; z", 20, "test_interpret_top_level_variable_declaration");
 }
 
+void test_interpret_typeless_variable_declaration(void)
+{
+    assert_success("let x = 100; x", 100, "test_interpret_typeless_variable_declaration");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -156,6 +161,7 @@ int main(void)
     test_interpret_variable_declaration();
     test_interpret_multiple_variable_declarations();
     test_interpret_top_level_variable_declaration();
+    test_interpret_typeless_variable_declaration();
     printf("All tests passed!\n");
     return 0;
 }

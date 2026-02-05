@@ -455,23 +455,37 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         return name_result;
     int name_len = name_result.value;
 
-    // Expect ':'
-    InterpretResult colon_result = expect_char(p, ':', "Expected ':' in variable declaration");
-    if (colon_result.has_error)
-        return colon_result;
     skip_whitespace(p);
 
-    // Parse type
-    char type_name[8];
-    InterpretResult type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected type name");
-    if (type_result.has_error)
-        return type_result;
+    // Check if this is a typed or typeless declaration
+    if (p->input[p->pos] == '=')
+    {
+        // Typeless declaration: let x = value;
+        p->pos++; // Skip '='
+        skip_whitespace(p);
+    }
+    else if (p->input[p->pos] == ':')
+    {
+        // Typed declaration: let x : Type = value;
+        p->pos++; // Skip ':'
+        skip_whitespace(p);
 
-    // Expect '='
-    InterpretResult eq_result = expect_char(p, '=', "Expected '=' in variable declaration");
-    if (eq_result.has_error)
-        return eq_result;
-    skip_whitespace(p);
+        // Parse type
+        char type_name[8];
+        InterpretResult type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected type name");
+        if (type_result.has_error)
+            return type_result;
+
+        // Expect '='
+        InterpretResult eq_result = expect_char(p, '=', "Expected '=' in variable declaration");
+        if (eq_result.has_error)
+            return eq_result;
+        skip_whitespace(p);
+    }
+    else
+    {
+        return make_error("Expected '=' or ':' after variable name");
+    }
 
     // Parse the value expression (can be a simple operand or a complex expression)
     InterpretResult val_result = parse_additive(p);
