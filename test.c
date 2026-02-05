@@ -173,6 +173,21 @@ void test_interpret_variable_assignment_type_check(void)
     assert_error("let x = 100U16; let y : U8 = x; y", "test_interpret_variable_assignment_type_check");
 }
 
+void test_interpret_untyped_to_i32(void)
+{
+    assert_success("let x = 0; let y : I32 = x; y", 0, "test_interpret_untyped_to_i32");
+}
+
+void test_interpret_untyped_to_u8_error(void)
+{
+    assert_error("let x = 0; let y : U8 = x; y", "test_interpret_untyped_to_u8_error");
+}
+
+void test_interpret_untyped_to_i8_error(void)
+{
+    assert_error("let x = 0; let y : I8 = x; y", "test_interpret_untyped_to_i8_error");
+}
+
 void test_interpret_mutable_variable(void)
 {
     assert_success("let mut x = 0; x = 100; x", 100, "test_interpret_mutable_variable");
@@ -478,6 +493,9 @@ int main(void)
     test_interpret_variable_type_mismatch();
     test_interpret_variable_type_compatible();
     test_interpret_variable_assignment_type_check();
+    test_interpret_untyped_to_i32();
+    test_interpret_untyped_to_u8_error();
+    test_interpret_untyped_to_i8_error();
     test_interpret_mutable_variable();
     test_interpret_immutable_variable_reassignment();
     test_interpret_immutable_variable_compound_assignment();

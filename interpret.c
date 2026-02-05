@@ -238,6 +238,14 @@ static void extract_suffix(const char *str, int pos, char *suffix_buf)
     }
 }
 
+// Helper: Set tracked suffix on parser
+static void set_tracked_suffix(Parser *p, const char *suffix_buf)
+{
+    strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), suffix_buf, _TRUNCATE);
+    p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+    p->has_tracked_suffix = 1;
+}
+
 static NumberValue parse_number_raw(Parser *p)
 {
     skip_whitespace(p);
@@ -299,6 +307,14 @@ static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_nu
     {
         strncpy_s(suffix_buf, sizeof(suffix_buf), num.suffix, num.suffix_len);
         suffix_buf[num.suffix_len] = '\0';
+        // Track the explicit type suffix
+        set_tracked_suffix(p, suffix_buf);
+    }
+    else
+    {
+        // Untyped number - mark as such, no default type here
+        p->has_tracked_suffix = 0;
+        p->tracked_suffix[0] = '\0';
     }
 
     return validate_type(num.value, num.suffix_len > 0 ? suffix_buf : NULL);
@@ -764,13 +780,19 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     if (val_result.has_error)
         return val_result;
 
-    // If declared type is specified, validate that the value matches the type
+    // Determine the actual type to use for the variable
+    char actual_type[8] = {0};
+
     if (declared_type[0] != '\0')
     {
-        // Only validate if the value has a type suffix
-        if (p->has_tracked_suffix)
+        // Explicit type declared: validate that the value fits in that type
+        strncpy_s(actual_type, sizeof(actual_type), declared_type, _TRUNCATE);
+        actual_type[sizeof(actual_type) - 1] = '\0';
+
+        // Check compatibility based on what type the value has
+        if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
         {
-            // Check if the value's type is compatible with the declared type
+            // Value has explicit type - check compatibility
             if (!is_type_compatible(declared_type, p->tracked_suffix))
             {
                 return make_error("Variable type mismatch: declared type does not match assigned value type");
@@ -778,23 +800,37 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         }
         else if (strcmp(declared_type, "Bool") == 0)
         {
-            // Untyped values (e.g. plain numbers) are not compatible with Bool
+            // Bool requires boolean values, not numeric ones
             return make_error("Variable type mismatch: declared type does not match assigned value type");
         }
-        // If value has no suffix and declared type is not Bool, it's compatible with any declared type
-        // Store variable with declared type
-        set_variable_with_mutability(p, var_name, name_len, val_result.value, declared_type, is_mutable);
+        else
+        {
+            // Value is untyped - validate it fits in the declared type
+            InterpretResult validation = validate_type(val_result.value, declared_type);
+            if (validation.has_error)
+                return validation;
+        }
     }
-    else if (p->has_tracked_suffix)
+    else if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
     {
-        // No declared type, but value has a type - store with value's type
-        set_variable_with_mutability(p, var_name, name_len, val_result.value, p->tracked_suffix, is_mutable);
+        // No explicit type declared, but value has a type - use value's type
+        strncpy_s(actual_type, sizeof(actual_type), p->tracked_suffix, _TRUNCATE);
+        actual_type[sizeof(actual_type) - 1] = '\0';
     }
     else
     {
-        // No declared type, typeless value
-        set_variable_with_mutability(p, var_name, name_len, val_result.value, NULL, is_mutable);
+        // No explicit type declared, untyped value - default to I32
+        strncpy_s(actual_type, sizeof(actual_type), "I32", _TRUNCATE);
+        actual_type[sizeof(actual_type) - 1] = '\0';
     }
+
+    // Validate the value fits in the actual type
+    InterpretResult type_validation = validate_type(val_result.value, actual_type);
+    if (type_validation.has_error)
+        return type_validation;
+
+    // Store variable with the actual type
+    set_variable_with_mutability(p, var_name, name_len, val_result.value, actual_type, is_mutable);
 
     return finalize_statement(p, "Expected ';' after variable declaration");
 }
@@ -1107,10 +1143,12 @@ static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_nam
                     return make_error("Assignment type mismatch: assigned value type does not match variable type");
                 }
             }
-            // If value has no suffix, it's incompatible with a typed variable
             else
             {
-                return make_error("Cannot assign untyped value to a typed variable");
+                // Untyped value - validate it fits in the variable's type
+                InterpretResult validation = validate_type(val_result.value, p->variables[idx].type);
+                if (validation.has_error)
+                    return validation;
             }
         }
     }
