@@ -360,6 +360,11 @@ void test_interpret_not_equal_false(void)
     assert_success("let x = 1; let y = 1; x != y", 0, "test_interpret_not_equal_false");
 }
 
+void test_interpret_bool_comparison_error(void)
+{
+    assert_error("true < false", "test_interpret_bool_comparison_error");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -430,6 +435,7 @@ int main(void)
     test_interpret_equal_false();
     test_interpret_not_equal_true();
     test_interpret_not_equal_false();
+    test_interpret_bool_comparison_error();
     printf("All tests passed!\n");
     return 0;
 }

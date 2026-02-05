@@ -1288,7 +1288,7 @@ static InterpretResult parse_comparison(Parser *p)
     {
         char curr = p->input[p->pos];
         char next = p->input[p->pos + 1];
-        
+
         if ((curr == '<' || curr == '>' || curr == '=' || curr == '!') && next == '=')
         {
             is_two_char = 1;
@@ -1298,7 +1298,7 @@ static InterpretResult parse_comparison(Parser *p)
             skip_whitespace(p);
         }
     }
-    
+
     // If not two-char, check for single-character operators (< or >)
     if (!is_comparison && (p->input[p->pos] == '<' || p->input[p->pos] == '>'))
     {
@@ -1310,10 +1310,22 @@ static InterpretResult parse_comparison(Parser *p)
 
     if (is_comparison)
     {
+        // Check that left operand is not a boolean
+        if (p->has_tracked_suffix && strcmp(p->tracked_suffix, "Bool") == 0)
+        {
+            return make_error("Boolean values cannot be used in comparison operations");
+        }
+
         // Parse right operand
         InterpretResult right = parse_additive(p);
         if (right.has_error)
             return right;
+
+        // Check that right operand is not a boolean
+        if (p->has_tracked_suffix && strcmp(p->tracked_suffix, "Bool") == 0)
+        {
+            return make_error("Boolean values cannot be used in comparison operations");
+        }
 
         // Perform comparison
         if (is_two_char)
