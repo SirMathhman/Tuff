@@ -15,7 +15,8 @@ typedef struct
 {
     char name[32];
     long value;
-    char type[8]; // Store variable's type (e.g., "U8", "U16", empty if typeless)
+    char type[8];   // Store variable's type (e.g., "U8", "U16", empty if typeless)
+    int is_mutable; // 1 if mutable, 0 if immutable
 } Variable;
 
 typedef struct
@@ -487,12 +488,14 @@ static InterpretResult expect_char(Parser *p, char expected, const char *error_m
 }
 
 // Helper: Set or add a variable with optional type information
-static int set_variable_with_type(Parser *p, const char *name, int name_len, long value, const char *type)
+// Helper: Set or add a variable with optional type and mutability information
+static int set_variable_with_mutability(Parser *p, const char *name, int name_len, long value, const char *type, int is_mutable)
 {
     int idx = find_variable(p, name, name_len);
     if (idx >= 0)
     {
         p->variables[idx].value = value;
+        p->variables[idx].is_mutable = is_mutable;
         if (type && type[0])
         {
             strncpy(p->variables[idx].type, type, sizeof(p->variables[idx].type) - 1);
@@ -507,6 +510,7 @@ static int set_variable_with_type(Parser *p, const char *name, int name_len, lon
     strncpy(p->variables[p->var_count].name, name, name_len);
     p->variables[p->var_count].name[name_len] = '\0';
     p->variables[p->var_count].value = value;
+    p->variables[p->var_count].is_mutable = is_mutable;
     if (type && type[0])
     {
         strncpy(p->variables[p->var_count].type, type, sizeof(p->variables[p->var_count].type) - 1);
@@ -519,7 +523,13 @@ static int set_variable_with_type(Parser *p, const char *name, int name_len, lon
     return p->var_count++;
 }
 
-// Helper: Set or add a variable without type information
+// Helper: Set or add a variable with type information (immutable by default)
+static int set_variable_with_type(Parser *p, const char *name, int name_len, long value, const char *type)
+{
+    return set_variable_with_mutability(p, name, name_len, value, type, 0);
+}
+
+// Helper: Set or add a variable without type information (immutable by default)
 static int set_variable(Parser *p, const char *name, int name_len, long value)
 {
     return set_variable_with_type(p, name, name_len, value, NULL);
@@ -548,8 +558,76 @@ static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len)
     return len;
 }
 
+// Helper: Parse variable name and return length (or error)
+// Helper: Check if a keyword matches at the current position
+static int is_keyword_at(Parser *p, const char *keyword)
+{
+    int i = 0;
+    while (keyword[i])
+    {
+        if (p->input[p->pos + i] != keyword[i])
+            return 0;
+        i++;
+    }
+    return 1;
+}
+
+// Helper: Parse the 'mut' keyword if present and return mutability flag
+static int parse_mut_keyword(Parser *p)
+{
+    if (is_keyword_at(p, "mut") &&
+        (isspace(p->input[p->pos + 3]) || p->input[p->pos + 3] == '\0'))
+    {
+        p->pos += 3; // Skip 'mut'
+        skip_whitespace(p);
+        return 1;
+    }
+    return 0;
+}
+
+static InterpretResult parse_and_validate_var_name(Parser *p, char *out_name, int max_name_len)
+{
+    InterpretResult name_result = parse_identifier_or_error(p, out_name, max_name_len, "Expected variable name");
+    if (name_result.has_error)
+        return name_result;
+    int name_len = name_result.value;
+    skip_whitespace(p);
+    return (InterpretResult){.value = name_len, .has_error = false, .error_message = NULL};
+}
+
+#define PARSE_VAR_NAME_OR_RETURN(p, name_buf, name_len)         \
+    do                                                         \
+    {                                                          \
+        InterpretResult _name_result =                         \
+            parse_and_validate_var_name(p, name_buf, sizeof(name_buf)); \
+        if (_name_result.has_error)                            \
+            return _name_result;                               \
+        name_len = _name_result.value;                         \
+    } while (0)
+
+// Helper: Expect and consume a semicolon, then skip whitespace
+static InterpretResult expect_semicolon_and_skip(Parser *p, const char *context)
+{
+    InterpretResult semi_result = expect_char(p, ';', context);
+    if (semi_result.has_error)
+        return semi_result;
+    skip_whitespace(p);
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Finalize a statement by expecting semicolon and returning success
+static InterpretResult finalize_statement(Parser *p, const char *context)
+{
+    skip_whitespace(p);
+    InterpretResult semi_result = expect_semicolon_and_skip(p, context);
+    if (semi_result.has_error)
+        return semi_result;
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
 // Forward declaration for recursion
 static InterpretResult parse_additive(Parser *p);
+static InterpretResult parse_assignment_statement_in_block(Parser *p);
 
 // Helper: Parse a let statement in a block
 static InterpretResult parse_let_statement_in_block(Parser *p)
@@ -557,14 +635,13 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     p->pos += 3; // Skip 'let'
     skip_whitespace(p);
 
+    // Check for 'mut' keyword
+    int is_mutable = parse_mut_keyword(p);
+
     // Parse variable name
     char var_name[32];
-    InterpretResult name_result = parse_identifier_or_error(p, var_name, sizeof(var_name), "Expected variable name");
-    if (name_result.has_error)
-        return name_result;
-    int name_len = name_result.value;
-
-    skip_whitespace(p);
+    int name_len = 0;
+    PARSE_VAR_NAME_OR_RETURN(p, var_name, name_len);
 
     // Check if variable already exists (duplicate declaration)
     if (find_variable(p, var_name, name_len) >= 0)
@@ -628,28 +705,20 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         }
         // If value has no suffix, it's compatible with any declared type
         // Store variable with declared type
-        set_variable_with_type(p, var_name, name_len, val_result.value, declared_type);
+        set_variable_with_mutability(p, var_name, name_len, val_result.value, declared_type, is_mutable);
     }
     else if (p->has_tracked_suffix)
     {
         // No declared type, but value has a type - store with value's type
-        set_variable_with_type(p, var_name, name_len, val_result.value, p->tracked_suffix);
+        set_variable_with_mutability(p, var_name, name_len, val_result.value, p->tracked_suffix, is_mutable);
     }
     else
     {
         // No declared type, typeless value
-        set_variable(p, var_name, name_len, val_result.value);
+        set_variable_with_mutability(p, var_name, name_len, val_result.value, NULL, is_mutable);
     }
 
-    skip_whitespace(p);
-
-    // Expect ';'
-    InterpretResult semi_result = expect_char(p, ';', "Expected ';' after variable declaration");
-    if (semi_result.has_error)
-        return semi_result;
-    skip_whitespace(p);
-
-    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+    return finalize_statement(p, "Expected ';' after variable declaration");
 }
 
 // Helper: Parse a sequence of let statements
@@ -657,18 +726,99 @@ static InterpretResult parse_let_statements_loop(Parser *p)
 {
     skip_whitespace(p);
 
-    // Parse let statements until none are found
-    while (p->input[p->pos] == 'l' &&
-           p->input[p->pos + 1] == 'e' &&
-           p->input[p->pos + 2] == 't')
+    // Parse let statements and assignments until none are found
+    while (1)
     {
-        InterpretResult let_result = parse_let_statement_in_block(p);
-        if (let_result.has_error)
-            return let_result;
         skip_whitespace(p);
+
+        // Check for let statement
+        if (is_keyword_at(p, "let"))
+        {
+            InterpretResult let_result = parse_let_statement_in_block(p);
+            if (let_result.has_error)
+                return let_result;
+            skip_whitespace(p);
+        }
+        // Check for assignment statement (identifier followed by '=')
+        else if (isalpha(p->input[p->pos]))
+        {
+            // Look ahead to see if this is an assignment
+            int saved_pos = p->pos;
+            char temp_name[32];
+            int name_len = parse_identifier(p, temp_name, sizeof(temp_name));
+
+            // Check if found identifier is followed by '=' (with possible whitespace)
+            int is_assignment = 0;
+            int temp_pos = p->pos;
+            while (isspace(p->input[temp_pos]))
+                temp_pos++;
+            if (p->input[temp_pos] == '=')
+            {
+                is_assignment = 1;
+            }
+
+            // Reset position and handle accordingly
+            p->pos = saved_pos;
+
+            if (is_assignment)
+            {
+                InterpretResult assign_result = parse_assignment_statement_in_block(p);
+                if (assign_result.has_error)
+                    return assign_result;
+                skip_whitespace(p);
+            }
+            else
+            {
+                // Not an assignment, exit the loop
+                break;
+            }
+        }
+        else
+        {
+            // Not a let or assignment statement, exit the loop
+            break;
+        }
     }
 
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Parse an assignment statement in a block
+static InterpretResult parse_assignment_statement_in_block(Parser *p)
+{
+    // Parse variable name
+    char var_name[32];
+    int name_len = 0;
+    PARSE_VAR_NAME_OR_RETURN(p, var_name, name_len);
+
+    // Find the variable
+    int idx = find_variable(p, var_name, name_len);
+    if (idx < 0)
+    {
+        return make_error("Variable not found");
+    }
+
+    // Check if variable is mutable
+    if (!p->variables[idx].is_mutable)
+    {
+        return make_error("Cannot assign to immutable variable");
+    }
+
+    // Expect '='
+    InterpretResult eq_result = expect_char(p, '=', "Expected '=' in assignment");
+    if (eq_result.has_error)
+        return eq_result;
+    skip_whitespace(p);
+
+    // Parse the value expression
+    InterpretResult val_result = parse_additive(p);
+    if (val_result.has_error)
+        return val_result;
+
+    // Update the variable's value
+    p->variables[idx].value = val_result.value;
+
+    return finalize_statement(p, "Expected ';' after assignment");
 }
 
 // Helper: Parse a primary expression (number, variable reference, or parenthesized/braced expression)

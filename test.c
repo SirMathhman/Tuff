@@ -158,6 +158,11 @@ void test_interpret_variable_assignment_type_check(void)
     assert_error("let x = 100U16; let y : U8 = x; y", "test_interpret_variable_assignment_type_check");
 }
 
+void test_interpret_mutable_variable(void)
+{
+    assert_success("let mut x = 0; x = 100; x", 100, "test_interpret_mutable_variable");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -188,6 +193,7 @@ int main(void)
     test_interpret_variable_type_mismatch();
     test_interpret_variable_type_compatible();
     test_interpret_variable_assignment_type_check();
+    test_interpret_mutable_variable();
     printf("All tests passed!\n");
     return 0;
 }
