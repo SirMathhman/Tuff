@@ -121,6 +121,11 @@ void test_interpret_variable_declaration(void)
     assert_success("(2 + { let x : U8 = 3; x }) * 4", 20, "test_interpret_variable_declaration");
 }
 
+void test_interpret_multiple_variable_declarations(void)
+{
+    assert_success("(2 + { let x : U8 = 3; let y : U8 = x; y }) * 4", 20, "test_interpret_multiple_variable_declarations");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -144,6 +149,7 @@ int main(void)
     test_interpret_parentheses();
     test_interpret_curly_braces();
     test_interpret_variable_declaration();
+    test_interpret_multiple_variable_declarations();
     printf("All tests passed!\n");
     return 0;
 }

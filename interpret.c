@@ -211,6 +211,24 @@ static InterpretResult parse_expression(Parser *p);
 static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_num);
 static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num);
 
+// Implementation of parse_and_validate_operand
+static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num)
+{
+    NumberValue num = parse_number_raw(p);
+
+    if (out_num)
+        *out_num = num;
+
+    char suffix_buf[4] = {0};
+    if (num.suffix_len > 0)
+    {
+        strncpy(suffix_buf, num.suffix, num.suffix_len);
+        suffix_buf[num.suffix_len] = '\0';
+    }
+
+    return validate_type(num.value, num.suffix_len > 0 ? suffix_buf : NULL);
+}
+
 // Helper: Check if operator matches a set of operators (e.g., "*/" or "+-")
 static int is_binary_operator(char c, const char *operators)
 {
@@ -292,21 +310,49 @@ static OperatorAndOperand get_next_operator_and_multiplicative(Parser *p, const 
 #define BINARY_OP_LOOP_END }
 
 // Helper: Parse next operand, validate it, and return the validation result
-static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num)
+static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num);
+
+// Forward declarations for variable handling
+static int find_variable(Parser *p, const char *name, int name_len);
+static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len);
+
+// Helper: Parse a simple operand (number or variable reference)
+static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 {
-    NumberValue num = parse_number_raw(p);
+    skip_whitespace(p);
 
-    if (out_num)
-        *out_num = num;
-
-    char suffix_buf[4] = {0};
-    if (num.suffix_len > 0)
+    // Check for variable reference
+    if (isalpha(p->input[p->pos]))
     {
-        strncpy(suffix_buf, num.suffix, num.suffix_len);
-        suffix_buf[num.suffix_len] = '\0';
+        int saved_pos = p->pos;
+        char var_name[32];
+        int name_len = parse_identifier(p, var_name, sizeof(var_name));
+        if (name_len > 0)
+        {
+            int idx = find_variable(p, var_name, name_len);
+            if (idx >= 0)
+            {
+                if (out_num)
+                {
+                    out_num->value = p->variables[idx].value;
+                    out_num->suffix_len = 0;
+                }
+                return (InterpretResult){
+                    .value = (int)p->variables[idx].value,
+                    .has_error = false,
+                    .error_message = NULL};
+            }
+            else
+            {
+                // Identifier found but not a known variable - could be type suffix
+                // Reset position and try to parse as a number
+                p->pos = saved_pos;
+            }
+        }
     }
 
-    return validate_type(num.value, num.suffix_len > 0 ? suffix_buf : NULL);
+    // Parse a number
+    return parse_and_validate_operand(p, out_num);
 }
 
 // Helper: Find a variable by name
@@ -314,7 +360,7 @@ static int find_variable(Parser *p, const char *name, int name_len)
 {
     for (int i = 0; i < p->var_count; i++)
     {
-        if (strncmp(p->variables[i].name, name, name_len) == 0 && 
+        if (strncmp(p->variables[i].name, name, name_len) == 0 &&
             p->variables[i].name[name_len] == '\0')
         {
             return i;
@@ -331,9 +377,6 @@ static InterpretResult make_error(const char *message)
         .has_error = true,
         .error_message = message};
 }
-
-// Forward declaration for parse_identifier
-static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len);
 
 // Helper: Parse identifier and check for error
 static InterpretResult parse_identifier_or_error(Parser *p, char *out_name, int max_name_len, const char *error_msg)
@@ -354,7 +397,6 @@ static InterpretResult expect_char(Parser *p, char expected, const char *error_m
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
-
 // Helper: Set or add a variable
 static int set_variable(Parser *p, const char *name, int name_len, long value)
 {
@@ -364,10 +406,10 @@ static int set_variable(Parser *p, const char *name, int name_len, long value)
         p->variables[idx].value = value;
         return idx;
     }
-    
+
     if (p->var_count >= 10)
         return -1; // Too many variables
-    
+
     strncpy(p->variables[p->var_count].name, name, name_len);
     p->variables[p->var_count].name[name_len] = '\0';
     p->variables[p->var_count].value = value;
@@ -378,20 +420,20 @@ static int set_variable(Parser *p, const char *name, int name_len, long value)
 static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len)
 {
     skip_whitespace(p);
-    
+
     if (!isalpha(p->input[p->pos]))
         return 0;
-    
+
     int start = p->pos;
     while (isalnum(p->input[p->pos]) || p->input[p->pos] == '_')
     {
         p->pos++;
     }
-    
+
     int len = p->pos - start;
     if (len >= max_name_len)
         return -1;
-    
+
     strncpy(out_name, &p->input[start], len);
     out_name[len] = '\0';
     return len;
@@ -405,49 +447,49 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
 {
     p->pos += 3; // Skip 'let'
     skip_whitespace(p);
-    
+
     // Parse variable name
     char var_name[32];
     InterpretResult name_result = parse_identifier_or_error(p, var_name, sizeof(var_name), "Expected variable name");
     if (name_result.has_error)
         return name_result;
     int name_len = name_result.value;
-    
+
     // Expect ':'
     InterpretResult colon_result = expect_char(p, ':', "Expected ':' in variable declaration");
     if (colon_result.has_error)
         return colon_result;
     skip_whitespace(p);
-    
+
     // Parse type
     char type_name[8];
     InterpretResult type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected type name");
     if (type_result.has_error)
         return type_result;
-    
+
     // Expect '='
     InterpretResult eq_result = expect_char(p, '=', "Expected '=' in variable declaration");
     if (eq_result.has_error)
         return eq_result;
     skip_whitespace(p);
-    
-    // Parse the value expression
+
+    // Parse the value expression (number or variable reference)
     NumberValue var_num = {0};
-    InterpretResult val_result = parse_and_validate_operand(p, &var_num);
+    InterpretResult val_result = parse_simple_operand(p, &var_num);
     if (val_result.has_error)
         return val_result;
-    
+
     // Store the variable
     set_variable(p, var_name, name_len, var_num.value);
-    
+
     skip_whitespace(p);
-    
+
     // Expect ';'
     InterpretResult semi_result = expect_char(p, ';', "Expected ';' after variable declaration");
     if (semi_result.has_error)
         return semi_result;
     skip_whitespace(p);
-    
+
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
@@ -468,11 +510,11 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
         if (is_block)
         {
             skip_whitespace(p);
-            
+
             // Parse let statements
-            while (p->input[p->pos] == 'l' && 
-                   p->input[p->pos+1] == 'e' && 
-                   p->input[p->pos+2] == 't')
+            while (p->input[p->pos] == 'l' &&
+                   p->input[p->pos + 1] == 'e' &&
+                   p->input[p->pos + 2] == 't')
             {
                 InterpretResult let_result = parse_let_statement_in_block(p);
                 if (let_result.has_error)
@@ -512,31 +554,8 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
         return result;
     }
 
-    // Check for variable reference
-    if (isalpha(p->input[p->pos]))
-    {
-        char var_name[32];
-        int name_len = parse_identifier(p, var_name, sizeof(var_name));
-        if (name_len > 0)
-        {
-            int idx = find_variable(p, var_name, name_len);
-            if (idx >= 0)
-            {
-                if (out_num)
-                {
-                    out_num->value = p->variables[idx].value;
-                    out_num->suffix_len = 0;
-                }
-                return (InterpretResult){
-                    .value = (int)p->variables[idx].value,
-                    .has_error = false,
-                    .error_message = NULL};
-            }
-        }
-    }
-
-    // Parse a number
-    return parse_and_validate_operand(p, out_num);
+    // Parse a simple operand (number or variable reference)
+    return parse_simple_operand(p, out_num);
 }
 
 static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_num)
