@@ -1041,6 +1041,7 @@ static InterpretResult parse_expression(Parser *p)
 static int is_expression(const char *str)
 {
     int in_number = 0;
+    int in_identifier = 0;
 
     // Skip leading whitespace
     while (isspace(*str))
@@ -1080,6 +1081,11 @@ static int is_expression(const char *str)
             if (in_number)
                 return 1;
         }
+        else if (str[i] == '=' && in_identifier)
+        {
+            // Assignment statement (variable = value)
+            return 1;
+        }
         else if (str[i] == '(' || str[i] == ')' || str[i] == '{' || str[i] == '}')
         {
             return 1;
@@ -1088,10 +1094,9 @@ static int is_expression(const char *str)
         {
             in_number = 1;
         }
-        else if (isalpha(str[i]))
+        else if (isalpha(str[i]) || str[i] == '_')
         {
-            // Part of a type suffix
-            continue;
+            in_identifier = 1;
         }
     }
     return 0;
