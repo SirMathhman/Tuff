@@ -773,14 +773,15 @@ static int parse_and_skip_body_restoring_state(Parser *p, int body_start_pos)
 
     p->pos = body_start_pos;
     InterpretResult body_result = parse_assignment_or_if_else(p);
-    if (body_result.has_error) {
+    if (body_result.has_error)
+    {
         // Note: caller must handle error since we can't return it from this helper
         return -1;
     }
     int body_end_pos = p->pos;
 
     restore_saved_vars(p, saved_vars, saved_var_count);
-    
+
     return body_end_pos;
 }
 
@@ -1958,8 +1959,16 @@ static InterpretResult parse_assignment_or_if_else(Parser *p)
         return assign_result;
     }
 
-    // Not an assignment, parse as if-else (which delegates to match then logical_or as needed)
-    return parse_if_else(p);
+    // Check if this is actually "not an assignment" or a real error in parsing
+    // Only fall back to if-else if it's not an assignment, not for other errors
+    if (assign_result.error_message && strcmp(assign_result.error_message, "not_an_assignment") == 0)
+    {
+        // Not an assignment, parse as if-else (which delegates to match then logical_or as needed)
+        return parse_if_else(p);
+    }
+
+    // Real error (e.g., immutable variable), propagate it
+    return assign_result;
 }
 
 // Helper: Apply branch state after executing an if/else branch

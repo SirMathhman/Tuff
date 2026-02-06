@@ -528,6 +528,31 @@ void test_interpret_for_loop_without_final_expression(void)
     assert_success("let mut i = 0; for (j in 0..3) i += 1;", 0, "test_interpret_for_loop_without_final_expression");
 }
 
+void test_interpret_for_loop_variable_assignment_error(void)
+{
+    assert_error("for (i in 0..5) i = 10;", "test_interpret_for_loop_variable_assignment_error");
+}
+
+void test_interpret_for_loop_variable_compound_assignment_error(void)
+{
+    assert_error("for (i in 0..5) i += 1;", "test_interpret_for_loop_variable_compound_assignment_error");
+}
+
+void test_interpret_for_loop_variable_shadowing_error(void)
+{
+    assert_error("let i = 0; for (i in 0..5) { }", "test_interpret_for_loop_variable_shadowing_error");
+}
+
+void test_interpret_for_loop_nested_shadowing_error(void)
+{
+    assert_error("for (i in 0..5) { for (i in 0..3) { } }", "test_interpret_for_loop_nested_shadowing_error");
+}
+
+void test_interpret_for_loop_missing_in_keyword_error(void)
+{
+    assert_error("for (i to 0..5) { }", "test_interpret_for_loop_missing_in_keyword_error");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -629,6 +654,11 @@ int main(void)
     test_interpret_for_loop_negative_range();
     test_interpret_for_loop_large_range();
     test_interpret_for_loop_without_final_expression();
+    test_interpret_for_loop_variable_assignment_error();
+    test_interpret_for_loop_variable_compound_assignment_error();
+    test_interpret_for_loop_variable_shadowing_error();
+    test_interpret_for_loop_nested_shadowing_error();
+    test_interpret_for_loop_missing_in_keyword_error();
 
     if (passed_asserts == total_asserts)
     {
