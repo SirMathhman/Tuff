@@ -559,6 +559,20 @@ static void restore_saved_vars(Parser *p, Variable saved_vars[10], int saved_var
     }
 }
 
+// Helper: Build a slice type string from element type and mutability
+static void build_slice_type_string(char *out_type, int out_size, const char *elem_type, int is_mut)
+{
+    if (is_mut)
+    {
+        snprintf(out_type, out_size, "*mut [%s]", elem_type);
+    }
+    else
+    {
+        snprintf(out_type, out_size, "*[%s]", elem_type);
+    }
+    out_type[out_size - 1] = '\0';
+}
+
 // Helper: Set tracked suffix on parser
 static void set_tracked_suffix(Parser *p, const char *suffix_buf)
 {
@@ -999,15 +1013,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
             // Create slice type: *[ElementType] or *mut [ElementType]
             char slice_type[32];
-            if (is_mut_ref)
-            {
-                snprintf(slice_type, sizeof(slice_type), "*mut [%s]", p->variables[var_idx].array_element_type);
-            }
-            else
-            {
-                snprintf(slice_type, sizeof(slice_type), "*[%s]", p->variables[var_idx].array_element_type);
-            }
-            slice_type[sizeof(slice_type) - 1] = '\0';
+            build_slice_type_string(slice_type, sizeof(slice_type), p->variables[var_idx].array_element_type, is_mut_ref);
 
             // Set the tracked suffix to the slice type
             set_tracked_suffix_and_output(p, slice_type, var_idx, out_num);
@@ -1015,6 +1021,25 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             // Store slice bounds in temporary fields
             p->temp_slice_start = start_idx;
             p->temp_slice_end = end_idx;
+
+            // Return the array variable index as the slice pointer value
+            return (InterpretResult){.value = var_idx, .has_error = false, .error_message = NULL};
+        }
+
+        // Check if this is an implicit full-array slice: &array (no explicit bounds)
+        // When referencing an array without bounds, create an implicit slice over the full array
+        if (p->variables[var_idx].is_array)
+        {
+            // Create implicit full-array slice type: *[ElementType] or *mut [ElementType]
+            char slice_type[32];
+            build_slice_type_string(slice_type, sizeof(slice_type), p->variables[var_idx].array_element_type, is_mut_ref);
+
+            // Set the tracked suffix to the slice type
+            set_tracked_suffix_and_output(p, slice_type, var_idx, out_num);
+
+            // Store implicit slice bounds (full array)
+            p->temp_slice_start = 0;
+            p->temp_slice_end = p->variables[var_idx].array_total_count;
 
             // Return the array variable index as the slice pointer value
             return (InterpretResult){.value = var_idx, .has_error = false, .error_message = NULL};
@@ -2808,7 +2833,19 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
 
     if (p->has_temp_array && !is_array_declared)
     {
-        return make_error("Array literal must be assigned to an array variable");
+        // Infer array type from the literal (implicitly create array type)
+        // Use element type from literal and set both init_count and total_count to literal size
+        is_array_declared = 1;
+        strncpy_s(declared_array_elem_type, sizeof(declared_array_elem_type),
+                  p->temp_array_element_type, _TRUNCATE);
+        declared_array_elem_type[sizeof(declared_array_elem_type) - 1] = '\0';
+        declared_array_init_count = p->temp_array_count;
+        declared_array_total_count = p->temp_array_count;
+
+        // Build the inferred array type string
+        snprintf(declared_type, sizeof(declared_type), "[%s;%d;%d]",
+                 declared_array_elem_type, declared_array_init_count, declared_array_total_count);
+        declared_type[sizeof(declared_type) - 1] = '\0';
     }
 
     if (p->has_temp_struct && declared_type[0] != '\0' && declared_struct_idx < 0)
