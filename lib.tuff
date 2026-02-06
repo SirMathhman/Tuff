@@ -1,5 +1,34 @@
-fn is_pointer_type(type : *Str) : Bool => type != 0
-    && type[0] == '*' 
-    && type[1] != '\0';
+let MAX_ARRAY_ELEMENTS = 64;
+
+struct TypeInfo {
+    suffix : *Str;
+    min_value : I64;
+    max_value : I64;
+    error_message : *Str;
+}
+
+struct Variable {
+    name : Str[32];
+    value : I32;
+    type : Str[16];
+    is_mutable : Bool;
+    is_array : Bool;
+}
+
+struct FunctionInfo {
+    name : Str[32];
+}
+
+struct StructInfo {
+    name : Str[32];
+}
+
+struct Parser {
+    input : *Str;
+}
+
+struct NumberValue {
+    
+}
 
 __args__[1].length

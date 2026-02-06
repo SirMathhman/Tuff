@@ -2,14 +2,43 @@
 #include <string.h>
 #include <stdint.h>
 
-int is_pointer_type(char* type);
+typedef struct {
+    char* suffix;
+    int min_value;
+    int max_value;
+    char* error_message;
+} TypeInfo;
 
-int is_pointer_type(char* type) {
-    return type != 0
-    && type[0] == '*' 
-    && type[1] != '\0';
-}
+typedef struct {
+    char name[32];
+    int value;
+    char type[16];
+    int is_mutable;
+    int is_array;
+} Variable;
+
+typedef struct {
+    char name[32];
+} FunctionInfo;
+
+typedef struct {
+    char name[32];
+} StructInfo;
+
+typedef struct {
+    char* input;
+} Parser;
+
+typedef struct {
+} NumberValue;
+
+// Global argc/argv for __args__ access
+int32_t __tuff_argc = 0;
+char **__tuff_argv = NULL;
 
 int32_t main(int32_t argc, char **argv) {
-    return argv[1];
+    __tuff_argc = argc;
+    __tuff_argv = argv;
+    int32_t MAX_ARRAY_ELEMENTS = 64;
+    return structNumberValue{}(int)strlen(__tuff_argv[1]);
 }
