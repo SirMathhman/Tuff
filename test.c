@@ -645,6 +645,11 @@ void test_interpret_function_calling_function(void)
     assert_success("fn a() => 100; fn b() => a(); b()", 100, "test_interpret_function_calling_function");
 }
 
+void test_interpret_function_forward_reference(void)
+{
+    assert_success("fn b() => a(); fn a() => 100; b()", 100, "test_interpret_function_forward_reference");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -769,6 +774,7 @@ int main(void)
     test_interpret_function_implicit_return_type();
     test_interpret_function_implicit_body();
     test_interpret_function_calling_function();
+    test_interpret_function_forward_reference();
 
     if (passed_asserts == total_asserts)
     {
