@@ -590,6 +590,16 @@ void test_interpret_immutable_pointer_dereference_assign_error(void)
     assert_error("let mut x = 100; let y : *I32 = &x; *y = 200; x", "test_interpret_immutable_pointer_dereference_assign_error");
 }
 
+void test_interpret_array_indexing(void)
+{
+    assert_success("let array : [I32; 3; 3] = [1, 2, 3]; array[0] + array[1] + array[2]", 6, "test_interpret_array_indexing");
+}
+
+void test_interpret_function_declaration(void)
+{
+    assert_success("fn empty() : Void => {}", 0, "test_interpret_function_declaration");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -703,6 +713,8 @@ int main(void)
     test_interpret_pointer_dereference_non_pointer_error();
     test_interpret_mutable_pointer();
     test_interpret_immutable_pointer_dereference_assign_error();
+    test_interpret_array_indexing();
+    test_interpret_function_declaration();
 
     if (passed_asserts == total_asserts)
     {
