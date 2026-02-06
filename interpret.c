@@ -6800,7 +6800,7 @@ static CompileResult compile_args_source(const char *source)
     // Track struct definitions
     StructDef structs[10] = {{{0}}};
     int32_t struct_count = 0;
-    
+
     // Flag: whether __args__ appears anywhere in the source
     int32_t any_args_in_source = (source && strstr(source, "__args__") != NULL) ? 1 : 0;
 
@@ -6981,10 +6981,38 @@ static CompileResult compile_args_source(const char *source)
             {
                 char c_field_type[32] = {0};
                 tuff_type_to_c_type(structs[i].field_types[j], c_field_type, sizeof(c_field_type));
+
+                // Handle array types: extract base type and array brackets
+                // If c_field_type is "char[32]", we need to output "char fieldname[32];"
+                // not "char[32] fieldname;"
+                char base_type[32] = {0};
+                char array_brackets[32] = {0};
+
+                // Find the opening bracket in c_field_type
+                const char *bracket_pos = strchr(c_field_type, '[');
+                if (bracket_pos != NULL)
+                {
+                    // Extract base type (everything before the bracket)
+                    int32_t base_len = (int32_t)(bracket_pos - c_field_type);
+                    if (base_len > 0 && base_len < 31)
+                    {
+                        strncpy_s(base_type, sizeof(base_type), c_field_type, base_len);
+                        base_type[base_len] = '\0';
+                    }
+                    // Extract array brackets (from bracket onwards)
+                    strcpy_s(array_brackets, sizeof(array_brackets), bracket_pos);
+                }
+                else
+                {
+                    // No brackets, use the type as-is
+                    strcpy_s(base_type, sizeof(base_type), c_field_type);
+                }
+
                 strncat_s(c_code, sizeof(c_code), "    ", _TRUNCATE);
-                strncat_s(c_code, sizeof(c_code), c_field_type, _TRUNCATE);
+                strncat_s(c_code, sizeof(c_code), base_type, _TRUNCATE);
                 strncat_s(c_code, sizeof(c_code), " ", _TRUNCATE);
                 strncat_s(c_code, sizeof(c_code), structs[i].field_names[j], _TRUNCATE);
+                strncat_s(c_code, sizeof(c_code), array_brackets, _TRUNCATE);
                 strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             }
             strncat_s(c_code, sizeof(c_code), "} ", _TRUNCATE);
@@ -7074,8 +7102,8 @@ static CompileResult compile_args_source(const char *source)
     // Generate main function
     strncat_s(c_code, sizeof(c_code), "int32_t main(int32_t argc, char **argv) {\n", _TRUNCATE);
 
-        // Initialize global argc/argv if __args__ appears anywhere
-        if (any_args_in_source)
+    // Initialize global argc/argv if __args__ appears anywhere
+    if (any_args_in_source)
     {
         strncat_s(c_code, sizeof(c_code), "    __tuff_argc = argc;\n", _TRUNCATE);
         strncat_s(c_code, sizeof(c_code), "    __tuff_argv = argv;\n", _TRUNCATE);

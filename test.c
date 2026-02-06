@@ -1414,6 +1414,14 @@ void test_stack_string_in_if_expression(void)
     assert_success("let msg : Str[32] = if (true) \"yes\" else \"no\"; msg[0]", 121, "test_stack_string_in_if_expression");
 }
 
+void test_compile_struct_with_array_field(void)
+{
+    // Test that compiling a struct with an array field generates valid C code
+    // Must reference __args__ to trigger the code generation path (compile_args_source)
+    const char *const args[] = {"test", "arg2", NULL};
+    assert_compile_success("struct Data { name : Str[32]; } let len = __args__[1].length; len", 4, "test_compile_struct_with_array_field", args);
+}
+
 void test_compiler_param_type_transpilation(void)
 {
     const char *const args[] = {"*test", NULL};
@@ -1615,6 +1623,7 @@ int main(void)
     test_struct_with_stack_string_multiple_fields();
     test_stack_string_in_function();
     test_stack_string_in_if_expression();
+    test_compile_struct_with_array_field();
     test_compiler_param_type_transpilation();
 
     if (passed_asserts == total_asserts)
