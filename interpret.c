@@ -1024,7 +1024,7 @@ static InterpretResult parse_function_declaration(Parser *p)
     // Skip 'fn' keyword
     if (!is_keyword_at(p, "fn"))
         return make_error("Expected 'fn' keyword");
-    
+
     p->pos += 2; // Skip 'fn'
     skip_whitespace(p);
 
@@ -1044,21 +1044,70 @@ static InterpretResult parse_function_declaration(Parser *p)
     if (p->input[p->pos] != '(')
         return make_error("Expected '(' after function name");
     p->pos++;
-    
+
     skip_whitespace(p);
 
-    // Expect closing parenthesis (no parameters for now)
+    // Parse function parameters (name : Type pairs separated by commas)
+    while (p->input[p->pos] != ')')
+    {
+        skip_whitespace(p);
+
+        // Check if we're at the closing parenthesis (no parameters case)
+        if (p->input[p->pos] == ')')
+            break;
+
+        // Parse parameter name
+        char param_name[32];
+        int param_name_len = parse_identifier(p, param_name, sizeof(param_name));
+        if (param_name_len <= 0)
+            return make_error("Expected parameter name");
+
+        skip_whitespace(p);
+
+        // Expect colon after parameter name
+        if (p->input[p->pos] != ':')
+            return make_error("Expected ':' after parameter name");
+        p->pos++;
+
+        skip_whitespace(p);
+
+        // Parse parameter type
+        char param_type[32];
+        int param_type_len = parse_identifier(p, param_type, sizeof(param_type));
+        if (param_type_len <= 0)
+            return make_error("Expected parameter type");
+
+        skip_whitespace(p);
+
+        // Check for comma (more parameters) or closing parenthesis
+        if (p->input[p->pos] == ',')
+        {
+            p->pos++;
+            skip_whitespace(p);
+            continue;
+        }
+        else if (p->input[p->pos] == ')')
+        {
+            break;
+        }
+        else
+        {
+            return make_error("Expected ',' or ')' after parameter");
+        }
+    }
+
+    // Expect closing parenthesis
     if (p->input[p->pos] != ')')
         return make_error("Expected ')' after function parameters");
     p->pos++;
-    
+
     skip_whitespace(p);
 
     // Expect colon
     if (p->input[p->pos] != ':')
         return make_error("Expected ':' after function parameters");
     p->pos++;
-    
+
     skip_whitespace(p);
 
     // Parse return type (Void for now)
@@ -1066,26 +1115,26 @@ static InterpretResult parse_function_declaration(Parser *p)
     int type_len = parse_identifier(p, return_type, sizeof(return_type));
     if (type_len <= 0)
         return make_error("Expected return type");
-    
+
     skip_whitespace(p);
 
     // Expect arrow
     if (p->input[p->pos] != '=' || p->input[p->pos + 1] != '>')
         return make_error("Expected '=>' after return type");
     p->pos += 2;
-    
+
     skip_whitespace(p);
 
     // Parse function body (for now, just skip it - we only care about tracking)
     // Save position before body
     int body_start_pos = p->pos;
-    
+
     // Skip the body - for empty functions, it's just {}
     if (p->input[p->pos] == '{')
     {
         p->pos++; // Skip '{'
         skip_whitespace(p);
-        
+
         // Count braces to find matching close
         int brace_count = 1;
         while (brace_count > 0 && p->input[p->pos])
@@ -1106,7 +1155,7 @@ static InterpretResult parse_function_declaration(Parser *p)
     register_declared_function(p, func_name, name_len);
 
     skip_whitespace(p);
-    
+
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 static int has_variable_been_declared(Parser *p, const char *name, int name_len)

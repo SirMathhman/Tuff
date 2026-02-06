@@ -605,6 +605,11 @@ void test_interpret_duplicate_function_declaration(void)
     assert_error("fn empty() : Void => {} fn empty() : Void => {}", "test_interpret_duplicate_function_declaration");
 }
 
+void test_interpret_function_with_parameters(void)
+{
+    assert_success("fn empty(x : I32, y : I32) : Void => {}", 0, "test_interpret_function_with_parameters");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -721,6 +726,7 @@ int main(void)
     test_interpret_array_indexing();
     test_interpret_function_declaration();
     test_interpret_duplicate_function_declaration();
+    test_interpret_function_with_parameters();
 
     if (passed_asserts == total_asserts)
     {
