@@ -4,12 +4,16 @@
 
 **Tuff** is a typed expression language interpreter written in C. It supports:
 
-- Numeric expressions with `+`, `-`, `*`, `/` operations
-- Typed integers: `U8` (0-255), `U16/U32/U64` (unsigned), `I8` through `I64` (signed)
-- Typeless integers (auto-widened to accommodate results)
-- Variables with `let mut x = expr;` syntax
-- Control flow: `if` expressions and statements
-- Boolean logic: `&&`, `||`, comparison operators
+- **Numeric expressions**: `+`, `-`, `*`, `/` with operator precedence
+- **Types**: `U8` (0-255), `U16/U32/U64` (unsigned), `I8` through `I64` (signed), `Bool`, `Char`
+- **Variables**: `let x = expr`, `let mut x = expr` (mutable)
+- **Arrays**: `[Type; init_count; total_count]` with bounds checking and element assignment
+- **Pointers & slices**: `&variable`, `*pointer`, `&array[start..end]` (immutable/mutable)
+- **Functions**: `fn name(param: Type) : ReturnType => body` with forward references
+- **Structs**: `struct Point { x: I32; y: I32; }` and instantiation with field access
+- **Control flow**: `if (cond) expr else expr`, `while`, `for (i in start..end)` loops
+- **Pattern matching**: `match (val) { case 1 => result; case _ => default; }`
+- **Strings & chars**: String literals `"text"`, char literals `'a'`, indexed access `str[0]`
 
 **Key Entry Point**: `interpret(const char *str)` in [interpret.c](../interpret.c) — parses and evaluates input strings, returns `InterpretResult` struct with value and optional error.
 
@@ -21,12 +25,37 @@
 
 ```c
 Parser {
-    const char *input;           // Input string to parse
-    int pos;                     // Current position in input
-    Variable variables[10];      // Stack of variable bindings
-    int var_count;               // Number of active variables
-    char all_declared_names[10][32];  // Track all declared names (for duplicate checks)
+    const char *input;                      // Input string to parse
+    int pos;                                // Current position in input
+    Variable variables[10];                 // Stack of variable bindings
+    int var_count;                          // Number of active variables
+    char all_declared_names[10][32];        // Track all variable names (duplicate prevention)
     int all_declared_count;
+
+    // Temporary storage for intermediate parse results (cleared after use)
+    int has_temp_array;                     // Array literal in progress
+    long temp_array_values[MAX_ARRAY_ELEMENTS];
+    char temp_array_element_type[16];
+
+    int has_temp_string;                    // String literal in progress
+    char temp_string_value[256];
+    int temp_string_len;
+
+    int has_temp_struct;                    // Struct literal in progress
+    int temp_struct_def_idx;
+    long temp_struct_values[10];
+
+    int temp_slice_start, temp_slice_end;   // Array slice bounds
+
+    // Function and struct definitions (forward-referenceable)
+    FunctionInfo functions[10];             // Parsed function declarations
+    int functions_count;
+    StructInfo structs[10];                 // Parsed struct definitions
+    int structs_count;
+
+    // Type tracking across operations
+    char tracked_suffix[16];                // Current value's type (e.g., "U8", "Bool", "*I32")
+    int has_tracked_suffix;
 }
 ```
 
@@ -114,9 +143,132 @@ if (condition.value == 0) {
 
 ---
 
-## Testing Patterns
+## Functions & Forward References
 
-### Test Helpers in [test.c](../test.c)
+Functions are declared with `fn name(params) : ReturnType => body` and support forward references via a **prescan phase**:
+
+1. **`prescan_function_declarations()`** — Initial pass over entire input to register all function names
+2. **Normal parsing** — Executes function bodies only when invoked
+
+**Function state isolation**: Each function call saves parser state, binds parameters as new variables, executes the function body in a protected scope, then restores the original state. This ensures parameter scope is local and mutations don't leak to callers (except through mutable pointers passed as arguments).
+
+```c
+// Forward reference is valid because prescan registered 'get' first
+let result = get();
+fn get() : I32 => 100;
+```
+
+---
+
+## Structs
+
+Structs are declared at top-level: `struct Point { x: I32; y: I32; }`. They support:
+
+- **Field initialization**: Must initialize all fields in struct literal: `Point { x: 3, y: 4 }`
+- **Out-of-order fields**: `Point { y: 4, x: 3 }` is valid
+- **Field access**: `point.x` retrieves field value
+- **Type checking**: Field types are validated; `point.x = true` errors if `x` is `I32`
+
+Structs are stored in `parser.structs[]` array with metadata in `StructInfo`. Field values are stored in `Variable.struct_values[10]`.
+
+---
+
+## Arrays
+
+Arrays use fixed-size bounds: `[ElementType; init_count; total_count]`
+
+- **Literal syntax**: `[1, 2, 3]` infers type from elements
+- **Indexed access**: `array[0]` retrieves element
+- **Element assignment**: `array[2] = 5` increments `array_init_count` if assigning to next uninitialized element
+- **Bounds checking**: Accessing uninitialized elements errors; assigned elements must be contiguous
+- **Function parameters**: Array parameters require sufficient initialized elements at call site
+
+Array data is stored per-variable with `array_values[MAX_ARRAY_ELEMENTS]`, `array_init_count`, and `array_total_count`.
+
+---
+
+## Pointers & Slices
+
+**Address-of operator (`&`)** creates pointers:
+
+- `&variable` creates immutable pointer `*Type`
+- `&mut variable` creates mutable pointer `*mut Type`
+- `&array[start..end]` creates a slice (pointer-to-array with bounds)
+- `&array` creates implicit slice over entire array
+
+**Dereferences**: `*pointer = value` (if mutable) or `*pointer` (read value)
+
+**Slices** (pointer-to-array):
+
+- Type: `*[ElementType]` or `*mut [ElementType]`
+- Properties: `.length` (slice size), `.init` (initialized count)
+- Bounds: Prevent out-of-bounds access; enforce element-wise contiguity
+- Mutable slices can assign elements: `slice[i] = value`
+
+Pointer targets are tracked via `Variable.pointer_target` (variable index).
+
+---
+
+## Strings & Characters
+
+- **Char literals**: `'a'` evaluates to ASCII code (97 for 'a')
+- **String literals**: `"test"` creates type `*Str` with immutable indexed access
+- **String indexing**: `str[0]` returns character code (116 for 't' in "test")
+- **Type tracking**: Strings are internally `is_string` variables, distinct from regular pointers
+
+---
+
+## Control Flow: Match, While, For
+
+**Match expressions**: Pattern matching with numeric or boolean patterns:
+
+```c
+match (value) {
+    case 1 => expr1;
+    case 2 => expr2;
+    case _ => default;
+}
+```
+
+- Patterns must match value type (numeric vs. boolean)
+- Wildcard `_` catches unmatched cases
+- Requires either a matching case or wildcard to succeed
+
+**While loops**: `while (condition) body` — condition must be `Bool`
+
+- Loop re-evaluates condition each iteration; max 1024 iterations
+- Mutations persist across iterations
+- No initial execution (condition checked first)
+
+**For loops**: `for (i in start..end) body` — creates immutable loop variable
+
+- Loop variable is auto-scoped; cannot redeclare it in outer scope
+- Executes `end - start` times
+- Cannot assign to loop variable inside body (immutable)
+
+---
+
+## Temporary State & Intermediate Results
+
+The parser uses temporary fields to accumulate intermediate values during parsing, then consume them on assignment/declaration:
+
+- **`has_temp_array`, `temp_array_*`**: Holds array literal `[1, 2, 3]` until assigned to a variable
+- **`has_temp_string`, `temp_string_*`**: Holds string literal `"text"` until assigned to string pointer
+- **`has_temp_struct`, `temp_struct_*`**: Holds struct instance `Point { x: 3, y: 4 }` until assigned
+- **`temp_slice_start/end`**: Stores slice bounds from `&array[start..end]`
+
+These fields must be **cleared after consumption** to avoid leaking values between statements. Always check flags before using data:
+
+```c
+if (p->has_temp_array) {
+    // Use p->temp_array_values[], p->temp_array_element_type, p->temp_array_count
+    p->has_temp_array = 0;  // Clear after use
+}
+```
+
+---
+
+## Testing Patterns
 
 ```c
 // Success case: assert result.value and no error
@@ -128,18 +280,25 @@ assert_error(input_string, test_name);
 
 ### Test Coverage
 
-Currently **56 tests** in [test.c](../test.c) covering:
+Currently **150+ tests** in [test.c](../test.c) covering:
 
-- Arithmetic: addition, subtraction, multiplication, division (lines ~50-100)
-- Type validation: overflow detection, type mismatches (lines ~100-200)
-- Variables: `let`, `mut`, assignments, blocks (lines ~200-250)
-- Control flow: if-else expressions, if-only statements (lines ~250-358)
+- Arithmetic: addition, subtraction, multiplication, division with operator precedence
+- Type validation: overflow detection, type mismatches, type compatibility rules
+- Variables: immutable/mutable declarations, scoping, compound assignments
+- Control flow: if-else expressions vs. statements, while/for loops, match expressions
+- Functions: declarations, parameters, forward references, calling conventions
+- Structs: field declarations, instantiation, field access, type validation
+- Arrays: literals, indexing, bounds checking, initialization tracking
+- Pointers & slices: address-of operator, dereferencing, mutable references
+- Strings & chars: literals, indexing, character codes
+- Booleans: literals, logical operators, comparison operations
 
 **Adding new tests**:
 
 1. Create test function: `void test_name(void) { assert_success(...); }`
-2. Run test suite: `powershell test.ps1` (compiles + runs all tests)
-3. All 56 tests must pass; use temp debug files only during development, then delete
+2. Update test runner to call your new test
+3. Run test suite: `powershell test.ps1` (compiles + runs all tests)
+4. All tests must pass; use temp debug files only during development, then delete
 
 ---
 
@@ -162,7 +321,7 @@ powershell test.ps1
 This script:
 
 1. Compiles with clang
-2. Runs `test.exe` (all 56 test functions)
+2. Runs `test.exe` (all 150+ test functions)
 3. Checks for code duplication using static analysis
 4. **All tests must pass** before committing
 

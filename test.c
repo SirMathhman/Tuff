@@ -1,9 +1,113 @@
 #include <assert.h>
+#include <process.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <windows.h>
 #include "interpret.h"
 
 static int passed_asserts = 0;
 static int total_asserts = 0;
+
+// run: compiles Tuff source to C using compile(), writes it to a temporary .c file,
+// compiles it with clang, runs the produced executable, and returns a RunResult.
+//
+// args is a NULL-terminated array of strings (may be NULL for no args).
+RunResult run(const char *source, const char *const *args)
+{
+    if (!source)
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "NULL source"};
+
+    CompileResult compiled = compile(source);
+    if (compiled.has_error)
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = compiled.error_message};
+    char *target = compiled.code;
+
+    char temp_dir[MAX_PATH] = {0};
+    DWORD temp_dir_len = GetTempPathA((DWORD)sizeof(temp_dir), temp_dir);
+    if (temp_dir_len == 0 || temp_dir_len >= sizeof(temp_dir))
+    {
+        free(compiled.code);
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to get temp directory"};
+    }
+
+    char temp_base[MAX_PATH] = {0};
+    // Creates an actual file on disk; we'll delete/rename it to get a stable unique base name.
+    if (GetTempFileNameA(temp_dir, "tuf", 0, temp_base) == 0)
+    {
+        free(compiled.code);
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to create temp file"};
+    }
+
+    // Derive paths: replace extension with .c and .exe
+    char c_path[MAX_PATH] = {0};
+    char exe_path[MAX_PATH] = {0};
+    strncpy_s(c_path, sizeof(c_path), temp_base, _TRUNCATE);
+    strncpy_s(exe_path, sizeof(exe_path), temp_base, _TRUNCATE);
+
+    char *dot = strrchr(c_path, '.');
+    if (!dot)
+        dot = &c_path[strlen(c_path)];
+    strcpy_s(dot, (size_t)(c_path + sizeof(c_path) - dot), ".c");
+
+    dot = strrchr(exe_path, '.');
+    if (!dot)
+        dot = &exe_path[strlen(exe_path)];
+    strcpy_s(dot, (size_t)(exe_path + sizeof(exe_path) - dot), ".exe");
+
+    // Remove the temp file created by GetTempFileNameA; we'll create our own .c file.
+    DeleteFileA(temp_base);
+
+    FILE *f = NULL;
+    if (fopen_s(&f, c_path, "wb") != 0 || !f)
+    {
+        free(compiled.code);
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to open temp file for writing"};
+    }
+    fwrite(compiled.code, 1, strlen(compiled.code), f);
+    fclose(f);
+    free(compiled.code);
+
+    // Compile generated C with clang.
+    // Use _spawnvp so we don't have to do shell quoting; clang must be on PATH.
+    const char *clang_argv[] = {"clang", c_path, "-o", exe_path, NULL};
+    int clang_exit = _spawnvp(_P_WAIT, "clang", clang_argv);
+    if (clang_exit != 0)
+    {
+        DeleteFileA(c_path);
+        DeleteFileA(exe_path);
+        return (RunResult){.exit_code = clang_exit == -1 ? 1 : clang_exit, .has_error = true, .error_message = "Clang compilation failed"};
+    }
+
+    // Count args (NULL-terminated).
+    int arg_count = 0;
+    if (args)
+    {
+        while (args[arg_count])
+            arg_count++;
+    }
+
+    // Build argv for the program: argv[0] is the executable path.
+    const char **prog_argv = (const char **)malloc((size_t)(arg_count + 2) * sizeof(char *));
+    if (!prog_argv)
+    {
+        DeleteFileA(c_path);
+        DeleteFileA(exe_path);
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to allocate argument vector"};
+    }
+    prog_argv[0] = exe_path;
+    for (int i = 0; i < arg_count; i++)
+        prog_argv[i + 1] = args[i];
+    prog_argv[arg_count + 1] = NULL;
+
+    int program_exit = _spawnv(_P_WAIT, exe_path, prog_argv);
+    free(prog_argv);
+
+    DeleteFileA(c_path);
+    DeleteFileA(exe_path);
+
+    return (RunResult){.exit_code = program_exit, .has_error = false, .error_message = NULL};
+}
 
 static void assert_success(const char *input, int expected_value, const char *test_name)
 {
@@ -13,16 +117,34 @@ static void assert_success(const char *input, int expected_value, const char *te
     {
         printf("'%s' failed!\n", test_name);
         printf("ERROR in '%s': %s\n", test_name, result.error_message);
+        return;
     }
     else if (result.value != expected_value)
     {
         printf("'%s' failed!\n", test_name);
         printf("ERROR in '%s': Expected value %d but got %d\n", test_name, expected_value, result.value);
+        return;
     }
-    else
+
+    // Also verify via run (which includes compile + clang + execution)
+    RunResult run_result = run(input, NULL);
+    if (run_result.has_error)
     {
-        passed_asserts++;
+        printf("'%s' failed!\n", test_name);
+        printf("ERROR in '%s' (run): Expected success but got error: %s\n", test_name, run_result.error_message);
+        return;
     }
+
+    // Exit codes are limited to 0-255 on most platforms, so compare using byte-masked value.
+    int expected_exit = expected_value & 0xFF;
+    if (run_result.exit_code != expected_exit)
+    {
+        printf("'%s' failed!\n", test_name);
+        printf("ERROR in '%s' (run): Expected exit code %d but got %d\n", test_name, expected_exit, run_result.exit_code);
+        return;
+    }
+
+    passed_asserts++;
 }
 
 static void assert_error(const char *input, const char *test_name)
@@ -33,11 +155,19 @@ static void assert_error(const char *input, const char *test_name)
     {
         printf("'%s' failed!\n", test_name);
         printf("ERROR in '%s': Expected error but got value %d\n", test_name, result.value);
+        return;
     }
-    else
+
+    // Also verify run fails (errors should occur at compile time)
+    RunResult run_result = run(input, NULL);
+    if (!run_result.has_error)
     {
-        passed_asserts++;
+        printf("'%s' failed!\n", test_name);
+        printf("ERROR in '%s' (run): Expected failure but run succeeded with exit code %d\n", test_name, run_result.exit_code);
+        return;
     }
+
+    passed_asserts++;
 }
 
 void test_interpret_empty_string(void)
