@@ -2097,6 +2097,60 @@ static InterpretResult parse_let_statements_loop(Parser *p)
         // Check for function declaration
         if (is_keyword_at(p, "fn"))
         {
+            // Look ahead to check if this function has already been parsed by prescan
+            int saved_pos = p->pos;
+            p->pos += 2; // Skip 'fn'
+            skip_whitespace(p);
+            char func_name[32];
+            int name_len = parse_identifier(p, func_name, sizeof(func_name));
+            
+            // Check if function has already been registered (by prescan)
+            if (name_len > 0 && find_function(p, func_name, name_len) >= 0)
+            {
+                // Function already parsed by prescan, skip re-parsing by consuming the declaration
+                p->pos = saved_pos;
+                // Skip function declaration: "fn name() ... => ... { ... }" or "fn name() ... => ... ;"
+                // Find the '=>' first
+                while (p->input[p->pos] && (p->input[p->pos] != '=' || p->input[p->pos + 1] != '>'))
+                {
+                    p->pos++;
+                }
+                if (p->input[p->pos] == '=')
+                {
+                    p->pos += 2; // Skip '=>'
+                }
+                skip_whitespace(p);
+                // Now skip the body
+                if (p->input[p->pos] == '{')
+                {
+                    // Braced body: skip until matching '}'
+                    int brace_depth = 1;
+                    p->pos++;
+                    while (p->input[p->pos] && brace_depth > 0)
+                    {
+                        if (p->input[p->pos] == '{')
+                            brace_depth++;
+                        else if (p->input[p->pos] == '}')
+                            brace_depth--;
+                        p->pos++;
+                    }
+                }
+                else
+                {
+                    // Implicit body: skip until ';'
+                    while (p->input[p->pos] && p->input[p->pos] != ';')
+                    {
+                        p->pos++;
+                    }
+                    if (p->input[p->pos] == ';')
+                        p->pos++;
+                }
+                skip_whitespace(p);
+                continue;
+            }
+            
+            // Function not yet parsed, parse it normally
+            p->pos = saved_pos;
             InterpretResult fn_result = parse_function_declaration(p);
             if (fn_result.has_error)
                 return fn_result;
@@ -3825,8 +3879,72 @@ static InterpretResult parse_additive(Parser *p)
     return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};
 }
 
+// Helper: Pre-scan for top-level function declarations and register them
+// This allows forward references to functions that are declared later
+static InterpretResult prescan_function_declarations(Parser *p)
+{
+    // Save starting position and reset to beginning
+    int starting_pos = p->pos;
+    p->pos = 0;
+    skip_whitespace(p);
+
+    // Scan entire input for all function declarations
+    while (p->input[p->pos])
+    {
+        skip_whitespace(p);
+
+        // Check if we're at a function declaration
+        if (is_keyword_at(p, "fn"))
+        {
+            // Parse the function declaration to register it
+            InterpretResult fn_result = parse_function_declaration(p);
+            if (fn_result.has_error)
+                return fn_result;
+            skip_whitespace(p);
+        }
+        else
+        {
+            // Not a function declaration at this position
+            // Skip this statement and continue scanning for more functions
+            // Skip until we find a semicolon (end of statement) or closing brace
+            int brace_depth = 0;
+            while (p->input[p->pos])
+            {
+                if (p->input[p->pos] == '{')
+                {
+                    brace_depth++;
+                }
+                else if (p->input[p->pos] == '}')
+                {
+                    brace_depth--;
+                    p->pos++;
+                    break;
+                }
+                else if (p->input[p->pos] == ';' && brace_depth == 0)
+                {
+                    p->pos++;
+                    break;
+                }
+                p->pos++;
+            }
+            skip_whitespace(p);
+        }
+    }
+
+    // Restore position to beginning for normal parsing
+    p->pos = 0;
+
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
 static InterpretResult parse_expression(Parser *p)
 {
+    // Pre-scan for all top-level function declarations
+    // This allows forward references to functions declared later
+    InterpretResult prescan_result = prescan_function_declarations(p);
+    if (prescan_result.has_error)
+        return prescan_result;
+
     // Check for top-level let statements and blocks
     InterpretResult let_statements_result = parse_let_statements_loop(p);
     if (let_statements_result.has_error)
