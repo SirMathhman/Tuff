@@ -1,0 +1,1 @@
+clang main.c interpret.c -o compiler.exe
