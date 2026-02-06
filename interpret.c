@@ -7380,6 +7380,54 @@ static CompileResult compile_args_source(const char *source)
                     var_types[var_count - 1] = vtype;
                 compile_args_emit_decl(c_code, sizeof(c_code), "char *", vname, p, var_names, var_types, var_count);
             }
+            else if (is_array_type_string(type_str))
+            {
+                // Array type variable: [ElementType; init_count; total_count]
+                // Extract element type from array type string
+                vtype = 1; // Treat as numeric type for tracking purposes
+                if (!is_global)
+                    compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
+                else
+                    var_types[var_count - 1] = vtype;
+
+                // Extract element type from array string (e.g., "[TypeInfo; 0; 0]" -> "TypeInfo")
+                const char *start = type_str + 1; // Skip '['
+                const char *end = start;
+                while (*end && *end != ';')
+                    end++;
+
+                if (end > start)
+                {
+                    char elem_type[64] = {0};
+                    size_t elem_len = (size_t)(end - start);
+                    if (elem_len < sizeof(elem_type))
+                    {
+                        memcpy(elem_type, start, elem_len);
+                        elem_type[elem_len] = '\0';
+                        // Trim whitespace
+                        while (elem_len > 0 && isspace(elem_type[elem_len - 1]))
+                            elem_type[--elem_len] = '\0';
+
+                        // Check if element type is a known struct
+                        int32_t elem_struct_idx = -1;
+                        for (int32_t i = 0; i < struct_count; i++)
+                        {
+                            if (strcmp(elem_type, structs[i].name) == 0)
+                            {
+                                elem_struct_idx = i;
+                                break;
+                            }
+                        }
+
+                        // For simplicity, declare array element as pointer to element type
+                        // This avoids issues with C not supporting zero-size arrays
+                        char ptr_decl[256] = {0};
+                        snprintf(ptr_decl, sizeof(ptr_decl), "    %s *%s = NULL;", elem_type, vname);
+                        strncat_s(c_code, sizeof(c_code), ptr_decl, _TRUNCATE);
+                        strncat_s(c_code, sizeof(c_code), "\n", _TRUNCATE);
+                    }
+                }
+            }
             else
             {
                 // Numeric type (USize, I32, etc.) or __args__[n].length

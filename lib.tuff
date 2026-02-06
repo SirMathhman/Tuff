@@ -28,9 +28,9 @@ struct Parser {
 }
 
 struct NumberValue {
-
+    value : I32;
 }
 
-let TypeInfo
+let TypeInfo : [TypeInfo; 0; 0] = [];
 
 __args__[1].length

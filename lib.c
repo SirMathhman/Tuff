@@ -30,6 +30,7 @@ typedef struct {
 } Parser;
 
 typedef struct {
+    int value;
 } NumberValue;
 
 // Global argc/argv for __args__ access
@@ -40,5 +41,6 @@ int32_t main(int32_t argc, char **argv) {
     __tuff_argc = argc;
     __tuff_argv = argv;
     int32_t MAX_ARRAY_ELEMENTS = 64;
-    return structNumberValue{}letTypeInfo(int)strlen(__tuff_argv[1]);
+    TypeInfo *TypeInfo = NULL;
+    return (int)strlen(__tuff_argv[1]);
 }
