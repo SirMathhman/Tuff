@@ -3,11 +3,117 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <windows.h>
 #include "interpret.h"
 
 static int passed_asserts = 0;
 static int total_asserts = 0;
+static int cache_ready = 0;
+
+#define CACHE_ROOT ".cache\\compile"
+#define CACHE_OLD ".cache\\compile\\old"
+#define CACHE_NEW ".cache\\compile\\new"
+
+static int dir_exists(const char *path)
+{
+    DWORD attrs = GetFileAttributesA(path);
+    return (attrs != INVALID_FILE_ATTRIBUTES) && (attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static int file_exists(const char *path)
+{
+    DWORD attrs = GetFileAttributesA(path);
+    return (attrs != INVALID_FILE_ATTRIBUTES) && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+static int ensure_dir(const char *path)
+{
+    if (dir_exists(path))
+        return 1;
+    if (CreateDirectoryA(path, NULL))
+        return 1;
+    return GetLastError() == ERROR_ALREADY_EXISTS;
+}
+
+static void delete_directory_recursive(const char *path)
+{
+    if (!dir_exists(path))
+        return;
+
+    char search_path[MAX_PATH] = {0};
+    _snprintf_s(search_path, sizeof(search_path), _TRUNCATE, "%s\\*", path);
+
+    WIN32_FIND_DATAA ffd;
+    HANDLE hFind = FindFirstFileA(search_path, &ffd);
+    if (hFind == INVALID_HANDLE_VALUE)
+        return;
+
+    do
+    {
+        const char *name = ffd.cFileName;
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+            continue;
+
+        char child_path[MAX_PATH] = {0};
+        _snprintf_s(child_path, sizeof(child_path), _TRUNCATE, "%s\\%s", path, name);
+
+        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            delete_directory_recursive(child_path);
+        else
+            DeleteFileA(child_path);
+    } while (FindNextFileA(hFind, &ffd));
+
+    FindClose(hFind);
+    RemoveDirectoryA(path);
+}
+
+static unsigned long long hash_source(const char *source)
+{
+    const unsigned long long fnv_offset = 1469598103934665603ULL;
+    const unsigned long long fnv_prime = 1099511628211ULL;
+    unsigned long long hash = fnv_offset;
+    const unsigned char *p = (const unsigned char *)source;
+    while (*p)
+    {
+        hash ^= (unsigned long long)(*p++);
+        hash *= fnv_prime;
+    }
+    return hash;
+}
+
+static void build_cache_paths(unsigned long long hash, char *old_exe, size_t old_exe_sz,
+                              char *new_exe, size_t new_exe_sz, char *new_c, size_t new_c_sz)
+{
+    _snprintf_s(old_exe, old_exe_sz, _TRUNCATE, "%s\\%016llx.exe", CACHE_OLD, hash);
+    _snprintf_s(new_exe, new_exe_sz, _TRUNCATE, "%s\\%016llx.exe", CACHE_NEW, hash);
+    _snprintf_s(new_c, new_c_sz, _TRUNCATE, "%s\\%016llx.c", CACHE_NEW, hash);
+}
+
+static int cache_init(void)
+{
+    if (!ensure_dir(".cache"))
+        return 0;
+    if (!ensure_dir(CACHE_ROOT))
+        return 0;
+    if (dir_exists(CACHE_NEW))
+        delete_directory_recursive(CACHE_NEW);
+    if (!ensure_dir(CACHE_NEW))
+        return 0;
+    if (!ensure_dir(CACHE_OLD))
+        return 0;
+    return 1;
+}
+
+static void cache_finalize(void)
+{
+    if (!cache_ready)
+        return;
+
+    delete_directory_recursive(CACHE_OLD);
+    MoveFileExA(CACHE_NEW, CACHE_OLD, MOVEFILE_REPLACE_EXISTING);
+    ensure_dir(CACHE_NEW);
+}
 
 // run: compiles Tuff source to C using compile(), writes it to a temporary .c file,
 // compiles it with clang, runs the produced executable, and returns a RunResult.
@@ -29,63 +135,100 @@ RunResult run(const char *source, const char *const *args)
     CompileResult compiled = compile(source);
     if (compiled.has_error)
         return (RunResult){.exit_code = 1, .has_error = true, .error_message = compiled.error_message};
-    char *target = compiled.code;
 
-    char temp_dir[MAX_PATH] = {0};
-    DWORD temp_dir_len = GetTempPathA((DWORD)sizeof(temp_dir), temp_dir);
-    if (temp_dir_len == 0 || temp_dir_len >= sizeof(temp_dir))
-    {
-        free(compiled.code);
-        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to get temp directory"};
-    }
-
-    char temp_base[MAX_PATH] = {0};
-    // Creates an actual file on disk; we'll delete/rename it to get a stable unique base name.
-    if (GetTempFileNameA(temp_dir, "tuf", 0, temp_base) == 0)
-    {
-        free(compiled.code);
-        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to create temp file"};
-    }
-
-    // Derive paths: replace extension with .c and .exe
     char c_path[MAX_PATH] = {0};
     char exe_path[MAX_PATH] = {0};
-    strncpy_s(c_path, sizeof(c_path), temp_base, _TRUNCATE);
-    strncpy_s(exe_path, sizeof(exe_path), temp_base, _TRUNCATE);
+    char cache_old_exe[MAX_PATH] = {0};
+    char cache_new_exe[MAX_PATH] = {0};
+    char cache_new_c[MAX_PATH] = {0};
+    int using_cache = 0;
+    int cache_hit = 0;
 
-    char *dot = strrchr(c_path, '.');
-    if (!dot)
-        dot = &c_path[strlen(c_path)];
-    strcpy_s(dot, (size_t)(c_path + sizeof(c_path) - dot), ".c");
-
-    dot = strrchr(exe_path, '.');
-    if (!dot)
-        dot = &exe_path[strlen(exe_path)];
-    strcpy_s(dot, (size_t)(exe_path + sizeof(exe_path) - dot), ".exe");
-
-    // Remove the temp file created by GetTempFileNameA; we'll create our own .c file.
-    DeleteFileA(temp_base);
-
-    FILE *f = NULL;
-    if (fopen_s(&f, c_path, "wb") != 0 || !f)
+    if (cache_ready)
     {
-        free(compiled.code);
-        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to open temp file for writing"};
+        unsigned long long hash = hash_source(source);
+        build_cache_paths(hash, cache_old_exe, sizeof(cache_old_exe), cache_new_exe, sizeof(cache_new_exe),
+                          cache_new_c, sizeof(cache_new_c));
+
+        if (file_exists(cache_old_exe))
+        {
+            using_cache = 1;
+            cache_hit = 1;
+            strncpy_s(exe_path, sizeof(exe_path), cache_old_exe, _TRUNCATE);
+            CopyFileA(cache_old_exe, cache_new_exe, FALSE);
+        }
+        else
+        {
+            using_cache = 1;
+            strncpy_s(c_path, sizeof(c_path), cache_new_c, _TRUNCATE);
+            strncpy_s(exe_path, sizeof(exe_path), cache_new_exe, _TRUNCATE);
+        }
     }
-    fwrite(compiled.code, 1, strlen(compiled.code), f);
-    fclose(f);
-    free(compiled.code);
 
-    // Compile generated C with clang.
-    // Use _spawnvp so we don't have to do shell quoting; clang must be on PATH.
-    const char *clang_argv[] = {"clang", c_path, "-o", exe_path, NULL};
-    int clang_exit = _spawnvp(_P_WAIT, "clang", clang_argv);
-    if (clang_exit != 0)
+    if (!using_cache)
     {
+        char temp_dir[MAX_PATH] = {0};
+        DWORD temp_dir_len = GetTempPathA((DWORD)sizeof(temp_dir), temp_dir);
+        if (temp_dir_len == 0 || temp_dir_len >= sizeof(temp_dir))
+        {
+            free(compiled.code);
+            return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to get temp directory"};
+        }
+
+        char temp_base[MAX_PATH] = {0};
+        // Creates an actual file on disk; we'll delete/rename it to get a stable unique base name.
+        if (GetTempFileNameA(temp_dir, "tuf", 0, temp_base) == 0)
+        {
+            free(compiled.code);
+            return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to create temp file"};
+        }
+
+        // Derive paths: replace extension with .c and .exe
+        strncpy_s(c_path, sizeof(c_path), temp_base, _TRUNCATE);
+        strncpy_s(exe_path, sizeof(exe_path), temp_base, _TRUNCATE);
+
+        char *dot = strrchr(c_path, '.');
+        if (!dot)
+            dot = &c_path[strlen(c_path)];
+        strcpy_s(dot, (size_t)(c_path + sizeof(c_path) - dot), ".c");
+
+        dot = strrchr(exe_path, '.');
+        if (!dot)
+            dot = &exe_path[strlen(exe_path)];
+        strcpy_s(dot, (size_t)(exe_path + sizeof(exe_path) - dot), ".exe");
+
+        // Remove the temp file created by GetTempFileNameA; we'll create our own .c file.
+        DeleteFileA(temp_base);
+    }
+
+    if (!cache_hit)
+    {
+        FILE *f = NULL;
+        if (fopen_s(&f, c_path, "wb") != 0 || !f)
+        {
+            free(compiled.code);
+            return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to open temp file for writing"};
+        }
+        fwrite(compiled.code, 1, strlen(compiled.code), f);
+        fclose(f);
+
+        // Compile generated C with clang.
+        // Use _spawnvp so we don't have to do shell quoting; clang must be on PATH.
+        const char *clang_argv[] = {"clang", c_path, "-o", exe_path, NULL};
+        int clang_exit = _spawnvp(_P_WAIT, "clang", clang_argv);
+        if (clang_exit != 0)
+        {
+            DeleteFileA(c_path);
+            if (!using_cache)
+                DeleteFileA(exe_path);
+            free(compiled.code);
+            return (RunResult){.exit_code = clang_exit == -1 ? 1 : clang_exit, .has_error = true, .error_message = "Clang compilation failed"};
+        }
+
         DeleteFileA(c_path);
-        DeleteFileA(exe_path);
-        return (RunResult){.exit_code = clang_exit == -1 ? 1 : clang_exit, .has_error = true, .error_message = "Clang compilation failed"};
     }
+
+    free(compiled.code);
 
     // Count args (NULL-terminated).
     // arg_count was already calculated at the beginning
@@ -105,8 +248,8 @@ RunResult run(const char *source, const char *const *args)
     int program_exit = _spawnv(_P_WAIT, exe_path, prog_argv);
     free(prog_argv);
 
-    DeleteFileA(c_path);
-    DeleteFileA(exe_path);
+    if (!using_cache)
+        DeleteFileA(exe_path);
 
     return (RunResult){.exit_code = program_exit, .has_error = false, .error_message = NULL};
 }
@@ -1037,6 +1180,10 @@ void test_mut_string_pointer_args_reassignment(void)
 
 int main(void)
 {
+    cache_ready = cache_init();
+    if (!cache_ready)
+        printf("Warning: cache disabled; falling back to temp builds.\n");
+
     printf("Running tests...\n");
     test_interpret_empty_string();
     test_interpret_one_hundred();
@@ -1209,11 +1356,13 @@ int main(void)
     if (passed_asserts == total_asserts)
     {
         printf("All %d tests passed!\n", passed_asserts);
+        cache_finalize();
         return 0;
     }
     else
     {
         printf("%d out of %d tests passed.\n", passed_asserts, total_asserts);
+        cache_finalize();
         return -1;
     }
 }
