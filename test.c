@@ -690,6 +690,11 @@ void test_interpret_struct_with_duplicate_fields(void)
     assert_error("struct Empty { x : I32; x : I32; }", "test_interpret_struct_with_duplicate_fields");
 }
 
+void test_interpret_struct_instantiation_and_field_access(void)
+{
+    assert_success("struct Point { x : I32; y : I32; } let point : Point = Point { x : 3, y : 4 }; point.x + point.y", 7, "test_interpret_struct_instantiation_and_field_access");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -823,6 +828,7 @@ int main(void)
     test_interpret_struct_with_multiple_fields();
     test_interpret_struct_with_typed_fields();
     test_interpret_struct_with_duplicate_fields();
+    test_interpret_struct_instantiation_and_field_access();
 
     if (passed_asserts == total_asserts)
     {

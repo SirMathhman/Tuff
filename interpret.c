@@ -26,6 +26,9 @@ typedef struct
     int array_total_count;
     char array_element_type[16];
     long array_values[MAX_ARRAY_ELEMENTS];
+    int is_struct;      // 1 if struct instance, 0 otherwise
+    int struct_def_idx; // Index in parser's structs array
+    long struct_values[10]; // Field values for struct instances
 } Variable;
 
 typedef struct
@@ -39,6 +42,14 @@ typedef struct
     int body_end_pos;         // Position in input where function body ends
     int is_braced_body;       // 1 if body has braces { }, 0 if implicit body
 } FunctionInfo;
+
+typedef struct
+{
+    char name[32];            // Struct name
+    char field_names[10][32]; // Field names
+    char field_types[10][32]; // Field types
+    int field_count;          // Number of fields
+} StructInfo;
 
 typedef struct
 {
@@ -61,6 +72,8 @@ typedef struct
     int functions_count;             // Count of stored functions
     char declared_structs[10][32];   // Track all declared struct names
     int declared_structs_count;      // Count of declared structs
+    StructInfo structs[10];          // Array of struct definitions
+    int structs_count;               // Count of struct definitions
 } Parser;
 
 typedef struct
@@ -1154,7 +1167,7 @@ static void skip_to_matching_brace(Parser *p)
 {
     if (p->input[p->pos] != '{')
         return;
-    
+
     int brace_depth = 1;
     p->pos++;
     while (p->input[p->pos] && brace_depth > 0)
@@ -1188,6 +1201,20 @@ static int find_function(Parser *p, const char *name, int name_len)
     {
         if (strncmp(p->functions[i].name, name, name_len) == 0 &&
             p->functions[i].name[name_len] == '\0')
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Helper: Find a struct by name and return its index, or -1 if not found
+static int find_struct(Parser *p, const char *name, int name_len)
+{
+    for (int i = 0; i < p->structs_count; i++)
+    {
+        if (strncmp(p->structs[i].name, name, name_len) == 0 &&
+            p->structs[i].name[name_len] == '\0')
         {
             return i;
         }
@@ -1594,6 +1621,12 @@ static void init_variable_entry(Parser *p, const char *name, int name_len, long 
     for (int i = 0; i < MAX_ARRAY_ELEMENTS; i++)
     {
         p->variables[p->var_count].array_values[i] = 0;
+    }
+    p->variables[p->var_count].is_struct = 0;
+    p->variables[p->var_count].struct_def_idx = -1;
+    for (int i = 0; i < 10; i++)
+    {
+        p->variables[p->var_count].struct_values[i] = 0;
     }
     register_declared_name(p, name, name_len);
 }
@@ -2429,6 +2462,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
 
             // Parse struct fields
             char field_names[10][32];
+            char field_types[10][32];
             int field_count = 0;
 
             while (p->input[p->pos] && p->input[p->pos] != '}')
@@ -2484,6 +2518,10 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                     return make_error("Expected field type");
                 }
 
+                // Store field type
+                strncpy_s(field_types[field_count - 1], sizeof(field_types[field_count - 1]), field_type, field_type_len);
+                field_types[field_count - 1][field_type_len] = '\0';
+
                 skip_whitespace(p);
 
                 // Expect semicolon
@@ -2500,6 +2538,26 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 return make_error("Expected '}' after struct fields");
             }
             p->pos++; // Skip '}'
+
+            // Store struct definition
+            if (p->structs_count >= 10)
+            {
+                return make_error("Too many struct definitions");
+            }
+
+            strncpy_s(p->structs[p->structs_count].name, sizeof(p->structs[p->structs_count].name), struct_name, name_len);
+            p->structs[p->structs_count].name[name_len] = '\0';
+            p->structs[p->structs_count].field_count = field_count;
+
+            for (int i = 0; i < field_count; i++)
+            {
+                strncpy_s(p->structs[p->structs_count].field_names[i], sizeof(p->structs[p->structs_count].field_names[i]), field_names[i], _TRUNCATE);
+                p->structs[p->structs_count].field_names[i][31] = '\0';
+                strncpy_s(p->structs[p->structs_count].field_types[i], sizeof(p->structs[p->structs_count].field_types[i]), field_types[i], _TRUNCATE);
+                p->structs[p->structs_count].field_types[i][31] = '\0';
+            }
+
+            p->structs_count++;
 
             skip_whitespace(p);
             has_last_statement = 0; // struct declarations don't have values
