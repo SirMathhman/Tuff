@@ -996,6 +996,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                     // Parse arguments
                     InterpretResult args[10];
+                    char arg_types[10][32];  // Store argument types
                     int arg_count = 0;
 
                     if (p->input[p->pos] != ')')
@@ -1010,7 +1011,21 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                             if (arg_result.has_error)
                                 return arg_result;
 
-                            args[arg_count++] = arg_result;
+                            args[arg_count] = arg_result;
+                            
+                            // Capture argument type information
+                            if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+                            {
+                                strncpy_s(arg_types[arg_count], sizeof(arg_types[arg_count]), 
+                                         p->tracked_suffix, _TRUNCATE);
+                                arg_types[arg_count][sizeof(arg_types[arg_count]) - 1] = '\0';
+                            }
+                            else
+                            {
+                                arg_types[arg_count][0] = '\0';
+                            }
+
+                            arg_count++;
 
                             skip_whitespace(p);
 
@@ -1038,6 +1053,29 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     if (arg_count != p->functions[func_idx].param_count)
                         return make_error("Function argument count mismatch");
 
+                    // Validate argument types match parameter types
+                    for (int i = 0; i < arg_count; i++)
+                    {
+                        const char *param_type = p->functions[func_idx].param_types[i];
+                        const char *arg_type = arg_types[i][0] != '\0' ? arg_types[i] : NULL;
+
+                        if (arg_type)
+                        {
+                            // Argument has explicit type - validate compatibility
+                            if (!is_type_compatible(param_type, arg_type))
+                            {
+                                return make_error("Function argument type mismatch");
+                            }
+                        }
+                        else
+                        {
+                            // Untyped argument - validate it fits in the parameter type
+                            InterpretResult validation = validate_type(args[i].value, param_type);
+                            if (validation.has_error)
+                                return validation;
+                        }
+                    }
+
                     // Save current variable state
                     Variable saved_vars[10];
                     int saved_var_count;
@@ -1047,9 +1085,9 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     for (int i = 0; i < arg_count; i++)
                     {
                         set_variable_with_type(p, p->functions[func_idx].param_names[i],
-                                             strlen(p->functions[func_idx].param_names[i]),
-                                             args[i].value,
-                                             p->functions[func_idx].param_types[i]);
+                                               strlen(p->functions[func_idx].param_names[i]),
+                                               args[i].value,
+                                               p->functions[func_idx].param_types[i]);
                     }
 
                     // Save position and jump to function body
