@@ -580,6 +580,11 @@ void test_interpret_pointer_dereference_non_pointer_error(void)
     assert_error("let x = 100; *x", "test_interpret_pointer_dereference_non_pointer_error");
 }
 
+void test_interpret_mutable_pointer(void)
+{
+    assert_success("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x", 100, "test_interpret_mutable_pointer");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -691,6 +696,7 @@ int main(void)
     test_interpret_pointer_immutable_dereference_assign_error();
     test_interpret_pointer_type_mismatch_error();
     test_interpret_pointer_dereference_non_pointer_error();
+    test_interpret_mutable_pointer();
 
     if (passed_asserts == total_asserts)
     {

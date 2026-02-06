@@ -346,6 +346,7 @@ static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_nu
 static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num);
 static InterpretResult make_error(const char *message);
 static InterpretResult try_parse_assignment_expression(Parser *p);
+static int is_keyword_at(Parser *p, const char *keyword);
 
 // Implementation of parse_and_validate_operand
 static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num)
@@ -473,13 +474,22 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 {
     skip_whitespace(p);
 
-    // Check for address-of operator (&variable)
+    // Check for address-of operator (&variable or &mut variable)
     if (p->input[p->pos] == '&')
     {
         p->pos++; // Skip '&'
         skip_whitespace(p);
 
-        // Parse the variable name after &
+        // Check for 'mut' keyword after &
+        int is_mut_ref = 0;
+        if (is_keyword_at(p, "mut"))
+        {
+            is_mut_ref = 1;
+            p->pos += 3; // Skip 'mut'
+            skip_whitespace(p);
+        }
+
+        // Parse the variable name after & or &mut
         char var_name[32];
         int name_len = parse_identifier(p, var_name, sizeof(var_name));
         if (name_len <= 0)
@@ -499,9 +509,16 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                                    ? p->variables[var_idx].type
                                    : "I32"; // Default type for untyped variables
 
-        // Create pointer type: "*BaseType"
+        // Create pointer type: "*BaseType" or "*mut BaseType"
         char pointer_type[16];
-        snprintf(pointer_type, sizeof(pointer_type), "*%s", var_type);
+        if (is_mut_ref)
+        {
+            snprintf(pointer_type, sizeof(pointer_type), "*mut %s", var_type);
+        }
+        else
+        {
+            snprintf(pointer_type, sizeof(pointer_type), "*%s", var_type);
+        }
 
         // Set the tracked suffix to the pointer type
         strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), pointer_type, _TRUNCATE);
@@ -512,8 +529,8 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
         // We encode it so that assignment to pointer variables can use it
         if (out_num)
         {
-            out_num->value = var_idx; // Store variable index as the pointer value
-            out_num->suffix = pointer_type;
+            out_num->value = var_idx;            // Store variable index as the pointer value
+            out_num->suffix = p->tracked_suffix; // Point to parser's tracked suffix buffer
             out_num->suffix_len = strlen(pointer_type);
         }
 
@@ -675,6 +692,72 @@ static InterpretResult expect_char(Parser *p, char expected, const char *error_m
     p->pos++;
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
+// Helper: Apply compound operator to current and new values
+static InterpretResult apply_compound_operator(char compound_op, long current_value, long new_value, long *out_final_value)
+{
+    long final_value = new_value;
+
+    if (compound_op == '+')
+        final_value = current_value + new_value;
+    else if (compound_op == '-')
+        final_value = current_value - new_value;
+    else if (compound_op == '*')
+        final_value = current_value * new_value;
+    else if (compound_op == '/')
+    {
+        if (new_value == 0)
+            return make_error("Division by zero");
+        final_value = current_value / new_value;
+    }
+
+    *out_final_value = final_value;
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Register a variable name in the global declared names list
+static void register_declared_name(Parser *p, const char *name, int name_len)
+{
+    if (p->all_declared_count < 10)
+    {
+        strncpy_s(p->all_declared_names[p->all_declared_count], sizeof(p->all_declared_names[p->all_declared_count]), name, name_len);
+        p->all_declared_names[p->all_declared_count][name_len] = '\0';
+        p->all_declared_count++;
+    }
+}
+
+// Helper: Initialize a variable entry with name, value, and type information
+static void init_variable_entry(Parser *p, const char *name, int name_len, long value, int pointer_target, int is_mutable, const char *type)
+{
+    strncpy_s(p->variables[p->var_count].name, sizeof(p->variables[p->var_count].name), name, name_len);
+    p->variables[p->var_count].name[name_len] = '\0';
+    p->variables[p->var_count].value = value;
+    p->variables[p->var_count].is_mutable = is_mutable;
+    p->variables[p->var_count].pointer_target = pointer_target;
+    if (type && type[0])
+    {
+        strncpy_s(p->variables[p->var_count].type, sizeof(p->variables[p->var_count].type), type, _TRUNCATE);
+        p->variables[p->var_count].type[sizeof(p->variables[p->var_count].type) - 1] = '\0';
+    }
+    else
+    {
+        p->variables[p->var_count].type[0] = '\0';
+    }
+    register_declared_name(p, name, name_len);
+}
+
+// Helper: Update the type of an existing variable
+static void set_variable_type(Variable *var, const char *type)
+{
+    if (type && type[0])
+    {
+        strncpy_s(var->type, sizeof(var->type), type, _TRUNCATE);
+        var->type[sizeof(var->type) - 1] = '\0';
+    }
+    else
+    {
+        var->type[0] = '\0';
+    }
+}
 
 // Helper: Set or add a variable with optional type information
 // Helper: Set or add a variable with optional type and mutability information
@@ -686,39 +769,14 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
         p->variables[idx].value = value;
         p->variables[idx].is_mutable = is_mutable;
         p->variables[idx].pointer_target = -1; // Reset pointer target on update
-        if (type && type[0])
-        {
-            strncpy_s(p->variables[idx].type, sizeof(p->variables[idx].type), type, _TRUNCATE);
-            p->variables[idx].type[sizeof(p->variables[idx].type) - 1] = '\0';
-        }
+        set_variable_type(&p->variables[idx], type);
         return idx;
     }
 
     if (p->var_count >= 10)
         return -1; // Too many variables
 
-    strncpy_s(p->variables[p->var_count].name, sizeof(p->variables[p->var_count].name), name, name_len);
-    p->variables[p->var_count].name[name_len] = '\0';
-    p->variables[p->var_count].value = value;
-    p->variables[p->var_count].is_mutable = is_mutable;
-    p->variables[p->var_count].pointer_target = -1; // Initialize pointer target
-    if (type && type[0])
-    {
-        strncpy_s(p->variables[p->var_count].type, sizeof(p->variables[p->var_count].type), type, _TRUNCATE);
-        p->variables[p->var_count].type[sizeof(p->variables[p->var_count].type) - 1] = '\0';
-    }
-    else
-    {
-        p->variables[p->var_count].type[0] = '\0';
-    }
-
-    // Track this name in the all_declared_names array for duplicate checking across scopes
-    if (p->all_declared_count < 10)
-    {
-        strncpy_s(p->all_declared_names[p->all_declared_count], sizeof(p->all_declared_names[p->all_declared_count]), name, name_len);
-        p->all_declared_names[p->all_declared_count][name_len] = '\0';
-        p->all_declared_count++;
-    }
+    init_variable_entry(p, name, name_len, value, -1, is_mutable, type);
 
     return p->var_count++;
 }
@@ -733,39 +791,14 @@ static int set_pointer_variable_with_mutability(Parser *p, const char *name, int
         p->variables[idx].value = 0; // Pointer values don't store direct values
         p->variables[idx].is_mutable = is_mutable;
         p->variables[idx].pointer_target = target_idx;
-        if (pointer_type && pointer_type[0])
-        {
-            strncpy_s(p->variables[idx].type, sizeof(p->variables[idx].type), pointer_type, _TRUNCATE);
-            p->variables[idx].type[sizeof(p->variables[idx].type) - 1] = '\0';
-        }
+        set_variable_type(&p->variables[idx], pointer_type);
         return idx;
     }
 
     if (p->var_count >= 10)
         return -1; // Too many variables
 
-    strncpy_s(p->variables[p->var_count].name, sizeof(p->variables[p->var_count].name), name, name_len);
-    p->variables[p->var_count].name[name_len] = '\0';
-    p->variables[p->var_count].value = 0; // Pointer values don't store direct values
-    p->variables[p->var_count].is_mutable = is_mutable;
-    p->variables[p->var_count].pointer_target = target_idx;
-    if (pointer_type && pointer_type[0])
-    {
-        strncpy_s(p->variables[p->var_count].type, sizeof(p->variables[p->var_count].type), pointer_type, _TRUNCATE);
-        p->variables[p->var_count].type[sizeof(p->variables[p->var_count].type) - 1] = '\0';
-    }
-    else
-    {
-        p->variables[p->var_count].type[0] = '\0';
-    }
-
-    // Track this name in the all_declared_names array for duplicate checking across scopes
-    if (p->all_declared_count < 10)
-    {
-        strncpy_s(p->all_declared_names[p->all_declared_count], sizeof(p->all_declared_names[p->all_declared_count]), name, name_len);
-        p->all_declared_names[p->all_declared_count][name_len] = '\0';
-        p->all_declared_count++;
-    }
+    init_variable_entry(p, name, name_len, 0, target_idx, is_mutable, pointer_type);
 
     return p->var_count++;
 }
@@ -976,13 +1009,22 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         p->pos++; // Skip ':'
         skip_whitespace(p);
 
-        // Check for pointer type (*)
+        // Check for pointer type (*) or mutable pointer type (*mut)
         int is_pointer = 0;
+        int is_mut_pointer = 0;
         if (p->input[p->pos] == '*')
         {
             is_pointer = 1;
             p->pos++; // Skip '*'
             skip_whitespace(p);
+
+            // Check for 'mut' keyword after *
+            if (is_keyword_at(p, "mut"))
+            {
+                is_mut_pointer = 1;
+                p->pos += 3; // Skip 'mut'
+                skip_whitespace(p);
+            }
         }
 
         // Parse type
@@ -994,7 +1036,14 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         // Store the declared type for validation later
         if (is_pointer)
         {
-            snprintf(declared_type, sizeof(declared_type), "*%s", type_name);
+            if (is_mut_pointer)
+            {
+                snprintf(declared_type, sizeof(declared_type), "*mut %s", type_name);
+            }
+            else
+            {
+                snprintf(declared_type, sizeof(declared_type), "*%s", type_name);
+            }
         }
         else
         {
@@ -1393,6 +1442,20 @@ static int has_assignment_operator(Parser *p)
     return get_operator_at(p->input, temp_pos) != '\0';
 }
 
+// Helper: Check if there's an assignment operator at the current position
+// Returns the operator char if found ('+', '-', '*', '/', '\0' for simple =), '\0' otherwise
+static char check_assignment_operator(Parser *p)
+{
+    skip_whitespace(p);
+    if (p->input[p->pos] == '=' && p->input[p->pos + 1] != '=')
+        return '=';
+    if ((p->input[p->pos] == '+' || p->input[p->pos] == '-' ||
+         p->input[p->pos] == '*' || p->input[p->pos] == '/') &&
+        p->input[p->pos + 1] == '=')
+        return p->input[p->pos];
+    return '\0';
+}
+
 // Helper: Parse and apply an assignment, returning the assigned value
 // Assumes variable name is already parsed and position is at variable name
 static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_name, int name_len)
@@ -1435,20 +1498,11 @@ static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_nam
     long final_value = val_result.value;
     if (compound_op != '=')
     {
-        // Apply the compound operation
+        // Apply the compound operation using helper function
         long current_value = p->variables[idx].value;
-        if (compound_op == '+')
-            final_value = current_value + val_result.value;
-        else if (compound_op == '-')
-            final_value = current_value - val_result.value;
-        else if (compound_op == '*')
-            final_value = current_value * val_result.value;
-        else if (compound_op == '/')
-        {
-            if (val_result.value == 0)
-                return make_error("Division by zero");
-            final_value = current_value / val_result.value;
-        }
+        InterpretResult op_result = apply_compound_operator(compound_op, current_value, val_result.value, &final_value);
+        if (op_result.has_error)
+            return op_result;
     }
 
     // If variable has a declared type, check type compatibility
@@ -1515,22 +1569,8 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
         skip_whitespace(p);
 
         // Check for assignment operator
-        int is_assignment = 0;
-        char compound_op = '\0';
-        if (p->input[p->pos] == '=' && p->input[p->pos + 1] != '=')
-        {
-            is_assignment = 1;
-            compound_op = '=';
-        }
-        else if ((p->input[p->pos] == '+' || p->input[p->pos] == '-' ||
-                  p->input[p->pos] == '*' || p->input[p->pos] == '/') &&
-                 p->input[p->pos + 1] == '=')
-        {
-            is_assignment = 1;
-            compound_op = p->input[p->pos];
-        }
-
-        if (!is_assignment)
+        char compound_op = check_assignment_operator(p);
+        if (compound_op == '\0')
         {
             p->pos = saved_pos;
             return make_error("not_an_assignment");
@@ -1577,18 +1617,9 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
         {
             // Apply the compound operation
             long current_value = p->variables[target_idx].value;
-            if (compound_op == '+')
-                final_value = current_value + val_result.value;
-            else if (compound_op == '-')
-                final_value = current_value - val_result.value;
-            else if (compound_op == '*')
-                final_value = current_value * val_result.value;
-            else if (compound_op == '/')
-            {
-                if (val_result.value == 0)
-                    return make_error("Division by zero");
-                final_value = current_value / val_result.value;
-            }
+            InterpretResult op_result = apply_compound_operator(compound_op, current_value, val_result.value, &final_value);
+            if (op_result.has_error)
+                return op_result;
         }
 
         // Update the target variable's value
@@ -1616,20 +1647,7 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
     name_len = parse_identifier(p, var_name, sizeof(var_name));
 
     // Check for '=', '+=', '-=', '*=', or '/=' (single equals, not ==)
-    skip_whitespace(p);
-    int is_assignment = 0;
-    if (p->input[p->pos] == '=' && p->input[p->pos + 1] != '=')
-    {
-        is_assignment = 1;
-    }
-    else if ((p->input[p->pos] == '+' || p->input[p->pos] == '-' ||
-              p->input[p->pos] == '*' || p->input[p->pos] == '/') &&
-             p->input[p->pos + 1] == '=')
-    {
-        is_assignment = 1;
-    }
-
-    if (!is_assignment)
+    if (!check_assignment_operator(p))
     {
         p->pos = saved_pos;
         return make_error("not_an_assignment");
@@ -2657,8 +2675,8 @@ static InterpretResult parse_additive(Parser *p)
         return left;
 
     long result_value = left.value;
-    char tracked_suffix[8] = {0}; // Increased to accommodate "Bool"
-    char last_suffix[8] = {0};    // Increased to accommodate "Bool"
+    char tracked_suffix[16] = {0}; // Increased to accommodate "*mut I32"
+    char last_suffix[16] = {0};    // Increased to accommodate "*mut I8"
     int has_tracked_suffix = 0;
     int in_mixed_types = 0; // Track if we've seen mixed types
 
