@@ -615,6 +615,11 @@ void test_interpret_function_duplicate_parameter_names(void)
     assert_error("fn empty(x : I32, x : I32) : Void => {}", "test_interpret_function_duplicate_parameter_names");
 }
 
+void test_interpret_function_invocation(void)
+{
+    assert_success("fn add(first : I32, second : I32) : I32 => { first + second } add(3, 4)", 7, "test_interpret_function_invocation");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -733,6 +738,7 @@ int main(void)
     test_interpret_duplicate_function_declaration();
     test_interpret_function_with_parameters();
     test_interpret_function_duplicate_parameter_names();
+    test_interpret_function_invocation();
 
     if (passed_asserts == total_asserts)
     {

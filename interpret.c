@@ -30,6 +30,17 @@ typedef struct
 
 typedef struct
 {
+    char name[32];
+    char param_names[10][32]; // Parameter names
+    char param_types[10][32]; // Parameter types
+    int param_count;          // Number of parameters
+    char return_type[32];     // Return type
+    int body_start_pos;       // Position in input where function body starts
+    int body_end_pos;         // Position in input where function body ends
+} FunctionInfo;
+
+typedef struct
+{
     const char *input;
     int pos;
     InterpretResult last_error;
@@ -45,6 +56,8 @@ typedef struct
     long temp_array_values[MAX_ARRAY_ELEMENTS];
     char declared_functions[10][32]; // Track all declared function names
     int declared_functions_count;    // Count of declared functions
+    FunctionInfo functions[10];      // Array of function information
+    int functions_count;             // Count of stored functions
 } Parser;
 
 typedef struct
@@ -524,6 +537,12 @@ static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_nu
 static InterpretResult make_error(const char *message);
 static InterpretResult try_parse_assignment_expression(Parser *p);
 static int is_keyword_at(Parser *p, const char *keyword);
+static int find_variable(Parser *p, const char *name, int name_len);
+static int find_function(Parser *p, const char *name, int name_len);
+static int set_variable_with_type(Parser *p, const char *name, int name_len, long value, const char *type);
+static void save_variable_state(Parser *p, Variable saved_vars[10], int *saved_var_count);
+static void restore_saved_vars(Parser *p, Variable saved_vars[10], int saved_var_count);
+static InterpretResult parse_assignment_or_if_else(Parser *p);
 
 // Implementation of parse_and_validate_operand
 static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num)
@@ -963,6 +982,97 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     .has_error = false,
                     .error_message = NULL};
             }
+
+            // Check for function call
+            skip_whitespace(p);
+            if (p->input[p->pos] == '(')
+            {
+                int func_idx = find_function(p, var_name, name_len);
+                if (func_idx >= 0)
+                {
+                    // This is a function call
+                    p->pos++; // Skip '('
+                    skip_whitespace(p);
+
+                    // Parse arguments
+                    InterpretResult args[10];
+                    int arg_count = 0;
+
+                    if (p->input[p->pos] != ')')
+                    {
+                        while (1)
+                        {
+                            if (arg_count >= 10)
+                                return make_error("Too many function arguments");
+
+                            // Parse the argument expression
+                            InterpretResult arg_result = parse_additive(p);
+                            if (arg_result.has_error)
+                                return arg_result;
+
+                            args[arg_count++] = arg_result;
+
+                            skip_whitespace(p);
+
+                            if (p->input[p->pos] == ')')
+                                break;
+                            else if (p->input[p->pos] == ',')
+                            {
+                                p->pos++;
+                                skip_whitespace(p);
+                                continue;
+                            }
+                            else
+                            {
+                                return make_error("Expected ',' or ')' in function call");
+                            }
+                        }
+                    }
+
+                    // Expect closing paren
+                    if (p->input[p->pos] != ')')
+                        return make_error("Expected ')' after function arguments");
+                    p->pos++;
+
+                    // Check argument count matches
+                    if (arg_count != p->functions[func_idx].param_count)
+                        return make_error("Function argument count mismatch");
+
+                    // Save current variable state
+                    Variable saved_vars[10];
+                    int saved_var_count;
+                    save_variable_state(p, saved_vars, &saved_var_count);
+
+                    // Bind parameters to arguments
+                    for (int i = 0; i < arg_count; i++)
+                    {
+                        set_variable_with_type(p, p->functions[func_idx].param_names[i],
+                                             strlen(p->functions[func_idx].param_names[i]),
+                                             args[i].value,
+                                             p->functions[func_idx].param_types[i]);
+                    }
+
+                    // Save position and jump to function body
+                    int saved_pos = p->pos;
+                    p->pos = p->functions[func_idx].body_start_pos + 1; // Skip opening brace
+
+                    // Parse and execute function body
+                    skip_whitespace(p);
+                    InterpretResult body_result = parse_assignment_or_if_else(p);
+
+                    // Restore position and variable state
+                    p->pos = saved_pos;
+                    restore_saved_vars(p, saved_vars, saved_var_count);
+
+                    // Return the function result
+                    return body_result;
+                }
+                else
+                {
+                    // Identifier not found as function either, reset and try number
+                    p->pos = saved_pos;
+                }
+            }
             else
             {
                 // Identifier found but not a known variable - could be type suffix
@@ -1002,6 +1112,20 @@ static int has_function_been_declared(Parser *p, const char *name, int name_len)
         }
     }
     return 0;
+}
+
+// Helper: Find a function by name and return its index, or -1 if not found
+static int find_function(Parser *p, const char *name, int name_len)
+{
+    for (int i = 0; i < p->functions_count; i++)
+    {
+        if (strncmp(p->functions[i].name, name, name_len) == 0 &&
+            p->functions[i].name[name_len] == '\0')
+        {
+            return i;
+        }
+    }
+    return -1;
 }
 
 // Helper: Register a declared function name
@@ -1050,6 +1174,7 @@ static InterpretResult parse_function_declaration(Parser *p)
     // Parse function parameters (name : Type pairs separated by commas)
     // Track parameter names to detect duplicates
     char param_names[10][32];
+    char param_types[10][32];
     int param_count = 0;
 
     while (p->input[p->pos] != ')')
@@ -1081,7 +1206,6 @@ static InterpretResult parse_function_declaration(Parser *p)
             return make_error("Too many function parameters");
         strncpy_s(param_names[param_count], sizeof(param_names[param_count]), param_name, param_name_len);
         param_names[param_count][param_name_len] = '\0';
-        param_count++;
 
         skip_whitespace(p);
 
@@ -1098,7 +1222,10 @@ static InterpretResult parse_function_declaration(Parser *p)
         if (param_type_len <= 0)
             return make_error("Expected parameter type");
 
-        skip_whitespace(p);
+        // Store parameter type
+        strncpy_s(param_types[param_count], sizeof(param_types[param_count]), param_type, param_type_len);
+        param_types[param_count][param_type_len] = '\0';
+        param_count++;
 
         // Check for comma (more parameters) or closing parenthesis
         if (p->input[p->pos] == ',')
@@ -1171,6 +1298,33 @@ static InterpretResult parse_function_declaration(Parser *p)
     {
         return make_error("Expected '{' to start function body");
     }
+
+    // Save the body end position
+    int body_end_pos = p->pos;
+
+    // Store the function info
+    if (p->functions_count >= 10)
+        return make_error("Too many function declarations");
+
+    strncpy_s(p->functions[p->functions_count].name, sizeof(p->functions[p->functions_count].name), func_name, name_len);
+    p->functions[p->functions_count].name[name_len] = '\0';
+
+    for (int i = 0; i < param_count; i++)
+    {
+        strncpy_s(p->functions[p->functions_count].param_names[i], sizeof(p->functions[p->functions_count].param_names[i]), param_names[i], _TRUNCATE);
+        p->functions[p->functions_count].param_names[i][31] = '\0';
+        strncpy_s(p->functions[p->functions_count].param_types[i], sizeof(p->functions[p->functions_count].param_types[i]), param_types[i], _TRUNCATE);
+        p->functions[p->functions_count].param_types[i][31] = '\0';
+    }
+    p->functions[p->functions_count].param_count = param_count;
+
+    strncpy_s(p->functions[p->functions_count].return_type, sizeof(p->functions[p->functions_count].return_type), return_type, _TRUNCATE);
+    p->functions[p->functions_count].return_type[31] = '\0';
+
+    p->functions[p->functions_count].body_start_pos = body_start_pos;
+    p->functions[p->functions_count].body_end_pos = body_end_pos;
+
+    p->functions_count++;
 
     // Register the function as declared
     register_declared_function(p, func_name, name_len);
