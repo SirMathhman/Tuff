@@ -3776,7 +3776,9 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
                     return make_error("Variable not found");
                 }
 
-                if (!p->variables[array_idx].is_array)
+                int is_slice = is_pointer_to_array_type(p->variables[array_idx].type);
+
+                if (!p->variables[array_idx].is_array && !is_slice)
                 {
                     return make_error("Cannot index non-array variable");
                 }
@@ -3793,22 +3795,58 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
                     return make_error("not_an_assignment");
                 }
 
-                if (!p->variables[array_idx].is_mutable)
+                int target_array_idx = array_idx;
+                if (is_slice)
                 {
-                    return make_error("Cannot assign to immutable variable");
+                    // For slices, get the underlying array
+                    target_array_idx = p->variables[array_idx].pointer_target;
+                    if (target_array_idx < 0 || target_array_idx >= p->var_count || !p->variables[target_array_idx].is_array)
+                    {
+                        return make_error("Invalid slice pointer");
+                    }
+
+                    // Check if slice pointer is mutable (determined by pointer type, not variable mutability)
+                    if (!is_mutable_pointer_type(p->variables[array_idx].type))
+                    {
+                        return make_error("Cannot assign through immutable slice");
+                    }
+
+                    // Check if the underlying array is mutable
+                    if (!p->variables[target_array_idx].is_mutable)
+                    {
+                        return make_error("Cannot assign to immutable variable");
+                    }
+
+                    // Check bounds against slice
+                    if (index_value < 0 || index_value >= (p->variables[array_idx].slice_end - p->variables[array_idx].slice_start))
+                    {
+                        return make_error("Array index out of bounds");
+                    }
+
+                    // Adjust index to actual array position
+                    index_value += p->variables[array_idx].slice_start;
+                }
+                else
+                {
+                    // For regular arrays, check if the array variable is mutable
+                    if (!p->variables[array_idx].is_mutable)
+                    {
+                        return make_error("Cannot assign to immutable variable");
+                    }
+
+                    // Regular array bounds checking
+                    if (index_value < 0 || index_value >= p->variables[target_array_idx].array_total_count)
+                    {
+                        return make_error("Array index out of bounds");
+                    }
+
+                    if (index_value > p->variables[target_array_idx].array_init_count)
+                    {
+                        return make_error("Array elements must be initialized in order");
+                    }
                 }
 
-                if (index_value < 0 || index_value >= p->variables[array_idx].array_total_count)
-                {
-                    return make_error("Array index out of bounds");
-                }
-
-                if (index_value > p->variables[array_idx].array_init_count)
-                {
-                    return make_error("Array elements must be initialized in order");
-                }
-
-                if (compound_op != '=' && index_value >= p->variables[array_idx].array_init_count)
+                if (compound_op != '=' && index_value >= p->variables[target_array_idx].array_init_count)
                 {
                     return make_error("Cannot use compound assignment on uninitialized element");
                 }
@@ -3818,7 +3856,7 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
                 skip_whitespace(p);
 
                 // Parse RHS and calculate final value
-                InterpretResult assign_result = parse_assignment_rhs(p, compound_op, p->variables[array_idx].array_values[index_value]);
+                InterpretResult assign_result = parse_assignment_rhs(p, compound_op, p->variables[target_array_idx].array_values[index_value]);
                 if (assign_result.has_error)
                     return assign_result;
 
@@ -3827,22 +3865,22 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
                 // Validate final value against array element type
                 if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
                 {
-                    if (!is_type_compatible(p->variables[array_idx].array_element_type, p->tracked_suffix))
+                    if (!is_type_compatible(p->variables[target_array_idx].array_element_type, p->tracked_suffix))
                     {
                         return make_error("Array element type mismatch");
                     }
                 }
                 else
                 {
-                    InterpretResult validation = validate_type(final_value, p->variables[array_idx].array_element_type);
+                    InterpretResult validation = validate_type(final_value, p->variables[target_array_idx].array_element_type);
                     if (validation.has_error)
                         return validation;
                 }
 
-                p->variables[array_idx].array_values[index_value] = final_value;
-                if (index_value == p->variables[array_idx].array_init_count)
+                p->variables[target_array_idx].array_values[index_value] = final_value;
+                if (index_value == p->variables[target_array_idx].array_init_count)
                 {
-                    p->variables[array_idx].array_init_count++;
+                    p->variables[target_array_idx].array_init_count++;
                 }
 
                 return (InterpretResult){.value = final_value, .has_error = false, .error_message = NULL};

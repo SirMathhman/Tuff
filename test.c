@@ -760,6 +760,11 @@ void test_interpret_slice_implicit_full_array(void)
     assert_success("let array = [1, 2, 3]; let slice : *[I32] = &array; slice.length", 3, "test_interpret_slice_implicit_full_array");
 }
 
+void test_interpret_mutable_slice_element_assignment(void)
+{
+    assert_success("let mut array = [1, 2, 3]; let slice : *mut [I32] = &mut array; slice[0] = 100; array[0]", 100, "test_interpret_mutable_slice_element_assignment");
+}
+
 void test_interpret_bool_array_with_numeric_literal(void)
 {
     assert_error("let array : [Bool; 1; 1] = [100];", "test_interpret_bool_array_with_numeric_literal");
@@ -932,6 +937,7 @@ int main(void)
     test_interpret_slice_init_property();
     test_interpret_slice_init_partial_range();
     test_interpret_slice_implicit_full_array();
+    test_interpret_mutable_slice_element_assignment();
     test_interpret_bool_array_with_numeric_literal();
     test_interpret_array_init_count_mismatch();
     test_interpret_array_assignment_increments_init();
