@@ -5758,6 +5758,193 @@ static int compile_args_expression_with_funcs(const char *expr, char *out_buf, s
     return compile_args_expression(expr, out_buf, buf_size, var_names, var_types, var_count);
 }
 
+// Function definition structure
+typedef struct
+{
+    char name[32];
+    char params[10][32]; // Parameter names
+    int param_count;
+    char body[256]; // Function body expression
+} FuncDef;
+
+// Helper: Convert if-else expressions to C ternary operators recursively
+static int compile_args_convert_if_else(const char *src, char *out, size_t out_size)
+{
+    const char *p = src;
+    while (*p && isspace(*p))
+        p++;
+
+    if (strncmp(p, "if", 2) != 0 || !isspace(p[2]))
+    {
+        // Not an if-else, copy as-is
+        strncat_s(out, out_size, src, _TRUNCATE);
+        return 0;
+    }
+
+    p += 2; // skip "if"
+    while (*p && isspace(*p))
+        p++;
+
+    if (*p != '(')
+    {
+        strncat_s(out, out_size, src, _TRUNCATE);
+        return 0;
+    }
+    p++; // skip '('
+
+    // Extract condition (find matching ')')
+    int paren_depth = 1;
+    const char *cond_start = p;
+    while (*p && paren_depth > 0)
+    {
+        if (*p == '(')
+            paren_depth++;
+        else if (*p == ')')
+            paren_depth--;
+        p++;
+    }
+    size_t cond_len = (size_t)(p - cond_start - 1);
+
+    // Extract condition
+    char condition[256] = {0};
+    if (cond_len >= sizeof(condition))
+        cond_len = sizeof(condition) - 1;
+    memcpy(condition, cond_start, cond_len);
+    condition[cond_len] = '\0';
+
+    // Skip whitespace after ')'
+    while (*p && isspace(*p))
+        p++;
+
+    // Extract then-branch (until "else")
+    const char *then_start = p;
+    const char *else_keyword = NULL;
+
+    // Find "else" keyword (but not inside nested if-else)
+    int depth = 0;
+    const char *scan = p;
+    while (*scan)
+    {
+        if (strncmp(scan, "if", 2) == 0 && (scan == p || isspace(scan[-1])) && isspace(scan[2]))
+            depth++;
+        else if (strncmp(scan, "else", 4) == 0 && (scan == p || isspace(scan[-1])) &&
+                 (isspace(scan[4]) || scan[4] == '\0'))
+        {
+            if (depth == 0)
+            {
+                else_keyword = scan;
+                break;
+            }
+            depth--;
+        }
+        scan++;
+    }
+
+    if (!else_keyword)
+    {
+        // No else branch, can't convert to ternary
+        strncat_s(out, out_size, src, _TRUNCATE);
+        return 0;
+    }
+
+    size_t then_len = (size_t)(else_keyword - then_start);
+    char then_branch[256] = {0};
+    if (then_len >= sizeof(then_branch))
+        then_len = sizeof(then_branch) - 1;
+    memcpy(then_branch, then_start, then_len);
+    then_branch[then_len] = '\0';
+
+    // Trim trailing whitespace from then-branch
+    while (then_len > 0 && isspace(then_branch[then_len - 1]))
+        then_branch[--then_len] = '\0';
+
+    // Skip "else" keyword
+    p = else_keyword + 4;
+    while (*p && isspace(*p))
+        p++;
+
+    // Extract else-branch (rest of string)
+    const char *else_start = p;
+
+    // Generate ternary: (condition) ? (then) : (else)
+    strncat_s(out, out_size, "(", _TRUNCATE);
+    strncat_s(out, out_size, condition, _TRUNCATE);
+    strncat_s(out, out_size, ") ? (", _TRUNCATE);
+
+    // Recursively convert then-branch
+    compile_args_convert_if_else(then_branch, out, out_size);
+
+    strncat_s(out, out_size, ") : (", _TRUNCATE);
+
+    // Recursively convert else-branch
+    compile_args_convert_if_else(else_start, out, out_size);
+
+    strncat_s(out, out_size, ")", _TRUNCATE);
+
+    return 0;
+}
+
+// Helper: Emit function signature (name and parameters)
+static void emit_function_signature(char *c_code, size_t c_code_size, const FuncDef *func, int with_semicolon)
+{
+    strncat_s(c_code, c_code_size, "int ", _TRUNCATE);
+    strncat_s(c_code, c_code_size, func->name, _TRUNCATE);
+    strncat_s(c_code, c_code_size, "(", _TRUNCATE);
+    for (int j = 0; j < func->param_count; j++)
+    {
+        if (j > 0)
+            strncat_s(c_code, c_code_size, ", ", _TRUNCATE);
+        strncat_s(c_code, c_code_size, "int ", _TRUNCATE);
+        strncat_s(c_code, c_code_size, func->params[j], _TRUNCATE);
+    }
+    strncat_s(c_code, c_code_size, ")", _TRUNCATE);
+    if (with_semicolon)
+        strncat_s(c_code, c_code_size, ";\n", _TRUNCATE);
+}
+
+// Helper: Parse statement from source into buffer, trim whitespace, return trimmed pointer
+static const char *parse_statement_setup(const char *s, const char *semi, char *stmt, size_t stmt_size, size_t *stmt_len_out)
+{
+    size_t stmt_len = (size_t)(semi - s);
+    if (stmt_len >= stmt_size)
+        stmt_len = stmt_size - 1;
+    memcpy(stmt, s, stmt_len);
+    stmt[stmt_len] = '\0';
+
+    const char *st = stmt;
+    while (*st && isspace(*st))
+        st++;
+
+    if (stmt_len_out)
+        *stmt_len_out = stmt_len;
+    return st;
+}
+
+// Helper: Emit variable assignment statement
+static void emit_var_assignment(char *c_code, size_t c_code_size, const char *vname, const char *expr,
+                                const char var_names[][32], const int *var_types, int var_count)
+{
+    char assign[256];
+    snprintf(assign, sizeof(assign), "    %s = ", vname);
+    strncat_s(c_code, c_code_size, assign, _TRUNCATE);
+    compile_args_expression(expr, c_code, c_code_size, var_names, var_types, var_count);
+    strncat_s(c_code, c_code_size, ";\n", _TRUNCATE);
+}
+
+// Helper: Check if identifier is a Tuff keyword
+static int is_tuff_keyword(const char *ident)
+{
+    const char *keywords[] = {"if", "else", "while", "for", "let", "mut", 
+                              "fn", "return", "struct", "match", "case", 
+                              "true", "false", "in", NULL};
+    for (int i = 0; keywords[i]; i++)
+    {
+        if (strcmp(ident, keywords[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
 // compile_args_source: Transpile Tuff source containing __args__ into a complete C program.
 // Returns a CompileResult with generated C code.
 static CompileResult compile_args_source(const char *source)
@@ -5765,25 +5952,19 @@ static CompileResult compile_args_source(const char *source)
     char c_code[4096] = {0};
     strcpy_s(c_code, sizeof(c_code),
              "#include <stdlib.h>\n"
-             "#include <string.h>\n"
-             "int main(int argc, char **argv) {\n");
+             "#include <string.h>\n\n");
 
     // Track variable declarations: name, type (1=numeric, 2=*Str, 3=*[*Str])
     char var_names[16][32] = {{0}};
     int var_types[16] = {0};
     int var_count = 0;
 
-    // Track function definitions: name -> expression body
-    char func_names[10][32] = {{0}};
-    char func_bodies[10][256] = {{0}};
+    // Track function definitions with parameters
+    FuncDef functions[10] = {{{0}}};
     int func_count = 0;
 
-    // Split source into statements by ';'
-    // The last piece (after the last ';' or the entire source if no ';') is the return expression
+    // First pass: Extract all function definitions with parameters
     const char *s = source;
-
-    // Collect statements (semicolon-terminated) and a possible trailing expression
-    // Process statement by statement
     while (*s)
     {
         while (*s && isspace(*s))
@@ -5791,45 +5972,60 @@ static CompileResult compile_args_source(const char *source)
         if (!*s)
             break;
 
-        // Find the next semicolon to delimit a statement
         const char *semi = strchr(s, ';');
-
         if (semi == NULL)
-        {
-            // No semicolon - this is the final return expression
-            strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
-            compile_args_expression(s, c_code, sizeof(c_code), var_names, var_types, var_count);
-            strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
-            break;
-        }
+            break; // No more statements
 
-        // Extract the statement (up to but not including the semicolon)
-        size_t stmt_len = (size_t)(semi - s);
         char stmt[512] = {0};
-        if (stmt_len >= sizeof(stmt))
-            stmt_len = sizeof(stmt) - 1;
-        memcpy(stmt, s, stmt_len);
-        stmt[stmt_len] = '\0';
-
-        // Trim leading whitespace from statement
-        const char *st = stmt;
-        while (*st && isspace(*st))
-            st++;
+        const char *st = parse_statement_setup(s, semi, stmt, sizeof(stmt), NULL);
 
         if (strncmp(st, "fn ", 3) == 0)
         {
-            // Function definition: fn name() => expr; or fn name() : Type => expr;
+            // Function definition: fn name(param: Type) => expr;
             const char *p = st + 3;
             while (*p && isspace(*p))
                 p++;
 
             // Parse function name
-            char fname[32] = {0};
-            p = compile_args_parse_identifier(p, fname, sizeof(fname));
+            p = compile_args_parse_identifier(p, functions[func_count].name, sizeof(functions[func_count].name));
 
-            // Skip whitespace and parameters (we don't support parameters in transpiler)
-            while (*p && *p != ')')
+            // Skip whitespace to '('
+            while (*p && isspace(*p))
                 p++;
+            if (*p == '(')
+                p++;
+
+            // Parse parameters
+            while (*p && *p != ')')
+            {
+                while (*p && isspace(*p))
+                    p++;
+                if (*p == ')')
+                    break;
+
+                // Parse parameter name
+                char param_name[32] = {0};
+                p = compile_args_parse_identifier(p, param_name, sizeof(param_name));
+                if (param_name[0] != '\0' && functions[func_count].param_count < 10)
+                {
+                    strcpy_s(functions[func_count].params[functions[func_count].param_count],
+                             sizeof(functions[func_count].params[functions[func_count].param_count]),
+                             param_name);
+                    functions[func_count].param_count++;
+                }
+
+                // Skip type annotation
+                while (*p && isspace(*p))
+                    p++;
+                if (*p == ':')
+                {
+                    p++;
+                    while (*p && *p != ',' && *p != ')')
+                        p++;
+                }
+                if (*p == ',')
+                    p++;
+            }
             if (*p == ')')
                 p++;
 
@@ -5838,7 +6034,7 @@ static CompileResult compile_args_source(const char *source)
                 p++;
             if (*p == ':')
             {
-                p++; // skip ':'
+                p++;
                 while (*p && *p != '=')
                     p++;
             }
@@ -5853,13 +6049,165 @@ static CompileResult compile_args_source(const char *source)
                     p++;
             }
 
-            // Store the function body (remaining part of statement)
-            if (func_count < 10)
+            // Store function body
+            strncpy_s(functions[func_count].body, sizeof(functions[func_count].body), p, _TRUNCATE);
+            func_count++;
+        }
+
+        s = semi + 1;
+    }
+
+    // Generate function declarations and implementations
+    if (func_count > 0)
+    {
+        // Detect global variables: variables referenced in function bodies but not in parameters
+        char global_vars[16][32] = {{0}};
+        int global_count = 0;
+
+        for (int i = 0; i < func_count; i++)
+        {
+            // Scan function body for variable references
+            const char *body = functions[i].body;
+            while (*body)
             {
-                strncpy_s(func_names[func_count], sizeof(func_names[func_count]), fname, _TRUNCATE);
-                strncpy_s(func_bodies[func_count], sizeof(func_bodies[func_count]), p, _TRUNCATE);
-                func_count++;
+                if (isalpha(*body) || *body == '_')
+                {
+                    char ident[32] = {0};
+                    int idx = 0;
+                    const char *start = body;
+                    while ((isalnum(*body) || *body == '_') && idx < 31)
+                        ident[idx++] = *body++;
+                    ident[idx] = '\0';
+
+                    // Check if this identifier is a parameter of this function
+                    int is_param = 0;
+                    for (int j = 0; j < functions[i].param_count; j++)
+                    {
+                        if (strcmp(ident, functions[i].params[j]) == 0)
+                        {
+                            is_param = 1;
+                            break;
+                        }
+                    }
+
+                    // Check if it's a function name
+                    int is_func = 0;
+                    for (int j = 0; j < func_count; j++)
+                    {
+                        if (strcmp(ident, functions[j].name) == 0)
+                        {
+                            is_func = 1;
+                            break;
+                        }
+                    }
+
+                    // If not a parameter and not a function, it might be a global variable
+                    if (!is_param && !is_func && strlen(ident) > 0)
+                    {
+                        // Filter out keywords
+                        if (is_tuff_keyword(ident))
+                        {
+                            // Skip keywords
+                        }
+                        else
+                        {
+                            // Check if already in global list
+                            int already_global = 0;
+                            for (int j = 0; j < global_count; j++)
+                            {
+                                if (strcmp(global_vars[j], ident) == 0)
+                                {
+                                    already_global = 1;
+                                    break;
+                                }
+                            }
+
+                            if (!already_global && global_count < 16)
+                            {
+                                strcpy_s(global_vars[global_count], sizeof(global_vars[global_count]), ident);
+                                global_count++;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    body++;
+                }
             }
+        }
+
+        // Generate global variable declarations (will be initialized in main)
+        for (int i = 0; i < global_count; i++)
+        {
+            strncat_s(c_code, sizeof(c_code), "int ", _TRUNCATE);
+            strncat_s(c_code, sizeof(c_code), global_vars[i], _TRUNCATE);
+            strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
+        }
+        if (global_count > 0)
+            strncat_s(c_code, sizeof(c_code), "\n", _TRUNCATE);
+
+        // Generate forward declarations
+        for (int i = 0; i < func_count; i++)
+        {
+            emit_function_signature(c_code, sizeof(c_code), &functions[i], 1);
+        }
+        strncat_s(c_code, sizeof(c_code), "\n", _TRUNCATE);
+
+        // Generate function implementations
+        for (int i = 0; i < func_count; i++)
+        {
+            emit_function_signature(c_code, sizeof(c_code), &functions[i], 0);
+            strncat_s(c_code, sizeof(c_code), " {\n    return ", _TRUNCATE);
+
+            // Convert if-else to ternary in function body
+            char body_converted[512] = {0};
+            compile_args_convert_if_else(functions[i].body, body_converted, sizeof(body_converted));
+            strncat_s(c_code, sizeof(c_code), body_converted, _TRUNCATE);
+            strncat_s(c_code, sizeof(c_code), ";\n}\n\n", _TRUNCATE);
+        }
+
+        // Store global variable names for later - mark them for special handling
+        for (int i = 0; i < global_count; i++)
+        {
+            if (var_count < 16)
+            {
+                strcpy_s(var_names[var_count], sizeof(var_names[var_count]), global_vars[i]);
+                var_types[var_count] = -1; // Special marker for global variables
+                var_count++;
+            }
+        }
+    }
+
+    // Generate main function
+    strncat_s(c_code, sizeof(c_code), "int main(int argc, char **argv) {\n", _TRUNCATE);
+
+    // Second pass: Process variable declarations and return expression
+    s = source;
+    while (*s)
+    {
+        while (*s && isspace(*s))
+            s++;
+        if (!*s)
+            break;
+
+        const char *semi = strchr(s, ';');
+        if (semi == NULL)
+        {
+            // Final return expression
+            strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
+            // Append expression directly to preserve function calls with arguments
+            strncat_s(c_code, sizeof(c_code), s, _TRUNCATE);
+            strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
+            break;
+        }
+
+        char stmt[512] = {0};
+        const char *st = parse_statement_setup(s, semi, stmt, sizeof(stmt), NULL);
+
+        if (strncmp(st, "fn ", 3) == 0)
+        {
+            // Skip function definitions (already processed)
         }
         else if (strncmp(st, "let ", 4) == 0)
         {
@@ -5868,11 +6216,9 @@ static CompileResult compile_args_source(const char *source)
             while (*p && isspace(*p))
                 p++;
 
-            // Check for 'mut' keyword
-            int is_mut = 0;
+            // Check for 'mut'
             if (strncmp(p, "mut ", 4) == 0)
             {
-                is_mut = 1;
                 p += 4;
                 while (*p && isspace(*p))
                     p++;
@@ -5882,19 +6228,17 @@ static CompileResult compile_args_source(const char *source)
             char vname[32] = {0};
             p = compile_args_parse_identifier(p, vname, sizeof(vname));
 
-            // Skip whitespace
             while (*p && isspace(*p))
                 p++;
 
-            // Parse optional type annotation ': Type'
+            // Parse optional type annotation
             char type_str[32] = {0};
             if (*p == ':')
             {
-                p++; // skip ':'
+                p++;
                 while (*p && isspace(*p))
                     p++;
                 int ti = 0;
-                // Read type including possible * and [] characters
                 while (*p && *p != '=' && !isspace(*p) && ti < 31)
                 {
                     type_str[ti++] = *p++;
@@ -5904,7 +6248,6 @@ static CompileResult compile_args_source(const char *source)
                     p++;
             }
 
-            // Expect '='
             if (*p == '=')
             {
                 p++;
@@ -5912,38 +6255,67 @@ static CompileResult compile_args_source(const char *source)
                     p++;
             }
 
-            // Determine variable type and generate C declaration
-            int vtype = 1; // default: numeric
-            // Check for args slice: either explicitly typed *[*Str] or assigning bare __args__ (not __args__.length or __args__[n])
-            if (strcmp(type_str, "*[*Str]") == 0 || (strcmp(p, "__args__") == 0))
+            // Generate C variable declaration
+            int vtype = 1;
+            // Check if this variable was already marked as global
+            int is_global = 0;
+            for (int v = 0; v < var_count; v++)
+            {
+                if (strcmp(var_names[v], vname) == 0 && var_types[v] == -1)
+                {
+                    is_global = 1;
+                    var_types[v] = 1; // Update to actual type (numeric)
+                    break;
+                }
+            }
+
+            if (strcmp(type_str, "*[*Str]") == 0 || strcmp(p, "__args__") == 0)
             {
                 // Assigning __args__ directly (not __args__[n]) -> args slice
                 vtype = 3;
-                compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
-                // Generate: char **vname = argv;
-                // (argc is accessible directly, no need to store separately)
+                if (!is_global)
+                    compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
+                else
+                    var_types[var_count - 1] = vtype;
                 compile_args_emit_args_slice_decl(c_code, sizeof(c_code), vname);
             }
-            else if (strcmp(type_str, "*Str") == 0 || strstr(p, "__args__[") != NULL)
+            else if (strcmp(type_str, "*Str") == 0 || (strstr(p, "__args__[") != NULL && strstr(p, ".length") == NULL))
             {
-                // String pointer from __args__[n]
+                // String pointer from __args__[n] (without .length access)
                 vtype = 2;
-                compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
-                // Generate: char *vname = <expr>;
+                if (!is_global)
+                    compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
+                else
+                    var_types[var_count - 1] = vtype;
                 compile_args_emit_decl(c_code, sizeof(c_code), "char *", vname, p, var_names, var_types, var_count);
             }
             else
             {
-                // Numeric type (USize, I32, etc.)
+                // Numeric type (USize, I32, etc.) or __args__[n].length
                 vtype = 1;
-                compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
-                // Generate: int vname = <expr>;
-                compile_args_emit_decl(c_code, sizeof(c_code), "int ", vname, p, var_names, var_types, var_count);
+                if (!is_global)
+                    compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
+                else
+                {
+                    // For global variables, just emit assignment (no declaration)
+                    emit_var_assignment(c_code, sizeof(c_code), vname, p, var_names, var_types, var_count);
+                    // Update type in var_types
+                    for (int v = 0; v < var_count; v++)
+                    {
+                        if (strcmp(var_names[v], vname) == 0)
+                        {
+                            var_types[v] = vtype;
+                            break;
+                        }
+                    }
+                }
+                if (!is_global)
+                    compile_args_emit_decl(c_code, sizeof(c_code), "int ", vname, p, var_names, var_types, var_count);
             }
         }
         else if (isalpha(*st) || *st == '_')
         {
-            // Variable reassignment: varname = expr;
+            // Variable reassignment
             const char *p = st;
             char vname[32] = {0};
             p = compile_args_parse_identifier(p, vname, sizeof(vname));
@@ -5956,28 +6328,21 @@ static CompileResult compile_args_source(const char *source)
                 while (*p && isspace(*p))
                     p++;
 
-                // Generate: vname = <expr>;
-                char assign[256];
-                snprintf(assign, sizeof(assign), "    %s = ", vname);
-                strncat_s(c_code, sizeof(c_code), assign, _TRUNCATE);
-                compile_args_expression(p, c_code, sizeof(c_code), var_names, var_types, var_count);
-                strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
+                emit_var_assignment(c_code, sizeof(c_code), vname, p, var_names, var_types, var_count);
             }
         }
 
-        // Advance past the semicolon
         s = semi + 1;
 
-        // Check if there's anything after this semicolon (could be trailing expression)
+        // Check for trailing expression
         const char *remaining = s;
         while (*remaining && isspace(*remaining))
             remaining++;
         if (*remaining && strchr(remaining, ';') == NULL)
         {
-            // This is a trailing expression (no more semicolons) - generate return
             strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
-            // Expand function calls in the expression
-            compile_args_expression_with_funcs(remaining, c_code, sizeof(c_code), var_names, var_types, var_count, func_names, func_bodies, func_count);
+            // For function calls, append directly to preserve arguments
+            strncat_s(c_code, sizeof(c_code), remaining, _TRUNCATE);
             strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             break;
         }
@@ -5985,7 +6350,7 @@ static CompileResult compile_args_source(const char *source)
 
     strncat_s(c_code, sizeof(c_code), "}\n", _TRUNCATE);
 
-    // Allocate and return the generated code
+    // Allocate and return
     char *out = (char *)malloc(strlen(c_code) + 1);
     if (!out)
         return (CompileResult){.code = NULL, .has_error = true, .error_message = "Memory allocation failed"};

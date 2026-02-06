@@ -1243,6 +1243,12 @@ void test_function_returns_args_length(void)
     assert_compile_success("let temp = __args__[2]; fn get() => temp; get().length", 5, "test_function_returns_args_length", args);
 }
 
+void test_recursive_function_with_args(void)
+{
+    const char *const args[] = {"prog", "one", NULL};
+    assert_compile_success("let length = __args__[2].length; fn countTo(extent : USize) => if (extent == length) 1 else countTo(extent - 1) + 1; countTo(6)", 4, "test_recursive_function_with_args", args);
+}
+
 int main(void)
 {
     cache_ready = cache_init();
@@ -1418,6 +1424,7 @@ int main(void)
     test_args_slice_length();
     test_mut_string_pointer_args_reassignment();
     test_function_returns_args_length();
+    test_recursive_function_with_args();
 
     if (passed_asserts == total_asserts)
     {
