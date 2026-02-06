@@ -720,6 +720,21 @@ void test_interpret_char_literal(void)
     assert_success("let temp : Char = 'a'; temp", 97, "test_interpret_char_literal");
 }
 
+void test_interpret_string_pointer_index(void)
+{
+    assert_success("let temp : *Str = \"test\"; temp[0]", 116, "test_interpret_string_pointer_index");
+}
+
+void test_interpret_string_pointer_index_last(void)
+{
+    assert_success("let temp : *Str = \"test\"; temp[3]", 116, "test_interpret_string_pointer_index_last");
+}
+
+void test_interpret_string_pointer_index_mid(void)
+{
+    assert_success("let temp : *Str = \"test\"; temp[1]", 101, "test_interpret_string_pointer_index_mid");
+}
+
 void test_interpret_slice_basic(void)
 {
     assert_success("let array : [I32; 3; 3] = [1, 2, 3]; let slice : *[I32] = &array[0..3]; slice[0] + slice[1] + slice[2]", 6, "test_interpret_slice_basic");
@@ -904,6 +919,9 @@ int main(void)
     test_interpret_struct_field_type_mismatch_bool();
     test_interpret_struct_undefined_fields_error();
     test_interpret_char_literal();
+    test_interpret_string_pointer_index();
+    test_interpret_string_pointer_index_last();
+    test_interpret_string_pointer_index_mid();
     test_interpret_slice_basic();
     test_interpret_slice_length_property();
     test_interpret_slice_init_property();

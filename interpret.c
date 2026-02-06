@@ -31,6 +31,9 @@ typedef struct
     long struct_values[10]; // Field values for struct instances
     int slice_start;        // Start index of slice (for pointer-to-array types)
     int slice_end;          // End index of slice (for pointer-to-array types)
+    int is_string;          // 1 if string value
+    char string_value[256]; // Store string content
+    int string_len;         // Length of string
 } Variable;
 
 typedef struct
@@ -81,6 +84,9 @@ typedef struct
     int structs_count;             // Count of struct definitions
     int temp_slice_start;          // Start index for temporary slice
     int temp_slice_end;            // End index for temporary slice
+    int has_temp_string;           // 1 if temp string is set
+    char temp_string_value[256];   // Store temporary string
+    int temp_string_len;           // Length of temporary string
 } Parser;
 
 typedef struct
@@ -1076,6 +1082,44 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
         return (InterpretResult){.value = char_value, .has_error = false, .error_message = NULL};
     }
 
+    // Check for string literal ("test")
+    if (p->input[p->pos] == '"')
+    {
+        p->pos++; // Skip opening double quote
+
+        int string_len = 0;
+        while (p->input[p->pos] && p->input[p->pos] != '"' && string_len < 255)
+        {
+            p->temp_string_value[string_len] = p->input[p->pos];
+            string_len++;
+            p->pos++;
+        }
+        p->temp_string_value[string_len] = '\0';
+
+        if (p->input[p->pos] != '"')
+        {
+            return make_error("Expected closing double quote for string literal");
+        }
+        p->pos++; // Skip closing double quote
+
+        p->has_temp_string = 1;
+        p->temp_string_len = string_len;
+
+        // Set tracked suffix to "*Str" to indicate this is a string pointer
+        strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "*Str", _TRUNCATE);
+        p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+        p->has_tracked_suffix = 1;
+
+        if (out_num)
+        {
+            out_num->value = 0;
+            out_num->suffix = p->tracked_suffix;
+            out_num->suffix_len = 4;
+        }
+
+        return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+    }
+
     // Check for dereference operator (*pointer)
     // This is handled at a different parsing level since * is used for multiplication
     // We'll detect it based on pointer type tracking
@@ -1119,13 +1163,44 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 skip_whitespace(p);
                 if (p->input[p->pos] == '[')
                 {
-                    // Check if this is an array or a slice (pointer-to-array)
+                    // Check if this is an array, slice, or string
                     int is_indexable = p->variables[idx].is_array ||
-                                       is_pointer_to_array_type(p->variables[idx].type);
+                                       is_pointer_to_array_type(p->variables[idx].type) ||
+                                       p->variables[idx].is_string;
 
                     if (!is_indexable)
                     {
                         return make_error("Cannot index non-array variable");
+                    }
+
+                    // If it's a string, handle string indexing
+                    if (p->variables[idx].is_string)
+                    {
+                        long index_value = 0;
+                        InterpretResult bracket_result = parse_bracket_index(p, &index_value);
+                        if (bracket_result.has_error)
+                            return bracket_result;
+
+                        if (index_value < 0 || index_value >= p->variables[idx].string_len)
+                        {
+                            return make_error("String index out of bounds");
+                        }
+
+                        int char_code = (unsigned char)p->variables[idx].string_value[index_value];
+
+                        // Set tracked suffix to I32 (char codes are numeric)
+                        strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "I32", _TRUNCATE);
+                        p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+                        p->has_tracked_suffix = 1;
+
+                        if (out_num)
+                        {
+                            out_num->value = char_code;
+                            out_num->suffix = p->tracked_suffix;
+                            out_num->suffix_len = 3;
+                        }
+
+                        return (InterpretResult){.value = char_code, .has_error = false, .error_message = NULL};
                     }
 
                     // If it's a slice, we need to handle it differently
@@ -2201,6 +2276,9 @@ static void init_variable_entry(Parser *p, const char *name, int name_len, long 
     }
     p->variables[p->var_count].slice_start = 0;
     p->variables[p->var_count].slice_end = 0;
+    p->variables[p->var_count].is_string = 0;
+    p->variables[p->var_count].string_value[0] = '\0';
+    p->variables[p->var_count].string_len = 0;
     register_declared_name(p, name, name_len);
 }
 
@@ -2327,6 +2405,30 @@ static int set_array_variable_with_mutability(
     {
         p->variables[p->var_count].array_values[i] = (i < init_count && values) ? values[i] : 0;
     }
+
+    return p->var_count++;
+}
+
+// Helper: Set a string variable with mutability
+static int set_variable_string_with_mutability(
+    Parser *p,
+    const char *name,
+    int name_len,
+    const char *string_value,
+    int string_len,
+    int is_mutable)
+{
+    if (p->var_count >= 10)
+        return -1;
+
+    init_variable_entry(p, name, name_len, 0, -1, is_mutable, "*Str");
+    p->variables[p->var_count].is_string = 1;
+    strncpy_s(p->variables[p->var_count].string_value,
+              sizeof(p->variables[p->var_count].string_value),
+              string_value,
+              string_len);
+    p->variables[p->var_count].string_value[string_len] = '\0';
+    p->variables[p->var_count].string_len = string_len;
 
     return p->var_count++;
 }
@@ -2714,6 +2816,11 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         return make_error("Struct literal must be assigned to a struct variable");
     }
 
+    if (p->has_temp_string && strcmp(declared_type, "*Str") != 0)
+    {
+        return make_error("String literal must be assigned to a string pointer variable");
+    }
+
     // Determine the actual type to use for the variable
     char actual_type[16] = {0}; // Expanded to 16 to accommodate pointer types like "*I32"
 
@@ -2785,6 +2892,26 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                 is_mutable);
 
             p->has_temp_struct = 0;
+            return finalize_statement(p, "Expected ';' after variable declaration");
+        }
+
+        // Check if declared type is string pointer type
+        if (strcmp(declared_type, "*Str") == 0)
+        {
+            if (!p->has_temp_string)
+            {
+                return make_error("String literal required for string pointer variable");
+            }
+
+            set_variable_string_with_mutability(
+                p,
+                var_name,
+                name_len,
+                p->temp_string_value,
+                p->temp_string_len,
+                is_mutable);
+
+            p->has_temp_string = 0;
             return finalize_statement(p, "Expected ';' after variable declaration");
         }
 
@@ -3034,15 +3161,15 @@ static InterpretResult parse_let_statements_loop(Parser *p)
 
             // Check what follows the identifier
             skip_whitespace(p);
-            int is_array_element = (p->input[p->pos] == '[');  // array[index] pattern
-            int is_assignment = has_assignment_operator(p);    // = or compound operator
+            int is_array_element = (p->input[p->pos] == '['); // array[index] pattern
+            int is_assignment = has_assignment_operator(p);   // = or compound operator
 
             // If it's array element, skip past [...] to check for assignment
             if (is_array_element && !is_assignment)
             {
                 // Skip bracket content to find assignment operator
                 int bracket_depth = 1;
-                p->pos++;  // Skip opening [
+                p->pos++; // Skip opening [
                 while (p->input[p->pos] && bracket_depth > 0)
                 {
                     if (p->input[p->pos] == '[')
