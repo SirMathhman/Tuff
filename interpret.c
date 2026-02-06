@@ -16,8 +16,9 @@ typedef struct
 {
     char name[32];
     long value;
-    char type[8];   // Store variable's type (e.g., "U8", "U16", empty if typeless)
-    int is_mutable; // 1 if mutable, 0 if immutable
+    char type[16];      // Store variable's type (e.g., "U8", "U16", "*I32", empty if typeless)
+    int is_mutable;     // 1 if mutable, 0 if immutable
+    int pointer_target; // -1 if not a pointer, otherwise index of pointed-to variable
 } Variable;
 
 typedef struct
@@ -50,6 +51,24 @@ static const TypeInfo type_info[] = {
     {"I32", -2147483648LL, 2147483647LL, "Value out of range for I32"},
     {"I64", -9223372036854775807LL - 1, 9223372036854775807LL, "Value out of range for I64"},
     {NULL, 0, 0, NULL}};
+
+// Helper: Check if a type string is a pointer type
+static int is_pointer_type(const char *type)
+{
+    return type && type[0] == '*' && type[1] != '\0';
+}
+
+// Helper: Extract the base type from a pointer type (e.g., "*I32" -> "I32")
+static void extract_pointer_base_type(const char *pointer_type, char *out_base_type, int max_len)
+{
+    if (!pointer_type || pointer_type[0] != '*')
+    {
+        out_base_type[0] = '\0';
+        return;
+    }
+    strncpy_s(out_base_type, max_len, &pointer_type[1], _TRUNCATE);
+    out_base_type[max_len - 1] = '\0';
+}
 
 static int suffix_length(const char *suffix)
 {
@@ -325,6 +344,8 @@ static InterpretResult parse_expression(Parser *p);
 // Forward declarations
 static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_num);
 static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num);
+static InterpretResult make_error(const char *message);
+static InterpretResult try_parse_assignment_expression(Parser *p);
 
 // Implementation of parse_and_validate_operand
 static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num)
@@ -451,6 +472,58 @@ static void set_bool_tracked_suffix(Parser *p)
 static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 {
     skip_whitespace(p);
+
+    // Check for address-of operator (&variable)
+    if (p->input[p->pos] == '&')
+    {
+        p->pos++; // Skip '&'
+        skip_whitespace(p);
+
+        // Parse the variable name after &
+        char var_name[32];
+        int name_len = parse_identifier(p, var_name, sizeof(var_name));
+        if (name_len <= 0)
+        {
+            return make_error("Expected variable name after & operator");
+        }
+
+        // Find the variable
+        int var_idx = find_variable(p, var_name, name_len);
+        if (var_idx < 0)
+        {
+            return make_error("Variable not found");
+        }
+
+        // Get the base type of the variable being pointed to
+        const char *var_type = p->variables[var_idx].type[0] != '\0'
+                                   ? p->variables[var_idx].type
+                                   : "I32"; // Default type for untyped variables
+
+        // Create pointer type: "*BaseType"
+        char pointer_type[16];
+        snprintf(pointer_type, sizeof(pointer_type), "*%s", var_type);
+
+        // Set the tracked suffix to the pointer type
+        strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), pointer_type, _TRUNCATE);
+        p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+        p->has_tracked_suffix = 1;
+
+        // The value represents the pointer target (variable index)
+        // We encode it so that assignment to pointer variables can use it
+        if (out_num)
+        {
+            out_num->value = var_idx; // Store variable index as the pointer value
+            out_num->suffix = pointer_type;
+            out_num->suffix_len = strlen(pointer_type);
+        }
+
+        // Return the variable index as the pointer value
+        return (InterpretResult){.value = var_idx, .has_error = false, .error_message = NULL};
+    }
+
+    // Check for dereference operator (*pointer)
+    // This is handled at a different parsing level since * is used for multiplication
+    // We'll detect it based on pointer type tracking
 
     // Check for variable reference or boolean literal
     if (isalpha(p->input[p->pos]))
@@ -612,6 +685,7 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
     {
         p->variables[idx].value = value;
         p->variables[idx].is_mutable = is_mutable;
+        p->variables[idx].pointer_target = -1; // Reset pointer target on update
         if (type && type[0])
         {
             strncpy_s(p->variables[idx].type, sizeof(p->variables[idx].type), type, _TRUNCATE);
@@ -627,9 +701,57 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
     p->variables[p->var_count].name[name_len] = '\0';
     p->variables[p->var_count].value = value;
     p->variables[p->var_count].is_mutable = is_mutable;
+    p->variables[p->var_count].pointer_target = -1; // Initialize pointer target
     if (type && type[0])
     {
         strncpy_s(p->variables[p->var_count].type, sizeof(p->variables[p->var_count].type), type, _TRUNCATE);
+        p->variables[p->var_count].type[sizeof(p->variables[p->var_count].type) - 1] = '\0';
+    }
+    else
+    {
+        p->variables[p->var_count].type[0] = '\0';
+    }
+
+    // Track this name in the all_declared_names array for duplicate checking across scopes
+    if (p->all_declared_count < 10)
+    {
+        strncpy_s(p->all_declared_names[p->all_declared_count], sizeof(p->all_declared_names[p->all_declared_count]), name, name_len);
+        p->all_declared_names[p->all_declared_count][name_len] = '\0';
+        p->all_declared_count++;
+    }
+
+    return p->var_count++;
+}
+
+// Helper: Set a pointer variable
+static int set_pointer_variable_with_mutability(Parser *p, const char *name, int name_len, int target_idx, const char *pointer_type, int is_mutable)
+{
+    // target_idx is the index of the variable being pointed to
+    int idx = find_variable(p, name, name_len);
+    if (idx >= 0)
+    {
+        p->variables[idx].value = 0; // Pointer values don't store direct values
+        p->variables[idx].is_mutable = is_mutable;
+        p->variables[idx].pointer_target = target_idx;
+        if (pointer_type && pointer_type[0])
+        {
+            strncpy_s(p->variables[idx].type, sizeof(p->variables[idx].type), pointer_type, _TRUNCATE);
+            p->variables[idx].type[sizeof(p->variables[idx].type) - 1] = '\0';
+        }
+        return idx;
+    }
+
+    if (p->var_count >= 10)
+        return -1; // Too many variables
+
+    strncpy_s(p->variables[p->var_count].name, sizeof(p->variables[p->var_count].name), name, name_len);
+    p->variables[p->var_count].name[name_len] = '\0';
+    p->variables[p->var_count].value = 0; // Pointer values don't store direct values
+    p->variables[p->var_count].is_mutable = is_mutable;
+    p->variables[p->var_count].pointer_target = target_idx;
+    if (pointer_type && pointer_type[0])
+    {
+        strncpy_s(p->variables[p->var_count].type, sizeof(p->variables[p->var_count].type), pointer_type, _TRUNCATE);
         p->variables[p->var_count].type[sizeof(p->variables[p->var_count].type) - 1] = '\0';
     }
     else
@@ -850,18 +972,34 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     }
     else if (p->input[p->pos] == ':')
     {
-        // Typed declaration: let x : Type = value;
+        // Typed declaration: let x : Type = value; or let x : *Type = value;
         p->pos++; // Skip ':'
         skip_whitespace(p);
 
+        // Check for pointer type (*)
+        int is_pointer = 0;
+        if (p->input[p->pos] == '*')
+        {
+            is_pointer = 1;
+            p->pos++; // Skip '*'
+            skip_whitespace(p);
+        }
+
         // Parse type
-        char type_name[8];
+        char type_name[16];
         InterpretResult type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected type name");
         if (type_result.has_error)
             return type_result;
 
         // Store the declared type for validation later
-        strncpy_s(declared_type, sizeof(declared_type), type_name, _TRUNCATE);
+        if (is_pointer)
+        {
+            snprintf(declared_type, sizeof(declared_type), "*%s", type_name);
+        }
+        else
+        {
+            strncpy_s(declared_type, sizeof(declared_type), type_name, _TRUNCATE);
+        }
         declared_type[sizeof(declared_type) - 1] = '\0';
 
         // Expect '='
@@ -881,7 +1019,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         return val_result;
 
     // Determine the actual type to use for the variable
-    char actual_type[8] = {0};
+    char actual_type[16] = {0}; // Expanded to 16 to accommodate pointer types like "*I32"
 
     if (declared_type[0] != '\0')
     {
@@ -889,26 +1027,63 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         strncpy_s(actual_type, sizeof(actual_type), declared_type, _TRUNCATE);
         actual_type[sizeof(actual_type) - 1] = '\0';
 
-        // Check compatibility based on what type the value has
-        if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+        // Check if declared type is a pointer type
+        if (is_pointer_type(declared_type))
         {
-            // Value has explicit type - check compatibility
-            if (!is_type_compatible(declared_type, p->tracked_suffix))
+            // Pointer type validation
+            // Check that the value has a pointer type matching the declared pointer type
+            if (!p->has_tracked_suffix || !is_pointer_type(p->tracked_suffix))
             {
-                return make_error("Variable type mismatch: declared type does not match assigned value type");
+                return make_error("Cannot assign non-pointer value to pointer variable");
             }
-        }
-        else if (strcmp(declared_type, "Bool") == 0)
-        {
-            // Bool requires boolean values, not numeric ones
-            return make_error("Variable type mismatch: declared type does not match assigned value type");
+
+            // Check that the base types match
+            if (strcmp(declared_type, p->tracked_suffix) != 0)
+            {
+                return make_error("Pointer type mismatch: incompatible base types");
+            }
+
+            // For pointer variables, val_result.value contains the target variable index
+            // Extract it and store the pointer
+            if (val_result.value < 0 || val_result.value >= p->var_count)
+            {
+                return make_error("Invalid pointer target");
+            }
+
+            set_pointer_variable_with_mutability(p, var_name, name_len, val_result.value, actual_type, is_mutable);
         }
         else
         {
-            // Value is untyped - validate it fits in the declared type
-            InterpretResult validation = validate_type(val_result.value, declared_type);
-            if (validation.has_error)
-                return validation;
+            // Non-pointer type validation
+            // Check compatibility based on what type the value has
+            if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+            {
+                // Value has explicit type - check compatibility
+                if (!is_type_compatible(declared_type, p->tracked_suffix))
+                {
+                    return make_error("Variable type mismatch: declared type does not match assigned value type");
+                }
+            }
+            else if (strcmp(declared_type, "Bool") == 0)
+            {
+                // Bool requires boolean values, not numeric ones
+                return make_error("Variable type mismatch: declared type does not match assigned value type");
+            }
+            else
+            {
+                // Value is untyped - validate it fits in the declared type
+                InterpretResult validation = validate_type(val_result.value, declared_type);
+                if (validation.has_error)
+                    return validation;
+            }
+
+            // Validate the value fits in the actual type
+            InterpretResult type_validation = validate_type(val_result.value, actual_type);
+            if (type_validation.has_error)
+                return type_validation;
+
+            // Store variable with the actual type
+            set_variable_with_mutability(p, var_name, name_len, val_result.value, actual_type, is_mutable);
         }
     }
     else if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
@@ -916,21 +1091,27 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         // No explicit type declared, but value has a type - use value's type
         strncpy_s(actual_type, sizeof(actual_type), p->tracked_suffix, _TRUNCATE);
         actual_type[sizeof(actual_type) - 1] = '\0';
+
+        // If value is a pointer type, handle as pointer variable
+        if (is_pointer_type(actual_type))
+        {
+            set_pointer_variable_with_mutability(p, var_name, name_len, val_result.value, actual_type, is_mutable);
+        }
+        else
+        {
+            // Store variable with the tracked type
+            set_variable_with_mutability(p, var_name, name_len, val_result.value, actual_type, is_mutable);
+        }
     }
     else
     {
         // No explicit type declared, untyped value - default to I32
         strncpy_s(actual_type, sizeof(actual_type), "I32", _TRUNCATE);
         actual_type[sizeof(actual_type) - 1] = '\0';
+
+        // Store variable with I32 type
+        set_variable_with_mutability(p, var_name, name_len, val_result.value, actual_type, is_mutable);
     }
-
-    // Validate the value fits in the actual type
-    InterpretResult type_validation = validate_type(val_result.value, actual_type);
-    if (type_validation.has_error)
-        return type_validation;
-
-    // Store variable with the actual type
-    set_variable_with_mutability(p, var_name, name_len, val_result.value, actual_type, is_mutable);
 
     return finalize_statement(p, "Expected ';' after variable declaration");
 }
@@ -959,6 +1140,39 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             skip_whitespace(p);
             has_last_statement = 0; // let statements don't have values
             saw_statement = 1;
+        }
+        // Check for dereference assignment statement (*variable = value)
+        else if (p->input[p->pos] == '*' && isalpha(p->input[p->pos + 1]))
+        {
+            // Look ahead to see if this is a dereference assignment
+            int saved_pos = p->pos;
+            p->pos++; // Skip '*'
+            skip_whitespace(p);
+            char temp_name[32];
+            int name_len = parse_identifier(p, temp_name, sizeof(temp_name));
+
+            // Check if this pointer variable is followed by an assignment operator
+            int is_assignment = has_assignment_operator(p);
+
+            // Reset position and handle accordingly
+            p->pos = saved_pos;
+
+            if (is_assignment)
+            {
+                InterpretResult assign_result = try_parse_assignment_expression(p);
+                if (assign_result.has_error && strcmp(assign_result.error_message, "not_an_assignment") != 0)
+                {
+                    return assign_result;
+                }
+                skip_whitespace(p);
+                has_last_statement = 0; // assignments at this level don't have values to return
+                saw_statement = 1;
+            }
+            else
+            {
+                // Not an assignment, exit the loop
+                break;
+            }
         }
         // Check for assignment statement (identifier followed by '=')
         else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match") && !is_keyword_at(p, "for"))
@@ -1281,8 +1495,116 @@ static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_nam
 static InterpretResult try_parse_assignment_expression(Parser *p)
 {
     int saved_pos = p->pos;
+    skip_whitespace(p);
 
-    // Try to parse an identifier
+    // Check for dereference assignment (*var = value)
+    if (p->input[p->pos] == '*' && isalpha(p->input[p->pos + 1]))
+    {
+        p->pos++; // Skip '*'
+        skip_whitespace(p);
+
+        // Parse the pointer variable name
+        char ptr_var_name[32];
+        int ptr_var_len = parse_identifier(p, ptr_var_name, sizeof(ptr_var_name));
+        if (ptr_var_len <= 0)
+        {
+            p->pos = saved_pos;
+            return make_error("not_an_assignment");
+        }
+
+        skip_whitespace(p);
+
+        // Check for assignment operator
+        int is_assignment = 0;
+        char compound_op = '\0';
+        if (p->input[p->pos] == '=' && p->input[p->pos + 1] != '=')
+        {
+            is_assignment = 1;
+            compound_op = '=';
+        }
+        else if ((p->input[p->pos] == '+' || p->input[p->pos] == '-' ||
+                  p->input[p->pos] == '*' || p->input[p->pos] == '/') &&
+                 p->input[p->pos + 1] == '=')
+        {
+            is_assignment = 1;
+            compound_op = p->input[p->pos];
+        }
+
+        if (!is_assignment)
+        {
+            p->pos = saved_pos;
+            return make_error("not_an_assignment");
+        }
+
+        // Find the pointer variable
+        int ptr_idx = find_variable(p, ptr_var_name, ptr_var_len);
+        if (ptr_idx < 0)
+        {
+            return make_error("Variable not found");
+        }
+
+        // Check that it's a pointer variable
+        if (!is_pointer_type(p->variables[ptr_idx].type))
+        {
+            return make_error("Cannot dereference non-pointer variable");
+        }
+
+        // Get the target variable index from pointer_target
+        int target_idx = p->variables[ptr_idx].pointer_target;
+        if (target_idx < 0 || target_idx >= p->var_count)
+        {
+            return make_error("Invalid pointer target");
+        }
+
+        // Check if the target variable is mutable
+        if (!p->variables[target_idx].is_mutable)
+        {
+            return make_error("Cannot assign to immutable variable");
+        }
+
+        // Parse the assignment operator
+        p->pos += (compound_op == '=' ? 1 : 2);
+        skip_whitespace(p);
+
+        // Parse the value expression
+        InterpretResult val_result = parse_additive(p);
+        if (val_result.has_error)
+            return val_result;
+
+        // Calculate the final value
+        long final_value = val_result.value;
+        if (compound_op != '=')
+        {
+            // Apply the compound operation
+            long current_value = p->variables[target_idx].value;
+            if (compound_op == '+')
+                final_value = current_value + val_result.value;
+            else if (compound_op == '-')
+                final_value = current_value - val_result.value;
+            else if (compound_op == '*')
+                final_value = current_value * val_result.value;
+            else if (compound_op == '/')
+            {
+                if (val_result.value == 0)
+                    return make_error("Division by zero");
+                final_value = current_value / val_result.value;
+            }
+        }
+
+        // Update the target variable's value
+        p->variables[target_idx].value = final_value;
+
+        // Consume optional semicolon
+        skip_whitespace(p);
+        if (p->input[p->pos] == ';')
+        {
+            p->pos++;
+        }
+
+        return (InterpretResult){.value = final_value, .has_error = false, .error_message = NULL};
+    }
+
+    // Try to parse a regular identifier assignment
     char var_name[32];
     int name_len = 0;
     if (!isalpha(p->input[p->pos]))
@@ -1352,6 +1674,58 @@ static InterpretResult parse_assignment_statement_in_block(Parser *p)
 static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
 {
     skip_whitespace(p);
+
+    // Check for dereference operator (*pointer)
+    // This must be distinguished from multiplication - we check if we're at the start of an operand
+    if (p->input[p->pos] == '*' && !isdigit(p->input[p->pos + 1]))
+    {
+        // Might be a dereference operator (not multiplication)
+        // We'll parse the following primary and check if it's a pointer type
+        int saved_pos = p->pos;
+        p->pos++; // Skip '*'
+
+        // Parse the operand after *
+        InterpretResult ptr_expr = parse_primary(p, out_num);
+        if (ptr_expr.has_error)
+        {
+            p->pos = saved_pos;
+            // Not a dereference, fall through to parsing as normal operand
+        }
+        else if (!p->has_tracked_suffix || !is_pointer_type(p->tracked_suffix))
+        {
+            // Not a pointer type, so * is an error (cannot dereference non-pointer)
+            return make_error("Cannot dereference non-pointer value");
+        }
+        else
+        {
+            // This is a dereference operation on a pointer type
+            // ptr_expr.value contains the variable index to dereference
+            // p->tracked_suffix contains the pointer type like "*I32"
+
+            // Extract the base type from the pointer type
+            char base_type[16];
+            extract_pointer_base_type(p->tracked_suffix, base_type, sizeof(base_type));
+
+            // Validate the pointer index is valid
+            if (ptr_expr.value < 0 || ptr_expr.value >= p->var_count)
+            {
+                return make_error("Invalid pointer dereference");
+            }
+
+            // Get the value from the pointed-to variable
+            long deref_value = p->variables[ptr_expr.value].value;
+
+            // Update tracked suffix to the dereferenced type
+            strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), base_type, _TRUNCATE);
+            p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+            p->has_tracked_suffix = 1;
+
+            if (out_num)
+                out_num->suffix_len = 0;
+
+            return (InterpretResult){.value = (int)deref_value, .has_error = false, .error_message = NULL};
+        }
+    }
 
     if (p->input[p->pos] == '(' || p->input[p->pos] == '{')
     {

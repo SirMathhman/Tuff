@@ -14,15 +14,15 @@ static void assert_success(const char *input, int expected_value, const char *te
         printf("'%s' failed!\n", test_name);
         printf("ERROR in '%s': %s\n", test_name, result.error_message);
     }
-    assert(!result.has_error);
-
-    if (result.value != expected_value)
+    else if (result.value != expected_value)
     {
         printf("'%s' failed!\n", test_name);
         printf("ERROR in '%s': Expected value %d but got %d\n", test_name, expected_value, result.value);
     }
-    assert(result.value == expected_value);
-    passed_asserts++;
+    else
+    {
+        passed_asserts++;
+    }
 }
 
 static void assert_error(const char *input, const char *test_name)
@@ -34,8 +34,10 @@ static void assert_error(const char *input, const char *test_name)
         printf("'%s' failed!\n", test_name);
         printf("ERROR in '%s': Expected error but got value %d\n", test_name, result.value);
     }
-    assert(result.has_error);
-    passed_asserts++;
+    else
+    {
+        passed_asserts++;
+    }
 }
 
 void test_interpret_empty_string(void)
@@ -553,6 +555,31 @@ void test_interpret_for_loop_missing_in_keyword_error(void)
     assert_error("for (i to 0..5) { }", "test_interpret_for_loop_missing_in_keyword_error");
 }
 
+void test_interpret_pointer_basic(void)
+{
+    assert_success("let x = 100; let y : *I32 = &x; *y", 100, "test_interpret_pointer_basic");
+}
+
+void test_interpret_pointer_mutable_dereference_assign(void)
+{
+    assert_success("let mut x = 100; let y : *I32 = &x; *y = 200; x", 200, "test_interpret_pointer_mutable_dereference_assign");
+}
+
+void test_interpret_pointer_immutable_dereference_assign_error(void)
+{
+    assert_error("let x = 100; let y : *I32 = &x; *y = 200; x", "test_interpret_pointer_immutable_dereference_assign_error");
+}
+
+void test_interpret_pointer_type_mismatch_error(void)
+{
+    assert_error("let x : U8 = 100; let y : *I32 = &x;", "test_interpret_pointer_type_mismatch_error");
+}
+
+void test_interpret_pointer_dereference_non_pointer_error(void)
+{
+    assert_error("let x = 100; *x", "test_interpret_pointer_dereference_non_pointer_error");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -659,14 +686,20 @@ int main(void)
     test_interpret_for_loop_variable_shadowing_error();
     test_interpret_for_loop_nested_shadowing_error();
     test_interpret_for_loop_missing_in_keyword_error();
+    test_interpret_pointer_basic();
+    test_interpret_pointer_mutable_dereference_assign();
+    test_interpret_pointer_immutable_dereference_assign_error();
+    test_interpret_pointer_type_mismatch_error();
+    test_interpret_pointer_dereference_non_pointer_error();
 
     if (passed_asserts == total_asserts)
     {
         printf("All %d tests passed!\n", passed_asserts);
+        return 0;
     }
     else
     {
         printf("%d out of %d tests passed.\n", passed_asserts, total_asserts);
+        return -1;
     }
-    return 0;
 }
