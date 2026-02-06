@@ -635,6 +635,11 @@ void test_interpret_function_implicit_return_type(void)
     assert_success("fn add(first : I32, second : I32) => { first + second } add(3, 4)", 7, "test_interpret_function_implicit_return_type");
 }
 
+void test_interpret_function_implicit_body(void)
+{
+    assert_success("fn add(first : I32, second : I32) => first + second; add(3, 4)", 7, "test_interpret_function_implicit_body");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -757,6 +762,7 @@ int main(void)
     test_interpret_function_argument_count_mismatch();
     test_interpret_function_argument_type_mismatch();
     test_interpret_function_implicit_return_type();
+    test_interpret_function_implicit_body();
 
     if (passed_asserts == total_asserts)
     {

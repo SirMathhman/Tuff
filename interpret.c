@@ -37,6 +37,7 @@ typedef struct
     char return_type[32];     // Return type
     int body_start_pos;       // Position in input where function body starts
     int body_end_pos;         // Position in input where function body ends
+    int is_braced_body;       // 1 if body has braces { }, 0 if implicit body
 } FunctionInfo;
 
 typedef struct
@@ -1092,7 +1093,14 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                     // Save position and jump to function body
                     int saved_pos = p->pos;
-                    p->pos = p->functions[func_idx].body_start_pos + 1; // Skip opening brace
+                    if (p->functions[func_idx].is_braced_body)
+                    {
+                        p->pos = p->functions[func_idx].body_start_pos + 1; // Skip opening brace
+                    }
+                    else
+                    {
+                        p->pos = p->functions[func_idx].body_start_pos; // No brace to skip
+                    }
 
                     // Parse and execute function body
                     skip_whitespace(p);
@@ -1300,7 +1308,7 @@ static InterpretResult parse_function_declaration(Parser *p)
         int type_len = parse_identifier(p, return_type, sizeof(return_type));
         if (type_len <= 0)
             return make_error("Expected return type");
-        
+
         return_type[type_len] = '\0';
 
         skip_whitespace(p);
@@ -1319,13 +1327,19 @@ static InterpretResult parse_function_declaration(Parser *p)
 
     skip_whitespace(p);
 
-    // Parse function body (for now, just skip it - we only care about tracking)
-    // Save position before body
-    int body_start_pos = p->pos;
+    // Parse function body
+    // Support two syntaxes:
+    // 1. Braced body: => { expression }
+    // 2. Implicit body: => expression;
 
-    // Skip the body - for empty functions, it's just {}
+    int body_start_pos = p->pos;
+    int body_end_pos = p->pos;
+    int is_braced_body = 0;
+
     if (p->input[p->pos] == '{')
     {
+        // Braced body: { expression }
+        is_braced_body = 1;
         p->pos++; // Skip '{'
         skip_whitespace(p);
 
@@ -1339,14 +1353,25 @@ static InterpretResult parse_function_declaration(Parser *p)
                 brace_count--;
             p->pos++;
         }
+        body_end_pos = p->pos;
     }
     else
     {
-        return make_error("Expected '{' to start function body");
-    }
+        // Implicit body: expression;
+        // Parse until we find a semicolon
+        while (p->input[p->pos] && p->input[p->pos] != ';')
+        {
+            p->pos++;
+        }
 
-    // Save the body end position
-    int body_end_pos = p->pos;
+        if (p->input[p->pos] != ';')
+        {
+            return make_error("Expected ';' after implicit function body");
+        }
+
+        body_end_pos = p->pos;
+        p->pos++; // Skip the semicolon
+    }
 
     // Store the function info
     if (p->functions_count >= 10)
@@ -1369,6 +1394,7 @@ static InterpretResult parse_function_declaration(Parser *p)
 
     p->functions[p->functions_count].body_start_pos = body_start_pos;
     p->functions[p->functions_count].body_end_pos = body_end_pos;
+    p->functions[p->functions_count].is_braced_body = is_braced_body;
 
     p->functions_count++;
 
