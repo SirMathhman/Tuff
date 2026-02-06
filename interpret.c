@@ -1048,6 +1048,10 @@ static InterpretResult parse_function_declaration(Parser *p)
     skip_whitespace(p);
 
     // Parse function parameters (name : Type pairs separated by commas)
+    // Track parameter names to detect duplicates
+    char param_names[10][32];
+    int param_count = 0;
+
     while (p->input[p->pos] != ')')
     {
         skip_whitespace(p);
@@ -1061,6 +1065,23 @@ static InterpretResult parse_function_declaration(Parser *p)
         int param_name_len = parse_identifier(p, param_name, sizeof(param_name));
         if (param_name_len <= 0)
             return make_error("Expected parameter name");
+
+        // Check if parameter name is already declared
+        for (int i = 0; i < param_count; i++)
+        {
+            if (strncmp(param_names[i], param_name, param_name_len) == 0 &&
+                param_names[i][param_name_len] == '\0')
+            {
+                return make_error("Duplicate parameter name");
+            }
+        }
+
+        // Register the parameter name
+        if (param_count >= 10)
+            return make_error("Too many function parameters");
+        strncpy_s(param_names[param_count], sizeof(param_names[param_count]), param_name, param_name_len);
+        param_names[param_count][param_name_len] = '\0';
+        param_count++;
 
         skip_whitespace(p);
 
