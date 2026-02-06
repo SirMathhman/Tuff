@@ -424,6 +424,10 @@ static int is_type_compatible(const char *dest_type, const char *source_type)
     if (strcmp(dest_type, "Bool") == 0 && strcmp(source_type, "Bool") == 0)
         return 1;
 
+    // Check for Char type (special case)
+    if (strcmp(dest_type, "Char") == 0 && strcmp(source_type, "Char") == 0)
+        return 1;
+
     int dest_idx = get_type_info_index(dest_type);
     int src_idx = get_type_info_index(source_type);
 
@@ -917,9 +921,45 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
         return (InterpretResult){.value = var_idx, .has_error = false, .error_message = NULL};
     }
 
+    // Check for character literal ('a', 'b', etc.)
+    if (p->input[p->pos] == '\'')
+    {
+        // Parse character literal: 'x'
+        p->pos++; // Skip opening single quote
+        
+        if (!p->input[p->pos] || p->input[p->pos] == '\'')
+        {
+            return make_error("Expected character in character literal");
+        }
+        
+        int char_value = (unsigned char)p->input[p->pos];
+        p->pos++; // Move to potential closing quote
+        
+        if (p->input[p->pos] != '\'')
+        {
+            return make_error("Expected closing single quote after character literal");
+        }
+        p->pos++; // Skip closing single quote
+        
+        // Set Char type tracking
+        strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "Char", _TRUNCATE);
+        p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+        p->has_tracked_suffix = 1;
+        
+        if (out_num)
+        {
+            out_num->value = char_value;
+            out_num->suffix = p->tracked_suffix;
+            out_num->suffix_len = 4;
+        }
+        
+        return (InterpretResult){.value = char_value, .has_error = false, .error_message = NULL};
+    }
+
     // Check for dereference operator (*pointer)
     // This is handled at a different parsing level since * is used for multiplication
     // We'll detect it based on pointer type tracking
+
 
     // Check for variable reference or boolean literal
     if (isalpha(p->input[p->pos]))
