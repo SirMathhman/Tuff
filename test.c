@@ -695,6 +695,11 @@ void test_interpret_struct_instantiation_and_field_access(void)
     assert_success("struct Point { x : I32; y : I32; } let point : Point = Point { x : 3, y : 4 }; point.x + point.y", 7, "test_interpret_struct_instantiation_and_field_access");
 }
 
+void test_interpret_struct_out_of_order_field_init(void)
+{
+    assert_success("struct Point { x : I32; y : I32; } let point : Point = Point { y : 4, x : 3 }; point.x - point.y", -1, "test_interpret_struct_out_of_order_field_init");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -829,6 +834,7 @@ int main(void)
     test_interpret_struct_with_typed_fields();
     test_interpret_struct_with_duplicate_fields();
     test_interpret_struct_instantiation_and_field_access();
+    test_interpret_struct_out_of_order_field_init();
 
     if (passed_asserts == total_asserts)
     {
