@@ -173,7 +173,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
 
     CompileResult compiled = compile(source);
     if (compiled.has_error)
-        return (RunResult){.exit_code = 1, .has_error = true, .error_message = compiled.error_message};
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = compiled.error_message, .compiled_code = NULL};
 
     char c_path[MAX_PATH] = {0};
     char exe_path[MAX_PATH] = {0};
@@ -222,7 +222,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
     if (temp_dir_len == 0 || temp_dir_len >= sizeof(temp_dir))
     {
         free(compiled.code);
-        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to get temp directory"};
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to get temp directory", .compiled_code = NULL};
     }
 
     if (!using_cache)
@@ -232,7 +232,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
         if (GetTempFileNameA(temp_dir, "tuf", 0, temp_base) == 0)
         {
             free(compiled.code);
-            return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to create temp file"};
+            return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to create temp file", .compiled_code = NULL};
         }
 
         // Derive paths: replace extension with .c and .exe
@@ -259,7 +259,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
         if (fopen_s(&f, c_path, "wb") != 0 || !f)
         {
             free(compiled.code);
-            return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to open temp file for writing"};
+            return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to open temp file for writing", .compiled_code = NULL};
         }
         fwrite(compiled.code, 1, strlen(compiled.code), f);
         fclose(f);
@@ -274,7 +274,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
             if (GetTempFileNameA(temp_dir, "err", 0, error_file) == 0)
             {
                 free(compiled.code);
-                return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to create temp file for clang errors"};
+                return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to create temp file for clang errors", .compiled_code = NULL};
             }
 
             // Build command with stderr redirection: clang input.c -o output.exe 2>errors.txt
@@ -289,7 +289,6 @@ RunResult run(const char *source, const char *test_name, const char *const *args
                     DeleteFileA(c_path);
                 if (!using_cache)
                     DeleteFileA(exe_path);
-                free(compiled.code);
 
                 // Read and format error message with clang output
                 FILE *ef = NULL;
@@ -318,7 +317,8 @@ RunResult run(const char *source, const char *test_name, const char *const *args
                     RunResult err = (RunResult){
                         .exit_code = clang_exit == -1 ? 1 : clang_exit,
                         .has_error = true,
-                        .error_message = error_message};
+                        .error_message = error_message,
+                        .compiled_code = compiled.code};
                     DeleteFileA(error_file);
                     // Note: error_message is leaked, but that's acceptable for error paths
                     return err;
@@ -329,7 +329,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
                 }
 
                 DeleteFileA(error_file);
-                return (RunResult){.exit_code = clang_exit == -1 ? 1 : clang_exit, .has_error = true, .error_message = "Clang compilation failed"};
+                return (RunResult){.exit_code = clang_exit == -1 ? 1 : clang_exit, .has_error = true, .error_message = "Clang compilation failed", .compiled_code = compiled.code};
             }
 
             DeleteFileA(error_file);
@@ -352,7 +352,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
             DeleteFileA(c_path);
         if (!using_cache)
             DeleteFileA(exe_path);
-        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to allocate argument vector"};
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to allocate argument vector", .compiled_code = NULL};
     }
     prog_argv[0] = exe_path;
     for (int i = 0; i < arg_count; i++)
@@ -365,7 +365,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
     if (!using_cache)
         DeleteFileA(exe_path);
 
-    return (RunResult){.exit_code = program_exit, .has_error = false, .error_message = NULL};
+    return (RunResult){.exit_code = program_exit, .has_error = false, .error_message = NULL, .compiled_code = NULL};
 }
 
 // Helper: Validate RunResult and check exit code, with error logging
@@ -376,6 +376,12 @@ static int validate_run_result(RunResult run_result, int expected_value, const c
     {
         printf("'%s' failed!\n", test_name);
         printf("ERROR in '%s': Expected success but got error: %s\n", test_name, run_result.error_message);
+        if (run_result.compiled_code)
+        {
+            printf("\n--- Compiled C Code ---\n");
+            printf("%s\n", run_result.compiled_code);
+            printf("--- End Compiled Code ---\n\n");
+        }
         return 0;
     }
 

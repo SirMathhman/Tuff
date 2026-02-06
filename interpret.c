@@ -5999,7 +5999,7 @@ static int32_t compile_args_expression_ex(const char *expr, char *out_buf, size_
 
         if (strncmp(s, "__args__.length", 15) == 0)
         {
-            strncat_s(out_buf, buf_size, "argc", _TRUNCATE);
+            strncat_s(out_buf, buf_size, "__tuff_argc", _TRUNCATE);
             s += 15;
         }
         else if (strncmp(s, "__args__[", 9) == 0)
@@ -6016,14 +6016,14 @@ static int32_t compile_args_expression_ex(const char *expr, char *out_buf, size_
             {
                 s += 8;
                 char expr_buf[64];
-                snprintf(expr_buf, sizeof(expr_buf), "(int)strlen(argv[%d])", index);
+                snprintf(expr_buf, sizeof(expr_buf), "(int)strlen(__tuff_argv[%d])", index);
                 strncat_s(out_buf, buf_size, expr_buf, _TRUNCATE);
             }
             else if (*s == ']')
             {
                 s++; // skip ']'
                 char expr_buf[64];
-                snprintf(expr_buf, sizeof(expr_buf), "argv[%d]", index);
+                snprintf(expr_buf, sizeof(expr_buf), "__tuff_argv[%d]", index);
                 strncat_s(out_buf, buf_size, expr_buf, _TRUNCATE);
             }
         }
@@ -6800,6 +6800,12 @@ static CompileResult compile_args_source(const char *source)
     // Track struct definitions
     StructDef structs[10] = {{{0}}};
     int32_t struct_count = 0;
+    
+    // Flag: whether __args__ appears anywhere in the source
+    int32_t any_args_in_source = (source && strstr(source, "__args__") != NULL) ? 1 : 0;
+
+    // Flag: whether any function uses __args__ (starts true if source has __args__)
+    int32_t any_func_uses_args = any_args_in_source;
 
     // First pass: Extract all struct and function definitions
     const char *s = source;
@@ -6888,7 +6894,7 @@ static CompileResult compile_args_source(const char *source)
     }
 
     // Generate function declarations and implementations
-    if (func_count > 0 || struct_count > 0)
+    if (func_count > 0 || struct_count > 0 || any_args_in_source)
     {
         // Detect global variables: variables referenced in function bodies but not in parameters
         char global_vars[16][32] = {{0}};
@@ -6987,6 +6993,22 @@ static CompileResult compile_args_source(const char *source)
         }
 
         // Generate global variable declarations (will be initialized in main)
+
+        // Check if any function uses __args__ (also check in any_func_uses_args from first pass)
+        for (int32_t i = 0; i < func_count && !any_func_uses_args; i++)
+        {
+            if (strstr(functions[i].body, "__args__") != NULL)
+                any_func_uses_args = 1;
+        }
+
+        // If __args__ appears anywhere, declare argc/argv as globals with non-conflicting names
+        if (any_args_in_source)
+        {
+            strncat_s(c_code, sizeof(c_code), "// Global argc/argv for __args__ access\n", _TRUNCATE);
+            strncat_s(c_code, sizeof(c_code), "int32_t __tuff_argc = 0;\n", _TRUNCATE);
+            strncat_s(c_code, sizeof(c_code), "char **__tuff_argv = NULL;\n\n", _TRUNCATE);
+        }
+
         for (int32_t i = 0; i < global_count; i++)
         {
             strncat_s(c_code, sizeof(c_code), "int32_t ", _TRUNCATE);
@@ -7001,7 +7023,8 @@ static CompileResult compile_args_source(const char *source)
         {
             emit_function_signature(c_code, sizeof(c_code), &functions[i], 1);
         }
-        strncat_s(c_code, sizeof(c_code), "\n", _TRUNCATE);
+        if (func_count > 0)
+            strncat_s(c_code, sizeof(c_code), "\n", _TRUNCATE);
 
         // Generate function implementations
         for (int32_t i = 0; i < func_count; i++)
@@ -7009,10 +7032,30 @@ static CompileResult compile_args_source(const char *source)
             emit_function_signature(c_code, sizeof(c_code), &functions[i], 0);
             strncat_s(c_code, sizeof(c_code), " {\n    return ", _TRUNCATE);
 
-            // Convert if-else to ternary in function body
-            char body_converted[512] = {0};
-            compile_args_convert_if_else(functions[i].body, body_converted, sizeof(body_converted));
-            strncat_s(c_code, sizeof(c_code), body_converted, _TRUNCATE);
+            // Check if function body contains __args__
+            if (strstr(functions[i].body, "__args__") != NULL)
+            {
+                // Body contains __args__, need proper transpilation
+                char temp_body[512] = {0};
+
+                // First convert if-else to ternary
+                compile_args_convert_if_else(functions[i].body, temp_body, sizeof(temp_body));
+
+                // Now transpile __args__ references in the result
+                char body_transpiled[512] = {0};
+                compile_args_expression_with_funcs(temp_body, body_transpiled, sizeof(body_transpiled),
+                                                   var_names, var_types, var_count, functions, func_count);
+
+                strncat_s(c_code, sizeof(c_code), body_transpiled, _TRUNCATE);
+            }
+            else
+            {
+                // Body doesn't contain __args__, just convert if-else to ternary
+                char body_converted[512] = {0};
+                compile_args_convert_if_else(functions[i].body, body_converted, sizeof(body_converted));
+                strncat_s(c_code, sizeof(c_code), body_converted, _TRUNCATE);
+            }
+
             strncat_s(c_code, sizeof(c_code), ";\n}\n\n", _TRUNCATE);
         }
 
@@ -7030,6 +7073,13 @@ static CompileResult compile_args_source(const char *source)
 
     // Generate main function
     strncat_s(c_code, sizeof(c_code), "int32_t main(int32_t argc, char **argv) {\n", _TRUNCATE);
+
+        // Initialize global argc/argv if __args__ appears anywhere
+        if (any_args_in_source)
+    {
+        strncat_s(c_code, sizeof(c_code), "    __tuff_argc = argc;\n", _TRUNCATE);
+        strncat_s(c_code, sizeof(c_code), "    __tuff_argv = argv;\n", _TRUNCATE);
+    }
 
     // Second pass: Process variable declarations and return expression
     s = source;

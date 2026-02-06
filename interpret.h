@@ -22,6 +22,7 @@ typedef struct
     int exit_code;
     bool has_error;
     const char *error_message;
+    const char *compiled_code; // For debugging: the generated C code (may be NULL)
 } RunResult;
 
 InterpretResult interpret(const char *str);
