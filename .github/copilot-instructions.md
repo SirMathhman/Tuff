@@ -1,25 +1,56 @@
 # Tuff Language Interpreter - AI Coding Guidelines
 
-## Project Overview
+## Quick Reference: What is Tuff?
 
-**Tuff** is a typed expression language interpreter written in C. It supports:
+**Tuff** is a typed expression language interpreter written in C (1867 lines in [interpret.c](../interpret.c)). It's a compile-to-C system supporting:
 
-- **Numeric expressions**: `+`, `-`, `*`, `/` with operator precedence
-- **Types**: `U8` (0-255), `U16/U32/U64` (unsigned), `I8` through `I64` (signed), `Bool`, `Char`
-- **Variables**: `let x = expr`, `let mut x = expr` (mutable)
-- **Arrays**: `[Type; init_count; total_count]` with bounds checking and element assignment
-- **Pointers & slices**: `&variable`, `*pointer`, `&array[start..end]` (immutable/mutable)
-- **Functions**: `fn name(param: Type) : ReturnType => body` with forward references
-- **Structs**: `struct Point { x: I32; y: I32; }` and instantiation with field access
-- **Control flow**: `if (cond) expr else expr`, `while`, `for (i in start..end)` loops
-- **Pattern matching**: `match (val) { case 1 => result; case _ => default; }`
-- **Strings & chars**: String literals `"text"`, char literals `'a'`, indexed access `str[0]`
+- **Numeric ops**: `+`, `-`, `*`, `/` with proper precedence and type overflow checking
+- **Types**: Unsigned (`U8`-`U64`, `USize`), Signed (`I8`-`I64`, `ISize`), `Bool`, `Char`
+- **Variables**: `let x = expr`, `let mut x = expr` with full type compatibilityChecking
+- **Functions**: `fn name(param: Type) : RetType => body` with full forward reference support via prescan
+- **Structs**: Field declarations, instantiation with out-of-order field init, field access
+- **Arrays & Slices**: Fixed-size arrays `[Type; init_count; total_count]`, slices `&array[start..end]`
+- **Pointers**: `&var`, `&mut var`, dereference `*ptr` with mutability tracking
+- **Control Flow**: `if-else` expressions, `while`, `for (i in start..end)` loops, `match` patterns
+- **Builtins**: String literals `"text"`, char literals `'a'`, special `__args__` for CLI args
 
-**Key Entry Point**: `interpret(const char *str)` in [interpret.c](../interpret.c) — parses and evaluates input strings, returns `InterpretResult` struct with value and optional error.
+**Key Entry Points**:
+
+- `InterpretResult interpret(const char *str)` – Direct interpretation (no argc context)
+- `InterpretResult interpret_with_argc(const char *str, int argc, const char *const *argv)` – With CLI args
+- `CompileResult compile(const char *source)` – Generates C program (returns heap-allocated string)
 
 ---
 
-## Architecture: Recursive Descent Parser with State Management
+## Quick Start: Making Changes
+
+### For Adding Features:
+
+1. **New operator?** Add to `parse_additive()` or `parse_multiplicative()` (lines 1420-1550), update `type_hierarchies[]`
+2. **New type?** Add to `type_info[]` array (lines 16-30), implement validation in `validate_type()`
+3. **New control flow?** Add to `parse_let_statements_loop()` (line ~830) for statement-level, or create `parse_*()` function for expressions
+4. **New builtin?** Add to `parse_simple_operand()` - check for keyword, parse args, return `InterpretResult`
+
+### For Debugging:
+
+- **Unknown error?** Search function name in [test.c](../test.c) (166 test cases cover all features)
+- **Type mismatch?** Trace through `is_type_compatible()` and `validate_type()` (lines 100-180)
+- **Parsing stuck?** Add `printf()` calls to see parser position (`p->pos`) and input ahead
+- **Failed test?** Run `./test.ps1` to see which assertion failed, copy test into isolated `.c` file for debugging
+
+### For Testing:
+
+```powershell
+# Run all 166 tests
+./test.ps1
+
+# Add new test in test.c following pattern:
+void test_feature_name(void) {
+    assert_success("input", expected_value, "test_feature_name");
+}
+```
+
+---
 
 ### Parser Structure (`struct Parser`)
 
