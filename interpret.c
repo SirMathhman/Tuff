@@ -2103,7 +2103,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             skip_whitespace(p);
             char func_name[32];
             int name_len = parse_identifier(p, func_name, sizeof(func_name));
-            
+
             // Check if function has already been registered (by prescan)
             if (name_len > 0 && find_function(p, func_name, name_len) >= 0)
             {
@@ -2148,7 +2148,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 skip_whitespace(p);
                 continue;
             }
-            
+
             // Function not yet parsed, parse it normally
             p->pos = saved_pos;
             InterpretResult fn_result = parse_function_declaration(p);

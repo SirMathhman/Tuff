@@ -655,6 +655,11 @@ void test_interpret_function_forward_reference_top_level(void)
     assert_success("let temp = get(); fn get() => 100; temp", 100, "test_interpret_function_forward_reference_top_level");
 }
 
+void test_interpret_function_forward_reference_type_mismatch(void)
+{
+    assert_error("let temp = get(); fn get() => 100U16; let y : U8 = temp; y", "test_interpret_function_forward_reference_type_mismatch");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -781,6 +786,7 @@ int main(void)
     test_interpret_function_calling_function();
     test_interpret_function_forward_reference();
     test_interpret_function_forward_reference_top_level();
+    test_interpret_function_forward_reference_type_mismatch();
 
     if (passed_asserts == total_asserts)
     {
