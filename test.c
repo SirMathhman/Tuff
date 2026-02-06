@@ -991,19 +991,37 @@ void test_interpret_function_array_parameter_initialized(void)
 void test_args_length(void)
 {
     const char *const args[] = {"a", "b", NULL};
-    assert_compile_success("args.length", 2, "test_args_length", args);
+    assert_compile_success("__args__.length", 3, "test_args_length", args);
 }
 
 void test_usize_with_args_length(void)
 {
     const char *const args[] = {"a", "b", NULL};
-    assert_compile_success("let temp : USize = args.length; temp", 2, "test_usize_with_args_length", args);
+    assert_compile_success("let temp : USize = __args__.length; temp", 3, "test_usize_with_args_length", args);
 }
 
 void test_usize_args_length_arithmetic(void)
 {
     const char *const args[] = {"a", "b", NULL};
-    assert_compile_success("let temp : USize = args.length; temp + temp", 4, "test_usize_args_length_arithmetic", args);
+    assert_compile_success("let temp : USize = __args__.length; temp + temp", 6, "test_usize_args_length_arithmetic", args);
+}
+
+void test_args_index_length(void)
+{
+    const char *const args[] = {"a", "b", NULL};
+    assert_compile_success("__args__[1].length", 1, "test_args_index_length", args);
+}
+
+void test_args_index_2_length(void)
+{
+    const char *const args[] = {"a", "b", NULL};
+    assert_compile_success("__args__[2].length", 1, "test_args_index_2_length", args);
+}
+
+void test_args_index_in_expression(void)
+{
+    const char *const args[] = {"hello", "world", NULL};
+    assert_compile_success("__args__[1].length + __args__[2].length", 10, "test_args_index_in_expression", args);
 }
 
 int main(void)
@@ -1171,6 +1189,9 @@ int main(void)
     test_args_length();
     test_usize_with_args_length();
     test_usize_args_length_arithmetic();
+    test_args_index_length();
+    test_args_index_2_length();
+    test_args_index_in_expression();
 
     if (passed_asserts == total_asserts)
     {

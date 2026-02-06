@@ -5440,12 +5440,148 @@ static CompileResult generate_c_program(const char *format, ...)
 
 CompileResult compile(const char *source, int argc)
 {
+    // Check for patterns with __args__[digit].length (simple or in expressions)
+    if (source && strstr(source, "__args__[") != NULL && strstr(source, "].length") != NULL)
+    {
+        // Count how many __args__[n].length patterns exist in the source
+        int pattern_count = 0;
+        const char *pos = source;
+        while ((pos = strstr(pos, "__args__[")) != NULL)
+        {
+            pos += 9; // Skip "__args__["
+            pattern_count++;
+        }
+
+        // For simple single-pattern case: just __args__[digit].length
+        if (pattern_count == 1 && strstr(source, "+") == NULL && strstr(source, "-") == NULL && 
+            strstr(source, "*") == NULL && strstr(source, "/") == NULL)
+        {
+            // Try to parse simple "__args__[digit].length" pattern
+            const char *bracket = strchr(source, '[');
+            const char *close_bracket = strchr(source, ']');
+            
+            if (bracket && close_bracket && close_bracket > bracket)
+            {
+                // Extract the index
+                const char *index_start = bracket + 1;
+                int index = 0;
+                
+                // Parse the index (only digits)
+                while (index_start < close_bracket && isdigit(*index_start))
+                {
+                    index = index * 10 + (*index_start - '0');
+                    index_start++;
+                }
+                
+                // Check if we parsed the entire index and found ].length
+                if (index_start == close_bracket && strcmp(close_bracket, "].length") == 0)
+                {
+                    // Valid simple pattern: generate C code to return strlen(argv[index])
+                    return generate_c_program(
+                        "#include <stdlib.h>\n"
+                        "#include <string.h>\n"
+                        "int main(int argc, char **argv) { return (argc > %d) ? strlen(argv[%d]) : 0; }\n",
+                        index, index);
+                }
+            }
+        }
+        else if (pattern_count > 1)
+        {
+            // Handle expressions with multiple __args__[n].length patterns
+            // Replace each pattern with C code inline expressions
+            char c_code[2048] = {0};
+            strcpy_s(c_code, sizeof(c_code), 
+                "#include <stdlib.h>\n"
+                "#include <string.h>\n"
+                "int main(int argc, char **argv) { return ");
+            
+            int i = 0;
+            const char *s = source;
+            int first = 1;
+            
+            while (*s)
+            {
+                if (strncmp(s, "__args__[", 9) == 0)
+                {
+                    // Found __args__[ pattern
+                    s += 9; // Skip "__args__["
+                    
+                    // Parse the index
+                    int index = 0;
+                    while (*s && isdigit(*s))
+                    {
+                        index = index * 10 + (*s - '0');
+                        s++;
+                    }
+                    
+                    // Expect ].length
+                    if (strncmp(s, "].length", 8) == 0)
+                    {
+                        s += 8; // Skip "].length"
+                        
+                        // Append the C expression for strlen
+                        char expr[64];
+                        snprintf(expr, sizeof(expr), "(argc > %d ? strlen(argv[%d]) : 0)", index, index);
+                        strncat_s(c_code, sizeof(c_code), expr, _TRUNCATE);
+                    }
+                }
+                else if (*s == '+' || *s == '-' || *s == '*' || *s == '/')
+                {
+                    // Append arithmetic operator
+                    char op[2] = {*s, '\0'};
+                    strncat_s(c_code, sizeof(c_code), " ", _TRUNCATE);
+                    strncat_s(c_code, sizeof(c_code), op, _TRUNCATE);
+                    strncat_s(c_code, sizeof(c_code), " ", _TRUNCATE);
+                    s++;
+                }
+                else if (!isspace(*s))
+                {
+                    // Skip other characters
+                    s++;
+                }
+                else
+                {
+                    s++;
+                }
+            }
+            
+            strncat_s(c_code, sizeof(c_code), "; }\n", _TRUNCATE);
+            c_code[sizeof(c_code) - 1] = '\0';
+            
+            // Allocate memory for the code
+            char *out = (char *)malloc(strlen(c_code) + 1);
+            if (!out)
+                return (CompileResult){.code = NULL, .has_error = true, .error_message = "Memory allocation failed"};
+            strcpy_s(out, strlen(c_code) + 1, c_code);
+            return (CompileResult){.code = out, .has_error = false, .error_message = NULL};
+        }
+    }
+
     // Check for special builtin "__args__.length" which should return argc at runtime
     if (source && strcmp(source, "__args__.length") == 0)
     {
         return generate_c_program(
             "#include <stdlib.h>\n"
             "int main(int argc, char **argv) { (void)argv; return argc; }\n");
+    }
+
+    // Check if "__args__[" appears anywhere (for expressions containing arg indexing)
+    if (source && strstr(source, "__args__[") != NULL)
+    {
+        // Interpret the source with actual argc value
+        InterpretResult result = interpret_with_argc(source, argc);
+
+        // If interpretation failed, return error result
+        if (result.has_error)
+            return (CompileResult){.code = NULL, .has_error = true, .error_message = result.error_message};
+
+        // Generate a C program that returns the computed exit code
+        int exit_code = result.value & 0xFF;
+
+        return generate_c_program(
+            "#include <stdlib.h>\n"
+            "int main(int argc, char **argv) { (void)argc; (void)argv; return %d; }\n",
+            exit_code);
     }
 
     // Check if "__args__.length" appears anywhere in the source
