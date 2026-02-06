@@ -991,6 +991,12 @@ void test_args_length(void)
     assert_compile_success("args.length", 2, "test_args_length", args);
 }
 
+void test_usize_with_args_length(void)
+{
+    const char *const args[] = {"a", "b", NULL};
+    assert_compile_success("let temp : USize = args.length; temp", 2, "test_usize_with_args_length", args);
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -1154,6 +1160,7 @@ int main(void)
     test_interpret_function_array_parameter_uninitialized_error();
     test_interpret_function_array_parameter_initialized();
     test_args_length();
+    test_usize_with_args_length();
 
     if (passed_asserts == total_asserts)
     {
