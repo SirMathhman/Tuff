@@ -616,6 +616,7 @@ static int find_function(Parser *p, const char *name, int name_len);
 static int find_struct(Parser *p, const char *name, int name_len);
 static int find_struct_field_index(Parser *p, int struct_idx, const char *field_name, int field_name_len);
 static int set_variable_with_type(Parser *p, const char *name, int name_len, long value, const char *type);
+static int set_array_variable_with_mutability(Parser *p, const char *name, int name_len, const char *array_type, const char *element_type, int init_count, int total_count, const long *values, int is_mutable);
 static void save_variable_state(Parser *p, Variable saved_vars[10], int *saved_var_count);
 static void restore_saved_vars(Parser *p, Variable saved_vars[10], int saved_var_count);
 static InterpretResult parse_assignment_or_if_else(Parser *p);
@@ -1175,7 +1176,28 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                 if (p->variables[idx].is_array)
                 {
-                    return make_error("Array value must be indexed");
+                    // Allow array to be referenced as a value (e.g., for function arguments)
+                    // Set tracked suffix to array type with CURRENT initialization count
+                    char array_type_with_init[64];
+                    snprintf(array_type_with_init, sizeof(array_type_with_init), "[%s;%d;%d]",
+                             p->variables[idx].array_element_type,
+                             p->variables[idx].array_init_count,
+                             p->variables[idx].array_total_count);
+                    array_type_with_init[sizeof(array_type_with_init) - 1] = '\0';
+
+                    strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), array_type_with_init, _TRUNCATE);
+                    p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+                    p->has_tracked_suffix = 1;
+
+                    if (out_num)
+                    {
+                        out_num->value = idx; // Return array variable index
+                        out_num->suffix = p->tracked_suffix;
+                        out_num->suffix_len = strlen(p->tracked_suffix);
+                    }
+
+                    // Return array variable index as the value
+                    return (InterpretResult){.value = idx, .has_error = false, .error_message = NULL};
                 }
 
                 // Handle slice.length property access
@@ -1551,10 +1573,44 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     // Bind parameters to arguments
                     for (int i = 0; i < arg_count; i++)
                     {
-                        set_variable_with_type(p, p->functions[func_idx].param_names[i],
-                                               strlen(p->functions[func_idx].param_names[i]),
-                                               args[i].value,
-                                               p->functions[func_idx].param_types[i]);
+                        // For array arguments, need to copy the entire array variable metadata
+                        // not just the value, so use special handling
+                        if (is_array_type_string(p->functions[func_idx].param_types[i]))
+                        {
+                            // Array parameter - need to create a parameter variable with the array data
+                            // args[i].value contains the source array variable index
+                            int src_array_idx = args[i].value;
+                            if (src_array_idx >= 0 && src_array_idx < p->var_count && p->variables[src_array_idx].is_array)
+                            {
+                                // Copy the array variable with its current init count
+                                set_array_variable_with_mutability(
+                                    p,
+                                    p->functions[func_idx].param_names[i],
+                                    strlen(p->functions[func_idx].param_names[i]),
+                                    p->variables[src_array_idx].type, // Use actual source type
+                                    p->variables[src_array_idx].array_element_type,
+                                    p->variables[src_array_idx].array_init_count, // Preserve current init count
+                                    p->variables[src_array_idx].array_total_count,
+                                    p->variables[src_array_idx].array_values, // Copy values
+                                    0);                                       // Parameters are immutable
+                            }
+                            else
+                            {
+                                // Fallback - shouldn't happen if type checking passed
+                                set_variable_with_type(p, p->functions[func_idx].param_names[i],
+                                                       strlen(p->functions[func_idx].param_names[i]),
+                                                       args[i].value,
+                                                       p->functions[func_idx].param_types[i]);
+                            }
+                        }
+                        else
+                        {
+                            // Non-array parameter
+                            set_variable_with_type(p, p->functions[func_idx].param_names[i],
+                                                   strlen(p->functions[func_idx].param_names[i]),
+                                                   args[i].value,
+                                                   p->functions[func_idx].param_types[i]);
+                        }
                     }
 
                     // Save position and jump to function body
@@ -1805,15 +1861,62 @@ static InterpretResult parse_function_declaration(Parser *p)
 
         skip_whitespace(p);
 
-        // Parse parameter type
-        char param_type[32];
-        int param_type_len = parse_identifier(p, param_type, sizeof(param_type));
-        if (param_type_len <= 0)
-            return make_error("Expected parameter type");
+        // Parse parameter type (could be array, pointer, or identifier)
+        char param_type[64]; // Increased to support array types
+
+        if (p->input[p->pos] == '[')
+        {
+            // Array type: [Type; Init; Total]
+            char array_elem_type[16];
+            int array_init_count = 0;
+            int array_total_count = 0;
+
+            InterpretResult array_type_result = parse_array_type_annotation(
+                p,
+                param_type,
+                sizeof(param_type),
+                array_elem_type,
+                sizeof(array_elem_type),
+                &array_init_count,
+                &array_total_count);
+            if (array_type_result.has_error)
+                return array_type_result;
+        }
+        else if (p->input[p->pos] == '*')
+        {
+            // Pointer type: *Type or *mut Type
+            int type_start = p->pos;
+            p->pos++; // Skip '*'
+            skip_whitespace(p);
+
+            // Check for 'mut' keyword
+            if (is_keyword_at(p, "mut"))
+            {
+                p->pos += 3; // Skip 'mut'
+                skip_whitespace(p);
+            }
+
+            // Parse the base type
+            char base_type[32];
+            int base_type_len = parse_identifier(p, base_type, sizeof(base_type));
+            if (base_type_len <= 0)
+                return make_error("Expected type after * operator");
+
+            // Reconstruct the pointer type string
+            snprintf(param_type, sizeof(param_type), "%.*s", (int)(p->pos - type_start), &p->input[type_start]);
+            param_type[sizeof(param_type) - 1] = '\0';
+        }
+        else
+        {
+            // Regular identifier type
+            int param_type_len = parse_identifier(p, param_type, sizeof(param_type));
+            if (param_type_len <= 0)
+                return make_error("Expected parameter type");
+        }
 
         // Store parameter type
-        strncpy_s(param_types[param_count], sizeof(param_types[param_count]), param_type, param_type_len);
-        param_types[param_count][param_type_len] = '\0';
+        strncpy_s(param_types[param_count], sizeof(param_types[param_count]), param_type, _TRUNCATE);
+        param_types[param_count][sizeof(param_types[param_count]) - 1] = '\0';
         param_count++;
 
         // Check for comma (more parameters) or closing parenthesis
@@ -2562,11 +2665,34 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
             declared_struct_idx = find_struct(p, declared_type, (int)strlen(declared_type));
         }
 
-        // Expect '='
-        InterpretResult eq_result = expect_char(p, '=', "Expected '=' in variable declaration");
-        if (eq_result.has_error)
-            return eq_result;
+        // Expect '=' (unless it's an array with 0 initial elements)
         skip_whitespace(p);
+        if (p->input[p->pos] == '=')
+        {
+            p->pos++; // Skip '='
+            skip_whitespace(p);
+        }
+        else if (is_array_declared && declared_array_init_count == 0)
+        {
+            // Array with 0 initial elements doesn't require an initializer
+            // Create an empty array that can be populated by element assignment
+            set_array_variable_with_mutability(
+                p,
+                var_name,
+                name_len,
+                declared_type,
+                declared_array_elem_type,
+                0, // init_count = 0
+                declared_array_total_count,
+                NULL, // no initial values
+                is_mutable);
+
+            return finalize_statement(p, "Expected ';' after variable declaration");
+        }
+        else
+        {
+            return make_error("Expected '=' in variable declaration");
+        }
     }
     else
     {
@@ -2898,32 +3024,60 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 break;
             }
         }
-        // Check for assignment statement (identifier followed by '=')
+        // Check for assignment statement (identifier followed by assignment operator or bracket)
         else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match") && !is_keyword_at(p, "for") && !is_keyword_at(p, "fn") && !is_keyword_at(p, "struct"))
         {
-            // Look ahead to see if this is an assignment
+            // Look ahead to determine assignment type (simple, array element, or pointer dereference)
             int saved_pos = p->pos;
             char temp_name[32];
             int name_len = parse_identifier(p, temp_name, sizeof(temp_name));
 
-            // Check if this identifier is followed by an assignment operator
-            int is_assignment = has_assignment_operator(p);
+            // Check what follows the identifier
+            skip_whitespace(p);
+            int is_array_element = (p->input[p->pos] == '[');  // array[index] pattern
+            int is_assignment = has_assignment_operator(p);    // = or compound operator
+
+            // If it's array element, skip past [...] to check for assignment
+            if (is_array_element && !is_assignment)
+            {
+                // Skip bracket content to find assignment operator
+                int bracket_depth = 1;
+                p->pos++;  // Skip opening [
+                while (p->input[p->pos] && bracket_depth > 0)
+                {
+                    if (p->input[p->pos] == '[')
+                        bracket_depth++;
+                    else if (p->input[p->pos] == ']')
+                        bracket_depth--;
+                    p->pos++;
+                }
+                skip_whitespace(p);
+                is_assignment = has_assignment_operator(p);
+            }
 
             // Reset position and handle accordingly
             p->pos = saved_pos;
 
             if (is_assignment)
             {
-                InterpretResult assign_result = parse_assignment_statement_in_block(p);
-                if (assign_result.has_error)
+                // Use try_parse_assignment_expression which handles all assignment types
+                InterpretResult assign_result = try_parse_assignment_expression(p);
+                if (assign_result.has_error && strcmp(assign_result.error_message, "not_an_assignment") == 0)
+                {
+                    // Should not happen if is_assignment was true, but fallback
+                    break;
+                }
+                else if (assign_result.has_error)
+                {
                     return assign_result;
+                }
                 skip_whitespace(p);
-                has_last_statement = 0; // assignments at this level don't have values to return
+                has_last_statement = 0;
                 saw_statement = 1;
             }
             else
             {
-                // Not an assignment and not a keyword, exit the loop
+                // Not an assignment, exit the loop
                 break;
             }
         }

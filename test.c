@@ -750,6 +750,21 @@ void test_interpret_array_init_count_mismatch(void)
     assert_error("let array : [I32; 2; 2] = [100];", "test_interpret_array_init_count_mismatch");
 }
 
+void test_interpret_array_assignment_increments_init(void)
+{
+    assert_success("let mut a : [I32; 0; 2]; a[0] = 5; a[0]", 5, "test_interpret_array_assignment_increments_init");
+}
+
+void test_interpret_function_array_parameter_uninitialized_error(void)
+{
+    assert_error("fn first(array : [I32; 1; 2]) => array[0]; let mut temp : [I32; 0; 2]; first(temp)", "test_interpret_function_array_parameter_uninitialized_error");
+}
+
+void test_interpret_function_array_parameter_initialized(void)
+{
+    assert_success("fn first(array : [I32; 1; 2]) => array[0]; let mut temp : [I32; 0; 2]; temp[0] = 100; first(temp)", 100, "test_interpret_function_array_parameter_initialized");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -895,6 +910,9 @@ int main(void)
     test_interpret_slice_init_partial_range();
     test_interpret_bool_array_with_numeric_literal();
     test_interpret_array_init_count_mismatch();
+    test_interpret_array_assignment_increments_init();
+    test_interpret_function_array_parameter_uninitialized_error();
+    test_interpret_function_array_parameter_initialized();
 
     if (passed_asserts == total_asserts)
     {
