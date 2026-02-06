@@ -1,11 +1,5 @@
-fn is_pointer_type(type : *Str | 0) : I32 => type != 0
+fn is_pointer_type(type : *Str) : Bool => type != 0
     && type[0] == '*' 
     && type[1] != '\0';
 
-fn is_mutable_pointer_type(pointer_type : *Str | 0) : I32 => {
-    if (pointer_type == 0 || pointer_type[0] != '*') {
-        
-    }
-}
-
-__args__[1]
+__args__[1].length

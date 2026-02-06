@@ -2,7 +2,7 @@
 
 ## Quick Reference: What is Tuff?
 
-**Tuff** is a typed expression language interpreter written in C (1867 lines in [interpret.c](../interpret.c)). It's a compile-to-C system supporting:
+**Tuff** is a typed expression language interpreter written in C. It's a compile-to-C system supporting:
 
 - **Numeric ops**: `+`, `-`, `*`, `/` with proper precedence and type overflow checking
 - **Types**: Unsigned (`U8`-`U64`, `USize`), Signed (`I8`-`I64`, `ISize`), `Bool`, `Char`
@@ -33,7 +33,7 @@
 
 ### For Debugging:
 
-- **Unknown error?** Search function name in [test.c](../test.c) (166 test cases cover all features)
+- **Unknown error?** Search function name in test.c (166 test cases cover all features)
 - **Type mismatch?** Trace through `is_type_compatible()` and `validate_type()` (lines 100-180)
 - **Parsing stuck?** Add `printf()` calls to see parser position (`p->pos`) and input ahead
 - **Failed test?** Run `./test.ps1` to see which assertion failed, copy test into isolated `.c` file for debugging
@@ -384,7 +384,7 @@ assert_compile_success(input_string, expected_value, test_name, args);
 
 ### Test Coverage
 
-Currently **166 tests** in [test.c](../test.c) covering:
+Currently **166 tests** in test.c covering:
 
 - Arithmetic: addition, subtraction, multiplication, division with operator precedence
 - Type validation: overflow detection, type mismatches, type compatibility rules
@@ -473,19 +473,6 @@ if (attempt.has_error) {
     // For full state restore, also save/restore variables
 }
 ```
-
----
-
-## Key Files & Line Ranges
-
-| File                          | Purpose                         | Key Sections                                                                                                                     |
-| ----------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| [interpret.h](../interpret.h) | Public API                      | `InterpretResult` struct, `interpret()` declaration                                                                              |
-| [interpret.c](../interpret.c) | Parser & evaluator (1867 lines) | Type system (lines 1-200), parser hierarchy (lines 690-1700), main entry (lines 1820-1867), if-statement logic (lines 1340-1550) |
-| [test.c](../test.c)           | Unit tests                      | Helpers (lines 4-24), test functions (lines 26-358)                                                                              |
-| [test.ps1](../test.ps1)       | Build script                    | Clang compilation, test execution                                                                                                |
-
----
 
 ## Guidelines for Modifications
 

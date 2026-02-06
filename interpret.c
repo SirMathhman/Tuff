@@ -5944,9 +5944,11 @@ static CompileResult generate_c_program(const char *format, ...)
 typedef struct
 {
     char name[32];
-    char params[10][32]; // Parameter names
+    char params[10][32];      // Parameter names
+    char param_types[10][32]; // Parameter types
     int32_t param_count;
-    char body[256]; // Function body expression
+    char return_type[32]; // Return type
+    char body[256];       // Function body expression
 } FuncDef;
 
 // Struct definition structure (used by __args__ transpiler)
@@ -6128,11 +6130,28 @@ static int32_t compile_args_expression_ex(const char *expr, char *out_buf, size_
                         continue;
                     }
 
-                    // Not a supported inline: emit the call as-is (preserving parentheses)
+                    // Not a supported inline: emit call with transpiled arguments
                     strncat_s(out_buf, buf_size, name, _TRUNCATE);
-                    for (const char *c = call_start; c < call_end; c++)
-                        compile_args_append_char(out_buf, buf_size, *c);
+                    strncat_s(out_buf, buf_size, "(", _TRUNCATE);
 
+                    // Extract and transpile arguments between parentheses
+                    const char *args_start = call_start + 1;
+                    const char *args_end = call_end - 1;
+
+                    if (args_start < args_end)
+                    {
+                        char args_text[256] = {0};
+                        size_t args_len = (size_t)(args_end - args_start);
+                        if (args_len >= sizeof(args_text))
+                            args_len = sizeof(args_text) - 1;
+                        memcpy(args_text, args_start, args_len);
+                        args_text[args_len] = '\0';
+
+                        // Recursively transpile the arguments
+                        compile_args_expression_ex(args_text, out_buf, buf_size, var_names, var_types, var_count, funcs, func_count);
+                    }
+
+                    strncat_s(out_buf, buf_size, ")", _TRUNCATE);
                     s = call_end;
                     continue;
                 }
@@ -6489,14 +6508,31 @@ static int32_t compile_args_convert_if_else(const char *src, char *out, size_t o
 // Helper: Emit function signature (name and parameters)
 static void emit_function_signature(char *c_code, size_t c_code_size, const FuncDef *func, int32_t with_semicolon)
 {
-    strncat_s(c_code, c_code_size, "int32_t ", _TRUNCATE);
+    // Convert return type
+    char c_return_type[32] = {0};
+    if (func->return_type[0])
+        tuff_type_to_c_type(func->return_type, c_return_type, sizeof(c_return_type));
+    else
+        strcpy_s(c_return_type, sizeof(c_return_type), "int");
+
+    strncat_s(c_code, c_code_size, c_return_type, _TRUNCATE);
+    strncat_s(c_code, c_code_size, " ", _TRUNCATE);
     strncat_s(c_code, c_code_size, func->name, _TRUNCATE);
     strncat_s(c_code, c_code_size, "(", _TRUNCATE);
     for (int32_t j = 0; j < func->param_count; j++)
     {
         if (j > 0)
             strncat_s(c_code, c_code_size, ", ", _TRUNCATE);
-        strncat_s(c_code, c_code_size, "int32_t ", _TRUNCATE);
+
+        // Convert parameter type
+        char c_param_type[32] = {0};
+        if (func->param_types[j][0])
+            tuff_type_to_c_type(func->param_types[j], c_param_type, sizeof(c_param_type));
+        else
+            strcpy_s(c_param_type, sizeof(c_param_type), "int");
+
+        strncat_s(c_code, c_code_size, c_param_type, _TRUNCATE);
+        strncat_s(c_code, c_code_size, " ", _TRUNCATE);
         strncat_s(c_code, c_code_size, func->params[j], _TRUNCATE);
     }
     strncat_s(c_code, c_code_size, ")", _TRUNCATE);
@@ -6620,7 +6656,6 @@ static const char *parse_function_param_item(const char *p, void *data, int32_t 
     if (param_name[0] && f->param_count < 10)
     {
         strcpy_s(f->params[f->param_count], sizeof(f->params[f->param_count]), param_name);
-        f->param_count++;
     }
 
     int32_t at_colon;
@@ -6628,6 +6663,27 @@ static const char *parse_function_param_item(const char *p, void *data, int32_t 
     if (at_colon)
     {
         p++;
+
+        // Skip whitespace after colon
+        while (*p && isspace(*p))
+            p++;
+
+        // Extract parameter type
+        char param_type[32] = {0};
+        int32_t type_len = 0;
+        while (*p && *p != ',' && *p != ')' && !isspace(*p) && type_len < 31)
+        {
+            param_type[type_len++] = *p++;
+        }
+        param_type[type_len] = '\0';
+
+        if (param_type[0] && f->param_count < 10)
+        {
+            strcpy_s(f->param_types[f->param_count], sizeof(f->param_types[f->param_count]), param_type);
+            f->param_count++;
+        }
+
+        // Skip to comma or closing paren
         while (*p && *p != ',' && *p != ')')
             p++;
     }
@@ -6789,14 +6845,28 @@ static CompileResult compile_args_source(const char *source)
             // Parse function parameters using helper
             p = parse_function_params(p, &functions[func_count]);
 
-            // Skip optional return type ': Type'
+            // Parse and store return type ': Type'
             while (*p && isspace(*p))
                 p++;
             if (*p == ':')
             {
                 p++;
-                while (*p && *p != '=')
+                while (*p && isspace(*p))
                     p++;
+
+                // Extract return type
+                char return_type[32] = {0};
+                int32_t ret_type_len = 0;
+                while (*p && *p != '=' && !isspace(*p) && ret_type_len < 31)
+                {
+                    return_type[ret_type_len++] = *p++;
+                }
+                return_type[ret_type_len] = '\0';
+
+                if (return_type[0])
+                {
+                    strcpy_s(functions[func_count].return_type, sizeof(functions[func_count].return_type), return_type);
+                }
             }
 
             // Expect '=>'

@@ -1408,6 +1408,12 @@ void test_stack_string_in_if_expression(void)
     assert_success("let msg : Str[32] = if (true) \"yes\" else \"no\"; msg[0]", 121, "test_stack_string_in_if_expression");
 }
 
+void test_compiler_param_type_transpilation(void)
+{
+    const char *const args[] = {"*test", NULL};
+    assert_compile_success("fn check(s: *Str) : I32 => if (s[0] == 42) 1 else 0; check(__args__[1])", 1, "test_compiler_param_type_transpilation", args);
+}
+
 int main(void)
 {
     cache_ready = cache_init();
@@ -1603,6 +1609,7 @@ int main(void)
     test_struct_with_stack_string_multiple_fields();
     test_stack_string_in_function();
     test_stack_string_in_if_expression();
+    test_compiler_param_type_transpilation();
 
     if (passed_asserts == total_asserts)
     {
