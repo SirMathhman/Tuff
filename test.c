@@ -18,16 +18,15 @@ RunResult run(const char *source, const char *const *args)
     if (!source)
         return (RunResult){.exit_code = 1, .has_error = true, .error_message = "NULL source"};
 
-    // Calculate argc from args (count + 1 for program name)
+    // Count args for building the runtime argv
     int arg_count = 0;
     if (args)
     {
         while (args[arg_count])
             arg_count++;
     }
-    int argc = arg_count + 1; // +1 for program name
 
-    CompileResult compiled = compile(source, argc);
+    CompileResult compiled = compile(source);
     if (compiled.has_error)
         return (RunResult){.exit_code = 1, .has_error = true, .error_message = compiled.error_message};
     char *target = compiled.code;
@@ -1024,6 +1023,18 @@ void test_args_index_in_expression(void)
     assert_compile_success("__args__[1].length + __args__[2].length", 10, "test_args_index_in_expression", args);
 }
 
+void test_args_slice_length(void)
+{
+    const char *const args[] = {"a", "b", NULL};
+    assert_compile_success("let myArgs : *[*Str] = __args__; myArgs.length", 3, "test_args_slice_length", args);
+}
+
+void test_mut_string_pointer_args_reassignment(void)
+{
+    const char *const args[] = {"one", "three", NULL};
+    assert_compile_success("let mut x : *Str = __args__[1]; x = __args__[2]; x.length", 5, "test_mut_string_pointer_args_reassignment", args);
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -1192,6 +1203,8 @@ int main(void)
     test_args_index_length();
     test_args_index_2_length();
     test_args_index_in_expression();
+    test_args_slice_length();
+    test_mut_string_pointer_args_reassignment();
 
     if (passed_asserts == total_asserts)
     {

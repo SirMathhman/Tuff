@@ -248,6 +248,75 @@ match (value) {
 
 ---
 
+---
+
+## Command-Line Argument Support via `__args__`
+
+**Feature Overview**: Tuff supports access to command-line arguments through the special `__args__` identifier. The compiler generates C code that accesses `argc`/`argv` at runtime from the generated program's own `main()`.
+
+### Entry Point Semantics: `compile()` vs `interpret()`
+
+**Critical Distinction**: The interpreter has two main entry points with different semantics:
+
+- **`interpret(const char *str)`**: Generic single-argument interpreter
+  - No argc context available
+  - Cannot evaluate `__args__` features
+  - Used for: Direct value interpretation, testing
+
+- **`interpret_with_argc(const char *str, int argc)`**: Argc-aware interpreter
+  - Full context for `__args__` evaluation
+  - Can compute `__args__.length` at interpret-time
+  - Required for: Interpreting code containing `__args__`
+
+- **`compile(const char *source)`**: User-facing compiler entry point
+  - Takes source code only — does NOT take argc/argv
+  - When source contains `__args__`, generates C code that accesses `argc`/`argv` at runtime
+  - When source does NOT contain `__args__`, interprets and bakes the constant result
+  - **Key principle**: Compile produces a program; the program receives its arguments when executed
+
+### `__args__` Compilation Patterns
+
+The compiler translates `__args__` references to runtime C code:
+
+| Tuff source                                      | Generated C                                           |
+| ------------------------------------------------ | ----------------------------------------------------- |
+| `__args__.length`                                | `return argc;`                                        |
+| `__args__[1].length`                             | `return (int)strlen(argv[1]);`                        |
+| `__args__[1].length + __args__[2].length`        | `return (int)strlen(argv[1]) + (int)strlen(argv[2]);` |
+| `let temp : USize = __args__.length; temp`       | `int temp = argc; return temp;`                       |
+| `let myArgs : *[*Str] = __args__; myArgs.length` | `char **myArgs = argv; return argc;`                  |
+| `let mut x : *Str = __args__[1]; x.length`       | `char *x = argv[1]; return (int)strlen(x);`           |
+
+### Implementation Details
+
+**Transpiler (`compile_args_source`)**: When source contains `__args__`, the compiler uses a mini-transpiler that:
+
+1. Splits source into semicolon-delimited statements
+2. Translates each `let` declaration, variable reassignment, and expression to equivalent C
+3. Tracks variable types: numeric (1), `*Str` (2), `*[*Str]` args slice (3)
+4. Generates `return <expr>;` for the final trailing expression
+
+**Expression translator (`compile_args_expression`)**: Translates individual expressions:
+
+- `__args__.length` → `argc`
+- `__args__[n].length` → `(int)strlen(argv[n])`
+- `__args__[n]` → `argv[n]`
+- `var.length` → `argc` (if var is args slice) or `(int)strlen(var)` (if var is `*Str`)
+- Arithmetic operators are passed through directly
+
+**Interpreter fallback**: For code without `__args__`, the compiler interprets the source and bakes the constant result (this is correct since the result doesn't depend on runtime arguments).
+
+### Debugging `__args__` Issues
+
+Common pitfall: **New `__args__` patterns not handled by the transpiler**
+
+- Symptom: Generated C code fails to compile with clang
+- Root cause: The `compile_args_source` transpiler only handles patterns it knows about
+- Fix: Add new pattern handling to `compile_args_expression` or `compile_args_source`
+- Debug: Check the generated C code by examining the CompileResult.code string
+
+---
+
 ## Temporary State & Intermediate Results
 
 The parser uses temporary fields to accumulate intermediate values during parsing, then consume them on assignment/declaration:
@@ -276,11 +345,15 @@ assert_success(input_string, expected_int_value, test_name);
 
 // Error case: assert result.has_error is true
 assert_error(input_string, test_name);
+
+// Compile + run test with args (args are passed to the compiled program at runtime)
+const char *const args[] = {"arg1", "arg2", NULL};
+assert_compile_success(input_string, expected_value, test_name, args);
 ```
 
 ### Test Coverage
 
-Currently **150+ tests** in [test.c](../test.c) covering:
+Currently **166 tests** in [test.c](../test.c) covering:
 
 - Arithmetic: addition, subtraction, multiplication, division with operator precedence
 - Type validation: overflow detection, type mismatches, type compatibility rules
@@ -321,7 +394,7 @@ powershell test.ps1
 This script:
 
 1. Compiles with clang
-2. Runs `test.exe` (all 150+ test functions)
+2. Runs `test.exe` (all 166 test functions)
 3. Checks for code duplication using static analysis
 4. **All tests must pass** before committing
 

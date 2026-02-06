@@ -35,6 +35,7 @@ typedef struct
     int is_string;          // 1 if string value
     char string_value[256]; // Store string content
     int string_len;         // Length of string
+    int is_args_slice;      // 1 if initialized from __args__ builtin, 0 otherwise
 } Variable;
 
 typedef struct
@@ -89,6 +90,7 @@ typedef struct
     char temp_string_value[256];   // Store temporary string
     int temp_string_len;           // Length of temporary string
     int argc;                      // argc value for __args__.length (-1 if not provided)
+    const char *const *argv;       // argv array for __args__[n] (NULL if not provided)
 } Parser;
 
 typedef struct
@@ -497,6 +499,10 @@ static int is_type_compatible(const char *dest_type, const char *source_type)
 
     // Check for Char type (special case)
     if (strcmp(dest_type, "Char") == 0 && strcmp(source_type, "Char") == 0)
+        return 1;
+
+    // Check for *Str type (special case for string pointers)
+    if (strcmp(dest_type, "*Str") == 0 && strcmp(source_type, "*Str") == 0)
         return 1;
 
     int dest_idx = get_type_info_index(dest_type);
@@ -1221,14 +1227,57 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     // If argc is -1 (not provided), return 0 as placeholder
                     // If argc >= 0, return argc (total argument count including program name)
                     long args_length_value = (p->argc >= 0) ? p->argc : 0;
-                    set_tracked_suffix(p, "I32");
+                    // Don't set a type suffix - let it be untyped so it can assign to any numeric type
+                    p->has_tracked_suffix = 0;
                     return (InterpretResult){.value = (int)args_length_value, .has_error = false, .error_message = NULL};
                 }
                 else if (property_name_len > 0)
                 {
                     return make_error("Unknown __args__ property (only 'length' is supported)");
-                    // "__args__" identifier without property access - error
-                    return make_error("'__args__' is a reserved builtin and cannot be used as a variable");
+                }
+                else if (p->input[p->pos] == '[')
+                {
+                    // __args__[n] indexing - return string at index n
+                    long index_value = 0;
+                    InterpretResult bracket_result = parse_bracket_index(p, &index_value);
+                    if (bracket_result.has_error)
+                        return bracket_result;
+
+                    // Check that index is within bounds
+                    if (p->argc > 0 && index_value >= 0 && index_value < p->argc && p->argv != NULL && p->argv[index_value] != NULL)
+                    {
+                        // We have access to the actual argv string - store it as temp string
+                        const char *arg_string = p->argv[index_value];
+                        int arg_len = strlen(arg_string);
+                        if (arg_len < 256)
+                        {
+                            // Store in temp string for later assignment
+                            strncpy_s(p->temp_string_value, sizeof(p->temp_string_value), arg_string, arg_len);
+                            p->temp_string_value[arg_len] = '\0';
+                            p->temp_string_len = arg_len;
+                            p->has_temp_string = 1;
+                            set_tracked_suffix(p, "*Str");
+                            // Return the string length so .length property works
+                            return (InterpretResult){.value = (int)arg_len, .has_error = false, .error_message = NULL};
+                        }
+                    }
+
+                    // If we don't have argv data, mark as *Str type but we can't get actual string
+                    // This will be handled specially at compile time
+                    set_tracked_suffix(p, "*Str");
+
+                    // Return a pseudo-value representing the string at this index
+                    // The compile() function will handle __args__[n] specially if needed
+                    return (InterpretResult){.value = (int)index_value, .has_error = false, .error_message = NULL};
+                }
+                else
+                {
+                    // __args__ without property access - treat as a slice reference with type *[*Str]
+                    // This allows assignment to slice variables: let myArgs : *[*Str] = __args__
+                    set_tracked_suffix(p, "*[*Str]");
+                    // Return argc as the "value" - this will be used during variable initialization
+                    long args_value = (p->argc >= 0) ? p->argc : 0;
+                    return (InterpretResult){.value = (int)args_value, .has_error = false, .error_message = NULL};
                 }
             }
 
@@ -1361,8 +1410,19 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                         // Check for .length property
                         if (strncmp(property_name, "length", property_name_len) == 0 && property_name_len == 6)
                         {
-                            // Return the slice length (end - start)
-                            long slice_length = p->variables[idx].slice_end - p->variables[idx].slice_start;
+                            long length_value = 0;
+
+                            // Special handling for __args__ slice variables
+                            if (p->variables[idx].is_args_slice)
+                            {
+                                // Return argc for __args__ slices
+                                length_value = p->variables[idx].value;
+                            }
+                            else
+                            {
+                                // Return the slice length (end - start)
+                                length_value = p->variables[idx].slice_end - p->variables[idx].slice_start;
+                            }
 
                             // Set tracked suffix to I32 (length is always a numeric value)
                             strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "I32", _TRUNCATE);
@@ -1371,12 +1431,12 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                             if (out_num)
                             {
-                                out_num->value = slice_length;
+                                out_num->value = length_value;
                                 out_num->suffix = p->tracked_suffix;
                                 out_num->suffix_len = 3;
                             }
 
-                            return (InterpretResult){.value = (int)slice_length, .has_error = false, .error_message = NULL};
+                            return (InterpretResult){.value = (int)length_value, .has_error = false, .error_message = NULL};
                         }
                         else if (strncmp(property_name, "init", property_name_len) == 0 && property_name_len == 4)
                         {
@@ -2346,6 +2406,7 @@ static void init_variable_entry(Parser *p, const char *name, int name_len, long 
     p->variables[p->var_count].is_string = 0;
     p->variables[p->var_count].string_value[0] = '\0';
     p->variables[p->var_count].string_len = 0;
+    p->variables[p->var_count].is_args_slice = 0;
     register_declared_name(p, name, name_len);
 }
 
@@ -2777,13 +2838,35 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
             if (is_pointer && p->input[p->pos] == '[')
             {
                 // Pointer to array type: *[ElementType] (for slices)
+                // Element type can be a simple type like I32 or a pointer type like *Str
                 // Parse simplified array type: [Type] (without size counts)
                 p->pos++; // Skip '['
                 skip_whitespace(p);
 
-                InterpretResult elem_type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected array element type");
-                if (elem_type_result.has_error)
-                    return elem_type_result;
+                // Check if element type is a pointer type (*Type) or simple type
+                if (p->input[p->pos] == '*')
+                {
+                    // Element type is a pointer (e.g., *Str for slice of string pointers)
+                    p->pos++; // Skip '*'
+                    skip_whitespace(p);
+
+                    InterpretResult elem_type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected element type after *");
+                    if (elem_type_result.has_error)
+                        return elem_type_result;
+
+                    // Prepend * to make it a pointer type
+                    char full_elem_type[64];
+                    snprintf(full_elem_type, sizeof(full_elem_type), "*%s", type_name);
+                    strncpy_s(type_name, sizeof(type_name), full_elem_type, _TRUNCATE);
+                    type_name[sizeof(type_name) - 1] = '\0';
+                }
+                else
+                {
+                    // Element type is a simple identifier
+                    InterpretResult elem_type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected array element type");
+                    if (elem_type_result.has_error)
+                        return elem_type_result;
+                }
 
                 skip_whitespace(p);
 
@@ -2977,21 +3060,49 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         // Check if declared type is string pointer type
         if (strcmp(declared_type, "*Str") == 0)
         {
-            if (!p->has_temp_string)
+            if (p->has_temp_string)
+            {
+                // String literal case
+                set_variable_string_with_mutability(
+                    p,
+                    var_name,
+                    name_len,
+                    p->temp_string_value,
+                    p->temp_string_len,
+                    is_mutable);
+
+                p->has_temp_string = 0;
+                return finalize_statement(p, "Expected ';' after variable declaration");
+            }
+            else if (p->has_tracked_suffix && strcmp(p->tracked_suffix, "*Str") == 0)
+            {
+                // Runtime string value case (e.g., from __args__[n])
+                // Create a string pointer variable that points to a runtime string
+                // We store the value (which represents the string at runtime)
+                set_variable_string_with_mutability(
+                    p,
+                    var_name,
+                    name_len,
+                    "", // Empty string for now, as the actual string is from runtime
+                    0,  // Length 0 for now
+                    is_mutable);
+
+                // Now find the variable we just created and mark it as a runtime string reference
+                int var_idx = find_variable(p, var_name, name_len);
+                if (var_idx >= 0)
+                {
+                    // Store the pointer target if this is a pointer to another string
+                    // For __args__, we don't have a direct variable to point to,
+                    // so we keep it as a special case handled at runtime
+                    p->variables[var_idx].value = val_result.value;
+                }
+
+                return finalize_statement(p, "Expected ';' after variable declaration");
+            }
+            else
             {
                 return make_error("String literal required for string pointer variable");
             }
-
-            set_variable_string_with_mutability(
-                p,
-                var_name,
-                name_len,
-                p->temp_string_value,
-                p->temp_string_len,
-                is_mutable);
-
-            p->has_temp_string = 0;
-            return finalize_statement(p, "Expected ';' after variable declaration");
         }
 
         // Check if declared type is a pointer type
@@ -3008,6 +3119,22 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
             if (strcmp(declared_type, p->tracked_suffix) != 0)
             {
                 return make_error("Pointer type mismatch: incompatible base types");
+            }
+
+            // Special handling for __args__ assignment to *[*Str] variables
+            if (strcmp(declared_type, "*[*Str]") == 0 && strcmp(p->tracked_suffix, "*[*Str]") == 0)
+            {
+                // This is assignment from __args__ to a slice variable
+                // Create the variable and mark it as from __args__
+                int var_idx = set_pointer_variable_with_mutability(p, var_name, name_len, -1, actual_type, is_mutable);
+                if (var_idx >= 0)
+                {
+                    // Mark this variable as initialized from __args__
+                    p->variables[var_idx].is_args_slice = 1;
+                    // Store argc value for later use (even though this is a slice type)
+                    p->variables[var_idx].value = val_result.value;
+                }
+                return finalize_statement(p, "Expected ';' after variable declaration");
             }
 
             // For pointer variables, val_result.value contains the target variable index
@@ -3329,10 +3456,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             p->pos++; // Skip '}'
 
             // Preserve mutations to outer-scope variables before restoring scope
-            for (int i = 0; i < saved_var_count_block; i++)
-            {
-                // Values are already updated in place
-            }
+            // (Values are already updated in place)
 
             // Restore variable scope (remove variables declared inside the block)
             p->var_count = saved_var_count_block;
@@ -4074,16 +4198,8 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
             p->pos++; // Skip ')' or '}'
 
             // Before restoring variable scope, preserve mutations to outer-scope variables
-            if (is_block)
-            {
-                // Copy back the values of outer-scope variables (0 to saved_var_count-1)
-                // to preserve any mutations that occurred in the block
-                for (int i = 0; i < saved_var_count; i++)
-                {
-                    // Values in p->variables[i] are already updated, var_count will be reset
-                    // The values persist because they're stored directly in the array
-                }
-            }
+            // (Values in p->variables[i] are already updated, var_count will be reset)
+            // (The values persist because they're stored directly in the array)
 
             // Restore variable scope
             p->var_count = saved_var_count;
@@ -4110,17 +4226,9 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
         p->pos++; // Skip ')' or '}'
 
         // Before restoring variable scope, preserve mutations to outer-scope variables
-        if (is_block)
-        {
-            // Copy back the values of outer-scope variables (0 to saved_var_count-1)
-            // to preserve any mutations that occurred in the block
-            for (int i = 0; i < saved_var_count; i++)
-            {
-                // The variable at index i may have been modified in the block
-                // We keep its current value, don't restore the old one
-                // (no action needed - values are already updated)
-            }
-        }
+        // (The variable at index i may have been modified in the block)
+        // (We keep its current value, don't restore the old one)
+        // (no action needed - values are already updated)
 
         // Restore variable scope
         p->var_count = saved_var_count;
@@ -4426,11 +4534,8 @@ static InterpretResult parse_if_statement(Parser *p)
 
         // Save current state before else (in case condition was true)
         Variable saved_vars_before_else[10];
-        int saved_var_count_before_else = p->var_count;
-        for (int i = 0; i < p->var_count; i++)
-        {
-            saved_vars_before_else[i] = p->variables[i];
-        }
+        int saved_var_count_before_else;
+        save_variable_state(p, saved_vars_before_else, &saved_var_count_before_else);
 
         if (header_state.condition.value == 0)
         {
@@ -4446,11 +4551,7 @@ static InterpretResult parse_if_statement(Parser *p)
             if (else_result.has_error)
                 return else_result;
             // Restore the state before the else (undo else branch mutations)
-            p->var_count = saved_var_count_before_else;
-            for (int i = 0; i < saved_var_count_before_else; i++)
-            {
-                p->variables[i] = saved_vars_before_else[i];
-            }
+            restore_saved_vars(p, saved_vars_before_else, saved_var_count_before_else);
         }
 
         skip_whitespace(p);
@@ -4667,11 +4768,7 @@ static InterpretResult parse_assignment_or_if_else(Parser *p)
 // Helper: Apply branch state after executing an if/else branch
 static InterpretResult apply_branch_state(Parser *p, Variable then_state_vars[10], int then_state_var_count, InterpretResult then_expr)
 {
-    p->var_count = then_state_var_count;
-    for (int i = 0; i < then_state_var_count; i++)
-    {
-        p->variables[i] = then_state_vars[i];
-    }
+    restore_saved_vars(p, then_state_vars, then_state_var_count);
     return (InterpretResult){.value = then_expr.value, .has_error = false, .error_message = NULL};
 }
 
@@ -4890,11 +4987,8 @@ static InterpretResult parse_if_else(Parser *p)
 
     // Save the state after executing then branch
     Variable then_state_vars[10];
-    int then_state_var_count = p->var_count;
-    for (int i = 0; i < p->var_count; i++)
-    {
-        then_state_vars[i] = p->variables[i];
-    }
+    int then_state_var_count;
+    save_variable_state(p, then_state_vars, &then_state_var_count);
 
     // Restore pre-then state before executing else
     restore_saved_vars(p, header_state.saved_vars, header_state.saved_var_count);
@@ -5103,13 +5197,16 @@ static InterpretResult parse_additive(Parser *p)
     // Update the Parser struct with the tracked suffix information
     if (has_tracked_suffix)
     {
+        // Operators were found - use the type tracking from operator handling
         strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), tracked_suffix, _TRUNCATE);
         p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
         p->has_tracked_suffix = 1;
     }
     else
     {
-        p->has_tracked_suffix = 0;
+        // No operators found - this is just a simple operand being passed through
+        // Preserve any tracking that was set by nested functions like parse_simple_operand()
+        // Don't clear p->has_tracked_suffix automatically
     }
 
     return (InterpretResult){.value = (int)result_value, .has_error = false, .error_message = NULL};
@@ -5324,7 +5421,7 @@ static int is_expression(const char *str)
 }
 
 // Helper: Initialize Parser struct with default values
-static Parser init_parser(const char *str, int argc)
+static Parser init_parser(const char *str, int argc, const char *const *argv)
 {
     return (Parser){
         .input = str,
@@ -5351,7 +5448,8 @@ static Parser init_parser(const char *str, int argc)
         .declared_structs_count = 0,
         .structs = {0},
         .structs_count = 0,
-        .argc = argc};
+        .argc = argc,
+        .argv = argv};
 }
 
 // Helper: Parse single value (no operators)
@@ -5391,7 +5489,7 @@ static InterpretResult parse_single_value(const char *str)
 }
 
 // Helper: Core interpretation logic shared by interpret() and interpret_with_argc()
-static InterpretResult interpret_impl(const char *str, int argc)
+static InterpretResult interpret_impl(const char *str, int argc, const char *const *argv)
 {
     if (str == NULL || *str == '\0')
     {
@@ -5401,7 +5499,7 @@ static InterpretResult interpret_impl(const char *str, int argc)
     // Check if this is an expression (contains operators)
     if (is_expression(str))
     {
-        Parser p = init_parser(str, argc);
+        Parser p = init_parser(str, argc, argv);
         return parse_expression(&p);
     }
 
@@ -5410,12 +5508,12 @@ static InterpretResult interpret_impl(const char *str, int argc)
 
 InterpretResult interpret(const char *str)
 {
-    return interpret_impl(str, -1);
+    return interpret_impl(str, -1, NULL);
 }
 
-InterpretResult interpret_with_argc(const char *str, int argc)
+InterpretResult interpret_with_argc(const char *str, int argc, const char *const *argv)
 {
-    return interpret_impl(str, argc);
+    return interpret_impl(str, argc, argv);
 }
 
 // Helper: Generate and allocate C code for a program that returns a specific value
@@ -5438,173 +5536,351 @@ static CompileResult generate_c_program(const char *format, ...)
     return (CompileResult){.code = out, .has_error = false, .error_message = NULL};
 }
 
-CompileResult compile(const char *source, int argc)
+// compile_args_expression: Translate a Tuff expression containing __args__ references
+// into equivalent C code. Appends to out_buf. Returns 0 on success, -1 on error.
+// var_types tracks declared variables: 0=unknown, 1=numeric/USize, 2=*Str, 3=*[*Str] (args slice)
+static int compile_args_expression(const char *expr, char *out_buf, size_t buf_size,
+                                   const char var_names[][32], const int *var_types, int var_count)
 {
-    // Check for patterns with __args__[digit].length (simple or in expressions)
-    if (source && strstr(source, "__args__[") != NULL && strstr(source, "].length") != NULL)
-    {
-        // Count how many __args__[n].length patterns exist in the source
-        int pattern_count = 0;
-        const char *pos = source;
-        while ((pos = strstr(pos, "__args__[")) != NULL)
-        {
-            pos += 9; // Skip "__args__["
-            pattern_count++;
-        }
+    const char *s = expr;
+    while (*s && isspace(*s))
+        s++;
 
-        // For simple single-pattern case: just __args__[digit].length
-        if (pattern_count == 1 && strstr(source, "+") == NULL && strstr(source, "-") == NULL && 
-            strstr(source, "*") == NULL && strstr(source, "/") == NULL)
+    // Build the expression piece by piece
+    while (*s)
+    {
+        while (*s && isspace(*s))
+            s++;
+        if (!*s)
+            break;
+
+        if (strncmp(s, "__args__.length", 15) == 0)
         {
-            // Try to parse simple "__args__[digit].length" pattern
-            const char *bracket = strchr(source, '[');
-            const char *close_bracket = strchr(source, ']');
-            
-            if (bracket && close_bracket && close_bracket > bracket)
+            strncat_s(out_buf, buf_size, "argc", _TRUNCATE);
+            s += 15;
+        }
+        else if (strncmp(s, "__args__[", 9) == 0)
+        {
+            s += 9;
+            // Parse index
+            int index = 0;
+            while (*s && isdigit(*s))
             {
-                // Extract the index
-                const char *index_start = bracket + 1;
-                int index = 0;
-                
-                // Parse the index (only digits)
-                while (index_start < close_bracket && isdigit(*index_start))
-                {
-                    index = index * 10 + (*index_start - '0');
-                    index_start++;
-                }
-                
-                // Check if we parsed the entire index and found ].length
-                if (index_start == close_bracket && strcmp(close_bracket, "].length") == 0)
-                {
-                    // Valid simple pattern: generate C code to return strlen(argv[index])
-                    return generate_c_program(
-                        "#include <stdlib.h>\n"
-                        "#include <string.h>\n"
-                        "int main(int argc, char **argv) { return (argc > %d) ? strlen(argv[%d]) : 0; }\n",
-                        index, index);
-                }
+                index = index * 10 + (*s - '0');
+                s++;
+            }
+            if (strncmp(s, "].length", 8) == 0)
+            {
+                s += 8;
+                char expr_buf[64];
+                snprintf(expr_buf, sizeof(expr_buf), "(int)strlen(argv[%d])", index);
+                strncat_s(out_buf, buf_size, expr_buf, _TRUNCATE);
+            }
+            else if (*s == ']')
+            {
+                s++; // skip ']'
+                char expr_buf[64];
+                snprintf(expr_buf, sizeof(expr_buf), "argv[%d]", index);
+                strncat_s(out_buf, buf_size, expr_buf, _TRUNCATE);
             }
         }
-        else if (pattern_count > 1)
+        else if (isalpha(*s) || *s == '_')
         {
-            // Handle expressions with multiple __args__[n].length patterns
-            // Replace each pattern with C code inline expressions
-            char c_code[2048] = {0};
-            strcpy_s(c_code, sizeof(c_code), 
-                "#include <stdlib.h>\n"
-                "#include <string.h>\n"
-                "int main(int argc, char **argv) { return ");
-            
-            int i = 0;
-            const char *s = source;
-            int first = 1;
-            
-            while (*s)
+            // Variable reference - extract name
+            char name[32] = {0};
+            int ni = 0;
+            while (*s && (isalnum(*s) || *s == '_') && ni < 31)
             {
-                if (strncmp(s, "__args__[", 9) == 0)
+                name[ni++] = *s++;
+            }
+            name[ni] = '\0';
+
+            // Check if followed by .length
+            if (strncmp(s, ".length", 7) == 0)
+            {
+                s += 7;
+                // Look up variable type
+                int vtype = 0;
+                for (int i = 0; i < var_count; i++)
                 {
-                    // Found __args__[ pattern
-                    s += 9; // Skip "__args__["
-                    
-                    // Parse the index
-                    int index = 0;
-                    while (*s && isdigit(*s))
+                    if (strcmp(var_names[i], name) == 0)
                     {
-                        index = index * 10 + (*s - '0');
-                        s++;
-                    }
-                    
-                    // Expect ].length
-                    if (strncmp(s, "].length", 8) == 0)
-                    {
-                        s += 8; // Skip "].length"
-                        
-                        // Append the C expression for strlen
-                        char expr[64];
-                        snprintf(expr, sizeof(expr), "(argc > %d ? strlen(argv[%d]) : 0)", index, index);
-                        strncat_s(c_code, sizeof(c_code), expr, _TRUNCATE);
+                        vtype = var_types[i];
+                        break;
                     }
                 }
-                else if (*s == '+' || *s == '-' || *s == '*' || *s == '/')
+                if (vtype == 3)
                 {
-                    // Append arithmetic operator
-                    char op[2] = {*s, '\0'};
-                    strncat_s(c_code, sizeof(c_code), " ", _TRUNCATE);
-                    strncat_s(c_code, sizeof(c_code), op, _TRUNCATE);
-                    strncat_s(c_code, sizeof(c_code), " ", _TRUNCATE);
-                    s++;
+                    // args slice - length is argc
+                    strncat_s(out_buf, buf_size, "argc", _TRUNCATE);
                 }
-                else if (!isspace(*s))
+                else if (vtype == 2)
                 {
-                    // Skip other characters
-                    s++;
+                    // *Str - length is strlen
+                    char expr_buf[64];
+                    snprintf(expr_buf, sizeof(expr_buf), "(int)strlen(%s)", name);
+                    strncat_s(out_buf, buf_size, expr_buf, _TRUNCATE);
                 }
                 else
                 {
-                    s++;
+                    // Unknown type, just emit variable name with .length
+                    strncat_s(out_buf, buf_size, name, _TRUNCATE);
                 }
             }
-            
-            strncat_s(c_code, sizeof(c_code), "; }\n", _TRUNCATE);
-            c_code[sizeof(c_code) - 1] = '\0';
-            
-            // Allocate memory for the code
-            char *out = (char *)malloc(strlen(c_code) + 1);
-            if (!out)
-                return (CompileResult){.code = NULL, .has_error = true, .error_message = "Memory allocation failed"};
-            strcpy_s(out, strlen(c_code) + 1, c_code);
-            return (CompileResult){.code = out, .has_error = false, .error_message = NULL};
+            else
+            {
+                // Plain variable reference
+                strncat_s(out_buf, buf_size, name, _TRUNCATE);
+            }
+        }
+        else if (*s == '+' || *s == '-' || *s == '*' || *s == '/')
+        {
+            char op[4] = {' ', *s, ' ', '\0'};
+            strncat_s(out_buf, buf_size, op, _TRUNCATE);
+            s++;
+        }
+        else
+        {
+            // Skip unexpected characters
+            s++;
+        }
+    }
+    return 0;
+}
+
+static const char *compile_args_parse_identifier(const char *p, char *out_name, size_t name_size)
+{
+    int vi = 0;
+    while (*p && (isalnum(*p) || *p == '_') && vi < (int)(name_size - 1))
+    {
+        out_name[vi++] = *p++;
+    }
+    out_name[vi] = '\0';
+    return p;
+}
+
+static void compile_args_register_var(char var_names[][32], int *var_types, int *var_count,
+                                      const char *vname, int vtype)
+{
+    if (*var_count < 16)
+    {
+        strcpy_s(var_names[*var_count], sizeof(var_names[*var_count]), vname);
+        var_types[*var_count] = vtype;
+        (*var_count)++;
+    }
+}
+
+static void compile_args_emit_args_slice_decl(char *c_code, size_t c_code_size, const char *vname)
+{
+    char decl[128];
+    snprintf(decl, sizeof(decl), "    char **%s = argv;\n", vname);
+    strncat_s(c_code, c_code_size, decl, _TRUNCATE);
+}
+
+static void compile_args_emit_decl(char *c_code, size_t c_code_size, const char *type_prefix,
+                                   const char *vname, const char *expr,
+                                   const char var_names[][32], const int *var_types, int var_count)
+{
+    char decl[256];
+    snprintf(decl, sizeof(decl), "    %s%s = ", type_prefix, vname);
+    strncat_s(c_code, c_code_size, decl, _TRUNCATE);
+    compile_args_expression(expr, c_code, c_code_size, var_names, var_types, var_count);
+    strncat_s(c_code, c_code_size, ";\n", _TRUNCATE);
+}
+
+// compile_args_source: Transpile Tuff source containing __args__ into a complete C program.
+// Returns a CompileResult with generated C code.
+static CompileResult compile_args_source(const char *source)
+{
+    char c_code[4096] = {0};
+    strcpy_s(c_code, sizeof(c_code),
+             "#include <stdlib.h>\n"
+             "#include <string.h>\n"
+             "int main(int argc, char **argv) {\n");
+
+    // Track variable declarations: name, type (1=numeric, 2=*Str, 3=*[*Str])
+    char var_names[16][32] = {{0}};
+    int var_types[16] = {0};
+    int var_count = 0;
+
+    // Split source into statements by ';'
+    // The last piece (after the last ';' or the entire source if no ';') is the return expression
+    const char *s = source;
+
+    // Collect statements (semicolon-terminated) and a possible trailing expression
+    // Process statement by statement
+    while (*s)
+    {
+        while (*s && isspace(*s))
+            s++;
+        if (!*s)
+            break;
+
+        // Find the next semicolon to delimit a statement
+        const char *semi = strchr(s, ';');
+
+        if (semi == NULL)
+        {
+            // No semicolon - this is the final return expression
+            strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
+            compile_args_expression(s, c_code, sizeof(c_code), var_names, var_types, var_count);
+            strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
+            break;
+        }
+
+        // Extract the statement (up to but not including the semicolon)
+        size_t stmt_len = (size_t)(semi - s);
+        char stmt[512] = {0};
+        if (stmt_len >= sizeof(stmt))
+            stmt_len = sizeof(stmt) - 1;
+        memcpy(stmt, s, stmt_len);
+        stmt[stmt_len] = '\0';
+
+        // Trim leading whitespace from statement
+        const char *st = stmt;
+        while (*st && isspace(*st))
+            st++;
+
+        if (strncmp(st, "let ", 4) == 0)
+        {
+            // Variable declaration
+            const char *p = st + 4;
+            while (*p && isspace(*p))
+                p++;
+
+            // Check for 'mut' keyword
+            int is_mut = 0;
+            if (strncmp(p, "mut ", 4) == 0)
+            {
+                is_mut = 1;
+                p += 4;
+                while (*p && isspace(*p))
+                    p++;
+            }
+
+            // Parse variable name
+            char vname[32] = {0};
+            p = compile_args_parse_identifier(p, vname, sizeof(vname));
+
+            // Skip whitespace
+            while (*p && isspace(*p))
+                p++;
+
+            // Parse optional type annotation ': Type'
+            char type_str[32] = {0};
+            if (*p == ':')
+            {
+                p++; // skip ':'
+                while (*p && isspace(*p))
+                    p++;
+                int ti = 0;
+                // Read type including possible * and [] characters
+                while (*p && *p != '=' && !isspace(*p) && ti < 31)
+                {
+                    type_str[ti++] = *p++;
+                }
+                type_str[ti] = '\0';
+                while (*p && isspace(*p))
+                    p++;
+            }
+
+            // Expect '='
+            if (*p == '=')
+            {
+                p++;
+                while (*p && isspace(*p))
+                    p++;
+            }
+
+            // Determine variable type and generate C declaration
+            int vtype = 1; // default: numeric
+            // Check for args slice: either explicitly typed *[*Str] or assigning bare __args__ (not __args__.length or __args__[n])
+            if (strcmp(type_str, "*[*Str]") == 0 || (strcmp(p, "__args__") == 0))
+            {
+                // Assigning __args__ directly (not __args__[n]) -> args slice
+                vtype = 3;
+                compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
+                // Generate: char **vname = argv;
+                // (argc is accessible directly, no need to store separately)
+                compile_args_emit_args_slice_decl(c_code, sizeof(c_code), vname);
+            }
+            else if (strcmp(type_str, "*Str") == 0 || strstr(p, "__args__[") != NULL)
+            {
+                // String pointer from __args__[n]
+                vtype = 2;
+                compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
+                // Generate: char *vname = <expr>;
+                compile_args_emit_decl(c_code, sizeof(c_code), "char *", vname, p, var_names, var_types, var_count);
+            }
+            else
+            {
+                // Numeric type (USize, I32, etc.)
+                vtype = 1;
+                compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
+                // Generate: int vname = <expr>;
+                compile_args_emit_decl(c_code, sizeof(c_code), "int ", vname, p, var_names, var_types, var_count);
+            }
+        }
+        else if (isalpha(*st) || *st == '_')
+        {
+            // Variable reassignment: varname = expr;
+            const char *p = st;
+            char vname[32] = {0};
+            p = compile_args_parse_identifier(p, vname, sizeof(vname));
+            while (*p && isspace(*p))
+                p++;
+
+            if (*p == '=')
+            {
+                p++;
+                while (*p && isspace(*p))
+                    p++;
+
+                // Generate: vname = <expr>;
+                char assign[256];
+                snprintf(assign, sizeof(assign), "    %s = ", vname);
+                strncat_s(c_code, sizeof(c_code), assign, _TRUNCATE);
+                compile_args_expression(p, c_code, sizeof(c_code), var_names, var_types, var_count);
+                strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
+            }
+        }
+
+        // Advance past the semicolon
+        s = semi + 1;
+
+        // Check if there's anything after this semicolon (could be trailing expression)
+        const char *remaining = s;
+        while (*remaining && isspace(*remaining))
+            remaining++;
+        if (*remaining && strchr(remaining, ';') == NULL)
+        {
+            // This is a trailing expression (no more semicolons) - generate return
+            strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
+            compile_args_expression(remaining, c_code, sizeof(c_code), var_names, var_types, var_count);
+            strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
+            break;
         }
     }
 
-    // Check for special builtin "__args__.length" which should return argc at runtime
-    if (source && strcmp(source, "__args__.length") == 0)
+    strncat_s(c_code, sizeof(c_code), "}\n", _TRUNCATE);
+
+    // Allocate and return the generated code
+    char *out = (char *)malloc(strlen(c_code) + 1);
+    if (!out)
+        return (CompileResult){.code = NULL, .has_error = true, .error_message = "Memory allocation failed"};
+    strcpy_s(out, strlen(c_code) + 1, c_code);
+    return (CompileResult){.code = out, .has_error = false, .error_message = NULL};
+}
+
+CompileResult compile(const char *source)
+{
+    // If source contains __args__, use the transpiler to generate runtime C code
+    if (source && strstr(source, "__args__") != NULL)
     {
-        return generate_c_program(
-            "#include <stdlib.h>\n"
-            "int main(int argc, char **argv) { (void)argv; return argc; }\n");
+        return compile_args_source(source);
     }
 
-    // Check if "__args__[" appears anywhere (for expressions containing arg indexing)
-    if (source && strstr(source, "__args__[") != NULL)
-    {
-        // Interpret the source with actual argc value
-        InterpretResult result = interpret_with_argc(source, argc);
-
-        // If interpretation failed, return error result
-        if (result.has_error)
-            return (CompileResult){.code = NULL, .has_error = true, .error_message = result.error_message};
-
-        // Generate a C program that returns the computed exit code
-        int exit_code = result.value & 0xFF;
-
-        return generate_c_program(
-            "#include <stdlib.h>\n"
-            "int main(int argc, char **argv) { (void)argc; (void)argv; return %d; }\n",
-            exit_code);
-    }
-
-    // Check if "__args__.length" appears anywhere in the source
-    // If it does, use interpret_with_argc to properly evaluate the full expression
-    if (source && strstr(source, "__args__.length") != NULL)
-    {
-        // Interpret the source with actual argc value
-        InterpretResult result = interpret_with_argc(source, argc);
-
-        // If interpretation failed, return error result
-        if (result.has_error)
-            return (CompileResult){.code = NULL, .has_error = true, .error_message = result.error_message};
-
-        // Generate a C program that returns the computed exit code
-        int exit_code = result.value & 0xFF;
-
-        return generate_c_program(
-            "#include <stdlib.h>\n"
-            "int main(int argc, char **argv) { (void)argc; (void)argv; return %d; }\n",
-            exit_code);
-    }
-
-    // Interpret the source to get the result
+    // No __args__ - interpret the source and bake the constant result
     InterpretResult result = interpret(source);
 
     // If interpretation failed, return error result

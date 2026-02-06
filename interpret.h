@@ -26,18 +26,18 @@ typedef struct
 
 InterpretResult interpret(const char *str);
 
-// interpret_with_argc: Interpreter with argc parameter for __args__.length support at compile time
-// When argc is -1, __args__.length is treated as 0 (default behavior)
-// When argc >= 0, __args__.length evaluates to argc (total argument count including program name)
-InterpretResult interpret_with_argc(const char *str, int argc);
+// interpret_with_argc: Interpreter with argc and argv for __args__ support
+// When argc is -1, __args__ is unavailable
+// When argc >= 0, __args__ evaluates using argv values
+// argv: Pointer to argv array (may be NULL if argc condition doesn't match)
+InterpretResult interpret_with_argc(const char *str, int argc, const char *const *argv);
 
-// compile: Compiler entry point with optional argc parameter.
-// Takes Tuff source code and argc value, returns a CompileResult containing generated C source code.
+// compile: Compiler entry point.
+// Takes Tuff source code and returns a CompileResult containing generated C source code.
+// The generated C program handles __args__ access at runtime via its own main(argc, argv).
 // If successful, caller owns the returned code string and must free() it.
 // If has_error is true, code will be NULL and error_message contains the error.
-// argc: Should be set to the count of command-line arguments (including program name).
-//       If argc is -1 (default), __args__.length evaluates to 0. If argc >= 0, __args__.length evaluates to argc.
-CompileResult compile(const char *source, int argc);
+CompileResult compile(const char *source);
 
 RunResult run(const char *source, const char *const *args);
 
