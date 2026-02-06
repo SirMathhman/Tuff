@@ -40,5 +40,5 @@ int32_t main(int32_t argc, char **argv) {
     __tuff_argc = argc;
     __tuff_argv = argv;
     int32_t MAX_ARRAY_ELEMENTS = 64;
-    return structNumberValue{}(int)strlen(__tuff_argv[1]);
+    return structNumberValue{}letTypeInfo(int)strlen(__tuff_argv[1]);
 }
