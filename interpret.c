@@ -1199,7 +1199,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                         {
                             // Return the slice length (end - start)
                             long slice_length = p->variables[idx].slice_end - p->variables[idx].slice_start;
-                            
+
                             // Set tracked suffix to I32 (length is always a numeric value)
                             strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "I32", _TRUNCATE);
                             p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
@@ -1214,9 +1214,33 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                             return (InterpretResult){.value = (int)slice_length, .has_error = false, .error_message = NULL};
                         }
+                        else if (strncmp(property_name, "init", property_name_len) == 0 && property_name_len == 4)
+                        {
+                            // Get the underlying array
+                            int array_var_idx = p->variables[idx].pointer_target;
+                            if (array_var_idx < 0 || array_var_idx >= p->var_count || !p->variables[array_var_idx].is_array)
+                            {
+                                return make_error("Invalid slice pointer");
+                            }
+
+                            // Calculate initialized count within slice bounds
+                            int init_count = 0;
+                            if (p->variables[idx].slice_start < p->variables[array_var_idx].array_init_count)
+                            {
+                                int max_init = p->variables[array_var_idx].array_init_count;
+                                int slice_end = p->variables[idx].slice_end;
+                                int effective_end = (slice_end < max_init) ? slice_end : max_init;
+                                init_count = effective_end - p->variables[idx].slice_start;
+                            }
+
+                            // Set tracked suffix to I32 (init count is always a numeric value)
+                            set_tracked_suffix_and_output(p, "I32", init_count, out_num);
+
+                            return (InterpretResult){.value = init_count, .has_error = false, .error_message = NULL};
+                        }
                         else
                         {
-                            return make_error("Unknown slice property (only 'length' is supported)");
+                            return make_error("Unknown slice property (only 'length' and 'init' are supported)");
                         }
                     }
                 }
