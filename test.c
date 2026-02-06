@@ -1328,6 +1328,86 @@ void test_args_length_plus_u8(void)
     assert_compile_success("__args__[1].length + 100U8", 103, "test_args_length_plus_u8", args);
 }
 
+void test_two_functions_args_lengths_in_one_expression(void)
+{
+    const char *const args[] = {"hello", "world", NULL};
+    assert_compile_success(
+        "let a : *Str = __args__[1]; let b : *Str = __args__[2]; fn first() => a; fn second() => b; first().length + second().length",
+        10,
+        "test_two_functions_args_lengths_in_one_expression",
+        args);
+}
+
+void test_stack_string_basic(void)
+{
+    assert_success("let text : Str[32] = \"hello\"; text[0]", 104, "test_stack_string_basic");
+}
+
+void test_stack_string_length(void)
+{
+    assert_success("let text : Str[32] = \"hello\"; text.length", 5, "test_stack_string_length");
+}
+
+void test_stack_string_index_access(void)
+{
+    assert_success("let text : Str[16] = \"test\"; text[1]", 101, "test_stack_string_index_access");
+}
+
+void test_stack_string_size_constraint_met(void)
+{
+    assert_success("let text : Str[10] = \"hi\"; text.length", 2, "test_stack_string_size_constraint_met");
+}
+
+void test_stack_string_size_constraint_exceeded(void)
+{
+    assert_error("let text : Str[3] = \"hello\"; text[0]", "test_stack_string_size_constraint_exceeded");
+}
+
+void test_stack_string_empty(void)
+{
+    assert_success("let text : Str[32] = \"\"; text.length", 0, "test_stack_string_empty");
+}
+
+void test_stack_string_max_size(void)
+{
+    assert_success("let text : Str[5] = \"test\"; text.length", 4, "test_stack_string_max_size");
+}
+
+void test_stack_string_exact_size(void)
+{
+    assert_success("let text : Str[5] = \"hello\"; text[4]", 111, "test_stack_string_exact_size");
+}
+
+void test_stack_string_index_middle(void)
+{
+    assert_success("let text : Str[32] = \"hello\"; text[2]", 108, "test_stack_string_index_middle");
+}
+
+void test_stack_string_vs_pointer_string(void)
+{
+    assert_success("let stack : Str[32] = \"test\"; let ptr : *Str = \"hello\"; stack[0] + ptr[0]", 220, "test_stack_string_vs_pointer_string");
+}
+
+void test_struct_with_stack_string_field(void)
+{
+    assert_success("struct Data { msg : Str[32]; } let d : Data = Data { msg: \"hi\" }; d.msg[0]", 104, "test_struct_with_stack_string_field");
+}
+
+void test_struct_with_stack_string_multiple_fields(void)
+{
+    assert_success("struct Config { name : Str[64]; version : I32; } let cfg : Config = Config { name: \"app\", version: 1 }; cfg.name[0] + cfg.version", 98, "test_struct_with_stack_string_multiple_fields");
+}
+
+void test_stack_string_in_function(void)
+{
+    assert_success("fn getMessage() => \"hello\"; let msg : Str[32] = getMessage(); msg[0]", 104, "test_stack_string_in_function");
+}
+
+void test_stack_string_in_if_expression(void)
+{
+    assert_success("let msg : Str[32] = if (true) \"yes\" else \"no\"; msg[0]", 121, "test_stack_string_in_if_expression");
+}
+
 int main(void)
 {
     cache_ready = cache_init();
@@ -1508,6 +1588,21 @@ int main(void)
     test_struct_with_string_field_from_args();
     test_struct_i64_with_args();
     test_args_length_plus_u8();
+    test_two_functions_args_lengths_in_one_expression();
+    test_stack_string_basic();
+    test_stack_string_length();
+    test_stack_string_index_access();
+    test_stack_string_size_constraint_met();
+    test_stack_string_size_constraint_exceeded();
+    test_stack_string_empty();
+    test_stack_string_max_size();
+    test_stack_string_exact_size();
+    test_stack_string_index_middle();
+    test_stack_string_vs_pointer_string();
+    test_struct_with_stack_string_field();
+    test_struct_with_stack_string_multiple_fields();
+    test_stack_string_in_function();
+    test_stack_string_in_if_expression();
 
     if (passed_asserts == total_asserts)
     {

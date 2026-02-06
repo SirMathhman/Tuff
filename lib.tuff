@@ -1,20 +1,11 @@
-struct TypeInfo
-{
-    suffix : *Str;
-    min_value : I64;
-    max_value : I64;
-    error_message : *Str;
+fn is_pointer_type(type : *Str | 0) : I32 => type != 0
+    && type[0] == '*' 
+    && type[1] != '\0';
+
+fn is_mutable_pointer_type(pointer_type : *Str | 0) : I32 => {
+    if (pointer_type == 0 || pointer_type[0] != '*') {
+        
+    }
 }
 
-struct Variable {
-    name : Str[32];
-    value : I32;
-}
-
-struct Wrapper {
-    x : I32;
-}
-
-let length = __args__[1];
-let temp : Wrapper = { x : length };
-temp.x
+__args__[1]

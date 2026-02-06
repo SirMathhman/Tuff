@@ -20,23 +20,26 @@ typedef struct
 {
     char name[32];
     int32_t value;
-    char type[16];      // Store variable's type (e.g., "U8", "U16", "*I32", "[I32;3;3]")
-    bool is_mutable;     // 1 if mutable, 0 if immutable
+    char type[16];          // Store variable's type (e.g., "U8", "U16", "*I32", "[I32;3;3]")
+    bool is_mutable;        // 1 if mutable, 0 if immutable
     int32_t pointer_target; // -1 if not a pointer, otherwise index of pointed-to variable
-    bool is_array;       // 1 if array, 0 otherwise
+    bool is_array;          // 1 if array, 0 otherwise
     int32_t array_init_count;
     int32_t array_total_count;
     char array_element_type[16];
     int32_t array_values[MAX_ARRAY_ELEMENTS];
-    bool is_struct;             // 1 if struct instance, 0 otherwise
-    int32_t struct_def_idx;        // Index in parser's structs array
-    int32_t struct_values[10]; // Field values for struct instances
-    int32_t slice_start;           // Start index of slice (for pointer-to-array types)
-    int32_t slice_end;             // End index of slice (for pointer-to-array types)
-    bool is_string;             // 1 if string value
-    char string_value[256];    // Store string content
-    int32_t string_len;            // Length of string
-    bool is_args_slice;         // 1 if initialized from __args__ builtin, 0 otherwise
+    bool is_struct;                     // 1 if struct instance, 0 otherwise
+    int32_t struct_def_idx;             // Index in parser's structs array
+    int32_t struct_values[10];          // Field values for struct instances
+    char struct_string_values[10][256]; // Field string values for string fields
+    int32_t struct_string_lengths[10];  // String lengths for each string field
+    int32_t slice_start;                // Start index of slice (for pointer-to-array types)
+    int32_t slice_end;                  // End index of slice (for pointer-to-array types)
+    bool is_string;                     // 1 if string value
+    char string_value[256];             // Store string content
+    int32_t string_len;                 // Length of string
+    int32_t string_max_size;            // Max size for Str[N] types (-1 if unbounded *Str)
+    bool is_args_slice;                 // 1 if initialized from __args__ builtin, 0 otherwise
 } Variable;
 
 typedef struct
@@ -44,11 +47,11 @@ typedef struct
     char name[32];
     char param_names[10][32]; // Parameter names
     char param_types[10][32]; // Parameter types
-    int32_t param_count;          // Number of parameters
+    int32_t param_count;      // Number of parameters
     char return_type[32];     // Return type
-    int32_t body_start_pos;       // Position in input where function body starts
-    int32_t body_end_pos;         // Position in input where function body ends
-    int32_t is_braced_body;       // 1 if body has braces { }, 0 if implicit body
+    int32_t body_start_pos;   // Position in input where function body starts
+    int32_t body_end_pos;     // Position in input where function body ends
+    int32_t is_braced_body;   // 1 if body has braces { }, 0 if implicit body
 } FunctionInfo;
 
 typedef struct
@@ -56,7 +59,7 @@ typedef struct
     char name[32];            // Struct name
     char field_names[10][32]; // Field names
     char field_types[10][32]; // Field types
-    int32_t field_count;          // Number of fields
+    int32_t field_count;      // Number of fields
 } StructInfo;
 
 typedef struct
@@ -69,29 +72,31 @@ typedef struct
     Variable variables[10];
     int32_t var_count;
     char all_declared_names[10][32]; // Track all variable names ever declared
-    int32_t all_declared_count;          // Count of all declared names
+    int32_t all_declared_count;      // Count of all declared names
     int32_t has_temp_array;
     int32_t temp_array_count;
     char temp_array_element_type[16];
     int32_t temp_array_values[MAX_ARRAY_ELEMENTS];
-    char declared_functions[10][32]; // Track all declared function names
-    int32_t declared_functions_count;    // Count of declared functions
-    FunctionInfo functions[10];      // Array of function information
-    int32_t functions_count;             // Count of stored functions
+    char declared_functions[10][32];  // Track all declared function names
+    int32_t declared_functions_count; // Count of declared functions
+    FunctionInfo functions[10];       // Array of function information
+    int32_t functions_count;          // Count of stored functions
     int32_t has_temp_struct;
     int32_t temp_struct_def_idx;
     int32_t temp_struct_values[10];
-    char declared_structs[10][32]; // Track all declared struct names
-    int32_t declared_structs_count;    // Count of declared structs
-    StructInfo structs[10];        // Array of struct definitions
-    int32_t structs_count;             // Count of struct definitions
-    int32_t temp_slice_start;          // Start index for temporary slice
-    int32_t temp_slice_end;            // End index for temporary slice
-    int32_t has_temp_string;           // 1 if temp string is set
-    char temp_string_value[256];   // Store temporary string
-    int32_t temp_string_len;           // Length of temporary string
-    int32_t argc;                      // argc value for __args__.length (-1 if not provided)
-    const char *const *argv;       // argv array for __args__[n] (NULL if not provided)
+    char temp_struct_string_values[10][256]; // String field values for temp struct
+    int32_t temp_struct_string_lengths[10];  // String field lengths for temp struct
+    char declared_structs[10][32];           // Track all declared struct names
+    int32_t declared_structs_count;          // Count of declared structs
+    StructInfo structs[10];                  // Array of struct definitions
+    int32_t structs_count;                   // Count of struct definitions
+    int32_t temp_slice_start;                // Start index for temporary slice
+    int32_t temp_slice_end;                  // End index for temporary slice
+    int32_t has_temp_string;                 // 1 if temp string is set
+    char temp_string_value[256];             // Store temporary string
+    int32_t temp_string_len;                 // Length of temporary string
+    int32_t argc;                            // argc value for __args__.length (-1 if not provided)
+    const char *const *argv;                 // argv array for __args__[n] (NULL if not provided)
 } Parser;
 
 typedef struct
@@ -145,6 +150,30 @@ static InterpretResult make_error(const char *message);
 static InterpretResult parse_identifier_or_error(Parser *p, char *out_name, int32_t max_name_len, const char *error_msg);
 static InterpretResult expect_char(Parser *p, char expected, const char *error_msg);
 static void skip_whitespace(Parser *p);
+
+// Helper: Check if a type string is a string stack type (e.g., "Str[32]")
+static int32_t is_string_type_string(const char *type)
+{
+    return type && strncmp(type, "Str[", 4) == 0;
+}
+
+// Helper: Extract size from string type (e.g., "Str[32]" -> 32)
+static int32_t extract_string_type_size(const char *string_type)
+{
+    if (!is_string_type_string(string_type))
+        return -1;
+
+    const char *p = string_type + 4; // Skip "Str["
+    int32_t size = 0;
+    while (*p && isdigit(*p))
+    {
+        size = size * 10 + (*p - '0');
+        p++;
+    }
+    if (*p == ']')
+        return size;
+    return -1; // Invalid format
+}
 
 // Helper: Check if a type string is an array type
 static int32_t is_array_type_string(const char *type)
@@ -273,6 +302,40 @@ static InterpretResult parse_array_type_annotation(
     out_type[out_type_size - 1] = '\0';
     *out_init_count = init_count;
     *out_total_count = total_count;
+
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Parse string type annotation: Str[Size]
+static InterpretResult parse_string_type_annotation(
+    Parser *p,
+    char *out_type,
+    int32_t out_type_size,
+    int32_t *out_size)
+{
+    InterpretResult open_bracket = expect_char(p, '[', "Expected '[' to start string type");
+    if (open_bracket.has_error)
+        return open_bracket;
+    skip_whitespace(p);
+
+    int32_t size = 0;
+    if (!parse_non_negative_int(p, &size))
+    {
+        return make_error("Expected string size");
+    }
+
+    if (size <= 0 || size > 65535)
+    {
+        return make_error("String size must be between 1 and 65535");
+    }
+
+    InterpretResult close_bracket = expect_char(p, ']', "Expected ']' after string size");
+    if (close_bracket.has_error)
+        return close_bracket;
+
+    snprintf(out_type, out_type_size, "Str[%d]", size);
+    out_type[out_type_size - 1] = '\0';
+    *out_size = size;
 
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
@@ -506,6 +569,14 @@ static int32_t is_type_compatible(const char *dest_type, const char *source_type
     if (strcmp(dest_type, "*Str") == 0 && strcmp(source_type, "*Str") == 0)
         return 1;
 
+    // Check for stack string types Str[N] - must match exactly for now
+    if (is_string_type_string(dest_type) && is_string_type_string(source_type))
+        return strcmp(dest_type, source_type) == 0;
+
+    // Allow assigning string literal (*Str) to Str[N] stack string
+    if (is_string_type_string(dest_type) && strcmp(source_type, "*Str") == 0)
+        return 1;
+
     int32_t dest_idx = get_type_info_index(dest_type);
     int32_t src_idx = get_type_info_index(source_type);
 
@@ -601,6 +672,38 @@ static void set_tracked_suffix(Parser *p, const char *suffix_buf)
     p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
     p->has_tracked_suffix = 1;
 }
+
+// Helper: Set parser temp string state and track string type
+// Used by string literals, string struct fields, and argv-backed strings.
+static void set_temp_string_and_track(Parser *p, const char *string_val, int32_t string_len, const char *type, NumberValue *out_num)
+{
+    if (!p)
+        return;
+
+    if (string_len < 0)
+        string_len = 0;
+    if (string_len > 255)
+        string_len = 255;
+
+    p->has_temp_string = 1;
+    p->temp_string_len = string_len;
+    if (string_val && string_len > 0)
+    {
+        strncpy_s(p->temp_string_value, sizeof(p->temp_string_value), string_val, string_len);
+    }
+    p->temp_string_value[string_len] = '\0';
+
+    set_tracked_suffix(p, type ? type : "*Str");
+
+    if (out_num)
+    {
+        out_num->value = 0;
+        out_num->suffix = p->tracked_suffix;
+        out_num->suffix_len = (int32_t)strlen(p->tracked_suffix);
+    }
+}
+
+// (deduped) set_temp_string_and_track defined above
 
 static NumberValue parse_number_raw(Parser *p)
 {
@@ -790,6 +893,13 @@ static int32_t parse_property_access(Parser *p, char *out_property_name, int32_t
     return property_len;
 }
 
+// Helper: Check if property matches expected name
+static int32_t is_property_match(const char *property_name, int32_t property_name_len, const char *expected)
+{
+    int32_t expected_len = (int32_t)strlen(expected);
+    return strncmp(property_name, expected, property_name_len) == 0 && property_name_len == expected_len;
+}
+
 // Helper: Set Bool type tracking on parser
 static void set_bool_tracked_suffix(Parser *p)
 {
@@ -901,8 +1011,28 @@ static InterpretResult parse_array_literal(Parser *p)
 }
 
 // Helper: Parse bracket notation [index] and return the index value
-// Returns index_result with value set to the parsed index
-// This is used by both array indexing and array element assignment
+// Returns an InterpretResult with the parsed index value stored in out_index
+static InterpretResult parse_bracket_index(Parser *p, int32_t *out_index)
+{
+    InterpretResult bracket_open = expect_char(p, '[', "Expected '[' to start array index");
+    if (bracket_open.has_error)
+        return bracket_open;
+    skip_whitespace(p);
+
+    InterpretResult index_result = parse_additive(p);
+    if (index_result.has_error)
+        return index_result;
+
+    *out_index = index_result.value;
+
+    skip_whitespace(p);
+    InterpretResult bracket_close = expect_char(p, ']', "Expected ']' after array index");
+    if (bracket_close.has_error)
+        return bracket_close;
+
+    return (InterpretResult){.value = index_result.value, .has_error = false, .error_message = NULL};
+}
+
 // Helper: Set tracked suffix for a value and populate output number struct
 // Used when returning indexed values or dereferences with explicit types
 static void set_tracked_suffix_and_output(Parser *p, const char *type, int32_t value, NumberValue *out_num)
@@ -915,31 +1045,8 @@ static void set_tracked_suffix_and_output(Parser *p, const char *type, int32_t v
     {
         out_num->value = value;
         out_num->suffix = p->tracked_suffix;
-        out_num->suffix_len = strlen(p->tracked_suffix);
+        out_num->suffix_len = (int32_t)strlen(p->tracked_suffix);
     }
-}
-
-static InterpretResult parse_bracket_index(Parser *p, int32_t *out_index)
-{
-    InterpretResult open_bracket = expect_char(p, '[', "Expected '[' to start bracket notation");
-    if (open_bracket.has_error)
-        return open_bracket;
-
-    InterpretResult index_result = parse_additive(p);
-    if (index_result.has_error)
-        return index_result;
-
-    if (p->has_tracked_suffix && strcmp(p->tracked_suffix, "Bool") == 0)
-    {
-        return make_error("Array index must be a numeric value");
-    }
-
-    InterpretResult close_bracket = expect_char(p, ']', "Expected ']' after index");
-    if (close_bracket.has_error)
-        return close_bracket;
-
-    *out_index = index_result.value;
-    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
 // Helper: Parse array index access (array[idx])
@@ -1163,20 +1270,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
         }
         p->pos++; // Skip closing double quote
 
-        p->has_temp_string = 1;
-        p->temp_string_len = string_len;
-
-        // Set tracked suffix to "*Str" to indicate this is a string pointer
-        strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "*Str", _TRUNCATE);
-        p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
-        p->has_tracked_suffix = 1;
-
-        if (out_num)
-        {
-            out_num->value = 0;
-            out_num->suffix = p->tracked_suffix;
-            out_num->suffix_len = 4;
-        }
+        set_temp_string_and_track(p, p->temp_string_value, string_len, "*Str", out_num);
 
         return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
     }
@@ -1253,11 +1347,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                         if (arg_len < 256)
                         {
                             // Store in temp string for later assignment
-                            strncpy_s(p->temp_string_value, sizeof(p->temp_string_value), arg_string, arg_len);
-                            p->temp_string_value[arg_len] = '\0';
-                            p->temp_string_len = arg_len;
-                            p->has_temp_string = 1;
-                            set_tracked_suffix(p, "*Str");
+                            set_temp_string_and_track(p, arg_string, arg_len, "*Str", out_num);
                             // Return the string length so .length property works
                             return (InterpretResult){.value = (int)arg_len, .has_error = false, .error_message = NULL};
                         }
@@ -1291,8 +1381,8 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 {
                     // Check if this is an array, slice, or string
                     int32_t is_indexable = p->variables[idx].is_array ||
-                                       is_pointer_to_array_type(p->variables[idx].type) ||
-                                       p->variables[idx].is_string;
+                                           is_pointer_to_array_type(p->variables[idx].type) ||
+                                           p->variables[idx].is_string;
 
                     if (!is_indexable)
                     {
@@ -1409,7 +1499,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     if (property_name_len > 0)
                     {
                         // Check for .length property
-                        if (strncmp(property_name, "length", property_name_len) == 0 && property_name_len == 6)
+                        if (is_property_match(property_name, property_name_len, "length"))
                         {
                             int32_t length_value = 0;
 
@@ -1425,21 +1515,10 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                                 length_value = p->variables[idx].slice_end - p->variables[idx].slice_start;
                             }
 
-                            // Set tracked suffix to I32 (length is always a numeric value)
-                            strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "I32", _TRUNCATE);
-                            p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
-                            p->has_tracked_suffix = 1;
-
-                            if (out_num)
-                            {
-                                out_num->value = length_value;
-                                out_num->suffix = p->tracked_suffix;
-                                out_num->suffix_len = 3;
-                            }
-
+                            set_tracked_suffix_and_output(p, "I32", length_value, out_num);
                             return (InterpretResult){.value = (int)length_value, .has_error = false, .error_message = NULL};
                         }
-                        else if (strncmp(property_name, "init", property_name_len) == 0 && property_name_len == 4)
+                        else if (is_property_match(property_name, property_name_len, "init"))
                         {
                             // Get the underlying array
                             int32_t array_var_idx = p->variables[idx].pointer_target;
@@ -1466,6 +1545,29 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                         else
                         {
                             return make_error("Unknown slice property (only 'length' and 'init' are supported)");
+                        }
+                    }
+                }
+
+                // Handle string.length property access for both *Str and Str[N] types
+                if (p->variables[idx].is_string || strcmp(p->variables[idx].type, "*Str") == 0)
+                {
+                    char property_name[32];
+                    int32_t property_name_len = parse_property_access(p, property_name, sizeof(property_name));
+                    if (property_name_len > 0)
+                    {
+                        if (is_property_match(property_name, property_name_len, "length"))
+                        {
+                            int32_t length_value = p->variables[idx].string_len;
+
+                            // Set tracked suffix to I32 (length is always numeric)
+                            set_tracked_suffix_and_output(p, "I32", length_value, out_num);
+
+                            return (InterpretResult){.value = (int)length_value, .has_error = false, .error_message = NULL};
+                        }
+                        else
+                        {
+                            return make_error("Unknown string property (only 'length' is supported)");
                         }
                     }
                 }
@@ -1502,6 +1604,54 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                     int32_t field_value = p->variables[idx].struct_values[field_idx];
                     const char *field_type = p->structs[struct_idx].field_types[field_idx];
+
+                    // Handle string fields (Str[N] or *Str)
+                    if (is_string_type_string(field_type) || strcmp(field_type, "*Str") == 0)
+                    {
+                        skip_whitespace(p);
+
+                        int32_t string_len = p->variables[idx].struct_string_lengths[field_idx];
+                        const char *string_val = p->variables[idx].struct_string_values[field_idx];
+
+                        // Support indexing into string field: d.msg[0]
+                        if (p->input[p->pos] == '[')
+                        {
+                            int32_t index_value = 0;
+                            InterpretResult bracket_result = parse_bracket_index(p, &index_value);
+                            if (bracket_result.has_error)
+                                return bracket_result;
+
+                            if (index_value < 0 || index_value >= string_len)
+                            {
+                                return make_error("String index out of bounds");
+                            }
+
+                            int32_t char_code = (unsigned char)string_val[index_value];
+                            set_tracked_suffix_and_output(p, "I32", char_code, out_num);
+                            return (InterpretResult){.value = char_code, .has_error = false, .error_message = NULL};
+                        }
+
+                        // Support .length property on string fields
+                        if (p->input[p->pos] == '.')
+                        {
+                            char property_name[32];
+                            int32_t property_name_len = parse_property_access(p, property_name, sizeof(property_name));
+                            if (property_name_len > 0)
+                            {
+                                if (strncmp(property_name, "length", property_name_len) == 0 && property_name_len == 6)
+                                {
+                                    set_tracked_suffix_and_output(p, "I32", string_len, out_num);
+                                    return (InterpretResult){.value = string_len, .has_error = false, .error_message = NULL};
+                                }
+                                return make_error("Unknown string property (only 'length' is supported)");
+                            }
+                        }
+
+                        // Return string value for further use (e.g., assignment)
+                        set_temp_string_and_track(p, string_val, string_len, field_type, out_num);
+
+                        return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+                    }
 
                     strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), field_type, _TRUNCATE);
                     p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
@@ -1563,6 +1713,8 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                     int32_t field_values[10] = {0};
                     int32_t field_set[10] = {0};
+                    char field_string_values[10][256] = {0};
+                    int32_t field_string_lengths[10] = {0};
                     int32_t field_count = p->structs[struct_idx].field_count;
 
                     if (p->input[p->pos] != '}' || field_count > 0)
@@ -1600,12 +1752,40 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                                 return value_result;
 
                             const char *field_type = p->structs[struct_idx].field_types[field_idx];
-                            if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+
+                            // Handle string literals specially - they can be assigned to *Str or Str[N]
+                            if (p->has_temp_string)
+                            {
+                                if (strcmp(field_type, "*Str") != 0 && !is_string_type_string(field_type))
+                                {
+                                    return make_error("String literal cannot be assigned to non-string field");
+                                }
+
+                                // Enforce Str[N] size constraints
+                                if (is_string_type_string(field_type))
+                                {
+                                    int32_t max_size = extract_string_type_size(field_type);
+                                    if (max_size < 0)
+                                        return make_error("Invalid Str[N] type format");
+                                    if (p->temp_string_len > max_size)
+                                        return make_error("String literal too long for declared Str[N] size");
+                                }
+
+                                strncpy_s(field_string_values[field_idx], sizeof(field_string_values[field_idx]),
+                                          p->temp_string_value, p->temp_string_len);
+                                field_string_values[field_idx][p->temp_string_len] = '\0';
+                                field_string_lengths[field_idx] = p->temp_string_len;
+                                field_values[field_idx] = 0;
+
+                                p->has_temp_string = 0;
+                            }
+                            else if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
                             {
                                 if (!is_type_compatible(field_type, p->tracked_suffix))
                                 {
                                     return make_error("Struct field type mismatch");
                                 }
+                                field_values[field_idx] = value_result.value;
                             }
                             else if (strcmp(field_type, "Bool") == 0)
                             {
@@ -1616,9 +1796,9 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                                 InterpretResult validation = validate_type(value_result.value, field_type);
                                 if (validation.has_error)
                                     return validation;
+                                field_values[field_idx] = value_result.value;
                             }
 
-                            field_values[field_idx] = value_result.value;
                             field_set[field_idx] = 1;
 
                             skip_whitespace(p);
@@ -1657,6 +1837,10 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     for (int32_t i = 0; i < field_count; i++)
                     {
                         p->temp_struct_values[i] = field_values[i];
+                        strncpy_s(p->temp_struct_string_values[i], sizeof(p->temp_struct_string_values[i]),
+                                  field_string_values[i], _TRUNCATE);
+                        p->temp_struct_string_values[i][sizeof(p->temp_struct_string_values[i]) - 1] = '\0';
+                        p->temp_struct_string_lengths[i] = field_string_lengths[i];
                     }
 
                     strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), p->structs[struct_idx].name, _TRUNCATE);
@@ -2401,12 +2585,15 @@ static void init_variable_entry(Parser *p, const char *name, int32_t name_len, i
     for (int32_t i = 0; i < 10; i++)
     {
         p->variables[p->var_count].struct_values[i] = 0;
+        p->variables[p->var_count].struct_string_values[i][0] = '\0';
+        p->variables[p->var_count].struct_string_lengths[i] = 0;
     }
     p->variables[p->var_count].slice_start = 0;
     p->variables[p->var_count].slice_end = 0;
     p->variables[p->var_count].is_string = 0;
     p->variables[p->var_count].string_value[0] = '\0';
     p->variables[p->var_count].string_len = 0;
+    p->variables[p->var_count].string_max_size = -1;
     p->variables[p->var_count].is_args_slice = 0;
     register_declared_name(p, name, name_len);
 }
@@ -2545,12 +2732,25 @@ static int32_t set_variable_string_with_mutability(
     int32_t name_len,
     const char *string_value,
     int32_t string_len,
+    const char *type_string,
     int32_t is_mutable)
 {
     if (p->var_count >= 10)
         return -1;
 
-    init_variable_entry(p, name, name_len, 0, -1, is_mutable, "*Str");
+    // Default to *Str if type_string not provided
+    const char *type = type_string ? type_string : "*Str";
+    int32_t max_size = -1;
+    if (is_string_type_string(type))
+    {
+        max_size = extract_string_type_size(type);
+        if (max_size < 0)
+            return -1; // Invalid Str[N] format
+        if (string_len > max_size)
+            return -1; // String too long for declared size
+    }
+
+    init_variable_entry(p, name, name_len, 0, -1, is_mutable, type);
     p->variables[p->var_count].is_string = 1;
     strncpy_s(p->variables[p->var_count].string_value,
               sizeof(p->variables[p->var_count].string_value),
@@ -2558,6 +2758,7 @@ static int32_t set_variable_string_with_mutability(
               string_len);
     p->variables[p->var_count].string_value[string_len] = '\0';
     p->variables[p->var_count].string_len = string_len;
+    p->variables[p->var_count].string_max_size = max_size;
 
     return p->var_count++;
 }
@@ -2569,6 +2770,8 @@ static int32_t set_struct_variable_with_mutability(
     int32_t name_len,
     int32_t struct_def_idx,
     const int32_t *values,
+    const char string_values[10][256],
+    const int32_t *string_lengths,
     const char *struct_type,
     int32_t is_mutable)
 {
@@ -2583,6 +2786,18 @@ static int32_t set_struct_variable_with_mutability(
     for (int32_t i = 0; i < field_count && i < 10; i++)
     {
         p->variables[p->var_count].struct_values[i] = values ? values[i] : 0;
+        if (string_values)
+        {
+            strncpy_s(p->variables[p->var_count].struct_string_values[i],
+                      sizeof(p->variables[p->var_count].struct_string_values[i]),
+                      string_values[i], _TRUNCATE);
+            p->variables[p->var_count].struct_string_values[i][sizeof(p->variables[p->var_count].struct_string_values[i]) - 1] = '\0';
+        }
+        else
+        {
+            p->variables[p->var_count].struct_string_values[i][0] = '\0';
+        }
+        p->variables[p->var_count].struct_string_lengths[i] = string_lengths ? string_lengths[i] : 0;
     }
 
     return p->var_count++;
@@ -2813,6 +3028,28 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                 return array_type_result;
             is_array_declared = 1;
         }
+        else if (is_keyword_at(p, "Str"))
+        {
+            // Check for Str[N] type annotation
+            p->pos += 3; // Skip 'Str'
+            skip_whitespace(p);
+            if (p->input[p->pos] == '[')
+            {
+                int32_t declared_string_size = 0;
+                InterpretResult string_type_result = parse_string_type_annotation(
+                    p,
+                    declared_type,
+                    sizeof(declared_type),
+                    &declared_string_size);
+                if (string_type_result.has_error)
+                    return string_type_result;
+                is_array_declared = -1; // Mark as string type, not regular array
+            }
+            else
+            {
+                return make_error("Expected '[' after Str");
+            }
+        }
         else
         {
             // Check for pointer type (*) or mutable pointer type (*mut)
@@ -2979,7 +3216,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         return make_error("Struct literal must be assigned to a struct variable");
     }
 
-    if (p->has_temp_string && strcmp(declared_type, "*Str") != 0)
+    if (p->has_temp_string && strcmp(declared_type, "*Str") != 0 && !is_string_type_string(declared_type))
     {
         return make_error("String literal must be assigned to a string pointer variable");
     }
@@ -2993,7 +3230,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         strncpy_s(actual_type, sizeof(actual_type), declared_type, _TRUNCATE);
         actual_type[sizeof(actual_type) - 1] = '\0';
 
-        if (is_array_declared)
+        if (is_array_declared == 1)
         {
             if (!p->has_temp_array)
             {
@@ -3032,29 +3269,35 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
             p->has_temp_array = 0;
             return finalize_statement(p, "Expected ';' after variable declaration");
         }
-
-        if (declared_struct_idx >= 0)
+        else if (is_array_declared == -1)
         {
-            if (!p->has_temp_struct)
+            // String type Str[N]
+            if (!p->has_temp_string)
             {
-                return make_error("Struct initializer required");
+                return make_error("String literal required for Str[N] variable");
             }
 
-            if (p->temp_struct_def_idx != declared_struct_idx)
+            int32_t max_size = extract_string_type_size(declared_type);
+            if (max_size < 0)
             {
-                return make_error("Struct type mismatch");
+                return make_error("Invalid Str[N] type format");
             }
 
-            set_struct_variable_with_mutability(
+            if (p->temp_string_len > max_size)
+            {
+                return make_error("String literal too long for declared Str[N] size");
+            }
+
+            set_variable_string_with_mutability(
                 p,
                 var_name,
                 name_len,
-                declared_struct_idx,
-                p->temp_struct_values,
+                p->temp_string_value,
+                p->temp_string_len,
                 declared_type,
                 is_mutable);
 
-            p->has_temp_struct = 0;
+            p->has_temp_string = 0;
             return finalize_statement(p, "Expected ';' after variable declaration");
         }
 
@@ -3070,6 +3313,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                     name_len,
                     p->temp_string_value,
                     p->temp_string_len,
+                    "*Str",
                     is_mutable);
 
                 p->has_temp_string = 0;
@@ -3086,6 +3330,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                     name_len,
                     "", // Empty string for now, as the actual string is from runtime
                     0,  // Length 0 for now
+                    "*Str",
                     is_mutable);
 
                 // Now find the variable we just created and mark it as a runtime string reference
@@ -3104,6 +3349,34 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
             {
                 return make_error("String literal required for string pointer variable");
             }
+        }
+
+        // Check if declared type is a struct type
+        if (declared_struct_idx >= 0)
+        {
+            if (!p->has_temp_struct)
+            {
+                return make_error("Struct initializer required");
+            }
+
+            if (p->temp_struct_def_idx != declared_struct_idx)
+            {
+                return make_error("Struct type mismatch");
+            }
+
+            set_struct_variable_with_mutability(
+                p,
+                var_name,
+                name_len,
+                declared_struct_idx,
+                p->temp_struct_values,
+                p->temp_struct_string_values,
+                p->temp_struct_string_lengths,
+                declared_type,
+                is_mutable);
+
+            p->has_temp_struct = 0;
+            return finalize_statement(p, "Expected ';' after variable declaration");
         }
 
         // Check if declared type is a pointer type
@@ -3195,6 +3468,8 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                 name_len,
                 p->temp_struct_def_idx,
                 p->temp_struct_values,
+                p->temp_struct_string_values,
+                p->temp_struct_string_lengths,
                 actual_type,
                 is_mutable);
             p->has_temp_struct = 0;
@@ -3230,6 +3505,8 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                 name_len,
                 struct_idx,
                 p->temp_struct_values,
+                p->temp_struct_string_values,
+                p->temp_struct_string_lengths,
                 actual_type,
                 is_mutable);
             p->has_temp_struct = 0;
@@ -3618,12 +3895,61 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 p->pos++; // Skip ':'
                 skip_whitespace(p);
 
-                // Parse field type
-                char field_type[32];
-                int32_t field_type_len = parse_identifier(p, field_type, sizeof(field_type));
-                if (field_type_len <= 0)
+                // Parse field type (could be Str[N], array type, or identifier)
+                char field_type[64]; // Increased size to handle Str[32] etc.
+                int32_t field_type_len = 0;
+
+                if (p->input[p->pos] == '[')
                 {
-                    return make_error("Expected field type");
+                    // Array type: [Type; Init; Total]
+                    char array_elem_type[16];
+                    int32_t array_init_count = 0;
+                    int32_t array_total_count = 0;
+
+                    InterpretResult array_type_result = parse_array_type_annotation(
+                        p,
+                        field_type,
+                        sizeof(field_type),
+                        array_elem_type,
+                        sizeof(array_elem_type),
+                        &array_init_count,
+                        &array_total_count);
+                    if (array_type_result.has_error)
+                        return array_type_result;
+                    field_type_len = strlen(field_type);
+                }
+                else if (is_keyword_at(p, "Str"))
+                {
+                    // Check for Str[N] type
+                    const char *saved_pos_str = p->input + p->pos;
+                    p->pos += 3; // Skip 'Str'
+                    skip_whitespace(p);
+
+                    if (p->input[p->pos] == '[')
+                    {
+                        int32_t string_size = 0;
+                        InterpretResult string_type_result = parse_string_type_annotation(
+                            p,
+                            field_type,
+                            sizeof(field_type),
+                            &string_size);
+                        if (string_type_result.has_error)
+                            return string_type_result;
+                        field_type_len = strlen(field_type);
+                    }
+                    else
+                    {
+                        return make_error("Expected '[' after Str in struct field type");
+                    }
+                }
+                else
+                {
+                    // Regular identifier type
+                    field_type_len = parse_identifier(p, field_type, sizeof(field_type));
+                    if (field_type_len <= 0)
+                    {
+                        return make_error("Expected field type");
+                    }
                 }
 
                 // Store field type
@@ -4497,6 +4823,71 @@ static IfHeaderState parse_if_header_state(Parser *p)
     return state;
 }
 
+// Helper: Capture/restore temp string + tracked suffix across if/else branches
+// This prevents code duplication and keeps branch-typed results consistent.
+typedef struct
+{
+    int32_t has_temp_string;
+    char temp_string_value[256];
+    int32_t temp_string_len;
+    int32_t has_tracked_suffix;
+    char tracked_suffix[16];
+} BranchTempState;
+
+static BranchTempState capture_branch_temp_state(Parser *p)
+{
+    BranchTempState s = {0};
+    if (!p)
+        return s;
+
+    s.has_temp_string = p->has_temp_string;
+    s.temp_string_len = p->temp_string_len;
+    if (s.has_temp_string)
+    {
+        strncpy_s(s.temp_string_value, sizeof(s.temp_string_value), p->temp_string_value, _TRUNCATE);
+        s.temp_string_value[sizeof(s.temp_string_value) - 1] = '\0';
+    }
+
+    s.has_tracked_suffix = p->has_tracked_suffix;
+    if (s.has_tracked_suffix)
+    {
+        strncpy_s(s.tracked_suffix, sizeof(s.tracked_suffix), p->tracked_suffix, _TRUNCATE);
+        s.tracked_suffix[sizeof(s.tracked_suffix) - 1] = '\0';
+    }
+
+    return s;
+}
+
+static void restore_branch_temp_state(Parser *p, const BranchTempState *s)
+{
+    if (!p || !s)
+        return;
+
+    p->has_temp_string = s->has_temp_string;
+    p->temp_string_len = s->temp_string_len;
+    if (s->has_temp_string)
+    {
+        strncpy_s(p->temp_string_value, sizeof(p->temp_string_value), s->temp_string_value, _TRUNCATE);
+        p->temp_string_value[sizeof(p->temp_string_value) - 1] = '\0';
+    }
+    else
+    {
+        p->temp_string_value[0] = '\0';
+        p->temp_string_len = 0;
+    }
+
+    p->has_tracked_suffix = s->has_tracked_suffix;
+    if (s->has_tracked_suffix)
+    {
+        strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), s->tracked_suffix, _TRUNCATE);
+        p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+    }
+    else
+    {
+        p->tracked_suffix[0] = '\0';
+    }
+}
+
 // Helper: Parse if-statement at statement level (not as expression)
 // This handles if statements as standalone statements
 // Unlike parse_if_else, we want to keep mutations from the taken branch
@@ -4977,6 +5368,8 @@ static InterpretResult parse_if_else(Parser *p)
     if (then_expr.has_error)
         return then_expr;
 
+    BranchTempState then_temp = capture_branch_temp_state(p);
+
     // Capture the type of the then branch
     char then_type[8] = {0};
     int32_t then_has_type = p->has_tracked_suffix;
@@ -5008,6 +5401,8 @@ static InterpretResult parse_if_else(Parser *p)
         if (else_expr.has_error)
             return else_expr;
 
+        BranchTempState else_temp = capture_branch_temp_state(p);
+
         // Capture the type of the else branch
         char else_type[8] = {0};
         int32_t else_has_type = p->has_tracked_suffix;
@@ -5032,11 +5427,13 @@ static InterpretResult parse_if_else(Parser *p)
         if (header_state.condition.value != 0)
         {
             // Condition is true, use then branch state
+            restore_branch_temp_state(p, &then_temp);
             return apply_branch_state(p, then_state_vars, then_state_var_count, then_expr);
         }
         else
         {
             // Condition is false, use else branch state (already applied)
+            restore_branch_temp_state(p, &else_temp);
             return (InterpretResult){.value = else_expr.value, .has_error = false, .error_message = NULL};
         }
     }
@@ -5048,12 +5445,16 @@ static InterpretResult parse_if_else(Parser *p)
         if (header_state.condition.value != 0)
         {
             // Condition is true, use then branch state
+            restore_branch_temp_state(p, &then_temp);
             return apply_branch_state(p, then_state_vars, then_state_var_count, then_expr);
         }
         else
         {
             // Condition is false, don't apply then branch, return pre-condition state
             restore_saved_vars(p, header_state.saved_vars, header_state.saved_var_count);
+            p->has_temp_string = 0;
+            p->temp_string_len = 0;
+            p->temp_string_value[0] = '\0';
             // For if-only (no else), return 0 when condition is false
             return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
         }
@@ -5445,6 +5846,8 @@ static Parser init_parser(const char *str, int32_t argc, const char *const *argv
         .has_temp_struct = 0,
         .temp_struct_def_idx = -1,
         .temp_struct_values = {0},
+        .temp_struct_string_values = {0},
+        .temp_struct_string_lengths = {0},
         .declared_structs = {0},
         .declared_structs_count = 0,
         .structs = {0},
@@ -5537,11 +5940,48 @@ static CompileResult generate_c_program(const char *format, ...)
     return (CompileResult){.code = out, .has_error = false, .error_message = NULL};
 }
 
-// compile_args_expression: Translate a Tuff expression containing __args__ references
-// into equivalent C code. Appends to out_buf. Returns 0 on success, -1 on error.
-// var_types tracks declared variables: 0=unknown, 1=numeric/USize, 2=*Str, 3=*[*Str] (args slice)
-static int32_t compile_args_expression(const char *expr, char *out_buf, size_t buf_size,
-                                   const char var_names[][32], const int32_t *var_types, int32_t var_count)
+// Function definition structure (used by __args__ transpiler)
+typedef struct
+{
+    char name[32];
+    char params[10][32]; // Parameter names
+    int32_t param_count;
+    char body[256]; // Function body expression
+} FuncDef;
+
+// Struct definition structure (used by __args__ transpiler)
+typedef struct
+{
+    char name[32];
+    char field_names[10][32]; // Field names
+    char field_types[10][32]; // Field types (USize, I32, etc.)
+    int32_t field_count;
+} StructDef;
+
+static void compile_args_append_char(char *out_buf, size_t buf_size, char c)
+{
+    char tmp[2] = {c, '\0'};
+    strncat_s(out_buf, buf_size, tmp, _TRUNCATE);
+}
+
+static const FuncDef *compile_args_find_func(const FuncDef *funcs, int32_t func_count, const char *name)
+{
+    if (!funcs || func_count <= 0 || !name || !name[0])
+        return NULL;
+
+    for (int32_t i = 0; i < func_count; i++)
+    {
+        if (strcmp(funcs[i].name, name) == 0)
+            return &funcs[i];
+    }
+    return NULL;
+}
+
+// compile_args_expression_ex: Translate a Tuff expression containing __args__ references
+// into equivalent C code. Also optionally expands simple zero-arg function().length patterns.
+static int32_t compile_args_expression_ex(const char *expr, char *out_buf, size_t buf_size,
+                                          const char var_names[][32], const int32_t *var_types, int32_t var_count,
+                                          const FuncDef *funcs, int32_t func_count)
 {
     const char *s = expr;
     while (*s && isspace(*s))
@@ -5614,7 +6054,7 @@ static int32_t compile_args_expression(const char *expr, char *out_buf, size_t b
         }
         else if (isalpha(*s) || *s == '_')
         {
-            // Variable reference - extract name
+            // Identifier reference - extract name
             char name[32] = {0};
             int32_t ni = 0;
             while (*s && (isalnum(*s) || *s == '_') && ni < 31)
@@ -5623,11 +6063,84 @@ static int32_t compile_args_expression(const char *expr, char *out_buf, size_t b
             }
             name[ni] = '\0';
 
+            // Optional: function call handling
+            const char *after_name = s;
+            const char *t = after_name;
+            while (*t && isspace(*t))
+                t++;
+
+            if (funcs && func_count > 0 && *t == '(')
+            {
+                // Parse to matching ')' so we can either pass-through calls or expand foo().length
+                const char *call_start = t;
+                const char *p = t + 1;
+                int32_t depth = 1;
+                while (*p && depth > 0)
+                {
+                    if (*p == '(')
+                        depth++;
+                    else if (*p == ')')
+                        depth--;
+                    p++;
+                }
+
+                if (depth == 0)
+                {
+                    const char *call_end = p; // points just after ')'
+                    // Determine if call has arguments
+                    int32_t call_has_args = 0;
+                    for (const char *a = call_start + 1; a < (call_end - 1); a++)
+                    {
+                        if (!isspace(*a))
+                        {
+                            call_has_args = 1;
+                            break;
+                        }
+                    }
+
+                    // Check for .length after the call
+                    const char *q = call_end;
+                    while (*q && isspace(*q))
+                        q++;
+
+                    int32_t is_length_access = 0;
+                    const char *after_length = q;
+                    if (*q == '.')
+                    {
+                        q++;
+                        while (*q && isspace(*q))
+                            q++;
+                        if (strncmp(q, "length", 6) == 0 && !(isalnum(q[6]) || q[6] == '_'))
+                        {
+                            is_length_access = 1;
+                            after_length = q + 6;
+                        }
+                    }
+
+                    const FuncDef *f = compile_args_find_func(funcs, func_count, name);
+                    if (f && is_length_access && f->param_count == 0 && !call_has_args)
+                    {
+                        // Expand foo().length -> (int)strlen(<foo body>)
+                        strncat_s(out_buf, buf_size, "(int)strlen(", _TRUNCATE);
+                        compile_args_expression_ex(f->body, out_buf, buf_size, var_names, var_types, var_count, funcs, func_count);
+                        strncat_s(out_buf, buf_size, ")", _TRUNCATE);
+                        s = after_length;
+                        continue;
+                    }
+
+                    // Not a supported inline: emit the call as-is (preserving parentheses)
+                    strncat_s(out_buf, buf_size, name, _TRUNCATE);
+                    for (const char *c = call_start; c < call_end; c++)
+                        compile_args_append_char(out_buf, buf_size, *c);
+
+                    s = call_end;
+                    continue;
+                }
+            }
+
             // Check if followed by .field or .length
             if (*s == '.')
             {
-                // Could be .length, .field, or .field.length
-                const char *dot_start = s;
                 s++; // skip '.'
 
                 // Parse the property/field name
@@ -5712,7 +6225,7 @@ static int32_t compile_args_expression(const char *expr, char *out_buf, size_t b
             }
             else
             {
-                // Plain variable reference
+                // Plain identifier reference
                 strncat_s(out_buf, buf_size, name, _TRUNCATE);
             }
         }
@@ -5724,11 +6237,22 @@ static int32_t compile_args_expression(const char *expr, char *out_buf, size_t b
         }
         else
         {
-            // Skip unexpected characters
+            // Preserve unrecognized characters (e.g., parentheses for function calls)
+            compile_args_append_char(out_buf, buf_size, *s);
             s++;
         }
     }
+
     return 0;
+}
+
+// compile_args_expression: Translate a Tuff expression containing __args__ references
+// into equivalent C code. Appends to out_buf. Returns 0 on success, -1 on error.
+// var_types tracks declared variables: 0=unknown, 1=numeric/USize, 2=*Str, 3=*[*Str] (args slice)
+static int32_t compile_args_expression(const char *expr, char *out_buf, size_t buf_size,
+                                       const char var_names[][32], const int32_t *var_types, int32_t var_count)
+{
+    return compile_args_expression_ex(expr, out_buf, buf_size, var_names, var_types, var_count, NULL, 0);
 }
 
 static const char *compile_args_parse_identifier(const char *p, char *out_name, size_t name_size)
@@ -5771,92 +6295,13 @@ static void compile_args_emit_decl(char *c_code, size_t c_code_size, const char 
     strncat_s(c_code, c_code_size, ";\n", _TRUNCATE);
 }
 
-// Function definition structure
-typedef struct
-{
-    char name[32];
-    char params[10][32]; // Parameter names
-    int32_t param_count;
-    char body[256]; // Function body expression
-} FuncDef;
-
-// Struct definition structure
-typedef struct
-{
-    char name[32];
-    char field_names[10][32]; // Field names
-    char field_types[10][32]; // Field types (USize, I32, etc.)
-    int32_t field_count;
-} StructDef;
-
 // Helper: Expand expression with function call inlining
 // For simple cases like get().length where get() returns a variable
 static int32_t compile_args_expression_with_funcs(const char *expr, char *out_buf, size_t buf_size,
-                                              const char var_names[][32], const int32_t *var_types, int32_t var_count,
-                                              const FuncDef *funcs, int32_t func_count)
+                                                  const char var_names[][32], const int32_t *var_types, int32_t var_count,
+                                                  const FuncDef *funcs, int32_t func_count)
 {
-    const char *s = expr;
-    while (*s && isspace(*s))
-        s++;
-
-    // Check if expression starts with a known function name followed by ()
-    for (int32_t i = 0; i < func_count; i++)
-    {
-        size_t fname_len = strlen(funcs[i].name);
-        if (strncmp(s, funcs[i].name, fname_len) == 0 && s[fname_len] == '(')
-        {
-            // This is a function call
-            const char *body_start = funcs[i].body;
-            const char *after_call = s + fname_len + 1;
-
-            // Skip closing paren
-            while (*after_call && *after_call != ')')
-                after_call++;
-            if (*after_call == ')')
-                after_call++;
-
-            // Check if there's a property access like .length
-            if (*after_call == '.')
-            {
-                // Property access on function result
-                after_call++; // skip '.'
-                char prop[32] = {0};
-                int32_t pi = 0;
-                while (isalnum(*after_call) && pi < 31)
-                    prop[pi++] = *after_call++;
-                prop[pi] = '\0';
-
-                if (strcmp(prop, "length") == 0)
-                {
-                    // Expand get().length to (int)strlen(get_body) or similar
-                    strncat_s(out_buf, buf_size, "(int)strlen(", _TRUNCATE);
-                    compile_args_expression(body_start, out_buf, buf_size, var_names, var_types, var_count);
-                    strncat_s(out_buf, buf_size, ")", _TRUNCATE);
-                    // Add remaining expression
-                    if (*after_call)
-                    {
-                        strncat_s(out_buf, buf_size, after_call, _TRUNCATE);
-                    }
-                    return 0;
-                }
-            }
-            else
-            {
-                // Simple function call without property access
-                // Just expand the body
-                compile_args_expression(body_start, out_buf, buf_size, var_names, var_types, var_count);
-                // Add remaining expression
-                if (*after_call)
-                {
-                    strncat_s(out_buf, buf_size, after_call, _TRUNCATE);
-                }
-                return 0;
-            }
-        }
-    }
-
-    // No function calls found, use regular expression expansion
-    return compile_args_expression(expr, out_buf, buf_size, var_names, var_types, var_count);
+    return compile_args_expression_ex(expr, out_buf, buf_size, var_names, var_types, var_count, funcs, func_count);
 }
 
 // Helper: Map Tuff type to C type for struct fields
@@ -5868,6 +6313,23 @@ static void tuff_type_to_c_type(const char *tuff_type, char *c_type, size_t c_ty
         return;
     }
 
+    // Handle stack string types Str[N]
+    if (is_string_type_string(tuff_type))
+    {
+        int32_t size = extract_string_type_size(tuff_type);
+        if (size > 0)
+        {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "char[%d]", size);
+            strncpy_s(c_type, c_type_size, buf, _TRUNCATE);
+        }
+        else
+        {
+            strncpy_s(c_type, c_type_size, "char*", _TRUNCATE);
+        }
+        return;
+    }
+
     // Handle pointer types
     if (strcmp(tuff_type, "*Str") == 0 || strcmp(tuff_type, "*[*Str]") == 0)
     {
@@ -5875,7 +6337,8 @@ static void tuff_type_to_c_type(const char *tuff_type, char *c_type, size_t c_ty
     }
     else if (strcmp(tuff_type, "USize") == 0)
     {
-        strncpy_s(c_type, c_type_size, "unsigned int64_t", _TRUNCATE);
+        // Use a real stdint type ("unsigned int64_t" is not valid C)
+        strncpy_s(c_type, c_type_size, "uint64_t", _TRUNCATE);
     }
     else if (strcmp(tuff_type, "ISize") == 0)
     {
@@ -6265,7 +6728,8 @@ static CompileResult compile_args_source(const char *source)
     char c_code[4096] = {0};
     strcpy_s(c_code, sizeof(c_code),
              "#include <stdlib.h>\n"
-             "#include <string.h>\n\n");
+             "#include <string.h>\n"
+             "#include <stdint.h>\n\n");
 
     // Track variable declarations: name, type (1=numeric, 2=*Str, 3=*[*Str], 4=struct)
     char var_names[16][32] = {{0}};
@@ -6858,6 +7322,7 @@ CompileResult compile(const char *source)
 
     return generate_c_program(
         "#include <stdlib.h>\n"
+        "#include <stdint.h>\n"
         "int32_t main(int32_t argc, char **argv) { (void)argc; (void)argv; return %d; }\n",
         exit_code);
 }

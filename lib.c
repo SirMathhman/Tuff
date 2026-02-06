@@ -1,25 +1,15 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
-typedef struct {
-    char* suffix;
-    int min_value;
-    int max_value;
-    char* error_message;
-} TypeInfo;
+int32_t is_pointer_type(int32_t type);
 
-typedef struct {
-    int name;
-    int value;
-} Variable;
+int32_t is_pointer_type(int32_t type) {
+    return type != 0
+    && type[0] == '*' 
+    && type[1] != '\0';
+}
 
-typedef struct {
-    int x;
-} Wrapper;
-
-
-int main(int argc, char **argv) {
-    char *length = argv[1];
-    Wrapper temp = {length};
-    return temp.x;
+int32_t main(int32_t argc, char **argv) {
+    return fnis_mutable_pointer_type(pointer_type : *Str | 0):I32=>{if(pointer_type == 0 || pointer_type[0] != '*'){}}argv[1];
 }

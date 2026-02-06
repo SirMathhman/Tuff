@@ -1,0 +1,29 @@
+Running tests...
+'test_stack_string_basic' failed!
+ERROR in 'test_stack_string_basic': String literal must be assigned to a string pointer variable
+'test_stack_string_length' failed!
+ERROR in 'test_stack_string_length': String literal must be assigned to a string pointer variable
+'test_stack_string_index_access' failed!
+ERROR in 'test_stack_string_index_access': String literal must be assigned to a string pointer variable
+'test_stack_string_size_constraint_met' failed!
+ERROR in 'test_stack_string_size_constraint_met': String literal must be assigned to a string pointer variable
+'test_stack_string_empty' failed!
+ERROR in 'test_stack_string_empty': String literal must be assigned to a string pointer variable
+'test_stack_string_max_size' failed!
+ERROR in 'test_stack_string_max_size': String literal must be assigned to a string pointer variable
+'test_stack_string_exact_size' failed!
+ERROR in 'test_stack_string_exact_size': String literal must be assigned to a string pointer variable
+'test_stack_string_index_middle' failed!
+ERROR in 'test_stack_string_index_middle': String literal must be assigned to a string pointer variable
+'test_stack_string_vs_pointer_string' failed!
+ERROR in 'test_stack_string_vs_pointer_string': String literal must be assigned to a string pointer variable
+'test_struct_with_stack_string_field' failed!
+ERROR in 'test_struct_with_stack_string_field': Struct field type mismatch
+'test_struct_with_stack_string_multiple_fields' failed!
+ERROR in 'test_struct_with_stack_string_multiple_fields': Struct field type mismatch
+'test_stack_string_in_function' failed!
+ERROR in 'test_stack_string_in_function': String literal must be assigned to a string pointer variable
+'test_stack_string_in_if_expression' failed!
+ERROR in 'test_stack_string_in_if_expression': String literal must be assigned to a string pointer variable
+174 out of 187 tests passed.
+
