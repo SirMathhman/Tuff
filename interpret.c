@@ -59,6 +59,8 @@ typedef struct
     int declared_functions_count;    // Count of declared functions
     FunctionInfo functions[10];      // Array of function information
     int functions_count;             // Count of stored functions
+    char declared_structs[10][32];   // Track all declared struct names
+    int declared_structs_count;      // Count of declared structs
 } Parser;
 
 typedef struct
@@ -1146,6 +1148,25 @@ static int find_variable(Parser *p, const char *name, int name_len)
     return -1;
 }
 
+// Helper: Skip from current position (at opening brace) to matching closing brace
+// Assumes p->pos is positioned at the opening '{'
+static void skip_to_matching_brace(Parser *p)
+{
+    if (p->input[p->pos] != '{')
+        return;
+    
+    int brace_depth = 1;
+    p->pos++;
+    while (p->input[p->pos] && brace_depth > 0)
+    {
+        if (p->input[p->pos] == '{')
+            brace_depth++;
+        else if (p->input[p->pos] == '}')
+            brace_depth--;
+        p->pos++;
+    }
+}
+
 // Helper: Check if a function has been declared
 static int has_function_been_declared(Parser *p, const char *name, int name_len)
 {
@@ -1184,6 +1205,33 @@ static void register_declared_function(Parser *p, const char *name, int name_len
                   name, name_len);
         p->declared_functions[p->declared_functions_count][name_len] = '\0';
         p->declared_functions_count++;
+    }
+}
+
+// Helper: Check if a struct has been declared
+static int has_struct_been_declared(Parser *p, const char *name, int name_len)
+{
+    for (int i = 0; i < p->declared_structs_count; i++)
+    {
+        if (strncmp(p->declared_structs[i], name, name_len) == 0 &&
+            p->declared_structs[i][name_len] == '\0')
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Helper: Register a declared struct name
+static void register_declared_struct(Parser *p, const char *name, int name_len)
+{
+    if (p->declared_structs_count < 10)
+    {
+        strncpy_s(p->declared_structs[p->declared_structs_count],
+                  sizeof(p->declared_structs[p->declared_structs_count]),
+                  name, name_len);
+        p->declared_structs[p->declared_structs_count][name_len] = '\0';
+        p->declared_structs_count++;
     }
 }
 
@@ -2124,16 +2172,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 if (p->input[p->pos] == '{')
                 {
                     // Braced body: skip until matching '}'
-                    int brace_depth = 1;
-                    p->pos++;
-                    while (p->input[p->pos] && brace_depth > 0)
-                    {
-                        if (p->input[p->pos] == '{')
-                            brace_depth++;
-                        else if (p->input[p->pos] == '}')
-                            brace_depth--;
-                        p->pos++;
-                    }
+                    skip_to_matching_brace(p);
                 }
                 else
                 {
@@ -2204,7 +2243,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             }
         }
         // Check for assignment statement (identifier followed by '=')
-        else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match") && !is_keyword_at(p, "for") && !is_keyword_at(p, "fn"))
+        else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match") && !is_keyword_at(p, "for") && !is_keyword_at(p, "fn") && !is_keyword_at(p, "struct"))
         {
             // Look ahead to see if this is an assignment
             int saved_pos = p->pos;
@@ -2354,9 +2393,48 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             has_last_statement = 0; // for statements don't produce values
             saw_statement = 1;
         }
+        // Check for struct declaration
+        else if (is_keyword_at(p, "struct"))
+        {
+            p->pos += 6; // Skip 'struct'
+            skip_whitespace(p);
+
+            // Parse struct name
+            char struct_name[32];
+            int name_len = parse_identifier(p, struct_name, sizeof(struct_name));
+            if (name_len <= 0)
+            {
+                return make_error("Expected struct name");
+            }
+
+            // Check if struct already declared
+            if (has_struct_been_declared(p, struct_name, name_len))
+            {
+                return make_error("Struct already declared");
+            }
+
+            // Register the struct
+            register_declared_struct(p, struct_name, name_len);
+
+            skip_whitespace(p);
+
+            // Expect opening brace
+            if (p->input[p->pos] != '{')
+            {
+                return make_error("Expected '{' after struct name");
+            }
+
+            // Skip to closing brace
+            skip_to_matching_brace(p);
+
+            skip_whitespace(p);
+            has_last_statement = 0; // struct declarations don't have values
+            saw_statement = 1;
+            continue;
+        }
         else
         {
-            // Not a let, assignment, block, if statement, while statement, or for statement, exit the loop
+            // Not a let, assignment, block, if statement, while statement, for statement, or struct declaration, exit the loop
             break;
         }
     }
@@ -4093,7 +4171,26 @@ InterpretResult interpret(const char *str)
     // Check if this is an expression (contains operators)
     if (is_expression(str))
     {
-        Parser p = {.input = str, .pos = 0};
+        Parser p = {
+            .input = str,
+            .pos = 0,
+            .last_error = {0},
+            .tracked_suffix = {0},
+            .has_tracked_suffix = 0,
+            .variables = {0},
+            .var_count = 0,
+            .all_declared_names = {0},
+            .all_declared_count = 0,
+            .has_temp_array = 0,
+            .temp_array_count = 0,
+            .temp_array_element_type = {0},
+            .temp_array_values = {0},
+            .declared_functions = {0},
+            .declared_functions_count = 0,
+            .functions = {0},
+            .functions_count = 0,
+            .declared_structs = {0},
+            .declared_structs_count = 0};
         return parse_expression(&p);
     }
 

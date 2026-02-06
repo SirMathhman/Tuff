@@ -665,6 +665,11 @@ void test_interpret_struct_empty(void)
     assert_success("struct Empty {}", 0, "test_interpret_struct_empty");
 }
 
+void test_interpret_duplicate_struct_declaration(void)
+{
+    assert_error("struct Empty {} struct Empty {}", "test_interpret_duplicate_struct_declaration");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -793,6 +798,7 @@ int main(void)
     test_interpret_function_forward_reference_top_level();
     test_interpret_function_forward_reference_type_mismatch();
     test_interpret_struct_empty();
+    test_interpret_duplicate_struct_declaration();
 
     if (passed_asserts == total_asserts)
     {
