@@ -31,6 +31,9 @@ struct TypeInfo {
     error_message : *Str;
 }
 
+fn new_TypeInfo() => {
+}
+
 let array = [TypeInfo {
     suffix: "",
     min_value : 100,

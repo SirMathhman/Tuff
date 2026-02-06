@@ -6747,6 +6747,42 @@ static const char *find_statement_end(const char *s)
         return NULL;
     }
 
+    // Check if this is a function definition (fn name(...) => {...})
+    if (strncmp(p, "fn ", 3) == 0)
+    {
+        // For functions with =>, find the closing brace after =>
+        // Scan for '=>'
+        while (*p && !(*p == '=' && *(p+1) == '>'))
+            p++;
+        
+        if (*p == '=' && *(p+1) == '>')
+        {
+            p += 2; // Skip '=>'
+            // Now find the closing brace of the function body
+            int32_t brace_depth = 0;
+            int32_t in_body = 0;
+            while (*p)
+            {
+                if (*p == '{')
+                {
+                    brace_depth++;
+                    in_body = 1;
+                }
+                else if (*p == '}')
+                {
+                    brace_depth--;
+                    if (in_body && brace_depth == 0)
+                    {
+                        // Return position of the closing brace
+                        return p;
+                    }
+                }
+                p++;
+            }
+        }
+        return NULL;
+    }
+
     // For other statements, find semicolon respecting brace depth
     int32_t brace_depth = 0;
     p = s;
@@ -6886,7 +6922,42 @@ static CompileResult compile_args_source(const char *source)
             }
 
             // Store function body
-            strncpy_s(functions[func_count].body, sizeof(functions[func_count].body), p, _TRUNCATE);
+            // If body starts with '{', extract content inside braces
+            if (*p == '{')
+            {
+                p++; // Skip opening brace
+                while (*p && isspace(*p))
+                    p++;
+                
+                // Find the closing brace and extract content
+                const char *body_start = p;
+                int32_t brace_depth = 1;
+                while (*p && brace_depth > 0)
+                {
+                    if (*p == '{')
+                        brace_depth++;
+                    else if (*p == '}')
+                        brace_depth--;
+                    if (brace_depth > 0)
+                        p++;
+                }
+                
+                // Extract body content (from body_start to p, excluding the closing brace)
+                size_t body_len = (size_t)(p - body_start);
+                if (body_len < sizeof(functions[func_count].body))
+                {
+                    strncpy_s(functions[func_count].body, sizeof(functions[func_count].body), body_start, body_len);
+                }
+                else
+                {
+                    strncpy_s(functions[func_count].body, sizeof(functions[func_count].body), body_start, _TRUNCATE);
+                }
+            }
+            else
+            {
+                // Body is not in braces, store as-is
+                strncpy_s(functions[func_count].body, sizeof(functions[func_count].body), p, _TRUNCATE);
+            }
             func_count++;
         }
 
@@ -7060,8 +7131,18 @@ static CompileResult compile_args_source(const char *source)
             emit_function_signature(c_code, sizeof(c_code), &functions[i], 0);
             strncat_s(c_code, sizeof(c_code), " {\n    return ", _TRUNCATE);
 
-            // Check if function body contains __args__
-            if (strstr(functions[i].body, "__args__") != NULL)
+            // Check if function body is empty (after trimming whitespace)
+            const char *body_check = functions[i].body;
+            while (*body_check && isspace(*body_check))
+                body_check++;
+            int32_t body_is_empty = (*body_check == '\0');
+
+            if (body_is_empty)
+            {
+                // Empty function body - return default value 0
+                strncat_s(c_code, sizeof(c_code), "0", _TRUNCATE);
+            }
+            else if (strstr(functions[i].body, "__args__") != NULL)
             {
                 // Body contains __args__, need proper transpilation
                 char temp_body[512] = {0};
@@ -7510,7 +7591,7 @@ static CompileResult compile_args_source(const char *source)
                     while (content < bracket_end - 1)
                     {
                         // Skip struct type name at start of struct literal
-                        if (has_struct && brace_depth == 0 && 
+                        if (has_struct && brace_depth == 0 &&
                             strncmp(content, elem_type, elem_type_len) == 0 &&
                             (content[elem_type_len] == '{' || isspace(content[elem_type_len])))
                         {
