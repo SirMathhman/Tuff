@@ -1,12 +1,5 @@
 let MAX_ARRAY_ELEMENTS = 64;
 
-struct TypeInfo {
-    suffix : *Str;
-    min_value : I64;
-    max_value : I64;
-    error_message : *Str;
-}
-
 struct Variable {
     name : Str[32];
     value : I32;
@@ -31,5 +24,18 @@ struct NumberValue {
     value : I32;
 }
 
-let array = [1, 2, 3];
-__args__[1].length + array[0]
+struct TypeInfo {
+    suffix : *Str;
+    min_value : I64;
+    max_value : I64;
+    error_message : *Str;
+}
+
+let array = [TypeInfo {
+    suffix: "",
+    min_value : 100,
+    max_value : 100,
+    error_message : ""
+}];
+
+__args__[1].length + array[0].min_value

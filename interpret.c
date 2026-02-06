@@ -7430,8 +7430,7 @@ static CompileResult compile_args_source(const char *source)
             }
             else if (type_str[0] == '\0' && *p == '[')
             {
-                // Array literal without explicit type annotation: [1, 2, 3]
-                // Convert to valid C: int32_t array[] = {1, 2, 3};
+                // Array literal without explicit type annotation:  [1, 2, 3] or [StructName {...}]
                 vtype = 1;
                 if (!is_global)
                     compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
@@ -7451,18 +7450,121 @@ static CompileResult compile_args_source(const char *source)
                     bracket_end++;
                 }
 
+                // Detect struct type from array content
+                const char *content_start = bracket_start + 1;
+                char elem_type[64] = {0};
+                int32_t has_struct = 0;
+
+                // Skip whitespace and check for struct pattern
+                const char *check = content_start;
+                while (*check && isspace(*check) && check < bracket_end)
+                    check++;
+                if (isalpha(*check) || *check == '_')
+                {
+                    // Collect potential struct name
+                    const char *name_start = check;
+                    int32_t name_len = 0;
+                    while (check < bracket_end && (isalnum(*check) || *check == '_') && name_len < 63)
+                    {
+                        elem_type[name_len++] = *check++;
+                    }
+                    elem_type[name_len] = '\0';
+
+                    // Skip whitespace to see if followed by '{'
+                    while (*check && isspace(*check))
+                        check++;
+                    if (*check == '{')
+                    {
+                        // Verify it's a known struct
+                        for (int32_t i = 0; i < struct_count; i++)
+                        {
+                            if (strcmp(elem_type, structs[i].name) == 0)
+                            {
+                                has_struct = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 // Generate C array declaration with curly braces
                 if (bracket_depth == 0)
                 {
-                    char array_decl[512] = {0};
-                    snprintf(array_decl, sizeof(array_decl), "    int32_t %s[] = {", vname);
+                    char array_decl[256] = {0};
+                    if (has_struct)
+                    {
+                        snprintf(array_decl, sizeof(array_decl), "    %s %s[] = {", elem_type, vname);
+                    }
+                    else
+                    {
+                        snprintf(array_decl, sizeof(array_decl), "    int32_t %s[] = {", vname);
+                    }
                     strncat_s(c_code, sizeof(c_code), array_decl, _TRUNCATE);
 
-                    // Copy array contents, replacing square brackets with curly braces
-                    const char *content = bracket_start + 1; // Skip opening [
-                    while (content < bracket_end - 1)        // Stop before closing ]
+                    // Process array contents
+                    const char *content = content_start;
+                    int32_t brace_depth = 0;
+                    int32_t elem_type_len = strlen(elem_type);
+                    int32_t in_field_literal = 0; // Track if we just output a dot for a new field
+
+                    while (content < bracket_end - 1)
                     {
-                        compile_args_append_char(c_code, sizeof(c_code), *content);
+                        // Skip struct type name at start of struct literal
+                        if (has_struct && brace_depth == 0 && 
+                            strncmp(content, elem_type, elem_type_len) == 0 &&
+                            (content[elem_type_len] == '{' || isspace(content[elem_type_len])))
+                        {
+                            content += elem_type_len;
+                            while (*content && isspace(*content))
+                                content++;
+                            continue;
+                        }
+
+                        char ch = *content;
+                        if (ch == '{')
+                        {
+                            brace_depth++;
+                            compile_args_append_char(c_code, sizeof(c_code), ch);
+                            in_field_literal = 0;
+                        }
+                        else if (ch == '}')
+                        {
+                            brace_depth--;
+                            compile_args_append_char(c_code, sizeof(c_code), ch);
+                            in_field_literal = 0;
+                        }
+                        else if (ch == ':' && brace_depth > 0)
+                        {
+                            // Convert ':' to ' ='
+                            strncat_s(c_code, sizeof(c_code), " =", _TRUNCATE);
+                            in_field_literal = 0;
+                        }
+                        else if ((ch == ',' || isspace(ch)) && brace_depth > 0)
+                        {
+                            compile_args_append_char(c_code, sizeof(c_code), ch);
+                            in_field_literal = 0;
+                        }
+                        else if ((isalpha(ch) || ch == '_') && brace_depth > 0 && !in_field_literal)
+                        {
+                            // Look ahead for field name followed by ':'
+                            const char *next = content + 1;
+                            while (*next && (isalnum(*next) || *next == '_'))
+                                next++;
+                            const char *after_name = next;
+                            while (*after_name && isspace(*after_name))
+                                after_name++;
+                            if (*after_name == ':')
+                            {
+                                // This is a struct field - emit with dot prefix
+                                strncat_s(c_code, sizeof(c_code), ".", _TRUNCATE);
+                                in_field_literal = 1;
+                            }
+                            compile_args_append_char(c_code, sizeof(c_code), ch);
+                        }
+                        else
+                        {
+                            compile_args_append_char(c_code, sizeof(c_code), ch);
+                        }
                         content++;
                     }
 

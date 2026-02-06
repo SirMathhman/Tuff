@@ -3,13 +3,6 @@
 #include <stdint.h>
 
 typedef struct {
-    char* suffix;
-    int min_value;
-    int max_value;
-    char* error_message;
-} TypeInfo;
-
-typedef struct {
     char name[32];
     int value;
     char type[16];
@@ -33,6 +26,13 @@ typedef struct {
     int value;
 } NumberValue;
 
+typedef struct {
+    char* suffix;
+    int min_value;
+    int max_value;
+    char* error_message;
+} TypeInfo;
+
 // Global argc/argv for __args__ access
 int32_t __tuff_argc = 0;
 char **__tuff_argv = NULL;
@@ -41,6 +41,11 @@ int32_t main(int32_t argc, char **argv) {
     __tuff_argc = argc;
     __tuff_argv = argv;
     int32_t MAX_ARRAY_ELEMENTS = 64;
-    int32_t array[] = {1, 2, 3};
-    return (int)strlen(__tuff_argv[1]) + array[0];
+    TypeInfo array[] = {{
+    .suffix = "",
+    .min_value  = 100,
+    .max_value  = 100,
+    .error_message  = ""
+}};
+    return (int)strlen(__tuff_argv[1]) + array[0].min_value;
 }
