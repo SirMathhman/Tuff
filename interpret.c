@@ -135,6 +135,53 @@ static int is_array_type_string(const char *type)
     return type && type[0] == '[';
 }
 
+// Helper: Check if a type string is a pointer-to-array type (e.g., "*[I32]" or "*mut [I32]")
+static int is_pointer_to_array_type(const char *type)
+{
+    if (!type || type[0] != '*')
+        return 0;
+    
+    // Skip the '*' and optional 'mut '
+    const char *p = type + 1;
+    if (p[0] == 'm' && p[1] == 'u' && p[2] == 't' && p[3] == ' ')
+    {
+        p += 4; // Skip "mut "
+    }
+    
+    // Check if what remains is an array type indicator
+    return p[0] == '[';
+}
+
+// Helper: Extract element type from pointer-to-array type (e.g., "*[I32]" -> "I32")
+static void extract_pointer_array_element_type(const char *pointer_array_type, char *out_elem_type, int max_len)
+{
+    if (!is_pointer_to_array_type(pointer_array_type))
+    {
+        out_elem_type[0] = '\0';
+        return;
+    }
+    
+    // Skip the '*' and optional 'mut '
+    const char *p = pointer_array_type + 1;
+    if (p[0] == 'm' && p[1] == 'u' && p[2] == 't' && p[3] == ' ')
+    {
+        p += 4; // Skip "mut "
+    }
+    
+    // Now p points to '[ElementType]'
+    // Skip '['
+    p++;
+    
+    // Find the closing ']'
+    int len = 0;
+    while (*p && *p != ']' && len < max_len - 1)
+    {
+        out_elem_type[len++] = *p;
+        p++;
+    }
+    out_elem_type[len] = '\0';
+}
+
 // Helper: Parse non-negative integer from input
 static int parse_non_negative_int(Parser *p, int *out_value)
 {
@@ -795,6 +842,22 @@ static InterpretResult parse_array_literal(Parser *p)
 // Helper: Parse bracket notation [index] and return the index value
 // Returns index_result with value set to the parsed index
 // This is used by both array indexing and array element assignment
+// Helper: Set tracked suffix for a value and populate output number struct
+// Used when returning indexed values or dereferences with explicit types
+static void set_tracked_suffix_and_output(Parser *p, const char *type, long value, NumberValue *out_num)
+{
+    strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), type, _TRUNCATE);
+    p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+    p->has_tracked_suffix = 1;
+
+    if (out_num)
+    {
+        out_num->value = value;
+        out_num->suffix = p->tracked_suffix;
+        out_num->suffix_len = strlen(p->tracked_suffix);
+    }
+}
+
 static InterpretResult parse_bracket_index(Parser *p, long *out_index)
 {
     InterpretResult open_bracket = expect_char(p, '[', "Expected '[' to start bracket notation");
@@ -838,19 +901,13 @@ static InterpretResult parse_array_index(Parser *p, int var_idx, NumberValue *ou
 
     long value = p->variables[var_idx].array_values[index_value];
 
-    strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), p->variables[var_idx].array_element_type, _TRUNCATE);
-    p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
-    p->has_tracked_suffix = 1;
-
-    if (out_num)
-    {
-        out_num->value = value;
-        out_num->suffix = p->tracked_suffix;
-        out_num->suffix_len = strlen(p->tracked_suffix);
-    }
+    set_tracked_suffix_and_output(p, p->variables[var_idx].array_element_type, value, out_num);
 
     return (InterpretResult){.value = value, .has_error = false, .error_message = NULL};
 }
+
+// Forward declarations
+static InterpretResult expect_range_operator(Parser *p);
 
 // Helper: Parse a simple operand (number or variable reference)
 static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
@@ -887,6 +944,68 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             return make_error("Variable not found");
         }
 
+        // Check if this is an array slice: &array[start..end]
+        skip_whitespace(p);
+        if (p->variables[var_idx].is_array && p->input[p->pos] == '[')
+        {
+            // This is array slice syntax: &array[start..end]
+            p->pos++; // Skip '['
+            skip_whitespace(p);
+
+            // Parse start value
+            InterpretResult start_result = parse_additive(p);
+            if (start_result.has_error)
+                return start_result;
+            long start_idx = start_result.value;
+
+            // Expect '..' operator
+            InterpretResult range_op = expect_range_operator(p);
+            if (range_op.has_error)
+                return range_op;
+
+            // Parse end value
+            InterpretResult end_result = parse_additive(p);
+            if (end_result.has_error)
+                return end_result;
+            long end_idx = end_result.value;
+
+            skip_whitespace(p);
+
+            // Expect closing bracket
+            InterpretResult close_bracket = expect_char(p, ']', "Expected ']' after slice range");
+            if (close_bracket.has_error)
+                return close_bracket;
+
+            // Validate range
+            if (start_idx < 0 || start_idx >= p->variables[var_idx].array_total_count)
+            {
+                return make_error("Slice start index out of bounds");
+            }
+            if (end_idx < start_idx || end_idx > p->variables[var_idx].array_total_count)
+            {
+                return make_error("Slice end index out of bounds or less than start");
+            }
+
+            // Create slice type: *[ElementType] or *mut [ElementType]
+            char slice_type[32];
+            if (is_mut_ref)
+            {
+                snprintf(slice_type, sizeof(slice_type), "*mut [%s]", p->variables[var_idx].array_element_type);
+            }
+            else
+            {
+                snprintf(slice_type, sizeof(slice_type), "*[%s]", p->variables[var_idx].array_element_type);
+            }
+            slice_type[sizeof(slice_type) - 1] = '\0';
+
+            // Set the tracked suffix to the slice type
+            set_tracked_suffix_and_output(p, slice_type, var_idx, out_num);
+
+            // Return the array variable index as the slice pointer value
+            return (InterpretResult){.value = var_idx, .has_error = false, .error_message = NULL};
+        }
+
+        // Regular address-of (not a slice)
         // Get the base type of the variable being pointed to
         const char *var_type = p->variables[var_idx].type[0] != '\0'
                                    ? p->variables[var_idx].type
@@ -904,18 +1023,10 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
         }
 
         // Set the tracked suffix to the pointer type
-        strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), pointer_type, _TRUNCATE);
-        p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
-        p->has_tracked_suffix = 1;
+        set_tracked_suffix_and_output(p, pointer_type, var_idx, out_num);
 
         // The value represents the pointer target (variable index)
         // We encode it so that assignment to pointer variables can use it
-        if (out_num)
-        {
-            out_num->value = var_idx;            // Store variable index as the pointer value
-            out_num->suffix = p->tracked_suffix; // Point to parser's tracked suffix buffer
-            out_num->suffix_len = strlen(pointer_type);
-        }
 
         // Return the variable index as the pointer value
         return (InterpretResult){.value = var_idx, .has_error = false, .error_message = NULL};
@@ -926,40 +1037,39 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
     {
         // Parse character literal: 'x'
         p->pos++; // Skip opening single quote
-        
+
         if (!p->input[p->pos] || p->input[p->pos] == '\'')
         {
             return make_error("Expected character in character literal");
         }
-        
+
         int char_value = (unsigned char)p->input[p->pos];
         p->pos++; // Move to potential closing quote
-        
+
         if (p->input[p->pos] != '\'')
         {
             return make_error("Expected closing single quote after character literal");
         }
         p->pos++; // Skip closing single quote
-        
+
         // Set Char type tracking
         strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "Char", _TRUNCATE);
         p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
         p->has_tracked_suffix = 1;
-        
+
         if (out_num)
         {
             out_num->value = char_value;
             out_num->suffix = p->tracked_suffix;
             out_num->suffix_len = 4;
         }
-        
+
         return (InterpretResult){.value = char_value, .has_error = false, .error_message = NULL};
     }
 
     // Check for dereference operator (*pointer)
     // This is handled at a different parsing level since * is used for multiplication
     // We'll detect it based on pointer type tracking
-
 
     // Check for variable reference or boolean literal
     if (isalpha(p->input[p->pos]))
@@ -1000,11 +1110,59 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 skip_whitespace(p);
                 if (p->input[p->pos] == '[')
                 {
-                    if (!p->variables[idx].is_array)
+                    // Check if this is an array or a slice (pointer-to-array)
+                    int is_indexable = p->variables[idx].is_array ||
+                                      is_pointer_to_array_type(p->variables[idx].type);
+                    
+                    if (!is_indexable)
                     {
                         return make_error("Cannot index non-array variable");
                     }
-                    return parse_array_index(p, idx, out_num);
+                    
+                    // If it's a slice, we need to handle it differently
+                    if (is_pointer_to_array_type(p->variables[idx].type))
+                    {
+                        // For slices, extract element type from pointer-to-array type
+                        char elem_type[16];
+                        extract_pointer_array_element_type(p->variables[idx].type, elem_type, sizeof(elem_type));
+                        
+                        // Parse the index
+                        long index_value = 0;
+                        InterpretResult bracket_result = parse_bracket_index(p, &index_value);
+                        if (bracket_result.has_error)
+                            return bracket_result;
+                        
+                        // Get the array variable that the slice points to
+                        int array_var_idx = p->variables[idx].pointer_target;
+                        if (array_var_idx < 0 || array_var_idx >= p->var_count || !p->variables[array_var_idx].is_array)
+                        {
+                            return make_error("Invalid slice pointer");
+                        }
+                        
+                        // Validate the index against the array bounds
+                        if (index_value < 0 || index_value >= p->variables[array_var_idx].array_total_count)
+                        {
+                            return make_error("Array index out of bounds");
+                        }
+                        
+                        if (index_value >= p->variables[array_var_idx].array_init_count)
+                        {
+                            return make_error("Array index out of initialized range");
+                        }
+                        
+                        // Get the value from the array
+                        long value = p->variables[array_var_idx].array_values[index_value];
+                        
+                        // Set the tracked suffix to the element type
+                        set_tracked_suffix_and_output(p, elem_type, value, out_num);
+                        
+                        return (InterpretResult){.value = value, .has_error = false, .error_message = NULL};
+                    }
+                    else
+                    {
+                        // Regular array indexing
+                        return parse_array_index(p, idx, out_num);
+                    }
                 }
 
                 if (p->variables[idx].is_array)
@@ -2251,29 +2409,62 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                 }
             }
 
-            // Parse type
-            char type_name[16];
-            InterpretResult type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected type name");
-            if (type_result.has_error)
-                return type_result;
-
-            // Store the declared type for validation later
-            if (is_pointer)
+            // Parse type (could be identifier or array type like [I32])
+            char type_name[64]; // Increased to support "*[I32]" types
+            
+            if (is_pointer && p->input[p->pos] == '[')
             {
+                // Pointer to array type: *[ElementType] (for slices)
+                // Parse simplified array type: [Type] (without size counts)
+                p->pos++; // Skip '['
+                skip_whitespace(p);
+                
+                InterpretResult elem_type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected array element type");
+                if (elem_type_result.has_error)
+                    return elem_type_result;
+                
+                skip_whitespace(p);
+                
+                InterpretResult close_bracket = expect_char(p, ']', "Expected ']' after array element type");
+                if (close_bracket.has_error)
+                    return close_bracket;
+                
+                // Store the declared type as pointer to array
                 if (is_mut_pointer)
                 {
-                    snprintf(declared_type, sizeof(declared_type), "*mut %s", type_name);
+                    snprintf(declared_type, sizeof(declared_type), "*mut [%s]", type_name);
                 }
                 else
                 {
-                    snprintf(declared_type, sizeof(declared_type), "*%s", type_name);
+                    snprintf(declared_type, sizeof(declared_type), "*[%s]", type_name);
                 }
+                declared_type[sizeof(declared_type) - 1] = '\0';
             }
             else
             {
-                strncpy_s(declared_type, sizeof(declared_type), type_name, _TRUNCATE);
+                // Regular identifier type
+                InterpretResult type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected type name");
+                if (type_result.has_error)
+                    return type_result;
+
+                // Store the declared type for validation later
+                if (is_pointer)
+                {
+                    if (is_mut_pointer)
+                    {
+                        snprintf(declared_type, sizeof(declared_type), "*mut %s", type_name);
+                    }
+                    else
+                    {
+                        snprintf(declared_type, sizeof(declared_type), "*%s", type_name);
+                    }
+                }
+                else
+                {
+                    strncpy_s(declared_type, sizeof(declared_type), type_name, _TRUNCATE);
+                }
+                declared_type[sizeof(declared_type) - 1] = '\0';
             }
-            declared_type[sizeof(declared_type) - 1] = '\0';
         }
 
         if (!is_array_declared && !is_pointer_type(declared_type))
