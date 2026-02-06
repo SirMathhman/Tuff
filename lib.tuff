@@ -31,14 +31,13 @@ struct TypeInfo {
     error_message : *Str;
 }
 
-fn new_TypeInfo() => {
+fn new_TypeInfo() : TypeInfo => {
+    TypeInfo {
+        suffix: "",
+        min_value : 100,
+        max_value : 100,
+        error_message : ""
+    }
 }
 
-let array = [TypeInfo {
-    suffix: "",
-    min_value : 100,
-    max_value : 100,
-    error_message : ""
-}];
-
-__args__[1].length + array[0].min_value
+__args__[1]

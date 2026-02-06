@@ -37,21 +37,20 @@ typedef struct {
 int32_t __tuff_argc = 0;
 char **__tuff_argv = NULL;
 
-int new_TypeInfo();
+TypeInfo new_TypeInfo();
 
-int new_TypeInfo() {
-    return 0;
+TypeInfo new_TypeInfo() {
+    return (TypeInfo) { 
+        .suffix = "",
+        .min_value = 100,
+        .max_value = 100,
+        .error_message = ""
+     };
 }
 
 int32_t main(int32_t argc, char **argv) {
     __tuff_argc = argc;
     __tuff_argv = argv;
     int32_t MAX_ARRAY_ELEMENTS = 64;
-    TypeInfo array[] = {{
-    .suffix = "",
-    .min_value  = 100,
-    .max_value  = 100,
-    .error_message  = ""
-}};
-    return (int)strlen(__tuff_argv[1]) + array[0].min_value;
+    return (int32_t)strlen(__tuff_argv[1]);
 }

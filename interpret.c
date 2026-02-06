@@ -6511,7 +6511,10 @@ static void emit_function_signature(char *c_code, size_t c_code_size, const Func
     // Convert return type
     char c_return_type[32] = {0};
     if (func->return_type[0])
-        tuff_type_to_c_type(func->return_type, c_return_type, sizeof(c_return_type));
+    {
+        // Try to use the return type as-is first (for struct names)
+        strcpy_s(c_return_type, sizeof(c_return_type), func->return_type);
+    }
     else
         strcpy_s(c_return_type, sizeof(c_return_type), "int");
 
@@ -6752,10 +6755,10 @@ static const char *find_statement_end(const char *s)
     {
         // For functions with =>, find the closing brace after =>
         // Scan for '=>'
-        while (*p && !(*p == '=' && *(p+1) == '>'))
+        while (*p && !(*p == '=' && *(p + 1) == '>'))
             p++;
-        
-        if (*p == '=' && *(p+1) == '>')
+
+        if (*p == '=' && *(p + 1) == '>')
         {
             p += 2; // Skip '=>'
             // Now find the closing brace of the function body
@@ -6928,7 +6931,7 @@ static CompileResult compile_args_source(const char *source)
                 p++; // Skip opening brace
                 while (*p && isspace(*p))
                     p++;
-                
+
                 // Find the closing brace and extract content
                 const char *body_start = p;
                 int32_t brace_depth = 1;
@@ -6941,7 +6944,7 @@ static CompileResult compile_args_source(const char *source)
                     if (brace_depth > 0)
                         p++;
                 }
-                
+
                 // Extract body content (from body_start to p, excluding the closing brace)
                 size_t body_len = (size_t)(p - body_start);
                 if (body_len < sizeof(functions[func_count].body))
@@ -7008,8 +7011,33 @@ static CompileResult compile_args_source(const char *source)
                         }
                     }
 
-                    // If not a parameter and not a function, it might be a global variable
-                    if (!is_param && !is_func && strlen(ident) > 0)
+                    // Check if it's a struct name
+                    int32_t is_struct = 0;
+                    for (int32_t j = 0; j < struct_count; j++)
+                    {
+                        if (strcmp(ident, structs[j].name) == 0)
+                        {
+                            is_struct = 1;
+                            break;
+                        }
+                    }
+
+                    // Check if it's a struct field name
+                    int32_t is_struct_field = 0;
+                    for (int32_t j = 0; j < struct_count && !is_struct_field; j++)
+                    {
+                        for (int32_t k = 0; k < structs[j].field_count; k++)
+                        {
+                            if (strcmp(ident, structs[j].field_names[k]) == 0)
+                            {
+                                is_struct_field = 1;
+                                break;
+                            }
+                        }
+                    }
+
+                    // If not a parameter, function, struct, or struct field, it might be a global variable
+                    if (!is_param && !is_func && !is_struct && !is_struct_field && strlen(ident) > 0)
                     {
                         // Filter out keywords
                         if (is_tuff_keyword(ident))
@@ -7159,10 +7187,131 @@ static CompileResult compile_args_source(const char *source)
             }
             else
             {
-                // Body doesn't contain __args__, just convert if-else to ternary
+                // Body doesn't contain __args__, but might contain struct literals
                 char body_converted[512] = {0};
-                compile_args_convert_if_else(functions[i].body, body_converted, sizeof(body_converted));
-                strncat_s(c_code, sizeof(c_code), body_converted, _TRUNCATE);
+
+                // Check if body starts with a struct literal pattern (StructName {)
+                const char *body_start = functions[i].body;
+                while (*body_start && isspace(*body_start))
+                    body_start++;
+
+                int32_t is_struct_literal = 0;
+                char struct_type[64] = {0};
+
+                // Try to detect struct name
+                if (isalpha(*body_start) || *body_start == '_')
+                {
+                    char potential_type[64] = {0};
+                    int32_t type_len = 0;
+                    const char *scan = body_start;
+                    while (scan < functions[i].body + strlen(functions[i].body) &&
+                           (isalnum(*scan) || *scan == '_') && type_len < 63)
+                    {
+                        potential_type[type_len++] = *scan++;
+                    }
+                    potential_type[type_len] = '\0';
+
+                    // Skip whitespace
+                    while (scan < functions[i].body + strlen(functions[i].body) && isspace(*scan))
+                        scan++;
+
+                    // Check if followed by {
+                    if (*scan == '{')
+                    {
+                        // Verify this is a known struct
+                        for (int32_t j = 0; j < struct_count; j++)
+                        {
+                            if (strcmp(potential_type, structs[j].name) == 0)
+                            {
+                                is_struct_literal = 1;
+                                strcpy_s(struct_type, sizeof(struct_type), potential_type);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (is_struct_literal)
+                {
+                    // Generate compound literal: (StructType) { .field = value, ... }
+                    strncat_s(c_code, sizeof(c_code), "(", _TRUNCATE);
+                    strncat_s(c_code, sizeof(c_code), struct_type, _TRUNCATE);
+                    strncat_s(c_code, sizeof(c_code), ") { ", _TRUNCATE);
+
+                    // Process the struct literal content, converting colons to dot-equals
+                    const char *content = body_start + strlen(struct_type);
+                    while (*content && isspace(*content))
+                        content++;
+
+                    if (*content == '{')
+                        content++; // Skip opening brace
+
+                    int32_t in_field_literal = 0;
+                    while (*content && *content != '}')
+                    {
+                        if ((isalpha(*content) || *content == '_') && !in_field_literal)
+                        {
+                            // This might be a field name
+                            char field_name[32] = {0};
+                            int32_t field_len = 0;
+                            const char *field_start = content;
+                            while ((isalnum(*content) || *content == '_') && field_len < 31)
+                                field_name[field_len++] = *content++;
+                            field_name[field_len] = '\0';
+
+                            // Skip whitespace
+                            const char *after_name = content;
+                            while (*after_name && isspace(*after_name))
+                                after_name++;
+
+                            if (*after_name == ':')
+                            {
+                                // This is a field - emit with dot prefix
+                                strncat_s(c_code, sizeof(c_code), ".", _TRUNCATE);
+                                strncat_s(c_code, sizeof(c_code), field_name, _TRUNCATE);
+                                strncat_s(c_code, sizeof(c_code), " =", _TRUNCATE);
+                                content = after_name + 1; // Skip colon
+                                in_field_literal = 1;
+                                continue;
+                            }
+                            else
+                            {
+                                // Not a field, just a regular identifier
+                                strncat_s(c_code, sizeof(c_code), field_name, _TRUNCATE);
+                            }
+                        }
+                        else if (*content == ',' && in_field_literal)
+                        {
+                            compile_args_append_char(c_code, sizeof(c_code), *content);
+                            in_field_literal = 0;
+                        }
+                        else if (*content == '"')
+                        {
+                            // String literal - copy verbatim until closing quote
+                            compile_args_append_char(c_code, sizeof(c_code), *content);
+                            content++;
+                            while (*content && *content != '"')
+                            {
+                                compile_args_append_char(c_code, sizeof(c_code), *content);
+                                content++;
+                            }
+                            compile_args_append_char(c_code, sizeof(c_code), '"');
+                        }
+                        else
+                        {
+                            compile_args_append_char(c_code, sizeof(c_code), *content);
+                        }
+                        content++;
+                    }
+
+                    strncat_s(c_code, sizeof(c_code), " }", _TRUNCATE);
+                }
+                else
+                {
+                    // Not a struct literal, just convert if-else to ternary
+                    compile_args_convert_if_else(functions[i].body, body_converted, sizeof(body_converted));
+                    strncat_s(c_code, sizeof(c_code), body_converted, _TRUNCATE);
+                }
             }
 
             strncat_s(c_code, sizeof(c_code), ";\n}\n\n", _TRUNCATE);
@@ -7203,9 +7352,50 @@ static CompileResult compile_args_source(const char *source)
         if (semi == NULL)
         {
             // Final return expression
+            // Check if expression is a raw __args__ reference (not .length)
+            const char *expr_scan = s;
+            while (*expr_scan && isspace(*expr_scan))
+                expr_scan++;
+
+            int32_t is_raw_string = 0;
+            if (strncmp(expr_scan, "__args__[", 9) == 0)
+            {
+                // Check if it ends with .length
+                const char *expr_end = expr_scan;
+                while (*expr_end && *expr_end != ';')
+                    expr_end++;
+                // Look backwards for .length
+                const char *check_len = expr_end - 1;
+                while (check_len > expr_scan && isspace(*check_len))
+                    check_len--;
+                if (check_len - 6 > expr_scan && strncmp(check_len - 6, "length", 6) == 0)
+                {
+                    // Has .length, don't wrap
+                    is_raw_string = 0;
+                }
+                else
+                {
+                    // No .length, it's a raw string - need to convert to length
+                    is_raw_string = 1;
+                }
+            }
+
             strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
+
+            if (is_raw_string)
+            {
+                // Wrap with strlen() for string to int conversion
+                strncat_s(c_code, sizeof(c_code), "(int32_t)strlen(", _TRUNCATE);
+            }
+
             compile_args_expression_with_funcs(s, c_code, sizeof(c_code), var_names, var_types, var_count,
                                                functions, func_count);
+
+            if (is_raw_string)
+            {
+                strncat_s(c_code, sizeof(c_code), ")", _TRUNCATE);
+            }
+
             strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             break;
         }
@@ -7216,10 +7406,14 @@ static CompileResult compile_args_source(const char *source)
         if (strncmp(st, "struct ", 7) == 0)
         {
             // Skip struct definitions (already processed)
+            s = semi + 1;
+            continue;
         }
         else if (strncmp(st, "fn ", 3) == 0)
         {
             // Skip function definitions (already processed)
+            s = semi + 1;
+            continue;
         }
         else if (strncmp(st, "let ", 4) == 0)
         {
