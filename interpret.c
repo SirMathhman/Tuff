@@ -5767,6 +5767,15 @@ typedef struct
     char body[256]; // Function body expression
 } FuncDef;
 
+// Struct definition structure
+typedef struct
+{
+    char name[32];
+    char field_names[10][32]; // Field names
+    char field_types[10][32]; // Field types (USize, I32, etc.)
+    int field_count;
+} StructDef;
+
 // Helper: Convert if-else expressions to C ternary operators recursively
 static int compile_args_convert_if_else(const char *src, char *out, size_t out_size)
 {
@@ -5931,11 +5940,185 @@ static void emit_var_assignment(char *c_code, size_t c_code_size, const char *vn
     strncat_s(c_code, c_code_size, ";\n", _TRUNCATE);
 }
 
+// Helper: Skip whitespace and check if at specific character
+static inline const char *skip_to_char(const char *p, char c, int *found)
+{
+    while (*p && isspace(*p))
+        p++;
+    if (found)
+        *found = (*p == c);
+    return p;
+}
+
+// Generic callback for parsing items in delimited lists
+typedef const char *(*ItemParser)(const char *p, void *data, int *should_continue);
+
+// Helper: Parse delimited list (e.g., "{a; b;}" or "(x, y)")
+// Calls item_parser for each item until closing delimiter
+static const char *parse_delimited_list(const char *p, char open_delim, char close_delim,
+                                        ItemParser item_parser, void *data)
+{
+    int at_open;
+    p = skip_to_char(p, open_delim, &at_open);
+    if (at_open)
+        p++;
+
+    int at_close = 0;
+    while (*p && !at_close)
+    {
+        p = skip_to_char(p, close_delim, &at_close);
+        if (at_close)
+            break;
+
+        int should_continue = 1;
+        p = item_parser(p, data, &should_continue);
+        if (!should_continue)
+            break;
+    }
+    return p;
+}
+
+// Parser callback for struct fields
+static const char *parse_struct_field_item(const char *p, void *data, int *should_continue)
+{
+    StructDef *s = (StructDef *)data;
+
+    char field_name[32] = {0};
+    p = compile_args_parse_identifier(p, field_name, sizeof(field_name));
+
+    int at_colon;
+    p = skip_to_char(p, ':', &at_colon);
+    if (at_colon)
+    {
+        p++;
+        while (*p && isspace(*p))
+            p++;
+
+        char field_type[32] = {0};
+        int ti = 0;
+        while (*p && !isspace(*p) && *p != ';' && *p != '}' && ti < 31)
+            field_type[ti++] = *p++;
+        field_type[ti] = '\0';
+
+        if (field_name[0] && s->field_count < 10)
+        {
+            strcpy_s(s->field_names[s->field_count], sizeof(s->field_names[s->field_count]), field_name);
+            strcpy_s(s->field_types[s->field_count], sizeof(s->field_types[s->field_count]), field_type);
+            s->field_count++;
+        }
+    }
+
+    while (*p && *p != ';' && *p != '}')
+        p++;
+    if (*p == ';')
+        p++;
+
+    *should_continue = 1;
+    return p;
+}
+
+// Parser callback for function parameters
+static const char *parse_function_param_item(const char *p, void *data, int *should_continue)
+{
+    FuncDef *f = (FuncDef *)data;
+
+    char param_name[32] = {0};
+    p = compile_args_parse_identifier(p, param_name, sizeof(param_name));
+    if (param_name[0] && f->param_count < 10)
+    {
+        strcpy_s(f->params[f->param_count], sizeof(f->params[f->param_count]), param_name);
+        f->param_count++;
+    }
+
+    int at_colon;
+    p = skip_to_char(p, ':', &at_colon);
+    if (at_colon)
+    {
+        p++;
+        while (*p && *p != ',' && *p != ')')
+            p++;
+    }
+
+    if (*p == ',')
+        p++;
+
+    *should_continue = 1;
+    return p;
+}
+
+// Helper: Parse struct field definitions from "{ field : Type; ... }"
+static inline const char *parse_struct_fields(const char *p, StructDef *s)
+{
+    return parse_delimited_list(p, '{', '}', parse_struct_field_item, s);
+}
+
+// Helper: Parse function parameters from "(param: Type, ...)"
+static inline const char *parse_function_params(const char *p, FuncDef *f)
+{
+    p = parse_delimited_list(p, '(', ')', parse_function_param_item, f);
+    // Ensure we skip the closing ')'
+    if (*p == ')')
+        p++;
+    return p;
+}
+
+// Helper: Find the statement-ending semicolon, respecting brace depth
+// For struct definitions, returns position after closing brace
+static const char *find_statement_end(const char *s)
+{
+    // Skip leading whitespace
+    const char *p = s;
+    while (*p && isspace(*p))
+        p++;
+
+    // Check if this is a struct definition
+    if (strncmp(p, "struct ", 7) == 0)
+    {
+        // For structs, find the closing brace
+        int brace_depth = 0;
+        int found_open = 0;
+        while (*p)
+        {
+            if (*p == '{')
+            {
+                brace_depth++;
+                found_open = 1;
+            }
+            else if (*p == '}')
+            {
+                brace_depth--;
+                if (found_open && brace_depth == 0)
+                {
+                    // Return position of the closing brace (it will be treated as statement end)
+                    return p;
+                }
+            }
+            p++;
+        }
+        return NULL;
+    }
+
+    // For other statements, find semicolon respecting brace depth
+    int brace_depth = 0;
+    p = s;
+    while (*p)
+    {
+        if (*p == '{')
+            brace_depth++;
+        else if (*p == '}')
+            brace_depth--;
+        else if (*p == ';' && brace_depth == 0)
+            return p;
+        p++;
+    }
+    return NULL;
+}
+
 // Helper: Check if identifier is a Tuff keyword
 static int is_tuff_keyword(const char *ident)
 {
-    const char *keywords[] = {"if", "else", "while", "for", "let", "mut", 
-                              "fn", "return", "struct", "match", "case", 
+    const char *keywords[] = {"if", "else", "while", "for", "let", "mut",
+                              "fn", "return", "struct", "match", "case",
                               "true", "false", "in", NULL};
     for (int i = 0; keywords[i]; i++)
     {
@@ -5954,16 +6137,21 @@ static CompileResult compile_args_source(const char *source)
              "#include <stdlib.h>\n"
              "#include <string.h>\n\n");
 
-    // Track variable declarations: name, type (1=numeric, 2=*Str, 3=*[*Str])
+    // Track variable declarations: name, type (1=numeric, 2=*Str, 3=*[*Str], 4=struct)
     char var_names[16][32] = {{0}};
     int var_types[16] = {0};
     int var_count = 0;
+    char var_struct_types[16][32] = {{0}}; // For struct variables, stores struct type name
 
     // Track function definitions with parameters
     FuncDef functions[10] = {{{0}}};
     int func_count = 0;
 
-    // First pass: Extract all function definitions with parameters
+    // Track struct definitions
+    StructDef structs[10] = {{{0}}};
+    int struct_count = 0;
+
+    // First pass: Extract all struct and function definitions
     const char *s = source;
     while (*s)
     {
@@ -5972,14 +6160,29 @@ static CompileResult compile_args_source(const char *source)
         if (!*s)
             break;
 
-        const char *semi = strchr(s, ';');
+        const char *semi = find_statement_end(s);
         if (semi == NULL)
             break; // No more statements
 
         char stmt[512] = {0};
         const char *st = parse_statement_setup(s, semi, stmt, sizeof(stmt), NULL);
 
-        if (strncmp(st, "fn ", 3) == 0)
+        if (strncmp(st, "struct ", 7) == 0)
+        {
+            // Struct definition: struct Name { field : Type; ... }
+            const char *p = st + 7;
+            while (*p && isspace(*p))
+                p++;
+
+            // Parse struct name
+            p = compile_args_parse_identifier(p, structs[struct_count].name, sizeof(structs[struct_count].name));
+
+            // Parse struct fields using helper
+            p = parse_struct_fields(p, &structs[struct_count]);
+
+            struct_count++;
+        }
+        else if (strncmp(st, "fn ", 3) == 0)
         {
             // Function definition: fn name(param: Type) => expr;
             const char *p = st + 3;
@@ -5989,45 +6192,8 @@ static CompileResult compile_args_source(const char *source)
             // Parse function name
             p = compile_args_parse_identifier(p, functions[func_count].name, sizeof(functions[func_count].name));
 
-            // Skip whitespace to '('
-            while (*p && isspace(*p))
-                p++;
-            if (*p == '(')
-                p++;
-
-            // Parse parameters
-            while (*p && *p != ')')
-            {
-                while (*p && isspace(*p))
-                    p++;
-                if (*p == ')')
-                    break;
-
-                // Parse parameter name
-                char param_name[32] = {0};
-                p = compile_args_parse_identifier(p, param_name, sizeof(param_name));
-                if (param_name[0] != '\0' && functions[func_count].param_count < 10)
-                {
-                    strcpy_s(functions[func_count].params[functions[func_count].param_count],
-                             sizeof(functions[func_count].params[functions[func_count].param_count]),
-                             param_name);
-                    functions[func_count].param_count++;
-                }
-
-                // Skip type annotation
-                while (*p && isspace(*p))
-                    p++;
-                if (*p == ':')
-                {
-                    p++;
-                    while (*p && *p != ',' && *p != ')')
-                        p++;
-                }
-                if (*p == ',')
-                    p++;
-            }
-            if (*p == ')')
-                p++;
+            // Parse function parameters using helper
+            p = parse_function_params(p, &functions[func_count]);
 
             // Skip optional return type ': Type'
             while (*p && isspace(*p))
@@ -6058,7 +6224,7 @@ static CompileResult compile_args_source(const char *source)
     }
 
     // Generate function declarations and implementations
-    if (func_count > 0)
+    if (func_count > 0 || struct_count > 0)
     {
         // Detect global variables: variables referenced in function bodies but not in parameters
         char global_vars[16][32] = {{0}};
@@ -6137,6 +6303,21 @@ static CompileResult compile_args_source(const char *source)
             }
         }
 
+        // Generate struct definitions
+        for (int i = 0; i < struct_count; i++)
+        {
+            strncat_s(c_code, sizeof(c_code), "typedef struct {\n", _TRUNCATE);
+            for (int j = 0; j < structs[i].field_count; j++)
+            {
+                strncat_s(c_code, sizeof(c_code), "    int ", _TRUNCATE);
+                strncat_s(c_code, sizeof(c_code), structs[i].field_names[j], _TRUNCATE);
+                strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
+            }
+            strncat_s(c_code, sizeof(c_code), "} ", _TRUNCATE);
+            strncat_s(c_code, sizeof(c_code), structs[i].name, _TRUNCATE);
+            strncat_s(c_code, sizeof(c_code), ";\n\n", _TRUNCATE);
+        }
+
         // Generate global variable declarations (will be initialized in main)
         for (int i = 0; i < global_count; i++)
         {
@@ -6191,7 +6372,7 @@ static CompileResult compile_args_source(const char *source)
         if (!*s)
             break;
 
-        const char *semi = strchr(s, ';');
+        const char *semi = find_statement_end(s);
         if (semi == NULL)
         {
             // Final return expression
@@ -6205,7 +6386,11 @@ static CompileResult compile_args_source(const char *source)
         char stmt[512] = {0};
         const char *st = parse_statement_setup(s, semi, stmt, sizeof(stmt), NULL);
 
-        if (strncmp(st, "fn ", 3) == 0)
+        if (strncmp(st, "struct ", 7) == 0)
+        {
+            // Skip struct definitions (already processed)
+        }
+        else if (strncmp(st, "fn ", 3) == 0)
         {
             // Skip function definitions (already processed)
         }
@@ -6269,7 +6454,167 @@ static CompileResult compile_args_source(const char *source)
                 }
             }
 
-            if (strcmp(type_str, "*[*Str]") == 0 || strcmp(p, "__args__") == 0)
+            // Infer struct type from initializer if no explicit type annotation
+            if (type_str[0] == '\0')
+            {
+                // Check if value starts with a struct name followed by '{'
+                const char *val_check = p;
+                while (*val_check && isspace(*val_check))
+                    val_check++;
+                char potential_struct[32] = {0};
+                int pi = 0;
+                while (*val_check && (isalnum(*val_check) || *val_check == '_') && pi < 31)
+                    potential_struct[pi++] = *val_check++;
+                potential_struct[pi] = '\0';
+                while (*val_check && isspace(*val_check))
+                    val_check++;
+                if (*val_check == '{')
+                {
+                    // Looks like struct instantiation, check if it's a known struct
+                    for (int i = 0; i < struct_count; i++)
+                    {
+                        if (strcmp(potential_struct, structs[i].name) == 0)
+                        {
+                            strcpy_s(type_str, sizeof(type_str), potential_struct);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Check if type is a struct
+            int struct_idx = -1;
+            for (int i = 0; i < struct_count; i++)
+            {
+                if (strcmp(type_str, structs[i].name) == 0)
+                {
+                    struct_idx = i;
+                    break;
+                }
+            }
+
+            if (struct_idx >= 0)
+            {
+                // Struct variable
+                vtype = 4;
+                if (!is_global)
+                    compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
+                strcpy_s(var_struct_types[var_count - 1], sizeof(var_struct_types[var_count - 1]), type_str);
+
+                // Parse struct instantiation: StructName { field1: value1, field2: value2, ... }
+                // Skip to StructName
+                while (*p && isspace(*p))
+                    p++;
+
+                // Skip struct name (should match type_str)
+                while (*p && (isalnum(*p) || *p == '_'))
+                    p++;
+
+                // Skip to '{'
+                while (*p && isspace(*p))
+                    p++;
+                if (*p == '{')
+                    p++;
+
+                // Generate C struct initialization
+                char struct_init[512] = {0};
+                snprintf(struct_init, sizeof(struct_init), "    %s %s = {", type_str, vname);
+                strncat_s(c_code, sizeof(c_code), struct_init, _TRUNCATE);
+
+                // Parse field initializations
+                char field_values[10][128] = {{0}};
+                int field_indices[10] = {-1};
+                int init_count = 0;
+
+                while (*p && *p != '}' && init_count < 10)
+                {
+                    while (*p && isspace(*p))
+                        p++;
+                    if (*p == '}')
+                        break;
+
+                    // Parse field name
+                    char field_name[32] = {0};
+                    const char *field_start = p;
+                    p = compile_args_parse_identifier(p, field_name, sizeof(field_name));
+
+                    // Skip ':'
+                    while (*p && isspace(*p))
+                        p++;
+                    if (*p == ':')
+                        p++;
+                    while (*p && isspace(*p))
+                        p++;
+
+                    // Find field index in struct definition
+                    int field_idx = -1;
+                    for (int i = 0; i < structs[struct_idx].field_count; i++)
+                    {
+                        if (strcmp(field_name, structs[struct_idx].field_names[i]) == 0)
+                        {
+                            field_idx = i;
+                            break;
+                        }
+                    }
+
+                    // Parse field value (until ',' or '}')
+                    const char *value_start = p;
+                    int depth = 0;
+                    while (*p && !(*p == ',' && depth == 0) && !(*p == '}' && depth == 0))
+                    {
+                        if (*p == '{' || *p == '(')
+                            depth++;
+                        else if (*p == '}' || *p == ')')
+                            depth--;
+                        p++;
+                    }
+
+                    // Extract field value
+                    size_t value_len = (size_t)(p - value_start);
+                    if (value_len < sizeof(field_values[init_count]))
+                    {
+                        memcpy(field_values[init_count], value_start, value_len);
+                        field_values[init_count][value_len] = '\0';
+                        // Trim trailing whitespace
+                        while (value_len > 0 && isspace(field_values[init_count][value_len - 1]))
+                            field_values[init_count][--value_len] = '\0';
+
+                        field_indices[init_count] = field_idx;
+                        init_count++;
+                    }
+
+                    if (*p == ',')
+                        p++;
+                }
+
+                // Generate field initializations in struct definition order
+                for (int i = 0; i < structs[struct_idx].field_count; i++)
+                {
+                    if (i > 0)
+                        strncat_s(c_code, sizeof(c_code), ", ", _TRUNCATE);
+
+                    // Find value for this field
+                    int found = 0;
+                    for (int j = 0; j < init_count; j++)
+                    {
+                        if (field_indices[j] == i)
+                        {
+                            compile_args_expression(field_values[j], c_code, sizeof(c_code), var_names, var_types, var_count);
+                            found = 1;
+                            break;
+                        }
+                    }
+
+                    if (!found)
+                    {
+                        // Field not initialized, use 0
+                        strncat_s(c_code, sizeof(c_code), "0", _TRUNCATE);
+                    }
+                }
+
+                strncat_s(c_code, sizeof(c_code), "};\n", _TRUNCATE);
+            }
+            else if (strcmp(type_str, "*[*Str]") == 0 || strcmp(p, "__args__") == 0)
             {
                 // Assigning __args__ directly (not __args__[n]) -> args slice
                 vtype = 3;

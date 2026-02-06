@@ -1249,6 +1249,12 @@ void test_recursive_function_with_args(void)
     assert_compile_success("let length = __args__[2].length; fn countTo(extent : USize) => if (extent == length) 1 else countTo(extent - 1) + 1; countTo(6)", 4, "test_recursive_function_with_args", args);
 }
 
+void test_struct_with_args(void)
+{
+    const char *const args[] = {"foo", "bear", NULL};
+    assert_compile_success("struct Container { first : USize; second : USize; } let myContainer = Container { first : __args__[1].length, second : __args__[2].length }; myContainer.first + myContainer.second", 7, "test_struct_with_args", args);
+}
+
 int main(void)
 {
     cache_ready = cache_init();
@@ -1425,6 +1431,7 @@ int main(void)
     test_mut_string_pointer_args_reassignment();
     test_function_returns_args_length();
     test_recursive_function_with_args();
+    test_struct_with_args();
 
     if (passed_asserts == total_asserts)
     {
