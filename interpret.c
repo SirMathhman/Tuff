@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 #define MAX_ARRAY_ELEMENTS 64
 
@@ -5353,8 +5354,36 @@ InterpretResult interpret(const char *str)
     return validate_type(value, suffix_start);
 }
 
+// Helper: Generate and allocate C code for a program that returns a specific value
+static CompileResult generate_c_program(const char *format, ...)
+{
+    char buffer[512];
+    va_list args;
+    va_start(args, format);
+    int len = vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+
+    if (len < 0 || len >= (int)sizeof(buffer))
+        return (CompileResult){.code = NULL, .has_error = true, .error_message = "Internal compiler error: code generation buffer overflow"};
+
+    // Allocate and copy the generated code
+    char *out = (char *)malloc((size_t)len + 1);
+    if (!out)
+        return (CompileResult){.code = NULL, .has_error = true, .error_message = "Internal compiler error: memory allocation failed"};
+    memcpy(out, buffer, (size_t)len + 1);
+    return (CompileResult){.code = out, .has_error = false, .error_message = NULL};
+}
+
 CompileResult compile(const char *source)
 {
+    // Check for special builtin "args.length" which should return argc at runtime
+    if (source && strcmp(source, "args.length") == 0)
+    {
+        return generate_c_program(
+            "#include <stdlib.h>\n"
+            "int main(int argc, char **argv) { (void)argv; return argc - 1; }\n");
+    }
+
     // Interpret the source to get the result
     InterpretResult result = interpret(source);
 
@@ -5366,20 +5395,8 @@ CompileResult compile(const char *source)
     // Mask to 0-255 range (unsigned byte) for valid exit codes on all platforms
     int exit_code = result.value & 0xFF;
 
-    // Build the C program string
-    char buffer[512];
-    int len = snprintf(buffer, sizeof(buffer),
-                       "#include <stdlib.h>\n"
-                       "int main(int argc, char **argv) { (void)argc; (void)argv; return %d; }\n",
-                       exit_code);
-
-    if (len < 0 || len >= (int)sizeof(buffer))
-        return (CompileResult){.code = NULL, .has_error = true, .error_message = "Internal compiler error: code generation buffer overflow"};
-
-    // Allocate and copy the generated code
-    char *out = (char *)malloc((size_t)len + 1);
-    if (!out)
-        return (CompileResult){.code = NULL, .has_error = true, .error_message = "Internal compiler error: memory allocation failed"};
-    memcpy(out, buffer, (size_t)len + 1);
-    return (CompileResult){.code = out, .has_error = false, .error_message = NULL};
+    return generate_c_program(
+        "#include <stdlib.h>\n"
+        "int main(int argc, char **argv) { (void)argc; (void)argv; return %d; }\n",
+        exit_code);
 }

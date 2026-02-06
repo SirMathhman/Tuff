@@ -109,6 +109,29 @@ RunResult run(const char *source, const char *const *args)
     return (RunResult){.exit_code = program_exit, .has_error = false, .error_message = NULL};
 }
 
+// Helper: Validate RunResult and check exit code, with error logging
+// Returns 1 if valid, 0 if invalid (and logs errors)
+static int validate_run_result(RunResult run_result, int expected_value, const char *test_name)
+{
+    if (run_result.has_error)
+    {
+        printf("'%s' failed!\n", test_name);
+        printf("ERROR in '%s': Expected success but got error: %s\n", test_name, run_result.error_message);
+        return 0;
+    }
+
+    // Exit codes are limited to 0-255 on most platforms, so compare using byte-masked value.
+    int expected_exit = expected_value & 0xFF;
+    if (run_result.exit_code != expected_exit)
+    {
+        printf("'%s' failed!\n", test_name);
+        printf("ERROR in '%s': Expected exit code %d but got %d\n", test_name, expected_exit, run_result.exit_code);
+        return 0;
+    }
+
+    return 1;
+}
+
 static void assert_success(const char *input, int expected_value, const char *test_name)
 {
     total_asserts++;
@@ -128,21 +151,8 @@ static void assert_success(const char *input, int expected_value, const char *te
 
     // Also verify via run (which includes compile + clang + execution)
     RunResult run_result = run(input, NULL);
-    if (run_result.has_error)
-    {
-        printf("'%s' failed!\n", test_name);
-        printf("ERROR in '%s' (run): Expected success but got error: %s\n", test_name, run_result.error_message);
+    if (!validate_run_result(run_result, expected_value, test_name))
         return;
-    }
-
-    // Exit codes are limited to 0-255 on most platforms, so compare using byte-masked value.
-    int expected_exit = expected_value & 0xFF;
-    if (run_result.exit_code != expected_exit)
-    {
-        printf("'%s' failed!\n", test_name);
-        printf("ERROR in '%s' (run): Expected exit code %d but got %d\n", test_name, expected_exit, run_result.exit_code);
-        return;
-    }
 
     passed_asserts++;
 }
@@ -166,6 +176,16 @@ static void assert_error(const char *input, const char *test_name)
         printf("ERROR in '%s' (run): Expected failure but run succeeded with exit code %d\n", test_name, run_result.exit_code);
         return;
     }
+
+    passed_asserts++;
+}
+
+static void assert_compile_success(const char *input, int expected_value, const char *test_name, const char *const *args)
+{
+    total_asserts++;
+    RunResult run_result = run(input, args);
+    if (!validate_run_result(run_result, expected_value, test_name))
+        return;
 
     passed_asserts++;
 }
@@ -920,6 +940,12 @@ void test_interpret_function_array_parameter_initialized(void)
     assert_success("fn first(array : [I32; 1; 2]) => array[0]; let mut temp : [I32; 0; 2]; temp[0] = 100; first(temp)", 100, "test_interpret_function_array_parameter_initialized");
 }
 
+void test_args_length(void)
+{
+    const char *const args[] = {"a", "b", NULL};
+    assert_compile_success("args.length", 2, "test_args_length", args);
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -1073,6 +1099,7 @@ int main(void)
     test_interpret_array_assignment_increments_init();
     test_interpret_function_array_parameter_uninitialized_error();
     test_interpret_function_array_parameter_initialized();
+    test_args_length();
 
     if (passed_asserts == total_asserts)
     {
