@@ -2424,8 +2424,82 @@ static InterpretResult parse_let_statements_loop(Parser *p)
                 return make_error("Expected '{' after struct name");
             }
 
-            // Skip to closing brace
-            skip_to_matching_brace(p);
+            p->pos++; // Skip '{'
+            skip_whitespace(p);
+
+            // Parse struct fields
+            char field_names[10][32];
+            int field_count = 0;
+
+            while (p->input[p->pos] && p->input[p->pos] != '}')
+            {
+                skip_whitespace(p);
+
+                // Check if we're at the closing brace
+                if (p->input[p->pos] == '}')
+                    break;
+
+                // Parse field name
+                char field_name[32];
+                int field_name_len = parse_identifier(p, field_name, sizeof(field_name));
+                if (field_name_len <= 0)
+                {
+                    return make_error("Expected field name in struct");
+                }
+
+                // Check for duplicate field name
+                for (int i = 0; i < field_count; i++)
+                {
+                    if (strncmp(field_names[i], field_name, field_name_len) == 0 &&
+                        field_names[i][field_name_len] == '\0')
+                    {
+                        return make_error("Duplicate field name in struct");
+                    }
+                }
+
+                // Register the field name
+                if (field_count >= 10)
+                {
+                    return make_error("Too many struct fields");
+                }
+                strncpy_s(field_names[field_count], sizeof(field_names[field_count]), field_name, field_name_len);
+                field_names[field_count][field_name_len] = '\0';
+                field_count++;
+
+                skip_whitespace(p);
+
+                // Expect colon
+                if (p->input[p->pos] != ':')
+                {
+                    return make_error("Expected ':' after field name");
+                }
+                p->pos++; // Skip ':'
+                skip_whitespace(p);
+
+                // Parse field type
+                char field_type[32];
+                int field_type_len = parse_identifier(p, field_type, sizeof(field_type));
+                if (field_type_len <= 0)
+                {
+                    return make_error("Expected field type");
+                }
+
+                skip_whitespace(p);
+
+                // Expect semicolon
+                if (p->input[p->pos] != ';')
+                {
+                    return make_error("Expected ';' after field declaration");
+                }
+                p->pos++; // Skip ';'
+            }
+
+            // Expect closing brace
+            if (p->input[p->pos] != '}')
+            {
+                return make_error("Expected '}' after struct fields");
+            }
+            p->pos++; // Skip '}'
 
             skip_whitespace(p);
             has_last_statement = 0; // struct declarations don't have values
