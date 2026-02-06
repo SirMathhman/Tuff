@@ -660,6 +660,11 @@ void test_interpret_function_forward_reference_type_mismatch(void)
     assert_error("let temp = get(); fn get() => 100U16; let y : U8 = temp; y", "test_interpret_function_forward_reference_type_mismatch");
 }
 
+void test_interpret_struct_empty(void)
+{
+    assert_success("struct Empty {}", 0, "test_interpret_struct_empty");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -787,6 +792,7 @@ int main(void)
     test_interpret_function_forward_reference();
     test_interpret_function_forward_reference_top_level();
     test_interpret_function_forward_reference_type_mismatch();
+    test_interpret_struct_empty();
 
     if (passed_asserts == total_asserts)
     {
