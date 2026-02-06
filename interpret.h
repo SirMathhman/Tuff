@@ -39,6 +39,6 @@ InterpretResult interpret_with_argc(const char *str, int argc, const char *const
 // If has_error is true, code will be NULL and error_message contains the error.
 CompileResult compile(const char *source);
 
-RunResult run(const char *source, const char *const *args);
+RunResult run(const char *source, const char *test_name, const char *const *args);
 
 #endif

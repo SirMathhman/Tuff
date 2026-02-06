@@ -82,14 +82,53 @@ static unsigned long long hash_source(const char *source)
     return hash;
 }
 
-static void build_cache_paths(unsigned long long hash, char *old_exe, size_t old_exe_sz,
-                              char *new_exe, size_t new_exe_sz, char *new_c, size_t new_c_sz)
+static void sanitize_name(const char *name, char *out, size_t out_sz)
 {
-    _snprintf_s(old_exe, old_exe_sz, _TRUNCATE, "%s\\%016llx.exe", CACHE_OLD, hash);
-    _snprintf_s(new_exe, new_exe_sz, _TRUNCATE, "%s\\%016llx.exe", CACHE_NEW, hash);
-    _snprintf_s(new_c, new_c_sz, _TRUNCATE, "%s\\%016llx.c", CACHE_NEW, hash);
+    size_t j = 0;
+    if (out_sz == 0)
+        return;
+
+    for (size_t i = 0; name && name[i] != '\0' && j + 1 < out_sz; i++)
+    {
+        char c = name[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_')
+        {
+            out[j++] = c;
+        }
+        else if (c == ' ' || c == '.' || c == ':')
+        {
+            out[j++] = '_';
+        }
+        else
+        {
+            out[j++] = '-';
+        }
+    }
+
+    if (j == 0)
+    {
+        out[0] = 't';
+        out[1] = '0';
+        out[2] = '\0';
+    }
+    else
+    {
+        out[j] = '\0';
+    }
 }
 
+static void build_cache_paths(unsigned long long hash, const char *test_name,
+                              char *old_exe, size_t old_exe_sz, char *old_c, size_t old_c_sz,
+                              char *new_exe, size_t new_exe_sz, char *new_c, size_t new_c_sz)
+{
+    char safe_name[64] = {0};
+    sanitize_name(test_name ? test_name : "test", safe_name, sizeof(safe_name));
+
+    _snprintf_s(old_exe, old_exe_sz, _TRUNCATE, "%s\\%s_%016llx.exe", CACHE_OLD, safe_name, hash);
+    _snprintf_s(old_c, old_c_sz, _TRUNCATE, "%s\\%s_%016llx.c", CACHE_OLD, safe_name, hash);
+    _snprintf_s(new_exe, new_exe_sz, _TRUNCATE, "%s\\%s_%016llx.exe", CACHE_NEW, safe_name, hash);
+    _snprintf_s(new_c, new_c_sz, _TRUNCATE, "%s\\%s_%016llx.c", CACHE_NEW, safe_name, hash);
+}
 static int cache_init(void)
 {
     if (!ensure_dir(".cache"))
@@ -119,7 +158,7 @@ static void cache_finalize(void)
 // compiles it with clang, runs the produced executable, and returns a RunResult.
 //
 // args is a NULL-terminated array of strings (may be NULL for no args).
-RunResult run(const char *source, const char *const *args)
+RunResult run(const char *source, const char *test_name, const char *const *args)
 {
     if (!source)
         return (RunResult){.exit_code = 1, .has_error = true, .error_message = "NULL source"};
@@ -139,23 +178,35 @@ RunResult run(const char *source, const char *const *args)
     char c_path[MAX_PATH] = {0};
     char exe_path[MAX_PATH] = {0};
     char cache_old_exe[MAX_PATH] = {0};
+    char cache_old_c[MAX_PATH] = {0};
     char cache_new_exe[MAX_PATH] = {0};
     char cache_new_c[MAX_PATH] = {0};
     int using_cache = 0;
-    int cache_hit = 0;
+    int need_compile = 1;
+    int need_write_c = 1;
 
     if (cache_ready)
     {
         unsigned long long hash = hash_source(source);
-        build_cache_paths(hash, cache_old_exe, sizeof(cache_old_exe), cache_new_exe, sizeof(cache_new_exe),
-                          cache_new_c, sizeof(cache_new_c));
+        build_cache_paths(hash, test_name, cache_old_exe, sizeof(cache_old_exe), cache_old_c, sizeof(cache_old_c),
+                          cache_new_exe, sizeof(cache_new_exe), cache_new_c, sizeof(cache_new_c));
 
         if (file_exists(cache_old_exe))
         {
             using_cache = 1;
-            cache_hit = 1;
+            need_compile = 0;
             strncpy_s(exe_path, sizeof(exe_path), cache_old_exe, _TRUNCATE);
             CopyFileA(cache_old_exe, cache_new_exe, FALSE);
+
+            if (file_exists(cache_old_c))
+            {
+                need_write_c = 0;
+                CopyFileA(cache_old_c, cache_new_c, FALSE);
+            }
+            else
+            {
+                strncpy_s(c_path, sizeof(c_path), cache_new_c, _TRUNCATE);
+            }
         }
         else
         {
@@ -201,7 +252,7 @@ RunResult run(const char *source, const char *const *args)
         DeleteFileA(temp_base);
     }
 
-    if (!cache_hit)
+    if (need_write_c)
     {
         FILE *f = NULL;
         if (fopen_s(&f, c_path, "wb") != 0 || !f)
@@ -212,20 +263,26 @@ RunResult run(const char *source, const char *const *args)
         fwrite(compiled.code, 1, strlen(compiled.code), f);
         fclose(f);
 
-        // Compile generated C with clang.
-        // Use _spawnvp so we don't have to do shell quoting; clang must be on PATH.
-        const char *clang_argv[] = {"clang", c_path, "-o", exe_path, NULL};
-        int clang_exit = _spawnvp(_P_WAIT, "clang", clang_argv);
-        if (clang_exit != 0)
+        if (need_compile)
         {
-            DeleteFileA(c_path);
-            if (!using_cache)
-                DeleteFileA(exe_path);
-            free(compiled.code);
-            return (RunResult){.exit_code = clang_exit == -1 ? 1 : clang_exit, .has_error = true, .error_message = "Clang compilation failed"};
-        }
+            // Compile generated C with clang.
+            // Use _spawnvp so we don't have to do shell quoting; clang must be on PATH.
+            const char *clang_argv[] = {"clang", c_path, "-o", exe_path, NULL};
+            int clang_exit = _spawnvp(_P_WAIT, "clang", clang_argv);
+            if (clang_exit != 0)
+            {
+                if (!using_cache)
+                    DeleteFileA(c_path);
+                if (!using_cache)
+                    DeleteFileA(exe_path);
+                free(compiled.code);
+                return (RunResult){.exit_code = clang_exit == -1 ? 1 : clang_exit, .has_error = true, .error_message = "Clang compilation failed"};
+            }
 
-        DeleteFileA(c_path);
+            // Keep .c files in cache for debugging; only delete temp files when not using cache.
+            if (!using_cache)
+                DeleteFileA(c_path);
+        }
     }
 
     free(compiled.code);
@@ -236,8 +293,10 @@ RunResult run(const char *source, const char *const *args)
     const char **prog_argv = (const char **)malloc((size_t)(arg_count + 2) * sizeof(char *));
     if (!prog_argv)
     {
-        DeleteFileA(c_path);
-        DeleteFileA(exe_path);
+        if (!using_cache)
+            DeleteFileA(c_path);
+        if (!using_cache)
+            DeleteFileA(exe_path);
         return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to allocate argument vector"};
     }
     prog_argv[0] = exe_path;
@@ -295,7 +354,7 @@ static void assert_success(const char *input, int expected_value, const char *te
     }
 
     // Also verify via run (which includes compile + clang + execution)
-    RunResult run_result = run(input, NULL);
+    RunResult run_result = run(input, test_name, NULL);
     if (!validate_run_result(run_result, expected_value, test_name))
         return;
 
@@ -314,7 +373,7 @@ static void assert_error(const char *input, const char *test_name)
     }
 
     // Also verify run fails (errors should occur at compile time)
-    RunResult run_result = run(input, NULL);
+    RunResult run_result = run(input, test_name, NULL);
     if (!run_result.has_error)
     {
         printf("'%s' failed!\n", test_name);
@@ -328,7 +387,7 @@ static void assert_error(const char *input, const char *test_name)
 static void assert_compile_success(const char *input, int expected_value, const char *test_name, const char *const *args)
 {
     total_asserts++;
-    RunResult run_result = run(input, args);
+    RunResult run_result = run(input, test_name, args);
     if (!validate_run_result(run_result, expected_value, test_name))
         return;
 
