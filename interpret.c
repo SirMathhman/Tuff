@@ -5688,6 +5688,76 @@ static void compile_args_emit_decl(char *c_code, size_t c_code_size, const char 
     strncat_s(c_code, c_code_size, ";\n", _TRUNCATE);
 }
 
+// Helper: Expand expression with function call inlining
+// For simple cases like get().length where get() returns a variable
+static int compile_args_expression_with_funcs(const char *expr, char *out_buf, size_t buf_size,
+                                              const char var_names[][32], const int *var_types, int var_count,
+                                              const char func_names[][32], const char func_bodies[][256], int func_count)
+{
+    const char *s = expr;
+    while (*s && isspace(*s))
+        s++;
+
+    // Check if expression starts with a known function name followed by ()
+    for (int i = 0; i < func_count; i++)
+    {
+        size_t fname_len = strlen(func_names[i]);
+        if (strncmp(s, func_names[i], fname_len) == 0 && s[fname_len] == '(')
+        {
+            // This is a function call
+            const char *body_start = func_bodies[i];
+            const char *after_call = s + fname_len + 1;
+
+            // Skip closing paren
+            while (*after_call && *after_call != ')')
+                after_call++;
+            if (*after_call == ')')
+                after_call++;
+
+            // Check if there's a property access like .length
+            if (*after_call == '.')
+            {
+                // Property access on function result
+                after_call++; // skip '.'
+                char prop[32] = {0};
+                int pi = 0;
+                while (isalnum(*after_call) && pi < 31)
+                    prop[pi++] = *after_call++;
+                prop[pi] = '\0';
+
+                if (strcmp(prop, "length") == 0)
+                {
+                    // Expand get().length to (int)strlen(get_body) or similar
+                    strncat_s(out_buf, buf_size, "(int)strlen(", _TRUNCATE);
+                    compile_args_expression(body_start, out_buf, buf_size, var_names, var_types, var_count);
+                    strncat_s(out_buf, buf_size, ")", _TRUNCATE);
+                    // Add remaining expression
+                    if (*after_call)
+                    {
+                        strncat_s(out_buf, buf_size, after_call, _TRUNCATE);
+                    }
+                    return 0;
+                }
+            }
+            else
+            {
+                // Simple function call without property access
+                // Just expand the body
+                compile_args_expression(body_start, out_buf, buf_size, var_names, var_types, var_count);
+                // Add remaining expression
+                if (*after_call)
+                {
+                    strncat_s(out_buf, buf_size, after_call, _TRUNCATE);
+                }
+                return 0;
+            }
+        }
+    }
+
+    // No function calls found, use regular expression expansion
+    return compile_args_expression(expr, out_buf, buf_size, var_names, var_types, var_count);
+}
+
 // compile_args_source: Transpile Tuff source containing __args__ into a complete C program.
 // Returns a CompileResult with generated C code.
 static CompileResult compile_args_source(const char *source)
@@ -5702,6 +5772,11 @@ static CompileResult compile_args_source(const char *source)
     char var_names[16][32] = {{0}};
     int var_types[16] = {0};
     int var_count = 0;
+
+    // Track function definitions: name -> expression body
+    char func_names[10][32] = {{0}};
+    char func_bodies[10][256] = {{0}};
+    int func_count = 0;
 
     // Split source into statements by ';'
     // The last piece (after the last ';' or the entire source if no ';') is the return expression
@@ -5741,7 +5816,52 @@ static CompileResult compile_args_source(const char *source)
         while (*st && isspace(*st))
             st++;
 
-        if (strncmp(st, "let ", 4) == 0)
+        if (strncmp(st, "fn ", 3) == 0)
+        {
+            // Function definition: fn name() => expr; or fn name() : Type => expr;
+            const char *p = st + 3;
+            while (*p && isspace(*p))
+                p++;
+
+            // Parse function name
+            char fname[32] = {0};
+            p = compile_args_parse_identifier(p, fname, sizeof(fname));
+
+            // Skip whitespace and parameters (we don't support parameters in transpiler)
+            while (*p && *p != ')')
+                p++;
+            if (*p == ')')
+                p++;
+
+            // Skip optional return type ': Type'
+            while (*p && isspace(*p))
+                p++;
+            if (*p == ':')
+            {
+                p++; // skip ':'
+                while (*p && *p != '=')
+                    p++;
+            }
+
+            // Expect '=>'
+            while (*p && isspace(*p))
+                p++;
+            if (*p == '=' && *(p + 1) == '>')
+            {
+                p += 2;
+                while (*p && isspace(*p))
+                    p++;
+            }
+
+            // Store the function body (remaining part of statement)
+            if (func_count < 10)
+            {
+                strncpy_s(func_names[func_count], sizeof(func_names[func_count]), fname, _TRUNCATE);
+                strncpy_s(func_bodies[func_count], sizeof(func_bodies[func_count]), p, _TRUNCATE);
+                func_count++;
+            }
+        }
+        else if (strncmp(st, "let ", 4) == 0)
         {
             // Variable declaration
             const char *p = st + 4;
@@ -5856,7 +5976,8 @@ static CompileResult compile_args_source(const char *source)
         {
             // This is a trailing expression (no more semicolons) - generate return
             strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
-            compile_args_expression(remaining, c_code, sizeof(c_code), var_names, var_types, var_count);
+            // Expand function calls in the expression
+            compile_args_expression_with_funcs(remaining, c_code, sizeof(c_code), var_names, var_types, var_count, func_names, func_bodies, func_count);
             strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             break;
         }

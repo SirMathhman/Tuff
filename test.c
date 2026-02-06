@@ -1237,6 +1237,12 @@ void test_mut_string_pointer_args_reassignment(void)
     assert_compile_success("let mut x : *Str = __args__[1]; x = __args__[2]; x.length", 5, "test_mut_string_pointer_args_reassignment", args);
 }
 
+void test_function_returns_args_length(void)
+{
+    const char *const args[] = {"prog", "wahoo", NULL};
+    assert_compile_success("let temp = __args__[2]; fn get() => temp; get().length", 5, "test_function_returns_args_length", args);
+}
+
 int main(void)
 {
     cache_ready = cache_init();
@@ -1411,6 +1417,7 @@ int main(void)
     test_args_index_in_expression();
     test_args_slice_length();
     test_mut_string_pointer_args_reassignment();
+    test_function_returns_args_length();
 
     if (passed_asserts == total_asserts)
     {
