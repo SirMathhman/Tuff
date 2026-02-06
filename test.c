@@ -620,6 +620,11 @@ void test_interpret_function_invocation(void)
     assert_success("fn add(first : I32, second : I32) : I32 => { first + second } add(3, 4)", 7, "test_interpret_function_invocation");
 }
 
+void test_interpret_function_argument_count_mismatch(void)
+{
+    assert_error("fn add(first : I32, second : I32) : I32 => { first + second } add()", "test_interpret_function_argument_count_mismatch");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -739,6 +744,7 @@ int main(void)
     test_interpret_function_with_parameters();
     test_interpret_function_duplicate_parameter_names();
     test_interpret_function_invocation();
+    test_interpret_function_argument_count_mismatch();
 
     if (passed_asserts == total_asserts)
     {
