@@ -4,38 +4,39 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 #define MAX_ARRAY_ELEMENTS 64
 
 typedef struct
 {
     const char *suffix;
-    long long min_value;
-    long long max_value;
+    int64_t min_value;
+    int64_t max_value;
     const char *error_message;
 } TypeInfo;
 
 typedef struct
 {
     char name[32];
-    long value;
+    int32_t value;
     char type[16];      // Store variable's type (e.g., "U8", "U16", "*I32", "[I32;3;3]")
-    int is_mutable;     // 1 if mutable, 0 if immutable
-    int pointer_target; // -1 if not a pointer, otherwise index of pointed-to variable
-    int is_array;       // 1 if array, 0 otherwise
-    int array_init_count;
-    int array_total_count;
+    bool is_mutable;     // 1 if mutable, 0 if immutable
+    int32_t pointer_target; // -1 if not a pointer, otherwise index of pointed-to variable
+    bool is_array;       // 1 if array, 0 otherwise
+    int32_t array_init_count;
+    int32_t array_total_count;
     char array_element_type[16];
-    long array_values[MAX_ARRAY_ELEMENTS];
-    int is_struct;          // 1 if struct instance, 0 otherwise
-    int struct_def_idx;     // Index in parser's structs array
-    long struct_values[10]; // Field values for struct instances
-    int slice_start;        // Start index of slice (for pointer-to-array types)
-    int slice_end;          // End index of slice (for pointer-to-array types)
-    int is_string;          // 1 if string value
-    char string_value[256]; // Store string content
-    int string_len;         // Length of string
-    int is_args_slice;      // 1 if initialized from __args__ builtin, 0 otherwise
+    int32_t array_values[MAX_ARRAY_ELEMENTS];
+    bool is_struct;             // 1 if struct instance, 0 otherwise
+    int32_t struct_def_idx;        // Index in parser's structs array
+    int32_t struct_values[10]; // Field values for struct instances
+    int32_t slice_start;           // Start index of slice (for pointer-to-array types)
+    int32_t slice_end;             // End index of slice (for pointer-to-array types)
+    bool is_string;             // 1 if string value
+    char string_value[256];    // Store string content
+    int32_t string_len;            // Length of string
+    bool is_args_slice;         // 1 if initialized from __args__ builtin, 0 otherwise
 } Variable;
 
 typedef struct
@@ -43,11 +44,11 @@ typedef struct
     char name[32];
     char param_names[10][32]; // Parameter names
     char param_types[10][32]; // Parameter types
-    int param_count;          // Number of parameters
+    int32_t param_count;          // Number of parameters
     char return_type[32];     // Return type
-    int body_start_pos;       // Position in input where function body starts
-    int body_end_pos;         // Position in input where function body ends
-    int is_braced_body;       // 1 if body has braces { }, 0 if implicit body
+    int32_t body_start_pos;       // Position in input where function body starts
+    int32_t body_end_pos;         // Position in input where function body ends
+    int32_t is_braced_body;       // 1 if body has braces { }, 0 if implicit body
 } FunctionInfo;
 
 typedef struct
@@ -55,49 +56,49 @@ typedef struct
     char name[32];            // Struct name
     char field_names[10][32]; // Field names
     char field_types[10][32]; // Field types
-    int field_count;          // Number of fields
+    int32_t field_count;          // Number of fields
 } StructInfo;
 
 typedef struct
 {
     const char *input;
-    int pos;
+    int32_t pos;
     InterpretResult last_error;
     char tracked_suffix[16]; // Increased to accommodate "*mut I32"
-    int has_tracked_suffix;
+    int32_t has_tracked_suffix;
     Variable variables[10];
-    int var_count;
+    int32_t var_count;
     char all_declared_names[10][32]; // Track all variable names ever declared
-    int all_declared_count;          // Count of all declared names
-    int has_temp_array;
-    int temp_array_count;
+    int32_t all_declared_count;          // Count of all declared names
+    int32_t has_temp_array;
+    int32_t temp_array_count;
     char temp_array_element_type[16];
-    long temp_array_values[MAX_ARRAY_ELEMENTS];
+    int32_t temp_array_values[MAX_ARRAY_ELEMENTS];
     char declared_functions[10][32]; // Track all declared function names
-    int declared_functions_count;    // Count of declared functions
+    int32_t declared_functions_count;    // Count of declared functions
     FunctionInfo functions[10];      // Array of function information
-    int functions_count;             // Count of stored functions
-    int has_temp_struct;
-    int temp_struct_def_idx;
-    long temp_struct_values[10];
+    int32_t functions_count;             // Count of stored functions
+    int32_t has_temp_struct;
+    int32_t temp_struct_def_idx;
+    int32_t temp_struct_values[10];
     char declared_structs[10][32]; // Track all declared struct names
-    int declared_structs_count;    // Count of declared structs
+    int32_t declared_structs_count;    // Count of declared structs
     StructInfo structs[10];        // Array of struct definitions
-    int structs_count;             // Count of struct definitions
-    int temp_slice_start;          // Start index for temporary slice
-    int temp_slice_end;            // End index for temporary slice
-    int has_temp_string;           // 1 if temp string is set
+    int32_t structs_count;             // Count of struct definitions
+    int32_t temp_slice_start;          // Start index for temporary slice
+    int32_t temp_slice_end;            // End index for temporary slice
+    int32_t has_temp_string;           // 1 if temp string is set
     char temp_string_value[256];   // Store temporary string
-    int temp_string_len;           // Length of temporary string
-    int argc;                      // argc value for __args__.length (-1 if not provided)
+    int32_t temp_string_len;           // Length of temporary string
+    int32_t argc;                      // argc value for __args__.length (-1 if not provided)
     const char *const *argv;       // argv array for __args__[n] (NULL if not provided)
 } Parser;
 
 typedef struct
 {
-    long value;
+    int32_t value;
     const char *suffix;
-    int suffix_len;
+    int32_t suffix_len;
 } NumberValue;
 
 static const TypeInfo type_info[] = {
@@ -114,13 +115,13 @@ static const TypeInfo type_info[] = {
     {NULL, 0, 0, NULL}};
 
 // Helper: Check if a type string is a pointer type
-static int is_pointer_type(const char *type)
+static int32_t is_pointer_type(const char *type)
 {
     return type && type[0] == '*' && type[1] != '\0';
 }
 
 // Helper: Check if a pointer type is mutable (*mut Type)
-static int is_mutable_pointer_type(const char *pointer_type)
+static int32_t is_mutable_pointer_type(const char *pointer_type)
 {
     if (!pointer_type || pointer_type[0] != '*')
         return 0;
@@ -129,7 +130,7 @@ static int is_mutable_pointer_type(const char *pointer_type)
 }
 
 // Helper: Extract the base type from a pointer type (e.g., "*I32" -> "I32")
-static void extract_pointer_base_type(const char *pointer_type, char *out_base_type, int max_len)
+static void extract_pointer_base_type(const char *pointer_type, char *out_base_type, int32_t max_len)
 {
     if (!pointer_type || pointer_type[0] != '*')
     {
@@ -141,18 +142,18 @@ static void extract_pointer_base_type(const char *pointer_type, char *out_base_t
 }
 
 static InterpretResult make_error(const char *message);
-static InterpretResult parse_identifier_or_error(Parser *p, char *out_name, int max_name_len, const char *error_msg);
+static InterpretResult parse_identifier_or_error(Parser *p, char *out_name, int32_t max_name_len, const char *error_msg);
 static InterpretResult expect_char(Parser *p, char expected, const char *error_msg);
 static void skip_whitespace(Parser *p);
 
 // Helper: Check if a type string is an array type
-static int is_array_type_string(const char *type)
+static int32_t is_array_type_string(const char *type)
 {
     return type && type[0] == '[';
 }
 
 // Helper: Check if a type string is a pointer-to-array type (e.g., "*[I32]" or "*mut [I32]")
-static int is_pointer_to_array_type(const char *type)
+static int32_t is_pointer_to_array_type(const char *type)
 {
     if (!type || type[0] != '*')
         return 0;
@@ -169,7 +170,7 @@ static int is_pointer_to_array_type(const char *type)
 }
 
 // Helper: Extract element type from pointer-to-array type (e.g., "*[I32]" -> "I32")
-static void extract_pointer_array_element_type(const char *pointer_array_type, char *out_elem_type, int max_len)
+static void extract_pointer_array_element_type(const char *pointer_array_type, char *out_elem_type, int32_t max_len)
 {
     if (!is_pointer_to_array_type(pointer_array_type))
     {
@@ -189,7 +190,7 @@ static void extract_pointer_array_element_type(const char *pointer_array_type, c
     p++;
 
     // Find the closing ']'
-    int len = 0;
+    int32_t len = 0;
     while (*p && *p != ']' && len < max_len - 1)
     {
         out_elem_type[len++] = *p;
@@ -199,13 +200,13 @@ static void extract_pointer_array_element_type(const char *pointer_array_type, c
 }
 
 // Helper: Parse non-negative integer from input
-static int parse_non_negative_int(Parser *p, int *out_value)
+static int32_t parse_non_negative_int(Parser *p, int32_t *out_value)
 {
     skip_whitespace(p);
     if (!isdigit(p->input[p->pos]))
         return 0;
 
-    int value = 0;
+    int32_t value = 0;
     while (isdigit(p->input[p->pos]))
     {
         value = value * 10 + (p->input[p->pos] - '0');
@@ -219,11 +220,11 @@ static int parse_non_negative_int(Parser *p, int *out_value)
 static InterpretResult parse_array_type_annotation(
     Parser *p,
     char *out_type,
-    int out_type_size,
+    int32_t out_type_size,
     char *out_elem_type,
-    int out_elem_type_size,
-    int *out_init_count,
-    int *out_total_count)
+    int32_t out_elem_type_size,
+    int32_t *out_init_count,
+    int32_t *out_total_count)
 {
     InterpretResult open_bracket = expect_char(p, '[', "Expected '[' to start array type");
     if (open_bracket.has_error)
@@ -238,7 +239,7 @@ static InterpretResult parse_array_type_annotation(
     if (first_sep.has_error)
         return first_sep;
 
-    int init_count = 0;
+    int32_t init_count = 0;
     if (!parse_non_negative_int(p, &init_count))
     {
         return make_error("Expected initialized element count");
@@ -248,7 +249,7 @@ static InterpretResult parse_array_type_annotation(
     if (second_sep.has_error)
         return second_sep;
 
-    int total_count = 0;
+    int32_t total_count = 0;
     if (!parse_non_negative_int(p, &total_count))
     {
         return make_error("Expected total element count");
@@ -276,7 +277,7 @@ static InterpretResult parse_array_type_annotation(
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
-static int suffix_length(const char *suffix)
+static int32_t suffix_length(const char *suffix)
 {
     if (!suffix || !suffix[0])
         return 0;
@@ -300,15 +301,15 @@ static int suffix_length(const char *suffix)
     return 0;
 }
 
-static int contains_suffix(const char *suffix, const char *search_suffix)
+static int32_t contains_suffix(const char *suffix, const char *search_suffix)
 {
-    int len = suffix_length(search_suffix);
+    int32_t len = suffix_length(search_suffix);
     return strncmp(suffix, search_suffix, len) == 0;
 }
 
 // Helper: Check if there's a typed operand ahead in the remaining input
 // Scans ahead looking for "+ number_with_suffix" or "- number_with_suffix" patterns
-static int has_typed_operand_ahead(const char *input, int pos)
+static int32_t has_typed_operand_ahead(const char *input, int32_t pos)
 {
     while (input[pos])
     {
@@ -339,9 +340,9 @@ static int has_typed_operand_ahead(const char *input, int pos)
     return 0;
 }
 
-static int get_type_info_index(const char *suffix);
+static int32_t get_type_info_index(const char *suffix);
 
-static InterpretResult validate_value_by_index(long long value, int type_idx)
+static InterpretResult validate_value_by_index(int64_t value, int32_t type_idx)
 {
     if (type_idx < 0)
     {
@@ -359,18 +360,18 @@ static InterpretResult validate_value_by_index(long long value, int type_idx)
     return (InterpretResult){.value = (int)value, .has_error = false, .error_message = NULL};
 }
 
-static InterpretResult validate_type(long long value, const char *suffix)
+static InterpretResult validate_type(int64_t value, const char *suffix)
 {
-    int type_idx = get_type_info_index(suffix);
+    int32_t type_idx = get_type_info_index(suffix);
     return validate_value_by_index(value, type_idx);
 }
 
-static int get_type_info_index(const char *suffix)
+static int32_t get_type_info_index(const char *suffix)
 {
     if (!suffix || !suffix[0])
         return -1;
 
-    for (int i = 0; type_info[i].suffix != NULL; i++)
+    for (int32_t i = 0; type_info[i].suffix != NULL; i++)
     {
         if (contains_suffix(suffix, type_info[i].suffix))
         {
@@ -403,13 +404,13 @@ static const TypeHierarchy type_hierarchies[] = {
 
 // Helper: Check if source type can be assigned to destination type
 // using the unified type hierarchy
-static int check_type_hierarchy(char type_char, const char *dest, const char *src)
+static int32_t check_type_hierarchy(char type_char, const char *dest, const char *src)
 {
-    for (int i = 0; type_hierarchies[i].type_char != 0; i++)
+    for (int32_t i = 0; type_hierarchies[i].type_char != 0; i++)
     {
         if (type_hierarchies[i].type_char == type_char && contains_suffix(src, type_hierarchies[i].source_type))
         {
-            for (int j = 0; type_hierarchies[i].wider_types[j] != NULL; j++)
+            for (int32_t j = 0; type_hierarchies[i].wider_types[j] != NULL; j++)
             {
                 if (contains_suffix(dest, type_hierarchies[i].wider_types[j]))
                     return 1;
@@ -420,16 +421,16 @@ static int check_type_hierarchy(char type_char, const char *dest, const char *sr
     return 0;
 }
 
-static int is_type_compatible(const char *dest_type, const char *source_type);
+static int32_t is_type_compatible(const char *dest_type, const char *source_type);
 
 // Helper: Parse array type string "[Type;Init;Total]"
-static int parse_array_type_string(const char *type_str, char *out_elem_type, int elem_type_size, int *out_init, int *out_total)
+static int32_t parse_array_type_string(const char *type_str, char *out_elem_type, int32_t elem_type_size, int32_t *out_init, int32_t *out_total)
 {
     if (!is_array_type_string(type_str))
         return 0;
 
     const char *p = type_str + 1;
-    int i = 0;
+    int32_t i = 0;
     while (*p && *p != ';' && i < elem_type_size - 1)
     {
         out_elem_type[i++] = *p;
@@ -442,12 +443,12 @@ static int parse_array_type_string(const char *type_str, char *out_elem_type, in
     p++;
 
     char *endptr = NULL;
-    long init_count = strtol(p, &endptr, 10);
+    int32_t init_count = strtol(p, &endptr, 10);
     if (endptr == p || *endptr != ';')
         return 0;
     p = endptr + 1;
 
-    long total_count = strtol(p, &endptr, 10);
+    int32_t total_count = strtol(p, &endptr, 10);
     if (endptr == p || *endptr != ']')
         return 0;
 
@@ -460,14 +461,14 @@ static int parse_array_type_string(const char *type_str, char *out_elem_type, in
 }
 
 // Helper: Check array type compatibility
-static int is_array_type_compatible(const char *dest_type, const char *source_type)
+static int32_t is_array_type_compatible(const char *dest_type, const char *source_type)
 {
     char dest_elem[16] = {0};
     char src_elem[16] = {0};
-    int dest_init = 0;
-    int dest_total = 0;
-    int src_init = 0;
-    int src_total = 0;
+    int32_t dest_init = 0;
+    int32_t dest_total = 0;
+    int32_t src_init = 0;
+    int32_t src_total = 0;
 
     if (!parse_array_type_string(dest_type, dest_elem, sizeof(dest_elem), &dest_init, &dest_total))
         return 0;
@@ -485,7 +486,7 @@ static int is_array_type_compatible(const char *dest_type, const char *source_ty
 
 // Helper: Check if a source type can be assigned to a destination type
 // Returns 1 if compatible, 0 if not
-static int is_type_compatible(const char *dest_type, const char *source_type)
+static int32_t is_type_compatible(const char *dest_type, const char *source_type)
 {
     if (!dest_type || !source_type || !dest_type[0] || !source_type[0])
         return 0;
@@ -505,8 +506,8 @@ static int is_type_compatible(const char *dest_type, const char *source_type)
     if (strcmp(dest_type, "*Str") == 0 && strcmp(source_type, "*Str") == 0)
         return 1;
 
-    int dest_idx = get_type_info_index(dest_type);
-    int src_idx = get_type_info_index(source_type);
+    int32_t dest_idx = get_type_info_index(dest_type);
+    int32_t src_idx = get_type_info_index(source_type);
 
     if (dest_idx < 0 || src_idx < 0)
         return 0;
@@ -537,12 +538,12 @@ static void skip_whitespace(Parser *p)
     }
 }
 
-static void extract_suffix(const char *str, int pos, char *suffix_buf)
+static void extract_suffix(const char *str, int32_t pos, char *suffix_buf)
 {
     suffix_buf[0] = '\0';
     if (isalpha(str[pos]))
     {
-        int len = suffix_length(&str[pos]);
+        int32_t len = suffix_length(&str[pos]);
         strncpy_s(suffix_buf, sizeof(suffix_buf), &str[pos], len);
         suffix_buf[len] = '\0';
     }
@@ -560,27 +561,27 @@ static void consume_optional_semicolon(Parser *p)
 }
 
 // Helper: Save variable state
-static void save_variable_state(Parser *p, Variable saved_vars[10], int *saved_var_count)
+static void save_variable_state(Parser *p, Variable saved_vars[10], int32_t *saved_var_count)
 {
     *saved_var_count = p->var_count;
-    for (int i = 0; i < p->var_count; i++)
+    for (int32_t i = 0; i < p->var_count; i++)
     {
         saved_vars[i] = p->variables[i];
     }
 }
 
 // Helper: Restore variable state
-static void restore_saved_vars(Parser *p, Variable saved_vars[10], int saved_var_count)
+static void restore_saved_vars(Parser *p, Variable saved_vars[10], int32_t saved_var_count)
 {
     p->var_count = saved_var_count;
-    for (int i = 0; i < saved_var_count; i++)
+    for (int32_t i = 0; i < saved_var_count; i++)
     {
         p->variables[i] = saved_vars[i];
     }
 }
 
 // Helper: Build a slice type string from element type and mutability
-static void build_slice_type_string(char *out_type, int out_size, const char *elem_type, int is_mut)
+static void build_slice_type_string(char *out_type, int32_t out_size, const char *elem_type, int32_t is_mut)
 {
     if (is_mut)
     {
@@ -610,7 +611,7 @@ static NumberValue parse_number_raw(Parser *p)
         return (NumberValue){.value = 0, .suffix = NULL, .suffix_len = 0};
     }
 
-    long value = 0;
+    int32_t value = 0;
     while (isdigit(p->input[p->pos]))
     {
         value = value * 10 + (p->input[p->pos] - '0');
@@ -619,7 +620,7 @@ static NumberValue parse_number_raw(Parser *p)
 
     // Check for type suffix
     const char *suffix_start = &p->input[p->pos];
-    int suffix_len = 0;
+    int32_t suffix_len = 0;
     if (isalpha(suffix_start[0]))
     {
         suffix_len = suffix_length(suffix_start);
@@ -650,15 +651,15 @@ static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_nu
 static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num);
 static InterpretResult make_error(const char *message);
 static InterpretResult try_parse_assignment_expression(Parser *p);
-static int is_keyword_at(Parser *p, const char *keyword);
-static int find_variable(Parser *p, const char *name, int name_len);
-static int find_function(Parser *p, const char *name, int name_len);
-static int find_struct(Parser *p, const char *name, int name_len);
-static int find_struct_field_index(Parser *p, int struct_idx, const char *field_name, int field_name_len);
-static int set_variable_with_type(Parser *p, const char *name, int name_len, long value, const char *type);
-static int set_array_variable_with_mutability(Parser *p, const char *name, int name_len, const char *array_type, const char *element_type, int init_count, int total_count, const long *values, int is_mutable);
-static void save_variable_state(Parser *p, Variable saved_vars[10], int *saved_var_count);
-static void restore_saved_vars(Parser *p, Variable saved_vars[10], int saved_var_count);
+static int32_t is_keyword_at(Parser *p, const char *keyword);
+static int32_t find_variable(Parser *p, const char *name, int32_t name_len);
+static int32_t find_function(Parser *p, const char *name, int32_t name_len);
+static int32_t find_struct(Parser *p, const char *name, int32_t name_len);
+static int32_t find_struct_field_index(Parser *p, int32_t struct_idx, const char *field_name, int32_t field_name_len);
+static int32_t set_variable_with_type(Parser *p, const char *name, int32_t name_len, int32_t value, const char *type);
+static int32_t set_array_variable_with_mutability(Parser *p, const char *name, int32_t name_len, const char *array_type, const char *element_type, int32_t init_count, int32_t total_count, const int32_t *values, int32_t is_mutable);
+static void save_variable_state(Parser *p, Variable saved_vars[10], int32_t *saved_var_count);
+static void restore_saved_vars(Parser *p, Variable saved_vars[10], int32_t saved_var_count);
 static InterpretResult parse_assignment_or_if_else(Parser *p);
 
 // Implementation of parse_and_validate_operand
@@ -688,7 +689,7 @@ static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_nu
 }
 
 // Helper: Check if operator matches a set of operators (e.g., "*/" or "+-")
-static int is_binary_operator(char c, const char *operators)
+static int32_t is_binary_operator(char c, const char *operators)
 {
     while (*operators)
     {
@@ -701,7 +702,7 @@ static int is_binary_operator(char c, const char *operators)
 
 // Helper: Check if we should continue parsing binary operators
 // Skips whitespace and returns whether input has one of the operators
-static int should_continue_binary_op(Parser *p, const char *operators)
+static int32_t should_continue_binary_op(Parser *p, const char *operators)
 {
     skip_whitespace(p);
     return is_binary_operator(p->input[p->pos], operators);
@@ -715,7 +716,7 @@ static InterpretResult parse_additive(Parser *p);
 // Helper: Parse the next operator and its right operand (for multiplicative level)
 typedef struct
 {
-    int has_operator;
+    int32_t has_operator;
     char op;
     NumberValue operand;
     InterpretResult validation;
@@ -771,12 +772,12 @@ static OperatorAndOperand get_next_operator_and_multiplicative(Parser *p, const 
 static InterpretResult parse_and_validate_operand(Parser *p, NumberValue *out_num);
 
 // Forward declarations for variable handling
-static int find_variable(Parser *p, const char *name, int name_len);
-static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len);
+static int32_t find_variable(Parser *p, const char *name, int32_t name_len);
+static intptr_t parse_identifier(Parser *p, char *out_name, int32_t max_name_len);
 
 // Helper: Parse property access (.property_name) and return property name length, or 0 if not present
 // Modifies parser position if successful
-static int parse_property_access(Parser *p, char *out_property_name, int max_property_len)
+static int32_t parse_property_access(Parser *p, char *out_property_name, int32_t max_property_len)
 {
     skip_whitespace(p);
     if (p->input[p->pos] != '.')
@@ -785,7 +786,7 @@ static int parse_property_access(Parser *p, char *out_property_name, int max_pro
     p->pos++; // Skip '.'
     skip_whitespace(p);
 
-    int property_len = parse_identifier(p, out_property_name, max_property_len);
+    int32_t property_len = parse_identifier(p, out_property_name, max_property_len);
     return property_len;
 }
 
@@ -806,9 +807,9 @@ static InterpretResult parse_array_literal(Parser *p)
 
     skip_whitespace(p);
 
-    int count = 0;
+    int32_t count = 0;
     char element_type[16] = {0};
-    int has_element_type = 0;
+    int32_t has_element_type = 0;
 
     if (p->input[p->pos] == ']')
     {
@@ -904,7 +905,7 @@ static InterpretResult parse_array_literal(Parser *p)
 // This is used by both array indexing and array element assignment
 // Helper: Set tracked suffix for a value and populate output number struct
 // Used when returning indexed values or dereferences with explicit types
-static void set_tracked_suffix_and_output(Parser *p, const char *type, long value, NumberValue *out_num)
+static void set_tracked_suffix_and_output(Parser *p, const char *type, int32_t value, NumberValue *out_num)
 {
     strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), type, _TRUNCATE);
     p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
@@ -918,7 +919,7 @@ static void set_tracked_suffix_and_output(Parser *p, const char *type, long valu
     }
 }
 
-static InterpretResult parse_bracket_index(Parser *p, long *out_index)
+static InterpretResult parse_bracket_index(Parser *p, int32_t *out_index)
 {
     InterpretResult open_bracket = expect_char(p, '[', "Expected '[' to start bracket notation");
     if (open_bracket.has_error)
@@ -942,9 +943,9 @@ static InterpretResult parse_bracket_index(Parser *p, long *out_index)
 }
 
 // Helper: Parse array index access (array[idx])
-static InterpretResult parse_array_index(Parser *p, int var_idx, NumberValue *out_num)
+static InterpretResult parse_array_index(Parser *p, int32_t var_idx, NumberValue *out_num)
 {
-    long index_value = 0;
+    int32_t index_value = 0;
     InterpretResult bracket_result = parse_bracket_index(p, &index_value);
     if (bracket_result.has_error)
         return bracket_result;
@@ -959,7 +960,7 @@ static InterpretResult parse_array_index(Parser *p, int var_idx, NumberValue *ou
         return make_error("Array index out of initialized range");
     }
 
-    long value = p->variables[var_idx].array_values[index_value];
+    int32_t value = p->variables[var_idx].array_values[index_value];
 
     set_tracked_suffix_and_output(p, p->variables[var_idx].array_element_type, value, out_num);
 
@@ -981,7 +982,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
         skip_whitespace(p);
 
         // Check for 'mut' keyword after &
-        int is_mut_ref = 0;
+        int32_t is_mut_ref = 0;
         if (is_keyword_at(p, "mut"))
         {
             is_mut_ref = 1;
@@ -991,14 +992,14 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
         // Parse the variable name after & or &mut
         char var_name[32];
-        int name_len = parse_identifier(p, var_name, sizeof(var_name));
+        int32_t name_len = parse_identifier(p, var_name, sizeof(var_name));
         if (name_len <= 0)
         {
             return make_error("Expected variable name after & operator");
         }
 
         // Find the variable
-        int var_idx = find_variable(p, var_name, name_len);
+        int32_t var_idx = find_variable(p, var_name, name_len);
         if (var_idx < 0)
         {
             return make_error("Variable not found");
@@ -1016,7 +1017,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             InterpretResult start_result = parse_additive(p);
             if (start_result.has_error)
                 return start_result;
-            long start_idx = start_result.value;
+            int32_t start_idx = start_result.value;
 
             // Expect '..' operator
             InterpretResult range_op = expect_range_operator(p);
@@ -1027,7 +1028,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             InterpretResult end_result = parse_additive(p);
             if (end_result.has_error)
                 return end_result;
-            long end_idx = end_result.value;
+            int32_t end_idx = end_result.value;
 
             skip_whitespace(p);
 
@@ -1118,7 +1119,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             return make_error("Expected character in character literal");
         }
 
-        int char_value = (unsigned char)p->input[p->pos];
+        int32_t char_value = (unsigned char)p->input[p->pos];
         p->pos++; // Move to potential closing quote
 
         if (p->input[p->pos] != '\'')
@@ -1147,7 +1148,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
     {
         p->pos++; // Skip opening double quote
 
-        int string_len = 0;
+        int32_t string_len = 0;
         while (p->input[p->pos] && p->input[p->pos] != '"' && string_len < 255)
         {
             p->temp_string_value[string_len] = p->input[p->pos];
@@ -1187,9 +1188,9 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
     // Check for variable reference or boolean literal
     if (isalpha(p->input[p->pos]) || p->input[p->pos] == '_')
     {
-        int saved_pos = p->pos;
+        int32_t saved_pos = p->pos;
         char var_name[32];
-        int name_len = parse_identifier(p, var_name, sizeof(var_name));
+        int32_t name_len = parse_identifier(p, var_name, sizeof(var_name));
         if (name_len > 0)
         {
             // Check for boolean literals
@@ -1220,13 +1221,13 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             if (strncmp(var_name, "__args__", name_len) == 0 && name_len == 8)
             {
                 char property_name[32];
-                int property_name_len = parse_property_access(p, property_name, sizeof(property_name));
+                int32_t property_name_len = parse_property_access(p, property_name, sizeof(property_name));
                 if (property_name_len > 0 && strncmp(property_name, "length", property_name_len) == 0 && property_name_len == 6)
                 {
                     // This is __args__.length - return the actual argc value if provided, otherwise 0
                     // If argc is -1 (not provided), return 0 as placeholder
                     // If argc >= 0, return argc (total argument count including program name)
-                    long args_length_value = (p->argc >= 0) ? p->argc : 0;
+                    int32_t args_length_value = (p->argc >= 0) ? p->argc : 0;
                     // Don't set a type suffix - let it be untyped so it can assign to any numeric type
                     p->has_tracked_suffix = 0;
                     return (InterpretResult){.value = (int)args_length_value, .has_error = false, .error_message = NULL};
@@ -1238,7 +1239,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 else if (p->input[p->pos] == '[')
                 {
                     // __args__[n] indexing - return string at index n
-                    long index_value = 0;
+                    int32_t index_value = 0;
                     InterpretResult bracket_result = parse_bracket_index(p, &index_value);
                     if (bracket_result.has_error)
                         return bracket_result;
@@ -1248,7 +1249,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     {
                         // We have access to the actual argv string - store it as temp string
                         const char *arg_string = p->argv[index_value];
-                        int arg_len = strlen(arg_string);
+                        int32_t arg_len = strlen(arg_string);
                         if (arg_len < 256)
                         {
                             // Store in temp string for later assignment
@@ -1276,20 +1277,20 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     // This allows assignment to slice variables: let myArgs : *[*Str] = __args__
                     set_tracked_suffix(p, "*[*Str]");
                     // Return argc as the "value" - this will be used during variable initialization
-                    long args_value = (p->argc >= 0) ? p->argc : 0;
+                    int32_t args_value = (p->argc >= 0) ? p->argc : 0;
                     return (InterpretResult){.value = (int)args_value, .has_error = false, .error_message = NULL};
                 }
             }
 
             // Check for variable reference
-            int idx = find_variable(p, var_name, name_len);
+            int32_t idx = find_variable(p, var_name, name_len);
             if (idx >= 0)
             {
                 skip_whitespace(p);
                 if (p->input[p->pos] == '[')
                 {
                     // Check if this is an array, slice, or string
-                    int is_indexable = p->variables[idx].is_array ||
+                    int32_t is_indexable = p->variables[idx].is_array ||
                                        is_pointer_to_array_type(p->variables[idx].type) ||
                                        p->variables[idx].is_string;
 
@@ -1301,7 +1302,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     // If it's a string, handle string indexing
                     if (p->variables[idx].is_string)
                     {
-                        long index_value = 0;
+                        int32_t index_value = 0;
                         InterpretResult bracket_result = parse_bracket_index(p, &index_value);
                         if (bracket_result.has_error)
                             return bracket_result;
@@ -1311,7 +1312,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                             return make_error("String index out of bounds");
                         }
 
-                        int char_code = (unsigned char)p->variables[idx].string_value[index_value];
+                        int32_t char_code = (unsigned char)p->variables[idx].string_value[index_value];
 
                         // Set tracked suffix to I32 (char codes are numeric)
                         strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "I32", _TRUNCATE);
@@ -1336,13 +1337,13 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                         extract_pointer_array_element_type(p->variables[idx].type, elem_type, sizeof(elem_type));
 
                         // Parse the index
-                        long index_value = 0;
+                        int32_t index_value = 0;
                         InterpretResult bracket_result = parse_bracket_index(p, &index_value);
                         if (bracket_result.has_error)
                             return bracket_result;
 
                         // Get the array variable that the slice points to
-                        int array_var_idx = p->variables[idx].pointer_target;
+                        int32_t array_var_idx = p->variables[idx].pointer_target;
                         if (array_var_idx < 0 || array_var_idx >= p->var_count || !p->variables[array_var_idx].is_array)
                         {
                             return make_error("Invalid slice pointer");
@@ -1360,7 +1361,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                         }
 
                         // Get the value from the array
-                        long value = p->variables[array_var_idx].array_values[index_value];
+                        int32_t value = p->variables[array_var_idx].array_values[index_value];
 
                         // Set the tracked suffix to the element type
                         set_tracked_suffix_and_output(p, elem_type, value, out_num);
@@ -1404,13 +1405,13 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 if (is_pointer_to_array_type(p->variables[idx].type))
                 {
                     char property_name[32];
-                    int property_name_len = parse_property_access(p, property_name, sizeof(property_name));
+                    int32_t property_name_len = parse_property_access(p, property_name, sizeof(property_name));
                     if (property_name_len > 0)
                     {
                         // Check for .length property
                         if (strncmp(property_name, "length", property_name_len) == 0 && property_name_len == 6)
                         {
-                            long length_value = 0;
+                            int32_t length_value = 0;
 
                             // Special handling for __args__ slice variables
                             if (p->variables[idx].is_args_slice)
@@ -1441,19 +1442,19 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                         else if (strncmp(property_name, "init", property_name_len) == 0 && property_name_len == 4)
                         {
                             // Get the underlying array
-                            int array_var_idx = p->variables[idx].pointer_target;
+                            int32_t array_var_idx = p->variables[idx].pointer_target;
                             if (array_var_idx < 0 || array_var_idx >= p->var_count || !p->variables[array_var_idx].is_array)
                             {
                                 return make_error("Invalid slice pointer");
                             }
 
                             // Calculate initialized count within slice bounds
-                            int init_count = 0;
+                            int32_t init_count = 0;
                             if (p->variables[idx].slice_start < p->variables[array_var_idx].array_init_count)
                             {
-                                int max_init = p->variables[array_var_idx].array_init_count;
-                                int slice_end = p->variables[idx].slice_end;
-                                int effective_end = (slice_end < max_init) ? slice_end : max_init;
+                                int32_t max_init = p->variables[array_var_idx].array_init_count;
+                                int32_t slice_end = p->variables[idx].slice_end;
+                                int32_t effective_end = (slice_end < max_init) ? slice_end : max_init;
                                 init_count = effective_end - p->variables[idx].slice_start;
                             }
 
@@ -1481,25 +1482,25 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     skip_whitespace(p);
 
                     char field_name[32];
-                    int field_name_len = parse_identifier(p, field_name, sizeof(field_name));
+                    int32_t field_name_len = parse_identifier(p, field_name, sizeof(field_name));
                     if (field_name_len <= 0)
                     {
                         return make_error("Expected field name after '.'");
                     }
 
-                    int struct_idx = p->variables[idx].struct_def_idx;
+                    int32_t struct_idx = p->variables[idx].struct_def_idx;
                     if (struct_idx < 0 || struct_idx >= p->structs_count)
                     {
                         return make_error("Invalid struct type");
                     }
 
-                    int field_idx = find_struct_field_index(p, struct_idx, field_name, field_name_len);
+                    int32_t field_idx = find_struct_field_index(p, struct_idx, field_name, field_name_len);
                     if (field_idx < 0)
                     {
                         return make_error("Unknown struct field");
                     }
 
-                    long field_value = p->variables[idx].struct_values[field_idx];
+                    int32_t field_value = p->variables[idx].struct_values[field_idx];
                     const char *field_type = p->structs[struct_idx].field_types[field_idx];
 
                     strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), field_type, _TRUNCATE);
@@ -1554,28 +1555,28 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             skip_whitespace(p);
             if (p->input[p->pos] == '{')
             {
-                int struct_idx = find_struct(p, var_name, name_len);
+                int32_t struct_idx = find_struct(p, var_name, name_len);
                 if (struct_idx >= 0)
                 {
                     p->pos++; // Skip '{'
                     skip_whitespace(p);
 
-                    long field_values[10] = {0};
-                    int field_set[10] = {0};
-                    int field_count = p->structs[struct_idx].field_count;
+                    int32_t field_values[10] = {0};
+                    int32_t field_set[10] = {0};
+                    int32_t field_count = p->structs[struct_idx].field_count;
 
                     if (p->input[p->pos] != '}' || field_count > 0)
                     {
                         while (p->input[p->pos] && p->input[p->pos] != '}')
                         {
                             char field_name[32];
-                            int field_name_len = parse_identifier(p, field_name, sizeof(field_name));
+                            int32_t field_name_len = parse_identifier(p, field_name, sizeof(field_name));
                             if (field_name_len <= 0)
                             {
                                 return make_error("Expected field name in struct initializer");
                             }
 
-                            int field_idx = find_struct_field_index(p, struct_idx, field_name, field_name_len);
+                            int32_t field_idx = find_struct_field_index(p, struct_idx, field_name, field_name_len);
                             if (field_idx < 0)
                             {
                                 return make_error("Unknown struct field in initializer");
@@ -1643,7 +1644,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     }
                     p->pos++; // Skip '}'
 
-                    for (int i = 0; i < field_count; i++)
+                    for (int32_t i = 0; i < field_count; i++)
                     {
                         if (!field_set[i])
                         {
@@ -1653,7 +1654,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                     p->has_temp_struct = 1;
                     p->temp_struct_def_idx = struct_idx;
-                    for (int i = 0; i < field_count; i++)
+                    for (int32_t i = 0; i < field_count; i++)
                     {
                         p->temp_struct_values[i] = field_values[i];
                     }
@@ -1678,7 +1679,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             skip_whitespace(p);
             if (p->input[p->pos] == '(')
             {
-                int func_idx = find_function(p, var_name, name_len);
+                int32_t func_idx = find_function(p, var_name, name_len);
                 if (func_idx >= 0)
                 {
                     // This is a function call
@@ -1688,7 +1689,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     // Parse arguments
                     InterpretResult args[10];
                     char arg_types[10][32]; // Store argument types
-                    int arg_count = 0;
+                    int32_t arg_count = 0;
 
                     if (p->input[p->pos] != ')')
                     {
@@ -1745,7 +1746,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                         return make_error("Function argument count mismatch");
 
                     // Validate argument types match parameter types
-                    for (int i = 0; i < arg_count; i++)
+                    for (int32_t i = 0; i < arg_count; i++)
                     {
                         const char *param_type = p->functions[func_idx].param_types[i];
                         const char *arg_type = arg_types[i][0] != '\0' ? arg_types[i] : NULL;
@@ -1769,11 +1770,11 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                     // Save current variable state
                     Variable saved_vars[10];
-                    int saved_var_count;
+                    int32_t saved_var_count;
                     save_variable_state(p, saved_vars, &saved_var_count);
 
                     // Bind parameters to arguments
-                    for (int i = 0; i < arg_count; i++)
+                    for (int32_t i = 0; i < arg_count; i++)
                     {
                         // For array arguments, need to copy the entire array variable metadata
                         // not just the value, so use special handling
@@ -1781,7 +1782,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                         {
                             // Array parameter - need to create a parameter variable with the array data
                             // args[i].value contains the source array variable index
-                            int src_array_idx = args[i].value;
+                            int32_t src_array_idx = args[i].value;
                             if (src_array_idx >= 0 && src_array_idx < p->var_count && p->variables[src_array_idx].is_array)
                             {
                                 // Copy the array variable with its current init count
@@ -1816,7 +1817,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     }
 
                     // Save position and jump to function body
-                    int saved_pos = p->pos;
+                    int32_t saved_pos = p->pos;
                     if (p->functions[func_idx].is_braced_body)
                     {
                         p->pos = p->functions[func_idx].body_start_pos + 1; // Skip opening brace
@@ -1857,9 +1858,9 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 }
 
 // Helper: Find a variable by name
-static int find_variable(Parser *p, const char *name, int name_len)
+static int32_t find_variable(Parser *p, const char *name, int32_t name_len)
 {
-    for (int i = 0; i < p->var_count; i++)
+    for (int32_t i = 0; i < p->var_count; i++)
     {
         if (strncmp(p->variables[i].name, name, name_len) == 0 &&
             p->variables[i].name[name_len] == '\0')
@@ -1877,7 +1878,7 @@ static void skip_to_matching_brace(Parser *p)
     if (p->input[p->pos] != '{')
         return;
 
-    int brace_depth = 1;
+    int32_t brace_depth = 1;
     p->pos++;
     while (p->input[p->pos] && brace_depth > 0)
     {
@@ -1890,9 +1891,9 @@ static void skip_to_matching_brace(Parser *p)
 }
 
 // Helper: Check if a function has been declared
-static int has_function_been_declared(Parser *p, const char *name, int name_len)
+static int32_t has_function_been_declared(Parser *p, const char *name, int32_t name_len)
 {
-    for (int i = 0; i < p->declared_functions_count; i++)
+    for (int32_t i = 0; i < p->declared_functions_count; i++)
     {
         if (strncmp(p->declared_functions[i], name, name_len) == 0 &&
             p->declared_functions[i][name_len] == '\0')
@@ -1904,9 +1905,9 @@ static int has_function_been_declared(Parser *p, const char *name, int name_len)
 }
 
 // Helper: Find a function by name and return its index, or -1 if not found
-static int find_function(Parser *p, const char *name, int name_len)
+static int32_t find_function(Parser *p, const char *name, int32_t name_len)
 {
-    for (int i = 0; i < p->functions_count; i++)
+    for (int32_t i = 0; i < p->functions_count; i++)
     {
         if (strncmp(p->functions[i].name, name, name_len) == 0 &&
             p->functions[i].name[name_len] == '\0')
@@ -1918,9 +1919,9 @@ static int find_function(Parser *p, const char *name, int name_len)
 }
 
 // Helper: Find a struct by name and return its index, or -1 if not found
-static int find_struct(Parser *p, const char *name, int name_len)
+static int32_t find_struct(Parser *p, const char *name, int32_t name_len)
 {
-    for (int i = 0; i < p->structs_count; i++)
+    for (int32_t i = 0; i < p->structs_count; i++)
     {
         if (strncmp(p->structs[i].name, name, name_len) == 0 &&
             p->structs[i].name[name_len] == '\0')
@@ -1932,12 +1933,12 @@ static int find_struct(Parser *p, const char *name, int name_len)
 }
 
 // Helper: Find a field index within a struct definition, or -1 if not found
-static int find_struct_field_index(Parser *p, int struct_idx, const char *field_name, int field_name_len)
+static int32_t find_struct_field_index(Parser *p, int32_t struct_idx, const char *field_name, int32_t field_name_len)
 {
     if (struct_idx < 0 || struct_idx >= p->structs_count)
         return -1;
 
-    for (int i = 0; i < p->structs[struct_idx].field_count; i++)
+    for (int32_t i = 0; i < p->structs[struct_idx].field_count; i++)
     {
         if (strncmp(p->structs[struct_idx].field_names[i], field_name, field_name_len) == 0 &&
             p->structs[struct_idx].field_names[i][field_name_len] == '\0')
@@ -1949,7 +1950,7 @@ static int find_struct_field_index(Parser *p, int struct_idx, const char *field_
 }
 
 // Helper: Register a declared function name
-static void register_declared_function(Parser *p, const char *name, int name_len)
+static void register_declared_function(Parser *p, const char *name, int32_t name_len)
 {
     if (p->declared_functions_count < 10)
     {
@@ -1962,9 +1963,9 @@ static void register_declared_function(Parser *p, const char *name, int name_len
 }
 
 // Helper: Check if a struct has been declared
-static int has_struct_been_declared(Parser *p, const char *name, int name_len)
+static int32_t has_struct_been_declared(Parser *p, const char *name, int32_t name_len)
 {
-    for (int i = 0; i < p->declared_structs_count; i++)
+    for (int32_t i = 0; i < p->declared_structs_count; i++)
     {
         if (strncmp(p->declared_structs[i], name, name_len) == 0 &&
             p->declared_structs[i][name_len] == '\0')
@@ -1976,7 +1977,7 @@ static int has_struct_been_declared(Parser *p, const char *name, int name_len)
 }
 
 // Helper: Register a declared struct name
-static void register_declared_struct(Parser *p, const char *name, int name_len)
+static void register_declared_struct(Parser *p, const char *name, int32_t name_len)
 {
     if (p->declared_structs_count < 10)
     {
@@ -2001,7 +2002,7 @@ static InterpretResult parse_function_declaration(Parser *p)
 
     // Parse function name
     char func_name[32];
-    int name_len = parse_identifier(p, func_name, sizeof(func_name));
+    int32_t name_len = parse_identifier(p, func_name, sizeof(func_name));
     if (name_len <= 0)
         return make_error("Expected function name");
 
@@ -2022,7 +2023,7 @@ static InterpretResult parse_function_declaration(Parser *p)
     // Track parameter names to detect duplicates
     char param_names[10][32];
     char param_types[10][32];
-    int param_count = 0;
+    int32_t param_count = 0;
 
     while (p->input[p->pos] != ')')
     {
@@ -2034,12 +2035,12 @@ static InterpretResult parse_function_declaration(Parser *p)
 
         // Parse parameter name
         char param_name[32];
-        int param_name_len = parse_identifier(p, param_name, sizeof(param_name));
+        int32_t param_name_len = parse_identifier(p, param_name, sizeof(param_name));
         if (param_name_len <= 0)
             return make_error("Expected parameter name");
 
         // Check if parameter name is already declared
-        for (int i = 0; i < param_count; i++)
+        for (int32_t i = 0; i < param_count; i++)
         {
             if (strncmp(param_names[i], param_name, param_name_len) == 0 &&
                 param_names[i][param_name_len] == '\0')
@@ -2070,8 +2071,8 @@ static InterpretResult parse_function_declaration(Parser *p)
         {
             // Array type: [Type; Init; Total]
             char array_elem_type[16];
-            int array_init_count = 0;
-            int array_total_count = 0;
+            int32_t array_init_count = 0;
+            int32_t array_total_count = 0;
 
             InterpretResult array_type_result = parse_array_type_annotation(
                 p,
@@ -2087,7 +2088,7 @@ static InterpretResult parse_function_declaration(Parser *p)
         else if (p->input[p->pos] == '*')
         {
             // Pointer type: *Type or *mut Type
-            int type_start = p->pos;
+            int32_t type_start = p->pos;
             p->pos++; // Skip '*'
             skip_whitespace(p);
 
@@ -2100,7 +2101,7 @@ static InterpretResult parse_function_declaration(Parser *p)
 
             // Parse the base type
             char base_type[32];
-            int base_type_len = parse_identifier(p, base_type, sizeof(base_type));
+            int32_t base_type_len = parse_identifier(p, base_type, sizeof(base_type));
             if (base_type_len <= 0)
                 return make_error("Expected type after * operator");
 
@@ -2111,7 +2112,7 @@ static InterpretResult parse_function_declaration(Parser *p)
         else
         {
             // Regular identifier type
-            int param_type_len = parse_identifier(p, param_type, sizeof(param_type));
+            int32_t param_type_len = parse_identifier(p, param_type, sizeof(param_type));
             if (param_type_len <= 0)
                 return make_error("Expected parameter type");
         }
@@ -2153,7 +2154,7 @@ static InterpretResult parse_function_declaration(Parser *p)
         skip_whitespace(p);
 
         // Parse return type
-        int type_len = parse_identifier(p, return_type, sizeof(return_type));
+        int32_t type_len = parse_identifier(p, return_type, sizeof(return_type));
         if (type_len <= 0)
             return make_error("Expected return type");
 
@@ -2180,9 +2181,9 @@ static InterpretResult parse_function_declaration(Parser *p)
     // 1. Braced body: => { expression }
     // 2. Implicit body: => expression;
 
-    int body_start_pos = p->pos;
-    int body_end_pos = p->pos;
-    int is_braced_body = 0;
+    int32_t body_start_pos = p->pos;
+    int32_t body_end_pos = p->pos;
+    int32_t is_braced_body = 0;
 
     if (p->input[p->pos] == '{')
     {
@@ -2192,7 +2193,7 @@ static InterpretResult parse_function_declaration(Parser *p)
         skip_whitespace(p);
 
         // Count braces to find matching close
-        int brace_count = 1;
+        int32_t brace_count = 1;
         while (brace_count > 0 && p->input[p->pos])
         {
             if (p->input[p->pos] == '{')
@@ -2228,7 +2229,7 @@ static InterpretResult parse_function_declaration(Parser *p)
     strncpy_s(p->functions[p->functions_count].name, sizeof(p->functions[p->functions_count].name), func_name, name_len);
     p->functions[p->functions_count].name[name_len] = '\0';
 
-    for (int i = 0; i < param_count; i++)
+    for (int32_t i = 0; i < param_count; i++)
     {
         strncpy_s(p->functions[p->functions_count].param_names[i], sizeof(p->functions[p->functions_count].param_names[i]), param_names[i], _TRUNCATE);
         p->functions[p->functions_count].param_names[i][31] = '\0';
@@ -2253,9 +2254,9 @@ static InterpretResult parse_function_declaration(Parser *p)
 
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
-static int has_variable_been_declared(Parser *p, const char *name, int name_len)
+static int32_t has_variable_been_declared(Parser *p, const char *name, int32_t name_len)
 {
-    for (int i = 0; i < p->all_declared_count; i++)
+    for (int32_t i = 0; i < p->all_declared_count; i++)
     {
         if (strncmp(p->all_declared_names[i], name, name_len) == 0 &&
             p->all_declared_names[i][name_len] == '\0')
@@ -2291,9 +2292,9 @@ static InterpretResult expect_closing_paren(Parser *p, const char *context)
 }
 
 // Helper: Parse identifier and check for error
-static InterpretResult parse_identifier_or_error(Parser *p, char *out_name, int max_name_len, const char *error_msg)
+static InterpretResult parse_identifier_or_error(Parser *p, char *out_name, int32_t max_name_len, const char *error_msg)
 {
-    int len = parse_identifier(p, out_name, max_name_len);
+    int32_t len = parse_identifier(p, out_name, max_name_len);
     if (len <= 0)
         return make_error(error_msg);
     return (InterpretResult){.value = len, .has_error = false, .error_message = NULL};
@@ -2309,9 +2310,9 @@ static InterpretResult expect_char(Parser *p, char expected, const char *error_m
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 // Helper: Apply compound operator to current and new values
-static InterpretResult apply_compound_operator(char compound_op, long current_value, long new_value, long *out_final_value)
+static InterpretResult apply_compound_operator(char compound_op, int32_t current_value, int32_t new_value, int32_t *out_final_value)
 {
-    long final_value = new_value;
+    int32_t final_value = new_value;
 
     if (compound_op == '+')
         final_value = current_value + new_value;
@@ -2332,7 +2333,7 @@ static InterpretResult apply_compound_operator(char compound_op, long current_va
 
 // Helper: Parse and calculate assignment value after operator is consumed
 // Handles compound operators and semicolon consumption
-static InterpretResult parse_assignment_rhs(Parser *p, char compound_op, long current_value)
+static InterpretResult parse_assignment_rhs(Parser *p, char compound_op, int32_t current_value)
 {
     // Parse the value expression
     InterpretResult val_result = parse_additive(p);
@@ -2340,7 +2341,7 @@ static InterpretResult parse_assignment_rhs(Parser *p, char compound_op, long cu
         return val_result;
 
     // Calculate the final value
-    long final_value = val_result.value;
+    int32_t final_value = val_result.value;
     if (compound_op != '=')
     {
         // Apply the compound operation
@@ -2360,7 +2361,7 @@ static InterpretResult parse_assignment_rhs(Parser *p, char compound_op, long cu
 }
 
 // Helper: Register a variable name in the global declared names list
-static void register_declared_name(Parser *p, const char *name, int name_len)
+static void register_declared_name(Parser *p, const char *name, int32_t name_len)
 {
     if (p->all_declared_count < 10)
     {
@@ -2371,7 +2372,7 @@ static void register_declared_name(Parser *p, const char *name, int name_len)
 }
 
 // Helper: Initialize a variable entry with name, value, and type information
-static void init_variable_entry(Parser *p, const char *name, int name_len, long value, int pointer_target, int is_mutable, const char *type)
+static void init_variable_entry(Parser *p, const char *name, int32_t name_len, int32_t value, int32_t pointer_target, int32_t is_mutable, const char *type)
 {
     strncpy_s(p->variables[p->var_count].name, sizeof(p->variables[p->var_count].name), name, name_len);
     p->variables[p->var_count].name[name_len] = '\0';
@@ -2391,13 +2392,13 @@ static void init_variable_entry(Parser *p, const char *name, int name_len, long 
     p->variables[p->var_count].array_init_count = 0;
     p->variables[p->var_count].array_total_count = 0;
     p->variables[p->var_count].array_element_type[0] = '\0';
-    for (int i = 0; i < MAX_ARRAY_ELEMENTS; i++)
+    for (int32_t i = 0; i < MAX_ARRAY_ELEMENTS; i++)
     {
         p->variables[p->var_count].array_values[i] = 0;
     }
     p->variables[p->var_count].is_struct = 0;
     p->variables[p->var_count].struct_def_idx = -1;
-    for (int i = 0; i < 10; i++)
+    for (int32_t i = 0; i < 10; i++)
     {
         p->variables[p->var_count].struct_values[i] = 0;
     }
@@ -2438,7 +2439,7 @@ static void clear_struct_fields(Variable *var)
 {
     var->is_struct = 0;
     var->struct_def_idx = -1;
-    for (int i = 0; i < 10; i++)
+    for (int32_t i = 0; i < 10; i++)
     {
         var->struct_values[i] = 0;
     }
@@ -2446,9 +2447,9 @@ static void clear_struct_fields(Variable *var)
 
 // Helper: Set or add a variable with optional type information
 // Helper: Set or add a variable with optional type and mutability information
-static int set_variable_with_mutability(Parser *p, const char *name, int name_len, long value, const char *type, int is_mutable)
+static int32_t set_variable_with_mutability(Parser *p, const char *name, int32_t name_len, int32_t value, const char *type, int32_t is_mutable)
 {
-    int idx = find_variable(p, name, name_len);
+    int32_t idx = find_variable(p, name, name_len);
     if (idx >= 0)
     {
         p->variables[idx].value = value;
@@ -2469,10 +2470,10 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
 }
 
 // Helper: Set a pointer variable
-static int set_pointer_variable_with_mutability(Parser *p, const char *name, int name_len, int target_idx, const char *pointer_type, int is_mutable)
+static int32_t set_pointer_variable_with_mutability(Parser *p, const char *name, int32_t name_len, int32_t target_idx, const char *pointer_type, int32_t is_mutable)
 {
     // target_idx is the index of the variable being pointed to
-    int idx = find_variable(p, name, name_len);
+    int32_t idx = find_variable(p, name, name_len);
     if (idx >= 0)
     {
         p->variables[idx].value = 0; // Pointer values don't store direct values
@@ -2506,16 +2507,16 @@ static int set_pointer_variable_with_mutability(Parser *p, const char *name, int
 }
 
 // Helper: Set an array variable with mutability
-static int set_array_variable_with_mutability(
+static int32_t set_array_variable_with_mutability(
     Parser *p,
     const char *name,
-    int name_len,
+    int32_t name_len,
     const char *array_type,
     const char *element_type,
-    int init_count,
-    int total_count,
-    const long *values,
-    int is_mutable)
+    int32_t init_count,
+    int32_t total_count,
+    const int32_t *values,
+    int32_t is_mutable)
 {
     if (p->var_count >= 10)
         return -1; // Too many variables
@@ -2529,7 +2530,7 @@ static int set_array_variable_with_mutability(
               element_type,
               _TRUNCATE);
     p->variables[p->var_count].array_element_type[sizeof(p->variables[p->var_count].array_element_type) - 1] = '\0';
-    for (int i = 0; i < total_count && i < MAX_ARRAY_ELEMENTS; i++)
+    for (int32_t i = 0; i < total_count && i < MAX_ARRAY_ELEMENTS; i++)
     {
         p->variables[p->var_count].array_values[i] = (i < init_count && values) ? values[i] : 0;
     }
@@ -2538,13 +2539,13 @@ static int set_array_variable_with_mutability(
 }
 
 // Helper: Set a string variable with mutability
-static int set_variable_string_with_mutability(
+static int32_t set_variable_string_with_mutability(
     Parser *p,
     const char *name,
-    int name_len,
+    int32_t name_len,
     const char *string_value,
-    int string_len,
-    int is_mutable)
+    int32_t string_len,
+    int32_t is_mutable)
 {
     if (p->var_count >= 10)
         return -1;
@@ -2562,14 +2563,14 @@ static int set_variable_string_with_mutability(
 }
 
 // Helper: Set a struct variable with mutability
-static int set_struct_variable_with_mutability(
+static int32_t set_struct_variable_with_mutability(
     Parser *p,
     const char *name,
-    int name_len,
-    int struct_def_idx,
-    const long *values,
+    int32_t name_len,
+    int32_t struct_def_idx,
+    const int32_t *values,
     const char *struct_type,
-    int is_mutable)
+    int32_t is_mutable)
 {
     if (p->var_count >= 10)
         return -1; // Too many variables
@@ -2578,8 +2579,8 @@ static int set_struct_variable_with_mutability(
     p->variables[p->var_count].is_struct = 1;
     p->variables[p->var_count].struct_def_idx = struct_def_idx;
 
-    int field_count = p->structs[struct_def_idx].field_count;
-    for (int i = 0; i < field_count && i < 10; i++)
+    int32_t field_count = p->structs[struct_def_idx].field_count;
+    for (int32_t i = 0; i < field_count && i < 10; i++)
     {
         p->variables[p->var_count].struct_values[i] = values ? values[i] : 0;
     }
@@ -2588,32 +2589,32 @@ static int set_struct_variable_with_mutability(
 }
 
 // Helper: Set or add a variable with type information (immutable by default)
-static int set_variable_with_type(Parser *p, const char *name, int name_len, long value, const char *type)
+static int32_t set_variable_with_type(Parser *p, const char *name, int32_t name_len, int32_t value, const char *type)
 {
     return set_variable_with_mutability(p, name, name_len, value, type, 0);
 }
 
 // Helper: Set or add a variable without type information (immutable by default)
-static int set_variable(Parser *p, const char *name, int name_len, long value)
+static int32_t set_variable(Parser *p, const char *name, int32_t name_len, int32_t value)
 {
     return set_variable_with_type(p, name, name_len, value, NULL);
 }
 
 // Helper: Parse an identifier (variable name)
-static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len)
+static intptr_t parse_identifier(Parser *p, char *out_name, int32_t max_name_len)
 {
     skip_whitespace(p);
 
     if (!isalpha(p->input[p->pos]) && p->input[p->pos] != '_')
         return 0;
 
-    int start = p->pos;
+    int32_t start = p->pos;
     while (isalnum(p->input[p->pos]) || p->input[p->pos] == '_')
     {
         p->pos++;
     }
 
-    int len = p->pos - start;
+    int32_t len = p->pos - start;
     if (len >= max_name_len)
         return -1;
 
@@ -2624,9 +2625,9 @@ static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len)
 
 // Helper: Parse variable name and return length (or error)
 // Helper: Check if a keyword matches at the current position
-static int is_keyword_at(Parser *p, const char *keyword)
+static int32_t is_keyword_at(Parser *p, const char *keyword)
 {
-    int i = 0;
+    int32_t i = 0;
     while (keyword[i])
     {
         if (p->input[p->pos + i] != keyword[i])
@@ -2637,7 +2638,7 @@ static int is_keyword_at(Parser *p, const char *keyword)
 }
 
 // Helper: Parse the 'mut' keyword if present and return mutability flag
-static int parse_mut_keyword(Parser *p)
+static int32_t parse_mut_keyword(Parser *p)
 {
     if (is_keyword_at(p, "mut") &&
         (isspace(p->input[p->pos + 3]) || p->input[p->pos + 3] == '\0'))
@@ -2649,12 +2650,12 @@ static int parse_mut_keyword(Parser *p)
     return 0;
 }
 
-static InterpretResult parse_and_validate_var_name(Parser *p, char *out_name, int max_name_len)
+static InterpretResult parse_and_validate_var_name(Parser *p, char *out_name, int32_t max_name_len)
 {
     InterpretResult name_result = parse_identifier_or_error(p, out_name, max_name_len, "Expected variable name");
     if (name_result.has_error)
         return name_result;
-    int name_len = name_result.value;
+    int32_t name_len = name_result.value;
     skip_whitespace(p);
     return (InterpretResult){.value = name_len, .has_error = false, .error_message = NULL};
 }
@@ -2700,14 +2701,14 @@ static InterpretResult parse_while_statement(Parser *p);
 static InterpretResult parse_for_statement(Parser *p);
 static InterpretResult parse_assignment_or_if_else(Parser *p);
 static InterpretResult parse_assignment_statement_in_block(Parser *p);
-static int has_assignment_operator(Parser *p);
+static int32_t has_assignment_operator(Parser *p);
 
 // Helper: Parse body to skip past it, restoring variable state
 // Returns the position where the body ends
-static int parse_and_skip_body_restoring_state(Parser *p, int body_start_pos)
+static int32_t parse_and_skip_body_restoring_state(Parser *p, int32_t body_start_pos)
 {
     Variable saved_vars[10];
-    int saved_var_count;
+    int32_t saved_var_count;
     save_variable_state(p, saved_vars, &saved_var_count);
 
     p->pos = body_start_pos;
@@ -2717,7 +2718,7 @@ static int parse_and_skip_body_restoring_state(Parser *p, int body_start_pos)
         // Note: caller must handle error since we can't return it from this helper
         return -1;
     }
-    int body_end_pos = p->pos;
+    int32_t body_end_pos = p->pos;
 
     restore_saved_vars(p, saved_vars, saved_var_count);
 
@@ -2742,14 +2743,14 @@ static InterpretResult expect_range_operator(Parser *p)
 // Returns initialized body tracking variables
 typedef struct
 {
-    int body_start_pos;
-    int body_end_pos;
+    int32_t body_start_pos;
+    int32_t body_end_pos;
 } LoopState;
 
 static LoopState init_loop_state(Parser *p)
 {
-    int body_start_pos = p->pos;
-    int body_end_pos = body_start_pos;
+    int32_t body_start_pos = p->pos;
+    int32_t body_end_pos = body_start_pos;
     return (LoopState){.body_start_pos = body_start_pos, .body_end_pos = body_end_pos};
 }
 
@@ -2760,11 +2761,11 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     skip_whitespace(p);
 
     // Check for 'mut' keyword
-    int is_mutable = parse_mut_keyword(p);
+    int32_t is_mutable = parse_mut_keyword(p);
 
     // Parse variable name
     char var_name[32];
-    int name_len = 0;
+    int32_t name_len = 0;
     PARSE_VAR_NAME_OR_RETURN(p, var_name, name_len);
 
     // Check if variable already exists in current scope OR was declared before (across all scopes)
@@ -2779,11 +2780,11 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
 
     // Variable to store the declared type (for typed declarations)
     char declared_type[16] = {0};
-    int is_array_declared = 0;
+    int32_t is_array_declared = 0;
     char declared_array_elem_type[16] = {0};
-    int declared_array_init_count = 0;
-    int declared_array_total_count = 0;
-    int declared_struct_idx = -1;
+    int32_t declared_array_init_count = 0;
+    int32_t declared_array_total_count = 0;
+    int32_t declared_struct_idx = -1;
 
     // Check if this is a typed or typeless declaration
     if (p->input[p->pos] == '=')
@@ -2815,8 +2816,8 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         else
         {
             // Check for pointer type (*) or mutable pointer type (*mut)
-            int is_pointer = 0;
-            int is_mut_pointer = 0;
+            int32_t is_pointer = 0;
+            int32_t is_mut_pointer = 0;
             if (p->input[p->pos] == '*')
             {
                 is_pointer = 1;
@@ -3010,7 +3011,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                 return make_error("Array element type mismatch");
             }
 
-            for (int i = 0; i < p->temp_array_count; i++)
+            for (int32_t i = 0; i < p->temp_array_count; i++)
             {
                 InterpretResult element_validation = validate_type(p->temp_array_values[i], declared_array_elem_type);
                 if (element_validation.has_error)
@@ -3088,11 +3089,11 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                     is_mutable);
 
                 // Now find the variable we just created and mark it as a runtime string reference
-                int var_idx = find_variable(p, var_name, name_len);
+                int32_t var_idx = find_variable(p, var_name, name_len);
                 if (var_idx >= 0)
                 {
                     // Store the pointer target if this is a pointer to another string
-                    // For __args__, we don't have a direct variable to point to,
+                    // For __args__, we don't have a direct variable to point32_t to,
                     // so we keep it as a special case handled at runtime
                     p->variables[var_idx].value = val_result.value;
                 }
@@ -3126,7 +3127,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
             {
                 // This is assignment from __args__ to a slice variable
                 // Create the variable and mark it as from __args__
-                int var_idx = set_pointer_variable_with_mutability(p, var_name, name_len, -1, actual_type, is_mutable);
+                int32_t var_idx = set_pointer_variable_with_mutability(p, var_name, name_len, -1, actual_type, is_mutable);
                 if (var_idx >= 0)
                 {
                     // Mark this variable as initialized from __args__
@@ -3219,7 +3220,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
 
         if (p->has_temp_struct)
         {
-            int struct_idx = p->temp_struct_def_idx;
+            int32_t struct_idx = p->temp_struct_def_idx;
             strncpy_s(actual_type, sizeof(actual_type), p->structs[struct_idx].name, _TRUNCATE);
             actual_type[sizeof(actual_type) - 1] = '\0';
 
@@ -3248,9 +3249,9 @@ static InterpretResult parse_let_statements_loop(Parser *p)
     skip_whitespace(p);
 
     // Track the last statement value to return it if it's a block
-    int last_statement_value = 0;
-    int has_last_statement = 0;
-    int saw_statement = 0;
+    int32_t last_statement_value = 0;
+    int32_t has_last_statement = 0;
+    int32_t saw_statement = 0;
 
     // Parse let statements and assignments until none are found
     while (1)
@@ -3261,11 +3262,11 @@ static InterpretResult parse_let_statements_loop(Parser *p)
         if (is_keyword_at(p, "fn"))
         {
             // Look ahead to check if this function has already been parsed by prescan
-            int saved_pos = p->pos;
+            int32_t saved_pos = p->pos;
             p->pos += 2; // Skip 'fn'
             skip_whitespace(p);
             char func_name[32];
-            int name_len = parse_identifier(p, func_name, sizeof(func_name));
+            int32_t name_len = parse_identifier(p, func_name, sizeof(func_name));
 
             // Check if function has already been registered (by prescan)
             if (name_len > 0 && find_function(p, func_name, name_len) >= 0)
@@ -3328,14 +3329,14 @@ static InterpretResult parse_let_statements_loop(Parser *p)
         else if (p->input[p->pos] == '*' && isalpha(p->input[p->pos + 1]))
         {
             // Look ahead to see if this is a dereference assignment
-            int saved_pos = p->pos;
+            int32_t saved_pos = p->pos;
             p->pos++; // Skip '*'
             skip_whitespace(p);
             char temp_name[32];
-            int name_len = parse_identifier(p, temp_name, sizeof(temp_name));
+            int32_t name_len = parse_identifier(p, temp_name, sizeof(temp_name));
 
             // Check if this pointer variable is followed by an assignment operator
-            int is_assignment = has_assignment_operator(p);
+            int32_t is_assignment = has_assignment_operator(p);
 
             // Reset position and handle accordingly
             p->pos = saved_pos;
@@ -3361,20 +3362,20 @@ static InterpretResult parse_let_statements_loop(Parser *p)
         else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match") && !is_keyword_at(p, "for") && !is_keyword_at(p, "fn") && !is_keyword_at(p, "struct"))
         {
             // Look ahead to determine assignment type (simple, array element, or pointer dereference)
-            int saved_pos = p->pos;
+            int32_t saved_pos = p->pos;
             char temp_name[32];
-            int name_len = parse_identifier(p, temp_name, sizeof(temp_name));
+            int32_t name_len = parse_identifier(p, temp_name, sizeof(temp_name));
 
             // Check what follows the identifier
             skip_whitespace(p);
-            int is_array_element = (p->input[p->pos] == '['); // array[index] pattern
-            int is_assignment = has_assignment_operator(p);   // = or compound operator
+            int32_t is_array_element = (p->input[p->pos] == '['); // array[index] pattern
+            int32_t is_assignment = has_assignment_operator(p);   // = or compound operator
 
             // If it's array element, skip past [...] to check for assignment
             if (is_array_element && !is_assignment)
             {
                 // Skip bracket content to find assignment operator
-                int bracket_depth = 1;
+                int32_t bracket_depth = 1;
                 p->pos++; // Skip opening [
                 while (p->input[p->pos] && bracket_depth > 0)
                 {
@@ -3418,8 +3419,8 @@ static InterpretResult parse_let_statements_loop(Parser *p)
         else if (p->input[p->pos] == '{')
         {
             // Parse block as a statement
-            int saved_pos = p->pos;
-            int saved_var_count_block = p->var_count;
+            int32_t saved_pos = p->pos;
+            int32_t saved_var_count_block = p->var_count;
             p->pos++; // Skip '{'
 
             // Check for let statements in the block
@@ -3471,7 +3472,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
         else if (p->input[p->pos] == '{')
         {
             // Look ahead to see if this is an empty block
-            int saved_pos = p->pos;
+            int32_t saved_pos = p->pos;
             p->pos++; // Skip '{'
             skip_whitespace(p);
 
@@ -3541,7 +3542,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
 
             // Parse struct name
             char struct_name[32];
-            int name_len = parse_identifier(p, struct_name, sizeof(struct_name));
+            int32_t name_len = parse_identifier(p, struct_name, sizeof(struct_name));
             if (name_len <= 0)
             {
                 return make_error("Expected struct name");
@@ -3570,7 +3571,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             // Parse struct fields
             char field_names[10][32];
             char field_types[10][32];
-            int field_count = 0;
+            int32_t field_count = 0;
 
             while (p->input[p->pos] && p->input[p->pos] != '}')
             {
@@ -3582,14 +3583,14 @@ static InterpretResult parse_let_statements_loop(Parser *p)
 
                 // Parse field name
                 char field_name[32];
-                int field_name_len = parse_identifier(p, field_name, sizeof(field_name));
+                int32_t field_name_len = parse_identifier(p, field_name, sizeof(field_name));
                 if (field_name_len <= 0)
                 {
                     return make_error("Expected field name in struct");
                 }
 
                 // Check for duplicate field name
-                for (int i = 0; i < field_count; i++)
+                for (int32_t i = 0; i < field_count; i++)
                 {
                     if (strncmp(field_names[i], field_name, field_name_len) == 0 &&
                         field_names[i][field_name_len] == '\0')
@@ -3619,7 +3620,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
 
                 // Parse field type
                 char field_type[32];
-                int field_type_len = parse_identifier(p, field_type, sizeof(field_type));
+                int32_t field_type_len = parse_identifier(p, field_type, sizeof(field_type));
                 if (field_type_len <= 0)
                 {
                     return make_error("Expected field type");
@@ -3656,7 +3657,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             p->structs[p->structs_count].name[name_len] = '\0';
             p->structs[p->structs_count].field_count = field_count;
 
-            for (int i = 0; i < field_count; i++)
+            for (int32_t i = 0; i < field_count; i++)
             {
                 strncpy_s(p->structs[p->structs_count].field_names[i], sizeof(p->structs[p->structs_count].field_names[i]), field_names[i], _TRUNCATE);
                 p->structs[p->structs_count].field_names[i][31] = '\0';
@@ -3684,7 +3685,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
 
 // Helper: Check if character at position is an operator followed by '='
 // Returns the operator char if found ('+', '-', '*', '/'), '\0' otherwise
-static char get_compound_operator_at(const char *input, int pos, char op_char)
+static char get_compound_operator_at(const char *input, int32_t pos, char op_char)
 {
     if (input[pos] == op_char && input[pos + 1] == '=')
         return op_char;
@@ -3693,10 +3694,10 @@ static char get_compound_operator_at(const char *input, int pos, char op_char)
 
 // Helper: Determine the operator at a position without consuming it
 // Returns '+', '-', '*', '/', or '=' if found, '\0' otherwise
-static char get_operator_at(const char *input, int pos)
+static char get_operator_at(const char *input, int32_t pos)
 {
     const char compound_ops[] = "+-*/";
-    for (int i = 0; compound_ops[i]; i++)
+    for (int32_t i = 0; compound_ops[i]; i++)
     {
         char op = get_compound_operator_at(input, pos, compound_ops[i]);
         if (op)
@@ -3730,9 +3731,9 @@ static char parse_assignment_operator(Parser *p)
 // Helper: Check if there's an assignment operator at the current position
 // Checks for =, +=, -=, *=, /= (skipping whitespace first)
 // Does not consume the operator
-static int has_assignment_operator(Parser *p)
+static int32_t has_assignment_operator(Parser *p)
 {
-    int temp_pos = p->pos;
+    int32_t temp_pos = p->pos;
     while (isspace(p->input[temp_pos]))
         temp_pos++;
 
@@ -3755,10 +3756,10 @@ static char check_assignment_operator(Parser *p)
 
 // Helper: Parse and apply an assignment, returning the assigned value
 // Assumes variable name is already parsed and position is at variable name
-static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_name, int name_len)
+static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_name, int32_t name_len)
 {
     // Find the variable
-    int idx = find_variable(p, var_name, name_len);
+    int32_t idx = find_variable(p, var_name, name_len);
     if (idx < 0)
     {
         return make_error("Variable not found");
@@ -3797,11 +3798,11 @@ static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_nam
         return val_result;
 
     // Calculate the final value
-    long final_value = val_result.value;
+    int32_t final_value = val_result.value;
     if (compound_op != '=')
     {
         // Apply the compound operation using helper function
-        long current_value = p->variables[idx].value;
+        int32_t current_value = p->variables[idx].value;
         InterpretResult op_result = apply_compound_operator(compound_op, current_value, val_result.value, &final_value);
         if (op_result.has_error)
             return op_result;
@@ -3850,7 +3851,7 @@ static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_nam
 // Returns error if this is not an assignment
 static InterpretResult try_parse_assignment_expression(Parser *p)
 {
-    int saved_pos = p->pos;
+    int32_t saved_pos = p->pos;
     skip_whitespace(p);
 
     // Check for dereference assignment (*var = value)
@@ -3861,7 +3862,7 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
 
         // Parse the pointer variable name
         char ptr_var_name[32];
-        int ptr_var_len = parse_identifier(p, ptr_var_name, sizeof(ptr_var_name));
+        int32_t ptr_var_len = parse_identifier(p, ptr_var_name, sizeof(ptr_var_name));
         if (ptr_var_len <= 0)
         {
             p->pos = saved_pos;
@@ -3879,7 +3880,7 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
         }
 
         // Find the pointer variable
-        int ptr_idx = find_variable(p, ptr_var_name, ptr_var_len);
+        int32_t ptr_idx = find_variable(p, ptr_var_name, ptr_var_len);
         if (ptr_idx < 0)
         {
             return make_error("Variable not found");
@@ -3898,7 +3899,7 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
         }
 
         // Get the target variable index from pointer_target
-        int target_idx = p->variables[ptr_idx].pointer_target;
+        int32_t target_idx = p->variables[ptr_idx].pointer_target;
         if (target_idx < 0 || target_idx >= p->var_count)
         {
             return make_error("Invalid pointer target");
@@ -3928,28 +3929,28 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
     // Check for array element assignment (array[idx] = value)
     if (isalpha(p->input[p->pos]))
     {
-        int name_pos = p->pos;
+        int32_t name_pos = p->pos;
         char array_name[32];
-        int array_name_len = parse_identifier(p, array_name, sizeof(array_name));
+        int32_t array_name_len = parse_identifier(p, array_name, sizeof(array_name));
         if (array_name_len > 0)
         {
             skip_whitespace(p);
             if (p->input[p->pos] == '[')
             {
-                int array_idx = find_variable(p, array_name, array_name_len);
+                int32_t array_idx = find_variable(p, array_name, array_name_len);
                 if (array_idx < 0)
                 {
                     return make_error("Variable not found");
                 }
 
-                int is_slice = is_pointer_to_array_type(p->variables[array_idx].type);
+                int32_t is_slice = is_pointer_to_array_type(p->variables[array_idx].type);
 
                 if (!p->variables[array_idx].is_array && !is_slice)
                 {
                     return make_error("Cannot index non-array variable");
                 }
 
-                long index_value = 0;
+                int32_t index_value = 0;
                 InterpretResult bracket_result = parse_bracket_index(p, &index_value);
                 if (bracket_result.has_error)
                     return bracket_result;
@@ -3961,7 +3962,7 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
                     return make_error("not_an_assignment");
                 }
 
-                int target_array_idx = array_idx;
+                int32_t target_array_idx = array_idx;
                 if (is_slice)
                 {
                     // For slices, get the underlying array
@@ -4026,7 +4027,7 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
                 if (assign_result.has_error)
                     return assign_result;
 
-                long final_value = assign_result.value;
+                int32_t final_value = assign_result.value;
 
                 // Validate final value against array element type
                 if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
@@ -4057,7 +4058,7 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
 
     // Try to parse a regular identifier assignment
     char var_name[32];
-    int name_len = 0;
+    int32_t name_len = 0;
     if (!isalpha(p->input[p->pos]))
     {
         p->pos = saved_pos;
@@ -4097,7 +4098,7 @@ static InterpretResult parse_assignment_statement_in_block(Parser *p)
 {
     // Parse variable name
     char var_name[32];
-    int name_len = 0;
+    int32_t name_len = 0;
     PARSE_VAR_NAME_OR_RETURN(p, var_name, name_len);
 
     // Parse and apply the assignment
@@ -4119,7 +4120,7 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
     {
         // Might be a dereference operator (not multiplication)
         // We'll parse the following primary and check if it's a pointer type
-        int saved_pos = p->pos;
+        int32_t saved_pos = p->pos;
         p->pos++; // Skip '*'
 
         // Parse the operand after *
@@ -4151,7 +4152,7 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
             }
 
             // Get the value from the pointed-to variable
-            long deref_value = p->variables[ptr_expr.value].value;
+            int32_t deref_value = p->variables[ptr_expr.value].value;
 
             // Update tracked suffix to the dereferenced type
             strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), base_type, _TRUNCATE);
@@ -4174,8 +4175,8 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
     {
         // Parse parenthesized or braced expression
         char closing_char = p->input[p->pos] == '(' ? ')' : '}';
-        int is_block = p->input[p->pos] == '{';
-        int saved_var_count = p->var_count;
+        int32_t is_block = p->input[p->pos] == '{';
+        int32_t saved_var_count = p->var_count;
         p->pos++; // Skip '(' or '{'
 
         // For blocks, check for let statements
@@ -4253,7 +4254,7 @@ static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_nu
     if (left.has_error)
         return left;
 
-    long result_value = (out_first_num && out_first_num->value) ? out_first_num->value : left.value;
+    int32_t result_value = (out_first_num && out_first_num->value) ? out_first_num->value : left.value;
 
     BINARY_OP_LOOP_START("*/")
     if (next.op == '*')
@@ -4269,7 +4270,7 @@ static InterpretResult parse_multiplicative(Parser *p, NumberValue *out_first_nu
 typedef InterpretResult (*BinaryOpParser)(Parser *p);
 
 // Helper: Parse binary logical operation with custom operand parser
-static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, int is_or, BinaryOpParser operand_parser)
+static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, int32_t is_or, BinaryOpParser operand_parser)
 {
     skip_whitespace(p);
 
@@ -4280,7 +4281,7 @@ static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, 
     skip_whitespace(p);
 
     // Look for operator (both && and || repeat the character)
-    int found_operator = 0;
+    int32_t found_operator = 0;
     while (p->input[p->pos] == op_char && p->input[p->pos + 1] == op_char)
     {
         found_operator = 1;
@@ -4302,7 +4303,7 @@ static InterpretResult parse_binary_logical_op_generic(Parser *p, char op_char, 
             return make_error("Operand must be a boolean value");
 
         // Evaluate operation
-        long result;
+        int32_t result;
         if (is_or)
             result = (left.value != 0) || (right.value != 0) ? 1 : 0;
         else // AND
@@ -4337,11 +4338,11 @@ static InterpretResult parse_comparison(Parser *p)
     skip_whitespace(p);
 
     // Check for comparison operators
-    int is_comparison = 0;
-    int is_two_char = 0;
+    int32_t is_comparison = 0;
+    int32_t is_two_char = 0;
     char op1 = '\0';
     char op = '\0';
-    long result = 0;
+    int32_t result = 0;
 
     // Check for two-character operators first (<=, >=, ==, !=)
     if (p->input[p->pos] && p->input[p->pos + 1])
@@ -4417,7 +4418,7 @@ static InterpretResult parse_comparison(Parser *p)
 }
 
 // Helper: Parse binary logical operation (AND or OR)
-static InterpretResult parse_logical_binary_op(Parser *p, char op_char, int is_or)
+static InterpretResult parse_logical_binary_op(Parser *p, char op_char, int32_t is_or)
 {
     return parse_binary_logical_op_generic(p, op_char, is_or, parse_comparison);
 }
@@ -4437,7 +4438,7 @@ static InterpretResult parse_logical_or(Parser *p)
 // Helper: Parse shared if-condition header and save state
 // Parses: if (condition)
 // Helper: Parse keyword followed by '(' and expect opening paren - used by both if and match parsing
-static InterpretResult parse_keyword_header(Parser *p, const char *keyword, int keyword_len, const char *context_msg)
+static InterpretResult parse_keyword_header(Parser *p, const char *keyword, int32_t keyword_len, const char *context_msg)
 {
     skip_whitespace(p);
 
@@ -4456,7 +4457,7 @@ static InterpretResult parse_keyword_header(Parser *p, const char *keyword, int 
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
-static InterpretResult parse_if_header(Parser *p, InterpretResult *condition, Variable saved_vars[10], int *saved_var_count)
+static InterpretResult parse_if_header(Parser *p, InterpretResult *condition, Variable saved_vars[10], int32_t *saved_var_count)
 {
     InterpretResult header = parse_keyword_header(p, "if", 2, "Expected 'if' keyword");
     if (header.has_error)
@@ -4486,7 +4487,7 @@ typedef struct
     InterpretResult header;
     InterpretResult condition;
     Variable saved_vars[10];
-    int saved_var_count;
+    int32_t saved_var_count;
 } IfHeaderState;
 
 static IfHeaderState parse_if_header_state(Parser *p)
@@ -4534,7 +4535,7 @@ static InterpretResult parse_if_statement(Parser *p)
 
         // Save current state before else (in case condition was true)
         Variable saved_vars_before_else[10];
-        int saved_var_count_before_else;
+        int32_t saved_var_count_before_else;
         save_variable_state(p, saved_vars_before_else, &saved_var_count_before_else);
 
         if (header_state.condition.value == 0)
@@ -4570,7 +4571,7 @@ static InterpretResult parse_while_statement(Parser *p)
         return header;
 
     // Save position before condition
-    int cond_start_pos = p->pos;
+    int32_t cond_start_pos = p->pos;
 
     // Parse condition expression
     InterpretResult cond_result = parse_logical_or(p);
@@ -4590,16 +4591,16 @@ static InterpretResult parse_while_statement(Parser *p)
 
     // Save position where body starts
     LoopState loop_state = init_loop_state(p);
-    int body_start_pos = loop_state.body_start_pos;
-    int body_end_pos = loop_state.body_end_pos;
+    int32_t body_start_pos = loop_state.body_start_pos;
+    int32_t body_end_pos = loop_state.body_end_pos;
 
     // Execute while loop with iteration cap
-    static const int MAX_ITERATIONS = 1024;
+    static const int32_t MAX_ITERATIONS = 1024;
 
-    for (int iter = 0; iter < MAX_ITERATIONS; iter++)
+    for (int32_t iter = 0; iter < MAX_ITERATIONS; iter++)
     {
         // Reset to condition start and re-evaluate condition
-        int saved_pos = p->pos;
+        int32_t saved_pos = p->pos;
         p->pos = cond_start_pos;
 
         // Re-parse condition
@@ -4649,7 +4650,7 @@ static InterpretResult parse_for_statement(Parser *p)
 
     // Parse loop variable name
     char loop_var_name[32];
-    int name_len = parse_identifier(p, loop_var_name, sizeof(loop_var_name));
+    int32_t name_len = parse_identifier(p, loop_var_name, sizeof(loop_var_name));
     if (name_len <= 0)
     {
         return make_error("Expected loop variable name in for loop");
@@ -4668,7 +4669,7 @@ static InterpretResult parse_for_statement(Parser *p)
     InterpretResult start_result = parse_additive(p);
     if (start_result.has_error)
         return start_result;
-    long start_value = start_result.value;
+    int32_t start_value = start_result.value;
 
     // Expect '..' operator
     InterpretResult range_op = expect_range_operator(p);
@@ -4679,7 +4680,7 @@ static InterpretResult parse_for_statement(Parser *p)
     InterpretResult end_result = parse_additive(p);
     if (end_result.has_error)
         return end_result;
-    long end_value = end_result.value;
+    int32_t end_value = end_result.value;
     skip_whitespace(p);
 
     // Expect closing parenthesis
@@ -4689,11 +4690,11 @@ static InterpretResult parse_for_statement(Parser *p)
 
     // Save position where body starts
     LoopState loop_state = init_loop_state(p);
-    int body_start_pos = loop_state.body_start_pos;
-    int body_end_pos = loop_state.body_end_pos;
+    int32_t body_start_pos = loop_state.body_start_pos;
+    int32_t body_end_pos = loop_state.body_end_pos;
 
     // Execute for loop with iteration cap
-    static const int MAX_ITERATIONS = 1024;
+    static const int32_t MAX_ITERATIONS = 1024;
 
     // Check that loop variable hasn't been declared before
     if (has_variable_been_declared(p, loop_var_name, name_len))
@@ -4701,7 +4702,7 @@ static InterpretResult parse_for_statement(Parser *p)
         return make_error("Variable already declared");
     }
 
-    for (long i = start_value; i < end_value && (i - start_value) < MAX_ITERATIONS; i++)
+    for (int32_t i = start_value; i < end_value && (i - start_value) < MAX_ITERATIONS; i++)
     {
         // Set loop variable to current value (immutable, typeless)
         set_variable(p, loop_var_name, name_len, i);
@@ -4766,7 +4767,7 @@ static InterpretResult parse_assignment_or_if_else(Parser *p)
 }
 
 // Helper: Apply branch state after executing an if/else branch
-static InterpretResult apply_branch_state(Parser *p, Variable then_state_vars[10], int then_state_var_count, InterpretResult then_expr)
+static InterpretResult apply_branch_state(Parser *p, Variable then_state_vars[10], int32_t then_state_var_count, InterpretResult then_expr)
 {
     restore_saved_vars(p, then_state_vars, then_state_var_count);
     return (InterpretResult){.value = then_expr.value, .has_error = false, .error_message = NULL};
@@ -4774,7 +4775,7 @@ static InterpretResult apply_branch_state(Parser *p, Variable then_state_vars[10
 
 // Helper: Parse boolean pattern (true/false) with type validation
 // Returns pattern_value (1 for true, 0 for false) or error if type mismatch
-static InterpretResult parse_bool_pattern(Parser *p, int match_value_is_bool, long *out_pattern_value)
+static InterpretResult parse_bool_pattern(Parser *p, int32_t match_value_is_bool, int32_t *out_pattern_value)
 {
     if (is_keyword_at(p, "true"))
     {
@@ -4821,7 +4822,7 @@ static InterpretResult parse_match(Parser *p)
         return match_value;
 
     // Determine match value type (boolean or numeric)
-    int match_value_is_bool = (p->has_tracked_suffix && strcmp(p->tracked_suffix, "Bool") == 0);
+    int32_t match_value_is_bool = (p->has_tracked_suffix && strcmp(p->tracked_suffix, "Bool") == 0);
 
     // Expect closing parenthesis
     InterpretResult close_paren = expect_char(p, ')', "Expected ')' after match condition");
@@ -4837,9 +4838,9 @@ static InterpretResult parse_match(Parser *p)
 
     // Parse case branches
     InterpretResult wildcard_result = {.value = 0, .has_error = true, .error_message = NULL};
-    int found_match = 0;
+    int32_t found_match = 0;
     InterpretResult match_result = {.value = 0, .has_error = true, .error_message = NULL};
-    int has_non_wildcard_cases = 0;
+    int32_t has_non_wildcard_cases = 0;
 
     while (p->input[p->pos] && p->input[p->pos] != '}')
     {
@@ -4854,8 +4855,8 @@ static InterpretResult parse_match(Parser *p)
         skip_whitespace(p);
 
         // Parse pattern (either a number, boolean literal, or wildcard _)
-        int is_wildcard = 0;
-        long pattern_value = 0;
+        int32_t is_wildcard = 0;
+        int32_t pattern_value = 0;
 
         if (p->input[p->pos] == '_')
         {
@@ -4978,7 +4979,7 @@ static InterpretResult parse_if_else(Parser *p)
 
     // Capture the type of the then branch
     char then_type[8] = {0};
-    int then_has_type = p->has_tracked_suffix;
+    int32_t then_has_type = p->has_tracked_suffix;
     if (p->has_tracked_suffix)
     {
         strncpy_s(then_type, sizeof(then_type), p->tracked_suffix, _TRUNCATE);
@@ -4987,7 +4988,7 @@ static InterpretResult parse_if_else(Parser *p)
 
     // Save the state after executing then branch
     Variable then_state_vars[10];
-    int then_state_var_count;
+    int32_t then_state_var_count;
     save_variable_state(p, then_state_vars, &then_state_var_count);
 
     // Restore pre-then state before executing else
@@ -5009,7 +5010,7 @@ static InterpretResult parse_if_else(Parser *p)
 
         // Capture the type of the else branch
         char else_type[8] = {0};
-        int else_has_type = p->has_tracked_suffix;
+        int32_t else_has_type = p->has_tracked_suffix;
         if (p->has_tracked_suffix)
         {
             strncpy_s(else_type, sizeof(else_type), p->tracked_suffix, _TRUNCATE);
@@ -5069,11 +5070,11 @@ static InterpretResult parse_additive(Parser *p)
     if (left.has_error)
         return left;
 
-    long result_value = left.value;
+    int32_t result_value = left.value;
     char tracked_suffix[16] = {0}; // Increased to accommodate "*mut I32"
     char last_suffix[16] = {0};    // Increased to accommodate "*mut I8"
-    int has_tracked_suffix = 0;
-    int in_mixed_types = 0; // Track if we've seen mixed types
+    int32_t has_tracked_suffix = 0;
+    int32_t in_mixed_types = 0; // Track if we've seen mixed types
 
     if (first_num.suffix_len > 0)
     {
@@ -5149,7 +5150,7 @@ static InterpretResult parse_additive(Parser *p)
                 if (!has_typed_operand_ahead(p->input, p->pos))
                 {
                     // No typed operand ahead: validate result fits in type
-                    int type_idx = get_type_info_index(tracked_suffix);
+                    int32_t type_idx = get_type_info_index(tracked_suffix);
                     InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
                     if (validation_result.has_error)
                     {
@@ -5167,7 +5168,7 @@ static InterpretResult parse_additive(Parser *p)
                      strncmp(right_num.suffix, first_num.suffix, first_num.suffix_len) == 0)
             {
                 // Same type: validate result fits in type
-                int type_idx = get_type_info_index(tracked_suffix);
+                int32_t type_idx = get_type_info_index(tracked_suffix);
                 InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
                 if (validation_result.has_error)
                 {
@@ -5186,7 +5187,7 @@ static InterpretResult parse_additive(Parser *p)
     // If we're in mixed types, validate final result against last operand's type
     if (in_mixed_types && last_suffix[0] != '\0')
     {
-        int type_idx = get_type_info_index(last_suffix);
+        int32_t type_idx = get_type_info_index(last_suffix);
         InterpretResult validation_result = validate_value_by_index(result_value, type_idx);
         if (validation_result.has_error)
         {
@@ -5217,7 +5218,7 @@ static InterpretResult parse_additive(Parser *p)
 static InterpretResult prescan_function_declarations(Parser *p)
 {
     // Save starting position and reset to beginning
-    int starting_pos = p->pos;
+    int32_t starting_pos = p->pos;
     p->pos = 0;
     skip_whitespace(p);
 
@@ -5240,7 +5241,7 @@ static InterpretResult prescan_function_declarations(Parser *p)
             // Not a function declaration at this position
             // Skip this statement and continue scanning for more functions
             // Skip until we find a semicolon (end of statement) or closing brace
-            int brace_depth = 0;
+            int32_t brace_depth = 0;
             while (p->input[p->pos])
             {
                 if (p->input[p->pos] == '{')
@@ -5284,9 +5285,9 @@ static InterpretResult parse_expression(Parser *p)
         return let_statements_result;
 
     // Skip whitespace to check if there's anything left
-    int save_pos = p->pos;
+    int32_t save_pos = p->pos;
     skip_whitespace(p);
-    int has_remaining = (p->input[p->pos] != '\0');
+    int32_t has_remaining = (p->input[p->pos] != '\0');
     p->pos = save_pos;
 
     // If there's remaining input, parse it as the final expression
@@ -5303,16 +5304,16 @@ static InterpretResult parse_expression(Parser *p)
     }
 }
 
-static int is_keyword_lookahead(const char *str, const char *keyword, int keyword_len)
+static int32_t is_keyword_lookahead(const char *str, const char *keyword, int32_t keyword_len)
 {
     return strncmp(str, keyword, keyword_len) == 0 &&
            (isspace(str[keyword_len]) || str[keyword_len] == '(' || str[keyword_len] == '\0');
 }
 
-static int is_expression(const char *str)
+static int32_t is_expression(const char *str)
 {
-    int in_number = 0;
-    int in_identifier = 0;
+    int32_t in_number = 0;
+    int32_t in_identifier = 0;
 
     // Skip leading whitespace
     while (isspace(*str))
@@ -5346,7 +5347,7 @@ static int is_expression(const char *str)
         return 1;
     }
 
-    for (int i = 0; str[i]; i++)
+    for (int32_t i = 0; str[i]; i++)
     {
         // Skip whitespace
         if (isspace(str[i]))
@@ -5421,7 +5422,7 @@ static int is_expression(const char *str)
 }
 
 // Helper: Initialize Parser struct with default values
-static Parser init_parser(const char *str, int argc, const char *const *argv)
+static Parser init_parser(const char *str, int32_t argc, const char *const *argv)
 {
     return (Parser){
         .input = str,
@@ -5482,14 +5483,14 @@ static InterpretResult parse_single_value(const char *str)
     }
 
     // Parse the numeric part
-    long value = strtol(str, NULL, 10);
+    int32_t value = strtol(str, NULL, 10);
 
     // Validate range based on type suffix
     return validate_type(value, suffix_start);
 }
 
 // Helper: Core interpretation logic shared by interpret() and interpret_with_argc()
-static InterpretResult interpret_impl(const char *str, int argc, const char *const *argv)
+static InterpretResult interpret_impl(const char *str, int32_t argc, const char *const *argv)
 {
     if (str == NULL || *str == '\0')
     {
@@ -5511,7 +5512,7 @@ InterpretResult interpret(const char *str)
     return interpret_impl(str, -1, NULL);
 }
 
-InterpretResult interpret_with_argc(const char *str, int argc, const char *const *argv)
+InterpretResult interpret_with_argc(const char *str, int32_t argc, const char *const *argv)
 {
     return interpret_impl(str, argc, argv);
 }
@@ -5522,7 +5523,7 @@ static CompileResult generate_c_program(const char *format, ...)
     char buffer[512];
     va_list args;
     va_start(args, format);
-    int len = vsnprintf(buffer, sizeof(buffer), format, args);
+    int32_t len = vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
 
     if (len < 0 || len >= (int)sizeof(buffer))
@@ -5539,8 +5540,8 @@ static CompileResult generate_c_program(const char *format, ...)
 // compile_args_expression: Translate a Tuff expression containing __args__ references
 // into equivalent C code. Appends to out_buf. Returns 0 on success, -1 on error.
 // var_types tracks declared variables: 0=unknown, 1=numeric/USize, 2=*Str, 3=*[*Str] (args slice)
-static int compile_args_expression(const char *expr, char *out_buf, size_t buf_size,
-                                   const char var_names[][32], const int *var_types, int var_count)
+static int32_t compile_args_expression(const char *expr, char *out_buf, size_t buf_size,
+                                   const char var_names[][32], const int32_t *var_types, int32_t var_count)
 {
     const char *s = expr;
     while (*s && isspace(*s))
@@ -5563,7 +5564,7 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
         {
             s += 9;
             // Parse index
-            int index = 0;
+            int32_t index = 0;
             while (*s && isdigit(*s))
             {
                 index = index * 10 + (*s - '0');
@@ -5587,7 +5588,7 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
         else if (isdigit(*s))
         {
             char number_buf[64] = {0};
-            int ni = 0;
+            int32_t ni = 0;
             while (*s && isdigit(*s) && ni < (int)(sizeof(number_buf) - 1))
             {
                 number_buf[ni++] = *s++;
@@ -5597,7 +5598,7 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
             // Skip any type suffix (e.g., U8, I32, USize)
             if (*s && isalpha(*s))
             {
-                int type_len = suffix_length(s);
+                int32_t type_len = suffix_length(s);
                 if (type_len > 0)
                 {
                     s += type_len;
@@ -5615,7 +5616,7 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
         {
             // Variable reference - extract name
             char name[32] = {0};
-            int ni = 0;
+            int32_t ni = 0;
             while (*s && (isalnum(*s) || *s == '_') && ni < 31)
             {
                 name[ni++] = *s++;
@@ -5631,7 +5632,7 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
 
                 // Parse the property/field name
                 char prop_or_field[32] = {0};
-                int pi = 0;
+                int32_t pi = 0;
                 while (*s && (isalnum(*s) || *s == '_') && pi < 31)
                 {
                     prop_or_field[pi++] = *s++;
@@ -5642,8 +5643,8 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
                 if (strcmp(prop_or_field, "length") == 0)
                 {
                     // Direct property access: variable.length
-                    int vtype = 0;
-                    for (int i = 0; i < var_count; i++)
+                    int32_t vtype = 0;
+                    for (int32_t i = 0; i < var_count; i++)
                     {
                         if (strcmp(var_names[i], name) == 0)
                         {
@@ -5676,7 +5677,7 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
                     {
                         s++; // skip the dot
                         char nested_prop[32] = {0};
-                        int npi = 0;
+                        int32_t npi = 0;
                         while (*s && (isalnum(*s) || *s == '_') && npi < 31)
                         {
                             nested_prop[npi++] = *s++;
@@ -5732,7 +5733,7 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
 
 static const char *compile_args_parse_identifier(const char *p, char *out_name, size_t name_size)
 {
-    int vi = 0;
+    int32_t vi = 0;
     while (*p && (isalnum(*p) || *p == '_') && vi < (int)(name_size - 1))
     {
         out_name[vi++] = *p++;
@@ -5741,8 +5742,8 @@ static const char *compile_args_parse_identifier(const char *p, char *out_name, 
     return p;
 }
 
-static void compile_args_register_var(char var_names[][32], int *var_types, int *var_count,
-                                      const char *vname, int vtype)
+static void compile_args_register_var(char var_names[][32], int32_t *var_types, int32_t *var_count,
+                                      const char *vname, int32_t vtype)
 {
     if (*var_count < 16)
     {
@@ -5761,7 +5762,7 @@ static void compile_args_emit_args_slice_decl(char *c_code, size_t c_code_size, 
 
 static void compile_args_emit_decl(char *c_code, size_t c_code_size, const char *type_prefix,
                                    const char *vname, const char *expr,
-                                   const char var_names[][32], const int *var_types, int var_count)
+                                   const char var_names[][32], const int32_t *var_types, int32_t var_count)
 {
     char decl[256];
     snprintf(decl, sizeof(decl), "    %s%s = ", type_prefix, vname);
@@ -5775,7 +5776,7 @@ typedef struct
 {
     char name[32];
     char params[10][32]; // Parameter names
-    int param_count;
+    int32_t param_count;
     char body[256]; // Function body expression
 } FuncDef;
 
@@ -5785,21 +5786,21 @@ typedef struct
     char name[32];
     char field_names[10][32]; // Field names
     char field_types[10][32]; // Field types (USize, I32, etc.)
-    int field_count;
+    int32_t field_count;
 } StructDef;
 
 // Helper: Expand expression with function call inlining
 // For simple cases like get().length where get() returns a variable
-static int compile_args_expression_with_funcs(const char *expr, char *out_buf, size_t buf_size,
-                                              const char var_names[][32], const int *var_types, int var_count,
-                                              const FuncDef *funcs, int func_count)
+static int32_t compile_args_expression_with_funcs(const char *expr, char *out_buf, size_t buf_size,
+                                              const char var_names[][32], const int32_t *var_types, int32_t var_count,
+                                              const FuncDef *funcs, int32_t func_count)
 {
     const char *s = expr;
     while (*s && isspace(*s))
         s++;
 
     // Check if expression starts with a known function name followed by ()
-    for (int i = 0; i < func_count; i++)
+    for (int32_t i = 0; i < func_count; i++)
     {
         size_t fname_len = strlen(funcs[i].name);
         if (strncmp(s, funcs[i].name, fname_len) == 0 && s[fname_len] == '(')
@@ -5820,7 +5821,7 @@ static int compile_args_expression_with_funcs(const char *expr, char *out_buf, s
                 // Property access on function result
                 after_call++; // skip '.'
                 char prop[32] = {0};
-                int pi = 0;
+                int32_t pi = 0;
                 while (isalnum(*after_call) && pi < 31)
                     prop[pi++] = *after_call++;
                 prop[pi] = '\0';
@@ -5874,11 +5875,11 @@ static void tuff_type_to_c_type(const char *tuff_type, char *c_type, size_t c_ty
     }
     else if (strcmp(tuff_type, "USize") == 0)
     {
-        strncpy_s(c_type, c_type_size, "unsigned long long", _TRUNCATE);
+        strncpy_s(c_type, c_type_size, "unsigned int64_t", _TRUNCATE);
     }
     else if (strcmp(tuff_type, "ISize") == 0)
     {
-        strncpy_s(c_type, c_type_size, "long long", _TRUNCATE);
+        strncpy_s(c_type, c_type_size, "int64_t", _TRUNCATE);
     }
     else if (strcmp(tuff_type, "Bool") == 0)
     {
@@ -5900,13 +5901,13 @@ static void tuff_type_to_c_type(const char *tuff_type, char *c_type, size_t c_ty
     }
     else
     {
-        // Default to int for unknown types
+        // Default to int32_t for unknown types
         strncpy_s(c_type, c_type_size, "int", _TRUNCATE);
     }
 }
 
 // Helper: Convert if-else expressions to C ternary operators recursively
-static int compile_args_convert_if_else(const char *src, char *out, size_t out_size)
+static int32_t compile_args_convert_if_else(const char *src, char *out, size_t out_size)
 {
     const char *p = src;
     while (*p && isspace(*p))
@@ -5931,7 +5932,7 @@ static int compile_args_convert_if_else(const char *src, char *out, size_t out_s
     p++; // skip '('
 
     // Extract condition (find matching ')')
-    int paren_depth = 1;
+    int32_t paren_depth = 1;
     const char *cond_start = p;
     while (*p && paren_depth > 0)
     {
@@ -5959,7 +5960,7 @@ static int compile_args_convert_if_else(const char *src, char *out, size_t out_s
     const char *else_keyword = NULL;
 
     // Find "else" keyword (but not inside nested if-else)
-    int depth = 0;
+    int32_t depth = 0;
     const char *scan = p;
     while (*scan)
     {
@@ -6023,16 +6024,16 @@ static int compile_args_convert_if_else(const char *src, char *out, size_t out_s
 }
 
 // Helper: Emit function signature (name and parameters)
-static void emit_function_signature(char *c_code, size_t c_code_size, const FuncDef *func, int with_semicolon)
+static void emit_function_signature(char *c_code, size_t c_code_size, const FuncDef *func, int32_t with_semicolon)
 {
-    strncat_s(c_code, c_code_size, "int ", _TRUNCATE);
+    strncat_s(c_code, c_code_size, "int32_t ", _TRUNCATE);
     strncat_s(c_code, c_code_size, func->name, _TRUNCATE);
     strncat_s(c_code, c_code_size, "(", _TRUNCATE);
-    for (int j = 0; j < func->param_count; j++)
+    for (int32_t j = 0; j < func->param_count; j++)
     {
         if (j > 0)
             strncat_s(c_code, c_code_size, ", ", _TRUNCATE);
-        strncat_s(c_code, c_code_size, "int ", _TRUNCATE);
+        strncat_s(c_code, c_code_size, "int32_t ", _TRUNCATE);
         strncat_s(c_code, c_code_size, func->params[j], _TRUNCATE);
     }
     strncat_s(c_code, c_code_size, ")", _TRUNCATE);
@@ -6060,7 +6061,7 @@ static const char *parse_statement_setup(const char *s, const char *semi, char *
 
 // Helper: Emit variable assignment statement
 static void emit_var_assignment(char *c_code, size_t c_code_size, const char *vname, const char *expr,
-                                const char var_names[][32], const int *var_types, int var_count)
+                                const char var_names[][32], const int32_t *var_types, int32_t var_count)
 {
     char assign[256];
     snprintf(assign, sizeof(assign), "    %s = ", vname);
@@ -6070,7 +6071,7 @@ static void emit_var_assignment(char *c_code, size_t c_code_size, const char *vn
 }
 
 // Helper: Skip whitespace and check if at specific character
-static inline const char *skip_to_char(const char *p, char c, int *found)
+static inline const char *skip_to_char(const char *p, char c, int32_t *found)
 {
     while (*p && isspace(*p))
         p++;
@@ -6080,26 +6081,26 @@ static inline const char *skip_to_char(const char *p, char c, int *found)
 }
 
 // Generic callback for parsing items in delimited lists
-typedef const char *(*ItemParser)(const char *p, void *data, int *should_continue);
+typedef const char *(*ItemParser)(const char *p, void *data, int32_t *should_continue);
 
 // Helper: Parse delimited list (e.g., "{a; b;}" or "(x, y)")
 // Calls item_parser for each item until closing delimiter
 static const char *parse_delimited_list(const char *p, char open_delim, char close_delim,
                                         ItemParser item_parser, void *data)
 {
-    int at_open;
+    int32_t at_open;
     p = skip_to_char(p, open_delim, &at_open);
     if (at_open)
         p++;
 
-    int at_close = 0;
+    int32_t at_close = 0;
     while (*p && !at_close)
     {
         p = skip_to_char(p, close_delim, &at_close);
         if (at_close)
             break;
 
-        int should_continue = 1;
+        int32_t should_continue = 1;
         p = item_parser(p, data, &should_continue);
         if (!should_continue)
             break;
@@ -6108,14 +6109,14 @@ static const char *parse_delimited_list(const char *p, char open_delim, char clo
 }
 
 // Parser callback for struct fields
-static const char *parse_struct_field_item(const char *p, void *data, int *should_continue)
+static const char *parse_struct_field_item(const char *p, void *data, int32_t *should_continue)
 {
     StructDef *s = (StructDef *)data;
 
     char field_name[32] = {0};
     p = compile_args_parse_identifier(p, field_name, sizeof(field_name));
 
-    int at_colon;
+    int32_t at_colon;
     p = skip_to_char(p, ':', &at_colon);
     if (at_colon)
     {
@@ -6124,7 +6125,7 @@ static const char *parse_struct_field_item(const char *p, void *data, int *shoul
             p++;
 
         char field_type[32] = {0};
-        int ti = 0;
+        int32_t ti = 0;
         while (*p && !isspace(*p) && *p != ';' && *p != '}' && ti < 31)
             field_type[ti++] = *p++;
         field_type[ti] = '\0';
@@ -6147,7 +6148,7 @@ static const char *parse_struct_field_item(const char *p, void *data, int *shoul
 }
 
 // Parser callback for function parameters
-static const char *parse_function_param_item(const char *p, void *data, int *should_continue)
+static const char *parse_function_param_item(const char *p, void *data, int32_t *should_continue)
 {
     FuncDef *f = (FuncDef *)data;
 
@@ -6159,7 +6160,7 @@ static const char *parse_function_param_item(const char *p, void *data, int *sho
         f->param_count++;
     }
 
-    int at_colon;
+    int32_t at_colon;
     p = skip_to_char(p, ':', &at_colon);
     if (at_colon)
     {
@@ -6204,8 +6205,8 @@ static const char *find_statement_end(const char *s)
     if (strncmp(p, "struct ", 7) == 0)
     {
         // For structs, find the closing brace
-        int brace_depth = 0;
-        int found_open = 0;
+        int32_t brace_depth = 0;
+        int32_t found_open = 0;
         while (*p)
         {
             if (*p == '{')
@@ -6228,7 +6229,7 @@ static const char *find_statement_end(const char *s)
     }
 
     // For other statements, find semicolon respecting brace depth
-    int brace_depth = 0;
+    int32_t brace_depth = 0;
     p = s;
     while (*p)
     {
@@ -6244,12 +6245,12 @@ static const char *find_statement_end(const char *s)
 }
 
 // Helper: Check if identifier is a Tuff keyword
-static int is_tuff_keyword(const char *ident)
+static int32_t is_tuff_keyword(const char *ident)
 {
     const char *keywords[] = {"if", "else", "while", "for", "let", "mut",
                               "fn", "return", "struct", "match", "case",
                               "true", "false", "in", NULL};
-    for (int i = 0; keywords[i]; i++)
+    for (int32_t i = 0; keywords[i]; i++)
     {
         if (strcmp(ident, keywords[i]) == 0)
             return 1;
@@ -6268,17 +6269,17 @@ static CompileResult compile_args_source(const char *source)
 
     // Track variable declarations: name, type (1=numeric, 2=*Str, 3=*[*Str], 4=struct)
     char var_names[16][32] = {{0}};
-    int var_types[16] = {0};
-    int var_count = 0;
+    int32_t var_types[16] = {0};
+    int32_t var_count = 0;
     char var_struct_types[16][32] = {{0}}; // For struct variables, stores struct type name
 
     // Track function definitions with parameters
     FuncDef functions[10] = {{{0}}};
-    int func_count = 0;
+    int32_t func_count = 0;
 
     // Track struct definitions
     StructDef structs[10] = {{{0}}};
-    int struct_count = 0;
+    int32_t struct_count = 0;
 
     // First pass: Extract all struct and function definitions
     const char *s = source;
@@ -6357,9 +6358,9 @@ static CompileResult compile_args_source(const char *source)
     {
         // Detect global variables: variables referenced in function bodies but not in parameters
         char global_vars[16][32] = {{0}};
-        int global_count = 0;
+        int32_t global_count = 0;
 
-        for (int i = 0; i < func_count; i++)
+        for (int32_t i = 0; i < func_count; i++)
         {
             // Scan function body for variable references
             const char *body = functions[i].body;
@@ -6368,15 +6369,15 @@ static CompileResult compile_args_source(const char *source)
                 if (isalpha(*body) || *body == '_')
                 {
                     char ident[32] = {0};
-                    int idx = 0;
+                    int32_t idx = 0;
                     const char *start = body;
                     while ((isalnum(*body) || *body == '_') && idx < 31)
                         ident[idx++] = *body++;
                     ident[idx] = '\0';
 
                     // Check if this identifier is a parameter of this function
-                    int is_param = 0;
-                    for (int j = 0; j < functions[i].param_count; j++)
+                    int32_t is_param = 0;
+                    for (int32_t j = 0; j < functions[i].param_count; j++)
                     {
                         if (strcmp(ident, functions[i].params[j]) == 0)
                         {
@@ -6386,8 +6387,8 @@ static CompileResult compile_args_source(const char *source)
                     }
 
                     // Check if it's a function name
-                    int is_func = 0;
-                    for (int j = 0; j < func_count; j++)
+                    int32_t is_func = 0;
+                    for (int32_t j = 0; j < func_count; j++)
                     {
                         if (strcmp(ident, functions[j].name) == 0)
                         {
@@ -6407,8 +6408,8 @@ static CompileResult compile_args_source(const char *source)
                         else
                         {
                             // Check if already in global list
-                            int already_global = 0;
-                            for (int j = 0; j < global_count; j++)
+                            int32_t already_global = 0;
+                            for (int32_t j = 0; j < global_count; j++)
                             {
                                 if (strcmp(global_vars[j], ident) == 0)
                                 {
@@ -6433,10 +6434,10 @@ static CompileResult compile_args_source(const char *source)
         }
 
         // Generate struct definitions
-        for (int i = 0; i < struct_count; i++)
+        for (int32_t i = 0; i < struct_count; i++)
         {
             strncat_s(c_code, sizeof(c_code), "typedef struct {\n", _TRUNCATE);
-            for (int j = 0; j < structs[i].field_count; j++)
+            for (int32_t j = 0; j < structs[i].field_count; j++)
             {
                 char c_field_type[32] = {0};
                 tuff_type_to_c_type(structs[i].field_types[j], c_field_type, sizeof(c_field_type));
@@ -6452,9 +6453,9 @@ static CompileResult compile_args_source(const char *source)
         }
 
         // Generate global variable declarations (will be initialized in main)
-        for (int i = 0; i < global_count; i++)
+        for (int32_t i = 0; i < global_count; i++)
         {
-            strncat_s(c_code, sizeof(c_code), "int ", _TRUNCATE);
+            strncat_s(c_code, sizeof(c_code), "int32_t ", _TRUNCATE);
             strncat_s(c_code, sizeof(c_code), global_vars[i], _TRUNCATE);
             strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
         }
@@ -6462,14 +6463,14 @@ static CompileResult compile_args_source(const char *source)
             strncat_s(c_code, sizeof(c_code), "\n", _TRUNCATE);
 
         // Generate forward declarations
-        for (int i = 0; i < func_count; i++)
+        for (int32_t i = 0; i < func_count; i++)
         {
             emit_function_signature(c_code, sizeof(c_code), &functions[i], 1);
         }
         strncat_s(c_code, sizeof(c_code), "\n", _TRUNCATE);
 
         // Generate function implementations
-        for (int i = 0; i < func_count; i++)
+        for (int32_t i = 0; i < func_count; i++)
         {
             emit_function_signature(c_code, sizeof(c_code), &functions[i], 0);
             strncat_s(c_code, sizeof(c_code), " {\n    return ", _TRUNCATE);
@@ -6482,7 +6483,7 @@ static CompileResult compile_args_source(const char *source)
         }
 
         // Store global variable names for later - mark them for special handling
-        for (int i = 0; i < global_count; i++)
+        for (int32_t i = 0; i < global_count; i++)
         {
             if (var_count < 16)
             {
@@ -6494,7 +6495,7 @@ static CompileResult compile_args_source(const char *source)
     }
 
     // Generate main function
-    strncat_s(c_code, sizeof(c_code), "int main(int argc, char **argv) {\n", _TRUNCATE);
+    strncat_s(c_code, sizeof(c_code), "int32_t main(int32_t argc, char **argv) {\n", _TRUNCATE);
 
     // Second pass: Process variable declarations and return expression
     s = source;
@@ -6556,7 +6557,7 @@ static CompileResult compile_args_source(const char *source)
                 p++;
                 while (*p && isspace(*p))
                     p++;
-                int ti = 0;
+                int32_t ti = 0;
                 while (*p && *p != '=' && !isspace(*p) && ti < 31)
                 {
                     type_str[ti++] = *p++;
@@ -6574,10 +6575,10 @@ static CompileResult compile_args_source(const char *source)
             }
 
             // Generate C variable declaration
-            int vtype = 1;
+            int32_t vtype = 1;
             // Check if this variable was already marked as global
-            int is_global = 0;
-            for (int v = 0; v < var_count; v++)
+            int32_t is_global = 0;
+            for (int32_t v = 0; v < var_count; v++)
             {
                 if (strcmp(var_names[v], vname) == 0 && var_types[v] == -1)
                 {
@@ -6595,7 +6596,7 @@ static CompileResult compile_args_source(const char *source)
                 while (*val_check && isspace(*val_check))
                     val_check++;
                 char potential_struct[32] = {0};
-                int pi = 0;
+                int32_t pi = 0;
                 while (*val_check && (isalnum(*val_check) || *val_check == '_') && pi < 31)
                     potential_struct[pi++] = *val_check++;
                 potential_struct[pi] = '\0';
@@ -6604,7 +6605,7 @@ static CompileResult compile_args_source(const char *source)
                 if (*val_check == '{')
                 {
                     // Looks like struct instantiation, check if it's a known struct
-                    for (int i = 0; i < struct_count; i++)
+                    for (int32_t i = 0; i < struct_count; i++)
                     {
                         if (strcmp(potential_struct, structs[i].name) == 0)
                         {
@@ -6616,8 +6617,8 @@ static CompileResult compile_args_source(const char *source)
             }
 
             // Check if type is a struct
-            int struct_idx = -1;
-            for (int i = 0; i < struct_count; i++)
+            int32_t struct_idx = -1;
+            for (int32_t i = 0; i < struct_count; i++)
             {
                 if (strcmp(type_str, structs[i].name) == 0)
                 {
@@ -6656,8 +6657,8 @@ static CompileResult compile_args_source(const char *source)
 
                 // Parse field initializations
                 char field_values[10][128] = {{0}};
-                int field_indices[10] = {-1};
-                int init_count = 0;
+                int32_t field_indices[10] = {-1};
+                int32_t init_count = 0;
 
                 while (*p && *p != '}' && init_count < 10)
                 {
@@ -6680,8 +6681,8 @@ static CompileResult compile_args_source(const char *source)
                         p++;
 
                     // Find field index in struct definition
-                    int field_idx = -1;
-                    for (int i = 0; i < structs[struct_idx].field_count; i++)
+                    int32_t field_idx = -1;
+                    for (int32_t i = 0; i < structs[struct_idx].field_count; i++)
                     {
                         if (strcmp(field_name, structs[struct_idx].field_names[i]) == 0)
                         {
@@ -6692,7 +6693,7 @@ static CompileResult compile_args_source(const char *source)
 
                     // Parse field value (until ',' or '}')
                     const char *value_start = p;
-                    int depth = 0;
+                    int32_t depth = 0;
                     while (*p && !(*p == ',' && depth == 0) && !(*p == '}' && depth == 0))
                     {
                         if (*p == '{' || *p == '(')
@@ -6721,14 +6722,14 @@ static CompileResult compile_args_source(const char *source)
                 }
 
                 // Generate field initializations in struct definition order
-                for (int i = 0; i < structs[struct_idx].field_count; i++)
+                for (int32_t i = 0; i < structs[struct_idx].field_count; i++)
                 {
                     if (i > 0)
                         strncat_s(c_code, sizeof(c_code), ", ", _TRUNCATE);
 
                     // Find value for this field
-                    int found = 0;
-                    for (int j = 0; j < init_count; j++)
+                    int32_t found = 0;
+                    for (int32_t j = 0; j < init_count; j++)
                     {
                         if (field_indices[j] == i)
                         {
@@ -6778,7 +6779,7 @@ static CompileResult compile_args_source(const char *source)
                     // For global variables, just emit assignment (no declaration)
                     emit_var_assignment(c_code, sizeof(c_code), vname, p, var_names, var_types, var_count);
                     // Update type in var_types
-                    for (int v = 0; v < var_count; v++)
+                    for (int32_t v = 0; v < var_count; v++)
                     {
                         if (strcmp(var_names[v], vname) == 0)
                         {
@@ -6788,7 +6789,7 @@ static CompileResult compile_args_source(const char *source)
                     }
                 }
                 if (!is_global)
-                    compile_args_emit_decl(c_code, sizeof(c_code), "int ", vname, p, var_names, var_types, var_count);
+                    compile_args_emit_decl(c_code, sizeof(c_code), "int32_t ", vname, p, var_names, var_types, var_count);
             }
         }
         else if (isalpha(*st) || *st == '_')
@@ -6853,10 +6854,10 @@ CompileResult compile(const char *source)
 
     // Generate a C program that returns the computed exit code
     // Mask to 0-255 range (unsigned byte) for valid exit codes on all platforms
-    int exit_code = result.value & 0xFF;
+    int32_t exit_code = result.value & 0xFF;
 
     return generate_c_program(
         "#include <stdlib.h>\n"
-        "int main(int argc, char **argv) { (void)argc; (void)argv; return %d; }\n",
+        "int32_t main(int32_t argc, char **argv) { (void)argc; (void)argv; return %d; }\n",
         exit_code);
 }

@@ -1,1 +1,20 @@
-100
+struct TypeInfo
+{
+    suffix : *Str;
+    min_value : I64;
+    max_value : I64;
+    error_message : *Str;
+}
+
+struct Variable {
+    name : Str[32];
+    value : I32;
+}
+
+struct Wrapper {
+    x : I32;
+}
+
+let length = __args__[1];
+let temp : Wrapper = { x : length };
+temp.x
