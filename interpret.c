@@ -88,6 +88,7 @@ typedef struct
     int has_temp_string;           // 1 if temp string is set
     char temp_string_value[256];   // Store temporary string
     int temp_string_len;           // Length of temporary string
+    int argc;                      // argc value for args.length (-1 if not provided)
 } Parser;
 
 typedef struct
@@ -1216,10 +1217,12 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 int property_name_len = parse_property_access(p, property_name, sizeof(property_name));
                 if (property_name_len > 0 && strncmp(property_name, "length", property_name_len) == 0 && property_name_len == 6)
                 {
-                    // This is args.length - return a placeholder value of 0
-                    // The actual argc value will be used at compile time via argc - 1
+                    // This is args.length - return the actual argc value if provided, otherwise 0
+                    // If argc is -1 (not provided), return 0 as placeholder
+                    // If argc >= 0, return argc - 1 (the number of actual arguments)
+                    long args_length_value = (p->argc >= 0) ? (p->argc - 1) : 0;
                     set_tracked_suffix(p, "I32");
-                    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+                    return (InterpretResult){.value = (int)args_length_value, .has_error = false, .error_message = NULL};
                 }
                 else if (property_name_len > 0)
                 {
@@ -5320,45 +5323,40 @@ static int is_expression(const char *str)
     return 0;
 }
 
-InterpretResult interpret(const char *str)
+// Helper: Initialize Parser struct with default values
+static Parser init_parser(const char *str, int argc)
 {
-    if (str == NULL || *str == '\0')
-    {
-        return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
-    }
+    return (Parser){
+        .input = str,
+        .pos = 0,
+        .last_error = {0},
+        .tracked_suffix = {0},
+        .has_tracked_suffix = 0,
+        .variables = {0},
+        .var_count = 0,
+        .all_declared_names = {0},
+        .all_declared_count = 0,
+        .has_temp_array = 0,
+        .temp_array_count = 0,
+        .temp_array_element_type = {0},
+        .temp_array_values = {0},
+        .declared_functions = {0},
+        .declared_functions_count = 0,
+        .functions = {0},
+        .functions_count = 0,
+        .has_temp_struct = 0,
+        .temp_struct_def_idx = -1,
+        .temp_struct_values = {0},
+        .declared_structs = {0},
+        .declared_structs_count = 0,
+        .structs = {0},
+        .structs_count = 0,
+        .argc = argc};
+}
 
-    // Check if this is an expression (contains operators)
-    if (is_expression(str))
-    {
-        Parser p = {
-            .input = str,
-            .pos = 0,
-            .last_error = {0},
-            .tracked_suffix = {0},
-            .has_tracked_suffix = 0,
-            .variables = {0},
-            .var_count = 0,
-            .all_declared_names = {0},
-            .all_declared_count = 0,
-            .has_temp_array = 0,
-            .temp_array_count = 0,
-            .temp_array_element_type = {0},
-            .temp_array_values = {0},
-            .declared_functions = {0},
-            .declared_functions_count = 0,
-            .functions = {0},
-            .functions_count = 0,
-            .has_temp_struct = 0,
-            .temp_struct_def_idx = -1,
-            .temp_struct_values = {0},
-            .declared_structs = {0},
-            .declared_structs_count = 0,
-            .structs = {0},
-            .structs_count = 0};
-        return parse_expression(&p);
-    }
-
-    // Single value parsing
+// Helper: Parse single value (no operators)
+static InterpretResult parse_single_value(const char *str)
+{
     bool is_negative = (str[0] == '-');
     const char *num_start = is_negative ? str + 1 : str;
 
@@ -5392,6 +5390,34 @@ InterpretResult interpret(const char *str)
     return validate_type(value, suffix_start);
 }
 
+// Helper: Core interpretation logic shared by interpret() and interpret_with_argc()
+static InterpretResult interpret_impl(const char *str, int argc)
+{
+    if (str == NULL || *str == '\0')
+    {
+        return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+    }
+
+    // Check if this is an expression (contains operators)
+    if (is_expression(str))
+    {
+        Parser p = init_parser(str, argc);
+        return parse_expression(&p);
+    }
+
+    return parse_single_value(str);
+}
+
+InterpretResult interpret(const char *str)
+{
+    return interpret_impl(str, -1);
+}
+
+InterpretResult interpret_with_argc(const char *str, int argc)
+{
+    return interpret_impl(str, argc);
+}
+
 // Helper: Generate and allocate C code for a program that returns a specific value
 static CompileResult generate_c_program(const char *format, ...)
 {
@@ -5412,7 +5438,7 @@ static CompileResult generate_c_program(const char *format, ...)
     return (CompileResult){.code = out, .has_error = false, .error_message = NULL};
 }
 
-CompileResult compile(const char *source)
+CompileResult compile(const char *source, int argc)
 {
     // Check for special builtin "args.length" which should return argc at runtime
     if (source && strcmp(source, "args.length") == 0)
@@ -5423,15 +5449,23 @@ CompileResult compile(const char *source)
     }
 
     // Check if "args.length" appears anywhere in the source
-    // If it does, we need to generate C code that uses argc at runtime
+    // If it does, use interpret_with_argc to properly evaluate the full expression
     if (source && strstr(source, "args.length") != NULL)
     {
-        // For now, if the source uses args.length, return argc - 1
-        // This works for expressions like "let temp : USize = args.length; temp"
-        // because the last value in the expression chain should be the args.length value
+        // Interpret the source with actual argc value
+        InterpretResult result = interpret_with_argc(source, argc);
+
+        // If interpretation failed, return error result
+        if (result.has_error)
+            return (CompileResult){.code = NULL, .has_error = true, .error_message = result.error_message};
+
+        // Generate a C program that returns the computed exit code
+        int exit_code = result.value & 0xFF;
+
         return generate_c_program(
             "#include <stdlib.h>\n"
-            "int main(int argc, char **argv) { (void)argv; return argc - 1; }\n");
+            "int main(int argc, char **argv) { (void)argc; (void)argv; return %d; }\n",
+            exit_code);
     }
 
     // Interpret the source to get the result

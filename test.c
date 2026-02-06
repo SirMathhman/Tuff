@@ -18,7 +18,16 @@ RunResult run(const char *source, const char *const *args)
     if (!source)
         return (RunResult){.exit_code = 1, .has_error = true, .error_message = "NULL source"};
 
-    CompileResult compiled = compile(source);
+    // Calculate argc from args (count + 1 for program name)
+    int arg_count = 0;
+    if (args)
+    {
+        while (args[arg_count])
+            arg_count++;
+    }
+    int argc = arg_count + 1; // +1 for program name
+
+    CompileResult compiled = compile(source, argc);
     if (compiled.has_error)
         return (RunResult){.exit_code = 1, .has_error = true, .error_message = compiled.error_message};
     char *target = compiled.code;
@@ -80,13 +89,7 @@ RunResult run(const char *source, const char *const *args)
     }
 
     // Count args (NULL-terminated).
-    int arg_count = 0;
-    if (args)
-    {
-        while (args[arg_count])
-            arg_count++;
-    }
-
+    // arg_count was already calculated at the beginning
     // Build argv for the program: argv[0] is the executable path.
     const char **prog_argv = (const char **)malloc((size_t)(arg_count + 2) * sizeof(char *));
     if (!prog_argv)
@@ -997,6 +1000,12 @@ void test_usize_with_args_length(void)
     assert_compile_success("let temp : USize = args.length; temp", 2, "test_usize_with_args_length", args);
 }
 
+void test_usize_args_length_arithmetic(void)
+{
+    const char *const args[] = {"a", "b", NULL};
+    assert_compile_success("let temp : USize = args.length; temp + temp", 4, "test_usize_args_length_arithmetic", args);
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -1161,6 +1170,7 @@ int main(void)
     test_interpret_function_array_parameter_initialized();
     test_args_length();
     test_usize_with_args_length();
+    test_usize_args_length_arithmetic();
 
     if (passed_asserts == total_asserts)
     {
