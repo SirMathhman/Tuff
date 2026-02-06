@@ -740,6 +740,11 @@ void test_interpret_slice_init_partial_range(void)
     assert_success("let array : [I32; 3; 3] = [1, 2, 3]; let slice : *[I32] = &array[1..3]; slice.init", 2, "test_interpret_slice_init_partial_range");
 }
 
+void test_interpret_bool_array_with_numeric_literal(void)
+{
+    assert_error("let array : [Bool; 1; 1] = [100];", "test_interpret_bool_array_with_numeric_literal");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -883,6 +888,7 @@ int main(void)
     test_interpret_slice_length_property();
     test_interpret_slice_init_property();
     test_interpret_slice_init_partial_range();
+    test_interpret_bool_array_with_numeric_literal();
 
     if (passed_asserts == total_asserts)
     {
