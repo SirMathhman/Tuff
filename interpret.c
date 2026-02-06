@@ -7428,6 +7428,47 @@ static CompileResult compile_args_source(const char *source)
                     }
                 }
             }
+            else if (type_str[0] == '\0' && *p == '[')
+            {
+                // Array literal without explicit type annotation: [1, 2, 3]
+                // Convert to valid C: int32_t array[] = {1, 2, 3};
+                vtype = 1;
+                if (!is_global)
+                    compile_args_register_var(var_names, var_types, &var_count, vname, vtype);
+                else
+                    var_types[var_count - 1] = vtype;
+
+                // Find the matching closing bracket
+                const char *bracket_start = p;
+                const char *bracket_end = p + 1;
+                int32_t bracket_depth = 1;
+                while (*bracket_end && bracket_depth > 0)
+                {
+                    if (*bracket_end == '[')
+                        bracket_depth++;
+                    else if (*bracket_end == ']')
+                        bracket_depth--;
+                    bracket_end++;
+                }
+
+                // Generate C array declaration with curly braces
+                if (bracket_depth == 0)
+                {
+                    char array_decl[512] = {0};
+                    snprintf(array_decl, sizeof(array_decl), "    int32_t %s[] = {", vname);
+                    strncat_s(c_code, sizeof(c_code), array_decl, _TRUNCATE);
+
+                    // Copy array contents, replacing square brackets with curly braces
+                    const char *content = bracket_start + 1; // Skip opening [
+                    while (content < bracket_end - 1)        // Stop before closing ]
+                    {
+                        compile_args_append_char(c_code, sizeof(c_code), *content);
+                        content++;
+                    }
+
+                    strncat_s(c_code, sizeof(c_code), "};\n", _TRUNCATE);
+                }
+            }
             else
             {
                 // Numeric type (USize, I32, etc.) or __args__[n].length

@@ -41,6 +41,6 @@ int32_t main(int32_t argc, char **argv) {
     __tuff_argc = argc;
     __tuff_argv = argv;
     int32_t MAX_ARRAY_ELEMENTS = 64;
-    TypeInfo *TypeInfo = NULL;
-    return (int)strlen(__tuff_argv[1]);
+    int32_t array[] = {1, 2, 3};
+    return (int)strlen(__tuff_argv[1]) + array[0];
 }

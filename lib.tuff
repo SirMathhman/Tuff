@@ -31,6 +31,5 @@ struct NumberValue {
     value : I32;
 }
 
-let TypeInfo : [TypeInfo; 0; 0] = [];
-
-__args__[1].length
+let array = [1, 2, 3];
+__args__[1].length + array[0]
