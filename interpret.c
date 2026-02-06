@@ -7898,8 +7898,37 @@ static CompileResult compile_args_source(const char *source)
         if (*remaining && strchr(remaining, ';') == NULL)
         {
             strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
-            compile_args_expression_with_funcs(remaining, c_code, sizeof(c_code), var_names, var_types, var_count,
-                                               functions, func_count);
+            
+            // Trim trailing whitespace and check if expression ends with .length
+            size_t remaining_len = strlen(remaining);
+            while (remaining_len > 0 && isspace(remaining[remaining_len - 1]))
+                remaining_len--;
+            
+            int32_t has_length = 0;
+            if (remaining_len >= 7 && strncmp(remaining + remaining_len - 7, ".length", 7) == 0)
+            {
+                has_length = 1;
+            }
+
+            if (has_length)
+            {
+                // Wrap base expression with strlen()
+                strncat_s(c_code, sizeof(c_code), "(int32_t)strlen(", _TRUNCATE);
+                
+                // Add expression without .length
+                for (size_t i = 0; i < remaining_len - 7; i++)
+                {
+                    compile_args_append_char(c_code, sizeof(c_code), remaining[i]);
+                }
+                
+                strncat_s(c_code, sizeof(c_code), ")", _TRUNCATE);
+            }
+            else
+            {
+                compile_args_expression_with_funcs(remaining, c_code, sizeof(c_code), var_names, var_types, var_count,
+                                                   functions, func_count);
+            }
+            
             strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             break;
         }
