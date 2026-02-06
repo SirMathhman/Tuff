@@ -301,6 +301,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
                     long error_size = ftell(ef);
                     fseek(ef, 0, SEEK_SET);
 
+                    // TODO: Also add the compiled code to the error message for easier debugging of compilation issues
                     int prefix_len = snprintf(error_message, 256, "Clang compilation failed (exit %d):\n", clang_exit == -1 ? 1 : clang_exit);
 
                     if (error_size > 0 && error_size < 8192)
@@ -1309,6 +1310,12 @@ void test_struct_with_args(void)
     assert_compile_success("struct Container { first : USize; second : USize; } let myContainer = Container { first : __args__[1].length, second : __args__[2].length }; myContainer.first + myContainer.second", 7, "test_struct_with_args", args);
 }
 
+void test_struct_with_string_field_from_args(void)
+{
+    const char *const args[] = {"prog", "hello", "world", NULL};
+    assert_compile_success("struct StringContainer { value : *Str; } let container : StringContainer = StringContainer { value : __args__[2] }; container.value.length", 5, "test_struct_with_string_field_from_args", args);
+}
+
 void test_args_length_plus_u8(void)
 {
     const char *const args[] = {"foo", NULL};
@@ -1492,6 +1499,7 @@ int main(void)
     test_function_returns_args_length();
     test_recursive_function_with_args();
     test_struct_with_args();
+    test_struct_with_string_field_from_args();
     test_args_length_plus_u8();
 
     if (passed_asserts == total_asserts)

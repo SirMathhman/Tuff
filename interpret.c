@@ -5622,36 +5622,91 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
             }
             name[ni] = '\0';
 
-            // Check if followed by .length
-            if (strncmp(s, ".length", 7) == 0)
+            // Check if followed by .field or .length
+            if (*s == '.')
             {
-                s += 7;
-                // Look up variable type
-                int vtype = 0;
-                for (int i = 0; i < var_count; i++)
+                // Could be .length, .field, or .field.length
+                const char *dot_start = s;
+                s++; // skip '.'
+
+                // Parse the property/field name
+                char prop_or_field[32] = {0};
+                int pi = 0;
+                while (*s && (isalnum(*s) || *s == '_') && pi < 31)
                 {
-                    if (strcmp(var_names[i], name) == 0)
+                    prop_or_field[pi++] = *s++;
+                }
+                prop_or_field[pi] = '\0';
+
+                // Check if this is a property access (.length) or struct field
+                if (strcmp(prop_or_field, "length") == 0)
+                {
+                    // Direct property access: variable.length
+                    int vtype = 0;
+                    for (int i = 0; i < var_count; i++)
                     {
-                        vtype = var_types[i];
-                        break;
+                        if (strcmp(var_names[i], name) == 0)
+                        {
+                            vtype = var_types[i];
+                            break;
+                        }
                     }
-                }
-                if (vtype == 3)
-                {
-                    // args slice - length is argc
-                    strncat_s(out_buf, buf_size, "argc", _TRUNCATE);
-                }
-                else if (vtype == 2)
-                {
-                    // *Str - length is strlen
-                    char expr_buf[64];
-                    snprintf(expr_buf, sizeof(expr_buf), "(int)strlen(%s)", name);
-                    strncat_s(out_buf, buf_size, expr_buf, _TRUNCATE);
+                    if (vtype == 3)
+                    {
+                        // args slice - length is argc
+                        strncat_s(out_buf, buf_size, "argc", _TRUNCATE);
+                    }
+                    else if (vtype == 2)
+                    {
+                        // *Str - length is strlen
+                        char expr_buf[64];
+                        snprintf(expr_buf, sizeof(expr_buf), "(int)strlen(%s)", name);
+                        strncat_s(out_buf, buf_size, expr_buf, _TRUNCATE);
+                    }
+                    else
+                    {
+                        // Unknown type, just emit variable name with .length
+                        strncat_s(out_buf, buf_size, name, _TRUNCATE);
+                    }
                 }
                 else
                 {
-                    // Unknown type, just emit variable name with .length
-                    strncat_s(out_buf, buf_size, name, _TRUNCATE);
+                    // Struct field access or chained property: variable.field[.property]
+                    if (*s == '.')
+                    {
+                        s++; // skip the dot
+                        char nested_prop[32] = {0};
+                        int npi = 0;
+                        while (*s && (isalnum(*s) || *s == '_') && npi < 31)
+                        {
+                            nested_prop[npi++] = *s++;
+                        }
+                        nested_prop[npi] = '\0';
+
+                        if (strcmp(nested_prop, "length") == 0)
+                        {
+                            // Struct field is a string, emit strlen wrapper
+                            char temp_buf[64] = {0};
+                            snprintf(temp_buf, sizeof(temp_buf), "(int)strlen(%s.%s)", name, prop_or_field);
+                            strncat_s(out_buf, buf_size, temp_buf, _TRUNCATE);
+                        }
+                        else
+                        {
+                            // Unknown nested property, emit as chained access
+                            strncat_s(out_buf, buf_size, name, _TRUNCATE);
+                            strncat_s(out_buf, buf_size, ".", _TRUNCATE);
+                            strncat_s(out_buf, buf_size, prop_or_field, _TRUNCATE);
+                            strncat_s(out_buf, buf_size, ".", _TRUNCATE);
+                            strncat_s(out_buf, buf_size, nested_prop, _TRUNCATE);
+                        }
+                    }
+                    else
+                    {
+                        // Plain struct field access
+                        strncat_s(out_buf, buf_size, name, _TRUNCATE);
+                        strncat_s(out_buf, buf_size, ".", _TRUNCATE);
+                        strncat_s(out_buf, buf_size, prop_or_field, _TRUNCATE);
+                    }
                 }
             }
             else
@@ -5715,11 +5770,29 @@ static void compile_args_emit_decl(char *c_code, size_t c_code_size, const char 
     strncat_s(c_code, c_code_size, ";\n", _TRUNCATE);
 }
 
+// Function definition structure
+typedef struct
+{
+    char name[32];
+    char params[10][32]; // Parameter names
+    int param_count;
+    char body[256]; // Function body expression
+} FuncDef;
+
+// Struct definition structure
+typedef struct
+{
+    char name[32];
+    char field_names[10][32]; // Field names
+    char field_types[10][32]; // Field types (USize, I32, etc.)
+    int field_count;
+} StructDef;
+
 // Helper: Expand expression with function call inlining
 // For simple cases like get().length where get() returns a variable
 static int compile_args_expression_with_funcs(const char *expr, char *out_buf, size_t buf_size,
                                               const char var_names[][32], const int *var_types, int var_count,
-                                              const char func_names[][32], const char func_bodies[][256], int func_count)
+                                              const FuncDef *funcs, int func_count)
 {
     const char *s = expr;
     while (*s && isspace(*s))
@@ -5728,11 +5801,11 @@ static int compile_args_expression_with_funcs(const char *expr, char *out_buf, s
     // Check if expression starts with a known function name followed by ()
     for (int i = 0; i < func_count; i++)
     {
-        size_t fname_len = strlen(func_names[i]);
-        if (strncmp(s, func_names[i], fname_len) == 0 && s[fname_len] == '(')
+        size_t fname_len = strlen(funcs[i].name);
+        if (strncmp(s, funcs[i].name, fname_len) == 0 && s[fname_len] == '(')
         {
             // This is a function call
-            const char *body_start = func_bodies[i];
+            const char *body_start = funcs[i].body;
             const char *after_call = s + fname_len + 1;
 
             // Skip closing paren
@@ -5785,23 +5858,52 @@ static int compile_args_expression_with_funcs(const char *expr, char *out_buf, s
     return compile_args_expression(expr, out_buf, buf_size, var_names, var_types, var_count);
 }
 
-// Function definition structure
-typedef struct
+// Helper: Map Tuff type to C type for struct fields
+static void tuff_type_to_c_type(const char *tuff_type, char *c_type, size_t c_type_size)
 {
-    char name[32];
-    char params[10][32]; // Parameter names
-    int param_count;
-    char body[256]; // Function body expression
-} FuncDef;
+    if (!tuff_type || !tuff_type[0])
+    {
+        strncpy_s(c_type, c_type_size, "int", _TRUNCATE);
+        return;
+    }
 
-// Struct definition structure
-typedef struct
-{
-    char name[32];
-    char field_names[10][32]; // Field names
-    char field_types[10][32]; // Field types (USize, I32, etc.)
-    int field_count;
-} StructDef;
+    // Handle pointer types
+    if (strcmp(tuff_type, "*Str") == 0 || strcmp(tuff_type, "*[*Str]") == 0)
+    {
+        strncpy_s(c_type, c_type_size, "char*", _TRUNCATE);
+    }
+    else if (strcmp(tuff_type, "USize") == 0)
+    {
+        strncpy_s(c_type, c_type_size, "unsigned long long", _TRUNCATE);
+    }
+    else if (strcmp(tuff_type, "ISize") == 0)
+    {
+        strncpy_s(c_type, c_type_size, "long long", _TRUNCATE);
+    }
+    else if (strcmp(tuff_type, "Bool") == 0)
+    {
+        strncpy_s(c_type, c_type_size, "int", _TRUNCATE);
+    }
+    else if (strcmp(tuff_type, "Char") == 0)
+    {
+        strncpy_s(c_type, c_type_size, "char", _TRUNCATE);
+    }
+    else if (strncmp(tuff_type, "U8", 2) == 0 || strncmp(tuff_type, "U16", 3) == 0 ||
+             strncmp(tuff_type, "U32", 3) == 0 || strncmp(tuff_type, "U64", 3) == 0)
+    {
+        strncpy_s(c_type, c_type_size, "int", _TRUNCATE);
+    }
+    else if (strncmp(tuff_type, "I8", 2) == 0 || strncmp(tuff_type, "I16", 3) == 0 ||
+             strncmp(tuff_type, "I32", 3) == 0 || strncmp(tuff_type, "I64", 3) == 0)
+    {
+        strncpy_s(c_type, c_type_size, "int", _TRUNCATE);
+    }
+    else
+    {
+        // Default to int for unknown types
+        strncpy_s(c_type, c_type_size, "int", _TRUNCATE);
+    }
+}
 
 // Helper: Convert if-else expressions to C ternary operators recursively
 static int compile_args_convert_if_else(const char *src, char *out, size_t out_size)
@@ -6336,7 +6438,11 @@ static CompileResult compile_args_source(const char *source)
             strncat_s(c_code, sizeof(c_code), "typedef struct {\n", _TRUNCATE);
             for (int j = 0; j < structs[i].field_count; j++)
             {
-                strncat_s(c_code, sizeof(c_code), "    int ", _TRUNCATE);
+                char c_field_type[32] = {0};
+                tuff_type_to_c_type(structs[i].field_types[j], c_field_type, sizeof(c_field_type));
+                strncat_s(c_code, sizeof(c_code), "    ", _TRUNCATE);
+                strncat_s(c_code, sizeof(c_code), c_field_type, _TRUNCATE);
+                strncat_s(c_code, sizeof(c_code), " ", _TRUNCATE);
                 strncat_s(c_code, sizeof(c_code), structs[i].field_names[j], _TRUNCATE);
                 strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             }
@@ -6404,15 +6510,8 @@ static CompileResult compile_args_source(const char *source)
         {
             // Final return expression
             strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
-            if (strstr(s, "__args__") != NULL)
-            {
-                compile_args_expression(s, c_code, sizeof(c_code), var_names, var_types, var_count);
-            }
-            else
-            {
-                // Append expression directly to preserve function calls with arguments
-                strncat_s(c_code, sizeof(c_code), s, _TRUNCATE);
-            }
+            compile_args_expression_with_funcs(s, c_code, sizeof(c_code), var_names, var_types, var_count,
+                                               functions, func_count);
             strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             break;
         }
@@ -6720,15 +6819,8 @@ static CompileResult compile_args_source(const char *source)
         if (*remaining && strchr(remaining, ';') == NULL)
         {
             strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
-            if (strstr(remaining, "__args__") != NULL)
-            {
-                compile_args_expression(remaining, c_code, sizeof(c_code), var_names, var_types, var_count);
-            }
-            else
-            {
-                // For function calls, append directly to preserve arguments
-                strncat_s(c_code, sizeof(c_code), remaining, _TRUNCATE);
-            }
+            compile_args_expression_with_funcs(remaining, c_code, sizeof(c_code), var_names, var_types, var_count,
+                                               functions, func_count);
             strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             break;
         }
