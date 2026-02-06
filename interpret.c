@@ -5584,6 +5584,33 @@ static int compile_args_expression(const char *expr, char *out_buf, size_t buf_s
                 strncat_s(out_buf, buf_size, expr_buf, _TRUNCATE);
             }
         }
+        else if (isdigit(*s))
+        {
+            char number_buf[64] = {0};
+            int ni = 0;
+            while (*s && isdigit(*s) && ni < (int)(sizeof(number_buf) - 1))
+            {
+                number_buf[ni++] = *s++;
+            }
+            number_buf[ni] = '\0';
+
+            // Skip any type suffix (e.g., U8, I32, USize)
+            if (*s && isalpha(*s))
+            {
+                int type_len = suffix_length(s);
+                if (type_len > 0)
+                {
+                    s += type_len;
+                }
+                else
+                {
+                    while (*s && isalpha(*s))
+                        s++;
+                }
+            }
+
+            strncat_s(out_buf, buf_size, number_buf, _TRUNCATE);
+        }
         else if (isalpha(*s) || *s == '_')
         {
             // Variable reference - extract name
@@ -6377,8 +6404,15 @@ static CompileResult compile_args_source(const char *source)
         {
             // Final return expression
             strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
-            // Append expression directly to preserve function calls with arguments
-            strncat_s(c_code, sizeof(c_code), s, _TRUNCATE);
+            if (strstr(s, "__args__") != NULL)
+            {
+                compile_args_expression(s, c_code, sizeof(c_code), var_names, var_types, var_count);
+            }
+            else
+            {
+                // Append expression directly to preserve function calls with arguments
+                strncat_s(c_code, sizeof(c_code), s, _TRUNCATE);
+            }
             strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             break;
         }
@@ -6686,8 +6720,15 @@ static CompileResult compile_args_source(const char *source)
         if (*remaining && strchr(remaining, ';') == NULL)
         {
             strncat_s(c_code, sizeof(c_code), "    return ", _TRUNCATE);
-            // For function calls, append directly to preserve arguments
-            strncat_s(c_code, sizeof(c_code), remaining, _TRUNCATE);
+            if (strstr(remaining, "__args__") != NULL)
+            {
+                compile_args_expression(remaining, c_code, sizeof(c_code), var_names, var_types, var_count);
+            }
+            else
+            {
+                // For function calls, append directly to preserve arguments
+                strncat_s(c_code, sizeof(c_code), remaining, _TRUNCATE);
+            }
             strncat_s(c_code, sizeof(c_code), ";\n", _TRUNCATE);
             break;
         }

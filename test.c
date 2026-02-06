@@ -184,6 +184,7 @@ RunResult run(const char *source, const char *test_name, const char *const *args
     int using_cache = 0;
     int need_compile = 1;
     int need_write_c = 1;
+    char temp_dir[MAX_PATH] = {0};
 
     if (cache_ready)
     {
@@ -216,16 +217,16 @@ RunResult run(const char *source, const char *test_name, const char *const *args
         }
     }
 
+    // Always initialize temp_dir before it might be needed in any code path
+    DWORD temp_dir_len = GetTempPathA((DWORD)sizeof(temp_dir), temp_dir);
+    if (temp_dir_len == 0 || temp_dir_len >= sizeof(temp_dir))
+    {
+        free(compiled.code);
+        return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to get temp directory"};
+    }
+
     if (!using_cache)
     {
-        char temp_dir[MAX_PATH] = {0};
-        DWORD temp_dir_len = GetTempPathA((DWORD)sizeof(temp_dir), temp_dir);
-        if (temp_dir_len == 0 || temp_dir_len >= sizeof(temp_dir))
-        {
-            free(compiled.code);
-            return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to get temp directory"};
-        }
-
         char temp_base[MAX_PATH] = {0};
         // Creates an actual file on disk; we'll delete/rename it to get a stable unique base name.
         if (GetTempFileNameA(temp_dir, "tuf", 0, temp_base) == 0)
@@ -265,10 +266,23 @@ RunResult run(const char *source, const char *test_name, const char *const *args
 
         if (need_compile)
         {
-            // Compile generated C with clang.
-            // Use _spawnvp so we don't have to do shell quoting; clang must be on PATH.
-            const char *clang_argv[] = {"clang", c_path, "-o", exe_path, NULL};
-            int clang_exit = _spawnvp(_P_WAIT, "clang", clang_argv);
+            // Compile generated C with clang, capturing error output.
+            char error_file[MAX_PATH] = {0};
+            char cmd[MAX_PATH * 3] = {0};
+
+            // Create temp file for clang error output
+            if (GetTempFileNameA(temp_dir, "err", 0, error_file) == 0)
+            {
+                free(compiled.code);
+                return (RunResult){.exit_code = 1, .has_error = true, .error_message = "Failed to create temp file for clang errors"};
+            }
+
+            // Build command with stderr redirection: clang input.c -o output.exe 2>errors.txt
+            snprintf(cmd, sizeof(cmd), "clang \"%s\" -o \"%s\" 2>\"%s\"", c_path, exe_path, error_file);
+
+            int clang_exit = system(cmd);
+
+            // Read clang error output if compilation failed
             if (clang_exit != 0)
             {
                 if (!using_cache)
@@ -276,13 +290,53 @@ RunResult run(const char *source, const char *test_name, const char *const *args
                 if (!using_cache)
                     DeleteFileA(exe_path);
                 free(compiled.code);
+
+                // Read and format error message with clang output
+                FILE *ef = NULL;
+                char *error_message = (char *)malloc(8448); // 256 for prefix + 8192 for clang output
+
+                if (error_message && fopen_s(&ef, error_file, "rb") == 0 && ef)
+                {
+                    fseek(ef, 0, SEEK_END);
+                    long error_size = ftell(ef);
+                    fseek(ef, 0, SEEK_SET);
+
+                    int prefix_len = snprintf(error_message, 256, "Clang compilation failed (exit %d):\n", clang_exit == -1 ? 1 : clang_exit);
+
+                    if (error_size > 0 && error_size < 8192)
+                    {
+                        size_t bytes = fread(&error_message[prefix_len], 1, (size_t)error_size, ef);
+                        error_message[prefix_len + bytes] = '\0';
+                    }
+                    else
+                    {
+                        error_message[prefix_len] = '\0';
+                    }
+
+                    fclose(ef);
+                    RunResult err = (RunResult){
+                        .exit_code = clang_exit == -1 ? 1 : clang_exit,
+                        .has_error = true,
+                        .error_message = error_message};
+                    DeleteFileA(error_file);
+                    // Note: error_message is leaked, but that's acceptable for error paths
+                    return err;
+                }
+                else if (error_message)
+                {
+                    free(error_message);
+                }
+
+                DeleteFileA(error_file);
                 return (RunResult){.exit_code = clang_exit == -1 ? 1 : clang_exit, .has_error = true, .error_message = "Clang compilation failed"};
             }
 
-            // Keep .c files in cache for debugging; only delete temp files when not using cache.
-            if (!using_cache)
-                DeleteFileA(c_path);
+            DeleteFileA(error_file);
         }
+
+        // Keep .c files in cache for debugging; only delete temp files when not using cache.
+        if (!using_cache)
+            DeleteFileA(c_path);
     }
 
     free(compiled.code);
@@ -1255,6 +1309,12 @@ void test_struct_with_args(void)
     assert_compile_success("struct Container { first : USize; second : USize; } let myContainer = Container { first : __args__[1].length, second : __args__[2].length }; myContainer.first + myContainer.second", 7, "test_struct_with_args", args);
 }
 
+void test_args_length_plus_u8(void)
+{
+    const char *const args[] = {"foo", NULL};
+    assert_compile_success("__args__[1].length + 100U8", 103, "test_args_length_plus_u8", args);
+}
+
 int main(void)
 {
     cache_ready = cache_init();
@@ -1432,6 +1492,7 @@ int main(void)
     test_function_returns_args_length();
     test_recursive_function_with_args();
     test_struct_with_args();
+    test_args_length_plus_u8();
 
     if (passed_asserts == total_asserts)
     {
