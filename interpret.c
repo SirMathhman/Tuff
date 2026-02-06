@@ -58,6 +58,15 @@ static int is_pointer_type(const char *type)
     return type && type[0] == '*' && type[1] != '\0';
 }
 
+// Helper: Check if a pointer type is mutable (*mut Type)
+static int is_mutable_pointer_type(const char *pointer_type)
+{
+    if (!pointer_type || pointer_type[0] != '*')
+        return 0;
+    // Check if it starts with "*mut " (skip '*', then check 'mut ')
+    return pointer_type[1] == 'm' && pointer_type[2] == 'u' && pointer_type[3] == 't' && pointer_type[4] == ' ';
+}
+
 // Helper: Extract the base type from a pointer type (e.g., "*I32" -> "I32")
 static void extract_pointer_base_type(const char *pointer_type, char *out_base_type, int max_len)
 {
@@ -1587,6 +1596,12 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
         if (!is_pointer_type(p->variables[ptr_idx].type))
         {
             return make_error("Cannot dereference non-pointer variable");
+        }
+
+        // Check that it's a mutable pointer (required for assignment through dereferencing)
+        if (!is_mutable_pointer_type(p->variables[ptr_idx].type))
+        {
+            return make_error("Cannot assign through immutable pointer");
         }
 
         // Get the target variable index from pointer_target

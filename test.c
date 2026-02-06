@@ -562,7 +562,7 @@ void test_interpret_pointer_basic(void)
 
 void test_interpret_pointer_mutable_dereference_assign(void)
 {
-    assert_success("let mut x = 100; let y : *I32 = &x; *y = 200; x", 200, "test_interpret_pointer_mutable_dereference_assign");
+    assert_success("let mut x = 100; let y : *mut I32 = &mut x; *y = 200; x", 200, "test_interpret_pointer_mutable_dereference_assign");
 }
 
 void test_interpret_pointer_immutable_dereference_assign_error(void)
@@ -583,6 +583,11 @@ void test_interpret_pointer_dereference_non_pointer_error(void)
 void test_interpret_mutable_pointer(void)
 {
     assert_success("let mut x = 0; let y : *mut I32 = &mut x; *y = 100; x", 100, "test_interpret_mutable_pointer");
+}
+
+void test_interpret_immutable_pointer_dereference_assign_error(void)
+{
+    assert_error("let mut x = 100; let y : *I32 = &x; *y = 200; x", "test_interpret_immutable_pointer_dereference_assign_error");
 }
 
 int main(void)
@@ -697,6 +702,7 @@ int main(void)
     test_interpret_pointer_type_mismatch_error();
     test_interpret_pointer_dereference_non_pointer_error();
     test_interpret_mutable_pointer();
+    test_interpret_immutable_pointer_dereference_assign_error();
 
     if (passed_asserts == total_asserts)
     {
