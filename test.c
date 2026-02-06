@@ -745,6 +745,11 @@ void test_interpret_bool_array_with_numeric_literal(void)
     assert_error("let array : [Bool; 1; 1] = [100];", "test_interpret_bool_array_with_numeric_literal");
 }
 
+void test_interpret_array_init_count_mismatch(void)
+{
+    assert_error("let array : [I32; 2; 2] = [100];", "test_interpret_array_init_count_mismatch");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -889,6 +894,7 @@ int main(void)
     test_interpret_slice_init_property();
     test_interpret_slice_init_partial_range();
     test_interpret_bool_array_with_numeric_literal();
+    test_interpret_array_init_count_mismatch();
 
     if (passed_asserts == total_asserts)
     {
