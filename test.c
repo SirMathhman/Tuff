@@ -1316,6 +1316,12 @@ void test_struct_with_string_field_from_args(void)
     assert_compile_success("struct StringContainer { value : *Str; } let container : StringContainer = StringContainer { value : __args__[2] }; container.value.length", 5, "test_struct_with_string_field_from_args", args);
 }
 
+void test_struct_i64_with_args(void)
+{
+    const char *const args[] = {"prog", "hello", "world", NULL};
+    assert_compile_success("struct Data { big : I64; medium : U32; small : I16; } let container : Data = Data { big : __args__.length, medium : __args__[1].length, small : __args__[2].length }; container.big + container.medium + container.small", 13, "test_struct_i64_with_args", args);
+}
+
 void test_args_length_plus_u8(void)
 {
     const char *const args[] = {"foo", NULL};
@@ -1500,6 +1506,7 @@ int main(void)
     test_recursive_function_with_args();
     test_struct_with_args();
     test_struct_with_string_field_from_args();
+    test_struct_i64_with_args();
     test_args_length_plus_u8();
 
     if (passed_asserts == total_asserts)
