@@ -996,7 +996,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 
                     // Parse arguments
                     InterpretResult args[10];
-                    char arg_types[10][32];  // Store argument types
+                    char arg_types[10][32]; // Store argument types
                     int arg_count = 0;
 
                     if (p->input[p->pos] != ')')
@@ -1012,12 +1012,12 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                                 return arg_result;
 
                             args[arg_count] = arg_result;
-                            
+
                             // Capture argument type information
                             if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
                             {
-                                strncpy_s(arg_types[arg_count], sizeof(arg_types[arg_count]), 
-                                         p->tracked_suffix, _TRUNCATE);
+                                strncpy_s(arg_types[arg_count], sizeof(arg_types[arg_count]),
+                                          p->tracked_suffix, _TRUNCATE);
                                 arg_types[arg_count][sizeof(arg_types[arg_count]) - 1] = '\0';
                             }
                             else
@@ -1289,20 +1289,28 @@ static InterpretResult parse_function_declaration(Parser *p)
 
     skip_whitespace(p);
 
-    // Expect colon
-    if (p->input[p->pos] != ':')
-        return make_error("Expected ':' after function parameters");
-    p->pos++;
+    // Check for return type (optional - can go directly to =>)
+    char return_type[32] = {0};
+    if (p->input[p->pos] == ':')
+    {
+        p->pos++; // Skip colon
+        skip_whitespace(p);
 
-    skip_whitespace(p);
+        // Parse return type
+        int type_len = parse_identifier(p, return_type, sizeof(return_type));
+        if (type_len <= 0)
+            return make_error("Expected return type");
+        
+        return_type[type_len] = '\0';
 
-    // Parse return type (Void for now)
-    char return_type[32];
-    int type_len = parse_identifier(p, return_type, sizeof(return_type));
-    if (type_len <= 0)
-        return make_error("Expected return type");
-
-    skip_whitespace(p);
+        skip_whitespace(p);
+    }
+    else
+    {
+        // No return type specified, default to Void
+        strncpy_s(return_type, sizeof(return_type), "Void", _TRUNCATE);
+        return_type[sizeof(return_type) - 1] = '\0';
+    }
 
     // Expect arrow
     if (p->input[p->pos] != '=' || p->input[p->pos + 1] != '>')
