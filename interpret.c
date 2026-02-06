@@ -88,7 +88,7 @@ typedef struct
     int has_temp_string;           // 1 if temp string is set
     char temp_string_value[256];   // Store temporary string
     int temp_string_len;           // Length of temporary string
-    int argc;                      // argc value for args.length (-1 if not provided)
+    int argc;                      // argc value for __args__.length (-1 if not provided)
 } Parser;
 
 typedef struct
@@ -1179,7 +1179,7 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
     // We'll detect it based on pointer type tracking
 
     // Check for variable reference or boolean literal
-    if (isalpha(p->input[p->pos]))
+    if (isalpha(p->input[p->pos]) || p->input[p->pos] == '_')
     {
         int saved_pos = p->pos;
         char var_name[32];
@@ -1210,25 +1210,25 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
             }
 
-            // Check for args.length special builtin
-            if (strncmp(var_name, "args", name_len) == 0 && name_len == 4)
+            // Check for __args__.length special builtin
+            if (strncmp(var_name, "__args__", name_len) == 0 && name_len == 8)
             {
                 char property_name[32];
                 int property_name_len = parse_property_access(p, property_name, sizeof(property_name));
                 if (property_name_len > 0 && strncmp(property_name, "length", property_name_len) == 0 && property_name_len == 6)
                 {
-                    // This is args.length - return the actual argc value if provided, otherwise 0
+                    // This is __args__.length - return the actual argc value if provided, otherwise 0
                     // If argc is -1 (not provided), return 0 as placeholder
-                    // If argc >= 0, return argc - 1 (the number of actual arguments)
-                    long args_length_value = (p->argc >= 0) ? (p->argc - 1) : 0;
+                    // If argc >= 0, return argc (total argument count including program name)
+                    long args_length_value = (p->argc >= 0) ? p->argc : 0;
                     set_tracked_suffix(p, "I32");
                     return (InterpretResult){.value = (int)args_length_value, .has_error = false, .error_message = NULL};
                 }
                 else if (property_name_len > 0)
                 {
-                    return make_error("Unknown args property (only 'length' is supported)");
-                    // "args" identifier without property access - error
-                    return make_error("'args' is a reserved builtin and cannot be used as a variable");
+                    return make_error("Unknown __args__ property (only 'length' is supported)");
+                    // "__args__" identifier without property access - error
+                    return make_error("'__args__' is a reserved builtin and cannot be used as a variable");
                 }
             }
 
@@ -2543,7 +2543,7 @@ static intptr_t parse_identifier(Parser *p, char *out_name, int max_name_len)
 {
     skip_whitespace(p);
 
-    if (!isalpha(p->input[p->pos]))
+    if (!isalpha(p->input[p->pos]) && p->input[p->pos] != '_')
         return 0;
 
     int start = p->pos;
@@ -5440,17 +5440,17 @@ static CompileResult generate_c_program(const char *format, ...)
 
 CompileResult compile(const char *source, int argc)
 {
-    // Check for special builtin "args.length" which should return argc at runtime
-    if (source && strcmp(source, "args.length") == 0)
+    // Check for special builtin "__args__.length" which should return argc at runtime
+    if (source && strcmp(source, "__args__.length") == 0)
     {
         return generate_c_program(
             "#include <stdlib.h>\n"
-            "int main(int argc, char **argv) { (void)argv; return argc - 1; }\n");
+            "int main(int argc, char **argv) { (void)argv; return argc; }\n");
     }
 
-    // Check if "args.length" appears anywhere in the source
+    // Check if "__args__.length" appears anywhere in the source
     // If it does, use interpret_with_argc to properly evaluate the full expression
-    if (source && strstr(source, "args.length") != NULL)
+    if (source && strstr(source, "__args__.length") != NULL)
     {
         // Interpret the source with actual argc value
         InterpretResult result = interpret_with_argc(source, argc);
