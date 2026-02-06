@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include <stdio.h>
 
+#define MAX_ARRAY_ELEMENTS 64
+
 typedef struct
 {
     const char *suffix;
@@ -16,9 +18,14 @@ typedef struct
 {
     char name[32];
     long value;
-    char type[16];      // Store variable's type (e.g., "U8", "U16", "*I32", empty if typeless)
+    char type[16];      // Store variable's type (e.g., "U8", "U16", "*I32", "[I32;3;3]")
     int is_mutable;     // 1 if mutable, 0 if immutable
     int pointer_target; // -1 if not a pointer, otherwise index of pointed-to variable
+    int is_array;       // 1 if array, 0 otherwise
+    int array_init_count;
+    int array_total_count;
+    char array_element_type[16];
+    long array_values[MAX_ARRAY_ELEMENTS];
 } Variable;
 
 typedef struct
@@ -26,12 +33,18 @@ typedef struct
     const char *input;
     int pos;
     InterpretResult last_error;
-    char tracked_suffix[8]; // Increased to accommodate "Bool" (4 chars + null)
+    char tracked_suffix[16]; // Increased to accommodate "*mut I32"
     int has_tracked_suffix;
     Variable variables[10];
     int var_count;
     char all_declared_names[10][32]; // Track all variable names ever declared
     int all_declared_count;          // Count of all declared names
+    int has_temp_array;
+    int temp_array_count;
+    char temp_array_element_type[16];
+    long temp_array_values[MAX_ARRAY_ELEMENTS];
+    char declared_functions[10][32]; // Track all declared function names
+    int declared_functions_count;    // Count of declared functions
 } Parser;
 
 typedef struct
@@ -77,6 +90,95 @@ static void extract_pointer_base_type(const char *pointer_type, char *out_base_t
     }
     strncpy_s(out_base_type, max_len, &pointer_type[1], _TRUNCATE);
     out_base_type[max_len - 1] = '\0';
+}
+
+static InterpretResult make_error(const char *message);
+static InterpretResult parse_identifier_or_error(Parser *p, char *out_name, int max_name_len, const char *error_msg);
+static InterpretResult expect_char(Parser *p, char expected, const char *error_msg);
+static void skip_whitespace(Parser *p);
+
+// Helper: Check if a type string is an array type
+static int is_array_type_string(const char *type)
+{
+    return type && type[0] == '[';
+}
+
+// Helper: Parse non-negative integer from input
+static int parse_non_negative_int(Parser *p, int *out_value)
+{
+    skip_whitespace(p);
+    if (!isdigit(p->input[p->pos]))
+        return 0;
+
+    int value = 0;
+    while (isdigit(p->input[p->pos]))
+    {
+        value = value * 10 + (p->input[p->pos] - '0');
+        p->pos++;
+    }
+    *out_value = value;
+    return 1;
+}
+
+// Helper: Parse array type annotation: [Type; InitCount; TotalCount]
+static InterpretResult parse_array_type_annotation(
+    Parser *p,
+    char *out_type,
+    int out_type_size,
+    char *out_elem_type,
+    int out_elem_type_size,
+    int *out_init_count,
+    int *out_total_count)
+{
+    InterpretResult open_bracket = expect_char(p, '[', "Expected '[' to start array type");
+    if (open_bracket.has_error)
+        return open_bracket;
+    skip_whitespace(p);
+
+    InterpretResult elem_type_result = parse_identifier_or_error(p, out_elem_type, out_elem_type_size, "Expected array element type");
+    if (elem_type_result.has_error)
+        return elem_type_result;
+
+    InterpretResult first_sep = expect_char(p, ';', "Expected ';' after array element type");
+    if (first_sep.has_error)
+        return first_sep;
+
+    int init_count = 0;
+    if (!parse_non_negative_int(p, &init_count))
+    {
+        return make_error("Expected initialized element count");
+    }
+
+    InterpretResult second_sep = expect_char(p, ';', "Expected ';' after initialized element count");
+    if (second_sep.has_error)
+        return second_sep;
+
+    int total_count = 0;
+    if (!parse_non_negative_int(p, &total_count))
+    {
+        return make_error("Expected total element count");
+    }
+
+    InterpretResult close_bracket = expect_char(p, ']', "Expected ']' after array type");
+    if (close_bracket.has_error)
+        return close_bracket;
+
+    if (total_count < init_count)
+    {
+        return make_error("Array total count must be >= initialized count");
+    }
+
+    if (total_count > MAX_ARRAY_ELEMENTS)
+    {
+        return make_error("Array total count exceeds maximum supported size");
+    }
+
+    snprintf(out_type, out_type_size, "[%s;%d;%d]", out_elem_type, init_count, total_count);
+    out_type[out_type_size - 1] = '\0';
+    *out_init_count = init_count;
+    *out_total_count = total_count;
+
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
 static int suffix_length(const char *suffix)
@@ -213,12 +315,78 @@ static int check_type_hierarchy(char type_char, const char *dest, const char *sr
     return 0;
 }
 
+static int is_type_compatible(const char *dest_type, const char *source_type);
+
+// Helper: Parse array type string "[Type;Init;Total]"
+static int parse_array_type_string(const char *type_str, char *out_elem_type, int elem_type_size, int *out_init, int *out_total)
+{
+    if (!is_array_type_string(type_str))
+        return 0;
+
+    const char *p = type_str + 1;
+    int i = 0;
+    while (*p && *p != ';' && i < elem_type_size - 1)
+    {
+        out_elem_type[i++] = *p;
+        p++;
+    }
+    out_elem_type[i] = '\0';
+
+    if (*p != ';')
+        return 0;
+    p++;
+
+    char *endptr = NULL;
+    long init_count = strtol(p, &endptr, 10);
+    if (endptr == p || *endptr != ';')
+        return 0;
+    p = endptr + 1;
+
+    long total_count = strtol(p, &endptr, 10);
+    if (endptr == p || *endptr != ']')
+        return 0;
+
+    if (init_count < 0 || total_count < 0)
+        return 0;
+
+    *out_init = (int)init_count;
+    *out_total = (int)total_count;
+    return 1;
+}
+
+// Helper: Check array type compatibility
+static int is_array_type_compatible(const char *dest_type, const char *source_type)
+{
+    char dest_elem[16] = {0};
+    char src_elem[16] = {0};
+    int dest_init = 0;
+    int dest_total = 0;
+    int src_init = 0;
+    int src_total = 0;
+
+    if (!parse_array_type_string(dest_type, dest_elem, sizeof(dest_elem), &dest_init, &dest_total))
+        return 0;
+    if (!parse_array_type_string(source_type, src_elem, sizeof(src_elem), &src_init, &src_total))
+        return 0;
+
+    if (dest_total != src_total)
+        return 0;
+
+    if (!is_type_compatible(dest_elem, src_elem))
+        return 0;
+
+    return src_init >= dest_init;
+}
+
 // Helper: Check if a source type can be assigned to a destination type
 // Returns 1 if compatible, 0 if not
 static int is_type_compatible(const char *dest_type, const char *source_type)
 {
     if (!dest_type || !source_type || !dest_type[0] || !source_type[0])
         return 0;
+
+    if (is_array_type_string(dest_type) && is_array_type_string(source_type))
+        return is_array_type_compatible(dest_type, source_type);
 
     // Check for Bool type (special case)
     if (strcmp(dest_type, "Bool") == 0 && strcmp(source_type, "Bool") == 0)
@@ -478,6 +646,168 @@ static void set_bool_tracked_suffix(Parser *p)
     p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
 }
 
+// Helper: Parse an array literal [a, b, c]
+static InterpretResult parse_array_literal(Parser *p)
+{
+    InterpretResult open_bracket = expect_char(p, '[', "Expected '[' to start array literal");
+    if (open_bracket.has_error)
+        return open_bracket;
+
+    skip_whitespace(p);
+
+    int count = 0;
+    char element_type[16] = {0};
+    int has_element_type = 0;
+
+    if (p->input[p->pos] == ']')
+    {
+        p->pos++;
+        p->has_temp_array = 1;
+        p->temp_array_count = 0;
+        p->temp_array_element_type[0] = '\0';
+        p->has_tracked_suffix = 0;
+        return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+    }
+
+    while (p->input[p->pos])
+    {
+        if (count >= MAX_ARRAY_ELEMENTS)
+        {
+            return make_error("Array literal exceeds maximum supported size");
+        }
+
+        InterpretResult elem_result = parse_additive(p);
+        if (elem_result.has_error)
+            return elem_result;
+
+        if (p->has_tracked_suffix && strcmp(p->tracked_suffix, "Bool") == 0)
+        {
+            return make_error("Boolean values cannot be used in array literals");
+        }
+
+        if (!has_element_type)
+        {
+            if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+            {
+                strncpy_s(element_type, sizeof(element_type), p->tracked_suffix, _TRUNCATE);
+                element_type[sizeof(element_type) - 1] = '\0';
+            }
+            else
+            {
+                strncpy_s(element_type, sizeof(element_type), "I32", _TRUNCATE);
+                element_type[sizeof(element_type) - 1] = '\0';
+            }
+            has_element_type = 1;
+        }
+        else
+        {
+            if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+            {
+                if (!is_type_compatible(element_type, p->tracked_suffix))
+                {
+                    return make_error("Array literal element types must match");
+                }
+            }
+            else
+            {
+                InterpretResult validation = validate_type(elem_result.value, element_type);
+                if (validation.has_error)
+                    return validation;
+            }
+        }
+
+        InterpretResult elem_validation = validate_type(elem_result.value, element_type);
+        if (elem_validation.has_error)
+            return elem_validation;
+
+        p->temp_array_values[count++] = elem_result.value;
+
+        skip_whitespace(p);
+        if (p->input[p->pos] == ',')
+        {
+            p->pos++;
+            skip_whitespace(p);
+            continue;
+        }
+
+        if (p->input[p->pos] == ']')
+        {
+            p->pos++;
+            break;
+        }
+
+        return make_error("Expected ',' or ']' after array literal element");
+    }
+
+    p->has_temp_array = 1;
+    p->temp_array_count = count;
+    strncpy_s(p->temp_array_element_type, sizeof(p->temp_array_element_type), element_type, _TRUNCATE);
+    p->temp_array_element_type[sizeof(p->temp_array_element_type) - 1] = '\0';
+    p->has_tracked_suffix = 0;
+
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Parse bracket notation [index] and return the index value
+// Returns index_result with value set to the parsed index
+// This is used by both array indexing and array element assignment
+static InterpretResult parse_bracket_index(Parser *p, long *out_index)
+{
+    InterpretResult open_bracket = expect_char(p, '[', "Expected '[' to start bracket notation");
+    if (open_bracket.has_error)
+        return open_bracket;
+
+    InterpretResult index_result = parse_additive(p);
+    if (index_result.has_error)
+        return index_result;
+
+    if (p->has_tracked_suffix && strcmp(p->tracked_suffix, "Bool") == 0)
+    {
+        return make_error("Array index must be a numeric value");
+    }
+
+    InterpretResult close_bracket = expect_char(p, ']', "Expected ']' after index");
+    if (close_bracket.has_error)
+        return close_bracket;
+
+    *out_index = index_result.value;
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
+
+// Helper: Parse array index access (array[idx])
+static InterpretResult parse_array_index(Parser *p, int var_idx, NumberValue *out_num)
+{
+    long index_value = 0;
+    InterpretResult bracket_result = parse_bracket_index(p, &index_value);
+    if (bracket_result.has_error)
+        return bracket_result;
+
+    if (index_value < 0 || index_value >= p->variables[var_idx].array_total_count)
+    {
+        return make_error("Array index out of bounds");
+    }
+
+    if (index_value >= p->variables[var_idx].array_init_count)
+    {
+        return make_error("Array index out of initialized range");
+    }
+
+    long value = p->variables[var_idx].array_values[index_value];
+
+    strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), p->variables[var_idx].array_element_type, _TRUNCATE);
+    p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+    p->has_tracked_suffix = 1;
+
+    if (out_num)
+    {
+        out_num->value = value;
+        out_num->suffix = p->tracked_suffix;
+        out_num->suffix_len = strlen(p->tracked_suffix);
+    }
+
+    return (InterpretResult){.value = value, .has_error = false, .error_message = NULL};
+}
+
 // Helper: Parse a simple operand (number or variable reference)
 static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
 {
@@ -587,6 +917,21 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             int idx = find_variable(p, var_name, name_len);
             if (idx >= 0)
             {
+                skip_whitespace(p);
+                if (p->input[p->pos] == '[')
+                {
+                    if (!p->variables[idx].is_array)
+                    {
+                        return make_error("Cannot index non-array variable");
+                    }
+                    return parse_array_index(p, idx, out_num);
+                }
+
+                if (p->variables[idx].is_array)
+                {
+                    return make_error("Array value must be indexed");
+                }
+
                 if (out_num)
                 {
                     out_num->value = p->variables[idx].value;
@@ -645,7 +990,125 @@ static int find_variable(Parser *p, const char *name, int name_len)
     return -1;
 }
 
-// Helper: Check if a variable name was ever declared (across all scopes)
+// Helper: Check if a function has been declared
+static int has_function_been_declared(Parser *p, const char *name, int name_len)
+{
+    for (int i = 0; i < p->declared_functions_count; i++)
+    {
+        if (strncmp(p->declared_functions[i], name, name_len) == 0 &&
+            p->declared_functions[i][name_len] == '\0')
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Helper: Register a declared function name
+static void register_declared_function(Parser *p, const char *name, int name_len)
+{
+    if (p->declared_functions_count < 10)
+    {
+        strncpy_s(p->declared_functions[p->declared_functions_count],
+                  sizeof(p->declared_functions[p->declared_functions_count]),
+                  name, name_len);
+        p->declared_functions[p->declared_functions_count][name_len] = '\0';
+        p->declared_functions_count++;
+    }
+}
+
+// Helper: Parse a function declaration
+// Syntax: fn name() : ReturnType => body
+static InterpretResult parse_function_declaration(Parser *p)
+{
+    // Skip 'fn' keyword
+    if (!is_keyword_at(p, "fn"))
+        return make_error("Expected 'fn' keyword");
+    
+    p->pos += 2; // Skip 'fn'
+    skip_whitespace(p);
+
+    // Parse function name
+    char func_name[32];
+    int name_len = parse_identifier(p, func_name, sizeof(func_name));
+    if (name_len <= 0)
+        return make_error("Expected function name");
+
+    // Check if function already declared
+    if (has_function_been_declared(p, func_name, name_len))
+        return make_error("Function already declared");
+
+    skip_whitespace(p);
+
+    // Expect opening parenthesis
+    if (p->input[p->pos] != '(')
+        return make_error("Expected '(' after function name");
+    p->pos++;
+    
+    skip_whitespace(p);
+
+    // Expect closing parenthesis (no parameters for now)
+    if (p->input[p->pos] != ')')
+        return make_error("Expected ')' after function parameters");
+    p->pos++;
+    
+    skip_whitespace(p);
+
+    // Expect colon
+    if (p->input[p->pos] != ':')
+        return make_error("Expected ':' after function parameters");
+    p->pos++;
+    
+    skip_whitespace(p);
+
+    // Parse return type (Void for now)
+    char return_type[32];
+    int type_len = parse_identifier(p, return_type, sizeof(return_type));
+    if (type_len <= 0)
+        return make_error("Expected return type");
+    
+    skip_whitespace(p);
+
+    // Expect arrow
+    if (p->input[p->pos] != '=' || p->input[p->pos + 1] != '>')
+        return make_error("Expected '=>' after return type");
+    p->pos += 2;
+    
+    skip_whitespace(p);
+
+    // Parse function body (for now, just skip it - we only care about tracking)
+    // Save position before body
+    int body_start_pos = p->pos;
+    
+    // Skip the body - for empty functions, it's just {}
+    if (p->input[p->pos] == '{')
+    {
+        p->pos++; // Skip '{'
+        skip_whitespace(p);
+        
+        // Count braces to find matching close
+        int brace_count = 1;
+        while (brace_count > 0 && p->input[p->pos])
+        {
+            if (p->input[p->pos] == '{')
+                brace_count++;
+            else if (p->input[p->pos] == '}')
+                brace_count--;
+            p->pos++;
+        }
+    }
+    else
+    {
+        return make_error("Expected '{' to start function body");
+    }
+
+    // Register the function as declared
+    register_declared_function(p, func_name, name_len);
+
+    skip_whitespace(p);
+    
+    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+}
 static int has_variable_been_declared(Parser *p, const char *name, int name_len)
 {
     for (int i = 0; i < p->all_declared_count; i++)
@@ -723,6 +1186,35 @@ static InterpretResult apply_compound_operator(char compound_op, long current_va
     return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
 }
 
+// Helper: Parse and calculate assignment value after operator is consumed
+// Handles compound operators and semicolon consumption
+static InterpretResult parse_assignment_rhs(Parser *p, char compound_op, long current_value)
+{
+    // Parse the value expression
+    InterpretResult val_result = parse_additive(p);
+    if (val_result.has_error)
+        return val_result;
+
+    // Calculate the final value
+    long final_value = val_result.value;
+    if (compound_op != '=')
+    {
+        // Apply the compound operation
+        InterpretResult op_result = apply_compound_operator(compound_op, current_value, val_result.value, &final_value);
+        if (op_result.has_error)
+            return op_result;
+    }
+
+    // Consume optional semicolon
+    skip_whitespace(p);
+    if (p->input[p->pos] == ';')
+    {
+        p->pos++;
+    }
+
+    return (InterpretResult){.value = final_value, .has_error = false, .error_message = NULL};
+}
+
 // Helper: Register a variable name in the global declared names list
 static void register_declared_name(Parser *p, const char *name, int name_len)
 {
@@ -751,6 +1243,14 @@ static void init_variable_entry(Parser *p, const char *name, int name_len, long 
     {
         p->variables[p->var_count].type[0] = '\0';
     }
+    p->variables[p->var_count].is_array = 0;
+    p->variables[p->var_count].array_init_count = 0;
+    p->variables[p->var_count].array_total_count = 0;
+    p->variables[p->var_count].array_element_type[0] = '\0';
+    for (int i = 0; i < MAX_ARRAY_ELEMENTS; i++)
+    {
+        p->variables[p->var_count].array_values[i] = 0;
+    }
     register_declared_name(p, name, name_len);
 }
 
@@ -768,6 +1268,15 @@ static void set_variable_type(Variable *var, const char *type)
     }
 }
 
+// Helper: Clear all array-related fields in a variable
+static void clear_array_fields(Variable *var)
+{
+    var->is_array = 0;
+    var->array_init_count = 0;
+    var->array_total_count = 0;
+    var->array_element_type[0] = '\0';
+}
+
 // Helper: Set or add a variable with optional type information
 // Helper: Set or add a variable with optional type and mutability information
 static int set_variable_with_mutability(Parser *p, const char *name, int name_len, long value, const char *type, int is_mutable)
@@ -779,6 +1288,7 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
         p->variables[idx].is_mutable = is_mutable;
         p->variables[idx].pointer_target = -1; // Reset pointer target on update
         set_variable_type(&p->variables[idx], type);
+        clear_array_fields(&p->variables[idx]);
         return idx;
     }
 
@@ -801,6 +1311,7 @@ static int set_pointer_variable_with_mutability(Parser *p, const char *name, int
         p->variables[idx].is_mutable = is_mutable;
         p->variables[idx].pointer_target = target_idx;
         set_variable_type(&p->variables[idx], pointer_type);
+        clear_array_fields(&p->variables[idx]);
         return idx;
     }
 
@@ -808,6 +1319,38 @@ static int set_pointer_variable_with_mutability(Parser *p, const char *name, int
         return -1; // Too many variables
 
     init_variable_entry(p, name, name_len, 0, target_idx, is_mutable, pointer_type);
+
+    return p->var_count++;
+}
+
+// Helper: Set an array variable with mutability
+static int set_array_variable_with_mutability(
+    Parser *p,
+    const char *name,
+    int name_len,
+    const char *array_type,
+    const char *element_type,
+    int init_count,
+    int total_count,
+    const long *values,
+    int is_mutable)
+{
+    if (p->var_count >= 10)
+        return -1; // Too many variables
+
+    init_variable_entry(p, name, name_len, 0, -1, is_mutable, array_type);
+    p->variables[p->var_count].is_array = 1;
+    p->variables[p->var_count].array_init_count = init_count;
+    p->variables[p->var_count].array_total_count = total_count;
+    strncpy_s(p->variables[p->var_count].array_element_type,
+              sizeof(p->variables[p->var_count].array_element_type),
+              element_type,
+              _TRUNCATE);
+    p->variables[p->var_count].array_element_type[sizeof(p->variables[p->var_count].array_element_type) - 1] = '\0';
+    for (int i = 0; i < total_count && i < MAX_ARRAY_ELEMENTS; i++)
+    {
+        p->variables[p->var_count].array_values[i] = (i < init_count && values) ? values[i] : 0;
+    }
 
     return p->var_count++;
 }
@@ -1003,7 +1546,11 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     }
 
     // Variable to store the declared type (for typed declarations)
-    char declared_type[8] = {0};
+    char declared_type[16] = {0};
+    int is_array_declared = 0;
+    char declared_array_elem_type[16] = {0};
+    int declared_array_init_count = 0;
+    int declared_array_total_count = 0;
 
     // Check if this is a typed or typeless declaration
     if (p->input[p->pos] == '=')
@@ -1018,47 +1565,64 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         p->pos++; // Skip ':'
         skip_whitespace(p);
 
-        // Check for pointer type (*) or mutable pointer type (*mut)
-        int is_pointer = 0;
-        int is_mut_pointer = 0;
-        if (p->input[p->pos] == '*')
+        if (p->input[p->pos] == '[')
         {
-            is_pointer = 1;
-            p->pos++; // Skip '*'
-            skip_whitespace(p);
-
-            // Check for 'mut' keyword after *
-            if (is_keyword_at(p, "mut"))
-            {
-                is_mut_pointer = 1;
-                p->pos += 3; // Skip 'mut'
-                skip_whitespace(p);
-            }
-        }
-
-        // Parse type
-        char type_name[16];
-        InterpretResult type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected type name");
-        if (type_result.has_error)
-            return type_result;
-
-        // Store the declared type for validation later
-        if (is_pointer)
-        {
-            if (is_mut_pointer)
-            {
-                snprintf(declared_type, sizeof(declared_type), "*mut %s", type_name);
-            }
-            else
-            {
-                snprintf(declared_type, sizeof(declared_type), "*%s", type_name);
-            }
+            InterpretResult array_type_result = parse_array_type_annotation(
+                p,
+                declared_type,
+                sizeof(declared_type),
+                declared_array_elem_type,
+                sizeof(declared_array_elem_type),
+                &declared_array_init_count,
+                &declared_array_total_count);
+            if (array_type_result.has_error)
+                return array_type_result;
+            is_array_declared = 1;
         }
         else
         {
-            strncpy_s(declared_type, sizeof(declared_type), type_name, _TRUNCATE);
+            // Check for pointer type (*) or mutable pointer type (*mut)
+            int is_pointer = 0;
+            int is_mut_pointer = 0;
+            if (p->input[p->pos] == '*')
+            {
+                is_pointer = 1;
+                p->pos++; // Skip '*'
+                skip_whitespace(p);
+
+                // Check for 'mut' keyword after *
+                if (is_keyword_at(p, "mut"))
+                {
+                    is_mut_pointer = 1;
+                    p->pos += 3; // Skip 'mut'
+                    skip_whitespace(p);
+                }
+            }
+
+            // Parse type
+            char type_name[16];
+            InterpretResult type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected type name");
+            if (type_result.has_error)
+                return type_result;
+
+            // Store the declared type for validation later
+            if (is_pointer)
+            {
+                if (is_mut_pointer)
+                {
+                    snprintf(declared_type, sizeof(declared_type), "*mut %s", type_name);
+                }
+                else
+                {
+                    snprintf(declared_type, sizeof(declared_type), "*%s", type_name);
+                }
+            }
+            else
+            {
+                strncpy_s(declared_type, sizeof(declared_type), type_name, _TRUNCATE);
+            }
+            declared_type[sizeof(declared_type) - 1] = '\0';
         }
-        declared_type[sizeof(declared_type) - 1] = '\0';
 
         // Expect '='
         InterpretResult eq_result = expect_char(p, '=', "Expected '=' in variable declaration");
@@ -1076,6 +1640,11 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     if (val_result.has_error)
         return val_result;
 
+    if (p->has_temp_array && !is_array_declared)
+    {
+        return make_error("Array literal must be assigned to an array variable");
+    }
+
     // Determine the actual type to use for the variable
     char actual_type[16] = {0}; // Expanded to 16 to accommodate pointer types like "*I32"
 
@@ -1084,6 +1653,46 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         // Explicit type declared: validate that the value fits in that type
         strncpy_s(actual_type, sizeof(actual_type), declared_type, _TRUNCATE);
         actual_type[sizeof(actual_type) - 1] = '\0';
+
+        if (is_array_declared)
+        {
+            if (!p->has_temp_array)
+            {
+                return make_error("Array initializer required");
+            }
+
+            if (p->temp_array_count != declared_array_init_count)
+            {
+                return make_error("Array initializer count must match declared initialized count");
+            }
+
+            if (p->temp_array_element_type[0] != '\0' &&
+                !is_type_compatible(declared_array_elem_type, p->temp_array_element_type))
+            {
+                return make_error("Array element type mismatch");
+            }
+
+            for (int i = 0; i < p->temp_array_count; i++)
+            {
+                InterpretResult element_validation = validate_type(p->temp_array_values[i], declared_array_elem_type);
+                if (element_validation.has_error)
+                    return element_validation;
+            }
+
+            set_array_variable_with_mutability(
+                p,
+                var_name,
+                name_len,
+                actual_type,
+                declared_array_elem_type,
+                declared_array_init_count,
+                declared_array_total_count,
+                p->temp_array_values,
+                is_mutable);
+
+            p->has_temp_array = 0;
+            return finalize_statement(p, "Expected ';' after variable declaration");
+        }
 
         // Check if declared type is a pointer type
         if (is_pointer_type(declared_type))
@@ -1189,6 +1798,18 @@ static InterpretResult parse_let_statements_loop(Parser *p)
     {
         skip_whitespace(p);
 
+        // Check for function declaration
+        if (is_keyword_at(p, "fn"))
+        {
+            InterpretResult fn_result = parse_function_declaration(p);
+            if (fn_result.has_error)
+                return fn_result;
+            skip_whitespace(p);
+            has_last_statement = 0; // function declarations don't have values
+            saw_statement = 1;
+            continue;
+        }
+
         // Check for let statement
         if (is_keyword_at(p, "let"))
         {
@@ -1233,7 +1854,7 @@ static InterpretResult parse_let_statements_loop(Parser *p)
             }
         }
         // Check for assignment statement (identifier followed by '=')
-        else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match") && !is_keyword_at(p, "for"))
+        else if (isalpha(p->input[p->pos]) && !is_keyword_at(p, "if") && !is_keyword_at(p, "else") && !is_keyword_at(p, "while") && !is_keyword_at(p, "let") && !is_keyword_at(p, "match") && !is_keyword_at(p, "for") && !is_keyword_at(p, "fn"))
         {
             // Look ahead to see if this is an assignment
             int saved_pos = p->pos;
@@ -1621,33 +2242,107 @@ static InterpretResult try_parse_assignment_expression(Parser *p)
         p->pos += (compound_op == '=' ? 1 : 2);
         skip_whitespace(p);
 
-        // Parse the value expression
-        InterpretResult val_result = parse_additive(p);
-        if (val_result.has_error)
-            return val_result;
-
-        // Calculate the final value
-        long final_value = val_result.value;
-        if (compound_op != '=')
-        {
-            // Apply the compound operation
-            long current_value = p->variables[target_idx].value;
-            InterpretResult op_result = apply_compound_operator(compound_op, current_value, val_result.value, &final_value);
-            if (op_result.has_error)
-                return op_result;
-        }
+        // Parse RHS and calculate final value
+        InterpretResult assign_result = parse_assignment_rhs(p, compound_op, p->variables[target_idx].value);
+        if (assign_result.has_error)
+            return assign_result;
 
         // Update the target variable's value
-        p->variables[target_idx].value = final_value;
+        p->variables[target_idx].value = assign_result.value;
 
-        // Consume optional semicolon
-        skip_whitespace(p);
-        if (p->input[p->pos] == ';')
+        return (InterpretResult){.value = assign_result.value, .has_error = false, .error_message = NULL};
+    }
+
+    // Check for array element assignment (array[idx] = value)
+    if (isalpha(p->input[p->pos]))
+    {
+        int name_pos = p->pos;
+        char array_name[32];
+        int array_name_len = parse_identifier(p, array_name, sizeof(array_name));
+        if (array_name_len > 0)
         {
-            p->pos++;
-        }
+            skip_whitespace(p);
+            if (p->input[p->pos] == '[')
+            {
+                int array_idx = find_variable(p, array_name, array_name_len);
+                if (array_idx < 0)
+                {
+                    return make_error("Variable not found");
+                }
 
-        return (InterpretResult){.value = final_value, .has_error = false, .error_message = NULL};
+                if (!p->variables[array_idx].is_array)
+                {
+                    return make_error("Cannot index non-array variable");
+                }
+
+                long index_value = 0;
+                InterpretResult bracket_result = parse_bracket_index(p, &index_value);
+                if (bracket_result.has_error)
+                    return bracket_result;
+
+                char compound_op = check_assignment_operator(p);
+                if (compound_op == '\0')
+                {
+                    p->pos = saved_pos;
+                    return make_error("not_an_assignment");
+                }
+
+                if (!p->variables[array_idx].is_mutable)
+                {
+                    return make_error("Cannot assign to immutable variable");
+                }
+
+                if (index_value < 0 || index_value >= p->variables[array_idx].array_total_count)
+                {
+                    return make_error("Array index out of bounds");
+                }
+
+                if (index_value > p->variables[array_idx].array_init_count)
+                {
+                    return make_error("Array elements must be initialized in order");
+                }
+
+                if (compound_op != '=' && index_value >= p->variables[array_idx].array_init_count)
+                {
+                    return make_error("Cannot use compound assignment on uninitialized element");
+                }
+
+                // Parse the assignment operator
+                p->pos += (compound_op == '=' ? 1 : 2);
+                skip_whitespace(p);
+
+                // Parse RHS and calculate final value
+                InterpretResult assign_result = parse_assignment_rhs(p, compound_op, p->variables[array_idx].array_values[index_value]);
+                if (assign_result.has_error)
+                    return assign_result;
+
+                long final_value = assign_result.value;
+
+                // Validate final value against array element type
+                if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+                {
+                    if (!is_type_compatible(p->variables[array_idx].array_element_type, p->tracked_suffix))
+                    {
+                        return make_error("Array element type mismatch");
+                    }
+                }
+                else
+                {
+                    InterpretResult validation = validate_type(final_value, p->variables[array_idx].array_element_type);
+                    if (validation.has_error)
+                        return validation;
+                }
+
+                p->variables[array_idx].array_values[index_value] = final_value;
+                if (index_value == p->variables[array_idx].array_init_count)
+                {
+                    p->variables[array_idx].array_init_count++;
+                }
+
+                return (InterpretResult){.value = final_value, .has_error = false, .error_message = NULL};
+            }
+            p->pos = name_pos;
+        }
     }
 
     // Try to parse a regular identifier assignment
@@ -1758,6 +2453,11 @@ static InterpretResult parse_primary(Parser *p, NumberValue *out_num)
 
             return (InterpretResult){.value = (int)deref_value, .has_error = false, .error_message = NULL};
         }
+    }
+
+    if (p->input[p->pos] == '[')
+    {
+        return parse_array_literal(p);
     }
 
     if (p->input[p->pos] == '(' || p->input[p->pos] == '{')
@@ -2953,7 +3653,7 @@ static int is_expression(const char *str)
             // Logical AND operator
             return 1;
         }
-        else if (str[i] == '(' || str[i] == ')' || str[i] == '{' || str[i] == '}')
+        else if (str[i] == '(' || str[i] == ')' || str[i] == '{' || str[i] == '}' || str[i] == '[' || str[i] == ']')
         {
             return 1;
         }

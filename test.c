@@ -600,6 +600,11 @@ void test_interpret_function_declaration(void)
     assert_success("fn empty() : Void => {}", 0, "test_interpret_function_declaration");
 }
 
+void test_interpret_duplicate_function_declaration(void)
+{
+    assert_error("fn empty() : Void => {} fn empty() : Void => {}", "test_interpret_duplicate_function_declaration");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -715,6 +720,7 @@ int main(void)
     test_interpret_immutable_pointer_dereference_assign_error();
     test_interpret_array_indexing();
     test_interpret_function_declaration();
+    test_interpret_duplicate_function_declaration();
 
     if (passed_asserts == total_asserts)
     {
