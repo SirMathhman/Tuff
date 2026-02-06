@@ -215,6 +215,51 @@ void test_interpret_negative_i8(void)
     assert_success("-100I8", -100, "test_interpret_negative_i8");
 }
 
+void test_interpret_usize_literal(void)
+{
+    assert_success("100USize", 100, "test_interpret_usize_literal");
+}
+
+void test_interpret_isize_literal(void)
+{
+    assert_success("100ISize", 100, "test_interpret_isize_literal");
+}
+
+void test_interpret_negative_isize(void)
+{
+    assert_success("-100ISize", -100, "test_interpret_negative_isize");
+}
+
+void test_interpret_usize_variable(void)
+{
+    assert_success("let x : USize = 100; x", 100, "test_interpret_usize_variable");
+}
+
+void test_interpret_isize_variable(void)
+{
+    assert_success("let x : ISize = -100; x", -100, "test_interpret_isize_variable");
+}
+
+void test_interpret_usize_arithmetic(void)
+{
+    assert_success("10USize + 20USize", 30, "test_interpret_usize_arithmetic");
+}
+
+void test_interpret_isize_arithmetic(void)
+{
+    assert_success("10ISize + 20ISize", 30, "test_interpret_isize_arithmetic");
+}
+
+void test_interpret_usize_i64_compatibility(void)
+{
+    assert_success("let x : USize = 100U64; x", 100, "test_interpret_usize_i64_compatibility");
+}
+
+void test_interpret_isize_i64_compatibility(void)
+{
+    assert_success("let x : ISize = 100I64; x", 100, "test_interpret_isize_i64_compatibility");
+}
+
 void test_interpret_out_of_range_u8(void)
 {
     assert_error("256U8", "test_interpret_out_of_range_u8");
@@ -954,6 +999,15 @@ int main(void)
     test_interpret_one_hundred_u8();
     test_interpret_negative_u8();
     test_interpret_negative_i8();
+    test_interpret_usize_literal();
+    test_interpret_isize_literal();
+    test_interpret_negative_isize();
+    test_interpret_usize_variable();
+    test_interpret_isize_variable();
+    test_interpret_usize_arithmetic();
+    test_interpret_isize_arithmetic();
+    test_interpret_usize_i64_compatibility();
+    test_interpret_isize_i64_compatibility();
     test_interpret_out_of_range_u8();
     test_interpret_addition();
     test_interpret_mixed_types();

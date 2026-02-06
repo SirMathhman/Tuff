@@ -102,10 +102,12 @@ static const TypeInfo type_info[] = {
     {"U16", 0, 65535, "Value out of range for U16 (0-65535)"},
     {"U32", 0, 4294967295LL, "Value out of range for U32 (0-4294967295)"},
     {"U64", 0, 9223372036854775807LL, "Value out of range for U64"},
+    {"USize", 0, 9223372036854775807LL, "Value out of range for USize"},
     {"I8", -128, 127, "Value out of range for I8 (-128 to 127)"},
     {"I16", -32768, 32767, "Value out of range for I16 (-32768 to 32767)"},
     {"I32", -2147483648LL, 2147483647LL, "Value out of range for I32"},
     {"I64", -9223372036854775807LL - 1, 9223372036854775807LL, "Value out of range for I64"},
+    {"ISize", -9223372036854775807LL - 1, 9223372036854775807LL, "Value out of range for ISize"},
     {NULL, 0, 0, NULL}};
 
 // Helper: Check if a type string is a pointer type
@@ -275,6 +277,12 @@ static int suffix_length(const char *suffix)
 {
     if (!suffix || !suffix[0])
         return 0;
+    // Check for 5-char suffixes first (USize, ISize)
+    if ((suffix[0] == 'U' || suffix[0] == 'I') &&
+        suffix[1] == 'S' && suffix[2] == 'i' && suffix[3] == 'z' && suffix[4] == 'e')
+    {
+        return 5; // USize or ISize
+    }
     // U8, I8 are 2 chars, U16, I16, U32, I32, U64, I64 are 3 chars
     // Check if second char is a digit (2-char suffix) or a digit and another char (3-char)
     if (isdigit(suffix[1]))
@@ -380,10 +388,14 @@ typedef struct
 static const TypeHierarchy type_hierarchies[] = {
     {'U', "U8", {"U16", "U32", "U64"}},
     {'U', "U16", {"U32", "U64", NULL}},
-    {'U', "U32", {"U64", NULL, NULL}},
+    {'U', "U32", {"U64", "USize", NULL}},
+    {'U', "U64", {"USize", NULL, NULL}},
+    {'U', "USize", {NULL, NULL, NULL}},
     {'I', "I8", {"I16", "I32", "I64"}},
     {'I', "I16", {"I32", "I64", NULL}},
-    {'I', "I32", {"I64", NULL, NULL}},
+    {'I', "I32", {"I64", "ISize", NULL}},
+    {'I', "I64", {"ISize", NULL, NULL}},
+    {'I', "ISize", {NULL, NULL, NULL}},
     {0, NULL, {NULL, NULL, NULL}}};
 
 // Helper: Check if source type can be assigned to destination type
