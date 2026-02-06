@@ -26,8 +26,8 @@ typedef struct
     int array_total_count;
     char array_element_type[16];
     long array_values[MAX_ARRAY_ELEMENTS];
-    int is_struct;      // 1 if struct instance, 0 otherwise
-    int struct_def_idx; // Index in parser's structs array
+    int is_struct;          // 1 if struct instance, 0 otherwise
+    int struct_def_idx;     // Index in parser's structs array
     long struct_values[10]; // Field values for struct instances
 } Variable;
 
@@ -70,10 +70,13 @@ typedef struct
     int declared_functions_count;    // Count of declared functions
     FunctionInfo functions[10];      // Array of function information
     int functions_count;             // Count of stored functions
-    char declared_structs[10][32];   // Track all declared struct names
-    int declared_structs_count;      // Count of declared structs
-    StructInfo structs[10];          // Array of struct definitions
-    int structs_count;               // Count of struct definitions
+    int has_temp_struct;
+    int temp_struct_def_idx;
+    long temp_struct_values[10];
+    char declared_structs[10][32]; // Track all declared struct names
+    int declared_structs_count;    // Count of declared structs
+    StructInfo structs[10];        // Array of struct definitions
+    int structs_count;             // Count of struct definitions
 } Parser;
 
 typedef struct
@@ -555,6 +558,8 @@ static InterpretResult try_parse_assignment_expression(Parser *p);
 static int is_keyword_at(Parser *p, const char *keyword);
 static int find_variable(Parser *p, const char *name, int name_len);
 static int find_function(Parser *p, const char *name, int name_len);
+static int find_struct(Parser *p, const char *name, int name_len);
+static int find_struct_field_index(Parser *p, int struct_idx, const char *field_name, int field_name_len);
 static int set_variable_with_type(Parser *p, const char *name, int name_len, long value, const char *type);
 static void save_variable_state(Parser *p, Variable saved_vars[10], int *saved_var_count);
 static void restore_saved_vars(Parser *p, Variable saved_vars[10], int saved_var_count);
@@ -967,6 +972,56 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     return make_error("Array value must be indexed");
                 }
 
+                if (p->variables[idx].is_struct)
+                {
+                    skip_whitespace(p);
+                    if (p->input[p->pos] != '.')
+                    {
+                        return make_error("Struct value must access field");
+                    }
+
+                    p->pos++; // Skip '.'
+                    skip_whitespace(p);
+
+                    char field_name[32];
+                    int field_name_len = parse_identifier(p, field_name, sizeof(field_name));
+                    if (field_name_len <= 0)
+                    {
+                        return make_error("Expected field name after '.'");
+                    }
+
+                    int struct_idx = p->variables[idx].struct_def_idx;
+                    if (struct_idx < 0 || struct_idx >= p->structs_count)
+                    {
+                        return make_error("Invalid struct type");
+                    }
+
+                    int field_idx = find_struct_field_index(p, struct_idx, field_name, field_name_len);
+                    if (field_idx < 0)
+                    {
+                        return make_error("Unknown struct field");
+                    }
+
+                    long field_value = p->variables[idx].struct_values[field_idx];
+                    const char *field_type = p->structs[struct_idx].field_types[field_idx];
+
+                    strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), field_type, _TRUNCATE);
+                    p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+                    p->has_tracked_suffix = 1;
+
+                    if (out_num)
+                    {
+                        out_num->value = field_value;
+                        out_num->suffix = p->tracked_suffix;
+                        out_num->suffix_len = strlen(p->tracked_suffix);
+                    }
+
+                    return (InterpretResult){
+                        .value = (int)field_value,
+                        .has_error = false,
+                        .error_message = NULL};
+                }
+
                 if (out_num)
                 {
                     out_num->value = p->variables[idx].value;
@@ -997,6 +1052,129 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                     .value = (int)p->variables[idx].value,
                     .has_error = false,
                     .error_message = NULL};
+            }
+
+            skip_whitespace(p);
+            if (p->input[p->pos] == '{')
+            {
+                int struct_idx = find_struct(p, var_name, name_len);
+                if (struct_idx >= 0)
+                {
+                    p->pos++; // Skip '{'
+                    skip_whitespace(p);
+
+                    long field_values[10] = {0};
+                    int field_set[10] = {0};
+                    int field_count = p->structs[struct_idx].field_count;
+
+                    if (p->input[p->pos] != '}' || field_count > 0)
+                    {
+                        while (p->input[p->pos] && p->input[p->pos] != '}')
+                        {
+                            char field_name[32];
+                            int field_name_len = parse_identifier(p, field_name, sizeof(field_name));
+                            if (field_name_len <= 0)
+                            {
+                                return make_error("Expected field name in struct initializer");
+                            }
+
+                            int field_idx = find_struct_field_index(p, struct_idx, field_name, field_name_len);
+                            if (field_idx < 0)
+                            {
+                                return make_error("Unknown struct field in initializer");
+                            }
+
+                            if (field_set[field_idx])
+                            {
+                                return make_error("Duplicate field in struct initializer");
+                            }
+
+                            skip_whitespace(p);
+                            if (p->input[p->pos] != ':')
+                            {
+                                return make_error("Expected ':' after field name in initializer");
+                            }
+                            p->pos++; // Skip ':'
+                            skip_whitespace(p);
+
+                            InterpretResult value_result = parse_additive(p);
+                            if (value_result.has_error)
+                                return value_result;
+
+                            const char *field_type = p->structs[struct_idx].field_types[field_idx];
+                            if (p->has_tracked_suffix && p->tracked_suffix[0] != '\0')
+                            {
+                                if (!is_type_compatible(field_type, p->tracked_suffix))
+                                {
+                                    return make_error("Struct field type mismatch");
+                                }
+                            }
+                            else if (strcmp(field_type, "Bool") == 0)
+                            {
+                                return make_error("Struct field type mismatch");
+                            }
+                            else
+                            {
+                                InterpretResult validation = validate_type(value_result.value, field_type);
+                                if (validation.has_error)
+                                    return validation;
+                            }
+
+                            field_values[field_idx] = value_result.value;
+                            field_set[field_idx] = 1;
+
+                            skip_whitespace(p);
+                            if (p->input[p->pos] == ',')
+                            {
+                                p->pos++;
+                                skip_whitespace(p);
+                                continue;
+                            }
+
+                            if (p->input[p->pos] == '}')
+                            {
+                                break;
+                            }
+
+                            return make_error("Expected ',' or '}' after struct field value");
+                        }
+                    }
+
+                    if (p->input[p->pos] != '}')
+                    {
+                        return make_error("Expected '}' after struct initializer");
+                    }
+                    p->pos++; // Skip '}'
+
+                    for (int i = 0; i < field_count; i++)
+                    {
+                        if (!field_set[i])
+                        {
+                            return make_error("Missing field initializer");
+                        }
+                    }
+
+                    p->has_temp_struct = 1;
+                    p->temp_struct_def_idx = struct_idx;
+                    for (int i = 0; i < field_count; i++)
+                    {
+                        p->temp_struct_values[i] = field_values[i];
+                    }
+
+                    strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), p->structs[struct_idx].name, _TRUNCATE);
+                    p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+                    p->has_tracked_suffix = 1;
+
+                    if (out_num)
+                    {
+                        out_num->value = 0;
+                        out_num->suffix = p->tracked_suffix;
+                        out_num->suffix_len = strlen(p->tracked_suffix);
+                    }
+
+                    return (InterpretResult){.value = 0, .has_error = false, .error_message = NULL};
+                }
+                p->pos = saved_pos;
             }
 
             // Check for function call
@@ -1215,6 +1393,23 @@ static int find_struct(Parser *p, const char *name, int name_len)
     {
         if (strncmp(p->structs[i].name, name, name_len) == 0 &&
             p->structs[i].name[name_len] == '\0')
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Helper: Find a field index within a struct definition, or -1 if not found
+static int find_struct_field_index(Parser *p, int struct_idx, const char *field_name, int field_name_len)
+{
+    if (struct_idx < 0 || struct_idx >= p->structs_count)
+        return -1;
+
+    for (int i = 0; i < p->structs[struct_idx].field_count; i++)
+    {
+        if (strncmp(p->structs[struct_idx].field_names[i], field_name, field_name_len) == 0 &&
+            p->structs[struct_idx].field_names[i][field_name_len] == '\0')
         {
             return i;
         }
@@ -1654,6 +1849,17 @@ static void clear_array_fields(Variable *var)
     var->array_element_type[0] = '\0';
 }
 
+// Helper: Clear all struct-related fields in a variable
+static void clear_struct_fields(Variable *var)
+{
+    var->is_struct = 0;
+    var->struct_def_idx = -1;
+    for (int i = 0; i < 10; i++)
+    {
+        var->struct_values[i] = 0;
+    }
+}
+
 // Helper: Set or add a variable with optional type information
 // Helper: Set or add a variable with optional type and mutability information
 static int set_variable_with_mutability(Parser *p, const char *name, int name_len, long value, const char *type, int is_mutable)
@@ -1666,6 +1872,7 @@ static int set_variable_with_mutability(Parser *p, const char *name, int name_le
         p->variables[idx].pointer_target = -1; // Reset pointer target on update
         set_variable_type(&p->variables[idx], type);
         clear_array_fields(&p->variables[idx]);
+        clear_struct_fields(&p->variables[idx]);
         return idx;
     }
 
@@ -1689,6 +1896,7 @@ static int set_pointer_variable_with_mutability(Parser *p, const char *name, int
         p->variables[idx].pointer_target = target_idx;
         set_variable_type(&p->variables[idx], pointer_type);
         clear_array_fields(&p->variables[idx]);
+        clear_struct_fields(&p->variables[idx]);
         return idx;
     }
 
@@ -1727,6 +1935,32 @@ static int set_array_variable_with_mutability(
     for (int i = 0; i < total_count && i < MAX_ARRAY_ELEMENTS; i++)
     {
         p->variables[p->var_count].array_values[i] = (i < init_count && values) ? values[i] : 0;
+    }
+
+    return p->var_count++;
+}
+
+// Helper: Set a struct variable with mutability
+static int set_struct_variable_with_mutability(
+    Parser *p,
+    const char *name,
+    int name_len,
+    int struct_def_idx,
+    const long *values,
+    const char *struct_type,
+    int is_mutable)
+{
+    if (p->var_count >= 10)
+        return -1; // Too many variables
+
+    init_variable_entry(p, name, name_len, 0, -1, is_mutable, struct_type);
+    p->variables[p->var_count].is_struct = 1;
+    p->variables[p->var_count].struct_def_idx = struct_def_idx;
+
+    int field_count = p->structs[struct_def_idx].field_count;
+    for (int i = 0; i < field_count && i < 10; i++)
+    {
+        p->variables[p->var_count].struct_values[i] = values ? values[i] : 0;
     }
 
     return p->var_count++;
@@ -1928,6 +2162,7 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     char declared_array_elem_type[16] = {0};
     int declared_array_init_count = 0;
     int declared_array_total_count = 0;
+    int declared_struct_idx = -1;
 
     // Check if this is a typed or typeless declaration
     if (p->input[p->pos] == '=')
@@ -2001,6 +2236,11 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
             declared_type[sizeof(declared_type) - 1] = '\0';
         }
 
+        if (!is_array_declared && !is_pointer_type(declared_type))
+        {
+            declared_struct_idx = find_struct(p, declared_type, (int)strlen(declared_type));
+        }
+
         // Expect '='
         InterpretResult eq_result = expect_char(p, '=', "Expected '=' in variable declaration");
         if (eq_result.has_error)
@@ -2020,6 +2260,11 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
     if (p->has_temp_array && !is_array_declared)
     {
         return make_error("Array literal must be assigned to an array variable");
+    }
+
+    if (p->has_temp_struct && declared_type[0] != '\0' && declared_struct_idx < 0)
+    {
+        return make_error("Struct literal must be assigned to a struct variable");
     }
 
     // Determine the actual type to use for the variable
@@ -2068,6 +2313,31 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
                 is_mutable);
 
             p->has_temp_array = 0;
+            return finalize_statement(p, "Expected ';' after variable declaration");
+        }
+
+        if (declared_struct_idx >= 0)
+        {
+            if (!p->has_temp_struct)
+            {
+                return make_error("Struct initializer required");
+            }
+
+            if (p->temp_struct_def_idx != declared_struct_idx)
+            {
+                return make_error("Struct type mismatch");
+            }
+
+            set_struct_variable_with_mutability(
+                p,
+                var_name,
+                name_len,
+                declared_struct_idx,
+                p->temp_struct_values,
+                declared_type,
+                is_mutable);
+
+            p->has_temp_struct = 0;
             return finalize_statement(p, "Expected ';' after variable declaration");
         }
 
@@ -2136,6 +2406,20 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         strncpy_s(actual_type, sizeof(actual_type), p->tracked_suffix, _TRUNCATE);
         actual_type[sizeof(actual_type) - 1] = '\0';
 
+        if (p->has_temp_struct)
+        {
+            set_struct_variable_with_mutability(
+                p,
+                var_name,
+                name_len,
+                p->temp_struct_def_idx,
+                p->temp_struct_values,
+                actual_type,
+                is_mutable);
+            p->has_temp_struct = 0;
+            return finalize_statement(p, "Expected ';' after variable declaration");
+        }
+
         // If value is a pointer type, handle as pointer variable
         if (is_pointer_type(actual_type))
         {
@@ -2152,6 +2436,24 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
         // No explicit type declared, untyped value - default to I32
         strncpy_s(actual_type, sizeof(actual_type), "I32", _TRUNCATE);
         actual_type[sizeof(actual_type) - 1] = '\0';
+
+        if (p->has_temp_struct)
+        {
+            int struct_idx = p->temp_struct_def_idx;
+            strncpy_s(actual_type, sizeof(actual_type), p->structs[struct_idx].name, _TRUNCATE);
+            actual_type[sizeof(actual_type) - 1] = '\0';
+
+            set_struct_variable_with_mutability(
+                p,
+                var_name,
+                name_len,
+                struct_idx,
+                p->temp_struct_values,
+                actual_type,
+                is_mutable);
+            p->has_temp_struct = 0;
+            return finalize_statement(p, "Expected ';' after variable declaration");
+        }
 
         // Store variable with I32 type
         set_variable_with_mutability(p, var_name, name_len, val_result.value, actual_type, is_mutable);
@@ -2661,6 +2963,11 @@ static InterpretResult parse_and_apply_assignment(Parser *p, const char *var_nam
     if (!p->variables[idx].is_mutable)
     {
         return make_error("Cannot assign to immutable variable");
+    }
+
+    if (p->variables[idx].is_struct)
+    {
+        return make_error("Cannot assign to struct variable");
     }
 
     // Parse assignment operator (handles =, +=, -=, *=, /=)
@@ -4281,6 +4588,10 @@ static int is_expression(const char *str)
         {
             return 1;
         }
+        else if (str[i] == '.')
+        {
+            return 1;
+        }
         else if (isdigit(str[i]))
         {
             in_number = 1;
@@ -4321,8 +4632,13 @@ InterpretResult interpret(const char *str)
             .declared_functions_count = 0,
             .functions = {0},
             .functions_count = 0,
+            .has_temp_struct = 0,
+            .temp_struct_def_idx = -1,
+            .temp_struct_values = {0},
             .declared_structs = {0},
-            .declared_structs_count = 0};
+            .declared_structs_count = 0,
+            .structs = {0},
+            .structs_count = 0};
         return parse_expression(&p);
     }
 
