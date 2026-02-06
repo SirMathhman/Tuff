@@ -705,6 +705,11 @@ void test_interpret_struct_missing_fields_error(void)
     assert_error("struct Point { x : I32; y : I32; } let point : Point = Point {}; point.x - point.y", "test_interpret_struct_missing_fields_error");
 }
 
+void test_interpret_struct_field_type_mismatch_bool(void)
+{
+    assert_error("struct Point { x : I32; y : I32; } let point : Point = Point { y : true, x : true }; point.x - point.y", "test_interpret_struct_field_type_mismatch_bool");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -841,6 +846,7 @@ int main(void)
     test_interpret_struct_instantiation_and_field_access();
     test_interpret_struct_out_of_order_field_init();
     test_interpret_struct_missing_fields_error();
+    test_interpret_struct_field_type_mismatch_bool();
 
     if (passed_asserts == total_asserts)
     {
