@@ -725,6 +725,11 @@ void test_interpret_slice_basic(void)
     assert_success("let array : [I32; 3; 3] = [1, 2, 3]; let slice : *[I32] = &array[0..3]; slice[0] + slice[1] + slice[2]", 6, "test_interpret_slice_basic");
 }
 
+void test_interpret_slice_length_property(void)
+{
+    assert_success("let array : [I32; 3; 3] = [1, 2, 3]; let slice : *[I32] = &array[0..3]; slice.length", 3, "test_interpret_slice_length_property");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -865,6 +870,7 @@ int main(void)
     test_interpret_struct_undefined_fields_error();
     test_interpret_char_literal();
     test_interpret_slice_basic();
+    test_interpret_slice_length_property();
 
     if (passed_asserts == total_asserts)
     {

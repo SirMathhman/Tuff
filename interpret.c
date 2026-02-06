@@ -29,6 +29,8 @@ typedef struct
     int is_struct;          // 1 if struct instance, 0 otherwise
     int struct_def_idx;     // Index in parser's structs array
     long struct_values[10]; // Field values for struct instances
+    int slice_start;        // Start index of slice (for pointer-to-array types)
+    int slice_end;          // End index of slice (for pointer-to-array types)
 } Variable;
 
 typedef struct
@@ -77,6 +79,8 @@ typedef struct
     int declared_structs_count;    // Count of declared structs
     StructInfo structs[10];        // Array of struct definitions
     int structs_count;             // Count of struct definitions
+    int temp_slice_start;          // Start index for temporary slice
+    int temp_slice_end;            // End index for temporary slice
 } Parser;
 
 typedef struct
@@ -140,14 +144,14 @@ static int is_pointer_to_array_type(const char *type)
 {
     if (!type || type[0] != '*')
         return 0;
-    
+
     // Skip the '*' and optional 'mut '
     const char *p = type + 1;
     if (p[0] == 'm' && p[1] == 'u' && p[2] == 't' && p[3] == ' ')
     {
         p += 4; // Skip "mut "
     }
-    
+
     // Check if what remains is an array type indicator
     return p[0] == '[';
 }
@@ -160,18 +164,18 @@ static void extract_pointer_array_element_type(const char *pointer_array_type, c
         out_elem_type[0] = '\0';
         return;
     }
-    
+
     // Skip the '*' and optional 'mut '
     const char *p = pointer_array_type + 1;
     if (p[0] == 'm' && p[1] == 'u' && p[2] == 't' && p[3] == ' ')
     {
         p += 4; // Skip "mut "
     }
-    
+
     // Now p points to '[ElementType]'
     // Skip '['
     p++;
-    
+
     // Find the closing ']'
     int len = 0;
     while (*p && *p != ']' && len < max_len - 1)
@@ -1001,6 +1005,10 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
             // Set the tracked suffix to the slice type
             set_tracked_suffix_and_output(p, slice_type, var_idx, out_num);
 
+            // Store slice bounds in temporary fields
+            p->temp_slice_start = start_idx;
+            p->temp_slice_end = end_idx;
+
             // Return the array variable index as the slice pointer value
             return (InterpretResult){.value = var_idx, .has_error = false, .error_message = NULL};
         }
@@ -1112,50 +1120,50 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 {
                     // Check if this is an array or a slice (pointer-to-array)
                     int is_indexable = p->variables[idx].is_array ||
-                                      is_pointer_to_array_type(p->variables[idx].type);
-                    
+                                       is_pointer_to_array_type(p->variables[idx].type);
+
                     if (!is_indexable)
                     {
                         return make_error("Cannot index non-array variable");
                     }
-                    
+
                     // If it's a slice, we need to handle it differently
                     if (is_pointer_to_array_type(p->variables[idx].type))
                     {
                         // For slices, extract element type from pointer-to-array type
                         char elem_type[16];
                         extract_pointer_array_element_type(p->variables[idx].type, elem_type, sizeof(elem_type));
-                        
+
                         // Parse the index
                         long index_value = 0;
                         InterpretResult bracket_result = parse_bracket_index(p, &index_value);
                         if (bracket_result.has_error)
                             return bracket_result;
-                        
+
                         // Get the array variable that the slice points to
                         int array_var_idx = p->variables[idx].pointer_target;
                         if (array_var_idx < 0 || array_var_idx >= p->var_count || !p->variables[array_var_idx].is_array)
                         {
                             return make_error("Invalid slice pointer");
                         }
-                        
+
                         // Validate the index against the array bounds
                         if (index_value < 0 || index_value >= p->variables[array_var_idx].array_total_count)
                         {
                             return make_error("Array index out of bounds");
                         }
-                        
+
                         if (index_value >= p->variables[array_var_idx].array_init_count)
                         {
                             return make_error("Array index out of initialized range");
                         }
-                        
+
                         // Get the value from the array
                         long value = p->variables[array_var_idx].array_values[index_value];
-                        
+
                         // Set the tracked suffix to the element type
                         set_tracked_suffix_and_output(p, elem_type, value, out_num);
-                        
+
                         return (InterpretResult){.value = value, .has_error = false, .error_message = NULL};
                     }
                     else
@@ -1168,6 +1176,49 @@ static InterpretResult parse_simple_operand(Parser *p, NumberValue *out_num)
                 if (p->variables[idx].is_array)
                 {
                     return make_error("Array value must be indexed");
+                }
+
+                // Handle slice.length property access
+                if (is_pointer_to_array_type(p->variables[idx].type))
+                {
+                    skip_whitespace(p);
+                    if (p->input[p->pos] == '.')
+                    {
+                        p->pos++; // Skip '.'
+                        skip_whitespace(p);
+
+                        char property_name[32];
+                        int property_name_len = parse_identifier(p, property_name, sizeof(property_name));
+                        if (property_name_len <= 0)
+                        {
+                            return make_error("Expected property name after '.'");
+                        }
+
+                        // Check for .length property
+                        if (strncmp(property_name, "length", property_name_len) == 0 && property_name_len == 6)
+                        {
+                            // Return the slice length (end - start)
+                            long slice_length = p->variables[idx].slice_end - p->variables[idx].slice_start;
+                            
+                            // Set tracked suffix to I32 (length is always a numeric value)
+                            strncpy_s(p->tracked_suffix, sizeof(p->tracked_suffix), "I32", _TRUNCATE);
+                            p->tracked_suffix[sizeof(p->tracked_suffix) - 1] = '\0';
+                            p->has_tracked_suffix = 1;
+
+                            if (out_num)
+                            {
+                                out_num->value = slice_length;
+                                out_num->suffix = p->tracked_suffix;
+                                out_num->suffix_len = 3;
+                            }
+
+                            return (InterpretResult){.value = (int)slice_length, .has_error = false, .error_message = NULL};
+                        }
+                        else
+                        {
+                            return make_error("Unknown slice property (only 'length' is supported)");
+                        }
+                    }
                 }
 
                 if (p->variables[idx].is_struct)
@@ -2021,6 +2072,8 @@ static void init_variable_entry(Parser *p, const char *name, int name_len, long 
     {
         p->variables[p->var_count].struct_values[i] = 0;
     }
+    p->variables[p->var_count].slice_start = 0;
+    p->variables[p->var_count].slice_end = 0;
     register_declared_name(p, name, name_len);
 }
 
@@ -2095,6 +2148,12 @@ static int set_pointer_variable_with_mutability(Parser *p, const char *name, int
         set_variable_type(&p->variables[idx], pointer_type);
         clear_array_fields(&p->variables[idx]);
         clear_struct_fields(&p->variables[idx]);
+        // If this is a pointer-to-array (slice), store the bounds
+        if (is_pointer_to_array_type(pointer_type))
+        {
+            p->variables[idx].slice_start = p->temp_slice_start;
+            p->variables[idx].slice_end = p->temp_slice_end;
+        }
         return idx;
     }
 
@@ -2102,6 +2161,13 @@ static int set_pointer_variable_with_mutability(Parser *p, const char *name, int
         return -1; // Too many variables
 
     init_variable_entry(p, name, name_len, 0, target_idx, is_mutable, pointer_type);
+
+    // If this is a pointer-to-array (slice), store the bounds
+    if (is_pointer_to_array_type(pointer_type))
+    {
+        p->variables[p->var_count].slice_start = p->temp_slice_start;
+        p->variables[p->var_count].slice_end = p->temp_slice_end;
+    }
 
     return p->var_count++;
 }
@@ -2411,24 +2477,24 @@ static InterpretResult parse_let_statement_in_block(Parser *p)
 
             // Parse type (could be identifier or array type like [I32])
             char type_name[64]; // Increased to support "*[I32]" types
-            
+
             if (is_pointer && p->input[p->pos] == '[')
             {
                 // Pointer to array type: *[ElementType] (for slices)
                 // Parse simplified array type: [Type] (without size counts)
                 p->pos++; // Skip '['
                 skip_whitespace(p);
-                
+
                 InterpretResult elem_type_result = parse_identifier_or_error(p, type_name, sizeof(type_name), "Expected array element type");
                 if (elem_type_result.has_error)
                     return elem_type_result;
-                
+
                 skip_whitespace(p);
-                
+
                 InterpretResult close_bracket = expect_char(p, ']', "Expected ']' after array element type");
                 if (close_bracket.has_error)
                     return close_bracket;
-                
+
                 // Store the declared type as pointer to array
                 if (is_mut_pointer)
                 {
