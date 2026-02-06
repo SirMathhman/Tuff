@@ -670,6 +670,21 @@ void test_interpret_duplicate_struct_declaration(void)
     assert_error("struct Empty {} struct Empty {}", "test_interpret_duplicate_struct_declaration");
 }
 
+void test_interpret_struct_with_fields(void)
+{
+    assert_success("struct Empty { x : I32; }", 0, "test_interpret_struct_with_fields");
+}
+
+void test_interpret_struct_with_multiple_fields(void)
+{
+    assert_success("struct Point { x : I32; y : I32; z : I32; }", 0, "test_interpret_struct_with_multiple_fields");
+}
+
+void test_interpret_struct_with_typed_fields(void)
+{
+    assert_success("struct Data { a : U8; b : I16; c : U32; }", 0, "test_interpret_struct_with_typed_fields");
+}
+
 int main(void)
 {
     printf("Running tests...\n");
@@ -799,6 +814,9 @@ int main(void)
     test_interpret_function_forward_reference_type_mismatch();
     test_interpret_struct_empty();
     test_interpret_duplicate_struct_declaration();
+    test_interpret_struct_with_fields();
+    test_interpret_struct_with_multiple_fields();
+    test_interpret_struct_with_typed_fields();
 
     if (passed_asserts == total_asserts)
     {
