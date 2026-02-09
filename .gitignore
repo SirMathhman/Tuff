@@ -1,0 +1,30 @@
+# Build directories
+build/
+cmake-build-*/
+
+# Generated files
+*.c
+*.h
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Don't ignore our main.c bootstrap
+!main.c
+
+# Don't ignore test source files
+!tests/*.tuff
