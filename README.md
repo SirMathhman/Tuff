@@ -50,6 +50,7 @@ cl output.c /Fe:program.exe
 ## Example
 
 **hello.tuff:**
+
 ```tuff
 fn main() : Void => {
     printf("Hello, Tuff!\n");
@@ -57,6 +58,7 @@ fn main() : Void => {
 ```
 
 **Build and run:**
+
 ```bash
 ./build/tuffc tests/hello.tuff -o hello.c
 clang hello.c -o hello
@@ -66,6 +68,7 @@ clang hello.c -o hello
 ## Current Implementation
 
 ✅ **Lexer**: Complete tokenization of Tuff syntax
+
 - Keywords, identifiers, numbers, strings, operators
 - Line/block comments
 - Hex/binary/octal number literals
@@ -94,27 +97,32 @@ Tuff/
 ## Roadmap
 
 ### Phase 1: Bootstrap Compiler (Current)
+
 - [x] Lexer
 - [ ] Parser
 - [ ] Type checker
 - [ ] C code generator
 
 ### Phase 2: Tuff Standard Library
+
 - [ ] String, Vec, HashMap in Tuff
 - [ ] File I/O wrappers
 - [ ] Compile stdlib to C
 
 ### Phase 3: Incremental Migration
+
 - [ ] Replace C utilities with Tuff versions
 - [ ] Migrate parser to Tuff
 - [ ] Migrate type checker to Tuff
 - [ ] Migrate code generator to Tuff
 
 ### Phase 4: Self-Hosting
+
 - [ ] Entire compiler written in Tuff
 - [ ] Multi-generation stability testing
 
 ### Phase 5: Advanced Features
+
 - [ ] Refinement types and compile-time proofs
 - [ ] Generics
 - [ ] Borrow checker
