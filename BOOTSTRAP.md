@@ -2,12 +2,19 @@
 
 ## Purpose
 
-This document defines the **minimal subset of Tuff** required to implement a self-hosted compiler. The bootstrap strategy is:
+This document defines the **minimal subset of Tuff** required to implement a self-hosted compiler.
 
-1. **Phase 1**: Write a minimal Tuff compiler in C (compiles Tuff → C)
-2. **Phase 2**: Rewrite that compiler in minimal Tuff (single file)
-3. **Phase 3**: Use the Tuff-in-C compiler to compile the Tuff-in-Tuff compiler
-4. **Phase 4**: Gradually add more language features to both compiler and language
+**Bootstrap Strategy**: Incremental migration from C to Tuff without a "big bang" rewrite.
+
+1. Write bootstrap compiler `tuffc` in C (compiles Tuff → C + header files)
+2. Create `lib.tuff` with utility functions (String, Vec, parsing utilities, etc.)
+3. Compile `lib.tuff` → `lib.c` + `lib.h` using the bootstrap
+4. Link the C bootstrap with the generated Tuff library
+5. **Incrementally** replace C functions in bootstrap with Tuff equivalents
+6. Repeat: Write more in Tuff, compile, link, replace more C code
+7. Eventually, the entire compiler is in Tuff
+
+This **avoids phases** - the compiler continuously uses itself to build its own components.
 
 The bootstrap Tuff compiler only needs to support features it uses to compile itself. This is a **pragmatic minimal language** - not the full Tuff specification.
 
@@ -17,13 +24,15 @@ The bootstrap Tuff compiler only needs to support features it uses to compile it
 
 **Target**: The bootstrap compiler translates Tuff source code to C source code.
 
-**Rationale**: 
+**Rationale**:
+
 - C compiler handles optimization, linking, and platform specifics
 - Simple 1:1 mapping for most Tuff constructs
 - Allows gradual migration of bootstrap compiler from C to Tuff
 - Only need to support features that map cleanly to C
 
 **Non-Goals for Bootstrap**:
+
 - No LLVM backend (deferred)
 - No JavaScript backend (deferred)
 - No refinement types or compile-time proofs (deferred)
@@ -41,6 +50,7 @@ The bootstrap Tuff compiler only needs to support features it uses to compile it
 #### Primitive Types
 
 **Required**:
+
 ```tuff
 Bool          → _Bool / stdbool.h bool
 I8, I16, I32, I64, I128    → int8_t, int16_t, int32_t, int64_t, __int128
@@ -51,11 +61,13 @@ Char                       → char (or uint32_t for Unicode)
 ```
 
 **String Types**:
+
 ```tuff
 *Str          → char* (C string, null-terminated)
 ```
 
 **Not Required for Bootstrap**:
+
 - Refined types (I32 < 100, I32 != 0, etc.)
 - Literal types (5I32, exactly 5)
 - Dependent types
@@ -64,6 +76,7 @@ Char                       → char (or uint32_t for Unicode)
 #### Composite Types
 
 **Structs**:
+
 ```tuff
 struct Point {
     x : I32,
@@ -78,6 +91,7 @@ typedef struct Point {
 ```
 
 **Union Types** (Tagged Unions):
+
 ```tuff
 struct Some {
     value : I32;
@@ -97,6 +111,7 @@ typedef struct Option {
 ```
 
 **Arrays**:
+
 ```tuff
 [T; N]        // Fixed-size array → T arr[N]
 *[T]          // Dynamic array (pointer + length)
@@ -104,6 +119,7 @@ typedef struct Option {
 ```
 
 **Not Required**:
+
 - Arrays with init/capacity tracking: `[T; Init; Total]`
 
 #### Pointers
@@ -116,6 +132,7 @@ typedef struct Option {
 **Semantics**: Simple C-style pointers. No borrow checking in bootstrap.
 
 **Nullable Pointers**:
+
 ```tuff
 *T | 0        // Nullable pointer
               // Can implement with union or just use C's NULL
@@ -124,6 +141,7 @@ typedef struct Option {
 ### 2. Functions
 
 **Definition**:
+
 ```tuff
 fn add(a : I32, b : I32) : I32 => a + b;
 
@@ -139,6 +157,7 @@ int32_t add(int32_t a, int32_t b) {
 ```
 
 **Extension Methods** (No impl blocks):
+
 ```tuff
 struct Point { x : I32, y : I32 }
 
@@ -153,6 +172,7 @@ double distance(Point* this) {
 ```
 
 **Not Required**:
+
 - Generics: `fn identity<T>(x : T) : T`
 - Closures: `fn outer() : () => Void`
 - Async/await
@@ -168,16 +188,19 @@ let y = 200;          // Type inference (simple cases only)
 ```
 
 **Rules**:
+
 - Immutable by default (map to `const` in C where possible)
 - No shadowing
 - Type inference for literals and simple expressions
 
 **Not Required**:
+
 - Complex type inference with refinements
 
 ### 4. Control Flow
 
 **If/Else**:
+
 ```tuff
 if (condition) {
     // body
@@ -189,6 +212,7 @@ if (condition) {
 ```
 
 **Loops**:
+
 ```tuff
 // While loop
 while (condition) {
@@ -207,6 +231,7 @@ for (i in 0..10) {
 ```
 
 **Match Expressions**:
+
 ```tuff
 match (value) {
     case Some { value } = handleSome(value);
@@ -217,12 +242,14 @@ match (value) {
 ```
 
 **Pattern Matching Features**:
+
 - Destructuring union types
 - Variable binding in patterns
 - Wildcard `_` pattern
 - Basic exhaustiveness checking
 
 **Not Required**:
+
 - Range patterns: `case 0..10`
 - Multiple patterns: `case A | B` (can add later if useful)
 - Guards: `case Some { value } if value > 0`
@@ -230,6 +257,7 @@ match (value) {
 ### 5. Pattern Matching and Type Tests
 
 **Is Expression**:
+
 ```tuff
 if (option is Some { value }) {
     // use value
@@ -249,6 +277,7 @@ if (option is Some { value }) {
 **Logical**: `&&`, `||`, `!`
 
 **Not Required**:
+
 - Operator overloading (doesn't exist in full Tuff anyway)
 - Checked arithmetic (deferred with refinement types)
 
@@ -259,6 +288,7 @@ if (option is Some { value }) {
 **File I/O**: Access to C's stdio for reading source and writing generated C code.
 
 **Not Required**:
+
 - Package system: `com::meti::Module`
 - Multi-file projects
 - `let { A, B } = module;` imports
@@ -277,6 +307,7 @@ if (option is Some { value }) {
 The bootstrap compiler needs these types/functions:
 
 **String Operations**:
+
 ```tuff
 // String type (wrapper around *Str)
 struct String {
@@ -293,6 +324,7 @@ fn stringFree(s : *mut String) : Void;
 ```
 
 **Dynamic Array (Vec)**:
+
 ```tuff
 struct Vec {
     data : *mut U8,        // Generic via void* in C
@@ -310,6 +342,7 @@ fn vecFree(v : *mut Vec) : Void;
 ```
 
 **HashMap** (Optional - can use linear search in bootstrap):
+
 ```tuff
 struct HashMap {
     // Implementation details
@@ -323,6 +356,7 @@ fn hashMapFree(h : *mut HashMap) : Void;
 ```
 
 **Result and Option**:
+
 ```tuff
 struct Some { value : I32; }    // Concrete type, no generics
 struct None {}
@@ -337,6 +371,7 @@ type Result = Ok | Err;
 ```
 
 **File I/O**:
+
 ```tuff
 fn fileOpen(path : *Str, mode : *Str) : *File | 0;
 fn fileRead(f : *mut File, buffer : *mut U8, size : USize) : USize;
@@ -345,6 +380,7 @@ fn fileClose(f : *mut File) : Void;
 ```
 
 **Memory**:
+
 ```tuff
 fn malloc(size : USize) : *mut U8 | 0;
 fn free(ptr : *mut U8) : Void;
@@ -363,6 +399,7 @@ The bootstrap compiler implements these phases:
 **Output**: Token stream
 
 **Required Types**:
+
 ```tuff
 struct Token {
     kind : TokenKind,
@@ -387,6 +424,7 @@ type TokenKind = TokIdent | TokNumber | TokString | TokKeyword | ...;
 **Output**: Abstract Syntax Tree (AST)
 
 **Required Types**:
+
 ```tuff
 // AST nodes as union types
 struct AstFunctionDecl {
@@ -415,6 +453,7 @@ type AstExpr = AstBinary | AstUnary | AstCall | AstLiteral | ...;
 **Output**: Typed AST or type errors
 
 **Required**:
+
 - Symbol table (HashMap from name to type)
 - Type representation
 - Type compatibility checking (no refinements, just structural equality)
@@ -423,14 +462,19 @@ type AstExpr = AstBinary | AstUnary | AstCall | AstLiteral | ...;
 
 **Input**: Typed AST
 
-**Output**: C source code (as string)
+**Output**: 
+- C source file (`.c`)
+- C header file (`.h`)
+
+**Critical Requirement**: Must generate header files so Tuff code can be linked with C code during incremental migration.
 
 **Process**:
+
 - Walk AST
-- Emit corresponding C code
+- Emit corresponding C code to `.c` file
+- Emit function declarations, type definitions, and extern declarations to `.h` file
 - Handle name mangling if needed
 - Generate type definitions (structs, unions, enums)
-- Generate function definitions
 
 ---
 
@@ -439,6 +483,7 @@ type AstExpr = AstBinary | AstUnary | AstCall | AstLiteral | ...;
 The following features from the full Tuff specification are **not** required for bootstrap:
 
 ### Type System
+
 - ❌ Refinement types (I32 < 100, I32 != 0)
 - ❌ Literal types (5I32)
 - ❌ Dependent types
@@ -448,6 +493,7 @@ The following features from the full Tuff specification are **not** required for
 - ❌ Complex type inference
 
 ### Language Features
+
 - ❌ Closures and captures
 - ❌ Async/await
 - ❌ impl blocks (just use extension methods)
@@ -458,22 +504,26 @@ The following features from the full Tuff specification are **not** required for
 - ❌ Attributes
 
 ### Safety Features
+
 - ❌ Compile-time proofs of division by zero
 - ❌ Compile-time proofs of array bounds
 - ❌ Compile-time proofs of arithmetic overflow
 - ❌ Borrow checker
 
 ### Compilation Targets
+
 - ❌ LLVM backend
 - ❌ JavaScript backend
 - ❌ Tuff backend (interpreter)
 
 ### Module System
+
 - ❌ Multi-file projects
 - ❌ Package system (com::meti::Module)
 - ❌ Import statements
 
 ### Standard Library
+
 - ❌ Comprehensive collections
 - ❌ Networking
 - ❌ JSON/serialization
@@ -482,6 +532,7 @@ The following features from the full Tuff specification are **not** required for
 - ❌ Regex
 
 ### Developer Experience
+
 - ❌ Formatter
 - ❌ Linter
 - ❌ Language server
@@ -500,7 +551,7 @@ The minimal Tuff for self-hosting consists of:
 ✅ **Control Flow**: if/else, while, loop, for (desugared), match, break, continue
 ✅ **Pattern Matching**: Destructure unions, is-expressions
 ✅ **Operators**: Arithmetic, comparison, logical
-✅ **Comments**: // and /* */
+✅ **Comments**: // and /\* \*/
 ✅ **Standard Library**: String, Vec, HashMap (minimal), File I/O, Result/Option
 
 ❌ **Not Included**: Refinements, generics, contracts, closures, async, borrow checking, modules, advanced features
@@ -511,15 +562,15 @@ The minimal Tuff for self-hosting consists of:
 
 ### Type Mapping
 
-| Tuff Type | C Type |
-|-----------|--------|
-| I32 | int32_t |
-| Bool | bool (stdbool.h) |
-| *T | T* |
-| *mut T | T* |
-| [T; N] | T[N] |
-| *[T] | struct { T* data; size_t length; } |
-| A \| B (union) | Tagged union with enum |
+| Tuff Type      | C Type                              |
+| -------------- | ----------------------------------- |
+| I32            | int32_t                             |
+| Bool           | bool (stdbool.h)                    |
+| \*T            | T\*                                 |
+| \*mut T        | T\*                                 |
+| [T; N]         | T[N]                                |
+| \*[T]          | struct { T\* data; size_t length; } |
+| A \| B (union) | Tagged union with enum              |
 
 ### Function Mapping
 
@@ -601,47 +652,123 @@ switch (opt.tag) {
 
 ## Bootstrap Development Plan
 
-### Phase 1: C Bootstrap Compiler (tuffc-bootstrap)
+### Step 1: Initial C Bootstrap Compiler
 
-Write a compiler in C that:
+Write a minimal compiler in C (`tuffc.c`) that:
+
 1. Lexes/parses minimal Tuff
 2. Type checks (basic, no refinements)
-3. Generates C code
-4. Invokes C compiler (gcc/clang)
+3. Generates C source (.c) and header (.h) files
+4. Handles extern declarations for linking with C code
 
-**Deliverable**: `tuffc-bootstrap` (written in C)
+**Deliverable**: `tuffc` executable (compiled from C)
 
-### Phase 2: Self-Hosted Compiler (tuffc.tuff)
+**Key Feature**: Must generate both `.c` and `.h` files so Tuff code can be linked with C code.
 
-Rewrite the compiler in minimal Tuff (single file if possible, or minimal files):
-1. Port lexer to Tuff
-2. Port parser to Tuff
-3. Port type checker to Tuff
-4. Port code generator to Tuff
+### Step 2: Create Tuff Utility Library
 
-**Deliverable**: `tuffc.tuff` (written in minimal Tuff)
+Write `lib.tuff` with foundational utilities:
 
-### Phase 3: Bootstrap
+```tuff
+// String operations
+struct String { data : *mut U8, length : USize, capacity : USize }
+fn stringNew() : String => { ... }
+fn stringAppend(s : *mut String, ch : U8) : Void => { ... }
 
-```bash
-# Compile Tuff compiler using C bootstrap
-./tuffc-bootstrap tuffc.tuff -o tuffc.c
-gcc tuffc.c -o tuffc
+// Dynamic array
+struct Vec { data : *mut U8, length : USize, capacity : USize, elementSize : USize }
+fn vecNew(elementSize : USize) : Vec => { ... }
+fn vecPush(v : *mut Vec, element : *U8) : Void => { ... }
 
-# Now tuffc can compile itself
-./tuffc tuffc.tuff -o tuffc2.c
-gcc tuffc2.c -o tuffc2
-
-# Verify: tuffc and tuffc2 should be equivalent
+// Parser utilities, AST types, etc.
 ```
 
-### Phase 4: Iterative Enhancement
+**Compile it**:
 
-Once self-hosted:
+```bash
+./tuffc lib.tuff -o lib.c
+# Generates: lib.c and lib.h
+```
+
+### Step 3: Link C Bootstrap with Tuff Library
+
+Modify `tuffc.c` to `#include "lib.h"` and link with `lib.c`:
+
+```bash
+gcc tuffc.c lib.c -o tuffc-hybrid
+```
+
+Now the C compiler can call Tuff functions from the library.
+
+### Step 4: Incremental Migration (No Big Bang!)
+
+Gradually replace C functions with Tuff equivalents:
+
+**Example - Migrate String Handling**:
+
+1. Implement string functions in `lib.tuff`
+2. Recompile: `./tuffc lib.tuff -o lib.c`
+3. Update `tuffc.c` to use Tuff's string functions instead of C strings
+4. Recompile: `gcc tuffc.c lib.c -o tuffc-hybrid`
+5. Test
+
+**Example - Migrate Lexer**:
+
+1. Implement lexer in `lexer.tuff`
+2. Compile: `./tuffc-hybrid lexer.tuff -o lexer.c`
+3. Replace lexer code in `tuffc.c` with calls to Tuff lexer (via `lexer.h`)
+4. Recompile: `gcc tuffc.c lexer.c lib.c -o tuffc-hybrid`
+5. Test
+
+**Example - Migrate Parser**:
+
+1. Implement parser in `parser.tuff`
+2. Compile: `./tuffc-hybrid parser.tuff -o parser.c`
+3. Replace parser in `tuffc.c` with calls to Tuff parser
+4. Recompile: `gcc tuffc.c parser.c lexer.c lib.c -o tuffc-hybrid`
+5. Test
+
+**Continue until**:
+
+```bash
+# Eventually, main.c is just:
+# #include "compiler.h"
+# int main(int argc, char** argv) { return tuff_main(argc, argv); }
+
+gcc main.c compiler.c parser.c lexer.c lib.c -o tuffc
+```
+
+### Step 5: Full Self-Hosting
+
+When all compiler logic is in Tuff:
+
+```bash
+# Compile all Tuff files
+./tuffc compiler.tuff -o compiler.c
+./tuffc parser.tuff -o parser.c
+./tuffc lexer.tuff -o lexer.c
+./tuffc lib.tuff -o lib.c
+
+# Link with minimal C main
+gcc main.c compiler.c parser.c lexer.c lib.c -o tuffc-selfhosted
+
+# Now use it to compile itself again
+./tuffc-selfhosted compiler.tuff -o compiler2.c
+# ... compile all
+gcc main.c compiler2.c parser2.c lexer2.c lib2.c -o tuffc-gen2
+
+# Verify stability
+diff compiler.c compiler2.c
+```
+
+### Step 6: Iterative Enhancement
+
+Once fully self-hosted, gradually add advanced features:
+
 1. Add generics
 2. Add refinement types
 3. Add borrow checker
-4. Add LLVM backend
+4. Add LLVM backend (keep C backend for bootstrap)
 5. Add JavaScript backend
 6. Add contracts
 7. Add closures
@@ -655,39 +782,69 @@ Once self-hosted:
 
 ### Compiler Tests
 
-**Unit Tests**: Test each phase independently
+**Unit Tests**: Test each component independently:
 - Lexer: token stream correctness
 - Parser: AST correctness
 - Type checker: error detection
 - Code generator: valid C output
 
-**Integration Tests**: End-to-end compilation
+**Integration Tests**: End-to-end compilation:
 - Compile simple programs
-- Verify generated C compiles
+- Verify generated C compiles with gcc/clang
 - Verify executable runs correctly
+- Compare output across incremental migrations
+
+### Incremental Validation
+
+After each migration step:
+
+```bash
+# Before migration
+./tuffc-before test_program.tuff -o test_before.c
+gcc test_before.c -o test_before
+./test_before > output_before.txt
+
+# After migration (added new Tuff module)
+./tuffc-after test_program.tuff -o test_after.c
+gcc test_after.c -o test_after  
+./test_after > output_after.txt
+
+# Verify equivalence
+diff output_before.txt output_after.txt
+```
+
+**Success**: Output should be identical (or functionally equivalent).
 
 ### Self-Hosting Validation
 
-**Test**: Compile the compiler with itself multiple times.
+Once fully migrated to Tuff, test multi-generation compilation:
 
 ```bash
-# Generation 0: C bootstrap
-./tuffc-bootstrap tuffc.tuff -o tuffc0.c
-gcc tuffc0.c -o tuffc0
+# Generation 0: Hybrid bootstrap (C main + Tuff modules)
+gcc main.c compiler.c parser.c lexer.c lib.c -o tuffc0
 
-# Generation 1: First self-compile
-./tuffc0 tuffc.tuff -o tuffc1.c
-gcc tuffc1.c -o tuffc1
+# Generation 1: Compile all Tuff modules
+./tuffc0 compiler.tuff -o compiler1.c
+./tuffc0 parser.tuff -o parser1.c
+./tuffc0 lexer.tuff -o lexer1.c
+./tuffc0 lib.tuff -o lib1.c
+gcc main.c compiler1.c parser1.c lexer1.c lib1.c -o tuffc1
 
-# Generation 2: Second self-compile
-./tuffc1 tuffc.tuff -o tuffc2.c
-gcc tuffc2.c -o tuffc2
+# Generation 2: Compile again
+./tuffc1 compiler.tuff -o compiler2.c
+./tuffc1 parser.tuff -o parser2.c
+./tuffc1 lexer.tuff -o lexer2.c
+./tuffc1 lib.tuff -o lib2.c
+gcc main.c compiler2.c parser2.c lexer2.c lib2.c -o tuffc2
 
-# Verify: tuffc1.c and tuffc2.c should be identical (or produce equivalent executables)
-diff tuffc1.c tuffc2.c
+# Verify stability: gen1 and gen2 should produce identical code
+diff compiler1.c compiler2.c
+diff parser1.c parser2.c
+diff lexer1.c lexer2.c
+diff lib1.c lib2.c
 ```
 
-**Success Criteria**: The compiler stabilizes (produces identical output when compiling itself).
+**Success Criteria**: The compiler stabilizes (identical output across generations).
 
 ---
 
@@ -769,11 +926,15 @@ fn main() : Void => {
 
 The bootstrap is complete when:
 
-1. ✅ `tuffc-bootstrap` (written in C) can compile `tuffc.tuff` to C
-2. ✅ `tuffc` (compiled from Tuff) can compile itself
-3. ✅ The compiler stabilizes (generation N and N+1 produce identical output)
-4. ✅ All test programs compile and run correctly
-5. ✅ The compiler passes all unit and integration tests
+1. ✅ `tuffc` (written in C) can compile Tuff code to `.c` and `.h` files
+2. ✅ `lib.tuff` compiles and links successfully with C code
+3. ✅ Incremental migration works: C code can call Tuff functions via generated headers
+4. ✅ All compiler logic has been migrated from C to Tuff modules
+5. ✅ The fully Tuff-based compiler stabilizes (generation N and N+1 produce identical output)
+6. ✅ All test programs compile and run correctly
+7. ✅ The compiler passes all unit and integration tests
+
+**Key Advantage**: No "big bang" rewrite. Each function can be migrated and tested independently.
 
 At this point, Tuff is **self-hosted** and ready for incremental enhancement.
 
