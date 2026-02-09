@@ -1,0 +1,9 @@
+struct Point {
+    x : I32,
+    y : I32
+}
+
+fn main() : Void => {
+    let p : Point = Point { x: 10, y: 20 };
+    printf("Done\n");
+}

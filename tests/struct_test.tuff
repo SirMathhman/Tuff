@@ -1,0 +1,13 @@
+struct Point {
+    x : I32,
+    y : I32
+}
+
+fn make_point(x : I32, y : I32) : Point => {
+    return Point { x: x, y: y };
+}
+h
+fn main() : Void => {
+    let p : Point = make_point(10, 20);
+    printf("Point: (%d, %d)\n", p.x, p.y);
+}

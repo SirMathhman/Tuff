@@ -651,12 +651,14 @@ typedef enum
     TYPE_VOID,
     TYPE_I32,
     TYPE_BOOL,
-    TYPE_STRPTR
+    TYPE_STRPTR,
+    TYPE_STRUCT
 } TypeKind;
 
 typedef struct
 {
     TypeKind kind;
+    String struct_name; // For TYPE_STRUCT
 } Type;
 
 typedef enum
@@ -666,7 +668,9 @@ typedef enum
     EXPR_IDENT,
     EXPR_CALL,
     EXPR_BINARY,
-    EXPR_UNARY
+    EXPR_UNARY,
+    EXPR_MEMBER_ACCESS,
+    EXPR_STRUCT_LITERAL
 } ExprKind;
 
 typedef struct Expr Expr;
@@ -691,6 +695,20 @@ typedef struct
     size_t arg_count;
 } ExprCall;
 
+typedef struct
+{
+    Expr *object;
+    String member_name;
+} ExprMemberAccess;
+
+typedef struct
+{
+    String type_name;
+    String *field_names;
+    Expr **field_values;
+    size_t field_count;
+} ExprStructLiteral;
+
 typedef struct Expr
 {
     ExprKind kind;
@@ -703,6 +721,8 @@ typedef struct Expr
         ExprCall call;
         ExprBinary binary;
         ExprUnary unary;
+        ExprMemberAccess member_access;
+        ExprStructLiteral struct_literal;
     } as;
 } Expr;
 
@@ -710,7 +730,8 @@ typedef enum
 {
     STMT_EXPR,
     STMT_RETURN,
-    STMT_LET
+    STMT_LET,
+    STMT_IF
 } StmtKind;
 
 typedef struct Stmt
@@ -725,6 +746,14 @@ typedef struct Stmt
             Type type;
             Expr *value;
         } let_stmt;
+        struct
+        {
+            Expr *condition;
+            struct Stmt **then_branch;
+            size_t then_count;
+            struct Stmt **else_branch;
+            size_t else_count;
+        } if_stmt;
     } as;
 } Stmt;
 
@@ -746,6 +775,21 @@ typedef struct
 
 typedef struct
 {
+    String name;
+    Type type;
+} Field;
+
+typedef struct
+{
+    String name;
+    Field *fields;
+    size_t field_count;
+} StructDecl;
+
+typedef struct
+{
+    StructDecl **structs;
+    size_t struct_count;
     FunctionDecl **functions;
     size_t function_count;
 } Program;
@@ -894,8 +938,12 @@ static Type parse_type(Parser *parser)
         return (Type){TYPE_STRPTR};
     }
 
-    parser_error_at(parser, ident, "Unsupported or invalid type in bootstrap compiler");
-    return (Type){TYPE_VOID};
+    // Assume it's a struct type
+    Type t;
+    t.kind = TYPE_STRUCT;
+    t.struct_name = string_new();
+    string_append_range(&t.struct_name, ident.start, ident.length);
+    return t;
 }
 
 static Expr *parse_expression(Parser *parser);
@@ -951,6 +999,47 @@ static Expr *parse_primary(Parser *parser)
             return expr;
         }
 
+        if (parser_match(parser, TOK_LBRACE))
+        {
+            // Struct literal: TypeName { field1: value1, field2: value2 }
+            Expr *expr = expr_new(EXPR_STRUCT_LITERAL);
+            expr->token = ident;
+            expr->as.struct_literal.type_name = token_to_string(ident);
+
+            PtrVec field_names;
+            ptrvec_init(&field_names);
+            PtrVec field_values;
+            ptrvec_init(&field_values);
+
+            if (!parser_check(parser, TOK_RBRACE))
+            {
+                do
+                {
+                    Token field_name = parser_consume(parser, TOK_IDENT, "Expected field name");
+                    String *name_ptr = malloc(sizeof(String));
+                    *name_ptr = token_to_string(field_name);
+                    ptrvec_push(&field_names, name_ptr);
+
+                    parser_consume(parser, TOK_COLON, "Expected ':' after field name");
+
+                    Expr *value = parse_expression(parser);
+                    ptrvec_push(&field_values, value);
+                } while (parser_match(parser, TOK_COMMA));
+            }
+
+            parser_consume(parser, TOK_RBRACE, "Expected '}' after struct literal");
+
+            // Convert String* array to String array
+            expr->as.struct_literal.field_count = field_names.count;
+            expr->as.struct_literal.field_names = malloc(field_names.count * sizeof(String));
+            for (size_t i = 0; i < field_names.count; i++)
+            {
+                expr->as.struct_literal.field_names[i] = *(String *)field_names.items[i];
+            }
+            expr->as.struct_literal.field_values = (Expr **)field_values.items;
+            return expr;
+        }
+
         Expr *expr = expr_new(EXPR_IDENT);
         expr->token = ident;
         expr->as.ident = token_to_string(ident);
@@ -978,7 +1067,26 @@ static Expr *parse_unary(Parser *parser)
         expr->as.unary.value = parse_unary(parser);
         return expr;
     }
-    return parse_primary(parser);
+
+    // Handle postfix operators (member access)
+    Expr *expr = parse_primary(parser);
+    while (true)
+    {
+        if (parser_match(parser, TOK_DOT))
+        {
+            Token member = parser_consume(parser, TOK_IDENT, "Expected field name after '.'");
+            Expr *member_expr = expr_new(EXPR_MEMBER_ACCESS);
+            member_expr->token = member;
+            member_expr->as.member_access.object = expr;
+            member_expr->as.member_access.member_name = token_to_string(member);
+            expr = member_expr;
+        }
+        else
+        {
+            break;
+        }
+    }
+    return expr;
 }
 
 static Expr *parse_factor(Parser *parser)
@@ -1011,9 +1119,26 @@ static Expr *parse_term(Parser *parser)
     return expr;
 }
 
+static Expr *parse_comparison(Parser *parser)
+{
+    Expr *expr = parse_term(parser);
+    while (parser_match(parser, TOK_EQ) || parser_match(parser, TOK_NE) ||
+           parser_match(parser, TOK_LT) || parser_match(parser, TOK_GT) ||
+           parser_match(parser, TOK_LE) || parser_match(parser, TOK_GE))
+    {
+        Expr *binary = expr_new(EXPR_BINARY);
+        binary->token = parser->previous;
+        binary->as.binary.op = parser->previous.kind;
+        binary->as.binary.left = expr;
+        binary->as.binary.right = parse_term(parser);
+        expr = binary;
+    }
+    return expr;
+}
+
 static Expr *parse_expression(Parser *parser)
 {
-    return parse_term(parser);
+    return parse_comparison(parser);
 }
 
 static Stmt *stmt_new(StmtKind kind)
@@ -1022,6 +1147,8 @@ static Stmt *stmt_new(StmtKind kind)
     stmt->kind = kind;
     return stmt;
 }
+
+static Stmt **parse_block(Parser *parser, size_t *out_count);
 
 static Stmt *parse_statement(Parser *parser)
 {
@@ -1047,6 +1174,28 @@ static Stmt *parse_statement(Parser *parser)
         parser_consume(parser, TOK_ASSIGN, "Expected '=' after variable type");
         stmt->as.let_stmt.value = parse_expression(parser);
         parser_consume(parser, TOK_SEMICOLON, "Expected ';' after variable declaration");
+        return stmt;
+    }
+
+    if (parser_match(parser, TOK_IF))
+    {
+        Stmt *stmt = stmt_new(STMT_IF);
+        parser_consume(parser, TOK_LPAREN, "Expected '(' after 'if'");
+        stmt->as.if_stmt.condition = parse_expression(parser);
+        parser_consume(parser, TOK_RPAREN, "Expected ')' after condition");
+        parser_consume(parser, TOK_LBRACE, "Expected '{' after if condition");
+        stmt->as.if_stmt.then_branch = parse_block(parser, &stmt->as.if_stmt.then_count);
+
+        if (parser_match(parser, TOK_ELSE))
+        {
+            parser_consume(parser, TOK_LBRACE, "Expected '{' after 'else'");
+            stmt->as.if_stmt.else_branch = parse_block(parser, &stmt->as.if_stmt.else_count);
+        }
+        else
+        {
+            stmt->as.if_stmt.else_branch = NULL;
+            stmt->as.if_stmt.else_count = 0;
+        }
         return stmt;
     }
 
@@ -1128,26 +1277,75 @@ static FunctionDecl *parse_function(Parser *parser)
     return fn;
 }
 
+static StructDecl *parse_struct(Parser *parser)
+{
+    parser_consume(parser, TOK_STRUCT, "Expected 'struct'");
+    Token name = parser_consume(parser, TOK_IDENT, "Expected struct name");
+
+    StructDecl *decl = calloc(1, sizeof(StructDecl));
+    decl->name = token_to_string(name);
+
+    parser_consume(parser, TOK_LBRACE, "Expected '{' after struct name");
+
+    PtrVec fields;
+    ptrvec_init(&fields);
+
+    while (!parser_check(parser, TOK_RBRACE) && !parser_check(parser, TOK_EOF))
+    {
+        Field *field = calloc(1, sizeof(Field));
+        Token field_name = parser_consume(parser, TOK_IDENT, "Expected field name");
+        field->name = token_to_string(field_name);
+        parser_consume(parser, TOK_COLON, "Expected ':' after field name");
+        field->type = parse_type(parser);
+        ptrvec_push(&fields, field);
+
+        if (!parser_check(parser, TOK_RBRACE))
+        {
+            parser_consume(parser, TOK_COMMA, "Expected ',' after field");
+        }
+    }
+
+    parser_consume(parser, TOK_RBRACE, "Expected '}' after struct fields");
+
+    decl->fields = malloc(fields.count * sizeof(Field));
+    decl->field_count = fields.count;
+    for (size_t i = 0; i < fields.count; i++)
+    {
+        decl->fields[i] = *(Field *)fields.items[i];
+    }
+
+    return decl;
+}
+
 static Program *parse_program(Parser *parser)
 {
+    PtrVec structs;
+    ptrvec_init(&structs);
     PtrVec funcs;
     ptrvec_init(&funcs);
 
     while (!parser_check(parser, TOK_EOF))
     {
-        if (parser_check(parser, TOK_FN))
+        if (parser_check(parser, TOK_STRUCT))
+        {
+            StructDecl *structdecl = parse_struct(parser);
+            ptrvec_push(&structs, structdecl);
+        }
+        else if (parser_check(parser, TOK_FN))
         {
             FunctionDecl *fn = parse_function(parser);
             ptrvec_push(&funcs, fn);
         }
         else
         {
-            parser_error_at(parser, parser->current, "Only function declarations are supported at top-level");
+            parser_error_at(parser, parser->current, "Only struct and function declarations are supported at top-level");
             parser_advance(parser);
         }
     }
 
     Program *program = calloc(1, sizeof(Program));
+    program->structs = (StructDecl **)structs.items;
+    program->struct_count = structs.count;
     program->functions = (FunctionDecl **)funcs.items;
     program->function_count = funcs.count;
     return program;
@@ -1219,6 +1417,8 @@ static const char *type_name(Type type)
         return "Bool";
     case TYPE_STRPTR:
         return "*Str";
+    case TYPE_STRUCT:
+        return type.struct_name.data;
     }
     return "<unknown>";
 }
@@ -1329,13 +1529,39 @@ static Type typecheck_expr(SymbolTable *table, Expr *expr)
             return left;
         }
     }
+    case EXPR_MEMBER_ACCESS:
+    {
+        Type object_type = typecheck_expr(table, expr->as.member_access.object);
+        // Simplified: for now, just return I32.
+        // Proper implementation would look up the struct definition and field type
+        (void)object_type; // suppress unused warning
+        return (Type){TYPE_I32};
+    }
+    case EXPR_STRUCT_LITERAL:
+    {
+        Type t;
+        t.kind = TYPE_STRUCT;
+        t.struct_name = expr->as.struct_literal.type_name;
+        // Typecheck field values
+        for (size_t i = 0; i < expr->as.struct_literal.field_count; i++)
+        {
+            typecheck_expr(table, expr->as.struct_literal.field_values[i]);
+        }
+        return t;
+    }
     }
     return (Type){TYPE_VOID};
 }
 
 static bool type_equals(Type a, Type b)
 {
-    return a.kind == b.kind;
+    if (a.kind != b.kind)
+        return false;
+    if (a.kind == TYPE_STRUCT)
+    {
+        return strcmp(a.struct_name.data, b.struct_name.data) == 0;
+    }
+    return true;
 }
 
 static bool typecheck_function(Program *program, FunctionDecl *fn)
@@ -1387,6 +1613,18 @@ static bool typecheck_function(Program *program, FunctionDecl *fn)
         case STMT_EXPR:
             typecheck_expr(&table, stmt->as.expr);
             break;
+        case STMT_IF:
+        {
+            Type cond_type = typecheck_expr(&table, stmt->as.if_stmt.condition);
+            if (cond_type.kind != TYPE_BOOL && cond_type.kind != TYPE_I32)
+            {
+                fprintf(stderr, "Type error: if condition must be Bool or I32, got %s\n",
+                        type_name(cond_type));
+                ok = false;
+            }
+            // Note: We're not creating a new scope for the branches in this simple implementation
+            break;
+        }
         }
     }
     return ok;
@@ -1424,6 +1662,10 @@ static void emit_type(String *out, Type type)
         break;
     case TYPE_STRPTR:
         string_append_cstr(out, "const char*");
+        break;
+    case TYPE_STRUCT:
+        string_append_cstr(out, "struct ");
+        string_append_cstr(out, type.struct_name.data);
         break;
     }
 }
@@ -1505,6 +1747,26 @@ static void emit_expr(String *out, Expr *expr)
         emit_expr(out, expr->as.binary.right);
         string_append_cstr(out, ")");
         break;
+    case EXPR_MEMBER_ACCESS:
+        emit_expr(out, expr->as.member_access.object);
+        string_append_cstr(out, ".");
+        string_append_cstr(out, expr->as.member_access.member_name.data);
+        break;
+    case EXPR_STRUCT_LITERAL:
+        string_append_cstr(out, "(struct ");
+        string_append_cstr(out, expr->as.struct_literal.type_name.data);
+        string_append_cstr(out, "){");
+        for (size_t i = 0; i < expr->as.struct_literal.field_count; i++)
+        {
+            if (i > 0)
+                string_append_cstr(out, ", ");
+            string_append_cstr(out, ".");
+            string_append_cstr(out, expr->as.struct_literal.field_names[i].data);
+            string_append_cstr(out, " = ");
+            emit_expr(out, expr->as.struct_literal.field_values[i]);
+        }
+        string_append_cstr(out, "}");
+        break;
     }
 }
 
@@ -1532,6 +1794,28 @@ static void emit_stmt(String *out, Stmt *stmt)
         string_append_cstr(out, " = ");
         emit_expr(out, stmt->as.let_stmt.value);
         string_append_cstr(out, ";\n");
+        break;
+    case STMT_IF:
+        string_append_cstr(out, "if (");
+        emit_expr(out, stmt->as.if_stmt.condition);
+        string_append_cstr(out, ") {\n");
+        for (size_t i = 0; i < stmt->as.if_stmt.then_count; i++)
+        {
+            string_append_cstr(out, "        ");
+            emit_stmt(out, stmt->as.if_stmt.then_branch[i]);
+        }
+        string_append_cstr(out, "    }");
+        if (stmt->as.if_stmt.else_branch)
+        {
+            string_append_cstr(out, " else {\n");
+            for (size_t i = 0; i < stmt->as.if_stmt.else_count; i++)
+            {
+                string_append_cstr(out, "        ");
+                emit_stmt(out, stmt->as.if_stmt.else_branch[i]);
+            }
+            string_append_cstr(out, "    }");
+        }
+        string_append_cstr(out, "\n");
         break;
     }
 }
@@ -1585,6 +1869,22 @@ static void emit_function_decl(String *out, FunctionDecl *fn, bool is_definition
     string_append_cstr(out, "}\n\n");
 }
 
+static void emit_struct_decl(String *out, StructDecl *structdecl)
+{
+    string_append_cstr(out, "struct ");
+    string_append_cstr(out, structdecl->name.data);
+    string_append_cstr(out, " {\n");
+    for (size_t i = 0; i < structdecl->field_count; i++)
+    {
+        string_append_cstr(out, "    ");
+        emit_type(out, structdecl->fields[i].type);
+        string_append_cstr(out, " ");
+        string_append_cstr(out, structdecl->fields[i].name.data);
+        string_append_cstr(out, ";\n");
+    }
+    string_append_cstr(out, "};\n\n");
+}
+
 static String codegen_c(Program *program, const char *input_file)
 {
     String out = string_new();
@@ -1594,6 +1894,16 @@ static String codegen_c(Program *program, const char *input_file)
     string_append_cstr(&out, "#include <stdio.h>\n");
     string_append_cstr(&out, "#include <stdint.h>\n");
     string_append_cstr(&out, "#include <stdbool.h>\n\n");
+
+    // Emit struct declarations
+    for (size_t i = 0; i < program->struct_count; i++)
+    {
+        emit_struct_decl(&out, program->structs[i]);
+    }
+    if (program->struct_count > 0)
+    {
+        string_append_cstr(&out, "\n");
+    }
 
     for (size_t i = 0; i < program->function_count; i++)
     {
@@ -1619,6 +1929,16 @@ static String codegen_header(Program *program, const char *input_file)
     string_append_cstr(&out, "#define TUFF_HEADER_H\n\n");
     string_append_cstr(&out, "#include <stdint.h>\n");
     string_append_cstr(&out, "#include <stdbool.h>\n\n");
+
+    // Emit struct declarations
+    for (size_t i = 0; i < program->struct_count; i++)
+    {
+        emit_struct_decl(&out, program->structs[i]);
+    }
+    if (program->struct_count > 0)
+    {
+        string_append_cstr(&out, "\n");
+    }
 
     for (size_t i = 0; i < program->function_count; i++)
     {
