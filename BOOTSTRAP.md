@@ -462,7 +462,8 @@ type AstExpr = AstBinary | AstUnary | AstCall | AstLiteral | ...;
 
 **Input**: Typed AST
 
-**Output**: 
+**Output**:
+
 - C source file (`.c`)
 - C header file (`.h`)
 
@@ -783,12 +784,14 @@ Once fully self-hosted, gradually add advanced features:
 ### Compiler Tests
 
 **Unit Tests**: Test each component independently:
+
 - Lexer: token stream correctness
 - Parser: AST correctness
 - Type checker: error detection
 - Code generator: valid C output
 
 **Integration Tests**: End-to-end compilation:
+
 - Compile simple programs
 - Verify generated C compiles with gcc/clang
 - Verify executable runs correctly
@@ -806,7 +809,7 @@ gcc test_before.c -o test_before
 
 # After migration (added new Tuff module)
 ./tuffc-after test_program.tuff -o test_after.c
-gcc test_after.c -o test_after  
+gcc test_after.c -o test_after
 ./test_after > output_after.txt
 
 # Verify equivalence
