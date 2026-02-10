@@ -731,7 +731,8 @@ typedef enum
     STMT_EXPR,
     STMT_RETURN,
     STMT_LET,
-    STMT_IF
+    STMT_IF,
+    STMT_WHILE
 } StmtKind;
 
 typedef struct Stmt
@@ -754,6 +755,12 @@ typedef struct Stmt
             struct Stmt **else_branch;
             size_t else_count;
         } if_stmt;
+        struct
+        {
+            Expr *condition;
+            struct Stmt **body;
+            size_t body_count;
+        } while_stmt;
     } as;
 } Stmt;
 
@@ -1199,6 +1206,17 @@ static Stmt *parse_statement(Parser *parser)
         return stmt;
     }
 
+    if (parser_match(parser, TOK_WHILE))
+    {
+        Stmt *stmt = stmt_new(STMT_WHILE);
+        parser_consume(parser, TOK_LPAREN, "Expected '(' after 'while'");
+        stmt->as.while_stmt.condition = parse_expression(parser);
+        parser_consume(parser, TOK_RPAREN, "Expected ')' after condition");
+        parser_consume(parser, TOK_LBRACE, "Expected '{' after while condition");
+        stmt->as.while_stmt.body = parse_block(parser, &stmt->as.while_stmt.body_count);
+        return stmt;
+    }
+
     Stmt *stmt = stmt_new(STMT_EXPR);
     stmt->as.expr = parse_expression(parser);
     parser_consume(parser, TOK_SEMICOLON, "Expected ';' after expression");
@@ -1625,6 +1643,18 @@ static bool typecheck_function(Program *program, FunctionDecl *fn)
             // Note: We're not creating a new scope for the branches in this simple implementation
             break;
         }
+        case STMT_WHILE:
+        {
+            Type cond_type = typecheck_expr(&table, stmt->as.while_stmt.condition);
+            if (cond_type.kind != TYPE_BOOL && cond_type.kind != TYPE_I32)
+            {
+                fprintf(stderr, "Type error: while condition must be Bool or I32, got %s\n",
+                        type_name(cond_type));
+                ok = false;
+            }
+            // Note: We're not creating a new scope for the body in this simple implementation
+            break;
+        }
         }
     }
     return ok;
@@ -1816,6 +1846,17 @@ static void emit_stmt(String *out, Stmt *stmt)
             string_append_cstr(out, "    }");
         }
         string_append_cstr(out, "\n");
+        break;
+    case STMT_WHILE:
+        string_append_cstr(out, "while (");
+        emit_expr(out, stmt->as.while_stmt.condition);
+        string_append_cstr(out, ") {\n");
+        for (size_t i = 0; i < stmt->as.while_stmt.body_count; i++)
+        {
+            string_append_cstr(out, "        ");
+            emit_stmt(out, stmt->as.while_stmt.body[i]);
+        }
+        string_append_cstr(out, "    }\n");
         break;
     }
 }

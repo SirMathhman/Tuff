@@ -1,0 +1,21 @@
+fn test_while() : I32 => {
+    let x: I32 = 10;
+    while (x < 5) {
+        printf("This won't execute\n");
+    }
+    return x;
+}
+
+fn test_while_true() : Void => {
+    let done: I32 = 0;
+    while (done < 1) {
+        printf("Executing once\n");
+        return;
+    }
+}
+
+fn main() : Void => {
+    let result: I32 = test_while();
+    printf("Result: %d\n", result);
+    test_while_true();
+}
