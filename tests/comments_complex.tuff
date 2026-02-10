@@ -1,0 +1,22 @@
+// Nested comments should work fine
+// /* This is not a nested comment, just text inside a comment */
+
+/* Block comment with // in it
+   is valid since // is just text inside the block comment
+*/
+
+/* Block comments DO NOT nest:
+   /* This would end the comment */ 
+   This part would be outside the comment
+*/
+
+fn commented_function() -> I32 {
+    /* Complex example with mixed comments */
+    let value: I32 = 100; // local variable
+    // Operations with inline comments
+    return value; // Final return comment
+}
+
+fn main() -> I32 {
+    return commented_function();
+}

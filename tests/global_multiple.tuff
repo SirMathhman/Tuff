@@ -1,0 +1,9 @@
+let value: I32 = 42;
+let flag: Bool = true;
+
+fn main() -> I32 {
+    if (flag) {
+        return value;
+    }
+    return 0;
+}

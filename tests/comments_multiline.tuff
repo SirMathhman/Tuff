@@ -1,0 +1,14 @@
+/* This is a multi-line comment
+   that spans multiple lines
+   and can contain any characters */
+
+fn add(a: I32, b: I32) -> I32 {
+    /* Comments can appear anywhere,
+       even inside code blocks */
+    return a + b; /* inline too */
+}
+
+fn main() -> I32 {
+    let result: I32 = add(10, 32); /* calculate sum */
+    return result;
+}

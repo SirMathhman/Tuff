@@ -1,0 +1,12 @@
+let counter: I32 = 0;
+
+fn increment() -> I32 {
+    counter = counter + 1;
+    return counter;
+}
+
+fn main() -> I32 {
+    let a: I32 = increment();
+    let b: I32 = increment();
+    return counter;
+}

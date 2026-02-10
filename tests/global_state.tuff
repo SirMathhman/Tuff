@@ -1,0 +1,16 @@
+let count: I32 = 0;
+
+fn add_one() -> Void {
+    count = count + 1;
+}
+
+fn get_count() -> I32 {
+    return count;
+}
+
+fn main() -> I32 {
+    add_one();
+    add_one();
+    add_one();
+    return get_count();
+}

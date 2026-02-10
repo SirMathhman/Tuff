@@ -797,6 +797,7 @@ typedef enum
     STMT_RETURN,
     STMT_LET,
     STMT_ASSIGN,
+    STMT_MEMBER_ASSIGN,
     STMT_IF,
     STMT_WHILE,
     STMT_LOOP,
@@ -822,6 +823,12 @@ typedef struct Stmt
             String name;
             Expr *value;
         } assign_stmt;
+        struct
+        {
+            Expr *object;      // The struct expression (e.g., variable or member access)
+            String field_name; // The field to modify
+            Expr *value;       // The value to assign
+        } member_assign_stmt;
         struct
         {
             Expr *condition;
@@ -888,6 +895,13 @@ typedef struct
     size_t struct_count;
     FunctionDecl **functions;
     size_t function_count;
+    struct
+    {
+        String *names;
+        Type *types;
+        Expr **initializers;
+        size_t count;
+    } globals;
 } Program;
 
 // ============================================================================
@@ -1591,8 +1605,23 @@ static Stmt *parse_statement(Parser *parser)
         parser->current = ident;
     }
 
+    // Try to parse as expression statement, but check for member assignment: expr.field = value
+    Expr *expr = parse_expression(parser);
+
+    // Check if this is a member assignment (expr.field = value)
+    if (parser_match(parser, TOK_ASSIGN) && expr->kind == EXPR_MEMBER_ACCESS)
+    {
+        Stmt *stmt = stmt_new(STMT_MEMBER_ASSIGN);
+        stmt->as.member_assign_stmt.object = expr->as.member_access.object;
+        stmt->as.member_assign_stmt.field_name = expr->as.member_access.member_name;
+        stmt->as.member_assign_stmt.value = parse_expression(parser);
+        parser_consume(parser, TOK_SEMICOLON, "Expected ';' after member assignment");
+        return stmt;
+    }
+
+    // Regular expression statement
     Stmt *stmt = stmt_new(STMT_EXPR);
-    stmt->as.expr = parse_expression(parser);
+    stmt->as.expr = expr;
     parser_consume(parser, TOK_SEMICOLON, "Expected ';' after expression");
     return stmt;
 }
@@ -1726,6 +1755,12 @@ static Program *parse_program(Parser *parser)
     ptrvec_init(&structs);
     PtrVec funcs;
     ptrvec_init(&funcs);
+    PtrVec global_names;
+    ptrvec_init(&global_names);
+    PtrVec global_types;
+    ptrvec_init(&global_types);
+    PtrVec global_inits;
+    ptrvec_init(&global_inits);
 
     while (!parser_check(parser, TOK_EOF))
     {
@@ -1733,6 +1768,26 @@ static Program *parse_program(Parser *parser)
         {
             StructDecl *structdecl = parse_struct(parser);
             ptrvec_push(&structs, structdecl);
+        }
+        else if (parser_check(parser, TOK_LET))
+        {
+            // Global variable declaration
+            parser_advance(parser); // consume 'let'
+            Token name_token = parser_consume(parser, TOK_IDENT, "Expected variable name");
+            String *name = malloc(sizeof(String));
+            *name = token_to_string(name_token);
+            ptrvec_push(&global_names, name);
+
+            parser_consume(parser, TOK_COLON, "Expected ':' after variable name");
+            Type *type = malloc(sizeof(Type));
+            *type = parse_type(parser);
+            ptrvec_push(&global_types, type);
+
+            parser_consume(parser, TOK_ASSIGN, "Expected '=' after type");
+            Expr *init = parse_expression(parser);
+            ptrvec_push(&global_inits, init);
+
+            parser_consume(parser, TOK_SEMICOLON, "Expected ';' after global variable declaration");
         }
         else if (parser_check(parser, TOK_EXTERN))
         {
@@ -1747,7 +1802,7 @@ static Program *parse_program(Parser *parser)
         }
         else
         {
-            parser_error_at(parser, parser->current, "Only struct and function declarations are supported at top-level");
+            parser_error_at(parser, parser->current, "Only struct, global variable, and function declarations are supported at top-level");
             parser_advance(parser);
         }
     }
@@ -1757,6 +1812,19 @@ static Program *parse_program(Parser *parser)
     program->struct_count = structs.count;
     program->functions = (FunctionDecl **)funcs.items;
     program->function_count = funcs.count;
+
+    // Initialize globals
+    program->globals.names = malloc(global_names.count * sizeof(String));
+    program->globals.types = malloc(global_types.count * sizeof(Type));
+    program->globals.initializers = (Expr **)global_inits.items;
+    program->globals.count = global_names.count;
+
+    for (size_t i = 0; i < global_names.count; i++)
+    {
+        program->globals.names[i] = *(String *)global_names.items[i];
+        program->globals.types[i] = *(Type *)global_types.items[i];
+    }
+
     return program;
 }
 
@@ -2148,6 +2216,66 @@ static bool typecheck_function(Program *program, FunctionDecl *fn)
             }
             break;
         }
+        case STMT_MEMBER_ASSIGN:
+        {
+            // Type check struct.field = value
+            Type obj_type = typecheck_expr(&table, stmt->as.member_assign_stmt.object);
+            if (obj_type.kind != TYPE_STRUCT)
+            {
+                fprintf(stderr, "Type error: cannot assign to field of non-struct type\n");
+                ok = false;
+                break;
+            }
+
+            // Find the struct definition
+            StructDecl *struct_def = NULL;
+            for (size_t i = 0; i < program->struct_count; i++)
+            {
+                if (string_equals(program->structs[i]->name, obj_type.data.struct_name.data))
+                {
+                    struct_def = program->structs[i];
+                    break;
+                }
+            }
+
+            if (!struct_def)
+            {
+                fprintf(stderr, "Type error: struct '%s' not found\n", obj_type.data.struct_name.data);
+                ok = false;
+                break;
+            }
+
+            // Find the field
+            Type field_type = (Type){TYPE_VOID};
+            bool found = false;
+            for (size_t i = 0; i < struct_def->field_count; i++)
+            {
+                if (string_equals(struct_def->fields[i].name, stmt->as.member_assign_stmt.field_name.data))
+                {
+                    field_type = struct_def->fields[i].type;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                fprintf(stderr, "Type error: struct '%s' has no field '%s'\n",
+                        obj_type.data.struct_name.data, stmt->as.member_assign_stmt.field_name.data);
+                ok = false;
+                break;
+            }
+
+            // Check value type
+            Type value_type = typecheck_expr(&table, stmt->as.member_assign_stmt.value);
+            if (!type_equals(value_type, field_type))
+            {
+                fprintf(stderr, "Type error: cannot assign %s to field %s of type %s\n",
+                        type_name(value_type), stmt->as.member_assign_stmt.field_name.data, type_name(field_type));
+                ok = false;
+            }
+            break;
+        }
         case STMT_EXPR:
             typecheck_expr(&table, stmt->as.expr);
             break;
@@ -2211,6 +2339,25 @@ static bool typecheck_function(Program *program, FunctionDecl *fn)
 static bool typecheck_program(Program *program)
 {
     bool ok = true;
+
+    // Type check global variables
+    SymbolTable global_table;
+    symtab_init(&global_table);
+
+    for (size_t i = 0; i < program->globals.count; i++)
+    {
+        Type init_type = typecheck_expr(&global_table, program->globals.initializers[i]);
+        if (!type_equals(init_type, program->globals.types[i]))
+        {
+            fprintf(stderr, "Type error: cannot assign %s to %s in global '%s'\n",
+                    type_name(init_type), type_name(program->globals.types[i]),
+                    program->globals.names[i].data);
+            ok = false;
+        }
+        symtab_add(&global_table, program->globals.names[i], program->globals.types[i]);
+    }
+
+    // Type check functions
     for (size_t i = 0; i < program->function_count; i++)
     {
         if (!typecheck_function(program, program->functions[i]))
@@ -2444,6 +2591,14 @@ static void emit_stmt(String *out, Stmt *stmt)
         emit_expr(out, stmt->as.assign_stmt.value);
         string_append_cstr(out, ";\n");
         break;
+    case STMT_MEMBER_ASSIGN:
+        emit_expr(out, stmt->as.member_assign_stmt.object);
+        string_append_cstr(out, ".");
+        string_append_cstr(out, stmt->as.member_assign_stmt.field_name.data);
+        string_append_cstr(out, " = ");
+        emit_expr(out, stmt->as.member_assign_stmt.value);
+        string_append_cstr(out, ";\n");
+        break;
     case STMT_IF:
         string_append_cstr(out, "if (");
         emit_expr(out, stmt->as.if_stmt.condition);
@@ -2607,6 +2762,21 @@ static String codegen_c(Program *program, const char *input_file)
         emit_struct_decl(&out, program->structs[i]);
     }
     if (program->struct_count > 0)
+    {
+        string_append_cstr(&out, "\n");
+    }
+
+    // Emit global variable declarations
+    for (size_t i = 0; i < program->globals.count; i++)
+    {
+        emit_type(&out, program->globals.types[i]);
+        string_append_cstr(&out, " ");
+        string_append_cstr(&out, program->globals.names[i].data);
+        string_append_cstr(&out, " = ");
+        emit_expr(&out, program->globals.initializers[i]);
+        string_append_cstr(&out, ";\n");
+    }
+    if (program->globals.count > 0)
     {
         string_append_cstr(&out, "\n");
     }

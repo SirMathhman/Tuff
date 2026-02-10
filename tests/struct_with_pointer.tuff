@@ -1,0 +1,10 @@
+struct Node {
+    value: I32,
+    next: *Node
+}
+
+fn main() -> I32 {
+    let n1: Node = Node { value: 42, next: null };
+    n1.value = 100;
+    return n1.value;
+}

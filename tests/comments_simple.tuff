@@ -1,0 +1,8 @@
+// This is a single-line comment
+fn main() -> I32 {
+    // Comments can appear anywhere
+    let x: I32 = 42; // Even at the end of lines
+    // Multiple comments in a row
+    // are all valid
+    return x;
+}

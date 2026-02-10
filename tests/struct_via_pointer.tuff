@@ -1,0 +1,16 @@
+struct Config {
+    count: I32,
+    enabled: Bool
+}
+
+fn update_config(cfg: *Config) -> Void {
+    (*cfg).count = 99;
+    (*cfg).enabled = false;
+}
+
+fn main() -> I32 {
+    let c: Config = Config { count: 0, enabled: true };
+    let ptr: *Config = &c;
+    update_config(ptr);
+    return c.count;
+}
