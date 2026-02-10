@@ -1,0 +1,7 @@
+fn main() -> I32 {
+    let x: I32 = 10;
+    let y: I32 = 20;
+    let ptr: *I32 = &x;
+    ptr = &y;
+    return *ptr;
+}

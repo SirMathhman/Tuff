@@ -1,0 +1,7 @@
+// Simple variable mutation test
+
+fn main() -> I32 {
+    let x: I32 = 0;
+    x = 42;
+    return x;
+}

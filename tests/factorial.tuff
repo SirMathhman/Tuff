@@ -1,0 +1,17 @@
+// For loop with compound assignment
+
+fn factorial(n: I32) -> I32 {
+    let result: I32 = 1;
+    
+    for (i in 1..n + 1) {
+        result *= i;
+    }
+    
+    return result;
+}
+
+fn main() -> I32 {
+    let fact5: I32 = factorial(5);
+    putsi32(fact5);  // Should be 120
+    return fact5;
+}

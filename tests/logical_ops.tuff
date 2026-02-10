@@ -1,0 +1,21 @@
+// Logical operations test
+
+fn main() -> I32 {
+    let x: I32 = 5;
+    let y: I32 = 10;
+    
+    if (x < 10 && y > 5) {
+        printf("Both conditions true\n");
+    }
+    
+    if (x > 10 || y > 5) {
+        printf("At least one condition true\n");
+    }
+    
+    let result: I32 = 0;
+    if (!(x > 10)) {
+        result = 1;
+    }
+    
+    return result;
+}

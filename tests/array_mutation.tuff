@@ -1,0 +1,11 @@
+// Array element mutation
+
+fn main() -> I32 {
+    let arr: [I32; 3] = [10, 20, 30];
+    
+    arr[0] = 100;
+    arr[1] = 200;
+    arr[2] = 300;
+    
+    return arr[0] + arr[1] + arr[2];  // 600
+}

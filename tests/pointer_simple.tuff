@@ -1,0 +1,6 @@
+fn main() -> I32 {
+    let x: I32 = 42;
+    let ptr: *I32 = &x;
+    let value: I32 = *ptr;
+    return value;
+}

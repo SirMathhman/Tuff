@@ -1,0 +1,14 @@
+// Array of booleans
+
+fn main() -> I32 {
+    let flags: [Bool; 4] = [true, false, true, false];
+    let count: I32 = 0;
+    
+    for (i in 0..4) {
+        if (flags[i]) {
+            count += 1;
+        }
+    }
+    
+    return count;  // 2
+}

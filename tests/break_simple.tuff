@@ -1,0 +1,14 @@
+fn test_simple() : Void => {
+    let count: I32 = 0;
+    while (count < 10) {
+        if (count == 3) {
+            break;
+        }
+        printf("Count: %d\n", count);
+    }
+    printf("Done!\n");
+}
+
+fn main() : Void => {
+    test_simple();
+}

@@ -1,0 +1,12 @@
+// For loop test
+
+fn main() -> I32 {
+    let sum: I32 = 0;
+    
+    for (i in 0..10) {
+        putsi32(i);
+        sum = sum + i;
+    }
+    
+    return sum;
+}

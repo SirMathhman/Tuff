@@ -1,0 +1,6 @@
+extern fn puts(s: *Str): I32;
+
+fn main() -> I32 {
+    puts("Hello from extern!");
+    return 0;
+}

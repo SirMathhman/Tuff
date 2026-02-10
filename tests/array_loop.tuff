@@ -1,0 +1,12 @@
+// Array with loop iteration
+
+fn main() -> I32 {
+    let numbers: [I32; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let sum: I32 = 0;
+    
+    for (i in 0..10) {
+        sum += numbers[i];
+    }
+    
+    return sum;  // Should be 45
+}

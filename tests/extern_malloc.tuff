@@ -1,0 +1,11 @@
+extern fn malloc(size: I32): *I32;
+extern fn free(ptr: *I32): Void;
+
+fn main() -> I32 {
+    let ptr: *I32 = malloc(4);
+    if (ptr == null) {
+        return 1;
+    }
+    free(ptr);
+    return 0;
+}

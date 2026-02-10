@@ -1,0 +1,8 @@
+// Simple array test
+
+fn main() -> I32 {
+    let arr: [I32; 5] = [1, 2, 3, 4, 5];
+    let first: I32 = arr[0];
+    let last: I32 = arr[4];
+    return first + last;  // 6
+}

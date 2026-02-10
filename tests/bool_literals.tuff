@@ -1,0 +1,16 @@
+// Boolean literal tests
+
+fn main() -> Bool {
+    let a: Bool = true;
+    let b: Bool = false;
+    
+    if (a) {
+        printf("a is true\n");
+    }
+    
+    if (!b) {
+        printf("b is false\n");
+    }
+    
+    return a;
+}

@@ -1,0 +1,6 @@
+extern fn add(a: I32, b: I32): I32;
+
+fn main() -> I32 {
+    let result: I32 = add(3, 4);
+    return result;
+}

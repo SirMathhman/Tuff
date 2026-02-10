@@ -1,0 +1,53 @@
+// Test break and continue in while loops
+
+fn test_break() : I32 => {
+    let i: I32 = 0;
+    while (i < 10) {
+        if (i == 5) {
+            break;
+        }
+        printf("i = %d\n", i);
+        let next: I32 = i + 1;
+    }
+    return i;
+}
+
+fn test_continue() : Void => {
+    let j: I32 = 0;
+    while (j < 10) {
+        let next: I32 = j + 1;
+        if (j == 3) {
+            continue;
+        }
+        printf("j = %d\n", j);
+    }
+}
+
+fn test_nested_break() : I32 => {
+    let outer: I32 = 0;
+    while (outer < 3) {
+        let inner: I32 = 0;
+        while (inner < 3) {
+            if (inner == 2) {
+                break;
+            }
+            printf("outer=%d, inner=%d\n", outer, inner);
+            let next_inner: I32 = inner + 1;
+        }
+        let next_outer: I32 = outer + 1;
+    }
+    return outer;
+}
+
+fn main() : Void => {
+    printf("Testing break:\n");
+    let result: I32 = test_break();
+    printf("Broke at: %d\n", result);
+    
+    printf("\nTesting continue:\n");
+    test_continue();
+    
+    printf("\nTesting nested break:\n");
+    let nested_result: I32 = test_nested_break();
+    printf("Done with nested, outer=%d\n", nested_result);
+}

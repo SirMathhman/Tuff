@@ -160,28 +160,37 @@ typedef enum
     TOK_CONTRACT,
     TOK_IMPL,
     TOK_IS,
+    TOK_TRUE,
+    TOK_FALSE,
+    TOK_NULL,
 
     // Operators
-    TOK_PLUS,     // +
-    TOK_MINUS,    // -
-    TOK_STAR,     // *
-    TOK_SLASH,    // /
-    TOK_PERCENT,  // %
-    TOK_EQ,       // ==
-    TOK_NE,       // !=
-    TOK_LT,       // <
-    TOK_GT,       // >
-    TOK_LE,       // <=
-    TOK_GE,       // >=
-    TOK_AND,      // &&
-    TOK_OR,       // ||
-    TOK_NOT,      // !
-    TOK_ASSIGN,   // =
-    TOK_ARROW,    // =>
-    TOK_PIPE,     // |
-    TOK_PIPEGT,   // |>
-    TOK_RANGE,    // ..
-    TOK_QUESTION, // ?
+    TOK_PLUS,      // +
+    TOK_MINUS,     // -
+    TOK_STAR,      // *
+    TOK_SLASH,     // /
+    TOK_PERCENT,   // %
+    TOK_EQ,        // ==
+    TOK_NE,        // !=
+    TOK_LT,        // <
+    TOK_GT,        // >
+    TOK_LE,        // <=
+    TOK_GE,        // >=
+    TOK_AND,       // &&
+    TOK_OR,        // ||
+    TOK_NOT,       // !
+    TOK_AMPERSAND, // &
+    TOK_ASSIGN,    // =
+    TOK_PLUSEQ,    // +=
+    TOK_MINUSEQ,   // -=
+    TOK_STAREQ,    // *=
+    TOK_SLASHEQ,   // /=
+    TOK_PERCENTEQ, // %=
+    TOK_ARROW,     // =>
+    TOK_PIPE,      // |
+    TOK_PIPEGT,    // |>
+    TOK_RANGE,     // ..
+    TOK_QUESTION,  // ?
 
     // Delimiters
     TOK_LPAREN,     // (
@@ -395,6 +404,8 @@ static TokenKind identifier_type(const char *start, size_t length)
         {
             switch (start[1])
             {
+            case 'a':
+                return check_keyword(start, length, "false", TOK_FALSE);
             case 'n':
                 return check_keyword(start, length, "fn", TOK_FN);
             case 'o':
@@ -432,6 +443,8 @@ static TokenKind identifier_type(const char *start, size_t length)
         break;
     case 'm':
         return check_keyword(start, length, "match", TOK_MATCH);
+    case 'n':
+        return check_keyword(start, length, "null", TOK_NULL);
     case 'o':
         if (length > 1)
         {
@@ -449,7 +462,17 @@ static TokenKind identifier_type(const char *start, size_t length)
     case 's':
         return check_keyword(start, length, "struct", TOK_STRUCT);
     case 't':
-        return check_keyword(start, length, "type", TOK_TYPE);
+        if (length > 1)
+        {
+            switch (start[1])
+            {
+            case 'r':
+                return check_keyword(start, length, "true", TOK_TRUE);
+            case 'y':
+                return check_keyword(start, length, "type", TOK_TYPE);
+            }
+        }
+        break;
     case 'w':
         return check_keyword(start, length, "while", TOK_WHILE);
     }
@@ -597,15 +620,15 @@ Token lexer_next_token(Lexer *lexer)
     case '?':
         return make_token(lexer, TOK_QUESTION);
     case '%':
-        return make_token(lexer, TOK_PERCENT);
+        return make_token(lexer, match(lexer, '=') ? TOK_PERCENTEQ : TOK_PERCENT);
     case '+':
-        return make_token(lexer, TOK_PLUS);
+        return make_token(lexer, match(lexer, '=') ? TOK_PLUSEQ : TOK_PLUS);
     case '-':
-        return make_token(lexer, TOK_MINUS);
+        return make_token(lexer, match(lexer, '=') ? TOK_MINUSEQ : TOK_MINUS);
     case '*':
-        return make_token(lexer, TOK_STAR);
+        return make_token(lexer, match(lexer, '=') ? TOK_STAREQ : TOK_STAR);
     case '/':
-        return make_token(lexer, TOK_SLASH);
+        return make_token(lexer, match(lexer, '=') ? TOK_SLASHEQ : TOK_SLASH);
     case '!':
         return make_token(lexer, match(lexer, '=') ? TOK_NE : TOK_NOT);
     case '=':
@@ -621,7 +644,7 @@ Token lexer_next_token(Lexer *lexer)
     case '&':
         if (match(lexer, '&'))
             return make_token(lexer, TOK_AND);
-        break;
+        return make_token(lexer, TOK_AMPERSAND);
     case '|':
         if (match(lexer, '|'))
             return make_token(lexer, TOK_OR);
@@ -652,25 +675,45 @@ typedef enum
     TYPE_I32,
     TYPE_BOOL,
     TYPE_STRPTR,
-    TYPE_STRUCT
+    TYPE_STRUCT,
+    TYPE_ARRAY,
+    TYPE_POINTER
 } TypeKind;
 
-typedef struct
+typedef struct Type Type;
+
+struct Type
 {
     TypeKind kind;
-    String struct_name; // For TYPE_STRUCT
-} Type;
+    union
+    {
+        String struct_name; // For TYPE_STRUCT
+        struct
+        {
+            Type *element_type; // For TYPE_ARRAY
+            int array_size;     // -1 for dynamic arrays
+        } array_info;
+        Type *pointer_to; // For TYPE_POINTER
+    } data;
+};
 
 typedef enum
 {
     EXPR_NUMBER,
     EXPR_STRING,
+    EXPR_BOOL,
+    EXPR_NULL,
     EXPR_IDENT,
     EXPR_CALL,
     EXPR_BINARY,
     EXPR_UNARY,
+    EXPR_ADDRESS_OF,
+    EXPR_DEREF,
     EXPR_MEMBER_ACCESS,
-    EXPR_STRUCT_LITERAL
+    EXPR_STRUCT_LITERAL,
+    EXPR_ARRAY_LITERAL,
+    EXPR_INDEX,
+    EXPR_CAST
 } ExprKind;
 
 typedef struct Expr Expr;
@@ -709,6 +752,24 @@ typedef struct
     size_t field_count;
 } ExprStructLiteral;
 
+typedef struct
+{
+    Expr **elements;
+    size_t element_count;
+} ExprArrayLiteral;
+
+typedef struct
+{
+    Expr *array;
+    Expr *index;
+} ExprIndex;
+
+typedef struct
+{
+    Type target_type;
+    Expr *expr;
+} ExprCast;
+
 typedef struct Expr
 {
     ExprKind kind;
@@ -717,12 +778,16 @@ typedef struct Expr
     {
         int64_t number_value;
         String string_value;
+        bool bool_value;
         String ident;
         ExprCall call;
         ExprBinary binary;
         ExprUnary unary;
         ExprMemberAccess member_access;
         ExprStructLiteral struct_literal;
+        ExprArrayLiteral array_literal;
+        ExprIndex index;
+        ExprCast cast;
     } as;
 } Expr;
 
@@ -731,8 +796,13 @@ typedef enum
     STMT_EXPR,
     STMT_RETURN,
     STMT_LET,
+    STMT_ASSIGN,
     STMT_IF,
-    STMT_WHILE
+    STMT_WHILE,
+    STMT_LOOP,
+    STMT_FOR,
+    STMT_BREAK,
+    STMT_CONTINUE
 } StmtKind;
 
 typedef struct Stmt
@@ -749,6 +819,11 @@ typedef struct Stmt
         } let_stmt;
         struct
         {
+            String name;
+            Expr *value;
+        } assign_stmt;
+        struct
+        {
             Expr *condition;
             struct Stmt **then_branch;
             size_t then_count;
@@ -761,6 +836,19 @@ typedef struct Stmt
             struct Stmt **body;
             size_t body_count;
         } while_stmt;
+        struct
+        {
+            struct Stmt **body;
+            size_t body_count;
+        } loop_stmt;
+        struct
+        {
+            String var_name;
+            Expr *start;
+            Expr *end;
+            struct Stmt **body;
+            size_t body_count;
+        } for_stmt;
     } as;
 } Stmt;
 
@@ -778,6 +866,7 @@ typedef struct
     Type return_type;
     Stmt **body;
     size_t body_count;
+    bool is_extern;
 } FunctionDecl;
 
 typedef struct
@@ -921,6 +1010,23 @@ static String token_to_string(Token token)
 
 static Type parse_type(Parser *parser)
 {
+    // Check for array type: [T; N]
+    if (parser_match(parser, TOK_LBRACKET))
+    {
+        Type *elem_type = malloc(sizeof(Type));
+        *elem_type = parse_type(parser);
+        parser_consume(parser, TOK_SEMICOLON, "Expected ';' in array type");
+        Token size_token = parser_consume(parser, TOK_NUMBER, "Expected array size");
+        int size = (int)strtoll(size_token.start, NULL, 10);
+        parser_consume(parser, TOK_RBRACKET, "Expected ']' after array type");
+
+        Type array_type;
+        array_type.kind = TYPE_ARRAY;
+        array_type.data.array_info.element_type = elem_type;
+        array_type.data.array_info.array_size = size;
+        return array_type;
+    }
+
     bool is_ptr = false;
     if (parser_match(parser, TOK_STAR))
     {
@@ -928,32 +1034,49 @@ static Type parse_type(Parser *parser)
     }
 
     Token ident = parser_consume(parser, TOK_IDENT, "Expected type name");
+    Type base_type;
     if (token_is_ident(ident, "Void"))
     {
-        return (Type){TYPE_VOID};
+        base_type.kind = TYPE_VOID;
     }
-    if (token_is_ident(ident, "I32"))
+    else if (token_is_ident(ident, "I32"))
     {
-        return (Type){TYPE_I32};
+        base_type.kind = TYPE_I32;
     }
-    if (token_is_ident(ident, "Bool"))
+    else if (token_is_ident(ident, "Bool"))
     {
-        return (Type){TYPE_BOOL};
+        base_type.kind = TYPE_BOOL;
     }
-    if (token_is_ident(ident, "Str") && is_ptr)
+    else if (token_is_ident(ident, "Str") && is_ptr)
     {
-        return (Type){TYPE_STRPTR};
+        // Special case: *Str is TYPE_STRPTR
+        Type t;
+        t.kind = TYPE_STRPTR;
+        return t;
+    }
+    else
+    {
+        // Assume it's a struct type
+        base_type.kind = TYPE_STRUCT;
+        base_type.data.struct_name = string_new();
+        string_append_range(&base_type.data.struct_name, ident.start, ident.length);
     }
 
-    // Assume it's a struct type
-    Type t;
-    t.kind = TYPE_STRUCT;
-    t.struct_name = string_new();
-    string_append_range(&t.struct_name, ident.start, ident.length);
-    return t;
+    // If we saw *, wrap in pointer type
+    if (is_ptr)
+    {
+        Type ptr_type;
+        ptr_type.kind = TYPE_POINTER;
+        ptr_type.data.pointer_to = malloc(sizeof(Type));
+        *ptr_type.data.pointer_to = base_type;
+        return ptr_type;
+    }
+
+    return base_type;
 }
 
 static Expr *parse_expression(Parser *parser);
+static Expr *parse_unary(Parser *parser);
 
 static Expr *expr_new(ExprKind kind)
 {
@@ -977,6 +1100,29 @@ static Expr *parse_primary(Parser *parser)
         Expr *expr = expr_new(EXPR_STRING);
         expr->token = parser->previous;
         expr->as.string_value = token_to_string(parser->previous);
+        return expr;
+    }
+
+    if (parser_match(parser, TOK_TRUE))
+    {
+        Expr *expr = expr_new(EXPR_BOOL);
+        expr->token = parser->previous;
+        expr->as.bool_value = true;
+        return expr;
+    }
+
+    if (parser_match(parser, TOK_FALSE))
+    {
+        Expr *expr = expr_new(EXPR_BOOL);
+        expr->token = parser->previous;
+        expr->as.bool_value = false;
+        return expr;
+    }
+
+    if (parser_match(parser, TOK_NULL))
+    {
+        Expr *expr = expr_new(EXPR_NULL);
+        expr->token = parser->previous;
         return expr;
     }
 
@@ -1053,11 +1199,81 @@ static Expr *parse_primary(Parser *parser)
         return expr;
     }
 
+    if (parser_match(parser, TOK_LBRACKET))
+    {
+        // Array literal: [expr1, expr2, expr3]
+        Expr *expr = expr_new(EXPR_ARRAY_LITERAL);
+        expr->token = parser->previous;
+
+        PtrVec elements;
+        ptrvec_init(&elements);
+
+        if (!parser_check(parser, TOK_RBRACKET))
+        {
+            do
+            {
+                Expr *elem = parse_expression(parser);
+                ptrvec_push(&elements, elem);
+            } while (parser_match(parser, TOK_COMMA));
+        }
+
+        parser_consume(parser, TOK_RBRACKET, "Expected ']' after array literal");
+
+        expr->as.array_literal.elements = (Expr **)elements.items;
+        expr->as.array_literal.element_count = elements.count;
+        return expr;
+    }
+
     if (parser_match(parser, TOK_LPAREN))
     {
-        Expr *expr = parse_expression(parser);
-        parser_consume(parser, TOK_RPAREN, "Expected ')' after expression");
-        return expr;
+        // Try to determine if this is a type cast (Type)expr or grouped expression (expr)
+        // We'll use a simple approach: try to parse it as a cast, and if we see a closing paren
+        // followed by a unary expression that starts a new expression, it's a cast.
+        // Otherwise it's a grouped expression.
+
+        // Peek at first token to make an educated guess
+        bool might_be_cast = false;
+
+        // Check if first token after ( looks like it could start a type
+        // Types can start with: *, or an identifier (like I32, Bool, [, etc.)
+        if (parser_check(parser, TOK_STAR) || parser_check(parser, TOK_LBRACKET))
+        {
+            might_be_cast = true;
+        }
+        // For simple identifiers, we need to peek further, but for now we'll try a different heuristic:
+        // If it's an identifier followed by ] or ), it's likely a type cast
+        if (parser_check(parser, TOK_IDENT))
+        {
+            // We can't easily peek two tokens ahead, so we'll let parse_type handle the decision
+            // by attempting to parse as cast and seeing if it works
+            might_be_cast = true;
+        }
+
+        if (might_be_cast)
+        {
+            // Try to parse as a cast expression
+            Type target_type = parse_type(parser);
+            if (parser_match(parser, TOK_RPAREN))
+            {
+                // It was a cast!
+                Expr *cast_expr = expr_new(EXPR_CAST);
+                cast_expr->as.cast.target_type = target_type;
+                cast_expr->as.cast.expr = parse_unary(parser);
+                return cast_expr;
+            }
+            // If we didn't find RPAREN, this was not a cast - but we've already consumed
+            // tokens trying to parse the type. This is a parser error.
+            // In a production parser, we'd have backtracking. For now we'll just error.
+            parser_error_at(parser, parser->current, "Expected ')'");
+            return expr_new(EXPR_NUMBER);
+        }
+        else
+        {
+            // Parse as grouped expression
+            Expr *expr = parse_expression(parser);
+            parser_consume(parser, TOK_RPAREN, "Expected ')' after expression");
+            return expr;
+        }
     }
 
     parser_error_at(parser, parser->current, "Expected expression");
@@ -1075,7 +1291,23 @@ static Expr *parse_unary(Parser *parser)
         return expr;
     }
 
-    // Handle postfix operators (member access)
+    if (parser_match(parser, TOK_AMPERSAND))
+    {
+        Expr *expr = expr_new(EXPR_ADDRESS_OF);
+        expr->token = parser->previous;
+        expr->as.unary.value = parse_unary(parser);
+        return expr;
+    }
+
+    if (parser_match(parser, TOK_STAR))
+    {
+        Expr *expr = expr_new(EXPR_DEREF);
+        expr->token = parser->previous;
+        expr->as.unary.value = parse_unary(parser);
+        return expr;
+    }
+
+    // Handle postfix operators (member access, array indexing)
     Expr *expr = parse_primary(parser);
     while (true)
     {
@@ -1087,6 +1319,15 @@ static Expr *parse_unary(Parser *parser)
             member_expr->as.member_access.object = expr;
             member_expr->as.member_access.member_name = token_to_string(member);
             expr = member_expr;
+        }
+        else if (parser_match(parser, TOK_LBRACKET))
+        {
+            Expr *index_expr = expr_new(EXPR_INDEX);
+            index_expr->token = parser->previous;
+            index_expr->as.index.array = expr;
+            index_expr->as.index.index = parse_expression(parser);
+            parser_consume(parser, TOK_RBRACKET, "Expected ']' after array index");
+            expr = index_expr;
         }
         else
         {
@@ -1143,9 +1384,39 @@ static Expr *parse_comparison(Parser *parser)
     return expr;
 }
 
+static Expr *parse_logical_and(Parser *parser)
+{
+    Expr *expr = parse_comparison(parser);
+    while (parser_match(parser, TOK_AND))
+    {
+        Expr *binary = expr_new(EXPR_BINARY);
+        binary->token = parser->previous;
+        binary->as.binary.op = parser->previous.kind;
+        binary->as.binary.left = expr;
+        binary->as.binary.right = parse_comparison(parser);
+        expr = binary;
+    }
+    return expr;
+}
+
+static Expr *parse_logical_or(Parser *parser)
+{
+    Expr *expr = parse_logical_and(parser);
+    while (parser_match(parser, TOK_OR))
+    {
+        Expr *binary = expr_new(EXPR_BINARY);
+        binary->token = parser->previous;
+        binary->as.binary.op = parser->previous.kind;
+        binary->as.binary.left = expr;
+        binary->as.binary.right = parse_logical_and(parser);
+        expr = binary;
+    }
+    return expr;
+}
+
 static Expr *parse_expression(Parser *parser)
 {
-    return parse_comparison(parser);
+    return parse_logical_or(parser);
 }
 
 static Stmt *stmt_new(StmtKind kind)
@@ -1195,8 +1466,19 @@ static Stmt *parse_statement(Parser *parser)
 
         if (parser_match(parser, TOK_ELSE))
         {
-            parser_consume(parser, TOK_LBRACE, "Expected '{' after 'else'");
-            stmt->as.if_stmt.else_branch = parse_block(parser, &stmt->as.if_stmt.else_count);
+            if (parser_check(parser, TOK_IF))
+            {
+                // else if: parse as a single-statement else branch containing an if
+                Stmt *else_if = parse_statement(parser);
+                stmt->as.if_stmt.else_branch = malloc(sizeof(Stmt *));
+                stmt->as.if_stmt.else_branch[0] = else_if;
+                stmt->as.if_stmt.else_count = 1;
+            }
+            else
+            {
+                parser_consume(parser, TOK_LBRACE, "Expected '{' after 'else'");
+                stmt->as.if_stmt.else_branch = parse_block(parser, &stmt->as.if_stmt.else_count);
+            }
         }
         else
         {
@@ -1215,6 +1497,98 @@ static Stmt *parse_statement(Parser *parser)
         parser_consume(parser, TOK_LBRACE, "Expected '{' after while condition");
         stmt->as.while_stmt.body = parse_block(parser, &stmt->as.while_stmt.body_count);
         return stmt;
+    }
+
+    if (parser_match(parser, TOK_LOOP))
+    {
+        Stmt *stmt = stmt_new(STMT_LOOP);
+        parser_consume(parser, TOK_LBRACE, "Expected '{' after 'loop'");
+        stmt->as.loop_stmt.body = parse_block(parser, &stmt->as.loop_stmt.body_count);
+        return stmt;
+    }
+
+    if (parser_match(parser, TOK_FOR))
+    {
+        Stmt *stmt = stmt_new(STMT_FOR);
+        parser_consume(parser, TOK_LPAREN, "Expected '(' after 'for'");
+        Token var = parser_consume(parser, TOK_IDENT, "Expected loop variable");
+        stmt->as.for_stmt.var_name = token_to_string(var);
+        parser_consume(parser, TOK_IN, "Expected 'in' after loop variable");
+        stmt->as.for_stmt.start = parse_expression(parser);
+        parser_consume(parser, TOK_RANGE, "Expected '..' in range");
+        stmt->as.for_stmt.end = parse_expression(parser);
+        parser_consume(parser, TOK_RPAREN, "Expected ')' after range");
+        parser_consume(parser, TOK_LBRACE, "Expected '{' after for header");
+        stmt->as.for_stmt.body = parse_block(parser, &stmt->as.for_stmt.body_count);
+        return stmt;
+    }
+
+    if (parser_match(parser, TOK_BREAK))
+    {
+        Stmt *stmt = stmt_new(STMT_BREAK);
+        parser_consume(parser, TOK_SEMICOLON, "Expected ';' after break");
+        return stmt;
+    }
+
+    if (parser_match(parser, TOK_CONTINUE))
+    {
+        Stmt *stmt = stmt_new(STMT_CONTINUE);
+        parser_consume(parser, TOK_SEMICOLON, "Expected ';' after continue");
+        return stmt;
+    }
+
+    // Check for assignment: IDENT = expr; or IDENT += expr; etc.
+    if (parser_check(parser, TOK_IDENT))
+    {
+        Token ident = parser->current;
+        parser_advance(parser);
+
+        // Check for compound assignment
+        TokenKind compound_op = TOK_EOF;
+        if (parser_match(parser, TOK_PLUSEQ))
+            compound_op = TOK_PLUS;
+        else if (parser_match(parser, TOK_MINUSEQ))
+            compound_op = TOK_MINUS;
+        else if (parser_match(parser, TOK_STAREQ))
+            compound_op = TOK_STAR;
+        else if (parser_match(parser, TOK_SLASHEQ))
+            compound_op = TOK_SLASH;
+        else if (parser_match(parser, TOK_PERCENTEQ))
+            compound_op = TOK_PERCENT;
+        else if (parser_match(parser, TOK_ASSIGN))
+            compound_op = TOK_ASSIGN;
+
+        if (compound_op != TOK_EOF)
+        {
+            Stmt *stmt = stmt_new(STMT_ASSIGN);
+            stmt->as.assign_stmt.name = token_to_string(ident);
+
+            if (compound_op == TOK_ASSIGN)
+            {
+                // Simple assignment
+                stmt->as.assign_stmt.value = parse_expression(parser);
+            }
+            else
+            {
+                // Compound assignment: desugar to a = a op b
+                Expr *var_expr = expr_new(EXPR_IDENT);
+                var_expr->as.ident = token_to_string(ident);
+
+                Expr *rhs = parse_expression(parser);
+
+                Expr *binary = expr_new(EXPR_BINARY);
+                binary->as.binary.op = compound_op;
+                binary->as.binary.left = var_expr;
+                binary->as.binary.right = rhs;
+
+                stmt->as.assign_stmt.value = binary;
+            }
+
+            parser_consume(parser, TOK_SEMICOLON, "Expected ';' after assignment");
+            return stmt;
+        }
+        // Not an assignment, backtrack and parse as expression
+        parser->current = ident;
     }
 
     Stmt *stmt = stmt_new(STMT_EXPR);
@@ -1239,13 +1613,14 @@ static Stmt **parse_block(Parser *parser, size_t *out_count)
     return (Stmt **)stmts.items;
 }
 
-static FunctionDecl *parse_function(Parser *parser)
+static FunctionDecl *parse_function(Parser *parser, bool is_extern)
 {
     parser_consume(parser, TOK_FN, "Expected 'fn'");
     Token name = parser_consume(parser, TOK_IDENT, "Expected function name");
 
     FunctionDecl *fn = calloc(1, sizeof(FunctionDecl));
     fn->name = token_to_string(name);
+    fn->is_extern = is_extern;
 
     parser_consume(parser, TOK_LPAREN, "Expected '(' after function name");
 
@@ -1269,20 +1644,30 @@ static FunctionDecl *parse_function(Parser *parser)
     parser_consume(parser, TOK_COLON, "Expected ':' before return type");
     fn->return_type = parse_type(parser);
 
-    parser_consume(parser, TOK_ARROW, "Expected '=>' after return type");
-
-    if (parser_match(parser, TOK_LBRACE))
+    if (is_extern)
     {
-        fn->body = parse_block(parser, &fn->body_count);
+        // Extern functions have no body, just a semicolon
+        parser_consume(parser, TOK_SEMICOLON, "Expected ';' after extern function declaration");
+        fn->body = NULL;
+        fn->body_count = 0;
     }
     else
     {
-        Stmt *stmt = stmt_new(STMT_RETURN);
-        stmt->as.expr = parse_expression(parser);
-        parser_match(parser, TOK_SEMICOLON);
-        fn->body = malloc(sizeof(Stmt *));
-        fn->body[0] = stmt;
-        fn->body_count = 1;
+        parser_consume(parser, TOK_ARROW, "Expected '=>' after return type");
+
+        if (parser_match(parser, TOK_LBRACE))
+        {
+            fn->body = parse_block(parser, &fn->body_count);
+        }
+        else
+        {
+            Stmt *stmt = stmt_new(STMT_RETURN);
+            stmt->as.expr = parse_expression(parser);
+            parser_match(parser, TOK_SEMICOLON);
+            fn->body = malloc(sizeof(Stmt *));
+            fn->body[0] = stmt;
+            fn->body_count = 1;
+        }
     }
 
     fn->params = malloc(params.count * sizeof(Param));
@@ -1349,9 +1734,15 @@ static Program *parse_program(Parser *parser)
             StructDecl *structdecl = parse_struct(parser);
             ptrvec_push(&structs, structdecl);
         }
+        else if (parser_check(parser, TOK_EXTERN))
+        {
+            parser_advance(parser); // consume 'extern'
+            FunctionDecl *fn = parse_function(parser, true);
+            ptrvec_push(&funcs, fn);
+        }
         else if (parser_check(parser, TOK_FN))
         {
-            FunctionDecl *fn = parse_function(parser);
+            FunctionDecl *fn = parse_function(parser, false);
             ptrvec_push(&funcs, fn);
         }
         else
@@ -1436,12 +1827,19 @@ static const char *type_name(Type type)
     case TYPE_STRPTR:
         return "*Str";
     case TYPE_STRUCT:
-        return type.struct_name.data;
+        return type.data.struct_name.data;
+    case TYPE_ARRAY:
+        // Simplified: just return "Array" for now
+        return "Array";
+    case TYPE_POINTER:
+        // Simplified: just return "*T" for now
+        return "*T";
     }
     return "<unknown>";
 }
 
 static Type typecheck_expr(SymbolTable *table, Expr *expr);
+static bool type_equals(Type a, Type b);
 
 static Type typecheck_call(SymbolTable *table, Expr *expr)
 {
@@ -1482,6 +1880,17 @@ static Type typecheck_expr(SymbolTable *table, Expr *expr)
         return (Type){TYPE_I32};
     case EXPR_STRING:
         return (Type){TYPE_STRPTR};
+    case EXPR_BOOL:
+        return (Type){TYPE_BOOL};
+    case EXPR_NULL:
+    {
+        // null can be any pointer type - return a generic void pointer
+        Type ptr_type;
+        ptr_type.kind = TYPE_POINTER;
+        ptr_type.data.pointer_to = malloc(sizeof(Type));
+        ptr_type.data.pointer_to->kind = TYPE_VOID;
+        return ptr_type;
+    }
     case EXPR_IDENT:
     {
         Type type;
@@ -1543,6 +1952,13 @@ static Type typecheck_expr(SymbolTable *table, Expr *expr)
                 fprintf(stderr, "Type error: comparison expects matching operand types\n");
             }
             return (Type){TYPE_BOOL};
+        case TOK_AND:
+        case TOK_OR:
+            if (left.kind != TYPE_BOOL || right.kind != TYPE_BOOL)
+            {
+                fprintf(stderr, "Type error: logical operators expect Bool operands\n");
+            }
+            return (Type){TYPE_BOOL};
         default:
             return left;
         }
@@ -1559,13 +1975,83 @@ static Type typecheck_expr(SymbolTable *table, Expr *expr)
     {
         Type t;
         t.kind = TYPE_STRUCT;
-        t.struct_name = expr->as.struct_literal.type_name;
+        t.data.struct_name = expr->as.struct_literal.type_name;
         // Typecheck field values
         for (size_t i = 0; i < expr->as.struct_literal.field_count; i++)
         {
             typecheck_expr(table, expr->as.struct_literal.field_values[i]);
         }
         return t;
+    }
+    case EXPR_ARRAY_LITERAL:
+    {
+        if (expr->as.array_literal.element_count == 0)
+        {
+            fprintf(stderr, "Type error: cannot infer type of empty array literal\n");
+            Type error_type;
+            error_type.kind = TYPE_VOID;
+            return error_type;
+        }
+        Type elem_type = typecheck_expr(table, expr->as.array_literal.elements[0]);
+        for (size_t i = 1; i < expr->as.array_literal.element_count; i++)
+        {
+            Type t = typecheck_expr(table, expr->as.array_literal.elements[i]);
+            if (!type_equals(t, elem_type))
+            {
+                fprintf(stderr, "Type error: array literal elements must have same type\n");
+            }
+        }
+        Type array_type;
+        array_type.kind = TYPE_ARRAY;
+        array_type.data.array_info.element_type = malloc(sizeof(Type));
+        *array_type.data.array_info.element_type = elem_type;
+        array_type.data.array_info.array_size = (int)expr->as.array_literal.element_count;
+        return array_type;
+    }
+    case EXPR_INDEX:
+    {
+        Type array_type = typecheck_expr(table, expr->as.index.array);
+        Type index_type = typecheck_expr(table, expr->as.index.index);
+        if (index_type.kind != TYPE_I32)
+        {
+            fprintf(stderr, "Type error: array index must be I32\n");
+        }
+        if (array_type.kind != TYPE_ARRAY)
+        {
+            fprintf(stderr, "Type error: cannot index non-array type\n");
+            Type error_type;
+            error_type.kind = TYPE_VOID;
+            return error_type;
+        }
+        return *array_type.data.array_info.element_type;
+    }
+    case EXPR_ADDRESS_OF:
+    {
+        Type operand = typecheck_expr(table, expr->as.unary.value);
+        Type ptr_type;
+        ptr_type.kind = TYPE_POINTER;
+        ptr_type.data.pointer_to = malloc(sizeof(Type));
+        *ptr_type.data.pointer_to = operand;
+        return ptr_type;
+    }
+    case EXPR_DEREF:
+    {
+        Type operand = typecheck_expr(table, expr->as.unary.value);
+        if (operand.kind != TYPE_POINTER)
+        {
+            fprintf(stderr, "Type error: cannot dereference non-pointer type\n");
+            Type error_type;
+            error_type.kind = TYPE_VOID;
+            return error_type;
+        }
+        return *operand.data.pointer_to;
+    }
+    case EXPR_CAST:
+    {
+        // For casts, we don't validate the conversion - in a self-hosted compiler,
+        // casts are an escape valve for FFI and unsafe operations that bypass type safety
+        typecheck_expr(table, expr->as.cast.expr);
+        return expr->as.cast.target_type;
     }
     }
     return (Type){TYPE_VOID};
@@ -1577,13 +2063,29 @@ static bool type_equals(Type a, Type b)
         return false;
     if (a.kind == TYPE_STRUCT)
     {
-        return strcmp(a.struct_name.data, b.struct_name.data) == 0;
+        return strcmp(a.data.struct_name.data, b.data.struct_name.data) == 0;
+    }
+    if (a.kind == TYPE_ARRAY)
+    {
+        if (a.data.array_info.array_size != b.data.array_info.array_size)
+            return false;
+        return type_equals(*a.data.array_info.element_type, *b.data.array_info.element_type);
+    }
+    if (a.kind == TYPE_POINTER)
+    {
+        return type_equals(*a.data.pointer_to, *b.data.pointer_to);
     }
     return true;
 }
 
 static bool typecheck_function(Program *program, FunctionDecl *fn)
 {
+    // Extern functions have no body to typecheck
+    if (fn->is_extern)
+    {
+        return true;
+    }
+
     SymbolTable table;
     symtab_init(&table);
 
@@ -1628,6 +2130,24 @@ static bool typecheck_function(Program *program, FunctionDecl *fn)
             symtab_add(&table, stmt->as.let_stmt.name, stmt->as.let_stmt.type);
             break;
         }
+        case STMT_ASSIGN:
+        {
+            Type var_type;
+            if (!symbol_lookup(&table, stmt->as.assign_stmt.name, &var_type))
+            {
+                fprintf(stderr, "Type error: undefined variable '%s' in assignment\n",
+                        stmt->as.assign_stmt.name.data);
+                ok = false;
+            }
+            Type value_type = typecheck_expr(&table, stmt->as.assign_stmt.value);
+            if (!type_equals(value_type, var_type))
+            {
+                fprintf(stderr, "Type error: cannot assign %s to %s in variable '%s'\n",
+                        type_name(value_type), type_name(var_type), stmt->as.assign_stmt.name.data);
+                ok = false;
+            }
+            break;
+        }
         case STMT_EXPR:
             typecheck_expr(&table, stmt->as.expr);
             break;
@@ -1655,6 +2175,34 @@ static bool typecheck_function(Program *program, FunctionDecl *fn)
             // Note: We're not creating a new scope for the body in this simple implementation
             break;
         }
+        case STMT_LOOP:
+            // Infinite loop - no condition to check
+            // Note: We're not creating a new scope for the body in this simple implementation
+            break;
+        case STMT_FOR:
+        {
+            Type start_type = typecheck_expr(&table, stmt->as.for_stmt.start);
+            Type end_type = typecheck_expr(&table, stmt->as.for_stmt.end);
+            if (start_type.kind != TYPE_I32)
+            {
+                fprintf(stderr, "Type error: for loop start must be I32, got %s\n",
+                        type_name(start_type));
+                ok = false;
+            }
+            if (end_type.kind != TYPE_I32)
+            {
+                fprintf(stderr, "Type error: for loop end must be I32, got %s\n",
+                        type_name(end_type));
+                ok = false;
+            }
+            // Add loop variable to symbol table (simple implementation - no scope)
+            symtab_add(&table, stmt->as.for_stmt.var_name, (Type){TYPE_I32});
+            break;
+        }
+        case STMT_BREAK:
+        case STMT_CONTINUE:
+            // Note: We're not validating loop context in this simple implementation
+            break;
         }
     }
     return ok;
@@ -1695,7 +2243,15 @@ static void emit_type(String *out, Type type)
         break;
     case TYPE_STRUCT:
         string_append_cstr(out, "struct ");
-        string_append_cstr(out, type.struct_name.data);
+        string_append_cstr(out, type.data.struct_name.data);
+        break;
+    case TYPE_ARRAY:
+        // For arrays, emit the element type (size will be added separately)
+        emit_type(out, *type.data.array_info.element_type);
+        break;
+    case TYPE_POINTER:
+        emit_type(out, *type.data.pointer_to);
+        string_append_cstr(out, "*");
         break;
     }
 }
@@ -1710,6 +2266,12 @@ static void emit_expr(String *out, Expr *expr)
         break;
     case EXPR_STRING:
         string_append_range(out, expr->token.start, expr->token.length);
+        break;
+    case EXPR_BOOL:
+        string_append_cstr(out, expr->as.bool_value ? "true" : "false");
+        break;
+    case EXPR_NULL:
+        string_append_cstr(out, "NULL");
         break;
     case EXPR_IDENT:
         string_append_cstr(out, expr->as.ident.data);
@@ -1770,6 +2332,12 @@ static void emit_expr(String *out, Expr *expr)
         case TOK_GE:
             string_append_cstr(out, " >= ");
             break;
+        case TOK_AND:
+            string_append_cstr(out, " && ");
+            break;
+        case TOK_OR:
+            string_append_cstr(out, " || ");
+            break;
         default:
             string_append_cstr(out, " ? ");
             break;
@@ -1797,6 +2365,36 @@ static void emit_expr(String *out, Expr *expr)
         }
         string_append_cstr(out, "}");
         break;
+    case EXPR_ARRAY_LITERAL:
+        string_append_cstr(out, "{");
+        for (size_t i = 0; i < expr->as.array_literal.element_count; i++)
+        {
+            if (i > 0)
+                string_append_cstr(out, ", ");
+            emit_expr(out, expr->as.array_literal.elements[i]);
+        }
+        string_append_cstr(out, "}");
+        break;
+    case EXPR_INDEX:
+        emit_expr(out, expr->as.index.array);
+        string_append_cstr(out, "[");
+        emit_expr(out, expr->as.index.index);
+        string_append_cstr(out, "]");
+        break;
+    case EXPR_ADDRESS_OF:
+        string_append_cstr(out, "&");
+        emit_expr(out, expr->as.unary.value);
+        break;
+    case EXPR_DEREF:
+        string_append_cstr(out, "*");
+        emit_expr(out, expr->as.unary.value);
+        break;
+    case EXPR_CAST:
+        string_append_cstr(out, "(");
+        emit_type(out, expr->as.cast.target_type);
+        string_append_cstr(out, ")");
+        emit_expr(out, expr->as.cast.expr);
+        break;
     }
 }
 
@@ -1818,11 +2416,32 @@ static void emit_stmt(String *out, Stmt *stmt)
         string_append_cstr(out, ";\n");
         break;
     case STMT_LET:
-        emit_type(out, stmt->as.let_stmt.type);
-        string_append_cstr(out, " ");
-        string_append_cstr(out, stmt->as.let_stmt.name.data);
+        if (stmt->as.let_stmt.type.kind == TYPE_ARRAY)
+        {
+            // Special handling for array declarations: type name[size] = {...}
+            emit_type(out, *stmt->as.let_stmt.type.data.array_info.element_type);
+            string_append_cstr(out, " ");
+            string_append_cstr(out, stmt->as.let_stmt.name.data);
+            string_append_cstr(out, "[");
+            char size_buf[32];
+            snprintf(size_buf, sizeof(size_buf), "%d", stmt->as.let_stmt.type.data.array_info.array_size);
+            string_append_cstr(out, size_buf);
+            string_append_cstr(out, "]");
+        }
+        else
+        {
+            emit_type(out, stmt->as.let_stmt.type);
+            string_append_cstr(out, " ");
+            string_append_cstr(out, stmt->as.let_stmt.name.data);
+        }
         string_append_cstr(out, " = ");
         emit_expr(out, stmt->as.let_stmt.value);
+        string_append_cstr(out, ";\n");
+        break;
+    case STMT_ASSIGN:
+        string_append_cstr(out, stmt->as.assign_stmt.name.data);
+        string_append_cstr(out, " = ");
+        emit_expr(out, stmt->as.assign_stmt.value);
         string_append_cstr(out, ";\n");
         break;
     case STMT_IF:
@@ -1858,13 +2477,59 @@ static void emit_stmt(String *out, Stmt *stmt)
         }
         string_append_cstr(out, "    }\n");
         break;
+    case STMT_LOOP:
+        string_append_cstr(out, "while (1) {\n");
+        for (size_t i = 0; i < stmt->as.loop_stmt.body_count; i++)
+        {
+            string_append_cstr(out, "        ");
+            emit_stmt(out, stmt->as.loop_stmt.body[i]);
+        }
+        string_append_cstr(out, "    }\n");
+        break;
+    case STMT_FOR:
+        string_append_cstr(out, "for (int32_t ");
+        string_append_cstr(out, stmt->as.for_stmt.var_name.data);
+        string_append_cstr(out, " = ");
+        emit_expr(out, stmt->as.for_stmt.start);
+        string_append_cstr(out, "; ");
+        string_append_cstr(out, stmt->as.for_stmt.var_name.data);
+        string_append_cstr(out, " < ");
+        emit_expr(out, stmt->as.for_stmt.end);
+        string_append_cstr(out, "; ");
+        string_append_cstr(out, stmt->as.for_stmt.var_name.data);
+        string_append_cstr(out, "++) {\n");
+        for (size_t i = 0; i < stmt->as.for_stmt.body_count; i++)
+        {
+            string_append_cstr(out, "        ");
+            emit_stmt(out, stmt->as.for_stmt.body[i]);
+        }
+        string_append_cstr(out, "    }\n");
+        break;
+    case STMT_BREAK:
+        string_append_cstr(out, "break;\n");
+        break;
+    case STMT_CONTINUE:
+        string_append_cstr(out, "continue;\n");
+        break;
     }
 }
 
 static void emit_function_decl(String *out, FunctionDecl *fn, bool is_definition)
 {
+    // For extern functions, only emit declaration, never definition
+    if (fn->is_extern && is_definition)
+    {
+        return;
+    }
+
     bool is_main = string_equals(fn->name, "main");
     bool main_void = is_main && fn->return_type.kind == TYPE_VOID;
+
+    // Add 'extern' keyword for extern function declarations
+    if (fn->is_extern && !is_definition)
+    {
+        string_append_cstr(out, "extern ");
+    }
 
     if (main_void)
     {

@@ -1,0 +1,13 @@
+// Variable mutation in a loop
+
+fn main() -> I32 {
+    let count: I32 = 0;
+    let limit: I32 = 10;
+    
+    while (count < limit) {
+        putsi32(count);
+        count = count + 1;
+    }
+    
+    return count;
+}

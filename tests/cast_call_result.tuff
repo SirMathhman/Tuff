@@ -1,0 +1,7 @@
+extern fn intToPtr(val: I32): *I32;
+
+fn main() -> I32 {
+    let x: I32 = 12345;
+    let ptr: *I32 = (intToPtr(x));
+    return 0;
+}

@@ -1,0 +1,26 @@
+// More complex mutation patterns
+
+fn fibonacci(n: I32) -> I32 {
+    if (n < 2) {
+        return n;
+    }
+    
+    let a: I32 = 0;
+    let b: I32 = 1;
+    let i: I32 = 2;
+    
+    while (i <= n) {
+        let temp: I32 = a + b;
+        a = b;
+        b = temp;
+        i = i + 1;
+    }
+    
+    return b;
+}
+
+fn main() -> I32 {
+    let result: I32 = fibonacci(10);
+    putsi32(result);
+    return result;
+}

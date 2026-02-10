@@ -1,0 +1,15 @@
+// Infinite loop test with break
+
+fn main() -> I32 {
+    let count: I32 = 0;
+    
+    loop {
+        if (count >= 5) {
+            break;
+        }
+        putsi32(count);
+        count = count + 1;
+    }
+    
+    return count;
+}

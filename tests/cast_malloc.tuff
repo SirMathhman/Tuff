@@ -1,0 +1,7 @@
+extern fn malloc(size: I32): *I32;
+
+fn main() -> I32 {
+    let ptr: *I32 = malloc(100);
+    let casted: *I32 = (*I32)ptr;
+    return 0;
+}
