@@ -79,8 +79,9 @@ const readFileTool = tool({
       );
     }
 
+    console.log(`[Tool] Reading file: ${name} from line ${startLine} to line ${endLine}`);
     return lines
-      .map((line, index) => index + startLine + 1 + ": " + line)
+      .map((line, index) => index + startLine + ": " + line)
       .slice(startLine - 1, endLine)
       .join("\n");
   },
@@ -122,6 +123,7 @@ const editFileTool = tool({
 
     lines.splice(startLine - 1, endLine - startLine + 1, newContent);
     await fs.writeFile(name, lines.join("\n"), "utf-8");
+    console.log("[Tool] File edited: " + name);
     return "File edited.";
   },
 });
@@ -142,12 +144,14 @@ const deleteFileTool = tool({
       );
     }
 
+    console.log("[Tool] Deleting file: " + name);
     await fs.rm(name);
     // Recursively delete empty parent directories
     let parentDir = name.split("/").slice(0, -1).join("/");
     while (parentDir && parentDir !== "." && existsSync(parentDir)) {
       const files = await fs.readdir(parentDir);
       if (files.length === 0) {
+        console.log("[Tool] Deleting empty parent directory: " + parentDir);
         await fs.rmdir(parentDir);
         parentDir = parentDir.split("/").slice(0, -1).join("");
       } else {
@@ -167,6 +171,7 @@ const powerShellTool = tool({
   implementation: async ({ command }) => {
     const { exec } = await import("child_process");
     return new Promise((resolve) => {
+      console.log("[Tool] Executing PowerShell command: " + command);
       exec(command, { shell: "powershell.exe" }, (error, stdout, stderr) => {
         if (error) {
           resolve(`Error: ${error.message}`);
@@ -187,10 +192,13 @@ const searchFilesTool = tool({
   parameters: { query: z.string() },
   implementation: async ({ query }) => {
     const regex = new RegExp(query);
+    const query0 = glob("**/*", {
+      exclude: ["**/node_modules/**", "**/.git/**"],
+    });
+
+    console.log("[Tool] Searching for files that match the query: " + query);
     const files = await Array.fromAsync(
-      glob("**/*", {
-        exclude: ["**/node_modules/**", "**/.git/**"],
-      }),
+      query0,
     );
 
     return files.filter((file) => regex.test(file)).join("\n");
