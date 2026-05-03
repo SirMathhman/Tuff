@@ -105,16 +105,13 @@ while (true) {
   chat.append("user", input);
 
   process.stdout.write("Bot: ");
-  await model.act(
-    chat,
-    [createFileTool, readFileTool, editFileTool, deleteFileTool],
-    {
-      // When the model finish the entire message, push it to the chat
-      onMessage: (message) => chat.append(message),
-      onPredictionFragment: ({ content }) => {
-        process.stdout.write(content);
-      },
+  const tools = [createFileTool, readFileTool, editFileTool, deleteFileTool];
+  await model.act(chat, tools, {
+    // When the model finish the entire message, push it to the chat
+    onMessage: (message) => chat.append(message),
+    onPredictionFragment: ({ content }) => {
+      process.stdout.write(content);
     },
-  );
+  });
   process.stdout.write("\n");
 }
