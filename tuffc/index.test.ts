@@ -21,4 +21,12 @@ describe("The compiler", () => {
   test("should handle read<U8>()", () => {
     assertValid("read<U8>()", 100, "100");
   });
+
+  test("should handle read<U16>()", () => {
+    assertValid("read<U16>()", 100, "100");
+  });
+
+  test("should handle read<U32>()", () => {
+    assertValid("read<U32>()", 100, "100");
+  });
 });

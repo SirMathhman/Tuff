@@ -271,7 +271,7 @@ while (true) {
 
     // If the exit code is non-zero, then this means that the tests failed. We should inform the assistant about the failure and provide the error message.
     if (process.exitCode === 0) {
-      continue;
+      break;
     }
     
     console.log("Tests failed. Informing the assistant...");
