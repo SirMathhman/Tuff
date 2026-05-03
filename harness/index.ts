@@ -200,6 +200,42 @@ const tools = [
   powerShellTool,
   searchFilesTool,
 ];
+
+async function runCheck(command: string): Promise<boolean> {
+  // Run `npm run test` in `./tuffc`.
+  const { exec } = await import("child_process");
+  let stdOut = "";
+  let stdErr = "";
+
+  const process = exec(command, { cwd: "./tuffc" }, (error, stdout, stderr) => {
+    stdOut = stdout;
+    stdErr = stderr;
+  });
+
+  // Wait for the process to finish
+  await new Promise((resolve) => {
+    process.on("exit", resolve);
+  });
+
+  // If the exit code is non-zero, then this means that the tests failed. We should inform the assistant about the failure and provide the error message.
+  if (process.exitCode === 0) {
+    return true;
+  }
+
+  console.log("Tests failed. Informing the assistant...");
+  await promptAssistant(
+    chat,
+    "user",
+    "The command `" +
+      command +
+      "` in `./tuffc` failed with the following error message. You MUST fix the reported issues and get the command to pass: " +
+      stdErr +
+      "\n" +
+      stdOut,
+  );
+  return false;
+}
+
 async function promptAssistant(
   chat: Chat,
   role: ChatMessageRoleData,
@@ -250,39 +286,15 @@ while (true) {
   await promptAssistant(chat, "user", input);
 
   while (true) {
-    // Run `npm run test` in `./tuffc`.
-    const { exec } = await import("child_process");
-    let stdOut = "";
-    let stdErr = "";
-
-    const process = exec(
-      "npm run test",
-      { cwd: "./tuffc" },
-      (error, stdout, stderr) => {
-        stdOut = stdout;
-        stdErr = stderr;
-      },
-    );
-
-    // Wait for the process to finish
-    await new Promise((resolve) => {
-      process.on("exit", resolve);
-    });
-
-    // If the exit code is non-zero, then this means that the tests failed. We should inform the assistant about the failure and provide the error message.
-    if (process.exitCode === 0) {
+    const testCheckPassed = await runCheck("npm run test");
+    if (testCheckPassed) {
       break;
     }
-    
-    console.log("Tests failed. Informing the assistant...");
-    await promptAssistant(
-      chat,
-      "user",
-      "The tests in `./tuffc` failed with the following error message. You MUST fix them: " +
-        stdErr +
-        "\n" +
-        stdOut,
-    );
+
+    const lintCheckPassed = await runCheck("npm run lint");
+    if (lintCheckPassed) {
+      break;
+    }
   }
 }
 
