@@ -270,17 +270,19 @@ while (true) {
     });
 
     // If the exit code is non-zero, then this means that the tests failed. We should inform the assistant about the failure and provide the error message.
-    if (process.exitCode !== 0) {
-      console.log("Tests failed. Informing the assistant...");
-      await promptAssistant(
-        chat,
-        "system",
-        "The tests failed with the following error message: " +
-          stdErr +
-          "\n" +
-          stdOut,
-      );
+    if (process.exitCode === 0) {
+      continue;
     }
+    
+    console.log("Tests failed. Informing the assistant...");
+    await promptAssistant(
+      chat,
+      "user",
+      "The tests in `./tuffc` failed with the following error message. You MUST fix them: " +
+        stdErr +
+        "\n" +
+        stdOut,
+    );
   }
 }
 
