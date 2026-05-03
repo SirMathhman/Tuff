@@ -67,4 +67,7 @@ describe("The compiler", () => {
   test("should handle read<U64>()", () => {
     assertValid("read<U64>()", 100, "100");
   });
+  test("should handle read<U7>()", () => {
+    assertInvalid("read<U7>()");
+  });
 });
