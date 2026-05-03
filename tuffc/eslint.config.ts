@@ -18,6 +18,18 @@ export default defineConfig([
           message:
             "Throw statements are not allowed. Use a custom Result<T, X> type instead.",
         },
+        {
+          selector: "RegexLiteral",
+          message: "Regular expressions are not allowed.",
+        },
+        {
+          selector: "NewExpression[callee.name='RegExp']",
+          message: "Regular expressions are not allowed.",
+        },
+        {
+          selector: "CallExpression[callee.name='RegExp']",
+          message: "Regular expressions are not allowed.",
+        },
       ],
       complexity: ["error", 10],
     },
