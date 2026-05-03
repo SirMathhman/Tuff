@@ -4,7 +4,10 @@ import ts from "typescript";
 
 function assertValid(tuffSource: string, expectedExitCode: number, stdIn = "") {
   const tsSource = compileTuffToTS(tuffSource);
-  const jsSource = ts.transpile(tsSource, { module: ts.ModuleKind.CommonJS });
+  if (!tsSource.ok) {
+    throw tsSource.error;
+  }
+  const jsSource = ts.transpile(tsSource.value, { module: ts.ModuleKind.CommonJS });
   const actualExitCode = new Function("stdIn", jsSource)(stdIn);
   expect(actualExitCode).toBe(expectedExitCode);
 }
@@ -32,5 +35,32 @@ describe("The compiler", () => {
 
   test("should handle read<U32>()", () => {
     assertValid("read<U32>()", 100, "100");
+  });
+
+  test("should handle read<U64>()", () => {
+    assertValid("read<U64>()", 100, "100");
+  });
+
+  test("should handle read<U64>()", () => {
+    assertValid("read<U64>()", 100, "100");
+  });
+
+  test("should handle read<U64>()", () => {
+    assertValid("read<U64>()", 100, "100");
+  });
+
+  test("should handle read<U64>()", () => {
+    assertValid("read<U64>()", 100, "100");
+  });
+
+  test("should handle read<U64>()", () => {
+    assertValid("read<U64>()", 100, "100");
+  });
+  test("should handle read<U32>()", () => {
+    assertValid("read<U32>()", 100, "100");
+  });
+
+  test("should handle read<U64>()", () => {
+    assertValid("read<U64>()", 100, "100");
   });
 });

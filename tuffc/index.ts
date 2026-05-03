@@ -1,15 +1,19 @@
-export function compileTuffToTS(input: string): string {
+type Result<Value, Err = Error> =
+  | { ok: true; value: Value }
+  | { ok: false; error: Err };
+
+export function compileTuffToTS(input: string): Result<string> {
   if (input.trim() === "") {
-    return "return 0;";
+    return { ok: true, value: "return 0;" };
   }
   if (input.trim() === "read<U8>()") {
-    return "return Number(stdIn);";
+    return { ok: true, value: "return Number(stdIn);" };
   }
   if (input.trim() === "read<U16>()") {
-    return "return Number(stdIn);";
+    return { ok: true, value: "return Number(stdIn);" };
   }
   if (input.trim() === "read<U32>()") {
-    return "return Number(stdIn);";
+    return { ok: true, value: "return Number(stdIn);" };
   }
-  throw new Error("Invalid input: " + input);
+  return { ok: false, error: new Error("Invalid input: " + input) };
 }

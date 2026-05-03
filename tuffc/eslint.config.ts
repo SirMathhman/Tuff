@@ -19,6 +19,7 @@ export default defineConfig([
             "Throw statements are not allowed. Use a custom Result<T, X> type instead.",
         },
       ],
+      complexity: ["error", 10],
     },
   },
   tseslint.configs.recommended,
