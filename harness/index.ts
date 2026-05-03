@@ -254,7 +254,7 @@ async function promptAssistant(
   chat.append(role, content);
 
   await model.act(chat, tools, {
-    maxTokens: 8192,
+    maxTokens: 2048,
     // When the model finish the entire message, push it to the chat
     onMessage: (message) => {
       chat.append(message);
