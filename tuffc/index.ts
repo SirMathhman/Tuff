@@ -1,1 +1,3 @@
-console.log("Hello via Bun!");
+export function compileTuffToTS(_input: string): string {
+  return _input;
+}

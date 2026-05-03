@@ -15,6 +15,7 @@ if (await fs.exists("chat.json")) {
   console.log("Loading chat from chat.json...");
   const chatData = await fs.readFile("chat.json", "utf-8");
   chat = Chat.from(JSON.parse(chatData));
+  console.log("Found existing chat with " + chat.getLength() + " messages. Continuing the chat...");
 } else {
   console.log("No existing chat found. Starting a new chat...");
   chat = Chat.empty();
@@ -31,7 +32,7 @@ const createFileTool = tool({
   parameters: { name: z.string() },
   implementation: async ({ name }) => {
     if (existsSync(name)) {
-      return "Error: File already exists.";
+      return "Error: File already exists. If you want to edit this file, you should edit it instead.";
     }
 
     // Create parent directory
@@ -166,7 +167,7 @@ const powerShellTool = tool({
 
 while (true) {
   const input = await rl.question("You: ");
-  if (input.toLowerCase() === "exit") {
+  if (input.toLowerCase() === "/exit") {
     break;
   }
 
@@ -192,5 +193,5 @@ while (true) {
 }
 
 // Save the chat to the chat file
-await fs.writeFile("chat", JSON.stringify(chat), "utf-8");
+await fs.writeFile("chat.json", JSON.stringify(chat), "utf-8");
 process.exit(0);
