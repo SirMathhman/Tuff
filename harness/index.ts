@@ -12,12 +12,22 @@ const chat = Chat.empty();
 
 const createFileTool = tool({
   name: "createFile",
-  description: "Create a file with the given name and content.",
+  description: `Create a file with the given name and content.
+  The parent directory will be created if it does not exist. If a file with the same name already exists, an error message will be returned.
+  `,
+
   parameters: { name: z.string(), content: z.string() },
   implementation: async ({ name, content }) => {
     if (existsSync(name)) {
       return "Error: File already exists.";
     }
+
+    // Create parent directory
+    const parentDir = name.split("/").slice(0, -1).join("/");
+    if (parentDir && !existsSync(parentDir)) {
+      await fs.mkdir(parentDir, { recursive: true });
+    }
+
     await writeFile(name, content, "utf-8");
     return "File created.";
   },
@@ -84,8 +94,11 @@ const editFileTool = tool({
 
 const deleteFileTool = tool({
   name: "deleteFile",
-  description:
-    "Delete a file with the given name. If the file is not found, an error message will be returned.",
+  description: `Delete a file with the given name. 
+    If the file is not found, an error message will be returned.
+    If the directory is empty after the file is deleted, the directory will also be deleted, recursively.
+    The only exception to this is the root.`,
+
   parameters: { name: z.string() },
   implementation: async ({ name }) => {
     if (!existsSync(name)) {
@@ -94,7 +107,20 @@ const deleteFileTool = tool({
         (await fs.readdir(".")).join(", ")
       );
     }
+
     await fs.rm(name);
+    // Recursively delete empty parent directories
+    let parentDir = name.split("/").slice(0, -1).join("/");
+    while (parentDir && parentDir !== "." && existsSync(parentDir)) {
+      const files = await fs.readdir(parentDir);
+      if (files.length === 0) {
+        await fs.rmdir(parentDir);
+        parentDir = parentDir.split("/").slice(0, -1).join("");
+      } else {
+        break;
+      }
+    }
+
     return "File deleted.";
   },
 });
