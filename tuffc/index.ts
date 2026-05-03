@@ -3,17 +3,19 @@ type Result<Value, Err = Error> =
   | { ok: false; error: Err };
 
 export function compileTuffToTS(input: string): Result<string> {
-  if (input.trim() === "") {
+  const trimmed = input.trim();
+  
+  if (trimmed === "") {
     return { ok: true, value: "return 0;" };
   }
-  if (input.trim() === "read<U8>()") {
-    return { ok: true, value: "return Number(stdIn);" };
+  
+  const match = trimmed.match(/^read<([A-Z0-9]+)>\(\)$/);
+  if (match) {
+    const type = match[1];
+    if (["U8", "U16", "U32", "U64"].includes(type)) {
+      return { ok: true, value: "return Number(stdIn);" };
+    }
   }
-  if (input.trim() === "read<U16>()") {
-    return { ok: true, value: "return Number(stdIn);" };
-  }
-  if (input.trim() === "read<U32>()") {
-    return { ok: true, value: "return Number(stdIn);" };
-  }
-  return { ok: false, error: new Error("Invalid input: " + input) };
+  
+  throw new Error("Invalid input: " + input);
 }

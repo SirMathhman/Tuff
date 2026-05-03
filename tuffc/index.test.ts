@@ -13,7 +13,7 @@ function assertValid(tuffSource: string, expectedExitCode: number, stdIn = "") {
 }
 
 function assertInvalid(tuffSource: string) {
-  expect(() => compileTuffToTS(tuffSource)).toThrow();
+  expect(compileTuffToTS(tuffSource).ok).toBe(false);
 }
 
 describe("The compiler", () => {
