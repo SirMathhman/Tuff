@@ -22,12 +22,14 @@ if (await fs.exists("chat.json")) {
 
 const createFileTool = tool({
   name: "createFile",
-  description: `Create a file with the given name and content.
-  The parent directory will be created if it does not exist. If a file with the same name already exists, an error message will be returned.
+  description: `Create a file with the given name.
+  The parent directory will be created if it does not exist. 
+  If a file with the same name already exists, an error message will be returned.
+  To add content to this file, you must then edit it afterwards.
   `,
 
-  parameters: { name: z.string(), content: z.string() },
-  implementation: async ({ name, content }) => {
+  parameters: { name: z.string() },
+  implementation: async ({ name }) => {
     if (existsSync(name)) {
       return "Error: File already exists.";
     }
@@ -38,8 +40,8 @@ const createFileTool = tool({
       await fs.mkdir(parentDir, { recursive: true });
     }
 
-    await writeFile(name, content, "utf-8");
-    return "File created.";
+    await writeFile(name, "", "utf-8");
+    return "File succesfully created at: " + name;
   },
 });
 
@@ -73,7 +75,9 @@ const editFileTool = tool({
   name: "editFile",
   description: `Edit a file with the given name by replacing the content between the start and ending line numbers with the new content.
     If the file is not found, an error message will be returned.
-    If the line numbers are invalid, an error message will be returned.`,
+    If the line numbers are invalid, an error message will be returned.
+    The maximum number of lines that can be replaced at once is 20 lines. 
+    If more lines need to be replaced, the tool can be called multiple times.`,
   parameters: {
     name: z.string(),
     startLine: z.number(),
@@ -81,6 +85,10 @@ const editFileTool = tool({
     newContent: z.string(),
   },
   implementation: async ({ name, startLine, endLine, newContent }) => {
+    if (endLine - startLine + 1 > 20) {
+      return "Error: Too many lines to replace at once. Maximum is 20 lines.";
+    }
+
     if (!existsSync(name)) {
       return (
         "Error: File not found. Existing files: " +
