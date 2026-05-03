@@ -5,9 +5,13 @@ import ts from "typescript";
 function assertValid(tuffSource: string, expectedExitCode: number, stdIn = "") {
   const tsSource = compileTuffToTS(tuffSource);
   if (!tsSource.ok) {
-    throw tsSource.error;
+    expect(tsSource.error).toBeUndefined();
+    return;
   }
-  const jsSource = ts.transpile(tsSource.value, { module: ts.ModuleKind.CommonJS });
+
+  const jsSource = ts.transpile(tsSource.value, {
+    module: ts.ModuleKind.CommonJS,
+  });
   const actualExitCode = new Function("stdIn", jsSource)(stdIn);
   expect(actualExitCode).toBe(expectedExitCode);
 }
