@@ -1,4 +1,9 @@
-import { Chat, LMStudioClient, tool } from "@lmstudio/sdk";
+import {
+  Chat,
+  LMStudioClient,
+  tool,
+  type ChatMessageRoleData,
+} from "@lmstudio/sdk";
 import { existsSync } from "fs";
 import { glob, writeFile } from "fs/promises";
 import { createInterface } from "readline/promises";
@@ -187,24 +192,21 @@ const searchFilesTool = tool({
   },
 });
 
-while (true) {
-  const input = await rl.question("You: ");
-  if (input.toLowerCase() === "/exit") {
-    break;
-  }
-
-  // Append the user input to the chat
-  chat.append("user", input);
-
-  process.stdout.write("Bot: ");
-  const tools = [
-    createFileTool,
-    readFileTool,
-    editFileTool,
-    deleteFileTool,
-    powerShellTool,
-    searchFilesTool,
-  ];
+const tools = [
+  createFileTool,
+  readFileTool,
+  editFileTool,
+  deleteFileTool,
+  powerShellTool,
+  searchFilesTool,
+];
+async function promptAssistant(
+  chat: Chat,
+  role: ChatMessageRoleData,
+  content: string,
+) {
+  // Append the initial message
+  chat.append(role, content);
 
   // Keep track of the last 5 assistant messages in a buffer.
   // If the assistant spits out the same message, then we should remind the assistant
@@ -236,6 +238,50 @@ while (true) {
   });
 
   process.stdout.write("\n");
+}
+
+while (true) {
+  const input = await rl.question("You: ");
+  if (input.toLowerCase() === "/exit") {
+    break;
+  }
+
+  process.stdout.write("Bot: ");
+  await promptAssistant(chat, "user", input);
+
+  while (true) {
+    // Run `npm run test` in `./tuffc`.
+    const { exec } = await import("child_process");
+    let stdOut = "";
+    let stdErr = "";
+
+    const process = exec(
+      "npm run test",
+      { cwd: "./tuffc" },
+      (error, stdout, stderr) => {
+        stdOut = stdout;
+        stdErr = stderr;
+      },
+    );
+
+    // Wait for the process to finish
+    await new Promise((resolve) => {
+      process.on("exit", resolve);
+    });
+
+    // If the exit code is non-zero, then this means that the tests failed. We should inform the assistant about the failure and provide the error message.
+    if (process.exitCode !== 0) {
+      console.log("Tests failed. Informing the assistant...");
+      await promptAssistant(
+        chat,
+        "system",
+        "The tests failed with the following error message: " +
+          stdErr +
+          "\n" +
+          stdOut,
+      );
+    }
+  }
 }
 
 // Save the chat to the chat file
