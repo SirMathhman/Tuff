@@ -8,7 +8,17 @@ import * as fs from "fs/promises";
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 const client = new LMStudioClient();
 const model = await client.llm.model();
-const chat = Chat.empty();
+
+// Load the chat from the chat file
+let chat: Chat;
+if (await fs.exists("chat.json")) {
+  console.log("Loading chat from chat.json...");
+  const chatData = await fs.readFile("chat.json", "utf-8");
+  chat = Chat.from(JSON.parse(chatData));
+} else {
+  console.log("No existing chat found. Starting a new chat...");
+  chat = Chat.empty();
+}
 
 const createFileTool = tool({
   name: "createFile",
@@ -148,11 +158,21 @@ const powerShellTool = tool({
 
 while (true) {
   const input = await rl.question("You: ");
+  if (input.toLowerCase() === "exit") {
+    break;
+  }
+
   // Append the user input to the chat
   chat.append("user", input);
 
   process.stdout.write("Bot: ");
-  const tools = [createFileTool, readFileTool, editFileTool, deleteFileTool, powerShellTool];
+  const tools = [
+    createFileTool,
+    readFileTool,
+    editFileTool,
+    deleteFileTool,
+    powerShellTool,
+  ];
   await model.act(chat, tools, {
     // When the model finish the entire message, push it to the chat
     onMessage: (message) => chat.append(message),
@@ -162,3 +182,7 @@ while (true) {
   });
   process.stdout.write("\n");
 }
+
+// Save the chat to the chat file
+await fs.writeFile("chat", JSON.stringify(chat), "utf-8");
+process.exit(0);
