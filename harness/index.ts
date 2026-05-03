@@ -205,39 +205,44 @@ const tools = [
   searchFilesTool,
 ];
 
-async function runCheck(command: string): Promise<boolean> {
-  // Run `npm run test` in `./tuffc`.
-  const { exec } = await import("child_process");
-  let stdOut = "";
-  let stdErr = "";
+async function runCheck(command: string): Promise<void> {
+  while (true) {
+    // Run `npm run test` in `./tuffc`.
+    const { exec } = await import("child_process");
+    let stdOut = "";
+    let stdErr = "";
 
-  const process = exec(command, { cwd: "./tuffc" }, (error, stdout, stderr) => {
-    stdOut = stdout;
-    stdErr = stderr;
-  });
+    const process = exec(
+      command,
+      { cwd: "./tuffc" },
+      (error, stdout, stderr) => {
+        stdOut = stdout;
+        stdErr = stderr;
+      },
+    );
 
-  // Wait for the process to finish
-  await new Promise((resolve) => {
-    process.on("exit", resolve);
-  });
+    // Wait for the process to finish
+    await new Promise((resolve) => {
+      process.on("exit", resolve);
+    });
 
-  // If the exit code is non-zero, then this means that the tests failed. We should inform the assistant about the failure and provide the error message.
-  if (process.exitCode === 0) {
-    return true;
+    // If the exit code is non-zero, then this means that the tests failed. We should inform the assistant about the failure and provide the error message.
+    if (process.exitCode === 0) {
+      break;
+    }
+
+    console.log("Tests failed. Informing the assistant...");
+    await promptAssistant(
+      chat,
+      "user",
+      "The command `" +
+        command +
+        "` in `./tuffc` failed with the following error message. You MUST fix the reported issues and get the command to pass: " +
+        stdErr +
+        "\n" +
+        stdOut,
+    );
   }
-
-  console.log("Tests failed. Informing the assistant...");
-  await promptAssistant(
-    chat,
-    "user",
-    "The command `" +
-      command +
-      "` in `./tuffc` failed with the following error message. You MUST fix the reported issues and get the command to pass: " +
-      stdErr +
-      "\n" +
-      stdOut,
-  );
-  return false;
 }
 
 async function promptAssistant(
@@ -262,6 +267,16 @@ async function promptAssistant(
   process.stdout.write("\n");
 }
 
+async function runChecks(): Promise<void> {
+  while (true) {
+    const testCheckPassed = await runCheck("npm run test");
+    const lintCheckPassed = await runCheck("npm run lint");
+    if (testCheckPassed && lintCheckPassed) {
+      return;
+    }
+  }
+}
+
 while (true) {
   const input = await rl.question("You: ");
   if (input.toLowerCase() === "/exit") {
@@ -270,18 +285,7 @@ while (true) {
 
   process.stdout.write("Bot: ");
   await promptAssistant(chat, "user", input);
-
-  while (true) {
-    const testCheckPassed = await runCheck("npm run test");
-    if (testCheckPassed) {
-      break;
-    }
-
-    const lintCheckPassed = await runCheck("npm run lint");
-    if (lintCheckPassed) {
-      break;
-    }
-  }
+  await runChecks();
 }
 
 // Save the chat to the chat file
