@@ -231,7 +231,7 @@ async function runCheck(command: string): Promise<void> {
       break;
     }
 
-    console.log("Tests failed. Informing the assistant...");
+    console.log("Command " + command + " failed. Informing the assistant...");
     await promptAssistant(
       chat,
       "user",
