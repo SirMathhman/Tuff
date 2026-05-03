@@ -3,11 +3,36 @@ import { existsSync } from "fs";
 import { writeFile } from "fs/promises";
 import { createInterface } from "readline/promises";
 import { z } from "zod";
+import * as fs from "fs/promises";
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 const client = new LMStudioClient();
 const model = await client.llm.model();
 const chat = Chat.empty();
+
+const readFileTool = tool({
+  name: "readFile",
+  description: `Read the content of a file with the given name, given the start and ending line numbers.
+    If the file is not found, an error message will be returned. 
+    If the line numbers are invalid, an error message will be returned.`,
+  parameters: { name: z.string(), startLine: z.number(), endLine: z.number() },
+  implementation: async ({ name, startLine, endLine }) => {
+    if (!existsSync(name)) {
+      return (
+        "Error: File not found. Existing files: " +
+        (await fs.readdir(".")).join(", ")
+      );
+    }
+
+    const content = await fs.readFile(name, "utf-8");
+    const lines = content.split("\n");
+    if (startLine < 1 || endLine > lines.length || startLine > endLine) {
+      return "Error: Invalid line numbers. The file has " + lines.length + " lines.";
+    }
+
+    return lines.slice(startLine - 1, endLine).join("\n");
+  },
+});
 
 const createFileTool = tool({
   name: "createFile",
@@ -28,7 +53,7 @@ while (true) {
   chat.append("user", input);
 
   process.stdout.write("Bot: ");
-  await model.act(chat, [createFileTool], {
+  await model.act(chat, [createFileTool, readFileTool], {
     // When the model finish the entire message, push it to the chat
     onMessage: (message) => chat.append(message),
     onPredictionFragment: ({ content }) => {
