@@ -205,9 +205,31 @@ while (true) {
     powerShellTool,
     searchFilesTool,
   ];
+
+  // Keep track of the last 5 assistant messages in a buffer.
+  // If the assistant spits out the same message, then we should remind the assistant
+  // that it got stuck in a loop.
+  const lastMessagesBuffer: string[] = [];
+
   await model.act(chat, tools, {
     // When the model finish the entire message, push it to the chat
-    onMessage: (message) => chat.append(message),
+    onMessage: (message) => {
+      const content = message.getText();
+      if (message.getRole() === "assistant") {
+        if (lastMessagesBuffer.includes(content)) {
+          throw new Error(
+            "The assistant seems to be stuck in a loop. It keeps repeating the same message: " +
+              content,
+          );
+        }
+        lastMessagesBuffer.push(content);
+        if (lastMessagesBuffer.length > 5) {
+          lastMessagesBuffer.shift();
+        }
+      }
+
+      chat.append(message);
+    },
     onPredictionFragment: ({ content }) => {
       process.stdout.write(content);
     },

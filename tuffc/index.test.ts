@@ -17,4 +17,8 @@ describe("The compiler", () => {
   test("should handle an empty program", () => {
     assertValid(``, 0);
   });
+
+  test("should handle read<U8>()", () => {
+    assertValid("read<U8>()", 100, "100");
+  });
 });
