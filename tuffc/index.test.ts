@@ -18,6 +18,10 @@ describe("The compiler", () => {
     assertValid(``, 0);
   });
 
+  test("should handle invalid input", () => {
+    assertInvalid(`invalid`);
+  });
+
   test("should handle read<U8>()", () => {
     assertValid("read<U8>()", 100, "100");
   });
