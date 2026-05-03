@@ -1,3 +1,6 @@
-export function compileTuffToTS(_input: string): string {
-  return _input;
+export function compileTuffToTS(input: string): string {
+  if (input.trim() === "") {
+    return "return 0;";
+  }
+  throw new Error("Invalid input: " + input);
 }

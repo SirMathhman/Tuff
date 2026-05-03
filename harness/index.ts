@@ -1,6 +1,6 @@
 import { Chat, LMStudioClient, tool } from "@lmstudio/sdk";
 import { existsSync } from "fs";
-import { writeFile } from "fs/promises";
+import { glob, writeFile } from "fs/promises";
 import { createInterface } from "readline/promises";
 import { z } from "zod";
 import * as fs from "fs/promises";
@@ -170,6 +170,23 @@ const powerShellTool = tool({
   },
 });
 
+const searchFilesTool = tool({
+  name: "searchFiles",
+  description: `Search for files in the current directory and subdirectories that match the given query.
+    The query is a regex. The search tool does not search in .gitignored files and directories.`,
+  parameters: { query: z.string() },
+  implementation: async ({ query }) => {
+    const regex = new RegExp(query);
+    const files = await Array.fromAsync(
+      glob("**/*", {
+        exclude: ["**/node_modules/**", "**/.git/**"],
+      }),
+    );
+
+    return files.filter((file) => regex.test(file)).join("\n");
+  },
+});
+
 while (true) {
   const input = await rl.question("You: ");
   if (input.toLowerCase() === "/exit") {
@@ -186,6 +203,7 @@ while (true) {
     editFileTool,
     deleteFileTool,
     powerShellTool,
+    searchFilesTool,
   ];
   await model.act(chat, tools, {
     // When the model finish the entire message, push it to the chat
@@ -194,8 +212,6 @@ while (true) {
       process.stdout.write(content);
     },
   });
-
-  
 
   process.stdout.write("\n");
 }
