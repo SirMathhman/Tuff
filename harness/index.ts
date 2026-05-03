@@ -15,7 +15,11 @@ if (await fs.exists("chat.json")) {
   console.log("Loading chat from chat.json...");
   const chatData = await fs.readFile("chat.json", "utf-8");
   chat = Chat.from(JSON.parse(chatData));
-  console.log("Found existing chat with " + chat.getLength() + " messages. Continuing the chat...");
+  console.log(
+    "Found existing chat with " +
+      chat.getLength() +
+      " messages. Continuing the chat...",
+  );
 } else {
   console.log("No existing chat found. Starting a new chat...");
   chat = Chat.empty();
@@ -72,12 +76,13 @@ const readFileTool = tool({
   },
 });
 
+const maxLinesPerEdit = 50;
 const editFileTool = tool({
   name: "editFile",
   description: `Edit a file with the given name by replacing the content between the start and ending line numbers with the new content.
     If the file is not found, an error message will be returned.
     If the line numbers are invalid, an error message will be returned.
-    The maximum number of lines that can be replaced at once is 20 lines. 
+    The maximum number of lines that can be replaced at once is {maxLinesPerEdit} lines. 
     If more lines need to be replaced, the tool can be called multiple times.`,
   parameters: {
     name: z.string(),
@@ -86,8 +91,8 @@ const editFileTool = tool({
     newContent: z.string(),
   },
   implementation: async ({ name, startLine, endLine, newContent }) => {
-    if (endLine - startLine + 1 > 20) {
-      return "Error: Too many lines to replace at once. Maximum is 20 lines.";
+    if (endLine - startLine + 1 > maxLinesPerEdit) {
+      return `Error: Too many lines to replace at once. Maximum is ${maxLinesPerEdit} lines.`;
     }
 
     if (!existsSync(name)) {
