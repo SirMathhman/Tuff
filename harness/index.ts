@@ -268,13 +268,9 @@ async function promptAssistant(
 }
 
 async function runChecks(): Promise<void> {
-  while (true) {
-    const testCheckPassed = await runCheck("npm run test");
-    const lintCheckPassed = await runCheck("npm run lint");
-    if (testCheckPassed && lintCheckPassed) {
-      return;
-    }
-  }
+  await runCheck("npm run build");
+  await runCheck("npm run test");
+  await runCheck("npm run lint");
 }
 
 while (true) {

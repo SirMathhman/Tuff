@@ -1,14 +1,14 @@
-type Result<Value, Err = Error> =
+type Result<Value, Err> =
   | { ok: true; value: Value }
   | { ok: false; error: Err };
 
-export function compileTuffToTS(input: string): Result<string> {
+export function compileTuffToTS(input: string): Result<string, string> {
   const trimmed = input.trim();
-  
+
   if (trimmed === "") {
     return { ok: true, value: "return 0;" };
   }
-  
+
   const match = trimmed.match(/^read<([A-Z0-9]+)>\(\)$/);
   if (match) {
     const type = match[1];
@@ -16,6 +16,6 @@ export function compileTuffToTS(input: string): Result<string> {
       return { ok: true, value: "return Number(stdIn);" };
     }
   }
-  
-  throw new Error("Invalid input: " + input);
+
+  return { ok: false, error: "Invalid Tuff source code" };
 }
