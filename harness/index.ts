@@ -59,6 +59,7 @@ const createFileTool = tool({
 const readFileTool = tool({
   name: "readFile",
   description: `Read the content of a file with the given name, given the start and ending line numbers.
+  The start index is inclusive, while the end index is exclusive.
     If the file is not found, an error message will be returned. 
     If the line numbers are invalid, an error message will be returned.`,
   parameters: { name: z.string(), startLine: z.number(), endLine: z.number() },
@@ -79,7 +80,7 @@ const readFileTool = tool({
     }
 
     return lines
-      .map((line, index) => index + 1 + ": " + line)
+      .map((line, index) => index + startLine + 1 + ": " + line)
       .slice(startLine - 1, endLine)
       .join("\n");
   },
@@ -253,18 +254,29 @@ async function promptAssistant(
   // Append the initial message
   chat.append(role, content);
 
-  await model.act(chat, tools, {
-    maxTokens: 2048,
-    // When the model finish the entire message, push it to the chat
-    onMessage: (message) => {
-      chat.append(message);
-    },
-    onPredictionFragment: ({ content }) => {
-      process.stdout.write(content);
-    },
-  } as LLMActionOpts);
+  const maxTries = 10;
+  let tryCount = 0;
+  while (tryCount < maxTries) {
+    try {
+      await model.act(chat, tools, {
+        maxTokens: 2048,
+        // When the model finish the entire message, push it to the chat
+        onMessage: (message) => {
+          chat.append(message);
+        },
+        onPredictionFragment: ({ content }) => {
+          process.stdout.write(content);
+        },
+      } as LLMActionOpts);
 
-  process.stdout.write("\n");
+      process.stdout.write("\n");
+    } catch (error) {
+      console.error("Error during model interaction:", error);
+      console.log("Retrying...");
+      tryCount++;
+      continue;
+    }
+  }
 }
 
 async function runChecks(): Promise<void> {
