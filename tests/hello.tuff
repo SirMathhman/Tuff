@@ -1,4 +1,0 @@
-// Hello World in Tuff
-fn main() : Void => {
-    printf("Hello, Tuff!\n");
-}

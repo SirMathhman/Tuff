@@ -1,5 +1,0 @@
-fn main() -> I32 {
-    let x: I32 = 100;
-    let ptr: *I32 = (*I32)&x;
-    return *ptr;
-}

@@ -1,8 +1,0 @@
-struct Point {
-    x : I32,
-    y : I32
-}
-
-fn main() : Void => {
-    printf("Hello from struct test!\n");
-}

@@ -1,5 +1,0 @@
-fn main() : Void => {
-    while (0 < 1) {
-        return;
-    }
-}

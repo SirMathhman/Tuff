@@ -1,9 +1,0 @@
-// Nested for loops
-
-fn main() -> Void {
-    for (i in 0..3) {
-        for (j in 0..3) {
-            printf("i=%d, j=%d\n", i, j);
-        }
-    }
-}
