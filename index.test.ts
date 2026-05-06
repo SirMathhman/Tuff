@@ -12,3 +12,7 @@ function execute(source: string, stdIn = "") {
   });
   return new Function("stdIn", result.outputText)(stdIn);
 }
+
+test("empty string", () => {
+  expect(execute("")).toBe(0);
+});
