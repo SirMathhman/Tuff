@@ -13,6 +13,6 @@ function execute(source: string, stdIn = "") {
   return new Function("stdIn", result.outputText)(stdIn);
 }
 
-test("empty string", () => {
-  expect(execute("")).toBe(0);
+test("read<U8>() with stdIn '100'", () => {
+  expect(execute("read<U8>()", "100")).toBe(100);
 });
