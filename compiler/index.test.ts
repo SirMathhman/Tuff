@@ -19,3 +19,19 @@ function assertValid(
 test("empty string returns 0", () => {
   assertValid("", 10);
 });
+
+test("100U8 should return 100", () => {
+  assertValid("100U8", 100);
+});
+
+test("read<U8>() should read a byte from stdin", () => {
+  assertValid("read<U8>()", 100, "100");
+});
+
+test("read<U8>() should read first value and ignore trailing input", () => {
+  assertValid("read<U8>()", 100, "100 20");
+});
+
+test("read<U8>() + read<U8>() should sum two read values", () => {
+  assertValid("read<U8>() + read<U8>()", 120, "100 20");
+});
