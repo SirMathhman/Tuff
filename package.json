@@ -1,5 +1,5 @@
 {
-  "name": "tuff-agent",
+  "name": "tuff",
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -8,8 +8,5 @@
   },
   "peerDependencies": {
     "typescript": "^5"
-  },
-  "dependencies": {
-    "@lmstudio/sdk": "^1.5.0"
   }
 }
