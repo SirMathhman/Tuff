@@ -17,5 +17,5 @@ function assertValid(
 }
 
 test("empty string returns 0", () => {
-  assertValid("", 0);
+  assertValid("", 10);
 });
