@@ -117,13 +117,33 @@ const deleteFile = tool({
   },
 });
 
+const powershell = tool({
+  name: "powershell",
+  description: "Execute a PowerShell command and return the output.",
+  parameters: { command: z.string(), cwd: z.string().optional() },
+  implementation: async ({ command, cwd }) => {
+    const { exec } = require("child_process");
+    return new Promise((resolve) => {
+      exec(command, { cwd }, (error: any, stdout: string, stderr: string) => {
+        if (error) {
+          resolve(`Error: ${error.message}`);
+        } else if (stderr) {
+          resolve(`Error: ${stderr}`);
+        } else {
+          resolve(stdout);
+        }
+      });
+    });
+  },
+});
+
 while (true) {
   const input = await rl.question("You: ");
   // Append the user input to the chat
   chat.append("user", input);
 
   process.stdout.write("Bot: ");
-  await model.act(chat, [createFile, editFile, readFile, deleteFile], {
+  await model.act(chat, [createFile, editFile, readFile, deleteFile, powershell], {
     // When the model finish the entire message, push it to the chat
     onMessage: (message) => chat.append(message),
     onPredictionFragment: ({ content }) => {
