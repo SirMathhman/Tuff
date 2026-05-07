@@ -3,6 +3,10 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "test": "bun test",
+    "cpd" : "pmd cpd index.ts index.test.ts --minimum-tokens 50 --language typescript --ignore-literals --ignore-identifiers"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
