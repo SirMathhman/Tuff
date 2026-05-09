@@ -35,3 +35,8 @@ test("read<U8>() should read first value and ignore trailing input", () => {
 test("read<U8>() + read<U8>() should sum two read values", () => {
   assertValid("read<U8>() + read<U8>()", 120, "100 20");
 });
+
+test("read<U8>() + read<U8>() + read<U8>() should sum three read values", () => {
+  assertValid("read<U8>() + read<U8>() + read<U8>()", 150, "100 20 30");
+});
+

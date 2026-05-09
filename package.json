@@ -13,8 +13,5 @@
   "license": "ISC",
   "author": "",
   "type": "commonjs",
-  "main": "index.js",
-  "scripts": {
-    "agent": "bun ./agent/index.ts"
-  }
+  "main": "index.js"
 }
