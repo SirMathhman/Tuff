@@ -338,14 +338,18 @@ async function listDirectory(
 
 async function powershell(command: string, cwd?: string): Promise<string> {
   return new Promise((resolve) => {
-    child_process.exec(command, { cwd }, (error, stdout, stderr) => {
-      if (error)
-        resolve(
-          `Error: ${error.message} | Stderr: ${stderr} | Stdout: ${stdout}`,
-        );
-      else if (stderr) resolve(`Stderr: ${stderr} | Stdout: ${stdout}`);
-      else resolve(stdout || "(no output)");
-    });
+    child_process.exec(
+      `powershell -NoProfile -Command "${command.replace(/"/g, '\\"')}"`,
+      { cwd },
+      (error, stdout, stderr) => {
+        if (error)
+          resolve(
+            `Error: ${error.message} | Stderr: ${stderr} | Stdout: ${stdout}`,
+          );
+        else if (stderr) resolve(`Stderr: ${stderr} | Stdout: ${stdout}`);
+        else resolve(stdout || "(no output)");
+      },
+    );
   });
 }
 
@@ -664,7 +668,9 @@ async function act() {
       process.stdout.write(`\n[Stop.ps1] No issues detected.\n`);
     }
   } else {
-    process.stdout.write(`\n[Stop.ps1] No stop hook found, skipping.\n`);
+    process.stdout.write(
+      `\n[Stop.ps1] No stop hook found at file of absolute path: ${process.cwd()}\\Stop.ps1, skipping.\n`,
+    );
   }
 }
 

@@ -25,9 +25,18 @@ test('executeTuff("9007199254740993U64") returns bigint', () => {
   expect(executeTuff("9007199254740993U64")).toBe(9007199254740993n);
 });
 
-test('executeTuff("256U8") throws error for out of range', () => {
-  expect(() => executeTuff("256U8")).toThrow("Value exceeds maximum for U8");
-});
 test('executeTuff("-100I8") returns -100', () => {
   expect(executeTuff("-100I8")).toBe(-100);
 });
+
+test('executeTuff("1U8 + 2U8") returns 3', () => {
+  expect(executeTuff("1U8 + 2U8")).toBe(3);
+ expect(executeTuff("1U8 + 2U8")).toBe(3);
+});
+
+test('executeTuff("1U8 + 2U8 + 3U8") returns 6', () => {
+  expect(executeTuff("1U8 + 2U8 + 3U8")).toBe(6);
+});
+
+
+

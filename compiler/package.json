@@ -7,7 +7,7 @@
     "lint": "tsc --noEmit",
     "test": "bun test",
     "cpd": "pmd cpd index.ts index.test.ts --minimum-tokens 50 --language typescript --ignore-literals --ignore-identifiers",
-    "agent": "cd ../agent && npm run serve"
+    "agent": "npx tsx ../agent/index.ts"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.14.40",
