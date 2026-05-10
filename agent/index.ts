@@ -376,9 +376,7 @@ async function callTool(
 // Compacting
 
 // ── Context compaction ────────────────────────────────────────────────────────
-
-const MAX_CONTEXT_TOKENS = 13170;
-const COMPACT_THRESHOLD = 100_000; // compact when estimated usage exceeds this
+const COMPACT_THRESHOLD = 90_000; // compact when estimated usage exceeds this
 const KEEP_RECENT = 8; // always preserve this many tail messages verbatim
 
 function estimateTokens(
