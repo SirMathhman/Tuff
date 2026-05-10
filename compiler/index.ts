@@ -101,7 +101,8 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
   }
 
  // Variable scope for let declarations inside blocks: tracks both value and type string
-  const scope = new Map<string, { value: bigint; type: string }>();
+ const scope = new Map<string, { value: bigint; type: string; mutable: boolean }>();
+
 
   function parseIdentifier(): string {
     const name = consume();
@@ -141,10 +142,15 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return srcBits <= tgtBits;
   }
 
-  // Parse a block item (statement or expression). Returns the value of an expression, null for let statements.
+// Parse a block item (statement or expression). Returns the value of an expression, null for let statements.
   function parseBlockItem(): bigint | null {
     if (peek() === "let") {
       consume("let");        // let
+
+      // Check for optional `mut` keyword
+      const mutable = peek() === "mut";
+      if (mutable) consume("mut");
+
       const name = consume(); // variable name
 
       let declaredType: string | undefined;
@@ -163,14 +169,36 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
         if (!isAssignable(exprResult.type, declaredType)) {
           throw new Error(`Cannot assign ${exprResult.type} to variable of type ${declaredType}`);
         }
-        scope.set(name, { value, type: declaredType });
+        scope.set(name, { value, type: declaredType, mutable });
       } else {
         // No explicit type annotation — infer from the expression's literal type if possible
-        scope.set(name, { value, type: exprResult.type });
+        scope.set(name, { value, type: exprResult.type, mutable });
       }
 
       if (peek() === ";") consume(";");
-      return null;
+     return null;
+    } else if (peek() && /^[a-zA-Z_]\w*$/.test(peek()!) && tokens[pos + 1] === "=") {
+
+      // Assignment expression: `x = value` — returns the assigned value
+      const name = consume();
+      const entry = scope.get(name);
+      if (!entry || !entry.mutable) {
+        throw new Error(`Cannot reassign immutable variable: ${name}`);
+      }
+
+      consume("=");          // =
+      const exprResult = parseExprWithType();
+      const value = BigInt(exprResult.value);
+
+      // Check type compatibility for the assignment
+      if (!isAssignable(exprResult.type, entry.type)) {
+        throw new Error(`Cannot assign ${exprResult.type} to variable of type ${entry.type}`);
+      }
+
+      scope.set(name, { ...entry, value });
+
+      if (peek() === ";") consume(";");
+      return value;
     } else {
       const exprResult = parseExprWithType();
       if (peek() === ";") consume(";");
@@ -179,6 +207,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
   }
 
   // Extended expression parser that also tracks the inferred type of the result
+
   function parseExprWithType(): { value: number | bigint; type: string } {
     let left = parseTermWithType();
     while (peek() === "+" || peek() === "-") {

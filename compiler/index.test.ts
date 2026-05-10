@@ -81,6 +81,19 @@ test('executeTuff("let x = 0U16; let y : U8 = x;") throws error for narrowing as
   expect(() => executeTuff("let x = 0U16; let y : U8 = x;")).toThrow();
 });
 
+test('executeTuff("let mut x = 0U8; x = 1U8; x") returns 1', () => {
+  expect(executeTuff("let mut x = 0U8; x = 1U8; x")).toBe(1);
+});
+
+test('executeTuff("let mut x = 0U8; x = 1U16; x") throws error for widening assignment', () => {
+  expect(() => executeTuff("let mut x = 0U8; x = 1U16; x")).toThrow();
+});
+
+test('executeTuff("x = 1U16; x") throws error for undeclared variable', () => {
+  expect(() => executeTuff("x = 1U16; x")).toThrow();
+});
+
+
 
 
 
