@@ -28,3 +28,6 @@ test('executeTuff("9007199254740993U64") returns bigint', () => {
 test('executeTuff("256U8") throws error for out of range', () => {
   expect(() => executeTuff("256U8")).toThrow("Value exceeds maximum for U8");
 });
+test('executeTuff("-100I8") returns -100', () => {
+  expect(executeTuff("-100I8")).toBe(-100);
+});
