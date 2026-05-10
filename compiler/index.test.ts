@@ -65,6 +65,9 @@ test('executeTuff("let x : U8 = 100U8;") returns 0', () => {
   expect(executeTuff("let x : U8 = 100U8;")).toBe(0);
 });
 
+test('executeTuff("let x = 100U8; x") returns 100', () => {
+  expect(executeTuff("let x = 100U8; x")).toBe(100);
+});
 
 
 

@@ -112,11 +112,14 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
   // Parse a block item (statement or expression). Returns the value of an expression, null for let statements.
   function parseBlockItem(): bigint | null {
     if (peek() === "let") {
-      consume("let"); // let
+      consume("let");        // let
       const name = consume(); // variable name
-      consume(":"); // :
-      consume(); // type annotation (e.g., U8, I16) - ignored for evaluation
-      consume("="); // =
+      // Type annotation is optional: `:` followed by type token may or may not be present
+      if (peek() === ":") {
+        consume(":");         // :
+        consume();            // type annotation (e.g., U8, I16) - ignored for evaluation
+      }
+      consume("=");          // =
       const value = BigInt(parseExpr());
       scope.set(name, value);
       if (peek() === ";") consume(";");
@@ -175,11 +178,11 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       const right = BigInt(parseTerm());
       if (op === "+") left += right;
       else left -= right;
-   }
+    }
     return normalizeResult(left);
   }
 
- // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)
+  // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)
   let result = 0n;
   while (pos < tokens.length) {
     const itemValue = parseBlockItem();
@@ -190,7 +193,5 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   return normalizeResult(result);
 }
-
-
 
 
