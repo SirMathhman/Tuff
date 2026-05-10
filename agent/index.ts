@@ -340,7 +340,7 @@ async function callTool(
 // ── Context compaction ────────────────────────────────────────────────────────
 
 const MAX_CONTEXT_TOKENS = 13170;
-const COMPACT_THRESHOLD = 10000; // compact when estimated usage exceeds this
+const COMPACT_THRESHOLD = 100_000; // compact when estimated usage exceeds this
 const KEEP_RECENT = 8; // always preserve this many tail messages verbatim
 
 function estimateTokens(
@@ -404,11 +404,49 @@ async function compactMessages(
     ...recent,
   ];
 }
+// ── Persistence ───────────────────────────────────────────────────────────────
+
+const CONVERSATION_FILE = "conversation.json";
+
+async function loadConversation(): Promise<
+  OpenAI.Chat.ChatCompletionMessageParam[]
+> {
+  try {
+    if (fs.existsSync(CONVERSATION_FILE)) {
+      const data = await fs.promises.readFile(CONVERSATION_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        process.stderr.write(
+          `\x1b[2m[loaded ${parsed.length} messages from ${CONVERSATION_FILE}]\x1b[0m\n`,
+        );
+        return parsed;
+      }
+    }
+  } catch (e) {
+    process.stderr.write(`\x1b[2m[failed to load conversation: ${e}]\x1b[0m\n`);
+  }
+  return [];
+}
+
+async function saveConversation(
+  msgs: OpenAI.Chat.ChatCompletionMessageParam[],
+) {
+  try {
+    await fs.promises.writeFile(
+      CONVERSATION_FILE,
+      JSON.stringify(msgs, null, 2),
+      "utf-8",
+    );
+  } catch (e) {
+    process.stderr.write(`\x1b[2m[failed to save conversation: ${e}]\x1b[0m\n`);
+  }
+}
 
 // ── Agent loop ────────────────────────────────────────────────────────────────
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
-const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+const messages: OpenAI.Chat.ChatCompletionMessageParam[] =
+  await loadConversation();
 
 while (true) {
   const input = await rl.question("You: ");
