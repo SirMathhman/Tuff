@@ -334,6 +334,71 @@ async function callTool(
   }
 }
 
+// Compacting
+
+// ── Context compaction ────────────────────────────────────────────────────────
+
+const MAX_CONTEXT_TOKENS = 13170;
+const COMPACT_THRESHOLD = 10000; // compact when estimated usage exceeds this
+const KEEP_RECENT = 8; // always preserve this many tail messages verbatim
+
+function estimateTokens(
+  msgs: OpenAI.Chat.ChatCompletionMessageParam[],
+): number {
+  // ~4 chars per token is a reliable rough estimate for mixed prose/code
+  return Math.ceil(JSON.stringify(msgs).length / 4);
+}
+
+async function compactMessages(
+  msgs: OpenAI.Chat.ChatCompletionMessageParam[],
+): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
+  if (msgs.length <= KEEP_RECENT) return msgs;
+
+  const toSummarize = msgs.slice(0, msgs.length - KEEP_RECENT);
+  const recent = msgs.slice(msgs.length - KEEP_RECENT);
+
+  process.stderr.write(
+    `\x1b[2m[compacting: ${toSummarize.length} messages → summary]\x1b[0m\n`,
+  );
+
+  const res = await client.chat.completions.create({
+    model: MODEL,
+    messages: [
+      ...toSummarize,
+      {
+        role: "user",
+        content:
+          "Produce a concise but complete summary of the conversation and work done so far. " +
+          "Cover: the user's goals, every file created or modified (with key contents), " +
+          "decisions made, commands run and their outcomes, and any open tasks. " +
+          "Be dense — this replaces the full history. Plain prose, no headers.",
+      },
+    ],
+    temperature: 0.1,
+    max_tokens: 1024,
+  });
+
+  const summary = res.choices[0]?.message?.content ?? "(summary unavailable)";
+  const before = estimateTokens(msgs);
+  const after = estimateTokens([...recent]); // rough; summary adds ~summary.length/4
+
+  process.stderr.write(
+    `\x1b[2m[compacted: ~${before} → ~${after + Math.ceil(summary.length / 4)} est. tokens]\x1b[0m\n`,
+  );
+
+  return [
+    {
+      role: "user",
+      content: `[Session context summary — replaces earlier history]\n${summary}`,
+    },
+    {
+      role: "assistant",
+      content: "Got it, I have the prior context.",
+    },
+    ...recent,
+  ];
+}
+
 // ── Agent loop ────────────────────────────────────────────────────────────────
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -347,6 +412,12 @@ while (true) {
 
   // Agentic loop — keep going until model stops calling tools
   while (true) {
+    // Auto-compact if approaching the context limit
+    if (estimateTokens(messages) > COMPACT_THRESHOLD) {
+      const compacted = await compactMessages(messages);
+      messages.splice(0, messages.length, ...compacted);
+    }
+
     const response = await client.chat.completions.create({
       model: MODEL,
       messages,
@@ -366,19 +437,19 @@ while (true) {
     let draftAccepted = 0;
 
     for await (const chunk of response) {
+      const raw = chunk as any;
       const delta = chunk.choices[0]?.delta;
+      const finishReason = chunk.choices[0]?.finish_reason;
+
+      if (finishReason === "stop") {
+        completionTokens = raw.timings?.predicted_n ?? 0;
+        totalTimeMs = raw.timings?.predicted_ms ?? 0;
+        draftN = raw.timings?.draft_n ?? 0;
+        draftAccepted = raw.timings?.draft_n_accepted ?? 0;
+        continue;
+      }
+
       if (!delta) {
-        // Final chunk carries usage/timing stats (llama-server extension)
-        const raw = chunk as any;
-        if (raw.usage) {
-          completionTokens = raw.usage.completion_tokens ?? 0;
-          const t = raw.usage.timings ?? raw.timings ?? null;
-          if (t) {
-            totalTimeMs = t.predicted_ms ?? 0;
-            draftN = t.draft_n ?? 0;
-            draftAccepted = t.draft_n_accepted ?? 0;
-          }
-        }
         continue;
       }
 
