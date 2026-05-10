@@ -389,7 +389,9 @@ function estimateTokens(
 async function compactMessages(
   msgs: OpenAI.Chat.ChatCompletionMessageParam[],
 ): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
-  if (msgs.length <= KEEP_RECENT + 1) return msgs;
+  if (msgs.length <= KEEP_RECENT + 1) {
+    return msgs;
+  }
 
   const head = msgs.slice(0, 1); // system prompt
   const toSummarize = msgs.slice(1, msgs.length - KEEP_RECENT); // middle
@@ -491,11 +493,17 @@ const messages: OpenAI.Chat.ChatCompletionMessageParam[] =
  * @returns If the loop should continue.
  */
 async function actCycle(): Promise<boolean> {
-  process.stdout.write(`\x1b[2m[model is thinking...]\x1b[0m\n`);
   // Auto-compact if approaching the context limit
   if (estimateTokens(messages) > COMPACT_THRESHOLD) {
     const compacted = await compactMessages(messages);
     messages.splice(0, messages.length, ...compacted);
+  } else {
+    // Print out the amount of context used as a percentage
+    const usage = estimateTokens(messages);
+    const percent = ((usage / COMPACT_THRESHOLD) * 100).toFixed(1);
+    process.stderr.write(
+      `\x1b[2m[context usage: ~${usage} tokens, ${percent}% of threshold]\x1b[0m\n`,
+    );
   }
 
   let response;
@@ -620,7 +628,6 @@ async function actCycle(): Promise<boolean> {
 
 async function act() {
   // Agentic loop — keep going until model stops calling tools
-  process.stdout.write(`\x1b[2m[model is thinking...]\x1b[0m\n`);
   while (true) {
     const shouldContinue = await actCycle();
     if (!shouldContinue) break;
@@ -663,10 +670,15 @@ async function act() {
 
 while (true) {
   const input = await rl.question("You: ");
+  // if input is equal to /compact we should auto-compact
+  if (input.trim() === "/compact") {
+    const compacted = await compactMessages(messages);
+    messages.splice(0, messages.length, ...compacted);
+    continue;
+  }
+
   messages.push({ role: "user", content: input });
-
   process.stdout.write("Bot: ");
-
   await act();
 
   // Save after each complete turn
