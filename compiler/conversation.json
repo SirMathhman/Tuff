@@ -204,5 +204,450 @@
   {
     "role": "assistant",
     "content": "The test already exists at line 100-102. It's exactly the same as what you asked for: `executeTuff(\"let x = 0U8; let y = &x;\") => 0`. The test is passing according to the latest run output. No changes needed — it was already added in a previous session and works correctly now that I fixed the broken variable reference logic."
+  },
+  {
+    "role": "user",
+    "content": "Add and impl test case: executeTuff(\"let x : Bool = true; x\") => 1. Also add a test case for false."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":1,\"endLine\":50}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 355\n1: function parseLiteral(literal: string): number | bigint {\n2:   const match = literal.match(/^(-?\\d+)([UI])(8|16|32|64)$/);\n3:   if (!match || !match[1] || !match[2] || !match[3]) {\n4:     throw new Error(\"Invalid format\");\n5:   }\n6: \n7:   const valueStr = match[1];\n8:   const typePrefix = match[2]; // \"U\" or \"I\"\n9:   const bits = parseInt(match[3], 10);\n10: \n11:   let minValue: bigint;\n12:   let maxValue: bigint;\n13: \n14:   if (typePrefix === \"U\") {\n15:     minValue = 0n;\n16:     maxValue = (1n << BigInt(bits)) - 1n;\n17:   } else {\n18:     // Signed integers use two's complement representation\n19:     const signBitShift = BigInt(bits) - 1n;\n20:     minValue = -(1n << signBitShift);\n21:     maxValue = (1n << signBitShift) - 1n;\n22:   }\n23: \n24:   const value = BigInt(valueStr);\n25: \n26:   // Preserve backward-compatible error messages for unsigned types\n27:   if (typePrefix === \"U\") {\n28:     if (value < minValue) {\n29:       throw new Error(\"Negative values are not supported\");\n30:     }\n31:     if (value > maxValue) {\n32:       throw new Error(`Value exceeds maximum for ${typePrefix}${bits}`);\n33:     }\n34:   } else {\n35:     // Signed integer bounds checking\n36:     if (value < minValue || value > maxValue) {\n37:       throw new Error(`Value out of range for ${typePrefix}${bits}`);\n38:     }\n39:   }\n40: \n41:   // If the value fits within a safe integer range, return as number. Otherwise, return bigint.\n42:   if (value <= Number.MAX_SAFE_INTEGER && bits !== 64) {\n43:     return Number(value);\n44:   }\n45: \n46:   return value;\n47: }\n48: \n49: export function executeTuff(tuffSourceCode: string): number | bigint {"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":49,\"endLine\":120}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 355\n49: export function executeTuff(tuffSourceCode: string): number | bigint {\n50:   if (tuffSourceCode === \"\") {\n51:     return 0;\n52:   }\n53: \n54:   const rawTokens = tuffSourceCode.trim().split(/\\s+/);\n55:   const tokens: string[] = [];\n56:   for (const raw of rawTokens) {\n57:     let remaining = raw;\n58:     while (remaining.startsWith(\"(\")) {\n59:       tokens.push(\"(\");\n60:       remaining = remaining.slice(1);\n61:     }\n62:     while (remaining.startsWith(\"{\")) {\n63:       tokens.push(\"{\");\n64:       remaining = remaining.slice(1);\n65:     }\n66:     // Handle leading & as a separate token (reference operator)\n67:     if (remaining.startsWith(\"&\")) {\n68:       tokens.push(\"&\");\n69:       remaining = remaining.slice(1);\n70:     }\n71:     // Handle leading * followed by identifier as dereference: split into \"*\" and the rest\n72:     // But keep \"*U8\", \"*I16\" etc. together as pointer type annotations\n73:     if (remaining.startsWith(\"*\") && !/^\\*[UI]/.test(remaining)) {\n74:       tokens.push(\"*\");\n75:       remaining = remaining.slice(1);\n76:     }\n77:     if (!remaining) continue;\n78:     const trailingDelimiters: string[] = [];\n79:     while (\n80:       remaining.endsWith(\")\") ||\n81:       remaining.endsWith(\"}\") ||\n82:       remaining.endsWith(\";\") ||\n83:       remaining.endsWith(\":\")\n84:     ) {\n85:       trailingDelimiters.unshift(remaining[remaining.length - 1]!);\n86:       remaining = remaining.slice(0, -1);\n87:     }\n88:     if (remaining) tokens.push(remaining);\n89:     for (const d of trailingDelimiters) {\n90:       tokens.push(d);\n91:     }\n92:   }\n93: \n94:   let pos = 0;\n95: \n96:   function peek(): string | undefined {\n97:     return tokens[pos];\n98:   }\n99: \n100:   function consume(expected?: string): string {\n101:     const token = tokens[pos++]!;\n102:     if (expected && token !== expected) throw new Error(\"Invalid format\");\n103:     return token;\n104:   }\n105: \n106:   function normalizeResult(val: bigint): number | bigint {\n107:     if (val <= Number.MAX_SAFE_INTEGER && val >= -Number.MAX_SAFE_INTEGER) {\n108:       return Number(val);\n109:     }\n110:     return val;\n111:   }\n112: \n113:   // Variable scope for let declarations inside blocks: tracks both value and type string\n114:   const scope = new Map<\n115:     string,\n116:     { value: bigint; type: string; mutable: boolean }\n117:   >();\n118: \n119:   function parseIdentifier(): string {"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":120,\"endLine\":260}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 355\n120:     const name = consume();\n121:     if (!scope.has(name)) throw new Error(`Undefined variable: ${name}`);\n122:     return name;\n123:   }\n124:   // Parse a type annotation like U8, I16, *U8, etc. Returns the full token (e.g., \"U8\" or \"*U8\")\n125:   function parseTypeAnnotation(): string {\n126:     const typeToken = consume();\n127:     if (\n128:       !/^[UI](8|16|32|64)$/.test(typeToken) &&\n129:       !/^\\*[UI](8|16|32|64)$/.test(typeToken)\n130:     )\n131:       throw new Error(`Invalid type: ${typeToken}`);\n132:     return typeToken;\n133:   }\n134: \n135:   // Infer the type of a literal token (e.g., \"U8\" from \"100U8\")\n136:   function inferLiteralType(literal: string): string {\n137:     const match = literal.match(/^(-?\\d+)([UI](?:8|16|32|64))$/);\n138:     if (!match) throw new Error(\"Invalid format\");\n139:     return match[2]!; // e.g., \"U8\", \"I16\"\n140:   }\n141: \n142:   // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)\n143:   function isAssignable(sourceType: string, targetType: string): boolean {\n144:     const srcIsPointer = sourceType.startsWith(\"*\");\n145:     const tgtIsPointer = targetType.startsWith(\"*\");\n146: \n147:     // Pointer types must match exactly — no widening allowed for pointers\n148:     if (srcIsPointer && tgtIsPointer) {\n149:       return sourceType === targetType;\n150:     }\n151: \n152:     // Handle pointer types: a reference (*T) should match the base type T in assignment context\n153:     const srcBase = sourceType.replace(/^\\*/, \"\");\n154:     const tgtBase = targetType.replace(/^\\*/, \"\");\n155: \n156:     const srcMatch = srcBase.match(/^([UI])(\\d+)$/);\n157:     const tgtMatch = tgtBase.match(/^([UI])(\\d+)$/);\n158:     if (!srcMatch || !tgtMatch) return false;\n159: \n160:     // Same signedness required (U can't go to I and vice versa for now, keep it simple: must match exactly)\n161:     if (srcMatch[1] !== tgtMatch[1]) return false;\n162:     const srcBits = parseInt(srcMatch[2]!, 10);\n163:     const tgtBits = parseInt(tgtMatch[2]!, 10);\n164: \n165:     // Source type bits must be <= target type bits for safe assignment\n166:     return srcBits <= tgtBits;\n167:   }\n168: \n169:   function parseBlockItem(): bigint | null {\n170:     if (peek() === \"let\") {\n171:       consume(\"let\"); // let\n172: \n173:       // Check for optional `mut` keyword\n174:       const mutable = peek() === \"mut\";\n175:       if (mutable) consume(\"mut\");\n176: \n177:       const name = consume(); // variable name\n178: \n179:       let declaredType: string | undefined;\n180:       // Type annotation is optional: `:` followed by type token may or may not be present\n181:       if (peek() === \":\") {\n182:         consume(\":\"); // :\n183:         declaredType = parseTypeAnnotation();\n184:       }\n185: \n186:       consume(\"=\"); // =\n187:       const exprResult = parseExprWithType();\n188:       const value = BigInt(exprResult.value);\n189: \n190:       // If a type was explicitly declared, check compatibility with the expression's inferred type\n191:       if (declaredType) {\n192:         if (!isAssignable(exprResult.type, declaredType)) {\n193:           throw new Error(\n194:             `Cannot assign ${exprResult.type} to variable of type ${declaredType}`,\n195:           );\n196:         }\n197:         scope.set(name, { value, type: declaredType, mutable });\n198:       } else {\n199:         // No explicit type annotation — infer from the expression's literal type if possible\n200:         scope.set(name, { value, type: exprResult.type, mutable });\n201:       }\n202: \n203:       if (peek() === \";\") consume(\";\");\n204:       return null;\n205:     } else if (\n206:       peek() &&\n207:       /^[a-zA-Z_]\\w*$/.test(peek()!) &&\n208:       tokens[pos + 1] === \"=\"\n209:     ) {\n210:       // Assignment expression: `x = value` — returns the assigned value\n211:       const name = consume();\n212:       const entry = scope.get(name);\n213:       if (!entry || !entry.mutable) {\n214:         throw new Error(`Cannot reassign immutable variable: ${name}`);\n215:       }\n216: \n217:       consume(\"=\"); // =\n218:       const exprResult = parseExprWithType();\n219:       const value = BigInt(exprResult.value);\n220: \n221:       // Check type compatibility for the assignment\n222:       if (!isAssignable(exprResult.type, entry.type)) {\n223:         throw new Error(\n224:           `Cannot assign ${exprResult.type} to variable of type ${entry.type}`,\n225:         );\n226:       }\n227: \n228:       scope.set(name, { ...entry, value });\n229: \n230:       if (peek() === \";\") consume(\";\");\n231:       return value;\n232:     } else {\n233:       const exprResult = parseExprWithType();\n234:       if (peek() === \";\") consume(\";\");\n235:       return BigInt(exprResult.value);\n236:     }\n237:   }\n238: \n239:   // Extended expression parser that also tracks the inferred type of the result\n240: \n241:   function parseExprWithType(): { value: number | bigint; type: string } {\n242:     let left = parseTermWithType();\n243:     while (peek() === \"+\" || peek() === \"-\") {\n244:       const op = consume();\n245:       const right = parseTermWithType();\n246: \n247:       // When combining types, widen to the larger bit width and keep signedness consistent\n248:       const combinedType = combineTypes(left.type, right.type);\n249: \n250:       if (op === \"+\") left.value = BigInt(left.value) + BigInt(right.value);\n251:       else left.value = BigInt(left.value) - BigInt(right.value);\n252: \n253:       left.type = combinedType;\n254:     }\n255:     return { value: normalizeResult(BigInt(left.value)), type: left.type };\n256:   }\n257: \n258:   function parseTermWithType(): { value: number | bigint; type: string } {\n259:     let result: { value: bigint; type: string };"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":258,\"endLine\":360}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 355\n258:   function parseTermWithType(): { value: number | bigint; type: string } {\n259:     let result: { value: bigint; type: string };\n260:     const token = peek();\n261:     if (token === \"(\") {\n262:       consume(\"(\");\n263:       const innerResult = parseExprWithType();\n264:       consume(\")\");\n265:       result = { value: BigInt(innerResult.value), type: innerResult.type };\n266:     } else if (token === \"{\") {\n267:       consume(\"{\");\n268:       let blockValue: bigint | undefined;\n269:       while (!peek() || peek() !== \"}\") {\n270:         const itemValue = parseBlockItem();\n271:         if (itemValue !== null) {\n272:           blockValue = itemValue;\n273:         }\n274:       }\n275:       consume(\"}\");\n276:       result = { value: blockValue!, type: \"U8\" };\n277:     } else if (token === \"&\") {\n278:       // Reference operator — returns pointer type *T\n279:       consume(\"&\");\n280:       const name = parseIdentifier();\n281:       const entry = scope.get(name)!;\n282:       result = { value: entry.value, type: \"*\" + entry.type };\n283:     } else if (token === \"*\") {\n284:       // Dereference operator — strips the leading * to get base type T\n285:       consume(\"*\");\n286:       const name = parseIdentifier();\n287:       const entry = scope.get(name)!;\n288:       // Only allow dereferencing pointer types (types starting with *)\n289:       if (!entry.type.startsWith(\"*\")) {\n290:         throw new Error(`Cannot dereference non-pointer type: ${entry.type}`);\n291:       }\n292:       result = { value: entry.value, type: entry.type.replace(/^\\*/, \"\") };\n293:    } else if (token && /^[a-zA-Z_]\\w*$/.test(token)) {\n294:       // Variable reference — use the stored type from scope\n295:       const name = parseIdentifier();\n296:       const entry = scope.get(name)!;\n297:       result = { value: entry.value, type: entry.type };\n298:     } else {\n299:       const literalToken = consume();\n300:       result = {\n301:         value: BigInt(parseLiteral(literalToken)),\n302:         type: inferLiteralType(literalToken),\n303:       };\n304:     }\n305: \n306:     while (peek() === \"*\" || peek() === \"/\") {\n307:       const op = consume();\n308:       const rightResult = parseTermWithType();\n309: \n310:       // Combine types for multiplication/division — widen to larger bit width\n311:       result.type = combineTypes(result.type, rightResult.type);\n312: \n313:       if (op === \"*\") result.value *= BigInt(rightResult.value);\n314:       else {\n315:         if (BigInt(rightResult.value) === 0n)\n316:           throw new Error(\"Division by zero\");\n317:         result.value /= BigInt(rightResult.value);\n318:       }\n319:     }\n320:     return { value: normalizeResult(result.value), type: result.type };\n321:   }\n322: \n323:   // Combine two types into a wider one that can hold both values safely\n324:   function combineTypes(typeA: string, typeB: string): string {\n325:     const matchA = typeA.match(/^([UI])(\\d+)$/);\n326:     const matchB = typeB.match(/^([UI])(\\d+)$/);\n327: \n328:     if (!matchA || !matchB) return \"U64\"; // fallback to widest\n329: \n330:     const prefixA = matchA[1];\n331:     const bitsA = parseInt(matchA[2]!, 10);\n332:     const prefixB = matchB[1];\n333:     const bitsB = parseInt(matchB[2]!, 10);\n334: \n335:     // If either is signed, result is signed (I) to preserve sign semantics\n336:     const combinedPrefix = prefixA === \"I\" || prefixB === \"I\" ? \"I\" : \"U\";\n337:     const combinedBits = Math.max(bitsA, bitsB);\n338: \n339:     return `${combinedPrefix}${combinedBits}`;\n340:   }\n341: \n342:   // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)\n343: \n344:   // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)\n345:   let result = 0n;\n346:   while (pos < tokens.length) {\n347:     const itemValue = parseBlockItem();\n348:     if (itemValue !== null) {\n349:       result = BigInt(itemValue);\n350:     }\n351:   }\n352: \n353:   return normalizeResult(result);\n354: }\n355: "
+  },
+  {
+    "role": "assistant",
+    "content": "I'll add Bool support with `true`/`false` literals, type annotation, and proper assignment checking. Let me make the changes:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":258,\"endLine\":304,\"content\":\" function parseTermWithType(): { value: number | bigint; type: string } {\\n    let result: { value: bigint; type: string };\\n    const token = peek();\\n    if (token === \\\"(\\\") {\\n      consume(\\\"(\\\");\\n      const innerResult = parseExprWithType();\\n      consume(\\\")\\\");\\n      result = { value: BigInt(innerResult.value), type: innerResult.type };\\n    } else if (token === \\\"{\\\") {\\n      consume(\\\"{\\\");\\n      let blockValue: bigint | undefined;\\n      while (!peek() || peek() !== \\\"}\\\") {\\n        const itemValue = parseBlockItem();\\n        if (itemValue !== null) {\\n          blockValue = itemValue;\\n        }\\n      }\\n      consume(\\\"}\\\");\\n      result = { value: blockValue!, type: \\\"U8\\\" };\\n    } else if (token === \\\"&\\\") {\\n      // Reference operator — returns pointer type *T\\n      consume(\\\"&\\\");\\n      const name = parseIdentifier();\\n      const entry = scope.get(name)!;\\n      result = { value: entry.value, type: \\\"*\\\" + entry.type };\\n    } else if (token === \\\"*\\\") {\\n      // Dereference operator — strips the leading * to get base type T\\n      consume(\\\"*\\\");\\n      const name = parseIdentifier();\\n      const entry = scope.get(name)!;\\n      // Only allow dereferencing pointer types (types starting with *)\\n      if (!entry.type.startsWith(\\\"*\\\")) {\\n        throw new Error(`Cannot dereference non-pointer type: ${entry.type}`);\\n      }\\n      result = { value: entry.value, type: entry.type.replace(/^\\\\*/, \\\"\\\") };\\n    } else if (token === \\\"true\\\") {\\n      // Boolean literal true → 1 with type Bool\\n      consume(\\\"true\\\");\\n      result = { value: 1n, type: \\\"Bool\\\" };\\n    } else if (token === \\\"false\\\") {\\n      // Boolean literal false → 0 with type Bool\\n      consume(\\\"false\\\");\\n      result = { value: 0n, type: \\\"Bool\\\" };\\n    } else if (token && /^[a-zA-Z_]\\\\w*$/.test(token)) {\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": "Now I need to update the type annotation parser and isAssignable to recognize `Bool`:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":125,\"endLine\":133,\"content\":\" // Parse a type annotation like U8, I16, *U8, Bool, etc. Returns the full token (e.g., \\\"U8\\\" or \\\"*U8\\\")\\n  function parseTypeAnnotation(): string {\\n    const typeToken = consume();\\n    if (\\n      !/^[UI](8|16|32|64)$/.test(typeToken) &&\\n      !/^\\\\*[UI](8|16|32|64)$/.test(typeToken) &&\\n      typeToken !== \\\"Bool\\\"\\n    )\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":143,\"endLine\":167,\"content\":\" // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)\\n  function isAssignable(sourceType: string, targetType: string): boolean {\\n    const srcIsPointer = sourceType.startsWith(\\\"*\\\");\\n    const tgtIsPointer = targetType.startsWith(\\\"*\\\");\\n\\n    // Pointer types must match exactly — no widening allowed for pointers\\n    if (srcIsPointer && tgtIsPointer) {\\n      return sourceType === targetType;\\n    }\\n\\n    // Handle pointer types: a reference (*T) should match the base type T in assignment context\\n    const srcBase = sourceType.replace(/^\\\\*/, \\\"\\\");\\n    const tgtBase = targetType.replace(/^\\\\*/, \\\"\\\");\\n\\n    // Bool is only assignable to Bool — no mixing with numeric types\\n    if (srcBase === \\\"Bool\\\" && tgtBase === \\\"Bool\\\") return true;\\n    if (srcBase === \\\"Bool\\\" || tgtBase === \\\"Bool\\\") return false;\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me add the test cases for Bool:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":130,\"endLine\":135,\"content\":\"test('executeTuff(\\\"let x = 0U8; *x\\\") throws error for dereferencing non-pointer', () => {\\n  expect(() => executeTuff(\\\"let x = 0U8; *x\\\")).toThrow();\\n});\\n\\ntest('executeTuff(\\\"let x : Bool = true; x\\\") returns 1', () => {\\n  expect(executeTuff(\\\"let x : Bool = true; x\\\")).toBe(1);\\n});\\n\\ntest('executeTuff(\\\"let x : Bool = false; x\\\") returns 0', () => {\\n  expect(executeTuff(\\\"let x : Bool = false; x\\\")).toBe(0);\\n});\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test 2>&1 | Select-Object -Last 30\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1 | Select-Object -Last 30\"\nbun : \r\nAt line:1 char:53\r\n+ ... :\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1 | Selec ...\r\n+                                                     ~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nindex.test.ts:\r\n# Unhandled error between tests\r\n-------------------------------\r\nerror: Unexpected end of file\r\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:141:1\r\n-------------------------------\r\n 0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [29.00ms]\r\n | Stderr: bun : \r\nAt line:1 char:53\r\n+ ... :\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1 | Selec ...\r\n+                                                     ~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nindex.test.ts:\r\n# Unhandled error between tests\r\n-------------------------------\r\nerror: Unexpected end of file\r\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:141:1\r\n-------------------------------\r\n 0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [29.00ms]\r\n | Stdout: bun test v1.3.13 (bf2e2cec)\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":125,\"endLine\":145}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 142\n125:   expect(() => executeTuff(\"let x = 0U8; let y : *U16 = &x;\")).toThrow();\n126: });\n127: \n128: test('executeTuff(\"let x = 0U8; *x\") throws error for dereferencing non-pointer', () => {\n129:   expect(() => executeTuff(\"let x = 0U8; *x\")).toThrow();\n130: test('executeTuff(\"let x = 0U8; *x\") throws error for dereferencing non-pointer', () => {\n131:   expect(() => executeTuff(\"let x = 0U8; *x\")).toThrow();\n132: });\n133: \n134: test('executeTuff(\"let x : Bool = true; x\") returns 1', () => {\n135:   expect(executeTuff(\"let x : Bool = true; x\")).toBe(1);\n136: });\n137: \n138: test('executeTuff(\"let x : Bool = false; x\") returns 0', () => {\n139:   expect(executeTuff(\"let x : Bool = false; x\")).toBe(0);\n140: });\n141: \n142: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":128,\"endLine\":143,\"content\":\"test('executeTuff(\\\"let x = 0U8; *x\\\") throws error for dereferencing non-pointer', () => {\\n  expect(() => executeTuff(\\\"let x = 0U8; *x\\\")).toThrow();\\n});\\n\\ntest('executeTuff(\\\"let x : Bool = true; x\\\") returns 1', () => {\\n  expect(executeTuff(\\\"let x : Bool = true; x\\\")).toBe(1);\\n});\\n\\ntest('executeTuff(\\\"let x : Bool = false; x\\\") returns 0', () => {\\n  expect(executeTuff(\\\"let x : Bool = false; x\\\")).toBe(0);\\n});\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":283,\"endLine\":310}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 347\n283:       if (!entry.type.startsWith(\"*\")) {\n284:         throw new Error(`Cannot dereference non-pointer type: ${entry.type}`);\n285:       }\n286:       result = { value: entry.value, type: entry.type.replace(/^\\*/, \"\") };\n287:     } else if (token === \"true\") {\n288:       // Boolean literal true → 1 with type Bool\n289:       consume(\"true\");\n290:       result = { value: 1n, type: \"Bool\" };\n291:     } else if (token === \"false\") {\n292:       // Boolean literal false → 0 with type Bool\n293:       consume(\"false\");\n294:       result = { value: 0n, type: \"Bool\" };\n295:     } else if (token && /^[a-zA-Z_]\\w*$/.test(token)) {\n296:     }\n297: \n298:     while (peek() === \"*\" || peek() === \"/\") {\n299:       const op = consume();\n300:       const rightResult = parseTermWithType();\n301: \n302:       // Combine types for multiplication/division — widen to larger bit width\n303:       result.type = combineTypes(result.type, rightResult.type);\n304: \n305:       if (op === \"*\") result.value *= BigInt(rightResult.value);\n306:       else {\n307:         if (BigInt(rightResult.value) === 0n)\n308:           throw new Error(\"Division by zero\");\n309:         result.value /= BigInt(rightResult.value);"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":295,\"endLine\":301,\"content\":\"   } else if (token && /^[a-zA-Z_]\\\\w*$/.test(token)) {\\n      // Variable reference — use the stored type from scope\\n      const name = parseIdentifier();\\n      const entry = scope.get(name)!;\\n      result = { value: entry.value, type: entry.type };\\n    } else {\\n      const literalToken = consume();\\n      result = {\\n        value: BigInt(parseLiteral(literalToken)),\\n        type: inferLiteralType(literalToken),\\n      };\\n    }\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":287,\"endLine\":315}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 354\n287:     } else if (token === \"true\") {\n288:       // Boolean literal true → 1 with type Bool\n289:       consume(\"true\");\n290:       result = { value: 1n, type: \"Bool\" };\n291:     } else if (token === \"false\") {\n292:       // Boolean literal false → 0 with type Bool\n293:       consume(\"false\");\n294:       result = { value: 0n, type: \"Bool\" };\n295:    } else if (token && /^[a-zA-Z_]\\w*$/.test(token)) {\n296:       // Variable reference — use the stored type from scope\n297:       const name = parseIdentifier();\n298:       const entry = scope.get(name)!;\n299:       result = { value: entry.value, type: entry.type };\n300:     } else {\n301:       const literalToken = consume();\n302:       result = {\n303:         value: BigInt(parseLiteral(literalToken)),\n304:         type: inferLiteralType(literalToken),\n305:       };\n306:     }\n307: \n308: \n309:       // Combine types for multiplication/division — widen to larger bit width\n310:       result.type = combineTypes(result.type, rightResult.type);\n311: \n312:       if (op === \"*\") result.value *= BigInt(rightResult.value);\n313:       else {\n314:         if (BigInt(rightResult.value) === 0n)"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":306,\"endLine\":325,\"content\":\"    while (peek() === \\\"*\\\" || peek() === \\\"/\\\") {\\n      const op = consume();\\n      const rightResult = parseTermWithType();\\n\\n      // Combine types for multiplication/division — widen to larger bit width\\n      result.type = combineTypes(result.type, rightResult.type);\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":304,\"endLine\":325}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 342\n304:         type: inferLiteralType(literalToken),\n305:       };\n306:     while (peek() === \"*\" || peek() === \"/\") {\n307:       const op = consume();\n308:       const rightResult = parseTermWithType();\n309: \n310:       // Combine types for multiplication/division — widen to larger bit width\n311:       result.type = combineTypes(result.type, rightResult.type);\n312: \n313:     const matchB = typeB.match(/^([UI])(\\d+)$/);\n314: \n315:     if (!matchA || !matchB) return \"U64\"; // fallback to widest\n316: \n317:     const prefixA = matchA[1];\n318:     const bitsA = parseInt(matchA[2]!, 10);\n319:     const prefixB = matchB[1];\n320:     const bitsB = parseInt(matchB[2]!, 10);\n321: \n322:     // If either is signed, result is signed (I) to preserve sign semantics\n323:     const combinedPrefix = prefixA === \"I\" || prefixB === \"I\" ? \"I\" : \"U\";\n324:     const combinedBits = Math.max(bitsA, bitsB);"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":304,\"endLine\":350}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 342\n304:         type: inferLiteralType(literalToken),\n305:       };\n306:     while (peek() === \"*\" || peek() === \"/\") {\n307:       const op = consume();\n308:       const rightResult = parseTermWithType();\n309: \n310:       // Combine types for multiplication/division — widen to larger bit width\n311:       result.type = combineTypes(result.type, rightResult.type);\n312: \n313:     const matchB = typeB.match(/^([UI])(\\d+)$/);\n314: \n315:     if (!matchA || !matchB) return \"U64\"; // fallback to widest\n316: \n317:     const prefixA = matchA[1];\n318:     const bitsA = parseInt(matchA[2]!, 10);\n319:     const prefixB = matchB[1];\n320:     const bitsB = parseInt(matchB[2]!, 10);\n321: \n322:     // If either is signed, result is signed (I) to preserve sign semantics\n323:     const combinedPrefix = prefixA === \"I\" || prefixB === \"I\" ? \"I\" : \"U\";\n324:     const combinedBits = Math.max(bitsA, bitsB);\n325: \n326:     return `${combinedPrefix}${combinedBits}`;\n327:   }\n328: \n329:   // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)\n330: \n331:   // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)\n332:   let result = 0n;\n333:   while (pos < tokens.length) {\n334:     const itemValue = parseBlockItem();\n335:     if (itemValue !== null) {\n336:       result = BigInt(itemValue);\n337:     }\n338:   }\n339: \n340:   return normalizeResult(result);\n341: }\n342: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":305,\"endLine\":342,\"content\":\"     };\\n    }\\n\\n    while (peek() === \\\"*\\\" || peek() === \\\"/\\\") {\\n      const op = consume();\\n      const rightResult = parseTermWithType();\\n\\n      // Combine types for multiplication/division — widen to larger bit width\\n      result.type = combineTypes(result.type, rightResult.type);\\n\\n      if (op === \\\"*\\\") result.value *= BigInt(rightResult.value);\\n      else {\\n        if (BigInt(rightResult.value) === 0n)\\n          throw new Error(\\\"Division by zero\\\");\\n        result.value /= BigInt(rightResult.value);\\n      }\\n    }\\n    return { value: normalizeResult(result.value), type: result.type };\\n  }\\n\\n  // Combine two types into a wider one that can hold both values safely\\n  function combineTypes(typeA: string, typeB: string): string {\\n    const matchA = typeA.match(/^([UI])(\\\\d+)$/);\\n    const matchB = typeB.match(/^([UI])(\\\\d+)$/);\\n\\n    if (!matchA || !matchB) return \\\"U64\\\"; // fallback to widest\\n\\n    const prefixA = matchA[1];\\n    const bitsA = parseInt(matchA[2]!, 10);\\n    const prefixB = matchB[1];\\n    const bitsB = parseInt(matchB[2]!, 10);\\n\\n    // If either is signed, result is signed (I) to preserve sign semantics\\n    const combinedPrefix = prefixA === \\\"I\\\" || prefixB === \\\"I\\\" ? \\\"I\\\" : \\\"U\\\";\\n    const combinedBits = Math.max(bitsA, bitsB);\\n\\n    return `${combinedPrefix}${combinedBits}`;\\n  }\\n\\n  // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)\\n  let result = 0n;\\n  while (pos < tokens.length) {\\n    const itemValue = parseBlockItem();\\n    if (itemValue !== null) {\\n      result = BigInt(itemValue);\\n    }\\n  }\\n\\n  return normalizeResult(result);\\n}\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test 2>&1 | Select-Object -Last 40\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1 | Select-Object -Last 40\"\nbun : \r\nAt line:1 char:53\r\n+ ... :\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1 | Selec ...\r\n+                                                     ~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nindex.test.ts:\r\n# Unhandled error between tests\r\n-------------------------------\r\n133 |   }\r\n        ^\r\nerror: Unexpected }\r\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:133:3\r\n-------------------------------\r\n 0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [27.00ms]\r\n | Stderr: bun : \r\nAt line:1 char:53\r\n+ ... :\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1 | Selec ...\r\n+                                                     ~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nindex.test.ts:\r\n# Unhandled error between tests\r\n-------------------------------\r\n133 |   }\r\n        ^\r\nerror: Unexpected }\r\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:133:3\r\n-------------------------------\r\n 0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [27.00ms]\r\n | Stdout: bun test v1.3.13 (bf2e2cec)\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":140,\"endLine\":175}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 356\n140:   }\n141: \n142:   // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)\n143:  // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)\n144:   function isAssignable(sourceType: string, targetType: string): boolean {\n145:     const srcIsPointer = sourceType.startsWith(\"*\");\n146:     const tgtIsPointer = targetType.startsWith(\"*\");\n147: \n148:     // Pointer types must match exactly — no widening allowed for pointers\n149:     if (srcIsPointer && tgtIsPointer) {\n150:       return sourceType === targetType;\n151:     }\n152: \n153:     // Handle pointer types: a reference (*T) should match the base type T in assignment context\n154:     const srcBase = sourceType.replace(/^\\*/, \"\");\n155:     const tgtBase = targetType.replace(/^\\*/, \"\");\n156: \n157:     // Bool is only assignable to Bool — no mixing with numeric types\n158:     if (srcBase === \"Bool\" && tgtBase === \"Bool\") return true;\n159:     if (srcBase === \"Bool\" || tgtBase === \"Bool\") return false;\n160: \n161:   }\n162: \n163:   function parseBlockItem(): bigint | null {\n164:     if (peek() === \"let\") {\n165:       consume(\"let\"); // let\n166: \n167:       // Check for optional `mut` keyword\n168:       const mutable = peek() === \"mut\";\n169:       if (mutable) consume(\"mut\");\n170: \n171:       const name = consume(); // variable name\n172: \n173:       let declaredType: string | undefined;\n174:       // Type annotation is optional: `:` followed by type token may or may not be present"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":125,\"endLine\":165}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 356\n125:  // Parse a type annotation like U8, I16, *U8, Bool, etc. Returns the full token (e.g., \"U8\" or \"*U8\")\n126:   function parseTypeAnnotation(): string {\n127:     const typeToken = consume();\n128:     if (\n129:       !/^[UI](8|16|32|64)$/.test(typeToken) &&\n130:       !/^\\*[UI](8|16|32|64)$/.test(typeToken) &&\n131:       typeToken !== \"Bool\"\n132:     )\n133:   }\n134: \n135:   // Infer the type of a literal token (e.g., \"U8\" from \"100U8\")\n136:   function inferLiteralType(literal: string): string {\n137:     const match = literal.match(/^(-?\\d+)([UI](?:8|16|32|64))$/);\n138:     if (!match) throw new Error(\"Invalid format\");\n139:     return match[2]!; // e.g., \"U8\", \"I16\"\n140:   }\n141: \n142:   // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)\n143:  // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)\n144:   function isAssignable(sourceType: string, targetType: string): boolean {\n145:     const srcIsPointer = sourceType.startsWith(\"*\");\n146:     const tgtIsPointer = targetType.startsWith(\"*\");\n147: \n148:     // Pointer types must match exactly — no widening allowed for pointers\n149:     if (srcIsPointer && tgtIsPointer) {\n150:       return sourceType === targetType;\n151:     }\n152: \n153:     // Handle pointer types: a reference (*T) should match the base type T in assignment context\n154:     const srcBase = sourceType.replace(/^\\*/, \"\");\n155:     const tgtBase = targetType.replace(/^\\*/, \"\");\n156: \n157:     // Bool is only assignable to Bool — no mixing with numeric types\n158:     if (srcBase === \"Bool\" && tgtBase === \"Bool\") return true;\n159:     if (srcBase === \"Bool\" || tgtBase === \"Bool\") return false;\n160: \n161:   }\n162: \n163:   function parseBlockItem(): bigint | null {\n164:     if (peek() === \"let\") {"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":125,\"endLine\":162,\"content\":\" // Parse a type annotation like U8, I16, *U8, Bool, etc. Returns the full token (e.g., \\\"U8\\\" or \\\"*U8\\\")\\n  function parseTypeAnnotation(): string {\\n    const typeToken = consume();\\n    if (\\n      !/^[UI](8|16|32|64)$/.test(typeToken) &&\\n      !/^\\\\*[UI](8|16|32|64)$/.test(typeToken) &&\\n      typeToken !== \\\"Bool\\\"\\n    ) {\\n      throw new Error(`Invalid type: ${typeToken}`);\\n    }\\n    return typeToken;\\n  }\\n\\n  // Infer the type of a literal token (e.g., \\\"U8\\\" from \\\"100U8\\\")\\n  function inferLiteralType(literal: string): string {\\n    const match = literal.match(/^(-?\\\\d+)([UI](?:8|16|32|64))$/);\\n    if (!match) throw new Error(\\\"Invalid format\\\");\\n    return match[2]!; // e.g., \\\"U8\\\", \\\"I16\\\"\\n  }\\n\\n  // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)\\n  function isAssignable(sourceType: string, targetType: string): boolean {\\n    const srcIsPointer = sourceType.startsWith(\\\"*\\\");\\n    const tgtIsPointer = targetType.startsWith(\\\"*\\\");\\n\\n    // Pointer types must match exactly — no widening allowed for pointers\\n    if (srcIsPointer && tgtIsPointer) {\\n      return sourceType === targetType;\\n    }\\n\\n    // Handle pointer types: a reference (*T) should match the base type T in assignment context\\n    const srcBase = sourceType.replace(/^\\\\*/, \\\"\\\");\\n    const tgtBase = targetType.replace(/^\\\\*/, \\\"\\\");\\n\\n    // Bool is only assignable to Bool — no mixing with numeric types\\n    if (srcBase === \\\"Bool\\\" && tgtBase === \\\"Bool\\\") return true;\\n    if (srcBase === \\\"Bool\\\" || tgtBase === \\\"Bool\\\") return false;\\n\\n    const srcMatch = srcBase.match(/^([UI])(\\\\d+)$/);\\n    const tgtMatch = tgtBase.match(/^([UI])(\\\\d+)$/);\\n    if (!srcMatch || !tgtMatch) return false;\\n\\n    // Same signedness required (U can't go to I and vice versa for now, keep it simple: must match exactly)\\n    if (srcMatch[1] !== tgtMatch[1]) return false;\\n    const srcBits = parseInt(srcMatch[2]!, 10);\\n    const tgtBits = parseInt(tgtMatch[2]!, 10);\\n\\n    // Source type bits must be <= target type bits for safe assignment\\n    return srcBits <= tgtBits;\\n  }\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test 2>&1 | Select-Object -Last 40\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1 | Select-Object -Last 40\"\nindex.test.ts:\r\n(pass) executeTuff with empty string returns 0\r\n(pass) executeTuff(\"100U8\") returns 100 [16.00ms]\r\n(pass) executeTuff(\"100U16\") returns 100\r\n(pass) executeTuff(\"-100U8\") throws error for negative values\r\n(pass) executeTuff(\"256U8\") throws error for out of range\r\n(pass) executeTuff(\"9007199254740993U64\") returns bigint\r\n(pass) executeTuff(\"-100I8\") returns -100\r\n(pass) executeTuff(\"1U8 + 2U8\") returns 3\r\n(pass) executeTuff(\"1U8 + 2U8 + 3U8\") returns 6\r\n(pass) executeTuff(\"1U8 * 2U8 + 3U8\") returns 5\r\n(pass) executeTuff(\"1U8 + 2U8 * 3U8\") returns 7\r\n(pass) executeTuff(\"(1U8 + 2U8) * 3U8\") returns 9\r\n(pass) executeTuff(\"{ 1U8 + 2U8 } * 3U8\") returns 9\r\n(pass) executeTuff(\"{ let x : U8 = 1U8 + 2U8; x } * 3U8\") returns 9\r\n(pass) executeTuff(\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\") returns 9\r\n(pass) executeTuff(\"let x : U8 = 100U8;\") returns 0\r\n(pass) executeTuff(\"let x = 100U8; x\") returns 100\r\n(pass) executeTuff(\"let x = 0U8; let x = 10U8; x\") returns 10\r\n(pass) executeTuff(\"let x : U8 = 0U16; x\") throws error for type mismatch\r\n(pass) executeTuff(\"let x = 0U16; let y : U8 = x;\") throws error for narrowing assignment\r\n(pass) executeTuff(\"let mut x = 0U8; x = 1U8; x\") returns 1\r\n(pass) executeTuff(\"let mut x = 0U8; x = 1U16; x\") throws error for widening assignment\r\n(pass) executeTuff(\"x = 1U16; x\") throws error for undeclared variable\r\n(pass) executeTuff(\"let x = 100U16; x = 1U16; x\") throws error for reassigning immutable variable\r\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; let z : U8 = *y;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; *y\") returns 0\r\n(pass) executeTuff(\"let x = 1U8; let y : *U8 = &x; *y\") returns 1\r\n(pass) executeTuff(\"&x\") throws error for undefined variable\r\n(pass) executeTuff(\"let x = 0U8; let y : *U16 = &x;\") throws error for pointer type mismatch\r\n(pass) executeTuff(\"let x = 0U8; *x\") throws error for dereferencing non-pointer\r\n(pass) executeTuff(\"let x : Bool = true; x\") returns 1\r\n(pass) executeTuff(\"let x : Bool = false; x\") returns 0\r\n 34 pass\r\n 0 fail\r\n 34 expect() calls\r\nRan 34 tests across 1 file. [40.00ms]\r\n | Stderr: index.test.ts:\r\n(pass) executeTuff with empty string returns 0\r\n(pass) executeTuff(\"100U8\") returns 100 [16.00ms]\r\n(pass) executeTuff(\"100U16\") returns 100\r\n(pass) executeTuff(\"-100U8\") throws error for negative values\r\n(pass) executeTuff(\"256U8\") throws error for out of range\r\n(pass) executeTuff(\"9007199254740993U64\") returns bigint\r\n(pass) executeTuff(\"-100I8\") returns -100\r\n(pass) executeTuff(\"1U8 + 2U8\") returns 3\r\n(pass) executeTuff(\"1U8 + 2U8 + 3U8\") returns 6\r\n(pass) executeTuff(\"1U8 * 2U8 + 3U8\") returns 5\r\n(pass) executeTuff(\"1U8 + 2U8 * 3U8\") returns 7\r\n(pass) executeTuff(\"(1U8 + 2U8) * 3U8\") returns 9\r\n(pass) executeTuff(\"{ 1U8 + 2U8 } * 3U8\") returns 9\r\n(pass) executeTuff(\"{ let x : U8 = 1U8 + 2U8; x } * 3U8\") returns 9\r\n(pass) executeTuff(\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\") returns 9\r\n(pass) executeTuff(\"let x : U8 = 100U8;\") returns 0\r\n(pass) executeTuff(\"let x = 100U8; x\") returns 100\r\n(pass) executeTuff(\"let x = 0U8; let x = 10U8; x\") returns 10\r\n(pass) executeTuff(\"let x : U8 = 0U16; x\") throws error for type mismatch\r\n(pass) executeTuff(\"let x = 0U16; let y : U8 = x;\") throws error for narrowing assignment\r\n(pass) executeTuff(\"let mut x = 0U8; x = 1U8; x\") returns 1\r\n(pass) executeTuff(\"let mut x = 0U8; x = 1U16; x\") throws error for widening assignment\r\n(pass) executeTuff(\"x = 1U16; x\") throws error for undeclared variable\r\n(pass) executeTuff(\"let x = 100U16; x = 1U16; x\") throws error for reassigning immutable variable\r\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; let z : U8 = *y;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; *y\") returns 0\r\n(pass) executeTuff(\"let x = 1U8; let y : *U8 = &x; *y\") returns 1\r\n(pass) executeTuff(\"&x\") throws error for undefined variable\r\n(pass) executeTuff(\"let x = 0U8; let y : *U16 = &x;\") throws error for pointer type mismatch\r\n(pass) executeTuff(\"let x = 0U8; *x\") throws error for dereferencing non-pointer\r\n(pass) executeTuff(\"let x : Bool = true; x\") returns 1\r\n(pass) executeTuff(\"let x : Bool = false; x\") returns 0\r\n 34 pass\r\n 0 fail\r\n 34 expect() calls\r\nRan 34 tests across 1 file. [40.00ms]\r\n | Stdout: "
+  },
+  {
+    "role": "assistant",
+    "content": "All **34 tests passing** ✅ \n\nHere's what was implemented:\n\n### Changes in `index.ts`:\n1. **`parseTermWithType()`**: Added handling for `true` → `{ value: 1n, type: \"Bool\" }` and `false` → `{ value: 0n, type: \"Bool\" }`\n2. **`parseTypeAnnotation()`**: Now accepts `\"Bool\"` as a valid type annotation alongside numeric types like `U8`, `I16`, etc.\n3. **`isAssignable()`**: Added Bool type safety — Bool can only be assigned to Bool (no mixing with numeric types)\n\n### New test cases in `index.test.ts`:\n- ✅ `executeTuff(\"let x : Bool = true; x\") returns 1`\n- ✅ `executeTuff(\"let x : Bool = false; x\") returns 0`"
   }
 ]

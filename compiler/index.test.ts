@@ -129,4 +129,11 @@ test('executeTuff("let x = 0U8; *x") throws error for dereferencing non-pointer'
   expect(() => executeTuff("let x = 0U8; *x")).toThrow();
 });
 
+test('executeTuff("let x : Bool = true; x") returns 1', () => {
+  expect(executeTuff("let x : Bool = true; x")).toBe(1);
+});
+
+test('executeTuff("let x : Bool = false; x") returns 0', () => {
+  expect(executeTuff("let x : Bool = false; x")).toBe(0);
+});
 

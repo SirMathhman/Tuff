@@ -122,13 +122,16 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return name;
   }
   // Parse a type annotation like U8, I16, *U8, etc. Returns the full token (e.g., "U8" or "*U8")
+ // Parse a type annotation like U8, I16, *U8, Bool, etc. Returns the full token (e.g., "U8" or "*U8")
   function parseTypeAnnotation(): string {
     const typeToken = consume();
     if (
       !/^[UI](8|16|32|64)$/.test(typeToken) &&
-      !/^\*[UI](8|16|32|64)$/.test(typeToken)
-    )
+      !/^\*[UI](8|16|32|64)$/.test(typeToken) &&
+      typeToken !== "Bool"
+    ) {
       throw new Error(`Invalid type: ${typeToken}`);
+    }
     return typeToken;
   }
 
@@ -153,6 +156,10 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     const srcBase = sourceType.replace(/^\*/, "");
     const tgtBase = targetType.replace(/^\*/, "");
 
+    // Bool is only assignable to Bool — no mixing with numeric types
+    if (srcBase === "Bool" && tgtBase === "Bool") return true;
+    if (srcBase === "Bool" || tgtBase === "Bool") return false;
+
     const srcMatch = srcBase.match(/^([UI])(\d+)$/);
     const tgtMatch = tgtBase.match(/^([UI])(\d+)$/);
     if (!srcMatch || !tgtMatch) return false;
@@ -165,6 +172,8 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     // Source type bits must be <= target type bits for safe assignment
     return srcBits <= tgtBits;
   }
+
+
 
   function parseBlockItem(): bigint | null {
     if (peek() === "let") {
@@ -255,7 +264,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return { value: normalizeResult(BigInt(left.value)), type: left.type };
   }
 
-  function parseTermWithType(): { value: number | bigint; type: string } {
+ function parseTermWithType(): { value: number | bigint; type: string } {
     let result: { value: bigint; type: string };
     const token = peek();
     if (token === "(") {
@@ -290,6 +299,14 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
         throw new Error(`Cannot dereference non-pointer type: ${entry.type}`);
       }
       result = { value: entry.value, type: entry.type.replace(/^\*/, "") };
+    } else if (token === "true") {
+      // Boolean literal true → 1 with type Bool
+      consume("true");
+      result = { value: 1n, type: "Bool" };
+    } else if (token === "false") {
+      // Boolean literal false → 0 with type Bool
+      consume("false");
+      result = { value: 0n, type: "Bool" };
    } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
       // Variable reference — use the stored type from scope
       const name = parseIdentifier();
@@ -300,7 +317,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       result = {
         value: BigInt(parseLiteral(literalToken)),
         type: inferLiteralType(literalToken),
-      };
+     };
     }
 
     while (peek() === "*" || peek() === "/") {
@@ -340,8 +357,6 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
   }
 
   // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)
-
-  // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)
   let result = 0n;
   while (pos < tokens.length) {
     const itemValue = parseBlockItem();
@@ -352,3 +367,4 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   return normalizeResult(result);
 }
+
