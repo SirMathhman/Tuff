@@ -51,62 +51,94 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return 0;
   }
 
-  // Tokenize by splitting on whitespace.
-  const tokens = tuffSourceCode.trim().split(/\s+/);
-
-  // If there's only one token, it must be a single literal.
-  if (tokens.length === 1) {
-    return parseLiteral(tokens[0]!);
+  // Tokenize by splitting on whitespace, then further split delimiters from literals
+  const rawTokens = tuffSourceCode.trim().split(/\s+/);
+  const tokens: string[] = [];
+  for (const raw of rawTokens) {
+    let remaining = raw;
+    while (remaining.startsWith("(")) {
+      tokens.push("(");
+      remaining = remaining.slice(1);
+    }
+    while (remaining.startsWith("{")) {
+      tokens.push("{");
+      remaining = remaining.slice(1);
+    }
+    if (!remaining) continue;
+    const trailingDelimiters: string[] = [];
+    while (remaining.endsWith(")") || remaining.endsWith("}")) {
+      trailingDelimiters.unshift(remaining[remaining.length - 1]!);
+      remaining = remaining.slice(0, -1);
+    }
+    if (remaining) tokens.push(remaining);
+    for (const d of trailingDelimiters) {
+      tokens.push(d);
+    }
   }
 
-  // For expressions with multiple terms: [term, op, term, op, ..., term].
-  // tokens.length must be odd and >= 3.
-  if (tokens.length < 3 || tokens.length % 2 !== 1) {
+  let pos = 0;
+
+  function peek(): string | undefined {
+    return tokens[pos];
+  }
+
+  function consume(): string {
+    return tokens[pos++]!;
+  }
+
+  function normalizeResult(val: bigint): number | bigint {
+    if (val <= Number.MAX_SAFE_INTEGER && val >= -Number.MAX_SAFE_INTEGER) {
+      return Number(val);
+    }
+    return val;
+  }
+
+  // Recursive descent parser with operator precedence: * / before + -
+  function parseTerm(): number | bigint {
+    let left: bigint;
+    if (peek() === "(") {
+      consume(); // consume '('
+      const exprResult = BigInt(parseExpr());
+      if (peek() !== ")") throw new Error("Invalid format");
+      consume(); // consume ')'
+      left = exprResult;
+    } else if (peek() === "{") {
+      consume(); // consume '{'
+      const exprResult = BigInt(parseExpr());
+      if (peek() !== "}") throw new Error("Invalid format");
+      consume(); // consume '}'
+      left = exprResult;
+    } else {
+      left = BigInt(parseLiteral(consume()));
+    }
+    while (peek() === "*" || peek() === "/") {
+      const op = consume();
+      const right = BigInt(parseTerm());
+      if (op === "*") left *= right;
+      else {
+        if (right === 0n) throw new Error("Division by zero");
+        left /= right;
+      }
+    }
+    return normalizeResult(left);
+  }
+
+  function parseExpr(): number | bigint {
+    let left = BigInt(parseTerm());
+    while (peek() === "+" || peek() === "-") {
+      const op = consume();
+      const right = BigInt(parseTerm());
+      if (op === "+") left += right;
+      else left -= right;
+    }
+    return normalizeResult(left);
+  }
+
+  const result = parseExpr();
+
+  if (pos < tokens.length) {
     throw new Error("Invalid format");
   }
 
-  let accumulator = parseLiteral(tokens[0]!);
-
- for (let i = 1; i < tokens.length; i += 2) {
-    const op = tokens[i] as string;
-    const rightValue = parseLiteral(tokens[i + 1]!);
-
-    if (!["+", "-", "*", "/"].includes(op)) {
-      throw new Error(`Unsupported operator: ${op}`);
-    }
-
-    let result: bigint;
-    switch (op) {
-      case "+":
-        result = BigInt(accumulator) + BigInt(rightValue);
-        break;
-      case "-":
-        result = BigInt(accumulator) - BigInt(rightValue);
-        break;
-      case "*":
-        result = BigInt(accumulator) * BigInt(rightValue);
-        break;
-      case "/":
-        if (BigInt(rightValue) === 0n) {
-          throw new Error("Division by zero");
-        }
-        result = BigInt(accumulator) / BigInt(rightValue);
-        break;
-      default:
-        throw new Error(`Unsupported operator: ${op}`);
-    }
-
-    // Return as number if it fits in safe integer range, otherwise bigint.
-    if (result <= Number.MAX_SAFE_INTEGER && result >= -Number.MAX_SAFE_INTEGER) {
-      accumulator = Number(result);
-    } else {
-      accumulator = result;
-    }
-  }
-
-
-
-  return accumulator;
+  return result;
 }
-
-

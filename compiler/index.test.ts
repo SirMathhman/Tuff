@@ -31,12 +31,28 @@ test('executeTuff("-100I8") returns -100', () => {
 
 test('executeTuff("1U8 + 2U8") returns 3', () => {
   expect(executeTuff("1U8 + 2U8")).toBe(3);
- expect(executeTuff("1U8 + 2U8")).toBe(3);
 });
 
 test('executeTuff("1U8 + 2U8 + 3U8") returns 6', () => {
   expect(executeTuff("1U8 + 2U8 + 3U8")).toBe(6);
 });
+
+test('executeTuff("1U8 * 2U8 + 3U8") returns 5', () => {
+  expect(executeTuff("1U8 * 2U8 + 3U8")).toBe(5);
+});
+
+test('executeTuff("1U8 + 2U8 * 3U8") returns 7', () => {
+  expect(executeTuff("1U8 + 2U8 * 3U8")).toBe(7);
+});
+
+test('executeTuff("(1U8 + 2U8) * 3U8") returns 9', () => {
+  expect(executeTuff("(1U8 + 2U8) * 3U8")).toBe(9);
+});
+
+test('executeTuff("{ 1U8 + 2U8 } * 3U8") returns 9', () => {
+  expect(executeTuff("{ 1U8 + 2U8 } * 3U8")).toBe(9);
+});
+
 
 
 
