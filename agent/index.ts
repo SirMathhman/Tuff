@@ -301,7 +301,10 @@ async function listDirectory(
 async function powershell(command: string, cwd?: string): Promise<string> {
   return new Promise((resolve) => {
     child_process.exec(command, { cwd }, (error, stdout, stderr) => {
-      if (error) resolve(`Error: ${error.message} | Stderr: ${stderr} | Stdout: ${stdout}`);
+      if (error)
+        resolve(
+          `Error: ${error.message} | Stderr: ${stderr} | Stdout: ${stdout}`,
+        );
       else if (stderr) resolve(`Stderr: ${stderr} | Stdout: ${stdout}`);
       else resolve(stdout || "(no output)");
     });
@@ -456,6 +459,11 @@ while (true) {
         continue;
       }
 
+      const reasoning_content = (delta as any).reasoning_content;
+      if (reasoning_content) {
+        process.stdout.write(`\x1b[2m${reasoning_content}\x1b[0m`);
+      }
+
       if (delta.content) {
         process.stdout.write(delta.content);
         assistantContent += delta.content;
@@ -528,6 +536,4 @@ while (true) {
   }
 
   process.stdout.write("\n");
-
-
 }
