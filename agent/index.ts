@@ -380,7 +380,7 @@ async function callTool(
 // Compacting
 
 // ── Context compaction ────────────────────────────────────────────────────────
-const COMPACT_THRESHOLD = 60_000; // compact when estimated usage exceeds this
+const COMPACT_THRESHOLD = 50_000; // compact when estimated usage exceeds this
 const KEEP_RECENT = 8; // always preserve this many tail messages verbatim
 
 function estimateTokens(
