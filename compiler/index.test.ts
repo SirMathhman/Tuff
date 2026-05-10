@@ -13,3 +13,10 @@ test('executeTuff("100U16") returns 100', () => {
   expect(executeTuff("100U16")).toBe(100);
 });
 
+test('executeTuff("-100U8") throws error for negative values', () => {
+  expect(() => executeTuff("-100U8")).toThrow("Negative values are not supported");
+});
+
+test('executeTuff("256U8") throws error for out of range', () => {
+  expect(() => executeTuff("256U8")).toThrow("Value exceeds maximum for U8");
+});

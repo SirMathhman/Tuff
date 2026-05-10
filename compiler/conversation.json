@@ -488,5 +488,154 @@
   {
     "role": "assistant",
     "content": "Fixed! The issue was that TypeScript flagged `match[1]` as potentially `undefined`. I added an explicit guard (`|| !match[1]`) so TypeScript knows it's safe to use after the check.\n\nBoth **tests** ✅ and **lint** ✅ now pass cleanly:\n\n```typescript\nconst match = tuffSourceCode.match(/^(\\d+)/);\nif (!match || !match[1]) {   // ← guards against undefined\n  throw new Error(\"Invalid format\");\n}\nreturn parseInt(match[1], 10);\n```"
+  },
+  {
+    "role": "user",
+    "content": "Add and impl: executeTuff(\"-100U8\") => Error. Use a unique error message."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":1,\"endLine\":20,\"content\":\"import { executeTuff } from \\\"./index\\\";\\nimport { test, expect } from \\\"bun:test\\\";\\n\\ntest(\\\"executeTuff with empty string returns 0\\\", () => {\\n  expect(executeTuff(\\\"\\\")).toBe(0);\\n});\\n\\ntest('executeTuff(\\\"100U8\\\") returns 100', () => {\\n  expect(executeTuff(\\\"100U8\\\")).toBe(100);\\n});\\n\\ntest('executeTuff(\\\"100U16\\\") returns 100', () => {\\n  expect(executeTuff(\\\"100U16\\\")).toBe(100);\\n});\\n\\ntest('executeTuff(\\\"-100U8\\\") throws error for negative values', () => {\\n  expect(() => executeTuff(\\\"-100U8\\\")).toThrow(\\\"Negative values are not supported\\\");\\n});\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":1,\"endLine\":12,\"content\":\"export function executeTuff(tuffSourceCode: string): number {\\n  if (tuffSourceCode === \\\"\\\") {\\n    return 0;\\n  }\\n  if (/^-\\\\d+/.test(tuffSourceCode)) {\\n    throw new Error(\\\"Negative values are not supported\\\");\\n  }\\n  const match = tuffSourceCode.match(/^(\\\\d+)/);\\n  if (!match || !match[1]) {\\n    throw new Error(\\\"Invalid format\\\");\\n  }\\n  return parseInt(match[1], 10);\\n}\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun run test && bun run lint\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: $ bun test\n\nindex.test.ts:\n(pass) executeTuff with empty string returns 0\n(pass) executeTuff(\"100U8\") returns 100\n(pass) executeTuff(\"100U16\") returns 100\n(pass) executeTuff(\"-100U8\") throws error for negative values [15.00ms]\n\n 4 pass\n 0 fail\n 4 expect() calls\nRan 4 tests across 1 file. [23.00ms]\n$ tsc --noEmit\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Done! All 4 tests pass and lint is clean ✅\n\nI added an early check for negative values before attempting to parse:\n\n```typescript\nif (/^-\\d+/.test(tuffSourceCode)) {\n  throw new Error(\"Negative values are not supported\");\n}\n```\n\nNow `executeTuff(\"-100U8\")` throws with the unique message `\"Negative values are not supported\"`."
+  },
+  {
+    "role": "user",
+    "content": "Add and impl: executeTuff(\"256U8\") => Error. Use a unique error message."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":1,\"endLine\":20,\"content\":\"import { executeTuff } from \\\"./index\\\";\\nimport { test, expect } from \\\"bun:test\\\";\\n\\ntest(\\\"executeTuff with empty string returns 0\\\", () => {\\n  expect(executeTuff(\\\"\\\")).toBe(0);\\n});\\n\\ntest('executeTuff(\\\"100U8\\\") returns 100', () => {\\n  expect(executeTuff(\\\"100U8\\\")).toBe(100);\\n});\\n\\ntest('executeTuff(\\\"100U16\\\") returns 100', () => {\\n  expect(executeTuff(\\\"100U16\\\")).toBe(100);\\n});\\n\\ntest('executeTuff(\\\"-100U8\\\") throws error for negative values', () => {\\n  expect(() => executeTuff(\\\"-100U8\\\")).toThrow(\\\"Negative values are not supported\\\");\\n});\\n\\ntest('executeTuff(\\\"256U8\\\") throws error for out of range', () => {\\n  expect(() => executeTuff(\\\"256U8\\\")).toThrow(\\\"Value exceeds maximum for U8\\\");\\n});\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":1,\"endLine\":20}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 15\n1: export function executeTuff(tuffSourceCode: string): number {\n2:   if (tuffSourceCode === \"\") {\n3:     return 0;\n4:   }\n5:   if (/^-\\d+/.test(tuffSourceCode)) {\n6:     throw new Error(\"Negative values are not supported\");\n7:   }\n8:   const match = tuffSourceCode.match(/^(\\d+)/);\n9:   if (!match || !match[1]) {\n10:     throw new Error(\"Invalid format\");\n11:   }\n12:   return parseInt(match[1], 10);\n13: }\n14: \n15: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":1,\"endLine\":15,\"content\":\"export function executeTuff(tuffSourceCode: string): number {\\n  if (tuffSourceCode === \\\"\\\") {\\n    return 0;\\n  }\\n  if (/^-\\\\d+/.test(tuffSourceCode)) {\\n    throw new Error(\\\"Negative values are not supported\\\");\\n  }\\n  const match = tuffSourceCode.match(/^(\\\\d+)U(\\\\d+)/);\\n  if (!match || !match[1] || !match[2]) {\\n    throw new Error(\\\"Invalid format\\\");\\n  }\\n\\n  const value = parseInt(match[1], 10);\\n  const bits = parseInt(match[2], 10);\\n  const maxValue = (1 << bits) - 1;\\n\\n  if (value > maxValue) {\\n    throw new Error(`Value exceeds maximum for U${bits}`);\\n  }\\n\\n  return value;\\n}\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun run test && bun run lint\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: $ bun test\n\nindex.test.ts:\n(pass) executeTuff with empty string returns 0\n(pass) executeTuff(\"100U8\") returns 100\n(pass) executeTuff(\"100U16\") returns 100\n(pass) executeTuff(\"-100U8\") throws error for negative values\n(pass) executeTuff(\"256U8\") throws error for out of range\n\n 5 pass\n 0 fail\n 5 expect() calls\nRan 5 tests across 1 file. [30.00ms]\n$ tsc --noEmit\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Done! All 5 tests pass ✅ and TypeScript linting passes cleanly.\n\nI updated the parser to now extract both the numeric value **and** the bit-width suffix (e.g., `U8`, `U16`), then validate that the value fits within the range `[0, 2^bits - 1]`:\n\n```typescript\nconst match = tuffSourceCode.match(/^(\\d+)U(\\d+)/);\n// ...\nconst maxValue = (1 << bits) - 1;\nif (value > maxValue) {\n  throw new Error(`Value exceeds maximum for U${bits}`);\n}\n```\n\nNow `executeTuff(\"256U8\")` throws with the unique message `\"Value exceeds maximum for U8\"` since a U8 can only hold values up to 255."
   }
 ]
