@@ -189,7 +189,7 @@ async function readFile(
     .map((line, i) => `${i + startLine}: ${line}`)
     .join("\n");
 
-  return joinedLines + `Total lines in file: ${lines.length}\n`;
+  return `Total lines in file: ${lines.length}\n${joinedLines}`;
 }
 
 async function deleteFile(name: string): Promise<string> {
@@ -484,7 +484,7 @@ const messages: OpenAI.Chat.ChatCompletionMessageParam[] =
  *
  * @returns If the loop should continue.
  */
-async function act(): Promise<boolean> {
+async function actCycle(): Promise<boolean> {
   // Auto-compact if approaching the context limit
   if (estimateTokens(messages) > COMPACT_THRESHOLD) {
     const compacted = await compactMessages(messages);
@@ -601,53 +601,55 @@ async function act(): Promise<boolean> {
   return true;
 }
 
+async function act() {
+  // Agentic loop — keep going until model stops calling tools
+  while (true) {
+    const shouldContinue = await actCycle();
+    if (!shouldContinue) break;
+  }
+
+  // Execute `Stop.ps1` if it exists to check for errors after each agent turn
+  // Collect stdErr and stdOutput and give it to the model if we hit a non-zero exit code
+  if (fs.existsSync("Stop.ps1")) {
+    const stopResult = await new Promise<{
+      exitCode: number;
+      output: string;
+    }>((resolve) => {
+      child_process.exec(
+        "powershell -ExecutionPolicy Bypass -File Stop.ps1",
+        (error, stdout, stderr) => {
+          const exitCode = (error as any)?.code ?? 0;
+          const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+          resolve({ exitCode, output });
+        },
+      );
+    });
+
+    if (stopResult.exitCode !== 0) {
+      const msg = stopResult.output || "(no output)";
+      process.stdout.write(
+        `\n[Stop.ps1 failed (exit ${stopResult.exitCode})]\n${msg}\n`,
+      );
+      messages.push({
+        role: "user",
+        content: `Stop hook exited with code ${stopResult.exitCode}. You MUST fix these issues before continuing:\n${msg}`,
+      });
+      await act();
+    } else {
+      process.stdout.write(`\n[Stop.ps1] No issues detected.\n`);
+    }
+  } else {
+    process.stdout.write(`\n[Stop.ps1] No stop hook found, skipping.\n`);
+  }
+}
+
 while (true) {
   const input = await rl.question("You: ");
   messages.push({ role: "user", content: input });
 
   process.stdout.write("Bot: ");
 
-  // Agentic loop — keep going until model stops calling tools
-  while (true) {
-    const shouldContinue = await act();
-    if (!shouldContinue) break;
-
-    // Execute `Stop.ps1` if it exists to check for errors after each agent turn
-    // Collect stdErr and stdOutput and give it to the model if we hit a non-zero exit code
-
-    if (fs.existsSync("Stop.ps1")) {
-      const stopResult = await new Promise<{
-        exitCode: number;
-        output: string;
-      }>((resolve) => {
-        child_process.exec(
-          "powershell -ExecutionPolicy Bypass -File Stop.ps1",
-          (error, stdout, stderr) => {
-            const exitCode = (error as any)?.code ?? 0;
-            const output = [stdout, stderr].filter(Boolean).join("\n").trim();
-            resolve({ exitCode, output });
-          },
-        );
-      });
-
-      if (stopResult.exitCode !== 0) {
-        const msg = stopResult.output || "(no output)";
-        process.stdout.write(
-          `\n[Stop.ps1 failed (exit ${stopResult.exitCode})]\n${msg}\n`,
-        );
-        messages.push({
-          role: "user",
-          content: `Stop hook exited with code ${stopResult.exitCode}. You MUST fix these issues before continuing:\n${msg}`,
-        });
-      } else {
-        process.stdout.write(`\n[Stop.ps1] No issues detected.\n`);
-        break;
-      }
-    } else {
-      process.stdout.write(`\n[Stop.ps1] No stop hook found, skipping.\n`);
-      break;
-    }
-  }
+  await act();
 
   // Save after each complete turn
   await saveConversation(messages);
