@@ -66,7 +66,12 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     }
     if (!remaining) continue;
     const trailingDelimiters: string[] = [];
-    while (remaining.endsWith(")") || remaining.endsWith("}")) {
+    while (
+      remaining.endsWith(")") ||
+      remaining.endsWith("}") ||
+      remaining.endsWith(";") ||
+      remaining.endsWith(":")
+    ) {
       trailingDelimiters.unshift(remaining[remaining.length - 1]!);
       remaining = remaining.slice(0, -1);
     }
@@ -82,8 +87,10 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return tokens[pos];
   }
 
-  function consume(): string {
-    return tokens[pos++]!;
+  function consume(expected?: string): string {
+    const token = tokens[pos++]!;
+    if (expected && token !== expected) throw new Error("Invalid format");
+    return token;
   }
 
   function normalizeResult(val: bigint): number | bigint {
@@ -93,24 +100,62 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return val;
   }
 
+  // Variable scope for let declarations inside blocks
+  const scope = new Map<string, bigint>();
+
+  function parseIdentifier(): string {
+    const name = consume();
+    if (!scope.has(name)) throw new Error(`Undefined variable: ${name}`);
+    return name;
+  }
+
+  // Parse a block item (statement or expression). Returns the value of an expression, null for let statements.
+  function parseBlockItem(): bigint | null {
+    if (peek() === "let") {
+      consume("let"); // let
+      const name = consume(); // variable name
+      consume(":"); // :
+      consume(); // type annotation (e.g., U8, I16) - ignored for evaluation
+      consume("="); // =
+      const value = BigInt(parseExpr());
+      scope.set(name, value);
+      if (peek() === ";") consume(";");
+      return null;
+    } else {
+      const value = BigInt(parseExpr());
+      if (peek() === ";") consume(";");
+      return value;
+    }
+  }
+
   // Recursive descent parser with operator precedence: * / before + -
   function parseTerm(): number | bigint {
     let left: bigint;
-    if (peek() === "(") {
-      consume(); // consume '('
+    const token = peek();
+    if (token === "(") {
+      consume("(");
       const exprResult = BigInt(parseExpr());
-      if (peek() !== ")") throw new Error("Invalid format");
-      consume(); // consume ')'
+      consume(")");
       left = exprResult;
-    } else if (peek() === "{") {
-      consume(); // consume '{'
-      const exprResult = BigInt(parseExpr());
-      if (peek() !== "}") throw new Error("Invalid format");
-      consume(); // consume '}'
-      left = exprResult;
+    } else if (token === "{") {
+      consume("{");
+      let result: bigint | undefined;
+      while (!peek() || peek() !== "}") {
+        const itemValue = parseBlockItem();
+        if (itemValue !== null) {
+          result = itemValue;
+        }
+      }
+      consume("}");
+      left = result!;
+    } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
+      // Variable reference
+      const name = parseIdentifier();
+      left = scope.get(name)!;
     } else {
       left = BigInt(parseLiteral(consume()));
     }
+
     while (peek() === "*" || peek() === "/") {
       const op = consume();
       const right = BigInt(parseTerm());

@@ -53,6 +53,9 @@ test('executeTuff("{ 1U8 + 2U8 } * 3U8") returns 9', () => {
   expect(executeTuff("{ 1U8 + 2U8 } * 3U8")).toBe(9);
 });
 
+test('executeTuff("{ let x : U8 = 1U8 + 2U8; x } * 3U8") returns 9', () => {
+  expect(executeTuff("{ let x : U8 = 1U8 + 2U8; x } * 3U8")).toBe(9);
+});
 
 
 
