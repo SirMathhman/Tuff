@@ -175,15 +175,20 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       const right = BigInt(parseTerm());
       if (op === "+") left += right;
       else left -= right;
-    }
+   }
     return normalizeResult(left);
   }
 
-  const result = parseExpr();
-
-  if (pos < tokens.length) {
-    throw new Error("Invalid format");
+  // Top-level: parse a sequence of statements/expressions, return the last expression's value
+  let result: bigint | undefined;
+  while (pos < tokens.length) {
+    const itemValue = parseBlockItem();
+    if (itemValue !== null) {
+      result = itemValue;
+    }
   }
 
-  return result;
+  return normalizeResult(result!);
 }
+
+

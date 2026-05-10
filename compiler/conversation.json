@@ -1292,5 +1292,184 @@
   {
     "role": "assistant",
     "content": null
+  },
+  {
+    "role": "user",
+    "content": "Add and impl test case: executeTuff(\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\") => 9"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":54,\"endLine\":62}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 62\n54: });\n55: \n56: test('executeTuff(\"{ let x : U8 = 1U8 + 2U8; x } * 3U8\") returns 9', () => {\n57:   expect(executeTuff(\"{ let x : U8 = 1U8 + 2U8; x } * 3U8\")).toBe(9);\n58: });\n59: \n60: \n61: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":150,\"endLine\":200}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 190\n150:       left = result!;\n151:     } else if (token && /^[a-zA-Z_]\\w*$/.test(token)) {\n152:       // Variable reference\n153:       const name = parseIdentifier();\n154:       left = scope.get(name)!;\n155:     } else {\n156:       left = BigInt(parseLiteral(consume()));\n157:     }\n158: \n159:     while (peek() === \"*\" || peek() === \"/\") {\n160:       const op = consume();\n161:       const right = BigInt(parseTerm());\n162:       if (op === \"*\") left *= right;\n163:       else {\n164:         if (right === 0n) throw new Error(\"Division by zero\");\n165:         left /= right;\n166:       }\n167:     }\n168:     return normalizeResult(left);\n169:   }\n170: \n171:   function parseExpr(): number | bigint {\n172:     let left = BigInt(parseTerm());\n173:     while (peek() === \"+\" || peek() === \"-\") {\n174:       const op = consume();\n175:       const right = BigInt(parseTerm());\n176:       if (op === \"+\") left += right;\n177:       else left -= right;\n178:     }\n179:     return normalizeResult(left);\n180:   }\n181: \n182:   const result = parseExpr();\n183: \n184:   if (pos < tokens.length) {\n185:     throw new Error(\"Invalid format\");\n186:   }\n187: \n188:   return result;\n189: }\n190: "
+  },
+  {
+    "role": "assistant",
+    "content": "The test case requires handling `let` declarations at the top level, not just inside blocks. Currently the entry point calls `parseExpr()` which doesn't handle `let`. I need to make the top-level parser also support a sequence of statements/expressions like blocks do.\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":58,\"endLine\":62,\"content\":\"});\\n\\ntest('executeTuff(\\\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\\\") returns 9', () => {\\n  expect(executeTuff(\\\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\\\")).toBe(9);\\n});\\n\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":170,\"endLine\":190}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 190\n170: \n171:   function parseExpr(): number | bigint {\n172:     let left = BigInt(parseTerm());\n173:     while (peek() === \"+\" || peek() === \"-\") {\n174:       const op = consume();\n175:       const right = BigInt(parseTerm());\n176:       if (op === \"+\") left += right;\n177:       else left -= right;\n178:     }\n179:     return normalizeResult(left);\n180:   }\n181: \n182:   const result = parseExpr();\n183: \n184:   if (pos < tokens.length) {\n185:     throw new Error(\"Invalid format\");\n186:   }\n187: \n188:   return result;\n189: }"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":180,\"endLine\":190,\"content\":\" // Top-level: parse a sequence of statements/expressions, return the last expression's value\\n  let result: bigint | undefined;\\n  while (pos < tokens.length) {\\n    const itemValue = parseBlockItem();\\n    if (itemValue !== null) {\\n      result = itemValue;\\n    }\\n  }\\n\\n  return normalizeResult(result!);\\n}\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts 2>&1; tsc --noEmit 2>&1\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"bun test index.test.ts 2>&1; tsc --noEmit 2>&1\"\nbun : \r\nAt line:1 char:1\r\n+ bun test index.test.ts 2>&1; tsc --noEmit 2>&1\r\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nindex.test.ts:\r\n# Unhandled error between tests\r\n-------------------------------\r\nerror: Unexpected end of file\r\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:192:1\r\n-------------------------------\r\n 0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [22.00ms]\r\n | Stderr: bun : \r\nAt line:1 char:1\r\n+ bun test index.test.ts 2>&1; tsc --noEmit 2>&1\r\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nindex.test.ts:\r\n# Unhandled error between tests\r\n-------------------------------\r\nerror: Unexpected end of file\r\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:192:1\r\n-------------------------------\r\n 0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [22.00ms]\r\n | Stdout: bun test v1.3.13 (bf2e2cec)\nindex.ts(193,1): error TS1005: '}' expected.\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":178,\"endLine\":192}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 193\n178:     }\n179:     return normalizeResult(left);\n180:  // Top-level: parse a sequence of statements/expressions, return the last expression's value\n181:   let result: bigint | undefined;\n182:   while (pos < tokens.length) {\n183:     const itemValue = parseBlockItem();\n184:     if (itemValue !== null) {\n185:       result = itemValue;\n186:     }\n187:   }\n188: \n189:   return normalizeResult(result!);\n190: }\n191: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":169,\"endLine\":193}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 193\n169:   }\n170: \n171:   function parseExpr(): number | bigint {\n172:     let left = BigInt(parseTerm());\n173:     while (peek() === \"+\" || peek() === \"-\") {\n174:       const op = consume();\n175:       const right = BigInt(parseTerm());\n176:       if (op === \"+\") left += right;\n177:       else left -= right;\n178:     }\n179:     return normalizeResult(left);\n180:  // Top-level: parse a sequence of statements/expressions, return the last expression's value\n181:   let result: bigint | undefined;\n182:   while (pos < tokens.length) {\n183:     const itemValue = parseBlockItem();\n184:     if (itemValue !== null) {\n185:       result = itemValue;\n186:     }\n187:   }\n188: \n189:   return normalizeResult(result!);\n190: }\n191: \n192: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":178,\"endLine\":193,\"content\":\"   }\\n    return normalizeResult(left);\\n  }\\n\\n  // Top-level: parse a sequence of statements/expressions, return the last expression's value\\n  let result: bigint | undefined;\\n  while (pos < tokens.length) {\\n    const itemValue = parseBlockItem();\\n    if (itemValue !== null) {\\n      result = itemValue;\\n    }\\n  }\\n\\n  return normalizeResult(result!);\\n}\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null
   }
 ]
