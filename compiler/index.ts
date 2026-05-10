@@ -3,7 +3,7 @@ export function executeTuff(tuffSourceCode: string): number {
     return 0;
   }
   const match = tuffSourceCode.match(/^(\d+)/);
-  if (!match) {
+  if (!match || !match[1]) {
     throw new Error("Invalid format");
   }
   return parseInt(match[1], 10);
