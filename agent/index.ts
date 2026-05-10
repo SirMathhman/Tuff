@@ -71,10 +71,24 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
-  simpleTool(
-    "readFile",
-    "Read a file and return its content with line numbers starting at 1.",
-  ),
+  {
+    type: "function",
+    function: {
+      name: "readFile",
+      description: `Read a file and return its content with line numbers.
+      startLine is inclusive, endLine is exclusive. Line numbers start at 1.
+      Max 500 lines.`,
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          startLine: { type: "number" },
+          endLine: { type: "number" },
+        },
+        required: ["name"],
+      },
+    },
+  },
   simpleTool(
     "deleteFile",
     "Delete a file. Recursively removes empty parent directories.",
@@ -153,13 +167,29 @@ async function editFile(
   return "File updated.";
 }
 
-async function readFile(name: string): Promise<string> {
+async function readFile(
+  name: string,
+  startLine: number,
+  endLine: number,
+): Promise<string> {
   if (!fs.existsSync(name)) return "Error: File not found.";
   const content = await fs.promises.readFile(name, "utf-8");
-  return content
-    .split("\n")
-    .map((line, i) => `${i + 1}: ${line}`)
+  const lines = content.split("\n");
+
+  if (startLine < 1 || endLine > lines.length + 1 || startLine >= endLine) {
+    return "Error: Invalid line range.";
+  }
+
+  if (endLine - startLine > 500) {
+    return "Error: Requested line range exceeds maximum of 500 lines.";
+  }
+
+  const joinedLines = lines
+    .slice(startLine - 1, endLine - 1)
+    .map((line, i) => `${i + startLine}: ${line}`)
     .join("\n");
+
+  return joinedLines + `Total lines in file: ${lines.length}\n`;
 }
 
 async function deleteFile(name: string): Promise<string> {
@@ -323,7 +353,7 @@ async function callTool(
     case "editFile":
       return editFile(args.name, args.startLine, args.endLine, args.content);
     case "readFile":
-      return readFile(args.name);
+      return readFile(args.name, args.startLine, args.endLine);
     case "deleteFile":
       return deleteFile(args.name);
     case "listDirectory":
@@ -570,7 +600,7 @@ while (true) {
       });
     }
 
-   process.stdout.write("Bot: ");
+    process.stdout.write("Bot: ");
   }
 
   // Save after each complete turn
@@ -578,4 +608,3 @@ while (true) {
 
   process.stdout.write("\n");
 }
-
