@@ -51,7 +51,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return 0;
   }
 
-  const rawTokens = tuffSourceCode.trim().split(/\s+/);
+ const rawTokens = tuffSourceCode.trim().split(/\s+/);
   const tokens: string[] = [];
   for (const raw of rawTokens) {
     let remaining = raw;
@@ -66,6 +66,12 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     // Handle leading & as a separate token (reference operator)
     if (remaining.startsWith("&")) {
       tokens.push("&");
+      remaining = remaining.slice(1);
+    }
+    // Handle leading * followed by identifier as dereference: split into "*" and the rest
+    // But keep "*U8", "*I16" etc. together as pointer type annotations
+    if (remaining.startsWith("*") && !/^\*[UI]/.test(remaining)) {
+      tokens.push("*");
       remaining = remaining.slice(1);
     }
     if (!remaining) continue;
@@ -241,7 +247,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return { value: normalizeResult(BigInt(left.value)), type: left.type };
   }
 
-  function parseTermWithType(): { value: number | bigint; type: string } {
+ function parseTermWithType(): { value: number | bigint; type: string } {
     let result: { value: bigint; type: string };
     const token = peek();
     if (token === "(") {
@@ -252,7 +258,6 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     } else if (token === "{") {
       consume("{");
       let blockValue: bigint | undefined;
-      let blockType = "U8"; // default for empty blocks
       while (!peek() || peek() !== "}") {
         const itemValue = parseBlockItem();
         if (itemValue !== null) {
@@ -260,13 +265,19 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
         }
       }
       consume("}");
-      result = { value: blockValue!, type: blockType };
+      result = { value: blockValue!, type: "U8" };
     } else if (token === "&") {
-      // Reference operator — evaluate to the referenced variable's value and type
+      // Reference operator — returns pointer type *T
       consume("&");
       const name = parseIdentifier();
       const entry = scope.get(name)!;
-      result = { value: entry.value, type: entry.type };
+      result = { value: entry.value, type: "*" + entry.type };
+    } else if (token === "*") {
+      // Dereference operator — strips the leading * to get base type T
+      consume("*");
+      const name = parseIdentifier();
+      const entry = scope.get(name)!;
+      result = { value: entry.value, type: entry.type.replace(/^\*/, "") };
     } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
       // Variable reference — use the stored type from scope
       const name = parseIdentifier();
@@ -289,13 +300,14 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
       if (op === "*") result.value *= BigInt(rightResult.value);
       else {
-        if (BigInt(rightResult.value) === 0n)
-          throw new Error("Division by zero");
+        if (BigInt(rightResult.value) === 0n) throw new Error("Division by zero");
         result.value /= BigInt(rightResult.value);
       }
     }
     return { value: normalizeResult(result.value), type: result.type };
   }
+
+
 
   // Combine two types into a wider one that can hold both values safely
   function combineTypes(typeA: string, typeB: string): string {

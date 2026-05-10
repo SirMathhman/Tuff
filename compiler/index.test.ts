@@ -105,8 +105,8 @@ test('executeTuff("let x = 0U8; let y : *U8 = &x;") returns 0', () => {
   expect(executeTuff("let x = 0U8; let y : *U8 = &x;")).toBe(0);
 });
 
-
-
-
+test('executeTuff("let x = 0U8; let y : *U8 = &x; let z : U8 = *y;") returns 0', () => {
+  expect(executeTuff("let x = 0U8; let y : *U8 = &x; let z : U8 = *y;")).toBe(0);
+});
 
 
