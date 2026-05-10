@@ -94,6 +94,29 @@ function tokenize(tuffSourceCode: string): string[] {
       tokens.push("&&");
       remaining = remaining.slice(2);
     }
+    // Handle comparison operators: multi-char first, then single-char
+    if (remaining.startsWith("<=")) {
+      tokens.push("<=");
+      remaining = remaining.slice(2);
+    } else if (remaining.startsWith(">=")) {
+      tokens.push(">=");
+      remaining = remaining.slice(2);
+    } else if (remaining.startsWith("==")) {
+      tokens.push("==");
+      remaining = remaining.slice(2);
+    } else if (remaining.startsWith("!=")) {
+      tokens.push("!=");
+      remaining = remaining.slice(2);
+    } else if (remaining.startsWith("<")) {
+      tokens.push("<");
+      remaining = remaining.slice(1);
+    } else if (remaining.startsWith(">")) {
+      tokens.push(">");
+      remaining = remaining.slice(1);
+    } else if (remaining.startsWith("!")) {
+      tokens.push("!");
+      remaining = remaining.slice(1);
+    }
     // Handle leading & as a separate token (reference operator)
     if (remaining.startsWith("&")) {
       tokens.push("&");
@@ -105,7 +128,9 @@ function tokenize(tuffSourceCode: string): string[] {
       tokens.push("*");
       remaining = remaining.slice(1);
     }
+
     const trailingDelimiters: string[] = [];
+
     while (
       remaining.endsWith(")") ||
       remaining.endsWith("}") ||
@@ -291,7 +316,40 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       left.type = combinedType;
     }
 
-    // Helper: apply a logical operator only on Bool operands, throwing if types don't match
+    // Comparison operators: < > <= >= == != — result is Bool type
+    const comparisonOps = ["<", ">", "<=", ">=", "==", "!="];
+    while (comparisonOps.includes(peek() ?? "")) {
+      const op = consume();
+      const right = parseTermWithType();
+
+      let cmpResult: bigint;
+      switch (op) {
+        case "<":
+          cmpResult = BigInt(left.value) < BigInt(right.value) ? 1n : 0n;
+          break;
+        case ">":
+          cmpResult = BigInt(left.value) > BigInt(right.value) ? 1n : 0n;
+          break;
+        case "<=":
+          cmpResult = BigInt(left.value) <= BigInt(right.value) ? 1n : 0n;
+          break;
+        case ">=":
+          cmpResult = BigInt(left.value) >= BigInt(right.value) ? 1n : 0n;
+          break;
+        case "==":
+          cmpResult = BigInt(left.value) === BigInt(right.value) ? 1n : 0n;
+          break;
+        case "!=":
+          cmpResult = BigInt(left.value) !== BigInt(right.value) ? 1n : 0n;
+          break;
+        default:
+          throw new Error(`Unknown comparison operator: ${op}`);
+      }
+
+      left.value = cmpResult;
+      left.type = "Bool";
+    }
+
     function applyLogicalOp(
       opName: string,
       bitwiseFn: (a: bigint, b: bigint) => bigint,

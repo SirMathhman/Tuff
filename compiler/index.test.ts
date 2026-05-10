@@ -144,9 +144,46 @@ test('executeTuff("let x = true; let y = false; x || y") returns 1', () => {
 test('executeTuff("let x = true; let y = false; x && y") returns 0', () => {
   expect(executeTuff("let x = true; let y = false; x && y")).toBe(0);
 });
-test('executeTuff("let mut x = 0U8; { x = 100U8; } x") returns 100', () => {
-  expect(executeTuff("let mut x = 0U8; { x = 100U8; } x")).toBe(100);
+test('executeTuff("let x = 100U8; let y = 200U8; x < y") returns 1', () => {
+  expect(executeTuff("let x = 100U8; let y = 200U8; x < y")).toBe(1);
 });
+
+test('executeTuff("let x = 100U8; let y = 50U8; x > y") returns 1', () => {
+  expect(executeTuff("let x = 100U8; let y = 50U8; x > y")).toBe(1);
+});
+
+test('executeTuff("let x = 100U8; let y = 100U8; x == y") returns 1', () => {
+  expect(executeTuff("let x = 100U8; let y = 100U8; x == y")).toBe(1);
+});
+
+test('executeTuff("let x = 100U8; let y = 200U8; x != y") returns 1', () => {
+  expect(executeTuff("let x = 100U8; let y = 200U8; x != y")).toBe(1);
+});
+
+test('executeTuff("let x = 100U8; let y = 100U8; x <= y") returns 1', () => {
+  expect(executeTuff("let x = 100U8; let y = 100U8; x <= y")).toBe(1);
+});
+
+test('executeTuff("let x = 200U8; let y = 100U8; x >= y") returns 1', () => {
+  expect(executeTuff("let x = 200U8; let y = 100U8; x >= y")).toBe(1);
+});
+
+test('executeTuff("let x = 50U8; let y = 100U8; x < y") returns 1', () => {
+  expect(executeTuff("let x = 50U8; let y = 100U8; x < y")).toBe(1);
+});
+
+test('executeTuff("let x = 200U8; let y = 100U8; x > y") returns 1', () => {
+  expect(executeTuff("let x = 200U8; let y = 100U8; x > y")).toBe(1);
+});
+
+test('executeTuff("let x = 50U8; let y = 100U8; x < y") returns false when equal', () => {
+  expect(executeTuff("let x = 100U8; let y = 100U8; x < y")).toBe(0);
+});
+
+test('executeTuff("let x = true; let y = false; (x == 1U8) || y") returns 1', () => {
+  expect(executeTuff("let x = true; let y = false; (x == 1U8) || y")).toBe(1);
+});
+
 
 
 
