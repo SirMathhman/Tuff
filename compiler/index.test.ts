@@ -5,3 +5,8 @@ test("executeTuff with empty string returns 0", () => {
   expect(executeTuff("")).toBe(0);
 });
 
+test('executeTuff("100U8") returns 100', () => {
+  expect(executeTuff("100U8")).toBe(100);
+});
+
+
