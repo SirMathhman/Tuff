@@ -61,5 +61,10 @@ test('executeTuff("let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y") returns
   expect(executeTuff("let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y")).toBe(9);
 });
 
+test('executeTuff("let x : U8 = 100U8;") returns 0', () => {
+  expect(executeTuff("let x : U8 = 100U8;")).toBe(0);
+});
+
+
 
 

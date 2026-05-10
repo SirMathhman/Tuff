@@ -179,8 +179,8 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return normalizeResult(left);
   }
 
-  // Top-level: parse a sequence of statements/expressions, return the last expression's value
-  let result: bigint | undefined;
+ // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)
+  let result = 0n;
   while (pos < tokens.length) {
     const itemValue = parseBlockItem();
     if (itemValue !== null) {
@@ -188,7 +188,9 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     }
   }
 
-  return normalizeResult(result!);
+  return normalizeResult(result);
 }
+
+
 
 
