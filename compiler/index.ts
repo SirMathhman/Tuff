@@ -100,8 +100,8 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return val;
   }
 
-  // Variable scope for let declarations inside blocks
-  const scope = new Map<string, bigint>();
+ // Variable scope for let declarations inside blocks: tracks both value and type string
+  const scope = new Map<string, { value: bigint; type: string }>();
 
   function parseIdentifier(): string {
     const name = consume();
@@ -109,85 +109,166 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return name;
   }
 
+  // Parse a type annotation like U8, I16, etc. Returns the full token (e.g., "U8")
+  function parseTypeAnnotation(): string {
+    const typeToken = consume();
+    if (!/^[UI](8|16|32|64)$/.test(typeToken)) throw new Error(`Invalid type: ${typeToken}`);
+    return typeToken;
+  }
+
+  // Infer the type of a literal token (e.g., "U8" from "100U8")
+  function inferLiteralType(literal: string): string {
+    const match = literal.match(/^(-?\d+)([UI](?:8|16|32|64))$/);
+    if (!match) throw new Error("Invalid format");
+    return match[2]!; // e.g., "U8", "I16"
+  }
+
+  // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)
+  function isAssignable(sourceType: string, targetType: string): boolean {
+    const srcMatch = sourceType.match(/^([UI])(\d+)$/);
+    const tgtMatch = targetType.match(/^([UI])(\d+)$/);
+    if (!srcMatch || !tgtMatch) return false;
+
+    // Same signedness required (U can't go to I and vice versa for now, keep it simple: must match exactly)
+    if (srcMatch[1] !== tgtMatch[1]) return false;
+
+   const srcBits = parseInt(srcMatch[2]!, 10);
+    const tgtBits = parseInt(tgtMatch[2]!, 10);
+
+
+    // Source type bits must be <= target type bits for safe assignment
+    // But actually the test expects U16 -> U8 to fail, so we require exact match or source narrower than target
+    return srcBits <= tgtBits;
+  }
+
   // Parse a block item (statement or expression). Returns the value of an expression, null for let statements.
   function parseBlockItem(): bigint | null {
     if (peek() === "let") {
       consume("let");        // let
       const name = consume(); // variable name
+
+      let declaredType: string | undefined;
       // Type annotation is optional: `:` followed by type token may or may not be present
       if (peek() === ":") {
         consume(":");         // :
-        consume();            // type annotation (e.g., U8, I16) - ignored for evaluation
+        declaredType = parseTypeAnnotation();
       }
+
       consume("=");          // =
-      const value = BigInt(parseExpr());
-      scope.set(name, value);
+      const exprResult = parseExprWithType();
+      const value = BigInt(exprResult.value);
+
+      // If a type was explicitly declared, check compatibility with the expression's inferred type
+      if (declaredType) {
+        if (!isAssignable(exprResult.type, declaredType)) {
+          throw new Error(`Cannot assign ${exprResult.type} to variable of type ${declaredType}`);
+        }
+        scope.set(name, { value, type: declaredType });
+      } else {
+        // No explicit type annotation — infer from the expression's literal type if possible
+        scope.set(name, { value, type: exprResult.type });
+      }
+
       if (peek() === ";") consume(";");
       return null;
     } else {
-      const value = BigInt(parseExpr());
+      const exprResult = parseExprWithType();
       if (peek() === ";") consume(";");
-      return value;
+      return BigInt(exprResult.value);
     }
   }
 
-  // Recursive descent parser with operator precedence: * / before + -
-  function parseTerm(): number | bigint {
-    let left: bigint;
+  // Extended expression parser that also tracks the inferred type of the result
+  function parseExprWithType(): { value: number | bigint; type: string } {
+    let left = parseTermWithType();
+    while (peek() === "+" || peek() === "-") {
+      const op = consume();
+      const right = parseTermWithType();
+
+      // When combining types, widen to the larger bit width and keep signedness consistent
+      const combinedType = combineTypes(left.type, right.type);
+
+      if (op === "+") left.value = BigInt(left.value) + BigInt(right.value);
+      else left.value = BigInt(left.value) - BigInt(right.value);
+
+      left.type = combinedType;
+    }
+    return { value: normalizeResult(BigInt(left.value)), type: left.type };
+  }
+
+  function parseTermWithType(): { value: number | bigint; type: string } {
+    let result: { value: bigint; type: string };
     const token = peek();
     if (token === "(") {
       consume("(");
-      const exprResult = BigInt(parseExpr());
+      const innerResult = parseExprWithType();
       consume(")");
-      left = exprResult;
+      result = { value: BigInt(innerResult.value), type: innerResult.type };
     } else if (token === "{") {
       consume("{");
-      let result: bigint | undefined;
+      let blockValue: bigint | undefined;
+      let blockType = "U8"; // default for empty blocks
       while (!peek() || peek() !== "}") {
         const itemValue = parseBlockItem();
         if (itemValue !== null) {
-          result = itemValue;
+          blockValue = itemValue;
         }
       }
       consume("}");
-      left = result!;
+      result = { value: blockValue!, type: blockType };
     } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
-      // Variable reference
+      // Variable reference — use the stored type from scope
       const name = parseIdentifier();
-      left = scope.get(name)!;
+      const entry = scope.get(name)!;
+      result = { value: entry.value, type: entry.type };
     } else {
-      left = BigInt(parseLiteral(consume()));
+      const literalToken = consume();
+      result = { value: BigInt(parseLiteral(literalToken)), type: inferLiteralType(literalToken) };
     }
 
     while (peek() === "*" || peek() === "/") {
       const op = consume();
-      const right = BigInt(parseTerm());
-      if (op === "*") left *= right;
+      const rightResult = parseTermWithType();
+
+      // Combine types for multiplication/division — widen to larger bit width
+      result.type = combineTypes(result.type, rightResult.type);
+
+      if (op === "*") result.value *= BigInt(rightResult.value);
       else {
-        if (right === 0n) throw new Error("Division by zero");
-        left /= right;
+        if (BigInt(rightResult.value) === 0n) throw new Error("Division by zero");
+        result.value /= BigInt(rightResult.value);
       }
     }
-    return normalizeResult(left);
+    return { value: normalizeResult(result.value), type: result.type };
   }
 
-  function parseExpr(): number | bigint {
-    let left = BigInt(parseTerm());
-    while (peek() === "+" || peek() === "-") {
-      const op = consume();
-      const right = BigInt(parseTerm());
-      if (op === "+") left += right;
-      else left -= right;
-    }
-    return normalizeResult(left);
+ // Combine two types into a wider one that can hold both values safely
+  function combineTypes(typeA: string, typeB: string): string {
+    const matchA = typeA.match(/^([UI])(\d+)$/);
+    const matchB = typeB.match(/^([UI])(\d+)$/);
+
+    if (!matchA || !matchB) return "U64"; // fallback to widest
+
+    const prefixA = matchA[1];
+    const bitsA = parseInt(matchA[2]!, 10);
+    const prefixB = matchB[1];
+    const bitsB = parseInt(matchB[2]!, 10);
+
+    // If either is signed, result is signed (I) to preserve sign semantics
+    const combinedPrefix = prefixA === "I" || prefixB === "I" ? "I" : "U";
+    const combinedBits = Math.max(bitsA, bitsB);
+
+    return `${combinedPrefix}${combinedBits}`;
   }
+
+  // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)
 
   // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)
   let result = 0n;
   while (pos < tokens.length) {
     const itemValue = parseBlockItem();
     if (itemValue !== null) {
-      result = itemValue;
+      result = BigInt(itemValue);
     }
   }
 

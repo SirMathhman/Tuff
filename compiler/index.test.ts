@@ -69,5 +69,13 @@ test('executeTuff("let x = 100U8; x") returns 100', () => {
   expect(executeTuff("let x = 100U8; x")).toBe(100);
 });
 
+test('executeTuff("let x = 0U8; let x = 10U8; x") returns 10', () => {
+  expect(executeTuff("let x = 0U8; let x = 10U8; x")).toBe(10);
+});
+
+test('executeTuff("let x : U8 = 0U16; x") throws error for type mismatch', () => {
+  expect(() => executeTuff("let x : U8 = 0U16; x")).toThrow();
+});
+
 
 
