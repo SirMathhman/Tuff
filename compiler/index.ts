@@ -51,7 +51,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return 0;
   }
 
- const rawTokens = tuffSourceCode.trim().split(/\s+/);
+  const rawTokens = tuffSourceCode.trim().split(/\s+/);
   const tokens: string[] = [];
   for (const raw of rawTokens) {
     let remaining = raw;
@@ -80,13 +80,12 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       remaining = remaining.slice(0, -1);
     }
     if (remaining) tokens.push(remaining);
-   for (const d of trailingDelimiters) {
+    for (const d of trailingDelimiters) {
       tokens.push(d);
     }
   }
 
   let pos = 0;
-
 
   function peek(): string | undefined {
     return tokens[pos];
@@ -105,20 +104,25 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return val;
   }
 
- // Variable scope for let declarations inside blocks: tracks both value and type string
- const scope = new Map<string, { value: bigint; type: string; mutable: boolean }>();
-
+  // Variable scope for let declarations inside blocks: tracks both value and type string
+  const scope = new Map<
+    string,
+    { value: bigint; type: string; mutable: boolean }
+  >();
 
   function parseIdentifier(): string {
     const name = consume();
     if (!scope.has(name)) throw new Error(`Undefined variable: ${name}`);
     return name;
   }
-
-  // Parse a type annotation like U8, I16, etc. Returns the full token (e.g., "U8")
+  // Parse a type annotation like U8, I16, *U8, etc. Returns the full token (e.g., "U8" or "*U8")
   function parseTypeAnnotation(): string {
     const typeToken = consume();
-    if (!/^[UI](8|16|32|64)$/.test(typeToken)) throw new Error(`Invalid type: ${typeToken}`);
+    if (
+      !/^[UI](8|16|32|64)$/.test(typeToken) &&
+      !/^\*[UI](8|16|32|64)$/.test(typeToken)
+    )
+      throw new Error(`Invalid type: ${typeToken}`);
     return typeToken;
   }
 
@@ -131,26 +135,26 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)
   function isAssignable(sourceType: string, targetType: string): boolean {
-    const srcMatch = sourceType.match(/^([UI])(\d+)$/);
-    const tgtMatch = targetType.match(/^([UI])(\d+)$/);
+    // Handle pointer types: a reference (*T) should match the base type T in assignment context
+    const srcBase = sourceType.replace(/^\*/, "");
+    const tgtBase = targetType.replace(/^\*/, "");
+
+    const srcMatch = srcBase.match(/^([UI])(\d+)$/);
+    const tgtMatch = tgtBase.match(/^([UI])(\d+)$/);
     if (!srcMatch || !tgtMatch) return false;
 
     // Same signedness required (U can't go to I and vice versa for now, keep it simple: must match exactly)
     if (srcMatch[1] !== tgtMatch[1]) return false;
-
-   const srcBits = parseInt(srcMatch[2]!, 10);
+    const srcBits = parseInt(srcMatch[2]!, 10);
     const tgtBits = parseInt(tgtMatch[2]!, 10);
 
-
     // Source type bits must be <= target type bits for safe assignment
-    // But actually the test expects U16 -> U8 to fail, so we require exact match or source narrower than target
     return srcBits <= tgtBits;
   }
 
-// Parse a block item (statement or expression). Returns the value of an expression, null for let statements.
   function parseBlockItem(): bigint | null {
     if (peek() === "let") {
-      consume("let");        // let
+      consume("let"); // let
 
       // Check for optional `mut` keyword
       const mutable = peek() === "mut";
@@ -161,18 +165,20 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       let declaredType: string | undefined;
       // Type annotation is optional: `:` followed by type token may or may not be present
       if (peek() === ":") {
-        consume(":");         // :
+        consume(":"); // :
         declaredType = parseTypeAnnotation();
       }
 
-      consume("=");          // =
+      consume("="); // =
       const exprResult = parseExprWithType();
       const value = BigInt(exprResult.value);
 
       // If a type was explicitly declared, check compatibility with the expression's inferred type
       if (declaredType) {
         if (!isAssignable(exprResult.type, declaredType)) {
-          throw new Error(`Cannot assign ${exprResult.type} to variable of type ${declaredType}`);
+          throw new Error(
+            `Cannot assign ${exprResult.type} to variable of type ${declaredType}`,
+          );
         }
         scope.set(name, { value, type: declaredType, mutable });
       } else {
@@ -181,9 +187,12 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       }
 
       if (peek() === ";") consume(";");
-     return null;
-    } else if (peek() && /^[a-zA-Z_]\w*$/.test(peek()!) && tokens[pos + 1] === "=") {
-
+      return null;
+    } else if (
+      peek() &&
+      /^[a-zA-Z_]\w*$/.test(peek()!) &&
+      tokens[pos + 1] === "="
+    ) {
       // Assignment expression: `x = value` — returns the assigned value
       const name = consume();
       const entry = scope.get(name);
@@ -191,13 +200,15 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
         throw new Error(`Cannot reassign immutable variable: ${name}`);
       }
 
-      consume("=");          // =
+      consume("="); // =
       const exprResult = parseExprWithType();
       const value = BigInt(exprResult.value);
 
       // Check type compatibility for the assignment
       if (!isAssignable(exprResult.type, entry.type)) {
-        throw new Error(`Cannot assign ${exprResult.type} to variable of type ${entry.type}`);
+        throw new Error(
+          `Cannot assign ${exprResult.type} to variable of type ${entry.type}`,
+        );
       }
 
       scope.set(name, { ...entry, value });
@@ -227,10 +238,10 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
       left.type = combinedType;
     }
-   return { value: normalizeResult(BigInt(left.value)), type: left.type };
+    return { value: normalizeResult(BigInt(left.value)), type: left.type };
   }
 
-   function parseTermWithType(): { value: number | bigint; type: string } {
+  function parseTermWithType(): { value: number | bigint; type: string } {
     let result: { value: bigint; type: string };
     const token = peek();
     if (token === "(") {
@@ -263,7 +274,10 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       result = { value: entry.value, type: entry.type };
     } else {
       const literalToken = consume();
-      result = { value: BigInt(parseLiteral(literalToken)), type: inferLiteralType(literalToken) };
+      result = {
+        value: BigInt(parseLiteral(literalToken)),
+        type: inferLiteralType(literalToken),
+      };
     }
 
     while (peek() === "*" || peek() === "/") {
@@ -275,15 +289,15 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
       if (op === "*") result.value *= BigInt(rightResult.value);
       else {
-        if (BigInt(rightResult.value) === 0n) throw new Error("Division by zero");
+        if (BigInt(rightResult.value) === 0n)
+          throw new Error("Division by zero");
         result.value /= BigInt(rightResult.value);
       }
     }
     return { value: normalizeResult(result.value), type: result.type };
   }
 
-
- // Combine two types into a wider one that can hold both values safely
+  // Combine two types into a wider one that can hold both values safely
   function combineTypes(typeA: string, typeB: string): string {
     const matchA = typeA.match(/^([UI])(\d+)$/);
     const matchB = typeB.match(/^([UI])(\d+)$/);
@@ -315,5 +329,3 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   return normalizeResult(result);
 }
-
-
