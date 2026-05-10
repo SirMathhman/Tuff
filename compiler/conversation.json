@@ -440,5 +440,70 @@
   {
     "role": "assistant",
     "content": "All tests pass (36/36), TypeScript compiles cleanly, and ESLint reports no errors. The two issues are fixed:\n\n1. **`prefer-const`** - Changed `let left` to `const left` in `parseExprWithType()` since the object reference isn't reassigned, only its properties mutated.\n2. **`max-lines-per-function`** - Extracted the tokenizer logic into a top-level `tokenize()` function and moved `normalizeResult()` and `combineTypes()` outside `executeTuff()`, bringing it from 273 lines down to under 250.\n\nThe test case `'executeTuff(\"let x = 0U8; let y = &x;\") returns 0'` already existed in the file (line 100-102)."
+  },
+  {
+    "role": "user",
+    "content": "Add and impl test case: executeTuff(\"let mut x = 0U8; { x = 100U8; } x\") => 100"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":145,\"endLine\":149}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 149\n145:   expect(executeTuff(\"let x = true; let y = false; x && y\")).toBe(0);\n146: });\n147: \n148: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":147,\"endLine\":149,\"content\":\"test('executeTuff(\\\"let mut x = 0U8; { x = 100U8; } x\\\") returns 100', () => {\\n  expect(executeTuff(\\\"let mut x = 0U8; { x = 100U8; } x\\\")).toBe(100);\\n});\\n\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test 2>&1\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1\"\nbun : \r\nAt line:1 char:53\r\n+ cd C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1\r\n+                                                     ~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nindex.test.ts:\r\n(pass) executeTuff with empty string returns 0\r\n(pass) executeTuff(\"100U8\") returns 100\r\n(pass) executeTuff(\"100U16\") returns 100\r\n(pass) executeTuff(\"-100U8\") throws error for negative values\r\n(pass) executeTuff(\"256U8\") throws error for out of range\r\n(pass) executeTuff(\"9007199254740993U64\") returns bigint\r\n(pass) executeTuff(\"-100I8\") returns -100\r\n(pass) executeTuff(\"1U8 + 2U8\") returns 3\r\n(pass) executeTuff(\"1U8 + 2U8 + 3U8\") returns 6\r\n(pass) executeTuff(\"1U8 * 2U8 + 3U8\") returns 5\r\n(pass) executeTuff(\"1U8 + 2U8 * 3U8\") returns 7\r\n(pass) executeTuff(\"(1U8 + 2U8) * 3U8\") returns 9\r\n(pass) executeTuff(\"{ 1U8 + 2U8 } * 3U8\") returns 9\r\n(pass) executeTuff(\"{ let x : U8 = 1U8 + 2U8; x } * 3U8\") returns 9\r\n(pass) executeTuff(\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\") returns 9\r\n(pass) executeTuff(\"let x : U8 = 100U8;\") returns 0\r\n(pass) executeTuff(\"let x = 100U8; x\") returns 100\r\n(pass) executeTuff(\"let x = 0U8; let x = 10U8; x\") returns 10\r\n(pass) executeTuff(\"let x : U8 = 0U16; x\") throws error for type mismatch\r\n(pass) executeTuff(\"let x = 0U16; let y : U8 = x;\") throws error for narrowing assignment\r\n(pass) executeTuff(\"let mut x = 0U8; x = 1U8; x\") returns 1\r\n(pass) executeTuff(\"let mut x = 0U8; x = 1U16; x\") throws error for widening assignment\r\n(pass) executeTuff(\"x = 1U16; x\") throws error for undeclared variable\r\n(pass) executeTuff(\"let x = 100U16; x = 1U16; x\") throws error for reassigning immutable variable\r\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; let z : U8 = *y;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; *y\") returns 0\r\n(pass) executeTuff(\"let x = 1U8; let y : *U8 = &x; *y\") returns 1\r\n(pass) executeTuff(\"&x\") throws error for undefined variable\r\n(pass) executeTuff(\"let x = 0U8; let y : *U16 = &x;\") throws error for pointer type mismatch\r\n(pass) executeTuff(\"let x = 0U8; *x\") throws error for dereferencing non-pointer\r\n(pass) executeTuff(\"let x : Bool = true; x\") returns 1\r\n(pass) executeTuff(\"let x : Bool = false; x\") returns 0\r\n(pass) executeTuff(\"let x = true; let y = false; x || y\") returns 1\r\n(pass) executeTuff(\"let x = true; let y = false; x && y\") returns 0\r\n(pass) executeTuff(\"let mut x = 0U8; { x = 100U8; } x\") returns 100\r\n 37 pass\r\n 0 fail\r\n 37 expect() calls\r\nRan 37 tests across 1 file. [46.00ms]\r\n | Stderr: bun : \r\nAt line:1 char:53\r\n+ cd C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1\r\n+                                                     ~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nindex.test.ts:\r\n(pass) executeTuff with empty string returns 0\r\n(pass) executeTuff(\"100U8\") returns 100\r\n(pass) executeTuff(\"100U16\") returns 100\r\n(pass) executeTuff(\"-100U8\") throws error for negative values\r\n(pass) executeTuff(\"256U8\") throws error for out of range\r\n(pass) executeTuff(\"9007199254740993U64\") returns bigint\r\n(pass) executeTuff(\"-100I8\") returns -100\r\n(pass) executeTuff(\"1U8 + 2U8\") returns 3\r\n(pass) executeTuff(\"1U8 + 2U8 + 3U8\") returns 6\r\n(pass) executeTuff(\"1U8 * 2U8 + 3U8\") returns 5\r\n(pass) executeTuff(\"1U8 + 2U8 * 3U8\") returns 7\r\n(pass) executeTuff(\"(1U8 + 2U8) * 3U8\") returns 9\r\n(pass) executeTuff(\"{ 1U8 + 2U8 } * 3U8\") returns 9\r\n(pass) executeTuff(\"{ let x : U8 = 1U8 + 2U8; x } * 3U8\") returns 9\r\n(pass) executeTuff(\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\") returns 9\r\n(pass) executeTuff(\"let x : U8 = 100U8;\") returns 0\r\n(pass) executeTuff(\"let x = 100U8; x\") returns 100\r\n(pass) executeTuff(\"let x = 0U8; let x = 10U8; x\") returns 10\r\n(pass) executeTuff(\"let x : U8 = 0U16; x\") throws error for type mismatch\r\n(pass) executeTuff(\"let x = 0U16; let y : U8 = x;\") throws error for narrowing assignment\r\n(pass) executeTuff(\"let mut x = 0U8; x = 1U8; x\") returns 1\r\n(pass) executeTuff(\"let mut x = 0U8; x = 1U16; x\") throws error for widening assignment\r\n(pass) executeTuff(\"x = 1U16; x\") throws error for undeclared variable\r\n(pass) executeTuff(\"let x = 100U16; x = 1U16; x\") throws error for reassigning immutable variable\r\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; let z : U8 = *y;\") returns 0\r\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; *y\") returns 0\r\n(pass) executeTuff(\"let x = 1U8; let y : *U8 = &x; *y\") returns 1\r\n(pass) executeTuff(\"&x\") throws error for undefined variable\r\n(pass) executeTuff(\"let x = 0U8; let y : *U16 = &x;\") throws error for pointer type mismatch\r\n(pass) executeTuff(\"let x = 0U8; *x\") throws error for dereferencing non-pointer\r\n(pass) executeTuff(\"let x : Bool = true; x\") returns 1\r\n(pass) executeTuff(\"let x : Bool = false; x\") returns 0\r\n(pass) executeTuff(\"let x = true; let y = false; x || y\") returns 1\r\n(pass) executeTuff(\"let x = true; let y = false; x && y\") returns 0\r\n(pass) executeTuff(\"let mut x = 0U8; { x = 100U8; } x\") returns 100\r\n 37 pass\r\n 0 fail\r\n 37 expect() calls\r\nRan 37 tests across 1 file. [46.00ms]\r\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "All **37 tests pass**, including the new one:\n\n```ts\ntest('executeTuff(\"let mut x = 0U8; { x = 100U8; } x\") returns 100', () => {\n  expect(executeTuff(\"let mut x = 0U8; { x = 100U8; } x\")).toBe(100);\n});\n```\n\nNo changes to the compiler were needed — blocks already share scope with their parent context, so mutating `x` inside `{ ... }` persists after the block ends."
   }
 ]

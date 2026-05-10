@@ -144,5 +144,9 @@ test('executeTuff("let x = true; let y = false; x || y") returns 1', () => {
 test('executeTuff("let x = true; let y = false; x && y") returns 0', () => {
   expect(executeTuff("let x = true; let y = false; x && y")).toBe(0);
 });
+test('executeTuff("let mut x = 0U8; { x = 100U8; } x") returns 100', () => {
+  expect(executeTuff("let mut x = 0U8; { x = 100U8; } x")).toBe(100);
+});
+
 
 
