@@ -436,7 +436,7 @@ async function compactMessages(
 }
 // ── Persistence ───────────────────────────────────────────────────────────────
 
-const CONVERSATION_FILE = "conversation.json";
+const CONVERSATION_FILE = "./conversation.json";
 
 async function loadConversation(): Promise<
   OpenAI.Chat.ChatCompletionMessageParam[]
@@ -478,6 +478,129 @@ const rl = createInterface({ input: process.stdin, output: process.stdout });
 const messages: OpenAI.Chat.ChatCompletionMessageParam[] =
   await loadConversation();
 
+/**
+ * Performs one agent action cycle: sends messages to the model, streams the response,
+ * executes any tool calls, and updates the conversation history accordingly.
+ *
+ * @returns If the loop should continue.
+ */
+async function act(): Promise<boolean> {
+  // Auto-compact if approaching the context limit
+  if (estimateTokens(messages) > COMPACT_THRESHOLD) {
+    const compacted = await compactMessages(messages);
+    messages.splice(0, messages.length, ...compacted);
+  }
+
+  const response = await client.chat.completions.create({
+    model: MODEL,
+    messages,
+    tools,
+    tool_choice: "auto",
+    temperature: 0.3,
+    max_tokens: 8192,
+    stream: true,
+  });
+
+  // Accumulate streamed response
+  let assistantContent = "";
+  const toolCalls: Record<string, { name: string; arguments: string }> = {};
+  let completionTokens = 0;
+  let totalTimeMs = 0;
+  let draftN = 0;
+  let draftAccepted = 0;
+
+  for await (const chunk of response) {
+    const raw = chunk as any;
+    const delta = chunk.choices[0]?.delta;
+    const finishReason = chunk.choices[0]?.finish_reason;
+
+    if (finishReason === "stop") {
+      completionTokens = raw.timings?.predicted_n ?? 0;
+      totalTimeMs = raw.timings?.predicted_ms ?? 0;
+      draftN = raw.timings?.draft_n ?? 0;
+      draftAccepted = raw.timings?.draft_n_accepted ?? 0;
+      return true;
+    }
+
+    if (!delta) {
+      continue;
+    }
+
+    const reasoning_content = (delta as any).reasoning_content;
+    if (reasoning_content) {
+      process.stdout.write(`\x1b[2m${reasoning_content}\x1b[0m`);
+    }
+
+    if (delta.content) {
+      process.stdout.write(delta.content);
+      assistantContent += delta.content;
+    }
+
+    if (delta.tool_calls) {
+      for (const tc of delta.tool_calls) {
+        const id = tc.index.toString();
+        if (!toolCalls[id]) {
+          toolCalls[id] = { name: tc.function?.name ?? "", arguments: "" };
+        }
+        if (tc.function?.name) toolCalls[id].name = tc.function.name;
+        if (tc.function?.arguments)
+          toolCalls[id].arguments += tc.function.arguments;
+      }
+    }
+  }
+
+  // Print timing stats
+  if (completionTokens > 0 && totalTimeMs > 0) {
+    const tps = (completionTokens / (totalTimeMs / 1000)).toFixed(1);
+    const acceptRate =
+      draftN > 0
+        ? ` | draft ${((draftAccepted / draftN) * 100).toFixed(0)}% accepted`
+        : "";
+    process.stdout.write(
+      `\n\x1b[2m[${tps} TPS | ${completionTokens} tokens${acceptRate}]\x1b[0m`,
+    );
+  }
+
+  // Build assistant message
+  const toolCallList = Object.entries(toolCalls).map(([index, tc]) => ({
+    id: `call_${index}`,
+    type: "function" as const,
+    function: { name: tc.name, arguments: tc.arguments },
+  }));
+
+  const assistantMsg: OpenAI.Chat.ChatCompletionMessageParam = {
+    role: "assistant",
+    content: assistantContent || null,
+    ...(toolCallList.length > 0 && { tool_calls: toolCallList }),
+  };
+  messages.push(assistantMsg);
+
+  if (toolCallList.length === 0) return false;
+
+  // Execute tool calls
+  for (const tc of toolCallList) {
+    let args: Record<string, any> = {};
+    try {
+      args = JSON.parse(tc.function.arguments);
+    } catch {
+      args = {};
+    }
+
+    process.stdout.write(`\n[${tc.function.name}(${JSON.stringify(args)})]\n`);
+    const result = await callTool(tc.function.name, args);
+    process.stdout.write(`→ ${result}\n`);
+
+    messages.push({
+      role: "tool",
+      tool_call_id: tc.id,
+      content: result,
+    });
+  }
+
+  process.stdout.write("Bot: ");
+  return true;
+}
+
 while (true) {
   const input = await rl.question("You: ");
   messages.push({ role: "user", content: input });
@@ -486,125 +609,34 @@ while (true) {
 
   // Agentic loop — keep going until model stops calling tools
   while (true) {
-    // Auto-compact if approaching the context limit
-    if (estimateTokens(messages) > COMPACT_THRESHOLD) {
-      const compacted = await compactMessages(messages);
-      messages.splice(0, messages.length, ...compacted);
-    }
+    const shouldContinue = await act();
+    if (!shouldContinue) break;
 
-    const response = await client.chat.completions.create({
-      model: MODEL,
-      messages,
-      tools,
-      tool_choice: "auto",
-      temperature: 0.3,
-      max_tokens: 8192,
-      stream: true,
-    });
+    // Execute `Stop.ps1` if it exists to check for errors after each agent turn
+    // Collect stdErr and stdOutput and give it to the model if we hit a non-zero exit code
 
-    // Accumulate streamed response
-    let assistantContent = "";
-    const toolCalls: Record<string, { name: string; arguments: string }> = {};
-    let completionTokens = 0;
-    let totalTimeMs = 0;
-    let draftN = 0;
-    let draftAccepted = 0;
-
-    for await (const chunk of response) {
-      const raw = chunk as any;
-      const delta = chunk.choices[0]?.delta;
-      const finishReason = chunk.choices[0]?.finish_reason;
-
-      if (finishReason === "stop") {
-        completionTokens = raw.timings?.predicted_n ?? 0;
-        totalTimeMs = raw.timings?.predicted_ms ?? 0;
-        draftN = raw.timings?.draft_n ?? 0;
-        draftAccepted = raw.timings?.draft_n_accepted ?? 0;
-        continue;
+    if (fs.existsSync("Stop.ps1")) {
+      const stopResult = await powershell(
+        "powershell -ExecutionPolicy Bypass -File Stop.ps1",
+      );
+      if (stopResult.trim() !== "") {
+        process.stdout.write(`\n[Stop.ps1 output]\n${stopResult}\n`);
+        messages.push({
+          role: "tool",
+          tool_call_id: `stop_check_${Date.now()}`,
+          content: `Stop hook failed to execute. You MUST fix these issues before ending: ${stopResult}`,
+        });
+      } else {
+        process.stdout.write(`\n[Stop.ps1] No issues detected.\n`);
       }
-
-      if (!delta) {
-        continue;
-      }
-
-      const reasoning_content = (delta as any).reasoning_content;
-      if (reasoning_content) {
-        process.stdout.write(`\x1b[2m${reasoning_content}\x1b[0m`);
-      }
-
-      if (delta.content) {
-        process.stdout.write(delta.content);
-        assistantContent += delta.content;
-      }
-
-      if (delta.tool_calls) {
-        for (const tc of delta.tool_calls) {
-          const id = tc.index.toString();
-          if (!toolCalls[id]) {
-            toolCalls[id] = { name: tc.function?.name ?? "", arguments: "" };
-          }
-          if (tc.function?.name) toolCalls[id].name = tc.function.name;
-          if (tc.function?.arguments)
-            toolCalls[id].arguments += tc.function.arguments;
-        }
-      }
-    }
-
-    // Print timing stats
-    if (completionTokens > 0 && totalTimeMs > 0) {
-      const tps = (completionTokens / (totalTimeMs / 1000)).toFixed(1);
-      const acceptRate =
-        draftN > 0
-          ? ` | draft ${((draftAccepted / draftN) * 100).toFixed(0)}% accepted`
-          : "";
+    } else {
       process.stdout.write(
-        `\n\x1b[2m[${tps} TPS | ${completionTokens} tokens${acceptRate}]\x1b[0m`,
+        `\n[Stop.ps1] No stop hook found, skipping post-turn checks.\n`,
       );
     }
-
-    // Build assistant message
-    const toolCallList = Object.entries(toolCalls).map(([index, tc]) => ({
-      id: `call_${index}`,
-      type: "function" as const,
-      function: { name: tc.name, arguments: tc.arguments },
-    }));
-
-    const assistantMsg: OpenAI.Chat.ChatCompletionMessageParam = {
-      role: "assistant",
-      content: assistantContent || null,
-      ...(toolCallList.length > 0 && { tool_calls: toolCallList }),
-    };
-    messages.push(assistantMsg);
-
-    if (toolCallList.length === 0) break;
-
-    // Execute tool calls
-    for (const tc of toolCallList) {
-      let args: Record<string, any> = {};
-      try {
-        args = JSON.parse(tc.function.arguments);
-      } catch {
-        args = {};
-      }
-
-      process.stdout.write(
-        `\n[${tc.function.name}(${JSON.stringify(args)})]\n`,
-      );
-      const result = await callTool(tc.function.name, args);
-      process.stdout.write(`→ ${result}\n`);
-
-      messages.push({
-        role: "tool",
-        tool_call_id: tc.id,
-        content: result,
-      });
-    }
-
-    process.stdout.write("Bot: ");
   }
 
   // Save after each complete turn
   await saveConversation(messages);
-
   process.stdout.write("\n");
 }
