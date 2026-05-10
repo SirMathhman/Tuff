@@ -109,4 +109,20 @@ test('executeTuff("let x = 0U8; let y : *U8 = &x; let z : U8 = *y;") returns 0',
   expect(executeTuff("let x = 0U8; let y : *U8 = &x; let z : U8 = *y;")).toBe(0);
 });
 
+test('executeTuff("let x = 0U8; let y : *U8 = &x; *y") returns 0', () => {
+  expect(executeTuff("let x = 0U8; let y : *U8 = &x; *y")).toBe(0);
+});
+
+test('executeTuff("let x = 1U8; let y : *U8 = &x; *y") returns 1', () => {
+  expect(executeTuff("let x = 1U8; let y : *U8 = &x; *y")).toBe(1);
+});
+
+test('executeTuff("&x") throws error for undefined variable', () => {
+  expect(() => executeTuff("&x")).toThrow();
+});
+
+test('executeTuff("let x = 0U8; let y : *U16 = &x;") throws error for pointer type mismatch', () => {
+  expect(() => executeTuff("let x = 0U8; let y : *U16 = &x;")).toThrow();
+});
+
 

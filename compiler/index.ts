@@ -51,7 +51,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return 0;
   }
 
- const rawTokens = tuffSourceCode.trim().split(/\s+/);
+  const rawTokens = tuffSourceCode.trim().split(/\s+/);
   const tokens: string[] = [];
   for (const raw of rawTokens) {
     let remaining = raw;
@@ -141,6 +141,14 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   // Check if sourceType can be assigned to targetType (strict: must have same bit width or narrower)
   function isAssignable(sourceType: string, targetType: string): boolean {
+    const srcIsPointer = sourceType.startsWith("*");
+    const tgtIsPointer = targetType.startsWith("*");
+
+    // Pointer types must match exactly — no widening allowed for pointers
+    if (srcIsPointer && tgtIsPointer) {
+      return sourceType === targetType;
+    }
+
     // Handle pointer types: a reference (*T) should match the base type T in assignment context
     const srcBase = sourceType.replace(/^\*/, "");
     const tgtBase = targetType.replace(/^\*/, "");
@@ -247,7 +255,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return { value: normalizeResult(BigInt(left.value)), type: left.type };
   }
 
- function parseTermWithType(): { value: number | bigint; type: string } {
+  function parseTermWithType(): { value: number | bigint; type: string } {
     let result: { value: bigint; type: string };
     const token = peek();
     if (token === "(") {
@@ -300,14 +308,13 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
       if (op === "*") result.value *= BigInt(rightResult.value);
       else {
-        if (BigInt(rightResult.value) === 0n) throw new Error("Division by zero");
+        if (BigInt(rightResult.value) === 0n)
+          throw new Error("Division by zero");
         result.value /= BigInt(rightResult.value);
       }
     }
     return { value: normalizeResult(result.value), type: result.type };
   }
-
-
 
   // Combine two types into a wider one that can hold both values safely
   function combineTypes(typeA: string, typeB: string): string {
