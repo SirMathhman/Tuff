@@ -51,7 +51,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return 0;
   }
 
- const rawTokens = tuffSourceCode.trim().split(/\s+/);
+  const rawTokens = tuffSourceCode.trim().split(/\s+/);
   const tokens: string[] = [];
   for (const raw of rawTokens) {
     let remaining = raw;
@@ -63,15 +63,20 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       tokens.push("{");
       remaining = remaining.slice(1);
     }
+    // Handle || as logical OR operator — must check before single-char operators
+    while (remaining.startsWith("||")) {
+      tokens.push("||");
+      remaining = remaining.slice(2);
+    }
+    // Handle && as logical AND operator — must check before single &
+    while (remaining.startsWith("&&")) {
+      tokens.push("&&");
+      remaining = remaining.slice(2);
+    }
     // Handle leading & as a separate token (reference operator)
     if (remaining.startsWith("&")) {
       tokens.push("&");
       remaining = remaining.slice(1);
-    }
-    // Handle || as logical OR operator
-    while (remaining.startsWith("||")) {
-      tokens.push("||");
-      remaining = remaining.slice(2);
     }
     // Handle leading * followed by identifier as dereference: split into "*" and the rest
     // But keep "*U8", "*I16" etc. together as pointer type annotations
@@ -79,7 +84,6 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       tokens.push("*");
       remaining = remaining.slice(1);
     }
-    if (!remaining) continue;
     const trailingDelimiters: string[] = [];
     while (
       remaining.endsWith(")") ||
@@ -95,7 +99,6 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       tokens.push(d);
     }
   }
-
 
   let pos = 0;
 
@@ -128,7 +131,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return name;
   }
   // Parse a type annotation like U8, I16, *U8, etc. Returns the full token (e.g., "U8" or "*U8")
- // Parse a type annotation like U8, I16, *U8, Bool, etc. Returns the full token (e.g., "U8" or "*U8")
+  // Parse a type annotation like U8, I16, *U8, Bool, etc. Returns the full token (e.g., "U8" or "*U8")
   function parseTypeAnnotation(): string {
     const typeToken = consume();
     if (
@@ -178,8 +181,6 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     // Source type bits must be <= target type bits for safe assignment
     return srcBits <= tgtBits;
   }
-
-
 
   function parseBlockItem(): bigint | null {
     if (peek() === "let") {
@@ -253,7 +254,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   // Extended expression parser that also tracks the inferred type of the result
 
- function parseExprWithType(): { value: number | bigint; type: string } {
+  function parseExprWithType(): { value: number | bigint; type: string } {
     let left = parseTermWithType();
     while (peek() === "+" || peek() === "-") {
       const op = consume();
@@ -268,22 +269,38 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       left.type = combinedType;
     }
 
-    // Logical OR — only allowed on Bool types
-    while (peek() === "||") {
-      consume("||");
+    // Helper: apply a logical operator only on Bool operands, throwing if types don't match
+    function applyLogicalOp(
+      opName: string,
+      bitwiseFn: (a: bigint, b: bigint) => bigint,
+    ): void {
       const right = parseTermWithType();
 
       if (left.type !== "Bool" || right.type !== "Bool") {
-        throw new Error(`Logical OR requires Bool operands, got ${left.type} and ${right.type}`);
+        throw new Error(
+          `Logical ${opName} requires Bool operands, got ${left.type} and ${right.type}`,
+        );
       }
 
-      left.value = BigInt(BigInt(left.value) | BigInt(right.value));
+      left.value = BigInt(bitwiseFn(BigInt(left.value), BigInt(right.value)));
+    }
+
+    // Logical OR — only allowed on Bool types
+    while (peek() === "||") {
+      consume("||");
+      applyLogicalOp("OR", (a, b) => a | b);
+    }
+
+    // Logical AND — only allowed on Bool types
+    while (peek() === "&&") {
+      consume("&&");
+      applyLogicalOp("AND", (a, b) => a & b);
     }
 
     return { value: normalizeResult(BigInt(left.value)), type: left.type };
   }
 
- function parseTermWithType(): { value: number | bigint; type: string } {
+  function parseTermWithType(): { value: number | bigint; type: string } {
     let result: { value: bigint; type: string };
     const token = peek();
     if (token === "(") {
@@ -386,4 +403,3 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   return normalizeResult(result);
 }
-
