@@ -85,7 +85,7 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
           startLine: { type: "number" },
           endLine: { type: "number" },
         },
-        required: ["name"],
+        required: ["name", "startLine", "endLine"],
       },
     },
   },
@@ -177,11 +177,11 @@ async function readFile(
   const lines = content.split("\n");
 
   if (startLine < 1 || endLine > lines.length + 1 || startLine >= endLine) {
-    return "Error: Invalid line range.";
+    return "Error: Invalid line range. Total lines in file: " + lines.length;
   }
 
   if (endLine - startLine > 500) {
-    return "Error: Requested line range exceeds maximum of 500 lines.";
+    return "Error: Requested line range exceeds maximum of 500 lines. Total lines in file: " + lines.length;
   }
 
   const joinedLines = lines
@@ -485,6 +485,7 @@ const messages: OpenAI.Chat.ChatCompletionMessageParam[] =
  * @returns If the loop should continue.
  */
 async function actCycle(): Promise<boolean> {
+  process.stdout.write(`\x1b[2m[model is thinking...]\x1b[0m\n`);
   // Auto-compact if approaching the context limit
   if (estimateTokens(messages) > COMPACT_THRESHOLD) {
     const compacted = await compactMessages(messages);
@@ -519,7 +520,7 @@ async function actCycle(): Promise<boolean> {
       totalTimeMs = raw.timings?.predicted_ms ?? 0;
       draftN = raw.timings?.draft_n ?? 0;
       draftAccepted = raw.timings?.draft_n_accepted ?? 0;
-      return true;
+      break;
     }
 
     if (!delta) {
@@ -603,6 +604,7 @@ async function actCycle(): Promise<boolean> {
 
 async function act() {
   // Agentic loop — keep going until model stops calling tools
+  process.stdout.write(`\x1b[2m[model is thinking...]\x1b[0m\n`);
   while (true) {
     const shouldContinue = await actCycle();
     if (!shouldContinue) break;
