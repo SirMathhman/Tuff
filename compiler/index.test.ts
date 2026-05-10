@@ -97,6 +97,10 @@ test('executeTuff("let x = 100U16; x = 1U16; x") throws error for reassigning im
   expect(() => executeTuff("let x = 100U16; x = 1U16; x")).toThrow();
 });
 
+test('executeTuff("let x = 0U8; let y = &x;") returns 0', () => {
+  expect(executeTuff("let x = 0U8; let y = &x;")).toBe(0);
+});
+
 
 
 

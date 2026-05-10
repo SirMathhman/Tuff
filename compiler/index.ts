@@ -51,8 +51,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return 0;
   }
 
-  // Tokenize by splitting on whitespace, then further split delimiters from literals
-  const rawTokens = tuffSourceCode.trim().split(/\s+/);
+ const rawTokens = tuffSourceCode.trim().split(/\s+/);
   const tokens: string[] = [];
   for (const raw of rawTokens) {
     let remaining = raw;
@@ -62,6 +61,11 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     }
     while (remaining.startsWith("{")) {
       tokens.push("{");
+      remaining = remaining.slice(1);
+    }
+    // Handle leading & as a separate token (reference operator)
+    if (remaining.startsWith("&")) {
+      tokens.push("&");
       remaining = remaining.slice(1);
     }
     if (!remaining) continue;
@@ -76,12 +80,13 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       remaining = remaining.slice(0, -1);
     }
     if (remaining) tokens.push(remaining);
-    for (const d of trailingDelimiters) {
+   for (const d of trailingDelimiters) {
       tokens.push(d);
     }
   }
 
   let pos = 0;
+
 
   function peek(): string | undefined {
     return tokens[pos];
@@ -222,10 +227,10 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
       left.type = combinedType;
     }
-    return { value: normalizeResult(BigInt(left.value)), type: left.type };
+   return { value: normalizeResult(BigInt(left.value)), type: left.type };
   }
 
-  function parseTermWithType(): { value: number | bigint; type: string } {
+   function parseTermWithType(): { value: number | bigint; type: string } {
     let result: { value: bigint; type: string };
     const token = peek();
     if (token === "(") {
@@ -245,6 +250,12 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       }
       consume("}");
       result = { value: blockValue!, type: blockType };
+    } else if (token === "&") {
+      // Reference operator — evaluate to the referenced variable's value and type
+      consume("&");
+      const name = parseIdentifier();
+      const entry = scope.get(name)!;
+      result = { value: entry.value, type: entry.type };
     } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
       // Variable reference — use the stored type from scope
       const name = parseIdentifier();
@@ -270,6 +281,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     }
     return { value: normalizeResult(result.value), type: result.type };
   }
+
 
  // Combine two types into a wider one that can hold both values safely
   function combineTypes(typeA: string, typeB: string): string {
