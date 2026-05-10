@@ -176,16 +176,24 @@ async function readFile(
   const content = await fs.promises.readFile(name, "utf-8");
   const lines = content.split("\n");
 
-  if (startLine < 1 || endLine > lines.length + 1 || startLine >= endLine) {
-    return "Error: Invalid line range. Total lines in file: " + lines.length;
+  // If endLine is beyond the end of the file, just return up to the end without error — this allows reading to the end of the file without needing to know its length in advance
+  if (startLine > lines.length) {
+    return (
+      "Error: startLine is beyond end of file. Total lines in file: " +
+      lines.length
+    );
   }
 
-  if (endLine - startLine > 500) {
-    return "Error: Requested line range exceeds maximum of 500 lines. Total lines in file: " + lines.length;
+  const actualEndLine = Math.min(endLine, lines.length + 1);
+  if (actualEndLine - startLine > 500) {
+    return (
+      "Error: Requested line range exceeds maximum of 500 lines. Total lines in file: " +
+      lines.length
+    );
   }
 
   const joinedLines = lines
-    .slice(startLine - 1, endLine - 1)
+    .slice(startLine - 1, actualEndLine - 1)
     .map((line, i) => `${i + startLine}: ${line}`)
     .join("\n");
 
