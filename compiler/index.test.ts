@@ -77,5 +77,10 @@ test('executeTuff("let x : U8 = 0U16; x") throws error for type mismatch', () =>
   expect(() => executeTuff("let x : U8 = 0U16; x")).toThrow();
 });
 
+test('executeTuff("let x = 0U16; let y : U8 = x;") throws error for narrowing assignment', () => {
+  expect(() => executeTuff("let x = 0U16; let y : U8 = x;")).toThrow();
+});
+
+
 
 
