@@ -16,6 +16,26 @@ const MODEL = "Qwen3.6-27B-Q4_K_M-mtp.gguf";
 
 // ── Tool definitions (OpenAI schema) ─────────────────────────────────────────
 
+function simpleTool(
+  name: string,
+  description: string,
+): OpenAI.Chat.ChatCompletionTool {
+  return {
+    type: "function",
+    function: {
+      name,
+      description,
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+        },
+        required: ["name"],
+      },
+    },
+  };
+}
+
 const tools: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
@@ -51,36 +71,14 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
-  {
-    type: "function",
-    function: {
-      name: "readFile",
-      description:
-        "Read a file and return its content with line numbers starting at 1.",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-        },
-        required: ["name"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "deleteFile",
-      description:
-        "Delete a file. Recursively removes empty parent directories.",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-        },
-        required: ["name"],
-      },
-    },
-  },
+  simpleTool(
+    "readFile",
+    "Read a file and return its content with line numbers starting at 1.",
+  ),
+  simpleTool(
+    "deleteFile",
+    "Delete a file. Recursively removes empty parent directories.",
+  ),
   {
     type: "function",
     function: {
@@ -303,8 +301,8 @@ async function listDirectory(
 async function powershell(command: string, cwd?: string): Promise<string> {
   return new Promise((resolve) => {
     child_process.exec(command, { cwd }, (error, stdout, stderr) => {
-      if (error) resolve(`Error: ${error.message}`);
-      else if (stderr) resolve(`Stderr: ${stderr}`);
+      if (error) resolve(`Error: ${error.message} | Stderr: ${stderr} | Stdout: ${stdout}`);
+      else if (stderr) resolve(`Stderr: ${stderr} | Stdout: ${stdout}`);
       else resolve(stdout || "(no output)");
     });
   });
@@ -530,4 +528,6 @@ while (true) {
   }
 
   process.stdout.write("\n");
+
+
 }
