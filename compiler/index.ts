@@ -51,7 +51,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return 0;
   }
 
-  const rawTokens = tuffSourceCode.trim().split(/\s+/);
+ const rawTokens = tuffSourceCode.trim().split(/\s+/);
   const tokens: string[] = [];
   for (const raw of rawTokens) {
     let remaining = raw;
@@ -67,6 +67,11 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     if (remaining.startsWith("&")) {
       tokens.push("&");
       remaining = remaining.slice(1);
+    }
+    // Handle || as logical OR operator
+    while (remaining.startsWith("||")) {
+      tokens.push("||");
+      remaining = remaining.slice(2);
     }
     // Handle leading * followed by identifier as dereference: split into "*" and the rest
     // But keep "*U8", "*I16" etc. together as pointer type annotations
@@ -90,6 +95,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       tokens.push(d);
     }
   }
+
 
   let pos = 0;
 
@@ -247,7 +253,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   // Extended expression parser that also tracks the inferred type of the result
 
-  function parseExprWithType(): { value: number | bigint; type: string } {
+ function parseExprWithType(): { value: number | bigint; type: string } {
     let left = parseTermWithType();
     while (peek() === "+" || peek() === "-") {
       const op = consume();
@@ -261,6 +267,19 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
       left.type = combinedType;
     }
+
+    // Logical OR — only allowed on Bool types
+    while (peek() === "||") {
+      consume("||");
+      const right = parseTermWithType();
+
+      if (left.type !== "Bool" || right.type !== "Bool") {
+        throw new Error(`Logical OR requires Bool operands, got ${left.type} and ${right.type}`);
+      }
+
+      left.value = BigInt(BigInt(left.value) | BigInt(right.value));
+    }
+
     return { value: normalizeResult(BigInt(left.value)), type: left.type };
   }
 
@@ -307,7 +326,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       // Boolean literal false → 0 with type Bool
       consume("false");
       result = { value: 0n, type: "Bool" };
-   } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
+    } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
       // Variable reference — use the stored type from scope
       const name = parseIdentifier();
       const entry = scope.get(name)!;
@@ -317,7 +336,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       result = {
         value: BigInt(parseLiteral(literalToken)),
         type: inferLiteralType(literalToken),
-     };
+      };
     }
 
     while (peek() === "*" || peek() === "/") {

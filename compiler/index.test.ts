@@ -137,3 +137,9 @@ test('executeTuff("let x : Bool = false; x") returns 0', () => {
   expect(executeTuff("let x : Bool = false; x")).toBe(0);
 });
 
+test('executeTuff("let x = true; let y = false; x || y") returns 1', () => {
+  expect(executeTuff("let x = true; let y = false; x || y")).toBe(1);
+});
+
+
+
