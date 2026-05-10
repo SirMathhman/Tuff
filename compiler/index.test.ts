@@ -93,6 +93,9 @@ test('executeTuff("x = 1U16; x") throws error for undeclared variable', () => {
   expect(() => executeTuff("x = 1U16; x")).toThrow();
 });
 
+test('executeTuff("let x = 100U16; x = 1U16; x") throws error for reassigning immutable variable', () => {
+  expect(() => executeTuff("let x = 100U16; x = 1U16; x")).toThrow();
+});
 
 
 
