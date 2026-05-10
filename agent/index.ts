@@ -500,15 +500,25 @@ async function actCycle(): Promise<boolean> {
     messages.splice(0, messages.length, ...compacted);
   }
 
-  const response = await client.chat.completions.create({
-    model: MODEL,
-    messages,
-    tools,
-    tool_choice: "auto",
-    temperature: 0.3,
-    max_tokens: 8192,
-    stream: true,
-  });
+  let response;
+  try {
+    response = await client.chat.completions.create({
+      model: MODEL,
+      messages,
+      tools,
+      tool_choice: "auto",
+      temperature: 0.3,
+      max_tokens: 8192,
+      stream: true,
+    });
+  } catch (e: any) {
+    process.stdout.write(`\n[API error: ${e.message}]\n`);
+    messages.push({
+      role: "user",
+      content: `Your last request failed with an API error: ${e.message}. Please try again, potentially with smaller content chunks.`,
+    });
+    return true; // re-enter the loop
+  }
 
   // Accumulate streamed response
   let assistantContent = "";
