@@ -352,10 +352,13 @@ function estimateTokens(
 async function compactMessages(
   msgs: OpenAI.Chat.ChatCompletionMessageParam[],
 ): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
-  if (msgs.length <= KEEP_RECENT) return msgs;
+  if (msgs.length <= KEEP_RECENT + 1) return msgs;
 
-  const toSummarize = msgs.slice(0, msgs.length - KEEP_RECENT);
-  const recent = msgs.slice(msgs.length - KEEP_RECENT);
+  const head = msgs.slice(0, 1); // system prompt
+  const toSummarize = msgs.slice(1, msgs.length - KEEP_RECENT); // middle
+  const recent = msgs.slice(msgs.length - KEEP_RECENT); // recent tail
+
+  if (toSummarize.length === 0) return msgs;
 
   process.stderr.write(
     `\x1b[2m[compacting: ${toSummarize.length} messages → summary]\x1b[0m\n`,
@@ -364,6 +367,7 @@ async function compactMessages(
   const res = await client.chat.completions.create({
     model: MODEL,
     messages: [
+      ...head,
       ...toSummarize,
       {
         role: "user",
@@ -380,13 +384,14 @@ async function compactMessages(
 
   const summary = res.choices[0]?.message?.content ?? "(summary unavailable)";
   const before = estimateTokens(msgs);
-  const after = estimateTokens([...recent]); // rough; summary adds ~summary.length/4
+  const after = estimateTokens([...head, ...recent]);
 
   process.stderr.write(
     `\x1b[2m[compacted: ~${before} → ~${after + Math.ceil(summary.length / 4)} est. tokens]\x1b[0m\n`,
   );
 
   return [
+    ...head,
     {
       role: "user",
       content: `[Session context summary — replaces earlier history]\n${summary}`,
