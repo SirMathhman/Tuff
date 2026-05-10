@@ -1,12 +1,17 @@
 {
   "name": "tuff",
-  "module": "index.ts",
-  "type": "module",
-  "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/SirMathhman/Tuff#readme",
+  "bugs": {
+    "url": "https://github.com/SirMathhman/Tuff/issues"
   },
-  "peerDependencies": {
-    "typescript": "^5"
-  }
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SirMathhman/Tuff.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js"
 }
