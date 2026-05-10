@@ -570,8 +570,12 @@ while (true) {
       });
     }
 
-    process.stdout.write("Bot: ");
+   process.stdout.write("Bot: ");
   }
+
+  // Save after each complete turn
+  await saveConversation(messages);
 
   process.stdout.write("\n");
 }
+
