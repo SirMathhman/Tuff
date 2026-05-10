@@ -46,11 +46,32 @@ function parseLiteral(literal: string): number | bigint {
   return value;
 }
 
-export function executeTuff(tuffSourceCode: string): number | bigint {
-  if (tuffSourceCode === "") {
-    return 0;
+function normalizeResult(val: bigint): number | bigint {
+  if (val <= Number.MAX_SAFE_INTEGER && val >= -Number.MAX_SAFE_INTEGER) {
+    return Number(val);
   }
+  return val;
+}
 
+// Combine two types into a wider one that can hold both values safely
+function combineTypes(typeA: string, typeB: string): string {
+  const matchA = typeA.match(/^([UI])(\d+)$/);
+  const matchB = typeB.match(/^([UI])(\d+)$/);
+
+  if (!matchA || !matchB) return "U64"; // fallback to widest
+
+  const prefixA = matchA[1];
+  const bitsA = parseInt(matchA[2]!, 10);
+  const prefixB = matchB[1];
+  const bitsB = parseInt(matchB[2]!, 10);
+
+  // If either is signed, result is signed (I) to preserve sign semantics
+  const combinedPrefix = prefixA === "I" || prefixB === "I" ? "I" : "U";
+  const combinedBits = Math.max(bitsA, bitsB);
+
+  return `${combinedPrefix}${combinedBits}`;
+}
+function tokenize(tuffSourceCode: string): string[] {
   const rawTokens = tuffSourceCode.trim().split(/\s+/);
   const tokens: string[] = [];
   for (const raw of rawTokens) {
@@ -99,6 +120,15 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       tokens.push(d);
     }
   }
+  return tokens;
+}
+
+export function executeTuff(tuffSourceCode: string): number | bigint {
+  if (tuffSourceCode === "") {
+    return 0;
+  }
+
+  const tokens = tokenize(tuffSourceCode);
 
   let pos = 0;
 
@@ -112,13 +142,6 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return token;
   }
 
-  function normalizeResult(val: bigint): number | bigint {
-    if (val <= Number.MAX_SAFE_INTEGER && val >= -Number.MAX_SAFE_INTEGER) {
-      return Number(val);
-    }
-    return val;
-  }
-
   // Variable scope for let declarations inside blocks: tracks both value and type string
   const scope = new Map<
     string,
@@ -130,7 +153,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     if (!scope.has(name)) throw new Error(`Undefined variable: ${name}`);
     return name;
   }
-  // Parse a type annotation like U8, I16, *U8, etc. Returns the full token (e.g., "U8" or "*U8")
+
   // Parse a type annotation like U8, I16, *U8, Bool, etc. Returns the full token (e.g., "U8" or "*U8")
   function parseTypeAnnotation(): string {
     const typeToken = consume();
@@ -253,9 +276,8 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
   }
 
   // Extended expression parser that also tracks the inferred type of the result
-
   function parseExprWithType(): { value: number | bigint; type: string } {
-    let left = parseTermWithType();
+    const left = parseTermWithType();
     while (peek() === "+" || peek() === "-") {
       const op = consume();
       const right = parseTermWithType();
@@ -373,33 +395,14 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     return { value: normalizeResult(result.value), type: result.type };
   }
 
-  // Combine two types into a wider one that can hold both values safely
-  function combineTypes(typeA: string, typeB: string): string {
-    const matchA = typeA.match(/^([UI])(\d+)$/);
-    const matchB = typeB.match(/^([UI])(\d+)$/);
-
-    if (!matchA || !matchB) return "U64"; // fallback to widest
-
-    const prefixA = matchA[1];
-    const bitsA = parseInt(matchA[2]!, 10);
-    const prefixB = matchB[1];
-    const bitsB = parseInt(matchB[2]!, 10);
-
-    // If either is signed, result is signed (I) to preserve sign semantics
-    const combinedPrefix = prefixA === "I" || prefixB === "I" ? "I" : "U";
-    const combinedBits = Math.max(bitsA, bitsB);
-
-    return `${combinedPrefix}${combinedBits}`;
-  }
-
   // Top-level: parse a sequence of statements/expressions, return the last expression's value (or 0 if none)
-  let result = 0n;
+  let finalResult = 0n;
   while (pos < tokens.length) {
     const itemValue = parseBlockItem();
     if (itemValue !== null) {
-      result = BigInt(itemValue);
+      finalResult = BigInt(itemValue);
     }
   }
 
-  return normalizeResult(result);
+  return normalizeResult(finalResult);
 }
