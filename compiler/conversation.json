@@ -825,5 +825,127 @@
   {
     "role": "assistant",
     "content": "All good — TypeScript compiles cleanly (no errors in `compiler/index.ts`) and all 46 tests pass with 0 failures. The fix was adding a `default` case to the switch statement so TypeScript knows `cmpResult` is always assigned before use on line 352.\n\nThe test case you requested, `executeTuff(\"let x = 0U8; let y = &x;\") => 0`, already existed in the file and now passes along with all other tests including the newly implemented comparison operators (`<`, `>`, `<=`, `>=`, `==`, `!=`)."
+  },
+  {
+    "role": "user",
+    "content": "Add and impl test case: executeTuff(\"true == 1U8\") => Error, type mismatch. This might break older tests"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":319,\"endLine\":356}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 467\n319:     // Comparison operators: < > <= >= == != — result is Bool type\r\n320:     const comparisonOps = [\"<\", \">\", \"<=\", \">=\", \"==\", \"!=\"];\r\n321:     while (comparisonOps.includes(peek() ?? \"\")) {\r\n322:       const op = consume();\r\n323:       const right = parseTermWithType();\r\n324: \r\n325:       let cmpResult: bigint;\r\n326:       switch (op) {\r\n327:         case \"<\":\r\n328:           cmpResult = BigInt(left.value) < BigInt(right.value) ? 1n : 0n;\r\n329:           break;\r\n330:         case \">\":\r\n331:           cmpResult = BigInt(left.value) > BigInt(right.value) ? 1n : 0n;\r\n332:           break;\r\n333:         case \"<=\":\r\n334:           cmpResult = BigInt(left.value) <= BigInt(right.value) ? 1n : 0n;\r\n335:           break;\r\n336:         case \">=\":\r\n337:           cmpResult = BigInt(left.value) >= BigInt(right.value) ? 1n : 0n;\r\n338:           break;\r\n339:         case \"==\":\r\n340:           cmpResult = BigInt(left.value) === BigInt(right.value) ? 1n : 0n;\r\n341:           break;\r\n342:         case \"!=\":\r\n343:           cmpResult = BigInt(left.value) !== BigInt(right.value) ? 1n : 0n;\r\n344:           break;\r\n345:         default:\r\n346:           throw new Error(`Unknown comparison operator: ${op}`);\r\n347:       }\r\n348: \r\n349:       left.value = cmpResult;\r\n350:       left.type = \"Bool\";\r\n351:     }\r\n352: \r\n353:     function applyLogicalOp(\r\n354:       opName: string,\r\n355:       bitwiseFn: (a: bigint, b: bigint) => bigint,\r"
+  },
+  {
+    "role": "assistant",
+    "content": "I need to add type checking for comparisons so that comparing incompatible types (like `Bool` with numeric types) throws an error. Let me first understand which existing tests would be affected:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":183,\"endLine\":190}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 190\n183: test('executeTuff(\"let x = true; let y = false; (x == 1U8) || y\") returns 1', () => {\n184:   expect(executeTuff(\"let x = true; let y = false; (x == 1U8) || y\")).toBe(1);\n185: });\n186: \n187: \n188: \n189: "
+  },
+  {
+    "role": "assistant",
+    "content": "I'll add strict type checking for comparison operators. Comparing `Bool` with numeric types should throw a type mismatch error, which means I need to:\n\n1. Add type compatibility checks in the comparison operator handling\n2. Update the existing test `(x == 1U8) || y` since it will now fail\n3. Add the new test case\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":319,\"endLine\":352,\"content\":\"   // Comparison operators: < > <= >= == != — result is Bool type\\n    const comparisonOps = [\\\"<\\\", \\\">\\\", \\\"<=\\\", \\\">=\\\", \\\"==\\\", \\\"!=\\\"];\\n    while (comparisonOps.includes(peek() ?? \\\"\\\")) {\\n      const op = consume();\\n      const right = parseTermWithType();\\n\\n      // Enforce type compatibility: both operands must be same category\\n      // - Numeric types can compare with each other (U/I of any width)\\n      // - Bool cannot mix with numeric types\\n      if ((left.type === \\\"Bool\\\") !== (right.type === \\\"Bool\\\")) {\\n        throw new Error(\\n          `Type mismatch in comparison: ${left.type} and ${right.type}`,\\n        );\\n      }\\n\\n      let cmpResult: bigint;\\n      switch (op) {\\n        case \\\"<\\\":\\n          cmpResult = BigInt(left.value) < BigInt(right.value) ? 1n : 0n;\\n          break;\\n        case \\\">\\\":\\n          cmpResult = BigInt(left.value) > BigInt(right.value) ? 1n : 0n;\\n          break;\\n        case \\\"<=\\\":\\n          cmpResult = BigInt(left.value) <= BigInt(right.value) ? 1n : 0n;\\n          break;\\n        case \\\">=\\\":\\n          cmpResult = BigInt(left.value) >= BigInt(right.value) ? 1n : 0n;\\n          break;\\n        case \\\"==\\\":\\n          cmpResult = BigInt(left.value) === BigInt(right.value) ? 1n : 0n;\\n          break;\\n        case \\\"!=\\\":\\n          cmpResult = BigInt(left.value) !== BigInt(right.value) ? 1n : 0n;\\n          break;\\n        default:\\n          throw new Error(`Unknown comparison operator: ${op}`);\\n      }\\n\\n      left.value = cmpResult;\\n      left.type = \\\"Bool\\\";\\n    }\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":183,\"endLine\":190,\"content\":\"test('executeTuff(\\\"true == 1U8\\\") throws error for type mismatch', () => {\\n  expect(() => executeTuff(\\\"true == 1U8\\\")).toThrow(\\n    \\\"Type mismatch in comparison: Bool and U8\\\",\\n  );\\n});\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test 2>&1 | Select-Object -Last 8\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test 2>&1 | Select-Object -Last 8\"\n(pass) executeTuff(\"let x = 200U8; let y = 100U8; x > y\") returns 1\r\n(pass) executeTuff(\"let x = 50U8; let y = 100U8; x < y\") returns false when equal\r\n(pass) executeTuff(\"true == 1U8\") throws error for type mismatch\r\n 46 pass\r\n 0 fail\r\n 46 expect() calls\r\nRan 46 tests across 1 file. [28.00ms]\r\n | Stderr: (pass) executeTuff(\"let x = 200U8; let y = 100U8; x > y\") returns 1\r\n(pass) executeTuff(\"let x = 50U8; let y = 100U8; x < y\") returns false when equal\r\n(pass) executeTuff(\"true == 1U8\") throws error for type mismatch\r\n 46 pass\r\n 0 fail\r\n 46 expect() calls\r\nRan 46 tests across 1 file. [28.00ms]\r\n | Stdout: "
+  },
+  {
+    "role": "assistant",
+    "content": "All 46 tests pass, including the new one. Let me verify TypeScript is clean too:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff; npx tsc --noEmit 2>&1 | Select-String \\\"compiler/index.ts\\\"\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff; npx tsc --noEmit 2>&1 | Select-String \\\"compiler/index.ts\\\"\"\n | Stderr:  | Stdout: "
+  },
+  {
+    "role": "assistant",
+    "content": "All clean. Here's what I did:\n\n**In `index.ts` (comparison operator handling):** Added a type compatibility check before performing comparisons. If one operand is `\"Bool\"` and the other is numeric (or vice versa), it throws `\"Type mismatch in comparison: <typeA> and <typeB>\"`. This prevents mixing boolean values with integer literals like `true == 1U8`.\n\n**In `index.test.ts`:** Replaced the old test `'executeTuff(\"let x = true; let y = false; (x == 1U8) || y\") returns 1'` — which compared a `Bool` variable with a numeric literal (`1U8`) — with the new strict test:\n\n```ts\ntest('executeTuff(\"true == 1U8\") throws error for type mismatch', () => {\n  expect(() => executeTuff(\"true == 1U8\")).toThrow(\n    \"Type mismatch in comparison: Bool and U8\",\n  );\n});\n```\n\nAll **46 tests pass** ✅, TypeScript compiles cleanly with no errors."
   }
 ]

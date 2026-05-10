@@ -180,10 +180,10 @@ test('executeTuff("let x = 50U8; let y = 100U8; x < y") returns false when equal
   expect(executeTuff("let x = 100U8; let y = 100U8; x < y")).toBe(0);
 });
 
-test('executeTuff("let x = true; let y = false; (x == 1U8) || y") returns 1', () => {
-  expect(executeTuff("let x = true; let y = false; (x == 1U8) || y")).toBe(1);
+test('executeTuff("true == 1U8") throws error for type mismatch', () => {
+  expect(() => executeTuff("true == 1U8")).toThrow(
+    "Type mismatch in comparison: Bool and U8",
+  );
 });
-
-
 
 

@@ -322,6 +322,15 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       const op = consume();
       const right = parseTermWithType();
 
+      // Enforce type compatibility: both operands must be same category
+      // - Numeric types can compare with each other (U/I of any width)
+      // - Bool cannot mix with numeric types
+      if ((left.type === "Bool") !== (right.type === "Bool")) {
+        throw new Error(
+          `Type mismatch in comparison: ${left.type} and ${right.type}`,
+        );
+      }
+
       let cmpResult: bigint;
       switch (op) {
         case "<":
