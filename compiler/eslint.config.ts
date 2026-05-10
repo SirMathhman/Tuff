@@ -9,6 +9,12 @@ export default defineConfig([
     plugins: { js },
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
+    rules: {
+      "max-lines-per-function": [
+        "error",
+        { max: 250, skipComments: true, skipBlankLines: true },
+      ],
+    },
   },
   tseslint.configs.recommended,
 ]);
