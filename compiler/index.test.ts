@@ -125,4 +125,8 @@ test('executeTuff("let x = 0U8; let y : *U16 = &x;") throws error for pointer ty
   expect(() => executeTuff("let x = 0U8; let y : *U16 = &x;")).toThrow();
 });
 
+test('executeTuff("let x = 0U8; *x") throws error for dereferencing non-pointer', () => {
+  expect(() => executeTuff("let x = 0U8; *x")).toThrow();
+});
+
 

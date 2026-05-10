@@ -285,8 +285,12 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
       consume("*");
       const name = parseIdentifier();
       const entry = scope.get(name)!;
+      // Only allow dereferencing pointer types (types starting with *)
+      if (!entry.type.startsWith("*")) {
+        throw new Error(`Cannot dereference non-pointer type: ${entry.type}`);
+      }
       result = { value: entry.value, type: entry.type.replace(/^\*/, "") };
-    } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
+   } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
       // Variable reference — use the stored type from scope
       const name = parseIdentifier();
       const entry = scope.get(name)!;
