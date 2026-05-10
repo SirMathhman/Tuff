@@ -616,23 +616,36 @@ while (true) {
     // Collect stdErr and stdOutput and give it to the model if we hit a non-zero exit code
 
     if (fs.existsSync("Stop.ps1")) {
-      const stopResult = await powershell(
-        "powershell -ExecutionPolicy Bypass -File Stop.ps1",
-      );
-      if (stopResult.trim() !== "") {
-        process.stdout.write(`\n[Stop.ps1 output]\n${stopResult}\n`);
+      const stopResult = await new Promise<{
+        exitCode: number;
+        output: string;
+      }>((resolve) => {
+        child_process.exec(
+          "powershell -ExecutionPolicy Bypass -File Stop.ps1",
+          (error, stdout, stderr) => {
+            const exitCode = (error as any)?.code ?? 0;
+            const output = [stdout, stderr].filter(Boolean).join("\n").trim();
+            resolve({ exitCode, output });
+          },
+        );
+      });
+
+      if (stopResult.exitCode !== 0) {
+        const msg = stopResult.output || "(no output)";
+        process.stdout.write(
+          `\n[Stop.ps1 failed (exit ${stopResult.exitCode})]\n${msg}\n`,
+        );
         messages.push({
-          role: "tool",
-          tool_call_id: `stop_check_${Date.now()}`,
-          content: `Stop hook failed to execute. You MUST fix these issues before ending: ${stopResult}`,
+          role: "user",
+          content: `Stop hook exited with code ${stopResult.exitCode}. You MUST fix these issues before continuing:\n${msg}`,
         });
       } else {
         process.stdout.write(`\n[Stop.ps1] No issues detected.\n`);
+        break;
       }
     } else {
-      process.stdout.write(
-        `\n[Stop.ps1] No stop hook found, skipping post-turn checks.\n`,
-      );
+      process.stdout.write(`\n[Stop.ps1] No stop hook found, skipping.\n`);
+      break;
     }
   }
 
