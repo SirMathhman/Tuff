@@ -226,3 +226,7 @@ test('executeTuff("let mut i = 0U8; while (i < 4U8) i += 1U8; i") returns 4', ()
   expect(executeTuff("let mut i = 0U8; while (i < 4U8) i += 1U8; i")).toBe(4);
 });
 
+test('executeTuff("let mut i = 0U8; while (i < 4U8) { i += 1U8; } i") returns 4', () => {
+  expect(executeTuff("let mut i = 0U8; while (i < 4U8) { i += 1U8; } i")).toBe(4);
+});
+

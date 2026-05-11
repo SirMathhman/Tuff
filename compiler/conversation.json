@@ -456,5 +456,184 @@
   {
     "role": "assistant",
     "content": "All **54 tests pass** ✅ — the while loop test case is now added and passing with `executeTuff(\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\") => 4`."
+  },
+  {
+    "role": "user",
+    "content": "Add and implement: executeTuff(\"let mut i = 0U8; while (i < 4U8) { i += 1U8; } i\") => 4"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":230,\"endLine\":285}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 560\n230: // ── While loop executor (extracted from parseBlockItem) ───────────────\n231: \n232: function executeWhileLoop(ctx: ParserCtx): bigint | null {\n233:   consume(ctx, \"while\");\n234:   consume(ctx, \"(\");\n235: \n236:   // Save position so we can re-parse condition each iteration\n237:   const condStart = ctx.pos;\n238: \n239:   let blockValue: bigint | null = null;\n240:   for (let iter = 0; iter < MAX_WHILE_ITERATIONS; iter++) {\n241:     // Re-parse condition from saved position\n242:     ctx.pos = condStart;\n243:     const condResult = parseExprWithType(ctx);\n244:     if (condResult.type !== \"Bool\")\n245:       throw new Error(`While condition must be Bool, got ${condResult.type}`);\n246: \n247:     consume(ctx, \")\");\n248: \n249:     // If false, skip past the body tokens without executing them\n250:     if (condResult.value === 0) {\n251:       skipBodyTokens(ctx);\n252:       return blockValue;\n253:     }\n254: \n255:     // Execute body: parse ONE block item per iteration\n256:     const itemValue = parseBlockItem(ctx);\n257:     if (itemValue !== null) blockValue = itemValue;\n258:   }\n259: \n260:   return blockValue;\n261: }\n262: \n263: // Skip past the tokens that make up one while-loop body statement.\n264: function skipBodyTokens(ctx: ParserCtx): void {\n265:   // If there's a brace-enclosed block, skip to matching \"}\"\n266:   if (peek(ctx) === \"{\") {\n267:     let depth = 1;\n268:     consume(ctx); // opening \"{\"\n269:     while (depth > 0 && ctx.pos < ctx.tokens.length) {\n270:       const t = consume(ctx);\n271:       if (t === \"{\") depth++;\n272:       else if (t === \"}\") depth--;\n273:     }\n274:     return;\n275:   }\n276: \n277:   // Otherwise skip one statement: advance until we hit \";\" or run out of tokens.\n278:   while (ctx.pos < ctx.tokens.length && peek(ctx) !== \";\") {\n279:     consume(ctx);\n280:   }\n281:   if (peek(ctx) === \";\") consume(ctx, \";\");\n282: }\n283: \n284: "
+  },
+  {
+    "role": "assistant",
+    "content": "I need to update `executeWhileLoop` so that when the body is brace-enclosed (`{ ... }`), it executes all statements inside rather than just one:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":230,\"endLine\":282,\"content\":\"// ── While loop executor (extracted from parseBlockItem) ───────────────\\n\\nfunction executeWhileLoop(ctx: ParserCtx): bigint | null {\\n  consume(ctx, \\\"while\\\");\\n  consume(ctx, \\\"(\\\");\\n\\n  // Save position so we can re-parse condition each iteration\\n  const condStart = ctx.pos;\\n\\n  let blockValue: bigint | null = null;\\n  for (let iter = 0; iter < MAX_WHILE_ITERATIONS; iter++) {\\n    // Re-parse condition from saved position\\n    ctx.pos = condStart;\\n    const condResult = parseExprWithType(ctx);\\n    if (condResult.type !== \\\"Bool\\\")\\n      throw new Error(`While condition must be Bool, got ${condResult.type}`);\\n\\n    consume(ctx, \\\")\\\");\\n\\n    // If false, skip past the body tokens without executing them\\n    if (condResult.value === 0) {\\n      skipBodyTokens(ctx);\\n      return blockValue;\\n    }\\n\\n    // Execute body: brace-enclosed block or single statement\\n    const itemValue = parseWhileBody(ctx);\\n    if (itemValue !== null) blockValue = itemValue;\\n  }\\n\\n  return blockValue;\\n}\\n\\n// Parse and execute the while-loop body. Handles both `{ ... }` blocks\\n// with multiple statements, and bare single-statement bodies.\\nfunction parseWhileBody(ctx: ParserCtx): bigint | null {\\n  if (peek(ctx) === \\\"{\\\") {\\n    consume(ctx, \\\"{\\\");\\n    let lastValue: bigint | null = null;\\n    while (!peek(ctx) || peek(ctx) !== \\\"}\\\") {\\n      const itemValue = parseBlockItem(ctx);\\n      if (itemValue !== null) lastValue = itemValue;\\n    }\\n    consume(ctx, \\\"}\\\");\\n    return lastValue;\\n  }\\n\\n  // Single bare statement body\\n  const itemValue = parseBlockItem(ctx);\\n  return itemValue;\\n}\\n\\n// Skip past the tokens that make up one while-loop body (without executing).\\nfunction skipBodyTokens(ctx: ParserCtx): void {\\n  if (peek(ctx) === \\\"{\\\") {\\n    let depth = 1;\\n    consume(ctx); // opening \\\"{\\\"\\n    while (depth > 0 && ctx.pos < ctx.tokens.length) {\\n      const t = consume(ctx);\\n      if (t === \\\"{\\\") depth++;\\n      else if (t === \\\"}\\\") depth--;\\n    }\\n    return;\\n  }\\n\\n  // Otherwise skip one statement: advance until we hit \\\";\\\" or run out of tokens.\\n  while (ctx.pos < ctx.tokens.length && peek(ctx) !== \\\";\\\") {\\n    consume(ctx);\\n  }\\n  if (peek(ctx) === \\\";\\\") consume(ctx, \\\";\\\");\\n}\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me add the test case:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":221,\"endLine\":230}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 229\n221: test('executeTuff(\"let x = 0U8; let y = &x;\") returns 0', () => {\n222:   expect(executeTuff(\"let x = 0U8; let y = &x;\")).toBe(0);\n223: });\n224: \n225: test('executeTuff(\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\") returns 4', () => {\n226:   expect(executeTuff(\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\")).toBe(4);\n227: });\n228: \n229: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":225,\"endLine\":229,\"content\":\"test('executeTuff(\\\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\\\") returns 4', () => {\\n  expect(executeTuff(\\\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\\\")).toBe(4);\\n});\\n\\ntest('executeTuff(\\\"let mut i = 0U8; while (i < 4U8) { i += 1U8; } i\\\") returns 4', () => {\\n  expect(executeTuff(\\\"let mut i = 0U8; while (i < 4U8) { i += 1U8; } i\\\")).toBe(4);\\n});\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-Object -Last 5\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-Object -Last 5\"\n 0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [23.00ms]\r\n | Stderr:  0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [23.00ms]\r\n | Stdout: "
+  },
+  {
+    "role": "assistant",
+    "content": "There's a failure. Let me see the full output:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-Object -Last 30\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-Object -Last 30\"\nbun : \r\nAt line:1 char:44\r\n+ ... Documents\\Projects\\Tuff; bun test compiler/index.test.ts 2>&1 | Selec ...\r\n+                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\ncompiler\\index.test.ts:\r\n# Unhandled error between tests\r\n-------------------------------\r\n301 | }\r\n      ^\r\nerror: Unexpected }\r\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:301:1\r\n-------------------------------\r\n 0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [22.00ms]\r\n | Stderr: bun : \r\nAt line:1 char:44\r\n+ ... Documents\\Projects\\Tuff; bun test compiler/index.test.ts 2>&1 | Selec ...\r\n+                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\ncompiler\\index.test.ts:\r\n# Unhandled error between tests\r\n-------------------------------\r\n301 | }\r\n      ^\r\nerror: Unexpected }\r\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:301:1\r\n-------------------------------\r\n 0 pass\r\n 1 fail\r\n 1 error\r\nRan 1 test across 1 file. [22.00ms]\r\n | Stdout: bun test v1.3.13 (bf2e2cec)\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":290,\"endLine\":315}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 579\n290:       else if (t === \"}\") depth--;\n291:     }\n292:     return;\n293:   }\n294: \n295:   // Otherwise skip one statement: advance until we hit \";\" or run out of tokens.\n296:   while (ctx.pos < ctx.tokens.length && peek(ctx) !== \";\") {\n297:     consume(ctx);\n298:   }\n299:   if (peek(ctx) === \";\") consume(ctx, \";\");\n300: }\n301: }\n302: \n303: \n304: // ── Block item parser ───────────────────────────────────────────────\n305: \n306: function parseBlockItem(ctx: ParserCtx): bigint | null {\n307:   // While loop statement\n308:   if (peek(ctx) === \"while\") return executeWhileLoop(ctx);\n309: \n310:   // Let declaration\n311:   if (peek(ctx) === \"let\") {\n312:     consume(ctx, \"let\");\n313:     const mutable = peek(ctx) === \"mut\";\n314:     if (mutable) consume(ctx, \"mut\");"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.ts\",\"startLine\":301,\"endLine\":302,\"content\":\"\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-Object -Last 5\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-Object -Last 5\"\n 55 pass\r\n 0 fail\r\n 55 expect() calls\r\nRan 55 tests across 1 file. [29.00ms]\r\n | Stderr:  55 pass\r\n 0 fail\r\n 55 expect() calls\r\nRan 55 tests across 1 file. [29.00ms]\r\n | Stdout: "
+  },
+  {
+    "role": "assistant",
+    "content": "All **55 tests pass** ✅ — including the new brace-enclosed while loop body test case `executeTuff(\"let mut i = 0U8; while (i < 4U8) { i += 1U8; } i\") => 4`."
   }
 ]

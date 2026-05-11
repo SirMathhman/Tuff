@@ -10,7 +10,8 @@ const MAX_WHILE_ITERATIONS = 1024;
 
 function parseLiteral(literal: string): number | bigint {
   const match = literal.match(/^(-?\d+)([UI])(8|16|32|64)$/);
-  if (!match || !match[1] || !match[2] || !match[3]) throw new Error("Invalid format");
+  if (!match || !match[1] || !match[2] || !match[3])
+    throw new Error("Invalid format");
 
   const valueStr = match[1];
   const typePrefix = match[2]; // "U" or "I"
@@ -32,7 +33,8 @@ function parseLiteral(literal: string): number | bigint {
 
   if (typePrefix === "U") {
     if (value < minValue) throw new Error("Negative values are not supported");
-    if (value > maxValue) throw new Error(`Value exceeds maximum for ${typePrefix}${bits}`);
+    if (value > maxValue)
+      throw new Error(`Value exceeds maximum for ${typePrefix}${bits}`);
   } else {
     if (value < minValue || value > maxValue)
       throw new Error(`Value out of range for ${typePrefix}${bits}`);
@@ -193,7 +195,8 @@ function parseTypeAnnotation(ctx: ParserCtx): string {
     !/^[UI](8|16|32|64)$/.test(typeToken) &&
     !/^\*[UI](8|16|32|64)$/.test(typeToken) &&
     typeToken !== "Bool"
-  ) throw new Error(`Invalid type: ${typeToken}`);
+  )
+    throw new Error(`Invalid type: ${typeToken}`);
   return typeToken;
 }
 
@@ -252,17 +255,35 @@ function executeWhileLoop(ctx: ParserCtx): bigint | null {
       return blockValue;
     }
 
-    // Execute body: parse ONE block item per iteration
-    const itemValue = parseBlockItem(ctx);
+    // Execute body: brace-enclosed block or single statement
+    const itemValue = parseWhileBody(ctx);
     if (itemValue !== null) blockValue = itemValue;
   }
 
   return blockValue;
 }
 
-// Skip past the tokens that make up one while-loop body statement.
+// Parse and execute the while-loop body. Handles both `{ ... }` blocks
+// with multiple statements, and bare single-statement bodies.
+function parseWhileBody(ctx: ParserCtx): bigint | null {
+  if (peek(ctx) === "{") {
+    consume(ctx, "{");
+    let lastValue: bigint | null = null;
+    while (!peek(ctx) || peek(ctx) !== "}") {
+      const itemValue = parseBlockItem(ctx);
+      if (itemValue !== null) lastValue = itemValue;
+    }
+    consume(ctx, "}");
+    return lastValue;
+  }
+
+  // Single bare statement body
+  const itemValue = parseBlockItem(ctx);
+  return itemValue;
+}
+
+// Skip past the tokens that make up one while-loop body (without executing).
 function skipBodyTokens(ctx: ParserCtx): void {
-  // If there's a brace-enclosed block, skip to matching "}"
   if (peek(ctx) === "{") {
     let depth = 1;
     consume(ctx); // opening "{"
@@ -280,7 +301,6 @@ function skipBodyTokens(ctx: ParserCtx): void {
   }
   if (peek(ctx) === ";") consume(ctx, ";");
 }
-
 
 // ── Block item parser ───────────────────────────────────────────────
 
@@ -323,10 +343,8 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
   // Assignment / compound assignment expressions
   const p = peek(ctx);
   if (p && /^[a-zA-Z_]\w*$/.test(p) && ctx.tokens[ctx.pos + 1] === "=") {
-    return assignToVariable(
-      ctx,
-      "=",
-      (_entryVal, exprResult) => BigInt(exprResult.value),
+    return assignToVariable(ctx, "=", (_entryVal, exprResult) =>
+      BigInt(exprResult.value),
     );
   }
 
@@ -364,7 +382,10 @@ function applyLogicalOp(
 
 // ── Expression parser (with type tracking) ───────────────────────────
 
-function parseExprWithType(ctx: ParserCtx): { value: number | bigint; type: string } {
+function parseExprWithType(ctx: ParserCtx): {
+  value: number | bigint;
+  type: string;
+} {
   const left = parseTermWithType(ctx);
 
   // Addition / subtraction
@@ -386,7 +407,9 @@ function parseExprWithType(ctx: ParserCtx): { value: number | bigint; type: stri
     const right = parseTermWithType(ctx);
 
     if ((left.type === "Bool") !== (right.type === "Bool"))
-      throw new Error(`Type mismatch in comparison: ${left.type} and ${right.type}`);
+      throw new Error(
+        `Type mismatch in comparison: ${left.type} and ${right.type}`,
+      );
 
     let cmpResult: bigint;
     switch (op) {
@@ -442,7 +465,10 @@ function parseExprWithType(ctx: ParserCtx): { value: number | bigint; type: stri
 
 // ── Term parser ──────────────────────────────────────────────────────
 
-function parseTermWithType(ctx: ParserCtx): { value: number | bigint; type: string } {
+function parseTermWithType(ctx: ParserCtx): {
+  value: number | bigint;
+  type: string;
+} {
   let result: { value: bigint; type: string };
   const token = peek(ctx);
 
@@ -463,9 +489,10 @@ function parseTermWithType(ctx: ParserCtx): { value: number | bigint; type: stri
         `If/else branch type mismatch: ${thenBranch.type} vs ${elseBranch.type}`,
       );
 
-    result = condResult.value != 0
-      ? { value: BigInt(thenBranch.value), type: thenBranch.type }
-      : { value: BigInt(elseBranch.value), type: elseBranch.type };
+    result =
+      condResult.value != 0
+        ? { value: BigInt(thenBranch.value), type: thenBranch.type }
+        : { value: BigInt(elseBranch.value), type: elseBranch.type };
   } else if (token === "(") {
     consume(ctx, "(");
     const inner = parseExprWithType(ctx);
@@ -544,8 +571,12 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   const ctx: ParserCtx = {
     tokens,
-    get pos() { return pos; },
-    set pos(v) { pos = v; },
+    get pos() {
+      return pos;
+    },
+    set pos(v) {
+      pos = v;
+    },
     scope,
   };
 
