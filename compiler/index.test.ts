@@ -60,3 +60,11 @@ test("duplicate let declarations are rejected", () => {
 test("type inference: let x = read<U8>(); x returns the variable value", () => {
   assertValid("let x = read<U8>(); x", 100, "100");
 });
+
+test("assigning U16 to U8 variable is rejected (overflow risk)", () => {
+  assertInvalid("let x : U8 = read<U16>();");
+});
+
+test("let declaration requires a semicolon", () => {
+  assertInvalid("let x : U16 = read<U16>()");
+});

@@ -122,6 +122,7 @@ interface LetDecl {
   typeAnnotation?: string; // e.g. "U8" — optional, inferred from initializer if omitted
   init: Expr;
 }
+
 interface ExprStmt {
   kind: "expr";
   expr: Expr;
@@ -131,7 +132,6 @@ interface ExprStmt {
 
 class Parser {
   private pos = 0;
-
 
   constructor(private tokens: Token[]) {}
 
@@ -164,7 +164,7 @@ class Parser {
     return { kind: "expr", expr };
   }
 
- private parseLetDecl(): LetDecl {
+  private parseLetDecl(): LetDecl {
     // consume 'let'
     this.advance();
 
@@ -176,7 +176,7 @@ class Parser {
       );
     const name = nameTok.value;
 
-    let typeAnnotation: string | undefined;
+   let typeAnnotation = "";
 
     // ':' type annotation is optional — infer from initializer if omitted
     if (!this.atEnd() && this.peek().type === "COLON") {
@@ -193,17 +193,23 @@ class Parser {
     const init = this.parseExpression();
 
     // Infer type from initializer if not explicitly annotated
+    const initType = this.inferType(init);
+
     if (!typeAnnotation) {
-      typeAnnotation = this.inferType(init);
+      typeAnnotation = initType;
+    } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {
+      throw new Error(
+        `Cannot assign '${initType}' to variable of type '${typeAnnotation}': possible overflow`,
+      );
     }
 
-    // ';' terminator (optional at end of program)
-    if (!this.atEnd() && this.peek().type === "SEMICOLON") {
-      this.advance();
-    }
+
+   // ';' terminator — always required for let declarations
+    this.expect("SEMICOLON", "';' at end of let declaration");
 
     return { kind: "let", name, typeAnnotation, init };
   }
+
 
   private inferType(expr: Expr): string {
     switch (expr.kind) {
@@ -213,13 +219,28 @@ class Parser {
         return expr.typeAnnotation;
       default:
         throw new Error(
-         `Cannot infer type for variable initializer of kind '${expr.kind}'`,
+          `Cannot infer type for variable initializer of kind '${expr.kind}'`,
         );
     }
   }
 
-  private parseExpression(): Expr {
+  private typeBits(typeName: string): number {
+    switch (typeName) {
+      case "U8":
+      case "I8":
+        return 8;
+      case "U16":
+      case "I16":
+        return 16;
+      case "U32":
+      case "I32":
+        return 32;
+      default:
+        throw new Error(`Unknown type '${typeName}'`);
+    }
+  }
 
+  private parseExpression(): Expr {
     let left = this.parsePrimary();
 
     while (!this.atEnd() && this.peek().type === "PLUS") {
@@ -346,7 +367,7 @@ class Generator {
     return lines.join("\n");
   }
 
- private collectDeclarations(statements: Statement[]): void {
+  private collectDeclarations(statements: Statement[]): void {
     for (const stmt of statements) {
       if (stmt.kind === "let") {
         if (this.declaredVars.has(stmt.name)) {
@@ -356,7 +377,6 @@ class Generator {
       }
     }
   }
-
 
   private generateStatement(stmt: Statement, lines: string[]): void {
     switch (stmt.kind) {
