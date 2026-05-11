@@ -392,7 +392,36 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
   function parseTermWithType(): { value: number | bigint; type: string } {
     let result: { value: bigint; type: string };
     const token = peek();
-    if (token === "(") {
+
+    if (token === "if") {
+      // if/else expression: if (<cond>) <then> else <else>
+      consume("if");
+      consume("(");
+      const condResult = parseExprWithType();
+      consume(")");
+      if (condResult.type !== "Bool") {
+        throw new Error(`If condition must be Bool, got ${condResult.type}`);
+      }
+
+      // Parse then-branch
+      const thenBranch = parseTermWithType();
+
+      // Expect else keyword
+      consume("else");
+      const elseBranch = parseTermWithType();
+
+      // Both branches must have compatible types
+      if (thenBranch.type !== elseBranch.type) {
+        throw new Error(
+          `If/else branch type mismatch: ${thenBranch.type} vs ${elseBranch.type}`,
+        );
+      }
+
+      result =
+        condResult.value != 0
+          ? { value: BigInt(thenBranch.value), type: thenBranch.type }
+          : { value: BigInt(elseBranch.value), type: elseBranch.type };
+    } else if (token === "(") {
       consume("(");
       const innerResult = parseExprWithType();
       consume(")");
@@ -444,7 +473,6 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
         type: inferLiteralType(literalToken),
       };
     }
-
     while (peek() === "*" || peek() === "/") {
       const op = consume();
       const rightResult = parseTermWithType();

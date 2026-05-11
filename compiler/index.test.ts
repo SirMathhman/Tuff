@@ -186,4 +186,19 @@ test('executeTuff("true == 1U8") throws error for type mismatch', () => {
   );
 });
 
+test('executeTuff("let x = if (true) 3U8 else 5U8; x") returns 3', () => {
+  expect(executeTuff("let x = if (true) 3U8 else 5U8; x")).toBe(3);
+});
+
+test('executeTuff("let x = if (false) 3U8 else 5U8; x") returns 5', () => {
+  expect(executeTuff("let x = if (false) 3U8 else 5U8; x")).toBe(5);
+});
+
+test('executeTuff("if (true) 100U8 else 200U8") returns 100', () => {
+  expect(executeTuff("if (true) 100U8 else 200U8")).toBe(100);
+});
+
+test('executeTuff("let x = if (false) 3U8 else 5U8;") does not throw', () => {
+  expect(() => executeTuff("let x = if (false) 3U8 else 5U8;")).not.toThrow();
+});
 
