@@ -266,3 +266,15 @@ test('executeTuff("fn get() => 100;") returns 0', () => {
   expect(executeTuff("fn get() => 100;")).toBe(0);
 });
 
+test('executeTuff("fn get() => 100; get()") returns 100', () => {
+  expect(executeTuff("fn get() => 100; get()")).toBe(100);
+});
+
+test('executeTuff("fn a() => 100; fn b() => a(); b()") returns 100', () => {
+  expect(executeTuff("fn a() => 100; fn b() => a(); b()")).toBe(100);
+});
+
+test('executeTuff("fn b() => a(); fn a() => 100; b()") returns 100', () => {
+  expect(executeTuff("fn b() => a(); fn a() => 100; b()")).toBe(100);
+});
+

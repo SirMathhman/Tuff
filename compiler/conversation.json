@@ -247,5 +247,257 @@
   {
     "role": "assistant",
     "content": "All 63 tests are now passing! ✅\n\nThe fix was making the return type annotation optional in function declarations. When no `: Type` is specified (like in `\"fn get() => 100;\"`), it defaults to `\"I32\"`. This allows functions without explicit return types while still supporting all existing functionality including Void returns, duplicate detection, and multi-parameter support."
+  },
+  {
+    "role": "user",
+    "content": "Add test: executeTuff(\"fn get() => 100; get()\") => 100"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":260,\"endLine\":275}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 269\n260: \n261: test('executeTuff(\"fn pass(first : I32, first : I32) : Void => {}\") throws error for duplicate parameter', () => {\n262:   expect(() => executeTuff(\"fn pass(first : I32, first : I32) : Void => {}\")).toThrow();\n263: });\n264: \n265: test('executeTuff(\"fn get() => 100;\") returns 0', () => {\n266:   expect(executeTuff(\"fn get() => 100;\")).toBe(0);\n267: });\n268: \n269: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":265,\"endLine\":269,\"content\":\"test('executeTuff(\\\"fn get() => 100;\\\") returns 0', () => {\\n  expect(executeTuff(\\\"fn get() => 100;\\\")).toBe(0);\\n});\\n\\ntest('executeTuff(\\\"fn get() => 100; get()\\\") returns 100', () => {\\n  expect(executeTuff(\\\"fn get() => 100; get()\\\")).toBe(100);\\n});\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts --test-name-pattern 'fn get\\\\(\\\\) => 100; get\\\\(\\\\)'\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) executeTuff(\"fn get() => 100; get()\") returns 100\n\n 1 pass\n 63 filtered out\n 0 fail\n 1 expect() calls\nRan 1 test across 1 file. [28.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) executeTuff with empty string returns 0\n(pass) executeTuff(\"100U8\") returns 100 [16.00ms]\n(pass) executeTuff(\"100U16\") returns 100\n(pass) executeTuff(\"-100U8\") throws error for negative values\n(pass) executeTuff(\"256U8\") throws error for out of range\n(pass) executeTuff(\"9007199254740993U64\") returns bigint\n(pass) executeTuff(\"-100I8\") returns -100\n(pass) executeTuff(\"1U8 + 2U8\") returns 3\n(pass) executeTuff(\"1U8 + 2U8 + 3U8\") returns 6\n(pass) executeTuff(\"1U8 * 2U8 + 3U8\") returns 5\n(pass) executeTuff(\"1U8 + 2U8 * 3U8\") returns 7\n(pass) executeTuff(\"(1U8 + 2U8) * 3U8\") returns 9\n(pass) executeTuff(\"{ 1U8 + 2U8 } * 3U8\") returns 9\n(pass) executeTuff(\"{ let x : U8 = 1U8 + 2U8; x } * 3U8\") returns 9\n(pass) executeTuff(\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\") returns 9\n(pass) executeTuff(\"let x : U8 = 100U8;\") returns 0\n(pass) executeTuff(\"let x = 100U8; x\") returns 100\n(pass) executeTuff(\"let x = 0U8; let x = 10U8; x\") returns 10\n(pass) executeTuff(\"let x : U8 = 0U16; x\") throws error for type mismatch\n(pass) executeTuff(\"let x = 0U16; let y : U8 = x;\") throws error for narrowing assignment\n(pass) executeTuff(\"let mut x = 0U8; x = 1U8; x\") returns 1\n(pass) executeTuff(\"let mut x = 0U8; x = 1U16; x\") throws error for widening assignment\n(pass) executeTuff(\"x = 1U16; x\") throws error for undeclared variable\n(pass) executeTuff(\"let x = 100U16; x = 1U16; x\") throws error for reassigning immutable variable\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x;\") returns 0\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; let z : U8 = *y;\") returns 0\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; *y\") returns 0\n(pass) executeTuff(\"let x = 1U8; let y : *U8 = &x; *y\") returns 1\n(pass) executeTuff(\"&x\") throws error for undefined variable\n(pass) executeTuff(\"let x = 0U8; let y : *U16 = &x;\") throws error for pointer type mismatch\n(pass) executeTuff(\"let x = 0U8; *x\") throws error for dereferencing non-pointer\n(pass) executeTuff(\"let x : Bool = true; x\") returns 1\n(pass) executeTuff(\"let x : Bool = false; x\") returns 0\n(pass) executeTuff(\"let x = true; let y = false; x || y\") returns 1\n(pass) executeTuff(\"let x = true; let y = false; x && y\") returns 0\n(pass) executeTuff(\"let x = 100U8; let y = 200U8; x < y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 50U8; x > y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 100U8; x == y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 200U8; x != y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 100U8; x <= y\") returns 1\n(pass) executeTuff(\"let x = 200U8; let y = 100U8; x >= y\") returns 1\n(pass) executeTuff(\"let x = 50U8; let y = 100U8; x < y\") returns 1\n(pass) executeTuff(\"let x = 200U8; let y = 100U8; x > y\") returns 1\n(pass) executeTuff(\"let x = 50U8; let y = 100U8; x < y\") returns false when equal\n(pass) executeTuff(\"true == 1U8\") throws error for type mismatch\n(pass) executeTuff(\"let x = if (true) 3U8 else 5U8; x\") returns 3\n(pass) executeTuff(\"let x = if (false) 3U8 else 5U8; x\") returns 5\n(pass) executeTuff(\"if (true) 100U8 else 200U8\") returns 100\n(pass) executeTuff(\"let x = if (false) 3U8 else 5U8;\") does not throw\n(pass) executeTuff(\"let mut x = 0U8; if (false) { x = 3U8; } else { x = 5U8;} x\") returns 5\n(pass) executeTuff(\"let mut x = 0U8; x += 1U8; x\") returns 1\n(pass) executeTuff(\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\") returns 4\n(pass) executeTuff(\"let mut i = 0U8; while (i < 4U8) { i += 1U8; } i\") returns 4\n(pass) executeTuff(\"let x = 4; x\") returns 4\n(pass) executeTuff(\"fn get() : I32 => 100; get()\") returns 100\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\n(pass) executeTuff(\"fn pass(param : I32) : I32 => param; pass(100)\") returns 100\n(pass) executeTuff(\"fn empty() : Void => {}\") returns 0\n(pass) executeTuff(\"fn empty() : Void => {} fn empty() : Void => {}\") throws error for duplicate function\n(pass) executeTuff(\"fn pass(first : I32, second : I32) : Void => {}\") returns 0\n(pass) executeTuff(\"fn pass(first : I32, first : I32) : Void => {}\") throws error for duplicate parameter\n(pass) executeTuff(\"fn get() => 100;\") returns 0\n(pass) executeTuff(\"fn get() => 100; get()\") returns 100\n\n 64 pass\n 0 fail\n 64 expect() calls\nRan 64 tests across 1 file. [31.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Done! ✅ Added the test case `'executeTuff(\"fn get() => 100; get()\") returns 100'`. All **64 tests** pass — calling a function declared without an explicit return type correctly infers `I32` and evaluates to `100`."
+  },
+  {
+    "role": "user",
+    "content": "Add test: executeTuff(\"fn a() => 100; fn b() => a(); b()\") => 100"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":265,\"endLine\":273}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 274\n265: test('executeTuff(\"fn get() => 100;\") returns 0', () => {\n266:   expect(executeTuff(\"fn get() => 100;\")).toBe(0);\n267: });\n268: \n269: test('executeTuff(\"fn get() => 100; get()\") returns 100', () => {\n270:   expect(executeTuff(\"fn get() => 100; get()\")).toBe(100);\n271: });\n272: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":269,\"endLine\":273,\"content\":\"test('executeTuff(\\\"fn get() => 100; get()\\\") returns 100', () => {\\n  expect(executeTuff(\\\"fn get() => 100; get()\\\")).toBe(100);\\n});\\n\\ntest('executeTuff(\\\"fn a() => 100; fn b() => a(); b()\\\") returns 100', () => {\\n  expect(executeTuff(\\\"fn a() => 100; fn b() => a(); b()\\\")).toBe(100);\\n});\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts --test-name-pattern 'fn a\\\\(\\\\) => 100; fn b'\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) executeTuff(\"fn a() => 100; fn b() => a(); b()\") returns 100\n\n 1 pass\n 64 filtered out\n 0 fail\n 1 expect() calls\nRan 1 test across 1 file. [25.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) executeTuff with empty string returns 0\n(pass) executeTuff(\"100U8\") returns 100 [16.00ms]\n(pass) executeTuff(\"100U16\") returns 100\n(pass) executeTuff(\"-100U8\") throws error for negative values\n(pass) executeTuff(\"256U8\") throws error for out of range\n(pass) executeTuff(\"9007199254740993U64\") returns bigint\n(pass) executeTuff(\"-100I8\") returns -100\n(pass) executeTuff(\"1U8 + 2U8\") returns 3\n(pass) executeTuff(\"1U8 + 2U8 + 3U8\") returns 6\n(pass) executeTuff(\"1U8 * 2U8 + 3U8\") returns 5\n(pass) executeTuff(\"1U8 + 2U8 * 3U8\") returns 7\n(pass) executeTuff(\"(1U8 + 2U8) * 3U8\") returns 9\n(pass) executeTuff(\"{ 1U8 + 2U8 } * 3U8\") returns 9\n(pass) executeTuff(\"{ let x : U8 = 1U8 + 2U8; x } * 3U8\") returns 9\n(pass) executeTuff(\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\") returns 9\n(pass) executeTuff(\"let x : U8 = 100U8;\") returns 0\n(pass) executeTuff(\"let x = 100U8; x\") returns 100\n(pass) executeTuff(\"let x = 0U8; let x = 10U8; x\") returns 10\n(pass) executeTuff(\"let x : U8 = 0U16; x\") throws error for type mismatch\n(pass) executeTuff(\"let x = 0U16; let y : U8 = x;\") throws error for narrowing assignment\n(pass) executeTuff(\"let mut x = 0U8; x = 1U8; x\") returns 1\n(pass) executeTuff(\"let mut x = 0U8; x = 1U16; x\") throws error for widening assignment\n(pass) executeTuff(\"x = 1U16; x\") throws error for undeclared variable\n(pass) executeTuff(\"let x = 100U16; x = 1U16; x\") throws error for reassigning immutable variable\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x;\") returns 0\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; let z : U8 = *y;\") returns 0\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; *y\") returns 0\n(pass) executeTuff(\"let x = 1U8; let y : *U8 = &x; *y\") returns 1\n(pass) executeTuff(\"&x\") throws error for undefined variable\n(pass) executeTuff(\"let x = 0U8; let y : *U16 = &x;\") throws error for pointer type mismatch\n(pass) executeTuff(\"let x = 0U8; *x\") throws error for dereferencing non-pointer\n(pass) executeTuff(\"let x : Bool = true; x\") returns 1\n(pass) executeTuff(\"let x : Bool = false; x\") returns 0\n(pass) executeTuff(\"let x = true; let y = false; x || y\") returns 1\n(pass) executeTuff(\"let x = true; let y = false; x && y\") returns 0\n(pass) executeTuff(\"let x = 100U8; let y = 200U8; x < y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 50U8; x > y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 100U8; x == y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 200U8; x != y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 100U8; x <= y\") returns 1\n(pass) executeTuff(\"let x = 200U8; let y = 100U8; x >= y\") returns 1\n(pass) executeTuff(\"let x = 50U8; let y = 100U8; x < y\") returns 1\n(pass) executeTuff(\"let x = 200U8; let y = 100U8; x > y\") returns 1\n(pass) executeTuff(\"let x = 50U8; let y = 100U8; x < y\") returns false when equal\n(pass) executeTuff(\"true == 1U8\") throws error for type mismatch\n(pass) executeTuff(\"let x = if (true) 3U8 else 5U8; x\") returns 3\n(pass) executeTuff(\"let x = if (false) 3U8 else 5U8; x\") returns 5\n(pass) executeTuff(\"if (true) 100U8 else 200U8\") returns 100\n(pass) executeTuff(\"let x = if (false) 3U8 else 5U8;\") does not throw\n(pass) executeTuff(\"let mut x = 0U8; if (false) { x = 3U8; } else { x = 5U8;} x\") returns 5\n(pass) executeTuff(\"let mut x = 0U8; x += 1U8; x\") returns 1\n(pass) executeTuff(\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\") returns 4\n(pass) executeTuff(\"let mut i = 0U8; while (i < 4U8) { i += 1U8; } i\") returns 4\n(pass) executeTuff(\"let x = 4; x\") returns 4\n(pass) executeTuff(\"fn get() : I32 => 100; get()\") returns 100\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\n(pass) executeTuff(\"fn pass(param : I32) : I32 => param; pass(100)\") returns 100\n(pass) executeTuff(\"fn empty() : Void => {}\") returns 0\n(pass) executeTuff(\"fn empty() : Void => {} fn empty() : Void => {}\") throws error for duplicate function\n(pass) executeTuff(\"fn pass(first : I32, second : I32) : Void => {}\") returns 0\n(pass) executeTuff(\"fn pass(first : I32, first : I32) : Void => {}\") throws error for duplicate parameter\n(pass) executeTuff(\"fn get() => 100;\") returns 0\n(pass) executeTuff(\"fn get() => 100; get()\") returns 100\n(pass) executeTuff(\"fn a() => 100; fn b() => a(); b()\") returns 100\n\n 65 pass\n 0 fail\n 65 expect() calls\nRan 65 tests across 1 file. [30.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Done! ✅ Added the test case `'executeTuff(\"fn a() => 100; fn b() => a(); b()\") returns 100'`. All **65 tests** pass — confirming that function chaining works correctly: `b()` calls `a()`, which evaluates to `100`."
+  },
+  {
+    "role": "user",
+    "content": "Add test: executeTuff(\"fn b() => a(); fn a() => 100; b()\") => 100"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":265,\"endLine\":280}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 279\n265: test('executeTuff(\"fn get() => 100;\") returns 0', () => {\n266:   expect(executeTuff(\"fn get() => 100;\")).toBe(0);\n267: });\n268: \n269: test('executeTuff(\"fn get() => 100; get()\") returns 100', () => {\n270:   expect(executeTuff(\"fn get() => 100; get()\")).toBe(100);\n271: });\n272: \n273: test('executeTuff(\"fn a() => 100; fn b() => a(); b()\") returns 100', () => {\n274:   expect(executeTuff(\"fn a() => 100; fn b() => a(); b()\")).toBe(100);\n275: });\n276: \n277: \n278: \n279: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":273,\"endLine\":280,\"content\":\"test('executeTuff(\\\"fn a() => 100; fn b() => a(); b()\\\") returns 100', () => {\\n  expect(executeTuff(\\\"fn a() => 100; fn b() => a(); b()\\\")).toBe(100);\\n});\\n\\ntest('executeTuff(\\\"fn b() => a(); fn a() => 100; b()\\\") returns 100', () => {\\n  expect(executeTuff(\\\"fn b() => a(); fn a() => 100; b()\\\")).toBe(100);\\n});\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts --test-name-pattern 'fn b\\\\(\\\\) => a'\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) executeTuff(\"fn a() => 100; fn b() => a(); b()\") returns 100\n(pass) executeTuff(\"fn b() => a(); fn a() => 100; b()\") returns 100\n\n 2 pass\n 64 filtered out\n 0 fail\n 2 expect() calls\nRan 2 tests across 1 file. [27.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) executeTuff with empty string returns 0\n(pass) executeTuff(\"100U8\") returns 100\n(pass) executeTuff(\"100U16\") returns 100\n(pass) executeTuff(\"-100U8\") throws error for negative values\n(pass) executeTuff(\"256U8\") throws error for out of range\n(pass) executeTuff(\"9007199254740993U64\") returns bigint\n(pass) executeTuff(\"-100I8\") returns -100\n(pass) executeTuff(\"1U8 + 2U8\") returns 3\n(pass) executeTuff(\"1U8 + 2U8 + 3U8\") returns 6\n(pass) executeTuff(\"1U8 * 2U8 + 3U8\") returns 5\n(pass) executeTuff(\"1U8 + 2U8 * 3U8\") returns 7\n(pass) executeTuff(\"(1U8 + 2U8) * 3U8\") returns 9\n(pass) executeTuff(\"{ 1U8 + 2U8 } * 3U8\") returns 9\n(pass) executeTuff(\"{ let x : U8 = 1U8 + 2U8; x } * 3U8\") returns 9\n(pass) executeTuff(\"let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y\") returns 9\n(pass) executeTuff(\"let x : U8 = 100U8;\") returns 0\n(pass) executeTuff(\"let x = 100U8; x\") returns 100\n(pass) executeTuff(\"let x = 0U8; let x = 10U8; x\") returns 10\n(pass) executeTuff(\"let x : U8 = 0U16; x\") throws error for type mismatch\n(pass) executeTuff(\"let x = 0U16; let y : U8 = x;\") throws error for narrowing assignment\n(pass) executeTuff(\"let mut x = 0U8; x = 1U8; x\") returns 1\n(pass) executeTuff(\"let mut x = 0U8; x = 1U16; x\") throws error for widening assignment\n(pass) executeTuff(\"x = 1U16; x\") throws error for undeclared variable\n(pass) executeTuff(\"let x = 100U16; x = 1U16; x\") throws error for reassigning immutable variable\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x;\") returns 0\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; let z : U8 = *y;\") returns 0\n(pass) executeTuff(\"let x = 0U8; let y : *U8 = &x; *y\") returns 0\n(pass) executeTuff(\"let x = 1U8; let y : *U8 = &x; *y\") returns 1\n(pass) executeTuff(\"&x\") throws error for undefined variable\n(pass) executeTuff(\"let x = 0U8; let y : *U16 = &x;\") throws error for pointer type mismatch\n(pass) executeTuff(\"let x = 0U8; *x\") throws error for dereferencing non-pointer\n(pass) executeTuff(\"let x : Bool = true; x\") returns 1\n(pass) executeTuff(\"let x : Bool = false; x\") returns 0\n(pass) executeTuff(\"let x = true; let y = false; x || y\") returns 1\n(pass) executeTuff(\"let x = true; let y = false; x && y\") returns 0\n(pass) executeTuff(\"let x = 100U8; let y = 200U8; x < y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 50U8; x > y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 100U8; x == y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 200U8; x != y\") returns 1\n(pass) executeTuff(\"let x = 100U8; let y = 100U8; x <= y\") returns 1\n(pass) executeTuff(\"let x = 200U8; let y = 100U8; x >= y\") returns 1\n(pass) executeTuff(\"let x = 50U8; let y = 100U8; x < y\") returns 1\n(pass) executeTuff(\"let x = 200U8; let y = 100U8; x > y\") returns 1\n(pass) executeTuff(\"let x = 50U8; let y = 100U8; x < y\") returns false when equal\n(pass) executeTuff(\"true == 1U8\") throws error for type mismatch\n(pass) executeTuff(\"let x = if (true) 3U8 else 5U8; x\") returns 3\n(pass) executeTuff(\"let x = if (false) 3U8 else 5U8; x\") returns 5\n(pass) executeTuff(\"if (true) 100U8 else 200U8\") returns 100\n(pass) executeTuff(\"let x = if (false) 3U8 else 5U8;\") does not throw\n(pass) executeTuff(\"let mut x = 0U8; if (false) { x = 3U8; } else { x = 5U8;} x\") returns 5\n(pass) executeTuff(\"let mut x = 0U8; x += 1U8; x\") returns 1\n(pass) executeTuff(\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\") returns 4\n(pass) executeTuff(\"let mut i = 0U8; while (i < 4U8) { i += 1U8; } i\") returns 4\n(pass) executeTuff(\"let x = 4; x\") returns 4\n(pass) executeTuff(\"fn get() : I32 => 100; get()\") returns 100\n(pass) executeTuff(\"let x = 0U8; let y = &x;\") returns 0\n(pass) executeTuff(\"fn pass(param : I32) : I32 => param; pass(100)\") returns 100\n(pass) executeTuff(\"fn empty() : Void => {}\") returns 0\n(pass) executeTuff(\"fn empty() : Void => {} fn empty() : Void => {}\") throws error for duplicate function\n(pass) executeTuff(\"fn pass(first : I32, second : I32) : Void => {}\") returns 0\n(pass) executeTuff(\"fn pass(first : I32, first : I32) : Void => {}\") throws error for duplicate parameter\n(pass) executeTuff(\"fn get() => 100;\") returns 0\n(pass) executeTuff(\"fn get() => 100; get()\") returns 100\n(pass) executeTuff(\"fn a() => 100; fn b() => a(); b()\") returns 100\n(pass) executeTuff(\"fn b() => a(); fn a() => 100; b()\") returns 100\n\n 66 pass\n 0 fail\n 66 expect() calls\nRan 66 tests across 1 file. [30.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Done! ✅ Added the test case `'executeTuff(\"fn b() => a(); fn a() => 100; b()\") returns 100'`. All **66 tests** pass — confirming that forward references work correctly: `b()` can call `a()` even when declared before it, since function bodies are only evaluated at runtime."
   }
 ]
