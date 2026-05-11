@@ -381,7 +381,6 @@ async function callTool(
 
 // ── Context compaction ────────────────────────────────────────────────────────
 const COMPACT_THRESHOLD = 45_000; // compact when estimated usage exceeds this
-const KEEP_RECENT = 8; // always preserve this many tail messages verbatim
 
 function estimateTokens(
   msgs: OpenAI.Chat.ChatCompletionMessageParam[],
@@ -393,13 +392,17 @@ function estimateTokens(
 async function compactMessages(
   msgs: OpenAI.Chat.ChatCompletionMessageParam[],
 ): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
-  if (msgs.length <= KEEP_RECENT + 1) {
-    return msgs;
-  }
+  // Calculate the latest user message, starting from most recent and working backwards
+  const latestUserIndex = msgs
+    .map((m, i) => ({ role: m.role, index: i }))
+    .reverse()
+    .find((m) => m.role === "user")?.index;
 
   const head = msgs.slice(0, 1); // system prompt
-  const toSummarize = msgs.slice(1, msgs.length - KEEP_RECENT); // middle
-  const recent = msgs.slice(msgs.length - KEEP_RECENT); // recent tail
+
+  // This should compact everything up to the latest user message
+  const toSummarize = msgs.slice(1, latestUserIndex); // middle
+  const recent = msgs.slice(latestUserIndex); // recent tail
 
   if (toSummarize.length === 0) return msgs;
 
@@ -673,6 +676,11 @@ async function act() {
     );
   }
 }
+
+messages.push({
+  role: "system",
+  content: "You are an autonomous agent working to fulfill the user's goals.",
+});
 
 while (true) {
   const input = await rl.question("You: ");
