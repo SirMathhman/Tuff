@@ -35,4 +35,6 @@ test("read<U8>() ignores extra tokens in stdin", () => {
   assertValid("read<U8>()", 100, "100 20");
 });
 
-
+test("read<U8>() + read<U8>() sums two values from stdin", () => {
+  assertValid("read<U8>() + read<U8>()", 3, "1 2");
+});

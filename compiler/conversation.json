@@ -706,5 +706,146 @@
   {
     "role": "assistant",
     "content": "All 4 tests pass and TypeScript compiles cleanly with no errors. The change was straightforward — the generated code now splits `stdIn` on whitespace into tokens (`const tokens = stdIn.trim().split(/\\s+/)`), so each `read<T>()` reads from that token array instead of parsing stdin directly as a single number. This means extra values like `\"20\"` in `\"100 20\"` are simply ignored since only the first token is consumed."
+  },
+  {
+    "role": "user",
+    "content": "Add test case: assertValid(\"read<U8>() + read<U8>()\", 3, \"1 2\")"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":1,\"endLine\":50}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 153\n1: // TUFF → TypeScript compiler\n2: \n3: type TokenType = \"IDENT\" | \"NUMBER\" | \"LT\" | \"GT\" | \"LPAREN\" | \"RPAREN\";\n4: \n5: interface Token {\n6:   type: TokenType;\n7:   value: string;\n8: }\n9: \n10: function tokenize(source: string): Token[] {\n11:   const tokens: Token[] = [];\n12:   let i = 0;\n13:   while (i < source.length) {\n14:     const ch = source[i]!;\n15:     if (/\\s/.test(ch)) {\n16:       i++;\n17:       continue;\n18:     }\n19:     if (ch === \"<\") {\n20:       tokens.push({ type: \"LT\", value: \"<\" });\n21:       i++;\n22:     } else if (ch === \">\") {\n23:       tokens.push({ type: \"GT\", value: \">\" });\n24:       i++;\n25:     } else if (ch === \"(\") {\n26:       tokens.push({ type: \"LPAREN\", value: \"(\" });\n27:       i++;\n28:     } else if (ch === \")\") {\n29:       tokens.push({ type: \"RPAREN\", value: \")\" });\n30:       i++;\n31:     } else if (/[a-zA-Z_]\\w*/.test(ch)) {\n32:       let ident = \"\";\n33:       while (i < source.length && /\\w/.test(source[i]!)) {\n34:         ident += source[i]!;\n35:         i++;\n36:       }\n37:       tokens.push({ type: \"IDENT\", value: ident });\n38:     } else if (/[0-9]/.test(ch)) {\n39:       let num = \"\";\n40:       while (i < source.length && /[0-9]/.test(source[i]!)) {\n41:         num += source[i]!;\n42:         i++;\n43:       }\n44:       tokens.push({ type: \"NUMBER\", value: num });\n45:     } else {\n46:       throw new Error(`Unexpected character '${ch}' at position ${i}`);\n47:     }\n48:   }\n49:   return tokens;"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":1,\"endLine\":153}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 153\n1: // TUFF → TypeScript compiler\n2: \n3: type TokenType = \"IDENT\" | \"NUMBER\" | \"LT\" | \"GT\" | \"LPAREN\" | \"RPAREN\";\n4: \n5: interface Token {\n6:   type: TokenType;\n7:   value: string;\n8: }\n9: \n10: function tokenize(source: string): Token[] {\n11:   const tokens: Token[] = [];\n12:   let i = 0;\n13:   while (i < source.length) {\n14:     const ch = source[i]!;\n15:     if (/\\s/.test(ch)) {\n16:       i++;\n17:       continue;\n18:     }\n19:     if (ch === \"<\") {\n20:       tokens.push({ type: \"LT\", value: \"<\" });\n21:       i++;\n22:     } else if (ch === \">\") {\n23:       tokens.push({ type: \"GT\", value: \">\" });\n24:       i++;\n25:     } else if (ch === \"(\") {\n26:       tokens.push({ type: \"LPAREN\", value: \"(\" });\n27:       i++;\n28:     } else if (ch === \")\") {\n29:       tokens.push({ type: \"RPAREN\", value: \")\" });\n30:       i++;\n31:     } else if (/[a-zA-Z_]\\w*/.test(ch)) {\n32:       let ident = \"\";\n33:       while (i < source.length && /\\w/.test(source[i]!)) {\n34:         ident += source[i]!;\n35:         i++;\n36:       }\n37:       tokens.push({ type: \"IDENT\", value: ident });\n38:     } else if (/[0-9]/.test(ch)) {\n39:       let num = \"\";\n40:       while (i < source.length && /[0-9]/.test(source[i]!)) {\n41:         num += source[i]!;\n42:         i++;\n43:       }\n44:       tokens.push({ type: \"NUMBER\", value: num });\n45:     } else {\n46:       throw new Error(`Unexpected character '${ch}' at position ${i}`);\n47:     }\n48:   }\n49:   return tokens;\n50: }\n51: \n52: // AST nodes\n53: type AstNode = ReadExpr | NumberLit;\n54: \n55: interface ReadExpr {\n56:   kind: \"read\";\n57:   typeArg: string; // e.g. \"U8\", \"I32\"\n58: }\n59: \n60: interface NumberLit {\n61:   kind: \"number\";\n62:   value: number;\n63: }\n64: \n65: function parse(tokens: Token[]): AstNode | null {\n66:   if (tokens.length === 0) return null;\n67: \n68:   const first = tokens[0]!;\n69:   const rest = tokens.slice(1);\n70: \n71:   // read<T>()\n72:   if (first.type === \"IDENT\" && first.value === \"read\") {\n73:     if (!rest[0] || rest[0].type !== \"LT\")\n74:       throw new Error(\"Expected '<' after 'read'\");\n75:     const typeToken = rest.find((t) => t.type === \"GT\");\n76:     if (!typeToken) throw new Error(\"Missing '>' in read expression\");\n77: \n78:     // Extract the type argument between < and >\n79:     let typeArg = \"\";\n80:     for (let j = 1; j < rest.length; j++) {\n81:       const tok = rest[j]!;\n82:       if (tok.type === \"GT\") break;\n83:       typeArg += tok.value;\n84:     }\n85: \n86:     const gtIndex = rest.indexOf(typeToken);\n87:     const afterGt = rest.slice(gtIndex + 1);\n88:     // Expect ()\n89:     if (\n90:       !afterGt[0] ||\n91:       afterGt[0].type !== \"LPAREN\" ||\n92:       !afterGt[1] ||\n93:       afterGt[1].type !== \"RPAREN\"\n94:     ) {\n95:       throw new Error(\"Expected '()' in read expression\");\n96:     }\n97: \n98:     return { kind: \"read\", typeArg };\n99:   }\n100: \n101:   // number literal\n102:   if (first.type === \"NUMBER\") {\n103:     return { kind: \"number\", value: parseInt(first.value, 10) };\n104:   }\n105: \n106:   throw new Error(`Unexpected token '${first.value}'`);\n107: }\n108: \n109: function generate(ast: AstNode | null): string {\n110:   if (!ast) return \"\";\n111: \n112:   switch (ast.kind) {\n113:     case \"read\": {\n114:       const type = ast.typeArg;\n115:       // Map TUFF types to JS parsing logic, reading one token at a time from stdin\n116:       let parseExpr: string;\n117:       switch (type) {\n118:         case \"U8\":\n119:           parseExpr = `(Math.floor(Number(tokens[0])) & 0xFF)`;\n120:           break;\n121:         case \"I8\":\n122:           parseExpr = `((Math.floor(Number(tokens[0])) + 128) % 256 - 128)`;\n123:           break;\n124:         case \"U16\":\n125:           parseExpr = `(Math.floor(Number(tokens[0])) & 0xFFFF)`;\n126:           break;\n127:         case \"I16\":\n128:           parseExpr = `((Math.floor(Number(tokens[0])) + 32768) % 65536 - 32768)`;\n129:           break;\n130:         case \"U32\":\n131:           parseExpr = `(Math.trunc(Number(tokens[0])) >>> 0)`;\n132:           break;\n133:         case \"I32\":\n134:           parseExpr = `(Math.trunc(Number(tokens[0])) | 0)`;\n135:           break;\n136:         default:\n137:           throw new Error(`Unsupported read type '${type}'`);\n138:       }\n139:       return `const tokens = stdIn.trim().split(/\\\\s+/);\\nreturn ${parseExpr};`;\n140:     }\n141:     case \"number\":\n142:       return `return ${ast.value}`;\n143:   }\n144: }\n145: \n146: export function compileTuffToTS(tuffSourceCode: string): string {\n147:   const trimmed = tuffSourceCode.trim();\n148:   if (!trimmed) return \"return 0\";\n149:   const tokens = tokenize(trimmed);\n150:   const ast = parse(tokens);\n151:   return generate(ast);\n152: }"
+  },
+  {
+    "role": "assistant",
+    "content": "This requires substantial plumbing: binary operators in the tokenizer, expression parsing with operator precedence, and tracking which stdin token each `read<T>()` consumes. Let me rebuild this properly:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "deleteFile",
+          "arguments": "{\"name\":\"index.ts\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File deleted."
+  },
+  {
+    "role": "assistant",
+    "content": "I need to add binary operator support with proper expression parsing and stdin token tracking across multiple reads:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "createFile",
+          "arguments": "{\"name\":\"index.ts\",\"content\":\"// TUFF → TypeScript compiler\\n\\ntype TokenType =\\n  | \\\"IDENT\\\"\\n  | \\\"NUMBER\\\"\\n  | \\\"LT\\\"\\n  | \\\"GT\\\"\\n  | \\\"LPAREN\\\"\\n  | \\\"RPAREN\\\"\\n  | \\\"PLUS\\\";\\n\\ninterface Token {\\n  type: TokenType;\\n  value: string;\\n}\\n\\nfunction tokenize(source: string): Token[] {\\n  const tokens: Token[] = [];\\n  let i = 0;\\n  while (i < source.length) {\\n    const ch = source[i]!;\\n    if (/\\\\s/.test(ch)) {\\n      i++;\\n      continue;\\n    }\\n    if (ch === \\\"<\\\") {\\n      tokens.push({ type: \\\"LT\\\", value: \\\"<\\\" });\\n      i++;\\n    } else if (ch === \\\">\\\") {\\n      tokens.push({ type: \\\"GT\\\", value: \\\">\\\" });\\n      i++;\\n    } else if (ch === \\\"(\\\") {\\n      tokens.push({ type: \\\"LPAREN\\\", value: \\\"(\\\" });\\n      i++;\\n    } else if (ch === \\\")\\\") {\\n      tokens.push({ type: \\\"RPAREN\\\", value: \\\")\\\" });\\n      i++;\\n    } else if (ch === \\\"+\\\") {\\n      tokens.push({ type: \\\"PLUS\\\", value: \\\"+\\\" });\\n      i++;\\n    } else if (/[a-zA-Z_]\\\\w*/.test(ch)) {\\n      let ident = \\\"\\\";\\n      while (i < source.length && /\\\\w/.test(source[i]!)) {\\n        ident += source[i]!;\\n        i++;\\n      }\\n      tokens.push({ type: \\\"IDENT\\\", value: ident });\\n    } else if (/[0-9]/.test(ch)) {\\n      let num = \\\"\\\";\\n      while (i < source.length && /[0-9]/.test(source[i]!)) {\\n        num += source[i]!;\\n        i++;\\n      }\\n      tokens.push({ type: \\\"NUMBER\\\", value: num });\\n    } else {\\n      throw new Error(`Unexpected character '${ch}' at position ${i}`);\\n    }\\n  }\\n  return tokens;\\n}\\n\\n// AST nodes\\ntype AstNode = ReadExpr | NumberLit | BinOp;\\n\\ninterface ReadExpr {\\n  kind: \\\"read\\\";\\n  typeArg: string; // e.g. \\\"U8\\\", \\\"I32\\\"\\n}\\n\\ninterface NumberLit {\\n  kind: \\\"number\\\";\\n  value: number;\\n}\\n\\ninterface BinOp {\\n  kind: \\\"binop\\\";\\n  op: \\\"+\\\";\\n  left: AstNode;\\n  right: AstNode;\\n}\\n\\n// --- Recursive descent parser with operator precedence ---\\n\\nclass Parser {\\n  private pos = 0;\\n\\n  constructor(private tokens: Token[]) {}\\n\\n  parse(): AstNode | null {\\n    if (this.tokens.length === 0) return null;\\n    const expr = this.parseExpression();\\n    if (this.pos < this.tokens.length) {\\n      throw new Error(\\n        `Unexpected token '${this.tokens[this.pos]!.value}' at position ${this.pos}`\\n      );\\n    }\\n    return expr;\\n  }\\n\\n  // parseExpression handles addition (lowest precedence we support now)\\n  private parseExpression(): AstNode {\\n    let left = this.parsePrimary();\\n\\n    while (\\n      this.pos < this.tokens.length &&\\n      this.tokens[this.pos]!.type === \\\"PLUS\\\"\\n    ) {\\n      const opToken = this.tokens[this.pos]!;\\n      if (opToken.type !== \\\"PLUS\\\") break;\\n      this.pos++; // consume '+'\\n      const right = this.parsePrimary();\\n      left = { kind: \\\"binop\\\", op: \\\"+\\\", left, right };\\n    }\\n\\n    return left;\\n  }\\n\\n  // parsePrimary handles atoms: read<T>(), number literals, parenthesized expressions\\n  private parsePrimary(): AstNode {\\n    const tok = this.tokens[this.pos]!;\\n\\n    // Parenthesized expression\\n    if (tok.type === \\\"LPAREN\\\") {\\n      this.pos++; // consume '('\\n      const expr = this.parseExpression();\\n      if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== \\\"RPAREN\\\") {\\n        throw new Error(\\\"Expected ')'\\\");\\n      }\\n      this.pos++; // consume ')'\\n      return expr;\\n    }\\n\\n    // read<T>()\\n    if (tok.type === \\\"IDENT\\\" && tok.value === \\\"read\\\") {\\n      this.pos++; // consume 'read'\\n      const typeArg = this.parseTypeArgument();\\n      if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== \\\"LPAREN\\\") {\\n        throw new Error(\\\"Expected '(' after read<T>\\\");\\n      }\\n      this.pos++; // consume '('\\n      if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== \\\"RPAREN\\\") {\\n        throw new Error(\\\"Expected ')' in read expression\\\");\\n      }\\n      this.pos++; // consume ')'\\n      return { kind: \\\"read\\\", typeArg };\\n    }\\n\\n    // number literal\\n    if (tok.type === \\\"NUMBER\\\") {\\n      this.pos++;\\n      return { kind: \\\"number\\\", value: parseInt(tok.value, 10) };\\n    }\\n\\n    throw new Error(`Unexpected token '${tok.value}'`);\\n  }\\n\\n  private parseTypeArgument(): string {\\n    if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== \\\"LT\\\") {\\n      throw new Error(\\\"Expected '<' after 'read'\\\");\\n    }\\n    this.pos++; // consume '<'\\n\\n    let typeArg = \\\"\\\";\\n    while (\\n      this.pos < this.tokens.length &&\\n      this.tokens[this.pos]!.type !== \\\"GT\\\"\\n    ) {\\n      typeArg += this.tokens[this.pos]!.value;\\n      this.pos++;\\n    }\\n\\n    if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== \\\"GT\\\") {\\n      throw new Error(\\\"Missing '>' in read expression\\\");\\n    }\\n    this.pos++; // consume '>'\\n\\n    return typeArg;\\n  }\\n}\\n\\nfunction parse(tokens: Token[]): AstNode | null {\\n  const parser = new Parser(tokens);\\n  return parser.parse();\\n}\\n\\n// --- Code generation with stdin token index tracking ---\\n\\nclass Generator {\\n  private readIndex = 0; // tracks which stdin token each read<T>() consumes\\n\\n  generate(ast: AstNode | null): string {\\n    if (!ast) return \\\"\\\";\\n    const exprCode = this.generateExpr(ast);\\n    return `const tokens = stdIn.trim().split(/\\\\\\\\s+/);\\\\nreturn ${exprCode};`;\\n  }\\n\\n  private generateExpr(node: AstNode): string {\\n    switch (node.kind) {\\n      case \\\"read\\\":\\n        return this.generateRead(node);\\n      case \\\"number\\\":\\n        return String(node.value);\\n      case \\\"binop\\\":\\n        return `(${this.generateExpr(node.left)} ${node.op} ${this.generateExpr(\\n          node.right\\n        )})`;\\n    }\\n  }\\n\\n  private generateRead(node: ReadExpr): string {\\n    const idx = this.readIndex++;\\n    let parseFn: string;\\n    switch (node.typeArg) {\\n      case \\\"U8\\\":\\n        parseFn = `(Math.floor(Number(tokens[${idx}])) & 0xFF)`;\\n        break;\\n      case \\\"I8\\\":\\n        parseFn = `((Math.floor(Number(tokens[${idx}])) + 128) % 256 - 128)`;\\n        break;\\n      case \\\"U16\\\":\\n        parseFn = `(Math.floor(Number(tokens[${idx}])) & 0xFFFF)`;\\n        break;\\n      case \\\"I16\\\":\\n        parseFn = `((Math.floor(Number(tokens[${idx}])) + 32768) % 65536 - 32768)`;\\n        break;\\n      case \\\"U32\\\":\\n        parseFn = `(Math.trunc(Number(tokens[${idx}])) >>> 0)`;\\n        break;\\n      case \\\"I32\\\":\\n        parseFn = `(Math.trunc(Number(tokens[${idx}])) | 0)`;\\n        break;\\n      default:\\n        throw new Error(`Unsupported read type '${node.typeArg}'`);\\n    }\\n    return parseFn;\\n  }\\n}\\n\\nexport function compileTuffToTS(tuffSourceCode: string): string {\\n  const trimmed = tuffSourceCode.trim();\\n  if (!trimmed) return \\\"return 0\\\";\\n  const tokens = tokenize(trimmed);\\n  const ast = parse(tokens);\\n  const gen = new Generator();\\n  return gen.generate(ast);\\n}\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File created."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":1,\"endLine\":40}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 39\n1: import { test, expect } from \"bun:test\";\r\n2: import { compileTuffToTS } from \"./index\";\r\n3: import ts from \"typescript\";\r\n4: \r\n5: function assertValid(\r\n6:   tuffSourceCode: string,\r\n7:   expectedExitCode: number,\r\n8:   stdIn = \"\",\r\n9: ) {\r\n10:   const compiledTS = compileTuffToTS(tuffSourceCode);\r\n11:   const compiledJS = ts.transpile(compiledTS, {\r\n12:     module: ts.ModuleKind.CommonJS,\r\n13:   });\r\n14:   const actualExitCode = new Function(\"stdIn\", compiledJS)(stdIn);\r\n15:   expect(actualExitCode).toBe(expectedExitCode);\r\n16: }\r\n17: \r\n18: function assertInvalid(tuffSourceCode: string) {\r\n19:   expect(() => compileTuffToTS(tuffSourceCode)).toThrow();\r\n20: }\r\n21: \r\n22: test(\"The simplest possible program\", () => {\r\n23:   assertValid(``, 0);\r\n24: });\r\n25: \r\n26: test(\"A program with a syntax error\", () => {\n27:   assertInvalid(`this is not valid tuff code`);\n28: });\n29: \n30: test(\"read<U8>() parses stdin as unsigned 8-bit integer\", () => {\n31:   assertValid(\"read<U8>()\", 100, \"100\");\n32: });\n33: \n34: test(\"read<U8>() ignores extra tokens in stdin\", () => {\n35:   assertValid(\"read<U8>()\", 100, \"100 20\");\n36: });\n37: \n38: \n39: "
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me add the new test case and run everything:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":34,\"endLine\":39,\"content\":\"test(\\\"read<U8>() ignores extra tokens in stdin\\\", () => {\\n  assertValid(\\\"read<U8>()\\\", 100, \\\"100 20\\\");\\n});\\n\\ntest(\\\"read<U8>() + read<U8>() sums two values from stdin\\\", () => {\\n  assertValid(\\\"read<U8>() + read<U8>()\\\", 3, \\\"1 2\\\");\\n});\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts; tsc --noEmit\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) The simplest possible program [31.00ms]\n(pass) A program with a syntax error\n(pass) read<U8>() parses stdin as unsigned 8-bit integer [16.00ms]\n(pass) read<U8>() ignores extra tokens in stdin\n(pass) read<U8>() + read<U8>() sums two values from stdin\n\n 5 pass\n 0 fail\n 5 expect() calls\nRan 5 tests across 1 file. [388.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "All **5 tests pass** and TypeScript compiles cleanly with zero errors. Here's what the plumbing involved:\n\n### Changes to `index.ts`\n\n1. **Tokenizer**: Added `\"PLUS\"` token type for the `+` operator.\n\n2. **AST**: Added a new `BinOp` node kind (`{ kind: \"binop\", op, left, right }`) alongside existing `ReadExpr` and `NumberLit`.\n\n3. **Recursive descent parser** (replaced the old flat parser):\n   - `parseExpression()` — handles binary operators like `+`, chaining them into a left-associative tree\n   - `parsePrimary()` — handles atoms: parenthesized expressions, `read<T>()` calls, and number literals\n\n4. **Code generator with stdin token tracking**: The `Generator` class maintains a `readIndex` counter so each successive `read<T>()` consumes the next whitespace-separated token from stdin (`tokens[0]`, `tokens[1]`, etc.). For `\"read<U8>() + read<U8>()\"` with input `\"1 2\"`, it generates:\n   ```js\n   const tokens = stdIn.trim().split(/\\s+/);\n   return ((Math.floor(Number(tokens[0])) & 0xFF) + (Math.floor(Number(tokens[1])) & 0xFF));\n   // → 1 + 2 = 3 ✓\n   ```"
   }
 ]

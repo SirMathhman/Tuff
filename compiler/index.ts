@@ -1,6 +1,13 @@
 // TUFF → TypeScript compiler
 
-type TokenType = "IDENT" | "NUMBER" | "LT" | "GT" | "LPAREN" | "RPAREN";
+type TokenType =
+  | "IDENT"
+  | "NUMBER"
+  | "LT"
+  | "GT"
+  | "LPAREN"
+  | "RPAREN"
+  | "PLUS";
 
 interface Token {
   type: TokenType;
@@ -28,6 +35,9 @@ function tokenize(source: string): Token[] {
     } else if (ch === ")") {
       tokens.push({ type: "RPAREN", value: ")" });
       i++;
+    } else if (ch === "+") {
+      tokens.push({ type: "PLUS", value: "+" });
+      i++;
     } else if (/[a-zA-Z_]\w*/.test(ch)) {
       let ident = "";
       while (i < source.length && /\w/.test(source[i]!)) {
@@ -50,7 +60,7 @@ function tokenize(source: string): Token[] {
 }
 
 // AST nodes
-type AstNode = ReadExpr | NumberLit;
+type AstNode = ReadExpr | NumberLit | BinOp;
 
 interface ReadExpr {
   kind: "read";
@@ -62,84 +72,167 @@ interface NumberLit {
   value: number;
 }
 
-function parse(tokens: Token[]): AstNode | null {
-  if (tokens.length === 0) return null;
-
-  const first = tokens[0]!;
-  const rest = tokens.slice(1);
-
-  // read<T>()
-  if (first.type === "IDENT" && first.value === "read") {
-    if (!rest[0] || rest[0].type !== "LT")
-      throw new Error("Expected '<' after 'read'");
-    const typeToken = rest.find((t) => t.type === "GT");
-    if (!typeToken) throw new Error("Missing '>' in read expression");
-
-    // Extract the type argument between < and >
-    let typeArg = "";
-    for (let j = 1; j < rest.length; j++) {
-      const tok = rest[j]!;
-      if (tok.type === "GT") break;
-      typeArg += tok.value;
-    }
-
-    const gtIndex = rest.indexOf(typeToken);
-    const afterGt = rest.slice(gtIndex + 1);
-    // Expect ()
-    if (
-      !afterGt[0] ||
-      afterGt[0].type !== "LPAREN" ||
-      !afterGt[1] ||
-      afterGt[1].type !== "RPAREN"
-    ) {
-      throw new Error("Expected '()' in read expression");
-    }
-
-    return { kind: "read", typeArg };
-  }
-
-  // number literal
-  if (first.type === "NUMBER") {
-    return { kind: "number", value: parseInt(first.value, 10) };
-  }
-
-  throw new Error(`Unexpected token '${first.value}'`);
+interface BinOp {
+  kind: "binop";
+  op: "+";
+  left: AstNode;
+  right: AstNode;
 }
 
-function generate(ast: AstNode | null): string {
-  if (!ast) return "";
+// --- Recursive descent parser with operator precedence ---
 
-  switch (ast.kind) {
-    case "read": {
-      const type = ast.typeArg;
-      // Map TUFF types to JS parsing logic, reading one token at a time from stdin
-      let parseExpr: string;
-      switch (type) {
-        case "U8":
-          parseExpr = `(Math.floor(Number(tokens[0])) & 0xFF)`;
-          break;
-        case "I8":
-          parseExpr = `((Math.floor(Number(tokens[0])) + 128) % 256 - 128)`;
-          break;
-        case "U16":
-          parseExpr = `(Math.floor(Number(tokens[0])) & 0xFFFF)`;
-          break;
-        case "I16":
-          parseExpr = `((Math.floor(Number(tokens[0])) + 32768) % 65536 - 32768)`;
-          break;
-        case "U32":
-          parseExpr = `(Math.trunc(Number(tokens[0])) >>> 0)`;
-          break;
-        case "I32":
-          parseExpr = `(Math.trunc(Number(tokens[0])) | 0)`;
-          break;
-        default:
-          throw new Error(`Unsupported read type '${type}'`);
-      }
-      return `const tokens = stdIn.trim().split(/\\s+/);\nreturn ${parseExpr};`;
+class Parser {
+  private pos = 0;
+
+  constructor(private tokens: Token[]) {}
+
+  parse(): AstNode | null {
+    if (this.tokens.length === 0) return null;
+    const expr = this.parseExpression();
+    if (this.pos < this.tokens.length) {
+      throw new Error(
+        `Unexpected token '${this.tokens[this.pos]!.value}' at position ${this.pos}`
+      );
     }
-    case "number":
-      return `return ${ast.value}`;
+    return expr;
+  }
+
+  // parseExpression handles addition (lowest precedence we support now)
+  private parseExpression(): AstNode {
+    let left = this.parsePrimary();
+
+    while (
+      this.pos < this.tokens.length &&
+      this.tokens[this.pos]!.type === "PLUS"
+    ) {
+      const opToken = this.tokens[this.pos]!;
+      if (opToken.type !== "PLUS") break;
+      this.pos++; // consume '+'
+      const right = this.parsePrimary();
+      left = { kind: "binop", op: "+", left, right };
+    }
+
+    return left;
+  }
+
+  // parsePrimary handles atoms: read<T>(), number literals, parenthesized expressions
+  private parsePrimary(): AstNode {
+    const tok = this.tokens[this.pos]!;
+
+    // Parenthesized expression
+    if (tok.type === "LPAREN") {
+      this.pos++; // consume '('
+      const expr = this.parseExpression();
+      if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== "RPAREN") {
+        throw new Error("Expected ')'");
+      }
+      this.pos++; // consume ')'
+      return expr;
+    }
+
+    // read<T>()
+    if (tok.type === "IDENT" && tok.value === "read") {
+      this.pos++; // consume 'read'
+      const typeArg = this.parseTypeArgument();
+      if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== "LPAREN") {
+        throw new Error("Expected '(' after read<T>");
+      }
+      this.pos++; // consume '('
+      if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== "RPAREN") {
+        throw new Error("Expected ')' in read expression");
+      }
+      this.pos++; // consume ')'
+      return { kind: "read", typeArg };
+    }
+
+    // number literal
+    if (tok.type === "NUMBER") {
+      this.pos++;
+      return { kind: "number", value: parseInt(tok.value, 10) };
+    }
+
+    throw new Error(`Unexpected token '${tok.value}'`);
+  }
+
+  private parseTypeArgument(): string {
+    if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== "LT") {
+      throw new Error("Expected '<' after 'read'");
+    }
+    this.pos++; // consume '<'
+
+    let typeArg = "";
+    while (
+      this.pos < this.tokens.length &&
+      this.tokens[this.pos]!.type !== "GT"
+    ) {
+      typeArg += this.tokens[this.pos]!.value;
+      this.pos++;
+    }
+
+    if (!this.tokens[this.pos] || this.tokens[this.pos]!.type !== "GT") {
+      throw new Error("Missing '>' in read expression");
+    }
+    this.pos++; // consume '>'
+
+    return typeArg;
+  }
+}
+
+function parse(tokens: Token[]): AstNode | null {
+  const parser = new Parser(tokens);
+  return parser.parse();
+}
+
+// --- Code generation with stdin token index tracking ---
+
+class Generator {
+  private readIndex = 0; // tracks which stdin token each read<T>() consumes
+
+  generate(ast: AstNode | null): string {
+    if (!ast) return "";
+    const exprCode = this.generateExpr(ast);
+    return `const tokens = stdIn.trim().split(/\\s+/);\nreturn ${exprCode};`;
+  }
+
+  private generateExpr(node: AstNode): string {
+    switch (node.kind) {
+      case "read":
+        return this.generateRead(node);
+      case "number":
+        return String(node.value);
+      case "binop":
+        return `(${this.generateExpr(node.left)} ${node.op} ${this.generateExpr(
+          node.right
+        )})`;
+    }
+  }
+
+  private generateRead(node: ReadExpr): string {
+    const idx = this.readIndex++;
+    let parseFn: string;
+    switch (node.typeArg) {
+      case "U8":
+        parseFn = `(Math.floor(Number(tokens[${idx}])) & 0xFF)`;
+        break;
+      case "I8":
+        parseFn = `((Math.floor(Number(tokens[${idx}])) + 128) % 256 - 128)`;
+        break;
+      case "U16":
+        parseFn = `(Math.floor(Number(tokens[${idx}])) & 0xFFFF)`;
+        break;
+      case "I16":
+        parseFn = `((Math.floor(Number(tokens[${idx}])) + 32768) % 65536 - 32768)`;
+        break;
+      case "U32":
+        parseFn = `(Math.trunc(Number(tokens[${idx}])) >>> 0)`;
+        break;
+      case "I32":
+        parseFn = `(Math.trunc(Number(tokens[${idx}])) | 0)`;
+        break;
+      default:
+        throw new Error(`Unsupported read type '${node.typeArg}'`);
+    }
+    return parseFn;
   }
 }
 
@@ -148,5 +241,6 @@ export function compileTuffToTS(tuffSourceCode: string): string {
   if (!trimmed) return "return 0";
   const tokens = tokenize(trimmed);
   const ast = parse(tokens);
-  return generate(ast);
+  const gen = new Generator();
+  return gen.generate(ast);
 }
