@@ -421,7 +421,7 @@ async function compactMessages(
           "Be dense — this replaces the full history. Plain prose, no headers.",
       },
     ],
-    temperature: 0.1,
+    temperature: 0,
     max_tokens: 1024,
   });
 
@@ -517,7 +517,7 @@ async function actCycle(): Promise<boolean> {
       messages,
       tools,
       tool_choice: "auto",
-      temperature: 0.3,
+      temperature: 0,
       max_tokens: 8192,
       stream: true,
     });

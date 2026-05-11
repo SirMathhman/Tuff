@@ -3,11 +3,14 @@ interface ParserCtx {
   pos: number;
   scope: Map<string, { value: bigint; type: string; mutable: boolean }>;
 }
+
+const MAX_WHILE_ITERATIONS = 1024;
+
+// ── Literal parsing & normalization ───────────────────────────────────
+
 function parseLiteral(literal: string): number | bigint {
   const match = literal.match(/^(-?\d+)([UI])(8|16|32|64)$/);
-  if (!match || !match[1] || !match[2] || !match[3]) {
-    throw new Error("Invalid format");
-  }
+  if (!match || !match[1] || !match[2] || !match[3]) throw new Error("Invalid format");
 
   const valueStr = match[1];
   const typePrefix = match[2]; // "U" or "I"
@@ -29,13 +32,10 @@ function parseLiteral(literal: string): number | bigint {
 
   if (typePrefix === "U") {
     if (value < minValue) throw new Error("Negative values are not supported");
-    if (value > maxValue) {
-      throw new Error(`Value exceeds maximum for ${typePrefix}${bits}`);
-    }
+    if (value > maxValue) throw new Error(`Value exceeds maximum for ${typePrefix}${bits}`);
   } else {
-    if (value < minValue || value > maxValue) {
+    if (value < minValue || value > maxValue)
       throw new Error(`Value out of range for ${typePrefix}${bits}`);
-    }
   }
 
   if (value <= Number.MAX_SAFE_INTEGER && bits !== 64) return Number(value);
@@ -43,11 +43,12 @@ function parseLiteral(literal: string): number | bigint {
 }
 
 function normalizeResult(val: bigint): number | bigint {
-  if (val <= Number.MAX_SAFE_INTEGER && val >= -Number.MAX_SAFE_INTEGER) {
+  if (val >= -Number.MAX_SAFE_INTEGER && val <= Number.MAX_SAFE_INTEGER)
     return Number(val);
-  }
   return val;
 }
+
+// ── Type helpers ──────────────────────────────────────────────────────
 
 function combineTypes(typeA: string, typeB: string): string {
   const matchA = typeA.match(/^([UI])(\d+)$/);
@@ -60,15 +61,44 @@ function combineTypes(typeA: string, typeB: string): string {
   const bitsB = parseInt(matchB[2]!, 10);
 
   const combinedPrefix = prefixA === "I" || prefixB === "I" ? "I" : "U";
-  const combinedBits = Math.max(bitsA, bitsB);
-  return `${combinedPrefix}${combinedBits}`;
+  return `${combinedPrefix}${Math.max(bitsA, bitsB)}`;
 }
 
-function tokenize(tuffSourceCode: string): string[] {
-  const rawTokens = tuffSourceCode.trim().split(/\s+/);
+function inferLiteralType(literal: string): string {
+  const match = literal.match(/^(-?\d+)([UI](?:8|16|32|64))$/);
+  if (!match) throw new Error("Invalid format");
+  return match[2]!;
+}
+
+function isAssignable(sourceType: string, targetType: string): boolean {
+  const srcIsPointer = sourceType.startsWith("*");
+  const tgtIsPointer = targetType.startsWith("*");
+
+  if (srcIsPointer && tgtIsPointer) return sourceType === targetType;
+
+  const srcBase = sourceType.replace(/^\*/, "");
+  const tgtBase = targetType.replace(/^\*/, "");
+
+  if (srcBase === "Bool" && tgtBase === "Bool") return true;
+  if (srcBase === "Bool" || tgtBase === "Bool") return false;
+
+  const srcMatch = srcBase.match(/^([UI])(\d+)$/);
+  const tgtMatch = tgtBase.match(/^([UI])(\d+)$/);
+  if (!srcMatch || !tgtMatch) return false;
+  if (srcMatch[1] !== tgtMatch[1]) return false;
+
+  return parseInt(srcMatch[2]!, 10) <= parseInt(tgtMatch[2]!, 10);
+}
+
+// ── Tokenizer ────────────────────────────────────────────────────────
+
+function tokenize(source: string): string[] {
+  const rawTokens = source.trim().split(/\s+/);
   const tokens: string[] = [];
+
   for (const raw of rawTokens) {
     let remaining = raw;
+
     while (remaining.startsWith("(")) {
       tokens.push("(");
       remaining = remaining.slice(1);
@@ -85,12 +115,11 @@ function tokenize(tuffSourceCode: string): string[] {
       tokens.push("&&");
       remaining = remaining.slice(2);
     }
+
     if (remaining.startsWith("+=")) {
       tokens.push("+=");
       remaining = remaining.slice(2);
-    }
-
-    if (remaining.startsWith("<=")) {
+    } else if (remaining.startsWith("<=")) {
       tokens.push("<=");
       remaining = remaining.slice(2);
     } else if (remaining.startsWith(">=")) {
@@ -122,23 +151,25 @@ function tokenize(tuffSourceCode: string): string[] {
       remaining = remaining.slice(1);
     }
 
-    const trailingDelimiters: string[] = [];
+    const trailing: string[] = [];
     while (
       remaining.endsWith(")") ||
       remaining.endsWith("}") ||
       remaining.endsWith(";") ||
       remaining.endsWith(":")
     ) {
-      trailingDelimiters.unshift(remaining[remaining.length - 1]!);
+      trailing.unshift(remaining[remaining.length - 1]!);
       remaining = remaining.slice(0, -1);
     }
+
     if (remaining) tokens.push(remaining);
-    for (const d of trailingDelimiters) tokens.push(d);
+    for (const d of trailing) tokens.push(d);
   }
+
   return tokens;
 }
 
-// ── Helpers used by parser functions ───────────────────────────────
+// ── Parser helpers ───────────────────────────────────────────────────
 
 function peek(ctx: ParserCtx): string | undefined {
   return ctx.tokens[ctx.pos];
@@ -162,41 +193,11 @@ function parseTypeAnnotation(ctx: ParserCtx): string {
     !/^[UI](8|16|32|64)$/.test(typeToken) &&
     !/^\*[UI](8|16|32|64)$/.test(typeToken) &&
     typeToken !== "Bool"
-  ) {
-    throw new Error(`Invalid type: ${typeToken}`);
-  }
+  ) throw new Error(`Invalid type: ${typeToken}`);
   return typeToken;
 }
 
-function inferLiteralType(literal: string): string {
-  const match = literal.match(/^(-?\d+)([UI](?:8|16|32|64))$/);
-  if (!match) throw new Error("Invalid format");
-  return match[2]!;
-}
-
-function isAssignable(sourceType: string, targetType: string): boolean {
-  const srcIsPointer = sourceType.startsWith("*");
-  const tgtIsPointer = targetType.startsWith("*");
-
-  if (srcIsPointer && tgtIsPointer) return sourceType === targetType;
-
-  const srcBase = sourceType.replace(/^\*/, "");
-  const tgtBase = targetType.replace(/^\*/, "");
-
-  if (srcBase === "Bool" && tgtBase === "Bool") return true;
-  if (srcBase === "Bool" || tgtBase === "Bool") return false;
-
-  const srcMatch = srcBase.match(/^([UI])(\d+)$/);
-  const tgtMatch = tgtBase.match(/^([UI])(\d+)$/);
-  if (!srcMatch || !tgtMatch) return false;
-
-  if (srcMatch[1] !== tgtMatch[1]) return false;
-  const srcBits = parseInt(srcMatch[2]!, 10);
-  const tgtBits = parseInt(tgtMatch[2]!, 10);
-  return srcBits <= tgtBits;
-}
-
-// ── Assignment helper (extracted from parseBlockItem) ───────────────
+// ── Assignment helper (extracted from parseBlockItem) ────────────────
 
 function assignToVariable(
   ctx: ParserCtx,
@@ -208,18 +209,16 @@ function assignToVariable(
 ): bigint {
   const name = consume(ctx);
   const entry = ctx.scope.get(name);
-  if (!entry || !entry.mutable) {
+  if (!entry || !entry.mutable)
     throw new Error(`Cannot reassign immutable variable: ${name}`);
-  }
 
   consume(ctx, opToken);
   const exprResult = parseExprWithType(ctx);
 
-  if (!isAssignable(exprResult.type, entry.type)) {
+  if (!isAssignable(exprResult.type, entry.type))
     throw new Error(
       `Cannot assign ${exprResult.type} to variable of type ${entry.type}`,
     );
-  }
 
   const newValue = computeValue(entry.value, exprResult);
   ctx.scope.set(name, { ...entry, value: newValue });
@@ -228,9 +227,43 @@ function assignToVariable(
   return newValue;
 }
 
+// ── While loop executor (extracted from parseBlockItem) ───────────────
+
+function executeWhileLoop(ctx: ParserCtx): bigint | null {
+  consume(ctx, "while");
+  consume(ctx, "(");
+
+  // Save position so we can re-parse condition each iteration
+  const condStart = ctx.pos;
+
+  let blockValue: bigint | null = null;
+  for (let iter = 0; iter < MAX_WHILE_ITERATIONS; iter++) {
+    // Re-parse condition from saved position
+    ctx.pos = condStart;
+    const condResult = parseExprWithType(ctx);
+    if (condResult.type !== "Bool")
+      throw new Error(`While condition must be Bool, got ${condResult.type}`);
+
+    consume(ctx, ")");
+
+    // If false, break out of the loop
+    if (condResult.value === 0) break;
+
+    // Execute body: parse ONE block item per iteration
+    const itemValue = parseBlockItem(ctx);
+    if (itemValue !== null) blockValue = itemValue;
+  }
+
+  return blockValue;
+}
+
 // ── Block item parser ───────────────────────────────────────────────
 
 function parseBlockItem(ctx: ParserCtx): bigint | null {
+  // While loop statement
+  if (peek(ctx) === "while") return executeWhileLoop(ctx);
+
+  // Let declaration
   if (peek(ctx) === "let") {
     consume(ctx, "let");
     const mutable = peek(ctx) === "mut";
@@ -249,11 +282,10 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
     const value = BigInt(exprResult.value);
 
     if (declaredType) {
-      if (!isAssignable(exprResult.type, declaredType)) {
+      if (!isAssignable(exprResult.type, declaredType))
         throw new Error(
           `Cannot assign ${exprResult.type} to variable of type ${declaredType}`,
         );
-      }
       ctx.scope.set(name, { value, type: declaredType, mutable });
     } else {
       ctx.scope.set(name, { value, type: exprResult.type, mutable });
@@ -263,10 +295,13 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
     return null;
   }
 
+  // Assignment / compound assignment expressions
   const p = peek(ctx);
   if (p && /^[a-zA-Z_]\w*$/.test(p) && ctx.tokens[ctx.pos + 1] === "=") {
-    return assignToVariable(ctx, "=", (_entryVal, exprResult) =>
-      BigInt(exprResult.value),
+    return assignToVariable(
+      ctx,
+      "=",
+      (_entryVal, exprResult) => BigInt(exprResult.value),
     );
   }
 
@@ -278,6 +313,7 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
     );
   }
 
+  // Plain expression statement
   const exprResult = parseExprWithType(ctx);
   if (peek(ctx) === ";") consume(ctx, ";");
   return BigInt(exprResult.value);
@@ -293,23 +329,20 @@ function applyLogicalOp(
 ): void {
   const right = parseTermWithType(ctx);
 
-  if (left.type !== "Bool" || right.type !== "Bool") {
+  if (left.type !== "Bool" || right.type !== "Bool")
     throw new Error(
       `Logical ${opName} requires Bool operands, got ${left.type} and ${right.type}`,
     );
-  }
 
   left.value = BigInt(bitwiseFn(BigInt(left.value), BigInt(right.value)));
 }
 
 // ── Expression parser (with type tracking) ───────────────────────────
 
-function parseExprWithType(ctx: ParserCtx): {
-  value: number | bigint;
-  type: string;
-} {
+function parseExprWithType(ctx: ParserCtx): { value: number | bigint; type: string } {
   const left = parseTermWithType(ctx);
 
+  // Addition / subtraction
   while (peek(ctx) === "+" || peek(ctx) === "-") {
     const op = consume(ctx);
     const right = parseTermWithType(ctx);
@@ -327,11 +360,8 @@ function parseExprWithType(ctx: ParserCtx): {
     const op = consume(ctx);
     const right = parseTermWithType(ctx);
 
-    if ((left.type === "Bool") !== (right.type === "Bool")) {
-      throw new Error(
-        `Type mismatch in comparison: ${left.type} and ${right.type}`,
-      );
-    }
+    if ((left.type === "Bool") !== (right.type === "Bool"))
+      throw new Error(`Type mismatch in comparison: ${left.type} and ${right.type}`);
 
     let cmpResult: bigint;
     switch (op) {
@@ -361,6 +391,7 @@ function parseExprWithType(ctx: ParserCtx): {
     left.type = "Bool";
   }
 
+  // Logical OR / AND — only allowed on Bool types
   while (peek(ctx) === "||") {
     consume(ctx, "||");
     applyLogicalOp(
@@ -386,10 +417,7 @@ function parseExprWithType(ctx: ParserCtx): {
 
 // ── Term parser ──────────────────────────────────────────────────────
 
-function parseTermWithType(ctx: ParserCtx): {
-  value: number | bigint;
-  type: string;
-} {
+function parseTermWithType(ctx: ParserCtx): { value: number | bigint; type: string } {
   let result: { value: bigint; type: string };
   const token = peek(ctx);
 
@@ -398,29 +426,26 @@ function parseTermWithType(ctx: ParserCtx): {
     consume(ctx, "(");
     const condResult = parseExprWithType(ctx);
     consume(ctx, ")");
-    if (condResult.type !== "Bool") {
+    if (condResult.type !== "Bool")
       throw new Error(`If condition must be Bool, got ${condResult.type}`);
-    }
 
     const thenBranch = parseTermWithType(ctx);
     consume(ctx, "else");
     const elseBranch = parseTermWithType(ctx);
 
-    if (thenBranch.type !== elseBranch.type) {
+    if (thenBranch.type !== elseBranch.type)
       throw new Error(
         `If/else branch type mismatch: ${thenBranch.type} vs ${elseBranch.type}`,
       );
-    }
 
-    result =
-      condResult.value != 0
-        ? { value: BigInt(thenBranch.value), type: thenBranch.type }
-        : { value: BigInt(elseBranch.value), type: elseBranch.type };
+    result = condResult.value != 0
+      ? { value: BigInt(thenBranch.value), type: thenBranch.type }
+      : { value: BigInt(elseBranch.value), type: elseBranch.type };
   } else if (token === "(") {
     consume(ctx, "(");
-    const innerResult = parseExprWithType(ctx);
+    const inner = parseExprWithType(ctx);
     consume(ctx, ")");
-    result = { value: BigInt(innerResult.value), type: innerResult.type };
+    result = { value: BigInt(inner.value), type: inner.type };
   } else if (token === "{") {
     consume(ctx, "{");
     let blockValue: bigint | undefined;
@@ -431,17 +456,18 @@ function parseTermWithType(ctx: ParserCtx): {
     consume(ctx, "}");
     result = { value: blockValue!, type: "U8" };
   } else if (token === "&") {
+    // Reference operator — returns pointer type *T
     consume(ctx, "&");
     const name = parseIdentifier(ctx);
     const entry = ctx.scope.get(name)!;
     result = { value: entry.value, type: "*" + entry.type };
   } else if (token === "*") {
+    // Dereference operator — strips the leading * to get base type T
     consume(ctx, "*");
     const name = parseIdentifier(ctx);
     const entry = ctx.scope.get(name)!;
-    if (!entry.type.startsWith("*")) {
+    if (!entry.type.startsWith("*"))
       throw new Error(`Cannot dereference non-pointer type: ${entry.type}`);
-    }
     result = { value: entry.value, type: entry.type.replace(/^\*/, "") };
   } else if (token === "true") {
     consume(ctx, "true");
@@ -450,10 +476,12 @@ function parseTermWithType(ctx: ParserCtx): {
     consume(ctx, "false");
     result = { value: 0n, type: "Bool" };
   } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
+    // Variable reference — use the stored type from scope
     const name = parseIdentifier(ctx);
     const entry = ctx.scope.get(name)!;
     result = { value: entry.value, type: entry.type };
   } else {
+    // Literal token (e.g., "100U8")
     const literalToken = consume(ctx);
     result = {
       value: BigInt(parseLiteral(literalToken)),
@@ -461,6 +489,7 @@ function parseTermWithType(ctx: ParserCtx): {
     };
   }
 
+  // Multiplication / division — higher precedence than + -
   while (peek(ctx) === "*" || peek(ctx) === "/") {
     const op = consume(ctx);
     const rightResult = parseTermWithType(ctx);
@@ -490,12 +519,8 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
   const ctx: ParserCtx = {
     tokens,
-    get pos() {
-      return pos;
-    },
-    set pos(v) {
-      pos = v;
-    },
+    get pos() { return pos; },
+    set pos(v) { pos = v; },
     scope,
   };
 
