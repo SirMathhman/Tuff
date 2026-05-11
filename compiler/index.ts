@@ -435,9 +435,12 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
       throw new Error("Invalid format");
     consume(ctx, ")");
 
-    // Return type annotation : I32
-    consume(ctx, ":");
-    const returnType = parseTypeAnnotation(ctx);
+   // Return type annotation : I32 (optional)
+    let returnType = "I32"; // default return type
+    if (peek(ctx) === ":") {
+      consume(ctx, ":");
+      returnType = parseTypeAnnotation(ctx);
+    }
     // Arrow => and body expression start position
     consume(ctx, "=>");
     if (ctx.functions.has(funcName)) {
@@ -452,7 +455,8 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
     // Skip past the function body tokens (don't execute yet)
     skipBodyTokens(ctx);
     return null;
-  }
+ }
+
 
   // Let declaration
   if (peek(ctx) === "let") {

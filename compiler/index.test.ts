@@ -262,3 +262,7 @@ test('executeTuff("fn pass(first : I32, first : I32) : Void => {}") throws error
   expect(() => executeTuff("fn pass(first : I32, first : I32) : Void => {}")).toThrow();
 });
 
+test('executeTuff("fn get() => 100;") returns 0', () => {
+  expect(executeTuff("fn get() => 100;")).toBe(0);
+});
+
