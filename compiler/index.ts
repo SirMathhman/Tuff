@@ -84,7 +84,7 @@ function tokenize(tuffSourceCode: string): string[] {
       tokens.push("{");
       remaining = remaining.slice(1);
     }
-    // Handle || as logical OR operator — must check before single-char operators
+   // Handle || as logical OR operator — must check before single-char operators
     while (remaining.startsWith("||")) {
       tokens.push("||");
       remaining = remaining.slice(2);
@@ -94,6 +94,13 @@ function tokenize(tuffSourceCode: string): string[] {
       tokens.push("&&");
       remaining = remaining.slice(2);
     }
+   // Handle += compound assignment operator — must check before single + or =
+    if (remaining.startsWith("+=")) {
+      tokens.push("+=");
+      remaining = remaining.slice(2);
+    }
+
+    // Handle comparison operators: multi-char first, then single-char
     // Handle comparison operators: multi-char first, then single-char
     if (remaining.startsWith("<=")) {
       tokens.push("<=");
@@ -266,7 +273,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
       if (peek() === ";") consume(";");
       return null;
-    } else if (
+   } else if (
       peek() &&
       /^[a-zA-Z_]\w*$/.test(peek()!) &&
       tokens[pos + 1] === "="
@@ -293,6 +300,33 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
 
       if (peek() === ";") consume(";");
       return value;
+    } else if (
+      peek() &&
+      /^[a-zA-Z_]\w*$/.test(peek()!) &&
+      tokens[pos + 1] === "+="
+    ) {
+      // Compound assignment: `x += value` — returns the assigned value
+      const name = consume();
+      const entry = scope.get(name);
+      if (!entry || !entry.mutable) {
+        throw new Error(`Cannot reassign immutable variable: ${name}`);
+      }
+
+      consume("+="); // +=
+      const exprResult = parseExprWithType();
+      const newValue = BigInt(entry.value) + BigInt(exprResult.value);
+
+      // Check type compatibility for the assignment (result must fit in entry's type)
+      if (!isAssignable(exprResult.type, entry.type)) {
+        throw new Error(
+          `Cannot assign ${exprResult.type} to variable of type ${entry.type}`,
+        );
+      }
+
+      scope.set(name, { ...entry, value: newValue });
+
+      if (peek() === ";") consume(";");
+     return newValue;
     } else {
       const exprResult = parseExprWithType();
       if (peek() === ";") consume(";");
