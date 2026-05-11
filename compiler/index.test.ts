@@ -14,7 +14,9 @@ test('executeTuff("100U16") returns 100', () => {
 });
 
 test('executeTuff("-100U8") throws error for negative values', () => {
-  expect(() => executeTuff("-100U8")).toThrow("Negative values are not supported");
+  expect(() => executeTuff("-100U8")).toThrow(
+    "Negative values are not supported",
+  );
 });
 
 test('executeTuff("256U8") throws error for out of range', () => {
@@ -58,7 +60,9 @@ test('executeTuff("{ let x : U8 = 1U8 + 2U8; x } * 3U8") returns 9', () => {
 });
 
 test('executeTuff("let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y") returns 9', () => {
-  expect(executeTuff("let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y")).toBe(9);
+  expect(
+    executeTuff("let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y"),
+  ).toBe(9);
 });
 
 test('executeTuff("let x : U8 = 100U8;") returns 0', () => {
@@ -106,7 +110,9 @@ test('executeTuff("let x = 0U8; let y : *U8 = &x;") returns 0', () => {
 });
 
 test('executeTuff("let x = 0U8; let y : *U8 = &x; let z : U8 = *y;") returns 0', () => {
-  expect(executeTuff("let x = 0U8; let y : *U8 = &x; let z : U8 = *y;")).toBe(0);
+  expect(executeTuff("let x = 0U8; let y : *U8 = &x; let z : U8 = *y;")).toBe(
+    0,
+  );
 });
 
 test('executeTuff("let x = 0U8; let y : *U8 = &x; *y") returns 0', () => {
@@ -202,3 +208,8 @@ test('executeTuff("let x = if (false) 3U8 else 5U8;") does not throw', () => {
   expect(() => executeTuff("let x = if (false) 3U8 else 5U8;")).not.toThrow();
 });
 
+test('executeTuff("let mut x = 0U8; if (false) { x = 3U8; } else { x = 5U8; } x") returns 5', () => {
+  expect(
+    executeTuff("let mut x = 0U8; if (false) { x = 3U8; } else { x = 5U8; } x"),
+  ).toBe(5);
+});
