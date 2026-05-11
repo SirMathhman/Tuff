@@ -53,3 +53,10 @@ test("let x : U8 = read<U8>(); x + 1U8 adds a literal to the variable", () => {
   assertValid("let x : U8 = read<U8>(); x + 1U8", 2, "1");
 });
 
+test("duplicate let declarations are rejected", () => {
+  assertInvalid("let x : U8 = read<U8>(); let x : U8 = read<U8>()");
+});
+
+test("type inference: let x = read<U8>(); x returns the variable value", () => {
+  assertValid("let x = read<U8>(); x", 100, "100");
+});

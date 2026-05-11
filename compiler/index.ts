@@ -119,10 +119,9 @@ type Statement = LetDecl | ExprStmt;
 interface LetDecl {
   kind: "let";
   name: string;
-  typeAnnotation: string; // e.g. "U8"
+  typeAnnotation?: string; // e.g. "U8" — optional, inferred from initializer if omitted
   init: Expr;
 }
-
 interface ExprStmt {
   kind: "expr";
   expr: Expr;
@@ -132,6 +131,7 @@ interface ExprStmt {
 
 class Parser {
   private pos = 0;
+
 
   constructor(private tokens: Token[]) {}
 
@@ -164,7 +164,7 @@ class Parser {
     return { kind: "expr", expr };
   }
 
-  private parseLetDecl(): LetDecl {
+ private parseLetDecl(): LetDecl {
     // consume 'let'
     this.advance();
 
@@ -176,28 +176,50 @@ class Parser {
       );
     const name = nameTok.value;
 
-    // ':' type annotation
-    this.expect("COLON", `':' after variable name '${name}'`);
+    let typeAnnotation: string | undefined;
 
-    // type argument (e.g. U8) — read until '=' or ';'
-    let typeAnnotation = "";
-    while (!this.atEnd() && !["ASSIGN"].includes(this.peek().type)) {
-      const t = this.advance();
-      if (t.type === "GT") break;
-      typeAnnotation += t.value;
+    // ':' type annotation is optional — infer from initializer if omitted
+    if (!this.atEnd() && this.peek().type === "COLON") {
+      this.advance(); // consume ':'
+      while (!this.atEnd() && !["ASSIGN"].includes(this.peek().type)) {
+        const t = this.advance();
+        if (t.type === "GT") break;
+        typeAnnotation += t.value;
+      }
     }
 
     // '=' initializer expression
-    this.expect("ASSIGN", `'=' after type annotation`);
+    this.expect("ASSIGN", `'=' after variable name '${name}'`);
     const init = this.parseExpression();
 
-    // ';' terminator
-    this.expect("SEMICOLON", `';' at end of let declaration for '${name}'`);
+    // Infer type from initializer if not explicitly annotated
+    if (!typeAnnotation) {
+      typeAnnotation = this.inferType(init);
+    }
+
+    // ';' terminator (optional at end of program)
+    if (!this.atEnd() && this.peek().type === "SEMICOLON") {
+      this.advance();
+    }
 
     return { kind: "let", name, typeAnnotation, init };
   }
 
+  private inferType(expr: Expr): string {
+    switch (expr.kind) {
+      case "read":
+        return expr.typeArg;
+      case "typed_number":
+        return expr.typeAnnotation;
+      default:
+        throw new Error(
+         `Cannot infer type for variable initializer of kind '${expr.kind}'`,
+        );
+    }
+  }
+
   private parseExpression(): Expr {
+
     let left = this.parsePrimary();
 
     while (!this.atEnd() && this.peek().type === "PLUS") {
@@ -324,13 +346,17 @@ class Generator {
     return lines.join("\n");
   }
 
-  private collectDeclarations(statements: Statement[]): void {
+ private collectDeclarations(statements: Statement[]): void {
     for (const stmt of statements) {
       if (stmt.kind === "let") {
+        if (this.declaredVars.has(stmt.name)) {
+          throw new Error(`Duplicate variable declaration '${stmt.name}'`);
+        }
         this.declaredVars.add(stmt.name);
       }
     }
   }
+
 
   private generateStatement(stmt: Statement, lines: string[]): void {
     switch (stmt.kind) {
