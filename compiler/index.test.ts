@@ -209,10 +209,15 @@ test('executeTuff("let x = if (false) 3U8 else 5U8;") does not throw', () => {
 });
 
 test('executeTuff("let mut x = 0U8; if (false) { x = 3U8; } else { x = 5U8;} x") returns 5', () => {
-  expect(executeTuff("let mut x = 0U8; if (false) { x = 3U8; } else { x = 5U8;} x")).toBe(5);
+  expect(
+    executeTuff("let mut x = 0U8; if (false) { x = 3U8; } else { x = 5U8;} x"),
+  ).toBe(5);
 });
 
 test('executeTuff("let mut x = 0U8; x += 1U8; x") returns 1', () => {
   expect(executeTuff("let mut x = 0U8; x += 1U8; x")).toBe(1);
 });
 
+test('executeTuff("let x = 0U8; let y = &x;") returns 0', () => {
+  expect(executeTuff("let x = 0U8; let y = &x;")).toBe(0);
+});

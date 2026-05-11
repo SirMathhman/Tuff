@@ -246,8 +246,11 @@ function executeWhileLoop(ctx: ParserCtx): bigint | null {
 
     consume(ctx, ")");
 
-    // If false, break out of the loop
-    if (condResult.value === 0) break;
+    // If false, skip past the body tokens without executing them
+    if (condResult.value === 0) {
+      skipBodyTokens(ctx);
+      return blockValue;
+    }
 
     // Execute body: parse ONE block item per iteration
     const itemValue = parseBlockItem(ctx);
@@ -256,6 +259,28 @@ function executeWhileLoop(ctx: ParserCtx): bigint | null {
 
   return blockValue;
 }
+
+// Skip past the tokens that make up one while-loop body statement.
+function skipBodyTokens(ctx: ParserCtx): void {
+  // If there's a brace-enclosed block, skip to matching "}"
+  if (peek(ctx) === "{") {
+    let depth = 1;
+    consume(ctx); // opening "{"
+    while (depth > 0 && ctx.pos < ctx.tokens.length) {
+      const t = consume(ctx);
+      if (t === "{") depth++;
+      else if (t === "}") depth--;
+    }
+    return;
+  }
+
+  // Otherwise skip one statement: advance until we hit ";" or run out of tokens.
+  while (ctx.pos < ctx.tokens.length && peek(ctx) !== ";") {
+    consume(ctx);
+  }
+  if (peek(ctx) === ";") consume(ctx, ";");
+}
+
 
 // ── Block item parser ───────────────────────────────────────────────
 
