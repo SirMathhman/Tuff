@@ -39,14 +39,12 @@ test("read<U8>() + read<U8>() sums two values from stdin", () => {
 });
 
 test("read<U8>() + read<U8>() + read<U8>() chains three reads", () => {
-  assertValid(
-    "read<U8>() + read<U8>() + read<U8>()",
-    6,
-    "1 2 3"
-  );
+  assertValid("read<U8>() + read<U8>() + read<U8>()", 6, "1 2 3");
 });
 
 test("let x : U8 = read<U8>(); x returns the variable value", () => {
   assertValid("let x : U8 = read<U8>(); x", 1, "1");
 });
-
+test("let x : U8 = read<U8>(); x + x doubles the variable value", () => {
+  assertValid("let x : U8 = read<U8>(); x + x", 2, "1 3");
+});
