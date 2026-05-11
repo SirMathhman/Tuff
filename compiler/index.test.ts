@@ -26,3 +26,8 @@ test("The simplest possible program", () => {
 test("A program with a syntax error", () => {
   assertInvalid(`this is not valid tuff code`);
 });
+
+test("read<U8>() parses stdin as unsigned 8-bit integer", () => {
+  assertValid("read<U8>()", 100, "100");
+});
+
