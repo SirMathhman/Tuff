@@ -847,5 +847,51 @@
   {
     "role": "assistant",
     "content": "All **5 tests pass** and TypeScript compiles cleanly with zero errors. Here's what the plumbing involved:\n\n### Changes to `index.ts`\n\n1. **Tokenizer**: Added `\"PLUS\"` token type for the `+` operator.\n\n2. **AST**: Added a new `BinOp` node kind (`{ kind: \"binop\", op, left, right }`) alongside existing `ReadExpr` and `NumberLit`.\n\n3. **Recursive descent parser** (replaced the old flat parser):\n   - `parseExpression()` — handles binary operators like `+`, chaining them into a left-associative tree\n   - `parsePrimary()` — handles atoms: parenthesized expressions, `read<T>()` calls, and number literals\n\n4. **Code generator with stdin token tracking**: The `Generator` class maintains a `readIndex` counter so each successive `read<T>()` consumes the next whitespace-separated token from stdin (`tokens[0]`, `tokens[1]`, etc.). For `\"read<U8>() + read<U8>()\"` with input `\"1 2\"`, it generates:\n   ```js\n   const tokens = stdIn.trim().split(/\\s+/);\n   return ((Math.floor(Number(tokens[0])) & 0xFF) + (Math.floor(Number(tokens[1])) & 0xFF));\n   // → 1 + 2 = 3 ✓\n   ```"
+  },
+  {
+    "role": "user",
+    "content": "Add test case: assertValid(\"read<U8>() + read<U8>() + read<U8>()\", 6, \"1 2 3\"). Assume infinitely many terms."
+  },
+  {
+    "role": "assistant",
+    "content": "The existing recursive descent parser already chains `+` left-associatively for arbitrarily many terms, so no plumbing changes are needed — just the test:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":37,\"endLine\":42,\"content\":\"test(\\\"read<U8>() + read<U8>() sums two values from stdin\\\", () => {\\n  assertValid(\\\"read<U8>() + read<U8>()\\\", 3, \\\"1 2\\\");\\n});\\n\\ntest(\\\"read<U8>() + read<U8>() + read<U8>() chains three reads\\\", () => {\\n  assertValid(\\n    \\\"read<U8>() + read<U8>() + read<U8>()\\\",\\n    6,\\n    \\\"1 2 3\\\"\\n  );\\n});\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts; tsc --noEmit\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) The simplest possible program [15.00ms]\n(pass) A program with a syntax error\n(pass) read<U8>() parses stdin as unsigned 8-bit integer [16.00ms]\n(pass) read<U8>() ignores extra tokens in stdin\n(pass) read<U8>() + read<U8>() sums two values from stdin\n(pass) read<U8>() + read<U8>() + read<U8>() chains three reads\n\n 6 pass\n 0 fail\n 6 expect() calls\nRan 6 tests across 1 file. [397.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "All **6 tests pass**, zero TypeScript errors. No plumbing changes were needed — the existing recursive descent parser's `while` loop in `parseExpression()` already chains arbitrarily many `+` operators left-associatively, and the generator tracks stdin token indices sequentially across all terms:\n\n```js\n// Generated for \"read<U8>() + read<U8>() + read<U8>()\" with input \"1 2 3\":\nconst tokens = stdIn.trim().split(/\\s+/);\nreturn (((Math.floor(Number(tokens[0])) & 0xFF) \n       + (Math.floor(Number(tokens[1])) & 0xFF)) \n       + (Math.floor(Number(tokens[2])) & 0xFF));\n// → ((1 + 2) + 3) = 6 ✓\n```"
   }
 ]
