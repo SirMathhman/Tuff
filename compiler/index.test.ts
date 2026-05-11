@@ -31,3 +31,8 @@ test("read<U8>() parses stdin as unsigned 8-bit integer", () => {
   assertValid("read<U8>()", 100, "100");
 });
 
+test("read<U8>() ignores extra tokens in stdin", () => {
+  assertValid("read<U8>()", 100, "100 20");
+});
+
+

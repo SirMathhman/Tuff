@@ -508,5 +508,203 @@
   {
     "role": "assistant",
     "content": "Both TypeScript compilation and all tests now pass cleanly:\n\n- **TypeScript strict mode**: Fixed by using non-null assertions (`source[i]!`) for string indexing (safe because the loop bounds guarantee valid indices) and extracting `first` via direct array access instead of destructuring.\n- **All 3 tests pass**, including the new `read<U8>()` test case that reads `\"100\"` from stdin and returns exit code `100`."
+  },
+  {
+    "role": "user",
+    "content": "Add test case: assertValid(\"read<U8>()\", 100, \"100 20\")"
+  },
+  {
+    "role": "assistant",
+    "content": "I need to check how the current code handles multi-value stdin, then fix it if needed:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":105,\"endLine\":127}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 145\n105: \n106:   throw new Error(`Unexpected token '${first.value}'`);\n107: }\n108: \n109: function generate(ast: AstNode | null): string {\n110:   if (!ast) return \"\";\n111: \n112:   switch (ast.kind) {\n113:     case \"read\": {\n114:       const type = ast.typeArg;\n115:       // Map TUFF types to JS parsing logic\n116:       switch (type) {\n117:         case \"U8\":\n118:           return `return Math.floor(Number(stdIn)) & 0xFF`;\n119:         case \"I8\":\n120:           return `return (Math.floor(Number(stdIn)) + 128) % 256 - 128`;\n121:         case \"U16\":\n122:           return `return Math.floor(Number(stdIn)) & 0xFFFF`;\n123:         case \"I16\":\n124:           return `return ((Math.floor(Number(stdIn)) + 32768) % 65536) - 32768`;\n125:         case \"U32\":\n126:           return `return Math.trunc(Number(stdIn)) >>> 0`;"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":109,\"endLine\":145}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 145\n109: function generate(ast: AstNode | null): string {\n110:   if (!ast) return \"\";\n111: \n112:   switch (ast.kind) {\n113:     case \"read\": {\n114:       const type = ast.typeArg;\n115:       // Map TUFF types to JS parsing logic\n116:       switch (type) {\n117:         case \"U8\":\n118:           return `return Math.floor(Number(stdIn)) & 0xFF`;\n119:         case \"I8\":\n120:           return `return (Math.floor(Number(stdIn)) + 128) % 256 - 128`;\n121:         case \"U16\":\n122:           return `return Math.floor(Number(stdIn)) & 0xFFFF`;\n123:         case \"I16\":\n124:           return `return ((Math.floor(Number(stdIn)) + 32768) % 65536) - 32768`;\n125:         case \"U32\":\n126:           return `return Math.trunc(Number(stdIn)) >>> 0`;\n127:         case \"I32\":\n128:           return `return Math.trunc(Number(stdIn)) | 0`;\n129:         default:\n130:           throw new Error(`Unsupported read type '${type}'`);\n131:       }\n132:     }\n133:     case \"number\":\n134:       return `return ${ast.value}`;\n135:   }\n136: }\n137: \n138: export function compileTuffToTS(tuffSourceCode: string): string {\n139:   const trimmed = tuffSourceCode.trim();\n140:   if (!trimmed) return \"return 0\";\n141:   const tokens = tokenize(trimmed);\n142:   const ast = parse(tokens);\n143:   return generate(ast);\n144: }"
+  },
+  {
+    "role": "assistant",
+    "content": "The current code does `Number(stdIn)` which would fail with `\"100 20\"` (it becomes NaN). I need to make stdin parsing token-aware so each `read<T>()` consumes one whitespace-separated value:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":109,\"endLine\":136,\"content\":\"function generate(ast: AstNode | null): string {\\n  if (!ast) return \\\"\\\";\\n\\n  switch (ast.kind) {\\n    case \\\"read\\\": {\\n      const type = ast.typeArg;\\n      // Map TUFF types to JS parsing logic, reading one token at a time from stdin\\n      let parseExpr: string;\\n      switch (type) {\\n        case \\\"U8\\\":\\n          parseExpr = `(Math.floor(Number(token)) & 0xFF)`;\\n          break;\\n        case \\\"I8\\\":\\n          parseExpr = `((Math.floor(Number(token)) + 128) % 256 - 128)`;\\n          break;\\n        case \\\"U16\\\":\\n          parseExpr = `(Math.floor(Number(token)) & 0xFFFF)`;\\n          break;\\n        case \\\"I16\\\":\\n          parseExpr = `((Math.floor(Number(token)) + 32768) % 65536 - 32768)`;\\n          break;\\n        case \\\"U32\\\":\\n          parseExpr = `(Math.trunc(Number(token)) >>> 0)`;\\n          break;\\n        case \\\"I32\\\":\\n          parseExpr = `(Math.trunc(Number(token)) | 0)`;\\n          break;\\n        default:\\n          throw new Error(`Unsupported read type '${type}'`);\\n      }\\n      return `const tokens = stdIn.trim().split(/\\\\\\\\s+/);\\\\nreturn ${parseExpr};`;\\n    }\\n    case \\\"number\\\":\\n      return `return ${ast.value}`;\\n  }\\n}\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": "Wait, my code references `token` but never defines it. Let me fix that — it should use the first token from stdin:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":109,\"endLine\":145,\"content\":\"function generate(ast: AstNode | null): string {\\n  if (!ast) return \\\"\\\";\\n\\n  switch (ast.kind) {\\n    case \\\"read\\\": {\\n      const type = ast.typeArg;\\n      // Map TUFF types to JS parsing logic, reading one token at a time from stdin\\n      let parseExpr: string;\\n      switch (type) {\\n        case \\\"U8\\\":\\n          parseExpr = `(Math.floor(Number(tokens[0])) & 0xFF)`;\\n          break;\\n        case \\\"I8\\\":\\n          parseExpr = `((Math.floor(Number(tokens[0])) + 128) % 256 - 128)`;\\n          break;\\n        case \\\"U16\\\":\\n          parseExpr = `(Math.floor(Number(tokens[0])) & 0xFFFF)`;\\n          break;\\n        case \\\"I16\\\":\\n          parseExpr = `((Math.floor(Number(tokens[0])) + 32768) % 65536 - 32768)`;\\n          break;\\n        case \\\"U32\\\":\\n          parseExpr = `(Math.trunc(Number(tokens[0])) >>> 0)`;\\n          break;\\n        case \\\"I32\\\":\\n          parseExpr = `(Math.trunc(Number(tokens[0])) | 0)`;\\n          break;\\n        default:\\n          throw new Error(`Unsupported read type '${type}'`);\\n      }\\n      return `const tokens = stdIn.trim().split(/\\\\\\\\s+/);\\\\nreturn ${parseExpr};`;\\n    }\\n    case \\\"number\\\":\\n      return `return ${ast.value}`;\\n  }\\n}\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":109,\"endLine\":165}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 154\n109: function generate(ast: AstNode | null): string {\n110:   if (!ast) return \"\";\n111: \n112:   switch (ast.kind) {\n113:     case \"read\": {\n114:       const type = ast.typeArg;\n115:       // Map TUFF types to JS parsing logic, reading one token at a time from stdin\n116:       let parseExpr: string;\n117:       switch (type) {\n118:         case \"U8\":\n119:           parseExpr = `(Math.floor(Number(tokens[0])) & 0xFF)`;\n120:           break;\n121:         case \"I8\":\n122:           parseExpr = `((Math.floor(Number(tokens[0])) + 128) % 256 - 128)`;\n123:           break;\n124:         case \"U16\":\n125:           parseExpr = `(Math.floor(Number(tokens[0])) & 0xFFFF)`;\n126:           break;\n127:         case \"I16\":\n128:           parseExpr = `((Math.floor(Number(tokens[0])) + 32768) % 65536 - 32768)`;\n129:           break;\n130:         case \"U32\":\n131:           parseExpr = `(Math.trunc(Number(tokens[0])) >>> 0)`;\n132:           break;\n133:         case \"I32\":\n134:           parseExpr = `(Math.trunc(Number(tokens[0])) | 0)`;\n135:           break;\n136:         default:\n137:           throw new Error(`Unsupported read type '${type}'`);\n138:       }\n139:       return `const tokens = stdIn.trim().split(/\\\\s+/);\\nreturn ${parseExpr};`;\n140:     }\n141:     case \"number\":\n142:       return `return ${ast.value}`;\n143:   }\n144: }\n145: }\n146: \n147: export function compileTuffToTS(tuffSourceCode: string): string {\n148:   const trimmed = tuffSourceCode.trim();\n149:   if (!trimmed) return \"return 0\";\n150:   const tokens = tokenize(trimmed);\n151:   const ast = parse(tokens);\n152:   return generate(ast);\n153: }\n154: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":144,\"endLine\":146,\"content\":\"}\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":138,\"endLine\":160}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 155\n138:       }\n139:       return `const tokens = stdIn.trim().split(/\\\\s+/);\\nreturn ${parseExpr};`;\n140:     }\n141:     case \"number\":\n142:       return `return ${ast.value}`;\n143:   }\n144: }\n145: \n146: \n147: \n148: export function compileTuffToTS(tuffSourceCode: string): string {\n149:   const trimmed = tuffSourceCode.trim();\n150:   if (!trimmed) return \"return 0\";\n151:   const tokens = tokenize(trimmed);\n152:   const ast = parse(tokens);\n153:   return generate(ast);\n154: }\n155: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":26,\"endLine\":35}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 34\n26: test(\"A program with a syntax error\", () => {\n27:   assertInvalid(`this is not valid tuff code`);\n28: });\n29: \n30: test(\"read<U8>() parses stdin as unsigned 8-bit integer\", () => {\n31:   assertValid(\"read<U8>()\", 100, \"100\");\n32: });\n33: \n34: "
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me add the new test case and run everything:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":30,\"endLine\":34,\"content\":\"test(\\\"read<U8>() parses stdin as unsigned 8-bit integer\\\", () => {\\n  assertValid(\\\"read<U8>()\\\", 100, \\\"100\\\");\\n});\\n\\ntest(\\\"read<U8>() ignores extra tokens in stdin\\\", () => {\\n  assertValid(\\\"read<U8>()\\\", 100, \\\"100 20\\\");\\n});\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test index.test.ts; tsc --noEmit\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) The simplest possible program [31.00ms]\n(pass) A program with a syntax error\n(pass) read<U8>() parses stdin as unsigned 8-bit integer\n(pass) read<U8>() ignores extra tokens in stdin\n\n 4 pass\n 0 fail\n 4 expect() calls\nRan 4 tests across 1 file. [383.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "All 4 tests pass and TypeScript compiles cleanly with no errors. The change was straightforward — the generated code now splits `stdIn` on whitespace into tokens (`const tokens = stdIn.trim().split(/\\s+/)`), so each `read<T>()` reads from that token array instead of parsing stdin directly as a single number. This means extra values like `\"20\"` in `\"100 20\"` are simply ignored since only the first token is consumed."
   }
 ]

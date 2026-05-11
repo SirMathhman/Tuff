@@ -112,23 +112,31 @@ function generate(ast: AstNode | null): string {
   switch (ast.kind) {
     case "read": {
       const type = ast.typeArg;
-      // Map TUFF types to JS parsing logic
+      // Map TUFF types to JS parsing logic, reading one token at a time from stdin
+      let parseExpr: string;
       switch (type) {
         case "U8":
-          return `return Math.floor(Number(stdIn)) & 0xFF`;
+          parseExpr = `(Math.floor(Number(tokens[0])) & 0xFF)`;
+          break;
         case "I8":
-          return `return (Math.floor(Number(stdIn)) + 128) % 256 - 128`;
+          parseExpr = `((Math.floor(Number(tokens[0])) + 128) % 256 - 128)`;
+          break;
         case "U16":
-          return `return Math.floor(Number(stdIn)) & 0xFFFF`;
+          parseExpr = `(Math.floor(Number(tokens[0])) & 0xFFFF)`;
+          break;
         case "I16":
-          return `return ((Math.floor(Number(stdIn)) + 32768) % 65536) - 32768`;
+          parseExpr = `((Math.floor(Number(tokens[0])) + 32768) % 65536 - 32768)`;
+          break;
         case "U32":
-          return `return Math.trunc(Number(stdIn)) >>> 0`;
+          parseExpr = `(Math.trunc(Number(tokens[0])) >>> 0)`;
+          break;
         case "I32":
-          return `return Math.trunc(Number(stdIn)) | 0`;
+          parseExpr = `(Math.trunc(Number(tokens[0])) | 0)`;
+          break;
         default:
           throw new Error(`Unsupported read type '${type}'`);
       }
+      return `const tokens = stdIn.trim().split(/\\s+/);\nreturn ${parseExpr};`;
     }
     case "number":
       return `return ${ast.value}`;
