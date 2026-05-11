@@ -176,7 +176,8 @@ function tokenize(source: string): string[] {
       remaining.endsWith(")") ||
       remaining.endsWith("}") ||
       remaining.endsWith(";") ||
-      remaining.endsWith(":")
+      remaining.endsWith(":") ||
+      remaining.endsWith(",")
     ) {
       trailing.unshift(remaining[remaining.length - 1]!);
       remaining = remaining.slice(0, -1);
@@ -212,7 +213,8 @@ function parseTypeAnnotation(ctx: ParserCtx): string {
   if (
     !/^[UI](8|16|32|64)$/.test(typeToken) &&
     !/^\*[UI](8|16|32|64)$/.test(typeToken) &&
-    typeToken !== "Bool"
+    typeToken !== "Bool" &&
+    typeToken !== "Void"
   )
     throw new Error(`Invalid type: ${typeToken}`);
   return typeToken;
@@ -418,6 +420,9 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
     const params: Array<{ name: string; type: string }> = [];
     while (peek(ctx) !== ")") {
       const paramName = consume(ctx);
+      if (params.some((p) => p.name === paramName)) {
+        throw new Error(`Duplicate parameter: ${paramName}`);
+      }
       consume(ctx, ":");
       const paramType = parseTypeAnnotation(ctx);
       params.push({ name: paramName, type: paramType });
@@ -433,9 +438,11 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
     // Return type annotation : I32
     consume(ctx, ":");
     const returnType = parseTypeAnnotation(ctx);
-
     // Arrow => and body expression start position
     consume(ctx, "=>");
+    if (ctx.functions.has(funcName)) {
+      throw new Error(`Duplicate function declaration: ${funcName}`);
+    }
     ctx.functions.set(funcName, {
       returnType,
       bodyStartPos: ctx.pos,

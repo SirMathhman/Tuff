@@ -1,4 +1,3 @@
-
 import { executeTuff } from "./index";
 import { test, expect } from "bun:test";
 
@@ -219,14 +218,14 @@ test('executeTuff("let mut x = 0U8; x += 1U8; x") returns 1', () => {
   expect(executeTuff("let mut x = 0U8; x += 1U8; x")).toBe(1);
 });
 
-
-
 test('executeTuff("let mut i = 0U8; while (i < 4U8) i += 1U8; i") returns 4', () => {
   expect(executeTuff("let mut i = 0U8; while (i < 4U8) i += 1U8; i")).toBe(4);
 });
 
 test('executeTuff("let mut i = 0U8; while (i < 4U8) { i += 1U8; } i") returns 4', () => {
-  expect(executeTuff("let mut i = 0U8; while (i < 4U8) { i += 1U8; } i")).toBe(4);
+  expect(executeTuff("let mut i = 0U8; while (i < 4U8) { i += 1U8; } i")).toBe(
+    4,
+  );
 });
 
 test('executeTuff("let x = 4; x") returns 4', () => {
@@ -242,5 +241,24 @@ test('executeTuff("let x = 0U8; let y = &x;") returns 0', () => {
 });
 
 test('executeTuff("fn pass(param : I32) : I32 => param; pass(100)") returns 100', () => {
-  expect(executeTuff("fn pass(param : I32) : I32 => param; pass(100)")).toBe(100);
+  expect(executeTuff("fn pass(param : I32) : I32 => param; pass(100)")).toBe(
+    100,
+  );
 });
+
+test('executeTuff("fn empty() : Void => {}") returns 0', () => {
+  expect(executeTuff("fn empty() : Void => {}")).toBe(0);
+});
+
+test('executeTuff("fn empty() : Void => {} fn empty() : Void => {}") throws error for duplicate function', () => {
+  expect(() => executeTuff("fn empty() : Void => {} fn empty() : Void => {}")).toThrow();
+});
+
+test('executeTuff("fn pass(first : I32, second : I32) : Void => {}") returns 0', () => {
+  expect(executeTuff("fn pass(first : I32, second : I32) : Void => {}")).toBe(0);
+});
+
+test('executeTuff("fn pass(first : I32, first : I32) : Void => {}") throws error for duplicate parameter', () => {
+  expect(() => executeTuff("fn pass(first : I32, first : I32) : Void => {}")).toThrow();
+});
+
