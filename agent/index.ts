@@ -661,7 +661,7 @@ async function act() {
       );
       messages.push({
         role: "user",
-        content: `Stop hook exited with code ${stopResult.exitCode}. You MUST fix these issues before continuing:\n${msg}`,
+        content: `Stop hook exited with code ${stopResult.exitCode}. You MUST fix these issues before continuing. Do NOT adjust the project configuration when doing so:\n${msg}`,
       });
       await act();
     } else {
