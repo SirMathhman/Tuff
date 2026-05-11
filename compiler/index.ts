@@ -18,6 +18,35 @@ interface Token {
   value: string;
 }
 
+function scanIdent(source: string, i: number): { value: string; end: number } {
+  let value = "";
+  while (i < source.length && /\w/.test(source[i]!)) {
+    value += source[i]!;
+    i++;
+  }
+  return { value, end: i };
+}
+
+function scanNumber(source: string, i: number): { token: Token; end: number } {
+  let num = "";
+  while (i < source.length && /[0-9]/.test(source[i]!)) {
+    num += source[i]!;
+    i++;
+  }
+  if (/^[UI]\d+$/.test(source.slice(i))) {
+    let suffix = "";
+    while (i < source.length && /\w/.test(source[i]!)) {
+      suffix += source[i]!;
+      i++;
+    }
+    return {
+      token: { type: "TYPED_NUMBER", value: `${num}:${suffix}` },
+      end: i,
+    };
+  }
+  return { token: { type: "NUMBER", value: num }, end: i };
+}
+
 function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -51,30 +80,14 @@ function tokenize(source: string): Token[] {
     } else if (ch === ";") {
       tokens.push({ type: "SEMICOLON", value: ";" });
       i++;
-    } else if (/[a-zA-Z_]\w*/.test(ch)) {
-      let ident = "";
-      while (i < source.length && /\w/.test(source[i]!)) {
-        ident += source[i]!;
-        i++;
-      }
-      tokens.push({ type: "IDENT", value: ident });
+    } else if (/[a-zA-Z_]/.test(ch)) {
+      const { value, end } = scanIdent(source, i);
+      tokens.push({ type: "IDENT", value });
+      i = end;
     } else if (/[0-9]/.test(ch)) {
-      let num = "";
-      while (i < source.length && /[0-9]/.test(source[i]!)) {
-        num += source[i]!;
-        i++;
-      }
-      // Check for a type suffix like U8, I32, etc.
-      if (/^[UI]\d+$/.test(source.slice(i))) {
-        let suffix = "";
-        while (i < source.length && /\w/.test(source[i]!)) {
-          suffix += source[i]!;
-          i++;
-        }
-        tokens.push({ type: "TYPED_NUMBER", value: `${num}:${suffix}` });
-      } else {
-        tokens.push({ type: "NUMBER", value: num });
-      }
+      const { token, end } = scanNumber(source, i);
+      tokens.push(token);
+      i = end;
     } else {
       throw new Error(`Unexpected character '${ch}' at position ${i}`);
     }
@@ -84,7 +97,13 @@ function tokenize(source: string): Token[] {
 
 // --- AST nodes ---
 
-type Expr = ReadExpr | NumberLit | TypedNumberLit | BinOp | IdentRef;
+type Expr =
+  | ReadExpr
+  | NumberLit
+  | TypedNumberLit
+  | BinOp
+  | IdentRef
+  | AssignExpr;
 
 interface ReadExpr {
   kind: "read";
@@ -114,10 +133,17 @@ interface IdentRef {
   name: string;
 }
 
+interface AssignExpr {
+  kind: "assign";
+  name: string;
+  value: Expr;
+}
+
 type Statement = LetDecl | ExprStmt;
 
 interface LetDecl {
   kind: "let";
+  mutable?: boolean; // true if declared with 'mut'
   name: string;
   typeAnnotation?: string; // e.g. "U8" — optional, inferred from initializer if omitted
   init: Expr;
@@ -132,6 +158,10 @@ interface ExprStmt {
 
 class Parser {
   private pos = 0;
+  // Track declared variable types for type inference of identifier references
+  private varTypes: Map<string, string> = new Map();
+  // Track which variables are mutable (declared with 'mut')
+  private mutableVars: Set<string> = new Set();
 
   constructor(private tokens: Token[]) {}
 
@@ -156,6 +186,35 @@ class Parser {
       return this.parseLetDecl();
     }
 
+    // Check for assignment expression: ident = expr;
+    if (
+      tok.type === "IDENT" &&
+      !this.atEnd() &&
+      this.tokens[this.pos + 1]?.type === "ASSIGN"
+    ) {
+      const nameTok = tok as Token & { value: string };
+      if (!this.mutableVars.has(nameTok.value)) {
+        throw new Error(
+          `Cannot reassign immutable variable '${nameTok.value}'`,
+        );
+      }
+      this.advance(); // consume ident
+      this.advance(); // consume '='
+      const right = this.parseExpression();
+      const rightType = this.inferType(right);
+      const leftType = this.varTypes.get(nameTok.value)!;
+      this.checkAssignment(leftType, rightType);
+      const expr: AssignExpr = {
+        kind: "assign",
+        name: nameTok.value,
+        value: right,
+      };
+      if (!this.atEnd() && this.peek().type === "SEMICOLON") {
+        this.advance();
+      }
+      return { kind: "expr", expr };
+    }
+
     const expr = this.parseExpression();
     // If followed by ';', consume it — otherwise leave it for next iteration (end of program)
     if (!this.atEnd() && this.peek().type === "SEMICOLON") {
@@ -165,8 +224,18 @@ class Parser {
   }
 
   private parseLetDecl(): LetDecl {
-    // consume 'let'
     this.advance();
+    let mutable = false;
+
+    // optional 'mut' keyword
+    if (
+      !this.atEnd() &&
+      this.peek().type === "IDENT" &&
+      this.peek().value === "mut"
+    ) {
+      this.advance(); // consume 'mut'
+      mutable = true;
+    }
 
     // variable name (IDENT)
     const nameTok = this.expect("IDENT");
@@ -176,7 +245,7 @@ class Parser {
       );
     const name = nameTok.value;
 
-   let typeAnnotation = "";
+    let typeAnnotation = "";
 
     // ':' type annotation is optional — infer from initializer if omitted
     if (!this.atEnd() && this.peek().type === "COLON") {
@@ -197,19 +266,21 @@ class Parser {
 
     if (!typeAnnotation) {
       typeAnnotation = initType;
-    } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {
-      throw new Error(
-        `Cannot assign '${initType}' to variable of type '${typeAnnotation}': possible overflow`,
-      );
+    } else {
+      this.checkAssignment(typeAnnotation, initType);
     }
 
-
-   // ';' terminator — always required for let declarations
+    // ';' terminator — always required for let declarations
     this.expect("SEMICOLON", "';' at end of let declaration");
 
-    return { kind: "let", name, typeAnnotation, init };
-  }
+    // Track the declared variable's type and mutability for later inference/checking
+    this.varTypes.set(name, typeAnnotation);
+    if (mutable) {
+      this.mutableVars.add(name);
+    }
 
+    return { kind: "let", mutable, name, typeAnnotation, init };
+  }
 
   private inferType(expr: Expr): string {
     switch (expr.kind) {
@@ -217,6 +288,11 @@ class Parser {
         return expr.typeArg;
       case "typed_number":
         return expr.typeAnnotation;
+      case "ident": {
+        const t = this.varTypes.get(expr.name);
+        if (!t) throw new Error(`Undefined variable '${expr.name}'`);
+        return t;
+      }
       default:
         throw new Error(
           `Cannot infer type for variable initializer of kind '${expr.kind}'`,
@@ -240,6 +316,8 @@ class Parser {
     }
   }
 
+  // Parse expression but stop at semicolons (statement boundaries) and assignment operators.
+  // Assignment is handled separately in parseAssignmentExpr to avoid crossing statement boundaries.
   private parseExpression(): Expr {
     let left = this.parsePrimary();
 
@@ -250,6 +328,15 @@ class Parser {
     }
 
     return left;
+  }
+
+  // Check that assigning `rightType` to a variable of `leftType` won't overflow.
+  private checkAssignment(leftType: string, rightType: string): void {
+    if (this.typeBits(leftType) < this.typeBits(rightType)) {
+      throw new Error(
+        `Cannot assign '${rightType}' to variable of type '${leftType}': possible overflow`,
+      );
+    }
   }
 
   private parsePrimary(): Expr {
@@ -382,12 +469,14 @@ class Generator {
     switch (stmt.kind) {
       case "let": {
         const initCode = this.generateExpr(stmt.init);
-        lines.push(`const ${stmt.name} = ${initCode};`);
+        const keyword = stmt.mutable ? "let" : "const";
+        lines.push(`${keyword} ${stmt.name} = ${initCode};`);
         break;
       }
       case "expr": {
         // expression statement executed for side effects only — still need to evaluate reads
-        this.generateExpr(stmt.expr);
+        const exprCode = this.generateExpr(stmt.expr);
+        lines.push(`${exprCode};`);
         break;
       }
     }
@@ -410,6 +499,10 @@ class Generator {
           throw new Error(`Undefined variable '${node.name}'`);
         }
         return node.name;
+      }
+      case "assign": {
+        const valueCode = this.generateExpr(node.value);
+        return `${node.name} = ${valueCode}`;
       }
     }
   }

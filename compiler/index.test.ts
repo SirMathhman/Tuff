@@ -68,3 +68,12 @@ test("assigning U16 to U8 variable is rejected (overflow risk)", () => {
 test("let declaration requires a semicolon", () => {
   assertInvalid("let x : U16 = read<U16>()");
 });
+
+test("assigning inferred U16 variable to U8 is rejected (overflow risk)", () => {
+  assertInvalid("let x = read<U16>(); let y : U8 = x;");
+});
+
+test("mutable variables can be reassigned", () => {
+  assertValid('let mut x = read<U8>(); x = read<U8>(); x', 2, "1 2");
+});
+

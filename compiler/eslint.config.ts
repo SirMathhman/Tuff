@@ -12,7 +12,7 @@ export default defineConfig([
     rules: {
       "max-lines-per-function": [
         "error",
-        { max: 100, skipComments: true, skipBlankLines: true },
+        { max: 50, skipComments: true, skipBlankLines: true },
       ],
     },
   },

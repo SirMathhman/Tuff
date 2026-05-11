@@ -246,5 +246,393 @@
   {
     "role": "assistant",
     "content": "All 13 tests pass. The fix was replacing the optional semicolon check in `parseLetDecl()` with a hard requirement:\n\n```typescript\n// Before (optional):\nif (!this.atEnd() && this.peek().type === \"SEMICOLON\") {\n  this.advance();\n}\n\n// After (required):\nthis.expect(\"SEMICOLON\", \"';' at end of let declaration\");\n```\n\nNow `let x : U16 = read<U16>()` without a trailing semicolon correctly throws an error, while all existing tests continue to pass."
+  },
+  {
+    "role": "user",
+    "content": "Add test case: \"let x = read<U16>(); let y : U8 = x;\" => Error"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":64,\"endLine\":72}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 71\n64: test(\"assigning U16 to U8 variable is rejected (overflow risk)\", () => {\r\n65:   assertInvalid(\"let x : U8 = read<U16>();\");\r\n66: });\r\n67: \r\n68: test(\"let declaration requires a semicolon\", () => {\r\n69:   assertInvalid(\"let x : U16 = read<U16>()\");\r\n70: });\r\n71: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":68,\"endLine\":71,\"content\":\"test(\\\"let declaration requires a semicolon\\\", () => {\\n  assertInvalid(\\\"let x : U16 = read<U16>()\\\");\\n});\\n\\ntest(\\\"assigning inferred U16 variable to U8 is rejected (overflow risk)\\\", () => {\\n  assertInvalid(\\\"let x = read<U16>(); let y : U8 = x;\\\");\\n});\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) The simplest possible program [16.00ms]\n(pass) A program with a syntax error\n(pass) read<U8>() parses stdin as unsigned 8-bit integer [15.00ms]\n(pass) read<U8>() ignores extra tokens in stdin\n(pass) read<U8>() + read<U8>() sums two values from stdin\n(pass) read<U8>() + read<U8>() + read<U8>() chains three reads\n(pass) let x : U8 = read<U8>(); x returns the variable value\n(pass) let x : U8 = read<U8>(); x + x doubles the variable value\n(pass) let x : U8 = read<U8>(); x + 1U8 adds a literal to the variable\n(pass) duplicate let declarations are rejected\n(pass) type inference: let x = read<U8>(); x returns the variable value\n(pass) assigning U16 to U8 variable is rejected (overflow risk)\n(pass) let declaration requires a semicolon\n(pass) assigning inferred U16 variable to U8 is rejected (overflow risk)\n\n 14 pass\n 0 fail\n 14 expect() calls\nRan 14 tests across 1 file. [397.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Interesting — the test passes but for the wrong reason! The `inferType` method doesn't handle identifiers (`\"ident\"` kind), so it throws `\"Cannot infer type for variable initializer of kind 'ident'\"` rather than the intended overflow error. \n\nTo make this work correctly, I need to track declared variable types in the parser and use them when inferring types from identifier references. Let me implement that:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":132,\"endLine\":245}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 455\n132: \n133: class Parser {\n134:   private pos = 0;\n135: \n136:   constructor(private tokens: Token[]) {}\n137: \n138:   parseProgram(): Statement[] | null {\n139:     if (this.tokens.length === 0) return [];\n140:     const stmts: Statement[] = [];\n141:     while (!this.atEnd()) {\n142:       stmts.push(this.parseStatement());\n143:     }\n144:     return stmts;\n145:   }\n146: \n147:   private atEnd(): boolean {\n148:     return this.pos >= this.tokens.length;\n149:   }\n150: \n151:   private parseStatement(): Statement {\n152:     const tok = this.peek();\n153: \n154:     // let x : Type = expr ;\n155:     if (tok.type === \"IDENT\" && tok.value === \"let\") {\n156:       return this.parseLetDecl();\n157:     }\n158: \n159:     const expr = this.parseExpression();\n160:     // If followed by ';', consume it — otherwise leave it for next iteration (end of program)\n161:     if (!this.atEnd() && this.peek().type === \"SEMICOLON\") {\n162:       this.advance();\n163:     }\n164:     return { kind: \"expr\", expr };\n165:   }\n166: \n167:   private parseLetDecl(): LetDecl {\n168:     // consume 'let'\n169:     this.advance();\n170: \n171:     // variable name (IDENT)\n172:     const nameTok = this.expect(\"IDENT\");\n173:     if (nameTok.type !== \"IDENT\")\n174:       throw new Error(\n175:         `Expected identifier after 'let', got '${nameTok.value}'`,\n176:       );\n177:     const name = nameTok.value;\n178: \n179:    let typeAnnotation = \"\";\n180: \n181:     // ':' type annotation is optional — infer from initializer if omitted\n182:     if (!this.atEnd() && this.peek().type === \"COLON\") {\n183:       this.advance(); // consume ':'\n184:       while (!this.atEnd() && ![\"ASSIGN\"].includes(this.peek().type)) {\n185:         const t = this.advance();\n186:         if (t.type === \"GT\") break;\n187:         typeAnnotation += t.value;\n188:       }\n189:     }\n190: \n191:     // '=' initializer expression\n192:     this.expect(\"ASSIGN\", `'=' after variable name '${name}'`);\n193:     const init = this.parseExpression();\n194: \n195:     // Infer type from initializer if not explicitly annotated\n196:     const initType = this.inferType(init);\n197: \n198:     if (!typeAnnotation) {\n199:       typeAnnotation = initType;\n200:     } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {\n201:       throw new Error(\n202:         `Cannot assign '${initType}' to variable of type '${typeAnnotation}': possible overflow`,\n203:       );\n204:     }\n205: \n206: \n207:    // ';' terminator — always required for let declarations\n208:     this.expect(\"SEMICOLON\", \"';' at end of let declaration\");\n209: \n210:     return { kind: \"let\", name, typeAnnotation, init };\n211:   }\n212: \n213: \n214:   private inferType(expr: Expr): string {\n215:     switch (expr.kind) {\n216:       case \"read\":\n217:         return expr.typeArg;\n218:       case \"typed_number\":\n219:         return expr.typeAnnotation;\n220:       default:\n221:         throw new Error(\n222:           `Cannot infer type for variable initializer of kind '${expr.kind}'`,\n223:         );\n224:     }\n225:   }\n226: \n227:   private typeBits(typeName: string): number {\n228:     switch (typeName) {\n229:       case \"U8\":\n230:       case \"I8\":\n231:         return 8;\n232:       case \"U16\":\n233:       case \"I16\":\n234:         return 16;\n235:       case \"U32\":\n236:       case \"I32\":\n237:         return 32;\n238:       default:\n239:         throw new Error(`Unknown type '${typeName}'`);\n240:     }\n241:   }\n242: \n243:   private parseExpression(): Expr {\n244:     let left = this.parsePrimary();"
+  },
+  {
+    "role": "assistant",
+    "content": "I need to add variable type tracking to the Parser so `inferType` can resolve identifier references:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":133,\"endLine\":245,\"content\":\"class Parser {\\n  private pos = 0;\\n  // Track declared variable types for type inference of identifier references\\n  private varTypes: Map<string, string> = new Map();\\n\\n  constructor(private tokens: Token[]) {}\\n\\n  parseProgram(): Statement[] | null {\\n    if (this.tokens.length === 0) return [];\\n    const stmts: Statement[] = [];\\n    while (!this.atEnd()) {\\n      stmts.push(this.parseStatement());\\n    }\\n    return stmts;\\n  }\\n\\n  private atEnd(): boolean {\\n    return this.pos >= this.tokens.length;\\n  }\\n\\n  private parseStatement(): Statement {\\n    const tok = this.peek();\\n\\n    // let x : Type = expr ;\\n    if (tok.type === \\\"IDENT\\\" && tok.value === \\\"let\\\") {\\n      return this.parseLetDecl();\\n    }\\n\\n    const expr = this.parseExpression();\\n    // If followed by ';', consume it — otherwise leave it for next iteration (end of program)\\n    if (!this.atEnd() && this.peek().type === \\\"SEMICOLON\\\") {\\n      this.advance();\\n    }\\n    return { kind: \\\"expr\\\", expr };\\n  }\\n\\n  private parseLetDecl(): LetDecl {\\n    // consume 'let'\\n    this.advance();\\n\\n    // variable name (IDENT)\\n    const nameTok = this.expect(\\\"IDENT\\\");\\n    if (nameTok.type !== \\\"IDENT\\\")\\n      throw new Error(\\n        `Expected identifier after 'let', got '${nameTok.value}'`,\\n      );\\n    const name = nameTok.value;\\n\\n   let typeAnnotation = \\\"\\\";\\n\\n    // ':' type annotation is optional — infer from initializer if omitted\\n    if (!this.atEnd() && this.peek().type === \\\"COLON\\\") {\\n      this.advance(); // consume ':'\\n      while (!this.atEnd() && ![\\\"ASSIGN\\\"].includes(this.peek().type)) {\\n        const t = this.advance();\\n        if (t.type === \\\"GT\\\") break;\\n        typeAnnotation += t.value;\\n      }\\n    }\\n\\n    // '=' initializer expression\\n    this.expect(\\\"ASSIGN\\\", `'=' after variable name '${name}'`);\\n    const init = this.parseExpression();\\n\\n    // Infer type from initializer if not explicitly annotated\\n    const initType = this.inferType(init);\\n\\n    if (!typeAnnotation) {\\n      typeAnnotation = initType;\\n    } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {\\n      throw new Error(\\n        `Cannot assign '${initType}' to variable of type '${typeAnnotation}': possible overflow`,\\n      );\\n    }\\n\\n   // ';' terminator — always required for let declarations\\n    this.expect(\\\"SEMICOLON\\\", \\\"';' at end of let declaration\\\");\\n\\n    // Track the declared variable's type for later inference\\n    this.varTypes.set(name, typeAnnotation);\\n\\n    return { kind: \\\"let\\\", name, typeAnnotation, init };\\n  }\\n\\n\\n  private inferType(expr: Expr): string {\\n    switch (expr.kind) {\\n      case \\\"read\\\":\\n        return expr.typeArg;\\n      case \\\"typed_number\\\":\\n        return expr.typeAnnotation;\\n      case \\\"ident\\\": {\\n        const t = this.varTypes.get(expr.name);\\n        if (!t) throw new Error(`Undefined variable '${expr.name}'`);\\n        return t;\\n      }\\n      default:\\n        throw new Error(\\n          `Cannot infer type for variable initializer of kind '${expr.kind}'`,\\n        );\\n    }\\n  }\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test\"\n\nindex.test.ts:\n\n# Unhandled error between tests\n-------------------------------\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                 ^\nerror: Expected identifier but found \"!\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:12\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                  ^\nerror: Expected \")\" but found \"this\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:13\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                      ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:17\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                               ^\nerror: Expected \";\" but found \"&&\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:26\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                      ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:33\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                             ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:40\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                                   ^\nerror: Expected \";\" but found \"===\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:46\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                                             ^\nerror: Expected \";\" but found \")\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:56\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                                               ^\nerror: Expected identifier but found \"{\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:58\n\n238 |       this.advance(); // consume '+'\n                ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:238:11\n\n239 |       const right = this.parsePrimary();\n                  ^\nerror: Expected \";\" but found \"right\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:239:13\n\n239 |       const right = this.parsePrimary();\n                        ^\nerror: Expected identifier but found \"=\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:239:19\n\n239 |       const right = this.parsePrimary();\n                              ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:239:25\n\n244 |   }\n        ^\nerror: Unexpected }\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:244:3\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [23.00ms]\n | Stderr: \nindex.test.ts:\n\n# Unhandled error between tests\n-------------------------------\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                 ^\nerror: Expected identifier but found \"!\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:12\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                  ^\nerror: Expected \")\" but found \"this\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:13\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                      ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:17\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                               ^\nerror: Expected \";\" but found \"&&\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:26\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                      ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:33\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                             ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:40\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                                   ^\nerror: Expected \";\" but found \"===\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:46\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                                             ^\nerror: Expected \";\" but found \")\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:56\n\n237 |     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n                                                               ^\nerror: Expected identifier but found \"{\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:237:58\n\n238 |       this.advance(); // consume '+'\n                ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:238:11\n\n239 |       const right = this.parsePrimary();\n                  ^\nerror: Expected \";\" but found \"right\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:239:13\n\n239 |       const right = this.parsePrimary();\n                        ^\nerror: Expected identifier but found \"=\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:239:19\n\n239 |       const right = this.parsePrimary();\n                              ^\nerror: Expected \";\" but found \".\"\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:239:25\n\n244 |   }\n        ^\nerror: Unexpected }\n    at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:244:3\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [23.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":195,\"endLine\":260}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 446\n195:     const init = this.parseExpression();\n196: \n197:     // Infer type from initializer if not explicitly annotated\n198:     const initType = this.inferType(init);\n199: \n200:     if (!typeAnnotation) {\n201:       typeAnnotation = initType;\n202:     } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {\n203:       throw new Error(\n204:         `Cannot assign '${initType}' to variable of type '${typeAnnotation}': possible overflow`,\n205:       );\n206:     }\n207: \n208:    // ';' terminator — always required for let declarations\n209:     this.expect(\"SEMICOLON\", \"';' at end of let declaration\");\n210: \n211:     // Track the declared variable's type for later inference\n212:     this.varTypes.set(name, typeAnnotation);\n213: \n214:     return { kind: \"let\", name, typeAnnotation, init };\n215:   }\n216: \n217: \n218:   private inferType(expr: Expr): string {\n219:     switch (expr.kind) {\n220:       case \"read\":\n221:         return expr.typeArg;\n222:       case \"typed_number\":\n223:         return expr.typeAnnotation;\n224:       case \"ident\": {\n225:         const t = this.varTypes.get(expr.name);\n226:         if (!t) throw new Error(`Undefined variable '${expr.name}'`);\n227:         return t;\n228:       }\n229:       default:\n230:         throw new Error(\n231:           `Cannot infer type for variable initializer of kind '${expr.kind}'`,\n232:         );\n233:     }\n234:   }\n235: \n236: \n237:     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n238:       this.advance(); // consume '+'\n239:       const right = this.parsePrimary();\n240:       left = { kind: \"binop\", op: \"+\", left, right };\n241:     }\n242: \n243:     return left;\n244:   }\n245: \n246:   private parsePrimary(): Expr {\n247:     const tok = this.peek();\n248: \n249:     // Parenthesized expression\n250:     if (tok.type === \"LPAREN\") {\n251:       this.advance(); // consume '('\n252:       const expr = this.parseExpression();\n253:       this.expect(\"RPAREN\", \"')'\");\n254:       return expr;\n255:     }\n256: \n257:     // read<T>()\n258:     if (tok.type === \"IDENT\" && tok.value === \"read\") {\n259:       this.advance(); // consume 'read'"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":235,\"endLine\":246,\"content\":\"\\n  private parseExpression(): Expr {\\n    let left = this.parsePrimary();\\n\\n    while (!this.atEnd() && this.peek().type === \\\"PLUS\\\") {\\n      this.advance(); // consume '+'\\n      const right = this.parsePrimary();\\n      left = { kind: \\\"binop\\\", op: \\\"+\\\", left, right };\\n    }\\n\\n    return left;\\n  }\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":230,\"endLine\":260}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 448\n230:         throw new Error(\n231:           `Cannot infer type for variable initializer of kind '${expr.kind}'`,\n232:         );\n233:     }\n234:   }\n235: \n236:   private parseExpression(): Expr {\n237:     let left = this.parsePrimary();\n238: \n239:     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n240:       this.advance(); // consume '+'\n241:       const right = this.parsePrimary();\n242:       left = { kind: \"binop\", op: \"+\", left, right };\n243:     }\n244: \n245:     return left;\n246:   }\n247: \n248:   private parsePrimary(): Expr {\n249:     const tok = this.peek();\n250: \n251:     // Parenthesized expression\n252:     if (tok.type === \"LPAREN\") {\n253:       this.advance(); // consume '('\n254:       const expr = this.parseExpression();\n255:       this.expect(\"RPAREN\", \"')'\");\n256:       return expr;\n257:     }\n258: \n259:     // read<T>()"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler; bun test\"\n\nindex.test.ts:\n(pass) The simplest possible program [31.00ms]\n(pass) A program with a syntax error\n(pass) read<U8>() parses stdin as unsigned 8-bit integer\n(pass) read<U8>() ignores extra tokens in stdin\n(pass) read<U8>() + read<U8>() sums two values from stdin\n(pass) read<U8>() + read<U8>() + read<U8>() chains three reads\n197 |     // Infer type from initializer if not explicitly annotated\n198 |     const initType = this.inferType(init);\n199 | \n200 |     if (!typeAnnotation) {\n201 |       typeAnnotation = initType;\n202 |     } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {\n                          ^\nTypeError: this.typeBits is not a function. (In 'this.typeBits(typeAnnotation)', 'this.typeBits' is undefined)\n      at parseLetDecl (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:202:21)\n      at parseProgram (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:144:23)\n      at compileTuffToTS (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:444:29)\n      at assertValid (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:10:22)\n      at <anonymous> (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:46:3)\n(fail) let x : U8 = read<U8>(); x returns the variable value [16.00ms]\n197 |     // Infer type from initializer if not explicitly annotated\n198 |     const initType = this.inferType(init);\n199 | \n200 |     if (!typeAnnotation) {\n201 |       typeAnnotation = initType;\n202 |     } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {\n                          ^\nTypeError: this.typeBits is not a function. (In 'this.typeBits(typeAnnotation)', 'this.typeBits' is undefined)\n      at parseLetDecl (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:202:21)\n      at parseProgram (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:144:23)\n      at compileTuffToTS (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:444:29)\n      at assertValid (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:10:22)\n      at <anonymous> (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:49:3)\n(fail) let x : U8 = read<U8>(); x + x doubles the variable value\n197 |     // Infer type from initializer if not explicitly annotated\n198 |     const initType = this.inferType(init);\n199 | \n200 |     if (!typeAnnotation) {\n201 |       typeAnnotation = initType;\n202 |     } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {\n                          ^\nTypeError: this.typeBits is not a function. (In 'this.typeBits(typeAnnotation)', 'this.typeBits' is undefined)\n      at parseLetDecl (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:202:21)\n      at parseProgram (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:144:23)\n      at compileTuffToTS (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:444:29)\n      at assertValid (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:10:22)\n      at <anonymous> (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:53:3)\n(fail) let x : U8 = read<U8>(); x + 1U8 adds a literal to the variable\n(pass) duplicate let declarations are rejected\n(pass) type inference: let x = read<U8>(); x returns the variable value\n(pass) assigning U16 to U8 variable is rejected (overflow risk)\n(pass) let declaration requires a semicolon\n(pass) assigning inferred U16 variable to U8 is rejected (overflow risk)\n\n 11 pass\n 3 fail\n 11 expect() calls\nRan 14 tests across 1 file. [402.00ms]\n | Stderr: \nindex.test.ts:\n(pass) The simplest possible program [31.00ms]\n(pass) A program with a syntax error\n(pass) read<U8>() parses stdin as unsigned 8-bit integer\n(pass) read<U8>() ignores extra tokens in stdin\n(pass) read<U8>() + read<U8>() sums two values from stdin\n(pass) read<U8>() + read<U8>() + read<U8>() chains three reads\n197 |     // Infer type from initializer if not explicitly annotated\n198 |     const initType = this.inferType(init);\n199 | \n200 |     if (!typeAnnotation) {\n201 |       typeAnnotation = initType;\n202 |     } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {\n                          ^\nTypeError: this.typeBits is not a function. (In 'this.typeBits(typeAnnotation)', 'this.typeBits' is undefined)\n      at parseLetDecl (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:202:21)\n      at parseProgram (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:144:23)\n      at compileTuffToTS (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:444:29)\n      at assertValid (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:10:22)\n      at <anonymous> (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:46:3)\n(fail) let x : U8 = read<U8>(); x returns the variable value [16.00ms]\n197 |     // Infer type from initializer if not explicitly annotated\n198 |     const initType = this.inferType(init);\n199 | \n200 |     if (!typeAnnotation) {\n201 |       typeAnnotation = initType;\n202 |     } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {\n                          ^\nTypeError: this.typeBits is not a function. (In 'this.typeBits(typeAnnotation)', 'this.typeBits' is undefined)\n      at parseLetDecl (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:202:21)\n      at parseProgram (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:144:23)\n      at compileTuffToTS (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:444:29)\n      at assertValid (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:10:22)\n      at <anonymous> (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:49:3)\n(fail) let x : U8 = read<U8>(); x + x doubles the variable value\n197 |     // Infer type from initializer if not explicitly annotated\n198 |     const initType = this.inferType(init);\n199 | \n200 |     if (!typeAnnotation) {\n201 |       typeAnnotation = initType;\n202 |     } else if (this.typeBits(typeAnnotation) < this.typeBits(initType)) {\n                          ^\nTypeError: this.typeBits is not a function. (In 'this.typeBits(typeAnnotation)', 'this.typeBits' is undefined)\n      at parseLetDecl (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:202:21)\n      at parseProgram (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:144:23)\n      at compileTuffToTS (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:444:29)\n      at assertValid (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:10:22)\n      at <anonymous> (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.test.ts:53:3)\n(fail) let x : U8 = read<U8>(); x + 1U8 adds a literal to the variable\n(pass) duplicate let declarations are rejected\n(pass) type inference: let x = read<U8>(); x returns the variable value\n(pass) assigning U16 to U8 variable is rejected (overflow risk)\n(pass) let declaration requires a semicolon\n(pass) assigning inferred U16 variable to U8 is rejected (overflow risk)\n\n 11 pass\n 3 fail\n 11 expect() calls\nRan 14 tests across 1 file. [402.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":230,\"endLine\":260}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 448\n230:         throw new Error(\n231:           `Cannot infer type for variable initializer of kind '${expr.kind}'`,\n232:         );\n233:     }\n234:   }\n235: \n236:   private parseExpression(): Expr {\n237:     let left = this.parsePrimary();\n238: \n239:     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n240:       this.advance(); // consume '+'\n241:       const right = this.parsePrimary();\n242:       left = { kind: \"binop\", op: \"+\", left, right };\n243:     }\n244: \n245:     return left;\n246:   }\n247: \n248:   private parsePrimary(): Expr {\n249:     const tok = this.peek();\n250: \n251:     // Parenthesized expression\n252:     if (tok.type === \"LPAREN\") {\n253:       this.advance(); // consume '('\n254:       const expr = this.parseExpression();\n255:       this.expect(\"RPAREN\", \"')'\");\n256:       return expr;\n257:     }\n258: \n259:     // read<T>()"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":230,\"endLine\":250}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 448\n230:         throw new Error(\n231:           `Cannot infer type for variable initializer of kind '${expr.kind}'`,\n232:         );\n233:     }\n234:   }\n235: \n236:   private parseExpression(): Expr {\n237:     let left = this.parsePrimary();\n238: \n239:     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n240:       this.advance(); // consume '+'\n241:       const right = this.parsePrimary();\n242:       left = { kind: \"binop\", op: \"+\", left, right };\n243:     }\n244: \n245:     return left;\n246:   }\n247: \n248:   private parsePrimary(): Expr {\n249:     const tok = this.peek();"
+  },
+  {
+    "role": "assistant",
+    "content": "The `typeBits` helper got dropped during the edit. Let me check and add it back:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":230,\"endLine\":250}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 448\n230:         throw new Error(\n231:           `Cannot infer type for variable initializer of kind '${expr.kind}'`,\n232:         );\n233:     }\n234:   }\n235: \n236:   private parseExpression(): Expr {\n237:     let left = this.parsePrimary();\n238: \n239:     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n240:       this.advance(); // consume '+'\n241:       const right = this.parsePrimary();\n242:       left = { kind: \"binop\", op: \"+\", left, right };\n243:     }\n244: \n245:     return left;\n246:   }\n247: \n248:   private parsePrimary(): Expr {\n249:     const tok = this.peek();"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":234,\"endLine\":236,\"content\":\" }\\n\\n  private typeBits(typeName: string): number {\\n    switch (typeName) {\\n      case \\\"U8\\\":\\n      case \\\"I8\\\":\\n        return 8;\\n      case \\\"U16\\\":\\n      case \\\"I16\\\":\\n        return 16;\\n      case \\\"U32\\\":\\n      case \\\"I32\\\":\\n        return 32;\\n      default:\\n        throw new Error(`Unknown type '${typeName}'`);\\n    }\\n  }\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":230,\"endLine\":280}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 464\n230:         throw new Error(\n231:           `Cannot infer type for variable initializer of kind '${expr.kind}'`,\n232:         );\n233:     }\n234:  }\n235: \n236:   private typeBits(typeName: string): number {\n237:     switch (typeName) {\n238:       case \"U8\":\n239:       case \"I8\":\n240:         return 8;\n241:       case \"U16\":\n242:       case \"I16\":\n243:         return 16;\n244:       case \"U32\":\n245:       case \"I32\":\n246:         return 32;\n247:       default:\n248:         throw new Error(`Unknown type '${typeName}'`);\n249:     }\n250:   }\n251: \n252:   private parseExpression(): Expr {\n253:     let left = this.parsePrimary();\n254: \n255:     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n256:       this.advance(); // consume '+'\n257:       const right = this.parsePrimary();\n258:       left = { kind: \"binop\", op: \"+\", left, right };\n259:     }\n260: \n261:     return left;\n262:   }\n263: \n264:   private parsePrimary(): Expr {\n265:     const tok = this.peek();\n266: \n267:     // Parenthesized expression\n268:     if (tok.type === \"LPAREN\") {\n269:       this.advance(); // consume '('\n270:       const expr = this.parseExpression();\n271:       this.expect(\"RPAREN\", \"')'\");\n272:       return expr;\n273:     }\n274: \n275:     // read<T>()\n276:     if (tok.type === \"IDENT\" && tok.value === \"read\") {\n277:       this.advance(); // consume 'read'\n278:       const typeArg = this.parseTypeArgument();\n279:       this.expect(\"LPAREN\", `'(' after read<T>`);"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":234,\"endLine\":235,\"content\":\"   }\\n  }\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":230,\"endLine\":260}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 466\n230:         throw new Error(\n231:           `Cannot infer type for variable initializer of kind '${expr.kind}'`,\n232:         );\n233:     }\n234:    }\n235:   }\n236: \n237: \n238:   private typeBits(typeName: string): number {\n239:     switch (typeName) {\n240:       case \"U8\":\n241:       case \"I8\":\n242:         return 8;\n243:       case \"U16\":\n244:       case \"I16\":\n245:         return 16;\n246:       case \"U32\":\n247:       case \"I32\":\n248:         return 32;\n249:       default:\n250:         throw new Error(`Unknown type '${typeName}'`);\n251:     }\n252:   }\n253: \n254:   private parseExpression(): Expr {\n255:     let left = this.parsePrimary();\n256: \n257:     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n258:       this.advance(); // consume '+'\n259:       const right = this.parsePrimary();"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":230,\"endLine\":238,\"content\":\"       throw new Error(\\n          `Cannot infer type for variable initializer of kind '${expr.kind}'`,\\n        );\\n    }\\n  }\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":218,\"endLine\":260}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 464\n218:   private inferType(expr: Expr): string {\n219:     switch (expr.kind) {\n220:       case \"read\":\n221:         return expr.typeArg;\n222:       case \"typed_number\":\n223:         return expr.typeAnnotation;\n224:       case \"ident\": {\n225:         const t = this.varTypes.get(expr.name);\n226:         if (!t) throw new Error(`Undefined variable '${expr.name}'`);\n227:         return t;\n228:       }\n229:       default:\n230:        throw new Error(\n231:           `Cannot infer type for variable initializer of kind '${expr.kind}'`,\n232:         );\n233:     }\n234:   }\n235: \n236:   private typeBits(typeName: string): number {\n237:     switch (typeName) {\n238:       case \"U8\":\n239:       case \"I8\":\n240:         return 8;\n241:       case \"U16\":\n242:       case \"I16\":\n243:         return 16;\n244:       case \"U32\":\n245:       case \"I32\":\n246:         return 32;\n247:       default:\n248:         throw new Error(`Unknown type '${typeName}'`);\n249:     }\n250:   }\n251: \n252:   private parseExpression(): Expr {\n253:     let left = this.parsePrimary();\n254: \n255:     while (!this.atEnd() && this.peek().type === \"PLUS\") {\n256:       this.advance(); // consume '+'\n257:       const right = this.parsePrimary();\n258:       left = { kind: \"binop\", op: \"+\", left, right };\n259:     }"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Stderr: \nindex.test.ts:\n(pass) The simplest possible program [15.00ms]\n(pass) A program with a syntax error\n(pass) read<U8>() parses stdin as unsigned 8-bit integer [16.00ms]\n(pass) read<U8>() ignores extra tokens in stdin\n(pass) read<U8>() + read<U8>() sums two values from stdin\n(pass) read<U8>() + read<U8>() + read<U8>() chains three reads\n(pass) let x : U8 = read<U8>(); x returns the variable value\n(pass) let x : U8 = read<U8>(); x + x doubles the variable value\n(pass) let x : U8 = read<U8>(); x + 1U8 adds a literal to the variable\n(pass) duplicate let declarations are rejected\n(pass) type inference: let x = read<U8>(); x returns the variable value\n(pass) assigning U16 to U8 variable is rejected (overflow risk)\n(pass) let declaration requires a semicolon\n(pass) assigning inferred U16 variable to U8 is rejected (overflow risk)\n\n 14 pass\n 0 fail\n 14 expect() calls\nRan 14 tests across 1 file. [418.00ms]\n | Stdout: bun test v1.3.13 (bf2e2cec)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "All 14 tests pass. Here's a summary of the changes:\n\n**Test added:** `\"let x = read<U16>(); let y : U8 = x;\"` → Error (overflow risk when assigning inferred `U16` variable to narrower `U8`)\n\n**Changes to `index.ts`:**\n- Added `private varTypes: Map<string, string>` to the Parser class to track declared variable types during parsing\n- After each let declaration is parsed, store its type via `this.varTypes.set(name, typeAnnotation)` \n- Extended `inferType()` with a new case for `\"ident\"` kind expressions that looks up the variable's stored type from `varTypes`\n\nThis enables cross-statement type checking — when `let y : U8 = x;` is parsed and `x` was previously declared as inferred `U16`, the overflow check correctly rejects it."
   }
 ]
