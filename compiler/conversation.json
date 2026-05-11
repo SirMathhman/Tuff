@@ -372,5 +372,89 @@
   {
     "role": "assistant",
     "content": "Those are pre-existing `tsconfig.json` target-related warnings (BigInt literals require ES2020+) — not new issues from my changes. Bun handles them fine at runtime since it uses its own engine, which is why all 53 tests pass cleanly.\n\nDone! ✅ Here's what happened:\n\n1. **Fixed the while loop off-by-one bug** — `executeTuff(\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\")` now correctly returns **4** instead of 5, by adding a `skipBodyTokens()` helper that skips past the body without executing it when the condition becomes false.\n\n2. **Added your test case** — `executeTuff(\"let x = 0U8; let y = &x;\") => 0` is now in `index.test.ts`.\n\nAll **53 tests pass**."
+  },
+  {
+    "role": "user",
+    "content": "I don't see the `while` test case."
+  },
+  {
+    "role": "assistant",
+    "content": "You're right, I missed adding that specific one! Let me append it now:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":215,\"endLine\":223}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 224\n215: });\r\n216: \r\n217: test('executeTuff(\"let mut x = 0U8; x += 1U8; x\") returns 1', () => {\r\n218:   expect(executeTuff(\"let mut x = 0U8; x += 1U8; x\")).toBe(1);\r\n219: });\r\n220: \r\n221: test('executeTuff(\"let x = 0U8; let y = &x;\") returns 0', () => {\r\n222:   expect(executeTuff(\"let x = 0U8; let y = &x;\")).toBe(0);\r"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\\\\index.test.ts\",\"startLine\":221,\"endLine\":224,\"content\":\"test('executeTuff(\\\"let x = 0U8; let y = &x;\\\") returns 0', () => {\\n  expect(executeTuff(\\\"let x = 0U8; let y = &x;\\\")).toBe(0);\\n});\\n\\ntest('executeTuff(\\\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\\\") returns 4', () => {\\n  expect(executeTuff(\\\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\\\")).toBe(4);\\n});\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-String -Pattern \\\"(pass|fail|expect)\\\"\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-String -Pattern \\\"(pass|fail|expect)\\\"\"\n'fail' is not recognized as an internal or external command,\r\noperable program or batch file.\r\n | Stderr: 'fail' is not recognized as an internal or external command,\r\noperable program or batch file.\r\n | Stdout: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-Object -Last 5\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Error: Command failed: powershell -NoProfile -Command \"cd C:\\Users\\mathm\\Documents\\Projects\\Tuff; bun test compiler/index.test.ts 2>&1 | Select-Object -Last 5\"\n 54 pass\r\n 0 fail\r\n 54 expect() calls\r\nRan 54 tests across 1 file. [29.00ms]\r\n | Stderr:  54 pass\r\n 0 fail\r\n 54 expect() calls\r\nRan 54 tests across 1 file. [29.00ms]\r\n | Stdout: "
+  },
+  {
+    "role": "assistant",
+    "content": "All **54 tests pass** ✅ — the while loop test case is now added and passing with `executeTuff(\"let mut i = 0U8; while (i < 4U8) i += 1U8; i\") => 4`."
   }
 ]
