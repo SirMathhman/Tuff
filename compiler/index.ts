@@ -377,7 +377,7 @@ function executeFunctionCall(
   // Restore original position after executing function body
   ctx.pos = savedPos;
 
- return { value: BigInt(result.value), type: funcDef.returnType };
+  return { value: BigInt(result.value), type: funcDef.returnType };
 }
 
 // ── Block item parser ───────────────────────────────────────
@@ -570,7 +570,7 @@ function parseExprWithType(ctx: ParserCtx): {
       case "!=":
         cmpResult = BigInt(left.value) !== BigInt(right.value) ? 1n : 0n;
         break;
-     default:
+      default:
         throw new Error(`Unknown comparison operator: ${op}`);
     }
 
@@ -675,7 +675,7 @@ function parseTermWithType(ctx: ParserCtx): {
     result = executeFunctionCall(ctx, name, argValues);
 
     consume(ctx, ")");
- } else if (token && /\(/.test(token)) {
+  } else if (token && /\(/.test(token)) {
     const name = token.slice(0, token.indexOf("("));
     const remainder = token.slice(token.indexOf("(") + 1);
 
@@ -694,7 +694,6 @@ function parseTermWithType(ctx: ParserCtx): {
       type: inferLiteralType(literalToken),
     };
   }
-
 
   // Multiplication / division — higher precedence than + -
   while (peek(ctx) === "*" || peek(ctx) === "/") {
@@ -740,5 +739,3 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
   }
   return normalizeResult(finalResult);
 }
-
-
