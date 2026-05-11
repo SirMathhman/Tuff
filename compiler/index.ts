@@ -1,6 +1,7 @@
 interface FuncDef {
   returnType: string;
   bodyStartPos: number;
+  params: Array<{ name: string; type: string }>;
 }
 
 interface ParserCtx {
@@ -58,7 +59,8 @@ function parseLiteral(literal: string): number | bigint {
   return value;
 }
 
-function normalizeResult(val: bigint): number | bigint {
+function normalizeResult(val: bigint | number): number | bigint {
+  if (typeof val === "number") return val;
   if (val >= -Number.MAX_SAFE_INTEGER && val <= Number.MAX_SAFE_INTEGER)
     return Number(val);
   return val;
@@ -131,7 +133,7 @@ function tokenize(source: string): string[] {
       tokens.push("&&");
       remaining = remaining.slice(2);
     }
-   if (remaining.startsWith("+=")) {
+    if (remaining.startsWith("+=")) {
       tokens.push("+=");
       remaining = remaining.slice(2);
     } else if (remaining.startsWith("=>")) {
@@ -320,9 +322,20 @@ function skipBodyTokens(ctx: ParserCtx): void {
 
 // ── Function call executor ────────────────────────────────────────────
 
+function evaluateFunctionArgs(ctx: ParserCtx): bigint[] {
+  const args: bigint[] = [];
+  while (peek(ctx) !== ")") {
+    const argResult = parseExprWithType(ctx);
+    args.push(BigInt(argResult.value));
+    if (peek(ctx) === ",") consume(ctx, ",");
+  }
+  return args;
+}
+
 function executeFunctionCall(
   ctx: ParserCtx,
   funcName: string,
+  argValues: bigint[],
 ): { value: bigint; type: string } {
   const funcDef = ctx.functions.get(funcName);
   if (!funcDef) throw new Error(`Undefined function: ${funcName}`);
@@ -331,13 +344,40 @@ function executeFunctionCall(
   const savedPos = ctx.pos;
   ctx.pos = funcDef.bodyStartPos;
 
+  // Bind parameters in scope for the duration of this call
+  const prevScopeEntries = new Map<
+    string,
+    { value: bigint; type: string; mutable: boolean }
+  >();
+  for (let i = 0; i < funcDef.params.length; i++) {
+    const param = funcDef.params[i]!;
+    if (ctx.scope.has(param.name)) {
+      prevScopeEntries.set(param.name, ctx.scope.get(param.name)!);
+    }
+    ctx.scope.set(param.name, {
+      value: argValues[i] ?? 0n,
+      type: param.type,
+      mutable: false,
+    });
+  }
+
   // Execute the function body expression
   const result = parseExprWithType(ctx);
+
+  // Restore original scope entries for parameters
+  for (let i = 0; i < funcDef.params.length; i++) {
+    const paramName = funcDef.params[i]!.name;
+    if (prevScopeEntries.has(paramName)) {
+      ctx.scope.set(paramName, prevScopeEntries.get(paramName)!);
+    } else {
+      ctx.scope.delete(paramName);
+    }
+  }
 
   // Restore original position after executing function body
   ctx.pos = savedPos;
 
-  return { value: BigInt(result.value), type: funcDef.returnType };
+ return { value: BigInt(result.value), type: funcDef.returnType };
 }
 
 // ── Block item parser ───────────────────────────────────────
@@ -346,21 +386,48 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
   // While loop statement
   if (peek(ctx) === "while") return executeWhileLoop(ctx);
 
- // Function declaration: fn get() : I32 => 100;
+  // Function declaration: fn get() : I32 => 100; or fn pass(param : I32) : I32 => param;
   if (peek(ctx) === "fn") {
     consume(ctx, "fn");
 
-    // Consume function name — tokenizer attaches "(" to identifier like "get("
-    let funcName = consume(ctx);
-    if (funcName.endsWith("(")) {
-      funcName = funcName.slice(0, -1);
+    // Consume function name — tokenizer may attach "(" to identifier like "get("
+    // or include params inside parens without spaces like "pass(param"
+    const rawToken = consume(ctx);
+
+    let funcName: string;
+    if (rawToken.startsWith("(")) {
+      funcName = rawToken.slice(1);
     } else {
+      funcName = rawToken;
+    }
+
+    // If the token contains an opening paren, split it and re-insert remainder
+    const parenIdx = funcName.indexOf("(");
+    if (parenIdx !== -1) {
+      funcName = funcName.slice(0, parenIdx);
+      const remainder = rawToken.slice(parenIdx + 1);
+      if (remainder.length > 0) {
+        ctx.tokens.splice(ctx.pos, 0, remainder);
+      }
+    } else {
+      // No paren attached — expect separate "(" token
       consume(ctx, "(");
+    }
+
+    // Parse parameters: zero or more `name : Type` separated by `,`
+    const params: Array<{ name: string; type: string }> = [];
+    while (peek(ctx) !== ")") {
+      const paramName = consume(ctx);
+      consume(ctx, ":");
+      const paramType = parseTypeAnnotation(ctx);
+      params.push({ name: paramName, type: paramType });
+      if (peek(ctx) === ",") consume(ctx, ",");
     }
 
     // Consume closing paren — may already be separate or attached differently
     const nextToken = peek(ctx);
-    if (!nextToken || !nextToken.startsWith(")")) throw new Error("Invalid format");
+    if (!nextToken || !nextToken.startsWith(")"))
+      throw new Error("Invalid format");
     consume(ctx, ")");
 
     // Return type annotation : I32
@@ -372,14 +439,15 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
     ctx.functions.set(funcName, {
       returnType,
       bodyStartPos: ctx.pos,
+      params,
     });
 
     // Skip past the function body tokens (don't execute yet)
     skipBodyTokens(ctx);
-   return null;
+    return null;
   }
 
- // Let declaration
+  // Let declaration
   if (peek(ctx) === "let") {
     consume(ctx, "let");
     const mutable = peek(ctx) === "mut";
@@ -437,7 +505,7 @@ function parseBlockItem(ctx: ParserCtx): bigint | null {
 
 function applyLogicalOp(
   ctx: ParserCtx,
-  left: { value: bigint; type: string },
+  left: { value: number | bigint; type: string },
   opName: string,
   bitwiseFn: (a: bigint, b: bigint) => bigint,
 ): void {
@@ -448,7 +516,7 @@ function applyLogicalOp(
       `Logical ${opName} requires Bool operands, got ${left.type} and ${right.type}`,
     );
 
-  left.value = BigInt(bitwiseFn(BigInt(left.value), BigInt(right.value)));
+  left.value = bitwiseFn(left.value as bigint, right.value as bigint);
 }
 
 // ── Expression parser (with type tracking) ───────────────────────────
@@ -502,7 +570,7 @@ function parseExprWithType(ctx: ParserCtx): {
       case "!=":
         cmpResult = BigInt(left.value) !== BigInt(right.value) ? 1n : 0n;
         break;
-      default:
+     default:
         throw new Error(`Unknown comparison operator: ${op}`);
     }
 
@@ -510,31 +578,38 @@ function parseExprWithType(ctx: ParserCtx): {
     left.type = "Bool";
   }
 
-  // Logical OR / AND — only allowed on Bool types
-  while (peek(ctx) === "||") {
-    consume(ctx, "||");
+  // Logical operators: || && — lowest precedence, result is Bool type
+  while (peek(ctx) === "||" || peek(ctx) === "&&") {
+    const op = consume(ctx);
     applyLogicalOp(
       ctx,
-      left as { value: bigint; type: string },
-      "OR",
-      (a, b) => a | b,
+      left,
+      op,
+      op === "||" ? (a, b) => a | b : (a, b) => a & b,
     );
   }
 
-  while (peek(ctx) === "&&") {
-    consume(ctx, "&&");
-    applyLogicalOp(
-      ctx,
-      left as { value: bigint; type: string },
-      "AND",
-      (a, b) => a & b,
-    );
-  }
-
-  return { value: normalizeResult(BigInt(left.value)), type: left.type };
+  return { value: normalizeResult(left.value), type: left.type };
 }
 
-// ── Term parser ──────────────────────────────────────────────────────
+function parseIfExpr(ctx: ParserCtx): { value: bigint; type: string } {
+  consume(ctx, "if");
+  consume(ctx, "(");
+  const condResult = parseExprWithType(ctx);
+  consume(ctx, ")");
+  if (condResult.type !== "Bool")
+    throw new Error(`If condition must be Bool, got ${condResult.type}`);
+  const thenBranch = parseTermWithType(ctx);
+  consume(ctx, "else");
+  const elseBranch = parseTermWithType(ctx);
+  if (thenBranch.type !== elseBranch.type)
+    throw new Error(
+      `If/else branch type mismatch: ${thenBranch.type} vs ${elseBranch.type}`,
+    );
+  return condResult.value != 0
+    ? { value: BigInt(thenBranch.value), type: thenBranch.type }
+    : { value: BigInt(elseBranch.value), type: elseBranch.type };
+}
 
 function parseTermWithType(ctx: ParserCtx): {
   value: number | bigint;
@@ -544,26 +619,7 @@ function parseTermWithType(ctx: ParserCtx): {
   const token = peek(ctx);
 
   if (token === "if") {
-    consume(ctx, "if");
-    consume(ctx, "(");
-    const condResult = parseExprWithType(ctx);
-    consume(ctx, ")");
-    if (condResult.type !== "Bool")
-      throw new Error(`If condition must be Bool, got ${condResult.type}`);
-
-    const thenBranch = parseTermWithType(ctx);
-    consume(ctx, "else");
-    const elseBranch = parseTermWithType(ctx);
-
-    if (thenBranch.type !== elseBranch.type)
-      throw new Error(
-        `If/else branch type mismatch: ${thenBranch.type} vs ${elseBranch.type}`,
-      );
-
-    result =
-      condResult.value != 0
-        ? { value: BigInt(thenBranch.value), type: thenBranch.type }
-        : { value: BigInt(elseBranch.value), type: elseBranch.type };
+    result = parseIfExpr(ctx);
   } else if (token === "(") {
     consume(ctx, "(");
     const inner = parseExprWithType(ctx);
@@ -579,54 +635,66 @@ function parseTermWithType(ctx: ParserCtx): {
     consume(ctx, "}");
     result = { value: blockValue!, type: "U8" };
   } else if (token === "&") {
-    // Reference operator — returns pointer type *T
     consume(ctx, "&");
     const name = parseIdentifier(ctx);
     const entry = ctx.scope.get(name)!;
     result = { value: entry.value, type: "*" + entry.type };
   } else if (token === "*") {
-    // Dereference operator — strips the leading * to get base type T
     consume(ctx, "*");
     const name = parseIdentifier(ctx);
     const entry = ctx.scope.get(name)!;
     if (!entry.type.startsWith("*"))
       throw new Error(`Cannot dereference non-pointer type: ${entry.type}`);
     result = { value: entry.value, type: entry.type.replace(/^\*/, "") };
- } else if (token === "true") {
+  } else if (token === "true") {
     consume(ctx, "true");
     result = { value: 1n, type: "Bool" };
   } else if (token === "false") {
     consume(ctx, "false");
     result = { value: 0n, type: "Bool" };
   } else if (token && /^[a-zA-Z_]\w*$/.test(token)) {
-    const name = parseIdentifier(ctx);
+    const name = token;
 
-    // Check if this is a function call: identifier followed by "("
-    if (peek(ctx) === "(") {
-      consume(ctx, "(");
+    // Check if this is a function call: identifier followed by "(" or known function
+    if (peek(ctx) === "(" || ctx.functions.has(name)) {
+      consume(ctx);
+      if (peek(ctx) === "(") consume(ctx, "(");
+      const argValues = evaluateFunctionArgs(ctx);
+      result = executeFunctionCall(ctx, name, argValues);
       consume(ctx, ")");
-      result = executeFunctionCall(ctx, name);
     } else {
-      // Variable reference — use the stored type from scope
+      parseIdentifier(ctx);
       const entry = ctx.scope.get(name)!;
       result = { value: entry.value, type: entry.type };
     }
   } else if (token && /^[a-zA-Z_]\w*\($/.test(token)) {
-    // Function call with attached paren like "get(" — tokenizer merges them
     consume(ctx); // consume the identifier+paren token
     const name = token.slice(0, -1);
 
-    // Consume closing ")" which is separate after the identifier+paren
+    const argValues = evaluateFunctionArgs(ctx);
+    result = executeFunctionCall(ctx, name, argValues);
+
     consume(ctx, ")");
-    result = executeFunctionCall(ctx, name);
+ } else if (token && /\(/.test(token)) {
+    const name = token.slice(0, token.indexOf("("));
+    const remainder = token.slice(token.indexOf("(") + 1);
+
+    consume(ctx); // consume the merged token
+
+    if (remainder.length > 0) {
+      ctx.tokens.splice(ctx.pos, 0, remainder);
+    }
+    const argValues = evaluateFunctionArgs(ctx);
+    result = executeFunctionCall(ctx, name, argValues);
+    consume(ctx, ")");
   } else {
-    // Literal token (e.g., "100U8")
     const literalToken = consume(ctx);
     result = {
       value: BigInt(parseLiteral(literalToken)),
       type: inferLiteralType(literalToken),
-   };
+    };
   }
+
 
   // Multiplication / division — higher precedence than + -
   while (peek(ctx) === "*" || peek(ctx) === "/") {
@@ -642,8 +710,6 @@ function parseTermWithType(ctx: ParserCtx): {
   }
   return { value: normalizeResult(result.value), type: result.type };
 }
-
-// ── Public entry point ───────────────────────────────────────────────
 
 export function executeTuff(tuffSourceCode: string): number | bigint {
   if (tuffSourceCode === "") return 0;
@@ -672,6 +738,7 @@ export function executeTuff(tuffSourceCode: string): number | bigint {
     const itemValue = parseBlockItem(ctx);
     if (itemValue !== null) finalResult = BigInt(itemValue);
   }
-
   return normalizeResult(finalResult);
 }
+
+

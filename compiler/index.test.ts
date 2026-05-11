@@ -1,3 +1,4 @@
+
 import { executeTuff } from "./index";
 import { test, expect } from "bun:test";
 
@@ -218,9 +219,7 @@ test('executeTuff("let mut x = 0U8; x += 1U8; x") returns 1', () => {
   expect(executeTuff("let mut x = 0U8; x += 1U8; x")).toBe(1);
 });
 
-test('executeTuff("let x = 0U8; let y = &x;") returns 0', () => {
-  expect(executeTuff("let x = 0U8; let y = &x;")).toBe(0);
-});
+
 
 test('executeTuff("let mut i = 0U8; while (i < 4U8) i += 1U8; i") returns 4', () => {
   expect(executeTuff("let mut i = 0U8; while (i < 4U8) i += 1U8; i")).toBe(4);
@@ -236,4 +235,12 @@ test('executeTuff("let x = 4; x") returns 4', () => {
 
 test('executeTuff("fn get() : I32 => 100; get()") returns 100', () => {
   expect(executeTuff("fn get() : I32 => 100; get()")).toBe(100);
+});
+
+test('executeTuff("let x = 0U8; let y = &x;") returns 0', () => {
+  expect(executeTuff("let x = 0U8; let y = &x;")).toBe(0);
+});
+
+test('executeTuff("fn pass(param : I32) : I32 => param; pass(100)") returns 100', () => {
+  expect(executeTuff("fn pass(param : I32) : I32 => param; pass(100)")).toBe(100);
 });
