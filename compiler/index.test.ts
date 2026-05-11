@@ -48,3 +48,8 @@ test("let x : U8 = read<U8>(); x returns the variable value", () => {
 test("let x : U8 = read<U8>(); x + x doubles the variable value", () => {
   assertValid("let x : U8 = read<U8>(); x + x", 2, "1 3");
 });
+
+test("let x : U8 = read<U8>(); x + 1U8 adds a literal to the variable", () => {
+  assertValid("let x : U8 = read<U8>(); x + 1U8", 2, "1");
+});
+

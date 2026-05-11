@@ -3,6 +3,7 @@
 type TokenType =
   | "IDENT"
   | "NUMBER"
+  | "TYPED_NUMBER"
   | "LT"
   | "GT"
   | "LPAREN"
@@ -63,7 +64,17 @@ function tokenize(source: string): Token[] {
         num += source[i]!;
         i++;
       }
-      tokens.push({ type: "NUMBER", value: num });
+      // Check for a type suffix like U8, I32, etc.
+      if (/^[UI]\d+$/.test(source.slice(i))) {
+        let suffix = "";
+        while (i < source.length && /\w/.test(source[i]!)) {
+          suffix += source[i]!;
+          i++;
+        }
+        tokens.push({ type: "TYPED_NUMBER", value: `${num}:${suffix}` });
+      } else {
+        tokens.push({ type: "NUMBER", value: num });
+      }
     } else {
       throw new Error(`Unexpected character '${ch}' at position ${i}`);
     }
@@ -73,7 +84,7 @@ function tokenize(source: string): Token[] {
 
 // --- AST nodes ---
 
-type Expr = ReadExpr | NumberLit | BinOp | IdentRef;
+type Expr = ReadExpr | NumberLit | TypedNumberLit | BinOp | IdentRef;
 
 interface ReadExpr {
   kind: "read";
@@ -83,6 +94,12 @@ interface ReadExpr {
 interface NumberLit {
   kind: "number";
   value: number;
+}
+
+interface TypedNumberLit {
+  kind: "typed_number";
+  value: number;
+  typeAnnotation: string; // e.g. "U8", "I32"
 }
 
 interface BinOp {
@@ -218,6 +235,17 @@ class Parser {
       return { kind: "number", value: parseInt(tok.value, 10) };
     }
 
+    // typed number literal (e.g. 1U8, 42I32)
+    if (tok.type === "TYPED_NUMBER") {
+      this.advance();
+      const [numStr, typeAnn] = tok.value.split(":");
+      return {
+        kind: "typed_number",
+        value: parseInt(numStr!, 10),
+        typeAnnotation: typeAnn!,
+      };
+    }
+
     // identifier reference — but NOT keywords like 'let' or 'read' followed by '<'
     if (tok.type === "IDENT" && tok.value !== "let") {
       this.advance();
@@ -324,6 +352,8 @@ class Generator {
       case "read":
         return this.generateRead(node);
       case "number":
+        return String(node.value);
+      case "typed_number":
         return String(node.value);
       case "binop":
         return `(${this.generateExpr(
