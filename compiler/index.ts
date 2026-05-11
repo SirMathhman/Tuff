@@ -9,13 +9,22 @@ const MAX_WHILE_ITERATIONS = 1024;
 // ── Literal parsing & normalization ───────────────────────────────────
 
 function parseLiteral(literal: string): number | bigint {
-  const match = literal.match(/^(-?\d+)([UI])(8|16|32|64)$/);
-  if (!match || !match[1] || !match[2] || !match[3])
-    throw new Error("Invalid format");
+  const match = literal.match(/^(-?\d+)([UI](?:8|16|32|64))?$/);
+  if (!match || !match[1]) throw new Error("Invalid format");
 
   const valueStr = match[1];
-  const typePrefix = match[2]; // "U" or "I"
-  const bits = parseInt(match[3], 10);
+  let typePrefix: string;
+  let bits: number;
+
+  if (match[2]) {
+    // Typed literal like "100U8" or "-5I32"
+    typePrefix = match[2][0]!; // "U" or "I"
+    bits = parseInt(match[2].slice(1), 10);
+  } else {
+    // Bare integer — defaults to I32
+    typePrefix = "I";
+    bits = 32;
+  }
 
   let minValue: bigint;
   let maxValue: bigint;
@@ -67,9 +76,9 @@ function combineTypes(typeA: string, typeB: string): string {
 }
 
 function inferLiteralType(literal: string): string {
-  const match = literal.match(/^(-?\d+)([UI](?:8|16|32|64))$/);
+  const match = literal.match(/^(-?\d+)([UI](?:8|16|32|64))?$/);
   if (!match) throw new Error("Invalid format");
-  return match[2]!;
+  return match[2] ?? "I32";
 }
 
 function isAssignable(sourceType: string, targetType: string): boolean {
