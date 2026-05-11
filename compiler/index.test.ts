@@ -234,3 +234,6 @@ test('executeTuff("let x = 4; x") returns 4', () => {
   expect(executeTuff("let x = 4; x")).toBe(4);
 });
 
+test('executeTuff("fn get() : I32 => 100; get()") returns 100', () => {
+  expect(executeTuff("fn get() : I32 => 100; get()")).toBe(100);
+});
