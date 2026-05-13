@@ -77,3 +77,10 @@ test('"let x : U8 = 100U16;" throws Error (narrowing type not allowed)', () => {
   expect(() => interpretTuff("let x : U8 = 100U16;")).toThrow(Error);
 });
 
+test('"let x = 100U16; let y : U8 = x;" throws Error (narrowing via variable)', () => {
+  expect(() => interpretTuff("let x = 100U16; let y : U8 = x;")).toThrow(Error);
+});
+
+test('mutable variable: "let mut x : U8 = 0U8; x = 100U8; x" returns 100', () => {
+  expect(interpretTuff("let mut x : U8 = 0U8; x = 100U8; x")).toBe(100);
+});

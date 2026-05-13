@@ -12,7 +12,10 @@ const TUFF_RANGES: Record<string, { min: bigint; max: bigint }> = {
   },
 };
 
-type Binding = Record<string, { value: number; type: string }>;
+type Binding = Record<
+  string,
+  { value: number; type: string; mutable: boolean }
+>;
 
 export function interpretTuff(input: string): number {
   if (input === "") return 0;
@@ -63,7 +66,9 @@ function _parseExpr(
   s: { pos: number },
   sc: Binding[],
 ): { value: number; type: string } {
-  function lookup(name: string): { value: number; type: string } | undefined {
+  function lookup(
+    name: string,
+  ): { value: number; type: string; mutable?: boolean } | undefined {
     for (let i = sc.length - 1; i >= 0; i--) {
       const scope = sc[i];
       if (scope && name in scope) return scope[name]!;
@@ -195,13 +200,14 @@ function _parseExpr(
 
     return parseAdditiveExpr(["}"]);
   }
-  // Parse a `let name : Type = expr ;` or `let name = expr ;` declaration.
+
+  // Parse a `let [mut] name [: Type] = expr ;` declaration.
   function parseLetDeclaration(): void {
     s.pos++; // consume 'let'
-    const name = tokens[s.pos]!;
-    if (!/^[a-zA-Z_]\w*$/.test(name))
-      throw new Error(`Invalid variable name: ${name}`);
-    s.pos++;
+
+    const mutable = tokens[s.pos] === "mut";
+    if (mutable) s.pos++; // consume optional 'mut'
+    const name = readVariableName();
 
     let explicitType: string | undefined;
 
@@ -223,25 +229,7 @@ function _parseExpr(
     s.pos++; // consume '='
     const value = parseTerm();
 
-    if (explicitType) {
-      // Prevent narrowing: the explicit type must be at least as wide as the assigned expression's type.
-      if (getBitWidth(explicitType) < getBitWidth(value.type)) {
-        throw new Error(
-          `Cannot narrow ${value.type} to ${explicitType}: potential data loss`,
-        );
-      }
-
-      // Validate against explicit type range.
-      const resultRange = TUFF_RANGES[explicitType]!;
-      if (
-        BigInt(value.value) < resultRange.min ||
-        BigInt(value.value) > resultRange.max
-      ) {
-        throw new Error(
-          `Value ${value.value} out of range for ${explicitType}: ${resultRange.min} to ${resultRange.max}`,
-        );
-      }
-    }
+    if (explicitType) validateExplicitType(explicitType, value);
 
     const topScope = sc[sc.length - 1];
     if (!topScope) throw new Error("Internal error: empty scope stack");
@@ -250,15 +238,93 @@ function _parseExpr(
       throw new Error(`Duplicate variable declaration: ${name}`);
     }
 
-    topScope[name] = { value: value.value, type: explicitType ?? value.type };
+    topScope[name] = {
+      value: value.value,
+      type: explicitType ?? value.type,
+      mutable,
+    };
+
+    if (s.pos < tokens.length && tokens[s.pos] === ";") s.pos++; // consume ';'
+  }
+
+  function validateExplicitType(t: string, v: { value: number; type: string }) {
+    // Prevent narrowing.
+    if (getBitWidth(t) < getBitWidth(v.type)) {
+      throw new Error(`Cannot narrow ${v.type} to ${t}: potential data loss`);
+    }
+    const r = TUFF_RANGES[t]!;
+    if (BigInt(v.value) < r.min || BigInt(v.value) > r.max) {
+      throw new Error(
+        `Value ${v.value} out of range for ${t}: ${r.min} to ${r.max}`,
+      );
+    }
+  }
+
+  // Read and validate the current token as a variable name, advancing s.pos.
+  function readVariableName(): string {
+    const name = tokens[s.pos]!;
+    if (!/^[a-zA-Z_]\w*$/.test(name))
+      throw new Error(`Invalid variable name: ${name}`);
+    s.pos++;
+    return name;
+  }
+
+  // Parse an assignment expression: `name = expr ;`
+  function parseAssignment(): void {
+    const name = readVariableName();
+
+    if (tokens[s.pos] !== "=")
+      throw new Error(`Expected '=' after variable name '${name}'`);
+    s.pos++; // consume '='
+
+    const value = parseTerm();
+
+    const binding = lookup(name);
+    if (!binding) throw new Error(`Undefined variable: ${name}`);
+    if (!binding.mutable) {
+      throw new Error(`Cannot reassign immutable variable '${name}'`);
+    }
+
+    // Prevent narrowing on assignment too.
+    if (getBitWidth(value.type) > getBitWidth(binding.type)) {
+      throw new Error(
+        `Cannot narrow ${value.type} to ${binding.type}: potential data loss`,
+      );
+    }
+
+    const topScope = sc[sc.length - 1];
+    if (!topScope || !(name in topScope))
+      throw new Error(`Variable '${name}' not found in current scope`);
+    topScope[name]!.value = value.value;
 
     if (s.pos < tokens.length && tokens[s.pos] === ";") {
       s.pos++; // consume ';'
     }
   }
 
-  while (s.pos < tokens.length && tokens[s.pos] === "let") {
-    parseLetDeclaration();
+  // Helper to check if current position is an assignment statement.
+  function isAssignment(): boolean {
+    const tok = tokens[s.pos];
+    return (
+      s.pos + 1 < tokens.length &&
+      tok != null &&
+      /^[a-zA-Z_]\w*$/.test(tok) &&
+      tok !== "let" &&
+      tok !== "mut" &&
+      !TUFF_RANGES[tok] &&
+      tokens[s.pos + 1] === "="
+    );
+  }
+
+  // Consume leading statements (let-declarations and assignments).
+  while (s.pos < tokens.length) {
+    if (tokens[s.pos] === "let") {
+      parseLetDeclaration();
+    } else if (isAssignment()) {
+      parseAssignment();
+    } else {
+      break;
+    }
   }
 
   if (s.pos >= tokens.length) return { value: 0, type: "U8" };
@@ -266,9 +332,8 @@ function _parseExpr(
   const result = parseAdditiveExpr([")", "}"]);
   return result;
 }
-
 function tokenize(input: string): Array<string> {
-  const tokens = input.match(/(-?\d+[UI]\d+|[+\-*/(){}=:;]|let|\w+)/g);
+  const tokens = input.match(/(-?\d+[UI]\d+|[+\-*/(){}=:;]|let|mut|\w+)/g);
   if (!tokens || tokens.length === 0) {
     throw new Error(`Invalid Tuff value: ${input}`);
   }
