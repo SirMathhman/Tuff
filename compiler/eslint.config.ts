@@ -10,6 +10,10 @@ export default defineConfig([
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
     rules: {
+      "max-lines": [
+        "error",
+        { max: 500, skipBlankLines: true, skipComments: true },
+      ],
       "max-lines-per-function": [
         "error",
         { max: 50, skipComments: true, skipBlankLines: true },

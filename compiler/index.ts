@@ -81,30 +81,65 @@ function _parseExpr(
     return undefined;
   }
 
+ function parseParenOrBlock(): { value: number; type: string } {
+    s.pos++; // consume '(' or '{'
+    let result: { value: number; type: string };
+
+    if (tokens[s.pos - 1] === "{") {
+      sc.push({});
+      result = parseBlockBody();
+      sc.pop();
+    } else {
+      result = _parseExpr(tokens, input, s, sc);
+    }
+
+    if (
+      s.pos >= tokens.length ||
+      (tokens[s.pos] !== ")" && tokens[s.pos] !== "}")
+    ) {
+      throw new Error(`Invalid Tuff value: ${input}`);
+    }
+    s.pos++; // consume ')' or '}'
+    return result;
+  }
+
+  function parseVariableRef(): { value: number; type: string } | null {
+    const tok = tokens[s.pos];
+    if (
+      tok == null ||
+      !/^[a-zA-Z_]\w*$/.test(tok) ||
+      tok === "let" ||
+      TUFF_RANGES[tok]
+    ) {
+      return null;
+    }
+
+    const binding = lookup(tok);
+    if (!binding) throw new Error(`Undefined variable: ${tok}`);
+    s.pos++;
+
+    // If it's an array binding, pass the ArrayBinding for indexing support.
+    if ("values" in binding) {
+      return handleIndexing(
+        binding as unknown as ArrayBinding,
+        `[${(binding as unknown as ArrayBinding).elementType}; ${(binding as unknown as ArrayBinding).length}]`,
+      );
+    }
+
+    // Scalar variable reference — check no [index] follows.
+    const scalar = binding as { value: number; type: string };
+    if (s.pos < tokens.length && tokens[s.pos] === "[") {
+      throw new Error(`Cannot index non-array type: ${scalar.type}`);
+    }
+    return { value: scalar.value, type: scalar.type };
+  }
+
   function parseFactor(): { value: number; type: string } {
     const tok = tokens[s.pos];
 
     // Parenthesized or braced sub-expression.
     if (tok === "(" || tok === "{") {
-      s.pos++; // consume '(' or '{'
-      let result: { value: number; type: string };
-
-      if (tok === "{") {
-        sc.push({});
-        result = parseBlockBody();
-        sc.pop();
-      } else {
-        result = _parseExpr(tokens, input, s, sc);
-      }
-
-      if (
-        s.pos >= tokens.length ||
-        (tokens[s.pos] !== ")" && tokens[s.pos] !== "}")
-      ) {
-        throw new Error(`Invalid Tuff value: ${input}`);
-      }
-      s.pos++; // consume ')' or '}'
-      return result;
+      return parseParenOrBlock();
     }
 
     // Array literal [...] — parse it and handle any indexing.
@@ -114,44 +149,11 @@ function _parseExpr(
     }
 
     // Variable reference.
-    if (
-      tok != null &&
-      /^[a-zA-Z_]\w*$/.test(tok) &&
-      tok !== "let" &&
-      !TUFF_RANGES[tok]
-    ) {
-      const binding = lookup(tok);
-      if (!binding) throw new Error(`Undefined variable: ${tok}`);
-      s.pos++;
-
-      // If it's an array binding, pass the ArrayBinding for indexing support.
-      if ("values" in binding) {
-        return handleIndexing(
-          binding as ArrayBinding,
-          `[${(binding as ArrayBinding).elementType}; ${(binding as ArrayBinding).length}]`,
-        );
-      }
-
-      // Scalar variable reference — check no [index] follows (shouldn't happen for scalars).
-      const scalar = binding as {
-        value: number;
-        type: string;
-        mutable?: boolean;
-      };
-      if (s.pos < tokens.length && tokens[s.pos] === "[") {
-        throw new Error(`Cannot index non-array type: ${scalar.type}`);
-      }
-      return { value: scalar.value, type: scalar.type };
-    }
-
+    const varRef = parseVariableRef();
+    if (varRef) return varRef;
     // Must be a literal.
-    const result = parseLiteral();
-    if (s.pos < tokens.length && tokens[s.pos] === "[") {
-      throw new Error(`Cannot index literal`);
-    }
-    return result;
+    return parseLiteral();
   }
-
   function handleIndexing(
     rawValue: number | ArrayBinding,
     typeStr: string,
@@ -190,7 +192,7 @@ function _parseExpr(
     throw new Error(`Array values cannot be used directly; use indexing`);
   }
 
-  function parseIndexExpression(): { value: number; type: string } {
+ function parseIndexExpression(): { value: number; type: string } {
     // Index expressions can be plain integers without type suffixes.
     const token = tokens[s.pos]!;
     s.pos++;
@@ -207,7 +209,6 @@ function _parseExpr(
       return { value: parseInt(intMatch[1]), type: "U8" };
     }
 
-    throw new Error(`Invalid index expression: ${token}`);
     throw new Error(`Invalid index expression: ${token}`);
   }
 
@@ -273,6 +274,7 @@ function _parseExpr(
     }
     return left;
   }
+
 
   function parseLiteral(): { value: number; type: string } {
     const token = tokens[s.pos]!;
