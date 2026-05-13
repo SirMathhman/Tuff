@@ -195,8 +195,7 @@ function _parseExpr(
 
     return parseAdditiveExpr(["}"]);
   }
-
-  // Parse a `let name : Type = expr ;` declaration.
+// Parse a `let name : Type = expr ;` or `let name = expr ;` declaration.
   function parseLetDeclaration(): void {
     s.pos++; // consume 'let'
     const name = tokens[s.pos]!;
@@ -204,29 +203,49 @@ function _parseExpr(
       throw new Error(`Invalid variable name: ${name}`);
     s.pos++;
 
-    if (tokens[s.pos] !== ":")
-      throw new Error(`Expected ':' after variable name`);
-    s.pos++;
+    let explicitType: string | undefined;
 
-    const typeSuffix = tokens[s.pos]!;
-    if (!TUFF_RANGES[typeSuffix])
-      throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
-    s.pos++;
+    if (tokens[s.pos] === ":") {
+      // Explicit type annotation present.
+      s.pos++;
+      explicitType = tokens[s.pos]!;
+      if (!TUFF_RANGES[explicitType])
+        throw new Error(`Unsupported Tuff type: ${explicitType}`);
+      s.pos++;
 
-    if (tokens[s.pos] !== "=") throw new Error(`Expected '=' after type`);
-    s.pos++;
+      if (tokens[s.pos] !== "=") throw new Error(`Expected '=' after type`);
+    } else if (tokens[s.pos] === "=") {
+      // No explicit type — will infer from assigned value.
+    } else {
+      throw new Error(
+        `Expected ':' or '=' after variable name '${name}'`,
+      );
+    }
 
+    s.pos++; // consume '='
     const value = parseTerm();
+
+    if (explicitType) {
+      // Validate against explicit type range.
+      const resultRange = TUFF_RANGES[explicitType]!;
+      if (
+        BigInt(value.value) < resultRange.min ||
+        BigInt(value.value) > resultRange.max
+      ) {
+        throw new Error(
+          `Value ${value.value} out of range for ${explicitType}: ${resultRange.min} to ${resultRange.max}`,
+        );
+      }
+    }
+
     const topScope = sc[sc.length - 1];
     if (!topScope) throw new Error("Internal error: empty scope stack");
-    topScope[name] = { value: value.value, type: value.type };
+    topScope[name] = { value: value.value, type: explicitType ?? value.type };
 
     if (s.pos < tokens.length && tokens[s.pos] === ";") {
       s.pos++; // consume ';'
     }
   }
-
-// Main expression loop — handles `let` declarations and additive operators.
   while (s.pos < tokens.length && tokens[s.pos] === "let") {
     parseLetDeclaration();
   }

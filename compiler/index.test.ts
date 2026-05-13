@@ -64,3 +64,7 @@ test("nested block with let declarations returns 100", () => {
 test('"let x : U8 = 100U8;" with no trailing expr returns 0', () => {
   expect(interpretTuff("let x : U8 = 100U8;")).toBe(0);
 });
+
+test('inferred type: "let x = 100U8; x" returns 100', () => {
+  expect(interpretTuff("let x = 100U8; x")).toBe(100);
+});

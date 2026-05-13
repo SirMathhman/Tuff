@@ -843,5 +843,165 @@
   {
     "role": "assistant",
     "content": null
+  },
+  {
+    "role": "user",
+    "content": "Add: interpretTuff(\"let x = 100U8; x\") => 100"
+  },
+  {
+    "role": "assistant",
+    "content": "First, let me add the test:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":61,\"endLine\":72}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 67\n61:   expect(interpretTuff(\"let x : U8 = { let y : U8 = 100U8; y }; x\")).toBe(100);\n62: });\n63: \n64: test('\"let x : U8 = 100U8;\" with no trailing expr returns 0', () => {\n65:   expect(interpretTuff(\"let x : U8 = 100U8;\")).toBe(0);\n66: });\n67: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":56,\"endLine\":72}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 67\n56: test('\"5U8 - (2U8 + 1U8)\" returns 2', () => {\n57:   expect(interpretTuff(\"5U8 - (2U8 + 1U8)\")).toBe(2);\n58: });\n59: \n60: test(\"nested block with let declarations returns 100\", () => {\n61:   expect(interpretTuff(\"let x : U8 = { let y : U8 = 100U8; y }; x\")).toBe(100);\n62: });\n63: \n64: test('\"let x : U8 = 100U8;\" with no trailing expr returns 0', () => {\n65:   expect(interpretTuff(\"let x : U8 = 100U8;\")).toBe(0);\n66: });\n67: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":1,\"endLine\":67}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 67\n1: import { expect, test } from \"bun:test\";\n2: \n3: import { interpretTuff } from \"./index\";\n4: \n5: test(\"empty string returns 0\", () => {\n6:   expect(interpretTuff(\"\")).toBe(0);\n7: });\n8: \n9: test('\"100U8\" returns 100', () => {\n10:   expect(interpretTuff(\"100U8\")).toBe(100);\n11: });\n12: \n13: test('\"-100U8\" throws Error', () => {\n14:   expect(() => interpretTuff(\"-100U8\")).toThrow(Error);\n15: });\n16: \n17: test('\"256U8\" throws Error', () => {\n18:   expect(() => interpretTuff(\"256U8\")).toThrow(Error);\n19: });\n20: \n21: test('\"-100U16\" throws Error', () => {\n22:   expect(() => interpretTuff(\"-100U16\")).toThrow(Error);\n23: });\n24: \n25: test('\"-100I8\" returns -100', () => {\n26:   expect(interpretTuff(\"-100I8\")).toBe(-100);\n27: });\n28: \n29: test('\"1U8 + 255U8\" throws Error', () => {\n30:   expect(() => interpretTuff(\"1U8 + 255U8\")).toThrow(Error);\n31: });\n32: \n33: test('\"1U8 + 255U16\" returns 256', () => {\n34:   expect(interpretTuff(\"1U8 + 255U16\")).toBe(256);\n35: });\n36: \n37: test('\"2U8 * 3U8 - 4U8\" returns 2', () => {\n38:   expect(interpretTuff(\"2U8 * 3U8 - 4U8\")).toBe(2);\n39: });\n40: \n41: test('\"2U8 + 3U8 * 4U8\" returns 14', () => {\n42:   expect(interpretTuff(\"2U8 + 3U8 * 4U8\")).toBe(14);\n43: });\n44: test('\"(2U8 + 3U8) * 4U8\" returns 20', () => {\n45:   expect(interpretTuff(\"(2U8 + 3U8) * 4U8\")).toBe(20);\n46: });\n47: \n48: test('\"((1U8 + 2U8))\" returns 3 (nested parens)', () => {\n49:   expect(interpretTuff(\"((1U8 + 2U8))\")).toBe(3);\n50: });\n51: \n52: test('\"(1U8 + 2U8) * (3U8 + 4U8)\" returns 21', () => {\n53:   expect(interpretTuff(\"(1U8 + 2U8) * (3U8 + 4U8)\")).toBe(21);\n54: });\n55: \n56: test('\"5U8 - (2U8 + 1U8)\" returns 2', () => {\n57:   expect(interpretTuff(\"5U8 - (2U8 + 1U8)\")).toBe(2);\n58: });\n59: \n60: test(\"nested block with let declarations returns 100\", () => {\n61:   expect(interpretTuff(\"let x : U8 = { let y : U8 = 100U8; y }; x\")).toBe(100);\n62: });\n63: \n64: test('\"let x : U8 = 100U8;\" with no trailing expr returns 0', () => {\n65:   expect(interpretTuff(\"let x : U8 = 100U8;\")).toBe(0);\n66: });"
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me understand what `\"let x = 100U8; x\"` means — this is type inference on variable declarations (no explicit `: Type`). Let me first check how the current parser handles it, then implement support for inferred types.\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun -e \\\"import { interpretTuff } from './compiler/index.ts'; console.log(interpretTuff('let x = 100U8; x'));\\\"\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 1,\n      Std Out: ,\n      Std Err: 203 |     if (!/^[a-zA-Z_]\\w*$/.test(name))\n204 |       throw new Error(`Invalid variable name: ${name}`);\n205 |     s.pos++;\n206 | \n207 |     if (tokens[s.pos] !== \":\")\n208 |       throw new Error(`Expected ':' after variable name`);\n                      ^\nerror: Expected ':' after variable name\n      at parseLetDeclaration (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:208:17)\n      at _parseExpr (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:231:5)\n      at interpretTuff (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:22:18)\n      at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\[eval]:1:66\n      at loadAndEvaluateModule (2:1)\n\nBun v1.3.13 (Windows x64)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me add the test and implement inferred types in `let` declarations:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":64,\"endLine\":67,\"content\":\"test('\\\"let x : U8 = 100U8;\\\" with no trailing expr returns 0', () => {\\n  expect(interpretTuff(\\\"let x : U8 = 100U8;\\\")).toBe(0);\\n});\\n\\ntest('inferred type: \\\"let x = 100U8; x\\\" returns 100', () => {\\n  expect(interpretTuff(\\\"let x = 100U8; x\\\")).toBe(100);\\n});\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me implement inferred types in `parseLetDeclaration`:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":198,\"endLine\":230}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 267\n198: \n199:   // Parse a `let name : Type = expr ;` declaration.\n200:   function parseLetDeclaration(): void {\n201:     s.pos++; // consume 'let'\n202:     const name = tokens[s.pos]!;\n203:     if (!/^[a-zA-Z_]\\w*$/.test(name))\n204:       throw new Error(`Invalid variable name: ${name}`);\n205:     s.pos++;\n206: \n207:     if (tokens[s.pos] !== \":\")\n208:       throw new Error(`Expected ':' after variable name`);\n209:     s.pos++;\n210: \n211:     const typeSuffix = tokens[s.pos]!;\n212:     if (!TUFF_RANGES[typeSuffix])\n213:       throw new Error(`Unsupported Tuff type: ${typeSuffix}`);\n214:     s.pos++;\n215: \n216:     if (tokens[s.pos] !== \"=\") throw new Error(`Expected '=' after type`);\n217:     s.pos++;\n218: \n219:     const value = parseTerm();\n220:     const topScope = sc[sc.length - 1];\n221:     if (!topScope) throw new Error(\"Internal error: empty scope stack\");\n222:     topScope[name] = { value: value.value, type: value.type };\n223: \n224:     if (s.pos < tokens.length && tokens[s.pos] === \";\") {\n225:       s.pos++; // consume ';'\n226:     }\n227:   }\n228: \n229: // Main expression loop — handles `let` declarations and additive operators."
+  },
+  {
+    "role": "assistant",
+    "content": "Now I need to make `:` optional in let declarations, inferring the type from the assigned expression when omitted. Let me also check how `_parseExpr` calls this:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":230,\"endLine\":245}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 267\n230:   while (s.pos < tokens.length && tokens[s.pos] === \"let\") {\n231:     parseLetDeclaration();\n232:   }\n233: \n234:  if (s.pos >= tokens.length) return { value: 0, type: \"U8\" };\n235: \n236:   const result = parseAdditiveExpr([\")\", \"}\"]);\n237:   return result;\n238: }\n239: \n240: function tokenize(input: string): Array<string> {\n241:   const tokens = input.match(/(-?\\d+[UI]\\d+|[+\\-*/(){}=:;]|let|\\w+)/g);\n242:   if (!tokens || tokens.length === 0) {\n243:     throw new Error(`Invalid Tuff value: ${input}`);\n244:   }"
+  },
+  {
+    "role": "assistant",
+    "content": "Now I need to modify `parseLetDeclaration` to make the type annotation optional — when omitted, infer the type from the assigned expression:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":198,\"endLine\":230,\"content\":\"// Parse a `let name : Type = expr ;` or `let name = expr ;` declaration.\\n  function parseLetDeclaration(): void {\\n    s.pos++; // consume 'let'\\n    const name = tokens[s.pos]!;\\n    if (!/^[a-zA-Z_]\\\\w*$/.test(name))\\n      throw new Error(`Invalid variable name: ${name}`);\\n    s.pos++;\\n\\n    let explicitType: string | undefined;\\n\\n    if (tokens[s.pos] === \\\":\\\") {\\n      // Explicit type annotation present.\\n      s.pos++;\\n      explicitType = tokens[s.pos]!;\\n      if (!TUFF_RANGES[explicitType])\\n        throw new Error(`Unsupported Tuff type: ${explicitType}`);\\n      s.pos++;\\n\\n      if (tokens[s.pos] !== \\\"=\\\") throw new Error(`Expected '=' after type`);\\n    } else if (tokens[s.pos] === \\\"=\\\") {\\n      // No explicit type — will infer from assigned value.\\n    } else {\\n      throw new Error(\\n        `Expected ':' or '=' after variable name '${name}'`,\\n      );\\n    }\\n\\n    s.pos++; // consume '='\\n    const value = parseTerm();\\n\\n    if (explicitType) {\\n      // Validate against explicit type range.\\n      const resultRange = TUFF_RANGES[explicitType]!;\\n      if (\\n        BigInt(value.value) < resultRange.min ||\\n        BigInt(value.value) > resultRange.max\\n      ) {\\n        throw new Error(\\n          `Value ${value.value} out of range for ${explicitType}: ${resultRange.min} to ${resultRange.max}`,\\n        );\\n      }\\n    }\\n\\n    const topScope = sc[sc.length - 1];\\n    if (!topScope) throw new Error(\\\"Internal error: empty scope stack\\\");\\n    topScope[name] = { value: value.value, type: explicitType ?? value.type };\\n\\n    if (s.pos < tokens.length && tokens[s.pos] === \\\";\\\") {\\n      s.pos++; // consume ';'\\n    }\\n  }\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null
   }
 ]
