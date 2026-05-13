@@ -22,4 +22,8 @@ describe("interpretTuff", () => {
   test('"-100U16" throws Error', () => {
     expect(() => interpretTuff("-100U16")).toThrow(Error);
   });
+
+  test('"-100I8" returns -100', () => {
+    expect(interpretTuff("-100I8")).toBe(-100);
+  });
 });
