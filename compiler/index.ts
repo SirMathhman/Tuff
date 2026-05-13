@@ -14,8 +14,6 @@ const TUFF_RANGES: Record<string, { min: bigint; max: bigint }> = {
 };
 
 type ArrayBinding = {
-
-
   values: number[];
   elementType: string;
   length: number;
@@ -31,12 +29,10 @@ export function interpretTuff(input: string): number {
   if (input === "") return 0;
 
   const tokens = tokenize(input);
-  // Start with an empty binding scope stack.
   const result = parseExpr(tokens, input, [{}]);
 
   const resultRange = TUFF_RANGES[result.type];
   if (!resultRange) throw new Error(`Unsupported Tuff type: ${result.type}`);
-
   if (
     result.value < Number(resultRange.min) ||
     result.value > Number(resultRange.max)
@@ -48,7 +44,6 @@ export function interpretTuff(input: string): number {
 
   return result.value;
 }
-
 function parseExpr(
   tokens: Array<string>,
   input: string,
@@ -67,8 +62,6 @@ function parseExpr(
   const s = { pos: 0 };
   return _parseExpr(tokens, input, s, scopes ?? [{}]);
 }
-
-// Internal helper that carries both position state and scope stack through recursion.
 // eslint-disable-next-line max-lines-per-function -- recursive descent parser needs nested functions
 function _parseExpr(
   tokens: Array<string>,
@@ -84,7 +77,7 @@ function _parseExpr(
     return undefined;
   }
 
- function parseParenOrBlock(): { value: number; type: string } {
+  function parseParenOrBlock(): { value: number; type: string } {
     s.pos++; // consume '(' or '{'
     let result: { value: number; type: string };
 
@@ -106,7 +99,7 @@ function _parseExpr(
     return result;
   }
 
- function parseVariableRef(): { value: number; type: string } | null {
+  function parseVariableRef(): { value: number; type: string } | null {
     const tok = tokens[s.pos];
     if (
       tok == null ||
@@ -131,14 +124,13 @@ function _parseExpr(
       );
     }
 
-   // Scalar variable reference — check no [index] follows.
+    // Scalar variable reference — check no [index] follows.
     const scalar = binding as { value: number; type: string };
     if (s.pos < tokens.length && tokens[s.pos] === "[") {
       throw new Error(`Cannot index non-array type: ${scalar.type}`);
     }
     return { value: scalar.value, type: scalar.type };
   }
-
 
   function parseFactor(): { value: number; type: string } {
     const tok = tokens[s.pos];
@@ -166,11 +158,10 @@ function _parseExpr(
     // Must be a literal.
     return parseLiteral();
   }
- function handleIndexing(
+  function handleIndexing(
     rawValue: number | ArrayBinding,
     typeStr: string,
   ): { value: number; type: string } {
-
     while (s.pos < tokens.length && tokens[s.pos] === "[") {
       s.pos++; // consume '['
 
@@ -198,14 +189,13 @@ function _parseExpr(
       return { value: elementValue, type: arrInfo.elementType };
     }
 
-    // No indexing brackets — just return the scalar value.
     if (typeof rawValue === "number") {
       return { value: rawValue, type: typeStr };
     }
     throw new Error(`Array values cannot be used directly; use indexing`);
   }
 
- function parseIndexExpression(): { value: number; type: string } {
+  function parseIndexExpression(): { value: number; type: string } {
     // Index expressions can be plain integers without type suffixes.
     const token = tokens[s.pos]!;
     s.pos++;
@@ -277,9 +267,8 @@ function _parseExpr(
       const op = tokens[s.pos];
       s.pos++;
       const right = parseFactor();
-      if (getBitWidth(right.type) > getBitWidth(left.type)) {
+      if (getBitWidth(right.type) > getBitWidth(left.type))
         left.type = right.type;
-      }
       left.value =
         op === "*"
           ? left.value * right.value
@@ -288,19 +277,13 @@ function _parseExpr(
     return left;
   }
 
-
   function parseLiteral(): { value: number; type: string } {
     const token = tokens[s.pos]!;
     s.pos++;
     const match = token.match(/^(-?\d+)([UI]\d+)$/);
     if (!match) throw new Error(`Invalid Tuff literal: ${token}`);
 
-    const rawValueStr = match[1]!;
-    const typeSuffix = match[2]!;
-    return {
-      value: parseTuffLiteral(rawValueStr, typeSuffix),
-      type: typeSuffix,
-    };
+    return { value: parseTuffLiteral(match[1]!, match[2]!), type: match[2]! };
   }
 
   function parseAdditiveExpr(stopTokens: string[]): {
@@ -333,6 +316,57 @@ function _parseExpr(
     return result;
   }
 
+  function parseLogicalBinary(
+    subParser: (stop: string[]) => { value: number; type: string },
+    opToken: string,
+    shortCircuitCheck: (val: number) => [boolean, number],
+    outerStopTokens: string[],
+  ): { value: number; type: string } {
+    const innerStop = [...outerStopTokens, opToken];
+    let result = subParser(innerStop);
+
+    while (s.pos < tokens.length && !outerStopTokens.includes(tokens[s.pos]!)) {
+      if (tokens[s.pos] === "let") {
+        parseLetDeclaration();
+        continue;
+      }
+      s.pos++; // consume operator
+      const [shouldSkip, skipVal] = shortCircuitCheck(result.value);
+      if (shouldSkip) {
+        subParser(innerStop);
+        return { value: skipVal, type: "Bool" };
+      }
+      const term = subParser(innerStop);
+      result = { value: term.value !== 0 ? 1 : 0, type: "Bool" };
+    }
+
+    return result;
+  }
+
+  function parseLogicalAnd(stopTokens: string[]): {
+    value: number;
+    type: string;
+  } {
+    return parseLogicalBinary(
+      parseAdditiveExpr,
+      "&&",
+      (v) => [v === 0, 0],
+      stopTokens,
+    );
+  }
+
+  function parseLogicalOr(stopTokens: string[]): {
+    value: number;
+    type: string;
+  } {
+    return parseLogicalBinary(
+      parseLogicalAnd,
+      "||",
+      (v) => [v !== 0, 1],
+      stopTokens,
+    );
+  }
+
   function parseBlockBody(): { value: number; type: string } {
     while (s.pos < tokens.length) {
       if (tokens[s.pos] === "let") {
@@ -344,10 +378,10 @@ function _parseExpr(
       }
     }
 
-    return parseAdditiveExpr(["}"]);
+    return parseLogicalOr(["}"]);
   }
 
- function validateExplicitType(t: string, v: { value: number; type: string }) {
+  function validateExplicitType(t: string, v: { value: number; type: string }) {
     // Bool cannot be narrowed from numeric types.
     if (t === "Bool" && v.type !== "Bool") {
       throw new Error(`Cannot narrow ${v.type} to Bool`);
@@ -364,7 +398,6 @@ function _parseExpr(
     }
   }
 
-
   function readVariableName(): string {
     const name = tokens[s.pos]!;
     if (!/^[a-zA-Z_]\w*$/.test(name))
@@ -372,7 +405,6 @@ function _parseExpr(
     s.pos++;
     return name;
   }
-  // Parse the RHS of a let declaration. Returns either scalar or array binding data.
   function parseLetRhs(): {
     value?: number;
     type: string;
@@ -383,7 +415,6 @@ function _parseExpr(
     const tok = tokens[s.pos];
 
     if (tok === "[") {
-      // Array literal — parse directly without going through handleIndexing.
       const arrResult = parseArrayLiteral();
       return {
         value: undefined,
@@ -394,17 +425,16 @@ function _parseExpr(
       };
     }
 
-    // Scalar expression — use normal parsing path but skip indexing check.
     const result = parseTerm();
     return { value: result.value, type: result.type };
   }
 
-  // Parse explicit type annotation after ':'. Returns the type string or undefined if no ':' present.
   function parseExplicitType(): string | undefined {
     if (tokens[s.pos] !== ":") return undefined;
     s.pos++; // consume ':'
 
     // Check for array type [ElementType; length].
+
     if (tokens[s.pos] === "[") {
       s.pos++; // consume '['
       const elementType = tokens[s.pos];
@@ -565,18 +595,20 @@ function _parseExpr(
       break;
     }
   }
-
   if (s.pos >= tokens.length) return { value: 0, type: "U8" };
 
-  const result = parseAdditiveExpr([")", "}"]);
+  const result = parseLogicalOr([")", "}"]);
   return result;
 }
 
 function tokenize(input: string): Array<string> {
-  const tokens = input.match(/(-?\d+[UI]\d+|[+\-*/(){}=:;,|[\]]|let|mut|true|false|\w+)/g);
+  const tokens = input.match(
+    /(-?\d+[UI]\d+|\|\||&&|[+\-*/(){}=:;,|[\]]|let|mut|true|false|\w+)/g,
+  );
   if (!tokens || tokens.length === 0) {
     throw new Error(`Invalid Tuff value: ${input}`);
   }
+
   return tokens;
 }
 
@@ -595,7 +627,10 @@ function parseTuffLiteral(valueStr: string, typeSuffix: string): number {
   }
 
   const bigValue = BigInt(valueStr);
-  if (bigValue < TUFF_RANGES[typeSuffix]!.min || bigValue > TUFF_RANGES[typeSuffix]!.max) {
+  if (
+    bigValue < TUFF_RANGES[typeSuffix]!.min ||
+    bigValue > TUFF_RANGES[typeSuffix]!.max
+  ) {
     throw new Error(
       `Value ${valueStr} out of range for ${typeSuffix}: ${TUFF_RANGES[typeSuffix]!.min} to ${TUFF_RANGES[typeSuffix]!.max}`,
     );

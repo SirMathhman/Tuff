@@ -138,3 +138,46 @@ test('bool narrowing: "let x : Bool = 1U8;" throws Error', () => {
   expect(() => interpretTuff("let x : Bool = 1U8;")).toThrow(Error);
 });
 
+// Logical OR (||) tests
+test('"true || false" returns 1', () => {
+  expect(interpretTuff("true || false")).toBe(1);
+});
+
+test('"false || true" returns 1', () => {
+  expect(interpretTuff("false || true")).toBe(1);
+});
+
+test('"false || false" returns 0', () => {
+  expect(interpretTuff("false || false")).toBe(0);
+});
+
+test('"true || true" returns 1', () => {
+  expect(interpretTuff("true || true")).toBe(1);
+});
+
+test('let x = true; let y = false; x || y returns 1', () => {
+  expect(interpretTuff("let x = true; let y = false; x || y")).toBe(1);
+});
+
+// Logical AND (&&) tests
+test('"true && false" returns 0', () => {
+  expect(interpretTuff("true && false")).toBe(0);
+});
+
+test('"false && true" returns 0', () => {
+  expect(interpretTuff("false && true")).toBe(0);
+});
+
+test('"false && false" returns 0', () => {
+  expect(interpretTuff("false && false")).toBe(0);
+});
+
+test('"true && true" returns 1', () => {
+  expect(interpretTuff("true && true")).toBe(1);
+});
+
+test('let x = true; let y = false; x && y returns 0', () => {
+  expect(interpretTuff("let x = true; let y = false; x && y")).toBe(0);
+});
+
+
