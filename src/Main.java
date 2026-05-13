@@ -3,6 +3,9 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -10,6 +13,7 @@ public class Main {
 
 	public static final String LINE_SEPARATOR = System.lineSeparator();
 	public static final String PERIOD = Pattern.quote(".");
+	public static final Map<String, List<String>> imports = new HashMap<String, List<String>>();
 
 	public static void main(String[] args) {
 		try {
@@ -33,11 +37,14 @@ public class Main {
 			}
 		}
 
-		return segments
-				.stream()
-				.map(Main::compileRootSegment)
-				.map(slice -> slice + LINE_SEPARATOR)
-				.collect(Collectors.joining());
+		final var collected = segments.stream().map(Main::compileRootSegment).collect(Collectors.joining());
+
+		final var joinedImports = imports.entrySet().stream().map(entry -> {
+			final var joinedValues = String.join(", ", entry.getValue());
+			return "import { " + joinedValues + " } from \"" + entry.getKey() + "\";" + System.lineSeparator();
+		}).collect(Collectors.joining());
+
+		return joinedImports + collected;
 	}
 
 	private static String compileRootSegment(String input) {
@@ -60,11 +67,16 @@ public class Main {
 				split.addFirst(".");
 
 				final var joined = String.join("/", split);
-				return "import { " + last + " } from \"" + joined + "\";";
+				if (!imports.containsKey(joined)) {
+					imports.put(joined, new ArrayList<String>());
+				}
+
+				imports.get(joined).add(last);
+				return "";
 			}
 		}
 
-		return wrap(stripped);
+		return wrap(stripped) + System.lineSeparator();
 	}
 
 	private static String wrap(String input) {
