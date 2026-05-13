@@ -6,14 +6,13 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class Main {
-
-	public static final String LINE_SEPARATOR = System.lineSeparator();
-	public static final String PERIOD = Pattern.quote(".");
-	public static final Map<String, List<String>> imports = new HashMap<String, List<String>>();
+	private static final String PERIOD = Pattern.quote(".");
+	private static final Map<String, List<String>> imports = new HashMap<String, List<String>>();
 
 	public static void main(String[] args) {
 		try {
@@ -26,6 +25,16 @@ public class Main {
 	}
 
 	private static String compile(String input) throws IOException {
+		final var collected = divide(input, Main::compileRootSegment);
+		final var joinedImports = imports.entrySet().stream().map(entry -> {
+			final var joinedValues = String.join(", ", entry.getValue());
+			return "import { " + joinedValues + " } from \"" + entry.getKey() + "\";" + System.lineSeparator();
+		}).collect(Collectors.joining());
+
+		return joinedImports + collected + "Main().main()";
+	}
+
+	private static String divide(String input, Function<String, String> mapper) {
 		final var segments = new ArrayList<String>();
 		final var buffer = new StringBuilder();
 		var depth = 0;
@@ -43,14 +52,8 @@ public class Main {
 		}
 		segments.add(buffer.toString());
 
-		final var collected = segments.stream().map(Main::compileRootSegment).collect(Collectors.joining());
-
-		final var joinedImports = imports.entrySet().stream().map(entry -> {
-			final var joinedValues = String.join(", ", entry.getValue());
-			return "import { " + joinedValues + " } from \"" + entry.getKey() + "\";" + System.lineSeparator();
-		}).collect(Collectors.joining());
-
-		return joinedImports + collected;
+		final var collected = segments.stream().map(mapper).collect(Collectors.joining());
+		return collected;
 	}
 
 	private static String compileRootSegment(String input) {
@@ -82,7 +85,26 @@ public class Main {
 			}
 		}
 
+		if (stripped.endsWith("}")) {
+			final var substring = stripped.substring(0, stripped.length() - 1);
+			final var i = substring.indexOf("{");
+			if (i >= 0) {
+				final var substring1 = substring.substring(0, i);
+				final var body = substring.substring(i + 1);
+				final var i1 = substring1.indexOf("class");
+				if (i1 >= 0) {
+					final var substring3 = substring1.substring(i1 + "class".length());
+					final var className = substring3.strip();
+					return "function " + className + "(){" + divide(body, Main::compileClassSegment) + "}";
+				}
+			}
+		}
+
 		return wrap(stripped) + System.lineSeparator();
+	}
+
+	private static String compileClassSegment(String input) {
+		return System.lineSeparator() + "\t" + wrap(input.strip());
 	}
 
 	private static String wrap(String input) {
