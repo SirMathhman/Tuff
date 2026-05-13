@@ -4,7 +4,9 @@ Write-Host "All tests passed.";
 
 npm run lint;
 if ($LASTEXITCODE -ne 0) { 
-    Write-Error "Linting failed. Do note that ESLint rules will ignore comments and whitespace.";
+    Write-Error "Linting failed. 
+    Do note that ESLint rules will ignore comments and whitespace.
+    If the file is too long, you should split the file.";
     exit 1 
 }
 Write-Host "Linting passed.";
