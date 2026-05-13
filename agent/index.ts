@@ -147,7 +147,30 @@ async function createFile(name: string, content: string): Promise<string> {
   const dir = path.dirname(name);
   if (!fs.existsSync(dir)) await fs.promises.mkdir(dir, { recursive: true });
   await writeFile(name, content, "utf-8");
+
+  const lintingResult = await lintFile(name);
+  if (lintingResult) {
+    return "File has errors: " + lintingResult;
+  }
+
   return "File created.";
+}
+
+async function lintFile(fileName: string): Promise<string | undefined> {
+  // We want to run two commands:
+  // npm run lint:tsc:file -- <fileName>
+  // npm run lint:eslint:file -- <fileName>
+
+  const tscResult = await powershell("npm run lint:tsc:file -- " + fileName);
+  const eslintResult = await powershell(
+    "npm run lint:eslint:file -- " + fileName,
+  );
+
+  const combined = (tscResult + eslintResult).trim();
+  if (combined.length === 0) {
+    return undefined;
+  }
+  return combined;
 }
 
 async function editFile(
@@ -164,6 +187,11 @@ async function editFile(
     ...lines.slice(endLine - 1),
   ].join("\n");
   await fs.promises.writeFile(name, updated, "utf-8");
+
+  const lintingResult = await lintFile(name);
+  if (lintingResult) {
+    return "File has errors: " + lintingResult;
+  }
   return "File updated.";
 }
 
