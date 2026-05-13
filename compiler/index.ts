@@ -9,48 +9,53 @@ const TUFF_RANGES: Record<string, { min: bigint; max: bigint }> = {
   I64: { min: BigInt("-9223372036854775808"), max: BigInt("9223372036854775807") },
 };
 
-
 export function interpretTuff(input: string): number {
   if (input === "") return 0;
 
-  // Check for addition expression like "1U8 + 2U8"
-  const addMatch = input.match(/^(-?\d+)([UI]\d+)\s*\+\s*(-?\d+)([UI]\d+)$/);
-  if (addMatch) {
-    const leftValue = parseTuffLiteral(addMatch[1]!, addMatch[2]!);
-    const rightValue = parseTuffLiteral(addMatch[3]!, addMatch[4]!);
+  // Split on '+' to handle one or more terms like "1U8 + 2U8" or "1U8 + 2U8 + 3U8"
+  const parts = input.split("+").map((p) => p.trim());
 
-    // Determine the result type by picking the wider of the two operand types
-    const leftType = addMatch[2]!;
-    const rightType = addMatch[4]!;
-    const resultRange = getResultRange(leftType, rightType);
-
-    const sum = leftValue + rightValue;
-    if (sum < Number(resultRange.min) || sum > Number(resultRange.max)) {
-      throw new Error(
-        `Sum ${sum} overflows for addition of ${leftType} and ${rightType}: result must be between ${resultRange.min} and ${resultRange.max}`,
-      );
-    }
-
-    return sum;
+  if (parts.length === 0 || (parts.length === 1 && parts[0]! === "")) {
+    throw new Error(`Invalid Tuff value: ${input}`);
   }
 
-  // Single literal like "100U8"
-  const match = input.match(/^(-?\d+)([UI]\d+)/);
-  if (!match) throw new Error(`Invalid Tuff value: ${input}`);
+  // Parse each term and collect values + types
+  const parsed = parts.map((part) => {
+    const match = part!.match(/^(-?\d+)([UI]\d+)$/);
+    if (!match) throw new Error(`Invalid Tuff value: ${input}`);
+    return {
+      value: parseTuffLiteral(match[1]!, match[2]!),
+      type: match[2]!,
+    };
+  });
 
-  return parseTuffLiteral(match[1]!, match[2]!);
+  // Determine the widest result range across all operand types (by bit width)
+  let widestType = parsed[0]!.type;
+  for (const p of parsed) {
+    if (getBitWidth(p.type) > getBitWidth(widestType)) {
+      widestType = p.type;
+    }
+  }
+
+  const resultRange = TUFF_RANGES[widestType];
+  if (!resultRange) throw new Error(`Unsupported Tuff type: ${widestType}`);
+
+  const sum = parsed.reduce((acc, p) => acc + p.value, 0);
+  if (sum < Number(resultRange.min) || sum > Number(resultRange.max)) {
+    throw new Error(
+      `Sum ${sum} overflows: result must be between ${resultRange.min} and ${resultRange.max}`,
+    );
+  }
+
+  return sum;
 }
 
-function getResultRange(typeA: string, typeB: string): { min: bigint; max: bigint } {
-  const rangeA = TUFF_RANGES[typeA];
-  const rangeB = TUFF_RANGES[typeB];
-  if (!rangeA || !rangeB) throw new Error(`Unsupported Tuff type`);
-
-  // Pick the wider range (larger bit width). If same, use either.
-  const bitsA = parseInt(typeA.slice(1));
-  const bitsB = parseInt(typeB.slice(1));
-  return bitsA >= bitsB ? rangeA : rangeB;
+function getBitWidth(typeSuffix: string): number {
+  const num = parseInt(typeSuffix.slice(1));
+  if (isNaN(num)) throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
+  return num;
 }
+
 function parseTuffLiteral(valueStr: string, typeSuffix: string): number {
   const range = TUFF_RANGES[typeSuffix];
   if (!range) throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
