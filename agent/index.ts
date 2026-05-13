@@ -169,7 +169,7 @@ async function lintFile(fileName: string): Promise<string | undefined> {
 
   const hasTSCError = tscResult.exitCode !== 0;
   const hasESLintError = eslintResult.exitCode !== 0;
-  
+
   if (hasTSCError && hasESLintError) return undefined;
 
   let merged = "";

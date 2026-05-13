@@ -12,17 +12,29 @@ const TUFF_RANGES: Record<string, { min: bigint; max: bigint }> = {
 export function interpretTuff(input: string): number {
   if (input === "") return 0;
 
+  // Check for addition expression like "1U8 + 2U8"
+  const addMatch = input.match(/^(-?\d+)([UI]\d+)\s*\+\s*(-?\d+)([UI]\d+)$/);
+  if (addMatch) {
+    const leftValue = parseTuffLiteral(addMatch[1]!, addMatch[2]!);
+    const rightValue = parseTuffLiteral(addMatch[3]!, addMatch[4]!);
+    return leftValue + rightValue;
+  }
+
+  // Single literal like "100U8"
   const match = input.match(/^(-?\d+)([UI]\d+)/);
   if (!match) throw new Error(`Invalid Tuff value: ${input}`);
 
-  const typeSuffix = match[2]!;
+  return parseTuffLiteral(match[1]!, match[2]!);
+}
+
+function parseTuffLiteral(valueStr: string, typeSuffix: string): number {
   const range = TUFF_RANGES[typeSuffix];
   if (!range) throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
 
-  const bigValue = BigInt(match[1]!);
+  const bigValue = BigInt(valueStr);
   if (bigValue < range.min || bigValue > range.max) {
     throw new Error(
-      `Value ${match[1]!} out of range for ${typeSuffix}: ${range.min} to ${range.max}`,
+      `Value ${valueStr} out of range for ${typeSuffix}: ${range.min} to ${range.max}`,
     );
   }
 
