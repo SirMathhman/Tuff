@@ -1003,5 +1003,325 @@
   {
     "role": "assistant",
     "content": null
+  },
+  {
+    "role": "user",
+    "content": "interpretTuff(\"let x = 100U8; let x = 200U8;\") => Error"
+  },
+  {
+    "role": "assistant",
+    "content": "First, let me verify the current behavior and then add the test + implement the guard.\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun -e \\\"import { interpretTuff } from './compiler/index.ts'; console.log(interpretTuff('let x = 100U8; let x = 200U8;'));\\\"\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 1,\n      Std Out: ,\n      Std Err: error: Cannot find module './compiler/index.ts' from 'C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\[eval]'\n\nBun v1.3.13 (Windows x64)\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun -e \\\"import { interpretTuff } from './index.ts'; console.log(interpretTuff('let x = 100U8; let x = 200U8;'));\\\"\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: 0\n,\n      Std Err: "
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me add the test and implement the duplicate-name guard.\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":64,\"endLine\":72}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 71\n64: test('\"let x : U8 = 100U8;\" with no trailing expr returns 0', () => {\n65:   expect(interpretTuff(\"let x : U8 = 100U8;\")).toBe(0);\n66: });\n67: \n68: test('inferred type: \"let x = 100U8; x\" returns 100', () => {\n69:   expect(interpretTuff(\"let x = 100U8; x\")).toBe(100);\n70: });\n71: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":64,\"endLine\":72,\"content\":\"test('\\\"let x : U8 = 100U8;\\\" with no trailing expr returns 0', () => {\\n  expect(interpretTuff(\\\"let x : U8 = 100U8;\\\")).toBe(0);\\n});\\n\\ntest('inferred type: \\\"let x = 100U8; x\\\" returns 100', () => {\\n  expect(interpretTuff(\\\"let x = 100U8; x\\\")).toBe(100);\\n});\\n\\ntest('\\\"let x = 100U8; let x = 200U8;\\\" throws Error (duplicate name)', () => {\\n  expect(() => interpretTuff(\\\"let x = 100U8; let x = 200U8;\\\")).toThrow(Error);\\n});\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": "Now implement the duplicate-name guard in `parseLetDeclaration`:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":198,\"endLine\":260}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 286\n198: // Parse a `let name : Type = expr ;` or `let name = expr ;` declaration.\n199:   function parseLetDeclaration(): void {\n200:     s.pos++; // consume 'let'\n201:     const name = tokens[s.pos]!;\n202:     if (!/^[a-zA-Z_]\\w*$/.test(name))\n203:       throw new Error(`Invalid variable name: ${name}`);\n204:     s.pos++;\n205: \n206:     let explicitType: string | undefined;\n207: \n208:     if (tokens[s.pos] === \":\") {\n209:       // Explicit type annotation present.\n210:       s.pos++;\n211:       explicitType = tokens[s.pos]!;\n212:       if (!TUFF_RANGES[explicitType])\n213:         throw new Error(`Unsupported Tuff type: ${explicitType}`);\n214:       s.pos++;\n215: \n216:       if (tokens[s.pos] !== \"=\") throw new Error(`Expected '=' after type`);\n217:     } else if (tokens[s.pos] === \"=\") {\n218:       // No explicit type — will infer from assigned value.\n219:     } else {\n220:       throw new Error(\n221:         `Expected ':' or '=' after variable name '${name}'`,\n222:       );\n223:     }\n224: \n225:     s.pos++; // consume '='\n226:     const value = parseTerm();\n227: \n228:     if (explicitType) {\n229:       // Validate against explicit type range.\n230:       const resultRange = TUFF_RANGES[explicitType]!;\n231:       if (\n232:         BigInt(value.value) < resultRange.min ||\n233:         BigInt(value.value) > resultRange.max\n234:       ) {\n235:         throw new Error(\n236:           `Value ${value.value} out of range for ${explicitType}: ${resultRange.min} to ${resultRange.max}`,\n237:         );\n238:       }\n239:     }\n240: \n241:     const topScope = sc[sc.length - 1];\n242:     if (!topScope) throw new Error(\"Internal error: empty scope stack\");\n243:     topScope[name] = { value: value.value, type: explicitType ?? value.type };\n244: \n245:     if (s.pos < tokens.length && tokens[s.pos] === \";\") {\n246:       s.pos++; // consume ';'\n247:     }\n248:   }\n249:   while (s.pos < tokens.length && tokens[s.pos] === \"let\") {\n250:     parseLetDeclaration();\n251:   }\n252: \n253:  if (s.pos >= tokens.length) return { value: 0, type: \"U8\" };\n254: \n255:   const result = parseAdditiveExpr([\")\", \"}\"]);\n256:   return result;\n257: }\n258: \n259: function tokenize(input: string): Array<string> {"
+  },
+  {
+    "role": "assistant",
+    "content": "I need to add a duplicate-name check before assigning. Let me insert it right after getting `topScope`:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":241,\"endLine\":245,\"content\":\"const topScope = sc[sc.length - 1];\\n    if (!topScope) throw new Error(\\\"Internal error: empty scope stack\\\");\\n\\n    if (name in topScope) {\\n      throw new Error(`Duplicate variable declaration: ${name}`);\\n    }\\n\\n    topScope[name] = { value: value.value, type: explicitType ?? value.type };\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test; bunx tsc --noEmit\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: bun test v1.3.13 (bf2e2cec)\n,\n      Std Err: \nindex.test.ts:\n(pass) empty string returns 0\n(pass) \"100U8\" returns 100\n(pass) \"-100U8\" throws Error\n(pass) \"256U8\" throws Error\n(pass) \"-100U16\" throws Error\n(pass) \"-100I8\" returns -100\n(pass) \"1U8 + 255U8\" throws Error\n(pass) \"1U8 + 255U16\" returns 256\n(pass) \"2U8 * 3U8 - 4U8\" returns 2\n(pass) \"2U8 + 3U8 * 4U8\" returns 14\n(pass) \"(2U8 + 3U8) * 4U8\" returns 20\n(pass) \"((1U8 + 2U8))\" returns 3 (nested parens)\n(pass) \"(1U8 + 2U8) * (3U8 + 4U8)\" returns 21 [16.00ms]\n(pass) \"5U8 - (2U8 + 1U8)\" returns 2\n(pass) nested block with let declarations returns 100\n(pass) \"let x : U8 = 100U8;\" with no trailing expr returns 0\n(pass) inferred type: \"let x = 100U8; x\" returns 100\n(pass) \"let x = 100U8; let x = 200U8;\" throws Error (duplicate name)\n\n 18 pass\n 0 fail\n 18 expect() calls\nRan 18 tests across 1 file. [59.00ms]\n"
+  },
+  {
+    "role": "assistant",
+    "content": "All 18 tests pass, TypeScript is clean, and ESLint passes too. The duplicate-name guard throws an error when the same variable name is declared twice in the same scope."
+  },
+  {
+    "role": "user",
+    "content": "interpretTuff(\"let x : U8 = 100U16;\") => Error, because a U16 is not guaranteed to fit in a U8"
+  },
+  {
+    "role": "assistant",
+    "content": "I'll add the test and implement the narrowing guard in `parseLetDeclaration`.\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":68,\"endLine\":75}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 75\n68: test('inferred type: \"let x = 100U8; x\" returns 100', () => {\n69:   expect(interpretTuff(\"let x = 100U8; x\")).toBe(100);\n70: });\n71: \n72: test('\"let x = 100U8; let x = 200U8;\" throws Error (duplicate name)', () => {\n73:   expect(() => interpretTuff(\"let x = 100U8; let x = 200U8;\")).toThrow(Error);\n74: });"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":72,\"endLine\":75,\"content\":\"test('\\\"let x = 100U8; let x = 200U8;\\\" throws Error (duplicate name)', () => {\\n  expect(() => interpretTuff(\\\"let x = 100U8; let x = 200U8;\\\")).toThrow(Error);\\n});\\n\\ntest('\\\"let x : U8 = 100U16;\\\" throws Error (narrowing type not allowed)', () => {\\n  expect(() => interpretTuff(\\\"let x : U8 = 100U16;\\\")).toThrow(Error);\\n});\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me look at the current `parseLetDeclaration` to add the narrowing guard:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":198,\"endLine\":260}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 290\n198: // Parse a `let name : Type = expr ;` or `let name = expr ;` declaration.\n199:   function parseLetDeclaration(): void {\n200:     s.pos++; // consume 'let'\n201:     const name = tokens[s.pos]!;\n202:     if (!/^[a-zA-Z_]\\w*$/.test(name))\n203:       throw new Error(`Invalid variable name: ${name}`);\n204:     s.pos++;\n205: \n206:     let explicitType: string | undefined;\n207: \n208:     if (tokens[s.pos] === \":\") {\n209:       // Explicit type annotation present.\n210:       s.pos++;\n211:       explicitType = tokens[s.pos]!;\n212:       if (!TUFF_RANGES[explicitType])\n213:         throw new Error(`Unsupported Tuff type: ${explicitType}`);\n214:       s.pos++;\n215: \n216:       if (tokens[s.pos] !== \"=\") throw new Error(`Expected '=' after type`);\n217:     } else if (tokens[s.pos] === \"=\") {\n218:       // No explicit type — will infer from assigned value.\n219:     } else {\n220:       throw new Error(\n221:         `Expected ':' or '=' after variable name '${name}'`,\n222:       );\n223:     }\n224: \n225:     s.pos++; // consume '='\n226:     const value = parseTerm();\n227: \n228:     if (explicitType) {\n229:       // Validate against explicit type range.\n230:       const resultRange = TUFF_RANGES[explicitType]!;\n231:       if (\n232:         BigInt(value.value) < resultRange.min ||\n233:         BigInt(value.value) > resultRange.max\n234:       ) {\n235:         throw new Error(\n236:           `Value ${value.value} out of range for ${explicitType}: ${resultRange.min} to ${resultRange.max}`,\n237:         );\n238:       }\n239:     }\n240: \n241: const topScope = sc[sc.length - 1];\n242:     if (!topScope) throw new Error(\"Internal error: empty scope stack\");\n243: \n244:     if (name in topScope) {\n245:       throw new Error(`Duplicate variable declaration: ${name}`);\n246:     }\n247: \n248:     topScope[name] = { value: value.value, type: explicitType ?? value.type };\n249:     if (s.pos < tokens.length && tokens[s.pos] === \";\") {\n250:       s.pos++; // consume ';'\n251:     }\n252:   }\n253:   while (s.pos < tokens.length && tokens[s.pos] === \"let\") {\n254:     parseLetDeclaration();\n255:   }\n256: \n257:  if (s.pos >= tokens.length) return { value: 0, type: \"U8\" };\n258: \n259:   const result = parseAdditiveExpr([\")\", \"}\"]);"
+  },
+  {
+    "role": "assistant",
+    "content": "I need to add a check: if `explicitType` has a smaller or equal bit width compared to the value's actual type, it should be rejected (narrowing not allowed). Let me insert this guard right after parsing the term and before the range validation:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":225,\"endLine\":240,\"content\":\"   s.pos++; // consume '='\\n    const value = parseTerm();\\n\\n    if (explicitType) {\\n      // Prevent narrowing: the explicit type must be at least as wide as the assigned expression's type.\\n      if (getBitWidth(explicitType) < getBitWidth(value.type)) {\\n        throw new Error(\\n          `Cannot narrow ${value.type} to ${explicitType}: potential data loss`,\\n        );\\n      }\\n\\n      // Validate against explicit type range.\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Content inserted:221:         `Expected ':' or '=' after variable name '${name}'`,\n222:       );\n223:     }\n224: \n225:    s.pos++; // consume '='\n226:     const value = parseTerm();\n227: \n228:     if (explicitType) {\n229:       // Prevent narrowing: the explicit type must be at least as wide as the assigned expression's type.\n230:       if (getBitWidth(explicitType) < getBitWidth(value.type)) {\n231:         throw new Error(\n232:           `Cannot narrow ${value.type} to ${explicitType}: potential data loss`,\n233:         );\n234:       }\n235: \n236:       // Validate against explicit type range.\n237: \n238: const topScope = sc[sc.length - 1];\n239:     if (!topScope) throw new Error(\"Internal error: empty scope stack\");\n240: \nFile has errors: \n> lint:eslint:file\n> eslint --fix --ext .ts index.ts\n\n\nC:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts\n  287:0  error  Parsing error: '}' expected\n\n✖ 1 problem (1 error, 0 warnings)\n\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":225,\"endLine\":260}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 287\n225:    s.pos++; // consume '='\n226:     const value = parseTerm();\n227: \n228:     if (explicitType) {\n229:       // Prevent narrowing: the explicit type must be at least as wide as the assigned expression's type.\n230:       if (getBitWidth(explicitType) < getBitWidth(value.type)) {\n231:         throw new Error(\n232:           `Cannot narrow ${value.type} to ${explicitType}: potential data loss`,\n233:         );\n234:       }\n235: \n236:       // Validate against explicit type range.\n237: \n238: const topScope = sc[sc.length - 1];\n239:     if (!topScope) throw new Error(\"Internal error: empty scope stack\");\n240: \n241:     if (name in topScope) {\n242:       throw new Error(`Duplicate variable declaration: ${name}`);\n243:     }\n244: \n245:     topScope[name] = { value: value.value, type: explicitType ?? value.type };\n246:     if (s.pos < tokens.length && tokens[s.pos] === \";\") {\n247:       s.pos++; // consume ';'\n248:     }\n249:   }\n250:   while (s.pos < tokens.length && tokens[s.pos] === \"let\") {\n251:     parseLetDeclaration();\n252:   }\n253: \n254:  if (s.pos >= tokens.length) return { value: 0, type: \"U8\" };\n255: \n256:   const result = parseAdditiveExpr([\")\", \"}\"]);\n257:   return result;\n258: }\n259: "
+  },
+  {
+    "role": "assistant",
+    "content": "I see — my edit removed the closing brace for the `if (explicitType)` block along with the old range-validation code inside it. Let me fix this:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":236,\"endLine\":249,\"content\":\"     // Validate against explicit type range.\\n      const resultRange = TUFF_RANGES[explicitType]!;\\n      if (\\n        BigInt(value.value) < resultRange.min ||\\n        BigInt(value.value) > resultRange.max\\n      ) {\\n        throw new Error(\\n          `Value ${value.value} out of range for ${explicitType}: ${resultRange.min} to ${resultRange.max}`,\\n        );\\n      }\\n    }\\n\\n    const topScope = sc[sc.length - 1];\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Content inserted:232:           `Cannot narrow ${value.type} to ${explicitType}: potential data loss`,\n233:         );\n234:       }\n235: \n236:      // Validate against explicit type range.\n237:       const resultRange = TUFF_RANGES[explicitType]!;\n238:       if (\n239:         BigInt(value.value) < resultRange.min ||\n240:         BigInt(value.value) > resultRange.max\n241:       ) {\n242:         throw new Error(\n243:           `Value ${value.value} out of range for ${explicitType}: ${resultRange.min} to ${resultRange.max}`,\n244:         );\n245:       }\n246:     }\n247: \n248:     const topScope = sc[sc.length - 1];\n249:   }\n250:   while (s.pos < tokens.length && tokens[s.pos] === \"let\") {\n251:     parseLetDeclaration();\n252:   }\nFile has errors: \n> lint:eslint:file\n> eslint --fix --ext .ts index.ts\n\n\nC:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts\n  248:11  error  'topScope' is assigned a value but never used  @typescript-eslint/no-unused-vars\n\n✖ 1 problem (1 error, 0 warnings)\n\n"
+  },
+  {
+    "role": "assistant",
+    "content": "The old code that used `topScope` got clobbered. Let me see what's there now and fix it:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":246,\"endLine\":270}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 287\n246:     }\n247: \n248:     const topScope = sc[sc.length - 1];\n249:   }\n250:   while (s.pos < tokens.length && tokens[s.pos] === \"let\") {\n251:     parseLetDeclaration();\n252:   }\n253: \n254:  if (s.pos >= tokens.length) return { value: 0, type: \"U8\" };\n255: \n256:   const result = parseAdditiveExpr([\")\", \"}\"]);\n257:   return result;\n258: }\n259: \n260: function tokenize(input: string): Array<string> {\n261:   const tokens = input.match(/(-?\\d+[UI]\\d+|[+\\-*/(){}=:;]|let|\\w+)/g);\n262:   if (!tokens || tokens.length === 0) {\n263:     throw new Error(`Invalid Tuff value: ${input}`);\n264:   }\n265:   return tokens;\n266: }\n267: \n268: function getBitWidth(typeSuffix: string): number {\n269:   const num = parseInt(typeSuffix.slice(1));"
+  },
+  {
+    "role": "assistant",
+    "content": "I see — the body after `const topScope` got lost during my edit. The closing brace on line 249 ends `parseLetDeclaration` prematurely, skipping the duplicate check, assignment, and semicolon consumption. Let me fix it:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":248,\"endLine\":250,\"content\":\"const topScope = sc[sc.length - 1];\\n    if (!topScope) throw new Error(\\\"Internal error: empty scope stack\\\");\\n\\n    if (name in topScope) {\\n      throw new Error(`Duplicate variable declaration: ${name}`);\\n    }\\n\\n    topScope[name] = { value: value.value, type: explicitType ?? value.type };\\n\\n    if (s.pos < tokens.length && tokens[s.pos] === \\\";\\\") {\\n      s.pos++; // consume ';'\\n    }\\n  }\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test; bunx tsc --noEmit\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: bun test v1.3.13 (bf2e2cec)\n,\n      Std Err: \nindex.test.ts:\n(pass) empty string returns 0\n(pass) \"100U8\" returns 100\n(pass) \"-100U8\" throws Error\n(pass) \"256U8\" throws Error\n(pass) \"-100U16\" throws Error\n(pass) \"-100I8\" returns -100\n(pass) \"1U8 + 255U8\" throws Error\n(pass) \"1U8 + 255U16\" returns 256\n(pass) \"2U8 * 3U8 - 4U8\" returns 2\n(pass) \"2U8 + 3U8 * 4U8\" returns 14\n(pass) \"(2U8 + 3U8) * 4U8\" returns 20 [16.00ms]\n(pass) \"((1U8 + 2U8))\" returns 3 (nested parens)\n(pass) \"(1U8 + 2U8) * (3U8 + 4U8)\" returns 21\n(pass) \"5U8 - (2U8 + 1U8)\" returns 2\n(pass) nested block with let declarations returns 100\n(pass) \"let x : U8 = 100U8;\" with no trailing expr returns 0\n(pass) inferred type: \"let x = 100U8; x\" returns 100\n(pass) \"let x = 100U8; let x = 200U8;\" throws Error (duplicate name)\n(pass) \"let x : U8 = 100U16;\" throws Error (narrowing type not allowed)\n\n 19 pass\n 0 fail\n 19 expect() calls\nRan 19 tests across 1 file. [50.00ms]\n"
+  },
+  {
+    "role": "assistant",
+    "content": "All 19 tests pass, TypeScript is clean, and ESLint passes too. The narrowing guard now rejects assignments where the explicit type has a smaller bit width than the assigned expression's type (e.g., `let x : U8 = 100U16` throws because U8 < U16)."
   }
 ]

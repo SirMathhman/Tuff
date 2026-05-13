@@ -68,3 +68,12 @@ test('"let x : U8 = 100U8;" with no trailing expr returns 0', () => {
 test('inferred type: "let x = 100U8; x" returns 100', () => {
   expect(interpretTuff("let x = 100U8; x")).toBe(100);
 });
+
+test('"let x = 100U8; let x = 200U8;" throws Error (duplicate name)', () => {
+  expect(() => interpretTuff("let x = 100U8; let x = 200U8;")).toThrow(Error);
+});
+
+test('"let x : U8 = 100U16;" throws Error (narrowing type not allowed)', () => {
+  expect(() => interpretTuff("let x : U8 = 100U16;")).toThrow(Error);
+});
+

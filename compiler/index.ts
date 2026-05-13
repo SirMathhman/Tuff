@@ -195,7 +195,7 @@ function _parseExpr(
 
     return parseAdditiveExpr(["}"]);
   }
-// Parse a `let name : Type = expr ;` or `let name = expr ;` declaration.
+  // Parse a `let name : Type = expr ;` or `let name = expr ;` declaration.
   function parseLetDeclaration(): void {
     s.pos++; // consume 'let'
     const name = tokens[s.pos]!;
@@ -217,15 +217,20 @@ function _parseExpr(
     } else if (tokens[s.pos] === "=") {
       // No explicit type — will infer from assigned value.
     } else {
-      throw new Error(
-        `Expected ':' or '=' after variable name '${name}'`,
-      );
+      throw new Error(`Expected ':' or '=' after variable name '${name}'`);
     }
 
     s.pos++; // consume '='
     const value = parseTerm();
 
     if (explicitType) {
+      // Prevent narrowing: the explicit type must be at least as wide as the assigned expression's type.
+      if (getBitWidth(explicitType) < getBitWidth(value.type)) {
+        throw new Error(
+          `Cannot narrow ${value.type} to ${explicitType}: potential data loss`,
+        );
+      }
+
       // Validate against explicit type range.
       const resultRange = TUFF_RANGES[explicitType]!;
       if (
@@ -240,17 +245,23 @@ function _parseExpr(
 
     const topScope = sc[sc.length - 1];
     if (!topScope) throw new Error("Internal error: empty scope stack");
+
+    if (name in topScope) {
+      throw new Error(`Duplicate variable declaration: ${name}`);
+    }
+
     topScope[name] = { value: value.value, type: explicitType ?? value.type };
 
     if (s.pos < tokens.length && tokens[s.pos] === ";") {
       s.pos++; // consume ';'
     }
   }
+
   while (s.pos < tokens.length && tokens[s.pos] === "let") {
     parseLetDeclaration();
   }
 
- if (s.pos >= tokens.length) return { value: 0, type: "U8" };
+  if (s.pos >= tokens.length) return { value: 0, type: "U8" };
 
   const result = parseAdditiveExpr([")", "}"]);
   return result;
