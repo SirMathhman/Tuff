@@ -539,8 +539,9 @@ async function saveConversation(
 // ── Agent loop ────────────────────────────────────────────────────────────────
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
-const messages: OpenAI.Chat.ChatCompletionMessageParam[] =
-  await loadConversation();
+const messages: OpenAI.Chat.ChatCompletionMessageParam[] = (
+  await loadConversation()
+).filter((m) => m.role !== "system");
 
 /**
  * Performs one agent action cycle: sends messages to the model, streams the response,
@@ -726,7 +727,7 @@ async function act() {
   }
 }
 
-messages.push({
+messages.unshift({
   role: "system",
   content: "You are an autonomous agent working to fulfill the user's goals.",
 });
