@@ -185,12 +185,17 @@ async function editFile(
     ...lines.slice(0, startLine - 1),
     ...content.split("\n"),
     ...lines.slice(endLine - 1),
-  ].join("\n");
-  await fs.promises.writeFile(name, updated, "utf-8");
+  ];
 
+  await fs.promises.writeFile(name, updated.join("\n"), "utf-8");
   const lintingResult = await lintFile(name);
   if (lintingResult) {
-    return "File has errors: " + lintingResult;
+    return (
+      "Content inserted:" +
+      render(updated, startLine - 4, endLine + 4) +
+      "\nFile has errors: " +
+      lintingResult
+    );
   }
   return "File updated.";
 }
@@ -220,12 +225,15 @@ async function readFile(
     );
   }
 
-  const joinedLines = lines
-    .slice(startLine - 1, actualEndLine - 1)
+  const joinedLines = render(lines, startLine, actualEndLine);
+  return `Total lines in file: ${lines.length}\n${joinedLines}`;
+}
+
+function render(lines: string[], startLine: number, endLine: number) {
+  return lines
+    .slice(Math.max(0, startLine - 1), Math.min(lines.length, endLine - 1))
     .map((line, i) => `${i + startLine}: ${line}`)
     .join("\n");
-
-  return `Total lines in file: ${lines.length}\n${joinedLines}`;
 }
 
 async function deleteFile(name: string): Promise<string> {
