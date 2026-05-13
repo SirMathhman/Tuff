@@ -4,6 +4,7 @@ import { writeFile } from "fs/promises";
 import { createInterface } from "readline/promises";
 import * as path from "path";
 import * as child_process from "child_process";
+import ts from "typescript";
 
 // ── Client ────────────────────────────────────────────────────────────────────
 
@@ -166,11 +167,19 @@ async function lintFile(fileName: string): Promise<string | undefined> {
     "npm run lint:eslint:file -- " + fileName,
   );
 
-  const combined = (tscResult + eslintResult).trim();
-  if (combined.length === 0) {
-    return undefined;
+  const hasTSCError = tscResult.exitCode === 0;
+  const hasESLintError = eslintResult.exitCode === 0;
+  
+  if (hasTSCError && hasESLintError) return undefined;
+
+  let merged = "";
+  if (hasTSCError) {
+    merged += tscResult.stdout + tscResult.stderr;
   }
-  return combined;
+  if (hasESLintError) {
+    merged += eslintResult.stdout + eslintResult.stderr;
+  }
+  return merged;
 }
 
 async function editFile(
@@ -372,18 +381,26 @@ async function listDirectory(
   return lines.length === 0 ? "(empty directory)" : lines.join("\n");
 }
 
-async function powershell(command: string, cwd?: string): Promise<string> {
+interface PowerShellResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+async function powershell(
+  command: string,
+  cwd?: string,
+): Promise<PowerShellResult> {
   return new Promise((resolve) => {
     child_process.exec(
       `powershell -NoProfile -Command "${command.replace(/"/g, '\\"')}"`,
       { cwd },
       (error, stdout, stderr) => {
-        if (error)
-          resolve(
-            `Error: ${error.message} | Stderr: ${stderr} | Stdout: ${stdout}`,
-          );
-        else if (stderr) resolve(`Stderr: ${stderr} | Stdout: ${stdout}`);
-        else resolve(stdout || "(no output)");
+        resolve({
+          exitCode: error?.code ?? 0,
+          stdout: stdout || "",
+          stderr: stderr || "",
+        });
       },
     );
   });
@@ -407,7 +424,10 @@ async function callTool(
     case "listDirectory":
       return listDirectory(args.path, args.recursive ?? false);
     case "powershell":
-      return powershell(args.command, args.cwd);
+      const result = await powershell(args.command, args.cwd);
+      return `Exit Code: ${result.exitCode},
+      Std Out: ${result.stdout},
+      Std Err: ${result.stderr}`;
     default:
       return `Error: Unknown tool "${name}"`;
   }

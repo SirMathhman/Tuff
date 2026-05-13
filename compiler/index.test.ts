@@ -10,4 +10,9 @@ describe("interpretTuff", () => {
   test('"100U8" returns 100', () => {
     expect(interpretTuff("100U8")).toBe(100);
   });
+
+  test('"-100U8" throws Error', () => {
+    expect(() => interpretTuff("-100U8")).toThrow(Error);
+  });
 });
+
