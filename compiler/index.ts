@@ -12,22 +12,8 @@ const TUFF_RANGES: Record<string, { min: bigint; max: bigint }> = {
 export function interpretTuff(input: string): number {
   if (input === "") return 0;
 
-  // Split on '+' to handle one or more terms like "1U8 + 2U8" or "1U8 + 2U8 + 3U8"
-  const parts = input.split("+").map((p) => p.trim());
-
-  if (parts.length === 0 || (parts.length === 1 && parts[0]! === "")) {
-    throw new Error(`Invalid Tuff value: ${input}`);
-  }
-
-  // Parse each term and collect values + types
-  const parsed = parts.map((part) => {
-    const match = part!.match(/^(-?\d+)([UI]\d+)$/);
-    if (!match) throw new Error(`Invalid Tuff value: ${input}`);
-    return {
-      value: parseTuffLiteral(match[1]!, match[2]!),
-      type: match[2]!,
-    };
-  });
+  const parsed = parseExpression(input);
+  if (parsed.length === 0) throw new Error(`Invalid Tuff value: ${input}`);
 
   // Determine the widest result range across all operand types (by bit width)
   let widestType = parsed[0]!.type;
@@ -48,6 +34,45 @@ export function interpretTuff(input: string): number {
   }
 
   return sum;
+}
+
+function parseExpression(input: string): Array<{ value: number; type: string }> {
+  const tokens = input.match(/(-?\d+[UI]\d+|[+-])/g);
+  if (!tokens || tokens.length === 0) throw new Error(`Invalid Tuff value: ${input}`);
+
+  const parsed: Array<{ value: number; type: string }> = [];
+  let sign = 1;
+
+  for (const token of tokens) {
+    if (token === "+" || token === "-") {
+      if (parsed.length > 0) {
+        sign = token === "-" ? -1 : 1;
+      } else {
+        throw new Error(`Invalid Tuff value: ${input}`);
+      }
+    } else {
+      const match = token.match(/^(-?\d+)([UI]\d+)$/);
+      if (!match) throw new Error(`Invalid Tuff value: ${input}`);
+
+      const rawValueStr = match[1]!;
+      const typeSuffix = match[2]!;
+
+      // Validate the literal's absolute value against its type range first
+      parseTuffLiteral(rawValueStr.replace(/^-/, ""), typeSuffix);
+
+      // Apply the operator sign to compute final contribution
+      let effectiveValue: number;
+      if (rawValueStr.startsWith("-")) {
+        effectiveValue = -parseTuffLiteral(rawValueStr.slice(1), typeSuffix);
+      } else {
+        effectiveValue = parseTuffLiteral(rawValueStr, typeSuffix);
+      }
+
+      parsed.push({ value: sign * effectiveValue, type: typeSuffix });
+    }
+  }
+
+  return parsed;
 }
 
 function getBitWidth(typeSuffix: string): number {

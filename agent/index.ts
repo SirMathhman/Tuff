@@ -187,9 +187,10 @@ async function editFile(
   await fs.promises.writeFile(name, updated.join("\n"), "utf-8");
   const lintingResult = await lintFile(name);
   if (lintingResult) {
+    const newEndLine = endLine + (updated.length - lines.length);
     return (
       "Content inserted:" +
-      render(updated, startLine - 4, endLine + 4) +
+      render(updated, startLine - 4, newEndLine + 4) +
       "\nFile has errors: " +
       lintingResult
     );
