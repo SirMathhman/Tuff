@@ -38,4 +38,24 @@ describe("interpretTuff", () => {
   test('"2U8 * 3U8 - 4U8" returns 2', () => {
     expect(interpretTuff("2U8 * 3U8 - 4U8")).toBe(2);
   });
+
+  test('"2U8 + 3U8 * 4U8" returns 14', () => {
+    expect(interpretTuff("2U8 + 3U8 * 4U8")).toBe(14);
+  });
+ test('"(2U8 + 3U8) * 4U8" returns 20', () => {
+    expect(interpretTuff("(2U8 + 3U8) * 4U8")).toBe(20);
+  });
+
+  test('"((1U8 + 2U8))" returns 3 (nested parens)', () => {
+    expect(interpretTuff("((1U8 + 2U8))")).toBe(3);
+  });
+
+  test('"(1U8 + 2U8) * (3U8 + 4U8)" returns 21', () => {
+    expect(interpretTuff("(1U8 + 2U8) * (3U8 + 4U8)")).toBe(21);
+  });
+
+  test('"5U8 - (2U8 + 1U8)" returns 2', () => {
+    expect(interpretTuff("5U8 - (2U8 + 1U8)")).toBe(2);
+  });
 });
+

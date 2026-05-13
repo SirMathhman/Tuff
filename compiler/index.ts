@@ -16,7 +16,7 @@ export function interpretTuff(input: string): number {
   if (input === "") return 0;
 
   const tokens = tokenize(input);
-  const result = evaluateExpression(tokens, input);
+  const result = parseExpr(tokens, input);
 
   const resultRange = TUFF_RANGES[result.type];
   if (!resultRange) throw new Error(`Unsupported Tuff type: ${result.type}`);
@@ -33,28 +33,56 @@ export function interpretTuff(input: string): number {
   return result.value;
 }
 
-function evaluateExpression(
+function parseExpr(
   tokens: Array<string>,
   input: string,
+): { value: number; type: string };
+function parseExpr(
+  tokens: Array<string>,
+  input: string,
+  state: { pos: number },
+): { value: number; type: string };
+
+// eslint-disable-next-line max-lines-per-function -- recursive descent parser needs nested functions
+function parseExpr(
+  tokens: Array<string>,
+  input: string,
+  state?: { pos: number },
 ): { value: number; type: string } {
-  let pos = 0;
+  const s = state ?? { pos: 0 };
+
+  function parseFactor(): { value: number; type: string } {
+    if (tokens[s.pos] === "(") {
+      // Parenthesized sub-expression — override precedence by recursing.
+      s.pos++; // consume '('
+      const result = parseExpr(tokens, input, s);
+      if (s.pos >= tokens.length || tokens[s.pos] !== ")") {
+        throw new Error(`Invalid Tuff value: ${input}`);
+      }
+      s.pos++; // consume ')'
+      return result;
+    }
+
+    return parseLiteral();
+  }
 
   function parseTerm(): { value: number; type: string } {
-    const left = parseLiteral();
-    while (pos < tokens.length && tokens[pos] === "*") {
-      pos++;
-      const right = parseLiteral();
+    const left = parseFactor();
+    while (s.pos < tokens.length && (tokens[s.pos] === "*" || tokens[s.pos] === "/")) {
+      const op = tokens[s.pos]; // save operator before consuming it
+      s.pos++;
+      const right = parseFactor();
       if (getBitWidth(right.type) > getBitWidth(left.type)) {
         left.type = right.type;
       }
-      left.value *= right.value;
+      left.value = op === "*" ? left.value * right.value : Math.floor(left.value / right.value);
     }
     return left;
   }
 
   function parseLiteral(): { value: number; type: string } {
-    const token = tokens[pos]!;
-    pos++;
+    const token = tokens[s.pos]!;
+    s.pos++;
     const match = token.match(/^(-?\d+)([UI]\d+)$/);
     if (!match) throw new Error(`Invalid Tuff value: ${input}`);
 
@@ -75,17 +103,15 @@ function evaluateExpression(
 
   // eslint-disable-next-line prefer-const -- mutated in place, not reassigned
   let result = parseTerm();
-  while (pos < tokens.length) {
-    const op = tokens[pos]!;
-    pos++;
+  while (s.pos < tokens.length && tokens[s.pos] !== ")") {
+    const op = tokens[s.pos]!;
+    s.pos++;
     if (op !== "+" && op !== "-")
       throw new Error(`Invalid Tuff value: ${input}`);
 
     const term = parseTerm();
     const widestType =
-      getBitWidth(term.type) > getBitWidth(result.type)
-        ? term.type
-        : result.type;
+      getBitWidth(term.type) > getBitWidth(result.type) ? term.type : result.type;
     result.value += op === "-" ? -term.value : term.value;
     result.type = widestType;
   }
@@ -94,7 +120,8 @@ function evaluateExpression(
 }
 
 function tokenize(input: string): Array<string> {
-  const tokens = input.match(/(-?\d+[UI]\d+|[+\-*])/g);
+const tokens = input.match(/(-?\d+[UI]\d+|[+\-*/()])/g);
+
   if (!tokens || tokens.length === 0)
     throw new Error(`Invalid Tuff value: ${input}`);
   return tokens;
