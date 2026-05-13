@@ -1,0 +1,24 @@
+{
+  "name": "tuff",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "lint": "tsc --noEmit && eslint . --ext .ts",
+    "test": "bun test",
+    "cpd": "pmd cpd index.ts index.test.ts --minimum-tokens 50 --language typescript --ignore-literals --ignore-identifiers",
+    "agent": "npx tsx ../agent/index.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@opencode-ai/plugin": "^1.14.46",
+    "@types/bun": "^1.3.13",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
+    "jiti": "^2.7.0",
+    "typescript-eslint": "^8.59.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,547 @@
+// TUFF → TypeScript compiler
+
+type TokenType =
+  | "IDENT"
+  | "NUMBER"
+  | "TYPED_NUMBER"
+  | "LT"
+  | "GT"
+  | "LPAREN"
+  | "RPAREN"
+  | "PLUS"
+  | "COLON"
+  | "ASSIGN"
+  | "SEMICOLON";
+
+interface Token {
+  type: TokenType;
+  value: string;
+}
+
+function scanIdent(source: string, i: number): { value: string; end: number } {
+  let value = "";
+  while (i < source.length && /\w/.test(source[i]!)) {
+    value += source[i]!;
+    i++;
+  }
+  return { value, end: i };
+}
+
+function scanNumber(source: string, i: number): { token: Token; end: number } {
+  let num = "";
+  while (i < source.length && /[0-9]/.test(source[i]!)) {
+    num += source[i]!;
+    i++;
+  }
+  if (/^[UI]\d+$/.test(source.slice(i))) {
+    let suffix = "";
+    while (i < source.length && /\w/.test(source[i]!)) {
+      suffix += source[i]!;
+      i++;
+    }
+    return {
+      token: { type: "TYPED_NUMBER", value: `${num}:${suffix}` },
+      end: i,
+    };
+  }
+  return { token: { type: "NUMBER", value: num }, end: i };
+}
+
+function tokenize(source: string): Token[] {
+  const tokens: Token[] = [];
+  let i = 0;
+  while (i < source.length) {
+    const ch = source[i]!;
+    if (/\s/.test(ch)) {
+      i++;
+      continue;
+    }
+    if (ch === "<") {
+      tokens.push({ type: "LT", value: "<" });
+      i++;
+    } else if (ch === ">") {
+      tokens.push({ type: "GT", value: ">" });
+      i++;
+    } else if (ch === "(") {
+      tokens.push({ type: "LPAREN", value: "(" });
+      i++;
+    } else if (ch === ")") {
+      tokens.push({ type: "RPAREN", value: ")" });
+      i++;
+    } else if (ch === "+") {
+      tokens.push({ type: "PLUS", value: "+" });
+      i++;
+    } else if (ch === ":") {
+      tokens.push({ type: "COLON", value: ":" });
+      i++;
+    } else if (ch === "=") {
+      tokens.push({ type: "ASSIGN", value: "=" });
+      i++;
+    } else if (ch === ";") {
+      tokens.push({ type: "SEMICOLON", value: ";" });
+      i++;
+    } else if (/[a-zA-Z_]/.test(ch)) {
+      const { value, end } = scanIdent(source, i);
+      tokens.push({ type: "IDENT", value });
+      i = end;
+    } else if (/[0-9]/.test(ch)) {
+      const { token, end } = scanNumber(source, i);
+      tokens.push(token);
+      i = end;
+    } else {
+      throw new Error(`Unexpected character '${ch}' at position ${i}`);
+    }
+  }
+  return tokens;
+}
+
+// --- AST nodes ---
+
+type Expr =
+  | ReadExpr
+  | NumberLit
+  | TypedNumberLit
+  | BinOp
+  | IdentRef
+  | AssignExpr;
+
+interface ReadExpr {
+  kind: "read";
+  typeArg: string; // e.g. "U8", "I32"
+}
+
+interface NumberLit {
+  kind: "number";
+  value: number;
+}
+
+interface TypedNumberLit {
+  kind: "typed_number";
+  value: number;
+  typeAnnotation: string; // e.g. "U8", "I32"
+}
+
+interface BinOp {
+  kind: "binop";
+  op: "+";
+  left: Expr;
+  right: Expr;
+}
+
+interface IdentRef {
+  kind: "ident";
+  name: string;
+}
+
+interface AssignExpr {
+  kind: "assign";
+  name: string;
+  value: Expr;
+}
+
+type Statement = LetDecl | ExprStmt;
+
+interface LetDecl {
+  kind: "let";
+  mutable?: boolean; // true if declared with 'mut'
+  name: string;
+  typeAnnotation?: string; // e.g. "U8" — optional, inferred from initializer if omitted
+  init: Expr;
+}
+
+interface ExprStmt {
+  kind: "expr";
+  expr: Expr;
+}
+
+// --- Recursive descent parser ---
+
+class Parser {
+  private pos = 0;
+  // Track declared variable types for type inference of identifier references
+  private varTypes: Map<string, string> = new Map();
+  // Track which variables are mutable (declared with 'mut')
+  private mutableVars: Set<string> = new Set();
+
+  constructor(private tokens: Token[]) {}
+
+  parseProgram(): Statement[] | null {
+    if (this.tokens.length === 0) return [];
+    const stmts: Statement[] = [];
+    while (!this.atEnd()) {
+      stmts.push(this.parseStatement());
+    }
+    return stmts;
+  }
+
+  private atEnd(): boolean {
+    return this.pos >= this.tokens.length;
+  }
+
+  private parseStatement(): Statement {
+    const tok = this.peek();
+
+    // let x : Type = expr ;
+    if (tok.type === "IDENT" && tok.value === "let") {
+      return this.parseLetDecl();
+    }
+
+    // Check for assignment expression: ident = expr;
+    if (
+      tok.type === "IDENT" &&
+      !this.atEnd() &&
+      this.tokens[this.pos + 1]?.type === "ASSIGN"
+    ) {
+      const nameTok = tok as Token & { value: string };
+      if (!this.mutableVars.has(nameTok.value)) {
+        throw new Error(
+          `Cannot reassign immutable variable '${nameTok.value}'`,
+        );
+      }
+      this.advance(); // consume ident
+      this.advance(); // consume '='
+      const right = this.parseExpression();
+      const rightType = this.inferType(right);
+      const leftType = this.varTypes.get(nameTok.value)!;
+      this.checkAssignment(leftType, rightType);
+      const expr: AssignExpr = {
+        kind: "assign",
+        name: nameTok.value,
+        value: right,
+      };
+      if (!this.atEnd() && this.peek().type === "SEMICOLON") {
+        this.advance();
+      }
+      return { kind: "expr", expr };
+    }
+
+    const expr = this.parseExpression();
+    // If followed by ';', consume it — otherwise leave it for next iteration (end of program)
+    if (!this.atEnd() && this.peek().type === "SEMICOLON") {
+      this.advance();
+    }
+    return { kind: "expr", expr };
+  }
+
+  private parseLetDecl(): LetDecl {
+    this.advance();
+    let mutable = false;
+
+    // optional 'mut' keyword
+    if (
+      !this.atEnd() &&
+      this.peek().type === "IDENT" &&
+      this.peek().value === "mut"
+    ) {
+      this.advance(); // consume 'mut'
+      mutable = true;
+    }
+
+    // variable name (IDENT)
+    const nameTok = this.expect("IDENT");
+    if (nameTok.type !== "IDENT")
+      throw new Error(
+        `Expected identifier after 'let', got '${nameTok.value}'`,
+      );
+    const name = nameTok.value;
+
+    let typeAnnotation = "";
+
+    // ':' type annotation is optional — infer from initializer if omitted
+    if (!this.atEnd() && this.peek().type === "COLON") {
+      this.advance(); // consume ':'
+      while (!this.atEnd() && !["ASSIGN"].includes(this.peek().type)) {
+        const t = this.advance();
+        if (t.type === "GT") break;
+        typeAnnotation += t.value;
+      }
+    }
+
+    // '=' initializer expression
+    this.expect("ASSIGN", `'=' after variable name '${name}'`);
+    const init = this.parseExpression();
+
+    // Infer type from initializer if not explicitly annotated
+    const initType = this.inferType(init);
+
+    if (!typeAnnotation) {
+      typeAnnotation = initType;
+    } else {
+      this.checkAssignment(typeAnnotation, initType);
+    }
+
+    // ';' terminator — always required for let declarations
+    this.expect("SEMICOLON", "';' at end of let declaration");
+
+    // Track the declared variable's type and mutability for later inference/checking
+    this.varTypes.set(name, typeAnnotation);
+    if (mutable) {
+      this.mutableVars.add(name);
+    }
+
+    return { kind: "let", mutable, name, typeAnnotation, init };
+  }
+
+  private inferType(expr: Expr): string {
+    switch (expr.kind) {
+      case "read":
+        return expr.typeArg;
+      case "typed_number":
+        return expr.typeAnnotation;
+      case "ident": {
+        const t = this.varTypes.get(expr.name);
+        if (!t) throw new Error(`Undefined variable '${expr.name}'`);
+        return t;
+      }
+      default:
+        throw new Error(
+          `Cannot infer type for variable initializer of kind '${expr.kind}'`,
+        );
+    }
+  }
+
+  private typeBits(typeName: string): number {
+    switch (typeName) {
+      case "U8":
+      case "I8":
+        return 8;
+      case "U16":
+      case "I16":
+        return 16;
+      case "U32":
+      case "I32":
+        return 32;
+      default:
+        throw new Error(`Unknown type '${typeName}'`);
+    }
+  }
+
+  // Parse expression but stop at semicolons (statement boundaries) and assignment operators.
+  // Assignment is handled separately in parseAssignmentExpr to avoid crossing statement boundaries.
+  private parseExpression(): Expr {
+    let left = this.parsePrimary();
+
+    while (!this.atEnd() && this.peek().type === "PLUS") {
+      this.advance(); // consume '+'
+      const right = this.parsePrimary();
+      left = { kind: "binop", op: "+", left, right };
+    }
+
+    return left;
+  }
+
+  // Check that assigning `rightType` to a variable of `leftType` won't overflow.
+  private checkAssignment(leftType: string, rightType: string): void {
+    if (this.typeBits(leftType) < this.typeBits(rightType)) {
+      throw new Error(
+        `Cannot assign '${rightType}' to variable of type '${leftType}': possible overflow`,
+      );
+    }
+  }
+
+  private parsePrimary(): Expr {
+    const tok = this.peek();
+
+    // Parenthesized expression
+    if (tok.type === "LPAREN") {
+      this.advance(); // consume '('
+      const expr = this.parseExpression();
+      this.expect("RPAREN", "')'");
+      return expr;
+    }
+
+    // read<T>()
+    if (tok.type === "IDENT" && tok.value === "read") {
+      this.advance(); // consume 'read'
+      const typeArg = this.parseTypeArgument();
+      this.expect("LPAREN", `'(' after read<T>`);
+      this.expect("RPAREN", "')' in read expression");
+      return { kind: "read", typeArg };
+    }
+
+    // number literal
+    if (tok.type === "NUMBER") {
+      this.advance();
+      return { kind: "number", value: parseInt(tok.value, 10) };
+    }
+
+    // typed number literal (e.g. 1U8, 42I32)
+    if (tok.type === "TYPED_NUMBER") {
+      this.advance();
+      const [numStr, typeAnn] = tok.value.split(":");
+      return {
+        kind: "typed_number",
+        value: parseInt(numStr!, 10),
+        typeAnnotation: typeAnn!,
+      };
+    }
+
+    // identifier reference — but NOT keywords like 'let' or 'read' followed by '<'
+    if (tok.type === "IDENT" && tok.value !== "let") {
+      this.advance();
+      return { kind: "ident", name: tok.value };
+    }
+
+    throw new Error(`Unexpected token '${tok.value}'`);
+  }
+
+  private parseTypeArgument(): string {
+    this.expect("LT", `'<', after 'read'`);
+    let typeArg = "";
+    while (!this.atEnd() && this.peek().type !== "GT") {
+      const t = this.advance();
+      typeArg += t.value;
+    }
+    this.expect("GT", `">' in read expression"`);
+    return typeArg;
+  }
+
+  private peek(): Token {
+    if (this.atEnd()) throw new Error("Unexpected end of input");
+    return this.tokens[this.pos]!;
+  }
+
+  private advance(): Token {
+    const tok = this.peek();
+    this.pos++;
+    return tok;
+  }
+
+  // Single consolidated expect method — replaces both old expectToken and expect
+  private expect(type: TokenType, message?: string): Token {
+    const tok = this.advance();
+    if (tok.type !== type) {
+      throw new Error(
+        `Expected '${type}' but got '${tok.value}'. ${message ?? ""}`.trim(),
+      );
+    }
+    return tok;
+  }
+}
+
+// --- Code generation with stdin token index tracking and variable scoping ---
+
+class Generator {
+  private readIndex = 0; // tracks which stdin token each read<T>() consumes
+  private declaredVars: Set<string> = new Set();
+
+  generate(statements: Statement[] | null): string {
+    if (!statements || statements.length === 0) return "return 0";
+
+    const lines: string[] = [];
+    lines.push("const tokens = stdIn.trim().split(/\\s+/);");
+
+    // First pass: collect declared variable names for name resolution
+    this.collectDeclarations(statements);
+
+    // Second pass: generate code with name checking
+    const lastStmt = statements[statements.length - 1]!;
+    const priorStmts = statements.slice(0, statements.length - 1);
+
+    for (const stmt of priorStmts) {
+      this.generateStatement(stmt, lines);
+    }
+
+    // The final statement's expression is returned as the exit code
+    if (lastStmt.kind === "expr") {
+      const exprCode = this.generateExpr(lastStmt.expr);
+      lines.push(`return ${exprCode};`);
+    } else {
+      // last stmt was a let decl with trailing ; — nothing to return, default 0
+      lines.push("return 0;");
+    }
+
+    return lines.join("\n");
+  }
+
+  private collectDeclarations(statements: Statement[]): void {
+    for (const stmt of statements) {
+      if (stmt.kind === "let") {
+        if (this.declaredVars.has(stmt.name)) {
+          throw new Error(`Duplicate variable declaration '${stmt.name}'`);
+        }
+        this.declaredVars.add(stmt.name);
+      }
+    }
+  }
+
+  private generateStatement(stmt: Statement, lines: string[]): void {
+    switch (stmt.kind) {
+      case "let": {
+        const initCode = this.generateExpr(stmt.init);
+        const keyword = stmt.mutable ? "let" : "const";
+        lines.push(`${keyword} ${stmt.name} = ${initCode};`);
+        break;
+      }
+      case "expr": {
+        // expression statement executed for side effects only — still need to evaluate reads
+        const exprCode = this.generateExpr(stmt.expr);
+        lines.push(`${exprCode};`);
+        break;
+      }
+    }
+  }
+
+  private generateExpr(node: Expr): string {
+    switch (node.kind) {
+      case "read":
+        return this.generateRead(node);
+      case "number":
+        return String(node.value);
+      case "typed_number":
+        return String(node.value);
+      case "binop":
+        return `(${this.generateExpr(
+          node.left,
+        )} ${node.op} ${this.generateExpr(node.right)})`;
+      case "ident": {
+        if (!this.declaredVars.has(node.name)) {
+          throw new Error(`Undefined variable '${node.name}'`);
+        }
+        return node.name;
+      }
+      case "assign": {
+        const valueCode = this.generateExpr(node.value);
+        return `${node.name} = ${valueCode}`;
+      }
+    }
+  }
+
+  private generateRead(node: ReadExpr): string {
+    const idx = this.readIndex++;
+    let parseFn: string;
+    switch (node.typeArg) {
+      case "U8":
+        parseFn = `(Math.floor(Number(tokens[${idx}])) & 0xFF)`;
+        break;
+      case "I8":
+        parseFn = `((Math.floor(Number(tokens[${idx}])) + 128) % 256 - 128)`;
+        break;
+      case "U16":
+        parseFn = `(Math.floor(Number(tokens[${idx}])) & 0xFFFF)`;
+        break;
+      case "I16":
+        parseFn = `((Math.floor(Number(tokens[${idx}])) + 32768) % 65536 - 32768)`;
+        break;
+      case "U32":
+        parseFn = `(Math.trunc(Number(tokens[${idx}])) >>> 0)`;
+        break;
+      case "I32":
+        parseFn = `(Math.trunc(Number(tokens[${idx}])) | 0)`;
+        break;
+      default:
+        throw new Error(`Unsupported read type '${node.typeArg}'`);
+    }
+    return parseFn;
+  }
+}
+
+export function compileTuffToTS(tuffSourceCode: string): string {
+  const trimmed = tuffSourceCode.trim();
+  if (!trimmed) return "return 0";
+  const tokens = tokenize(trimmed);
+  const parser = new Parser(tokens);
+  const statements = parser.parseProgram();
+  const gen = new Generator();
+  return gen.generate(statements);
+}
