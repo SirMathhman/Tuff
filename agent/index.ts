@@ -97,6 +97,29 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "deleteLines",
+      description:
+        "Delete a range of lines from a file. startLine is inclusive, endLine is exclusive. Line numbers start at 1.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Path to the file" },
+          startLine: {
+            type: "number",
+            description: "First line to delete (inclusive, 1-based)",
+          },
+          endLine: {
+            type: "number",
+            description: "Last line to delete (exclusive, 1-based)",
+          },
+        },
+        required: ["name", "startLine", "endLine"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "listDirectory",
       description:
         "List the contents of a directory. " +
@@ -232,6 +255,29 @@ function render(lines: string[], startLine: number, endLine: number) {
     .slice(Math.max(0, startLine - 1), Math.min(lines.length, endLine - 1))
     .map((line, i) => `${i + startLine}: ${line}`)
     .join("\n");
+}
+
+async function deleteLines(
+  name: string,
+  startLine: number,
+  endLine: number,
+): Promise<string> {
+  if (!fs.existsSync(name)) return "Error: File not found.";
+  const lines = (await fs.promises.readFile(name, "utf-8")).split("\n");
+  if (startLine < 1 || startLine > lines.length) {
+    return `Error: startLine ${startLine} is out of range. File has ${lines.length} lines.`;
+  }
+  const actualEnd = Math.min(endLine, lines.length + 1);
+  const updated = [
+    ...lines.slice(0, startLine - 1),
+    ...lines.slice(actualEnd - 1),
+  ];
+  await fs.promises.writeFile(name, updated.join("\n"), "utf-8");
+  const lintingResult = await lintFile(name);
+  if (lintingResult) {
+    return "Lines deleted, but file has errors: " + lintingResult;
+  }
+  return `Deleted lines ${startLine}–${actualEnd - 1}. File now has ${updated.length} lines.`;
 }
 
 async function deleteFile(name: string): Promise<string> {
@@ -408,6 +454,8 @@ async function callTool(
       return editFile(args.name, args.startLine, args.endLine, args.content);
     case "readFile":
       return readFile(args.name, args.startLine, args.endLine);
+    case "deleteLines":
+      return deleteLines(args.name, args.startLine, args.endLine);
     case "deleteFile":
       return deleteFile(args.name);
     case "listDirectory":
