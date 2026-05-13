@@ -52,8 +52,7 @@ public class Main {
 		}
 		segments.add(buffer.toString());
 
-		final var collected = segments.stream().map(mapper).collect(Collectors.joining());
-		return collected;
+		return segments.stream().map(mapper).collect(Collectors.joining());
 	}
 
 	private static String compileRootSegment(String input) {
@@ -95,7 +94,10 @@ public class Main {
 				if (i1 >= 0) {
 					final var substring3 = substring1.substring(i1 + "class".length());
 					final var className = substring3.strip();
-					return "function " + className + "(){" + divide(body, Main::compileClassSegment) + "}";
+					return "function " + className + "(){" + divide(body, input1 -> {
+						final var stripped1 = input1.strip();
+						return System.lineSeparator() + "\t" + compileClassSegment(stripped1);
+					}) + "}";
 				}
 			}
 		}
@@ -104,7 +106,45 @@ public class Main {
 	}
 
 	private static String compileClassSegment(String input) {
-		return System.lineSeparator() + "\t" + wrap(input.strip());
+		if (input.endsWith(";")) {
+			final var substring = input.substring(0, input.length() - 1);
+			return compileClassStatement(substring) + ";";
+		}
+
+		return wrap(input);
+	}
+
+	private static String compileClassStatement(String input) {
+		final var i = input.indexOf('=');
+		if (i != 0) {
+			final var substring = input.substring(0, i);
+			final var substring1 = input.substring(i + 1);
+			return compileDeclaration(substring) + " = " + wrap(substring1);
+		}
+
+		return wrap(input);
+	}
+
+	private static String compileDeclaration(String input) {
+		final var stripped = input.strip();
+		final var i = stripped.lastIndexOf(" ");
+		if (i >= 0) {
+			final var substring = stripped.substring(0, i);
+			final var name = stripped.substring(i + 1);
+			final var i1 = substring.lastIndexOf(" ");
+			if (i1 > 0) {
+				final var substring1 = substring.substring(0, i1);
+				final var substring2 = substring.substring(i1 + 1);
+				return wrap(substring1 + " ") + "const " + name + " : " + compileType(substring2);
+			}
+		}
+
+		return wrap(stripped);
+	}
+
+	private static String compileType(String input) {
+		final var stripped = input.strip();
+		return wrap(stripped);
 	}
 
 	private static String wrap(String input) {
