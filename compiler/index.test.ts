@@ -179,5 +179,7 @@ test('"true && true" returns 1', () => {
 test('let x = true; let y = false; x && y returns 0', () => {
   expect(interpretTuff("let x = true; let y = false; x && y")).toBe(0);
 });
-
+test('bare integer defaults to I32: "let x = 100; x" returns 100', () => {
+  expect(interpretTuff("let x = 100; x")).toBe(100);
+});
 

@@ -262,15 +262,25 @@ function _parseExpr(
     }
     return left;
   }
-
   function parseLiteral(): { value: number; type: string } {
     const token = tokens[s.pos]!;
     s.pos++;
-    const match = token.match(/^(-?\d+)([UI]\d+)$/);
-    if (!match) throw new Error(`Invalid Tuff literal: ${token}`);
 
-    return { value: parseTuffLiteral(match[1]!, match[2]!), type: match[2]! };
+    // Typed literal (e.g., "100U8", "-5I16").
+    const typedMatch = token.match(/^(-?\d+)([UI]\d+)$/);
+    if (typedMatch) {
+      return { value: parseTuffLiteral(typedMatch[1]!, typedMatch[2]!), type: typedMatch[2]! };
+    }
+
+    // Bare integer — defaults to I32.
+    const bareMatch = token.match(/^(-?\d+)$/);
+    if (bareMatch) {
+      return { value: parseTuffLiteral(bareMatch[1]!, "I32"), type: "I32" };
+    }
+
+    throw new Error(`Invalid Tuff literal: ${token}`);
   }
+
 
   function parseAdditiveExpr(stopTokens: string[]): {
     value: number;
