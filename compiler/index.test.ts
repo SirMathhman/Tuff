@@ -14,5 +14,12 @@ describe("interpretTuff", () => {
   test('"-100U8" throws Error', () => {
     expect(() => interpretTuff("-100U8")).toThrow(Error);
   });
-});
 
+  test('"256U8" throws Error', () => {
+    expect(() => interpretTuff("256U8")).toThrow(Error);
+  });
+
+  test('"-100U16" throws Error', () => {
+    expect(() => interpretTuff("-100U16")).toThrow(Error);
+  });
+});
