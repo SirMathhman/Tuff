@@ -282,6 +282,16 @@ async function deleteLines(
 
 async function deleteFile(name: string): Promise<string> {
   if (!fs.existsSync(name)) return "Error: File not found.";
+  const content = await fs.promises.readFile(name, "utf-8");
+  const lineCount = content.split("\n").length;
+  if (lineCount > 100) {
+    return `Delete file failed. 
+    Do not delete files more than 100 lines long.
+    Rewriting files destroys the version control history.
+    Prefer editing incrementally. 
+    Use #deleteLines or 'git checkout' when applicable.`;
+  }
+
   await fs.promises.rm(name, { recursive: true });
   let dir = path.dirname(name);
   while (dir !== "." && dir !== "/") {

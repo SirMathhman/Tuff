@@ -12,11 +12,14 @@ const TUFF_RANGES: Record<string, { min: bigint; max: bigint }> = {
   },
 };
 
+type Binding = Record<string, { value: number; type: string }>;
+
 export function interpretTuff(input: string): number {
   if (input === "") return 0;
 
   const tokens = tokenize(input);
-  const result = parseExpr(tokens, input);
+  // Start with an empty binding scope stack.
+  const result = parseExpr(tokens, input, [{}]);
 
   const resultRange = TUFF_RANGES[result.type];
   if (!resultRange) throw new Error(`Unsupported Tuff type: ${result.type}`);
@@ -40,27 +43,64 @@ function parseExpr(
 function parseExpr(
   tokens: Array<string>,
   input: string,
-  state: { pos: number },
+  scopes?: Binding[],
 ): { value: number; type: string };
 
-// eslint-disable-next-line max-lines-per-function -- recursive descent parser needs nested functions
+ 
 function parseExpr(
   tokens: Array<string>,
   input: string,
-  state?: { pos: number },
+  scopes?: Binding[],
 ): { value: number; type: string } {
-  const s = state ?? { pos: 0 };
+  const s = { pos: 0 };
+  return _parseExpr(tokens, input, s, scopes ?? [{}]);
+}
+
+// Internal helper that carries both position state and scope stack through recursion.
+// eslint-disable-next-line max-lines-per-function -- recursive descent parser needs nested functions
+function _parseExpr(
+  tokens: Array<string>,
+  input: string,
+  s: { pos: number },
+  sc: Binding[],
+): { value: number; type: string } {
+  function lookup(name: string): { value: number; type: string } | undefined {
+    for (let i = sc.length - 1; i >= 0; i--) {
+      if (name in sc[i]) return sc[i][name]!;
+    }
+    return undefined;
+  }
 
   function parseFactor(): { value: number; type: string } {
-    if (tokens[s.pos] === "(") {
-      // Parenthesized sub-expression — override precedence by recursing.
-      s.pos++; // consume '('
-      const result = parseExpr(tokens, input, s);
-      if (s.pos >= tokens.length || tokens[s.pos] !== ")") {
+    const tok = tokens[s.pos];
+
+    // Parenthesized or braced sub-expression.
+    if (tok === "(" || tok === "{") {
+      s.pos++; // consume '(' or '{'
+      let result: { value: number; type: string };
+
+      if (tok === "{") {
+        // Push a new scope for the block.
+        sc.push({});
+        result = parseBlockBody();
+        sc.pop();
+      } else {
+        result = _parseExpr(tokens, input, s, sc);
+      }
+
+      if (s.pos >= tokens.length || (tokens[s.pos] !== ")" && tokens[s.pos] !== "}")) {
         throw new Error(`Invalid Tuff value: ${input}`);
       }
-      s.pos++; // consume ')'
+      s.pos++; // consume ')' or '}'
       return result;
+    }
+
+    // Variable reference (exclude reserved keywords and type names).
+    if (/^[a-zA-Z_]\w*$/.test(tok) && tok !== "let" && !TUFF_RANGES[tok]) {
+      const binding = lookup(tok);
+      if (!binding) throw new Error(`Undefined variable: ${tok}`);
+      s.pos++;
+      return { value: binding.value, type: binding.type };
     }
 
     return parseLiteral();
@@ -69,7 +109,7 @@ function parseExpr(
   function parseTerm(): { value: number; type: string } {
     const left = parseFactor();
     while (s.pos < tokens.length && (tokens[s.pos] === "*" || tokens[s.pos] === "/")) {
-      const op = tokens[s.pos]; // save operator before consuming it
+      const op = tokens[s.pos]; // save operator before consuming it.
       s.pos++;
       const right = parseFactor();
       if (getBitWidth(right.type) > getBitWidth(left.type)) {
@@ -101,13 +141,75 @@ function parseExpr(
     return { value: effectiveValue, type: typeSuffix };
   }
 
-  // eslint-disable-next-line prefer-const -- mutated in place, not reassigned
-  let result = parseTerm();
-  while (s.pos < tokens.length && tokens[s.pos] !== ")") {
+  // Parse the body of a block: zero or more `let` declarations followed by one final expression.
+  function parseBlockBody(): { value: number; type: string } {
+    // Consume any leading let-declarations.
+    while (s.pos < tokens.length && tokens[s.pos] === "let") {
+      parseLetDeclaration();
+    }
+
+    const result = parseTerm();
+
+    while (s.pos < tokens.length && tokens[s.pos] !== "}") {
+      if (tokens[s.pos] === "let") {
+        parseLetDeclaration();
+        continue;
+      }
+
+      const op = tokens[s.pos]!;
+      s.pos++;
+      if (op !== "+" && op !== "-") {
+        throw new Error(`Invalid Tuff value: ${input}`);
+      }
+
+      const term = parseTerm();
+      const widestType =
+        getBitWidth(term.type) > getBitWidth(result.type) ? term.type : result.type;
+      result.value += op === "-" ? -term.value : term.value;
+      result.type = widestType;
+    }
+
+    return result;
+  }
+
+  // Parse a `let name : Type = expr ;` declaration.
+  function parseLetDeclaration(): void {
+    s.pos++; // consume 'let'
+    const name = tokens[s.pos]!;
+    if (!/^[a-zA-Z_]\w*$/.test(name)) throw new Error(`Invalid variable name: ${name}`);
+    s.pos++;
+
+    if (tokens[s.pos] !== ":") throw new Error(`Expected ':' after variable name`);
+    s.pos++;
+
+    const typeSuffix = tokens[s.pos]!;
+    if (!TUFF_RANGES[typeSuffix]) throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
+    s.pos++;
+
+    if (tokens[s.pos] !== "=") throw new Error(`Expected '=' after type`);
+    s.pos++;
+
+    const value = parseTerm();
+    sc[sc.length - 1][name] = { value: value.value, type: value.type };
+
+    if (s.pos < tokens.length && tokens[s.pos] === ";") {
+      s.pos++; // consume ';'
+    }
+  }
+
+  // Main expression loop — handles `let` declarations and additive operators.
+  const result = parseTerm();
+  while (s.pos < tokens.length && tokens[s.pos] !== ")" && tokens[s.pos] !== "}") {
+    if (tokens[s.pos] === "let") {
+      parseLetDeclaration();
+      continue;
+    }
+
     const op = tokens[s.pos]!;
     s.pos++;
-    if (op !== "+" && op !== "-")
+    if (op !== "+" && op !== "-") {
       throw new Error(`Invalid Tuff value: ${input}`);
+    }
 
     const term = parseTerm();
     const widestType =
@@ -120,10 +222,10 @@ function parseExpr(
 }
 
 function tokenize(input: string): Array<string> {
-const tokens = input.match(/(-?\d+[UI]\d+|[+\-*/()])/g);
-
-  if (!tokens || tokens.length === 0)
+  const tokens = input.match(/(-?\d+[UI]\d+|[+\-*/(){}=:;]|let|\w+)/g);
+  if (!tokens || tokens.length === 0) {
     throw new Error(`Invalid Tuff value: ${input}`);
+  }
   return tokens;
 }
 

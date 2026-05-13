@@ -4,9 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "lint": "tsc --noEmit && eslint . --ext .ts",
+    "lint": "tsc --noEmit && eslint . --fix --ext .ts",
     "lint:tsc:file": "tsc --noEmit",
-    "lint:eslint:file": "eslint --ext .ts",
+    "lint:eslint:file": "eslint --fix --ext .ts",
     "test": "bun test",
     "cpd": "pmd cpd index.ts index.test.ts --minimum-tokens 50 --language typescript --ignore-literals --ignore-identifiers",
     "agent": "npx tsx ../agent/index.ts"
