@@ -28,14 +28,20 @@ public class Main {
 	private static String compile(String input) throws IOException {
 		final var segments = new ArrayList<String>();
 		final var buffer = new StringBuilder();
+		var depth = 0;
 		for (var i = 0; i < input.length(); i++) {
 			final var c = input.charAt(i);
 			buffer.append(c);
-			if (c == ';') {
+			if (c == ';' && depth == 0) {
 				segments.add(buffer.toString());
 				buffer.setLength(0);
+			} else if (c == '{') {
+				depth++;
+			} else if (c == '}') {
+				depth--;
 			}
 		}
+		segments.add(buffer.toString());
 
 		final var collected = segments.stream().map(Main::compileRootSegment).collect(Collectors.joining());
 
