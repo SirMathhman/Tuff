@@ -54,8 +54,15 @@ describe("interpretTuff", () => {
     expect(interpretTuff("(1U8 + 2U8) * (3U8 + 4U8)")).toBe(21);
   });
 
-  test('"5U8 - (2U8 + 1U8)" returns 2', () => {
+ test('"5U8 - (2U8 + 1U8)" returns 2', () => {
     expect(interpretTuff("5U8 - (2U8 + 1U8)")).toBe(2);
   });
+
+  test('nested block with let declarations returns 100', () => {
+    expect(
+      interpretTuff("let x : U8 = { let y : U8 = 100U8; y }; x"),
+    ).toBe(100);
+  });
 });
+
 

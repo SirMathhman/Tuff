@@ -227,6 +227,10 @@ function _parseExpr(
   }
 
   // Main expression loop — handles `let` declarations and additive operators.
+  while (s.pos < tokens.length && tokens[s.pos] === "let") {
+    parseLetDeclaration();
+  }
+
   return parseAdditiveExpr([")", "}"]);
 }
 

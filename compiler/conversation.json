@@ -1000,5 +1000,260 @@
   {
     "role": "assistant",
     "content": "All green: **14/14 tests pass**, zero TypeScript errors, and PMD CPD reports no duplication (exit 0 with no output). \n\nThe fix extracted the duplicated additive-expression loop into a shared helper `parseAdditiveExpr(stopTokens)` that both `parseBlockBody` (stops on `}`) and `_parseExpr`'s main body (stops on `)` or `}`) now call."
+  },
+  {
+    "role": "user",
+    "content": "Add to index.test.ts: execute(\"let x : U8 = { let y : U8 = 100U8; y }; x\") => 100. Then implement."
+  },
+  {
+    "role": "assistant",
+    "content": "Let me check how the current parser handles this case:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":145,\"endLine\":200}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 260\n145: \n146:     parseTuffLiteral(rawValueStr.replace(/^-/, \"\"), typeSuffix);\n147: \n148:     let effectiveValue: number;\n149:     if (rawValueStr.startsWith(\"-\")) {\n150:       effectiveValue = -parseTuffLiteral(rawValueStr.slice(1), typeSuffix);\n151:     } else {\n152:       effectiveValue = parseTuffLiteral(rawValueStr, typeSuffix);\n153:     }\n154: \n155:     return { value: effectiveValue, type: typeSuffix };\n156:   }\n157: \n158:   // Shared loop for additive expressions with optional let declarations.\n159:   function parseAdditiveExpr(stopTokens: string[]): {\n160:     value: number;\n161:     type: string;\n162:   } {\n163:     const result = parseTerm();\n164: \n165:     while (s.pos < tokens.length && !stopTokens.includes(tokens[s.pos]!)) {\n166:       if (tokens[s.pos] === \"let\") {\n167:         parseLetDeclaration();\n168:         continue;\n169:       }\n170: \n171:       const op = tokens[s.pos]!;\n172:       s.pos++;\n173:       if (op !== \"+\" && op !== \"-\") {\n174:         throw new Error(`Invalid Tuff value: ${input}`);\n175:       }\n176: \n177:       const term = parseTerm();\n178:       const widestType =\n179:         getBitWidth(term.type) > getBitWidth(result.type)\n180:           ? term.type\n181:           : result.type;\n182:       result.value += op === \"-\" ? -term.value : term.value;\n183:       result.type = widestType;\n184:     }\n185: \n186:     return result;\n187:   }\n188: \n189:   // Parse the body of a block: zero or more `let` declarations followed by one final expression.\n190:   function parseBlockBody(): { value: number; type: string } {\n191:     // Consume any leading let-declarations.\n192:     while (s.pos < tokens.length && tokens[s.pos] === \"let\") {\n193:       parseLetDeclaration();\n194:     }\n195: \n196:     return parseAdditiveExpr([\"}\"]);\n197:   }\n198: \n199:   // Parse a `let name : Type = expr ;` declaration."
+  },
+  {
+    "role": "assistant",
+    "content": "Let me trace through what happens with `\"let x : U8 = { let y : U8 = 100U8; y }; x\"`:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun -e \\\"import { interpretTuff } from './compiler/index.ts'; console.log(interpretTuff('let x : U8 = { let y : U8 = 100U8; y }; x'));\\\"\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 1,\n      Std Out: ,\n      Std Err: 136 | \n137 |   function parseLiteral(): { value: number; type: string } {\n138 |     const token = tokens[s.pos]!;\n139 |     s.pos++;\n140 |     const match = token.match(/^(-?\\d+)([UI]\\d+)$/);\n141 |     if (!match) throw new Error(`Invalid Tuff value: ${input}`);\n                                ^\nerror: Invalid Tuff value: let x : U8 = { let y : U8 = 100U8; y }; x\n      at parseLiteral (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:141:27)\n      at parseTerm (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:118:18)\n      at parseAdditiveExpr (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:163:20)\n      at interpretTuff (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\index.ts:22:18)\n      at C:\\Users\\mathm\\Documents\\Projects\\Tuff\\[eval]:1:66\n      at loadAndEvaluateModule (2:1)\n\nBun v1.3.13 (Windows x64)\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Let me trace through the issue more carefully. The problem is that after consuming all top-level `let` declarations, there's still a trailing expression (`x`) that needs to be evaluated as the final result:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":158,\"endLine\":240}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 260\n158:   // Shared loop for additive expressions with optional let declarations.\n159:   function parseAdditiveExpr(stopTokens: string[]): {\n160:     value: number;\n161:     type: string;\n162:   } {\n163:     const result = parseTerm();\n164: \n165:     while (s.pos < tokens.length && !stopTokens.includes(tokens[s.pos]!)) {\n166:       if (tokens[s.pos] === \"let\") {\n167:         parseLetDeclaration();\n168:         continue;\n169:       }\n170: \n171:       const op = tokens[s.pos]!;\n172:       s.pos++;\n173:       if (op !== \"+\" && op !== \"-\") {\n174:         throw new Error(`Invalid Tuff value: ${input}`);\n175:       }\n176: \n177:       const term = parseTerm();\n178:       const widestType =\n179:         getBitWidth(term.type) > getBitWidth(result.type)\n180:           ? term.type\n181:           : result.type;\n182:       result.value += op === \"-\" ? -term.value : term.value;\n183:       result.type = widestType;\n184:     }\n185: \n186:     return result;\n187:   }\n188: \n189:   // Parse the body of a block: zero or more `let` declarations followed by one final expression.\n190:   function parseBlockBody(): { value: number; type: string } {\n191:     // Consume any leading let-declarations.\n192:     while (s.pos < tokens.length && tokens[s.pos] === \"let\") {\n193:       parseLetDeclaration();\n194:     }\n195: \n196:     return parseAdditiveExpr([\"}\"]);\n197:   }\n198: \n199:   // Parse a `let name : Type = expr ;` declaration.\n200:   function parseLetDeclaration(): void {\n201:     s.pos++; // consume 'let'\n202:     const name = tokens[s.pos]!;\n203:     if (!/^[a-zA-Z_]\\w*$/.test(name))\n204:       throw new Error(`Invalid variable name: ${name}`);\n205:     s.pos++;\n206: \n207:     if (tokens[s.pos] !== \":\")\n208:       throw new Error(`Expected ':' after variable name`);\n209:     s.pos++;\n210: \n211:     const typeSuffix = tokens[s.pos]!;\n212:     if (!TUFF_RANGES[typeSuffix])\n213:       throw new Error(`Unsupported Tuff type: ${typeSuffix}`);\n214:     s.pos++;\n215: \n216:     if (tokens[s.pos] !== \"=\") throw new Error(`Expected '=' after type`);\n217:     s.pos++;\n218: \n219:     const value = parseTerm();\n220:     const topScope = sc[sc.length - 1];\n221:     if (!topScope) throw new Error(\"Internal error: empty scope stack\");\n222:     topScope[name] = { value: value.value, type: value.type };\n223: \n224:     if (s.pos < tokens.length && tokens[s.pos] === \";\") {\n225:       s.pos++; // consume ';'\n226:     }\n227:   }\n228: \n229:   // Main expression loop — handles `let` declarations and additive operators.\n230:   return parseAdditiveExpr([\")\", \"}\"]);\n231: }\n232: \n233: function tokenize(input: string): Array<string> {\n234:   const tokens = input.match(/(-?\\d+[UI]\\d+|[+\\-*/(){}=:;]|let|\\w+)/g);\n235:   if (!tokens || tokens.length === 0) {\n236:     throw new Error(`Invalid Tuff value: ${input}`);\n237:   }\n238:   return tokens;\n239: }"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun -e \\\"const t = 'let x : U8 = { let y : U8 = 100U8; y }; x'.match(/(-?\\\\d+[UI]\\\\d+|[+\\\\-*/(){}=:;]|let|\\\\w+)/g); console.log(t);\\\"\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 255,\n      Std Out: ,\n      Std Err: '[+\\-*/' is not recognized as an internal or external command,\r\noperable program or batch file.\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"node -e \\\"const t = 'let x : U8 = { let y : U8 = 100U8; y }; x'.match(/(-?\\\\d+[UI]\\\\d+|[+\\\\-*/(){}=:;]|let|\\\\w+)/g); console.log(t);\\\"\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 255,\n      Std Out: ,\n      Std Err: '[+\\-*/' is not recognized as an internal or external command,\r\noperable program or batch file.\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Let me trace what happens with a simpler case first, then understand why nested blocks fail. The issue seems to be that after consuming all top-level `let` declarations and their trailing expressions, the parser doesn't know how to handle remaining tokens:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":158,\"endLine\":230}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 260\n158:   // Shared loop for additive expressions with optional let declarations.\n159:   function parseAdditiveExpr(stopTokens: string[]): {\n160:     value: number;\n161:     type: string;\n162:   } {\n163:     const result = parseTerm();\n164: \n165:     while (s.pos < tokens.length && !stopTokens.includes(tokens[s.pos]!)) {\n166:       if (tokens[s.pos] === \"let\") {\n167:         parseLetDeclaration();\n168:         continue;\n169:       }\n170: \n171:       const op = tokens[s.pos]!;\n172:       s.pos++;\n173:       if (op !== \"+\" && op !== \"-\") {\n174:         throw new Error(`Invalid Tuff value: ${input}`);\n175:       }\n176: \n177:       const term = parseTerm();\n178:       const widestType =\n179:         getBitWidth(term.type) > getBitWidth(result.type)\n180:           ? term.type\n181:           : result.type;\n182:       result.value += op === \"-\" ? -term.value : term.value;\n183:       result.type = widestType;\n184:     }\n185: \n186:     return result;\n187:   }\n188: \n189:   // Parse the body of a block: zero or more `let` declarations followed by one final expression.\n190:   function parseBlockBody(): { value: number; type: string } {\n191:     // Consume any leading let-declarations.\n192:     while (s.pos < tokens.length && tokens[s.pos] === \"let\") {\n193:       parseLetDeclaration();\n194:     }\n195: \n196:     return parseAdditiveExpr([\"}\"]);\n197:   }\n198: \n199:   // Parse a `let name : Type = expr ;` declaration.\n200:   function parseLetDeclaration(): void {\n201:     s.pos++; // consume 'let'\n202:     const name = tokens[s.pos]!;\n203:     if (!/^[a-zA-Z_]\\w*$/.test(name))\n204:       throw new Error(`Invalid variable name: ${name}`);\n205:     s.pos++;\n206: \n207:     if (tokens[s.pos] !== \":\")\n208:       throw new Error(`Expected ':' after variable name`);\n209:     s.pos++;\n210: \n211:     const typeSuffix = tokens[s.pos]!;\n212:     if (!TUFF_RANGES[typeSuffix])\n213:       throw new Error(`Unsupported Tuff type: ${typeSuffix}`);\n214:     s.pos++;\n215: \n216:     if (tokens[s.pos] !== \"=\") throw new Error(`Expected '=' after type`);\n217:     s.pos++;\n218: \n219:     const value = parseTerm();\n220:     const topScope = sc[sc.length - 1];\n221:     if (!topScope) throw new Error(\"Internal error: empty scope stack\");\n222:     topScope[name] = { value: value.value, type: value.type };\n223: \n224:     if (s.pos < tokens.length && tokens[s.pos] === \";\") {\n225:       s.pos++; // consume ';'\n226:     }\n227:   }\n228: \n229:   // Main expression loop — handles `let` declarations and additive operators."
+  },
+  {
+    "role": "assistant",
+    "content": "The issue is that when a top-level expression starts with `let`, it goes straight to `parseTerm()` → `parseFactor()`, which doesn't handle `\"let\"` and falls through to `parseLiteral()`. The fix: consume leading `let` declarations before calling `parseAdditiveExpr` at the top level, just like `parseBlockBody` does.\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.ts\",\"startLine\":229,\"endLine\":231,\"content\":\" // Main expression loop — handles `let` declarations and additive operators.\\n  while (s.pos < tokens.length && tokens[s.pos] === \\\"let\\\") {\\n    parseLetDeclaration();\\n  }\\n\\n  return parseAdditiveExpr([\\\")\\\", \\\"}\\\"]);\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test; bunx tsc --noEmit\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: bun test v1.3.13 (bf2e2cec)\n,\n      Std Err: \nindex.test.ts:\n(pass) interpretTuff > empty string returns 0\n(pass) interpretTuff > \"100U8\" returns 100 [15.00ms]\n(pass) interpretTuff > \"-100U8\" throws Error\n(pass) interpretTuff > \"256U8\" throws Error\n(pass) interpretTuff > \"-100U16\" throws Error\n(pass) interpretTuff > \"-100I8\" returns -100\n(pass) interpretTuff > \"1U8 + 255U8\" throws Error\n(pass) interpretTuff > \"1U8 + 255U16\" returns 256\n(pass) interpretTuff > \"2U8 * 3U8 - 4U8\" returns 2\n(pass) interpretTuff > \"2U8 + 3U8 * 4U8\" returns 14\n(pass) interpretTuff > \"(2U8 + 3U8) * 4U8\" returns 20\n(pass) interpretTuff > \"((1U8 + 2U8))\" returns 3 (nested parens)\n(pass) interpretTuff > \"(1U8 + 2U8) * (3U8 + 4U8)\" returns 21\n(pass) interpretTuff > \"5U8 - (2U8 + 1U8)\" returns 2\n\n 14 pass\n 0 fail\n 14 expect() calls\nRan 14 tests across 1 file. [25.00ms]\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me test the specific case:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun -e \\\"import { interpretTuff } from './compiler/index.ts'; console.log(interpretTuff('let x : U8 = 10U8; x'));\\\"\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: 10\n,\n      Std Err: "
+  },
+  {
+    "role": "assistant",
+    "content": "Good. Now let me test the nested block case:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun -e \\\"import { interpretTuff } from './compiler/index.ts'; console.log(interpretTuff('let x : U8 = { let y : U8 = 100U8; y }; x'));\\\"\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: 100\n,\n      Std Err: "
+  },
+  {
+    "role": "assistant",
+    "content": "Now let me add the test to `index.test.ts`:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":56,\"endLine\":62}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 62\n56: \n57:   test('\"5U8 - (2U8 + 1U8)\" returns 2', () => {\n58:     expect(interpretTuff(\"5U8 - (2U8 + 1U8)\")).toBe(2);\n59:   });\n60: });\n61: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"index.test.ts\",\"startLine\":57,\"endLine\":61,\"content\":\" test('\\\"5U8 - (2U8 + 1U8)\\\" returns 2', () => {\\n    expect(interpretTuff(\\\"5U8 - (2U8 + 1U8)\\\")).toBe(2);\\n  });\\n\\n  test('nested block with let declarations returns 100', () => {\\n    expect(\\n      interpretTuff(\\\"let x : U8 = { let y : U8 = 100U8; y }; x\\\"),\\n    ).toBe(100);\\n  });\\n});\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test; bunx tsc --noEmit; pmd cpd index.ts index.test.ts --minimum-tokens 50 --language typescript --ignore-literals --ignore-identifiers\",\"cwd\":\"C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: bun test v1.3.13 (bf2e2cec)\n,\n      Std Err: \nindex.test.ts:\n(pass) interpretTuff > empty string returns 0\n(pass) interpretTuff > \"100U8\" returns 100\n(pass) interpretTuff > \"-100U8\" throws Error\n(pass) interpretTuff > \"256U8\" throws Error\n(pass) interpretTuff > \"-100U16\" throws Error\n(pass) interpretTuff > \"-100I8\" returns -100\n(pass) interpretTuff > \"1U8 + 255U8\" throws Error\n(pass) interpretTuff > \"1U8 + 255U16\" returns 256\n(pass) interpretTuff > \"2U8 * 3U8 - 4U8\" returns 2\n(pass) interpretTuff > \"2U8 + 3U8 * 4U8\" returns 14\n(pass) interpretTuff > \"(2U8 + 3U8) * 4U8\" returns 20\n(pass) interpretTuff > \"((1U8 + 2U8))\" returns 3 (nested parens)\n(pass) interpretTuff > \"(1U8 + 2U8) * (3U8 + 4U8)\" returns 21\n(pass) interpretTuff > \"5U8 - (2U8 + 1U8)\" returns 2\n(pass) interpretTuff > nested block with let declarations returns 100\n\n 15 pass\n 0 fail\n 15 expect() calls\nRan 15 tests across 1 file. [27.00ms]\n"
+  },
+  {
+    "role": "assistant",
+    "content": null
   }
 ]
