@@ -46,7 +46,6 @@ function parseExpr(
   scopes?: Binding[],
 ): { value: number; type: string };
 
- 
 function parseExpr(
   tokens: Array<string>,
   input: string,
@@ -66,7 +65,8 @@ function _parseExpr(
 ): { value: number; type: string } {
   function lookup(name: string): { value: number; type: string } | undefined {
     for (let i = sc.length - 1; i >= 0; i--) {
-      if (name in sc[i]) return sc[i][name]!;
+      const scope = sc[i];
+      if (scope && name in scope) return scope[name]!;
     }
     return undefined;
   }
@@ -88,7 +88,10 @@ function _parseExpr(
         result = _parseExpr(tokens, input, s, sc);
       }
 
-      if (s.pos >= tokens.length || (tokens[s.pos] !== ")" && tokens[s.pos] !== "}")) {
+      if (
+        s.pos >= tokens.length ||
+        (tokens[s.pos] !== ")" && tokens[s.pos] !== "}")
+      ) {
         throw new Error(`Invalid Tuff value: ${input}`);
       }
       s.pos++; // consume ')' or '}'
@@ -96,7 +99,12 @@ function _parseExpr(
     }
 
     // Variable reference (exclude reserved keywords and type names).
-    if (/^[a-zA-Z_]\w*$/.test(tok) && tok !== "let" && !TUFF_RANGES[tok]) {
+    if (
+      tok != null &&
+      /^[a-zA-Z_]\w*$/.test(tok) &&
+      tok !== "let" &&
+      !TUFF_RANGES[tok]
+    ) {
       const binding = lookup(tok);
       if (!binding) throw new Error(`Undefined variable: ${tok}`);
       s.pos++;
@@ -108,14 +116,20 @@ function _parseExpr(
 
   function parseTerm(): { value: number; type: string } {
     const left = parseFactor();
-    while (s.pos < tokens.length && (tokens[s.pos] === "*" || tokens[s.pos] === "/")) {
+    while (
+      s.pos < tokens.length &&
+      (tokens[s.pos] === "*" || tokens[s.pos] === "/")
+    ) {
       const op = tokens[s.pos]; // save operator before consuming it.
       s.pos++;
       const right = parseFactor();
       if (getBitWidth(right.type) > getBitWidth(left.type)) {
         left.type = right.type;
       }
-      left.value = op === "*" ? left.value * right.value : Math.floor(left.value / right.value);
+      left.value =
+        op === "*"
+          ? left.value * right.value
+          : Math.floor(left.value / right.value);
     }
     return left;
   }
@@ -141,16 +155,14 @@ function _parseExpr(
     return { value: effectiveValue, type: typeSuffix };
   }
 
-  // Parse the body of a block: zero or more `let` declarations followed by one final expression.
-  function parseBlockBody(): { value: number; type: string } {
-    // Consume any leading let-declarations.
-    while (s.pos < tokens.length && tokens[s.pos] === "let") {
-      parseLetDeclaration();
-    }
-
+  // Shared loop for additive expressions with optional let declarations.
+  function parseAdditiveExpr(stopTokens: string[]): {
+    value: number;
+    type: string;
+  } {
     const result = parseTerm();
 
-    while (s.pos < tokens.length && tokens[s.pos] !== "}") {
+    while (s.pos < tokens.length && !stopTokens.includes(tokens[s.pos]!)) {
       if (tokens[s.pos] === "let") {
         parseLetDeclaration();
         continue;
@@ -164,7 +176,9 @@ function _parseExpr(
 
       const term = parseTerm();
       const widestType =
-        getBitWidth(term.type) > getBitWidth(result.type) ? term.type : result.type;
+        getBitWidth(term.type) > getBitWidth(result.type)
+          ? term.type
+          : result.type;
       result.value += op === "-" ? -term.value : term.value;
       result.type = widestType;
     }
@@ -172,25 +186,40 @@ function _parseExpr(
     return result;
   }
 
+  // Parse the body of a block: zero or more `let` declarations followed by one final expression.
+  function parseBlockBody(): { value: number; type: string } {
+    // Consume any leading let-declarations.
+    while (s.pos < tokens.length && tokens[s.pos] === "let") {
+      parseLetDeclaration();
+    }
+
+    return parseAdditiveExpr(["}"]);
+  }
+
   // Parse a `let name : Type = expr ;` declaration.
   function parseLetDeclaration(): void {
     s.pos++; // consume 'let'
     const name = tokens[s.pos]!;
-    if (!/^[a-zA-Z_]\w*$/.test(name)) throw new Error(`Invalid variable name: ${name}`);
+    if (!/^[a-zA-Z_]\w*$/.test(name))
+      throw new Error(`Invalid variable name: ${name}`);
     s.pos++;
 
-    if (tokens[s.pos] !== ":") throw new Error(`Expected ':' after variable name`);
+    if (tokens[s.pos] !== ":")
+      throw new Error(`Expected ':' after variable name`);
     s.pos++;
 
     const typeSuffix = tokens[s.pos]!;
-    if (!TUFF_RANGES[typeSuffix]) throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
+    if (!TUFF_RANGES[typeSuffix])
+      throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
     s.pos++;
 
     if (tokens[s.pos] !== "=") throw new Error(`Expected '=' after type`);
     s.pos++;
 
     const value = parseTerm();
-    sc[sc.length - 1][name] = { value: value.value, type: value.type };
+    const topScope = sc[sc.length - 1];
+    if (!topScope) throw new Error("Internal error: empty scope stack");
+    topScope[name] = { value: value.value, type: value.type };
 
     if (s.pos < tokens.length && tokens[s.pos] === ";") {
       s.pos++; // consume ';'
@@ -198,27 +227,7 @@ function _parseExpr(
   }
 
   // Main expression loop — handles `let` declarations and additive operators.
-  const result = parseTerm();
-  while (s.pos < tokens.length && tokens[s.pos] !== ")" && tokens[s.pos] !== "}") {
-    if (tokens[s.pos] === "let") {
-      parseLetDeclaration();
-      continue;
-    }
-
-    const op = tokens[s.pos]!;
-    s.pos++;
-    if (op !== "+" && op !== "-") {
-      throw new Error(`Invalid Tuff value: ${input}`);
-    }
-
-    const term = parseTerm();
-    const widestType =
-      getBitWidth(term.type) > getBitWidth(result.type) ? term.type : result.type;
-    result.value += op === "-" ? -term.value : term.value;
-    result.type = widestType;
-  }
-
-  return result;
+  return parseAdditiveExpr([")", "}"]);
 }
 
 function tokenize(input: string): Array<string> {
