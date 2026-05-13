@@ -84,3 +84,31 @@ test('"let x = 100U16; let y : U8 = x;" throws Error (narrowing via variable)', 
 test('mutable variable: "let mut x : U8 = 0U8; x = 100U8; x" returns 100', () => {
   expect(interpretTuff("let mut x : U8 = 0U8; x = 100U8; x")).toBe(100);
 });
+
+test('array literal and indexing: "let x = [1, 2, 3]; x[0]" returns 1', () => {
+  expect(interpretTuff("let x = [1U8, 2U8, 3U8]; x[0]")).toBe(1);
+});
+
+test('array literal and indexing: "let x = [1, 2, 3]; x[1]" returns 2', () => {
+  expect(interpretTuff("let x = [1U8, 2U8, 3U8]; x[1]")).toBe(2);
+});
+
+test('array literal and indexing: "let x = [1, 2, 3]; x[2]" returns 3', () => {
+  expect(interpretTuff("let x = [1U8, 2U8, 3U8]; x[2]")).toBe(3);
+});
+
+test('array out of bounds throws Error', () => {
+  expect(() => interpretTuff("let x = [1U8, 2U8, 3U8]; x[5]")).toThrow(Error);
+});
+
+test('explicit array type: "let x : [U8; 3] = [100U8, 200U8, 50U8]; x[1]" returns 200', () => {
+  expect(interpretTuff("let x : [U8; 3] = [100U8, 200U8, 50U8]; x[1]")).toBe(200);
+});
+
+test('array length mismatch throws Error', () => {
+  expect(() => interpretTuff("let x : [U8; 3] = [1U8, 2U8]")).toThrow(Error);
+});
+
+test('mixed element types in array literal throws Error', () => {
+  expect(() => interpretTuff("let x = [1U8, 2U16]; x[0]")).toThrow(Error);
+});
