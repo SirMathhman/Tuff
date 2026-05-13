@@ -133,9 +133,25 @@ public class Main {
 			final var name = stripped.substring(i + 1);
 			final var i1 = substring.lastIndexOf(" ");
 			if (i1 > 0) {
-				final var substring1 = substring.substring(0, i1);
+				final var modifiers = Arrays
+						.stream(substring.substring(0, i1).split(" "))
+						.map(String::strip)
+						.filter(slice -> !slice.isEmpty())
+						.collect(Collectors.toCollection(ArrayList::new));
+
+				modifiers.remove("private");
+				modifiers.remove("static");
+
+				final String type;
+				if (modifiers.contains("final")) {
+					type = "const";
+					modifiers.remove("final");
+				} else {
+					type = "let";
+				}
+
 				final var substring2 = substring.substring(i1 + 1);
-				return wrap(substring1 + " ") + "const " + name + " : " + compileType(substring2);
+				return type + " " + name + " : " + compileType(substring2);
 			}
 		}
 
