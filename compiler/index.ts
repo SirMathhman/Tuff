@@ -10,9 +10,12 @@ const TUFF_RANGES: Record<string, { min: bigint; max: bigint }> = {
     min: BigInt("-9223372036854775808"),
     max: BigInt("9223372036854775807"),
   },
+  Bool: { min: BigInt(0), max: BigInt(1) },
 };
 
 type ArrayBinding = {
+
+
   values: number[];
   elementType: string;
   length: number;
@@ -103,12 +106,14 @@ function _parseExpr(
     return result;
   }
 
-  function parseVariableRef(): { value: number; type: string } | null {
+ function parseVariableRef(): { value: number; type: string } | null {
     const tok = tokens[s.pos];
     if (
       tok == null ||
       !/^[a-zA-Z_]\w*$/.test(tok) ||
       tok === "let" ||
+      tok === "true" ||
+      tok === "false" ||
       TUFF_RANGES[tok]
     ) {
       return null;
@@ -126,13 +131,14 @@ function _parseExpr(
       );
     }
 
-    // Scalar variable reference — check no [index] follows.
+   // Scalar variable reference — check no [index] follows.
     const scalar = binding as { value: number; type: string };
     if (s.pos < tokens.length && tokens[s.pos] === "[") {
       throw new Error(`Cannot index non-array type: ${scalar.type}`);
     }
     return { value: scalar.value, type: scalar.type };
   }
+
 
   function parseFactor(): { value: number; type: string } {
     const tok = tokens[s.pos];
@@ -148,16 +154,23 @@ function _parseExpr(
       return handleIndexing(arr.value, arr.type);
     }
 
+    // Bool literals: true/false.
+    if (tok === "true" || tok === "false") {
+      s.pos++;
+      return { value: tok === "true" ? 1 : 0, type: "Bool" };
+    }
+
     // Variable reference.
     const varRef = parseVariableRef();
     if (varRef) return varRef;
     // Must be a literal.
     return parseLiteral();
   }
-  function handleIndexing(
+ function handleIndexing(
     rawValue: number | ArrayBinding,
     typeStr: string,
   ): { value: number; type: string } {
+
     while (s.pos < tokens.length && tokens[s.pos] === "[") {
       s.pos++; // consume '['
 
@@ -334,7 +347,12 @@ function _parseExpr(
     return parseAdditiveExpr(["}"]);
   }
 
-  function validateExplicitType(t: string, v: { value: number; type: string }) {
+ function validateExplicitType(t: string, v: { value: number; type: string }) {
+    // Bool cannot be narrowed from numeric types.
+    if (t === "Bool" && v.type !== "Bool") {
+      throw new Error(`Cannot narrow ${v.type} to Bool`);
+    }
+
     if (getBitWidth(t) < getBitWidth(v.type)) {
       throw new Error(`Cannot narrow ${v.type} to ${t}: potential data loss`);
     }
@@ -345,6 +363,7 @@ function _parseExpr(
       );
     }
   }
+
 
   function readVariableName(): string {
     const name = tokens[s.pos]!;
@@ -554,7 +573,7 @@ function _parseExpr(
 }
 
 function tokenize(input: string): Array<string> {
-  const tokens = input.match(/(-?\d+[UI]\d+|[+\-*/(){}=:;,|[\]]|let|mut|\w+)/g);
+  const tokens = input.match(/(-?\d+[UI]\d+|[+\-*/(){}=:;,|[\]]|let|mut|true|false|\w+)/g);
   if (!tokens || tokens.length === 0) {
     throw new Error(`Invalid Tuff value: ${input}`);
   }
@@ -562,19 +581,23 @@ function tokenize(input: string): Array<string> {
 }
 
 function getBitWidth(typeSuffix: string): number {
+  // Bool has bit width 1 so it promotes to any numeric type.
+  if (typeSuffix === "Bool") return 1;
   const num = parseInt(typeSuffix.slice(1));
   if (isNaN(num)) throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
   return num;
 }
 
 function parseTuffLiteral(valueStr: string, typeSuffix: string): number {
-  const range = TUFF_RANGES[typeSuffix];
-  if (!range) throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
+  // Bool is handled separately in the parser.
+  if (!TUFF_RANGES[typeSuffix]) {
+    throw new Error(`Unsupported Tuff type: ${typeSuffix}`);
+  }
 
   const bigValue = BigInt(valueStr);
-  if (bigValue < range.min || bigValue > range.max) {
+  if (bigValue < TUFF_RANGES[typeSuffix]!.min || bigValue > TUFF_RANGES[typeSuffix]!.max) {
     throw new Error(
-      `Value ${valueStr} out of range for ${typeSuffix}: ${range.min} to ${range.max}`,
+      `Value ${valueStr} out of range for ${typeSuffix}: ${TUFF_RANGES[typeSuffix]!.min} to ${TUFF_RANGES[typeSuffix]!.max}`,
     );
   }
 

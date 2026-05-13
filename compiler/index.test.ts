@@ -112,3 +112,29 @@ test('array length mismatch throws Error', () => {
 test('mixed element types in array literal throws Error', () => {
   expect(() => interpretTuff("let x = [1U8, 2U16]; x[0]")).toThrow(Error);
 });
+
+// Bool type tests
+test('"true" returns 1', () => {
+  expect(interpretTuff("true")).toBe(1);
+});
+
+test('"false" returns 0', () => {
+  expect(interpretTuff("false")).toBe(0);
+});
+
+test('let temp : Bool = true; temp returns 1', () => {
+  expect(interpretTuff("let temp : Bool = true; temp")).toBe(1);
+});
+
+test('let b : Bool = false; b returns 0', () => {
+  expect(interpretTuff("let b : Bool = false; b")).toBe(0);
+});
+
+test('"true + 2U8" returns 3 (Bool promotes to U8)', () => {
+  expect(interpretTuff("true + 2U8")).toBe(3);
+});
+
+test('bool narrowing: "let x : Bool = 1U8;" throws Error', () => {
+  expect(() => interpretTuff("let x : Bool = 1U8;")).toThrow(Error);
+});
+
