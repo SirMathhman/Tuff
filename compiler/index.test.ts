@@ -35,7 +35,7 @@ describe("interpretTuff", () => {
     expect(interpretTuff("1U8 + 255U16")).toBe(256);
   });
 
-  test('"2U8 + 3U8 - 4U8" returns 1', () => {
-    expect(interpretTuff("2U8 + 3U8 - 4U8")).toBe(1);
+  test('"2U8 * 3U8 - 4U8" returns 2', () => {
+    expect(interpretTuff("2U8 * 3U8 - 4U8")).toBe(2);
   });
 });
