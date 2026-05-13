@@ -144,6 +144,9 @@ public class Main {
 
 	private static String compileType(String input) {
 		final var stripped = input.strip();
+		if (stripped.endsWith("String")) {
+			return "string";
+		}
 		return wrap(stripped);
 	}
 
