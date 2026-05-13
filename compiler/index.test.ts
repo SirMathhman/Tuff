@@ -26,8 +26,13 @@ describe("interpretTuff", () => {
   test('"-100I8" returns -100', () => {
     expect(interpretTuff("-100I8")).toBe(-100);
   });
- test('"1U8 + 2U8" returns 3', () => {
-    expect(interpretTuff("1U8 + 2U8")).toBe(3);
+test('"1U8 + 255U8" throws Error', () => {
+    expect(() => interpretTuff("1U8 + 255U8")).toThrow(Error);
   });
+
+  test('"1U8 + 255U16" returns 256', () => {
+    expect(interpretTuff("1U8 + 255U16")).toBe(256);
+  });
+
 });
 

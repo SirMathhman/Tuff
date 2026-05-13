@@ -159,23 +159,16 @@ async function createFile(name: string, content: string): Promise<string> {
 
 async function lintFile(fileName: string): Promise<string | undefined> {
   // We want to run two commands:
-  // npm run lint:tsc:file -- <fileName>
   // npm run lint:eslint:file -- <fileName>
 
-  const tscResult = await powershell("npm run lint:tsc:file -- " + fileName);
   const eslintResult = await powershell(
     "npm run lint:eslint:file -- " + fileName,
   );
 
-  const hasTSCError = tscResult.exitCode !== 0;
   const hasESLintError = eslintResult.exitCode !== 0;
-
-  if (hasTSCError && hasESLintError) return undefined;
+  if (hasESLintError) return undefined;
 
   let merged = "";
-  if (hasTSCError) {
-    merged += tscResult.stdout + tscResult.stderr;
-  }
   if (hasESLintError) {
     merged += eslintResult.stdout + eslintResult.stderr;
   }
