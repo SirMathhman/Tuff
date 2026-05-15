@@ -1,4 +1,4 @@
-export function compileTuffToTS(tuffSourceCode: string): string {
+export function compile(tuffSourceCode: string): string {
   if (tuffSourceCode === "") {
     return "return 0;";
   }
