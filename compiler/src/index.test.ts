@@ -11,3 +11,7 @@ function executeTuff(tuffSourceCode: string, stdIn: string = ""): number {
   }
   return result;
 }
+
+test("executeTuff(empty string) == 0", () => {
+  expect(executeTuff("")).toBe(0);
+});
