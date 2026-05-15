@@ -23,3 +23,13 @@ test('executeTuff("read<U8>()", "100") == 100', () => {
 test('executeTuff("read<U16>()", "100") == 100', () => {
   expect(executeTuff("read<U16>()", "100")).toBe(100);
 });
+
+test('executeTuff("read<U16>()", "100 20") == 100', () => {
+  expect(executeTuff("read<U16>()", "100 20")).toBe(100);
+});
+
+test('executeTuff("read<U8>() + read<U8>()", "1 2") == 3', () => {
+  expect(executeTuff("read<U8>() + read<U8>()", "1 2")).toBe(3);
+});
+
+

@@ -3,29 +3,38 @@ export function compileTuffToTS(tuffSourceCode: string): string {
     return "return 0;";
   }
 
-  // Handle read<U8>(), read<U16>() etc. - parse stdin as unsigned integer
+  // Replace all read<U...>() calls with a helper that reads from stdin tokens
   const prefix = "read<U";
   const suffix = ">()";
-  if (tuffSourceCode.startsWith(prefix) && tuffSourceCode.endsWith(suffix)) {
-    const inner = tuffSourceCode.slice(
-      prefix.length,
-      tuffSourceCode.length - suffix.length,
-    );
-    // Check that inner contains only digits
-    let valid = true;
-    for (let i = 0; i < inner.length; i++) {
-      const ch = inner[i];
-      if (!ch || ch < "0" || ch > "9") {
-        valid = false;
-        break;
+  let result = "";
+  let i = 0;
+  while (i < tuffSourceCode.length) {
+    if (tuffSourceCode.slice(i, i + prefix.length) === prefix) {
+      // Check for valid read pattern: read<U followed by digits and >()
+      const restStart = i + prefix.length;
+      let j = restStart;
+      while (j < tuffSourceCode.length) {
+        const ch = tuffSourceCode[j];
+        if (!ch || ch < "0" || ch > "9") break;
+        j++;
+      }
+
+      if (j < tuffSourceCode.length - suffix.length + 1) {
+        const afterDigits = tuffSourceCode.slice(j, j + suffix.length);
+        if (afterDigits === suffix) {
+          result += "read()";
+          i = j + suffix.length;
+          continue;
+        }
       }
     }
-    if (valid && inner.length > 0) {
-      return "const value = parseInt(stdIn, 10);\nreturn value;";
-    }
+    result += tuffSourceCode[i];
+    i++;
   }
 
-  throw new Error(
-    "Throws error by default, invalid source code: " + tuffSourceCode,
+  return (
+    'const inputs = stdIn.split(" ").map(Number);\nlet idx = 0;\nfunction read() { return inputs[idx++]; }\nreturn ' +
+    result +
+    ";"
   );
 }
