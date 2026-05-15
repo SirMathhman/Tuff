@@ -1,4 +1,4 @@
-import { Project } from "ts-morph";
+import { Project, Node } from "ts-morph";
 import type { Rule } from "eslint";
 
 export default {
@@ -6,12 +6,12 @@ export default {
     type: "suggestion",
     docs: {
       description:
-        "Disallow functions that are only called once — inline them instead.",
+        "Disallow local variables that are only read once — inline the initializer at the use site instead.",
     },
     schema: [],
     messages: {
       shouldBeInlined:
-        "Function '{{name}}' is only called once. Inline it at the call site instead.",
+        "Variable '{{name}}' is only used once. Inline its initializer at the use site instead.",
     },
   },
   create(context) {
@@ -26,30 +26,33 @@ export default {
     });
 
     return {
-      FunctionDeclaration(node) {
-        if (!node.id) return;
-        const funcName = node.id.name;
+      VariableDeclarator(node) {
+        if (node.id.type !== "Identifier") return;
+        const varName = node.id.name;
 
         const declarations = sourceFile
-          .getFunctions()
-          .filter((f) => f.getName() === funcName);
+          .getVariableDeclarations()
+          .filter((d) => d.getName() === varName);
         if (declarations.length === 0) return;
         const declaration = declarations[0];
         if (!declaration) return;
 
-        // Skip exported functions — they may be called from outside this file.
-        if (declaration.isExported()) return;
+        // Skip exported variables — they may be read from outside this file.
+        const varStatement = declaration.getVariableStatement();
+        if (varStatement && varStatement.isExported()) return;
 
-        const refs = declaration
-          .getNameNodeOrThrow()
+        const nameNode = declaration.getNameNode();
+        if (!Node.isIdentifier(nameNode)) return;
+
+        const refs = nameNode
           .findReferencesAsNodes()
-          .filter((ref) => ref !== declaration.getNameNodeOrThrow());
+          .filter((ref) => ref !== nameNode);
 
         if (refs.length === 1) {
           context.report({
             node: node.id,
             messageId: "shouldBeInlined",
-            data: { name: funcName },
+            data: { name: varName },
           });
         }
       },

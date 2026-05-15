@@ -3,18 +3,25 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 import { defineConfig } from "eslint/config";
 import noSingleUseFunction from "./eslint-rules/no-single-use-function";
+import noSingleUseVariable from "./eslint-rules/no-single-use-variable";
 
 export default defineConfig([
   {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
     plugins: {
       js,
-      local: { rules: { "no-single-use-function": noSingleUseFunction } },
+      local: {
+        rules: {
+          "no-single-use-function": noSingleUseFunction,
+          "no-single-use-variable": noSingleUseVariable,
+        },
+      },
     },
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
     rules: {
       "local/no-single-use-function": "error",
+      "local/no-single-use-variable": "error",
       "no-restricted-syntax": [
         "error",
         {
