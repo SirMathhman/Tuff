@@ -32,4 +32,10 @@ test('executeTuff("read<U8>() + read<U8>()", "1 2") == 3', () => {
   expect(executeTuff("read<U8>() + read<U8>()", "1 2")).toBe(3);
 });
 
+test('executeTuff("read<U8>() + read<U8>() + read<U8>()", "1 2 3") == 6', () => {
+  expect(executeTuff("read<U8>() + read<U8>() + read<U8>()", "1 2 3")).toBe(6);
+});
 
+test('executeTuff("let x : U8 = read<U8>(); x", "2") == 2', () => {
+  expect(executeTuff("let x : U8 = read<U8>(); x", "2")).toBe(2);
+});
