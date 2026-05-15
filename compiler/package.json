@@ -8,7 +8,7 @@
     "lint:tsc:file": "tsc --noEmit",
     "lint:eslint:file": "eslint --fix --ext .ts",
     "test": "bun test",
-    "cpd": "pmd cpd index.ts index.test.ts --minimum-tokens 50 --language typescript --ignore-literals --ignore-identifiers",
+    "cpd": "pmd cpd --dir src --minimum-tokens 50 --language typescript --ignore-literals --ignore-identifiers",
     "agent": "npx tsx ../agent/index.ts"
   },
   "devDependencies": {
