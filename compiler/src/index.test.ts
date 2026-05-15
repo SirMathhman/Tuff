@@ -57,4 +57,10 @@ test('compile("let x : U8 = 0U16;") => Error', () => {
 test('compile("let x = 0U16; let y : U8 = x;") => Error', () => {
   expectErr("let x = 0U16; let y : U8 = x;");
 });
+test('executeTuff("let mut x = read<U8>(); x = read<U8>(); x", "100 20") == 20', () => {
+  expect(executeTuff("let mut x = read<U8>(); x = read<U8>(); x", "100 20")).toBe(20);
+});
 
+test('compile("let x = read<U8>(); x = read<U8>(); x") => Error', () => {
+  expectErr("let x = read<U8>(); x = read<U8>(); x");
+});

@@ -59,79 +59,105 @@ export function compile(tuffSourceCode: string): Result<string, string> {
     return new Ok("return 0;");
   }
 
-  // First pass: collect variable types and check for type mismatches.
+// First pass: collect variable types, mutability, and check for type mismatches.
   const rawParts = tuffSourceCode.split(";");
   const varTypes: Record<string, number> = {};
+  const mutableVars: Set<string> = new Set();
 
   for (let p = 0; p < rawParts.length - 1; p++) {
     const part = trim(rawParts[p] ?? "");
-    if (!part || !part.startsWith("let ")) continue;
+    if (!part) continue;
 
-    const afterLet = part.slice(4);
-    let pos = skipSpaces(afterLet, identEnd(afterLet, 0));
-    const varName = afterLet
-      .slice(0, pos - (afterLet[pos - 1] === " " ? 1 : 0))
-      .trim();
+    // Check if this is a `let` declaration.
+    if (part.startsWith("let ")) {
+      let afterLet: string;
+      const restAfterLet = part.slice(4);
+      const trimmedRest = restAfterLet.trim();
 
-    // Determine declared type width. If no explicit annotation, infer from literal.
-    let hasExplicitType = false;
-    let declaredTypeNum = 8;
-
-    if (pos < afterLet.length && afterLet[pos] === ":") {
-      hasExplicitType = true;
-      pos = skipSpaces(afterLet, pos + 1);
-      const typeStart = pos;
-      pos = identEnd(afterLet, pos);
-      let numStr = "";
-      const typeText = afterLet.slice(typeStart, pos);
-      for (let ci = 0; ci < typeText.length; ci++) {
-        const c = typeText[ci];
-        if (isDigit(c)) numStr += c;
-      }
-      declaredTypeNum = parseWidthOr8(numStr);
-    }
-
-    // Find the RHS and determine its value type.
-    let rhsValueNum = 8;
-    const eqIdx = afterLet.indexOf("=");
-    if (eqIdx >= 0) {
-      const rhs = trim(afterLet.slice(eqIdx + 1));
-
-      // Check if RHS is a variable reference.
-      const rhsIdentEnd = identEnd(rhs, 0);
-      const rhsVarName = rhs.slice(0, rhsIdentEnd).trim();
-      if (rhsVarName in varTypes) {
-        rhsValueNum = varTypes[rhsVarName]!;
+      // Handle `let mut x` vs `let x`.
+     if (trimmedRest.startsWith("mut ")) {
+        const afterMut = trimmedRest.slice(4);
+        const varNameFromMutEnd = identEnd(afterMut, 0);
+        mutableVars.add(afterMut.slice(0, varNameFromMutEnd));
+        afterLet = part.slice(8); // skip "let mut"
       } else {
-        // Determine the type width of a literal on the RHS.
-        let si = rhs.length;
-        while (si > 0 && isDigit(rhs[si - 1])) si--;
-        const uIdx = si - 1;
-        const uCh = rhs[uIdx];
-        if (uIdx >= 0 && uCh === "U" && uIdx > 0 && isDigit(rhs[uIdx - 1])) {
-          // Verify no `<` precedes the digits before U.
-          if (rhs.slice(0, uIdx - 1).indexOf("<") < 0) {
-            const suffixStr = rhs.slice(si);
-            if (suffixStr.length > 0) rhsValueNum = parseWidthOr8(suffixStr);
+        afterLet = restAfterLet;
+      }
+
+      let pos = skipSpaces(afterLet, identEnd(afterLet, 0));
+      const varName = afterLet
+        .slice(0, pos - (afterLet[pos - 1] === " " ? 1 : 0))
+        .trim();
+
+      // Determine declared type width. If no explicit annotation, infer from literal.
+      let hasExplicitType = false;
+      let declaredTypeNum = 8;
+
+      if (pos < afterLet.length && afterLet[pos] === ":") {
+        hasExplicitType = true;
+        pos = skipSpaces(afterLet, pos + 1);
+        const typeStart = pos;
+        pos = identEnd(afterLet, pos);
+        let numStr = "";
+        const typeText = afterLet.slice(typeStart, pos);
+        for (let ci = 0; ci < typeText.length; ci++) {
+          const c = typeText[ci];
+          if (isDigit(c)) numStr += c;
+        }
+        declaredTypeNum = parseWidthOr8(numStr);
+      }
+
+      // Find the RHS and determine its value type.
+      let rhsValueNum = 8;
+      const eqIdx = afterLet.indexOf("=");
+      if (eqIdx >= 0) {
+        const rhs = trim(afterLet.slice(eqIdx + 1));
+
+        // Check if RHS is a variable reference.
+        const rhsIdentEnd = identEnd(rhs, 0);
+        const rhsVarName = rhs.slice(0, rhsIdentEnd).trim();
+        if (rhsVarName in varTypes) {
+          rhsValueNum = varTypes[rhsVarName]!;
+        } else {
+          // Determine the type width of a literal on the RHS.
+          let si = rhs.length;
+          while (si > 0 && isDigit(rhs[si - 1])) si--;
+          const uIdx = si - 1;
+          const uCh = rhs[uIdx];
+          if (uIdx >= 0 && uCh === "U" && uIdx > 0 && isDigit(rhs[uIdx - 1])) {
+            // Verify no `<` precedes the digits before U.
+            if (rhs.slice(0, uIdx - 1).indexOf("<") < 0) {
+              const suffixStr = rhs.slice(si);
+              if (suffixStr.length > 0) rhsValueNum = parseWidthOr8(suffixStr);
+            }
           }
+        }
+
+        if (rhsValueNum > declaredTypeNum) {
+          return new Err(
+            "Value type U" +
+              rhsValueNum +
+              " does not fit in variable type U" +
+              declaredTypeNum,
+          );
         }
       }
 
-      if (rhsValueNum > declaredTypeNum) {
-        return new Err(
-          "Value type U" +
-            rhsValueNum +
-            " does not fit in variable type U" +
-            declaredTypeNum,
-        );
+      // Store the variable's effective type.
+      varTypes[varName] = hasExplicitType ? declaredTypeNum : rhsValueNum;
+    } else {
+      // Check for assignment to a non-mutable variable: `x = ...`
+      const eqIdx = part.indexOf("=");
+      if (eqIdx > 0) {
+        const lhsVarName = trim(part.slice(0, eqIdx));
+        if (lhsVarName in varTypes && !mutableVars.has(lhsVarName)) {
+          return new Err("Cannot assign to immutable variable: " + lhsVarName);
+        }
       }
     }
-
-    // Store the variable's effective type.
-    varTypes[varName] = hasExplicitType ? declaredTypeNum : rhsValueNum;
   }
 
-  // Transform `read<U8>()` -> `read()` and strip type annotations like `: U8`.
+
   const prefix = "read<U";
   const suffix = ">()";
   let transformed = "";
