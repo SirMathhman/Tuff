@@ -39,3 +39,13 @@ test('executeTuff("read<U8>() + read<U8>() + read<U8>()", "1 2 3") == 6', () => 
 test('executeTuff("let x : U8 = read<U8>(); x", "2") == 2', () => {
   expect(executeTuff("let x : U8 = read<U8>(); x", "2")).toBe(2);
 });
+
+test('executeTuff("let x : U8 = read<U8>(); x + x", "2") == 4', () => {
+  expect(executeTuff("let x : U8 = read<U8>(); x + x", "2")).toBe(4);
+});
+
+test('executeTuff("let x = read<U8>(); x + x", "2") == 4', () => {});
+
+test('executeTuff("let x = 0; let x = 0;") => Error', () => {
+  expect(() => executeTuff("let x = 0; let x = 0;", "")).toThrow();
+});
