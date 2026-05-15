@@ -4,6 +4,7 @@ import tseslint from "typescript-eslint";
 import { defineConfig } from "eslint/config";
 import noSingleUseFunction from "./eslint-rules/no-single-use-function";
 import noSingleUseVariable from "./eslint-rules/no-single-use-variable";
+import noDuplicateExpression from "./eslint-rules/no-duplicate-expression";
 
 export default defineConfig([
   {
@@ -14,6 +15,7 @@ export default defineConfig([
         rules: {
           "no-single-use-function": noSingleUseFunction,
           "no-single-use-variable": noSingleUseVariable,
+          "no-duplicate-expression": noDuplicateExpression,
         },
       },
     },
@@ -22,6 +24,7 @@ export default defineConfig([
     rules: {
       "local/no-single-use-function": "error",
       "local/no-single-use-variable": "error",
+      "local/no-duplicate-expression": "error",
       "no-restricted-syntax": [
         "error",
         {
