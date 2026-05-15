@@ -1,9 +1,11 @@
 import { test, expect } from "bun:test";
-import { compile } from ".";
+import { compile, Ok } from ".";
 import * as ts from "typescript";
 
 function executeTuff(tuffSourceCode: string, stdIn: string = ""): number {
-  const compiledTSCode = compile(tuffSourceCode);
+  const result = compile(tuffSourceCode);
+  if (!(result instanceof Ok)) return -1;
+  const compiledTSCode = result.value;
   const compiledJSCode = ts.transpile(compiledTSCode);
   return new Function("stdIn", compiledJSCode)(stdIn) as number;
 }
@@ -41,5 +43,6 @@ test('executeTuff("let x : U8 = read<U8>(); x + x", "2") == 4', () => {
 });
 
 test('compile("let x = 0; let x = 0;") => Error', () => {
-  expect(() => compile("let x = 0; let x = 0;")).toThrow();
+  const result = compile("let x = 0; let x = 0;");
+  expect(result instanceof Ok).toBe(false);
 });

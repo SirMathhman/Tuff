@@ -1,6 +1,12 @@
-export function compile(tuffSourceCode: string): string {
+import type { Result } from "./result";
+import { Ok, Err } from "./result";
+
+export { Ok };
+
+
+export function compile(tuffSourceCode: string): Result<string, string> {
   if (tuffSourceCode === "") {
-    return "return 0;";
+    return new Ok("return 0;");
   }
 
   const transformed = transformSource(tuffSourceCode);
@@ -12,24 +18,28 @@ export function compile(tuffSourceCode: string): string {
     if (!part) continue;
     const stmt = trim(part);
     if (stmt !== "") {
-      checkDuplicateLet(stmt, declaredVars);
+      const dupErr = checkDuplicateLet(stmt, declaredVars);
+      if (dupErr !== null) return new Err(dupErr);
       body += stmt + ";\n";
     }
   }
   const lastPart = parts[parts.length - 1] ?? "";
   const lastExpr = trim(lastPart);
 
-  return (
+  return new Ok(
     'const inputs = stdIn.split(" ").map(Number);\nlet idx = 0;\nfunction read() { return inputs[idx++]; }\n' +
     body +
     "return " +
     lastExpr +
-    ";"
+    ";",
   );
 }
 
-function checkDuplicateLet(stmt: string, declaredVars: string[]): void {
-  if (!stmt.startsWith("let ")) return;
+function checkDuplicateLet(
+  stmt: string,
+  declaredVars: string[],
+): string | null {
+  if (!stmt.startsWith("let ")) return null;
   const afterLet = stmt.slice(4);
   let nameEnd = 0;
   while (nameEnd < afterLet.length && isAlphaNumeric(afterLet[nameEnd])) {
@@ -38,10 +48,11 @@ function checkDuplicateLet(stmt: string, declaredVars: string[]): void {
   const varName = afterLet.slice(0, nameEnd);
   for (let i = 0; i < declaredVars.length; i++) {
     if (declaredVars[i] === varName) {
-      throw new Error("Duplicate variable declaration: " + varName);
+      return "Duplicate variable declaration: " + varName;
     }
   }
   declaredVars.push(varName);
+  return null;
 }
 
 function transformSource(src: string): string {
