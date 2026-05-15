@@ -21,17 +21,17 @@ function skipSpaces(str: string, i: number): number {
 // Advances `pos` past all alphanumeric characters in `s`, returning the new position.
 function identEnd(s: string, pos: number): number {
   while (pos < s.length) {
-    const ch = s[pos];
-    if (!ch) break;
-    if (ch >= "a" && ch <= "z") {
+    const cur = s[pos];
+    if (!cur) break;
+    if (cur >= "a" && cur <= "z") {
       pos++;
       continue;
     }
-    if (ch >= "A" && ch <= "Z") {
+    if (cur >= "A" && cur <= "Z") {
       pos++;
       continue;
     }
-    if (isDigit(ch)) {
+    if (isDigit(cur)) {
       pos++;
       continue;
     }
@@ -163,7 +163,7 @@ export function compile(tuffSourceCode: string): Result<string, string> {
   const srcLen = tuffSourceCode.length;
 
   while (ti < srcLen) {
-    const ch = tuffSourceCode[ti];
+    let ch = tuffSourceCode[ti];
 
     // Handle `read<U8>()` -> `read()`.
     if (ch === "r") {
@@ -186,27 +186,91 @@ export function compile(tuffSourceCode: string): Result<string, string> {
       continue;
     }
 
-    // Handle block expressions `{ ... }` -> just the content.
+    // Handle block expressions `{ ... }` -> IIFE with inner content.
     if (ch === "{") {
       let depth = 1;
       const innerStart = ti + 1;
       ti++;
       while (ti < srcLen && depth > 0) {
-        if (tuffSourceCode[ti] === "{") depth++;
-        else if (tuffSourceCode[ti] === "}") depth--;
+        ch = tuffSourceCode.charAt(ti);
+        if (ch === "{") depth++;
+        else if (ch === "}") depth--;
         ti++;
       }
-      transformed += tuffSourceCode.slice(innerStart, ti - 1).trim();
+      const innerContent = tuffSourceCode.slice(innerStart, ti - 1).trim();
+
+      // Recursively transform the inner content.
+      let transformedInner = "";
+      let ii = 0;
+      while (ii < innerContent.length) {
+        const ich = innerContent[ii];
+
+        if (ich === "r") {
+          const prefixEnd2 = ii + prefix.length;
+          if (innerContent.slice(ii, prefixEnd2) === prefix) {
+            let tj2 = prefixEnd2;
+            while (tj2 < innerContent.length && isDigit(innerContent[tj2]))
+              tj2++;
+            const suffixEnd2 = tj2 + suffix.length;
+            if (innerContent.slice(tj2, suffixEnd2) === suffix) {
+              transformedInner += "read()";
+              ii = suffixEnd2;
+              continue;
+            }
+          }
+        }
+
+        if (ich === ":" && innerContent[ii + 1] === " ") {
+          ii = identEnd(innerContent, ii + 2);
+          continue;
+        }
+
+        if (isDigit(ich)) {
+          let numEnd2 = ii;
+          let digitCharAtNumEnd: string | undefined;
+          do {
+            numEnd2++;
+            digitCharAtNumEnd = innerContent[numEnd2];
+          } while (numEnd2 < innerContent.length && isDigit(digitCharAtNumEnd));
+          transformedInner += innerContent.slice(ii, numEnd2);
+          if (digitCharAtNumEnd === "U") {
+            ii = identEnd(innerContent, numEnd2 + 1);
+          } else {
+            ii = numEnd2;
+          }
+          continue;
+        }
+
+        transformedInner += ich;
+        ii++;
+      }
+
+      // Split inner content into statements and build an IIFE.
+      const innerParts = transformedInner.split(";");
+      let iifeBody = "";
+      const partCount = innerParts.length - 1;
+      for (let ip = 0; ip < partCount; ip++) {
+        const stmt2 = trim(innerParts[ip] ?? "");
+        if (stmt2 === "") continue;
+        iifeBody += stmt2 + ";\n";
+      }
+      const lastInnerExpr = trim(innerParts[partCount] ?? "");
+
+      transformed +=
+        "(function() {\n" + iifeBody + "return " + lastInnerExpr + ";})()";
       continue;
     }
 
-    // Handle numeric literals with U suffix: `100U8` -> `100`.
     if (isDigit(ch)) {
-      let numEnd = ti + 1;
-      while (numEnd < srcLen && isDigit(tuffSourceCode[numEnd])) numEnd++;
+      let numEnd = ti;
+      let charAtNumEnd: string | undefined;
+      do {
+        numEnd++;
+        charAtNumEnd = tuffSourceCode[numEnd];
+      } while (numEnd < srcLen && isDigit(charAtNumEnd));
       transformed += tuffSourceCode.slice(ti, numEnd);
       // Skip the U suffix and any following digits.
-      if (tuffSourceCode[numEnd] === "U") {
+      if (charAtNumEnd === "U") {
         ti = identEnd(tuffSourceCode, numEnd + 1);
       } else {
         ti = numEnd;

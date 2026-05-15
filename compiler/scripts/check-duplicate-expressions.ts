@@ -9,6 +9,8 @@
  * Exit code 1 if any duplicates are found.
  */
 
+/* eslint-disable local/no-single-use-function, local/no-single-use-variable */
+
 import { Linter } from "eslint";
 import * as ts from "typescript";
 import { readFileSync, readdirSync } from "fs";
@@ -67,31 +69,55 @@ function findDuplicatesInFile(
         rules: {
           collect: {
             create(context) {
-              function record(
-                node: Parameters<typeof context.report>[0] extends {
-                  node: infer N;
-                }
-                  ? N
-                  : never,
-              ): void {
+              function record(node: Record<string, unknown>): void {
                 const trivial =
                   node.type === "Identifier" ||
                   node.type === "Literal" ||
                   node.type === "ThisExpression" ||
                   node.type === "Super";
                 if (trivial) return;
-                if (context.sourceCode.getTokens(node).length < MIN_TOKENS)
+
+                const sc = context.sourceCode as unknown as Record<
+                  string,
+                  unknown
+                >;
+
+                // Extract and bind getTokens so `this` is correct at runtime.
+                const rawGetTokens =
+                  typeof sc.getTokens === "function" ? sc.getTokens : null;
+                const boundGetTokens = rawGetTokens?.bind(sc) as
+                  | ((n: unknown) => unknown[])
+                  | undefined;
+                const tokens = boundGetTokens?.(node);
+                if (
+                  !tokens ||
+                  (Array.isArray(tokens) && tokens.length < MIN_TOKENS)
+                )
                   return;
-                const raw = context.sourceCode.getText(node);
+
+                // Extract and bind getText so `this` is correct at runtime.
+                const rawGetText =
+                  typeof sc.getText === "function" ? sc.getText : null;
+                const boundGetText = rawGetText?.bind(sc) as
+                  | ((n: unknown) => string)
+                  | undefined;
+                const raw = (boundGetText ?? (() => ""))(node);
+
                 const key = normalize(raw);
                 const loc = node.loc;
                 if (!loc) return;
+                const typedLoc = loc as {
+                  start: { line: number; column: number };
+                };
+                const firstLine = (raw.split("\n")[0] ?? "").slice(0, 80);
+
                 const occ: Occurrence = {
                   file: relPath,
-                  line: loc.start.line,
-                  col: loc.start.column + 1,
-                  text: raw.split("\n")[0].slice(0, 80),
+                  line: typedLoc.start.line,
+                  col: (typedLoc.start.column ?? 0) + 1,
+                  text: firstLine,
                 };
+
                 const bucket = occurrencesByKey.get(key);
                 if (bucket === undefined) {
                   occurrencesByKey.set(key, [occ]);
@@ -99,6 +125,7 @@ function findDuplicatesInFile(
                   bucket.push(occ);
                 }
               }
+
               return {
                 BinaryExpression: record,
                 LogicalExpression: record,
@@ -170,13 +197,19 @@ if (groups.length === 0) {
 }
 
 console.error(
-  `Found ${groups.length} duplicate expression${groups.length === 1 ? "" : "s"}:\n`,
+  "Found " +
+    groups.length +
+    " duplicate expression" +
+    (groups.length === 1 ? "" : "s") +
+    ":\n",
 );
 
 for (const group of groups) {
-  console.error(`  Duplicated expression: ${group.key.slice(0, 72)}`);
+  console.error("  Duplicated expression: " + group.key.slice(0, 72));
   for (const occ of group.occurrences) {
-    console.error(`    ${occ.file}:${occ.line}:${occ.col}  ${occ.text}`);
+    console.error(
+      "    " + occ.file + ":" + occ.line + ":" + occ.col + "  " + occ.text,
+    );
   }
   console.error("");
 }

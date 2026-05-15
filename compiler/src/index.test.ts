@@ -69,3 +69,8 @@ test('executeTuff("let x = { 100U8 }; x", "") == 100', () => {
   expect(executeTuff("let x = { 100U8 }; x", "")).toBe(100);
 });
 
+test('executeTuff("let x = { let y : U8 = 100U8; y }; x", "") == 100', () => {
+  expect(executeTuff("let x = { let y : U8 = 100U8; y }; x", "")).toBe(100);
+});
+
+
