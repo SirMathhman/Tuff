@@ -59,7 +59,7 @@ export function compile(tuffSourceCode: string): Result<string, string> {
     return new Ok("return 0;");
   }
 
-// First pass: collect variable types, mutability, and check for type mismatches.
+  // First pass: collect variable types, mutability, and check for type mismatches.
   const rawParts = tuffSourceCode.split(";");
   const varTypes: Record<string, number> = {};
   const mutableVars: Set<string> = new Set();
@@ -75,7 +75,7 @@ export function compile(tuffSourceCode: string): Result<string, string> {
       const trimmedRest = restAfterLet.trim();
 
       // Handle `let mut x` vs `let x`.
-     if (trimmedRest.startsWith("mut ")) {
+      if (trimmedRest.startsWith("mut ")) {
         const afterMut = trimmedRest.slice(4);
         const varNameFromMutEnd = identEnd(afterMut, 0);
         mutableVars.add(afterMut.slice(0, varNameFromMutEnd));
@@ -156,30 +156,64 @@ export function compile(tuffSourceCode: string): Result<string, string> {
       }
     }
   }
-
-
   const prefix = "read<U";
   const suffix = ">()";
   let transformed = "";
   let ti = 0;
   const srcLen = tuffSourceCode.length;
+
   while (ti < srcLen) {
-    const prefixEnd = ti + prefix.length;
-    if (tuffSourceCode.slice(ti, prefixEnd) === prefix) {
-      let tj = prefixEnd;
-      while (tj < srcLen && isDigit(tuffSourceCode[tj])) tj++;
-      const suffixEnd = tj + suffix.length;
-      if (tuffSourceCode.slice(tj, suffixEnd) === suffix) {
-        transformed += "read()";
-        ti = suffixEnd;
-        continue;
+    const ch = tuffSourceCode[ti];
+
+    // Handle `read<U8>()` -> `read()`.
+    if (ch === "r") {
+      const prefixEnd = ti + prefix.length;
+      if (tuffSourceCode.slice(ti, prefixEnd) === prefix) {
+        let tj = prefixEnd;
+        while (tj < srcLen && isDigit(tuffSourceCode[tj])) tj++;
+        const suffixEnd = tj + suffix.length;
+        if (tuffSourceCode.slice(tj, suffixEnd) === suffix) {
+          transformed += "read()";
+          ti = suffixEnd;
+          continue;
+        }
       }
     }
-    const ch = tuffSourceCode[ti];
+
+    // Handle type annotations `: U8` -> strip them.
     if (ch === ":" && tuffSourceCode[ti + 1] === " ") {
       ti = identEnd(tuffSourceCode, ti + 2);
       continue;
     }
+
+    // Handle block expressions `{ ... }` -> just the content.
+    if (ch === "{") {
+      let depth = 1;
+      const innerStart = ti + 1;
+      ti++;
+      while (ti < srcLen && depth > 0) {
+        if (tuffSourceCode[ti] === "{") depth++;
+        else if (tuffSourceCode[ti] === "}") depth--;
+        ti++;
+      }
+      transformed += tuffSourceCode.slice(innerStart, ti - 1).trim();
+      continue;
+    }
+
+    // Handle numeric literals with U suffix: `100U8` -> `100`.
+    if (isDigit(ch)) {
+      let numEnd = ti + 1;
+      while (numEnd < srcLen && isDigit(tuffSourceCode[numEnd])) numEnd++;
+      transformed += tuffSourceCode.slice(ti, numEnd);
+      // Skip the U suffix and any following digits.
+      if (tuffSourceCode[numEnd] === "U") {
+        ti = identEnd(tuffSourceCode, numEnd + 1);
+      } else {
+        ti = numEnd;
+      }
+      continue;
+    }
+
     transformed += ch;
     ti++;
   }

@@ -64,3 +64,8 @@ test('executeTuff("let mut x = read<U8>(); x = read<U8>(); x", "100 20") == 20',
 test('compile("let x = read<U8>(); x = read<U8>(); x") => Error', () => {
   expectErr("let x = read<U8>(); x = read<U8>(); x");
 });
+
+test('executeTuff("let x = { 100U8 }; x", "") == 100', () => {
+  expect(executeTuff("let x = { 100U8 }; x", "")).toBe(100);
+});
+
