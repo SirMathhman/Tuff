@@ -20,4 +20,6 @@ test('executeTuff("read<U8>()", "100") == 100', () => {
   expect(executeTuff("read<U8>()", "100")).toBe(100);
 });
 
-
+test('executeTuff("read<U16>()", "100") == 100', () => {
+  expect(executeTuff("read<U16>()", "100")).toBe(100);
+});

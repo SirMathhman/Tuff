@@ -22,15 +22,18 @@ export default defineConfig([
         "error",
         {
           selector: "Literal[regex]",
-          message: "Regex literals are not allowed",
+          message:
+            "Regex literals are not allowed because compilers should not use regexes.",
         },
         {
           selector: "NewExpression[callee.name='RegExp']",
-          message: "new RegExp() is not allowed",
+          message:
+            "new RegExp() is not allowed because compilers should not use regexes.",
         },
         {
           selector: "CallExpression[callee.name='RegExp']",
-          message: "RegExp() is not allowed",
+          message:
+            "RegExp() is not allowed because compilers should not use regexes.",
         },
         {
           selector: "TemplateLiteral",
