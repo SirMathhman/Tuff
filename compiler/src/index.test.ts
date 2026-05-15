@@ -42,14 +42,14 @@ test('executeTuff("let x : U8 = read<U8>(); x + x", "2") == 4', () => {
   expect(executeTuff("let x : U8 = read<U8>(); x + x", "2")).toBe(4);
 });
 
+function expectErr(src: string): void {
+  expect(compile(src) instanceof Ok).toBe(false);
+}
+
 test('compile("let x = 0; let x = 0;") => Error', () => {
-  const result = compile("let x = 0; let x = 0;");
-  expect(result instanceof Ok).toBe(false);
+  expectErr("let x = 0; let x = 0;");
 });
 
 test('compile("let x : U8 = 0U16;") => Error', () => {
-  const result = compile("let x : U8 = 0U16;");
-  expect(result instanceof Ok).toBe(false);
+  expectErr("let x : U8 = 0U16;");
 });
-
-

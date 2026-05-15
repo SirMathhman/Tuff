@@ -3,146 +3,164 @@ import { Ok, Err } from "./result";
 
 export { Ok };
 
+function isDigit(ch: string | undefined): boolean {
+  if (!ch) return false;
+  return ch >= "0" && ch <= "9";
+}
+
+function isSpace(ch: string | undefined): boolean {
+  return ch === " " || ch === "\t";
+}
+
+// Advances `i` past all space characters in `str`, returning the new index.
+function skipSpaces(str: string, i: number): number {
+  while (i < str.length && str[i] === " ") i++;
+  return i;
+}
+
+// Advances `pos` past all alphanumeric characters in `s`, returning the new position.
+function identEnd(s: string, pos: number): number {
+  while (pos < s.length) {
+    const ch = s[pos];
+    if (!ch) break;
+    if (ch >= "a" && ch <= "z") {
+      pos++;
+      continue;
+    }
+    if (ch >= "A" && ch <= "Z") {
+      pos++;
+      continue;
+    }
+    if (isDigit(ch)) {
+      pos++;
+      continue;
+    }
+    break;
+  }
+  return pos;
+}
+
+function trim(s: string): string {
+  let start = 0;
+  while (start < s.length && isSpace(s[start])) start++;
+  let end = s.length;
+  while (end > start && isSpace(s[end - 1])) end--;
+  return s.slice(start, end);
+}
+
+// Returns the integer parsed from `s`, or 8 if the parse fails.
+function parseWidthOr8(s: string): number {
+  const n = parseInt(s, 10);
+  return isNaN(n) ? 8 : n;
+}
+
 export function compile(tuffSourceCode: string): Result<string, string> {
   if (tuffSourceCode === "") {
     return new Ok("return 0;");
   }
 
-  // Check for type mismatches before transforming source
+  // Check for type mismatches: `let x : U8 = 0U16` etc.
   const rawParts = tuffSourceCode.split(";");
   for (let p = 0; p < rawParts.length - 1; p++) {
-    const rawPart = rawParts[p] ?? "";
-    const part = trim(rawPart);
-    if (!part) continue;
+    const part = trim(rawParts[p] ?? "");
+    if (!part || !part.startsWith("let ")) continue;
 
-    // Inline: checkTypeMismatch
-    if (part.startsWith("let ")) {
-      const afterLet = part.slice(4);
-      let nameEnd = 0;
-      while (nameEnd < afterLet.length && isAlphaNumeric(afterLet[nameEnd])) {
-        nameEnd++;
-      }
-      while (nameEnd < afterLet.length && afterLet[nameEnd] === " ") {
-        nameEnd++;
-      }
-      if (afterLet[nameEnd] === ":") {
-        let skip = nameEnd + 1;
-        while (skip < afterLet.length && afterLet[skip] === " ") {
-          skip++;
-        }
-        const typeStart = skip;
-        while (skip < afterLet.length && isAlphaNumeric(afterLet[skip])) {
-          skip++;
-        }
-        // Inline: extractNumberFromText
-        const typeText = afterLet.slice(typeStart, skip);
-        let numStr = "";
-        for (let ci = 0; ci < typeText.length; ci++) {
-          if (isDigit(typeText[ci])) numStr += typeText[ci];
-        }
-        const parsedTypeNum = parseInt(numStr, 10);
-        const declaredTypeNum = isNaN(parsedTypeNum) ? 8 : parsedTypeNum;
+    const afterLet = part.slice(4);
+    let pos = skipSpaces(afterLet, identEnd(afterLet, 0));
+    if (afterLet[pos] !== ":") continue;
 
-        let eqIdx = skip;
-        while (eqIdx < afterLet.length && afterLet[eqIdx] !== "=") {
-          eqIdx++;
-        }
-        if (eqIdx < afterLet.length) {
-          const rhs = trim(afterLet.slice(eqIdx + 1));
-          // Inline: extractLiteralSuffix
-          let si = rhs.length - 1;
-          while (si >= 0 && isDigit(rhs[si])) {
-            si--;
-          }
-          let literalTypeNum = 8;
-          if (si >= 0 && rhs[si] === "U" && si > 0 && isDigit(rhs[si - 1])) {
-            let k = si - 2;
-            while (k >= 0 && isDigit(rhs[k])) {
-              k--;
-            }
-            if (!(k >= 0 && rhs[k] === "<")) {
-              let suffixStr = "";
-              let sj = si + 1;
-              while (sj < rhs.length && isDigit(rhs[sj])) {
-                suffixStr += rhs[sj];
-                sj++;
-              }
-              if (suffixStr.length > 0) {
-                const parsedSuffix = parseInt(suffixStr, 10);
-                literalTypeNum = isNaN(parsedSuffix) ? 8 : parsedSuffix;
-              }
-            }
-          }
+    pos = skipSpaces(afterLet, pos + 1);
+    const typeStart = pos;
+    pos = identEnd(afterLet, pos);
 
-          if (literalTypeNum > declaredTypeNum) {
-            return new Err(
-              "Value type U" +
-                literalTypeNum +
-                " does not fit in variable type U" +
-                declaredTypeNum,
-            );
-          }
-        }
+    let numStr = "";
+    const typeText = afterLet.slice(typeStart, pos);
+    for (let ci = 0; ci < typeText.length; ci++) {
+      const c = typeText[ci];
+      if (isDigit(c)) numStr += c;
+    }
+    const declaredTypeNum = parseWidthOr8(numStr);
+
+    const eqIdx = afterLet.indexOf("=", pos);
+    if (eqIdx < 0) continue;
+
+    // Determine the type width of the literal on the RHS (e.g. `0U16` -> 16).
+    const rhs = trim(afterLet.slice(eqIdx + 1));
+    // Scan backward past trailing digits to find a potential `U<n>` suffix.
+    let si = rhs.length;
+    while (si > 0 && isDigit(rhs[si - 1])) si--;
+    const uIdx = si - 1;
+    const uCh = rhs[uIdx];
+    let literalTypeNum = 8;
+    if (uIdx >= 0 && uCh === "U" && uIdx > 0 && isDigit(rhs[uIdx - 1])) {
+      // Verify no `<` precedes the digits before U (rules out `read<U8>` style).
+      if (rhs.slice(0, uIdx - 1).indexOf("<") < 0) {
+        const suffixStr = rhs.slice(si);
+        if (suffixStr.length > 0) literalTypeNum = parseWidthOr8(suffixStr);
       }
+    }
+
+    if (literalTypeNum > declaredTypeNum) {
+      return new Err(
+        "Value type U" +
+          literalTypeNum +
+          " does not fit in variable type U" +
+          declaredTypeNum,
+      );
     }
   }
 
-  // Inline: transformSource
+  // Transform `read<U8>()` -> `read()` and strip type annotations like `: U8`.
   const prefix = "read<U";
   const suffix = ">()";
   let transformed = "";
   let ti = 0;
-  while (ti < tuffSourceCode.length) {
-    if (tuffSourceCode.slice(ti, ti + prefix.length) === prefix) {
-      let tj = ti + prefix.length;
-      while (tj < tuffSourceCode.length && isDigit(tuffSourceCode[tj])) {
-        tj++;
-      }
-      if (tuffSourceCode.slice(tj, tj + suffix.length) === suffix) {
+  const srcLen = tuffSourceCode.length;
+  while (ti < srcLen) {
+    const prefixEnd = ti + prefix.length;
+    if (tuffSourceCode.slice(ti, prefixEnd) === prefix) {
+      let tj = prefixEnd;
+      while (tj < srcLen && isDigit(tuffSourceCode[tj])) tj++;
+      const suffixEnd = tj + suffix.length;
+      if (tuffSourceCode.slice(tj, suffixEnd) === suffix) {
         transformed += "read()";
-        ti = tj + suffix.length;
+        ti = suffixEnd;
         continue;
       }
     }
-    if (tuffSourceCode[ti] === ":" && tuffSourceCode[ti + 1] === " ") {
-      ti += 2;
-      while (ti < tuffSourceCode.length && isAlphaNumeric(tuffSourceCode[ti])) {
-        ti++;
-      }
+    const ch = tuffSourceCode[ti];
+    if (ch === ":" && tuffSourceCode[ti + 1] === " ") {
+      ti = identEnd(tuffSourceCode, ti + 2);
       continue;
     }
-    transformed += tuffSourceCode[ti];
+    transformed += ch;
     ti++;
   }
 
+  // Build the function body from statements, checking for duplicate `let` names.
   const parts = transformed.split(";");
+  const partsEnd = parts.length - 1;
   let body = "";
   const declaredVars: string[] = [];
-  for (let p = 0; p < parts.length - 1; p++) {
-    const part = parts[p] ?? "";
-    if (!part) continue;
-    const stmt = trim(part);
-    if (stmt !== "") {
-      // Inline: checkDuplicateLet
-      if (stmt.startsWith("let ")) {
-        const afterLet = stmt.slice(4);
-        let nameEnd = 0;
-        while (nameEnd < afterLet.length && isAlphaNumeric(afterLet[nameEnd])) {
-          nameEnd++;
+  for (let p = 0; p < partsEnd; p++) {
+    const stmt = trim(parts[p] ?? "");
+    if (stmt === "") continue;
+
+    if (stmt.startsWith("let ")) {
+      const letRest = stmt.slice(4);
+      const nameLen = identEnd(letRest, 0);
+      const varName = letRest.slice(0, nameLen);
+      for (let i = 0; i < declaredVars.length; i++) {
+        if (declaredVars[i] === varName) {
+          return new Err("Duplicate variable declaration: " + varName);
         }
-        const varName = afterLet.slice(0, nameEnd);
-        for (let i = 0; i < declaredVars.length; i++) {
-          if (declaredVars[i] === varName) {
-            return new Err("Duplicate variable declaration: " + varName);
-          }
-        }
-        declaredVars.push(varName);
       }
-      body += stmt + ";\n";
+      declaredVars.push(varName);
     }
+    body += stmt + ";\n";
   }
-  const lastPart = parts[parts.length - 1] ?? "";
-  const lastExpr = trim(lastPart);
+
+  const lastExpr = trim(parts[partsEnd] ?? "");
 
   return new Ok(
     'const inputs = stdIn.split(" ").map(Number);\nlet idx = 0;\nfunction read() { return inputs[idx++]; }\n' +
@@ -151,25 +169,4 @@ export function compile(tuffSourceCode: string): Result<string, string> {
       lastExpr +
       ";",
   );
-}
-
-function isDigit(ch: string | undefined): boolean {
-  if (!ch) return false;
-  return ch >= "0" && ch <= "9";
-}
-
-function isAlphaNumeric(ch: string | undefined): boolean {
-  if (!ch) return false;
-  if (ch >= "a" && ch <= "z") return true;
-  if (ch >= "A" && ch <= "Z") return true;
-  if (ch >= "0" && ch <= "9") return true;
-  return false;
-}
-
-function trim(s: string): string {
-  let start = 0;
-  while (start < s.length && (s[start] === " " || s[start] === "\t")) start++;
-  let end = s.length;
-  while (end > start && (s[end - 1] === " " || s[end - 1] === "\t")) end--;
-  return s.slice(start, end);
 }
