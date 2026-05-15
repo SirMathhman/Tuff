@@ -32,6 +32,10 @@ export default defineConfig([
           selector: "CallExpression[callee.name='RegExp']",
           message: "RegExp() is not allowed",
         },
+        {
+          selector: "TemplateLiteral",
+          message: "Templates are not allowed because they false-flag CPD.",
+        },
       ],
     },
   },
