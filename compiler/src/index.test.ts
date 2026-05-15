@@ -46,3 +46,10 @@ test('compile("let x = 0; let x = 0;") => Error', () => {
   const result = compile("let x = 0; let x = 0;");
   expect(result instanceof Ok).toBe(false);
 });
+
+test('compile("let x : U8 = 0U16;") => Error', () => {
+  const result = compile("let x : U8 = 0U16;");
+  expect(result instanceof Ok).toBe(false);
+});
+
+
