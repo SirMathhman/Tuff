@@ -6,11 +6,13 @@ export function compile(tuffSourceCode: string): string {
   const transformed = transformSource(tuffSourceCode);
   const parts = transformed.split(";");
   let body = "";
+  const declaredVars: string[] = [];
   for (let p = 0; p < parts.length - 1; p++) {
     const part = parts[p];
     if (!part) continue;
     const stmt = trim(part);
     if (stmt !== "") {
+      checkDuplicateLet(stmt, declaredVars);
       body += stmt + ";\n";
     }
   }
@@ -24,6 +26,22 @@ export function compile(tuffSourceCode: string): string {
     lastExpr +
     ";"
   );
+}
+
+function checkDuplicateLet(stmt: string, declaredVars: string[]): void {
+  if (!stmt.startsWith("let ")) return;
+  const afterLet = stmt.slice(4);
+  let nameEnd = 0;
+  while (nameEnd < afterLet.length && isAlphaNumeric(afterLet[nameEnd])) {
+    nameEnd++;
+  }
+  const varName = afterLet.slice(0, nameEnd);
+  for (let i = 0; i < declaredVars.length; i++) {
+    if (declaredVars[i] === varName) {
+      throw new Error("Duplicate variable declaration: " + varName);
+    }
+  }
+  declaredVars.push(varName);
 }
 
 function transformSource(src: string): string {
@@ -79,3 +97,4 @@ function trim(s: string): string {
   while (end > start && (s[end - 1] === " " || s[end - 1] === "\t")) end--;
   return s.slice(start, end);
 }
+

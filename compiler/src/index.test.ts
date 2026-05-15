@@ -5,11 +5,7 @@ import * as ts from "typescript";
 function executeTuff(tuffSourceCode: string, stdIn: string = ""): number {
   const compiledTSCode = compile(tuffSourceCode);
   const compiledJSCode = ts.transpile(compiledTSCode);
-  const result = new Function("stdIn", compiledJSCode)(stdIn);
-  if (typeof result !== "number") {
-    throw new Error("Not a number!");
-  }
-  return result;
+  return new Function("stdIn", compiledJSCode)(stdIn) as number;
 }
 
 test("executeTuff(empty string) == 0", () => {
@@ -44,4 +40,6 @@ test('executeTuff("let x : U8 = read<U8>(); x + x", "2") == 4', () => {
   expect(executeTuff("let x : U8 = read<U8>(); x + x", "2")).toBe(4);
 });
 
-test('executeTuff("let x = read<U8>(); x + x", "2") == 4', () => {});
+test('compile("let x = 0; let x = 0;") => Error', () => {
+  expect(() => compile("let x = 0; let x = 0;")).toThrow();
+});
