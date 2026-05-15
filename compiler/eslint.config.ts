@@ -2,14 +2,19 @@ import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 import { defineConfig } from "eslint/config";
+import noSingleUseFunction from "./eslint-rules/no-single-use-function";
 
 export default defineConfig([
   {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
-    plugins: { js },
+    plugins: {
+      js,
+      local: { rules: { "no-single-use-function": noSingleUseFunction } },
+    },
     extends: ["js/recommended"],
     languageOptions: { globals: globals.node },
     rules: {
+      "local/no-single-use-function": "error",
       "no-restricted-syntax": [
         "error",
         {
