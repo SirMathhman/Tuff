@@ -15,3 +15,9 @@ function executeTuff(tuffSourceCode: string, stdIn: string = ""): number {
 test("executeTuff(empty string) == 0", () => {
   expect(executeTuff("")).toBe(0);
 });
+
+test('executeTuff("read<U8>()", "100") == 100', () => {
+  expect(executeTuff("read<U8>()", "100")).toBe(100);
+});
+
+
