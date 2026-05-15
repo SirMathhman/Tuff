@@ -53,3 +53,8 @@ test('compile("let x = 0; let x = 0;") => Error', () => {
 test('compile("let x : U8 = 0U16;") => Error', () => {
   expectErr("let x : U8 = 0U16;");
 });
+
+test('compile("let x = 0U16; let y : U8 = x;") => Error', () => {
+  expectErr("let x = 0U16; let y : U8 = x;");
+});
+

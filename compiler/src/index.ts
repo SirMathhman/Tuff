@@ -59,55 +59,76 @@ export function compile(tuffSourceCode: string): Result<string, string> {
     return new Ok("return 0;");
   }
 
-  // Check for type mismatches: `let x : U8 = 0U16` etc.
+  // First pass: collect variable types and check for type mismatches.
   const rawParts = tuffSourceCode.split(";");
+  const varTypes: Record<string, number> = {};
+
   for (let p = 0; p < rawParts.length - 1; p++) {
     const part = trim(rawParts[p] ?? "");
     if (!part || !part.startsWith("let ")) continue;
 
     const afterLet = part.slice(4);
     let pos = skipSpaces(afterLet, identEnd(afterLet, 0));
-    if (afterLet[pos] !== ":") continue;
+    const varName = afterLet
+      .slice(0, pos - (afterLet[pos - 1] === " " ? 1 : 0))
+      .trim();
 
-    pos = skipSpaces(afterLet, pos + 1);
-    const typeStart = pos;
-    pos = identEnd(afterLet, pos);
+    // Determine declared type width. If no explicit annotation, infer from literal.
+    let hasExplicitType = false;
+    let declaredTypeNum = 8;
 
-    let numStr = "";
-    const typeText = afterLet.slice(typeStart, pos);
-    for (let ci = 0; ci < typeText.length; ci++) {
-      const c = typeText[ci];
-      if (isDigit(c)) numStr += c;
+    if (pos < afterLet.length && afterLet[pos] === ":") {
+      hasExplicitType = true;
+      pos = skipSpaces(afterLet, pos + 1);
+      const typeStart = pos;
+      pos = identEnd(afterLet, pos);
+      let numStr = "";
+      const typeText = afterLet.slice(typeStart, pos);
+      for (let ci = 0; ci < typeText.length; ci++) {
+        const c = typeText[ci];
+        if (isDigit(c)) numStr += c;
+      }
+      declaredTypeNum = parseWidthOr8(numStr);
     }
-    const declaredTypeNum = parseWidthOr8(numStr);
 
-    const eqIdx = afterLet.indexOf("=", pos);
-    if (eqIdx < 0) continue;
+    // Find the RHS and determine its value type.
+    let rhsValueNum = 8;
+    const eqIdx = afterLet.indexOf("=");
+    if (eqIdx >= 0) {
+      const rhs = trim(afterLet.slice(eqIdx + 1));
 
-    // Determine the type width of the literal on the RHS (e.g. `0U16` -> 16).
-    const rhs = trim(afterLet.slice(eqIdx + 1));
-    // Scan backward past trailing digits to find a potential `U<n>` suffix.
-    let si = rhs.length;
-    while (si > 0 && isDigit(rhs[si - 1])) si--;
-    const uIdx = si - 1;
-    const uCh = rhs[uIdx];
-    let literalTypeNum = 8;
-    if (uIdx >= 0 && uCh === "U" && uIdx > 0 && isDigit(rhs[uIdx - 1])) {
-      // Verify no `<` precedes the digits before U (rules out `read<U8>` style).
-      if (rhs.slice(0, uIdx - 1).indexOf("<") < 0) {
-        const suffixStr = rhs.slice(si);
-        if (suffixStr.length > 0) literalTypeNum = parseWidthOr8(suffixStr);
+      // Check if RHS is a variable reference.
+      const rhsIdentEnd = identEnd(rhs, 0);
+      const rhsVarName = rhs.slice(0, rhsIdentEnd).trim();
+      if (rhsVarName in varTypes) {
+        rhsValueNum = varTypes[rhsVarName]!;
+      } else {
+        // Determine the type width of a literal on the RHS.
+        let si = rhs.length;
+        while (si > 0 && isDigit(rhs[si - 1])) si--;
+        const uIdx = si - 1;
+        const uCh = rhs[uIdx];
+        if (uIdx >= 0 && uCh === "U" && uIdx > 0 && isDigit(rhs[uIdx - 1])) {
+          // Verify no `<` precedes the digits before U.
+          if (rhs.slice(0, uIdx - 1).indexOf("<") < 0) {
+            const suffixStr = rhs.slice(si);
+            if (suffixStr.length > 0) rhsValueNum = parseWidthOr8(suffixStr);
+          }
+        }
+      }
+
+      if (rhsValueNum > declaredTypeNum) {
+        return new Err(
+          "Value type U" +
+            rhsValueNum +
+            " does not fit in variable type U" +
+            declaredTypeNum,
+        );
       }
     }
 
-    if (literalTypeNum > declaredTypeNum) {
-      return new Err(
-        "Value type U" +
-          literalTypeNum +
-          " does not fit in variable type U" +
-          declaredTypeNum,
-      );
-    }
+    // Store the variable's effective type.
+    varTypes[varName] = hasExplicitType ? declaredTypeNum : rhsValueNum;
   }
 
   // Transform `read<U8>()` -> `read()` and strip type annotations like `: U8`.
