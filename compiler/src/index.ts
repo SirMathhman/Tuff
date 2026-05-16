@@ -2,6 +2,10 @@ const RETURN_PREFIX = "return";
 export const STD_IN = "stdIn";
 export const READ_TYPES = ["U8", "U16", "U32", "U64"];
 export const READ_PREFIX = "read<";
+const PARSE_INT_PREFIX = "parseInt(";
+const STD_IN_PARTS = STD_IN + "Parts";
+
+const TRIM_CALL = ".trim()";
 
 function makeReadStr(type: string) {
   return READ_PREFIX + type + ">()";
@@ -24,9 +28,11 @@ export function compile(source: string) {
   const replacements: string[] = [];
   for (let i = 0; i < totalReads; i++) {
     if (totalReads > 1) {
-      replacements.push("(parseInt(stdInParts[" + i + "],10)||0)");
+      replacements.push(
+        "(" + PARSE_INT_PREFIX + STD_IN_PARTS + "[" + i + "],10)||0)",
+      );
     } else {
-      replacements.push("parseInt(" + STD_IN + ".trim(), 10)");
+      replacements.push(PARSE_INT_PREFIX + STD_IN + TRIM_CALL + ", 10)");
     }
   }
 
@@ -40,9 +46,12 @@ export function compile(source: string) {
 
   if (totalReads > 1)
     return (
-      "let stdInParts=" +
+      "let " +
+      STD_IN_PARTS +
+      "=" +
       STD_IN +
-      ".trim().split(/\\s+/);\n" +
+      TRIM_CALL +
+      ".split(/\\s+/);\n" +
       RETURN_PREFIX +
       " " +
       result +
