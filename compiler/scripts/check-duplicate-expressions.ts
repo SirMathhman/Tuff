@@ -8,13 +8,10 @@
  *
  * Exit code 1 if any duplicates are found.
  */
-
-/* eslint-disable local/no-single-use-function, local/no-single-use-variable */
-
 import { Linter } from "eslint";
-import * as ts from "typescript";
 import { readFileSync, readdirSync } from "fs";
 import { join, relative } from "path";
+import * as ts from "typescript";
 
 const SRC_DIR = join(import.meta.dir, "..", "src");
 const MIN_TOKENS = 4;
@@ -196,6 +193,9 @@ if (groups.length === 0) {
   process.exit(0);
 }
 
+console.error(
+  "Duplicate expression check failed. The expression(s) listed above appear more than once. Consider extracting them into a shared variable. If the duplicates contain identifiers that are the same but are in different scopes, rename one (or both) of them to be more accurate.",
+);
 console.error(
   "Found " +
     groups.length +
