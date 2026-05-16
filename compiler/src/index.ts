@@ -1,6 +1,10 @@
 const returnStr = "return ";
 const defaultReturn = returnStr + "0;";
 
+function buildReadExpr(type: string) {
+  return "read<" + type + ">()";
+}
+
 export function compile(source: string) {
   if (source.trim() === "") {
     return defaultReturn;
@@ -8,12 +12,14 @@ export function compile(source: string) {
 
   const types = ["U8", "I8", "U16", "I16", "U32", "I32", "F32", "F64"];
   const reads: string[] = [];
+  const readExprs: string[] = [];
 
   for (const type of types) {
-    const readExpr = "read<" + type + ">()";
+    const readExpr = buildReadExpr(type);
     let idx = source.indexOf(readExpr);
     while (idx !== -1) {
       reads.push(type);
+      readExprs.push(readExpr);
       idx = source.indexOf(readExpr, idx + 1);
     }
   }
@@ -22,11 +28,14 @@ export function compile(source: string) {
     return defaultReturn;
   }
 
-  const stdInPart = "stdIn.split(',')[i] || stdIn";
+  const stdInPart = "stdIn.replace(',', ' ').split(' ')[i] || stdIn";
   const parsePrefix = "parse";
-  const parts: string[] = [];
+  let code = "";
+  let expr = source;
+
   for (let i = 0; i < reads.length; i++) {
-    const type = reads[i];
+    const type: string | undefined = reads[i];
+    if (type === undefined) continue;
     let parseExpr: string;
     const indexBracket = "[" + i + "]";
     if (type === "F32" || type === "F64") {
@@ -40,17 +49,13 @@ export function compile(source: string) {
         indexBracket,
       );
     }
-    parts.push(parseExpr);
+    code += "const v" + i + " = " + parseExpr + ";\n";
+    const readExpr: string | undefined = readExprs[i];
+    if (readExpr === undefined) continue;
+    expr = expr.replace(readExpr, "v" + i);
   }
 
-  if (parts.length === 1) {
-    return returnStr + parts[0] + ";";
-  } else {
-    let code = "";
-    for (let j = 0; j < parts.length; j++) {
-      code += "const v" + j + " = " + parts[j] + ";\n";
-    }
-    code += returnStr + parts[parts.length - 1] + ";";
-    return code;
-  }
+  code += returnStr + expr + ";";
+  return code;
 }
+

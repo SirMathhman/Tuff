@@ -10,4 +10,6 @@ function assertValid(source: string, stdIn: string, expectedExitCode: number) {
 
 assertValid("", "", 0);
 assertValid("read<U8>()", "100", 100);
+assertValid("read<U16>()", "100", 100);
+assertValid("read<U8>() + read<U8>()", "100 20", 120);
 
