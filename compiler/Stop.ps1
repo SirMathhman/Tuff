@@ -1,22 +1,24 @@
-npm run test; 
-if ($LASTEXITCODE -ne 0) { exit 1 }
+$output = npm run test 2>&1;
+if ($LASTEXITCODE -ne 0) { $output; exit 1 }
 Write-Host "All tests passed.";
 
-npm run lint;
-if ($LASTEXITCODE -ne 0) { 
+$output = npm run lint 2>&1;
+if ($LASTEXITCODE -ne 0) {
+    $output;
     Write-Error "Linting failed. 
     Do note that ESLint rules will ignore comments and whitespace.
     If the file is too long, you should split the file.";
-    exit 1 
+    exit 1
 }
 Write-Host "Linting passed.";
 
-npm run cpd;
-if ($LASTEXITCODE -ne 0) { exit 1 }
+$output = npm run cpd 2>&1;
+if ($LASTEXITCODE -ne 0) { $output; exit 1 }
 Write-Host "Copy-paste detection passed.";
 
-npm run check-dupes;
+$output = npm run check-dupes 2>&1;
 if ($LASTEXITCODE -ne 0) {
+    $output;
     Write-Error "Duplicate expression check failed.
     The expression(s) listed above appear more than once.
     Consider extracting them into a shared variable.";
@@ -24,8 +26,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "Duplicate expression check passed.";
 
-npm run check-string-dupes;
+$output = npm run check-string-dupes 2>&1;
 if ($LASTEXITCODE -ne 0) {
+    $output;
     Write-Error "Duplicate substring check failed.
     The substring(s) listed above appear more than once.
     Consider extracting them into a shared variable.";
