@@ -995,5 +995,276 @@
   {
     "role": "assistant",
     "content": "All 6 tests pass, TypeScript clean, no duplicate expressions. The new test works without any compiler changes because the existing logic already handles it:\n\n1. Detects `read<U8>()`, generates `const v0 = parseInt(...);`\n2. Replaces with variable reference → `\"let x : U8 = v0; x + x\"`  \n3. Splits on semicolons, converts declaration to JS and wraps the expression in `return`"
+  },
+  {
+    "role": "user",
+    "content": "Add: assertValid(\"let x : U8 = read<U8>();\", \"120\", 0);"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"src/index.test.ts\",\"startLine\":15,\"endLine\":16,\"content\":\"assertValid(\\\"let x : U8 = read<U8>(); x\\\", \\\"120\\\", 120);\\nassertValid(\\\"let x : U8 = read<U8>(); x + x\\\", \\\"120\\\", 240);\\nassertValid(\\\"let x : U8 = read<U8>();\\\", \\\"120\\\", 0);\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test 2>&1; echo \\\"---EXIT:$LASTEXITCODE\\\"\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: bun test v1.3.13 (bf2e2cec)\n---EXIT:1\r\n,\n      Std Err: bun : \r\nAt line:1 char:1\r\n+ bun test 2>&1; echo \"---EXIT:$LASTEXITCODE\"\r\n+ ~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nsrc\\index.test.ts:\r\n(pass) \r\n(pass) read<U8>()\r\n(pass) read<U16>()\r\n(pass) read<U8>() + read<U8>()\r\n(pass) let x : U8 = read<U8>(); x\r\n(pass) let x : U8 = read<U8>(); x + x\r\n2 | import { compile } from \".\";\r\n3 | \r\n4 | function assertValid(source: string, stdIn: string, expectedExitCode: number) {\r\n5 |   test(source, () => {\r\n6 |     const compiled = compile(source);\r\n7 |     expect(new Function(\"stdIn\", compiled)(stdIn)).toBe(expectedExitCode);\r\n                                                       ^\r\nerror: expect(received).toBe(expected)\r\nExpected: 0\r\nReceived: undefined\r\n      at <anonymous> (C:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\src\\index.test.ts:7:52)\r\n(fail) let x : U8 = read<U8>();\r\n(pass) let x : U8 = read<U8>(); x + x\r\n 7 pass\r\n 1 fail\r\n 8 expect() calls\r\nRan 8 tests across 1 file. [38.00ms]\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": "The issue is that splitting `\"let x : U8 = read<U8>();\"` on semicolons produces an empty string for the trailing part, which gets converted to `return ;` → `undefined`. I need to handle this case.\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"src/index.ts\",\"startLine\":57,\"endLine\":104}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 104\n57:   }\n58: \n59:   // Split by semicolons and process each statement\n60:   const statements = splitStatements(expr);\n61:   for (const stmt of statements) {\n62:     code += convertStatement(stmt.trim()) + \"\\n\";\n63:   }\n64: \n65:   return code;\n66: }\n67: \n68: function splitStatements(s: string): string[] {\n69:   return s.split(\";\");\n70: }\n71: \n72: function convertStatement(stmt: string): string {\n73:   const letIdx = stmt.indexOf(\"let \");\n74:   if (letIdx === -1) {\n75:     return returnStr + stmt;\n76:   }\n77: \n78:   const afterLet = stmt.substring(letIdx + \"let \".length);\n79:   const colonPos = afterLet.indexOf(\":\");\n80:   const eqPos = afterLet.indexOf(\"=\");\n81:   const hasColon = colonPos >= 0;\n82:   const noEq = eqPos < 0;\n83: \n84:   let varName: string;\n85:   let valueStart: number;\n86: \n87:   if (hasColon && !noEq && colonPos < eqPos) {\n88:     // Has type annotation between name and '='\n89:     varName = afterLet.substring(0, colonPos).trim();\n90:     valueStart = eqPos + 1;\n91:   } else {\n92:     const firstSep = noEq ? (hasColon ? colonPos : afterLet.length) : eqPos;\n93:     varName = afterLet.substring(0, firstSep).trim();\n94:     valueStart = noEq ? afterLet.length : eqPos + 1;\n95:   }\n96: \n97:   if (valueStart < afterLet.length) {\n98:     const value = afterLet.substring(valueStart).trim();\n99:     return constKeyword + varName + \" = \" + value;\n100:   }\n101: \n102:   return \"\";\n103: }"
+  },
+  {
+    "role": "assistant",
+    "content": "The problem: splitting `\"let x : U8 = v0;\"` on semicolons produces an empty trailing part `\"\"`, which gets converted to `return ;` → undefined. I need to handle empty statements by returning the default value instead.\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"src/index.ts\",\"startLine\":72,\"endLine\":103,\"content\":\"function convertStatement(stmt: string): string {\\n  if (stmt === \\\"\\\") {\\n    return defaultReturn;\\n  }\\n\\n  const letIdx = stmt.indexOf(\\\"let \\\");\\n  if (letIdx === -1) {\\n    return returnStr + stmt;\\n  }\\n\\n  const afterLet = stmt.substring(letIdx + \\\"let \\\".length);\\n  const colonPos = afterLet.indexOf(\\\":\\\");\\n  const eqPos = afterLet.indexOf(\\\"=\\\");\\n  const hasColon = colonPos >= 0;\\n  const noEq = eqPos < 0;\\n\\n  let varName: string;\\n  let valueStart: number;\\n\\n  if (hasColon && !noEq && colonPos < eqPos) {\\n    // Has type annotation between name and '='\\n    varName = afterLet.substring(0, colonPos).trim();\\n    valueStart = eqPos + 1;\\n  } else {\\n    const firstSep = noEq ? (hasColon ? colonPos : afterLet.length) : eqPos;\\n    varName = afterLet.substring(0, firstSep).trim();\\n    valueStart = noEq ? afterLet.length : eqPos + 1;\\n  }\\n\\n  if (valueStart < afterLet.length) {\\n    const value = afterLet.substring(valueStart).trim();\\n    return constKeyword + varName + \\\" = \\\" + value;\\n  }\\n\\n  return \\\"\\\";\\n}\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Content inserted:68: function splitStatements(s: string): string[] {\n69:   return s.split(\";\");\n70: }\n71: \n72: function convertStatement(stmt: string): string {\n73:   if (stmt === \"\") {\n74:     return defaultReturn;\n75:   }\n76: \n77:   const letIdx = stmt.indexOf(\"let \");\n78:   if (letIdx === -1) {\n79:     return returnStr + stmt;\n80:   }\n81: \n82:   const afterLet = stmt.substring(letIdx + \"let \".length);\n83:   const colonPos = afterLet.indexOf(\":\");\n84:   const eqPos = afterLet.indexOf(\"=\");\n85:   const hasColon = colonPos >= 0;\n86:   const noEq = eqPos < 0;\n87: \n88:   let varName: string;\n89:   let valueStart: number;\n90: \n91:   if (hasColon && !noEq && colonPos < eqPos) {\n92:     // Has type annotation between name and '='\n93:     varName = afterLet.substring(0, colonPos).trim();\n94:     valueStart = eqPos + 1;\n95:   } else {\n96:     const firstSep = noEq ? (hasColon ? colonPos : afterLet.length) : eqPos;\n97:     varName = afterLet.substring(0, firstSep).trim();\n98:     valueStart = noEq ? afterLet.length : eqPos + 1;\n99:   }\n100: \n101:   if (valueStart < afterLet.length) {\n102:     const value = afterLet.substring(valueStart).trim();\n103:     return constKeyword + varName + \" = \" + value;\n104:   }\n105: \n106:   return \"\";\n107: }\n108: \n109: }\n110: \nFile has errors: \n> lint:eslint:file\n> eslint --fix --ext .ts src/index.ts\n\n\nC:\\Users\\mathm\\Documents\\Projects\\Tuff\\compiler\\src\\index.ts\n  109:0  error  Parsing error: Declaration or statement expected\n\n✖ 1 problem (1 error, 0 warnings)\n\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"src/index.ts\",\"startLine\":65,\"endLine\":120}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 110\n65:   return code;\n66: }\n67: \n68: function splitStatements(s: string): string[] {\n69:   return s.split(\";\");\n70: }\n71: \n72: function convertStatement(stmt: string): string {\n73:   if (stmt === \"\") {\n74:     return defaultReturn;\n75:   }\n76: \n77:   const letIdx = stmt.indexOf(\"let \");\n78:   if (letIdx === -1) {\n79:     return returnStr + stmt;\n80:   }\n81: \n82:   const afterLet = stmt.substring(letIdx + \"let \".length);\n83:   const colonPos = afterLet.indexOf(\":\");\n84:   const eqPos = afterLet.indexOf(\"=\");\n85:   const hasColon = colonPos >= 0;\n86:   const noEq = eqPos < 0;\n87: \n88:   let varName: string;\n89:   let valueStart: number;\n90: \n91:   if (hasColon && !noEq && colonPos < eqPos) {\n92:     // Has type annotation between name and '='\n93:     varName = afterLet.substring(0, colonPos).trim();\n94:     valueStart = eqPos + 1;\n95:   } else {\n96:     const firstSep = noEq ? (hasColon ? colonPos : afterLet.length) : eqPos;\n97:     varName = afterLet.substring(0, firstSep).trim();\n98:     valueStart = noEq ? afterLet.length : eqPos + 1;\n99:   }\n100: \n101:   if (valueStart < afterLet.length) {\n102:     const value = afterLet.substring(valueStart).trim();\n103:     return constKeyword + varName + \" = \" + value;\n104:   }\n105: \n106:   return \"\";\n107: }\n108: \n109: }\n110: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"src/index.ts\",\"startLine\":108,\"endLine\":110,\"content\":\"\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"src/index.ts\",\"startLine\":105,\"endLine\":112}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 109\n105: \n106:   return \"\";\n107: }\n108: \n109: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test 2>&1; echo \\\"---EXIT:$LASTEXITCODE\\\"\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: bun test v1.3.13 (bf2e2cec)\n---EXIT:0\r\n,\n      Std Err: bun : \r\nAt line:1 char:1\r\n+ bun test 2>&1; echo \"---EXIT:$LASTEXITCODE\"\r\n+ ~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nsrc\\index.test.ts:\r\n(pass) \r\n(pass) read<U8>()\r\n(pass) read<U16>()\r\n(pass) read<U8>() + read<U8>()\r\n(pass) let x : U8 = read<U8>(); x\r\n(pass) let x : U8 = read<U8>(); x + x\r\n(pass) let x : U8 = read<U8>();\r\n(pass) let x : U8 = read<U8>(); x + x\r\n 8 pass\r\n 0 fail\r\n 8 expect() calls\r\nRan 8 tests across 1 file. [39.00ms]\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": "All 8 tests pass! Let me verify the full lint suite:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"tsc --noEmit; bun run scripts/check-duplicate-expressions.ts 2>&1; echo \\\"---EXIT:$LASTEXITCODE\\\"\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: No duplicate expressions found.\n---EXIT:0\r\n,\n      Std Err: "
+  },
+  {
+    "role": "assistant",
+    "content": "All checks pass:\n\n- **8/8 tests** ✅ including the new `assertValid(\"let x : U8 = read<U8>();\", \"120\", 0)` \n- **TypeScript** clean\n- **No duplicate expressions**\n\nThe fix was a single guard in `convertStatement`: when splitting `\"let x : U8 = v0;\"` on semicolons, the trailing empty string would produce `return ;` → `undefined`. Now it returns `defaultReturn` (`\"return 0;\"`) for empty statements."
+  },
+  {
+    "role": "user",
+    "content": "Add: assertValid(\"let x = read<U8>(); x\", \"120\", 120);"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"src/index.test.ts\",\"startLine\":15,\"endLine\":16,\"content\":\"assertValid(\\\"let x : U8 = read<U8>(); x\\\", \\\"120\\\", 120);\\nassertValid(\\\"let x = read<U8>(); x\\\", \\\"120\\\", 120);\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null
+  },
+  {
+    "role": "user",
+    "content": "Add: assertValid(\"let x = read<U8>(); x\", \"120\", 120);"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"src/index.test.ts\",\"startLine\":1,\"endLine\":20}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 25\n1: import { test, expect } from \"bun:test\";\n2: import { compile } from \".\";\n3: \n4: function assertValid(source: string, stdIn: string, expectedExitCode: number) {\n5:   test(source, () => {\n6:     const compiled = compile(source);\n7:     expect(new Function(\"stdIn\", compiled)(stdIn)).toBe(expectedExitCode);\n8:   });\n9: }\n10: \n11: assertValid(\"\", \"\", 0);\n12: assertValid(\"read<U8>()\", \"100\", 100);\n13: assertValid(\"read<U16>()\", \"100\", 100);\n14: assertValid(\"read<U8>() + read<U8>()\", \"100 20\", 120);\n15: assertValid(\"let x : U8 = read<U8>(); x\", \"120\", 120);\n16: assertValid(\"let x = read<U8>(); x\", \"120\", 120);\n17: \n18: assertValid(\"let x : U8 = read<U8>(); x + x\", \"120\", 240);\n19: assertValid(\"let x : U8 = read<U8>();\", \"120\", 0);"
+  },
+  {
+    "role": "assistant",
+    "content": "The test is already in place from my previous edit. Let me run it to see if it passes:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"bun test 2>&1; echo \\\"---EXIT:$LASTEXITCODE\\\"\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: bun test v1.3.13 (bf2e2cec)\n---EXIT:0\r\n,\n      Std Err: bun : \r\nAt line:1 char:1\r\n+ bun test 2>&1; echo \"---EXIT:$LASTEXITCODE\"\r\n+ ~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nsrc\\index.test.ts:\r\n(pass) \r\n(pass) read<U8>()\r\n(pass) read<U16>()\r\n(pass) read<U8>() + read<U8>()\r\n(pass) let x : U8 = read<U8>(); x\r\n(pass) let x = read<U8>(); x\r\n(pass) let x : U8 = read<U8>(); x + x\r\n(pass) let x : U8 = read<U8>();\r\n(pass) let x : U8 = read<U8>(); x + x\r\n 9 pass\r\n 0 fail\r\n 9 expect() calls\r\nRan 9 tests across 1 file. [64.00ms]\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"tsc --noEmit; bun run scripts/check-duplicate-expressions.ts 2>&1; echo \\\"---EXIT:$LASTEXITCODE\\\"\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: No duplicate expressions found.\n---EXIT:0\r\n,\n      Std Err: "
+  },
+  {
+    "role": "assistant",
+    "content": "All **9/9 tests pass** ✅, TypeScript clean, no duplicate expressions. \n\nThe `let x = read<U8>(); x` case (without type annotation) already works because the existing `convertStatement` logic handles both paths:\n\n- With colon (`:`): extracts variable name before `:`, skips to `=`, then gets value\n- Without colon: goes through the else branch, finds `=` directly after the variable name and extracts from there\n\nNo compiler changes needed — just adding the test was sufficient."
   }
 ]

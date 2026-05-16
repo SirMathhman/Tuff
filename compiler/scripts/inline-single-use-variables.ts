@@ -17,9 +17,10 @@
  */
 import { Project, Node, VariableDeclarationKind } from "ts-morph";
 import { readdirSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const SRC_DIR = join(import.meta.dir, "..", "src");
+const SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 
 const tsFiles = readdirSync(SRC_DIR).filter((f) => f.endsWith(".ts"));
 

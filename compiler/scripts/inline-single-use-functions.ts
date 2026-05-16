@@ -39,9 +39,10 @@ import {
   ParameterDeclaration,
 } from "ts-morph";
 import { readdirSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const SRC_DIR = join(import.meta.dir, "..", "src");
+const SRC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 
 const tsFiles = readdirSync(SRC_DIR).filter((f) => f.endsWith(".ts"));
 
@@ -65,8 +66,10 @@ function substituteArgs(
     if (!param) continue;
     const paramName = param.getName();
     const argText = args[i] ?? "undefined";
-    // Replace whole-word occurrences of the parameter name.
-    result = result.split(paramName).join(argText);
+    // Replace whole-word occurrences only, using word-boundary markers so that
+    // a param named `s` does not corrupt `statements` → `(expr)tatements`.
+    const escaped = paramName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp("\\b" + escaped + "\\b", "g"), argText);
   }
   return result;
 }
@@ -160,25 +163,15 @@ for (const sourceFile of project.getSourceFiles()) {
           container.replaceWithText(inlined);
         }
       } else {
-        // ── Case 2: multiple statements ──────────────────────────────────
-        // Replace the containing statement with all body statements.
-        // The last statement's `return <expr>;` becomes `<expr>;`.
-        const container = getContainingStatement(callExpr);
-        if (!container) continue;
-
-        const lines: string[] = [];
-        for (let i = 0; i < statements.length; i++) {
-          const stmt = statements[i]!;
-          let text: string;
-          if (i === statements.length - 1 && Node.isReturnStatement(stmt)) {
-            const returnExpr = stmt.getExpression();
-            text = returnExpr ? returnExpr.getText() + ";" : "";
-          } else {
-            text = stmt.getText();
-          }
-          if (text) lines.push(substituteArgs(text, params, argTexts));
-        }
-        container.replaceWithText(lines.join("\n"));
+        // ── Case 2: multiple statements — emit an IIFE ───────────────────
+        // Replace the call expression with an immediately-invoked function
+        // expression so the result can be used in any expression context:
+        //   (() => { <body with args substituted> })()
+        const bodyLines = statements
+          .map((stmt) => substituteArgs(stmt.getText(), params, argTexts))
+          .join("\n");
+        const iife = "(() => {\n" + bodyLines + "\n})()";
+        callExpr.replaceWithText(iife);
       }
 
       fn.remove();
