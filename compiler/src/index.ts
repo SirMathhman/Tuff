@@ -4,6 +4,12 @@ const constKeyword = "const ";
 
 import { Ok, Err } from "./result";
 
+export enum CompileError {
+  DuplicateVariable = "duplicate_variable",
+  TypeMismatch = "type_mismatch",
+  ImmutableReassignment = "immutable_reassignment",
+}
+
 function okDefault(): Ok<string> {
   return new Ok(defaultReturn);
 }
@@ -22,8 +28,7 @@ function typeRank(t: string): number {
 function fitsIn(sourceType: string, targetType: string): boolean {
   return typeRank(sourceType) <= typeRank(targetType);
 }
-
-export function compile(source: string): Ok<string> | Err<string> {
+export function compile(source: string): Ok<string> | Err<CompileError> {
   if (source.trim() === "") {
     return okDefault();
   }
@@ -77,10 +82,12 @@ export function compile(source: string): Ok<string> | Err<string> {
 
   // Split by semicolons and process each statement
   const declaredVars: string[] = [];
+  // Track which variables were declared as mutable
+  const mutVars: Set<string> = new Set();
   // Map variable names to their types (both generated v0..vn and user-declared x, y, etc.)
   const allVarTypes: { name: string; type: string }[] = [];
 
-// Helper: look up the inferred/declared type of a variable by its name
+  // Helper: look up the inferred/declared type of a variable by its name
   function lookupType(varName: string): string | undefined {
     for (let vi = 0; vi < reads.length; vi++) {
       if (varName === "v" + vi) return varTypes[vi];
@@ -91,21 +98,31 @@ export function compile(source: string): Ok<string> | Err<string> {
     return undefined;
   }
 
-// Shared Ok value for success cases where no payload is needed
+  // Shared Ok value for success cases where no payload is needed
   const okVoid = new Ok(undefined);
 
   // Helper: check type compatibility and return Err on mismatch, or okVoid when compatible
-  function checkAssignable(srcType: string | undefined, targetType: string | undefined): Ok<void> | Err<string> {
-    if (srcType !== undefined && targetType !== undefined && !fitsIn(srcType, targetType)) {
-      return new Err("type mismatch: cannot assign " + srcType + " to " + targetType);
+  function checkAssignable(
+    srcType: string | undefined,
+    targetType: string | undefined,
+  ): Ok<void> | Err<CompileError> {
+    if (
+      srcType !== undefined &&
+      targetType !== undefined &&
+      !fitsIn(srcType, targetType)
+    ) {
+      return new Err(CompileError.TypeMismatch);
     }
     return okVoid;
   }
 
   // Helper: process an assignment statement and append generated JS code
   function emitAssignment(
-    varName: string, value: string, declaredType: string | undefined, isMutable: boolean,
-  ): Ok<void> | Err<string> {
+    varName: string,
+    value: string,
+    declaredType: string | undefined,
+    isMutable: boolean,
+  ): Ok<void> | Err<CompileError> {
     const srcType = lookupType(value);
     const existingType = lookupType(varName);
     const targetType = declaredType !== undefined ? declaredType : existingType;
@@ -119,7 +136,11 @@ export function compile(source: string): Ok<string> | Err<string> {
     }
 
     // Use 'let' for mutable vars, 'const' otherwise; bare reassignments omit the keyword
-    const keyword = isMutable ? "let" : (existingType !== undefined ? "" : constKeyword);
+    const keyword = isMutable
+      ? "let"
+      : existingType !== undefined
+        ? ""
+        : constKeyword;
     code += keyword + varName + " = " + value + "\n";
     return okVoid;
   }
@@ -163,15 +184,25 @@ export function compile(source: string): Ok<string> | Err<string> {
 
       // Check for duplicate variable declaration
       if (declaredVars.indexOf(varName) !== -1) {
-        return new Err("duplicate variable: " + varName);
+        return new Err(CompileError.DuplicateVariable);
       }
       declaredVars.push(varName);
 
-    if (eqPos >= 0) {
+      // Track mutable variables for later reassignment checks
+      if (isMutable) {
+        mutVars.add(varName);
+      }
+
+      if (eqPos >= 0) {
         const value = restOfDecl.substring(eqPos + 1).trim();
 
         // Type check and emit the assignment
-        const assignResult = emitAssignment(varName, value, declaredType, isMutable);
+        const assignResult = emitAssignment(
+          varName,
+          value,
+          declaredType,
+          isMutable,
+        );
         if (assignResult instanceof Err) return assignResult;
       } else {
         code += "";
@@ -180,8 +211,15 @@ export function compile(source: string): Ok<string> | Err<string> {
       // Bare assignment: e.g. "x = read<U8>()" or "x = y"
       const eqPos = trimmed.indexOf("=");
       const varName = trimmed.substring(0, eqPos).trim();
+
+      // Reject reassignment of immutable variables
+      if (!mutVars.has(varName)) {
+        return new Err(CompileError.ImmutableReassignment);
+      }
+
       const value = trimmed.substring(eqPos + 1).trim();
-     // Type check and emit the reassignment (no declared type, not mutable — just a bare assignment)
+
+      // Type check and emit the reassignment (no declared type, not mutable — just a bare assignment)
       const assignResult = emitAssignment(varName, value, undefined, false);
       if (assignResult instanceof Err) return assignResult;
     } else {
@@ -192,5 +230,3 @@ export function compile(source: string): Ok<string> | Err<string> {
 
   return new Ok(code);
 }
-
-

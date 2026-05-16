@@ -34,5 +34,8 @@ test("type mismatch via variable: U16 assigned to U8 through intermediate var", 
   expect((compile("let x = read<U16>(); let y : U8 = x;"))).toBeInstanceOf(Err);
 });
 
+test("reassigning immutable variable returns Err", () => {
+  expect((compile("let x = read<U8>(); x = read<U8>(); x"))).toBeInstanceOf(Err);
+});
 
 
