@@ -8,11 +8,10 @@ function assertValid(source: string, stdIn: string, expectedExitCode: number) {
   });
 }
 
-test('""', () => {
-  assertValid("", "", 0);
-});
+assertValid("", "", 0);
 
-function testReadType(type: string): void {
+for (const type of READ_TYPES) {
   assertValid(READ_PREFIX + type + ">()", "100", 100);
 }
-for (const type of READ_TYPES) testReadType(type);
+
+assertValid("read<U8>() + read<U8>()", "1 2", 3);
