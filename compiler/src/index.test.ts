@@ -1,10 +1,15 @@
 import { test, expect } from "bun:test";
 import { compile } from ".";
+import { Err, Ok } from "./result";
 
 function assertValid(source: string, stdIn: string, expectedExitCode: number) {
   test(source, () => {
     const compiled = compile(source);
-    expect(new Function("stdIn", compiled)(stdIn)).toBe(expectedExitCode);
+    if (compiled instanceof Ok) {
+      expect(new Function("stdIn", compiled.value)(stdIn)).toBe(expectedExitCode);
+    } else {
+      expect(compiled).toBeInstanceOf(Ok);
+    }
   });
 }
 
@@ -17,8 +22,9 @@ assertValid("let x = read<U8>(); x", "120", 120);
 
 assertValid("let x : U8 = read<U8>(); x + x", "120", 240);
 assertValid("let x : U8 = read<U8>();", "120", 0);
-
-assertValid("let x : U8 = read<U8>(); x + x", "120", 240);
-
+test("duplicate variable declaration returns Err", () => {
+  const result = compile("let x = read<U8>(); let x = read<U8>();");
+  expect(result).toBeInstanceOf(Err);
+});
 
 
