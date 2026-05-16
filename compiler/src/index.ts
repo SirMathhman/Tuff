@@ -1,61 +1,56 @@
-const RETURN_PREFIX = "return";
-export const STD_IN = "stdIn";
-export const READ_TYPES = ["U8", "U16", "U32", "U64"];
-export const READ_PREFIX = "read<";
-const PARSE_INT_PREFIX = "parseInt(";
-const STD_IN_PARTS = STD_IN + "Parts";
-
-const TRIM_CALL = ".trim()";
-
-function makeReadStr(type: string) {
-  return READ_PREFIX + type + ">()";
-}
+const returnStr = "return ";
+const defaultReturn = returnStr + "0;";
 
 export function compile(source: string) {
-  if (source === "") return RETURN_PREFIX + " " + "0";
-
-  let result = source;
-  const readStrs: [string, number][] = [];
-  for (const type of READ_TYPES) {
-    const searchStr = makeReadStr(type);
-    const count = result.split(searchStr).length - 1;
-    if (count > 0) readStrs.push([searchStr, count]);
+  if (source.trim() === "") {
+    return defaultReturn;
   }
 
-  let totalReads = 0;
-  for (const [, c] of readStrs) totalReads += c;
+  const types = ["U8", "I8", "U16", "I16", "U32", "I32", "F32", "F64"];
+  const reads: string[] = [];
 
-  const replacements: string[] = [];
-  for (let i = 0; i < totalReads; i++) {
-    if (totalReads > 1) {
-      replacements.push(
-        "(" + PARSE_INT_PREFIX + STD_IN_PARTS + "[" + i + "],10)||0)",
+  for (const type of types) {
+    const readExpr = "read<" + type + ">()";
+    let idx = source.indexOf(readExpr);
+    while (idx !== -1) {
+      reads.push(type);
+      idx = source.indexOf(readExpr, idx + 1);
+    }
+  }
+
+  if (reads.length === 0) {
+    return defaultReturn;
+  }
+
+  const stdInPart = "stdIn.split(',')[i] || stdIn";
+  const parsePrefix = "parse";
+  const parts: string[] = [];
+  for (let i = 0; i < reads.length; i++) {
+    const type = reads[i];
+    let parseExpr: string;
+    const indexBracket = "[" + i + "]";
+    if (type === "F32" || type === "F64") {
+      parseExpr = (parsePrefix + "Float(" + stdInPart + ")").replace(
+        "[i]",
+        indexBracket,
       );
     } else {
-      replacements.push(PARSE_INT_PREFIX + STD_IN + TRIM_CALL + ", 10)");
+      parseExpr = (parsePrefix + "Int(" + stdInPart + ", 10)").replace(
+        "[i]",
+        indexBracket,
+      );
     }
+    parts.push(parseExpr);
   }
 
-  let repIdx = 0;
-  for (const [searchStr] of readStrs) {
-    while (result.includes(searchStr)) {
-      result = result.replace(searchStr, replacements[repIdx] || "0");
-      repIdx++;
+  if (parts.length === 1) {
+    return returnStr + parts[0] + ";";
+  } else {
+    let code = "";
+    for (let j = 0; j < parts.length; j++) {
+      code += "const v" + j + " = " + parts[j] + ";\n";
     }
+    code += returnStr + parts[parts.length - 1] + ";";
+    return code;
   }
-
-  if (totalReads > 1)
-    return (
-      "let " +
-      STD_IN_PARTS +
-      "=" +
-      STD_IN +
-      TRIM_CALL +
-      ".split(/\\s+/);\n" +
-      RETURN_PREFIX +
-      " " +
-      result +
-      ";"
-    );
-  return RETURN_PREFIX + " " + result + ";";
 }
