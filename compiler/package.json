@@ -10,6 +10,7 @@
     "test": "bun test",
     "cpd": "pmd cpd --dir src --minimum-tokens 50 --language typescript --ignore-literals --ignore-identifiers",
     "check-dupes": "bun run scripts/check-duplicate-expressions.ts",
+    "check-string-dupes": "bun run scripts/check-duplicate-string-substrings.ts",
     "agent": "npx tsx ../agent/index.ts"
   },
   "devDependencies": {

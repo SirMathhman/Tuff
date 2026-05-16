@@ -23,3 +23,12 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-Host "Duplicate expression check passed.";
+
+npm run check-string-dupes;
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Duplicate substring check failed.
+    The substring(s) listed above appear more than once.
+    Consider extracting them into a shared variable.";
+    exit 1
+}
+Write-Host "Duplicate substring check passed.";
