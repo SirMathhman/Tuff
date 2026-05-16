@@ -101,7 +101,9 @@ function filterRedundantSubstrings(
 
 // ── Collect string literals from all source files ──────────────────────────
 
-const tsFiles = readdirSync(SRC_DIR).filter((f) => f.endsWith(".ts"));
+const tsFiles = readdirSync(SRC_DIR).filter(
+  (f) => f.endsWith(".ts") && !f.endsWith(".test.ts"),
+);
 
 const allOccurrences: StringOccurrence[] = [];
 
