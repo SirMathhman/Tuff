@@ -27,12 +27,10 @@ export function compile(source: string): Ok<string> | Err<string> {
   if (source.trim() === "") {
     return okDefault();
   }
-
-  const types = ["U8", "I8", "U16", "I16", "U32", "I32", "F32", "F64"];
   const reads: string[] = [];
   const readExprs: string[] = [];
 
-  for (const type of types) {
+  for (const type of (["U8", "I8", "U16", "I16", "U32", "I32", "F32", "F64"])) {
     const readExpr = "read<" + type + ">()";
     let idx = source.indexOf(readExpr);
     while (idx !== -1) {
@@ -78,12 +76,11 @@ export function compile(source: string): Ok<string> | Err<string> {
   }
 
   // Split by semicolons and process each statement
-  const statements = expr.split(";");
   const declaredVars: string[] = [];
   // Map variable names to their types (both generated v0..vn and user-declared x, y, etc.)
   const allVarTypes: { name: string; type: string }[] = [];
 
-  for (const stmt of statements) {
+  for (const stmt of expr.split(";")) {
     const trimmed = stmt.trim();
     if (trimmed === "") {
       code += defaultReturn + "\n";
@@ -125,8 +122,7 @@ export function compile(source: string): Ok<string> | Err<string> {
       // Determine the source type of `value` — could be a generated vN or a user-declared variable
       let srcType: string | undefined;
       for (let vi = 0; vi < reads.length; vi++) {
-        const vName = "v" + vi;
-        if (value === vName) {
+        if (value === ("v" + vi)) {
           srcType = varTypes[vi];
         }
       }

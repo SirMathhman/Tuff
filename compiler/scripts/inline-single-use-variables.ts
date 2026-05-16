@@ -15,7 +15,7 @@
  * Exit code 1 if any variables were inlined (so CI can re-run or flag the
  * change for review). Exit code 0 if nothing was changed.
  */
-import { Project, Node, VariableDeclarationKind } from "ts-morph";
+import { Project, Node, VariableDeclarationKind, SyntaxKind } from "ts-morph";
 import { readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -40,7 +40,7 @@ for (const sourceFile of project.getSourceFiles()) {
   while (changed) {
     changed = false;
 
-    for (const declaration of sourceFile.getVariableDeclarations()) {
+    for (const declaration of sourceFile.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
       // Skip exported declarations.
       const varStatement = declaration.getVariableStatement();
       if (varStatement && varStatement.isExported()) continue;

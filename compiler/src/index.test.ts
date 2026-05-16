@@ -23,17 +23,14 @@ assertValid("let x = read<U8>(); x", "120", 120);
 assertValid("let x : U8 = read<U8>(); x + x", "120", 240);
 assertValid("let x : U8 = read<U8>();", "120", 0);
 test("duplicate variable declaration returns Err", () => {
-  const result = compile("let x = read<U8>(); let x = read<U8>();");
-  expect(result).toBeInstanceOf(Err);
+  expect((compile("let x = read<U8>(); let x = read<U8>();"))).toBeInstanceOf(Err);
 });
 test("type mismatch: U16 cannot fit in U8", () => {
-  const result = compile("let x : U8 = read<U16>();");
-  expect(result).toBeInstanceOf(Err);
+  expect((compile("let x : U8 = read<U16>();"))).toBeInstanceOf(Err);
 });
 
 test("type mismatch via variable: U16 assigned to U8 through intermediate var", () => {
-  const result = compile("let x = read<U16>(); let y : U8 = x;");
-  expect(result).toBeInstanceOf(Err);
+  expect((compile("let x = read<U16>(); let y : U8 = x;"))).toBeInstanceOf(Err);
 });
 
 
