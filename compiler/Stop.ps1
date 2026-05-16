@@ -21,7 +21,9 @@ if ($LASTEXITCODE -ne 0) {
     $output;
     Write-Error "Duplicate expression check failed.
     The expression(s) listed above appear more than once.
-    Consider extracting them into a shared variable.";
+    Consider extracting them into a shared variable.
+    If the duplicates contain identifiers that are the same
+    but are in different scopes, rename one (or both) of them to be more accurate.";
     exit 1
 }
 Write-Host "Duplicate expression check passed.";

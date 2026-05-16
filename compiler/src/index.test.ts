@@ -21,6 +21,7 @@ assertValid("let x : U8 = read<U8>(); x", "120", 120);
 assertValid("let x = read<U8>(); x", "120", 120);
 
 assertValid("let x : U8 = read<U8>(); x + x", "120", 240);
+assertValid("let mut x = read<U8>(); x = read<U8>(); x", "1 2", 2);
 assertValid("let x : U8 = read<U8>();", "120", 0);
 test("duplicate variable declaration returns Err", () => {
   expect((compile("let x = read<U8>(); let x = read<U8>();"))).toBeInstanceOf(Err);

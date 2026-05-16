@@ -30,7 +30,7 @@ export function compile(source: string): Ok<string> | Err<string> {
   const reads: string[] = [];
   const readExprs: string[] = [];
 
-  for (const type of (["U8", "I8", "U16", "I16", "U32", "I32", "F32", "F64"])) {
+  for (const type of ["U8", "I8", "U16", "I16", "U32", "I32", "F32", "F64"]) {
     const readExpr = "read<" + type + ">()";
     let idx = source.indexOf(readExpr);
     while (idx !== -1) {
@@ -80,6 +80,50 @@ export function compile(source: string): Ok<string> | Err<string> {
   // Map variable names to their types (both generated v0..vn and user-declared x, y, etc.)
   const allVarTypes: { name: string; type: string }[] = [];
 
+// Helper: look up the inferred/declared type of a variable by its name
+  function lookupType(varName: string): string | undefined {
+    for (let vi = 0; vi < reads.length; vi++) {
+      if (varName === "v" + vi) return varTypes[vi];
+    }
+    for (const entry of allVarTypes) {
+      if (entry.name === varName) return entry.type;
+    }
+    return undefined;
+  }
+
+// Shared Ok value for success cases where no payload is needed
+  const okVoid = new Ok(undefined);
+
+  // Helper: check type compatibility and return Err on mismatch, or okVoid when compatible
+  function checkAssignable(srcType: string | undefined, targetType: string | undefined): Ok<void> | Err<string> {
+    if (srcType !== undefined && targetType !== undefined && !fitsIn(srcType, targetType)) {
+      return new Err("type mismatch: cannot assign " + srcType + " to " + targetType);
+    }
+    return okVoid;
+  }
+
+  // Helper: process an assignment statement and append generated JS code
+  function emitAssignment(
+    varName: string, value: string, declaredType: string | undefined, isMutable: boolean,
+  ): Ok<void> | Err<string> {
+    const srcType = lookupType(value);
+    const existingType = lookupType(varName);
+    const targetType = declaredType !== undefined ? declaredType : existingType;
+    const assignResult = checkAssignable(srcType, targetType);
+    if (assignResult instanceof Err) return assignResult;
+
+    // Record this variable's effective type for later lookups only if not already known
+    const effectiveType = declaredType ?? srcType ?? "";
+    if (effectiveType.length > 0 && existingType === undefined) {
+      allVarTypes.push({ name: varName, type: effectiveType });
+    }
+
+    // Use 'let' for mutable vars, 'const' otherwise; bare reassignments omit the keyword
+    const keyword = isMutable ? "let" : (existingType !== undefined ? "" : constKeyword);
+    code += keyword + varName + " = " + value + "\n";
+    return okVoid;
+  }
+
   for (const stmt of expr.split(";")) {
     const trimmed = stmt.trim();
     if (trimmed === "") {
@@ -87,84 +131,66 @@ export function compile(source: string): Ok<string> | Err<string> {
       continue;
     }
 
+    // Check if this is a let declaration or a bare assignment like "x = ..."
     const letIdx = trimmed.indexOf("let ");
-    if (letIdx === -1) {
-      code += returnStr + trimmed + "\n";
-      continue;
-    }
+    if (letIdx !== -1) {
+      // This is a `let` declaration
+      const afterLet = trimmed.substring(letIdx + "let ".length);
 
-    // Extract variable name from "let x" or "let x : Type ="
-    const afterLet = trimmed.substring(letIdx + "let ".length);
-    let varName: string;
-    let declaredType: string | undefined;
-    const colonPos = afterLet.indexOf(":");
-    const eqPos = afterLet.indexOf("=");
+      // Check for mut keyword: "mut x" or just "x"
+      let restOfDecl = afterLet;
+      let isMutable = false;
+      if (restOfDecl.startsWith("mut ")) {
+        isMutable = true;
+        restOfDecl = restOfDecl.substring(4); // skip "mut "
+      }
 
-    if (colonPos !== -1) {
-      // Has type annotation: extract both name and type
-      varName = afterLet.substring(0, colonPos).trim();
-      declaredType = afterLet
-        .substring(colonPos + 1, eqPos >= 0 ? eqPos : afterLet.length)
-        .trim();
-    } else {
-      varName = afterLet.substring(0, eqPos).trim();
-    }
+      // Extract variable name from "x" or "x : Type ="
+      let varName: string;
+      let declaredType: string | undefined;
+      const colonPos = restOfDecl.indexOf(":");
+      const eqPos = restOfDecl.indexOf("=");
 
-    // Check for duplicate variable declaration
-    if (declaredVars.indexOf(varName) !== -1) {
-      return new Err("duplicate variable: " + varName);
-    }
-    declaredVars.push(varName);
+      if (colonPos !== -1) {
+        // Has type annotation: extract both name and type
+        varName = restOfDecl.substring(0, colonPos).trim();
+        declaredType = restOfDecl
+          .substring(colonPos + 1, eqPos >= 0 ? eqPos : restOfDecl.length)
+          .trim();
+      } else {
+        varName = restOfDecl.substring(0, eqPos).trim();
+      }
+
+      // Check for duplicate variable declaration
+      if (declaredVars.indexOf(varName) !== -1) {
+        return new Err("duplicate variable: " + varName);
+      }
+      declaredVars.push(varName);
 
     if (eqPos >= 0) {
-      const value = afterLet.substring(eqPos + 1).trim();
+        const value = restOfDecl.substring(eqPos + 1).trim();
 
-      // Determine the source type of `value` — could be a generated vN or a user-declared variable
-      let srcType: string | undefined;
-      for (let vi = 0; vi < reads.length; vi++) {
-        if (value === ("v" + vi)) {
-          srcType = varTypes[vi];
-        }
+        // Type check and emit the assignment
+        const assignResult = emitAssignment(varName, value, declaredType, isMutable);
+        if (assignResult instanceof Err) return assignResult;
+      } else {
+        code += "";
       }
-
-      // If not a generated variable, check user-declared variables for their type
-      if (srcType === undefined) {
-        for (let ui = 0; ui < allVarTypes.length; ui++) {
-          const entry: { name: string; type: string } | undefined =
-            allVarTypes[ui];
-          if (entry !== undefined && value === entry.name) {
-            srcType = entry.type;
-          }
-        }
-      }
-
-      // Type check: if we have a declared target type and know the source type, verify compatibility
-      if (
-        declaredType !== undefined &&
-        srcType !== undefined &&
-        !fitsIn(srcType, declaredType)
-      ) {
-        return new Err(
-          "type mismatch: cannot assign " + srcType + " to " + declaredType,
-        );
-      }
-
-      // Record this variable's effective type for later lookups
-      const effectiveType =
-        declaredType !== undefined
-          ? declaredType
-          : srcType !== undefined
-            ? srcType
-            : "";
-      if (effectiveType.length > 0) {
-        allVarTypes.push({ name: varName, type: effectiveType });
-      }
-
-      code += constKeyword + varName + " = " + value + "\n";
+    } else if (trimmed.includes("=")) {
+      // Bare assignment: e.g. "x = read<U8>()" or "x = y"
+      const eqPos = trimmed.indexOf("=");
+      const varName = trimmed.substring(0, eqPos).trim();
+      const value = trimmed.substring(eqPos + 1).trim();
+     // Type check and emit the reassignment (no declared type, not mutable — just a bare assignment)
+      const assignResult = emitAssignment(varName, value, undefined, false);
+      if (assignResult instanceof Err) return assignResult;
     } else {
-      code += "";
+      // Expression statement — treat as return
+      code += returnStr + trimmed + "\n";
     }
   }
 
   return new Ok(code);
 }
+
+
