@@ -1,5 +1,6 @@
 const returnStr = "return ";
 const defaultReturn = returnStr + "0;";
+const constKeyword = "const ";
 
 function buildReadExpr(type: string) {
   return "read<" + type + ">()";
@@ -49,13 +50,54 @@ export function compile(source: string) {
         indexBracket,
       );
     }
-    code += "const v" + i + " = " + parseExpr + ";\n";
+    code += constKeyword + "v" + i + " = " + parseExpr + ";\n";
     const readExpr: string | undefined = readExprs[i];
     if (readExpr === undefined) continue;
     expr = expr.replace(readExpr, "v" + i);
   }
 
-  code += returnStr + expr + ";";
+  // Split by semicolons and process each statement
+  const statements = splitStatements(expr);
+  for (const stmt of statements) {
+    code += convertStatement(stmt.trim()) + "\n";
+  }
+
   return code;
 }
 
+function splitStatements(s: string): string[] {
+  return s.split(";");
+}
+
+function convertStatement(stmt: string): string {
+  const letIdx = stmt.indexOf("let ");
+  if (letIdx === -1) {
+    return returnStr + stmt;
+  }
+
+  const afterLet = stmt.substring(letIdx + "let ".length);
+  const colonPos = afterLet.indexOf(":");
+  const eqPos = afterLet.indexOf("=");
+  const hasColon = colonPos >= 0;
+  const noEq = eqPos < 0;
+
+  let varName: string;
+  let valueStart: number;
+
+  if (hasColon && !noEq && colonPos < eqPos) {
+    // Has type annotation between name and '='
+    varName = afterLet.substring(0, colonPos).trim();
+    valueStart = eqPos + 1;
+  } else {
+    const firstSep = noEq ? (hasColon ? colonPos : afterLet.length) : eqPos;
+    varName = afterLet.substring(0, firstSep).trim();
+    valueStart = noEq ? afterLet.length : eqPos + 1;
+  }
+
+  if (valueStart < afterLet.length) {
+    const value = afterLet.substring(valueStart).trim();
+    return constKeyword + varName + " = " + value;
+  }
+
+  return "";
+}
