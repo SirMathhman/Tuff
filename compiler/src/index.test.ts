@@ -1,23 +1,20 @@
 import { test, expect } from "bun:test";
-import { compile } from ".";
+import { compile, STD_IN, READ_TYPES, READ_PREFIX } from ".";
 
-test("run(empty string) => 0", () => {
+const INPUT_100 = "100";
+const ARROW = ") => ";
+
+test("run(empty string" + ARROW + "0", () => {
   const compiled = compile("");
-  expect(new Function("stdIn", compiled)("")).toBe(0);
+  expect(new Function(STD_IN, compiled)("")).toBe(0);
 });
 
-test('run("read<U8>()", "100") => 100', () => {
-  const compiled = compile("read<U8>()");
-  expect(new Function("stdIn", compiled)("100")).toBe(100);
-});
+function testReadType(type: string): void {
+  const readExpr = READ_PREFIX + type + ">()";
+  test('run("' + readExpr + '", "' + INPUT_100 + '"' + ARROW + "100", () => {
+    const compiled = compile(readExpr);
+    expect(new Function(STD_IN, compiled)(INPUT_100)).toBe(100);
+  });
+}
 
-test('run("read<U16>()", "100") => 100', () => {
-  const compiled = compile("read<U16>()");
-  expect(new Function("stdIn", compiled)("100")).toBe(100);
-});
-
-test('run("read<U32>()", "100") => 100', () => {
-  const compiled = compile("read<U32>()");
-  expect(new Function("stdIn", compiled)("100")).toBe(100);
-});
-
+for (const type of READ_TYPES) testReadType(type);
