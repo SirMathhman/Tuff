@@ -42,11 +42,17 @@ assertValid("let x = 3; let y = 4; x != y", "", 1);
 assertValid("let x : I32 = if (read<Bool>()) 3 else 5; x", "true", 3);
 assertValid("let mut x = 0; { x = 1; } x", "", 1);
 
+// if/else blocks with mutable variable reassignment inside them
+assertValid(
+  "let mut x = 0; if (read<Bool>()) { x = 1; } else { x = 2; } x",
+  "true",
+  1,
+);
+
 // Variable declared inside block is not accessible outside it
 
 test("variable in block not visible outside", () => {
   expect(compile("{ let x = 0; } x")).toBeInstanceOf(Err);
 });
-
 
 

@@ -188,9 +188,8 @@ function compileStatements(
     if (assignResult instanceof Err) return assignResult;
 
     // Record this variable's effective type for later lookups only if not already known
-    const resolvedType = declaredType ?? srcType ?? "";
-    if (resolvedType.length > 0 && existingType === undefined) {
-      allVarTypes.push({ name: varName, type: resolvedType });
+    if (existingType === undefined) {
+      allVarTypes.push({ name: varName, type: declaredType ?? srcType ?? "" });
     }
 
     // Use 'let' for mutable vars, 'const' otherwise; bare reassignments omit the keyword
@@ -336,6 +335,28 @@ function compileStatements(
     return okVoid;
   }
 
+  function processBlockContent(
+    blockBody: string,
+  ): Ok<void> | Err<CompileError> {
+    for (const stmt of blockBody.split(";")) {
+      const stmtTrimmed = stmt.trim();
+      if (stmtTrimmed === "") continue;
+      const stmtLetIdx = stmtTrimmed.indexOf("let ");
+      if (stmtLetIdx !== -1) {
+        const letResult = processLetDecl(
+          stmtTrimmed.substring(stmtLetIdx + "let ".length),
+        );
+        if (letResult instanceof Err) return letResult;
+      } else if (stmtTrimmed.includes("=") && !isComparisonExpr(stmtTrimmed)) {
+        const bareResult = emitBareAssignment(stmtTrimmed);
+        if (bareResult instanceof Err) return bareResult;
+      } else {
+        emitReturn(stmtTrimmed);
+      }
+    }
+    return okVoid;
+  }
+
   // Split by semicolons while respecting brace nesting, then process each segment
   const segments: string[] = [];
   let currentSegment = "";
@@ -369,8 +390,8 @@ function compileStatements(
   // Push any remaining content after the last semicolon
   finishSegment();
 
-  for (const segment of segments) {
-    const trimmed = segment.trim();
+  for (let segIdx = 0; segIdx < segments.length; segIdx++) {
+    const trimmed = segments[segIdx]!.trim();
 
     if (trimmed === "") {
       code += defaultReturn + "\n";
@@ -379,39 +400,65 @@ function compileStatements(
 
     // Check if this is a let declaration or a bare assignment like "x = ..."
     const letIdx = trimmed.indexOf("let ");
+    const endsWithCloseBrace = trimmed.endsWith("}");
 
     // Detect block statements: "{ ... }" — process contents but don't leak declarations outside
-    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-      // Process block contents by splitting on semicolons (no nested blocks expected)
-      for (const stmt of trimmed
-        .substring(1, trimmed.length - 1)
-        .trim()
-        .split(";")) {
-        const bTrimmed = stmt.trim();
-        if (bTrimmed === "") continue;
-
-        const letIdx2 = bTrimmed.indexOf("let ");
-        if (letIdx2 !== -1) {
-          const letResult = processLetDecl(
-            bTrimmed.substring(letIdx2 + "let ".length),
-          );
-          if (letResult instanceof Err) return letResult;
-        } else if (bTrimmed.includes("=") && !isComparisonExpr(bTrimmed)) {
-          const bareResult = emitBareAssignment(bTrimmed);
-          if (bareResult instanceof Err) return bareResult;
-        } else {
-          // Expression statement inside block — treat as return
-          emitReturn(bTrimmed);
-        }
-      }
-
-      // Restore outer scope — discard variables declared inside the block
-      allVarTypes.length = allVarTypes.length;
+    if (trimmed.startsWith("{") && endsWithCloseBrace) {
+      const blockResult = processBlockContent(
+        trimmed.substring(1, trimmed.length - 1).trim(),
+      );
+      if (blockResult instanceof Err) return blockResult;
       declaredVars.length = 0;
       for (const v of [...declaredVars]) declaredVars.push(v);
       mutVars.clear();
       for (const v of new Set(mutVars)) mutVars.add(v);
+      allVarTypes.length = allVarTypes.length;
       continue;
+    }
+
+    // Detect if/else statement blocks: "if (cond) { ... } [else { ... }]"
+    const ifPrefix = "if (";
+    if (trimmed.startsWith(ifPrefix) && endsWithCloseBrace) {
+      let condDepth = 0;
+      let condEnd = -1;
+      for (let ci = ifPrefix.length - 1; ci < trimmed.length; ci++) {
+        const ch = trimmed[ci];
+        if (ch === "(") condDepth++;
+        else if (ch === ")") {
+          condDepth--;
+          if (condDepth === 0) {
+            condEnd = ci;
+            break;
+          }
+        }
+      }
+      if (condEnd !== -1) {
+        const blockPart = trimmed.substring(condEnd + 1).trim();
+        if (blockPart.startsWith("{") && blockPart.endsWith("}")) {
+          code +=
+            ifPrefix + trimmed.substring(ifPrefix.length, condEnd) + ") {\n";
+          const ifResult = processBlockContent(
+            blockPart.substring(1, blockPart.length - 1),
+          );
+          if (ifResult instanceof Err) return ifResult;
+          code += "}\n";
+          const nextSeg = segments[segIdx + 1];
+          if (nextSeg !== undefined) {
+            const elseOpen = "else {";
+            const nextTrimmed = nextSeg.trim();
+            if (nextTrimmed.startsWith(elseOpen) && nextTrimmed.endsWith("}")) {
+              code += elseOpen + "\n";
+              const elseResult = processBlockContent(
+                nextTrimmed.substring(elseOpen.length, nextTrimmed.length - 1),
+              );
+              if (elseResult instanceof Err) return elseResult;
+              code += "}\n";
+              segIdx++;
+            }
+          }
+          continue;
+        }
+      }
     }
 
     if (letIdx !== -1) {
