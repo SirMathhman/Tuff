@@ -1,6 +1,8 @@
 const returnStr = "return ";
 const defaultReturn = returnStr + "0;";
 const constKeyword = "const ";
+const boolTrue = "true";
+const boolFalse = "false";
 
 import { Ok, Err } from "./result";
 
@@ -13,21 +15,27 @@ export enum CompileError {
 function okDefault(): Ok<string> {
   return new Ok(defaultReturn);
 }
-
-// Size rank for each type: higher means larger range
+// Size rank for each type: higher means larger range. Bool is special (rank -1).
 function typeRank(t: string): number {
   if (t === "U8" || t === "I8") return 1;
   if (t === "U16" || t === "I16") return 2;
   if (t === "U32" || t === "I32") return 3;
   if (t === "F32") return 4;
   if (t === "F64") return 5;
+  if (t === "Bool") return -1;
   return 0;
 }
 
 // Check if source type can always fit into target type
 function fitsIn(sourceType: string, targetType: string): boolean {
-  return typeRank(sourceType) <= typeRank(targetType);
+  const srcRank = typeRank(sourceType);
+  const tgtRank = typeRank(targetType);
+  // Bool only fits in Bool (rank -1), numeric types don't mix with Bool
+  if (srcRank === -1 && tgtRank !== -1) return false;
+  if (tgtRank === -1 && srcRank !== -1) return false;
+  return srcRank <= tgtRank;
 }
+
 export function compile(source: string): Ok<string> | Err<CompileError> {
   if (source.trim() === "") {
     return okDefault();
@@ -35,7 +43,17 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
   const reads: string[] = [];
   const readExprs: string[] = [];
 
-  for (const type of ["U8", "I8", "U16", "I16", "U32", "I32", "F32", "F64"]) {
+  for (const type of [
+    "U8",
+    "I8",
+    "U16",
+    "I16",
+    "U32",
+    "I32",
+    "F32",
+    "F64",
+    "Bool",
+  ]) {
     const readExpr = "read<" + type + ">()";
     let idx = source.indexOf(readExpr);
     while (idx !== -1) {
@@ -46,7 +64,7 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
   }
 
   if (reads.length === 0) {
-    return okDefault();
+    return compileNoReads(source);
   }
 
   const stdInPart = "stdIn.replace(',', ' ').split(' ')[i] || stdIn";
@@ -62,7 +80,12 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
     if (type === undefined) continue;
     let parseExpr: string;
     const indexBracket = "[" + i + "]";
-    if (type === "F32" || type === "F64") {
+    if (type === "Bool") {
+      parseExpr = ("(" + stdInPart + ') !== "' + boolFalse + '"').replace(
+        "[i]",
+        indexBracket,
+      );
+    } else if (type === "F32" || type === "F64") {
       parseExpr = (parsePrefix + "Float(" + stdInPart + ")").replace(
         "[i]",
         indexBracket,
@@ -81,6 +104,25 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
   }
 
   // Split by semicolons and process each statement
+  return compileStatements(expr, code, varTypes, reads.length);
+}
+
+// Compile source that has no read expressions (e.g. boolean literals)
+function compileNoReads(source: string): Ok<string> | Err<CompileError> {
+  const expr = source;
+  return compileStatements(expr, "", [], 0);
+}
+
+// Shared logic for processing statements after read expressions are replaced
+function compileStatements(
+  expr: string,
+  initialCode: string,
+  varTypes: string[],
+  readsCount: number,
+): Ok<string> | Err<CompileError> {
+  let code = initialCode;
+
+  // Split by semicolons and process each statement
   const declaredVars: string[] = [];
   // Track which variables were declared as mutable
   const mutVars: Set<string> = new Set();
@@ -89,7 +131,7 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
 
   // Helper: look up the inferred/declared type of a variable by its name
   function lookupType(varName: string): string | undefined {
-    for (let vi = 0; vi < reads.length; vi++) {
+    for (let vi = 0; vi < readsCount; vi++) {
       if (varName === "v" + vi) return varTypes[vi];
     }
     for (const entry of allVarTypes) {
@@ -123,25 +165,31 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
     declaredType: string | undefined,
     isMutable: boolean,
   ): Ok<void> | Err<CompileError> {
-    const srcType = lookupType(value);
+    let srcType = lookupType(value);
+
+    // Handle bool literals by setting their type explicitly
+    if (value === boolTrue || value === boolFalse) {
+      srcType = "Bool";
+    }
+
     const existingType = lookupType(varName);
     const targetType = declaredType !== undefined ? declaredType : existingType;
     const assignResult = checkAssignable(srcType, targetType);
     if (assignResult instanceof Err) return assignResult;
 
     // Record this variable's effective type for later lookups only if not already known
-    const effectiveType = declaredType ?? srcType ?? "";
-    if (effectiveType.length > 0 && existingType === undefined) {
-      allVarTypes.push({ name: varName, type: effectiveType });
+    const resolvedType = declaredType ?? srcType ?? "";
+    if (resolvedType.length > 0 && existingType === undefined) {
+      allVarTypes.push({ name: varName, type: resolvedType });
     }
 
     // Use 'let' for mutable vars, 'const' otherwise; bare reassignments omit the keyword
-    const keyword = isMutable
+    const kw = isMutable
       ? "let"
       : existingType !== undefined
         ? ""
         : constKeyword;
-    code += keyword + varName + " = " + value + "\n";
+    code += kw + varName + " = " + value + "\n";
     return okVoid;
   }
 
@@ -223,8 +271,17 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
       const assignResult = emitAssignment(varName, value, undefined, false);
       if (assignResult instanceof Err) return assignResult;
     } else {
-      // Expression statement — treat as return
-      code += returnStr + trimmed + "\n";
+      // Expression statement — treat as return. Handle bool literals and Bool-typed variables here too.
+      const retExpr = trimmed;
+      if (
+        retExpr === boolTrue ||
+        retExpr === boolFalse ||
+        lookupType(retExpr) === "Bool"
+      ) {
+        code += returnStr + "(+(" + retExpr + "))\n";
+      } else {
+        code += returnStr + retExpr + "\n";
+      }
     }
   }
 
