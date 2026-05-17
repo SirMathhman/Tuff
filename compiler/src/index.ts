@@ -12,9 +12,6 @@ export enum CompileError {
   ImmutableReassignment = "immutable_reassignment",
 }
 
-function okDefault(): Ok<string> {
-  return new Ok(defaultReturn);
-}
 // Size rank for each type: higher means larger range. Bool is special (rank -1).
 function typeRank(t: string): number {
   if (t === "U8" || t === "I8") return 1;
@@ -26,67 +23,12 @@ function typeRank(t: string): number {
   return 0;
 }
 // Check if source type can always fit into target type
-function fitsIn(sourceType: string, targetType: string): boolean {
-  const srcRank = typeRank(sourceType);
-  const tgtRank = typeRank(targetType);
-  // Bool only fits in Bool (rank -1), numeric types don't mix with Bool
-  if (srcRank === -1 && tgtRank !== -1) return false;
-  if (tgtRank === -1 && srcRank !== -1) return false;
-  return srcRank <= tgtRank;
-}
-
 // Extract type from typed literal like "1U8", "5I32" etc. Returns undefined for non-typed values.
-function extractLiteralType(value: string): string | undefined {
-  const types = ["F64", "F32", "U32", "I32", "U16", "I16", "U8", "I8"];
-  for (const t of types) {
-    if (value.endsWith(t)) return t;
-  }
-  return undefined;
-}
-
 // Convert Tuff if/else expression to JS ternary: if(cond) a else b => cond ? a : b
-function convertIfElse(expr: string): string {
-  const prefix = "if (";
-  const idx = expr.indexOf(prefix);
-  if (idx !== 0) return expr;
-
-  // Position right after the opening paren of "if ("
-  const conditionStart = idx + prefix.length;
-  let depth = 0;
-  let condEnd = -1;
-  for (let i = conditionStart - 1; i < expr.length; i++) {
-    const ch = expr[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") {
-      depth--;
-      if (depth === 0) {
-        condEnd = i;
-        break;
-      }
-    }
-  }
-  if (condEnd === -1) return expr;
-
-  const condition = expr.substring(conditionStart, condEnd);
-  const rest = expr.substring(condEnd + 1).trim();
-
-  // Find the "else" keyword that separates then/else branches
-  for (let i = 0; i < rest.length - 3; i++) {
-    if (rest.substring(i, i + 4) === "else") {
-      const thenBranch = rest.substring(0, i).trim();
-      const elseBranch = rest.substring(i + 4).trim();
-      return (
-        "(" + condition + ") ? (" + thenBranch + ") : (" + elseBranch + ")"
-      );
-    }
-  }
-
-  return expr;
-}
 
 export function compile(source: string): Ok<string> | Err<CompileError> {
   if (source.trim() === "") {
-    return okDefault();
+    return new Ok(defaultReturn);
   }
   const reads: string[] = [];
   const readExprs: string[] = [];
@@ -112,7 +54,10 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
   }
 
   if (reads.length === 0) {
-    return compileNoReads(source);
+    return (() => {
+      const expr = source;
+      return compileStatements(expr, "", [], 0);
+    })();
   }
 
   const stdInPart = "stdIn.replace(',', ' ').split(' ')[i] || stdIn";
@@ -156,11 +101,6 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
 }
 
 // Compile source that has no read expressions (e.g. boolean literals)
-function compileNoReads(source: string): Ok<string> | Err<CompileError> {
-  const expr = source;
-  return compileStatements(expr, "", [], 0);
-}
-
 // Shared logic for processing statements after read expressions are replaced
 function compileStatements(
   expr: string,
@@ -199,7 +139,13 @@ function compileStatements(
     if (
       srcType !== undefined &&
       targetType !== undefined &&
-      !fitsIn(srcType, targetType)
+      !(() => {
+        const srcRank = typeRank(srcType);
+        const tgtRank = typeRank(targetType);
+        if (srcRank === -1 && tgtRank !== -1) return false;
+        if (tgtRank === -1 && srcRank !== -1) return false;
+        return srcRank <= tgtRank;
+      })()
     ) {
       return new Err(CompileError.TypeMismatch);
     }
@@ -221,13 +167,50 @@ function compileStatements(
     }
 
     // Extract type from typed numeric literals like 1U8, 5I32 etc.
-    const literalType = extractLiteralType(value);
+    const literalType = (() => {
+      const types = ["F64", "F32", "U32", "I32", "U16", "I16", "U8", "I8"];
+      for (const t of types) {
+        if (value.endsWith(t)) return t;
+      }
+      return undefined;
+    })();
     if (literalType !== undefined) {
       srcType = literalType;
     }
 
     // Convert Tuff if/else to JS ternary before emitting
-    const convertedValue = convertIfElse(value);
+    const convertedValue = (() => {
+      const prefix = "if (";
+      const idx = value.indexOf(prefix);
+      if (idx !== 0) return value;
+      const conditionStart = idx + prefix.length;
+      let depth = 0;
+      let condEnd = -1;
+      for (let i = conditionStart - 1; i < value.length; i++) {
+        const ch = value[i];
+        if (ch === "(") depth++;
+        else if (ch === ")") {
+          depth--;
+          if (depth === 0) {
+            condEnd = i;
+            break;
+          }
+        }
+      }
+      if (condEnd === -1) return value;
+      const condition = value.substring(conditionStart, condEnd);
+      const rest = value.substring(condEnd + 1).trim();
+      for (let i = 0; i < rest.length - 3; i++) {
+        if (rest.substring(i, i + 4) === "else") {
+          const thenBranch = rest.substring(0, i).trim();
+          const elseBranch = rest.substring(i + 4).trim();
+          return (
+            "(" + condition + ") ? (" + thenBranch + ") : (" + elseBranch + ")"
+          );
+        }
+      }
+      return value;
+    })();
 
     const existingType = lookupType(varName);
     const targetType = declaredType !== undefined ? declaredType : existingType;
