@@ -37,3 +37,6 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-Host "Duplicate substring check passed.";
+
+npm run inline-vars
+npm run inline-fns

@@ -55,8 +55,7 @@ export function compile(source: string): Ok<string> | Err<CompileError> {
 
   if (reads.length === 0) {
     return (() => {
-      const expr = source;
-      return compileStatements(expr, "", [], 0);
+      return compileStatements(source, "", [], 0);
     })();
   }
 
@@ -168,8 +167,7 @@ function compileStatements(
 
     // Extract type from typed numeric literals like 1U8, 5I32 etc.
     const literalType = (() => {
-      const types = ["F64", "F32", "U32", "I32", "U16", "I16", "U8", "I8"];
-      for (const t of types) {
+      for (const t of ["F64", "F32", "U32", "I32", "U16", "I16", "U8", "I8"]) {
         if (value.endsWith(t)) return t;
       }
       return undefined;
@@ -179,42 +177,11 @@ function compileStatements(
     }
 
     // Convert Tuff if/else to JS ternary before emitting
-    const convertedValue = (() => {
-      const prefix = "if (";
-      const idx = value.indexOf(prefix);
-      if (idx !== 0) return value;
-      const conditionStart = idx + prefix.length;
-      let depth = 0;
-      let condEnd = -1;
-      for (let i = conditionStart - 1; i < value.length; i++) {
-        const ch = value[i];
-        if (ch === "(") depth++;
-        else if (ch === ")") {
-          depth--;
-          if (depth === 0) {
-            condEnd = i;
-            break;
-          }
-        }
-      }
-      if (condEnd === -1) return value;
-      const condition = value.substring(conditionStart, condEnd);
-      const rest = value.substring(condEnd + 1).trim();
-      for (let i = 0; i < rest.length - 3; i++) {
-        if (rest.substring(i, i + 4) === "else") {
-          const thenBranch = rest.substring(0, i).trim();
-          const elseBranch = rest.substring(i + 4).trim();
-          return (
-            "(" + condition + ") ? (" + thenBranch + ") : (" + elseBranch + ")"
-          );
-        }
-      }
-      return value;
-    })();
-
     const existingType = lookupType(varName);
-    const targetType = declaredType !== undefined ? declaredType : existingType;
-    const assignResult = checkAssignable(srcType, targetType);
+    const assignResult = checkAssignable(
+      srcType,
+      declaredType !== undefined ? declaredType : existingType,
+    );
     if (assignResult instanceof Err) return assignResult;
 
     // Record this variable's effective type for later lookups only if not already known
@@ -224,12 +191,46 @@ function compileStatements(
     }
 
     // Use 'let' for mutable vars, 'const' otherwise; bare reassignments omit the keyword
-    const kw = isMutable
-      ? "let"
-      : existingType !== undefined
-        ? ""
-        : constKeyword;
-    code += kw + varName + " = " + convertedValue + "\n";
+    code +=
+      (isMutable ? "let" : existingType !== undefined ? "" : constKeyword) +
+      varName +
+      " = " +
+      (() => {
+        const prefix = "if (";
+        const idx = value.indexOf(prefix);
+        if (idx !== 0) return value;
+        const conditionStart = idx + prefix.length;
+        let depth = 0;
+        let condEnd = -1;
+        for (let i = conditionStart - 1; i < value.length; i++) {
+          const ch = value[i];
+          if (ch === "(") depth++;
+          else if (ch === ")") {
+            depth--;
+            if (depth === 0) {
+              condEnd = i;
+              break;
+            }
+          }
+        }
+        if (condEnd === -1) return value;
+        const rest = value.substring(condEnd + 1).trim();
+        for (let i = 0; i < rest.length - 3; i++) {
+          if (rest.substring(i, i + 4) === "else") {
+            return (
+              "(" +
+              value.substring(conditionStart, condEnd) +
+              ") ? (" +
+              rest.substring(0, i).trim() +
+              ") : (" +
+              rest.substring(i + 4).trim() +
+              ")"
+            );
+          }
+        }
+        return value;
+      })() +
+      "\n";
     return okVoid;
   }
 
@@ -243,7 +244,12 @@ function compileStatements(
     );
   }
 
-  for (const stmt of expr.split(";")) {
+  // Strip curly braces from blocks so they don't interfere with semicolon splitting
+  for (const stmt of expr
+    .split("")
+    .filter((c) => c !== "{" && c !== "}")
+    .join("")
+    .split(";")) {
     const trimmed = stmt.trim();
 
     if (trimmed === "") {
@@ -255,10 +261,8 @@ function compileStatements(
     const letIdx = trimmed.indexOf("let ");
     if (letIdx !== -1) {
       // This is a `let` declaration
-      const afterLet = trimmed.substring(letIdx + "let ".length);
-
       // Check for mut keyword: "mut x" or just "x"
-      let restOfDecl = afterLet;
+      let restOfDecl = trimmed.substring(letIdx + "let ".length);
       let isMutable = false;
       if (restOfDecl.startsWith("mut ")) {
         isMutable = true;
@@ -293,12 +297,10 @@ function compileStatements(
       }
 
       if (eqPos >= 0) {
-        const value = restOfDecl.substring(eqPos + 1).trim();
-
         // Type check and emit the assignment
         const assignResult = emitAssignment(
           varName,
-          value,
+          restOfDecl.substring(eqPos + 1).trim(),
           declaredType,
           isMutable,
         );
@@ -315,21 +317,25 @@ function compileStatements(
       if (!mutVars.has(varName)) {
         return new Err(CompileError.ImmutableReassignment);
       }
-
-      const value = trimmed.substring(eqPos + 1).trim();
-
       // Type check and emit the reassignment (no declared type, not mutable — just a bare assignment)
-      const assignResult = emitAssignment(varName, value, undefined, false);
+      const assignResult = emitAssignment(
+        varName,
+        trimmed.substring(eqPos + 1).trim(),
+        undefined,
+        false,
+      );
       if (assignResult instanceof Err) return assignResult;
     } else {
       // Expression statement — treat as return. Handle bool literals and Bool-typed variables here too.
       const retExpr = trimmed;
-      const isBoolLiteral = retExpr === boolTrue || retExpr === boolFalse;
-      const isBoolVar = lookupType(retExpr) === "Bool";
-      const hasBoolOp = retExpr.includes("||") || retExpr.includes("&&");
-      const hasCmpOp = isComparisonExpr(retExpr);
-
-      if (isBoolLiteral || isBoolVar || hasBoolOp || hasCmpOp) {
+      if (
+        retExpr === boolTrue ||
+        retExpr === boolFalse ||
+        lookupType(retExpr) === "Bool" ||
+        retExpr.includes("||") ||
+        retExpr.includes("&&") ||
+        isComparisonExpr(retExpr)
+      ) {
         code += returnStr + "(+(" + retExpr + "))\n";
       } else {
         code += returnStr + retExpr + "\n";

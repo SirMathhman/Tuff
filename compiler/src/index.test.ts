@@ -41,6 +41,11 @@ assertValid("let x = 3; let y = 4; x != y", "", 1);
 // if/else expressions
 assertValid("let x : I32 = if (read<Bool>()) 3 else 5; x", "true", 3);
 
+// Block statements with curly braces
+assertValid("let mut x = 0; { x = 1; } x", "", 1);
+
+
+
 
 
 

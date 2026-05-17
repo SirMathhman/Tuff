@@ -772,7 +772,9 @@ async function act() {
       });
       await act();
     } else {
-      process.stdout.write(`\n[Stop.ps1] No issues detected.\n`);
+      process.stdout.write(
+        `\n[Stop.ps1] No issues detected: ${stopResult.output}\n`,
+      );
     }
   } else {
     process.stdout.write(
