@@ -43,6 +43,47 @@ function extractLiteralType(value: string): string | undefined {
   }
   return undefined;
 }
+
+// Convert Tuff if/else expression to JS ternary: if(cond) a else b => cond ? a : b
+function convertIfElse(expr: string): string {
+  const prefix = "if (";
+  const idx = expr.indexOf(prefix);
+  if (idx !== 0) return expr;
+
+  // Position right after the opening paren of "if ("
+  const conditionStart = idx + prefix.length;
+  let depth = 0;
+  let condEnd = -1;
+  for (let i = conditionStart - 1; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") {
+      depth--;
+      if (depth === 0) {
+        condEnd = i;
+        break;
+      }
+    }
+  }
+  if (condEnd === -1) return expr;
+
+  const condition = expr.substring(conditionStart, condEnd);
+  const rest = expr.substring(condEnd + 1).trim();
+
+  // Find the "else" keyword that separates then/else branches
+  for (let i = 0; i < rest.length - 3; i++) {
+    if (rest.substring(i, i + 4) === "else") {
+      const thenBranch = rest.substring(0, i).trim();
+      const elseBranch = rest.substring(i + 4).trim();
+      return (
+        "(" + condition + ") ? (" + thenBranch + ") : (" + elseBranch + ")"
+      );
+    }
+  }
+
+  return expr;
+}
+
 export function compile(source: string): Ok<string> | Err<CompileError> {
   if (source.trim() === "") {
     return okDefault();
@@ -185,6 +226,9 @@ function compileStatements(
       srcType = literalType;
     }
 
+    // Convert Tuff if/else to JS ternary before emitting
+    const convertedValue = convertIfElse(value);
+
     const existingType = lookupType(varName);
     const targetType = declaredType !== undefined ? declaredType : existingType;
     const assignResult = checkAssignable(srcType, targetType);
@@ -202,12 +246,23 @@ function compileStatements(
       : existingType !== undefined
         ? ""
         : constKeyword;
-    code += kw + varName + " = " + value + "\n";
+    code += kw + varName + " = " + convertedValue + "\n";
     return okVoid;
+  }
+
+  // Helper: detect if an expression contains comparison operators (<, >, <=, >=, ==, !=)
+  function isComparisonExpr(expr: string): boolean {
+    return (
+      expr.includes("<") ||
+      expr.includes(">") ||
+      expr.includes("==") ||
+      expr.includes("!=")
+    );
   }
 
   for (const stmt of expr.split(";")) {
     const trimmed = stmt.trim();
+
     if (trimmed === "") {
       code += defaultReturn + "\n";
       continue;
@@ -268,7 +323,7 @@ function compileStatements(
       } else {
         code += "";
       }
-    } else if (trimmed.includes("=")) {
+    } else if (trimmed.includes("=") && !isComparisonExpr(trimmed)) {
       // Bare assignment: e.g. "x = read<U8>()" or "x = y"
       const eqPos = trimmed.indexOf("=");
       const varName = trimmed.substring(0, eqPos).trim();
@@ -289,8 +344,9 @@ function compileStatements(
       const isBoolLiteral = retExpr === boolTrue || retExpr === boolFalse;
       const isBoolVar = lookupType(retExpr) === "Bool";
       const hasBoolOp = retExpr.includes("||") || retExpr.includes("&&");
+      const hasCmpOp = isComparisonExpr(retExpr);
 
-      if (isBoolLiteral || isBoolVar || hasBoolOp) {
+      if (isBoolLiteral || isBoolVar || hasBoolOp || hasCmpOp) {
         code += returnStr + "(+(" + retExpr + "))\n";
       } else {
         code += returnStr + retExpr + "\n";

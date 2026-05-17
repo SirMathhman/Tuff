@@ -30,6 +30,20 @@ assertValid("let x = read<Bool>(); x", "false", 0);
 assertValid("let x = true; let y = false; x || y", "", 1);
 assertValid("let x = true; let y = false; x && y", "", 0);
 
+// Comparison operators produce booleans, converted to numbers on return
+assertValid("let x = 0; let y = 1; x < y", "", 1);
+assertValid("let x = 2; let y = 1; x > y", "", 1);
+assertValid("let x = 1; let y = 1; x <= y", "", 1);
+assertValid("let x = 1; let y = 0; x >= y", "", 1);
+assertValid("let x = 5; let y = 5; x == y", "", 1);
+assertValid("let x = 3; let y = 4; x != y", "", 1);
+
+// if/else expressions
+assertValid("let x : I32 = if (read<Bool>()) 3 else 5; x", "true", 3);
+
+
+
+
 
 
 test("type mismatch: U8 cannot be assigned to Bool", () => {
