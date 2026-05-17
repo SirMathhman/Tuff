@@ -26,6 +26,15 @@ assertValid("let x : Bool = true; x", "", 1);
 assertValid("let x : Bool = false; x", "", 0);
 assertValid("let x = read<Bool>(); x", "false", 0);
 
+test("type mismatch: U8 cannot be assigned to Bool", () => {
+  expect(compile("let x : Bool = 1U8;")).toBeInstanceOf(Err);
+});
+
+test("type mismatch: U8 variable cannot be assigned to Bool", () => {
+  expect(compile("let x = 1U8; let y : Bool = x;")).toBeInstanceOf(Err);
+});
+
+
 
 
 test("duplicate variable declaration returns Err", () => {

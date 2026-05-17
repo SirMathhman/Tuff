@@ -25,7 +25,6 @@ function typeRank(t: string): number {
   if (t === "Bool") return -1;
   return 0;
 }
-
 // Check if source type can always fit into target type
 function fitsIn(sourceType: string, targetType: string): boolean {
   const srcRank = typeRank(sourceType);
@@ -36,6 +35,14 @@ function fitsIn(sourceType: string, targetType: string): boolean {
   return srcRank <= tgtRank;
 }
 
+// Extract type from typed literal like "1U8", "5I32" etc. Returns undefined for non-typed values.
+function extractLiteralType(value: string): string | undefined {
+  const types = ["F64", "F32", "U32", "I32", "U16", "I16", "U8", "I8"];
+  for (const t of types) {
+    if (value.endsWith(t)) return t;
+  }
+  return undefined;
+}
 export function compile(source: string): Ok<string> | Err<CompileError> {
   if (source.trim() === "") {
     return okDefault();
@@ -170,6 +177,12 @@ function compileStatements(
     // Handle bool literals by setting their type explicitly
     if (value === boolTrue || value === boolFalse) {
       srcType = "Bool";
+    }
+
+    // Extract type from typed numeric literals like 1U8, 5I32 etc.
+    const literalType = extractLiteralType(value);
+    if (literalType !== undefined) {
+      srcType = literalType;
     }
 
     const existingType = lookupType(varName);
