@@ -781,13 +781,13 @@ async function act() {
   }
 }
 
-messages.unshift({
-  role: "system",
-  content: `You are an autonomous agent working to fulfill the user's goals. 
-  Avoid rewriting files, prefer incremental edits.
-  Always add the test case to the test suite before implementing it.
-  Avoid using exception messages, use error codes.`,
-});
+if (fs.existsSync("./AGENTS.md")) {
+  const system = fs.readFileSync("./AGENTS.md", "utf-8");
+  messages.unshift({
+    role: "system",
+    content: system,
+  });
+}
 
 while (true) {
   const input = await rl.question("You: ");

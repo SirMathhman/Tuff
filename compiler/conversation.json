@@ -938,5 +938,127 @@
   {
     "role": "assistant",
     "content": "All checks pass now. Here's what I changed:\n\n1. **Added `CompileError` enum** at the top of `src/index.ts` with three variants:\n   - `DuplicateVariable = \"duplicate_variable\"` \n   - `TypeMismatch = \"type_mismatch\"`\n   - `ImmutableReassignment = \"immutable_reassignment\"`\n\n2. **Changed return type** from `Ok<string> | Err<string>` to `Ok<string> | Err<CompileError>` on the `compile()` function and all internal helpers (`checkAssignable`, `emitAssignment`).\n\n3. **Replaced all string error messages** with enum values:\n   - `\"duplicate vari\" + errVarSuffix + varName` → `CompileError.DuplicateVariable`\n   - `\"type mismatch: \" + errAssignPrefix + srcType + \" to \" + targetType` → `CompileError.TypeMismatch`\n   - `errAssignPrefix + \"to immutabl\" + errVarSuffix + varName` → `CompileError.ImmutableReassignment`\n\n4. **Removed the old string fragment constants** (`errAssignPrefix`, `errVarSuffix`) that were only needed to work around duplicate substring detection on error messages."
+  },
+  {
+    "role": "user",
+    "content": "Add: \"x = read<U8>(); x\" => Error"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"src/index.ts\",\"startLine\":1,\"endLine\":20}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 233\n1: const returnStr = \"return \";\n2: const defaultReturn = returnStr + \"0;\";\n3: const constKeyword = \"const \";\n4: \n5: import { Ok, Err } from \"./result\";\n6: \n7: export enum CompileError {\n8:   DuplicateVariable = \"duplicate_variable\",\n9:   TypeMismatch = \"type_mismatch\",\n10:   ImmutableReassignment = \"immutable_reassignment\",\n11: }\n12: \n13: function okDefault(): Ok<string> {\n14:   return new Ok(defaultReturn);\n15: }\n16: \n17: // Size rank for each type: higher means larger range\n18: function typeRank(t: string): number {\n19:   if (t === \"U8\" || t === \"I8\") return 1;"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "readFile",
+          "arguments": "{\"name\":\"src/index.test.ts\",\"startLine\":1,\"endLine\":42}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Total lines in file: 42\n1: import { test, expect } from \"bun:test\";\n2: import { compile } from \".\";\n3: import { Err, Ok } from \"./result\";\n4: \n5: function assertValid(source: string, stdIn: string, expectedExitCode: number) {\n6:   test(source, () => {\n7:     const compiled = compile(source);\n8:     if (compiled instanceof Ok) {\n9:       expect(new Function(\"stdIn\", compiled.value)(stdIn)).toBe(expectedExitCode);\n10:     } else {\n11:       expect(compiled).toBeInstanceOf(Ok);\n12:     }\n13:   });\n14: }\n15: \n16: assertValid(\"\", \"\", 0);\n17: assertValid(\"read<U8>()\", \"100\", 100);\n18: assertValid(\"read<U16>()\", \"100\", 100);\n19: assertValid(\"read<U8>() + read<U8>()\", \"100 20\", 120);\n20: assertValid(\"let x : U8 = read<U8>(); x\", \"120\", 120);\n21: assertValid(\"let x = read<U8>(); x\", \"120\", 120);\n22: \n23: assertValid(\"let x : U8 = read<U8>(); x + x\", \"120\", 240);\n24: assertValid(\"let mut x = read<U8>(); x = read<U8>(); x\", \"1 2\", 2);\n25: assertValid(\"let x : U8 = read<U8>();\", \"120\", 0);\n26: test(\"duplicate variable declaration returns Err\", () => {\n27:   expect((compile(\"let x = read<U8>(); let x = read<U8>();\"))).toBeInstanceOf(Err);\n28: });\n29: test(\"type mismatch: U16 cannot fit in U8\", () => {\n30:   expect((compile(\"let x : U8 = read<U16>();\"))).toBeInstanceOf(Err);\n31: });\n32: \n33: test(\"type mismatch via variable: U16 assigned to U8 through intermediate var\", () => {\n34:   expect((compile(\"let x = read<U16>(); let y : U8 = x;\"))).toBeInstanceOf(Err);\n35: });\n36: \n37: test(\"reassigning immutable variable returns Err\", () => {\n38:   expect((compile(\"let x = read<U8>(); x = read<U8>(); x\"))).toBeInstanceOf(Err);\n39: });\n40: \n41: "
+  },
+  {
+    "role": "assistant",
+    "content": "I'll add the test case first, then implement the fix. The issue is that `\"x = read<U8>(); x\"` tries to assign to a variable `x` that was never declared at all — not even as immutable. Currently it only checks if the variable is in `mutVars`, but doesn't check whether it was ever declared.\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "editFile",
+          "arguments": "{\"name\":\"src/index.test.ts\",\"startLine\":37,\"endLine\":42,\"content\":\"test(\\\"reassigning immutable variable returns Err\\\", () => {\\n  expect((compile(\\\"let x = read<U8>(); x = read<U8>(); x\\\"))).toBeInstanceOf(Err);\\n});\\n\\ntest(\\\"assignment to undeclared variable returns Err\\\", () => {\\n  expect((compile(\\\"x = read<U8>(); x\\\"))).toBeInstanceOf(Err);\\n});\\n\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "File updated."
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun test src/index.test.ts 2>&1 | Select-Object -Last 30\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 1,\n      Std Out: bun test v1.3.13 (bf2e2cec)\r\n,\n      Std Err: bun : \r\nAt line:1 char:53\r\n+ ... ments\\Projects\\Tuff\\compiler; bun test src/index.test.ts 2>&1 | Selec ...\r\n+                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:String) [], RemoteException\r\n    + FullyQualifiedErrorId : NativeCommandError\r\n \r\nsrc\\index.test.ts:\r\n(pass) \r\n(pass) read<U8>()\r\n(pass) read<U16>()\r\n(pass) read<U8>() + read<U8>()\r\n(pass) let x : U8 = read<U8>(); x\r\n(pass) let x = read<U8>(); x\r\n(pass) let x : U8 = read<U8>(); x + x\r\n(pass) let mut x = read<U8>(); x = read<U8>(); x\r\n(pass) let x : U8 = read<U8>();\r\n(pass) duplicate variable declaration returns Err\r\n(pass) type mismatch: U16 cannot fit in U8\r\n(pass) type mismatch via variable: U16 assigned to U8 through intermediate var\r\n(pass) reassigning immutable variable returns Err\r\n(pass) assignment to undeclared variable returns Err\r\n 14 pass\r\n 0 fail\r\n 14 expect() calls\r\nRan 14 tests across 1 file. [39.00ms]\r\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Interesting — the test actually passes already! That's because `\"x = read<U8>(); x\"` hits the bare assignment branch which checks `mutVars.has(varName)`, and since `x` was never declared as mutable, it returns `Err(CompileError.ImmutableReassignment)`. The error code is technically correct (you can't assign to a non-mutable variable), even though the root cause here is that the variable doesn't exist at all.\n\nAll 14 tests pass including the new one. Let me verify everything else still passes:\n\n",
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun run scripts/check-duplicate-string-substrings.ts 2>&1 | Select-Object -Last 30\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: No duplicate string substrings found.\r\n,\n      Std Err: "
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_0",
+        "type": "function",
+        "function": {
+          "name": "powershell",
+          "arguments": "{\"command\":\"cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler; bun run scripts/check-duplicate-expressions.ts 2>&1 | Select-Object -Last 30\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0",
+    "content": "Exit Code: 0,\n      Std Out: No duplicate expressions found.\r\n,\n      Std Err: "
+  },
+  {
+    "role": "assistant",
+    "content": "All clear. The test passes because the bare assignment branch already checks whether a variable was declared as mutable via `mutVars.has(varName)` — an undeclared variable is never added to that set, so it correctly returns `Err(CompileError.ImmutableReassignment)`. \n\nSummary:\n- **14 tests pass** including the new `\"x = read<U8>(); x\"` → `Err` case\n- **String duplicate check**: clean\n- **Duplicate expression check**: clean"
   }
 ]

@@ -38,4 +38,9 @@ test("reassigning immutable variable returns Err", () => {
   expect((compile("let x = read<U8>(); x = read<U8>(); x"))).toBeInstanceOf(Err);
 });
 
+test("assignment to undeclared variable returns Err", () => {
+  expect((compile("x = read<U8>(); x"))).toBeInstanceOf(Err);
+});
+
+
 
