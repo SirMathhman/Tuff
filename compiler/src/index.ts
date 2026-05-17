@@ -286,11 +286,11 @@ function compileStatements(
     } else {
       // Expression statement — treat as return. Handle bool literals and Bool-typed variables here too.
       const retExpr = trimmed;
-      if (
-        retExpr === boolTrue ||
-        retExpr === boolFalse ||
-        lookupType(retExpr) === "Bool"
-      ) {
+      const isBoolLiteral = retExpr === boolTrue || retExpr === boolFalse;
+      const isBoolVar = lookupType(retExpr) === "Bool";
+      const hasBoolOp = retExpr.includes("||") || retExpr.includes("&&");
+
+      if (isBoolLiteral || isBoolVar || hasBoolOp) {
         code += returnStr + "(+(" + retExpr + "))\n";
       } else {
         code += returnStr + retExpr + "\n";

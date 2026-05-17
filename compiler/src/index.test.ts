@@ -19,12 +19,18 @@ assertValid("read<U16>()", "100", 100);
 assertValid("read<U8>() + read<U8>()", "100 20", 120);
 assertValid("let x : U8 = read<U8>(); x", "120", 120);
 assertValid("let x = read<U8>(); x", "120", 120);
+assertValid("let x = 100; x", "", 100);
+
 
 assertValid("let x : U8 = read<U8>(); x + x", "120", 240);
 assertValid("let mut x = read<U8>(); x = read<U8>(); x", "1 2", 2);
 assertValid("let x : Bool = true; x", "", 1);
 assertValid("let x : Bool = false; x", "", 0);
 assertValid("let x = read<Bool>(); x", "false", 0);
+assertValid("let x = true; let y = false; x || y", "", 1);
+assertValid("let x = true; let y = false; x && y", "", 0);
+
+
 
 test("type mismatch: U8 cannot be assigned to Bool", () => {
   expect(compile("let x : Bool = 1U8;")).toBeInstanceOf(Err);
