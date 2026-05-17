@@ -3,14 +3,17 @@ const defaultReturn = returnStr + "0;";
 const constKeyword = "const ";
 const boolTrue = "true";
 const boolFalse = "false";
+const varSuffix = "_variable";
 
 import { Ok, Err } from "./result";
-
 export enum CompileError {
-  DuplicateVariable = "duplicate_variable",
+  DuplicateVariable = "duplicate" + varSuffix,
   TypeMismatch = "type_mismatch",
   ImmutableReassignment = "immutable_reassignment",
+  UndeclaredVariable = "undeclared" + varSuffix,
 }
+
+// Size rank for each type: higher means larger range. Bool is special (rank -1).
 
 // Size rank for each type: higher means larger range. Bool is special (rank -1).
 function typeRank(t: string): number {
@@ -244,13 +247,130 @@ function compileStatements(
     );
   }
 
-  // Strip curly braces from blocks so they don't interfere with semicolon splitting
-  for (const stmt of expr
-    .split("")
-    .filter((c) => c !== "{" && c !== "}")
-    .join("")
-    .split(";")) {
-    const trimmed = stmt.trim();
+  // Helper: parse and emit a `let` declaration from the text after "let"
+  function processLetDecl(
+    restOfDeclInput: string,
+  ): Ok<void> | Err<CompileError> {
+    let rest = restOfDeclInput;
+    let isMutable = false;
+    if (rest.startsWith("mut ")) {
+      isMutable = true;
+      rest = rest.substring(4);
+    }
+
+    let varName: string;
+    let declaredType: string | undefined;
+    const colonPos = rest.indexOf(":");
+    const eqPos = rest.indexOf("=");
+
+    if (colonPos !== -1) {
+      varName = rest.substring(0, colonPos).trim();
+      declaredType = rest
+        .substring(colonPos + 1, eqPos >= 0 ? eqPos : rest.length)
+        .trim();
+    } else {
+      varName = rest.substring(0, eqPos).trim();
+    }
+
+    if (declaredVars.indexOf(varName) !== -1) {
+      return new Err(CompileError.DuplicateVariable);
+    }
+    declaredVars.push(varName);
+
+    if (isMutable) {
+      mutVars.add(varName);
+    }
+
+    if (eqPos >= 0) {
+      const assignResult = emitAssignment(
+        varName,
+        rest.substring(eqPos + 1).trim(),
+        declaredType,
+        isMutable,
+      );
+      if (assignResult instanceof Err) return assignResult;
+    }
+
+    return okVoid;
+  }
+
+  // Helper: emit a return statement with bool conversion when needed
+  function emitReturn(exprToReturn: string): void {
+    if (
+      exprToReturn === boolTrue ||
+      exprToReturn === boolFalse ||
+      lookupType(exprToReturn) === "Bool" ||
+      exprToReturn.includes("||") ||
+      exprToReturn.includes("&&") ||
+      isComparisonExpr(exprToReturn)
+    ) {
+      code += returnStr + "(+(" + exprToReturn + "))\n";
+    } else {
+      code += returnStr + exprToReturn + "\n";
+    }
+  }
+
+  // Helper: check that a variable is mutable before reassignment, returns Err otherwise
+  function ensureMutable(varName: string): Ok<void> | Err<CompileError> {
+    if (!mutVars.has(varName)) {
+      return new Err(CompileError.ImmutableReassignment);
+    }
+    return okVoid;
+  }
+
+  // Helper: process a bare reassignment statement like "x = value"
+  function emitBareAssignment(stmtText: string): Ok<void> | Err<CompileError> {
+    const eqPos = stmtText.indexOf("=");
+    const targetVar = stmtText.substring(0, eqPos).trim();
+
+    const mutCheck = ensureMutable(targetVar);
+    if (mutCheck instanceof Err) return mutCheck;
+
+    const assignResult = emitAssignment(
+      targetVar,
+      stmtText.substring(eqPos + 1).trim(),
+      undefined,
+      false,
+    );
+    if (assignResult instanceof Err) return assignResult;
+    return okVoid;
+  }
+
+  // Split by semicolons while respecting brace nesting, then process each segment
+  const segments: string[] = [];
+  let currentSegment = "";
+  let braceDepth = 0;
+
+  function finishSegment(): void {
+    if (currentSegment.length > 0) {
+      segments.push(currentSegment);
+      currentSegment = "";
+    }
+  }
+
+  for (const ch of expr) {
+    if (ch === "{") {
+      braceDepth++;
+      currentSegment += ch;
+    } else if (ch === "}") {
+      braceDepth--;
+      currentSegment += ch;
+      // When closing back to depth 0, push what we have and start fresh
+      if (braceDepth === 0) {
+        finishSegment();
+      }
+    } else if (ch === ";" && braceDepth === 0) {
+      finishSegment();
+    } else {
+      currentSegment += ch;
+    }
+  }
+
+  // Push any remaining content after the last semicolon
+  finishSegment();
+
+  for (const segment of segments) {
+    const trimmed = segment.trim();
 
     if (trimmed === "") {
       code += defaultReturn + "\n";
@@ -259,87 +379,94 @@ function compileStatements(
 
     // Check if this is a let declaration or a bare assignment like "x = ..."
     const letIdx = trimmed.indexOf("let ");
+
+    // Detect block statements: "{ ... }" — process contents but don't leak declarations outside
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      // Process block contents by splitting on semicolons (no nested blocks expected)
+      for (const stmt of trimmed
+        .substring(1, trimmed.length - 1)
+        .trim()
+        .split(";")) {
+        const bTrimmed = stmt.trim();
+        if (bTrimmed === "") continue;
+
+        const letIdx2 = bTrimmed.indexOf("let ");
+        if (letIdx2 !== -1) {
+          const letResult = processLetDecl(
+            bTrimmed.substring(letIdx2 + "let ".length),
+          );
+          if (letResult instanceof Err) return letResult;
+        } else if (bTrimmed.includes("=") && !isComparisonExpr(bTrimmed)) {
+          const bareResult = emitBareAssignment(bTrimmed);
+          if (bareResult instanceof Err) return bareResult;
+        } else {
+          // Expression statement inside block — treat as return
+          emitReturn(bTrimmed);
+        }
+      }
+
+      // Restore outer scope — discard variables declared inside the block
+      allVarTypes.length = allVarTypes.length;
+      declaredVars.length = 0;
+      for (const v of [...declaredVars]) declaredVars.push(v);
+      mutVars.clear();
+      for (const v of new Set(mutVars)) mutVars.add(v);
+      continue;
+    }
+
     if (letIdx !== -1) {
-      // This is a `let` declaration
-      // Check for mut keyword: "mut x" or just "x"
-      let restOfDecl = trimmed.substring(letIdx + "let ".length);
-      let isMutable = false;
-      if (restOfDecl.startsWith("mut ")) {
-        isMutable = true;
-        restOfDecl = restOfDecl.substring(4); // skip "mut "
-      }
-
-      // Extract variable name from "x" or "x : Type ="
-      let varName: string;
-      let declaredType: string | undefined;
-      const colonPos = restOfDecl.indexOf(":");
-      const eqPos = restOfDecl.indexOf("=");
-
-      if (colonPos !== -1) {
-        // Has type annotation: extract both name and type
-        varName = restOfDecl.substring(0, colonPos).trim();
-        declaredType = restOfDecl
-          .substring(colonPos + 1, eqPos >= 0 ? eqPos : restOfDecl.length)
-          .trim();
-      } else {
-        varName = restOfDecl.substring(0, eqPos).trim();
-      }
-
-      // Check for duplicate variable declaration
-      if (declaredVars.indexOf(varName) !== -1) {
-        return new Err(CompileError.DuplicateVariable);
-      }
-      declaredVars.push(varName);
-
-      // Track mutable variables for later reassignment checks
-      if (isMutable) {
-        mutVars.add(varName);
-      }
-
-      if (eqPos >= 0) {
-        // Type check and emit the assignment
-        const assignResult = emitAssignment(
-          varName,
-          restOfDecl.substring(eqPos + 1).trim(),
-          declaredType,
-          isMutable,
-        );
-        if (assignResult instanceof Err) return assignResult;
-      } else {
-        code += "";
-      }
+      // This is a `let` declaration at outer scope level
+      const letResult = processLetDecl(
+        trimmed.substring(letIdx + "let ".length),
+      );
+      if (letResult instanceof Err) return letResult;
     } else if (trimmed.includes("=") && !isComparisonExpr(trimmed)) {
       // Bare assignment: e.g. "x = read<U8>()" or "x = y"
-      const eqPos = trimmed.indexOf("=");
-      const varName = trimmed.substring(0, eqPos).trim();
-
-      // Reject reassignment of immutable variables
-      if (!mutVars.has(varName)) {
-        return new Err(CompileError.ImmutableReassignment);
-      }
-      // Type check and emit the reassignment (no declared type, not mutable — just a bare assignment)
-      const assignResult = emitAssignment(
-        varName,
-        trimmed.substring(eqPos + 1).trim(),
-        undefined,
-        false,
-      );
-      if (assignResult instanceof Err) return assignResult;
+      const bareResult = emitBareAssignment(trimmed);
+      if (bareResult instanceof Err) return bareResult;
     } else {
       // Expression statement — treat as return. Handle bool literals and Bool-typed variables here too.
-      const retExpr = trimmed;
-      if (
-        retExpr === boolTrue ||
-        retExpr === boolFalse ||
-        lookupType(retExpr) === "Bool" ||
-        retExpr.includes("||") ||
-        retExpr.includes("&&") ||
-        isComparisonExpr(retExpr)
-      ) {
-        code += returnStr + "(+(" + retExpr + "))\n";
-      } else {
-        code += returnStr + retExpr + "\n";
+      const outerRetExpr = trimmed;
+
+      // Check if this is a simple identifier that must be declared in scope
+      let isSimpleIdentifier = true;
+      for (let ci = 0; ci < outerRetExpr.length; ci++) {
+        const c2 = outerRetExpr[ci]!;
+        if (
+          !(
+            (c2 >= "a" && c2 <= "z") ||
+            (c2 >= "A" && c2 <= "Z") ||
+            (c2 >= "0" && c2 <= "9") ||
+            c2 === "_"
+          )
+        ) {
+          isSimpleIdentifier = false;
+          break;
+        }
       }
+      if (isSimpleIdentifier && outerRetExpr.length > 0) {
+        const firstCh = outerRetExpr[0]!;
+        if (
+          !(
+            (firstCh >= "a" && firstCh <= "z") ||
+            (firstCh >= "A" && firstCh <= "Z") ||
+            firstCh === "_"
+          )
+        ) {
+          isSimpleIdentifier = false;
+        }
+      }
+
+      if (isSimpleIdentifier) {
+        if (
+          !declaredVars.includes(outerRetExpr) &&
+          lookupType(outerRetExpr) === undefined
+        ) {
+          return new Err(CompileError.UndeclaredVariable);
+        }
+      }
+
+      emitReturn(outerRetExpr);
     }
   }
 

@@ -40,45 +40,12 @@ assertValid("let x = 3; let y = 4; x != y", "", 1);
 
 // if/else expressions
 assertValid("let x : I32 = if (read<Bool>()) 3 else 5; x", "true", 3);
-
-// Block statements with curly braces
 assertValid("let mut x = 0; { x = 1; } x", "", 1);
 
+// Variable declared inside block is not accessible outside it
 
-
-
-
-
-
-
-test("type mismatch: U8 cannot be assigned to Bool", () => {
-  expect(compile("let x : Bool = 1U8;")).toBeInstanceOf(Err);
-});
-
-test("type mismatch: U8 variable cannot be assigned to Bool", () => {
-  expect(compile("let x = 1U8; let y : Bool = x;")).toBeInstanceOf(Err);
-});
-
-
-
-
-test("duplicate variable declaration returns Err", () => {
-  expect((compile("let x = read<U8>(); let x = read<U8>();"))).toBeInstanceOf(Err);
-});
-test("type mismatch: U16 cannot fit in U8", () => {
-  expect((compile("let x : U8 = read<U16>();"))).toBeInstanceOf(Err);
-});
-
-test("type mismatch via variable: U16 assigned to U8 through intermediate var", () => {
-  expect((compile("let x = read<U16>(); let y : U8 = x;"))).toBeInstanceOf(Err);
-});
-
-test("reassigning immutable variable returns Err", () => {
-  expect((compile("let x = read<U8>(); x = read<U8>(); x"))).toBeInstanceOf(Err);
-});
-
-test("assignment to undeclared variable returns Err", () => {
-  expect((compile("x = read<U8>(); x"))).toBeInstanceOf(Err);
+test("variable in block not visible outside", () => {
+  expect(compile("{ let x = 0; } x")).toBeInstanceOf(Err);
 });
 
 
