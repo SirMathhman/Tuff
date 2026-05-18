@@ -5,6 +5,7 @@ import { createInterface } from "readline/promises";
 import * as path from "path";
 import * as child_process from "child_process";
 import ts from "typescript";
+import type { ChatCompletionMessageParam } from "openai/resources/index.mjs";
 
 // ── Client ────────────────────────────────────────────────────────────────────
 
@@ -501,7 +502,12 @@ async function compactMessages(
     .reverse()
     .find((m) => m.role === "user")?.index;
 
-  const head = msgs.slice(0, 1); // system prompt
+  const newLocal: ChatCompletionMessageParam = {
+    role: "system",
+    content: "",
+  };
+
+  const head = readSystemPromptMessage() ?? newLocal;
 
   // This should compact everything up to the latest user message
   const toSummarize = msgs.slice(1, latestUserIndex); // middle
@@ -783,12 +789,20 @@ async function act() {
   }
 }
 
-if (fs.existsSync("./AGENTS.md")) {
-  const system = fs.readFileSync("./AGENTS.md", "utf-8");
-  messages.unshift({
-    role: "system",
-    content: system,
-  });
+function readSystemPromptMessage(): ChatCompletionMessageParam | undefined {
+  if (fs.existsSync("./AGENTS.md")) {
+    const prompt = fs.readFileSync("./AGENTS.md", "utf-8");
+    return {
+      role: "system",
+      content: prompt,
+    };
+  }
+  return undefined;
+}
+
+const promptMessage = readSystemPromptMessage();
+if (promptMessage) {
+  messages.unshift(promptMessage);
 }
 
 while (true) {
