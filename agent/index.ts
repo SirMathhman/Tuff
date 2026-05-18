@@ -178,7 +178,7 @@ async function createFile(name: string, content: string): Promise<string> {
     return "File has errors: " + lintingResult;
   }
 
-  return "File created.";
+  return "File created with no linting errors.";
 }
 
 async function lintFile(fileName: string): Promise<string | undefined> {
@@ -219,7 +219,7 @@ async function editFile(
       lintingResult
     );
   }
-  return "File updated.";
+  return "File updated with no linting errors remaining.";
 }
 
 async function readFile(
