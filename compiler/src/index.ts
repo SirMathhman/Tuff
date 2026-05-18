@@ -1,8 +1,14 @@
 import { Err, Ok, type Result } from "./result";
 
+const RETURN = "return ";
+
 export function compile(input: string): Result<string, Error> {
-  if (input.trim() === "") {
-    return new Ok("return 0");
+  const trimmed = input.trim();
+  if (trimmed === "") {
+    return new Ok(RETURN + "0");
+  }
+  if (trimmed === "read<U8>()") {
+    return new Ok(RETURN + "Number(stdIn)");
   }
   return new Err(new Error("Not implemented"));
 }

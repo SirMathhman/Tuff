@@ -18,3 +18,8 @@ test("run(empty string) => 0", () => {
 test('run(" ") => 0', () => {
   expect(run(" ")).toBe(0);
 });
+
+test('run("read<U8>()", "100") => 100', () => {
+  expect(run("read<U8>()", "100")).toBe(100);
+});
+
