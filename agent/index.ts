@@ -522,7 +522,7 @@ async function compactMessages(
   const res = await client.chat.completions.create({
     model: MODEL,
     messages: [
-      ...head,
+      head,
       ...toSummarize,
       {
         role: "user",
@@ -539,14 +539,14 @@ async function compactMessages(
 
   const summary = res.choices[0]?.message?.content ?? "(summary unavailable)";
   const before = estimateTokens(msgs);
-  const after = estimateTokens([...head, ...recent]);
+  const after = estimateTokens([head, ...recent]);
 
   process.stderr.write(
     `\x1b[2m[compacted: ~${before} → ~${after + Math.ceil(summary.length / 4)} est. tokens]\x1b[0m\n`,
   );
 
   return [
-    ...head,
+    head,
     {
       role: "user",
       content: `[Session context summary — replaces earlier history]\n${summary}`,

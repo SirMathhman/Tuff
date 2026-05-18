@@ -7,6 +7,41 @@ export enum CompileError {
   NotImplemented,
 }
 
+function isDigit(ch: string): boolean {
+  return ch >= "0" && ch <= "9";
+}
+
+function isAlphaNumOrUnderscore(ch: string): boolean {
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || isDigit(ch) || ch === "_";
+}
+
+function stripTypeSuffixes(input: string): string {
+  let result = "";
+  const len = input.length;
+  for (let i = 0; i < len; ) {
+    if (!isDigit(input[i] ?? "")) {
+      // Not a digit - just copy the character as-is
+      result += input[i];
+      i++;
+      continue;
+    }
+
+    // Collect only the digits, skip any type suffix after them
+    const numStart = i;
+    while (i < len && isDigit(input[i] ?? "")) {
+      i++;
+    }
+    result += input.substring(numStart, i);
+    // Skip past any type suffix characters that follow the number
+    while (i < len && isAlphaNumOrUnderscore(input[i] ?? "")) {
+      i++;
+    }
+
+  }
+
+  return result;
+}
+
 export function compile(input: string): Result<string, CompileError> {
   const trimmed = input.trim();
   if (trimmed === "") {
@@ -31,9 +66,12 @@ export function compile(input: string): Result<string, CompileError> {
     }
   }
 
+  // Strip type suffixes from numeric literals (e.g., "10U8" -> "10")
+  const stripped = stripTypeSuffixes(processed);
+
   // Replace each read<U8>() with Number(tokens[i++])
   let replaced = "";
-  let remaining = processed;
+  let remaining = stripped;
   while (remaining.length > 0) {
     const matchIndex = remaining.indexOf("read<U8>()");
     if (matchIndex === -1) {
@@ -66,3 +104,5 @@ export function compile(input: string): Result<string, CompileError> {
 
   return new Ok("const " + T + " = stdIn.trim().split(' '); let i = 0;" + body);
 }
+
+
