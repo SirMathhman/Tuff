@@ -34,3 +34,12 @@ test('run("read<U8>() + read<U8>()", "100 20") => 120', () => {
 test('run("read<U8>() + read<U8>() + read<U8>()", "100 20 1") => 121', () => {
   expect(run("read<U8>() + read<U8>() + read<U8>()", "100 20 1")).toBe(121);
 });
+
+test('run("let x : U8 = read<U8>();", "100") => 0', () => {
+  expect(run("let x : U8 = read<U8>();", "100")).toBe(0);
+});
+
+test('run("let x : U8 = read<U8>(); x", "100") => 100', () => {
+  expect(run("let x : U8 = read<U8>(); x", "100")).toBe(100);
+});
+
