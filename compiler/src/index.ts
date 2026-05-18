@@ -3,16 +3,6 @@ import { Ok, type Result } from "./result";
 const RETURN = "return ";
 const T = "tokens";
 
-function isWhitespace(char: string | undefined): boolean {
-  return (
-    char === " " ||
-    char === "\t" ||
-    char === "\n" ||
-    char === "\r" ||
-    char === undefined
-  );
-}
-
 export enum CompileError {
   NotImplemented,
 }
@@ -33,9 +23,16 @@ export function compile(input: string): Result<string, CompileError> {
     } else {
       processed += trimmed.substring(idx, colonIdx);
       // Skip past the type name: starts with uppercase letter after " : "
-      const typeStart = colonIdx + 3;
-      idx = typeStart;
-      while (!isWhitespace(trimmed[idx])) {
+      idx = colonIdx + 3;
+      while (
+        !(
+          trimmed[idx] === " " ||
+          trimmed[idx] === "\t" ||
+          trimmed[idx] === "\n" ||
+          trimmed[idx] === "\r" ||
+          trimmed[idx] === undefined
+        )
+      ) {
         idx++;
       }
     }

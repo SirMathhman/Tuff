@@ -16,6 +16,9 @@ $output = npm run cpd 2>&1;
 if ($LASTEXITCODE -ne 0) { $output; exit 1 }
 Write-Host "Copy-paste detection passed.";
 
+npm run inline-vars
+npm run inline-fns
+
 $output = npm run check-dupes 2>&1;
 if ($LASTEXITCODE -ne 0) {
     $output;
@@ -38,6 +41,3 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 Write-Host "Duplicate substring check passed.";
-
-npm run inline-vars
-npm run inline-fns
