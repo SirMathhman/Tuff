@@ -43,3 +43,7 @@ test('run("let x : U8 = read<U8>(); x", "100") => 100', () => {
   expect(run("let x : U8 = read<U8>(); x", "100")).toBe(100);
 });
 
+test('run("let x = read<U8>(); x", "100") => 100', () => {
+  expect(run("let x = read<U8>(); x", "100")).toBe(100);
+});
+
