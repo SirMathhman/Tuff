@@ -1,6 +1,6 @@
 import { compile } from ".";
 import { Ok } from "./result";
-import { expect } from "bun:test";
+import { expect, test } from "bun:test";
 
 function run(source: string, stdIn = "") {
   const compiledJS = compile(source);
@@ -10,3 +10,11 @@ function run(source: string, stdIn = "") {
     expect(compiledJS.error).toBeUndefined();
   }
 }
+
+test("run(empty string) => 0", () => {
+  expect(run("")).toBe(0);
+});
+
+test('run(" ") => 0', () => {
+  expect(run(" ")).toBe(0);
+});
