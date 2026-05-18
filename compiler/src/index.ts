@@ -15,7 +15,8 @@ export function compile(input: string): Result<string, CompileError> {
 
   // Strip type annotations like ": U8" from variable declarations without regex
   let processed = "";
-  for (let idx = 0; idx < trimmed.length; ) {
+  const len = trimmed.length;
+  for (let idx = 0; idx < len; ) {
     const colonIdx = trimmed.indexOf(" : ", idx);
     if (colonIdx === -1) {
       processed += trimmed.substring(idx);
@@ -24,15 +25,7 @@ export function compile(input: string): Result<string, CompileError> {
       processed += trimmed.substring(idx, colonIdx);
       // Skip past the type name: starts with uppercase letter after " : "
       idx = colonIdx + 3;
-      while (
-        !(
-          trimmed[idx] === " " ||
-          trimmed[idx] === "\t" ||
-          trimmed[idx] === "\n" ||
-          trimmed[idx] === "\r" ||
-          trimmed[idx] === undefined
-        )
-      ) {
+      while (idx < len && trimmed[idx] !== " ") {
         idx++;
       }
     }
