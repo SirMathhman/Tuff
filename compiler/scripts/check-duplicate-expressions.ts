@@ -1,217 +1,185 @@
 /**
- * Scans TypeScript source files for duplicate sub-expressions and reports them
- * with file/line/column context so the author can decide whether to extract a
- * shared variable.
+ * Scans TypeScript source files for duplicate sub-expressions and automatically
+ * extracts them into local const declarations with generated names.
  *
- * Unlike an ESLint rule, this script prints a human-readable diff-style report
- * rather than a hard error, making it clear *what* is duplicated and *where*.
+ * Expressions are compared both by normalized text AND by the resolved
+ * declaration of every identifier they contain, so `x + 1` in two different
+ * scopes (where `x` refers to different variables) is NOT treated as a
+ * duplicate.
  *
- * Exit code 1 if any duplicates are found.
+ * Exit code 1 if any expressions were extracted. Exit code 0 if nothing changed.
  */
-import { Linter } from "eslint";
-import { readFileSync, readdirSync } from "fs";
-import { join, relative } from "path";
-import * as ts from "typescript";
 
-const SRC_DIR = join(import.meta.dir, "..", "src");
-const MIN_TOKENS = 4;
+/* eslint-disable local/no-single-use-function, local/no-single-use-variable */
 
-interface Occurrence {
-  file: string;
-  line: number;
-  col: number;
-  text: string;
-}
+import { Project, Node, SyntaxKind, type SourceFile } from "ts-morph";
+import { join } from "path";
 
-interface DuplicateGroup {
-  key: string;
-  occurrences: Occurrence[];
-}
+const TSCONFIG_PATH = join(import.meta.dir, "..", "tsconfig.json");
+const MIN_TEXT_LENGTH = 7;
+
+const CANDIDATE_KINDS = new Set([
+  SyntaxKind.BinaryExpression,
+  SyntaxKind.PrefixUnaryExpression,
+  SyntaxKind.PostfixUnaryExpression,
+  SyntaxKind.CallExpression,
+  SyntaxKind.PropertyAccessExpression,
+  SyntaxKind.ConditionalExpression,
+  SyntaxKind.NewExpression,
+]);
 
 function normalize(text: string): string {
-  let key = "";
-  let inSpace = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
-      if (!inSpace) {
-        key += " ";
-        inSpace = true;
-      }
-    } else {
-      key += ch;
-      inSpace = false;
-    }
-  }
-  return key.trim();
+  return text.replace(/\s+/g, " ").trim();
 }
 
-function findDuplicatesInFile(
-  filePath: string,
-  seen: Map<string, Occurrence[]>,
-): void {
-  const tsSource = readFileSync(filePath, "utf8");
-  const jsSource = ts.transpile(tsSource, {
-    target: ts.ScriptTarget.ESNext,
-    module: ts.ModuleKind.ESNext,
+/**
+ * Returns a key that captures both the normalized text of an expression and
+ * the resolved declaration site of every identifier it contains.  Two
+ * expressions with the same text but different identifier bindings (e.g. `x`
+ * from different scopes) will produce different keys.
+ */
+function computeNodeKey(node: Node): string {
+  const textKey = normalize(node.getText());
+  const identifiers = node.getDescendantsOfKind(SyntaxKind.Identifier);
+  const symbolParts = identifiers.map((id) => {
+    const firstDecl = id.getSymbol()?.getDeclarations()?.[0];
+    return firstDecl
+      ? firstDecl.getSourceFile().getFilePath() + ":" + firstDecl.getStart()
+      : "?:" + id.getText();
   });
-  const relPath = relative(SRC_DIR, filePath);
-
-  const linter = new Linter({ configType: "flat" });
-  const occurrencesByKey = new Map<string, Occurrence[]>();
-
-  linter.verify(jsSource, {
-    plugins: {
-      local: {
-        rules: {
-          collect: {
-            create(context) {
-              function record(node: Record<string, unknown>): void {
-                const trivial =
-                  node.type === "Identifier" ||
-                  node.type === "Literal" ||
-                  node.type === "ThisExpression" ||
-                  node.type === "Super";
-                if (trivial) return;
-
-                const sc = context.sourceCode as unknown as Record<
-                  string,
-                  unknown
-                >;
-
-                // Extract and bind getTokens so `this` is correct at runtime.
-                const rawGetTokens =
-                  typeof sc.getTokens === "function" ? sc.getTokens : null;
-                const boundGetTokens = rawGetTokens?.bind(sc) as
-                  | ((n: unknown) => unknown[])
-                  | undefined;
-                const tokens = boundGetTokens?.(node);
-                if (
-                  !tokens ||
-                  (Array.isArray(tokens) && tokens.length < MIN_TOKENS)
-                )
-                  return;
-
-                // Extract and bind getText so `this` is correct at runtime.
-                const rawGetText =
-                  typeof sc.getText === "function" ? sc.getText : null;
-                const boundGetText = rawGetText?.bind(sc) as
-                  | ((n: unknown) => string)
-                  | undefined;
-                const raw = (boundGetText ?? (() => ""))(node);
-
-                const key = normalize(raw);
-                const loc = node.loc;
-                if (!loc) return;
-                const typedLoc = loc as {
-                  start: { line: number; column: number };
-                };
-                const firstLine = (raw.split("\n")[0] ?? "").slice(0, 80);
-
-                const occ: Occurrence = {
-                  file: relPath,
-                  line: typedLoc.start.line,
-                  col: (typedLoc.start.column ?? 0) + 1,
-                  text: firstLine,
-                };
-
-                const bucket = occurrencesByKey.get(key);
-                if (bucket === undefined) {
-                  occurrencesByKey.set(key, [occ]);
-                } else {
-                  bucket.push(occ);
-                }
-              }
-
-              return {
-                BinaryExpression: record,
-                LogicalExpression: record,
-                UnaryExpression: record,
-                CallExpression: record,
-                MemberExpression: record,
-                ConditionalExpression: record,
-                AssignmentExpression: record,
-                NewExpression: record,
-              };
-            },
-          },
-        },
-      },
-    },
-    languageOptions: { ecmaVersion: 2022, sourceType: "module" },
-    rules: { "local/collect": "error" },
-  });
-
-  for (const [key, occs] of occurrencesByKey) {
-    if (occs.length < 2) continue;
-    const existing = seen.get(key);
-    if (existing === undefined) {
-      seen.set(key, [...occs]);
-    } else {
-      for (const occ of occs) existing.push(occ);
-    }
-  }
+  return textKey + "\0" + symbolParts.join(",");
 }
 
-function isContainedInLargerDuplicate(
-  occ: Occurrence,
-  key: string,
-  allGroups: Map<string, Occurrence[]>,
+/**
+ * Returns true if every node in `nodes` is contained within the source range
+ * of some node in another group that also has 2+ occurrences.  Used to skip
+ * sub-expression groups when a larger enclosing expression is already being
+ * extracted.
+ */
+function isContainedInLargerGroup(
+  nodes: Node[],
+  byKey: Map<string, Node[]>,
 ): boolean {
-  for (const [otherKey, otherOccs] of allGroups) {
-    if (otherKey === key || otherOccs.length < 2) continue;
-    // A larger duplicate contains this one if its key text contains our key text
-    // and it appears in the same file/vicinity. We use text containment as a proxy
-    // since we don't have range info across the transpilation boundary.
-    if (otherKey.includes(key) && otherKey.length > key.length) {
-      const sameFileGroup = otherOccs.filter((o) => o.file === occ.file);
-      if (sameFileGroup.length >= 2) return true;
+  for (const otherNodes of byKey.values()) {
+    if (otherNodes === nodes || otherNodes.length < 2) continue;
+    for (const n of nodes) {
+      for (const other of otherNodes) {
+        if (n.getStart() >= other.getStart() && n.getEnd() <= other.getEnd()) {
+          return true;
+        }
+      }
     }
   }
   return false;
 }
 
-// Collect duplicates across all source files.
-const seen = new Map<string, Occurrence[]>();
-const tsFiles = readdirSync(SRC_DIR).filter(
-  (f) => f.endsWith(".ts") && !f.endsWith(".test.ts"),
-);
-for (const f of tsFiles) {
-  findDuplicatesInFile(join(SRC_DIR, f), seen);
+function getContainingStatement(node: Node): Node | undefined {
+  let current: Node = node;
+  while (current.getParent()) {
+    const parent = current.getParent()!;
+    if (
+      Node.isBlock(parent) ||
+      Node.isSourceFile(parent) ||
+      Node.isModuleBlock(parent)
+    ) {
+      return current;
+    }
+    current = parent;
+  }
+  return undefined;
 }
 
-// Filter to only groups with 2+ occurrences and suppress sub-expression noise.
-const groups: DuplicateGroup[] = [];
-for (const [key, occs] of seen) {
-  if (occs.length < 2) continue;
-  if (isContainedInLargerDuplicate(occs[0]!, key, seen)) continue;
-  groups.push({ key, occurrences: occs });
+function generateName(
+  prefix: string,
+  sourceFile: SourceFile,
+  start: number,
+): string {
+  const text = sourceFile.getFullText();
+  let i = start;
+  while (true) {
+    const name = prefix + i;
+    if (!text.includes(name)) return name;
+    i++;
+  }
 }
 
-if (groups.length === 0) {
+const project = new Project({ tsConfigFilePath: TSCONFIG_PATH });
+
+let totalExtracted = 0;
+let globalCounter = 0;
+
+for (const sourceFile of project.getSourceFiles()) {
+  // Skip declaration files and test files
+  if (
+    sourceFile.isDeclarationFile() ||
+    sourceFile.getBaseName().endsWith(".test.ts")
+  ) {
+    continue;
+  }
+
+  let extractedInFile = 0;
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    const byKey = new Map<string, Node[]>();
+    sourceFile.forEachDescendant((node) => {
+      if (!CANDIDATE_KINDS.has(node.getKind())) return;
+      if (node.getText().length < MIN_TEXT_LENGTH) return;
+      const key = computeNodeKey(node);
+      const bucket = byKey.get(key);
+      if (bucket === undefined) {
+        byKey.set(key, [node]);
+      } else {
+        bucket.push(node);
+      }
+    });
+
+    for (const nodes of byKey.values()) {
+      if (nodes.length < 2) continue;
+      if (isContainedInLargerGroup(nodes, byKey)) continue;
+
+      const sorted = [...nodes].sort((a, b) => a.getStart() - b.getStart());
+      const firstNode = sorted[0]!;
+      const exprText = firstNode.getText();
+
+      const stmt = getContainingStatement(firstNode);
+      if (!stmt) continue;
+
+      const name = generateName("expr", sourceFile, globalCounter++);
+
+      // Replace all occurrences from last to first to preserve positions
+      for (const node of [...sorted].reverse()) {
+        node.replaceWithText(name);
+      }
+
+      // Prepend the const declaration before the containing statement
+      stmt.replaceWithText(`const ${name} = ${exprText};\n${stmt.getText()}`);
+
+      extractedInFile++;
+      changed = true;
+      break;
+    }
+  }
+
+  if (extractedInFile > 0) {
+    sourceFile.saveSync();
+    console.log(
+      sourceFile.getBaseName() +
+        ": extracted " +
+        extractedInFile +
+        " expression" +
+        (extractedInFile === 1 ? "" : "s"),
+    );
+    totalExtracted += extractedInFile;
+  }
+}
+
+if (totalExtracted === 0) {
   console.log("No duplicate expressions found.");
   process.exit(0);
 }
 
-console.error(
-  "Duplicate expression check failed. The expression(s) listed above appear more than once. Consider extracting them into a shared variable. If the duplicates contain identifiers that are the same but are in different scopes, rename one (or both) of them to be more accurate.",
-);
-console.error(
-  "Found " +
-    groups.length +
-    " duplicate expression" +
-    (groups.length === 1 ? "" : "s") +
-    ":\n",
-);
-
-for (const group of groups) {
-  console.error("  Duplicated expression: " + group.key.slice(0, 72));
-  for (const occ of group.occurrences) {
-    console.error(
-      "    " + occ.file + ":" + occ.line + ":" + occ.col + "  " + occ.text,
-    );
-  }
-  console.error("");
-}
-
+console.log("\nTotal extracted: " + totalExtracted);
 process.exit(1);
