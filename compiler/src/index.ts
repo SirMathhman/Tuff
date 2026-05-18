@@ -2,7 +2,11 @@ import { Err, Ok, type Result } from "./result";
 
 const RETURN = "return ";
 
-export function compile(input: string): Result<string, Error> {
+export enum CompileError {
+  NotImplemented,
+}
+
+export function compile(input: string): Result<string, CompileError> {
   const trimmed = input.trim();
   if (trimmed === "") {
     return new Ok(RETURN + "0");
@@ -10,5 +14,5 @@ export function compile(input: string): Result<string, Error> {
   if (trimmed === "read<U8>()") {
     return new Ok(RETURN + "Number(stdIn)");
   }
-  return new Err(new Error("Not implemented"));
+  return new Err(CompileError.NotImplemented);
 }
