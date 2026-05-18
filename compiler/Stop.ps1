@@ -23,7 +23,8 @@ if ($LASTEXITCODE -ne 0) {
     The expression(s) listed above appear more than once.
     Consider extracting them into a shared variable.
     If the duplicates contain identifiers that are the same
-    but are in different scopes, rename one (or both) of them to be more accurate.";
+    but are in different scopes, rename one (or both) of them to be more accurate.
+    Do not extract a function for this, extract a local constant because the function will be inlined.";
     exit 1
 }
 Write-Host "Duplicate expression check passed.";
