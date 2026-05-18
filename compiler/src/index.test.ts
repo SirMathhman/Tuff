@@ -31,3 +31,6 @@ test('run("read<U8>() + read<U8>()", "100 20") => 120', () => {
   expect(run("read<U8>() + read<U8>()", "100 20")).toBe(120);
 });
 
+test('run("read<U8>() + read<U8>() + read<U8>()", "100 20 1") => 121', () => {
+  expect(run("read<U8>() + read<U8>() + read<U8>()", "100 20 1")).toBe(121);
+});
