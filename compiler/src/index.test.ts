@@ -22,3 +22,12 @@ test('run(" ") => 0', () => {
 test('run("read<U8>()", "100") => 100', () => {
   expect(run("read<U8>()", "100")).toBe(100);
 });
+
+test('run("read<U8>()", "100 20") => 100', () => {
+  expect(run("read<U8>()", "100 20")).toBe(100);
+});
+
+test('run("read<U8>() + read<U8>()", "100 20") => 120', () => {
+  expect(run("read<U8>() + read<U8>()", "100 20")).toBe(120);
+});
+
