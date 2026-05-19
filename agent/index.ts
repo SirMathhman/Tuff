@@ -44,14 +44,13 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
     function: {
       name: "createFile",
       description:
-        "Create a file with the given name and content. Creates parent directories automatically.",
+        "Create a file with the given name. Creates parent directories automatically.",
       parameters: {
         type: "object",
         properties: {
           name: { type: "string", description: "Path to the file to create" },
-          content: { type: "string", description: "Content to write" },
         },
-        required: ["name", "content"],
+        required: ["name"],
       },
     },
   },
@@ -60,7 +59,7 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
     function: {
       name: "editFile",
       description:
-        "Edit an existing file. startLine is inclusive, endLine is exclusive. Line numbers start at 1.",
+        "Edit an existing file. StartLine is inclusive, endLine is exclusive. Line numbers start at 1. Max 25 lines.",
       parameters: {
         type: "object",
         properties: {
@@ -167,11 +166,11 @@ const tools: OpenAI.Chat.ChatCompletionTool[] = [
 
 // ── Tool implementations ──────────────────────────────────────────────────────
 
-async function createFile(name: string, content: string): Promise<string> {
+async function createFile(name: string): Promise<string> {
   if (fs.existsSync(name)) return "Error: File already exists.";
   const dir = path.dirname(name);
   if (!fs.existsSync(dir)) await fs.promises.mkdir(dir, { recursive: true });
-  await writeFile(name, content, "utf-8");
+  await writeFile(name, "", "utf-8");
 
   const lintingResult = await lintFile(name);
   if (lintingResult) {
@@ -201,6 +200,11 @@ async function editFile(
   content: string,
 ): Promise<string> {
   if (!fs.existsSync(name)) return "Error: File not found.";
+  const lineCount = endLine - startLine;
+  if (lineCount > 25) {
+    return "Error: Too many lines: " + lineCount;
+  }
+
   const lines = (await fs.promises.readFile(name, "utf-8")).split("\n");
   const updated = [
     ...lines.slice(0, startLine - 1),
@@ -460,7 +464,7 @@ async function callTool(
 ): Promise<string> {
   switch (name) {
     case "createFile":
-      return createFile(args.name, args.content);
+      return createFile(args.name);
     case "editFile":
       return editFile(args.name, args.startLine, args.endLine, args.content);
     case "readFile":
