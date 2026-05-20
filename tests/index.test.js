@@ -77,6 +77,10 @@ describe("run", () => {
   it('should return 2 for run("let x = read<U8>(); let y = x; y", "2")', () => {
     expect(run("let x = read<U8>(); let y = x; y", "2")).toBe(2);
   });
+
+  it('should return 2 for run("let mut x = read<U8>(); x = read<U8>(); x", "1 2")', () => {
+    expect(run("let mut x = read<U8>(); x = read<U8>(); x", "1 2")).toBe(2);
+  });
 });
 
 describe("compile", () => {
@@ -90,6 +94,12 @@ describe("compile", () => {
 
   it('should throw for compile("let x : U8 = read<U16>();")', () => {
     expect(() => compile("let x : U8 = read<U16>();")).toThrow(Error);
+  });
+
+  it('should throw for compile("let x = read<U8>(); x = read<U8>(); x")', () => {
+    expect(() => compile("let x = read<U8>(); x = read<U8>(); x")).toThrow(
+      Error,
+    );
   });
 
   it('should throw for compile("let x = read<U8>(); let x = read<U8>();")', () => {

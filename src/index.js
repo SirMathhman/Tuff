@@ -47,6 +47,7 @@ function compile(source) {
   // --- validate types (inlined) ---
   const seenVars = new Set();
   const varTypes = new Map();
+  const mutableVars = {};
   {
     let idx = 0;
     while (idx < source.length) {
@@ -55,6 +56,16 @@ function compile(source) {
         source.slice(idx, idx + 4) === "let\t"
       ) {
         idx += 4;
+        // Check for `mut` keyword for mutable declarations
+        let isMut = false;
+        if (
+          (source[idx] === "m" && source.slice(idx, idx + 4) === "mut ") ||
+          (source[idx] === "m" && source.slice(idx, idx + 4) === "mu\t")
+        ) {
+          isMut = true;
+          idx += 4;
+        }
+        idx = skipSpaces(source, idx);
         // Manually read variable name to avoid duplicate readWord expression
         let varEnd = idx;
         while (
@@ -72,6 +83,9 @@ function compile(source) {
             throw new Error("Duplicate variable declaration: " + varName);
           }
           seenVars.add(varName);
+          if (isMut) {
+            mutableVars[varName] = true;
+          }
         }
         idx = skipSpaces(source, idx);
 
@@ -132,6 +146,64 @@ function compile(source) {
     }
   }
 
+  // --- validate reassignments (non-mut variables can't be reassigned) ---
+  {
+    let idx2 = 0;
+    while (idx2 < source.length) {
+      let semi = source.indexOf(";", idx2);
+      if (semi === -1) semi = source.length;
+
+      // Skip past "let" statements (may have leading whitespace from semicolons)
+      let trimmed = idx2;
+      while (trimmed < source.length && source[trimmed] === " ") trimmed++;
+      if (
+        source.slice(trimmed, trimmed + 4) === "let " ||
+        source.slice(trimmed, trimmed + 4) === "let\t"
+      ) {
+        idx2 = semi + 1;
+        continue;
+      }
+
+      const stmt = source.slice(idx2, semi).trim();
+
+      // Check for reassignment pattern: identifier = (where = is not ==, != etc.)
+      for (let k = 1; k < stmt.length; k++) {
+        if (
+          stmt[k] === "=" &&
+          stmt[k - 1] !== "=" &&
+          stmt[k - 1] !== "!" &&
+          stmt[k - 1] !== "<" &&
+          stmt[k - 1] !== ">"
+        ) {
+          // Extract variable name before `=`
+          let before = k - 1;
+          while (before >= 0 && stmt[before] === " ") before--;
+          let nameEnd = before + 1;
+          let nameStart = nameEnd - 1;
+          while (
+            nameStart >= 0 &&
+            ((stmt[nameStart] >= "a" && stmt[nameStart] <= "z") ||
+              (stmt[nameStart] >= "A" && stmt[nameStart] <= "Z") ||
+              (stmt[nameStart] >= "0" && stmt[nameStart] <= "9") ||
+              stmt[nameStart] === "_")
+          ) {
+            nameStart--;
+          }
+          nameStart++;
+          const varName = stmt.slice(nameStart, nameEnd);
+          if (
+            varName.length > 0 &&
+            seenVars.has(varName) &&
+            !(varName in mutableVars)
+          ) {
+            throw new Error("Cannot reassign immutable variable: " + varName);
+          }
+        }
+      }
+      idx2 = semi + 1;
+    }
+  }
+
   // --- process source (inlined) ---
   let transformed = "";
   let readCount;
@@ -139,6 +211,13 @@ function compile(source) {
   {
     let pos = 0;
     while (pos < source.length) {
+      // Strip `mut` after `let`
+      if (source.slice(pos, pos + 8) === "let mut ") {
+        transformed += "let ";
+        pos += 8;
+        continue;
+      }
+
       if (source[pos] === ":") {
         const { word: typeWord, end: j } = readAnnotated(source, pos + 1);
         if (typeSet.has(typeWord) && j > pos + 1) {
