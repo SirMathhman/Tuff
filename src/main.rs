@@ -574,6 +574,16 @@ impl Parser {
                     return Ok(tv);
                 }
             }
+            // Check if it's an undefined variable (but not a keyword)
+            if Self::is_ident(token)
+                && token != "true"
+                && token != "false"
+                && token != "if"
+                && token != "else"
+                && token != "let"
+            {
+                return Err(TuffError::UndefinedVariable(token.clone()));
+            }
             let lit = parse_typed_literal(token)?;
             self.pos += 1;
             Ok(lit)
@@ -724,6 +734,17 @@ mod tests {
     #[test]
     fn interpret_tuff_let_in_block() {
         assert_eq!(interpret_tuff("{ let x : U8 = 1U8 + 2U8; x } * 3U8"), Ok(9));
+    }
+    #[test]
+    fn interpret_tuff_mut_in_block() {
+        assert_eq!(interpret_tuff("let mut x = 0; { x = 3; } x"), Ok(3));
+    }
+    #[test]
+    fn interpret_tuff_scope_err() {
+        assert_eq!(
+            interpret_tuff("{ let mut x = 0; } x"),
+            Err(TuffError::UndefinedVariable("x".to_string()))
+        );
     }
     #[test]
     fn interpret_tuff_let_with_block_expr() {
