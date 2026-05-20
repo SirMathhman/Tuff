@@ -23,6 +23,7 @@ fn type_max(suffix: &str) -> Option<u64> {
         "U16" => Some(65535),
         "U32" => Some(4_294_967_295),
         "U64" => Some(u64::MAX),
+        "Bool" => Some(1),
         _ => None,
     }
 }
@@ -51,6 +52,14 @@ fn parse_typed_literal(token: &str) -> Result<TypedValue, TuffError> {
             }
             return Err(TuffError::InvalidLiteral(token.to_string()));
         }
+    }
+
+    // Bool literals
+    if token == "true" {
+        return Ok(TypedValue { value: 1, max: 1 });
+    }
+    if token == "false" {
+        return Ok(TypedValue { value: 0, max: 1 });
     }
 
     // Default: treat bare integer literals as I32
@@ -537,6 +546,11 @@ mod tests {
             interpret_tuff("let mut x = 0U8; x = 100U16; x"),
             Err(TuffError::TypeMismatch)
         );
+    }
+
+    #[test]
+    fn interpret_tuff_bool() {
+        assert_eq!(interpret_tuff("let x : Bool = true; x"), Ok(1));
     }
 
     #[test]
