@@ -93,7 +93,7 @@ fn tokenize(input: &str) -> Vec<String> {
 struct Parser {
     tokens: Vec<String>,
     pos: usize,
-    scopes: Vec<HashMap<String, TypedValue>>,
+    scopes: Vec<HashMap<String, (TypedValue, bool)>>, // (value, is_mutable)
 }
 
 impl Parser {
@@ -177,10 +177,52 @@ impl Parser {
         }
     }
 
+    fn is_ident(token: &str) -> bool {
+        !token.ends_with("U8")
+            && !token.ends_with("U16")
+            && !token.ends_with("U32")
+            && !token.ends_with("U64")
+            && token
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_alphabetic() || c == '_')
+    }
+
     fn parse_one_stmt(&mut self, mut value: TypedValue) -> Result<TypedValue, TuffError> {
         if self.tokens[self.pos] == "let" {
             self.pos += 1;
             self.parse_let()?;
+        } else if self.pos + 1 < self.tokens.len()
+            && self.tokens[self.pos + 1] == "="
+            && Self::is_ident(&self.tokens[self.pos])
+        {
+            // assignment: ident = expr
+            let name = self.tokens[self.pos].clone();
+            self.pos += 2; // skip ident and =
+            let val = self.parse_expr()?;
+            let mut found = false;
+            for scope in self.scopes.iter_mut().rev() {
+                if let Some(pair) = scope.get_mut(&name) {
+                    if !pair.1 {
+                        return Err(TuffError::UnexpectedToken(format!(
+                            "cannot assign to immutable variable '{}'",
+                            name
+                        )));
+                    }
+                    if val.max > pair.0.max {
+                        return Err(TuffError::TypeMismatch);
+                    }
+                    pair.0.value = val.value;
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return Err(TuffError::UndefinedVariable(name));
+            }
+            if self.pos < self.tokens.len() && self.tokens[self.pos] == ";" {
+                self.pos += 1;
+            }
         } else {
             value = self.parse_expr()?;
             if self.pos < self.tokens.len() && self.tokens[self.pos] == ";" {
@@ -194,6 +236,12 @@ impl Parser {
         if self.pos >= self.tokens.len() {
             return Err(TuffError::UnexpectedToken("end of input".to_string()));
         }
+
+        let is_mut = self.tokens[self.pos] == "mut";
+        if is_mut {
+            self.pos += 1;
+        }
+
         let name = self.tokens[self.pos].clone();
         self.pos += 1;
         // optional type annotation
@@ -213,9 +261,14 @@ impl Parser {
         }
         self.pos += 1;
         let val = self.parse_expr()?;
-        if val.max > annotated_max {
-            return Err(TuffError::TypeMismatch);
-        }
+        let effective_max = if annotated_max == u64::MAX {
+            val.max
+        } else {
+            if val.max > annotated_max {
+                return Err(TuffError::TypeMismatch);
+            }
+            annotated_max
+        };
         if self.pos >= self.tokens.len() || self.tokens[self.pos] != ";" {
             return Err(TuffError::ExpectedSemicolon);
         }
@@ -227,13 +280,15 @@ impl Parser {
                     name
                 )));
             }
-            // store with the annotation's max to preserve declared type
             scope.insert(
                 name,
-                TypedValue {
-                    value: val.value,
-                    max: annotated_max,
-                },
+                (
+                    TypedValue {
+                        value: val.value,
+                        max: effective_max,
+                    },
+                    is_mut,
+                ),
             );
         }
         Ok(())
@@ -261,9 +316,9 @@ impl Parser {
         } else {
             let token = &self.tokens[self.pos];
             for scope in self.scopes.iter().rev() {
-                if let Some(&val) = scope.get(token) {
+                if let Some(&(tv, _)) = scope.get(token) {
                     self.pos += 1;
-                    return Ok(val);
+                    return Ok(tv);
                 }
             }
             let lit = parse_typed_literal(token)?;
@@ -459,6 +514,29 @@ mod tests {
     #[test]
     fn interpret_tuff_let_default_i32() {
         assert_eq!(interpret_tuff("let x = 100; x"), Ok(100));
+    }
+
+    #[test]
+    fn interpret_tuff_mut_assign() {
+        assert_eq!(interpret_tuff("let mut x = 0; x = 100; x"), Ok(100));
+    }
+
+    #[test]
+    fn interpret_tuff_immut_assign_err() {
+        assert_eq!(
+            interpret_tuff("let x = 0; x = 100; x"),
+            Err(TuffError::UnexpectedToken(
+                "cannot assign to immutable variable 'x'".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn interpret_tuff_assign_type_mismatch() {
+        assert_eq!(
+            interpret_tuff("let mut x = 0U8; x = 100U16; x"),
+            Err(TuffError::TypeMismatch)
+        );
     }
 
     #[test]
