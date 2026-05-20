@@ -69,6 +69,8 @@ function processSource(source) {
 }
 
 function validateTypes(source) {
+  const seenVars = new Set();
+  const varTypes = new Map();
   let i = 0;
   while (i < source.length) {
     // Look for "let" keyword
@@ -77,35 +79,77 @@ function validateTypes(source) {
       source.slice(i, i + 4) === "let\t"
     ) {
       i += 4;
-      // Skip variable name
-      i = readWord(source, i).end;
+      // Read variable name
+      const { word: varName, end: varEnd } = readWord(source, i);
+      i = varEnd;
+      if (varName.length > 0) {
+        if (seenVars.has(varName)) {
+          throw new Error("Duplicate variable declaration: " + varName);
+        }
+        seenVars.add(varName);
+      }
       // Skip whitespace
       i = skipSpaces(source, i);
+
+      let declaredType = null;
+
       // Check for type annotation
       if (source[i] === ":") {
         const { word: annType, end: j } = readWord(
           source,
           skipSpaces(source, i + 1),
         );
+        i = j;
 
         if (typeSet.has(annType)) {
-          // Skip past = and read
-          i = j;
-          while (i < source.length && source[i] !== "=") i++;
-          if (source[i] === "=") {
-            i = skipSpaces(source, i + 1);
-            if (source.slice(i, i + 5) === "read<") {
-              const { word: readType } = readWord(source, i + 5);
-              if (typeSet.has(readType) && annType !== readType) {
-                throw new Error(
-                  "Type mismatch: variable declared as " +
-                    annType +
-                    " but read returns " +
-                    readType,
-                );
-              }
-            }
+          declaredType = annType;
+        }
+
+        // Skip to =
+        i = skipSpaces(source, i);
+        if (source[i] === "=") {
+          i = skipSpaces(source, i + 1);
+        }
+      } else if (source.slice(i, i + 2) === "= ") {
+        i = skipSpaces(source, i + 1);
+      }
+
+      // Analyze the right-hand side
+      if (source.slice(i, i + 5) === "read<") {
+        const { word: readType } = readWord(source, i + 5);
+        if (typeSet.has(readType)) {
+          if (declaredType !== null && declaredType !== readType) {
+            throw new Error(
+              "Type mismatch: variable declared as " +
+                declaredType +
+                " but read returns " +
+                readType,
+            );
           }
+          varTypes.set(varName, readType);
+        }
+      } else if (declaredType !== null) {
+        // Typed variable assigned from an expression — check if it's a variable ref
+        const { word: rhsVar } = readWord(source, i);
+        if (rhsVar.length > 0 && varTypes.has(rhsVar)) {
+          const rhsType = varTypes.get(rhsVar);
+          if (rhsType !== declaredType) {
+            throw new Error(
+              "Type mismatch: variable declared as " +
+                declaredType +
+                " but " +
+                rhsVar +
+                " is " +
+                rhsType,
+            );
+          }
+        }
+        varTypes.set(varName, declaredType);
+      } else {
+        // Un-typed variable assigned from expression — infer if possible
+        const { word: rhsVar } = readWord(source, i);
+        if (rhsVar.length > 0 && varTypes.has(rhsVar)) {
+          varTypes.set(varName, varTypes.get(rhsVar));
         }
       }
     }

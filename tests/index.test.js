@@ -92,4 +92,16 @@ describe("compile", () => {
   it('should throw for compile("let x : U8 = read<U16>();")', () => {
     expect(() => compile("let x : U8 = read<U16>();")).toThrow(Error);
   });
+
+  it('should throw for compile("let x = read<U8>(); let x = read<U8>();")', () => {
+    expect(() => compile("let x = read<U8>(); let x = read<U8>();")).toThrow(
+      Error,
+    );
+  });
+
+  it('should throw for compile("let x = read<U16>(); let y : U8 = x;")', () => {
+    expect(() => compile("let x = read<U16>(); let y : U8 = x;")).toThrow(
+      Error,
+    );
+  });
 });
