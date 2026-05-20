@@ -5,14 +5,4 @@ export function compile(source) {
   if (hasReadU8 && !source.includes("let") && !source.includes("const")) {
     return "return parseInt(stdIn, 10) & 255;";
   }
-
-  const hasReadU16 = source.indexOf("read<U16>()") !== -1;
-  if (hasReadU16 && !source.includes("let") && !source.includes("const")) {
-    return "return parseInt(stdIn, 10) & 65535;";
-  }
-
-  const hasReadU32 = source.indexOf("read<U32>()") !== -1;
-  if (hasReadU32 && !source.includes("let") && !source.includes("const")) {
-    return "return parseInt(stdIn, 10);";
-  }
 }
