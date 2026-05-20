@@ -1,5 +1,5 @@
 import { describe, test, expect } from "@jest/globals";
-import { compile, run } from "../src";
+import { compile } from "../src";
 
 export function run(source, stdIn) {
   const compiled = compile(source);

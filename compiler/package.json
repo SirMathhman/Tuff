@@ -3,13 +3,13 @@
   "module": "index.js",
   "type": "module",
   "private": true,
-"scripts": {
+  "scripts": {
+    "agent": "bun ../agent/index.ts",
     "lint": "eslint ./src --fix",
     "test": "bun test",
     "jest:test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "cpd": "pmd cpd --dir src --minimum-tokens 50 --language ecmascript --ignore-literals --ignore-identifiers"
   },
-
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@opencode-ai/plugin": "^1.14.46",
