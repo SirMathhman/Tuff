@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "jest 1>&2",
-    "lint": "eslint ."
+    "lint": "eslint . 1>&2",
+    "cpd": "pmd cpd --dir src,tests --language ecmascript --minimum-tokens 35 --ignore-literals --ignore-identifiers 1<&2"
   },
   "keywords": [],
   "author": "",
