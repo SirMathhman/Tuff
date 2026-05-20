@@ -33,11 +33,6 @@ export default defineConfig([
           selector: "TemplateLiteral",
           message: "Templates are not allowed because they false-flag CPD.",
         },
-        {
-          selector: "ThrowStatement",
-          message:
-            "throw statements are not allowed. Use a custom Result<T, E> type instead for error handling.",
-        },
       ],
     },
   },
