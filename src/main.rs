@@ -556,6 +556,16 @@ impl Parser {
             self.pos += 1;
             self.parse_let()?;
             Err(TuffError::UnexpectedToken("let".to_string()))
+        } else if self.tokens[self.pos] == "if" {
+            self.pos += 1;
+            let cond = self.parse_expr()?;
+            let then_val = self.parse_factor()?;
+            if self.pos >= self.tokens.len() || self.tokens[self.pos] != "else" {
+                return Err(TuffError::UnexpectedToken("expected 'else'".to_string()));
+            }
+            self.pos += 1;
+            let else_val = self.parse_factor()?;
+            Ok(if cond.value != 0 { then_val } else { else_val })
         } else {
             let token = &self.tokens[self.pos];
             for scope in self.scopes.iter().rev() {
@@ -682,6 +692,10 @@ mod tests {
     #[test]
     fn interpret_tuff_u64_max_value() {
         assert_eq!(interpret_tuff("18446744073709551615U64"), Ok(-1i64));
+    }
+    #[test]
+    fn interpret_tuff_if_expr() {
+        assert_eq!(interpret_tuff("let x = if (true) 3 else 5; x"), Ok(3));
     }
     #[test]
     fn interpret_tuff_addition() {
