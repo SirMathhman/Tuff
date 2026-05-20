@@ -182,7 +182,15 @@ fn tokenize(input: &str) -> Vec<String> {
                 tokens.push(std::mem::take(&mut buf));
             }
             i += 1;
-        } else if c == '(' || c == ')' || c == '{' || c == '}' || c == ';' || c == ':' {
+        } else if c == '('
+            || c == ')'
+            || c == '{'
+            || c == '}'
+            || c == ';'
+            || c == ':'
+            || c == '<'
+            || c == '>'
+        {
             if !buf.is_empty() {
                 tokens.push(std::mem::take(&mut buf));
             }
@@ -273,10 +281,10 @@ impl Parser {
     }
 
     fn parse_and_expr(&mut self) -> Result<TypedValue, TuffError> {
-        let mut acc = self.parse_add_expr()?;
+        let mut acc = self.parse_cmp_expr()?;
         while self.pos < self.tokens.len() && self.tokens[self.pos] == "&&" {
             self.pos += 1;
-            let b = self.parse_add_expr()?;
+            let b = self.parse_cmp_expr()?;
             let val = if (acc.value != 0) && (b.value != 0) {
                 1
             } else {
@@ -286,6 +294,32 @@ impl Parser {
                 value: val,
                 kind: TypeKind::Bool,
             };
+        }
+        Ok(acc)
+    }
+
+    fn parse_cmp_expr(&mut self) -> Result<TypedValue, TuffError> {
+        let mut acc = self.parse_add_expr()?;
+        while self.pos < self.tokens.len() {
+            match self.tokens[self.pos].as_str() {
+                "<" => {
+                    self.pos += 1;
+                    let b = self.parse_add_expr()?;
+                    acc = TypedValue {
+                        value: if acc.value < b.value { 1 } else { 0 },
+                        kind: TypeKind::Bool,
+                    };
+                }
+                ">" => {
+                    self.pos += 1;
+                    let b = self.parse_add_expr()?;
+                    acc = TypedValue {
+                        value: if acc.value > b.value { 1 } else { 0 },
+                        kind: TypeKind::Bool,
+                    };
+                }
+                _ => break,
+            }
         }
         Ok(acc)
     }
@@ -690,6 +724,10 @@ mod tests {
     #[test]
     fn interpret_tuff_logical_and() {
         assert_eq!(interpret_tuff("let x = true; let y = false; x && y"), Ok(0));
+    }
+    #[test]
+    fn interpret_tuff_less_than() {
+        assert_eq!(interpret_tuff("let x = 1; let y = 2; x < y"), Ok(1));
     }
     #[test]
     fn interpret_tuff_assign_int_to_bool_err() {
