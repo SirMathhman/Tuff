@@ -23,38 +23,100 @@ fn parse_typed_literal(token: &str) -> Result<u64, ()> {
     Err(())
 }
 
+fn tokenize(input: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut buf = String::new();
+    for c in input.chars() {
+        if c.is_whitespace() {
+            if !buf.is_empty() {
+                tokens.push(std::mem::take(&mut buf));
+            }
+        } else if c == '(' || c == ')' {
+            if !buf.is_empty() {
+                tokens.push(std::mem::take(&mut buf));
+            }
+            tokens.push(c.to_string());
+        } else {
+            buf.push(c);
+        }
+    }
+    if !buf.is_empty() {
+        tokens.push(buf);
+    }
+    tokens
+}
+
+fn parse_expr(tokens: &[String], pos: &mut usize) -> Result<u64, ()> {
+    let mut acc = parse_term(tokens, pos)?;
+    while *pos < tokens.len() {
+        match tokens[*pos].as_str() {
+            "+" => {
+                *pos += 1;
+                acc = acc.checked_add(parse_term(tokens, pos)?).ok_or(())?;
+            }
+            "-" => {
+                *pos += 1;
+                acc = acc.checked_sub(parse_term(tokens, pos)?).ok_or(())?;
+            }
+            _ => break,
+        }
+    }
+    Ok(acc)
+}
+
+fn parse_term(tokens: &[String], pos: &mut usize) -> Result<u64, ()> {
+    let mut acc = parse_factor(tokens, pos)?;
+    while *pos < tokens.len() {
+        match tokens[*pos].as_str() {
+            "*" => {
+                *pos += 1;
+                acc = acc.checked_mul(parse_factor(tokens, pos)?).ok_or(())?;
+            }
+            "/" => {
+                *pos += 1;
+                acc = acc.checked_div(parse_factor(tokens, pos)?).ok_or(())?;
+            }
+            _ => break,
+        }
+    }
+    Ok(acc)
+}
+
+fn parse_factor(tokens: &[String], pos: &mut usize) -> Result<u64, ()> {
+    if *pos >= tokens.len() {
+        return Err(());
+    }
+    if tokens[*pos] == "(" {
+        *pos += 1;
+        let val = parse_expr(tokens, pos)?;
+        if *pos >= tokens.len() || tokens[*pos] != ")" {
+            return Err(());
+        }
+        *pos += 1;
+        Ok(val)
+    } else {
+        let lit = parse_typed_literal(&tokens[*pos])?;
+        *pos += 1;
+        Ok(lit)
+    }
+}
+
 fn interpret_tuff(input: &str) -> Result<u64, ()> {
     let input = input.trim();
     if input.is_empty() {
         return Ok(0);
     }
 
-    let tokens: Vec<&str> = input.split_whitespace().collect();
-
-    if tokens.len() == 1 {
-        return parse_typed_literal(tokens[0]);
+    let tokens = tokenize(input);
+    if tokens.is_empty() {
+        return Ok(0);
     }
 
-    if tokens.len() % 2 == 0 {
+    let mut pos = 0;
+    let result = parse_expr(&tokens, &mut pos)?;
+    if pos != tokens.len() {
         return Err(());
     }
-
-    let mut result = parse_typed_literal(tokens[0])?;
-
-    let mut i = 1;
-    while i < tokens.len() {
-        let op = tokens[i];
-        let b = parse_typed_literal(tokens[i + 1])?;
-        result = match op {
-            "+" => result.checked_add(b).ok_or(()),
-            "-" => result.checked_sub(b).ok_or(()),
-            "*" => result.checked_mul(b).ok_or(()),
-            "/" => result.checked_div(b).ok_or(()),
-            _ => Err(()),
-        }?;
-        i += 2;
-    }
-
     Ok(result)
 }
 
@@ -166,5 +228,20 @@ mod tests {
     #[test]
     fn interpret_tuff_multi_addition() {
         assert_eq!(interpret_tuff("1U8 + 2U8 + 3U8"), Ok(6));
+    }
+
+    #[test]
+    fn interpret_tuff_precedence() {
+        assert_eq!(interpret_tuff("1U8 * 2U8 + 3U8"), Ok(5));
+    }
+
+    #[test]
+    fn interpret_tuff_reverse_precedence() {
+        assert_eq!(interpret_tuff("1U8 + 2U8 * 3U8"), Ok(7));
+    }
+
+    #[test]
+    fn interpret_tuff_parentheses() {
+        assert_eq!(interpret_tuff("(1U8 + 2U8) * 3U8"), Ok(9));
     }
 }
