@@ -219,11 +219,22 @@ fn interpret_tuff(input: &str) -> Result<u64, ()> {
 
     let mut pos = 0;
     let mut scopes: Vec<HashMap<String, u64>> = vec![HashMap::new()];
-    let result = parse_expr(&tokens, &mut pos, &mut scopes)?;
-    if pos != tokens.len() {
-        return Err(());
+    let mut value: u64 = 0;
+    loop {
+        if pos >= tokens.len() {
+            break;
+        }
+        if tokens[pos] == "let" {
+            pos += 1;
+            parse_let(&tokens, &mut pos, &mut scopes)?;
+        } else {
+            value = parse_expr(&tokens, &mut pos, &mut scopes)?;
+            if pos < tokens.len() && tokens[pos] == ";" {
+                pos += 1;
+            }
+        }
     }
-    Ok(result)
+    Ok(value)
 }
 
 use std::io::{self, Write};
@@ -359,5 +370,13 @@ mod tests {
     #[test]
     fn interpret_tuff_let_in_block() {
         assert_eq!(interpret_tuff("{ let x : U8 = 1U8 + 2U8; x } * 3U8"), Ok(9));
+    }
+
+    #[test]
+    fn interpret_tuff_let_with_block_expr() {
+        assert_eq!(
+            interpret_tuff("let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y"),
+            Ok(9)
+        );
     }
 }
