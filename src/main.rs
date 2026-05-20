@@ -173,18 +173,36 @@ fn parse_typed_literal(token: &str) -> Result<TypedValue, TuffError> {
 fn tokenize(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut buf = String::new();
-    for c in input.chars() {
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
         if c.is_whitespace() {
             if !buf.is_empty() {
                 tokens.push(std::mem::take(&mut buf));
             }
+            i += 1;
         } else if c == '(' || c == ')' || c == '{' || c == '}' || c == ';' || c == ':' {
             if !buf.is_empty() {
                 tokens.push(std::mem::take(&mut buf));
             }
             tokens.push(c.to_string());
+            i += 1;
+        } else if c == '|' && i + 1 < chars.len() && chars[i + 1] == '|' {
+            if !buf.is_empty() {
+                tokens.push(std::mem::take(&mut buf));
+            }
+            tokens.push("||".to_string());
+            i += 2;
+        } else if c == '&' && i + 1 < chars.len() && chars[i + 1] == '&' {
+            if !buf.is_empty() {
+                tokens.push(std::mem::take(&mut buf));
+            }
+            tokens.push("&&".to_string());
+            i += 2;
         } else {
             buf.push(c);
+            i += 1;
         }
     }
     if !buf.is_empty() {
@@ -233,6 +251,46 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<TypedValue, TuffError> {
+        self.parse_or_expr()
+    }
+
+    fn parse_or_expr(&mut self) -> Result<TypedValue, TuffError> {
+        let mut acc = self.parse_and_expr()?;
+        while self.pos < self.tokens.len() && self.tokens[self.pos] == "||" {
+            self.pos += 1;
+            let b = self.parse_and_expr()?;
+            let val = if (acc.value != 0) || (b.value != 0) {
+                1
+            } else {
+                0
+            };
+            acc = TypedValue {
+                value: val,
+                kind: TypeKind::Bool,
+            };
+        }
+        Ok(acc)
+    }
+
+    fn parse_and_expr(&mut self) -> Result<TypedValue, TuffError> {
+        let mut acc = self.parse_add_expr()?;
+        while self.pos < self.tokens.len() && self.tokens[self.pos] == "&&" {
+            self.pos += 1;
+            let b = self.parse_add_expr()?;
+            let val = if (acc.value != 0) && (b.value != 0) {
+                1
+            } else {
+                0
+            };
+            acc = TypedValue {
+                value: val,
+                kind: TypeKind::Bool,
+            };
+        }
+        Ok(acc)
+    }
+
+    fn parse_add_expr(&mut self) -> Result<TypedValue, TuffError> {
         let mut acc = self.parse_term()?;
         while self.pos < self.tokens.len() {
             match self.tokens[self.pos].as_str() {
@@ -624,6 +682,14 @@ mod tests {
             interpret_tuff("let mut x = 100U8; x = true; x"),
             Err(TuffError::TypeMismatch)
         );
+    }
+    #[test]
+    fn interpret_tuff_logical_or() {
+        assert_eq!(interpret_tuff("let x = true; let y = false; x || y"), Ok(1));
+    }
+    #[test]
+    fn interpret_tuff_logical_and() {
+        assert_eq!(interpret_tuff("let x = true; let y = false; x && y"), Ok(0));
     }
     #[test]
     fn interpret_tuff_assign_int_to_bool_err() {
