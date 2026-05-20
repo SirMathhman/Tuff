@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 fn parse_typed_literal(token: &str) -> Result<u64, ()> {
     let suffixes: [(&str, u64); 4] = [
         ("U8", 255),
@@ -31,7 +33,7 @@ fn tokenize(input: &str) -> Vec<String> {
             if !buf.is_empty() {
                 tokens.push(std::mem::take(&mut buf));
             }
-        } else if c == '(' || c == ')' {
+        } else if c == '(' || c == ')' || c == '{' || c == '}' || c == ';' || c == ':' {
             if !buf.is_empty() {
                 tokens.push(std::mem::take(&mut buf));
             }
@@ -46,17 +48,25 @@ fn tokenize(input: &str) -> Vec<String> {
     tokens
 }
 
-fn parse_expr(tokens: &[String], pos: &mut usize) -> Result<u64, ()> {
-    let mut acc = parse_term(tokens, pos)?;
+fn parse_expr(
+    tokens: &[String],
+    pos: &mut usize,
+    scopes: &mut Vec<HashMap<String, u64>>,
+) -> Result<u64, ()> {
+    let mut acc = parse_term(tokens, pos, scopes)?;
     while *pos < tokens.len() {
         match tokens[*pos].as_str() {
             "+" => {
                 *pos += 1;
-                acc = acc.checked_add(parse_term(tokens, pos)?).ok_or(())?;
+                acc = acc
+                    .checked_add(parse_term(tokens, pos, scopes)?)
+                    .ok_or(())?;
             }
             "-" => {
                 *pos += 1;
-                acc = acc.checked_sub(parse_term(tokens, pos)?).ok_or(())?;
+                acc = acc
+                    .checked_sub(parse_term(tokens, pos, scopes)?)
+                    .ok_or(())?;
             }
             _ => break,
         }
@@ -64,17 +74,25 @@ fn parse_expr(tokens: &[String], pos: &mut usize) -> Result<u64, ()> {
     Ok(acc)
 }
 
-fn parse_term(tokens: &[String], pos: &mut usize) -> Result<u64, ()> {
-    let mut acc = parse_factor(tokens, pos)?;
+fn parse_term(
+    tokens: &[String],
+    pos: &mut usize,
+    scopes: &mut Vec<HashMap<String, u64>>,
+) -> Result<u64, ()> {
+    let mut acc = parse_factor(tokens, pos, scopes)?;
     while *pos < tokens.len() {
         match tokens[*pos].as_str() {
             "*" => {
                 *pos += 1;
-                acc = acc.checked_mul(parse_factor(tokens, pos)?).ok_or(())?;
+                acc = acc
+                    .checked_mul(parse_factor(tokens, pos, scopes)?)
+                    .ok_or(())?;
             }
             "/" => {
                 *pos += 1;
-                acc = acc.checked_div(parse_factor(tokens, pos)?).ok_or(())?;
+                acc = acc
+                    .checked_div(parse_factor(tokens, pos, scopes)?)
+                    .ok_or(())?;
             }
             _ => break,
         }
@@ -82,20 +100,107 @@ fn parse_term(tokens: &[String], pos: &mut usize) -> Result<u64, ()> {
     Ok(acc)
 }
 
-fn parse_factor(tokens: &[String], pos: &mut usize) -> Result<u64, ()> {
+fn parse_block(
+    tokens: &[String],
+    pos: &mut usize,
+    scopes: &mut Vec<HashMap<String, u64>>,
+) -> Result<u64, ()> {
+    // expect '{' already consumed
+    scopes.push(HashMap::new());
+    let mut value: u64 = 0;
+    loop {
+        if *pos >= tokens.len() {
+            scopes.pop();
+            return Err(());
+        }
+        if tokens[*pos] == "}" {
+            *pos += 1;
+            scopes.pop();
+            return Ok(value);
+        }
+        if tokens[*pos] == "let" {
+            *pos += 1;
+            parse_let(tokens, pos, scopes)?;
+        } else {
+            value = parse_expr(tokens, pos, scopes)?;
+            if *pos < tokens.len() && tokens[*pos] == ";" {
+                *pos += 1;
+            }
+        }
+    }
+}
+
+fn parse_let(
+    tokens: &[String],
+    pos: &mut usize,
+    scopes: &mut Vec<HashMap<String, u64>>,
+) -> Result<(), ()> {
+    // 'let' already consumed
+    if *pos >= tokens.len() {
+        return Err(());
+    }
+    let name = tokens[*pos].clone();
+    *pos += 1;
+    if *pos >= tokens.len() || tokens[*pos] != ":" {
+        return Err(());
+    }
+    *pos += 1; // skip ':'
+    // skip type annotation (any token like U8, U16, etc.)
+    if *pos >= tokens.len() {
+        return Err(());
+    }
+    *pos += 1; // skip type
+    if *pos >= tokens.len() || tokens[*pos] != "=" {
+        return Err(());
+    }
+    *pos += 1; // skip '='
+    let val = parse_expr(tokens, pos, scopes)?;
+    if *pos >= tokens.len() || tokens[*pos] != ";" {
+        return Err(());
+    }
+    *pos += 1; // skip ';'
+    if let Some(scope) = scopes.last_mut() {
+        scope.insert(name, val);
+    }
+    Ok(())
+}
+
+fn parse_factor(
+    tokens: &[String],
+    pos: &mut usize,
+    scopes: &mut Vec<HashMap<String, u64>>,
+) -> Result<u64, ()> {
     if *pos >= tokens.len() {
         return Err(());
     }
     if tokens[*pos] == "(" {
         *pos += 1;
-        let val = parse_expr(tokens, pos)?;
+        let val = parse_expr(tokens, pos, scopes)?;
         if *pos >= tokens.len() || tokens[*pos] != ")" {
             return Err(());
         }
         *pos += 1;
         Ok(val)
+    } else if tokens[*pos] == "{" {
+        *pos += 1;
+        parse_block(tokens, pos, scopes)
+    } else if tokens[*pos] == "let" {
+        *pos += 1;
+        parse_let(tokens, pos, scopes)?;
+        // after a let statement at factor level, the value is the declared variable's value
+        // but this shouldn't happen in standard usage; Err is safer
+        Err(())
     } else {
-        let lit = parse_typed_literal(&tokens[*pos])?;
+        // Check if it's a variable reference
+        let token = &tokens[*pos];
+        // variable names don't end with a digit+suffix, so check scopes first
+        for scope in scopes.iter().rev() {
+            if let Some(&val) = scope.get(token) {
+                *pos += 1;
+                return Ok(val);
+            }
+        }
+        let lit = parse_typed_literal(token)?;
         *pos += 1;
         Ok(lit)
     }
@@ -113,7 +218,8 @@ fn interpret_tuff(input: &str) -> Result<u64, ()> {
     }
 
     let mut pos = 0;
-    let result = parse_expr(&tokens, &mut pos)?;
+    let mut scopes: Vec<HashMap<String, u64>> = vec![HashMap::new()];
+    let result = parse_expr(&tokens, &mut pos, &mut scopes)?;
     if pos != tokens.len() {
         return Err(());
     }
@@ -243,5 +349,15 @@ mod tests {
     #[test]
     fn interpret_tuff_parentheses() {
         assert_eq!(interpret_tuff("(1U8 + 2U8) * 3U8"), Ok(9));
+    }
+
+    #[test]
+    fn interpret_tuff_curly_braces() {
+        assert_eq!(interpret_tuff("{ 1U8 + 2U8 } * 3U8"), Ok(9));
+    }
+
+    #[test]
+    fn interpret_tuff_let_in_block() {
+        assert_eq!(interpret_tuff("{ let x : U8 = 1U8 + 2U8; x } * 3U8"), Ok(9));
     }
 }
