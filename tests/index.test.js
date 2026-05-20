@@ -83,34 +83,32 @@ describe("run", () => {
   });
 });
 
+function expectError(source) {
+  return expect(() => compile(source)).toThrow(Error);
+}
+
 describe("compile", () => {
   it('should throw for compile("read<U7>()")', () => {
-    expect(() => compile("read<U7>()")).toThrow(Error);
+    expectError("read<U7>()");
   });
 
   it('should throw for compile("read<F32>()")', () => {
-    expect(() => compile("read<F32>()")).toThrow(Error);
+    expectError("read<F32>()");
   });
 
   it('should throw for compile("let x : U8 = read<U16>();")', () => {
-    expect(() => compile("let x : U8 = read<U16>();")).toThrow(Error);
+    expectError("let x : U8 = read<U16>();");
   });
 
   it('should throw for compile("let x = read<U8>(); x = read<U8>(); x")', () => {
-    expect(() => compile("let x = read<U8>(); x = read<U8>(); x")).toThrow(
-      Error,
-    );
+    expectError("let x = read<U8>(); x = read<U8>(); x");
   });
 
   it('should throw for compile("let x = read<U8>(); let x = read<U8>();")', () => {
-    expect(() => compile("let x = read<U8>(); let x = read<U8>();")).toThrow(
-      Error,
-    );
+    expectError("let x = read<U8>(); let x = read<U8>();");
   });
 
   it('should throw for compile("let x = read<U16>(); let y : U8 = x;")', () => {
-    expect(() => compile("let x = read<U16>(); let y : U8 = x;")).toThrow(
-      Error,
-    );
+    expectError("let x = read<U16>(); let y : U8 = x;");
   });
 });

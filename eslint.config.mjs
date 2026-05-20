@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 
 export default [
   {
-    ignores: ["eslint.config.mjs"],
+    ignores: ["eslint.config.mjs", "eslint-rules/*.js"],
   },
   js.configs.recommended,
   {

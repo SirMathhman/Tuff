@@ -1,35 +1,26 @@
+function isAlphaNum(ch) {
+  return (
+    (ch >= "a" && ch <= "z") ||
+    (ch >= "A" && ch <= "Z") ||
+    (ch >= "0" && ch <= "9")
+  );
+}
+
 function readWord(str, pos) {
   let end = pos;
-  while (
-    end < str.length &&
-    ((str[end] >= "a" && str[end] <= "z") ||
-      (str[end] >= "A" && str[end] <= "Z") ||
-      (str[end] >= "0" && str[end] <= "9"))
-  ) {
+  while (end < str.length && isAlphaNum(str[end])) {
     end++;
   }
   return { word: str.slice(pos, end), end };
 }
 
-function readAnnotated(str, start) {
+function readChar(str, start) {
   let j = start;
-  while (j < str.length && str[j] === " ") j++;
-  const word = str.slice(
-    j,
-    (() => {
-      let k = j;
-      while (
-        k < str.length &&
-        ((str[k] >= "a" && str[k] <= "z") ||
-          (str[k] >= "A" && str[k] <= "Z") ||
-          (str[k] >= "0" && str[k] <= "9"))
-      ) {
-        k++;
-      }
-      return k;
-    })(),
-  );
-  return { word, end: j + word.length };
+  while (j < str.length && str[j] == " ") j++;
+  let k = j;
+  while (k < str.length && isAlphaNum(str[k])) k++;
+  const word = str.slice(j, k);
+  return { word, end: k };
 }
 
 const typeSet = new Set(["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"]);
@@ -48,6 +39,7 @@ function compile(source) {
   const seenVars = new Set();
   const varTypes = new Map();
   const mutableVars = {};
+
   {
     let idx = 0;
     while (idx < source.length) {
@@ -58,32 +50,24 @@ function compile(source) {
         idx += 4;
         // Check for `mut` keyword for mutable declarations
         let isMut = false;
+        var srcIdx = source[idx];
         if (
-          (source[idx] === "m" && source.slice(idx, idx + 4) === "mut ") ||
-          (source[idx] === "m" && source.slice(idx, idx + 4) === "mu\t")
+          (srcIdx === "m" && source.slice(idx, idx + 4) === "mut ") ||
+          (srcIdx === "m" && source.slice(idx, idx + 4) === "mu\t")
         ) {
           isMut = true;
           idx += 4;
         }
         idx = skipSpaces(source, idx);
-        // Manually read variable name to avoid duplicate readWord expression
-        let varEnd = idx;
-        while (
-          varEnd < source.length &&
-          ((source[varEnd] >= "a" && source[varEnd] <= "z") ||
-            (source[varEnd] >= "A" && source[varEnd] <= "Z") ||
-            (source[varEnd] >= "0" && source[varEnd] <= "9"))
-        ) {
-          varEnd++;
-        }
-        const varName = source.slice(idx, varEnd);
+        // Read variable name via readWord
+        const { word: varName, end: varEnd } = readWord(source, idx);
         idx = varEnd;
         if (varName.length > 0) {
           if (seenVars.has(varName)) {
             throw new Error("Duplicate variable declaration: " + varName);
           }
           seenVars.add(varName);
-          if (isMut) {
+          if (isMut && varName.length > 0) {
             mutableVars[varName] = true;
           }
         }
@@ -92,7 +76,7 @@ function compile(source) {
         let declaredType = null;
 
         if (source[idx] === ":") {
-          const { word: annType, end: j } = readAnnotated(source, idx + 1);
+          const { word: annType, end: j } = readChar(source, idx + 1);
           idx = j;
           if (typeSet.has(annType)) {
             declaredType = annType;
@@ -168,29 +152,29 @@ function compile(source) {
 
       // Check for reassignment pattern: identifier = (where = is not ==, != etc.)
       for (let k = 1; k < stmt.length; k++) {
+        var prev = stmt[k - 1];
         if (
           stmt[k] === "=" &&
-          stmt[k - 1] !== "=" &&
-          stmt[k - 1] !== "!" &&
-          stmt[k - 1] !== "<" &&
-          stmt[k - 1] !== ">"
+          prev !== "=" &&
+          prev !== "!" &&
+          prev !== "<" &&
+          prev !== ">"
         ) {
           // Extract variable name before `=`
           let before = k - 1;
           while (before >= 0 && stmt[before] === " ") before--;
-          let nameEnd = before + 1;
-          let nameStart = nameEnd - 1;
-          while (
-            nameStart >= 0 &&
-            ((stmt[nameStart] >= "a" && stmt[nameStart] <= "z") ||
-              (stmt[nameStart] >= "A" && stmt[nameStart] <= "Z") ||
-              (stmt[nameStart] >= "0" && stmt[nameStart] <= "9") ||
-              stmt[nameStart] === "_")
-          ) {
-            nameStart--;
-          }
-          nameStart++;
-          const varName = stmt.slice(nameStart, nameEnd);
+          var varName = (function (end) {
+            var start = end - 1;
+            var s;
+            while (
+              start >= 0 &&
+              ((s = stmt[start]), isAlphaNum(s) || s === "_")
+            ) {
+              start--;
+            }
+            start++;
+            return stmt.slice(start, end);
+          })(before + 1);
           if (
             varName.length > 0 &&
             seenVars.has(varName) &&
@@ -218,8 +202,9 @@ function compile(source) {
         continue;
       }
 
-      if (source[pos] === ":") {
-        const { word: typeWord, end: j } = readAnnotated(source, pos + 1);
+      var cur = source[pos];
+      if (cur === ":") {
+        const { word: typeWord, end: j } = readChar(source, pos + 1);
         if (typeSet.has(typeWord) && j > pos + 1) {
           pos = j;
           continue;
@@ -227,7 +212,7 @@ function compile(source) {
       }
 
       if (
-        source[pos] === "r" &&
+        cur === "r" &&
         pos + 4 < source.length &&
         source.slice(pos, pos + 5) === "read<"
       ) {
@@ -248,7 +233,7 @@ function compile(source) {
         }
       }
 
-      transformed += source[pos];
+      transformed += cur;
       pos++;
     }
   }
