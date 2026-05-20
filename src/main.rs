@@ -193,6 +193,16 @@ fn tokenize(input: &str) -> Vec<String> {
     tokens
 }
 
+fn to_i64(tv: TypedValue) -> i64 {
+    match tv.kind {
+        TypeKind::I8 => tv.value as i8 as i64,
+        TypeKind::I16 => tv.value as i16 as i64,
+        TypeKind::I32 => tv.value as i32 as i64,
+        TypeKind::I64 => tv.value as i64,
+        _ => tv.value as i64,
+    }
+}
+
 struct Parser {
     tokens: Vec<String>,
     pos: usize,
@@ -432,7 +442,7 @@ impl Parser {
         }
     }
 
-    fn parse_all(&mut self) -> Result<u64, TuffError> {
+    fn parse_all(&mut self) -> Result<i64, TuffError> {
         let mut value = TypedValue {
             value: 0,
             kind: TypeKind::I32,
@@ -440,11 +450,11 @@ impl Parser {
         while self.pos < self.tokens.len() {
             value = self.parse_one_stmt(value)?;
         }
-        Ok(value.value)
+        Ok(to_i64(value))
     }
 }
 
-fn interpret_tuff(input: &str) -> Result<u64, TuffError> {
+fn interpret_tuff(input: &str) -> Result<i64, TuffError> {
     let input = input.trim();
     if input.is_empty() {
         return Ok(0);
@@ -543,10 +553,7 @@ mod tests {
     }
     #[test]
     fn interpret_tuff_u64_max_value() {
-        assert_eq!(
-            interpret_tuff("18446744073709551615U64"),
-            Ok(18446744073709551615)
-        );
+        assert_eq!(interpret_tuff("18446744073709551615U64"), Ok(-1i64));
     }
     #[test]
     fn interpret_tuff_addition() {
@@ -618,6 +625,11 @@ mod tests {
     #[test]
     fn interpret_tuff_let_reference() {
         assert_eq!(interpret_tuff("let x = 100U8; let y = x; y"), Ok(100));
+    }
+
+    #[test]
+    fn interpret_tuff_signed_negative() {
+        assert_eq!(interpret_tuff("-100I8"), Ok(-100));
     }
     #[test]
     fn interpret_tuff_let_no_expr() {
