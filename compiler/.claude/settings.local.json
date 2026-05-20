@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(npx tsx *)",
-      "Bash(echo \"Exit: $?\")",
-      "PowerShell(cd C:\\\\Users\\\\mathm\\\\Documents\\\\Projects\\\\Tuff\\\\compiler && powershell -File Stop.ps1 2>&1)"
-    ]
-  }
-}
