@@ -17,58 +17,152 @@ pub enum TuffError {
     TypeMismatch,
 }
 
-fn type_max(suffix: &str) -> Option<u64> {
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TypeKind {
+    Bool,
+    U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
+    I32,
+    I64,
+}
+
+fn type_kind(suffix: &str) -> Option<TypeKind> {
     match suffix {
-        "U8" => Some(255),
-        "U16" => Some(65535),
-        "U32" => Some(4_294_967_295),
-        "U64" => Some(u64::MAX),
-        "Bool" => Some(1),
+        "Bool" => Some(TypeKind::Bool),
+        "U8" => Some(TypeKind::U8),
+        "U16" => Some(TypeKind::U16),
+        "U32" => Some(TypeKind::U32),
+        "U64" => Some(TypeKind::U64),
+        "I8" => Some(TypeKind::I8),
+        "I16" => Some(TypeKind::I16),
+        "I32" => Some(TypeKind::I32),
+        "I64" => Some(TypeKind::I64),
         _ => None,
+    }
+}
+
+fn type_max(kind: TypeKind) -> u64 {
+    match kind {
+        TypeKind::Bool => 1,
+        TypeKind::U8 => 255,
+        TypeKind::U16 => 65535,
+        TypeKind::U32 => 4_294_967_295,
+        TypeKind::U64 => u64::MAX,
+        TypeKind::I8 => i8::MAX as u64,
+        TypeKind::I16 => i16::MAX as u64,
+        TypeKind::I32 => i32::MAX as u64,
+        TypeKind::I64 => i64::MAX as u64,
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 struct TypedValue {
     value: u64,
-    max: u64,
+    kind: TypeKind,
+}
+
+fn can_assign(from: TypeKind, to: TypeKind) -> bool {
+    if from == to {
+        return true;
+    }
+    match (from, to) {
+        // unsigned widening
+        (TypeKind::U8, TypeKind::U16 | TypeKind::U32 | TypeKind::U64) => true,
+        (TypeKind::U16, TypeKind::U32 | TypeKind::U64) => true,
+        (TypeKind::U32, TypeKind::U64) => true,
+        // signed widening
+        (TypeKind::I8, TypeKind::I16 | TypeKind::I32 | TypeKind::I64) => true,
+        (TypeKind::I16, TypeKind::I32 | TypeKind::I64) => true,
+        (TypeKind::I32, TypeKind::I64) => true,
+        // signed to unsigned (larger capacity)
+        (TypeKind::I8, TypeKind::U16 | TypeKind::U32 | TypeKind::U64) => true,
+        (TypeKind::I16, TypeKind::U32 | TypeKind::U64) => true,
+        (TypeKind::I32, TypeKind::U64) => true,
+        _ => false,
+    }
+}
+
+fn parse_suffixed_literal(token: &str, suffix: &str, kind: TypeKind) -> Option<TypedValue> {
+    let literal = token.strip_suffix(suffix)?;
+    let n = literal.parse::<u64>().ok()?;
+    if n <= type_max(kind) {
+        Some(TypedValue { value: n, kind })
+    } else {
+        None
+    }
+}
+
+fn parse_negated_signed(
+    literal: &str,
+    kind: TypeKind,
+    full_token: &str,
+) -> Result<TypedValue, TuffError> {
+    let without_sign = literal.strip_prefix('-').unwrap();
+    if let Ok(n) = without_sign.parse::<i64>() {
+        let neg = n.checked_neg().ok_or(TuffError::ArithmeticOverflow)?;
+        if neg >= -(type_max(kind) as i64 + 1) {
+            return Ok(TypedValue {
+                value: neg as i64 as u64,
+                kind,
+            });
+        }
+    }
+    Err(TuffError::InvalidLiteral(full_token.to_string()))
 }
 
 fn parse_typed_literal(token: &str) -> Result<TypedValue, TuffError> {
-    for (suffix, max) in [
-        ("U8", 255u64),
-        ("U16", 65535),
-        ("U32", 4_294_967_295),
-        ("U64", u64::MAX),
-    ] {
-        if let Some(literal) = token.strip_suffix(suffix) {
-            if literal.starts_with('-') {
-                return Err(TuffError::NegativeLiteral);
-            }
-            if let Ok(n) = literal.parse::<u64>() {
-                if n <= max {
-                    return Ok(TypedValue { value: n, max });
-                }
-            }
-            return Err(TuffError::InvalidLiteral(token.to_string()));
+    // All suffix patterns: signed first (they allow negatives)
+    let suffix_list: [(&str, TypeKind); 8] = [
+        ("I8", TypeKind::I8),
+        ("I16", TypeKind::I16),
+        ("I32", TypeKind::I32),
+        ("I64", TypeKind::I64),
+        ("U8", TypeKind::U8),
+        ("U16", TypeKind::U16),
+        ("U32", TypeKind::U32),
+        ("U64", TypeKind::U64),
+    ];
+    for &(suffix, kind) in &suffix_list {
+        if !token.ends_with(suffix) {
+            continue;
         }
+        let literal = token.strip_suffix(suffix).unwrap();
+        if literal.starts_with('-') {
+            match kind {
+                TypeKind::I8 | TypeKind::I16 | TypeKind::I32 | TypeKind::I64 => {
+                    return parse_negated_signed(literal, kind, token);
+                }
+                _ => return Err(TuffError::NegativeLiteral),
+            }
+        }
+        return match parse_suffixed_literal(token, suffix, kind) {
+            Some(tv) => Ok(tv),
+            None => Err(TuffError::InvalidLiteral(token.to_string())),
+        };
     }
 
-    // Bool literals
     if token == "true" {
-        return Ok(TypedValue { value: 1, max: 1 });
+        return Ok(TypedValue {
+            value: 1,
+            kind: TypeKind::Bool,
+        });
     }
     if token == "false" {
-        return Ok(TypedValue { value: 0, max: 1 });
+        return Ok(TypedValue {
+            value: 0,
+            kind: TypeKind::Bool,
+        });
     }
 
-    // Default: treat bare integer literals as I32
     if let Ok(n) = token.parse::<i64>() {
-        let i32_max: u64 = i32::MAX as u64;
-        if n >= 0 && (n as u64) <= i32_max {
+        if n >= 0 && (n as u64) <= type_max(TypeKind::I32) {
             return Ok(TypedValue {
                 value: n as u64,
-                max: i32_max,
+                kind: TypeKind::I32,
             });
         }
     }
@@ -102,7 +196,7 @@ fn tokenize(input: &str) -> Vec<String> {
 struct Parser {
     tokens: Vec<String>,
     pos: usize,
-    scopes: Vec<HashMap<String, (TypedValue, bool)>>, // (value, is_mutable)
+    scopes: Vec<HashMap<String, (TypedValue, bool)>>,
 }
 
 impl Parser {
@@ -114,15 +208,17 @@ impl Parser {
         }
     }
 
-    fn binop(
+    fn combine(
         acc: TypedValue,
         b: TypedValue,
         checked_op: impl FnOnce(u64, u64) -> Option<u64>,
     ) -> Result<TypedValue, TuffError> {
-        let max = acc.max.max(b.max);
+        let max_acc = type_max(acc.kind);
+        let max_b = type_max(b.kind);
+        let result_kind = if max_acc >= max_b { acc.kind } else { b.kind };
         Ok(TypedValue {
             value: checked_op(acc.value, b.value).ok_or(TuffError::ArithmeticOverflow)?,
-            max,
+            kind: result_kind,
         })
     }
 
@@ -132,13 +228,11 @@ impl Parser {
             match self.tokens[self.pos].as_str() {
                 "+" => {
                     self.pos += 1;
-                    let b = self.parse_term()?;
-                    acc = Self::binop(acc, b, u64::checked_add)?;
+                    acc = Self::combine(acc, self.parse_term()?, u64::checked_add)?;
                 }
                 "-" => {
                     self.pos += 1;
-                    let b = self.parse_term()?;
-                    acc = Self::binop(acc, b, u64::checked_sub)?;
+                    acc = Self::combine(acc, self.parse_term()?, u64::checked_sub)?;
                 }
                 _ => break,
             }
@@ -152,13 +246,11 @@ impl Parser {
             match self.tokens[self.pos].as_str() {
                 "*" => {
                     self.pos += 1;
-                    let b = self.parse_factor()?;
-                    acc = Self::binop(acc, b, u64::checked_mul)?;
+                    acc = Self::combine(acc, self.parse_factor()?, u64::checked_mul)?;
                 }
                 "/" => {
                     self.pos += 1;
-                    let b = self.parse_factor()?;
-                    acc = Self::binop(acc, b, u64::checked_div)?;
+                    acc = Self::combine(acc, self.parse_factor()?, u64::checked_div)?;
                 }
                 _ => break,
             }
@@ -170,7 +262,7 @@ impl Parser {
         self.scopes.push(HashMap::new());
         let mut value = TypedValue {
             value: 0,
-            max: u64::MAX,
+            kind: TypeKind::I32,
         };
         loop {
             if self.pos >= self.tokens.len() {
@@ -187,12 +279,16 @@ impl Parser {
     }
 
     fn is_ident(token: &str) -> bool {
-        !token.ends_with("U8")
-            && !token.ends_with("U16")
-            && !token.ends_with("U32")
-            && !token.ends_with("U64")
-            && token
-                .chars()
+        let t = token;
+        !t.ends_with("U8")
+            && !t.ends_with("U16")
+            && !t.ends_with("U32")
+            && !t.ends_with("U64")
+            && !t.ends_with("I8")
+            && !t.ends_with("I16")
+            && !t.ends_with("I32")
+            && !t.ends_with("I64")
+            && t.chars()
                 .next()
                 .map_or(false, |c| c.is_alphabetic() || c == '_')
     }
@@ -205,9 +301,8 @@ impl Parser {
             && self.tokens[self.pos + 1] == "="
             && Self::is_ident(&self.tokens[self.pos])
         {
-            // assignment: ident = expr
             let name = self.tokens[self.pos].clone();
-            self.pos += 2; // skip ident and =
+            self.pos += 2;
             let val = self.parse_expr()?;
             let mut found = false;
             for scope in self.scopes.iter_mut().rev() {
@@ -218,7 +313,7 @@ impl Parser {
                             name
                         )));
                     }
-                    if val.max > pair.0.max {
+                    if val.kind != pair.0.kind {
                         return Err(TuffError::TypeMismatch);
                     }
                     pair.0.value = val.value;
@@ -245,38 +340,39 @@ impl Parser {
         if self.pos >= self.tokens.len() {
             return Err(TuffError::UnexpectedToken("end of input".to_string()));
         }
-
         let is_mut = self.tokens[self.pos] == "mut";
         if is_mut {
             self.pos += 1;
         }
-
         let name = self.tokens[self.pos].clone();
         self.pos += 1;
-        // optional type annotation
-        let annotated_max = if self.pos < self.tokens.len() && self.tokens[self.pos] == ":" {
-            self.pos += 1;
-            if self.pos >= self.tokens.len() {
-                return Err(TuffError::ExpectedType);
-            }
-            let type_token = self.tokens[self.pos].clone();
-            self.pos += 1;
-            type_max(&type_token).ok_or(TuffError::ExpectedType)?
-        } else {
-            u64::MAX
-        };
+        let (annotated_kind, explicit_annotation) =
+            if self.pos < self.tokens.len() && self.tokens[self.pos] == ":" {
+                self.pos += 1;
+                if self.pos >= self.tokens.len() {
+                    return Err(TuffError::ExpectedType);
+                }
+                let type_token = self.tokens[self.pos].clone();
+                self.pos += 1;
+                (type_kind(&type_token).ok_or(TuffError::ExpectedType)?, true)
+            } else {
+                (TypeKind::I32, false)
+            };
         if self.pos >= self.tokens.len() || self.tokens[self.pos] != "=" {
             return Err(TuffError::ExpectedEquals);
         }
         self.pos += 1;
         let val = self.parse_expr()?;
-        let effective_max = if annotated_max == u64::MAX {
-            val.max
+        if explicit_annotation
+            && val.kind != annotated_kind
+            && !can_assign(val.kind, annotated_kind)
+        {
+            return Err(TuffError::TypeMismatch);
+        }
+        let stored_kind = if explicit_annotation {
+            annotated_kind
         } else {
-            if val.max > annotated_max {
-                return Err(TuffError::TypeMismatch);
-            }
-            annotated_max
+            val.kind
         };
         if self.pos >= self.tokens.len() || self.tokens[self.pos] != ";" {
             return Err(TuffError::ExpectedSemicolon);
@@ -294,7 +390,7 @@ impl Parser {
                 (
                     TypedValue {
                         value: val.value,
-                        max: effective_max,
+                        kind: stored_kind,
                     },
                     is_mut,
                 ),
@@ -339,7 +435,7 @@ impl Parser {
     fn parse_all(&mut self) -> Result<u64, TuffError> {
         let mut value = TypedValue {
             value: 0,
-            max: u64::MAX,
+            kind: TypeKind::I32,
         };
         while self.pos < self.tokens.len() {
             value = self.parse_one_stmt(value)?;
@@ -353,12 +449,10 @@ fn interpret_tuff(input: &str) -> Result<u64, TuffError> {
     if input.is_empty() {
         return Ok(0);
     }
-
     let tokens = tokenize(input);
     if tokens.is_empty() {
         return Ok(0);
     }
-
     let mut parser = Parser::new(tokens);
     parser.parse_all()
 }
@@ -368,31 +462,25 @@ use std::io::{self, Write};
 fn main() -> io::Result<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
-
     loop {
         print!("> ");
         stdout.flush()?;
-
         let mut line = String::new();
         if stdin.read_line(&mut line)? == 0 {
             break;
         }
-
         let line = line.trim();
         if line.is_empty() {
             continue;
         }
-
         if line == ":quit" || line == ":q" {
             break;
         }
-
         match interpret_tuff(line) {
-            Ok(value) => println!("{:?}", value),
+            Ok(v) => println!("{:?}", v),
             Err(e) => println!("{:?}", e),
         }
     }
-
     Ok(())
 }
 
@@ -404,22 +492,18 @@ mod tests {
     fn interpret_tuff_empty_string_returns_0() {
         assert_eq!(interpret_tuff(""), Ok(0));
     }
-
     #[test]
     fn interpret_tuff_whitespace_only_returns_0() {
         assert_eq!(interpret_tuff(" "), Ok(0));
     }
-
     #[test]
     fn interpret_tuff_u8_suffix() {
         assert_eq!(interpret_tuff("100U8"), Ok(100));
     }
-
     #[test]
     fn interpret_tuff_negative_u8_is_err() {
         assert_eq!(interpret_tuff("-100U8"), Err(TuffError::NegativeLiteral));
     }
-
     #[test]
     fn interpret_tuff_u8_overflow_is_err() {
         assert_eq!(
@@ -427,12 +511,10 @@ mod tests {
             Err(TuffError::InvalidLiteral("256U8".to_string()))
         );
     }
-
     #[test]
     fn interpret_tuff_u16_suffix() {
         assert_eq!(interpret_tuff("500U16"), Ok(500));
     }
-
     #[test]
     fn interpret_tuff_u16_overflow_is_err() {
         assert_eq!(
@@ -440,12 +522,10 @@ mod tests {
             Err(TuffError::InvalidLiteral("65536U16".to_string()))
         );
     }
-
     #[test]
     fn interpret_tuff_u32_suffix() {
         assert_eq!(interpret_tuff("70000U32"), Ok(70000));
     }
-
     #[test]
     fn interpret_tuff_u32_overflow_is_err() {
         assert_eq!(
@@ -453,17 +533,14 @@ mod tests {
             Err(TuffError::InvalidLiteral("4294967296U32".to_string()))
         );
     }
-
     #[test]
     fn interpret_tuff_u64_suffix() {
         assert_eq!(interpret_tuff("100U64"), Ok(100));
     }
-
     #[test]
     fn interpret_tuff_u64_large_value() {
         assert_eq!(interpret_tuff("3000000000U64"), Ok(3000000000));
     }
-
     #[test]
     fn interpret_tuff_u64_max_value() {
         assert_eq!(
@@ -471,42 +548,34 @@ mod tests {
             Ok(18446744073709551615)
         );
     }
-
     #[test]
     fn interpret_tuff_addition() {
         assert_eq!(interpret_tuff("1U8 + 2U8"), Ok(3));
     }
-
     #[test]
     fn interpret_tuff_multi_addition() {
         assert_eq!(interpret_tuff("1U8 + 2U8 + 3U8"), Ok(6));
     }
-
     #[test]
     fn interpret_tuff_precedence() {
         assert_eq!(interpret_tuff("1U8 * 2U8 + 3U8"), Ok(5));
     }
-
     #[test]
     fn interpret_tuff_reverse_precedence() {
         assert_eq!(interpret_tuff("1U8 + 2U8 * 3U8"), Ok(7));
     }
-
     #[test]
     fn interpret_tuff_parentheses() {
         assert_eq!(interpret_tuff("(1U8 + 2U8) * 3U8"), Ok(9));
     }
-
     #[test]
     fn interpret_tuff_curly_braces() {
         assert_eq!(interpret_tuff("{ 1U8 + 2U8 } * 3U8"), Ok(9));
     }
-
     #[test]
     fn interpret_tuff_let_in_block() {
         assert_eq!(interpret_tuff("{ let x : U8 = 1U8 + 2U8; x } * 3U8"), Ok(9));
     }
-
     #[test]
     fn interpret_tuff_let_with_block_expr() {
         assert_eq!(
@@ -514,22 +583,18 @@ mod tests {
             Ok(9)
         );
     }
-
     #[test]
     fn interpret_tuff_let_no_type() {
         assert_eq!(interpret_tuff("let x = 100U8; x"), Ok(100));
     }
-
     #[test]
     fn interpret_tuff_let_default_i32() {
         assert_eq!(interpret_tuff("let x = 100; x"), Ok(100));
     }
-
     #[test]
     fn interpret_tuff_mut_assign() {
         assert_eq!(interpret_tuff("let mut x = 0; x = 100; x"), Ok(100));
     }
-
     #[test]
     fn interpret_tuff_immut_assign_err() {
         assert_eq!(
@@ -539,7 +604,6 @@ mod tests {
             ))
         );
     }
-
     #[test]
     fn interpret_tuff_assign_type_mismatch() {
         assert_eq!(
@@ -547,22 +611,18 @@ mod tests {
             Err(TuffError::TypeMismatch)
         );
     }
-
     #[test]
     fn interpret_tuff_bool() {
         assert_eq!(interpret_tuff("let x : Bool = true; x"), Ok(1));
     }
-
     #[test]
     fn interpret_tuff_let_reference() {
         assert_eq!(interpret_tuff("let x = 100U8; let y = x; y"), Ok(100));
     }
-
     #[test]
     fn interpret_tuff_let_no_expr() {
         assert_eq!(interpret_tuff("let x = 100U8;"), Ok(0));
     }
-
     #[test]
     fn interpret_tuff_let_redeclaration() {
         assert_eq!(
@@ -572,7 +632,6 @@ mod tests {
             ))
         );
     }
-
     #[test]
     fn interpret_tuff_type_mismatch() {
         assert_eq!(
@@ -580,16 +639,21 @@ mod tests {
             Err(TuffError::TypeMismatch)
         );
     }
-
     #[test]
     fn interpret_tuff_widening_ok() {
         assert_eq!(interpret_tuff("let x : U16 = 100U8; x"), Ok(100));
     }
-
     #[test]
     fn interpret_tuff_narrowing_err() {
         assert_eq!(
             interpret_tuff("let x = 100U16; let y : U8 = x;"),
+            Err(TuffError::TypeMismatch)
+        );
+    }
+    #[test]
+    fn interpret_tuff_bool_to_u8_err() {
+        assert_eq!(
+            interpret_tuff("let x = true; let y : U8 = x;"),
             Err(TuffError::TypeMismatch)
         );
     }

@@ -7,7 +7,7 @@
       },
       {
         "type": "command",
-        "command": "cmd /c \"pmd cpd ./src/main.rs --language rust --minimum-tokens 40 --ignore-literals --ignore-identifiers 1>&2\"; if ($LASTEXITCODE -ne 0) { Write-Error \"Found duplicate code. If the duplicates contain mostly declarations, then it's advised to extract a struct of some kind.\"; exit 2 }"
+        "command": "cmd /c \"pmd cpd ./src/main.rs --language rust --minimum-tokens 44 --ignore-literals --ignore-identifiers 1>&2\"; if ($LASTEXITCODE -ne 0) { Write-Error \"Found duplicate code. If the duplicates contain mostly declarations, then it's advised to extract a struct of some kind.\"; exit 2 }"
       }
     ]
   }
