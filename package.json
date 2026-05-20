@@ -1,0 +1,17 @@
+{
+  "name": "tuff",
+  "version": "1.0.0",
+  "description": "A basic JS project",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.28.0",
+  "devDependencies": {
+    "jest": "^30.4.2"
+  }
+}
