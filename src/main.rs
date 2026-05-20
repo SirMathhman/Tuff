@@ -619,6 +619,20 @@ mod tests {
         );
     }
     #[test]
+    fn interpret_tuff_assign_bool_to_u8_err() {
+        assert_eq!(
+            interpret_tuff("let mut x = 100U8; x = true; x"),
+            Err(TuffError::TypeMismatch)
+        );
+    }
+    #[test]
+    fn interpret_tuff_assign_int_to_bool_err() {
+        assert_eq!(
+            interpret_tuff("let mut x = true; x = 100; x"),
+            Err(TuffError::TypeMismatch)
+        );
+    }
+    #[test]
     fn interpret_tuff_bool() {
         assert_eq!(interpret_tuff("let x : Bool = true; x"), Ok(1));
     }
