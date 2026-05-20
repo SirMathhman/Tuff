@@ -1,5 +1,8 @@
 import js from "@eslint/js";
 import globals from "globals";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
 
 export default [
   {
@@ -14,9 +17,17 @@ export default [
       },
       sourceType: "commonjs",
     },
+    plugins: {
+      local: {
+        rules: {
+          "inline-once-used": require("./eslint-rules/inline-once-used.js"),
+        },
+      },
+    },
     rules: {
       "no-unused-vars": "warn",
       "no-console": "off",
+      "local/inline-once-used": "error",
       "no-restricted-syntax": [
         "error",
         {
