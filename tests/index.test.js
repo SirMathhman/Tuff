@@ -1,8 +1,7 @@
 const { main, compile } = require("../src/index.js");
 
 function run(source, stdIn) {
-  const compiled = compile(source);
-  return new Function("stdIn", compiled)(stdIn);
+  return new Function("stdIn", compile(source))(stdIn);
 }
 
 describe("main", () => {

@@ -21,6 +21,7 @@ export default [
       local: {
         rules: {
           "inline-once-used": require("./eslint-rules/inline-once-used.js"),
+          "inline-once-used-var": require("./eslint-rules/inline-once-used-var.js"),
         },
       },
     },
@@ -28,6 +29,7 @@ export default [
       "no-unused-vars": "warn",
       "no-console": "off",
       "local/inline-once-used": "error",
+      "local/inline-once-used-var": "error",
       "no-restricted-syntax": [
         "error",
         {

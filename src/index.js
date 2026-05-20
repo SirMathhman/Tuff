@@ -1,18 +1,17 @@
 function readWord(str, pos) {
-  const start = pos;
+  let end = pos;
   while (
-    pos < str.length &&
-    ((str[pos] >= "a" && str[pos] <= "z") ||
-      (str[pos] >= "A" && str[pos] <= "Z") ||
-      (str[pos] >= "0" && str[pos] <= "9"))
+    end < str.length &&
+    ((str[end] >= "a" && str[end] <= "z") ||
+      (str[end] >= "A" && str[end] <= "Z") ||
+      (str[end] >= "0" && str[end] <= "9"))
   ) {
-    pos++;
+    end++;
   }
-  return { word: str.slice(start, pos), end: pos };
+  return { word: str.slice(pos, end), end };
 }
 
-const typeNames = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"];
-const typeSet = new Set(typeNames);
+const typeSet = new Set(["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"]);
 
 function skipSpaces(str, pos) {
   while (pos < str.length && str[pos] === " ") pos++;
@@ -161,15 +160,14 @@ function compile(source) {
   // Multi-statement: statements before last `;`, last part is the return expression
   if (transformed.includes(";")) {
     const parts = transformed.split(";").map((s) => s.trim());
-    const returnExpr = parts.pop() || "0";
-    const statements = parts.filter((s) => s.length > 0);
+    const statements = parts.slice(0, -1).filter((s) => s.length > 0);
     return [
       "return (() => {",
       ...readHelper,
       ...statements.map(
         (s, idx) => s + (idx < statements.length - 1 ? ";" : ";"),
       ),
-      "return " + returnExpr + ";",
+      "return " + (parts[parts.length - 1] || "0") + ";",
       "})();",
     ].join("\n  ");
   }
