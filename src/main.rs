@@ -171,6 +171,16 @@ fn parse_typed_literal(token: &str) -> Result<TypedValue, TuffError> {
 }
 
 fn tokenize(input: &str) -> Vec<String> {
+    let two_char_tokens = [
+        ("<=", "<="),
+        (">=", ">="),
+        ("==", "=="),
+        ("!=", "!="),
+        ("||", "||"),
+        ("&&", "&&"),
+    ];
+    let single_char_tokens = "(){};:<>";
+
     let mut tokens = Vec::new();
     let mut buf = String::new();
     let chars: Vec<char> = input.chars().collect();
@@ -182,32 +192,22 @@ fn tokenize(input: &str) -> Vec<String> {
                 tokens.push(std::mem::take(&mut buf));
             }
             i += 1;
-        } else if c == '('
-            || c == ')'
-            || c == '{'
-            || c == '}'
-            || c == ';'
-            || c == ':'
-            || c == '<'
-            || c == '>'
-        {
+        } else if let Some(tok) = two_char_tokens.iter().find(|t| {
+            i + 1 < chars.len()
+                && c == t.0.chars().next().unwrap()
+                && chars[i + 1] == t.0.chars().nth(1).unwrap()
+        }) {
+            if !buf.is_empty() {
+                tokens.push(std::mem::take(&mut buf));
+            }
+            tokens.push(tok.1.to_string());
+            i += 2;
+        } else if single_char_tokens.contains(c) {
             if !buf.is_empty() {
                 tokens.push(std::mem::take(&mut buf));
             }
             tokens.push(c.to_string());
             i += 1;
-        } else if c == '|' && i + 1 < chars.len() && chars[i + 1] == '|' {
-            if !buf.is_empty() {
-                tokens.push(std::mem::take(&mut buf));
-            }
-            tokens.push("||".to_string());
-            i += 2;
-        } else if c == '&' && i + 1 < chars.len() && chars[i + 1] == '&' {
-            if !buf.is_empty() {
-                tokens.push(std::mem::take(&mut buf));
-            }
-            tokens.push("&&".to_string());
-            i += 2;
         } else {
             buf.push(c);
             i += 1;
@@ -301,25 +301,61 @@ impl Parser {
     fn parse_cmp_expr(&mut self) -> Result<TypedValue, TuffError> {
         let mut acc = self.parse_add_expr()?;
         while self.pos < self.tokens.len() {
-            match self.tokens[self.pos].as_str() {
-                "<" => {
+            let op = match self.tokens[self.pos].as_str() {
+                "<" | ">" | "<=" | ">=" | "==" | "!=" => {
                     self.pos += 1;
-                    let b = self.parse_add_expr()?;
-                    acc = TypedValue {
-                        value: if acc.value < b.value { 1 } else { 0 },
-                        kind: TypeKind::Bool,
-                    };
-                }
-                ">" => {
-                    self.pos += 1;
-                    let b = self.parse_add_expr()?;
-                    acc = TypedValue {
-                        value: if acc.value > b.value { 1 } else { 0 },
-                        kind: TypeKind::Bool,
-                    };
+                    self.tokens[self.pos - 1].clone()
                 }
                 _ => break,
-            }
+            };
+            let b = self.parse_add_expr()?;
+            acc = TypedValue {
+                value: match op.as_str() {
+                    "<" => {
+                        if acc.value < b.value {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    ">" => {
+                        if acc.value > b.value {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    "<=" => {
+                        if acc.value <= b.value {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    ">=" => {
+                        if acc.value >= b.value {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    "==" => {
+                        if acc.value == b.value {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                    _ => {
+                        if acc.value != b.value {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                },
+                kind: TypeKind::Bool,
+            };
         }
         Ok(acc)
     }
