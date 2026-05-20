@@ -1,6 +1,22 @@
 use std::collections::HashMap;
 
-fn parse_typed_literal(token: &str) -> Result<u64, ()> {
+#[derive(Debug, Clone, PartialEq)]
+pub enum TuffError {
+    UnexpectedToken(String),
+    UnterminatedBlock,
+    ExpectedColon,
+    ExpectedType,
+    ExpectedEquals,
+    ExpectedSemicolon,
+    ExpectedClosingParen,
+    ExpectedClosingBrace,
+    UndefinedVariable(String),
+    InvalidLiteral(String),
+    ArithmeticOverflow,
+    NegativeLiteral,
+}
+
+fn parse_typed_literal(token: &str) -> Result<u64, TuffError> {
     let suffixes: [(&str, u64); 4] = [
         ("U8", 255),
         ("U16", 65535),
@@ -11,18 +27,18 @@ fn parse_typed_literal(token: &str) -> Result<u64, ()> {
     for (suffix, max) in suffixes {
         if let Some(literal) = token.strip_suffix(suffix) {
             if literal.starts_with('-') {
-                return Err(());
+                return Err(TuffError::NegativeLiteral);
             }
             if let Ok(n) = literal.parse::<u64>() {
                 if n <= max {
                     return Ok(n);
                 }
             }
-            return Err(());
+            return Err(TuffError::InvalidLiteral(token.to_string()));
         }
     }
 
-    Err(())
+    Err(TuffError::InvalidLiteral(token.to_string()))
 }
 
 fn tokenize(input: &str) -> Vec<String> {
@@ -52,7 +68,7 @@ fn parse_expr(
     tokens: &[String],
     pos: &mut usize,
     scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<u64, ()> {
+) -> Result<u64, TuffError> {
     let mut acc = parse_term(tokens, pos, scopes)?;
     while *pos < tokens.len() {
         match tokens[*pos].as_str() {
@@ -60,13 +76,13 @@ fn parse_expr(
                 *pos += 1;
                 acc = acc
                     .checked_add(parse_term(tokens, pos, scopes)?)
-                    .ok_or(())?;
+                    .ok_or(TuffError::ArithmeticOverflow)?;
             }
             "-" => {
                 *pos += 1;
                 acc = acc
                     .checked_sub(parse_term(tokens, pos, scopes)?)
-                    .ok_or(())?;
+                    .ok_or(TuffError::ArithmeticOverflow)?;
             }
             _ => break,
         }
@@ -78,7 +94,7 @@ fn parse_term(
     tokens: &[String],
     pos: &mut usize,
     scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<u64, ()> {
+) -> Result<u64, TuffError> {
     let mut acc = parse_factor(tokens, pos, scopes)?;
     while *pos < tokens.len() {
         match tokens[*pos].as_str() {
@@ -86,13 +102,13 @@ fn parse_term(
                 *pos += 1;
                 acc = acc
                     .checked_mul(parse_factor(tokens, pos, scopes)?)
-                    .ok_or(())?;
+                    .ok_or(TuffError::ArithmeticOverflow)?;
             }
             "/" => {
                 *pos += 1;
                 acc = acc
                     .checked_div(parse_factor(tokens, pos, scopes)?)
-                    .ok_or(())?;
+                    .ok_or(TuffError::ArithmeticOverflow)?;
             }
             _ => break,
         }
@@ -104,14 +120,14 @@ fn parse_block(
     tokens: &[String],
     pos: &mut usize,
     scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<u64, ()> {
+) -> Result<u64, TuffError> {
     // expect '{' already consumed
     scopes.push(HashMap::new());
     let mut value: u64 = 0;
     loop {
         if *pos >= tokens.len() {
             scopes.pop();
-            return Err(());
+            return Err(TuffError::UnterminatedBlock);
         }
         if tokens[*pos] == "}" {
             *pos += 1;
@@ -134,29 +150,29 @@ fn parse_let(
     tokens: &[String],
     pos: &mut usize,
     scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<(), ()> {
+) -> Result<(), TuffError> {
     // 'let' already consumed
     if *pos >= tokens.len() {
-        return Err(());
+        return Err(TuffError::UnexpectedToken("end of input".to_string()));
     }
     let name = tokens[*pos].clone();
     *pos += 1;
     if *pos >= tokens.len() || tokens[*pos] != ":" {
-        return Err(());
+        return Err(TuffError::ExpectedColon);
     }
     *pos += 1; // skip ':'
     // skip type annotation (any token like U8, U16, etc.)
     if *pos >= tokens.len() {
-        return Err(());
+        return Err(TuffError::ExpectedType);
     }
     *pos += 1; // skip type
     if *pos >= tokens.len() || tokens[*pos] != "=" {
-        return Err(());
+        return Err(TuffError::ExpectedEquals);
     }
     *pos += 1; // skip '='
     let val = parse_expr(tokens, pos, scopes)?;
     if *pos >= tokens.len() || tokens[*pos] != ";" {
-        return Err(());
+        return Err(TuffError::ExpectedSemicolon);
     }
     *pos += 1; // skip ';'
     if let Some(scope) = scopes.last_mut() {
@@ -169,15 +185,15 @@ fn parse_factor(
     tokens: &[String],
     pos: &mut usize,
     scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<u64, ()> {
+) -> Result<u64, TuffError> {
     if *pos >= tokens.len() {
-        return Err(());
+        return Err(TuffError::UnexpectedToken("end of input".to_string()));
     }
     if tokens[*pos] == "(" {
         *pos += 1;
         let val = parse_expr(tokens, pos, scopes)?;
         if *pos >= tokens.len() || tokens[*pos] != ")" {
-            return Err(());
+            return Err(TuffError::ExpectedClosingParen);
         }
         *pos += 1;
         Ok(val)
@@ -187,9 +203,7 @@ fn parse_factor(
     } else if tokens[*pos] == "let" {
         *pos += 1;
         parse_let(tokens, pos, scopes)?;
-        // after a let statement at factor level, the value is the declared variable's value
-        // but this shouldn't happen in standard usage; Err is safer
-        Err(())
+        Err(TuffError::UnexpectedToken("let".to_string()))
     } else {
         // Check if it's a variable reference
         let token = &tokens[*pos];
@@ -206,7 +220,7 @@ fn parse_factor(
     }
 }
 
-fn interpret_tuff(input: &str) -> Result<u64, ()> {
+fn interpret_tuff(input: &str) -> Result<u64, TuffError> {
     let input = input.trim();
     if input.is_empty() {
         return Ok(0);
@@ -263,7 +277,7 @@ fn main() -> io::Result<()> {
 
         match interpret_tuff(line) {
             Ok(value) => println!("{:?}", value),
-            Err(()) => println!("Err"),
+            Err(e) => println!("{:?}", e),
         }
     }
 
@@ -291,12 +305,15 @@ mod tests {
 
     #[test]
     fn interpret_tuff_negative_u8_is_err() {
-        assert_eq!(interpret_tuff("-100U8"), Err(()));
+        assert_eq!(interpret_tuff("-100U8"), Err(TuffError::NegativeLiteral));
     }
 
     #[test]
     fn interpret_tuff_u8_overflow_is_err() {
-        assert_eq!(interpret_tuff("256U8"), Err(()));
+        assert_eq!(
+            interpret_tuff("256U8"),
+            Err(TuffError::InvalidLiteral("256U8".to_string()))
+        );
     }
 
     #[test]
@@ -306,7 +323,10 @@ mod tests {
 
     #[test]
     fn interpret_tuff_u16_overflow_is_err() {
-        assert_eq!(interpret_tuff("65536U16"), Err(()));
+        assert_eq!(
+            interpret_tuff("65536U16"),
+            Err(TuffError::InvalidLiteral("65536U16".to_string()))
+        );
     }
 
     #[test]
@@ -316,7 +336,10 @@ mod tests {
 
     #[test]
     fn interpret_tuff_u32_overflow_is_err() {
-        assert_eq!(interpret_tuff("4294967296U32"), Err(()));
+        assert_eq!(
+            interpret_tuff("4294967296U32"),
+            Err(TuffError::InvalidLiteral("4294967296U32".to_string()))
+        );
     }
 
     #[test]
