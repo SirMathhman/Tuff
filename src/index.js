@@ -3,6 +3,18 @@ function compile(source) {
     return "return 0;";
   }
 
+  // Validate type annotations match read types
+  const letPattern =
+    /let\s+(\w+)\s*:\s*(U8|U16|U32|U64|I8|I16|I32|I64)\s*=\s*read<(U8|U16|U32|U64|I8|I16|I32|I64)>\(\)/g;
+  let match;
+  while ((match = letPattern.exec(source)) !== null) {
+    if (match[2] !== match[3]) {
+      throw new Error(
+        `Type mismatch: variable declared as ${match[2]} but read returns ${match[3]}`,
+      );
+    }
+  }
+
   // Strip type annotations like : U8, : I16, etc.
   const typeAnnotationPattern = /: ?(U8|U16|U32|U64|I8|I16|I32|I64)/g;
   const stripped = source.replace(typeAnnotationPattern, "");
@@ -26,7 +38,7 @@ function compile(source) {
   // Multi-statement: statements before last `;`, last part is the return expression
   if (transformed.includes(";")) {
     const parts = transformed.split(";").map((s) => s.trim());
-    const returnExpr = parts.pop();
+    const returnExpr = parts.pop() || "0";
     const statements = parts.filter((s) => s.length > 0);
     return `return (() => {${readHelper}
   ${statements.join(";\n  ")};

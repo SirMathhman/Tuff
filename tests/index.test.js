@@ -62,6 +62,22 @@ describe("run", () => {
   it('should return 2 for run("let x : U8 = read<U8>(); x", "2")', () => {
     expect(run("let x : U8 = read<U8>(); x", "2")).toBe(2);
   });
+
+  it('should return 4 for run("let x : U8 = read<U8>(); x + x", "2")', () => {
+    expect(run("let x : U8 = read<U8>(); x + x", "2")).toBe(4);
+  });
+
+  it('should return 0 for run("let x : U8 = read<U8>();", "2")', () => {
+    expect(run("let x : U8 = read<U8>();", "2")).toBe(0);
+  });
+
+  it('should return 2 for run("let x = read<U8>(); x", "2")', () => {
+    expect(run("let x = read<U8>(); x", "2")).toBe(2);
+  });
+
+  it('should return 2 for run("let x = read<U8>(); let y = x; y", "2")', () => {
+    expect(run("let x = read<U8>(); let y = x; y", "2")).toBe(2);
+  });
 });
 
 describe("compile", () => {
@@ -71,5 +87,9 @@ describe("compile", () => {
 
   it('should throw for compile("read<F32>()")', () => {
     expect(() => compile("read<F32>()")).toThrow(Error);
+  });
+
+  it('should throw for compile("let x : U8 = read<U16>();")', () => {
+    expect(() => compile("let x : U8 = read<U16>();")).toThrow(Error);
   });
 });
