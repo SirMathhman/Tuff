@@ -58,6 +58,10 @@ describe("run", () => {
   it('should return 3 for run("read<U8>() + read<U8>()", "1 2")', () => {
     expect(run("read<U8>() + read<U8>()", "1 2")).toBe(3);
   });
+
+  it('should return 2 for run("let x : U8 = read<U8>(); x", "2")', () => {
+    expect(run("let x : U8 = read<U8>(); x", "2")).toBe(2);
+  });
 });
 
 describe("compile", () => {
