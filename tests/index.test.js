@@ -1,4 +1,9 @@
-const { main } = require("../src/index.js");
+const { main, compile } = require("../src/index.js");
+
+function run(source, stdIn) {
+  const compiled = compile(source);
+  return new Function("stdIn", compiled)(stdIn);
+}
 
 describe("main", () => {
   it("should log a greeting", () => {

@@ -1,3 +1,7 @@
+export function compile(source) {
+  throw new Error();
+}
+
 function main() {
   console.log("Hello from Tuff!");
 }
