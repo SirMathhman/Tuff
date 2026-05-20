@@ -64,159 +64,163 @@ fn tokenize(input: &str) -> Vec<String> {
     tokens
 }
 
-fn parse_expr(
-    tokens: &[String],
-    pos: &mut usize,
-    scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<u64, TuffError> {
-    let mut acc = parse_term(tokens, pos, scopes)?;
-    while *pos < tokens.len() {
-        match tokens[*pos].as_str() {
-            "+" => {
-                *pos += 1;
-                acc = acc
-                    .checked_add(parse_term(tokens, pos, scopes)?)
-                    .ok_or(TuffError::ArithmeticOverflow)?;
-            }
-            "-" => {
-                *pos += 1;
-                acc = acc
-                    .checked_sub(parse_term(tokens, pos, scopes)?)
-                    .ok_or(TuffError::ArithmeticOverflow)?;
-            }
-            _ => break,
-        }
-    }
-    Ok(acc)
+struct Parser {
+    tokens: Vec<String>,
+    pos: usize,
+    scopes: Vec<HashMap<String, u64>>,
 }
 
-fn parse_term(
-    tokens: &[String],
-    pos: &mut usize,
-    scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<u64, TuffError> {
-    let mut acc = parse_factor(tokens, pos, scopes)?;
-    while *pos < tokens.len() {
-        match tokens[*pos].as_str() {
-            "*" => {
-                *pos += 1;
-                acc = acc
-                    .checked_mul(parse_factor(tokens, pos, scopes)?)
-                    .ok_or(TuffError::ArithmeticOverflow)?;
-            }
-            "/" => {
-                *pos += 1;
-                acc = acc
-                    .checked_div(parse_factor(tokens, pos, scopes)?)
-                    .ok_or(TuffError::ArithmeticOverflow)?;
-            }
-            _ => break,
+impl Parser {
+    fn new(tokens: Vec<String>) -> Self {
+        Parser {
+            tokens,
+            pos: 0,
+            scopes: vec![HashMap::new()],
         }
     }
-    Ok(acc)
-}
 
-fn parse_block(
-    tokens: &[String],
-    pos: &mut usize,
-    scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<u64, TuffError> {
-    // expect '{' already consumed
-    scopes.push(HashMap::new());
-    let mut value: u64 = 0;
-    loop {
-        if *pos >= tokens.len() {
-            scopes.pop();
-            return Err(TuffError::UnterminatedBlock);
+    fn parse_expr(&mut self) -> Result<u64, TuffError> {
+        let mut acc = self.parse_term()?;
+        while self.pos < self.tokens.len() {
+            match self.tokens[self.pos].as_str() {
+                "+" => {
+                    self.pos += 1;
+                    acc = acc
+                        .checked_add(self.parse_term()?)
+                        .ok_or(TuffError::ArithmeticOverflow)?;
+                }
+                "-" => {
+                    self.pos += 1;
+                    acc = acc
+                        .checked_sub(self.parse_term()?)
+                        .ok_or(TuffError::ArithmeticOverflow)?;
+                }
+                _ => break,
+            }
         }
-        if tokens[*pos] == "}" {
-            *pos += 1;
-            scopes.pop();
-            return Ok(value);
+        Ok(acc)
+    }
+
+    fn parse_term(&mut self) -> Result<u64, TuffError> {
+        let mut acc = self.parse_factor()?;
+        while self.pos < self.tokens.len() {
+            match self.tokens[self.pos].as_str() {
+                "*" => {
+                    self.pos += 1;
+                    acc = acc
+                        .checked_mul(self.parse_factor()?)
+                        .ok_or(TuffError::ArithmeticOverflow)?;
+                }
+                "/" => {
+                    self.pos += 1;
+                    acc = acc
+                        .checked_div(self.parse_factor()?)
+                        .ok_or(TuffError::ArithmeticOverflow)?;
+                }
+                _ => break,
+            }
         }
-        if tokens[*pos] == "let" {
-            *pos += 1;
-            parse_let(tokens, pos, scopes)?;
+        Ok(acc)
+    }
+
+    fn parse_block(&mut self) -> Result<u64, TuffError> {
+        self.scopes.push(HashMap::new());
+        let mut value: u64 = 0;
+        loop {
+            if self.pos >= self.tokens.len() {
+                self.scopes.pop();
+                return Err(TuffError::UnterminatedBlock);
+            }
+            if self.tokens[self.pos] == "}" {
+                self.pos += 1;
+                self.scopes.pop();
+                return Ok(value);
+            }
+            value = self.parse_one_stmt(value)?;
+        }
+    }
+
+    fn parse_one_stmt(&mut self, mut value: u64) -> Result<u64, TuffError> {
+        if self.tokens[self.pos] == "let" {
+            self.pos += 1;
+            self.parse_let()?;
         } else {
-            value = parse_expr(tokens, pos, scopes)?;
-            if *pos < tokens.len() && tokens[*pos] == ";" {
-                *pos += 1;
+            value = self.parse_expr()?;
+            if self.pos < self.tokens.len() && self.tokens[self.pos] == ";" {
+                self.pos += 1;
             }
         }
+        Ok(value)
     }
-}
 
-fn parse_let(
-    tokens: &[String],
-    pos: &mut usize,
-    scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<(), TuffError> {
-    // 'let' already consumed
-    if *pos >= tokens.len() {
-        return Err(TuffError::UnexpectedToken("end of input".to_string()));
-    }
-    let name = tokens[*pos].clone();
-    *pos += 1;
-    if *pos >= tokens.len() || tokens[*pos] != ":" {
-        return Err(TuffError::ExpectedColon);
-    }
-    *pos += 1; // skip ':'
-    // skip type annotation (any token like U8, U16, etc.)
-    if *pos >= tokens.len() {
-        return Err(TuffError::ExpectedType);
-    }
-    *pos += 1; // skip type
-    if *pos >= tokens.len() || tokens[*pos] != "=" {
-        return Err(TuffError::ExpectedEquals);
-    }
-    *pos += 1; // skip '='
-    let val = parse_expr(tokens, pos, scopes)?;
-    if *pos >= tokens.len() || tokens[*pos] != ";" {
-        return Err(TuffError::ExpectedSemicolon);
-    }
-    *pos += 1; // skip ';'
-    if let Some(scope) = scopes.last_mut() {
-        scope.insert(name, val);
-    }
-    Ok(())
-}
-
-fn parse_factor(
-    tokens: &[String],
-    pos: &mut usize,
-    scopes: &mut Vec<HashMap<String, u64>>,
-) -> Result<u64, TuffError> {
-    if *pos >= tokens.len() {
-        return Err(TuffError::UnexpectedToken("end of input".to_string()));
-    }
-    if tokens[*pos] == "(" {
-        *pos += 1;
-        let val = parse_expr(tokens, pos, scopes)?;
-        if *pos >= tokens.len() || tokens[*pos] != ")" {
-            return Err(TuffError::ExpectedClosingParen);
+    fn parse_let(&mut self) -> Result<(), TuffError> {
+        if self.pos >= self.tokens.len() {
+            return Err(TuffError::UnexpectedToken("end of input".to_string()));
         }
-        *pos += 1;
-        Ok(val)
-    } else if tokens[*pos] == "{" {
-        *pos += 1;
-        parse_block(tokens, pos, scopes)
-    } else if tokens[*pos] == "let" {
-        *pos += 1;
-        parse_let(tokens, pos, scopes)?;
-        Err(TuffError::UnexpectedToken("let".to_string()))
-    } else {
-        // Check if it's a variable reference
-        let token = &tokens[*pos];
-        // variable names don't end with a digit+suffix, so check scopes first
-        for scope in scopes.iter().rev() {
-            if let Some(&val) = scope.get(token) {
-                *pos += 1;
-                return Ok(val);
+        let name = self.tokens[self.pos].clone();
+        self.pos += 1;
+        // optional type annotation
+        if self.pos < self.tokens.len() && self.tokens[self.pos] == ":" {
+            self.pos += 1;
+            if self.pos >= self.tokens.len() {
+                return Err(TuffError::ExpectedType);
             }
+            self.pos += 1;
         }
-        let lit = parse_typed_literal(token)?;
-        *pos += 1;
-        Ok(lit)
+        if self.pos >= self.tokens.len() || self.tokens[self.pos] != "=" {
+            return Err(TuffError::ExpectedEquals);
+        }
+        self.pos += 1;
+        let val = self.parse_expr()?;
+        if self.pos >= self.tokens.len() || self.tokens[self.pos] != ";" {
+            return Err(TuffError::ExpectedSemicolon);
+        }
+        self.pos += 1;
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name, val);
+        }
+        Ok(())
+    }
+
+    fn parse_factor(&mut self) -> Result<u64, TuffError> {
+        if self.pos >= self.tokens.len() {
+            return Err(TuffError::UnexpectedToken("end of input".to_string()));
+        }
+        if self.tokens[self.pos] == "(" {
+            self.pos += 1;
+            let val = self.parse_expr()?;
+            if self.pos >= self.tokens.len() || self.tokens[self.pos] != ")" {
+                return Err(TuffError::ExpectedClosingParen);
+            }
+            self.pos += 1;
+            Ok(val)
+        } else if self.tokens[self.pos] == "{" {
+            self.pos += 1;
+            self.parse_block()
+        } else if self.tokens[self.pos] == "let" {
+            self.pos += 1;
+            self.parse_let()?;
+            Err(TuffError::UnexpectedToken("let".to_string()))
+        } else {
+            let token = &self.tokens[self.pos];
+            for scope in self.scopes.iter().rev() {
+                if let Some(&val) = scope.get(token) {
+                    self.pos += 1;
+                    return Ok(val);
+                }
+            }
+            let lit = parse_typed_literal(token)?;
+            self.pos += 1;
+            Ok(lit)
+        }
+    }
+
+    fn parse_all(&mut self) -> Result<u64, TuffError> {
+        let mut value: u64 = 0;
+        while self.pos < self.tokens.len() {
+            value = self.parse_one_stmt(value)?;
+        }
+        Ok(value)
     }
 }
 
@@ -231,24 +235,8 @@ fn interpret_tuff(input: &str) -> Result<u64, TuffError> {
         return Ok(0);
     }
 
-    let mut pos = 0;
-    let mut scopes: Vec<HashMap<String, u64>> = vec![HashMap::new()];
-    let mut value: u64 = 0;
-    loop {
-        if pos >= tokens.len() {
-            break;
-        }
-        if tokens[pos] == "let" {
-            pos += 1;
-            parse_let(&tokens, &mut pos, &mut scopes)?;
-        } else {
-            value = parse_expr(&tokens, &mut pos, &mut scopes)?;
-            if pos < tokens.len() && tokens[pos] == ";" {
-                pos += 1;
-            }
-        }
-    }
-    Ok(value)
+    let mut parser = Parser::new(tokens);
+    parser.parse_all()
 }
 
 use std::io::{self, Write};
@@ -401,5 +389,15 @@ mod tests {
             interpret_tuff("let y : U8 = { let x : U8 = 1U8 + 2U8; x } * 3U8; y"),
             Ok(9)
         );
+    }
+
+    #[test]
+    fn interpret_tuff_let_no_type() {
+        assert_eq!(interpret_tuff("let x = 100U8; x"), Ok(100));
+    }
+
+    #[test]
+    fn interpret_tuff_let_reference() {
+        assert_eq!(interpret_tuff("let x = 100U8; let y = x; y"), Ok(100));
     }
 }
