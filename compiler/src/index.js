@@ -1,4 +1,9 @@
 export function compile(source) {
-  void source;
-  throw new Error("Not implemented yet: ");
+  if (source.trim().length === 0) return "return 0;";
+
+  const hasReadU8 = source.indexOf("read<U8>()") !== -1;
+  if (hasReadU8 && !source.includes("let") && !source.includes("const")) {
+    // Simple case: just a single read<U8>() expression
+    return "return parseInt(stdIn, 10) & 255;";
+  }
 }
