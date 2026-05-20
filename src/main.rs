@@ -52,6 +52,18 @@ fn parse_typed_literal(token: &str) -> Result<TypedValue, TuffError> {
             return Err(TuffError::InvalidLiteral(token.to_string()));
         }
     }
+
+    // Default: treat bare integer literals as I32
+    if let Ok(n) = token.parse::<i64>() {
+        let i32_max: u64 = i32::MAX as u64;
+        if n >= 0 && (n as u64) <= i32_max {
+            return Ok(TypedValue {
+                value: n as u64,
+                max: i32_max,
+            });
+        }
+    }
+
     Err(TuffError::InvalidLiteral(token.to_string()))
 }
 
@@ -445,6 +457,11 @@ mod tests {
     }
 
     #[test]
+    fn interpret_tuff_let_default_i32() {
+        assert_eq!(interpret_tuff("let x = 100; x"), Ok(100));
+    }
+
+    #[test]
     fn interpret_tuff_let_reference() {
         assert_eq!(interpret_tuff("let x = 100U8; let y = x; y"), Ok(100));
     }
@@ -475,5 +492,13 @@ mod tests {
     #[test]
     fn interpret_tuff_widening_ok() {
         assert_eq!(interpret_tuff("let x : U16 = 100U8; x"), Ok(100));
+    }
+
+    #[test]
+    fn interpret_tuff_narrowing_err() {
+        assert_eq!(
+            interpret_tuff("let x = 100U16; let y : U8 = x;"),
+            Err(TuffError::TypeMismatch)
+        );
     }
 }
