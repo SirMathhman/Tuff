@@ -14,30 +14,44 @@ pub enum TuffError {
     InvalidLiteral(String),
     ArithmeticOverflow,
     NegativeLiteral,
+    TypeMismatch,
 }
 
-fn parse_typed_literal(token: &str) -> Result<u64, TuffError> {
-    let suffixes: [(&str, u64); 4] = [
-        ("U8", 255),
+fn type_max(suffix: &str) -> Option<u64> {
+    match suffix {
+        "U8" => Some(255),
+        "U16" => Some(65535),
+        "U32" => Some(4_294_967_295),
+        "U64" => Some(u64::MAX),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TypedValue {
+    value: u64,
+    max: u64,
+}
+
+fn parse_typed_literal(token: &str) -> Result<TypedValue, TuffError> {
+    for (suffix, max) in [
+        ("U8", 255u64),
         ("U16", 65535),
         ("U32", 4_294_967_295),
         ("U64", u64::MAX),
-    ];
-
-    for (suffix, max) in suffixes {
+    ] {
         if let Some(literal) = token.strip_suffix(suffix) {
             if literal.starts_with('-') {
                 return Err(TuffError::NegativeLiteral);
             }
             if let Ok(n) = literal.parse::<u64>() {
                 if n <= max {
-                    return Ok(n);
+                    return Ok(TypedValue { value: n, max });
                 }
             }
             return Err(TuffError::InvalidLiteral(token.to_string()));
         }
     }
-
     Err(TuffError::InvalidLiteral(token.to_string()))
 }
 
@@ -67,7 +81,7 @@ fn tokenize(input: &str) -> Vec<String> {
 struct Parser {
     tokens: Vec<String>,
     pos: usize,
-    scopes: Vec<HashMap<String, u64>>,
+    scopes: Vec<HashMap<String, TypedValue>>,
 }
 
 impl Parser {
@@ -79,21 +93,31 @@ impl Parser {
         }
     }
 
-    fn parse_expr(&mut self) -> Result<u64, TuffError> {
+    fn binop(
+        acc: TypedValue,
+        b: TypedValue,
+        checked_op: impl FnOnce(u64, u64) -> Option<u64>,
+    ) -> Result<TypedValue, TuffError> {
+        let max = acc.max.max(b.max);
+        Ok(TypedValue {
+            value: checked_op(acc.value, b.value).ok_or(TuffError::ArithmeticOverflow)?,
+            max,
+        })
+    }
+
+    fn parse_expr(&mut self) -> Result<TypedValue, TuffError> {
         let mut acc = self.parse_term()?;
         while self.pos < self.tokens.len() {
             match self.tokens[self.pos].as_str() {
                 "+" => {
                     self.pos += 1;
-                    acc = acc
-                        .checked_add(self.parse_term()?)
-                        .ok_or(TuffError::ArithmeticOverflow)?;
+                    let b = self.parse_term()?;
+                    acc = Self::binop(acc, b, u64::checked_add)?;
                 }
                 "-" => {
                     self.pos += 1;
-                    acc = acc
-                        .checked_sub(self.parse_term()?)
-                        .ok_or(TuffError::ArithmeticOverflow)?;
+                    let b = self.parse_term()?;
+                    acc = Self::binop(acc, b, u64::checked_sub)?;
                 }
                 _ => break,
             }
@@ -101,21 +125,19 @@ impl Parser {
         Ok(acc)
     }
 
-    fn parse_term(&mut self) -> Result<u64, TuffError> {
+    fn parse_term(&mut self) -> Result<TypedValue, TuffError> {
         let mut acc = self.parse_factor()?;
         while self.pos < self.tokens.len() {
             match self.tokens[self.pos].as_str() {
                 "*" => {
                     self.pos += 1;
-                    acc = acc
-                        .checked_mul(self.parse_factor()?)
-                        .ok_or(TuffError::ArithmeticOverflow)?;
+                    let b = self.parse_factor()?;
+                    acc = Self::binop(acc, b, u64::checked_mul)?;
                 }
                 "/" => {
                     self.pos += 1;
-                    acc = acc
-                        .checked_div(self.parse_factor()?)
-                        .ok_or(TuffError::ArithmeticOverflow)?;
+                    let b = self.parse_factor()?;
+                    acc = Self::binop(acc, b, u64::checked_div)?;
                 }
                 _ => break,
             }
@@ -123,9 +145,12 @@ impl Parser {
         Ok(acc)
     }
 
-    fn parse_block(&mut self) -> Result<u64, TuffError> {
+    fn parse_block(&mut self) -> Result<TypedValue, TuffError> {
         self.scopes.push(HashMap::new());
-        let mut value: u64 = 0;
+        let mut value = TypedValue {
+            value: 0,
+            max: u64::MAX,
+        };
         loop {
             if self.pos >= self.tokens.len() {
                 self.scopes.pop();
@@ -140,7 +165,7 @@ impl Parser {
         }
     }
 
-    fn parse_one_stmt(&mut self, mut value: u64) -> Result<u64, TuffError> {
+    fn parse_one_stmt(&mut self, mut value: TypedValue) -> Result<TypedValue, TuffError> {
         if self.tokens[self.pos] == "let" {
             self.pos += 1;
             self.parse_let()?;
@@ -160,29 +185,49 @@ impl Parser {
         let name = self.tokens[self.pos].clone();
         self.pos += 1;
         // optional type annotation
-        if self.pos < self.tokens.len() && self.tokens[self.pos] == ":" {
+        let annotated_max = if self.pos < self.tokens.len() && self.tokens[self.pos] == ":" {
             self.pos += 1;
             if self.pos >= self.tokens.len() {
                 return Err(TuffError::ExpectedType);
             }
+            let type_token = self.tokens[self.pos].clone();
             self.pos += 1;
-        }
+            type_max(&type_token).ok_or(TuffError::ExpectedType)?
+        } else {
+            u64::MAX
+        };
         if self.pos >= self.tokens.len() || self.tokens[self.pos] != "=" {
             return Err(TuffError::ExpectedEquals);
         }
         self.pos += 1;
         let val = self.parse_expr()?;
+        if val.max > annotated_max {
+            return Err(TuffError::TypeMismatch);
+        }
         if self.pos >= self.tokens.len() || self.tokens[self.pos] != ";" {
             return Err(TuffError::ExpectedSemicolon);
         }
         self.pos += 1;
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, val);
+            if scope.contains_key(&name) {
+                return Err(TuffError::UnexpectedToken(format!(
+                    "redeclaration of '{}'",
+                    name
+                )));
+            }
+            // store with the annotation's max to preserve declared type
+            scope.insert(
+                name,
+                TypedValue {
+                    value: val.value,
+                    max: annotated_max,
+                },
+            );
         }
         Ok(())
     }
 
-    fn parse_factor(&mut self) -> Result<u64, TuffError> {
+    fn parse_factor(&mut self) -> Result<TypedValue, TuffError> {
         if self.pos >= self.tokens.len() {
             return Err(TuffError::UnexpectedToken("end of input".to_string()));
         }
@@ -216,11 +261,14 @@ impl Parser {
     }
 
     fn parse_all(&mut self) -> Result<u64, TuffError> {
-        let mut value: u64 = 0;
+        let mut value = TypedValue {
+            value: 0,
+            max: u64::MAX,
+        };
         while self.pos < self.tokens.len() {
             value = self.parse_one_stmt(value)?;
         }
-        Ok(value)
+        Ok(value.value)
     }
 }
 
@@ -399,5 +447,33 @@ mod tests {
     #[test]
     fn interpret_tuff_let_reference() {
         assert_eq!(interpret_tuff("let x = 100U8; let y = x; y"), Ok(100));
+    }
+
+    #[test]
+    fn interpret_tuff_let_no_expr() {
+        assert_eq!(interpret_tuff("let x = 100U8;"), Ok(0));
+    }
+
+    #[test]
+    fn interpret_tuff_let_redeclaration() {
+        assert_eq!(
+            interpret_tuff("let x = 100U8; let x = 0U8;"),
+            Err(TuffError::UnexpectedToken(
+                "redeclaration of 'x'".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn interpret_tuff_type_mismatch() {
+        assert_eq!(
+            interpret_tuff("let x : U8 = 100U16;"),
+            Err(TuffError::TypeMismatch)
+        );
+    }
+
+    #[test]
+    fn interpret_tuff_widening_ok() {
+        assert_eq!(interpret_tuff("let x : U16 = 100U8; x"), Ok(100));
     }
 }
