@@ -15,3 +15,9 @@ test("whitespace input returns 0", () => {
 test("read<U8>() reads a number from stdin", () => {
   expect(run("read<U8>()", "100")).toBe(100);
 });
+test("read<U16>() reads a number from stdin", () => {
+  expect(run("read<U16>()", "100")).toBe(100);
+});
+test("read<U32>() reads a number from stdin", () => {
+  expect(run("read<U32>()", "100")).toBe(100);
+});

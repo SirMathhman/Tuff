@@ -6,6 +6,7 @@
   "scripts": {
     "agent": "bun ../agent/index.ts",
     "lint": "eslint ./src --fix",
+    "lint:eslint:file": "eslint --fix",
     "test": "bun test",
     "jest:test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "cpd": "pmd cpd --dir src --minimum-tokens 50 --language ecmascript --ignore-literals --ignore-identifiers"
