@@ -13,3 +13,59 @@ describe("main", () => {
     spy.mockRestore();
   });
 });
+
+describe("run", () => {
+  it('should return 0 for run("", "")', () => {
+    expect(run("", "")).toBe(0);
+  });
+
+  it('should return 0 for run(" ", "")', () => {
+    expect(run(" ", "")).toBe(0);
+  });
+
+  it('should return 100 for run("read<U8>()", "100")', () => {
+    expect(run("read<U8>()", "100")).toBe(100);
+  });
+
+  it('should return 100 for run("read<U16>()", "100")', () => {
+    expect(run("read<U16>()", "100")).toBe(100);
+  });
+
+  it('should return 100 for run("read<U32>()", "100")', () => {
+    expect(run("read<U32>()", "100")).toBe(100);
+  });
+
+  it('should return 100 for run("read<U64>()", "100")', () => {
+    expect(run("read<U64>()", "100")).toBe(100);
+  });
+
+  it('should return 100 for run("read<I8>()", "100")', () => {
+    expect(run("read<I8>()", "100")).toBe(100);
+  });
+
+  it('should return 100 for run("read<I16>()", "100")', () => {
+    expect(run("read<I16>()", "100")).toBe(100);
+  });
+
+  it('should return 100 for run("read<I32>()", "100")', () => {
+    expect(run("read<I32>()", "100")).toBe(100);
+  });
+
+  it('should return 100 for run("read<I64>()", "100")', () => {
+    expect(run("read<I64>()", "100")).toBe(100);
+  });
+
+  it('should return 3 for run("read<U8>() + read<U8>()", "1 2")', () => {
+    expect(run("read<U8>() + read<U8>()", "1 2")).toBe(3);
+  });
+});
+
+describe("compile", () => {
+  it('should throw for compile("read<U7>()")', () => {
+    expect(() => compile("read<U7>()")).toThrow(Error);
+  });
+
+  it('should throw for compile("read<F32>()")', () => {
+    expect(() => compile("read<F32>()")).toThrow(Error);
+  });
+});
