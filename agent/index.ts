@@ -202,7 +202,7 @@ async function editFile(
   if (!fs.existsSync(name)) return "Error: File not found.";
   const lineCount = endLine - startLine;
   if (lineCount > 25) {
-    return "Error: Too many lines: " + lineCount;
+    return "Error: Too many lines. Max 25 lines: " + lineCount;
   }
 
   const lines = (await fs.promises.readFile(name, "utf-8")).split("\n");
