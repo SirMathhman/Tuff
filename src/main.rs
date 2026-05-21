@@ -235,6 +235,7 @@ struct Parser {
     pos: usize,
     scopes: Vec<HashMap<String, (TypedValue, bool)>>,
     skip_mode: bool,
+    loop_depth: usize,
 }
 
 impl Parser {
@@ -244,6 +245,7 @@ impl Parser {
             pos: 0,
             scopes: vec![HashMap::new()],
             skip_mode: false,
+            loop_depth: 0,
         }
     }
 
@@ -608,6 +610,36 @@ impl Parser {
                 self.pos += 1;
                 self.parse_if_branch()
             }
+        } else if self.tokens[self.pos] == "while" {
+            self.pos += 1;
+            let cond_pos = self.pos;
+            let cond = self.parse_expr()?;
+            let body_pos = self.pos;
+            let mut iterations = 0u32;
+            let mut result = TypedValue {
+                value: 0,
+                kind: TypeKind::I32,
+            };
+            loop {
+                self.pos = cond_pos;
+                let c = self.parse_expr()?;
+                if c.value == 0 {
+                    break;
+                }
+                self.pos = body_pos;
+                result = self.parse_if_branch()?;
+                iterations += 1;
+                if iterations >= 1024 {
+                    return Err(TuffError::UnexpectedToken(
+                        "loop iteration limit reached".to_string(),
+                    ));
+                }
+            }
+            self.pos = body_pos;
+            self.skip_mode = true;
+            self.parse_if_branch()?;
+            self.skip_mode = false;
+            Ok(result)
         } else {
             let token = &self.tokens[self.pos];
             for scope in self.scopes.iter().rev() {
@@ -813,6 +845,13 @@ mod tests {
     #[test]
     fn interpret_tuff_compound_add() {
         assert_eq!(interpret_tuff("let mut x = 0; x += 1; x"), Ok(1));
+    }
+    #[test]
+    fn interpret_tuff_while() {
+        assert_eq!(
+            interpret_tuff("let mut x = 0; while (x < 4) x += 1; x"),
+            Ok(4)
+        );
     }
     #[test]
     fn interpret_tuff_let_with_block_expr() {
