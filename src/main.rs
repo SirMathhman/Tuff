@@ -178,6 +178,7 @@ fn tokenize(input: &str) -> Vec<String> {
         ("!=", "!="),
         ("||", "||"),
         ("&&", "&&"),
+        ("+=", "+="),
     ];
     let single_char_tokens = "(){};:<>";
 
@@ -433,7 +434,7 @@ impl Parser {
                 .map_or(false, |c| c.is_alphabetic() || c == '_')
     }
 
-    fn parse_assignment(&mut self, name: String) -> Result<TypedValue, TuffError> {
+    fn parse_assignment(&mut self, name: String, op: &str) -> Result<TypedValue, TuffError> {
         let val = self.parse_expr()?;
         let mut result = val;
         let mut found = false;
@@ -449,7 +450,15 @@ impl Parser {
                     if val.kind != pair.0.kind {
                         return Err(TuffError::TypeMismatch);
                     }
-                    pair.0.value = val.value;
+                    let new_val = if op == "+=" {
+                        pair.0
+                            .value
+                            .checked_add(val.value)
+                            .ok_or(TuffError::ArithmeticOverflow)?
+                    } else {
+                        val.value
+                    };
+                    pair.0.value = new_val;
                     result = pair.0;
                 }
                 found = true;
@@ -466,16 +475,18 @@ impl Parser {
     }
 
     fn try_parse_assignment(&mut self) -> Option<Result<TypedValue, TuffError>> {
-        if self.pos + 1 < self.tokens.len()
-            && self.tokens[self.pos + 1] == "="
-            && Self::is_ident(&self.tokens[self.pos])
-        {
-            let name = self.tokens[self.pos].clone();
-            self.pos += 2;
-            Some(self.parse_assignment(name))
-        } else {
-            None
+        let assign_ops = ["=", "+="];
+        for &op in &assign_ops {
+            if self.pos + 1 < self.tokens.len()
+                && self.tokens[self.pos + 1] == op
+                && Self::is_ident(&self.tokens[self.pos])
+            {
+                let name = self.tokens[self.pos].clone();
+                self.pos += 2;
+                return Some(self.parse_assignment(name, op));
+            }
         }
+        None
     }
 
     fn parse_one_stmt(&mut self, mut value: TypedValue) -> Result<TypedValue, TuffError> {
@@ -798,6 +809,10 @@ mod tests {
             interpret_tuff("let mut x = 0; if (true) { x = 1; } else { x = 2; } x"),
             Ok(1)
         );
+    }
+    #[test]
+    fn interpret_tuff_compound_add() {
+        assert_eq!(interpret_tuff("let mut x = 0; x += 1; x"), Ok(1));
     }
     #[test]
     fn interpret_tuff_let_with_block_expr() {
