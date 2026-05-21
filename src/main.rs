@@ -233,6 +233,7 @@ struct Parser {
     tokens: Vec<String>,
     pos: usize,
     scopes: Vec<HashMap<String, (TypedValue, bool)>>,
+    skip_mode: bool,
 }
 
 impl Parser {
@@ -241,6 +242,7 @@ impl Parser {
             tokens,
             pos: 0,
             scopes: vec![HashMap::new()],
+            skip_mode: false,
         }
     }
 
@@ -431,20 +433,13 @@ impl Parser {
                 .map_or(false, |c| c.is_alphabetic() || c == '_')
     }
 
-    fn parse_one_stmt(&mut self, mut value: TypedValue) -> Result<TypedValue, TuffError> {
-        if self.tokens[self.pos] == "let" {
-            self.pos += 1;
-            self.parse_let()?;
-        } else if self.pos + 1 < self.tokens.len()
-            && self.tokens[self.pos + 1] == "="
-            && Self::is_ident(&self.tokens[self.pos])
-        {
-            let name = self.tokens[self.pos].clone();
-            self.pos += 2;
-            let val = self.parse_expr()?;
-            let mut found = false;
-            for scope in self.scopes.iter_mut().rev() {
-                if let Some(pair) = scope.get_mut(&name) {
+    fn parse_assignment(&mut self, name: String) -> Result<TypedValue, TuffError> {
+        let val = self.parse_expr()?;
+        let mut result = val;
+        let mut found = false;
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(pair) = scope.get_mut(&name) {
+                if !self.skip_mode {
                     if !pair.1 {
                         return Err(TuffError::UnexpectedToken(format!(
                             "cannot assign to immutable variable '{}'",
@@ -455,16 +450,40 @@ impl Parser {
                         return Err(TuffError::TypeMismatch);
                     }
                     pair.0.value = val.value;
-                    found = true;
-                    break;
+                    result = pair.0;
                 }
+                found = true;
+                break;
             }
-            if !found {
-                return Err(TuffError::UndefinedVariable(name));
-            }
-            if self.pos < self.tokens.len() && self.tokens[self.pos] == ";" {
-                self.pos += 1;
-            }
+        }
+        if !found {
+            return Err(TuffError::UndefinedVariable(name));
+        }
+        if self.pos < self.tokens.len() && self.tokens[self.pos] == ";" {
+            self.pos += 1;
+        }
+        Ok(result)
+    }
+
+    fn try_parse_assignment(&mut self) -> Option<Result<TypedValue, TuffError>> {
+        if self.pos + 1 < self.tokens.len()
+            && self.tokens[self.pos + 1] == "="
+            && Self::is_ident(&self.tokens[self.pos])
+        {
+            let name = self.tokens[self.pos].clone();
+            self.pos += 2;
+            Some(self.parse_assignment(name))
+        } else {
+            None
+        }
+    }
+
+    fn parse_one_stmt(&mut self, mut value: TypedValue) -> Result<TypedValue, TuffError> {
+        if self.tokens[self.pos] == "let" {
+            self.pos += 1;
+            self.parse_let()?;
+        } else if let Some(res) = self.try_parse_assignment() {
+            value = res?;
         } else {
             value = self.parse_expr()?;
             if self.pos < self.tokens.len() && self.tokens[self.pos] == ";" {
@@ -559,13 +578,25 @@ impl Parser {
         } else if self.tokens[self.pos] == "if" {
             self.pos += 1;
             let cond = self.parse_expr()?;
-            let then_val = self.parse_factor()?;
-            if self.pos >= self.tokens.len() || self.tokens[self.pos] != "else" {
-                return Err(TuffError::UnexpectedToken("expected 'else'".to_string()));
+            if cond.value != 0 {
+                let val = self.parse_if_branch()?;
+                if self.pos < self.tokens.len() && self.tokens[self.pos] == "else" {
+                    self.pos += 1;
+                    self.skip_mode = true;
+                    self.parse_if_branch()?;
+                    self.skip_mode = false;
+                }
+                Ok(val)
+            } else {
+                self.skip_mode = true;
+                self.parse_if_branch()?;
+                self.skip_mode = false;
+                if self.pos >= self.tokens.len() || self.tokens[self.pos] != "else" {
+                    return Err(TuffError::UnexpectedToken("expected 'else'".to_string()));
+                }
+                self.pos += 1;
+                self.parse_if_branch()
             }
-            self.pos += 1;
-            let else_val = self.parse_factor()?;
-            Ok(if cond.value != 0 { then_val } else { else_val })
         } else {
             let token = &self.tokens[self.pos];
             for scope in self.scopes.iter().rev() {
@@ -587,6 +618,14 @@ impl Parser {
             let lit = parse_typed_literal(token)?;
             self.pos += 1;
             Ok(lit)
+        }
+    }
+
+    fn parse_if_branch(&mut self) -> Result<TypedValue, TuffError> {
+        if let Some(res) = self.try_parse_assignment() {
+            res
+        } else {
+            self.parse_factor()
         }
     }
 
@@ -744,6 +783,20 @@ mod tests {
         assert_eq!(
             interpret_tuff("{ let mut x = 0; } x"),
             Err(TuffError::UndefinedVariable("x".to_string()))
+        );
+    }
+    #[test]
+    fn interpret_tuff_if_assign() {
+        assert_eq!(
+            interpret_tuff("let mut x = 0; if (true) x = 1; else x = 2; x"),
+            Ok(1)
+        );
+    }
+    #[test]
+    fn interpret_tuff_if_block_assign() {
+        assert_eq!(
+            interpret_tuff("let mut x = 0; if (true) { x = 1; } else { x = 2; } x"),
+            Ok(1)
         );
     }
     #[test]
