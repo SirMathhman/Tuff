@@ -1,7 +1,8 @@
 #include <stdio.h>
+#include "greet.h"
 
 int main(void)
 {
-    printf("Hello from Tuff!\n");
+    printf("%s\n", greet());
     return 0;
 }
