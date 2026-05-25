@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Library
 add_library(tuff_lib
     src/greet.c
+    src/compile.c
 )
 
 # Main executable
