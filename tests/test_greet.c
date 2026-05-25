@@ -28,6 +28,9 @@ static int tests_passed = 0;
         printf("ok\n");                \
     } while (0)
 
+/* Forward declarations */
+static int execute_tuff(const char *input);
+
 static int test_greet_returns_string(void)
 {
     TEST("greet returns non-NULL");
@@ -48,6 +51,14 @@ static int test_greet_contains_tuff(void)
     TEST("greet contains 'Tuff'");
     ASSERT(strstr(greet(), "Tuff") != NULL,
            "greet() should contain 'Tuff'");
+    return 0;
+}
+
+static int test_execute_tuff_empty(void)
+{
+    TEST("execute_tuff(\"\") returns 0");
+    ASSERT(execute_tuff("") == 0,
+           "execute_tuff(\"\") should return 0");
     return 0;
 }
 
@@ -111,6 +122,7 @@ int main(void)
     failed += test_greet_returns_string();
     failed += test_greet_contains_hello();
     failed += test_greet_contains_tuff();
+    failed += test_execute_tuff_empty();
 
     printf("\n%d / %d tests passed\n", tests_passed, tests_run);
 
