@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "powershell -File .github/hooks/scripts/run-tests.ps1",
+        "timeout": 120
+      }
+    ]
+  }
+}
