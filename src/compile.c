@@ -1,3 +1,5 @@
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -5,7 +7,26 @@
 
 const char *compile_tuff_to_c(const char *input)
 {
-    /* Generate a C program whose body prints the compiled output */
+    /* Dispatch on known Tuff syntax */
+    if (strcmp(input, "read<U8>()") == 0)
+    {
+        const char *code =
+            "#include <stdio.h>\n"
+            "int main(void)\n"
+            "{\n"
+            "    unsigned short val;\n"
+            "    if (scanf(\"%hu\", &val) != 1)\n"
+            "        return 1;\n"
+            "    return val;\n"
+            "}\n";
+        char *result = malloc(strlen(code) + 1);
+        if (result == NULL)
+            return NULL;
+        strcpy(result, code);
+        return result;
+    }
+
+    /* Default: emit program that prints the input string */
     const char *template_prefix =
         "#include <stdio.h>\n"
         "int main(void) { printf(\"%s\\n\", \"";

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <process.h>
 #include "../src/greet.h"
 #include "../src/compile.h"
 
@@ -29,7 +30,85 @@ static int tests_passed = 0;
     } while (0)
 
 /* Forward declarations */
-static int execute_tuff(const char *input);
+static int execute_tuff(const char *input, const char *stdin_input);
+
+/*
+ * execute_tuff: compiles and runs Tuff source via Clang.
+ *   1) Calls compile_tuff_to_c(input) to get generated C code.
+ *   2) Writes the C code to a temp file.
+ *   3) Compiles it with Clang (via _spawnvp with full LLVM path).
+ *   4) Runs the resulting executable.
+ *   5) Returns the process exit code, or -1 on failure.
+ */
+static int execute_tuff(const char *input, const char *stdin_input)
+{
+    const char *c_code = compile_tuff_to_c(input);
+    if (c_code == NULL)
+        return -1;
+
+    /* Build unique temp file paths */
+    char src_name[L_tmpnam + 3];
+    char exe_name[L_tmpnam + 5];
+    char stdin_name[L_tmpnam + 5];
+    tmpnam(src_name);
+    tmpnam(exe_name);
+    tmpnam(stdin_name);
+    strcat(src_name, ".c");
+    strcat(exe_name, ".exe");
+    strcat(stdin_name, ".txt");
+
+    /* Write generated C source to temp file */
+    FILE *f = fopen(src_name, "w");
+    if (f == NULL)
+        return -1;
+    fprintf(f, "%s", c_code);
+    fclose(f);
+
+    /* Compile with clang using _spawnv with the 8.3 short path */
+    const char *clang_path = "C:\\PROGRA~1\\LLVM\\bin\\clang.exe";
+    const char *clang_args[] = {
+        clang_path,
+        src_name,
+        "-o",
+        exe_name,
+        NULL};
+    int comp_ret = _spawnv(_P_WAIT, clang_path, clang_args);
+    if (comp_ret != 0)
+    {
+        remove(src_name);
+        remove(exe_name);
+        remove(stdin_name);
+        return -1;
+    }
+
+    /* Write stdin_input to a temp file for redirection */
+    FILE *sf = fopen(stdin_name, "w");
+    if (sf == NULL)
+    {
+        remove(src_name);
+        remove(exe_name);
+        return -1;
+    }
+    fprintf(sf, "%s", stdin_input);
+    fclose(sf);
+
+    /*
+     * Run the executable with stdin redirected from stdin_name.
+     * Use cmd /c so the < redirection is interpreted by cmd.exe.
+     */
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd),
+             "cmd /c \"%s\" < \"%s\"",
+             exe_name, stdin_name);
+    int run_ret = system(cmd);
+
+    /* Cleanup */
+    remove(src_name);
+    remove(exe_name);
+    remove(stdin_name);
+
+    return run_ret;
+}
 
 static int test_greet_returns_string(void)
 {
@@ -56,60 +135,22 @@ static int test_greet_contains_tuff(void)
 
 static int test_execute_tuff_empty(void)
 {
+    int ret = execute_tuff("", "");
+    printf("    (execute_tuff returned %d)\n", ret);
     TEST("execute_tuff(\"\") returns 0");
-    ASSERT(execute_tuff("") == 0,
+    ASSERT(ret == 0,
            "execute_tuff(\"\") should return 0");
     return 0;
 }
 
-/*
- * execute_tuff: compiles and runs Tuff source via Clang.
- *   1) Calls compile_tuff_to_c(input) to get generated C code.
- *   2) Writes the C code to a temp file.
- *   3) Compiles it with Clang.
- *   4) Runs the resulting executable.
- *   5) Returns the process exit code, or -1 on failure.
- */
-static int execute_tuff(const char *input)
+static int test_execute_tuff_read_u8(void)
 {
-    const char *c_code = compile_tuff_to_c(input);
-    if (c_code == NULL)
-        return -1;
-
-    /* Create unique temp file names */
-    char src_name[L_tmpnam + 3];
-    char exe_name[L_tmpnam + 5];
-    tmpnam(src_name);
-    tmpnam(exe_name);
-    strcat(src_name, ".c");
-    strcat(exe_name, ".exe");
-
-    /* Write generated C source to temp file */
-    FILE *f = fopen(src_name, "w");
-    if (f == NULL)
-        return -1;
-    fprintf(f, "%s", c_code);
-    fclose(f);
-
-    /* Compile with Clang */
-    char cmd[1024];
-    snprintf(cmd, sizeof(cmd), "clang \"%s\" -o \"%s\" 2>nul", src_name, exe_name);
-    int comp_ret = system(cmd);
-    if (comp_ret != 0)
-    {
-        remove(src_name);
-        return -1;
-    }
-
-    /* Run the compiled executable */
-    snprintf(cmd, sizeof(cmd), "\"%s\"", exe_name);
-    int run_ret = system(cmd);
-
-    /* Cleanup */
-    remove(src_name);
-    remove(exe_name);
-
-    return run_ret;
+    int ret = execute_tuff("read<U8>()", "100");
+    printf("    (execute_tuff returned %d)\n", ret);
+    TEST("execute_tuff(\"read<U8>()\") with stdin \"100\" returns 100");
+    ASSERT(ret == 100,
+           "execute_tuff(\"read<U8>()\", \"100\") should return 100");
+    return 0;
 }
 
 int main(void)
@@ -123,6 +164,7 @@ int main(void)
     failed += test_greet_contains_hello();
     failed += test_greet_contains_tuff();
     failed += test_execute_tuff_empty();
+    failed += test_execute_tuff_read_u8();
 
     printf("\n%d / %d tests passed\n", tests_passed, tests_run);
 
