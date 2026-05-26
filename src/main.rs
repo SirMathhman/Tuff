@@ -248,19 +248,20 @@ impl ParseState {
         };
         self.consume();
 
-        // Expect ':' type annotation separator (already tokenized as separate token).
-        match self.peek() {
-            Some(t) if t == ":" => {}
-            _ => return Err("expected ':' after variable name in 'let'".to_string()),
+        // Type annotation is optional: `: U8` or inferred from initializer.
+        let mut explicit_type_token: Option<String> = None;
+        if let Some(t) = self.peek() {
+            if t == ":" {
+                self.consume(); // skip ':'
+                match self.peek() {
+                    Some(tt) if is_type_suffix(tt) => {
+                        explicit_type_token = Some(tt.to_string());
+                        self.consume();
+                    }
+                    _ => return Err("expected type suffix after ':' in 'let'".to_string()),
+                }
+            }
         }
-        self.consume();
-
-        // Expect type suffix (e.g., "U8", "I32").
-        let type_token = match self.peek() {
-            Some(t) if is_type_suffix(t) => t.to_string(),
-            _ => return Err("expected type suffix after ':' in 'let'".to_string()),
-        };
-        self.consume();
 
         // Expect '='.
         match self.peek() {
@@ -272,18 +273,23 @@ impl ParseState {
         // Parse the initializer expression.
         let value = self.parse_expression()?;
 
-        // Validate range against declared type.
-        let (min_val, max_val) = match type_token.as_str() {
-            "U8" => (0i64, 255),
-            "U16" => (0, 65_535),
-            "U32" => (0, 4_294_967_295),
-            "I8" => (-128, 127),
-            "I16" => (-32_768, 32_767),
-            "I32" => (-2_147_483_648, 2_147_483_647),
-            _ => return Err(format!("unknown type '{}'", type_token)),
+        // Validate range against declared/inferred type.
+        let (min_val, max_val, type_name) = if let Some(ref tt) = explicit_type_token {
+            match tt.as_str() {
+                "U8" => (0i64, 255, "U8"),
+                "U16" => (0, 65_535, "U16"),
+                "U32" => (0, 4_294_967_295, "U32"),
+                "I8" => (-128, 127, "I8"),
+                "I16" => (-32_768, 32_767, "I16"),
+                "I32" => (-2_147_483_648, 2_147_483_647, "I32"),
+                _ => return Err(format!("unknown type '{}'", tt)),
+            }
+        } else {
+            // Use the expression context bounds (inferred from initializer).
+            (self.min_val, self.max_val, self.suffix)
         };
         if value < min_val || value > max_val {
-            return Err(format!("value {} out of range for {}", value, type_token));
+            return Err(format!("value {} out of range for {}", value, type_name));
         }
 
         // Store in environment.
@@ -391,19 +397,37 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
     let mut inferred_max: i64 = 0;
 
     if tokens[idx] == "let" {
-        // Skip past `let <identifier> : <TypeSuffix> = ... ;` to infer type from the declaration.
+        // Skip past `let <identifier> [: <TypeSuffix>] = ... ;` to infer type.
         let mut scan_idx = idx + 1; // skip 'let'
         if scan_idx < tokens.len() && is_identifier(&tokens[scan_idx]) {
             scan_idx += 1; // skip identifier
         }
+        // Type annotation is optional: `: U8` or just inferred from initializer.
+        let mut has_explicit_type = false;
         if scan_idx < tokens.len() && tokens[scan_idx] == ":" {
             scan_idx += 1; // skip ':'
+            if scan_idx < tokens.len() && is_type_suffix(&tokens[scan_idx]) {
+                if let Some((suffix, mn, mx)) = lookup_type_bounds(&tokens[scan_idx]) {
+                    inferred_suffix = Some(suffix);
+                    inferred_min = mn;
+                    inferred_max = mx;
+                    has_explicit_type = true;
+                }
+            }
         }
-        if scan_idx < tokens.len() && is_type_suffix(&tokens[scan_idx]) {
-            if let Some((suffix, mn, mx)) = lookup_type_bounds(&tokens[scan_idx]) {
-                inferred_suffix = Some(suffix);
-                inferred_min = mn;
-                inferred_max = mx;
+        // If no explicit type, try to infer from the initializer literal.
+        if !has_explicit_type {
+            while scan_idx < tokens.len() && tokens[scan_idx] != "=" {
+                scan_idx += 1;
+            }
+            if scan_idx + 1 < tokens.len() {
+                // Try parsing the token after '=' as a suffixed number.
+                let init_token = &tokens[scan_idx + 1];
+                if let Ok(parsed) = parse_value(init_token) {
+                    inferred_suffix = Some(parsed.suffix);
+                    inferred_min = parsed.min_val;
+                    inferred_max = parsed.max_val;
+                }
             }
         }
     }
@@ -600,5 +624,11 @@ mod tests {
             interpret_tuff("let y : U8 = { let x : U8 = 3U8 + 2U8; x } * 5U8;"),
             Ok(0)
         );
+    }
+
+    #[test]
+    fn test_interpret_tuff_let_type_inference() {
+        // Let with type inferred from initializer suffix, then return the value
+        assert_eq!(interpret_tuff("let y = 100U8; y"), Ok(100));
     }
 }
