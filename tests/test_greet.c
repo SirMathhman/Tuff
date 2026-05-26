@@ -195,6 +195,16 @@ static int test_execute_tuff_read_u8_add_u8(void)
     return 0;
 }
 
+static int test_execute_tuff_read_u8_add_u8_add_u8(void)
+{
+    int ret = execute_tuff("read<U8>() + read<U8>() + read<U8>()", "1 2 3");
+    printf("    (execute_tuff returned %d)\n", ret);
+    TEST("execute_tuff(\"read<U8>() + read<U8>() + read<U8>()\") with stdin \"1 2 3\" returns 6");
+    ASSERT(ret == 6,
+           "execute_tuff(\"read<U8>() + read<U8>() + read<U8>()\", \"1 2 3\") should return 6");
+    return 0;
+}
+
 int main(void)
 {
     int failed = 0;
@@ -211,6 +221,7 @@ int main(void)
     failed += test_execute_tuff_read_u16_extra();
     failed += test_compile_read_u7_error();
     failed += test_execute_tuff_read_u8_add_u8();
+    failed += test_execute_tuff_read_u8_add_u8_add_u8();
 
     printf("\n%d / %d tests passed\n", tests_passed, tests_run);
 
