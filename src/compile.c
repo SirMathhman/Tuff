@@ -7,25 +7,81 @@
 
 const char *compile_tuff_to_c(const char *input)
 {
-    /* Dispatch on known Tuff syntax */
-    if (strcmp(input, "read<U8>()") == 0)
+    /* Parse read<U{N}>() pattern generically */
     {
-        const char *code =
-            "#include <stdio.h>\n"
-            "int main(void)\n"
-            "{\n"
-            "    unsigned short val;\n"
-            "    if (scanf(\"%hu\", &val) != 1)\n"
-            "        return 1;\n"
-            "    return val;\n"
-            "}\n";
-        char *result = malloc(strlen(code) + 1);
-        if (result == NULL)
-            return NULL;
-        strcpy(result, code);
-        return result;
+        const char *prefix = "read<U";
+        const char *suffix = ">()";
+        size_t plen = strlen(prefix);
+        size_t slen = strlen(suffix);
+        size_t ilen = strlen(input);
+
+        if (ilen > plen + slen &&
+            strncmp(input, prefix, plen) == 0 &&
+            strcmp(input + ilen - slen, suffix) == 0)
+        {
+            /* Extract the bit-count string between prefix and suffix */
+            char bits_str[16];
+            size_t bits_len = ilen - plen - slen;
+            if (bits_len > 0 && bits_len < sizeof(bits_str))
+            {
+                strncpy(bits_str, input + plen, bits_len);
+                bits_str[bits_len] = '\0';
+
+                int bits = atoi(bits_str);
+
+                /* Map bit width to C type and scanf format string */
+                const char *c_type = NULL;
+                const char *scanf_fmt = NULL;
+
+                if (bits == 8)
+                {
+                    c_type = "unsigned char";
+                    scanf_fmt = "%hhu";
+                }
+                else if (bits == 16)
+                {
+                    c_type = "unsigned short";
+                    scanf_fmt = "%hu";
+                }
+                else
+                {
+                    /* Unsupported bit width, fall through to default */
+                    goto default_case;
+                }
+
+                /* Build the generated C code */
+                const char *code_prefix =
+                    "#include <stdio.h>\n"
+                    "int main(void)\n"
+                    "{\n"
+                    "    ";
+                const char *code_mid_type = c_type;
+                const char *code_mid_read =
+                    " val;\n"
+                    "    if (scanf(\"";
+                const char *code_mid_fmt = scanf_fmt;
+                const char *code_suffix =
+                    "\", &val) != 1)\n"
+                    "        return 1;\n"
+                    "    return val;\n"
+                    "}\n";
+
+                size_t len = strlen(code_prefix) + strlen(code_mid_type) + strlen(code_mid_read) + strlen(code_mid_fmt) + strlen(code_suffix) + 1;
+                char *result = malloc(len);
+                if (result == NULL)
+                    return NULL;
+                snprintf(result, len, "%s%s%s%s%s",
+                         code_prefix,
+                         code_mid_type,
+                         code_mid_read,
+                         code_mid_fmt,
+                         code_suffix);
+                return result;
+            }
+        }
     }
 
+default_case:
     /* Default: emit program that prints the input string */
     const char *template_prefix =
         "#include <stdio.h>\n"

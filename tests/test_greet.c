@@ -153,6 +153,16 @@ static int test_execute_tuff_read_u8(void)
     return 0;
 }
 
+static int test_execute_tuff_read_u16(void)
+{
+    int ret = execute_tuff("read<U16>()", "100");
+    printf("    (execute_tuff returned %d)\n", ret);
+    TEST("execute_tuff(\"read<U16>()\") with stdin \"100\" returns 100");
+    ASSERT(ret == 100,
+           "execute_tuff(\"read<U16>()\", \"100\") should return 100");
+    return 0;
+}
+
 int main(void)
 {
     int failed = 0;
@@ -165,6 +175,7 @@ int main(void)
     failed += test_greet_contains_tuff();
     failed += test_execute_tuff_empty();
     failed += test_execute_tuff_read_u8();
+    failed += test_execute_tuff_read_u16();
 
     printf("\n%d / %d tests passed\n", tests_passed, tests_run);
 
