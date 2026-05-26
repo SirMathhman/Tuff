@@ -162,7 +162,7 @@ impl ParseState {
                 }
             } else {
                 // Block: parse let-statements and final expression.
-                self.parse_block_body(close_char)
+                self.parse_statements(Some('}'), true)
             }
         } else if tok == "let" || is_identifier(&tok) {
             // Variable reference (identifier used in an expression context).
@@ -187,25 +187,35 @@ impl ParseState {
         }
     }
 
-    // Parse a block body: sequence of let-statements followed by a final expression.
-    fn parse_block_body(&mut self, close_char: char) -> Result<i64, String> {
+    // Shared loop: parse let-statements and expressions until terminated.
+    // - close_char = Some(c) → stops at closing delimiter c, consumes it
+    // - close_char = None   → stops at EOF (top-level)
+    fn parse_statements(
+        &mut self,
+        close_char: Option<char>,
+        require_expression: bool,
+    ) -> Result<i64, String> {
         let mut last_value = 0i64;
         let mut has_expression = false;
 
         loop {
             match self.peek() {
-                Some(t) if t == close_char.to_string() => {
-                    // Closing delimiter reached — return the value of the last expression.
-                    self.consume();
+                None => {
+                    if close_char.is_none() {
+                        break; // EOF for top-level
+                    } else {
+                        return Err("unexpected end of input".to_string());
+                    }
+                }
+                Some(t) if close_char.map_or(false, |c| t.chars().next() == Some(c)) => {
+                    self.consume(); // eat closing delimiter
                     break;
                 }
                 Some(t) if t == "let" => {
-                    // Parse let x : TYPE = expr;
                     self.parse_let_statement()?;
-                    has_expression = false; // a statement doesn't set block value
+                    has_expression = false;
                 }
                 _ => {
-                    // Regular expression — becomes the last value.
                     last_value = self.parse_expression()?;
                     has_expression = true;
 
@@ -219,7 +229,7 @@ impl ParseState {
             }
         }
 
-        if !has_expression && close_char == '}' {
+        if require_expression && !has_expression {
             Err("block has no final expression".to_string())
         } else {
             Ok(last_value)
@@ -369,7 +379,10 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
 
     // Helper to look up type bounds for a suffix string.
     let lookup_type_bounds = |suffix: &str| -> Option<(&'static str, i64, i64)> {
-        TYPE_BOUNDS.iter().find(|(s, _, _)| *s == suffix).map(|&(s, mn, mx)| (s, mn, mx))
+        TYPE_BOUNDS
+            .iter()
+            .find(|(s, _, _)| *s == suffix)
+            .map(|&(s, mn, mx)| (s, mn, mx))
     };
 
     // Try to determine the type: either from a let declaration or by parsing the first value.
@@ -399,10 +412,14 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
         (s, inferred_min, inferred_max)
     } else {
         let first_parsed = parse_value(&tokens[idx])?;
-        (first_parsed.suffix, first_parsed.min_val, first_parsed.max_val)
+        (
+            first_parsed.suffix,
+            first_parsed.min_val,
+            first_parsed.max_val,
+        )
     };
 
-   let mut state = ParseState {
+    let mut state = ParseState {
         tokens,
         pos: 0,
         suffix,
@@ -411,13 +428,8 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
         env: HashMap::new(),
     };
 
-    // Top-level call to the lowest-precedence rule.
-    let result = state.parse_expression()?;
-
-    // Ensure we consumed all tokens (no trailing garbage).
-    if state.pos < state.tokens.len() {
-        return Err(format!("unexpected token '{}'", state.peek().unwrap()));
-    }
+    // Top-level call — EOF-terminated, requires a final expression.
+    let result = state.parse_statements(None, true)?;
 
     Ok(result)
 }
@@ -566,6 +578,18 @@ mod tests {
     #[test]
     fn test_interpret_tuff_let_in_block() {
         // let x = 3 + 2; x * 5 = 25
-        assert_eq!(interpret_tuff("{ let x : U8 = 3U8 + 2U8; x } * 5U8"), Ok(25));
+        assert_eq!(
+            interpret_tuff("{ let x : U8 = 3U8 + 2U8; x } * 5U8"),
+            Ok(25)
+        );
+    }
+
+    #[test]
+    fn test_interpret_tuff_top_level_let() {
+        // Top-level let: y = ({x} * 5) = (5 * 5) = 25, then return y
+        assert_eq!(
+            interpret_tuff("let y : U8 = { let x : U8 = 3U8 + 2U8; x } * 5U8; y"),
+            Ok(25)
+        );
     }
 }
