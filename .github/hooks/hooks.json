@@ -4,6 +4,10 @@
       {
         "type": "command",
         "command": "cargo test; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      },
+      {
+        "type": "command",
+        "command": "cmd /c \"pmd cpd --dirs src --language rust --minimum-tokens 50 --ignore-literals --ignore-identifiers\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       }
     ]
   }
