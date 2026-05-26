@@ -51,7 +51,7 @@ struct ParseState {
     suffix: &'static str,
     min_val: i64,
     max_val: i64,
-    env: HashMap<String, i64>, // variable name -> value (type checked at declaration time)
+    env: HashMap<String, (i64, &'static str)>, // variable name -> (value, type_suffix)
 }
 
 impl ParseState {
@@ -168,7 +168,15 @@ impl ParseState {
             // Variable reference (identifier used in an expression context).
             self.consume();
             match self.env.get(&tok) {
-                Some(&val) => Ok(val),
+                Some(&(val, var_suffix)) => {
+                    if var_suffix != self.suffix {
+                        return Err(format!(
+                            "cannot use {} and {}, types must match",
+                            self.suffix, var_suffix
+                        ));
+                    }
+                    Ok(val)
+                }
                 None => Err(format!("undefined variable '{}'", tok)),
             }
         } else {
@@ -263,6 +271,23 @@ impl ParseState {
             }
         }
 
+        // Determine the target type for this let.
+        // If explicit, temporarily set context bounds so initializer is checked against them.
+        let (target_suffix, target_min_val, target_max_val) = if let Some(ref tt) = explicit_type_token {
+            match tt.as_str() {
+                "U8" => { self.suffix = "U8"; self.min_val = 0i64; self.max_val = 255; ("U8", 0, 255) }
+                "U16" => { self.suffix = "U16"; self.min_val = 0; self.max_val = 65_535; ("U16", 0, 65_535) }
+                "U32" => { self.suffix = "U32"; self.min_val = 0; self.max_val = 4_294_967_295; ("U32", 0, 4_294_967_295) }
+                "I8" => { self.suffix = "I8"; self.min_val = -128; self.max_val = 127; ("I8", -128, 127) }
+                "I16" => { self.suffix = "I16"; self.min_val = -32_768; self.max_val = 32_767; ("I16", -32_768, 32_767) }
+                "I32" => { self.suffix = "I32"; self.min_val = -2_147_483_648; self.max_val = 2_147_483_647; ("I32", -2_147_483_648, 2_147_483_647) }
+                _ => return Err(format!("unknown type '{}'", tt)),
+            }
+        } else {
+            // Will be inferred from initializer; keep current context.
+            (self.suffix, self.min_val, self.max_val)
+        };
+
         // Expect '='.
         match self.peek() {
             Some(t) if t == "=" => {}
@@ -270,30 +295,25 @@ impl ParseState {
         }
         self.consume();
 
-        // Parse the initializer expression.
+        // Parse the initializer expression (with context set to target type).
         let value = self.parse_expression()?;
 
-        // Validate range against declared/inferred type.
-        let (min_val, max_val, type_name) = if let Some(ref tt) = explicit_type_token {
-            match tt.as_str() {
-                "U8" => (0i64, 255, "U8"),
-                "U16" => (0, 65_535, "U16"),
-                "U32" => (0, 4_294_967_295, "U32"),
-                "I8" => (-128, 127, "I8"),
-                "I16" => (-32_768, 32_767, "I16"),
-                "I32" => (-2_147_483_648, 2_147_483_647, "I32"),
-                _ => return Err(format!("unknown type '{}'", tt)),
-            }
-        } else {
-            // Use the expression context bounds (inferred from initializer).
-            (self.min_val, self.max_val, self.suffix)
-        };
-        if value < min_val || value > max_val {
-            return Err(format!("value {} out of range for {}", value, type_name));
+        if value < target_min_val || value > target_max_val {
+            return Err(format!("value {} out of range for {}", value, target_suffix));
         }
 
-        // Store in environment.
-        self.env.insert(var_name, value);
+        // If no explicit type, infer from initializer literal and update context.
+        let stored_suffix = if explicit_type_token.is_some() {
+            target_suffix
+        } else {
+            self.suffix  // Already set by parse_value during expression evaluation.
+        };
+
+        // Check for variable redeclaration.
+        if self.env.contains_key(&var_name) {
+            return Err(format!("variable '{}' already declared", var_name));
+        };
+        self.env.insert(var_name, (value, stored_suffix));
 
         // Consume trailing ';'.
         if let Some(t) = self.peek() {
@@ -630,5 +650,23 @@ mod tests {
     fn test_interpret_tuff_let_type_inference() {
         // Let with type inferred from initializer suffix, then return the value
         assert_eq!(interpret_tuff("let y = 100U8; y"), Ok(100));
+    }
+
+    #[test]
+    fn test_interpret_tuff_variable_redeclaration() {
+        // Redeclaring a variable should error
+        assert!(interpret_tuff("let y = 100U8; let y = 200U8;").is_err());
+    }
+
+    #[test]
+    fn test_interpret_tuff_type_mismatch_let() {
+        // Declared type U8 but initializer is U16 — types don't match, should error
+        assert!(interpret_tuff("let y : U8 = 100U16;").is_err());
+    }
+
+    #[test]
+    fn test_interpret_tuff_type_mismatch_variable_assignment() {
+        // Variable y is U16, but x expects U8 — types don't match, should error
+        assert!(interpret_tuff("let y = 100U16; let x : U8 = y;").is_err());
     }
 }
