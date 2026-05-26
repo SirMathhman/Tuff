@@ -163,6 +163,28 @@ static int test_execute_tuff_read_u16(void)
     return 0;
 }
 
+static int test_execute_tuff_read_u16_extra(void)
+{
+    int ret = execute_tuff("read<U16>()", "100 20");
+    printf("    (execute_tuff returned %d)\n", ret);
+    TEST("execute_tuff(\"read<U16>()\") with stdin \"100 20\" returns 100");
+    ASSERT(ret == 100,
+           "execute_tuff(\"read<U16>()\", \"100 20\") should return 100");
+    return 0;
+}
+
+static int test_compile_read_u7_error(void)
+{
+    TEST("compile(\"read<U7>()\") sets UnsupportedBitWidth error");
+    clear_compile_error();
+    const char *result = compile_tuff_to_c("read<U7>()");
+    ASSERT(result == NULL, "compile_tuff_to_c should return NULL");
+    ASSERT(has_compile_error() == true, "has_compile_error should be true");
+    ASSERT(get_compile_error() == UnsupportedBitWidth,
+           "error should be UnsupportedBitWidth");
+    return 0;
+}
+
 int main(void)
 {
     int failed = 0;
@@ -176,6 +198,8 @@ int main(void)
     failed += test_execute_tuff_empty();
     failed += test_execute_tuff_read_u8();
     failed += test_execute_tuff_read_u16();
+    failed += test_execute_tuff_read_u16_extra();
+    failed += test_compile_read_u7_error();
 
     printf("\n%d / %d tests passed\n", tests_passed, tests_run);
 

@@ -5,8 +5,28 @@
 #include <stdlib.h>
 #include "compile.h"
 
+static CompileError compile_error = NoError;
+
+void clear_compile_error(void)
+{
+    compile_error = NoError;
+}
+
+bool has_compile_error(void)
+{
+    return compile_error != NoError;
+}
+
+CompileError get_compile_error(void)
+{
+    return compile_error;
+}
+
 const char *compile_tuff_to_c(const char *input)
 {
+    clear_compile_error();
+
+    /* Parse read<U{N}>() pattern generically */
     /* Parse read<U{N}>() pattern generically */
     {
         const char *prefix = "read<U";
@@ -45,8 +65,8 @@ const char *compile_tuff_to_c(const char *input)
                 }
                 else
                 {
-                    /* Unsupported bit width, fall through to default */
-                    goto default_case;
+                    compile_error = UnsupportedBitWidth;
+                    return NULL;
                 }
 
                 /* Build the generated C code */
@@ -81,7 +101,6 @@ const char *compile_tuff_to_c(const char *input)
         }
     }
 
-default_case:
     /* Default: emit program that prints the input string */
     const char *template_prefix =
         "#include <stdio.h>\n"
