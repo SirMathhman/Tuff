@@ -428,8 +428,8 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
         env: HashMap::new(),
     };
 
-    // Top-level call — EOF-terminated, requires a final expression.
-    let result = state.parse_statements(None, true)?;
+    // Top-level call — EOF-terminated, no-op if only statements (returns 0).
+    let result = state.parse_statements(None, false)?;
 
     Ok(result)
 }
@@ -590,6 +590,15 @@ mod tests {
         assert_eq!(
             interpret_tuff("let y : U8 = { let x : U8 = 3U8 + 2U8; x } * 5U8; y"),
             Ok(25)
+        );
+    }
+
+    #[test]
+    fn test_interpret_tuff_top_level_let_noop() {
+        // Top-level let with no final expression is a no-op, returns 0
+        assert_eq!(
+            interpret_tuff("let y : U8 = { let x : U8 = 3U8 + 2U8; x } * 5U8;"),
+            Ok(0)
         );
     }
 }
