@@ -42,6 +42,104 @@ fn parse_value(token: &str) -> Result<ParsedValue, String> {
     Err(format!("no valid suffix found in '{}'", token))
 }
 
+// Internal state passed through the recursive descent parser.
+struct ParseState<'a> {
+    tokens: Vec<&'a str>,
+    pos: usize,
+    suffix: &'static str,
+    min_val: i64,
+    max_val: i64,
+}
+
+impl<'a> ParseState<'a> {
+    // Check that a value fits within the type bounds.
+    fn check_range(&self, val: i64) -> Result<i64, String> {
+        if val < self.min_val || val > self.max_val {
+            Err(format!("result {} out of range for {}", val, self.suffix))
+        } else {
+            Ok(val)
+        }
+    }
+
+    // Consume and return the current token.
+    fn consume(&mut self) -> &'a str {
+        let tok = self.tokens[self.pos];
+        self.pos += 1;
+        tok
+    }
+
+    // Return the current token (or None at EOF).
+    fn peek(&self) -> Option<&'a str> {
+        self.tokens.get(self.pos).copied()
+    }
+
+    /* ---- precedence levels (lowest → highest) ---- */
+
+    // expression : term (('+' | '-') term)*
+    fn parse_expression(&mut self) -> Result<i64, String> {
+        let mut result = self.parse_term()?;
+
+        while let Some(op) = self.peek() {
+            match op {
+                "+" | "-" => {
+                    self.consume(); // eat operator
+                    let rhs = self.parse_term()?;
+                    result = match op {
+                        "+" => self.check_range(result + rhs)?,
+                        "-" => self.check_range(result - rhs)?,
+                        _ => unreachable!(),
+                    };
+                }
+                _ => break,
+            }
+        }
+
+        Ok(result)
+    }
+
+    // term : factor (('*' | '/') factor)*
+    fn parse_term(&mut self) -> Result<i64, String> {
+        let mut result = self.parse_factor()?;
+
+        while let Some(op) = self.peek() {
+            match op {
+                "*" | "/" => {
+                    self.consume(); // eat operator
+                    let rhs = self.parse_factor()?;
+                    result = match op {
+                        "*" => self.check_range(result * rhs)?,
+                        "/" => {
+                            if rhs == 0 {
+                                return Err("division by zero".to_string());
+                            }
+                            self.check_range(result / rhs)?
+                        }
+                        _ => unreachable!(),
+                    };
+                }
+                _ => break,
+            }
+        }
+
+        Ok(result)
+    }
+
+    // factor : value (with type-checking against the first operand's type)
+    fn parse_factor(&mut self) -> Result<i64, String> {
+        let tok = self.consume();
+        let parsed = parse_value(tok)?;
+
+        if parsed.suffix != self.suffix {
+            return Err(format!(
+                "cannot use {} and {}, types must match",
+                self.suffix, parsed.suffix
+            ));
+        }
+
+        Ok(parsed.num)
+    }
+}
+
 // Feel free to change param type if required
 fn interpret_tuff(source: &str) -> Result<i64, String> {
     let source = source.trim();
@@ -55,54 +153,26 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
         return Ok(0);
     }
 
-    // Parse the first value and establish the type for all operands
+    // Parse the first value to establish the type for all operands.
     let first_parsed = parse_value(tokens[0])?;
-    let suffix = first_parsed.suffix;
-    let min_val = first_parsed.min_val;
-    let max_val = first_parsed.max_val;
 
-    let mut sum = first_parsed.num;
+    let mut state = ParseState {
+        tokens,
+        pos: 0,
+        suffix: first_parsed.suffix,
+        min_val: first_parsed.min_val,
+        max_val: first_parsed.max_val,
+    };
 
-    // Alternate operator/value pairs: tokens[1], tokens[2], ...
-    let mut i = 1;
-    while i < tokens.len() {
-        let op = tokens[i];
-        if i + 1 >= tokens.len() {
-            return Err(format!("unexpected end of expression after '{}'", op));
-        }
+    // Top-level call to the lowest-precedence rule.
+    let result = state.parse_expression()?;
 
-        let parsed = parse_value(tokens[i + 1])?;
-
-        // All operands must have the same type
-        if parsed.suffix != suffix {
-            return Err(format!(
-                "cannot use {} and {}, types must match",
-                suffix, parsed.suffix
-            ));
-        }
-
-        sum = match op {
-            "+" => sum + parsed.num,
-            "-" => sum - parsed.num,
-            "*" => sum * parsed.num,
-            "/" => {
-                if parsed.num == 0 {
-                    return Err("division by zero".to_string());
-                }
-                sum / parsed.num
-            }
-            _ => return Err(format!("unknown operator '{}'", op)),
-        };
-
-        // Check result fits within the operand type's range after each operation
-        if sum < min_val || sum > max_val {
-            return Err(format!("result {} out of range for {}", sum, suffix));
-        }
-
-        i += 2;
+    // Ensure we consumed all tokens (no trailing garbage).
+    if state.pos < state.tokens.len() {
+        return Err(format!("unexpected token '{}'", state.peek().unwrap()));
     }
 
-    Ok(sum)
+    Ok(result)
 }
 
 use std::io::{self, BufRead, Write};
@@ -226,5 +296,11 @@ mod tests {
     fn test_interpret_tuff_multiplication_and_subtraction() {
         // 3 * 2 - 1 = 5
         assert_eq!(interpret_tuff("3U8 * 2U8 - 1U8"), Ok(5));
+    }
+
+    #[test]
+    fn test_interpret_tuff_operator_precedence() {
+        // 3 + 2 * 5 = 13 (multiplication before addition)
+        assert_eq!(interpret_tuff("3U8 + 2U8 * 5U8"), Ok(13));
     }
 }
