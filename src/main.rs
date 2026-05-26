@@ -1,3 +1,15 @@
+use std::collections::HashMap;
+
+/// Type definitions for Tuff suffixed integers: (suffix, min_value, max_value).
+const TYPE_BOUNDS: [(&str, i64, i64); 6] = [
+    ("U8", 0i64, 255),
+    ("U16", 0, 65_535),
+    ("U32", 0, 4_294_967_295),
+    ("I8", -128, 127),
+    ("I16", -32_768, 32_767),
+    ("I32", -2_147_483_648, 2_147_483_647),
+];
+
 /// Represents a parsed Tuff value with its type bounds.
 struct ParsedValue {
     num: i64,
@@ -13,17 +25,7 @@ fn parse_value(token: &str) -> Result<ParsedValue, String> {
         return Err("empty value".to_string());
     }
 
-    // (suffix, min_val, max_val)
-    let types = [
-        ("U8", 0i64, 255),
-        ("U16", 0, 65_535),
-        ("U32", 0, 4_294_967_295),
-        ("I8", -128, 127),
-        ("I16", -32_768, 32_767),
-        ("I32", -2_147_483_648, 2_147_483_647),
-    ];
-
-    for &(suffix, min_val, max_val) in &types {
+    for &(suffix, min_val, max_val) in &TYPE_BOUNDS {
         if let Some(num_str) = token.strip_suffix(suffix) {
             if let Ok(num) = num_str.parse::<i64>() {
                 if num < min_val || num > max_val {
@@ -49,6 +51,7 @@ struct ParseState {
     suffix: &'static str,
     min_val: i64,
     max_val: i64,
+    env: HashMap<String, i64>, // variable name -> value (type checked at declaration time)
 }
 
 impl ParseState {
@@ -132,25 +135,44 @@ impl ParseState {
         Ok(result)
     }
 
-    // factor : '(' expression ')' | '{' expression '}' | value (with type-checking against the first operand's type)
+    // factor : '(' expression ')' | '{' statements '}' | identifier | value (with type-checking against the first operand's type)
     fn parse_factor(&mut self) -> Result<i64, String> {
-        let tok = self.consume();
+        let tok = match self.peek() {
+            Some(t) => t.to_string(),
+            None => return Err("unexpected end of input".to_string()),
+        };
 
         if tok == "(" || tok == "{" {
             // Determine expected closing delimiter.
             let close_char = if tok == "(" { ')' } else { '}' };
+            self.consume(); // eat opening delimiter
 
-            // Evaluate inner expression and check for closing delimiter.
-            match (self.parse_expression(), self.peek()) {
-                (Ok(v), Some(t)) if t == close_char.to_string() => {
-                    self.consume(); // eat closing delimiter
-                    Ok(v)
+            if tok == "(" {
+                // Parentheses: simple expression grouping (no variable support).
+                match (self.parse_expression(), self.peek()) {
+                    (Ok(v), Some(t)) if t == close_char.to_string() => {
+                        self.consume(); // eat closing delimiter
+                        Ok(v)
+                    }
+                    (Err(e), _) => Err(e),
+                    _ => Err(format!(
+                        "expected '{}', found nothing or wrong token",
+                        close_char
+                    )),
                 }
-                (Err(e), _) => Err(e),
-                _ => Err(format!("expected '{}', found nothing or wrong token", close_char)),
+            } else {
+                // Block: parse let-statements and final expression.
+                self.parse_block_body(close_char)
+            }
+        } else if tok == "let" || is_identifier(&tok) {
+            // Variable reference (identifier used in an expression context).
+            self.consume();
+            match self.env.get(&tok) {
+                Some(&val) => Ok(val),
+                None => Err(format!("undefined variable '{}'", tok)),
             }
         } else {
-            let parsed = parse_value(tok)?;
+            let parsed = parse_value(&tok)?;
 
             if parsed.suffix != self.suffix {
                 return Err(format!(
@@ -159,9 +181,132 @@ impl ParseState {
                 ));
             }
 
+            // Consume the value token.
+            self.consume();
             Ok(parsed.num)
         }
     }
+
+    // Parse a block body: sequence of let-statements followed by a final expression.
+    fn parse_block_body(&mut self, close_char: char) -> Result<i64, String> {
+        let mut last_value = 0i64;
+        let mut has_expression = false;
+
+        loop {
+            match self.peek() {
+                Some(t) if t == close_char.to_string() => {
+                    // Closing delimiter reached — return the value of the last expression.
+                    self.consume();
+                    break;
+                }
+                Some(t) if t == "let" => {
+                    // Parse let x : TYPE = expr;
+                    self.parse_let_statement()?;
+                    has_expression = false; // a statement doesn't set block value
+                }
+                _ => {
+                    // Regular expression — becomes the last value.
+                    last_value = self.parse_expression()?;
+                    has_expression = true;
+
+                    // Optionally consume trailing ';'.
+                    if let Some(t) = self.peek() {
+                        if t == ";" {
+                            self.consume();
+                        }
+                    }
+                }
+            }
+        }
+
+        if !has_expression && close_char == '}' {
+            Err("block has no final expression".to_string())
+        } else {
+            Ok(last_value)
+        }
+    }
+
+    // Parse: let <identifier> : <TypeSuffix> = <expression>;
+    fn parse_let_statement(&mut self) -> Result<(), String> {
+        // Consume 'let'.
+        self.consume();
+
+        // Expect identifier.
+        let var_name = match self.peek() {
+            Some(t) if is_identifier(t) => t.to_string(),
+            _ => return Err("expected variable name after 'let'".to_string()),
+        };
+        self.consume();
+
+        // Expect ':' type annotation separator (already tokenized as separate token).
+        match self.peek() {
+            Some(t) if t == ":" => {}
+            _ => return Err("expected ':' after variable name in 'let'".to_string()),
+        }
+        self.consume();
+
+        // Expect type suffix (e.g., "U8", "I32").
+        let type_token = match self.peek() {
+            Some(t) if is_type_suffix(t) => t.to_string(),
+            _ => return Err("expected type suffix after ':' in 'let'".to_string()),
+        };
+        self.consume();
+
+        // Expect '='.
+        match self.peek() {
+            Some(t) if t == "=" => {}
+            _ => return Err("expected '=' in 'let' statement".to_string()),
+        }
+        self.consume();
+
+        // Parse the initializer expression.
+        let value = self.parse_expression()?;
+
+        // Validate range against declared type.
+        let (min_val, max_val) = match type_token.as_str() {
+            "U8" => (0i64, 255),
+            "U16" => (0, 65_535),
+            "U32" => (0, 4_294_967_295),
+            "I8" => (-128, 127),
+            "I16" => (-32_768, 32_767),
+            "I32" => (-2_147_483_648, 2_147_483_647),
+            _ => return Err(format!("unknown type '{}'", type_token)),
+        };
+        if value < min_val || value > max_val {
+            return Err(format!("value {} out of range for {}", value, type_token));
+        }
+
+        // Store in environment.
+        self.env.insert(var_name, value);
+
+        // Consume trailing ';'.
+        if let Some(t) = self.peek() {
+            if t == ";" {
+                self.consume();
+            } else {
+                return Err("expected ';' at end of 'let' statement".to_string());
+            }
+        } else {
+            return Err("expected ';' at end of 'let' statement".to_string());
+        }
+
+        Ok(())
+    }
+}
+
+// Check if a token is an identifier (starts with lowercase letter or underscore, alphanumeric).
+fn is_identifier(token: &str) -> bool {
+    let mut chars = token.chars();
+    let first_ok = match chars.next() {
+        Some(c) if c.is_lowercase() || c == '_' => true,
+        _ => false,
+    };
+    first_ok && chars.all(|c| c.is_alphanumeric())
+}
+
+// Check if a token is a valid type suffix.
+fn is_type_suffix(token: &str) -> bool {
+    matches!(token, "U8" | "U16" | "U32" | "I8" | "I16" | "I32")
 }
 
 // Split whitespace-delimited tokens further so that leading/trailing '(' and ')' become their own tokens.
@@ -175,9 +320,9 @@ fn tokenize(source: &str) -> Vec<String> {
             remaining = &remaining[1..];
         }
         if !remaining.is_empty() {
-            // Count trailing grouping delimiters (')' or '}') so we can push them AFTER the core token.
+            // Count trailing grouping delimiters (')' or '}' or ';') so we can push them AFTER the core token.
             let mut trimmed = remaining;
-            while trimmed.ends_with(')') || trimmed.ends_with('}') {
+            while trimmed.ends_with(')') || trimmed.ends_with('}') || trimmed.ends_with(';') {
                 trimmed = &trimmed[..trimmed.len() - 1];
             }
             if !trimmed.is_empty() {
@@ -186,7 +331,11 @@ fn tokenize(source: &str) -> Vec<String> {
             // Now push the trailing delimiter tokens.
             let trailing_count = remaining.len() - trimmed.len();
             for i in (0..trailing_count).rev() {
-                result.push(remaining[remaining.len() - trailing_count + i..remaining.len() - trailing_count + 1].to_string());
+                result.push(
+                    remaining[remaining.len() - trailing_count + i
+                        ..remaining.len() - trailing_count + 1]
+                        .to_string(),
+                );
             }
         }
     }
@@ -217,14 +366,49 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
     if idx >= tokens.len() {
         return Err("empty expression".to_string());
     }
-    let first_parsed = parse_value(&tokens[idx])?;
 
-    let mut state = ParseState {
+    // Helper to look up type bounds for a suffix string.
+    let lookup_type_bounds = |suffix: &str| -> Option<(&'static str, i64, i64)> {
+        TYPE_BOUNDS.iter().find(|(s, _, _)| *s == suffix).map(|&(s, mn, mx)| (s, mn, mx))
+    };
+
+    // Try to determine the type: either from a let declaration or by parsing the first value.
+    let mut inferred_suffix: Option<&'static str> = None;
+    let mut inferred_min: i64 = 0;
+    let mut inferred_max: i64 = 0;
+
+    if tokens[idx] == "let" {
+        // Skip past `let <identifier> : <TypeSuffix> = ... ;` to infer type from the declaration.
+        let mut scan_idx = idx + 1; // skip 'let'
+        if scan_idx < tokens.len() && is_identifier(&tokens[scan_idx]) {
+            scan_idx += 1; // skip identifier
+        }
+        if scan_idx < tokens.len() && tokens[scan_idx] == ":" {
+            scan_idx += 1; // skip ':'
+        }
+        if scan_idx < tokens.len() && is_type_suffix(&tokens[scan_idx]) {
+            if let Some((suffix, mn, mx)) = lookup_type_bounds(&tokens[scan_idx]) {
+                inferred_suffix = Some(suffix);
+                inferred_min = mn;
+                inferred_max = mx;
+            }
+        }
+    }
+
+    let (suffix, min_val, max_val) = if let Some(s) = inferred_suffix {
+        (s, inferred_min, inferred_max)
+    } else {
+        let first_parsed = parse_value(&tokens[idx])?;
+        (first_parsed.suffix, first_parsed.min_val, first_parsed.max_val)
+    };
+
+   let mut state = ParseState {
         tokens,
         pos: 0,
-        suffix: first_parsed.suffix,
-        min_val: first_parsed.min_val,
-        max_val: first_parsed.max_val,
+        suffix,
+        min_val,
+        max_val,
+        env: HashMap::new(),
     };
 
     // Top-level call to the lowest-precedence rule.
@@ -377,5 +561,11 @@ mod tests {
     fn test_interpret_tuff_block_grouping() {
         // {3 + 2} * 5 = 25 (block braces also override precedence)
         assert_eq!(interpret_tuff("{ 3U8 + 2U8 } * 5U8"), Ok(25));
+    }
+
+    #[test]
+    fn test_interpret_tuff_let_in_block() {
+        // let x = 3 + 2; x * 5 = 25
+        assert_eq!(interpret_tuff("{ let x : U8 = 3U8 + 2U8; x } * 5U8"), Ok(25));
     }
 }
