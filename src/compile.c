@@ -235,6 +235,123 @@ const char *compile_tuff_to_c(const char *input)
     }
 
     /* ------------------------------------------------------------------
+     * Let-binding path:  let <name> : <Type> = read<...>(); <expr>
+     * ------------------------------------------------------------------ */
+    {
+        const char *let_pat = "let ";
+        const char *colon_pat = " : ";
+        const char *eq_pat = " = ";
+        const char *semi_pat = ";";
+
+        const char *lp = strstr(input, let_pat);
+        if (lp == input)
+        {
+            const char *name_start = lp + 4; /* past "let " */
+            const char *colon = strstr(name_start, colon_pat);
+            if (colon)
+            {
+                /* Extract variable name */
+                size_t name_len = colon - name_start;
+                char varname[64];
+                if (name_len > 0 && name_len < sizeof(varname))
+                {
+                    strncpy(varname, name_start, name_len);
+                    varname[name_len] = '\0';
+
+                    /* Extract type string (e.g. "U8", "I16") */
+                    const char *type_start = colon + 3; /* past " : " */
+                    const char *eq = strstr(type_start, eq_pat);
+                    if (eq)
+                    {
+                        size_t type_len = eq - type_start;
+                        char type_str[16];
+                        if (type_len > 0 && type_len < sizeof(type_str))
+                        {
+                            strncpy(type_str, type_start, type_len);
+                            type_str[type_len] = '\0';
+
+                            /* Parse type to bits + signedness */
+                            int let_bits = 0;
+                            int let_signed = 0;
+                            if (type_str[0] == 'U' || type_str[0] == 'I')
+                            {
+                                let_signed = (type_str[0] == 'I');
+                                let_bits = atoi(type_str + 1);
+                            }
+
+                            /* Look up C type */
+                            const struct TypeInfo *let_ti = NULL;
+                            for (int i = 0; i < num_types; i++)
+                            {
+                                if (bits_values[i] == let_bits)
+                                {
+                                    let_ti = let_signed ? &stypes[i] : &types[i];
+                                    break;
+                                }
+                            }
+
+                            if (let_ti)
+                            {
+                                /* Find the read<...>() after = */
+                                const char *read_u = strstr(eq + 3, "read<U");
+                                const char *read_i = strstr(eq + 3, "read<I");
+                                const char *read_call = NULL;
+                                if (read_u && (!read_i || read_u < read_i))
+                                    read_call = read_u;
+                                else
+                                    read_call = read_i;
+
+                                if (read_call)
+                                {
+                                    const char *close = strstr(read_call + 6, ">()");
+                                    if (close)
+                                    {
+                                        /* Find semicolon after the read call */
+                                        const char *sc = strstr(close + 3, semi_pat);
+                                        if (sc)
+                                        {
+                                            /* Body is everything after "; " */
+                                            const char *body = sc + 1;
+                                            while (*body == ' ')
+                                                body++;
+
+                                            /* Generate C code */
+                                            char code[4096];
+                                            int pos = 0;
+
+                                            pos += snprintf(code + pos, sizeof(code) - pos,
+                                                            "#include <stdio.h>\n"
+                                                            "int main(void)\n"
+                                                            "{\n");
+
+                                            pos += snprintf(code + pos, sizeof(code) - pos,
+                                                            "    %s %s;\n"
+                                                            "    if (scanf(\"%s\", &%s) != 1)\n"
+                                                            "        return 1;\n",
+                                                            let_ti->ctype, varname,
+                                                            let_ti->scanf_fmt, varname);
+
+                                            pos += snprintf(code + pos, sizeof(code) - pos,
+                                                            "    return (int)(%s);\n"
+                                                            "}\n",
+                                                            body);
+
+                                            char *result = malloc(pos + 1);
+                                            if (result)
+                                                memcpy(result, code, pos + 1);
+                                            return result;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /* ------------------------------------------------------------------
      * Default: emit program that prints the input string
      * ------------------------------------------------------------------ */
     const char *template_prefix =
