@@ -43,15 +43,15 @@ fn parse_value(token: &str) -> Result<ParsedValue, String> {
 }
 
 // Internal state passed through the recursive descent parser.
-struct ParseState<'a> {
-    tokens: Vec<&'a str>,
+struct ParseState {
+    tokens: Vec<String>,
     pos: usize,
     suffix: &'static str,
     min_val: i64,
     max_val: i64,
 }
 
-impl<'a> ParseState<'a> {
+impl ParseState {
     // Check that a value fits within the type bounds.
     fn check_range(&self, val: i64) -> Result<i64, String> {
         if val < self.min_val || val > self.max_val {
@@ -61,16 +61,16 @@ impl<'a> ParseState<'a> {
         }
     }
 
-    // Consume and return the current token.
-    fn consume(&mut self) -> &'a str {
-        let tok = self.tokens[self.pos];
+    // Consume and return a reference to the current token.
+    fn consume(&mut self) -> &str {
+        let tok = &self.tokens[self.pos];
         self.pos += 1;
-        tok
+        tok.as_str()
     }
 
-    // Return the current token (or None at EOF).
-    fn peek(&self) -> Option<&'a str> {
-        self.tokens.get(self.pos).copied()
+    // Return a reference to the current token (or None at EOF).
+    fn peek(&self) -> Option<&str> {
+        self.tokens.get(self.pos).map(|s| s.as_str())
     }
 
     /* ---- precedence levels (lowest → highest) ---- */
@@ -79,12 +79,16 @@ impl<'a> ParseState<'a> {
     fn parse_expression(&mut self) -> Result<i64, String> {
         let mut result = self.parse_term()?;
 
-        while let Some(op) = self.peek() {
-            match op {
+        loop {
+            let op = match self.peek() {
+                Some(t) => t.to_string(),
+                None => break,
+            };
+            match op.as_str() {
                 "+" | "-" => {
                     self.consume(); // eat operator
                     let rhs = self.parse_term()?;
-                    result = match op {
+                    result = match op.as_str() {
                         "+" => self.check_range(result + rhs)?,
                         "-" => self.check_range(result - rhs)?,
                         _ => unreachable!(),
@@ -101,12 +105,16 @@ impl<'a> ParseState<'a> {
     fn parse_term(&mut self) -> Result<i64, String> {
         let mut result = self.parse_factor()?;
 
-        while let Some(op) = self.peek() {
-            match op {
+        loop {
+            let op = match self.peek() {
+                Some(t) => t.to_string(),
+                None => break,
+            };
+            match op.as_str() {
                 "*" | "/" => {
                     self.consume(); // eat operator
                     let rhs = self.parse_factor()?;
-                    result = match op {
+                    result = match op.as_str() {
                         "*" => self.check_range(result * rhs)?,
                         "/" => {
                             if rhs == 0 {
@@ -124,20 +132,61 @@ impl<'a> ParseState<'a> {
         Ok(result)
     }
 
-    // factor : value (with type-checking against the first operand's type)
+    // factor : '(' expression ')' | value (with type-checking against the first operand's type)
     fn parse_factor(&mut self) -> Result<i64, String> {
         let tok = self.consume();
-        let parsed = parse_value(tok)?;
 
-        if parsed.suffix != self.suffix {
-            return Err(format!(
-                "cannot use {} and {}, types must match",
-                self.suffix, parsed.suffix
-            ));
+        if tok == "(" {
+            let result = self.parse_expression()?;
+            match self.peek() {
+                Some(t) if t == ")" => {
+                    self.consume(); // eat ')'
+                    Ok(result)
+                }
+                _ => Err("expected ')', found nothing or wrong token".to_string()),
+            }
+        } else {
+            let parsed = parse_value(tok)?;
+
+            if parsed.suffix != self.suffix {
+                return Err(format!(
+                    "cannot use {} and {}, types must match",
+                    self.suffix, parsed.suffix
+                ));
+            }
+
+            Ok(parsed.num)
         }
-
-        Ok(parsed.num)
     }
+}
+
+// Split whitespace-delimited tokens further so that leading/trailing '(' and ')' become their own tokens.
+fn tokenize(source: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    for word in source.split_whitespace() {
+        // Strip leading parens, each as its own token.
+        let mut remaining = word;
+        while remaining.starts_with('(') {
+            result.push("(".to_string());
+            remaining = &remaining[1..];
+        }
+        if !remaining.is_empty() {
+            // Count trailing ')' so we can push them AFTER the core token.
+            let mut trimmed = remaining;
+            while trimmed.ends_with(')') {
+                trimmed = &trimmed[..trimmed.len() - 1];
+            }
+            if !trimmed.is_empty() {
+                result.push(trimmed.to_string());
+            }
+            // Now push the trailing ')' tokens.
+            let trailing_count = remaining.len() - trimmed.len();
+            for _ in 0..trailing_count {
+                result.push(")".to_string());
+            }
+        }
+    }
+    result
 }
 
 // Feel free to change param type if required
@@ -147,14 +196,24 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
         return Ok(0);
     }
 
-    // Tokenize by whitespace: ["3U8", "+", "2U8", "-", "1U8"]
-    let tokens: Vec<&str> = source.split_whitespace().collect();
-    if tokens.is_empty() {
+    // Tokenize by whitespace and parentheses.
+    let token_strings: Vec<String> = tokenize(source);
+    if token_strings.is_empty() {
         return Ok(0);
     }
 
-    // Parse the first value to establish the type for all operands.
-    let first_parsed = parse_value(tokens[0])?;
+    // Convert to owned strings so ParseState can hold them.
+    let tokens: Vec<String> = token_strings;
+
+    // Parse the first value to establish the type for all operands (skip leading '(').
+    let mut idx = 0;
+    while idx < tokens.len() && tokens[idx] == "(" {
+        idx += 1;
+    }
+    if idx >= tokens.len() {
+        return Err("empty expression".to_string());
+    }
+    let first_parsed = parse_value(&tokens[idx])?;
 
     let mut state = ParseState {
         tokens,
@@ -302,5 +361,11 @@ mod tests {
     fn test_interpret_tuff_operator_precedence() {
         // 3 + 2 * 5 = 13 (multiplication before addition)
         assert_eq!(interpret_tuff("3U8 + 2U8 * 5U8"), Ok(13));
+    }
+
+    #[test]
+    fn test_interpret_tuff_parentheses_grouping() {
+        // (3 + 2) * 5 = 25 (parentheses override precedence)
+        assert_eq!(interpret_tuff("(3U8 + 2U8) * 5U8"), Ok(25));
     }
 }
