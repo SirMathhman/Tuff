@@ -49,32 +49,57 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
         return Ok(0);
     }
 
-    // Split on '+' and parse each term (supports arbitrarily many operands)
-    let terms: Vec<&str> = source.split('+').collect();
+    // Tokenize by whitespace: ["3U8", "+", "2U8", "-", "1U8"]
+    let tokens: Vec<&str> = source.split_whitespace().collect();
+    if tokens.is_empty() {
+        return Ok(0);
+    }
 
-    let first_parsed = parse_value(terms[0])?;
+    // Parse the first value and establish the type for all operands
+    let first_parsed = parse_value(tokens[0])?;
     let suffix = first_parsed.suffix;
     let min_val = first_parsed.min_val;
     let max_val = first_parsed.max_val;
 
-    let mut sum = 0i64;
-    for term in &terms {
-        let parsed = parse_value(term)?;
+    let mut sum = first_parsed.num;
+
+    // Alternate operator/value pairs: tokens[1], tokens[2], ...
+    let mut i = 1;
+    while i < tokens.len() {
+        let op = tokens[i];
+        if i + 1 >= tokens.len() {
+            return Err(format!("unexpected end of expression after '{}'", op));
+        }
+
+        let parsed = parse_value(tokens[i + 1])?;
 
         // All operands must have the same type
         if parsed.suffix != suffix {
             return Err(format!(
-                "cannot add {} and {}, types must match",
+                "cannot use {} and {}, types must match",
                 suffix, parsed.suffix
             ));
         }
 
-        sum += parsed.num;
+        sum = match op {
+            "+" => sum + parsed.num,
+            "-" => sum - parsed.num,
+            "*" => sum * parsed.num,
+            "/" => {
+                if parsed.num == 0 {
+                    return Err("division by zero".to_string());
+                }
+                sum / parsed.num
+            }
+            _ => return Err(format!("unknown operator '{}'", op)),
+        };
 
-        // Check result fits within the operand type's range after each addition
+        // Check result fits within the operand type's range after each operation
         if sum < min_val || sum > max_val {
             return Err(format!("result {} out of range for {}", sum, suffix));
         }
+
+        i += 2;
     }
 
     Ok(sum)
@@ -189,5 +214,17 @@ mod tests {
     fn test_interpret_tuff_addition_multiple_terms() {
         // Support infinitely many terms: 1 + 2 + 3 = 6
         assert_eq!(interpret_tuff("1U8 + 2U8 + 3U8"), Ok(6));
+    }
+
+    #[test]
+    fn test_interpret_tuff_subtraction() {
+        // 3 + 2 - 1 = 4
+        assert_eq!(interpret_tuff("3U8 + 2U8 - 1U8"), Ok(4));
+    }
+
+    #[test]
+    fn test_interpret_tuff_multiplication_and_subtraction() {
+        // 3 * 2 - 1 = 5
+        assert_eq!(interpret_tuff("3U8 * 2U8 - 1U8"), Ok(5));
     }
 }
