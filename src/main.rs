@@ -80,8 +80,29 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
     Ok(sum)
 }
 
+use std::io::{self, BufRead, Write};
+
 fn main() {
-    println!("Hello, world!");
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+
+    println!("Tuff REPL. Type an expression (e.g., 1U8 + 2U8) or 'quit' to exit.");
+
+    for line in stdin.lock().lines() {
+        match line {
+            Ok(l) if l.trim().eq_ignore_ascii_case("quit") => break,
+            Ok(l) if l.trim().is_empty() => continue,
+            Ok(l) => {
+                let result = interpret_tuff(&l);
+                match result {
+                    Ok(value) => writeln!(out, "=> {}", value).unwrap(),
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            Err(e) => eprintln!("Read error: {}", e),
+        }
+    }
 }
 
 #[cfg(test)]
