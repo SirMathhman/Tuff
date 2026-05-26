@@ -67,12 +67,42 @@ impl ParseState {
     // Set context bounds based on a type suffix and return the (suffix, min, max) tuple.
     fn set_type_bounds(&mut self, suffix: &str) -> Result<(&'static str, i64, i64), String> {
         match suffix {
-            "U8" => { self.suffix = "U8"; self.min_val = 0i64; self.max_val = 255; Ok(("U8", 0, 255)) }
-            "U16" => { self.suffix = "U16"; self.min_val = 0; self.max_val = 65_535; Ok(("U16", 0, 65_535)) }
-            "U32" => { self.suffix = "U32"; self.min_val = 0; self.max_val = 4_294_967_295; Ok(("U32", 0, 4_294_967_295)) }
-            "I8" => { self.suffix = "I8"; self.min_val = -128; self.max_val = 127; Ok(("I8", -128, 127)) }
-            "I16" => { self.suffix = "I16"; self.min_val = -32_768; self.max_val = 32_767; Ok(("I16", -32_768, 32_767)) }
-            "I32" => { self.suffix = "I32"; self.min_val = -2_147_483_648; self.max_val = 2_147_483_647; Ok(("I32", -2_147_483_648, 2_147_483_647)) }
+            "U8" => {
+                self.suffix = "U8";
+                self.min_val = 0i64;
+                self.max_val = 255;
+                Ok(("U8", 0, 255))
+            }
+            "U16" => {
+                self.suffix = "U16";
+                self.min_val = 0;
+                self.max_val = 65_535;
+                Ok(("U16", 0, 65_535))
+            }
+            "U32" => {
+                self.suffix = "U32";
+                self.min_val = 0;
+                self.max_val = 4_294_967_295;
+                Ok(("U32", 0, 4_294_967_295))
+            }
+            "I8" => {
+                self.suffix = "I8";
+                self.min_val = -128;
+                self.max_val = 127;
+                Ok(("I8", -128, 127))
+            }
+            "I16" => {
+                self.suffix = "I16";
+                self.min_val = -32_768;
+                self.max_val = 32_767;
+                Ok(("I16", -32_768, 32_767))
+            }
+            "I32" => {
+                self.suffix = "I32";
+                self.min_val = -2_147_483_648;
+                self.max_val = 2_147_483_647;
+                Ok(("I32", -2_147_483_648, 2_147_483_647))
+            }
             _ => Err(format!("unknown type '{}'", suffix)),
         }
     }
@@ -297,7 +327,10 @@ impl ParseState {
         };
 
         if !is_mut {
-            return Err(format!("cannot assign to immutable variable '{}'", var_name));
+            return Err(format!(
+                "cannot assign to immutable variable '{}'",
+                var_name
+            ));
         }
 
         // Set context bounds based on the variable's type.
@@ -307,7 +340,10 @@ impl ParseState {
         let value = self.parse_expression()?;
 
         if value < target_min_val || value > target_max_val {
-            return Err(format!("value {} out of range for {}", value, target_suffix));
+            return Err(format!(
+                "value {} out of range for {}",
+                value, target_suffix
+            ));
         }
 
         // Update variable with new value.
@@ -368,12 +404,13 @@ impl ParseState {
 
         // Determine the target type for this let.
         // If explicit, temporarily set context bounds so initializer is checked against them.
-        let (target_suffix, target_min_val, target_max_val) = if let Some(ref tt) = explicit_type_token {
-            self.set_type_bounds(tt.as_str())?
-        } else {
-            // Will be inferred from initializer; keep current context.
-            (self.suffix, self.min_val, self.max_val)
-        };
+        let (target_suffix, target_min_val, target_max_val) =
+            if let Some(ref tt) = explicit_type_token {
+                self.set_type_bounds(tt.as_str())?
+            } else {
+                // Will be inferred from initializer; keep current context.
+                (self.suffix, self.min_val, self.max_val)
+            };
 
         // Expect '='.
         match self.peek() {
@@ -386,14 +423,17 @@ impl ParseState {
         let value = self.parse_expression()?;
 
         if value < target_min_val || value > target_max_val {
-            return Err(format!("value {} out of range for {}", value, target_suffix));
+            return Err(format!(
+                "value {} out of range for {}",
+                value, target_suffix
+            ));
         }
 
         // If no explicit type, infer from initializer literal and update context.
         let stored_suffix = if explicit_type_token.is_some() {
             target_suffix
         } else {
-            self.suffix  // Already set by parse_value during expression evaluation.
+            self.suffix // Already set by parse_value during expression evaluation.
         };
 
         // Check for variable redeclaration.
@@ -761,5 +801,23 @@ mod tests {
     fn test_interpret_tuff_mut_variable_assignment() {
         // Mutable variable: declare with mut, reassign, then use new value
         assert_eq!(interpret_tuff("let mut x = 100U8; x = 20U8; x"), Ok(20));
+    }
+
+    #[test]
+    fn test_interpret_tuff_mut_variable_type_mismatch() {
+        // Assigning a U16 value to a U8 variable should error (cross-type mismatch)
+        assert_eq!(
+            interpret_tuff("let mut x = 100U8; x = 20U16; x"),
+            Err("cannot use U8 and U16, types must match".to_string())
+        );
+    }
+
+    #[test]
+    fn test_interpret_tuff_immutable_variable_assignment() {
+        // Assigning to a non-mut variable should error
+        assert_eq!(
+            interpret_tuff("let x = 100U8; x = 20U8; x"),
+            Err(format!("cannot assign to immutable variable 'x'"))
+        );
     }
 }
