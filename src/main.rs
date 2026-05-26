@@ -132,18 +132,22 @@ impl ParseState {
         Ok(result)
     }
 
-    // factor : '(' expression ')' | value (with type-checking against the first operand's type)
+    // factor : '(' expression ')' | '{' expression '}' | value (with type-checking against the first operand's type)
     fn parse_factor(&mut self) -> Result<i64, String> {
         let tok = self.consume();
 
-        if tok == "(" {
-            let result = self.parse_expression()?;
-            match self.peek() {
-                Some(t) if t == ")" => {
-                    self.consume(); // eat ')'
-                    Ok(result)
+        if tok == "(" || tok == "{" {
+            // Determine expected closing delimiter.
+            let close_char = if tok == "(" { ')' } else { '}' };
+
+            // Evaluate inner expression and check for closing delimiter.
+            match (self.parse_expression(), self.peek()) {
+                (Ok(v), Some(t)) if t == close_char.to_string() => {
+                    self.consume(); // eat closing delimiter
+                    Ok(v)
                 }
-                _ => Err("expected ')', found nothing or wrong token".to_string()),
+                (Err(e), _) => Err(e),
+                _ => Err(format!("expected '{}', found nothing or wrong token", close_char)),
             }
         } else {
             let parsed = parse_value(tok)?;
@@ -164,25 +168,25 @@ impl ParseState {
 fn tokenize(source: &str) -> Vec<String> {
     let mut result = Vec::new();
     for word in source.split_whitespace() {
-        // Strip leading parens, each as its own token.
+        // Strip leading grouping delimiters ('(' or '{'), each as its own token.
         let mut remaining = word;
-        while remaining.starts_with('(') {
-            result.push("(".to_string());
+        while remaining.starts_with('(') || remaining.starts_with('{') {
+            result.push(remaining[..1].to_string());
             remaining = &remaining[1..];
         }
         if !remaining.is_empty() {
-            // Count trailing ')' so we can push them AFTER the core token.
+            // Count trailing grouping delimiters (')' or '}') so we can push them AFTER the core token.
             let mut trimmed = remaining;
-            while trimmed.ends_with(')') {
+            while trimmed.ends_with(')') || trimmed.ends_with('}') {
                 trimmed = &trimmed[..trimmed.len() - 1];
             }
             if !trimmed.is_empty() {
                 result.push(trimmed.to_string());
             }
-            // Now push the trailing ')' tokens.
+            // Now push the trailing delimiter tokens.
             let trailing_count = remaining.len() - trimmed.len();
-            for _ in 0..trailing_count {
-                result.push(")".to_string());
+            for i in (0..trailing_count).rev() {
+                result.push(remaining[remaining.len() - trailing_count + i..remaining.len() - trailing_count + 1].to_string());
             }
         }
     }
@@ -205,9 +209,9 @@ fn interpret_tuff(source: &str) -> Result<i64, String> {
     // Convert to owned strings so ParseState can hold them.
     let tokens: Vec<String> = token_strings;
 
-    // Parse the first value to establish the type for all operands (skip leading '(').
+    // Parse the first value to establish the type for all operands (skip leading grouping delimiters).
     let mut idx = 0;
-    while idx < tokens.len() && tokens[idx] == "(" {
+    while idx < tokens.len() && (tokens[idx] == "(" || tokens[idx] == "{") {
         idx += 1;
     }
     if idx >= tokens.len() {
@@ -367,5 +371,11 @@ mod tests {
     fn test_interpret_tuff_parentheses_grouping() {
         // (3 + 2) * 5 = 25 (parentheses override precedence)
         assert_eq!(interpret_tuff("(3U8 + 2U8) * 5U8"), Ok(25));
+    }
+
+    #[test]
+    fn test_interpret_tuff_block_grouping() {
+        // {3 + 2} * 5 = 25 (block braces also override precedence)
+        assert_eq!(interpret_tuff("{ 3U8 + 2U8 } * 5U8"), Ok(25));
     }
 }
