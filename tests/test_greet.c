@@ -225,6 +225,16 @@ static int test_execute_tuff_let_x_u8(void)
     return 0;
 }
 
+static int test_execute_tuff_let_x_u8_add_x(void)
+{
+    int ret = execute_tuff("let x : U8 = read<U8>(); x + x", "100");
+    printf("    (execute_tuff returned %d)\n", ret);
+    TEST("execute_tuff(\"let x : U8 = read<U8>(); x + x\") with stdin \"100\" returns 200");
+    ASSERT(ret == 200,
+           "execute_tuff(\"let x : U8 = read<U8>(); x + x\", \"100\") should return 200");
+    return 0;
+}
+
 int main(void)
 {
     int failed = 0;
@@ -244,6 +254,7 @@ int main(void)
     failed += test_execute_tuff_read_u8_add_u8_add_u8();
     failed += test_execute_tuff_read_u8_sub_u8();
     failed += test_execute_tuff_let_x_u8();
+    failed += test_execute_tuff_let_x_u8_add_x();
 
     printf("\n%d / %d tests passed\n", tests_passed, tests_run);
 
