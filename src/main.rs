@@ -207,6 +207,19 @@ impl ParseState {
                 // Block: parse let-statements and final expression.
                 self.parse_statements(Some('}'), true)
             }
+        } else if tok == "&" {
+            // Reference expression: &identifier -> returns 0 as sentinel (pointer value not yet implemented).
+            self.consume(); // eat '&'
+            let ref_name = match self.peek() {
+                Some(t) if is_identifier(t) => t.to_string(),
+                _ => return Err("expected identifier after '&'".to_string()),
+            };
+            self.consume();
+            // Validate variable exists.
+            match self.env.get(&ref_name) {
+                Some(_) => Ok(0),
+                None => Err(format!("undefined variable '{}'", ref_name)),
+            }
         } else if tok == "let" || is_identifier(&tok) {
             // Variable reference (identifier used in an expression context).
             self.consume();
@@ -387,7 +400,7 @@ impl ParseState {
         };
         self.consume();
 
-        // Type annotation is optional: `: U8` or inferred from initializer.
+        // Type annotation is optional: `: U8`, `: *U8` (pointer), or inferred from initializer.
         let mut explicit_type_token: Option<String> = None;
         if let Some(t) = self.peek() {
             if t == ":" {
@@ -397,16 +410,30 @@ impl ParseState {
                         explicit_type_token = Some(tt.to_string());
                         self.consume();
                     }
+                    Some(tt) if is_pointer_type_suffix(tt).is_some() => {
+                        explicit_type_token = Some(tt.to_string());
+                        self.consume();
+                    }
                     _ => return Err("expected type suffix after ':' in 'let'".to_string()),
                 }
             }
         }
 
+        // Check if this is a pointer type.
+        let is_pointer = explicit_type_token.as_ref().map_or(false, |tt| {
+            tt.starts_with('*')
+        });
+
         // Determine the target type for this let.
-        // If explicit, temporarily set context bounds so initializer is checked against them.
+        // If explicit and not a pointer, set context bounds so initializer is checked against them.
         let (target_suffix, target_min_val, target_max_val) =
             if let Some(ref tt) = explicit_type_token {
-                self.set_type_bounds(tt.as_str())?
+                if is_pointer {
+                    // Pointer types don't have numeric bounds; use default U8 bounds for expression parsing.
+                    ("U8", 0, 255)
+                } else {
+                    self.set_type_bounds(tt.as_str())?
+                }
             } else {
                 // Will be inferred from initializer; keep current context.
                 (self.suffix, self.min_val, self.max_val)
@@ -422,7 +449,8 @@ impl ParseState {
         // Parse the initializer expression (with context set to target type).
         let value = self.parse_expression()?;
 
-        if value < target_min_val || value > target_max_val {
+        // Skip range check for pointer types.
+        if !is_pointer && (value < target_min_val || value > target_max_val) {
             return Err(format!(
                 "value {} out of range for {}",
                 value, target_suffix
@@ -472,13 +500,22 @@ fn is_type_suffix(token: &str) -> bool {
     matches!(token, "U8" | "U16" | "U32" | "I8" | "I16" | "I32")
 }
 
+// Check if a token is a valid pointer type suffix (e.g., *U8, *I32).
+fn is_pointer_type_suffix(token: &str) -> Option<String> {
+    let inner = token.strip_prefix('*')?;
+    match inner {
+        "U8" | "U16" | "U32" | "I8" | "I16" | "I32" => Some(inner.to_string()),
+        _ => None,
+    }
+}
+
 // Split whitespace-delimited tokens further so that leading/trailing '(' and ')' become their own tokens.
 fn tokenize(source: &str) -> Vec<String> {
     let mut result = Vec::new();
     for word in source.split_whitespace() {
-        // Strip leading grouping delimiters ('(' or '{'), each as its own token.
+        // Strip leading grouping delimiters ('(' or '{') and reference operator '&'), each as its own token.
         let mut remaining = word;
-        while remaining.starts_with('(') || remaining.starts_with('{') {
+        while remaining.starts_with('(') || remaining.starts_with('{') || remaining.starts_with('&') {
             result.push(remaining[..1].to_string());
             remaining = &remaining[1..];
         }
@@ -819,5 +856,11 @@ mod tests {
             interpret_tuff("let x = 100U8; x = 20U8; x"),
             Err(format!("cannot assign to immutable variable 'x'"))
         );
+    }
+
+    #[test]
+    fn test_interpret_tuff_pointer_declaration() {
+        // Declare a pointer to a U8 variable using & syntax
+        assert_eq!(interpret_tuff("let x = 100U8; let temp : *U8 = &x;"), Ok(0));
     }
 }
