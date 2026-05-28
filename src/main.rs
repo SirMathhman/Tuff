@@ -3,13 +3,15 @@ use std::io::{self, BufRead};
 
 /// Variable environment for let bindings within blocks.
 struct Environment {
-    vars: HashMap<String, (i64, String, bool)>, // name -> (value, type, is_mut)
+    vars: HashMap<String, (i64, String, bool, i64)>, // name -> (value, type, is_mut, address)
+    next_address: i64,
 }
 
 impl Environment {
     fn new() -> Self {
         Self {
             vars: HashMap::new(),
+            next_address: 1000,
         }
     }
 
@@ -17,15 +19,33 @@ impl Environment {
     fn get(&self, name: &str) -> Result<i64, &'static str> {
         self.vars
             .get(name)
-            .map(|(v, _, _)| *v)
+            .map(|(v, _, _, _)| *v)
             .ok_or("undefined variable")
+    }
+
+    /// Get a variable's address (unique per variable).
+    fn get_address(&self, name: &str) -> Result<i64, &'static str> {
+        self.vars
+            .get(name)
+            .map(|(_, _, _, addr)| *addr)
+            .ok_or("undefined variable")
+    }
+
+    /// Reverse-lookup a variable's value by its address.
+    fn get_value_by_address(&self, address: i64) -> Result<i64, &'static str> {
+        for (_, (value, _, _, addr)) in &self.vars {
+            if *addr == address {
+                return Ok(*value);
+            }
+        }
+        Err("invalid memory address")
     }
 
     /// Get a variable's declared type (or inferred literal suffix).
     fn get_type(&self, name: &str) -> Result<&String, &'static str> {
         self.vars
             .get(name)
-            .map(|(_, t, _)| t)
+            .map(|(_, t, _, _)| t)
             .ok_or("undefined variable")
     }
 
@@ -34,8 +54,12 @@ impl Environment {
         if self.vars.contains_key(name) {
             return Err("variable already declared");
         }
-        self.vars
-            .insert(name.to_string(), (value, type_name.to_string(), false));
+        let addr = self.next_address;
+        self.next_address += 1;
+        self.vars.insert(
+            name.to_string(),
+            (value, type_name.to_string(), false, addr),
+        );
         Ok(())
     }
 
@@ -57,7 +81,7 @@ impl Environment {
             }
         }
         self.vars
-            .insert(name.to_string(), (value, entry.1.clone(), true));
+            .insert(name.to_string(), (value, entry.1.clone(), true, entry.3));
         Ok(())
     }
 }
@@ -461,13 +485,18 @@ fn parse_factor(
         *pos += 1; // consume ')'
         Ok(result)
     } else if tokens[*pos] == "&" {
-        // Address-of operator: &identifier -> returns 0 (placeholder address value)
+        // Address-of operator: &identifier -> returns unique address for each variable
         *pos += 1; // consume '&'
         let token = &tokens[*pos];
-        // Validate that the referenced variable exists
-        env.get(token.as_str())?;
+        let addr = env.get_address(token.as_str())?;
         *pos += 1;
-        Ok(0)
+        Ok(addr)
+    } else if tokens[*pos].starts_with('*') && tokens[*pos].len() > 1 {
+        // Dereference operator: *identifier -> look up address stored in variable, then deref to get value
+        let var_name = &tokens[*pos][1..]; // strip leading '*'
+        let addr = env.get(var_name)?;
+        *pos += 1;
+        env.get_value_by_address(addr)
     } else if tokens[*pos] == "{" {
         parse_block(tokens, pos, env)
     } else {
@@ -648,7 +677,10 @@ fn parse_let_statement(
         if env.vars.contains_key(&var_name) {
             return Err("variable already declared");
         }
-        env.vars.insert(var_name.clone(), (value, final_type, true));
+        let addr = env.next_address;
+        env.next_address += 1;
+        env.vars
+            .insert(var_name.clone(), (value, final_type, true, addr));
     } else {
         env.set(&var_name, value, &final_type)?;
     }
@@ -889,6 +921,21 @@ mod tests {
     #[test]
     fn test_execute_tuff_not_equal_comparison_false() {
         assert_eq!(execute_tuff("let x = 1; let y = 1; x != y"), Ok(0));
+    }
+
+    #[test]
+    fn test_execute_tuff_address_of_self_equality() {
+        assert_eq!(execute_tuff("let x = 0; &x == &x"), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_address_of_different_variables_not_equal() {
+        assert_eq!(execute_tuff("let x = 0; let y = 0; &x == &y"), Ok(0));
+    }
+
+    #[test]
+    fn test_execute_tuff_pointer_dereference_returns_value() {
+        assert_eq!(execute_tuff("let x = 100; let y : *I32 = &x; *y"), Ok(100));
     }
 
     #[test]
