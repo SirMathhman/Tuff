@@ -1,17 +1,37 @@
 fn main() {}
 
-fn execute_tuff(input: &str) -> u64 {
+fn execute_tuff(input: &str) -> Result<u64, &'static str> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        return 0;
+        return Ok(0);
     }
 
     // Parse TUIR values like "100U8", "255U16", etc.
-    if let Some((value_str, _suffix)) = parse_tuir_value(trimmed) {
-        return value_str.parse::<u64>().unwrap_or(0);
+    if let Some((value_str, suffix)) = parse_tuir_value(trimmed) {
+        // Reject negative numbers for unsigned types
+        if value_str.starts_with('-') {
+            return Err("negative value not allowed for unsigned type");
+        }
+        let parsed: u64 = value_str
+            .parse()
+            .map_err(|_| "failed to parse numeric value")?;
+
+        // Validate range based on suffix
+        let max_val = match suffix {
+            "U8" => u8::MAX as u64,
+            "U16" => u16::MAX as u64,
+            "U32" => u32::MAX as u64,
+            _ => u64::MAX,
+        };
+
+        if parsed > max_val {
+            return Err("value out of range for type");
+        }
+
+        return Ok(parsed);
     }
 
-    0
+    Ok(0)
 }
 
 /// Parse a TUIR-formatted value string like "100U8" into (numeric_part, type_suffix).
@@ -31,18 +51,28 @@ mod tests {
 
     #[test]
     fn test_execute_tuff_empty_string_returns_zero() {
-        assert_eq!(execute_tuff(""), 0);
+        assert_eq!(execute_tuff(""), Ok(0));
     }
 
     #[test]
     fn test_execute_tuff_whitespace_returns_zero() {
-        assert_eq!(execute_tuff("   "), 0);
-        assert_eq!(execute_tuff("\t\n"), 0);
-        assert_eq!(execute_tuff(" \t \n "), 0);
+        assert_eq!(execute_tuff("   "), Ok(0));
+        assert_eq!(execute_tuff("\t\n"), Ok(0));
+        assert_eq!(execute_tuff(" \t \n "), Ok(0));
     }
 
     #[test]
     fn test_execute_tuff_100u8_returns_100() {
-        assert_eq!(execute_tuff("100U8"), 100);
+        assert_eq!(execute_tuff("100U8"), Ok(100));
+    }
+
+    #[test]
+    fn test_execute_tuff_negative_u8_returns_err() {
+        assert!(execute_tuff("-100U8").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_256u8_overflow_returns_err() {
+        assert!(execute_tuff("256U8").is_err());
     }
 }
