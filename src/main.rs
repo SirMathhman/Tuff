@@ -25,26 +25,110 @@ fn main() {
     }
 }
 
-
 fn execute_tuff(input: &str) -> Result<u64, &'static str> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Ok(0);
     }
 
-    // Try to parse as a binary expression like "1U8 + 2U8"
-    if let Some((left_str, op, right_str)) = split_expression(trimmed) {
-        let left_val = evaluate_value(left_str.trim())?;
-        let right_val = evaluate_value(right_str.trim())?;
+    // Tokenize into values and operators (+, -, *, /)
+    // A `-` at the start or immediately after another operator is a unary minus (part of the value)
+    let mut tokens: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut prev_was_operator = true;
 
-        return match op {
-            "+" => Ok(left_val + right_val),
-            _ => Err("unsupported operator"),
-        };
+    for ch in trimmed.chars() {
+        if ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' {
+            // `-` at start or after operator is unary, keep it with the value
+            if ch == '-' && prev_was_operator {
+                current.push(ch);
+                continue;
+            }
+            if !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
+            tokens.push(format!("{}", ch));
+            prev_was_operator = true;
+        } else if ch.is_whitespace() {
+            // Skip whitespace
+            continue;
+        } else {
+            current.push(ch);
+            prev_was_operator = false;
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
     }
 
-    // Fall back to single value evaluation
-    evaluate_value(trimmed)
+    let mut operands: Vec<i64> = Vec::new();
+    let mut ops: Vec<char> = Vec::new();
+
+    for token in &tokens {
+        match token.as_str() {
+            "+" | "-" | "*" | "/" | "%" => ops.push(token.chars().next().unwrap()),
+            _ => operands.push(evaluate_value(token)? as i64),
+        }
+    }
+
+    if operands.is_empty() {
+        return Ok(0);
+    }
+
+    if ops.is_empty() {
+        let val = operands[0];
+        if val < 0 {
+            return Err("result underflows below zero");
+        }
+        return Ok(val as u64);
+    }
+
+    // Pass 1: Evaluate multiplications and divisions (higher precedence)
+    let mut result_ops: Vec<i64> = vec![operands[0]];
+    let mut result_op_chars: Vec<char> = Vec::new();
+
+    for (i, op) in ops.iter().enumerate() {
+        match *op {
+            '*' => {
+                let last = result_ops.pop().unwrap();
+                result_ops.push(last * operands[i + 1]);
+            }
+            '/' => {
+                let last = result_ops.pop().unwrap();
+                if operands[i + 1] == 0 {
+                    return Err("division by zero");
+                }
+                result_ops.push(last / operands[i + 1]);
+            }
+            '%' => {
+                let last = result_ops.pop().unwrap();
+                if operands[i + 1] == 0 {
+                    return Err("modulo by zero");
+                }
+                result_ops.push(last % operands[i + 1]);
+            }
+            _ => {
+                result_op_chars.push(*op);
+                result_ops.push(operands[i + 1]);
+            }
+        }
+    }
+
+    // Pass 2: Evaluate additions and subtractions (left to right)
+    let mut final_result = result_ops[0];
+    for (i, op) in result_op_chars.iter().enumerate() {
+        match op {
+            '+' => final_result += result_ops[i + 1],
+            '-' => final_result -= result_ops[i + 1],
+            _ => unreachable!(),
+        }
+    }
+
+    if final_result < 0 {
+        return Err("result underflows below zero");
+    }
+    Ok(final_result as u64)
 }
 
 /// Evaluate a single TUIR value or return 0 for unrecognized input.
@@ -74,22 +158,6 @@ fn evaluate_value(input: &str) -> Result<u64, &'static str> {
     }
 
     Ok(0)
-}
-
-/// Split an expression into (left_operand, operator, right_operand) by finding the first `+` at top level.
-fn split_expression(input: &str) -> Option<(&str, &'static str, &str)> {
-    // Find the last `+` that's not inside a TUIR suffix
-    for i in 1..input.len() {
-        if input.as_bytes()[i] == b'+' && !is_inside_suffix(input, i) {
-            return Some((&input[..i], "+", &input[i + 1..]));
-        }
-    }
-    None
-}
-
-/// Check if the `+` at position pos is part of a TUIR suffix (unlikely but safe guard).
-fn is_inside_suffix(_input: &str, _pos: usize) -> bool {
-    false // Suffixes don't contain `+`, so this is always safe
 }
 
 /// Parse a TUIR-formatted value string like "100U8" into (numeric_part, type_suffix).
@@ -137,5 +205,40 @@ mod tests {
     #[test]
     fn test_execute_tuff_addition_expression() {
         assert_eq!(execute_tuff("1U8 + 2U8"), Ok(3));
+    }
+
+    #[test]
+    fn test_execute_tuff_multiple_additions() {
+        assert_eq!(execute_tuff("1U8 + 2U8 + 3U8"), Ok(6));
+    }
+
+    #[test]
+    fn test_execute_tuff_mixed_addition_subtraction() {
+        assert_eq!(execute_tuff("3U8 + 2U8 - 4U8"), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_multiplication_with_subtraction() {
+        assert_eq!(execute_tuff("3U8 * 2U8 - 4U8"), Ok(2));
+    }
+
+    #[test]
+    fn test_execute_tuff_addition_after_multiplication_precedence() {
+        assert_eq!(execute_tuff("4U8 + 3U8 * 2U8"), Ok(10));
+    }
+
+    #[test]
+    fn test_execute_tuff_division_expression() {
+        assert_eq!(execute_tuff("10U8 / 2U8"), Ok(5));
+    }
+
+    #[test]
+    fn test_execute_tuff_integer_division_truncates() {
+        assert_eq!(execute_tuff("10U8 / 3U8"), Ok(3));
+    }
+
+    #[test]
+    fn test_execute_tuff_modulo_expression() {
+        assert_eq!(execute_tuff("10U8 % 3U8"), Ok(1));
     }
 }
