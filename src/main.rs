@@ -31,16 +31,16 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
         return Ok(0);
     }
 
-    // Tokenize into values and operators (+, -, *, /)
+    // Tokenize into values, operators (+, -, *, /, %), and parentheses (, )
     // A `-` at the start or immediately after another operator is a unary minus (part of the value)
     let mut tokens: Vec<String> = Vec::new();
     let mut current = String::new();
-    let mut prev_was_operator = true;
+    let mut prev_was_operator_or_open_paren = true;
 
     for ch in trimmed.chars() {
         if ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' {
-            // `-` at start or after operator is unary, keep it with the value
-            if ch == '-' && prev_was_operator {
+            // `-` at start or after operator/( is unary, keep it with the value
+            if ch == '-' && prev_was_operator_or_open_paren {
                 current.push(ch);
                 continue;
             }
@@ -49,86 +49,108 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
                 current.clear();
             }
             tokens.push(format!("{}", ch));
-            prev_was_operator = true;
+            prev_was_operator_or_open_paren = true;
+        } else if ch == '(' || ch == ')' {
+            if !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
+            tokens.push(format!("{}", ch));
+            // `(` acts like an operator for unary minus purposes; `)` does not
+            prev_was_operator_or_open_paren = ch == '(';
         } else if ch.is_whitespace() {
-            // Skip whitespace
             continue;
         } else {
             current.push(ch);
-            prev_was_operator = false;
+            prev_was_operator_or_open_paren = false;
         }
     }
     if !current.is_empty() {
         tokens.push(current);
     }
 
-    let mut operands: Vec<i64> = Vec::new();
-    let mut ops: Vec<char> = Vec::new();
+    // Recursive descent parser:
+    //   Expression -> Term (('+' | '-') Term)*
+    //   Term       -> Factor (('*' | '/' | '%') Factor)*
+    //   Factor     -> '(' Expression ')' | Value
+    let mut pos = 0;
+    let result = parse_expression(&tokens, &mut pos)?;
 
-    for token in &tokens {
-        match token.as_str() {
-            "+" | "-" | "*" | "/" | "%" => ops.push(token.chars().next().unwrap()),
-            _ => operands.push(evaluate_value(token)? as i64),
-        }
-    }
-
-    if operands.is_empty() {
-        return Ok(0);
-    }
-
-    if ops.is_empty() {
-        let val = operands[0];
-        if val < 0 {
-            return Err("result underflows below zero");
-        }
-        return Ok(val as u64);
-    }
-
-    // Pass 1: Evaluate multiplications and divisions (higher precedence)
-    let mut result_ops: Vec<i64> = vec![operands[0]];
-    let mut result_op_chars: Vec<char> = Vec::new();
-
-    for (i, op) in ops.iter().enumerate() {
-        match *op {
-            '*' => {
-                let last = result_ops.pop().unwrap();
-                result_ops.push(last * operands[i + 1]);
-            }
-            '/' => {
-                let last = result_ops.pop().unwrap();
-                if operands[i + 1] == 0 {
-                    return Err("division by zero");
-                }
-                result_ops.push(last / operands[i + 1]);
-            }
-            '%' => {
-                let last = result_ops.pop().unwrap();
-                if operands[i + 1] == 0 {
-                    return Err("modulo by zero");
-                }
-                result_ops.push(last % operands[i + 1]);
-            }
-            _ => {
-                result_op_chars.push(*op);
-                result_ops.push(operands[i + 1]);
-            }
-        }
-    }
-
-    // Pass 2: Evaluate additions and subtractions (left to right)
-    let mut final_result = result_ops[0];
-    for (i, op) in result_op_chars.iter().enumerate() {
-        match op {
-            '+' => final_result += result_ops[i + 1],
-            '-' => final_result -= result_ops[i + 1],
-            _ => unreachable!(),
-        }
-    }
-
-    if final_result < 0 {
+    if result < 0 {
         return Err("result underflows below zero");
     }
-    Ok(final_result as u64)
+    Ok(result as u64)
+}
+
+// Parse: Term (('+' | '-') Term)*
+fn parse_expression(tokens: &[String], pos: &mut usize) -> Result<i64, &'static str> {
+    let mut result = parse_term(tokens, pos)?;
+
+    while *pos < tokens.len() && (tokens[*pos] == "+" || tokens[*pos] == "-") {
+        let op = tokens[*pos].clone();
+        *pos += 1;
+        let right = parse_term(tokens, pos)?;
+        result = match op.as_str() {
+            "+" => result + right,
+            _ => result - right,
+        };
+    }
+
+    Ok(result)
+}
+
+// Parse: Factor (('*' | '/' | '%') Factor)*
+fn parse_term(tokens: &[String], pos: &mut usize) -> Result<i64, &'static str> {
+    let mut result = parse_factor(tokens, pos)?;
+
+    while *pos < tokens.len() && (tokens[*pos] == "*" || tokens[*pos] == "/" || tokens[*pos] == "%")
+    {
+        let op = tokens[*pos].clone();
+        *pos += 1;
+        let right = parse_factor(tokens, pos)?;
+        result = match op.as_str() {
+            "*" => result * right,
+            "/" => {
+                if right == 0 {
+                    return Err("division by zero");
+                }
+                result / right
+            }
+            "%" => {
+                if right == 0 {
+                    return Err("modulo by zero");
+                }
+                result % right
+            }
+            _ => unreachable!(),
+        };
+    }
+
+    Ok(result)
+}
+
+// Parse: '(' Expression ')' | Value
+fn parse_factor(tokens: &[String], pos: &mut usize) -> Result<i64, &'static str> {
+    if *pos >= tokens.len() {
+        return Err("unexpected end of expression");
+    }
+
+    if tokens[*pos] == "(" {
+        *pos += 1; // consume '('
+        let result = parse_expression(tokens, pos)?;
+        if *pos >= tokens.len() || tokens[*pos] != ")" {
+            return Err("missing closing parenthesis");
+        }
+        *pos += 1; // consume ')'
+        Ok(result)
+    } else {
+        let value = evaluate_value(&tokens[*pos])? as i64;
+        *pos += 1;
+        if value < 0 {
+            return Err("result underflows below zero");
+        }
+        Ok(value)
+    }
 }
 
 /// Evaluate a single TUIR value or return 0 for unrecognized input.
@@ -240,5 +262,10 @@ mod tests {
     #[test]
     fn test_execute_tuff_modulo_expression() {
         assert_eq!(execute_tuff("10U8 % 3U8"), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_parenthesized_multiplication() {
+        assert_eq!(execute_tuff("(4U8 + 3U8) * 2U8"), Ok(14));
     }
 }
