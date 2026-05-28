@@ -562,7 +562,7 @@ fn parse_let_statement(
 fn evaluate_value(input: &str) -> Result<u64, &'static str> {
     if let Some((value_str, suffix)) = parse_tuir_value(input) {
         // Reject negative numbers for unsigned types
-        if value_str.starts_with('-') && suffix != "I32" {
+        if value_str.starts_with('-') && !suffix.starts_with('I') {
             return Err("negative value not allowed for unsigned type");
         }
         let parsed: i64 = value_str
@@ -589,8 +589,19 @@ fn evaluate_value(input: &str) -> Result<u64, &'static str> {
                 }
                 return Ok(parsed as u64);
             }
+            "I8" => {
+                if parsed < i8::MIN as i64 || parsed > i8::MAX as i64 {
+                    return Err("value out of range for type");
+                }
+                return Ok(parsed as u64);
+            }
+            "I16" => {
+                if parsed < i16::MIN as i64 || parsed > i16::MAX as i64 {
+                    return Err("value out of range for type");
+                }
+                return Ok(parsed as u64);
+            }
             "I32" => {
-                // I32 is signed, allow negative values
                 if parsed < i32::MIN as i64 || parsed > i32::MAX as i64 {
                     return Err("value out of range for type");
                 }
@@ -610,7 +621,7 @@ fn evaluate_value(input: &str) -> Result<u64, &'static str> {
 
 /// Parse a TUIR-formatted value string like "100U8" into (numeric_part, type_suffix).
 fn parse_tuir_value(input: &str) -> Option<(&str, &str)> {
-    let suffixes = ["U64", "U32", "U16", "U8"];
+    let suffixes = ["I64", "U64", "I32", "U32", "I16", "U16", "I8", "U8"];
     for suffix in &suffixes {
         if input.ends_with(suffix) {
             return Some((&input[..input.len() - suffix.len()], suffix));
@@ -710,6 +721,31 @@ mod tests {
     #[test]
     fn test_execute_tuff_default_inferred_type_is_i32() {
         assert_eq!(execute_tuff("let x = 100; x"), Ok(100));
+    }
+
+    #[test]
+    fn test_execute_tuff_i8_literal() {
+        assert_eq!(execute_tuff(r#"let x : I8 = 10I8; x"#), Ok(10));
+    }
+
+    #[test]
+    fn test_execute_tuff_i16_literal() {
+        assert_eq!(execute_tuff(r#"let x : I16 = 30000I16; x"#), Ok(30000));
+    }
+
+    #[test]
+    fn test_execute_tuff_i8_negative_overflow_returns_err() {
+        assert!(execute_tuff("let x : I8 = -129I8;").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_i8_positive_overflow_returns_err() {
+        assert!(execute_tuff("let x : I8 = 128I8;").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_i16_negative_overflow_returns_err() {
+        assert!(execute_tuff("let x : I16 = -32769I16;").is_err());
     }
 
     #[test]
