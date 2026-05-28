@@ -3,7 +3,7 @@ use std::io::{self, BufRead};
 
 /// Variable environment for let bindings within blocks.
 struct Environment {
-    vars: HashMap<String, (i64, String)>, // name -> (value, type)
+    vars: HashMap<String, (i64, String, bool)>, // name -> (value, type, is_mut)
 }
 
 impl Environment {
@@ -17,7 +17,7 @@ impl Environment {
     fn get(&self, name: &str) -> Result<i64, &'static str> {
         self.vars
             .get(name)
-            .map(|(v, _)| *v)
+            .map(|(v, _, _)| *v)
             .ok_or("undefined variable")
     }
 
@@ -25,17 +25,39 @@ impl Environment {
     fn get_type(&self, name: &str) -> Result<&String, &'static str> {
         self.vars
             .get(name)
-            .map(|(_, t)| t)
+            .map(|(_, t, _)| t)
             .ok_or("undefined variable")
     }
 
-    /// Set a variable; returns Err if the variable is already bound (no redeclaration).
+    /// Set a new variable; returns Err if the variable is already bound (no redeclaration).
     fn set(&mut self, name: &str, value: i64, type_name: &str) -> Result<(), &'static str> {
         if self.vars.contains_key(name) {
             return Err("variable already declared");
         }
         self.vars
-            .insert(name.to_string(), (value, type_name.to_string()));
+            .insert(name.to_string(), (value, type_name.to_string(), false));
+        Ok(())
+    }
+
+    /// Set a mutable variable; checks mutability and type compatibility.
+    fn set_mut(
+        &mut self,
+        name: &str,
+        value: i64,
+        assigned_type: Option<&str>,
+    ) -> Result<(), &'static str> {
+        let entry = self.vars.get(name).ok_or("undefined variable")?;
+        if !entry.2 {
+            return Err("cannot reassign immutable variable");
+        }
+        // If we know the assigned type, it must match the variable's declared type
+        if let Some(ty) = assigned_type {
+            if ty != entry.1 {
+                return Err("type mismatch in assignment");
+            }
+        }
+        self.vars
+            .insert(name.to_string(), (value, entry.1.clone(), true));
         Ok(())
     }
 }
@@ -151,9 +173,19 @@ fn parse_program(
             break;
         }
 
-        // Check for 'let' statement: let name : Type = expression ;
+        // Check for 'let' statement: let [mut] name : Type = expression ;
         if tokens[*pos] == "let" {
             result = parse_let_statement(tokens, pos, env)?;
+        } else if *pos + 1 < tokens.len()
+            && tokens[*pos + 1] == "="
+            && !parse_tuir_value(&tokens[*pos]).is_some()
+            && !tokens[*pos]
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_ascii_digit())
+        {
+            // Assignment statement: identifier = expression
+            result = parse_assignment(tokens, pos, env)?;
         } else {
             // Regular expression (could be the final value)
             result = parse_expression(tokens, pos, env)?;
@@ -270,6 +302,51 @@ fn parse_factor(
     }
 }
 
+// Parse: identifier = expression
+fn parse_assignment(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
+    let var_name = tokens[*pos].clone();
+    *pos += 1; // consume identifier
+
+    if *pos >= tokens.len() || tokens[*pos] != "=" {
+        return Err("expected = in assignment");
+    }
+    *pos += 1; // consume '='
+
+    // Infer the assigned value's type from the first token of the RHS expression
+    let assigned_type: Option<String> = if *pos < tokens.len() {
+        infer_assignment_type(tokens, pos, env)
+    } else {
+        None
+    };
+
+    let value = parse_expression(tokens, pos, env)?;
+    env.set_mut(&var_name, value, assigned_type.as_deref())?;
+    Ok(value)
+}
+
+// Infer the type of a simple RHS expression (literal or variable reference).
+fn infer_assignment_type(tokens: &[String], pos: &usize, env: &Environment) -> Option<String> {
+    let token = &tokens[*pos];
+
+    // Try literal suffix first
+    if let Some((_, suffix)) = parse_tuir_value(token.as_str()) {
+        return Some(suffix.to_string());
+    }
+
+    // Fall back to variable lookup
+    if !token.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+        if let Ok(ty) = env.get_type(token.as_str()) {
+            return Some(ty.clone());
+        }
+    }
+
+    None
+}
+
 // Parse a block: { statements; final_expression }
 fn parse_block(
     tokens: &[String],
@@ -301,13 +378,21 @@ fn infer_init_type(_tokens: &[String], init_token: &str, env: &Environment) -> O
     None
 }
 
-// Parse: let name : Type = expression ;
+// Parse: let [mut] name : Type = expression ;
 fn parse_let_statement(
     tokens: &[String],
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<i64, &'static str> {
     *pos += 1; // consume 'let'
+
+    // Check for 'mut' keyword
+    let is_mut = if *pos < tokens.len() && tokens[*pos] == "mut" {
+        *pos += 1;
+        true
+    } else {
+        false
+    };
 
     if *pos >= tokens.len() {
         return Err("expected variable name after let");
@@ -356,7 +441,16 @@ fn parse_let_statement(
 
     // Parse the initializer expression
     let value = parse_expression(tokens, pos, env)?;
-    env.set(&var_name, value, &final_type)?;
+
+    if is_mut {
+        // For mutable variables, insert directly with mut flag
+        if env.vars.contains_key(&var_name) {
+            return Err("variable already declared");
+        }
+        env.vars.insert(var_name.clone(), (value, final_type, true));
+    } else {
+        env.set(&var_name, value, &final_type)?;
+    }
 
     Ok(value)
 }
@@ -428,6 +522,21 @@ mod tests {
     #[test]
     fn test_execute_tuff_variable_type_mismatch_propagates() {
         assert!(execute_tuff("let x = 100U16; let y : U8 = x;").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_mut_reassignment() {
+        assert_eq!(execute_tuff(r#"let mut x = 0U8; x = 1U8; x"#), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_immutable_variable_cannot_be_reassigned() {
+        assert!(execute_tuff("let x = 0U8; x = 1U8; x").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_mut_reassignment_type_mismatch() {
+        assert!(execute_tuff("let mut x = 0U8; x = 1U16; x").is_err());
     }
 
     #[test]
