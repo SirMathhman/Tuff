@@ -1,4 +1,26 @@
+use std::collections::HashMap;
 use std::io::{self, BufRead};
+
+/// Variable environment for let bindings within blocks.
+struct Environment {
+    vars: HashMap<String, i64>,
+}
+
+impl Environment {
+    fn new() -> Self {
+        Self {
+            vars: HashMap::new(),
+        }
+    }
+
+    fn get(&self, name: &str) -> Result<i64, &'static str> {
+        self.vars.get(name).copied().ok_or("undefined variable")
+    }
+
+    fn set(&mut self, name: &str, value: i64) {
+        self.vars.insert(name.to_string(), value);
+    }
+}
 
 fn main() {
     println!("Tuff REPL - type 'quit' to exit");
@@ -31,7 +53,7 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
         return Ok(0);
     }
 
-    // Tokenize into values, operators (+, -, *, /, %), and parentheses (, )
+    // Tokenize into values, operators (+, -, *, /, %), delimiters (; := ), and parentheses (, )
     // A `-` at the start or immediately after another operator is a unary minus (part of the value)
     let mut tokens: Vec<String> = Vec::new();
     let mut current = String::new();
@@ -50,15 +72,27 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
             }
             tokens.push(format!("{}", ch));
             prev_was_operator_or_open_paren = true;
-        } else if ch == '(' || ch == ')' {
+        } else if ch == '('
+            || ch == ')'
+            || ch == '{'
+            || ch == '}'
+            || ch == ';'
+            || ch == ':'
+            || ch == '='
+        {
             if !current.is_empty() {
                 tokens.push(current.clone());
                 current.clear();
             }
             tokens.push(format!("{}", ch));
-            // `(` acts like an operator for unary minus purposes; `)` does not
-            prev_was_operator_or_open_paren = ch == '(';
+            // ( and { act like operators for unary minus; ) } ; : = do not
+            prev_was_operator_or_open_paren = ch == '(' || ch == '{';
         } else if ch.is_whitespace() {
+            // Flush current token before skipping whitespace
+            if !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
             continue;
         } else {
             current.push(ch);
@@ -70,11 +104,14 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
     }
 
     // Recursive descent parser:
-    //   Expression -> Term (('+' | '-') Term)*
-    //   Term       -> Factor (('*' | '/' | '%') Factor)*
-    //   Factor     -> '(' Expression ')' | Value
+    //   Program      -> Statement (';' Statement)*
+    //   Statement    -> 'let' name ':' Type '=' Expression | Expression
+    //   Expression   -> Term (('+' | '-') Term)*
+    //   Term         -> Factor (('*' | '/' | '%') Factor)*
+    //   Factor       -> '(' Expression ')' | '{' Block '}' | Identifier | Value
     let mut pos = 0;
-    let result = parse_expression(&tokens, &mut pos)?;
+    let mut env = Environment::new();
+    let result = parse_program(&tokens, &mut pos, &mut env)?;
 
     if result < 0 {
         return Err("result underflows below zero");
@@ -82,14 +119,52 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
     Ok(result as u64)
 }
 
+// Parse a program: one or more statements separated by ';'
+// Returns the value of the last statement.
+fn parse_program(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
+    let mut result = 0i64;
+
+    loop {
+        if *pos >= tokens.len() || tokens[*pos] == "}" {
+            break;
+        }
+
+        // Check for 'let' statement: let name : Type = expression ;
+        if tokens[*pos] == "let" {
+            result = parse_let_statement(tokens, pos, env)?;
+        } else {
+            // Regular expression (could be the final value)
+            result = parse_expression(tokens, pos, env)?;
+        }
+
+        // Consume ';' if present
+        if *pos < tokens.len() && tokens[*pos] == ";" {
+            *pos += 1;
+        } else {
+            // No more statements
+            break;
+        }
+    }
+
+    Ok(result)
+}
+
 // Parse: Term (('+' | '-') Term)*
-fn parse_expression(tokens: &[String], pos: &mut usize) -> Result<i64, &'static str> {
-    let mut result = parse_term(tokens, pos)?;
+fn parse_expression(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
+    let mut result = parse_term(tokens, pos, env)?;
 
     while *pos < tokens.len() && (tokens[*pos] == "+" || tokens[*pos] == "-") {
         let op = tokens[*pos].clone();
         *pos += 1;
-        let right = parse_term(tokens, pos)?;
+        let right = parse_term(tokens, pos, env)?;
         result = match op.as_str() {
             "+" => result + right,
             _ => result - right,
@@ -100,14 +175,18 @@ fn parse_expression(tokens: &[String], pos: &mut usize) -> Result<i64, &'static 
 }
 
 // Parse: Factor (('*' | '/' | '%') Factor)*
-fn parse_term(tokens: &[String], pos: &mut usize) -> Result<i64, &'static str> {
-    let mut result = parse_factor(tokens, pos)?;
+fn parse_term(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
+    let mut result = parse_factor(tokens, pos, env)?;
 
     while *pos < tokens.len() && (tokens[*pos] == "*" || tokens[*pos] == "/" || tokens[*pos] == "%")
     {
         let op = tokens[*pos].clone();
         *pos += 1;
-        let right = parse_factor(tokens, pos)?;
+        let right = parse_factor(tokens, pos, env)?;
         result = match op.as_str() {
             "*" => result * right,
             "/" => {
@@ -129,28 +208,97 @@ fn parse_term(tokens: &[String], pos: &mut usize) -> Result<i64, &'static str> {
     Ok(result)
 }
 
-// Parse: '(' Expression ')' | Value
-fn parse_factor(tokens: &[String], pos: &mut usize) -> Result<i64, &'static str> {
+// Parse: '(' Expression ')' | '{' Block '}' | Identifier | Value
+fn parse_factor(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
     if *pos >= tokens.len() {
         return Err("unexpected end of expression");
     }
 
+    // Parenthesized group: ( Expression )
     if tokens[*pos] == "(" {
         *pos += 1; // consume '('
-        let result = parse_expression(tokens, pos)?;
+        let result = parse_expression(tokens, pos, env)?;
         if *pos >= tokens.len() || tokens[*pos] != ")" {
-            return Err("missing closing parenthesis");
+            return Err("missing closing delimiter");
         }
         *pos += 1; // consume ')'
         Ok(result)
+    } else if tokens[*pos] == "{" {
+        parse_block(tokens, pos, env)
     } else {
-        let value = evaluate_value(&tokens[*pos])? as i64;
-        *pos += 1;
-        if value < 0 {
-            return Err("result underflows below zero");
+        let token = &tokens[*pos];
+        // Try variable lookup first (identifier without a TUIR suffix)
+        if !parse_tuir_value(token.as_str()).is_some()
+            && !token.chars().next().map_or(false, |c| c.is_ascii_digit())
+        {
+            *pos += 1;
+            env.get(token.as_str())
+        } else {
+            let value = evaluate_value(token)? as i64;
+            *pos += 1;
+            if value < 0 {
+                return Err("result underflows below zero");
+            }
+            Ok(value)
         }
-        Ok(value)
     }
+}
+
+// Parse a block: { statements; final_expression }
+fn parse_block(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
+    *pos += 1; // consume '{'
+
+    let result = parse_program(tokens, pos, env)?;
+
+    if *pos >= tokens.len() || tokens[*pos] != "}" {
+        return Err("missing closing delimiter");
+    }
+    *pos += 1; // consume '}'
+
+    Ok(result)
+}
+
+// Parse: let name : Type = expression ;
+fn parse_let_statement(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
+    *pos += 1; // consume 'let'
+
+    if *pos >= tokens.len() {
+        return Err("expected variable name after let");
+    }
+    let var_name = tokens[*pos].clone();
+    *pos += 1;
+
+    // Consume ':' and type annotation (skip the type for now)
+    if *pos < tokens.len() && tokens[*pos] == ":" {
+        *pos += 1; // consume ':'
+        if *pos < tokens.len() {
+            *pos += 1; // skip type token
+        }
+    }
+
+    // Consume '='
+    if *pos >= tokens.len() || tokens[*pos] != "=" {
+        return Err("expected = in let statement");
+    }
+    *pos += 1;
+
+    // Parse the initializer expression
+    let value = parse_expression(tokens, pos, env)?;
+    env.set(&var_name, value);
+
+    Ok(value)
 }
 
 /// Evaluate a single TUIR value or return 0 for unrecognized input.
@@ -265,7 +413,28 @@ mod tests {
     }
 
     #[test]
+    fn test_execute_tuff_let_variable_in_block() {
+        assert_eq!(
+            execute_tuff(r#"{ let x : U8 = 4U8 + 3U8; x } * 2U8"#),
+            Ok(14)
+        );
+    }
+
+    #[test]
+    fn test_execute_tuff_nested_let_top_level() {
+        assert_eq!(
+            execute_tuff(r#"let y : U8 = { let x : U8 = 4U8 + 3U8; x } * 2U8; y"#),
+            Ok(14)
+        );
+    }
+
+    #[test]
     fn test_execute_tuff_parenthesized_multiplication() {
         assert_eq!(execute_tuff("(4U8 + 3U8) * 2U8"), Ok(14));
+    }
+
+    #[test]
+    fn test_execute_tuff_curly_brace_grouping() {
+        assert_eq!(execute_tuff("{ 4U8 + 3U8 } * 2U8"), Ok(14));
     }
 }
