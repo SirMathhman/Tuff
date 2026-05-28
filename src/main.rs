@@ -6,8 +6,24 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
         return Ok(0);
     }
 
-    // Parse TUIR values like "100U8", "255U16", etc.
-    if let Some((value_str, suffix)) = parse_tuir_value(trimmed) {
+    // Try to parse as a binary expression like "1U8 + 2U8"
+    if let Some((left_str, op, right_str)) = split_expression(trimmed) {
+        let left_val = evaluate_value(left_str.trim())?;
+        let right_val = evaluate_value(right_str.trim())?;
+
+        return match op {
+            "+" => Ok(left_val + right_val),
+            _ => Err("unsupported operator"),
+        };
+    }
+
+    // Fall back to single value evaluation
+    evaluate_value(trimmed)
+}
+
+/// Evaluate a single TUIR value or return 0 for unrecognized input.
+fn evaluate_value(input: &str) -> Result<u64, &'static str> {
+    if let Some((value_str, suffix)) = parse_tuir_value(input) {
         // Reject negative numbers for unsigned types
         if value_str.starts_with('-') {
             return Err("negative value not allowed for unsigned type");
@@ -32,6 +48,22 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
     }
 
     Ok(0)
+}
+
+/// Split an expression into (left_operand, operator, right_operand) by finding the first `+` at top level.
+fn split_expression(input: &str) -> Option<(&str, &'static str, &str)> {
+    // Find the last `+` that's not inside a TUIR suffix
+    for i in 1..input.len() {
+        if input.as_bytes()[i] == b'+' && !is_inside_suffix(input, i) {
+            return Some((&input[..i], "+", &input[i + 1..]));
+        }
+    }
+    None
+}
+
+/// Check if the `+` at position pos is part of a TUIR suffix (unlikely but safe guard).
+fn is_inside_suffix(_input: &str, _pos: usize) -> bool {
+    false // Suffixes don't contain `+`, so this is always safe
 }
 
 /// Parse a TUIR-formatted value string like "100U8" into (numeric_part, type_suffix).
@@ -74,5 +106,10 @@ mod tests {
     #[test]
     fn test_execute_tuff_256u8_overflow_returns_err() {
         assert!(execute_tuff("256U8").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_addition_expression() {
+        assert_eq!(execute_tuff("1U8 + 2U8"), Ok(3));
     }
 }
