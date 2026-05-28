@@ -491,9 +491,14 @@ fn parse_factor(
         let addr = env.get_address(token.as_str())?;
         *pos += 1;
         Ok(addr)
+    } else if *pos < tokens.len() && tokens[*pos] == "*" && tokens[*pos].len() == 1 {
+        // Standalone '*' — dereference operator (chained like **z tokenizes as "*", "*z")
+        *pos += 1; // consume '*'
+        let value = parse_factor(tokens, pos, env)?;
+        env.get_value_by_address(value)
     } else if tokens[*pos].starts_with('*') && tokens[*pos].len() > 1 {
-        // Dereference operator: *identifier -> look up address stored in variable, then deref to get value
-        let var_name = &tokens[*pos][1..]; // strip leading '*'
+        // Token like *y — dereference a variable; strip '*' and use remaining name
+        let var_name = &tokens[*pos][1..];
         let addr = env.get(var_name)?;
         *pos += 1;
         env.get_value_by_address(addr)
@@ -936,6 +941,14 @@ mod tests {
     #[test]
     fn test_execute_tuff_pointer_dereference_returns_value() {
         assert_eq!(execute_tuff("let x = 100; let y : *I32 = &x; *y"), Ok(100));
+    }
+
+    #[test]
+    fn test_execute_tuff_double_pointer_dereference() {
+        assert_eq!(
+            execute_tuff("let x = 100; let y = &x; let z = &y; **z"),
+            Ok(100)
+        );
     }
 
     #[test]
