@@ -1,4 +1,30 @@
-fn main() {}
+use std::io::{self, BufRead};
+
+fn main() {
+    println!("Tuff REPL - type 'quit' to exit");
+    let stdin = io::stdin();
+    for line in stdin.lock().lines() {
+        match line {
+            Ok(input) => {
+                if input.trim().eq_ignore_ascii_case("quit") {
+                    break;
+                }
+                if input.is_empty() {
+                    continue;
+                }
+                match execute_tuff(&input) {
+                    Ok(result) => println!("=> {}", result),
+                    Err(e) => println!("Error: {}", e),
+                }
+            }
+            Err(_) => {
+                eprintln!("Failed to read line");
+                break;
+            }
+        }
+    }
+}
+
 
 fn execute_tuff(input: &str) -> Result<u64, &'static str> {
     let trimmed = input.trim();
