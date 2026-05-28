@@ -535,11 +535,11 @@ fn parse_let_statement(
         }
     }
 
-    // Use the declared type, or fall back to inferred, or default to "U8"
+    // Use the declared type, or fall back to inferred, or default to "I32"
     let final_type: String = match (declared_type, inferred_type) {
         (_, Some(t)) => t,
         (Some(d), None) => d.to_string(),
-        _ => "U8".to_string(),
+        _ => "I32".to_string(),
     };
 
     // Parse the initializer expression
@@ -562,26 +562,47 @@ fn parse_let_statement(
 fn evaluate_value(input: &str) -> Result<u64, &'static str> {
     if let Some((value_str, suffix)) = parse_tuir_value(input) {
         // Reject negative numbers for unsigned types
-        if value_str.starts_with('-') {
+        if value_str.starts_with('-') && suffix != "I32" {
             return Err("negative value not allowed for unsigned type");
         }
-        let parsed: u64 = value_str
+        let parsed: i64 = value_str
             .parse()
             .map_err(|_| "failed to parse numeric value")?;
 
-        // Validate range based on suffix
-        let max_val = match suffix {
-            "U8" => u8::MAX as u64,
-            "U16" => u16::MAX as u64,
-            "U32" => u32::MAX as u64,
-            _ => u64::MAX,
-        };
-
-        if parsed > max_val {
-            return Err("value out of range for type");
+        // Validate range based on suffix and return
+        match suffix {
+            "U8" => {
+                if parsed < 0 || parsed > u8::MAX as i64 {
+                    return Err("value out of range for type");
+                }
+                return Ok(parsed as u64);
+            }
+            "U16" => {
+                if parsed < 0 || parsed > u16::MAX as i64 {
+                    return Err("value out of range for type");
+                }
+                return Ok(parsed as u64);
+            }
+            "U32" => {
+                if parsed < 0 || parsed > u32::MAX as i64 {
+                    return Err("value out of range for type");
+                }
+                return Ok(parsed as u64);
+            }
+            "I32" => {
+                // I32 is signed, allow negative values
+                if parsed < i32::MIN as i64 || parsed > i32::MAX as i64 {
+                    return Err("value out of range for type");
+                }
+                return Ok(parsed as u64);
+            }
+            _ => {
+                if parsed < 0 {
+                    return Err("result underflows below zero");
+                }
+                return Ok(parsed as u64);
+            }
         }
-
-        return Ok(parsed);
     }
 
     Ok(0)
@@ -594,6 +615,10 @@ fn parse_tuir_value(input: &str) -> Option<(&str, &str)> {
         if input.ends_with(suffix) {
             return Some((&input[..input.len() - suffix.len()], suffix));
         }
+    }
+    // If it's a bare number (no suffix), treat as I32
+    if input.chars().all(|c| c.is_ascii_digit() || c == '-') {
+        return Some((input, "I32"));
     }
     None
 }
@@ -680,6 +705,11 @@ mod tests {
     #[test]
     fn test_execute_tuff_pointer_declaration_with_address_of() {
         assert_eq!(execute_tuff(r#"let x = true; let y : *Bool = &x;"#), Ok(0));
+    }
+
+    #[test]
+    fn test_execute_tuff_default_inferred_type_is_i32() {
+        assert_eq!(execute_tuff("let x = 100; x"), Ok(100));
     }
 
     #[test]
