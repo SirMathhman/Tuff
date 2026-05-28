@@ -3,7 +3,7 @@ use std::io::{self, BufRead};
 
 /// Variable environment for let bindings within blocks.
 struct Environment {
-    vars: HashMap<String, i64>,
+    vars: HashMap<String, (i64, String)>, // name -> (value, type)
 }
 
 impl Environment {
@@ -13,12 +13,30 @@ impl Environment {
         }
     }
 
+    /// Get a variable's value.
     fn get(&self, name: &str) -> Result<i64, &'static str> {
-        self.vars.get(name).copied().ok_or("undefined variable")
+        self.vars
+            .get(name)
+            .map(|(v, _)| *v)
+            .ok_or("undefined variable")
     }
 
-    fn set(&mut self, name: &str, value: i64) {
-        self.vars.insert(name.to_string(), value);
+    /// Get a variable's declared type (or inferred literal suffix).
+    fn get_type(&self, name: &str) -> Result<&String, &'static str> {
+        self.vars
+            .get(name)
+            .map(|(_, t)| t)
+            .ok_or("undefined variable")
+    }
+
+    /// Set a variable; returns Err if the variable is already bound (no redeclaration).
+    fn set(&mut self, name: &str, value: i64, type_name: &str) -> Result<(), &'static str> {
+        if self.vars.contains_key(name) {
+            return Err("variable already declared");
+        }
+        self.vars
+            .insert(name.to_string(), (value, type_name.to_string()));
+        Ok(())
     }
 }
 
@@ -120,7 +138,7 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
 }
 
 // Parse a program: one or more statements separated by ';'
-// Returns the value of the last statement.
+// Returns the value of the last expression, or 0 if only let-statements (no-ops).
 fn parse_program(
     tokens: &[String],
     pos: &mut usize,
@@ -144,6 +162,10 @@ fn parse_program(
         // Consume ';' if present
         if *pos < tokens.len() && tokens[*pos] == ";" {
             *pos += 1;
+            // If nothing follows the ';', this is a no-op (bare statement)
+            if *pos >= tokens.len() || tokens[*pos] == "}" {
+                return Ok(0);
+            }
         } else {
             // No more statements
             break;
@@ -266,6 +288,19 @@ fn parse_block(
     Ok(result)
 }
 
+// Determine the type of a single-token initializer (literal or variable reference).
+fn infer_init_type(_tokens: &[String], init_token: &str, env: &Environment) -> Option<String> {
+    // Try literal suffix first
+    if let Some((_, suffix)) = parse_tuir_value(init_token) {
+        return Some(suffix.to_string());
+    }
+    // Fall back to variable lookup
+    if let Ok(ty) = env.get_type(init_token) {
+        return Some(ty.clone());
+    }
+    None
+}
+
 // Parse: let name : Type = expression ;
 fn parse_let_statement(
     tokens: &[String],
@@ -280,10 +315,12 @@ fn parse_let_statement(
     let var_name = tokens[*pos].clone();
     *pos += 1;
 
-    // Consume ':' and type annotation (skip the type for now)
+    // Consume ':' and capture declared type
+    let mut declared_type: Option<&str> = None;
     if *pos < tokens.len() && tokens[*pos] == ":" {
         *pos += 1; // consume ':'
         if *pos < tokens.len() {
+            declared_type = Some(tokens[*pos].as_str());
             *pos += 1; // skip type token
         }
     }
@@ -294,9 +331,32 @@ fn parse_let_statement(
     }
     *pos += 1;
 
+    // Infer the initializer's type (if it's a single literal or variable reference)
+    let inferred_type: Option<String> = if *pos < tokens.len() {
+        infer_init_type(tokens, &tokens[*pos], env)
+    } else {
+        None
+    };
+
+    // If both declared and inferred types exist, they must match
+    if let Some(declared) = declared_type {
+        if let Some(ref inferred) = inferred_type {
+            if inferred.as_str() != declared {
+                return Err("type mismatch in let binding");
+            }
+        }
+    }
+
+    // Use the declared type, or fall back to inferred, or default to "U8"
+    let final_type: String = match (declared_type, inferred_type) {
+        (_, Some(t)) => t,
+        (Some(d), None) => d.to_string(),
+        _ => "U8".to_string(),
+    };
+
     // Parse the initializer expression
     let value = parse_expression(tokens, pos, env)?;
-    env.set(&var_name, value);
+    env.set(&var_name, value, &final_type)?;
 
     Ok(value)
 }
@@ -344,6 +404,31 @@ fn parse_tuir_value(input: &str) -> Option<(&str, &str)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_execute_tuff_bare_let_is_noop() {
+        assert_eq!(execute_tuff(r#"let y : U8 = 100U8;"#), Ok(0));
+    }
+
+    #[test]
+    fn test_execute_tuff_let_then_variable_reference() {
+        assert_eq!(execute_tuff(r#"let x : U8 = 100U8; x"#), Ok(100));
+    }
+
+    #[test]
+    fn test_execute_tuff_duplicate_let_returns_err() {
+        assert!(execute_tuff("let x : U8 = 0; let x : U8 = 0;").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_type_mismatch_in_let_binding() {
+        assert!(execute_tuff("let x : U8 = 100U16;").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_variable_type_mismatch_propagates() {
+        assert!(execute_tuff("let x = 100U16; let y : U8 = x;").is_err());
+    }
 
     #[test]
     fn test_execute_tuff_empty_string_returns_zero() {
