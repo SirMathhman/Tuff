@@ -112,6 +112,13 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
                 i += 1;
                 continue;
             }
+            // `*` before an identifier: pointer type prefix (*Bool, *U8, etc.) — absorb into token
+            if ch == '*' && i + 1 < len && (chars[i + 1].is_alphanumeric() || chars[i + 1] == '_') {
+                current.push(ch);
+                prev_was_operator_or_open_paren = false;
+                i += 1;
+                continue;
+            }
             if !current.is_empty() {
                 tokens.push(current.clone());
                 current.clear();
@@ -128,6 +135,15 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
             tokens.push("&&".to_string());
             prev_was_operator_or_open_paren = true;
             i += 2;
+        } else if ch == '&' {
+            // Single & as address-of operator
+            if !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
+            tokens.push("&".to_string());
+            prev_was_operator_or_open_paren = true;
+            i += 1;
         } else if ch == '|' && i + 1 < len && chars[i + 1] == '|' {
             // Logical OR: ||
             if !current.is_empty() {
@@ -346,6 +362,14 @@ fn parse_factor(
         }
         *pos += 1; // consume ')'
         Ok(result)
+    } else if tokens[*pos] == "&" {
+        // Address-of operator: &identifier -> returns 0 (placeholder address value)
+        *pos += 1; // consume '&'
+        let token = &tokens[*pos];
+        // Validate that the referenced variable exists
+        env.get(token.as_str())?;
+        *pos += 1;
+        Ok(0)
     } else if tokens[*pos] == "{" {
         parse_block(tokens, pos, env)
     } else {
@@ -651,6 +675,11 @@ mod tests {
             execute_tuff(r#"let x = true; let y = false; x && y"#),
             Ok(0)
         );
+    }
+
+    #[test]
+    fn test_execute_tuff_pointer_declaration_with_address_of() {
+        assert_eq!(execute_tuff(r#"let x = true; let y : *Bool = &x;"#), Ok(0));
     }
 
     #[test]
