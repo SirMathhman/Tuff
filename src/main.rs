@@ -105,7 +105,34 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
 
     while i < len {
         let ch = chars[i];
-        if ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' {
+        // Comparison operators: handle multi-char (<=, >=, !=, ==) then single (<, >)
+        if ch == '<' || ch == '>' || ch == '!' || ch == '=' {
+            if !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
+            if ch == '<' && i + 1 < len && chars[i + 1] == '=' {
+                tokens.push("<=".to_string());
+                prev_was_operator_or_open_paren = true;
+                i += 2;
+            } else if ch == '>' && i + 1 < len && chars[i + 1] == '=' {
+                tokens.push(">=".to_string());
+                prev_was_operator_or_open_paren = true;
+                i += 2;
+            } else if ch == '!' && i + 1 < len && chars[i + 1] == '=' {
+                tokens.push("!=".to_string());
+                prev_was_operator_or_open_paren = true;
+                i += 2;
+            } else if ch == '=' && i + 1 < len && chars[i + 1] == '=' {
+                tokens.push("==".to_string());
+                prev_was_operator_or_open_paren = true;
+                i += 2;
+            } else {
+                tokens.push(format!("{}", ch));
+                prev_was_operator_or_open_paren = ch == '<' || ch == '=';
+                i += 1;
+            }
+        } else if ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' {
             // `-` at start or after operator/( is unary, keep it with the value
             if ch == '-' && prev_was_operator_or_open_paren {
                 current.push(ch);
@@ -190,7 +217,8 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
     //   Program      -> Statement (';' Statement)*
     //   Statement    -> 'let' name ':' Type '=' Expression | Expression
     //   LogicalOr    -> LogicalAnd ('||' LogicalAnd)*
-    //   LogicalAnd   -> ArithmeticExpression ('&&' ArithmeticExpression)*
+    //   LogicalAnd   -> Comparison ('&&' Comparison)*
+    //   Comparison   -> ArithmeticExpression (('>' | '<' | '>=' | '<=' | '==' | '!=') ArithmeticExpression)*
     //   ArithmeticExpression -> Term (('+' | '-') Term)*
     //   Term         -> Factor (('*' | '/' | '%') Factor)*
     //   Factor       -> '(' Expression ')' | '{' Block '}' | Identifier | Value
@@ -270,19 +298,89 @@ fn parse_logical_or(
     Ok(result)
 }
 
-// Parse: ArithmeticExpression ('&&' ArithmeticExpression)*
+// Parse: Comparison ('&&' Comparison)*
 // Logical AND has higher precedence than OR; result is 1 only if both operands are truthy, else 0.
 fn parse_logical_and(
     tokens: &[String],
     pos: &mut usize,
     env: &mut Environment,
 ) -> Result<i64, &'static str> {
-    let mut result = parse_expression(tokens, pos, env)?;
+    let mut result = parse_comparison(tokens, pos, env)?;
 
     while *pos < tokens.len() && tokens[*pos] == "&&" {
         *pos += 1; // consume '&&'
-        let right = parse_expression(tokens, pos, env)?;
+        let right = parse_comparison(tokens, pos, env)?;
         result = if result != 0 && right != 0 { 1 } else { 0 };
+    }
+
+    Ok(result)
+}
+
+// Parse: ArithmeticExpression (('>' | '<' | '>=' | '<=' | '==' | '!=') ArithmeticExpression)*
+// Comparison operators; result is 1 if the comparison is true, else 0.
+fn parse_comparison(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
+    let mut result = parse_expression(tokens, pos, env)?;
+
+    while *pos < tokens.len()
+        && (tokens[*pos] == "<"
+            || tokens[*pos] == ">"
+            || tokens[*pos] == "<="
+            || tokens[*pos] == ">="
+            || tokens[*pos] == "=="
+            || tokens[*pos] == "!=")
+    {
+        let op = tokens[*pos].clone();
+        *pos += 1; // consume operator
+        let right = parse_expression(tokens, pos, env)?;
+        result = match op.as_str() {
+            "<" => {
+                if result < right {
+                    1
+                } else {
+                    0
+                }
+            }
+            ">" => {
+                if result > right {
+                    1
+                } else {
+                    0
+                }
+            }
+            "<=" => {
+                if result <= right {
+                    1
+                } else {
+                    0
+                }
+            }
+            ">=" => {
+                if result >= right {
+                    1
+                } else {
+                    0
+                }
+            }
+            "==" => {
+                if result == right {
+                    1
+                } else {
+                    0
+                }
+            }
+            "!=" => {
+                if result != right {
+                    1
+                } else {
+                    0
+                }
+            }
+            _ => unreachable!(),
+        };
     }
 
     Ok(result)
@@ -746,6 +844,51 @@ mod tests {
     #[test]
     fn test_execute_tuff_i16_negative_overflow_returns_err() {
         assert!(execute_tuff("let x : I16 = -32769I16;").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_less_than_comparison_true() {
+        assert_eq!(execute_tuff("let x = 0; let y = 1; x < y"), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_greater_than_comparison_true() {
+        assert_eq!(execute_tuff("let x = 1; let y = 0; x > y"), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_less_than_or_equal_true() {
+        assert_eq!(execute_tuff("let x = 0; let y = 1; x <= y"), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_less_than_or_equal_false() {
+        assert_eq!(execute_tuff("let x = 1; let y = 0; x <= y"), Ok(0));
+    }
+
+    #[test]
+    fn test_execute_tuff_greater_than_or_equal_true() {
+        assert_eq!(execute_tuff("let x = 1; let y = 0; x >= y"), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_equal_comparison_true() {
+        assert_eq!(execute_tuff("let x = 1; let y = 1; x == y"), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_equal_comparison_false() {
+        assert_eq!(execute_tuff("let x = 0; let y = 1; x == y"), Ok(0));
+    }
+
+    #[test]
+    fn test_execute_tuff_not_equal_comparison_true() {
+        assert_eq!(execute_tuff("let x = 0; let y = 1; x != y"), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_not_equal_comparison_false() {
+        assert_eq!(execute_tuff("let x = 1; let y = 1; x != y"), Ok(0));
     }
 
     #[test]
