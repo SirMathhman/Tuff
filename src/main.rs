@@ -93,17 +93,23 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
         return Ok(0);
     }
 
-    // Tokenize into values, operators (+, -, *, /, %), delimiters (; := ), and parentheses (, )
+    // Tokenize into values, operators (+, -, *, /, %, ||), delimiters (; := ), and parentheses (, )
     // A `-` at the start or immediately after another operator is a unary minus (part of the value)
     let mut tokens: Vec<String> = Vec::new();
     let mut current = String::new();
     let mut prev_was_operator_or_open_paren = true;
 
-    for ch in trimmed.chars() {
+    let chars: Vec<char> = trimmed.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
         if ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' {
             // `-` at start or after operator/( is unary, keep it with the value
             if ch == '-' && prev_was_operator_or_open_paren {
                 current.push(ch);
+                i += 1;
                 continue;
             }
             if !current.is_empty() {
@@ -112,6 +118,25 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
             }
             tokens.push(format!("{}", ch));
             prev_was_operator_or_open_paren = true;
+            i += 1;
+        } else if ch == '&' && i + 1 < len && chars[i + 1] == '&' {
+            // Logical AND: &&
+            if !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
+            tokens.push("&&".to_string());
+            prev_was_operator_or_open_paren = true;
+            i += 2;
+        } else if ch == '|' && i + 1 < len && chars[i + 1] == '|' {
+            // Logical OR: ||
+            if !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
+            tokens.push("||".to_string());
+            prev_was_operator_or_open_paren = true;
+            i += 2;
         } else if ch == '('
             || ch == ')'
             || ch == '{'
@@ -127,16 +152,18 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
             tokens.push(format!("{}", ch));
             // ( and { act like operators for unary minus; ) } ; : = do not
             prev_was_operator_or_open_paren = ch == '(' || ch == '{';
+            i += 1;
         } else if ch.is_whitespace() {
             // Flush current token before skipping whitespace
             if !current.is_empty() {
                 tokens.push(current.clone());
                 current.clear();
             }
-            continue;
+            i += 1;
         } else {
             current.push(ch);
             prev_was_operator_or_open_paren = false;
+            i += 1;
         }
     }
     if !current.is_empty() {
@@ -146,7 +173,9 @@ fn execute_tuff(input: &str) -> Result<u64, &'static str> {
     // Recursive descent parser:
     //   Program      -> Statement (';' Statement)*
     //   Statement    -> 'let' name ':' Type '=' Expression | Expression
-    //   Expression   -> Term (('+' | '-') Term)*
+    //   LogicalOr    -> LogicalAnd ('||' LogicalAnd)*
+    //   LogicalAnd   -> ArithmeticExpression ('&&' ArithmeticExpression)*
+    //   ArithmeticExpression -> Term (('+' | '-') Term)*
     //   Term         -> Factor (('*' | '/' | '%') Factor)*
     //   Factor       -> '(' Expression ')' | '{' Block '}' | Identifier | Value
     let mut pos = 0;
@@ -188,7 +217,7 @@ fn parse_program(
             result = parse_assignment(tokens, pos, env)?;
         } else {
             // Regular expression (could be the final value)
-            result = parse_expression(tokens, pos, env)?;
+            result = parse_logical_or(tokens, pos, env)?;
         }
 
         // Consume ';' if present
@@ -202,6 +231,42 @@ fn parse_program(
             // No more statements
             break;
         }
+    }
+
+    Ok(result)
+}
+
+// Parse: LogicalAnd ('||' LogicalAnd)*
+// Logical OR has the lowest precedence; result is 1 if either operand is truthy, else 0.
+fn parse_logical_or(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
+    let mut result = parse_logical_and(tokens, pos, env)?;
+
+    while *pos < tokens.len() && tokens[*pos] == "||" {
+        *pos += 1; // consume '||'
+        let right = parse_logical_and(tokens, pos, env)?;
+        result = if result != 0 || right != 0 { 1 } else { 0 };
+    }
+
+    Ok(result)
+}
+
+// Parse: ArithmeticExpression ('&&' ArithmeticExpression)*
+// Logical AND has higher precedence than OR; result is 1 only if both operands are truthy, else 0.
+fn parse_logical_and(
+    tokens: &[String],
+    pos: &mut usize,
+    env: &mut Environment,
+) -> Result<i64, &'static str> {
+    let mut result = parse_expression(tokens, pos, env)?;
+
+    while *pos < tokens.len() && tokens[*pos] == "&&" {
+        *pos += 1; // consume '&&'
+        let right = parse_expression(tokens, pos, env)?;
+        result = if result != 0 && right != 0 { 1 } else { 0 };
     }
 
     Ok(result)
@@ -285,7 +350,12 @@ fn parse_factor(
         parse_block(tokens, pos, env)
     } else {
         let token = &tokens[*pos];
-        // Try variable lookup first (identifier without a TUIR suffix)
+        // Try boolean literal first
+        if let Some(val) = parse_bool_value(token.as_str()) {
+            *pos += 1;
+            return Ok(val);
+        }
+        // Try variable lookup (identifier without a TUIR suffix)
         if !parse_tuir_value(token.as_str()).is_some()
             && !token.chars().next().map_or(false, |c| c.is_ascii_digit())
         {
@@ -332,7 +402,12 @@ fn parse_assignment(
 fn infer_assignment_type(tokens: &[String], pos: &usize, env: &Environment) -> Option<String> {
     let token = &tokens[*pos];
 
-    // Try literal suffix first
+    // Try boolean literal first
+    if parse_bool_value(token.as_str()).is_some() {
+        return Some("Bool".to_string());
+    }
+
+    // Try literal suffix next
     if let Some((_, suffix)) = parse_tuir_value(token.as_str()) {
         return Some(suffix.to_string());
     }
@@ -367,7 +442,11 @@ fn parse_block(
 
 // Determine the type of a single-token initializer (literal or variable reference).
 fn infer_init_type(_tokens: &[String], init_token: &str, env: &Environment) -> Option<String> {
-    // Try literal suffix first
+    // Try boolean literal first
+    if parse_bool_value(init_token).is_some() {
+        return Some("Bool".to_string());
+    }
+    // Try literal suffix next
     if let Some((_, suffix)) = parse_tuir_value(init_token) {
         return Some(suffix.to_string());
     }
@@ -495,6 +574,15 @@ fn parse_tuir_value(input: &str) -> Option<(&str, &str)> {
     None
 }
 
+/// Parse a boolean literal: "true" -> 1, "false" -> 0.
+fn parse_bool_value(input: &str) -> Option<i64> {
+    match input {
+        "true" => Some(1),
+        "false" => Some(0),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,6 +625,32 @@ mod tests {
     #[test]
     fn test_execute_tuff_mut_reassignment_type_mismatch() {
         assert!(execute_tuff("let mut x = 0U8; x = 1U16; x").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_bool_true_returns_one() {
+        assert_eq!(execute_tuff(r#"let x : Bool = true; x"#), Ok(1));
+    }
+
+    #[test]
+    fn test_execute_tuff_mut_reassignment_bool_to_u8_mismatch() {
+        assert!(execute_tuff("let mut x = 0U8; x = true; x").is_err());
+    }
+
+    #[test]
+    fn test_execute_tuff_logical_or_true_false_returns_one() {
+        assert_eq!(
+            execute_tuff(r#"let x = true; let y = false; x || y"#),
+            Ok(1)
+        );
+    }
+
+    #[test]
+    fn test_execute_tuff_logical_and_true_false_returns_zero() {
+        assert_eq!(
+            execute_tuff(r#"let x = true; let y = false; x && y"#),
+            Ok(0)
+        );
     }
 
     #[test]
