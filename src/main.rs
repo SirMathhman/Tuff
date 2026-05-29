@@ -19,6 +19,8 @@ struct Parser<'a> {
     pos: usize,
     suffix: String,
     variables: HashMap<String, i64>,
+    mutable_vars: HashMap<String, bool>,
+    var_suffixes: HashMap<String, String>,
 }
 
 impl<'a> Parser<'a> {
@@ -28,6 +30,8 @@ impl<'a> Parser<'a> {
             pos: 0,
             suffix: String::new(),
             variables: HashMap::new(),
+            mutable_vars: HashMap::new(),
+            var_suffixes: HashMap::new(),
         }
     }
 
@@ -151,10 +155,35 @@ impl<'a> Parser<'a> {
             .peek()
             .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
         {
-            // Identifier: either a variable reference or "let" binding
+            // Identifier: variable reference, "let" binding, or assignment
             let ident = self.parse_identifier()?;
             if ident == "let" {
                 self.parse_let_binding()
+            } else if self.peek() == Some('=') {
+                // Assignment to a mutable variable
+                if !self.mutable_vars.get(&ident).copied().unwrap_or(false) {
+                    return Err(format!("cannot assign to immutable variable: {ident}"));
+                }
+                self.consume(); // '='
+                let value = self.parse_expr()?;
+                // Check type suffix compatibility
+                let var_suffix = self.var_suffixes.get(&ident).cloned();
+                if let Some(ref suffix) = var_suffix {
+                    if self.suffix != *suffix {
+                        return Err(format!(
+                            "type mismatch: assigned {} but variable is {}",
+                            self.suffix, suffix
+                        ));
+                    }
+                }
+                // Expect ';' after assignment
+                if self.consume() != Some(';') {
+                    return Err("expected ';' after assignment".to_string());
+                }
+                // Update variable value
+                self.variables.insert(ident.clone(), value);
+                // Continue parsing next expression
+                self.parse_expr()
             } else {
                 // Variable reference
                 self.variables
@@ -169,10 +198,20 @@ impl<'a> Parser<'a> {
 
     fn parse_let_binding(&mut self) -> Result<i64, String> {
         // Already consumed "let"
-        let name = self.parse_identifier()?;
+        // Check for optional "mut"
+        self.skip_whitespace();
+        let mut is_mut = false;
+        let mut ident = self.parse_identifier()?;
+        if ident == "mut" {
+            is_mut = true;
+            ident = self.parse_identifier()?;
+        }
+        let name = ident;
 
         // Optional type annotation after ':'
         let mut declared_type: Option<String> = None;
+        // Record mutability for this variable
+        self.mutable_vars.insert(name.clone(), is_mut);
         if self.peek() == Some(':') {
             self.consume(); // ':'
             let type_name = self.parse_type_name()?;
@@ -216,7 +255,8 @@ impl<'a> Parser<'a> {
         }
 
         // Store variable
-        self.variables.insert(name, value);
+        self.variables.insert(name.clone(), value);
+        self.var_suffixes.insert(name, self.suffix.clone());
         // If no further expression, return 0 as default
         self.skip_whitespace();
         if self.pos >= self.input.len() {
@@ -502,5 +542,20 @@ mod tests {
     #[test]
     fn let_type_mismatch_assign() {
         assert!(execute_tuff("let x = 100U16; let y : U8 = x;").is_err());
+    }
+
+    #[test]
+    fn let_mut_assignment() {
+        assert_eq!(execute_tuff("let mut x = 0U8; x = 1U8; x"), Ok(1));
+    }
+
+    #[test]
+    fn assign_to_immutable_returns_err() {
+        assert!(execute_tuff("let x = 0U8; x = 1U8; x").is_err());
+    }
+
+    #[test]
+    fn assign_type_mismatch_returns_err() {
+        assert!(execute_tuff("let mut x = 0U8; x = 1U16; x").is_err());
     }
 }
