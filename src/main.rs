@@ -322,4 +322,14 @@ mod tests {
     fn signed_underflow_returns_err() {
         assert!(execute_tuff("-100I8 + (-100I8)").is_err());
     }
+
+    #[test]
+    fn division_by_zero_returns_err() {
+        assert!(execute_tuff("10U8 / 0U8").is_err());
+    }
+
+    #[test]
+    fn modulo_by_zero_returns_err() {
+        assert!(execute_tuff("10U8 % 0U8").is_err());
+    }
 }
