@@ -38,7 +38,23 @@ fn execute_tuff(input: &str) -> Result<u64, String> {
 }
 
 fn main() {
-    println!("Hello, world!");
+    use std::io::{self, Write};
+
+    loop {
+        print!("tuff> ");
+        io::stdout().flush().unwrap();
+
+        let mut line = String::new();
+        if io::stdin().read_line(&mut line).is_err() || line.trim().is_empty() {
+            break;
+        }
+
+        let line = line.trim();
+        match execute_tuff(line) {
+            Ok(value) => println!("{value}"),
+            Err(e) => println!("error: {e}"),
+        }
+    }
 }
 
 #[cfg(test)]
