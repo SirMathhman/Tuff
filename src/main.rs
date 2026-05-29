@@ -171,15 +171,15 @@ impl<'a> Parser<'a> {
         // Already consumed "let"
         let name = self.parse_identifier()?;
 
-        // Expect ':'
-        if self.consume() != Some(':') {
-            return Err("expected ':' after variable name in let binding".to_string());
-        }
-
-        // Parse type annotation (e.g., U8, I32)
-        let type_name = self.parse_type_name()?;
-        if range_for_suffix(&type_name).is_none() {
-            return Err(format!("unknown type in let binding: {type_name}"));
+        // Optional type annotation after ':'
+        let mut declared_type: Option<String> = None;
+        if self.peek() == Some(':') {
+            self.consume(); // ':'
+            let type_name = self.parse_type_name()?;
+            if range_for_suffix(&type_name).is_none() {
+                return Err(format!("unknown type in let binding: {type_name}"));
+            }
+            declared_type = Some(type_name);
         }
 
         // Expect '='
@@ -194,8 +194,35 @@ impl<'a> Parser<'a> {
             return Err("expected ';' after let binding".to_string());
         }
 
+        // Disallow redeclaration in the same scope
+        if self.variables.contains_key(&name) {
+            return Err(format!("duplicate variable declaration: {name}"));
+        }
+
+        // Verify that the value fits within the declared type, if any
+        if let Some(t) = declared_type {
+            // Ensure the suffix of the expression matches the declared type
+            if self.suffix != t {
+                return Err(format!(
+                    "type mismatch: declared {} but expression uses {}",
+                    t, self.suffix
+                ));
+            }
+            let (min, max) =
+                range_for_suffix(&t).ok_or_else(|| format!("unknown type in let binding: {t}"))?;
+            if value < min || value > max {
+                return Err(format!("value out of range for {}: {value}", t));
+            }
+        }
+
+        // Store variable
         self.variables.insert(name, value);
-        // Continue parsing the block (next expression is the block body)
+        // If no further expression, return 0 as default
+        self.skip_whitespace();
+        if self.pos >= self.input.len() {
+            return Ok(0);
+        }
+        // Otherwise continue parsing the next expression
         self.parse_expr()
     }
 
@@ -439,5 +466,41 @@ mod tests {
     #[test]
     fn let_binding_in_block() {
         assert_eq!(execute_tuff("{ let x : U8 = 2U8 + 3U8; x } * 4U8"), Ok(20));
+    }
+
+    #[test]
+    fn top_level_let_binding() {
+        assert_eq!(
+            execute_tuff("let y : U8 = { let x : U8 = 2U8 + 3U8; x } * 4U8; y"),
+            Ok(20)
+        );
+    }
+
+    #[test]
+    fn top_level_let_no_trailing_expr() {
+        assert_eq!(
+            execute_tuff("let y : U8 = { let x : U8 = 2U8 + 3U8; x } * 4U8;"),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn let_without_type_annotation() {
+        assert_eq!(execute_tuff("let x = 100U8; x"), Ok(100));
+    }
+
+    #[test]
+    fn duplicate_top_level_let() {
+        assert!(execute_tuff("let x = 100U8; let x = 200U8;").is_err());
+    }
+
+    #[test]
+    fn let_type_mismatch() {
+        assert!(execute_tuff("let x : U16 = 100U8;").is_err());
+    }
+
+    #[test]
+    fn let_type_mismatch_assign() {
+        assert!(execute_tuff("let x = 100U16; let y : U8 = x;").is_err());
     }
 }
