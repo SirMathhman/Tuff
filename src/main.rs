@@ -1,9 +1,13 @@
-fn max_for_suffix(suffix: &str) -> Option<u64> {
+fn range_for_suffix(suffix: &str) -> Option<(i64, i64)> {
     match suffix.to_uppercase().as_str() {
-        "U8" => Some(u8::MAX as u64),
-        "U16" => Some(u16::MAX as u64),
-        "U32" => Some(u32::MAX as u64),
-        "U64" => Some(u64::MAX),
+        "U8" => Some((0, u8::MAX as i64)),
+        "U16" => Some((0, u16::MAX as i64)),
+        "U32" => Some((0, u32::MAX as i64)),
+        "U64" => Some((0, i64::MAX)),
+        "I8" => Some((i8::MIN as i64, i8::MAX as i64)),
+        "I16" => Some((i16::MIN as i64, i16::MAX as i64)),
+        "I32" => Some((i32::MIN as i64, i32::MAX as i64)),
+        "I64" => Some((i64::MIN, i64::MAX)),
         _ => None,
     }
 }
@@ -41,7 +45,7 @@ impl<'a> Parser<'a> {
         Some(c)
     }
 
-    fn parse_literal(&mut self) -> Result<u64, String> {
+    fn parse_literal(&mut self) -> Result<i64, String> {
         let start = self.pos;
         while self.pos < self.input.len() && self.input.as_bytes()[self.pos].is_ascii_digit() {
             self.pos += 1;
@@ -56,10 +60,10 @@ impl<'a> Parser<'a> {
         }
 
         let value = num_str
-            .parse::<u64>()
+            .parse::<i64>()
             .map_err(|e| format!("{e}: {num_str}"))?;
 
-        // Parse suffix (e.g., U8, U16)
+        // Parse suffix (e.g., U8, U16, I8, I16)
         let suffix_start = self.pos;
         while self.pos < self.input.len()
             && (self.input.as_bytes()[self.pos].is_ascii_alphabetic()
@@ -73,8 +77,9 @@ impl<'a> Parser<'a> {
             return Err(format!("missing type suffix at position {suffix_start}"));
         }
 
-        let max = max_for_suffix(suf).ok_or_else(|| format!("unknown suffix: {suf}"))?;
+        let (_min, max) = range_for_suffix(suf).ok_or_else(|| format!("unknown suffix: {suf}"))?;
 
+        // Only check upper bound at parse time; unary minus handles lower bound
         if value > max {
             return Err(format!("value out of range for {suf}: {value}"));
         }
@@ -88,7 +93,18 @@ impl<'a> Parser<'a> {
         Ok(value)
     }
 
-    fn parse_factor(&mut self) -> Result<u64, String> {
+    fn parse_factor(&mut self) -> Result<i64, String> {
+        if self.peek() == Some('-') {
+            self.consume(); // '-'
+            let value = self.parse_factor()?;
+            let negated = -value;
+            if let Some((min, _)) = range_for_suffix(&self.suffix) {
+                if negated < min {
+                    return Err(format!("value out of range for {}: {negated}", self.suffix));
+                }
+            }
+            return Ok(negated);
+        }
         if self.peek() == Some('(') {
             self.consume(); // '('
             let value = self.parse_expr()?;
@@ -97,9 +113,9 @@ impl<'a> Parser<'a> {
                 return Err("expected ')'".to_string());
             }
 
-            // Check for overflow against current suffix max
-            if let Some(max) = max_for_suffix(&self.suffix) {
-                if value > max {
+            // Check for overflow against current suffix range
+            if let Some((min, max)) = range_for_suffix(&self.suffix) {
+                if value < min || value > max {
                     return Err(format!("overflow in {}: {value}", self.suffix));
                 }
             }
@@ -110,7 +126,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_term(&mut self) -> Result<u64, String> {
+    fn parse_term(&mut self) -> Result<i64, String> {
         let mut value = self.parse_factor()?;
 
         loop {
@@ -118,9 +134,9 @@ impl<'a> Parser<'a> {
                 Some('*') => {
                     self.consume();
                     let right = self.parse_factor()?;
-                    let max = max_for_suffix(&self.suffix).unwrap_or(u64::MAX);
+                    let (min, max) = range_for_suffix(&self.suffix).unwrap_or((i64::MIN, i64::MAX));
                     let product = value * right;
-                    if product > max {
+                    if product < min || product > max {
                         return Err(format!("overflow in {}: {product}", self.suffix));
                     }
                     value = product;
@@ -148,7 +164,7 @@ impl<'a> Parser<'a> {
         Ok(value)
     }
 
-    fn parse_expr(&mut self) -> Result<u64, String> {
+    fn parse_expr(&mut self) -> Result<i64, String> {
         let mut value = self.parse_term()?;
 
         loop {
@@ -156,9 +172,9 @@ impl<'a> Parser<'a> {
                 Some('+') => {
                     self.consume();
                     let right = self.parse_term()?;
-                    let max = max_for_suffix(&self.suffix).unwrap_or(u64::MAX);
+                    let (min, max) = range_for_suffix(&self.suffix).unwrap_or((i64::MIN, i64::MAX));
                     let sum = value + right;
-                    if sum > max {
+                    if sum < min || sum > max {
                         return Err(format!("overflow in {}: {sum}", self.suffix));
                     }
                     value = sum;
@@ -166,7 +182,12 @@ impl<'a> Parser<'a> {
                 Some('-') => {
                     self.consume();
                     let right = self.parse_term()?;
-                    value -= right;
+                    let (min, max) = range_for_suffix(&self.suffix).unwrap_or((i64::MIN, i64::MAX));
+                    let diff = value - right;
+                    if diff < min || diff > max {
+                        return Err(format!("overflow in {}: {diff}", self.suffix));
+                    }
+                    value = diff;
                 }
                 _ => break,
             }
@@ -176,7 +197,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn execute_tuff(input: &str) -> Result<u64, String> {
+fn execute_tuff(input: &str) -> Result<i64, String> {
     let input = input.trim();
 
     if input.is_empty() {
@@ -290,5 +311,15 @@ mod tests {
     #[test]
     fn modulo_operator() {
         assert_eq!(execute_tuff("10U8 % 3U8"), Ok(1));
+    }
+
+    #[test]
+    fn negative_i64_literal() {
+        assert_eq!(execute_tuff("-1I64"), Ok(-1));
+    }
+
+    #[test]
+    fn signed_underflow_returns_err() {
+        assert!(execute_tuff("-100I8 + (-100I8)").is_err());
     }
 }
