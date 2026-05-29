@@ -105,12 +105,17 @@ impl<'a> Parser<'a> {
             }
             return Ok(negated);
         }
-        if self.peek() == Some('(') {
-            self.consume(); // '('
+        if self.peek() == Some('(') || self.peek() == Some('{') {
+            let open = self.consume().unwrap(); // '(' or '{'
+            let expected_close = if open == '(' { ')' } else { '}' };
             let value = self.parse_expr()?;
 
-            if self.consume() != Some(')') {
-                return Err("expected ')'".to_string());
+            let actual_close = self.consume();
+            if actual_close != Some(expected_close) {
+                let got = actual_close
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "EOF".to_string());
+                return Err(format!("expected '{expected_close}', got {got}"));
             }
 
             // Check for overflow against current suffix range
@@ -331,5 +336,10 @@ mod tests {
     #[test]
     fn modulo_by_zero_returns_err() {
         assert!(execute_tuff("10U8 % 0U8").is_err());
+    }
+
+    #[test]
+    fn curly_braces_as_parentheses() {
+        assert_eq!(execute_tuff("{ 2U8 + 3U8 } * 4U8"), Ok(20));
     }
 }

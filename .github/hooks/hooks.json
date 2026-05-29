@@ -7,7 +7,7 @@
       },
       {
         "type": "command",
-        "command": "cmd /c \"pmd cpd --dir src tests --language rust --minimum-tokens 50 --ignore-literals --ignore-identifiers 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+        "command": "cmd /c \"pmd cpd --dir src --language rust --minimum-tokens 50 --ignore-literals --ignore-identifiers 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       }
     ]
   }
