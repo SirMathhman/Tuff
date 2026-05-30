@@ -43,6 +43,14 @@ fn parse_literal(input: &str) -> Result<(i64, i64, i64), &'static str> {
     parse_suffix!(trimmed, "U8", u8, 0, u8::MAX as i64);
     parse_suffix!(trimmed, "I8", i8, i8::MIN as i64, i8::MAX as i64);
 
+    // Boolean literals
+    if trimmed == "true" {
+        return Ok((1, 0, 1));
+    }
+    if trimmed == "false" {
+        return Ok((0, 0, 1));
+    }
+
     Err("unknown literal")
 }
 
@@ -158,6 +166,11 @@ fn tokenize_expr<'a>(
 fn eval_expr(input: &str, scope: &Scope) -> Result<(i64, i64, i64), &'static str> {
     let trimmed = input.trim();
 
+    // Handle logical ops (lowest precedence) — split at top-level || and &&
+    if let Some(result) = eval_logical(trimmed, scope)? {
+        return Ok(result);
+    }
+
     let has_ops = trimmed.contains('+')
         || trimmed.contains('-')
         || trimmed.contains('*')
@@ -175,6 +188,74 @@ fn eval_expr(input: &str, scope: &Scope) -> Result<(i64, i64, i64), &'static str
     let tokens = fold_multiplicative(&tokens)?;
     let result = fold_additive(&tokens)?;
     Ok((result, 0, 0))
+}
+
+/// Splits `input` at top-level (depth 0) occurrences of `pat`, returning parts.
+/// `pat` must be exactly 2 characters long.
+fn split_top_level<'a>(input: &'a str, pat: &str) -> Vec<&'a str> {
+    let mut parts = Vec::new();
+    let mut depth = 0;
+    let mut start = 0;
+    for (i, ch) in input.char_indices() {
+        match ch {
+            '(' | '{' => depth += 1,
+            ')' | '}' => depth -= 1,
+            _ if depth == 0 && input[i..].starts_with(pat) => {
+                parts.push(&input[start..i]);
+                start = i + pat.len();
+            }
+            _ => {}
+        }
+    }
+    parts.push(&input[start..]);
+    parts
+}
+
+/// Splits at top-level `||`/`&&`, respecting operator precedence (&& before ||).
+fn eval_logical<'a>(
+    input: &'a str,
+    scope: &Scope<'a>,
+) -> Result<Option<(i64, i64, i64)>, &'static str> {
+    let or_parts = split_top_level(input, "||");
+    if or_parts.len() <= 1 {
+        // Check for && at top-level
+        let and_parts = split_top_level(input, "&&");
+        if and_parts.len() <= 1 {
+            return Ok(None);
+        }
+        // Evaluate &&: all must be truthy
+        let mut result = 1i64;
+        for part in &and_parts {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let (val, _, _) = eval_expr(trimmed, scope)?;
+            if val == 0 {
+                result = 0;
+                break;
+            }
+        }
+        return Ok(Some((result, 0, 1)));
+    }
+
+    // Evaluate ||: short-circuit on first truthy
+    for part in &or_parts {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        // Sub-evaluate each OR operand (which may contain &&)
+        let sub = eval_logical(trimmed, scope)?;
+        let val = match sub {
+            Some((v, _, _)) => v,
+            None => eval_expr(trimmed, scope)?.0,
+        };
+        if val != 0 {
+            return Ok(Some((1, 0, 1)));
+        }
+    }
+    Ok(Some((0, 0, 1)))
 }
 
 /// Evaluates a block `{ stmt; stmt; ...; expr }`.
@@ -220,6 +301,7 @@ fn type_bounds(ty: &str) -> Option<(i64, i64)> {
         "U32" => Some((0, u32::MAX as i64)),
         "U64" => Some((0, i64::MAX)),
         "I8" => Some((i8::MIN as i64, i8::MAX as i64)),
+        "Bool" => Some((0, 1)),
         _ => None,
     }
 }
@@ -660,5 +742,25 @@ mod tests {
     #[test]
     fn interpret_assignment_type_mismatch() {
         assert!(interpret_tuff("let mut x = 0U8; x = 1U16; x").is_err());
+    }
+
+    #[test]
+    fn interpret_bool_literal() {
+        assert_eq!(interpret_tuff("let x : Bool = true; x"), Ok(1));
+    }
+
+    #[test]
+    fn interpret_bool_literal_false() {
+        assert_eq!(interpret_tuff("let x : Bool = false; x"), Ok(0));
+    }
+
+    #[test]
+    fn interpret_logical_or() {
+        assert_eq!(interpret_tuff("let x = true; let y = false; x || y"), Ok(1));
+    }
+
+    #[test]
+    fn interpret_logical_and() {
+        assert_eq!(interpret_tuff("let x = true; let y = false; x && y"), Ok(0));
     }
 }
