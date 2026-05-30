@@ -2,8 +2,9 @@
 //!
 //! Parses and evaluates expressions with typed integer literals
 //! (U8, U16, U32, U64, I8, Bool) and arithmetic operators (+, -, *, /, %),
-//! logical operators (&&, ||), with proper operator precedence, bounds-checking,
-//! block expressions, `let` bindings, and mutable assignment.
+//! comparison operators (<, >, <=, >=, ==, !=), logical operators (&&, ||),
+//! with proper operator precedence, bounds-checking, block expressions,
+//! `let` bindings, and mutable assignment.
 
 use std::collections::HashMap;
 
@@ -167,9 +168,26 @@ fn tokenize_expr<'a>(
 fn eval_expr(input: &str, scope: &Scope) -> Result<(i64, i64, i64), &'static str> {
     let trimmed = input.trim();
 
-    // Handle logical ops (lowest precedence) — split at top-level || and &&
+    // Handle logical ops (lowest precedence)
     if let Some(result) = eval_logical(trimmed, scope)? {
         return Ok(result);
+    }
+
+    // Handle comparison operators (higher than logical, lower than arithmetic)
+    for pat in &["<=", ">=", "==", "!=", "<", ">"] {
+        let parts = split_top_level(trimmed, pat);
+        if parts.len() > 1 {
+            let left_val = eval_expr(parts[0].trim(), scope)?.0;
+            let right_val = eval_expr(parts[1].trim(), scope)?.0;
+            return Ok(match *pat {
+                "<" => ((left_val < right_val) as i64, 0, 1),
+                ">" => ((left_val > right_val) as i64, 0, 1),d
+                "<=" => ((left_val <= right_val) as i64, 0, 1),
+                ">=" => ((left_val >= right_val) as i64, 0, 1),
+                "==" => ((left_val == right_val) as i64, 0, 1),
+                _ => ((left_val != right_val) as i64, 0, 1),
+            });
+        }
     }
 
     let has_ops = trimmed.contains('+')
