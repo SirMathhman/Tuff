@@ -4,6 +4,8 @@
 //! (U8, U16, U32, U64, I8) and arithmetic operators (+, -, *, /, %),
 //! with proper operator precedence and bounds-checking.
 
+use std::collections::HashMap;
+
 /// Macro to parse a typed suffix literal (e.g. "42U8") and return its
 /// value along with the inclusive `[min, max]` range for the type.
 macro_rules! parse_suffix {
@@ -14,6 +16,9 @@ macro_rules! parse_suffix {
         }
     };
 }
+
+/// Type alias for a variable scope: name → (value, min_bound, max_bound).
+type Scope<'a> = HashMap<&'a str, (i64, i64, i64)>;
 
 /// Parses a single typed literal token (e.g. `"100U8"`, `"-128I8"`).
 ///
@@ -41,6 +46,18 @@ fn parse_literal(input: &str) -> Result<(i64, i64, i64), &'static str> {
     Err("unknown literal")
 }
 
+/// Parses a literal or resolves a variable name from the given scope.
+fn parse_literal_or_var<'a>(
+    input: &'a str,
+    scope: &Scope<'a>,
+) -> Result<(i64, i64, i64), &'static str> {
+    let trimmed = input.trim();
+    if let Some(&val) = scope.get(trimmed) {
+        return Ok(val);
+    }
+    parse_literal(trimmed)
+}
+
 /// Checks that `val` falls within the inclusive range `[min, max]`.
 fn check_bounds(val: i64, min: i64, max: i64) -> Result<(), &'static str> {
     if val < min || val > max {
@@ -49,11 +66,11 @@ fn check_bounds(val: i64, min: i64, max: i64) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// Tokenizes an expression string into a sequence of `(value, min, max, tag)` tuples.
-///
-/// Tag `' '` marks a literal; `'+'`, `'-'`, `'*'`, `'/'`, `'%'` mark operators.
-/// Parenthesized sub-expressions are recursively evaluated via [`interpret_tuff_full`].
-fn tokenize(input: &str) -> Result<Vec<(i64, i64, i64, char)>, &'static str> {
+/// Tokenizes an expression string, resolving variables from `scope`.
+fn tokenize_expr<'a>(
+    input: &'a str,
+    scope: &Scope<'a>,
+) -> Result<Vec<(i64, i64, i64, char)>, &'static str> {
     let chars: Vec<char> = input.chars().collect();
     let mut i = 0;
     let mut tokens = Vec::new();
@@ -80,29 +97,35 @@ fn tokenize(input: &str) -> Result<Vec<(i64, i64, i64, char)>, &'static str> {
             }
         }
 
-        if chars[i] == '(' {
+        if chars[i] == '(' || chars[i] == '{' {
+            let open = chars[i];
+            let close = if open == '(' { ')' } else { '}' };
             let mut depth = 1;
             let mut j = i + 1;
             while j < chars.len() && depth > 0 {
-                if chars[j] == '(' {
+                if chars[j] == open {
                     depth += 1;
-                } else if chars[j] == ')' {
+                } else if chars[j] == close {
                     depth -= 1;
                 }
                 j += 1;
             }
             if depth != 0 {
-                return Err("mismatched parentheses");
+                return Err("mismatched grouping");
             }
             let inner = &input[i + 1..j - 1];
-            let (val, lo, hi) = interpret_tuff_full(inner)?;
+            let (val, lo, hi) = if open == '(' {
+                eval_expr(inner, scope)?
+            } else {
+                eval_block(inner)?
+            };
             tokens.push((val, lo, hi, ' '));
             i = j;
             continue;
         }
 
-        if chars[i] == ')' {
-            return Err("unexpected closing parenthesis");
+        if chars[i] == ')' || chars[i] == '}' {
+            return Err("unexpected closing bracket");
         }
 
         let start = i;
@@ -116,48 +139,126 @@ fn tokenize(input: &str) -> Result<Vec<(i64, i64, i64, char)>, &'static str> {
             && chars[i] != '*'
             && chars[i] != '/'
             && chars[i] != '%'
+            && chars[i] != '('
+            && chars[i] != ')'
+            && chars[i] != '{'
+            && chars[i] != '}'
         {
             i += 1;
         }
         let literal: String = chars[start..i].iter().collect();
-        let (val, lo, hi) = parse_literal(&literal)?;
+        let (val, lo, hi) = parse_literal_or_var(&literal, scope)?;
         tokens.push((val, lo, hi, ' '));
     }
 
     Ok(tokens)
 }
 
-/// Evaluates an expression and returns the result together with bounds.
-///
-/// This is the internal workhorse that preserves bounds information
-/// (needed for parenthesized sub-expression evaluation in [`tokenize`]).
-fn interpret_tuff_full(input: &str) -> Result<(i64, i64, i64), &'static str> {
+/// Evaluates a parenthesized or simple expression with the given scope.
+fn eval_expr(input: &str, scope: &Scope) -> Result<(i64, i64, i64), &'static str> {
     let trimmed = input.trim();
 
-    if !trimmed.contains('+')
-        && !trimmed.contains('-')
-        && !trimmed.contains('*')
-        && !trimmed.contains('/')
-        && !trimmed.contains('%')
-    {
+    let has_ops = trimmed.contains('+')
+        || trimmed.contains('-')
+        || trimmed.contains('*')
+        || trimmed.contains('/')
+        || trimmed.contains('%');
+
+    if !has_ops {
         if trimmed.is_empty() {
             return Ok((0, 0, 0));
         }
-        return parse_literal(trimmed);
+        return parse_literal_or_var(trimmed, scope);
     }
 
-    let tokens = tokenize(trimmed)?;
+    let tokens = tokenize_expr(trimmed, scope)?;
     let tokens = fold_multiplicative(&tokens)?;
     let result = fold_additive(&tokens)?;
     Ok((result, 0, 0))
 }
 
-/// Parses and evaluates a Tuff expression, returning the resulting `i64`.
+/// Evaluates a block `{ stmt; stmt; ...; expr }`.
 ///
-/// The string may contain typed integer literals (U8, U16, U32, U64, I8)
-/// combined with arithmetic operators (+, -, *, /, %) and parentheses.
-pub fn interpret_tuff(input: &str) -> Result<i64, &'static str> {
-    interpret_tuff_full(input).map(|(val, _, _)| val)
+/// Processes `let` bindings and returns the value of the last expression.
+fn eval_block(input: &str) -> Result<(i64, i64, i64), &'static str> {
+    let trimmed = input.trim();
+    let mut scope: Scope = HashMap::new();
+    let mut last_val = (0i64, 0i64, 0i64);
+
+    // Split into statements at top-level `;` only (respecting brace depth).
+    let mut stmt_start = 0;
+    let mut depth = 0;
+    for (i, ch) in trimmed.char_indices() {
+        match ch {
+            '(' | '{' => depth += 1,
+            ')' | '}' => depth -= 1,
+            ';' if depth == 0 => {
+                let stmt = trimmed[stmt_start..i].trim();
+                if !stmt.is_empty() {
+                    eval_stmt(stmt, &mut scope)?;
+                    // Semicolon-terminated statements don't set last_val.
+                }
+                stmt_start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    // Last expression after the final `;` sets last_val.
+    let tail = trimmed[stmt_start..].trim();
+    if !tail.is_empty() {
+        last_val = eval_stmt(tail, &mut scope)?;
+    }
+
+    Ok(last_val)
+}
+
+/// Returns the inclusive `[min, max]` bounds for a named type (e.g. "U8", "I8").
+fn type_bounds(ty: &str) -> Option<(i64, i64)> {
+    match ty.trim() {
+        "U8" => Some((0, u8::MAX as i64)),
+        "U16" => Some((0, u16::MAX as i64)),
+        "U32" => Some((0, u32::MAX as i64)),
+        "U64" => Some((0, i64::MAX)),
+        "I8" => Some((i8::MIN as i64, i8::MAX as i64)),
+        _ => None,
+    }
+}
+
+/// Evaluates a single statement, which may be a `let` binding or an expression.
+fn eval_stmt<'a>(stmt: &'a str, scope: &mut Scope<'a>) -> Result<(i64, i64, i64), &'static str> {
+    if let Some(rhs) = stmt.strip_prefix("let ") {
+        // Parse: let name : Type = expr
+        let mut parts = rhs.splitn(2, '=');
+        let binding = parts.next().unwrap().trim();
+        let expr_str = parts.next().ok_or("expected '=' in let binding")?.trim();
+
+        // binding is "name : Type" or just "name"
+        let name: &str;
+        let type_name: Option<&str>;
+        if let Some((n, t)) = binding.split_once(':') {
+            name = n.trim();
+            type_name = Some(t.trim());
+        } else {
+            name = binding.trim();
+            type_name = None;
+        }
+
+        let (val, lo, hi) = eval_expr(expr_str, scope)?;
+
+        // Enforce type annotation bounds if declared
+        if let Some(ty) = type_name {
+            if let Some((tmin, tmax)) = type_bounds(ty) {
+                if lo < tmin || hi > tmax {
+                    return Err("type mismatch");
+                }
+            }
+        }
+
+        scope.insert(name, (val, lo, hi));
+        Ok((val, lo, hi))
+    } else {
+        eval_expr(stmt, scope)
+    }
 }
 
 /// Folds `*`, `/`, `%` operators with left-to-right precedence,
@@ -225,6 +326,23 @@ fn fold_additive(tokens: &[(i64, i64, i64, char)]) -> Result<i64, &'static str> 
     }
 
     Ok(acc)
+}
+
+/// Parses and evaluates a Tuff expression, returning the resulting `i64`.
+///
+/// The string may contain typed integer literals (U8, U16, U32, U64, I8)
+/// combined with arithmetic operators (+, -, *, /, %) and parentheses.
+pub fn interpret_tuff(input: &str) -> Result<i64, &'static str> {
+    let trimmed = input.trim();
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        let inner = &trimmed[1..trimmed.len() - 1];
+        return eval_block(inner).map(|(val, _, _)| val);
+    }
+    // Top-level statement sequence (let bindings with semicolons)
+    if trimmed.contains(';') || trimmed.starts_with("let ") {
+        return eval_block(trimmed).map(|(val, _, _)| val);
+    }
+    eval_expr(trimmed, &HashMap::new()).map(|(val, _, _)| val)
 }
 
 /// Interactive REPL that reads Tuff expressions from stdin and prints results.
@@ -440,5 +558,54 @@ mod tests {
     #[test]
     fn interpret_parentheses() {
         assert_eq!(interpret_tuff("(3U8 + 2U8) * 4U8"), Ok(20));
+    }
+
+    #[test]
+    fn interpret_curly_braces() {
+        assert_eq!(interpret_tuff("{ 3U8 + 2U8 } * 4U8"), Ok(20));
+    }
+
+    #[test]
+    fn interpret_let_binding() {
+        assert_eq!(
+            interpret_tuff("{ let x : U8 = 3U8 + 2U8; x } * 4U8"),
+            Ok(20)
+        );
+    }
+
+    #[test]
+    fn interpret_nested_let_binding() {
+        assert_eq!(
+            interpret_tuff("let y : U8 = { let x : U8 = 3U8 + 2U8; x } * 4U8; y"),
+            Ok(20)
+        );
+    }
+
+    #[test]
+    fn interpret_let_trailing_semicolon() {
+        assert_eq!(
+            interpret_tuff("let y : U8 = { let x : U8 = 3U8 + 2U8; x } * 4U8;"),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn interpret_let_without_type_annotation() {
+        assert_eq!(interpret_tuff("let y = 100U8; y"), Ok(100));
+    }
+
+    #[test]
+    fn interpret_let_shadowing() {
+        assert_eq!(interpret_tuff("let y = 100U8; let y = 200U8; y"), Ok(200));
+    }
+
+    #[test]
+    fn interpret_let_type_mismatch() {
+        assert!(interpret_tuff("let y : U8 = 100U16;").is_err());
+    }
+
+    #[test]
+    fn interpret_let_type_mismatch_var() {
+        assert!(interpret_tuff("let y = 0U16; let x : U8 = y;").is_err());
     }
 }
