@@ -1,3 +1,11 @@
+//! Tuff programming language interpreter.
+//!
+//! Parses and evaluates expressions with typed integer literals
+//! (U8, U16, U32, U64, I8) and arithmetic operators (+, -, *, /, %),
+//! with proper operator precedence and bounds-checking.
+
+/// Macro to parse a typed suffix literal (e.g. "42U8") and return its
+/// value along with the inclusive `[min, max]` range for the type.
 macro_rules! parse_suffix {
     ($input:expr, $suffix:literal, $ty:ty, $min:expr, $max:expr) => {
         if let Some(num) = $input.strip_suffix($suffix) {
@@ -7,6 +15,9 @@ macro_rules! parse_suffix {
     };
 }
 
+/// Parses a single typed literal token (e.g. `"100U8"`, `"-128I8"`).
+///
+/// Returns the integer value and its inclusive `[min, max]` bounds.
 fn parse_literal(input: &str) -> Result<(i64, i64, i64), &'static str> {
     let trimmed = input.trim();
 
@@ -30,6 +41,7 @@ fn parse_literal(input: &str) -> Result<(i64, i64, i64), &'static str> {
     Err("unknown literal")
 }
 
+/// Checks that `val` falls within the inclusive range `[min, max]`.
 fn check_bounds(val: i64, min: i64, max: i64) -> Result<(), &'static str> {
     if val < min || val > max {
         return Err("value out of bounds");
@@ -37,6 +49,10 @@ fn check_bounds(val: i64, min: i64, max: i64) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Tokenizes an expression string into a sequence of `(value, min, max, tag)` tuples.
+///
+/// Tag `' '` marks a literal; `'+'`, `'-'`, `'*'`, `'/'`, `'%'` mark operators.
+/// Parenthesized sub-expressions are recursively evaluated via [`interpret_tuff_full`].
 fn tokenize(input: &str) -> Result<Vec<(i64, i64, i64, char)>, &'static str> {
     let chars: Vec<char> = input.chars().collect();
     let mut i = 0;
@@ -64,6 +80,31 @@ fn tokenize(input: &str) -> Result<Vec<(i64, i64, i64, char)>, &'static str> {
             }
         }
 
+        if chars[i] == '(' {
+            let mut depth = 1;
+            let mut j = i + 1;
+            while j < chars.len() && depth > 0 {
+                if chars[j] == '(' {
+                    depth += 1;
+                } else if chars[j] == ')' {
+                    depth -= 1;
+                }
+                j += 1;
+            }
+            if depth != 0 {
+                return Err("mismatched parentheses");
+            }
+            let inner = &input[i + 1..j - 1];
+            let (val, lo, hi) = interpret_tuff_full(inner)?;
+            tokens.push((val, lo, hi, ' '));
+            i = j;
+            continue;
+        }
+
+        if chars[i] == ')' {
+            return Err("unexpected closing parenthesis");
+        }
+
         let start = i;
         if chars[i] == '-' {
             i += 1;
@@ -86,6 +127,41 @@ fn tokenize(input: &str) -> Result<Vec<(i64, i64, i64, char)>, &'static str> {
     Ok(tokens)
 }
 
+/// Evaluates an expression and returns the result together with bounds.
+///
+/// This is the internal workhorse that preserves bounds information
+/// (needed for parenthesized sub-expression evaluation in [`tokenize`]).
+fn interpret_tuff_full(input: &str) -> Result<(i64, i64, i64), &'static str> {
+    let trimmed = input.trim();
+
+    if !trimmed.contains('+')
+        && !trimmed.contains('-')
+        && !trimmed.contains('*')
+        && !trimmed.contains('/')
+        && !trimmed.contains('%')
+    {
+        if trimmed.is_empty() {
+            return Ok((0, 0, 0));
+        }
+        return parse_literal(trimmed);
+    }
+
+    let tokens = tokenize(trimmed)?;
+    let tokens = fold_multiplicative(&tokens)?;
+    let result = fold_additive(&tokens)?;
+    Ok((result, 0, 0))
+}
+
+/// Parses and evaluates a Tuff expression, returning the resulting `i64`.
+///
+/// The string may contain typed integer literals (U8, U16, U32, U64, I8)
+/// combined with arithmetic operators (+, -, *, /, %) and parentheses.
+pub fn interpret_tuff(input: &str) -> Result<i64, &'static str> {
+    interpret_tuff_full(input).map(|(val, _, _)| val)
+}
+
+/// Folds `*`, `/`, `%` operators with left-to-right precedence,
+/// collapsing each multiplication/division/modulo into a single token.
 fn fold_multiplicative(
     tokens: &[(i64, i64, i64, char)],
 ) -> Result<Vec<(i64, i64, i64, char)>, &'static str> {
@@ -122,6 +198,7 @@ fn fold_multiplicative(
     Ok(out)
 }
 
+/// Folds `+` and `-` operators left-to-right across the token stream.
 fn fold_additive(tokens: &[(i64, i64, i64, char)]) -> Result<i64, &'static str> {
     let mut acc = 0i64;
     let mut lo = i64::MAX;
@@ -150,27 +227,7 @@ fn fold_additive(tokens: &[(i64, i64, i64, char)]) -> Result<i64, &'static str> 
     Ok(acc)
 }
 
-fn interpret_tuff(input: &str) -> Result<i64, &'static str> {
-    let trimmed = input.trim();
-
-    if trimmed.is_empty() {
-        return Ok(0);
-    }
-
-    if !trimmed.contains('+')
-        && !trimmed.contains('-')
-        && !trimmed.contains('*')
-        && !trimmed.contains('/')
-        && !trimmed.contains('%')
-    {
-        return parse_literal(trimmed).map(|(val, _, _)| val);
-    }
-
-    let tokens = tokenize(trimmed)?;
-    let tokens = fold_multiplicative(&tokens)?;
-    fold_additive(&tokens)
-}
-
+/// Interactive REPL that reads Tuff expressions from stdin and prints results.
 fn main() {
     use std::io::{self, BufRead, Write};
 
@@ -378,5 +435,10 @@ mod tests {
     #[test]
     fn interpret_modulo_u8() {
         assert_eq!(interpret_tuff("10U8 % 3U8"), Ok(1));
+    }
+
+    #[test]
+    fn interpret_parentheses() {
+        assert_eq!(interpret_tuff("(3U8 + 2U8) * 4U8"), Ok(20));
     }
 }

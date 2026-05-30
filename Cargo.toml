@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+
+[lints.rust]
+missing_docs = "deny" # Rejects missing documentation on public items
+
+[lints.clippy]
+missing_docs_in_private_items = "deny" # Rejects missing documentation on private items
