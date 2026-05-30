@@ -1,8 +1,17 @@
-fn interpret_tuff(input: &str) -> Result<i64, &'static str> {
+macro_rules! parse_suffix {
+    ($input:expr, $suffix:literal, $ty:ty, $max:expr) => {
+        if let Some(num) = $input.strip_suffix($suffix) {
+            let value: $ty = num.parse().map_err(|_| "invalid literal")?;
+            return Ok((value as i64, $max));
+        }
+    };
+}
+
+fn parse_literal(input: &str) -> Result<(i64, u64), &'static str> {
     let trimmed = input.trim();
 
     if trimmed.is_empty() {
-        return Ok(0);
+        return Err("empty literal");
     }
 
     if let Some(num) = trimmed.strip_suffix("U64") {
@@ -10,30 +19,40 @@ fn interpret_tuff(input: &str) -> Result<i64, &'static str> {
         if value > i64::MAX as u64 {
             return Err("literal exceeds i64 range");
         }
-        return Ok(value as i64);
+        return Ok((value as i64, u64::MAX));
     }
 
-    if let Some(num) = trimmed.strip_suffix("U32") {
-        let value: u32 = num.parse().map_err(|_| "invalid literal")?;
-        return Ok(value as i64);
+    parse_suffix!(trimmed, "U32", u32, u32::MAX as u64);
+    parse_suffix!(trimmed, "U16", u16, u16::MAX as u64);
+    parse_suffix!(trimmed, "U8", u8, u8::MAX as u64);
+    parse_suffix!(trimmed, "I8", i8, 0); // signed, no unsigned overflow check
+
+    Err("unknown literal")
+}
+
+fn interpret_tuff(input: &str) -> Result<i64, &'static str> {
+    let trimmed = input.trim();
+
+    if trimmed.is_empty() {
+        return Ok(0);
     }
 
-    if let Some(num) = trimmed.strip_suffix("U16") {
-        let value: u16 = num.parse().map_err(|_| "invalid literal")?;
-        return Ok(value as i64);
+    if trimmed.contains('+') {
+        return trimmed
+            .split('+')
+            .try_fold((0i64, 0u64), |(acc, max_bound), part| {
+                let (term, bound) = parse_literal(part)?;
+                let new_max = max_bound.max(bound);
+                let sum = acc.checked_add(term).ok_or("i64 overflow")?;
+                if new_max > 0 && sum as u64 > new_max {
+                    return Err("unsigned overflow");
+                }
+                Ok((sum, new_max))
+            })
+            .map(|(val, _)| val);
     }
 
-    if let Some(num) = trimmed.strip_suffix("U8") {
-        let value: u8 = num.parse().map_err(|_| "invalid literal")?;
-        return Ok(value as i64);
-    }
-
-    if let Some(num) = trimmed.strip_suffix("I8") {
-        let value: i8 = num.parse().map_err(|_| "invalid literal")?;
-        return Ok(value as i64);
-    }
-
-    Err("unknown expression")
+    parse_literal(trimmed).map(|(val, _)| val)
 }
 
 fn main() {
@@ -160,5 +179,20 @@ mod tests {
     #[test]
     fn interpret_i8_literal_out_of_range_positive() {
         assert!(interpret_tuff("128I8").is_err());
+    }
+
+    #[test]
+    fn interpret_addition_u8() {
+        assert_eq!(interpret_tuff("1U8 + 2U8"), Ok(3));
+    }
+
+    #[test]
+    fn interpret_addition_u8_three_terms() {
+        assert_eq!(interpret_tuff("1U8 + 2U8 + 3U8"), Ok(6));
+    }
+
+    #[test]
+    fn interpret_addition_u8_overflow() {
+        assert!(interpret_tuff("1U8 + 255U8").is_err());
     }
 }
