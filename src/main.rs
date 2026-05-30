@@ -17,8 +17,8 @@ macro_rules! parse_suffix {
     };
 }
 
-/// Type alias for a variable scope: name → (value, min_bound, max_bound).
-type Scope<'a> = HashMap<&'a str, (i64, i64, i64)>;
+/// Type alias for a variable scope: name → (value, min_bound, max_bound, is_mutable).
+type Scope<'a> = HashMap<&'a str, (i64, i64, i64, bool)>;
 
 /// Parses a single typed literal token (e.g. `"100U8"`, `"-128I8"`).
 ///
@@ -52,8 +52,8 @@ fn parse_literal_or_var<'a>(
     scope: &Scope<'a>,
 ) -> Result<(i64, i64, i64), &'static str> {
     let trimmed = input.trim();
-    if let Some(&val) = scope.get(trimmed) {
-        return Ok(val);
+    if let Some(&(val, lo, hi, _)) = scope.get(trimmed) {
+        return Ok((val, lo, hi));
     }
     parse_literal(trimmed)
 }
@@ -224,15 +224,19 @@ fn type_bounds(ty: &str) -> Option<(i64, i64)> {
     }
 }
 
-/// Evaluates a single statement, which may be a `let` binding or an expression.
+/// Evaluates a single statement, which may be a `let` binding, assignment, or expression.
 fn eval_stmt<'a>(stmt: &'a str, scope: &mut Scope<'a>) -> Result<(i64, i64, i64), &'static str> {
+    // let [mut] name [: Type] = expr
     if let Some(rhs) = stmt.strip_prefix("let ") {
-        // Parse: let name : Type = expr
-        let mut parts = rhs.splitn(2, '=');
+        let (_is_mut, rest) = if let Some(r) = rhs.strip_prefix("mut ") {
+            (true, r)
+        } else {
+            (false, rhs)
+        };
+        let mut parts = rest.splitn(2, '=');
         let binding = parts.next().unwrap().trim();
         let expr_str = parts.next().ok_or("expected '=' in let binding")?.trim();
 
-        // binding is "name : Type" or just "name"
         let name: &str;
         let type_name: Option<&str>;
         if let Some((n, t)) = binding.split_once(':') {
@@ -245,7 +249,6 @@ fn eval_stmt<'a>(stmt: &'a str, scope: &mut Scope<'a>) -> Result<(i64, i64, i64)
 
         let (val, lo, hi) = eval_expr(expr_str, scope)?;
 
-        // Enforce type annotation bounds if declared
         if let Some(ty) = type_name {
             if let Some((tmin, tmax)) = type_bounds(ty) {
                 if lo < tmin || hi > tmax {
@@ -254,11 +257,32 @@ fn eval_stmt<'a>(stmt: &'a str, scope: &mut Scope<'a>) -> Result<(i64, i64, i64)
             }
         }
 
-        scope.insert(name, (val, lo, hi));
-        Ok((val, lo, hi))
-    } else {
-        eval_expr(stmt, scope)
+        scope.insert(name, (val, lo, hi, _is_mut));
+        return Ok((val, lo, hi));
     }
+
+    // Assignment: name = expr
+    if let Some((var, rhs_str)) = stmt.split_once('=') {
+        let var = var.trim();
+        let rhs_str = rhs_str.trim();
+        if let Some(&(_val, lo, hi, is_mut)) = scope.get(var) {
+            if !is_mut {
+                return Err("cannot assign to immutable variable");
+            }
+            let (_new_val, rlo, rhi) = eval_expr(rhs_str, scope)?;
+            if _new_val < lo || _new_val > hi {
+                return Err("assignment out of bounds");
+            }
+            if rlo < lo || rhi > hi {
+                return Err("assignment type mismatch");
+            }
+            scope.insert(var, (_new_val, lo, hi, true));
+            return Ok((_new_val, lo, hi));
+        }
+        return Err("unknown variable in assignment");
+    }
+
+    eval_expr(stmt, scope)
 }
 
 /// Folds `*`, `/`, `%` operators with left-to-right precedence,
@@ -328,6 +352,20 @@ fn fold_additive(tokens: &[(i64, i64, i64, char)]) -> Result<i64, &'static str> 
     Ok(acc)
 }
 
+/// Returns true if `input` contains a `;` at depth 0 (not inside braces/parens).
+fn has_top_level_semicolons(input: &str) -> bool {
+    let mut depth = 0;
+    for ch in input.chars() {
+        match ch {
+            '(' | '{' => depth += 1,
+            ')' | '}' => depth -= 1,
+            ';' if depth == 0 => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
 /// Parses and evaluates a Tuff expression, returning the resulting `i64`.
 ///
 /// The string may contain typed integer literals (U8, U16, U32, U64, I8)
@@ -338,8 +376,8 @@ pub fn interpret_tuff(input: &str) -> Result<i64, &'static str> {
         let inner = &trimmed[1..trimmed.len() - 1];
         return eval_block(inner).map(|(val, _, _)| val);
     }
-    // Top-level statement sequence (let bindings with semicolons)
-    if trimmed.contains(';') || trimmed.starts_with("let ") {
+    // Top-level statement sequence (semicolons at depth 0)
+    if has_top_level_semicolons(trimmed) {
         return eval_block(trimmed).map(|(val, _, _)| val);
     }
     eval_expr(trimmed, &HashMap::new()).map(|(val, _, _)| val)
@@ -607,5 +645,20 @@ mod tests {
     #[test]
     fn interpret_let_type_mismatch_var() {
         assert!(interpret_tuff("let y = 0U16; let x : U8 = y;").is_err());
+    }
+
+    #[test]
+    fn interpret_assignment() {
+        assert_eq!(interpret_tuff("let mut x = 0U8; x = 1U8; x"), Ok(1));
+    }
+
+    #[test]
+    fn interpret_assignment_immutable() {
+        assert!(interpret_tuff("let x = 0U8; x = 1U8; x").is_err());
+    }
+
+    #[test]
+    fn interpret_assignment_type_mismatch() {
+        assert!(interpret_tuff("let mut x = 0U8; x = 1U16; x").is_err());
     }
 }
