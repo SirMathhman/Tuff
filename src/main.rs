@@ -22,40 +22,49 @@ pub fn interpret_tuff(input: &str) -> Result<i64, String> {
 /// Tries to parse a literal with a type suffix like U8, I16, etc.
 /// Returns Some(Ok/Err) if a recognized suffix is found, None otherwise.
 fn try_parse_typed_literal(trimmed: &str, original: &str) -> Option<Result<i64, String>> {
-    let (stripped, type_name, min_val, max_val) =
-        if let Some(s) = trimmed.strip_suffix("U8").or_else(|| trimmed.strip_suffix("u8")) {
-            (s, "U8", 0i64, u8::MAX as i64)
-        } else if let Some(s) =
-            trimmed.strip_suffix("U16").or_else(|| trimmed.strip_suffix("u16"))
-        {
-            (s, "U16", 0i64, u16::MAX as i64)
-        } else if let Some(s) =
-            trimmed.strip_suffix("U32").or_else(|| trimmed.strip_suffix("u32"))
-        {
-            (s, "U32", 0i64, u32::MAX as i64)
-        } else if let Some(s) =
-            trimmed.strip_suffix("U64").or_else(|| trimmed.strip_suffix("u64"))
-        {
-            (s, "U64", 0i64, i64::MAX)
-        } else if let Some(s) =
-            trimmed.strip_suffix("I8").or_else(|| trimmed.strip_suffix("i8"))
-        {
-            (s, "I8", i8::MIN as i64, i8::MAX as i64)
-        } else if let Some(s) =
-            trimmed.strip_suffix("I16").or_else(|| trimmed.strip_suffix("i16"))
-        {
-            (s, "I16", i16::MIN as i64, i16::MAX as i64)
-        } else if let Some(s) =
-            trimmed.strip_suffix("I32").or_else(|| trimmed.strip_suffix("i32"))
-        {
-            (s, "I32", i32::MIN as i64, i32::MAX as i64)
-        } else if let Some(s) =
-            trimmed.strip_suffix("I64").or_else(|| trimmed.strip_suffix("i64"))
-        {
-            (s, "I64", i64::MIN, i64::MAX)
-        } else {
-            return None;
-        };
+    let (stripped, type_name, min_val, max_val) = if let Some(s) = trimmed
+        .strip_suffix("U8")
+        .or_else(|| trimmed.strip_suffix("u8"))
+    {
+        (s, "U8", 0i64, u8::MAX as i64)
+    } else if let Some(s) = trimmed
+        .strip_suffix("U16")
+        .or_else(|| trimmed.strip_suffix("u16"))
+    {
+        (s, "U16", 0i64, u16::MAX as i64)
+    } else if let Some(s) = trimmed
+        .strip_suffix("U32")
+        .or_else(|| trimmed.strip_suffix("u32"))
+    {
+        (s, "U32", 0i64, u32::MAX as i64)
+    } else if let Some(s) = trimmed
+        .strip_suffix("U64")
+        .or_else(|| trimmed.strip_suffix("u64"))
+    {
+        (s, "U64", 0i64, i64::MAX)
+    } else if let Some(s) = trimmed
+        .strip_suffix("I8")
+        .or_else(|| trimmed.strip_suffix("i8"))
+    {
+        (s, "I8", i8::MIN as i64, i8::MAX as i64)
+    } else if let Some(s) = trimmed
+        .strip_suffix("I16")
+        .or_else(|| trimmed.strip_suffix("i16"))
+    {
+        (s, "I16", i16::MIN as i64, i16::MAX as i64)
+    } else if let Some(s) = trimmed
+        .strip_suffix("I32")
+        .or_else(|| trimmed.strip_suffix("i32"))
+    {
+        (s, "I32", i32::MIN as i64, i32::MAX as i64)
+    } else if let Some(s) = trimmed
+        .strip_suffix("I64")
+        .or_else(|| trimmed.strip_suffix("i64"))
+    {
+        (s, "I64", i64::MIN, i64::MAX)
+    } else {
+        return None;
+    };
 
     match stripped.parse::<i64>() {
         Ok(n) => {
