@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "cmd /c \"cargo test\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+      }
+    ]
+  }
+}
