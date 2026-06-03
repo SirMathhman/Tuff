@@ -465,6 +465,26 @@ mod tests {
             35
         );
     }
+
+    #[test]
+    fn test_simple_top_level_let_binding() {
+        assert_eq!(interpret_tuff("let y : U8 = 35U8; y"), 35);
+    }
+
+    #[test]
+    fn test_let_binding_without_final_expression() {
+        assert_eq!(interpret_tuff("let y : U8 = 35U8;"), 0);
+    }
+
+    #[test]
+    fn test_simple_top_level_let_binding_no_type() {
+        assert_eq!(interpret_tuff("let y = 35U8; y"), 35);
+    }
+
+    #[test]
+    fn test_chained_let_bindings() {
+        assert_eq!(interpret_tuff("let y = 35U8; let x = y; x"), 35);
+    }
 }
 
 #[cfg(not(coverage))]
