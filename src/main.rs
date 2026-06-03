@@ -31,6 +31,109 @@ fn parse_literal(token: &str) -> i64 {
     num_str.parse::<i64>().unwrap_or(0)
 }
 
+/// Split text on semicolons at depth 0 (not inside nested parentheses or braces).
+fn split_on_semicolons(text: &str) -> Vec<String> {
+    let tokens: Vec<char> = text.chars().collect();
+    let len = tokens.len();
+    let mut segments: Vec<String> = Vec::new();
+    let mut current_start = 0;
+
+    for i in 0..len {
+        if tokens[i] == ';' {
+            let seg: String = tokens[current_start..i].iter().collect();
+            let (dp, db) = segment_depth(&seg);
+            if dp == 0 && db == 0 {
+                segments.push(seg.trim().to_string());
+                current_start = i + 1;
+            }
+        }
+    }
+
+    // Add remaining content after last semicolon.
+    let remainder: String = tokens[current_start..len].iter().collect();
+    if !remainder.trim().is_empty() {
+        segments.push(remainder.trim().to_string());
+    }
+
+    segments
+}
+
+/// Compute the net parenthesis and brace depth of a segment string.
+fn segment_depth(seg: &str) -> (i32, i32) {
+    let mut dp = 0;
+    let mut db = 0;
+    for ch in seg.chars() {
+        match ch {
+            '(' => dp += 1,
+            ')' => dp -= 1,
+            '{' => db += 1,
+            '}' => db -= 1,
+            _ => {}
+        }
+    }
+    (dp, db)
+}
+
+/// Parse a `let` segment: "let <name> [: <type>] = <expr>".
+/// Returns `(var_name, evaluated_value)` or None if not a valid let statement.
+fn parse_let_segment(seg: &str, existing_bindings: &[(String, i64)]) -> Option<(String, i64)> {
+    if !seg.starts_with("let ") {
+        return None;
+    }
+
+    let after_let = &seg[4..]; // skip "let "
+    let parts: Vec<&str> = after_let.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let decl_part = parts[0].trim();
+    let expr_str = parts[1].trim();
+
+    // Extract variable name (first word of declaration part)
+    let var_name = match decl_part.split_whitespace().next() {
+        Some(name) => name.to_string(),
+        None => return None,
+    };
+
+    // Substitute existing bindings into the expression before evaluating.
+    let mut substituted_expr = expr_str.to_string();
+    for (name, value) in existing_bindings {
+        substituted_expr = substituted_expr.replace(name.as_str(), &format!("{}U8", value));
+    }
+
+    Some((var_name.clone(), interpret_tuff(&substituted_expr)))
+}
+
+/// Substitute variable references with their resolved values.
+fn substitute_variables(text: &str, bindings: &[(String, i64)]) -> String {
+    let mut result = text.to_string();
+    // Sort by name length (longest first) to avoid partial replacements.
+    let mut sorted_bindings: Vec<_> = bindings.iter().collect();
+    sorted_bindings.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+
+    for (name, value) in &sorted_bindings {
+        result = result.replace(name.as_str(), &format!("{}U8", value));
+    }
+    result
+}
+
+/// Collect `let` bindings from segments and return remaining non-let segments.
+fn collect_bindings_and_remainder(segments: &[String]) -> (Vec<(String, i64)>, Vec<String>) {
+    let mut bindings: Vec<(String, i64)> = Vec::new();
+    let mut remainder: Vec<String> = Vec::new();
+
+    for seg in segments {
+        if let Some((name, value)) = parse_let_segment(seg, &bindings) {
+            bindings.push((name.clone(), value));
+        } else if !seg.is_empty() {
+            remainder.push(seg.clone());
+        }
+    }
+
+    (bindings, remainder)
+}
+
 /// Process `let` bindings inside a braced expression.
 /// Returns the body with all variable references replaced by their evaluated values,
 /// or None if there are no let statements to process.
@@ -41,83 +144,17 @@ fn process_let_bindings(body: &str) -> Option<String> {
         normalized = normalized.replace("  ", " ");
     }
 
-    // Tokenize by splitting on semicolons, respecting nested delimiters
-    let tokens: Vec<char> = normalized.chars().collect();
-    let len = tokens.len();
-    let mut segments: Vec<String> = Vec::new();
-    let mut current_start = 0;
-    for i in 0..len {
-        if tokens[i] == ';' {
-            // Check we're at depth 0 (not inside nested parens/braces)
-            let seg: String = tokens[current_start..i].iter().collect();
-            let mut depth_parens = 0;
-            let mut depth_braces = 0;
-            for ch in seg.chars() {
-                match ch {
-                    '(' => depth_parens += 1,
-                    ')' => depth_parens -= 1,
-                    '{' => depth_braces += 1,
-                    '}' => depth_braces -= 1,
-                    _ => {}
-                }
-            }
-            if depth_parens == 0 && depth_braces == 0 {
-                segments.push(seg.trim().to_string());
-                current_start = i + 1;
-            }
-        }
-    }
-    // Add remaining content after last semicolon
-    let remainder: String = tokens[current_start..len].iter().collect();
-    if !remainder.trim().is_empty() {
-        segments.push(remainder.trim().to_string());
-    }
-
-    // Check for `let` statements and collect variable bindings
-    let mut bindings: Vec<(String, i64)> = Vec::new();
-    let mut body_segments: Vec<String> = Vec::new();
-
-    for seg in &segments {
-        if seg.starts_with("let ") {
-            // Parse: let <name> [: <type>] = <expr>;
-            let after_let = &seg[4..]; // skip "let "
-            let parts: Vec<&str> = after_let.splitn(2, '=').collect();
-            if parts.len() == 2 {
-                let decl_part = parts[0].trim();
-                let expr_str = parts[1].trim();
-
-                // Extract variable name (first word)
-                let var_name = match decl_part.split_whitespace().next() {
-                    Some(name) => name.to_string(),
-                    None => continue,
-                };
-
-                // Evaluate the expression and store binding
-                let value = interpret_tuff(expr_str);
-                bindings.push((var_name.clone(), value));
-            }
-        } else if !seg.is_empty() {
-            body_segments.push(seg.clone());
-        }
-    }
+    let segments = split_on_semicolons(&normalized);
+    let (bindings, body_segments) = collect_bindings_and_remainder(&segments);
 
     if bindings.is_empty() {
         return None;
     }
 
-    // Build the final expression from remaining segments, replacing variable references
+    // Build the final expression from remaining segments, replacing variable references.
     let mut result = String::new();
     for seg in &body_segments {
-        let mut replaced = seg.to_string();
-        // Sort by name length (longest first) to avoid partial replacements
-        let mut sorted_bindings: Vec<_> = bindings.iter().collect();
-        sorted_bindings.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
-
-        for (name, value) in &sorted_bindings {
-            // Replace variable name with literal value + U8 suffix
-            let replacement = format!("{}U8", value);
-            replaced = replaced.replace(name.as_str(), &replacement);
-        }
+        let replaced = substitute_variables(seg, &bindings);
         if !result.is_empty() {
             result.push(' ');
         }
@@ -131,6 +168,41 @@ fn interpret_tuff(source: &str) -> i64 {
     let trimmed = source.trim();
     if trimmed.is_empty() {
         return 0;
+    }
+
+    // Check for top-level semicolon-separated statements (let bindings + final expression).
+    let has_top_level_semicolons = {
+        let mut depth_parens = 0;
+        let mut depth_braces = 0;
+        let mut found = false;
+        for ch in trimmed.chars() {
+            match ch {
+                '(' => depth_parens += 1,
+                ')' => depth_parens -= 1,
+                '{' => depth_braces += 1,
+                '}' => depth_braces -= 1,
+                ';' if depth_parens == 0 && depth_braces == 0 => {
+                    found = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        found
+    };
+
+    if has_top_level_semicolons {
+        // Use shared helpers to split, parse lets, and substitute.
+        let segments = split_on_semicolons(trimmed);
+        let (bindings, remainder) = collect_bindings_and_remainder(&segments);
+
+        // Evaluate the final expression with all substitutions.
+        let mut final_expr = match remainder.last() {
+            Some(e) => e.clone(),
+            None => return 0,
+        };
+        final_expr = substitute_variables(&final_expr, &bindings);
+        return interpret_tuff(&final_expr);
     }
 
     // If the entire expression is wrapped in a single balanced pair of parentheses or braces, evaluate the inner part.
@@ -384,6 +456,14 @@ mod tests {
     #[test]
     fn test_let_binding_in_braces() {
         assert_eq!(interpret_tuff("{ let x : U8 = 3U8 + 4U8; x } * 5U8"), 35);
+    }
+
+    #[test]
+    fn test_nested_let_bindings_with_top_level_semicolon() {
+        assert_eq!(
+            interpret_tuff("let y : U8 = { let x : U8 = 3U8 + 4U8; x } * 5U8; y"),
+            35
+        );
     }
 }
 
