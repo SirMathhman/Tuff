@@ -31,23 +31,135 @@ fn parse_literal(token: &str) -> i64 {
     num_str.parse::<i64>().unwrap_or(0)
 }
 
+/// Process `let` bindings inside a braced expression.
+/// Returns the body with all variable references replaced by their evaluated values,
+/// or None if there are no let statements to process.
+fn process_let_bindings(body: &str) -> Option<String> {
+    // Normalize spaces
+    let mut normalized = body.to_string();
+    while normalized.contains("  ") {
+        normalized = normalized.replace("  ", " ");
+    }
+
+    // Tokenize by splitting on semicolons, respecting nested delimiters
+    let tokens: Vec<char> = normalized.chars().collect();
+    let len = tokens.len();
+    let mut segments: Vec<String> = Vec::new();
+    let mut current_start = 0;
+    for i in 0..len {
+        if tokens[i] == ';' {
+            // Check we're at depth 0 (not inside nested parens/braces)
+            let seg: String = tokens[current_start..i].iter().collect();
+            let mut depth_parens = 0;
+            let mut depth_braces = 0;
+            for ch in seg.chars() {
+                match ch {
+                    '(' => depth_parens += 1,
+                    ')' => depth_parens -= 1,
+                    '{' => depth_braces += 1,
+                    '}' => depth_braces -= 1,
+                    _ => {}
+                }
+            }
+            if depth_parens == 0 && depth_braces == 0 {
+                segments.push(seg.trim().to_string());
+                current_start = i + 1;
+            }
+        }
+    }
+    // Add remaining content after last semicolon
+    let remainder: String = tokens[current_start..len].iter().collect();
+    if !remainder.trim().is_empty() {
+        segments.push(remainder.trim().to_string());
+    }
+
+    // Check for `let` statements and collect variable bindings
+    let mut bindings: Vec<(String, i64)> = Vec::new();
+    let mut body_segments: Vec<String> = Vec::new();
+
+    for seg in &segments {
+        if seg.starts_with("let ") {
+            // Parse: let <name> [: <type>] = <expr>;
+            let after_let = &seg[4..]; // skip "let "
+            let parts: Vec<&str> = after_let.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                let decl_part = parts[0].trim();
+                let expr_str = parts[1].trim();
+
+                // Extract variable name (first word)
+                let var_name = match decl_part.split_whitespace().next() {
+                    Some(name) => name.to_string(),
+                    None => continue,
+                };
+
+                // Evaluate the expression and store binding
+                let value = interpret_tuff(expr_str);
+                bindings.push((var_name.clone(), value));
+            }
+        } else if !seg.is_empty() {
+            body_segments.push(seg.clone());
+        }
+    }
+
+    if bindings.is_empty() {
+        return None;
+    }
+
+    // Build the final expression from remaining segments, replacing variable references
+    let mut result = String::new();
+    for seg in &body_segments {
+        let mut replaced = seg.to_string();
+        // Sort by name length (longest first) to avoid partial replacements
+        let mut sorted_bindings: Vec<_> = bindings.iter().collect();
+        sorted_bindings.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+
+        for (name, value) in &sorted_bindings {
+            // Replace variable name with literal value + U8 suffix
+            let replacement = format!("{}U8", value);
+            replaced = replaced.replace(name.as_str(), &replacement);
+        }
+        if !result.is_empty() {
+            result.push(' ');
+        }
+        result.push_str(&replaced);
+    }
+
+    Some(result)
+}
+
 fn interpret_tuff(source: &str) -> i64 {
     let trimmed = source.trim();
     if trimmed.is_empty() {
         return 0;
     }
 
-    // If the entire expression is wrapped in a single balanced pair of parentheses, evaluate the inner part.
-    if trimmed.starts_with('(') && trimmed.ends_with(')') {
+    // If the entire expression is wrapped in a single balanced pair of parentheses or braces, evaluate the inner part.
+    let opening = trimmed.chars().next();
+    let closing = trimmed.chars().last();
+    if (opening == Some('(') && closing == Some(')'))
+        || (opening == Some('{') && closing == Some('}'))
+    {
         let mut depth = 0;
         let mut can_unwrap = true;
         for ch in trimmed.chars() {
-            match ch {
-                '(' => depth += 1,
-                ')' => depth -= 1,
+            match opening {
+                Some('(') => {
+                    if ch == '(' {
+                        depth += 1;
+                    } else if ch == ')' {
+                        depth -= 1;
+                    }
+                }
+                Some('{') => {
+                    if ch == '{' {
+                        depth += 1;
+                    } else if ch == '}' {
+                        depth -= 1;
+                    }
+                }
                 _ => {}
             }
-            // If depth drops to 0 before the last character, outer parens don't fully wrap.
+            // If depth drops to 0 before the last character, outer delimiters don't fully wrap.
             if depth == 0 && !trimmed.ends_with(ch) {
                 can_unwrap = false;
                 break;
@@ -58,27 +170,39 @@ fn interpret_tuff(source: &str) -> i64 {
         }
     }
 
-    // Recursively evaluate parenthesized sub-expressions from inside out.
+    // Recursively evaluate parenthesized/braced sub-expressions from inside out.
     let mut resolved = String::new();
     let chars: Vec<char> = trimmed.chars().collect();
     let len = chars.len();
     let mut i = 0;
     while i < len {
-        if chars[i] == '(' {
-            // Find matching closing parenthesis
+        if chars[i] == '(' || chars[i] == '{' {
+            // Find matching closing delimiter
+            let open_delim = chars[i];
+            let close_delim = if open_delim == '(' { ')' } else { '}' };
             let mut depth = 1;
             let start = i + 1;
             let mut j = start;
             while j < len && depth > 0 {
-                if chars[j] == '(' {
+                if chars[j] == open_delim {
                     depth += 1;
-                } else if chars[j] == ')' {
+                } else if chars[j] == close_delim {
                     depth -= 1;
                 }
                 j += 1;
             }
             // Evaluate the inner expression and replace with result literal
             let inner: String = chars[start..j - 1].iter().collect();
+
+            // For braced expressions, check for `let` bindings first
+            if open_delim == '{' {
+                if let Some(processed) = process_let_bindings(&inner) {
+                    resolved.push_str(&format!("{}U8", interpret_tuff(&processed)));
+                    i = j;
+                    continue;
+                }
+            }
+
             let val = interpret_tuff(&inner);
             resolved.push_str(&format!("{}U8", val));
             i = j;
@@ -250,6 +374,16 @@ mod tests {
     #[test]
     fn test_multiple_parenthesized_expressions() {
         assert_eq!(interpret_tuff("(3U8 + 4U8) * (2U8 + 3U8)"), 35);
+    }
+
+    #[test]
+    fn test_braced_expression() {
+        assert_eq!(interpret_tuff("{ 3U8 + 4U8 } * 5U8"), 35);
+    }
+
+    #[test]
+    fn test_let_binding_in_braces() {
+        assert_eq!(interpret_tuff("{ let x : U8 = 3U8 + 4U8; x } * 5U8"), 35);
     }
 }
 
