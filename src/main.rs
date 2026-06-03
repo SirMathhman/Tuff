@@ -37,8 +37,59 @@ fn interpret_tuff(source: &str) -> i64 {
         return 0;
     }
 
+    // If the entire expression is wrapped in a single balanced pair of parentheses, evaluate the inner part.
+    if trimmed.starts_with('(') && trimmed.ends_with(')') {
+        let mut depth = 0;
+        let mut can_unwrap = true;
+        for ch in trimmed.chars() {
+            match ch {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
+            // If depth drops to 0 before the last character, outer parens don't fully wrap.
+            if depth == 0 && !trimmed.ends_with(ch) {
+                can_unwrap = false;
+                break;
+            }
+        }
+        if can_unwrap {
+            return interpret_tuff(&trimmed[1..trimmed.len() - 1]);
+        }
+    }
+
+    // Recursively evaluate parenthesized sub-expressions from inside out.
+    let mut resolved = String::new();
+    let chars: Vec<char> = trimmed.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    while i < len {
+        if chars[i] == '(' {
+            // Find matching closing parenthesis
+            let mut depth = 1;
+            let start = i + 1;
+            let mut j = start;
+            while j < len && depth > 0 {
+                if chars[j] == '(' {
+                    depth += 1;
+                } else if chars[j] == ')' {
+                    depth -= 1;
+                }
+                j += 1;
+            }
+            // Evaluate the inner expression and replace with result literal
+            let inner: String = chars[start..j - 1].iter().collect();
+            let val = interpret_tuff(&inner);
+            resolved.push_str(&format!("{}U8", val));
+            i = j;
+        } else {
+            resolved.push(chars[i]);
+            i += 1;
+        }
+    }
+
     // Normalize multiple consecutive spaces into a single space.
-    let mut normalized = trimmed.to_string();
+    let mut normalized = resolved;
     while normalized.contains("  ") {
         normalized = normalized.replace("  ", " ");
     }
@@ -189,6 +240,16 @@ mod tests {
     #[test]
     fn test_addition_with_multiplication_precedence() {
         assert_eq!(interpret_tuff("3U8 + 4U8 * 5U8"), 23);
+    }
+
+    #[test]
+    fn test_parenthesized_expression() {
+        assert_eq!(interpret_tuff("(3U8 + 4U8) * 5U8"), 35);
+    }
+
+    #[test]
+    fn test_multiple_parenthesized_expressions() {
+        assert_eq!(interpret_tuff("(3U8 + 4U8) * (2U8 + 3U8)"), 35);
     }
 }
 
