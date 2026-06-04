@@ -141,8 +141,15 @@ fn parse_let_segment(seg: &str, existing_bindings: &[(String, i64)]) -> Option<(
         None => return None,
     };
 
+    // Strip leading '&' for reference pass-through (e.g. `&x` -> `x`)
+    let eval_expr = if expr_str.starts_with('&') {
+        &expr_str[1..]
+    } else {
+        expr_str
+    };
+
     // Substitute existing bindings into the expression before evaluating.
-    let mut substituted_expr = expr_str.to_string();
+    let mut substituted_expr = eval_expr.to_string();
     for (name, value) in existing_bindings {
         substituted_expr = substituted_expr.replace(name.as_str(), &format!("{}U8", value));
     }
@@ -158,7 +165,12 @@ fn substitute_variables(text: &str, bindings: &[(String, i64)]) -> String {
     sorted_bindings.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
 
     for (name, value) in &sorted_bindings {
-        result = result.replace(name.as_str(), &format!("{}U8", value));
+        // Handle dereference pass-through: `*varName` -> `<value>U8`
+        result = result.replace(
+            &format!("*{}", name),
+            &format!("{}", value),
+        );
+        result = result.replace(name.as_str(), &format!("{}", value));
     }
     result
 }
@@ -547,6 +559,14 @@ mod tests {
     #[test]
     fn test_variable_reassignment() {
         assert_eq!(interpret_tuff("let mut x = 0U8; x = 1U8; x"), 1);
+    }
+
+    #[test]
+    fn test_reference_and_dereference_pass_through() {
+        assert_eq!(
+            interpret_tuff("let x = 100U8; let y : *U8 = &x; *y"),
+            100
+        );
     }
 }
 
