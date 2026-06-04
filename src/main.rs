@@ -74,6 +74,44 @@ fn segment_depth(seg: &str) -> (i32, i32) {
     (dp, db)
 }
 
+/// Check if a segment is a simple variable assignment (not a let declaration).
+/// e.g. "x = 1U8" -> Some(("x", evaluated_value))
+fn parse_assignment_segment(
+    seg: &str,
+    existing_bindings: &[(String, i64)],
+) -> Option<(String, i64)> {
+    // Must contain '=' and not start with 'let'
+    if seg.starts_with("let ") || !seg.contains('=') {
+        return None;
+    }
+
+    let parts: Vec<&str> = seg.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let name_part = parts[0].trim();
+    let expr_str = parts[1].trim();
+
+    // Variable name must be a single identifier (no type annotation, no spaces)
+    let var_name = match name_part.split_whitespace().next() {
+        Some(name) if !name.contains(' ') => name,
+        _ => return None,
+    };
+
+    // Only allow reassignment of existing bindings
+    if !existing_bindings.iter().any(|(n, _)| n == var_name) {
+        return None;
+    }
+
+    let mut substituted_expr = expr_str.to_string();
+    for (name, value) in existing_bindings {
+        substituted_expr = substituted_expr.replace(name.as_str(), &format!("{}U8", value));
+    }
+
+    Some((var_name.to_string(), interpret_tuff(&substituted_expr)))
+}
+
 /// Parse a `let` segment: "let <name> [: <type>] = <expr>".
 /// Returns `(var_name, evaluated_value)` or None if not a valid let statement.
 fn parse_let_segment(seg: &str, existing_bindings: &[(String, i64)]) -> Option<(String, i64)> {
@@ -90,8 +128,15 @@ fn parse_let_segment(seg: &str, existing_bindings: &[(String, i64)]) -> Option<(
     let decl_part = parts[0].trim();
     let expr_str = parts[1].trim();
 
-    // Extract variable name (first word of declaration part)
-    let var_name = match decl_part.split_whitespace().next() {
+    // Extract variable name, skipping 'mut' keyword if present
+    let mut words = decl_part.split_whitespace();
+    let first = words.next();
+    let var_name = if first == Some("mut") {
+        words.next()
+    } else {
+        first
+    };
+    let var_name = match var_name {
         Some(name) => name.to_string(),
         None => return None,
     };
@@ -126,6 +171,14 @@ fn collect_bindings_and_remainder(segments: &[String]) -> (Vec<(String, i64)>, V
     for seg in segments {
         if let Some((name, value)) = parse_let_segment(seg, &bindings) {
             bindings.push((name.clone(), value));
+        } else if let Some((name, value)) = parse_assignment_segment(seg, &bindings) {
+            // Update existing binding
+            for entry in &mut bindings {
+                if entry.0 == name {
+                    entry.1 = value;
+                    break;
+                }
+            }
         } else if !seg.is_empty() {
             remainder.push(seg.clone());
         }
@@ -484,6 +537,16 @@ mod tests {
     #[test]
     fn test_chained_let_bindings() {
         assert_eq!(interpret_tuff("let y = 35U8; let x = y; x"), 35);
+    }
+
+    #[test]
+    fn test_mut_let_binding() {
+        assert_eq!(interpret_tuff("let mut x = 1U8; x"), 1);
+    }
+
+    #[test]
+    fn test_variable_reassignment() {
+        assert_eq!(interpret_tuff("let mut x = 0U8; x = 1U8; x"), 1);
     }
 }
 
