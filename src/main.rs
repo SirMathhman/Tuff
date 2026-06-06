@@ -52,8 +52,13 @@ fn split_top_level<'a>(s: &'a str) -> Vec<&'a str> {
     result
 }
 
-/// Compile a Tuff statement list (semicolon-separated, no trailing return expr)
-/// into C statements joined by newlines.  Returns None if the source is empty.
+/// Strip all known type suffixes (`U8`, `I32`) from a string.
+/// Must only be called *after* `read<T>()` calls have been replaced,
+/// so the suffix inside `<...>` isn't stripped prematurely.
+fn strip_type_suffix(s: &str) -> String {
+    s.replace("U8", "").replace("I32", "")
+}
+
 /// Compile a `let [mut] <name> [= <init>]` statement into a Vec of C statements
 /// (variable declaration + optional init/read statements).
 fn compile_let_stmt(stmt: &str) -> Vec<String> {
@@ -74,7 +79,7 @@ fn compile_let_stmt(stmt: &str) -> Vec<String> {
                 vn, vn
             ));
         } else {
-            out.push(format!("{} = {};", vn, iv.replace("U8", "")));
+            out.push(format!("{} = {};", vn, strip_type_suffix(iv)));
         }
     }
     out
@@ -87,8 +92,8 @@ fn compile_statements(src: &str) -> Option<String> {
     }
     if parts.len() == 1 {
         // Single expression — just emit as return.
-        let v = parts[0].trim().replace("U8", "");
-        return Some(format!("return {};", v));
+        let v = parts[0].trim();
+        return Some(format!("return {};", strip_type_suffix(v)));
     }
     let mut c_stmts: Vec<String> = Vec::new();
     // All parts except the last are statements.
@@ -105,8 +110,8 @@ fn compile_statements(src: &str) -> Option<String> {
         }
     }
     // Last part is the block's return value.
-    let last_expr = parts.last().unwrap().trim().replace("U8", "");
-    c_stmts.push(format!("return {};", last_expr));
+    let last_expr = parts.last().unwrap().trim();
+    c_stmts.push(format!("return {};", strip_type_suffix(last_expr)));
     Some(c_stmts.join("\n  "))
 }
 
@@ -147,8 +152,8 @@ fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
 
     // Match if/else expression: if (condition) then_expr else else_expr
     if let Some((condition, raw_then, raw_else)) = parse_if_else(trimmed) {
-        let then_expr = raw_then.replace("U8", "");
-        let else_expr = raw_else.replace("U8", "");
+        let then_expr = strip_type_suffix(raw_then);
+        let else_expr = strip_type_suffix(raw_else);
 
         // Compile the condition body.
         let cond_body = if condition == "read<Bool>()" {
@@ -228,9 +233,10 @@ int main() {{
                             let loop_var = for_header[..in_pos].trim();
                             let range_expr = for_header[in_pos + 4..].trim();
                             if let Some(dotdot_pos) = range_expr.find("..") {
-                                let range_start = range_expr[..dotdot_pos].trim().replace("U8", "");
+                                let range_start =
+                                    strip_type_suffix(range_expr[..dotdot_pos].trim());
                                 let range_end =
-                                    range_expr[dotdot_pos + 2..].trim().replace("U8", "");
+                                    strip_type_suffix(range_expr[dotdot_pos + 2..].trim());
                                 c_stmts.push(format!(
                                     "for (int {} = {}; {} <= {}; {}++) {{\n    {};\n  }}",
                                     loop_var, range_start, loop_var, range_end, loop_var, body
@@ -244,30 +250,30 @@ int main() {{
                         let read_var = format!("_r{}", i);
                         c_stmts.push(format!("int {};", read_var));
                         c_stmts.push(format!("scanf(\"%d\", &{});", read_var));
-                        let c_line = stmt.replace("read<U8>()", &read_var).replace("U8", "");
-                        c_stmts.push(format!("{};", c_line));
+                        let c_line = stmt.replace("read<U8>()", &read_var);
+                        c_stmts.push(format!("{};", strip_type_suffix(&c_line)));
                     } else {
-                        c_stmts.push(format!("{};", stmt.replace("U8", "")));
+                        c_stmts.push(format!("{};", strip_type_suffix(stmt)));
                     }
                 }
             }
 
-            let ret_expr = parts.last().unwrap().trim().replace("U8", "");
+            let ret_expr = parts.last().unwrap().trim();
             // If the return expression is a top-level if/else, emit it as an if/else block
             // since C does not allow `return if (...) ... else ...`.
-            if let Some((condition, raw_then, raw_else)) = parse_if_else(&ret_expr) {
+            if let Some((condition, raw_then, raw_else)) = parse_if_else(ret_expr) {
                 let then_stmts = if raw_then.starts_with('{') {
                     // Block body: compile its contents
                     let inner = &raw_then[1..raw_then.len().saturating_sub(1)];
                     compile_statements(inner).unwrap_or_default()
                 } else {
-                    format!("return {};", raw_then.replace("U8", ""))
+                    format!("return {};", strip_type_suffix(raw_then))
                 };
                 let else_stmts = if raw_else.starts_with('{') {
                     let inner = &raw_else[1..raw_else.len().saturating_sub(1)];
                     compile_statements(inner).unwrap_or_default()
                 } else {
-                    format!("return {};", raw_else.replace("U8", ""))
+                    format!("return {};", strip_type_suffix(raw_else))
                 };
                 return Ok(format!(
                     r#"
@@ -303,7 +309,7 @@ int main() {{
 }}
 "#,
                 stmts = c_stmts.join("\n  "),
-                ret = ret_expr
+                ret = strip_type_suffix(ret_expr)
             ));
         }
     }
@@ -340,7 +346,7 @@ int main() {{
             expr = expr.replacen("read<U8>()", &format!("v{}", i), 1);
         }
         // Strip U8 suffix from numeric literals (e.g. 1U8 → 1).
-        expr = expr.replace("U8", "");
+        expr = strip_type_suffix(&expr);
         expr = expr.split_whitespace().collect::<Vec<_>>().join(" ");
         return Ok(format!(
             r#"
@@ -601,6 +607,13 @@ mod tests {
             Some("false"),
         );
         assert_eq!(exit_code, 3);
+    }
+
+    #[test]
+    fn test_let_i32_no_init_then_assign() {
+        // let temp : I32; temp = 100I32; temp should return 100.
+        let exit_code = execute_tuff("let temp : I32; temp = 100I32; temp", None);
+        assert_eq!(exit_code, 100);
     }
 
     #[test]
