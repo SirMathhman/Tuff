@@ -3,7 +3,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "cmd /c \"cargo test 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
+        "command": "cmd /c \"cargo llvm-cov --show-missing-lines --fail-under-lines 95 1>&2\"; if ($LASTEXITCODE -ne 0) { exit 2 }"
       },
       {
         "type": "command",

@@ -246,22 +246,27 @@ fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> i32 {
     }
 }
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-
+fn run(args: &[String]) -> i32 {
     if args.len() < 2 {
         eprintln!("Usage: tuffc <file.tuff>");
-        std::process::exit(1);
+        return 1;
     }
 
     let path = &args[1];
-    let source = fs::read_to_string(path).unwrap_or_else(|e| {
-        eprintln!("failed to read {}: {}", path, e);
-        std::process::exit(1);
-    });
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("failed to read {}: {}", path, e);
+            return 1;
+        }
+    };
 
-    // Pass through stdin if the terminal is a TTY (interactive input available)
-    let exit_code = execute_tuff(&source, None);
+    execute_tuff(&source, None)
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let exit_code = run(&args);
     std::process::exit(exit_code);
 }
 
@@ -358,5 +363,98 @@ mod tests {
         // if (read<Bool>()) 3U8 else 5U8 with "true" should return 3.
         let exit_code = execute_tuff("if (read<Bool>()) 3U8 else 5U8", Some("true"));
         assert_eq!(exit_code, 3);
+    }
+
+    #[test]
+    fn test_if_read_bool_else_u8_literal() {
+        // if (read<Bool>()) 3U8 else 5U8 with "false" should return 5.
+        let exit_code = execute_tuff("if (read<Bool>()) 3U8 else 5U8", Some("false"));
+        assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_if_read_u8_condition() {
+        // if (read<U8>()) 3U8 else 5U8 with "1" should return 3 (truthy).
+        let exit_code = execute_tuff("if (read<U8>()) 3U8 else 5U8", Some("1"));
+        assert_eq!(exit_code, 3);
+    }
+
+    #[test]
+    fn test_if_read_u8_condition_falsy() {
+        // if (read<U8>()) 3U8 else 5U8 with "0" should return 5 (falsy).
+        let exit_code = execute_tuff("if (read<U8>()) 3U8 else 5U8", Some("0"));
+        assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_if_literal_condition_truthy() {
+        // if (1) 3U8 else 5U8 should return 3.
+        let exit_code = execute_tuff("if (1) 3U8 else 5U8", None);
+        assert_eq!(exit_code, 3);
+    }
+
+    #[test]
+    fn test_if_literal_condition_falsy() {
+        // if (0) 3U8 else 5U8 should return 5.
+        let exit_code = execute_tuff("if (0) 3U8 else 5U8", None);
+        assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_compile_if_no_closing_paren_falls_through() {
+        // Unclosed parens in if expression should fall through to default path.
+        let result = compile_tuff_to_c("if (read<Bool>()");
+        assert!(result.contains("return 0;"));
+    }
+
+    #[test]
+    fn test_compile_if_no_else_falls_through() {
+        // if without else should fall through to default path.
+        let result = compile_tuff_to_c("if (read<Bool>()) 3U8");
+        assert!(result.contains("return 0;"));
+    }
+
+    #[test]
+    fn test_compile_let_single_part_falls_through() {
+        // let without semicolons should fall through to default path.
+        let result = compile_tuff_to_c("let x");
+        assert!(result.contains("return 0;"));
+    }
+
+    #[test]
+    fn test_clang_compile_failure() {
+        // Invalid then-expr should cause clang to fail.
+        let exit_code = execute_tuff("if (read<Bool>()) read<Bool>() else 0U8", Some("true"));
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_run_no_args_returns_one() {
+        let exit_code = run(&[]);
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_run_file_not_found_returns_one() {
+        let exit_code = run(&["tuffc".to_string(), "nonexistent_file.tuff".to_string()]);
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_run_with_valid_file() {
+        // Create a temp .tuff file and run it through the run() entry point.
+        let tmp_dir = std::env::temp_dir().join(format!("tuffc-test-{}", next_id()));
+        fs::create_dir_all(&tmp_dir).unwrap();
+        let tuff_path = tmp_dir.join("test.tuff");
+        fs::write(&tuff_path, "read<U8>()").unwrap();
+
+        let exit_code = run(&["tuffc".to_string(), tuff_path.to_string_lossy().to_string()]);
+        // Without stdin, scanf gets no input. On Windows, scanf of "%d" with no input
+        // leaves the variable uninitialized — just verify the process ran (exit code 0 or nonzero).
+        // The important thing is that run() executed without panicking.
+        let _ = exit_code;
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&tmp_dir);
     }
 }
