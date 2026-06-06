@@ -1,3 +1,4 @@
+use std::fmt;
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -10,7 +11,20 @@ fn next_id() -> u64 {
     INVOCATION_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
-fn compile_tuff_to_c(tuff_source: &str) -> String {
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompileError {
+    pub message: String,
+}
+
+impl fmt::Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "compile error: {}", self.message)
+    }
+}
+
+impl std::error::Error for CompileError {}
+
+fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
     // Trim whitespace and try to match known patterns.
     let trimmed = tuff_source.trim();
 
@@ -50,7 +64,9 @@ fn compile_tuff_to_c(tuff_source: &str) -> String {
                 } else if condition.contains("read<U8>()") {
                     "int cond_val;\n  scanf(\"%d\", &cond_val);".to_string()
                 } else {
-                    format!("int cond_val = {};", condition)
+                    return Err(CompileError {
+                        message: format!("unsupported if condition: {}", condition),
+                    });
                 };
 
                 let cond_check = if condition == "read<Bool>()" {
@@ -61,7 +77,7 @@ fn compile_tuff_to_c(tuff_source: &str) -> String {
                     condition
                 };
 
-                return format!(
+                return Ok(format!(
                     r#"
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
@@ -80,7 +96,7 @@ int main() {{
                     check = cond_check,
                     then = then_expr,
                     els = else_expr
-                );
+                ));
             }
         }
     }
@@ -184,7 +200,7 @@ int main() {{
             }
 
             let ret_expr = parts.last().unwrap().trim().replace("U8", "");
-            return format!(
+            return Ok(format!(
                 r#"
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
@@ -196,13 +212,13 @@ int main() {{
 "#,
                 stmts = c_stmts.join("\n  "),
                 ret = ret_expr
-            );
+            ));
         }
     }
 
     // Match read<Bool>() — reads "true" or "false" from stdin, returns 1 or 0 as exit code.
     if trimmed == "read<Bool>()" {
-        return format!(
+        return Ok(format!(
             r#"
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
@@ -214,7 +230,7 @@ int main() {{
   return strcmp(buf, "true") == 0 ? 1 : 0;
 }}
 "#
-        );
+        ));
     }
 
     // Count occurrences of read<U8>().
@@ -234,7 +250,7 @@ int main() {{
         // Strip U8 suffix from numeric literals (e.g. 1U8 → 1).
         expr = expr.replace("U8", "");
         expr = expr.split_whitespace().collect::<Vec<_>>().join(" ");
-        return format!(
+        return Ok(format!(
             r#"
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
@@ -246,19 +262,25 @@ int main() {{
 "#,
             reads = reads.join("\n  "),
             sum = expr
-        );
+        ));
     }
 
     // Default: empty program returning 0.
-    format!(
+    Ok(format!(
         "#include <stdio.h>\n\nint main() {{\n{body}\n  return 0;\n}}",
         body = "// TODO: lowered Tuff statements go here"
-    )
+    ))
 }
 
 fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> i32 {
     // 1) Compile Tuff source to C.
-    let c_source = compile_tuff_to_c(tuff_source);
+    let c_source = match compile_tuff_to_c(tuff_source) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", e);
+            return 1;
+        }
+    };
 
     // 2) Write C source to a temp file and compile with clang.
     // Use a unique subdirectory per invocation so parallel tests don't collide.
@@ -503,65 +525,98 @@ mod tests {
 
     #[test]
     fn test_if_literal_condition_truthy() {
-        // if (1) 3U8 else 5U8 should return 3.
-        let exit_code = execute_tuff("if (1) 3U8 else 5U8", None);
-        assert_eq!(exit_code, 3);
+        // if (1) 3U8 else 5U8 should fail to compile (literal if condition rejected).
+        let result = compile_tuff_to_c("if (1) 3U8 else 5U8");
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_if_literal_condition_falsy() {
-        // if (0) 3U8 else 5U8 should return 5.
-        let exit_code = execute_tuff("if (0) 3U8 else 5U8", None);
-        assert_eq!(exit_code, 5);
+        // if (0) 3U8 else 5U8 should fail to compile (literal if condition rejected).
+        let result = compile_tuff_to_c("if (0) 3U8 else 5U8");
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_compile_if_no_closing_paren_falls_through() {
         // Unclosed parens in if expression should fall through to default path.
         let result = compile_tuff_to_c("if (read<Bool>()");
-        assert!(result.contains("return 0;"));
+        assert!(result.unwrap().contains("return 0;"));
     }
 
     #[test]
     fn test_compile_if_no_else_falls_through() {
         // if without else should fall through to default path.
         let result = compile_tuff_to_c("if (read<Bool>()) 3U8");
-        assert!(result.contains("return 0;"));
+        assert!(result.unwrap().contains("return 0;"));
     }
 
     #[test]
     fn test_compile_let_single_part_falls_through() {
         // let without semicolons should fall through to default path.
         let result = compile_tuff_to_c("let x");
-        assert!(result.contains("return 0;"));
+        assert!(result.unwrap().contains("return 0;"));
     }
 
     #[test]
     fn test_compile_for_no_closing_paren_falls_through() {
         // for without closing paren should fall through to default path.
         let result = compile_tuff_to_c("for (i in 0..5");
-        assert!(result.contains("return 0;"));
+        assert!(result.unwrap().contains("return 0;"));
     }
 
     #[test]
     fn test_compile_for_no_in_keyword_falls_through() {
         // for without 'in' keyword should produce no for-loop output.
         let result = compile_tuff_to_c("for (i 0..5) sum += i; sum");
-        assert!(!result.contains("for ("), "no for loop should be generated");
+        assert!(
+            !result.unwrap().contains("for ("),
+            "no for loop should be generated"
+        );
     }
 
     #[test]
     fn test_compile_for_no_dotdot_falls_through() {
         // for without '..' range should produce no for-loop output.
         let result = compile_tuff_to_c("for (i in 0-5) sum += i; sum");
-        assert!(!result.contains("for ("), "no for loop should be generated");
+        assert!(
+            !result.unwrap().contains("for ("),
+            "no for loop should be generated"
+        );
     }
 
     #[test]
     fn test_compile_while_no_closing_paren_falls_through() {
         // while without closing paren should fall through to default path.
         let result = compile_tuff_to_c("while (counter < sum");
-        assert!(result.contains("return 0;"));
+        assert!(result.unwrap().contains("return 0;"));
+    }
+
+    #[test]
+    fn test_if_literal_condition_rejected() {
+        // if (100) 3U8 else 5U8 should return Err (literal conditions not supported).
+        let result = compile_tuff_to_c("if (100) 3U8 else 5U8");
+        assert_eq!(
+            result,
+            Err(CompileError {
+                message: "unsupported if condition: 100".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_compile_error_display() {
+        let err = CompileError {
+            message: "test error".to_string(),
+        };
+        assert_eq!(format!("{}", err), "compile error: test error");
+    }
+
+    #[test]
+    fn test_execute_tuff_compile_error_returns_one() {
+        // Literal if condition now returns CompileError, which execute_tuff turns into exit code 1.
+        let exit_code = execute_tuff("if (100) 3U8 else 5U8", None);
+        assert_eq!(exit_code, 1);
     }
 
     #[test]
