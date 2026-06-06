@@ -18,6 +18,73 @@ fn compile_tuff_to_c(tuff_source: &str) -> String {
     let allowed_chars =
         |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | '-' | ' ') || c.is_ascii_alphanumeric();
 
+    // Match if/else expression: if (condition) then_expr else else_expr
+    if trimmed.starts_with("if (") {
+        let after_if = trimmed.strip_prefix("if (").unwrap();
+        // Find matching ')' by tracking paren depth.
+        let mut depth = 1usize;
+        let mut cond_end = None;
+        for (i, c) in after_if.char_indices() {
+            match c {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
+            if depth == 0 {
+                cond_end = Some(i);
+                break;
+            }
+        }
+        if let Some(end) = cond_end {
+            let condition = after_if[..end].trim();
+            let rest = after_if[end + 1..].trim();
+            if let Some(else_idx) = rest.find(" else ") {
+                let then_expr = rest[..else_idx].trim().replace("U8", "");
+                let else_expr = rest[else_idx + 6..].trim().replace("U8", "");
+
+                // Compile the condition body.
+                let cond_body = if condition == "read<Bool>()" {
+                    r#"char cond_buf[8];
+  scanf("%7s", cond_buf);"#
+                        .to_string()
+                } else if condition.contains("read<U8>()") {
+                    "int cond_val;\n  scanf(\"%d\", &cond_val);".to_string()
+                } else {
+                    format!("int cond_val = {};", condition)
+                };
+
+                let cond_check = if condition == "read<Bool>()" {
+                    "strcmp(cond_buf, \"true\") == 0"
+                } else if condition.contains("read<U8>()") {
+                    "cond_val"
+                } else {
+                    condition
+                };
+
+                return format!(
+                    r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <string.h>
+
+int main() {{
+  {cond}
+  if ({check}) {{
+    return {then};
+  }} else {{
+    return {els};
+  }}
+}}
+"#,
+                    cond = cond_body,
+                    check = cond_check,
+                    then = then_expr,
+                    els = else_expr
+                );
+            }
+        }
+    }
+
     // Check for let-variable pattern: let [mut] <name> : U8 = read<U8>(); ...; <expr>
     if trimmed.starts_with("let ") {
         let parts: Vec<&str> = trimmed.split(';').collect();
@@ -54,6 +121,23 @@ int main() {{
         }
     }
 
+    // Match read<Bool>() — reads "true" or "false" from stdin, returns 1 or 0 as exit code.
+    if trimmed == "read<Bool>()" {
+        return format!(
+            r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <string.h>
+
+int main() {{
+  char buf[8];
+  scanf("%7s", buf);
+  return strcmp(buf, "true") == 0 ? 1 : 0;
+}}
+"#
+        );
+    }
+
     // Count occurrences of read<U8>().
     let num_reads = trimmed.matches("read<U8>()").count();
 
@@ -68,6 +152,8 @@ int main() {{
         for i in 0..num_reads {
             expr = expr.replacen("read<U8>()", &format!("v{}", i), 1);
         }
+        // Strip U8 suffix from numeric literals (e.g. 1U8 → 1).
+        expr = expr.replace("U8", "");
         expr = expr.split_whitespace().collect::<Vec<_>>().join(" ");
         return format!(
             r#"
@@ -251,5 +337,26 @@ mod tests {
             Some("3 4 5"),
         );
         assert_eq!(exit_code, 4);
+    }
+
+    #[test]
+    fn test_read_bool_true_returns_one() {
+        // read<Bool>() with stdin "true" should return 1.
+        let exit_code = execute_tuff("read<Bool>()", Some("true"));
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_read_u8_plus_literal() {
+        // read<U8>() + 1U8 should read 100 and add literal 1.
+        let exit_code = execute_tuff("read<U8>() + 1U8", Some("100"));
+        assert_eq!(exit_code, 101);
+    }
+
+    #[test]
+    fn test_if_read_bool_then_u8_literal() {
+        // if (read<Bool>()) 3U8 else 5U8 with "true" should return 3.
+        let exit_code = execute_tuff("if (read<Bool>()) 3U8 else 5U8", Some("true"));
+        assert_eq!(exit_code, 3);
     }
 }
