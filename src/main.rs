@@ -85,26 +85,48 @@ int main() {{
         }
     }
 
-    // Check for let-variable pattern: let [mut] <name> : U8 = read<U8>(); ...; <expr>
+    // Check for let-variable pattern: let [mut] <name> [= <init>]; <stmt>*; <expr>
     if trimmed.starts_with("let ") {
         let parts: Vec<&str> = trimmed.split(';').collect();
         if parts.len() >= 2 {
             let first_part = parts[0].trim();
             let after_let = first_part.strip_prefix("let ").unwrap_or("");
-            let name_part = after_let.strip_prefix("mut ").unwrap_or(after_let);
-            let varname = name_part.split(" : ").next().unwrap_or("").trim();
+            let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
+
+            // Variable name is the first whitespace-delimited token.
+            let varname = after_mut.split_whitespace().next().unwrap_or("");
 
             let mut c_stmts = Vec::new();
             c_stmts.push(format!("int {};", varname));
 
-            for i in 0..parts.len() - 1 {
-                let stmt = parts[i].trim();
-                if stmt.contains("= read<U8>()") {
+            // Handle initialization in the declaration (e.g. "= 0U8" or ": U8 = read<U8>()").
+            let after_name = after_mut[varname.len()..].trim();
+            if let Some(eq_pos) = after_name.find("= ") {
+                let init_val = after_name[eq_pos + 2..].trim();
+                if init_val == "read<U8>()" {
                     c_stmts.push(format!("scanf(\"%d\", &{});", varname));
+                } else {
+                    c_stmts.push(format!("{} = {};", varname, init_val.replace("U8", "")));
                 }
             }
 
-            let ret_expr = parts.last().unwrap().trim();
+            // Handle remaining statements (excluding the last, which is the return expr).
+            for i in 1..parts.len() - 1 {
+                let stmt = parts[i].trim();
+                if stmt.contains(" = read<U8>()") {
+                    // Simple reassignment: x = read<U8>()
+                    c_stmts.push(format!("scanf(\"%d\", &{});", varname));
+                } else if stmt.contains("read<U8>()") {
+                    // Compound or composed assignment: x += read<U8>(), x = read<U8>() + 1U8
+                    let read_var = format!("_r{}", i);
+                    c_stmts.push(format!("int {};", read_var));
+                    c_stmts.push(format!("scanf(\"%d\", &{});", read_var));
+                    let c_line = stmt.replace("read<U8>()", &read_var).replace("U8", "");
+                    c_stmts.push(format!("{};", c_line));
+                }
+            }
+
+            let ret_expr = parts.last().unwrap().trim().replace("U8", "");
             return format!(
                 r#"
 #define _CRT_SECURE_NO_WARNINGS
@@ -342,6 +364,13 @@ mod tests {
             Some("3 4 5"),
         );
         assert_eq!(exit_code, 4);
+    }
+
+    #[test]
+    fn test_let_mut_init_literal_then_add_assign() {
+        // let mut x = 0U8; x += read<U8>(); x with "5" should compute 0 + 5 = 5.
+        let exit_code = execute_tuff("let mut x = 0U8; x += read<U8>(); x", Some("5"));
+        assert_eq!(exit_code, 5);
     }
 
     #[test]
