@@ -10,9 +10,43 @@ fn next_id() -> u64 {
     INVOCATION_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
-fn compile_tuff_to_c(_tuff_source: &str) -> String {
-    // TODO: Parse Tuff source and emit C source.
-    // For now, wrap in a minimal C program.
+fn compile_tuff_to_c(tuff_source: &str) -> String {
+    // Trim whitespace and try to match known patterns.
+    let trimmed = tuff_source.trim();
+
+    // Check if source is composed only of read<U8>() calls, '+', and whitespace.
+    let allowed_chars =
+        |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | ' ') || c.is_ascii_alphanumeric();
+
+    // Count occurrences of read<U8>().
+    let num_reads = trimmed.matches("read<U8>()").count();
+
+    if num_reads > 0 && trimmed.chars().all(allowed_chars) {
+        // Source consists only of read<U8>() calls joined by '+'.
+        let mut reads = Vec::new();
+        for i in 0..num_reads {
+            reads.push(format!("int v{};\n  scanf(\"%d\", &v{});", i, i));
+        }
+        let vars_joined: String = (0..num_reads)
+            .map(|i| format!("v{}", i))
+            .collect::<Vec<_>>()
+            .join(" + ");
+        return format!(
+            r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+
+int main() {{
+  {reads}
+  return {sum};
+}}
+"#,
+            reads = reads.join("\n  "),
+            sum = vars_joined
+        );
+    }
+
+    // Default: empty program returning 0.
     format!(
         "#include <stdio.h>\n\nint main() {{\n{body}\n  return 0;\n}}",
         body = "// TODO: lowered Tuff statements go here"
@@ -121,5 +155,25 @@ mod tests {
     fn test_execute_whitespace_source_returns_zero() {
         let exit_code = execute_tuff("   \n\t  ", None);
         assert_eq!(exit_code, 0);
+    }
+
+    #[test]
+    fn test_read_u8_with_stdin_returns_value() {
+        let exit_code = execute_tuff("read<U8>()", Some("100"));
+        assert_eq!(exit_code, 100);
+    }
+
+    #[test]
+    fn test_read_u8_reads_only_first_value() {
+        // read<U8>() should consume only the first integer from stdin.
+        let exit_code = execute_tuff("read<U8>()", Some("100 20"));
+        assert_eq!(exit_code, 100);
+    }
+
+    #[test]
+    fn test_read_u8_addition_reads_two_values() {
+        // read<U8>() + read<U8>() should sum two integers from stdin.
+        let exit_code = execute_tuff("read<U8>() + read<U8>()", Some("100 20"));
+        assert_eq!(exit_code, 120);
     }
 }
