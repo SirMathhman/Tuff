@@ -14,23 +14,61 @@ fn compile_tuff_to_c(tuff_source: &str) -> String {
     // Trim whitespace and try to match known patterns.
     let trimmed = tuff_source.trim();
 
-    // Check if source is composed only of read<U8>() calls, '+', and whitespace.
+    // Check if source is composed only of read<U8>() calls, '+', '-', and whitespace.
     let allowed_chars =
-        |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | ' ') || c.is_ascii_alphanumeric();
+        |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | '-' | ' ') || c.is_ascii_alphanumeric();
+
+    // Check for let-variable pattern: let [mut] <name> : U8 = read<U8>(); ...; <expr>
+    if trimmed.starts_with("let ") {
+        let parts: Vec<&str> = trimmed.split(';').collect();
+        if parts.len() >= 2 {
+            let first_part = parts[0].trim();
+            let after_let = first_part.strip_prefix("let ").unwrap_or("");
+            let name_part = after_let.strip_prefix("mut ").unwrap_or(after_let);
+            let varname = name_part.split(" : ").next().unwrap_or("").trim();
+
+            let mut c_stmts = Vec::new();
+            c_stmts.push(format!("int {};", varname));
+
+            for i in 0..parts.len() - 1 {
+                let stmt = parts[i].trim();
+                if stmt.contains("= read<U8>()") {
+                    c_stmts.push(format!("scanf(\"%d\", &{});", varname));
+                }
+            }
+
+            let ret_expr = parts.last().unwrap().trim();
+            return format!(
+                r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+
+int main() {{
+  {stmts}
+  return {ret};
+}}
+"#,
+                stmts = c_stmts.join("\n  "),
+                ret = ret_expr
+            );
+        }
+    }
 
     // Count occurrences of read<U8>().
     let num_reads = trimmed.matches("read<U8>()").count();
 
     if num_reads > 0 && trimmed.chars().all(allowed_chars) {
-        // Source consists only of read<U8>() calls joined by '+'.
+        // Source consists only of read<U8>() calls joined by '+'/'-'.
         let mut reads = Vec::new();
         for i in 0..num_reads {
             reads.push(format!("int v{};\n  scanf(\"%d\", &v{});", i, i));
         }
-        let vars_joined: String = (0..num_reads)
-            .map(|i| format!("v{}", i))
-            .collect::<Vec<_>>()
-            .join(" + ");
+        // Substitute each read<U8>() with v0, v1, v2, ... left to right, preserving original operators.
+        let mut expr = trimmed.to_string();
+        for i in 0..num_reads {
+            expr = expr.replacen("read<U8>()", &format!("v{}", i), 1);
+        }
+        expr = expr.split_whitespace().collect::<Vec<_>>().join(" ");
         return format!(
             r#"
 #define _CRT_SECURE_NO_WARNINGS
@@ -42,7 +80,7 @@ int main() {{
 }}
 "#,
             reads = reads.join("\n  "),
-            sum = vars_joined
+            sum = expr
         );
     }
 
@@ -175,5 +213,43 @@ mod tests {
         // read<U8>() + read<U8>() should sum two integers from stdin.
         let exit_code = execute_tuff("read<U8>() + read<U8>()", Some("100 20"));
         assert_eq!(exit_code, 120);
+    }
+
+    #[test]
+    fn test_read_u8_addition_reads_three_values() {
+        // read<U8>() + read<U8>() + read<U8>() should sum three integers from stdin.
+        let exit_code = execute_tuff("read<U8>() + read<U8>() + read<U8>()", Some("1 2 3"));
+        assert_eq!(exit_code, 6);
+    }
+
+    #[test]
+    fn test_read_u8_subtraction_mixed_operators() {
+        // read<U8>() + read<U8>() - read<U8>() should compute 3 + 4 - 5 = 2.
+        let exit_code = execute_tuff("read<U8>() + read<U8>() - read<U8>()", Some("3 4 5"));
+        assert_eq!(exit_code, 2);
+    }
+
+    #[test]
+    fn test_let_variable_read_u8() {
+        // let x : U8 = read<U8>(); x should read one value and return it.
+        let exit_code = execute_tuff("let x : U8 = read<U8>(); x", Some("3 4 5"));
+        assert_eq!(exit_code, 3);
+    }
+
+    #[test]
+    fn test_let_variable_self_addition() {
+        // let x : U8 = read<U8>(); x + x should read one value and double it.
+        let exit_code = execute_tuff("let x : U8 = read<U8>(); x + x", Some("3 4 5"));
+        assert_eq!(exit_code, 6);
+    }
+
+    #[test]
+    fn test_let_mut_variable_reassignment() {
+        // let mut x : U8 = read<U8>(); x = read<U8>(); x should return the reassigned value.
+        let exit_code = execute_tuff(
+            "let mut x : U8 = read<U8>(); x = read<U8>(); x",
+            Some("3 4 5"),
+        );
+        assert_eq!(exit_code, 4);
     }
 }
