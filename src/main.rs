@@ -11,6 +11,119 @@ fn next_id() -> u64 {
     INVOCATION_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Given text starting after the opening `(`, find the matching `)` and return
+/// the content between parens and everything after it.
+fn split_at_matching_paren<'a>(after_open: &'a str) -> Option<(&'a str, &'a str)> {
+    let mut depth = 1usize;
+    for (i, c) in after_open.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 {
+            return Some((&after_open[..i], &after_open[i + 1..]));
+        }
+    }
+    None
+}
+
+/// Like `str::split(';')` but only splits at semicolons at brace-depth 0,
+/// so semicolons inside `{...}` blocks are ignored.
+fn split_top_level<'a>(s: &'a str) -> Vec<&'a str> {
+    let mut result = Vec::new();
+    let mut start = 0;
+    let mut brace_depth = 0usize;
+    for (i, c) in s.char_indices() {
+        match c {
+            '{' => brace_depth += 1,
+            '}' => brace_depth -= 1,
+            ';' if brace_depth == 0 => {
+                result.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let tail = &s[start..];
+    if !tail.trim().is_empty() {
+        result.push(tail);
+    }
+    result
+}
+
+/// Compile a Tuff statement list (semicolon-separated, no trailing return expr)
+/// into C statements joined by newlines.  Returns None if the source is empty.
+/// Compile a `let [mut] <name> [= <init>]` statement into a Vec of C statements
+/// (variable declaration + optional init/read statements).
+fn compile_let_stmt(stmt: &str) -> Vec<String> {
+    let after_let = stmt.strip_prefix("let ").unwrap();
+    let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
+    let vn = after_mut.split_whitespace().next().unwrap_or("");
+    let mut out = vec![format!("int {};", vn)];
+    let after_name = after_mut[vn.len()..].trim();
+    if let Some(eq) = after_name.find("= ") {
+        let iv = after_name[eq + 2..].trim();
+        if iv == "read<U8>()" {
+            out.push(format!("scanf(\"%d\", &{});", vn));
+        } else if iv == "read<Bool>()" {
+            out.push(format!("char {0}_buf[8];", vn));
+            out.push(format!("scanf(\"%7s\", {0}_buf);", vn));
+            out.push(format!(
+                "{} = strcmp({}_buf, \"true\") == 0 ? 1 : 0;",
+                vn, vn
+            ));
+        } else {
+            out.push(format!("{} = {};", vn, iv.replace("U8", "")));
+        }
+    }
+    out
+}
+
+fn compile_statements(src: &str) -> Option<String> {
+    let parts = split_top_level(src);
+    if parts.is_empty() {
+        return None;
+    }
+    if parts.len() == 1 {
+        // Single expression — just emit as return.
+        let v = parts[0].trim().replace("U8", "");
+        return Some(format!("return {};", v));
+    }
+    let mut c_stmts: Vec<String> = Vec::new();
+    // All parts except the last are statements.
+    for stmt in &parts[..parts.len() - 1] {
+        let stmt = stmt.trim();
+        if stmt.is_empty() {
+            continue;
+        }
+        if stmt.starts_with("let ") {
+            c_stmts.extend(compile_let_stmt(stmt));
+        } else {
+            // Plain statement.
+            c_stmts.push(format!("{};", stmt.replace("U8", "")));
+        }
+    }
+    // Last part is the block's return value.
+    let last_expr = parts.last().unwrap().trim().replace("U8", "");
+    c_stmts.push(format!("return {};", last_expr));
+    Some(c_stmts.join("\n  "))
+}
+
+/// Given text like `if (cond) then else else`, parse out the condition, then-expr, and else-expr.
+/// Returns None if parsing fails.
+fn parse_if_else<'a>(s: &'a str) -> Option<(&'a str, &'a str, &'a str)> {
+    let s = s.trim();
+    let after_if = s.strip_prefix("if (")?;
+    let (condition, rest) = split_at_matching_paren(after_if)?;
+    let condition = condition.trim();
+    let rest = rest.trim();
+    let else_idx = rest.find(" else ")?;
+    let then_expr = rest[..else_idx].trim();
+    let else_expr = rest[else_idx + 6..].trim();
+    Some((condition, then_expr, else_expr))
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompileError {
     pub message: String,
@@ -33,52 +146,33 @@ fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
         |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | '-' | ' ') || c.is_ascii_alphanumeric();
 
     // Match if/else expression: if (condition) then_expr else else_expr
-    if trimmed.starts_with("if (") {
-        let after_if = trimmed.strip_prefix("if (").unwrap();
-        // Find matching ')' by tracking paren depth.
-        let mut depth = 1usize;
-        let mut cond_end = None;
-        for (i, c) in after_if.char_indices() {
-            match c {
-                '(' => depth += 1,
-                ')' => depth -= 1,
-                _ => {}
-            }
-            if depth == 0 {
-                cond_end = Some(i);
-                break;
-            }
-        }
-        if let Some(end) = cond_end {
-            let condition = after_if[..end].trim();
-            let rest = after_if[end + 1..].trim();
-            if let Some(else_idx) = rest.find(" else ") {
-                let then_expr = rest[..else_idx].trim().replace("U8", "");
-                let else_expr = rest[else_idx + 6..].trim().replace("U8", "");
+    if let Some((condition, raw_then, raw_else)) = parse_if_else(trimmed) {
+        let then_expr = raw_then.replace("U8", "");
+        let else_expr = raw_else.replace("U8", "");
 
-                // Compile the condition body.
-                let cond_body = if condition == "read<Bool>()" {
-                    r#"char cond_buf[8];
+        // Compile the condition body.
+        let cond_body = if condition == "read<Bool>()" {
+            r#"char cond_buf[8];
   scanf("%7s", cond_buf);"#
-                        .to_string()
-                } else if condition.contains("read<U8>()") {
-                    "int cond_val;\n  scanf(\"%d\", &cond_val);".to_string()
-                } else {
-                    return Err(CompileError {
-                        message: format!("unsupported if condition: {}", condition),
-                    });
-                };
+                .to_string()
+        } else if condition.contains("read<U8>()") {
+            "int cond_val;\n  scanf(\"%d\", &cond_val);".to_string()
+        } else {
+            return Err(CompileError {
+                message: format!("unsupported if condition: {}", condition),
+            });
+        };
 
-                let cond_check = if condition == "read<Bool>()" {
-                    "strcmp(cond_buf, \"true\") == 0"
-                } else if condition.contains("read<U8>()") {
-                    "cond_val"
-                } else {
-                    condition
-                };
+        let cond_check = if condition == "read<Bool>()" {
+            "strcmp(cond_buf, \"true\") == 0"
+        } else if condition.contains("read<U8>()") {
+            "cond_val"
+        } else {
+            condition
+        };
 
-                return Ok(format!(
-                    r#"
+        return Ok(format!(
+            r#"
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <string.h>
@@ -92,19 +186,17 @@ int main() {{
   }}
 }}
 "#,
-                    cond = cond_body,
-                    check = cond_check,
-                    then = then_expr,
-                    els = else_expr
-                ));
-            }
-        }
+            cond = cond_body,
+            check = cond_check,
+            then = then_expr,
+            els = else_expr
+        ));
     }
 
     // Check for multi-statement programs with let/while/for statements.
     if trimmed.starts_with("let ") || trimmed.starts_with("while (") || trimmed.starts_with("for (")
     {
-        let parts: Vec<&str> = trimmed.split(';').collect();
+        let parts = split_top_level(trimmed);
         if parts.len() >= 2 {
             let mut c_stmts: Vec<String> = Vec::new();
 
@@ -115,62 +207,23 @@ int main() {{
                 }
 
                 if stmt.starts_with("let ") {
-                    // let [mut] <name> [= <init>]
-                    let after_let = stmt.strip_prefix("let ").unwrap();
-                    let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
-                    let varname = after_mut.split_whitespace().next().unwrap_or("");
-
-                    c_stmts.push(format!("int {};", varname));
-
-                    let after_name = after_mut[varname.len()..].trim();
-                    if let Some(eq_pos) = after_name.find("= ") {
-                        let init_val = after_name[eq_pos + 2..].trim();
-                        if init_val == "read<U8>()" {
-                            c_stmts.push(format!("scanf(\"%d\", &{});", varname));
-                        } else {
-                            c_stmts.push(format!("{} = {};", varname, init_val.replace("U8", "")));
-                        }
-                    }
+                    c_stmts.extend(compile_let_stmt(stmt));
                 } else if stmt.starts_with("while (") {
                     // while (condition) body-statement
                     let after_while = stmt.strip_prefix("while (").unwrap();
-                    let mut depth = 1usize;
-                    let mut cond_end = None;
-                    for (j, c) in after_while.char_indices() {
-                        match c {
-                            '(' => depth += 1,
-                            ')' => depth -= 1,
-                            _ => {}
-                        }
-                        if depth == 0 {
-                            cond_end = Some(j);
-                            break;
-                        }
-                    }
-                    if let Some(end) = cond_end {
-                        let condition = after_while[..end].trim();
-                        let body = after_while[end + 1..].trim().replace("U8", "");
-                        c_stmts.push(format!("while ({}) {{\n    {};\n  }}", condition, body));
+                    if let Some((condition, body)) = split_at_matching_paren(after_while) {
+                        let body = body.trim().replace("U8", "");
+                        c_stmts.push(format!(
+                            "while ({}) {{\n    {};\n  }}",
+                            condition.trim(),
+                            body
+                        ));
                     }
                 } else if stmt.starts_with("for (") {
                     // for (var in start..end) body-statement
                     let after_for = stmt.strip_prefix("for (").unwrap();
-                    let mut paren_depth = 1usize;
-                    let mut paren_end = None;
-                    for (j, c) in after_for.char_indices() {
-                        match c {
-                            '(' => paren_depth += 1,
-                            ')' => paren_depth -= 1,
-                            _ => {}
-                        }
-                        if paren_depth == 0 {
-                            paren_end = Some(j);
-                            break;
-                        }
-                    }
-                    if let Some(end) = paren_end {
-                        let for_header = after_for[..end].trim();
-                        let body = after_for[end + 1..].trim().replace("U8", "");
+                    if let Some((for_header, body)) = split_at_matching_paren(after_for) {
+                        let body = body.trim().replace("U8", "");
                         if let Some(in_pos) = for_header.find(" in ") {
                             let loop_var = for_header[..in_pos].trim();
                             let range_expr = for_header[in_pos + 4..].trim();
@@ -200,10 +253,49 @@ int main() {{
             }
 
             let ret_expr = parts.last().unwrap().trim().replace("U8", "");
+            // If the return expression is a top-level if/else, emit it as an if/else block
+            // since C does not allow `return if (...) ... else ...`.
+            if let Some((condition, raw_then, raw_else)) = parse_if_else(&ret_expr) {
+                let then_stmts = if raw_then.starts_with('{') {
+                    // Block body: compile its contents
+                    let inner = &raw_then[1..raw_then.len().saturating_sub(1)];
+                    compile_statements(inner).unwrap_or_default()
+                } else {
+                    format!("return {};", raw_then.replace("U8", ""))
+                };
+                let else_stmts = if raw_else.starts_with('{') {
+                    let inner = &raw_else[1..raw_else.len().saturating_sub(1)];
+                    compile_statements(inner).unwrap_or_default()
+                } else {
+                    format!("return {};", raw_else.replace("U8", ""))
+                };
+                return Ok(format!(
+                    r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <string.h>
+
+int main() {{
+  {stmts}
+  if ({cond}) {{
+    {then_body}
+  }} else {{
+    {else_body}
+  }}
+}}
+"#,
+                    stmts = c_stmts.join("\n  "),
+                    cond = condition,
+                    then_body = then_stmts,
+                    else_body = else_stmts
+                ));
+            }
+
             return Ok(format!(
                 r#"
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
+#include <string.h>
 
 int main() {{
   {stmts}
@@ -468,6 +560,68 @@ mod tests {
             Some("5"),
         );
         assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_let_bool_if_else() {
+        // let temp : Bool = read<Bool>(); if (temp) 3U8 else 5U8 with "false" should return 5.
+        let exit_code = execute_tuff(
+            "let temp : Bool = read<Bool>(); if (temp) 3U8 else 5U8",
+            Some("false"),
+        );
+        assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_let_bool_if_else_block_then() {
+        // let temp : Bool = read<Bool>(); if (temp) { let x = 3U8; x } else 5U8 with "false" should return 5.
+        let exit_code = execute_tuff(
+            "let temp : Bool = read<Bool>(); if (temp) { let x = 3U8; x } else 5U8",
+            Some("false"),
+        );
+        assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_let_bool_if_else_block_then_true() {
+        // let temp : Bool = read<Bool>(); if (temp) { let x = 3U8; x } else 5U8 with "true" should return 3.
+        let exit_code = execute_tuff(
+            "let temp : Bool = read<Bool>(); if (temp) { let x = 3U8; x } else 5U8",
+            Some("true"),
+        );
+        assert_eq!(exit_code, 3);
+    }
+
+    #[test]
+    fn test_let_bool_if_else_block_else() {
+        // Both branches use block bodies.
+        // if (temp) 5U8 else { let x = 3U8; x } with "false" should return 3.
+        let exit_code = execute_tuff(
+            "let temp : Bool = read<Bool>(); if (temp) 5U8 else { let x = 3U8; x }",
+            Some("false"),
+        );
+        assert_eq!(exit_code, 3);
+    }
+
+    #[test]
+    fn test_if_block_single_expr_then() {
+        // Block with just a single expression in the then branch.
+        // if (temp) { 5U8 } else 3U8 with "true" should return 5.
+        let exit_code = execute_tuff(
+            "let temp : Bool = read<Bool>(); if (temp) { 5U8 } else 3U8",
+            Some("true"),
+        );
+        assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_if_block_bool_init_reassignment() {
+        // Block with a let Bool init and reassignment inside.
+        let exit_code = execute_tuff(
+            "let temp : Bool = read<Bool>(); if (temp) { let x : Bool = read<Bool>(); x } else 0U8",
+            Some("true true"),
+        );
+        assert_eq!(exit_code, 1);
     }
 
     #[test]
