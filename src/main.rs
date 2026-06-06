@@ -85,44 +85,101 @@ int main() {{
         }
     }
 
-    // Check for let-variable pattern: let [mut] <name> [= <init>]; <stmt>*; <expr>
-    if trimmed.starts_with("let ") {
+    // Check for multi-statement programs with let/while/for statements.
+    if trimmed.starts_with("let ") || trimmed.starts_with("while (") || trimmed.starts_with("for (")
+    {
         let parts: Vec<&str> = trimmed.split(';').collect();
         if parts.len() >= 2 {
-            let first_part = parts[0].trim();
-            let after_let = first_part.strip_prefix("let ").unwrap_or("");
-            let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
+            let mut c_stmts: Vec<String> = Vec::new();
 
-            // Variable name is the first whitespace-delimited token.
-            let varname = after_mut.split_whitespace().next().unwrap_or("");
-
-            let mut c_stmts = Vec::new();
-            c_stmts.push(format!("int {};", varname));
-
-            // Handle initialization in the declaration (e.g. "= 0U8" or ": U8 = read<U8>()").
-            let after_name = after_mut[varname.len()..].trim();
-            if let Some(eq_pos) = after_name.find("= ") {
-                let init_val = after_name[eq_pos + 2..].trim();
-                if init_val == "read<U8>()" {
-                    c_stmts.push(format!("scanf(\"%d\", &{});", varname));
-                } else {
-                    c_stmts.push(format!("{} = {};", varname, init_val.replace("U8", "")));
-                }
-            }
-
-            // Handle remaining statements (excluding the last, which is the return expr).
-            for i in 1..parts.len() - 1 {
+            for i in 0..parts.len() - 1 {
                 let stmt = parts[i].trim();
-                if stmt.contains(" = read<U8>()") {
-                    // Simple reassignment: x = read<U8>()
-                    c_stmts.push(format!("scanf(\"%d\", &{});", varname));
-                } else if stmt.contains("read<U8>()") {
-                    // Compound or composed assignment: x += read<U8>(), x = read<U8>() + 1U8
-                    let read_var = format!("_r{}", i);
-                    c_stmts.push(format!("int {};", read_var));
-                    c_stmts.push(format!("scanf(\"%d\", &{});", read_var));
-                    let c_line = stmt.replace("read<U8>()", &read_var).replace("U8", "");
-                    c_stmts.push(format!("{};", c_line));
+                if stmt.is_empty() {
+                    continue;
+                }
+
+                if stmt.starts_with("let ") {
+                    // let [mut] <name> [= <init>]
+                    let after_let = stmt.strip_prefix("let ").unwrap();
+                    let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
+                    let varname = after_mut.split_whitespace().next().unwrap_or("");
+
+                    c_stmts.push(format!("int {};", varname));
+
+                    let after_name = after_mut[varname.len()..].trim();
+                    if let Some(eq_pos) = after_name.find("= ") {
+                        let init_val = after_name[eq_pos + 2..].trim();
+                        if init_val == "read<U8>()" {
+                            c_stmts.push(format!("scanf(\"%d\", &{});", varname));
+                        } else {
+                            c_stmts.push(format!("{} = {};", varname, init_val.replace("U8", "")));
+                        }
+                    }
+                } else if stmt.starts_with("while (") {
+                    // while (condition) body-statement
+                    let after_while = stmt.strip_prefix("while (").unwrap();
+                    let mut depth = 1usize;
+                    let mut cond_end = None;
+                    for (j, c) in after_while.char_indices() {
+                        match c {
+                            '(' => depth += 1,
+                            ')' => depth -= 1,
+                            _ => {}
+                        }
+                        if depth == 0 {
+                            cond_end = Some(j);
+                            break;
+                        }
+                    }
+                    if let Some(end) = cond_end {
+                        let condition = after_while[..end].trim();
+                        let body = after_while[end + 1..].trim().replace("U8", "");
+                        c_stmts.push(format!("while ({}) {{\n    {};\n  }}", condition, body));
+                    }
+                } else if stmt.starts_with("for (") {
+                    // for (var in start..end) body-statement
+                    let after_for = stmt.strip_prefix("for (").unwrap();
+                    let mut paren_depth = 1usize;
+                    let mut paren_end = None;
+                    for (j, c) in after_for.char_indices() {
+                        match c {
+                            '(' => paren_depth += 1,
+                            ')' => paren_depth -= 1,
+                            _ => {}
+                        }
+                        if paren_depth == 0 {
+                            paren_end = Some(j);
+                            break;
+                        }
+                    }
+                    if let Some(end) = paren_end {
+                        let for_header = after_for[..end].trim();
+                        let body = after_for[end + 1..].trim().replace("U8", "");
+                        if let Some(in_pos) = for_header.find(" in ") {
+                            let loop_var = for_header[..in_pos].trim();
+                            let range_expr = for_header[in_pos + 4..].trim();
+                            if let Some(dotdot_pos) = range_expr.find("..") {
+                                let range_start = range_expr[..dotdot_pos].trim().replace("U8", "");
+                                let range_end =
+                                    range_expr[dotdot_pos + 2..].trim().replace("U8", "");
+                                c_stmts.push(format!(
+                                    "for (int {} = {}; {} <= {}; {}++) {{\n    {};\n  }}",
+                                    loop_var, range_start, loop_var, range_end, loop_var, body
+                                ));
+                            }
+                        }
+                    }
+                } else {
+                    // Plain statement / assignment.
+                    if stmt.contains("read<U8>()") {
+                        let read_var = format!("_r{}", i);
+                        c_stmts.push(format!("int {};", read_var));
+                        c_stmts.push(format!("scanf(\"%d\", &{});", read_var));
+                        let c_line = stmt.replace("read<U8>()", &read_var).replace("U8", "");
+                        c_stmts.push(format!("{};", c_line));
+                    } else {
+                        c_stmts.push(format!("{};", stmt.replace("U8", "")));
+                    }
                 }
             }
 
@@ -374,6 +431,35 @@ mod tests {
     }
 
     #[test]
+    fn test_let_temp_read_u8() {
+        // let temp = read<U8>(); temp with "5" should return 5.
+        let exit_code = execute_tuff("let temp = read<U8>(); temp", Some("5"));
+        assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_while_loop_counter() {
+        // let mut counter = 0U8; let sum = read<U8>(); while (counter < sum) counter += 1; counter
+        // with "5" should increment counter from 0 to 5, then return 5.
+        let exit_code = execute_tuff(
+            "let mut counter = 0U8; let sum = read<U8>(); while (counter < sum) counter += 1; counter",
+            Some("5"),
+        );
+        assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_for_loop_sum_to_count() {
+        // let count = read<U8>(); let mut sum = 0U8; for (i in 0..count) sum += i; sum
+        // with "5" should compute 0 + 0 + 1 + 2 + 3 + 4 + 5 = 15.
+        let exit_code = execute_tuff(
+            "let count = read<U8>(); let mut sum = 0U8; for (i in 0..count) sum += i; sum",
+            Some("5"),
+        );
+        assert_eq!(exit_code, 15);
+    }
+
+    #[test]
     fn test_read_bool_true_returns_one() {
         // read<Bool>() with stdin "true" should return 1.
         let exit_code = execute_tuff("read<Bool>()", Some("true"));
@@ -447,6 +533,34 @@ mod tests {
     fn test_compile_let_single_part_falls_through() {
         // let without semicolons should fall through to default path.
         let result = compile_tuff_to_c("let x");
+        assert!(result.contains("return 0;"));
+    }
+
+    #[test]
+    fn test_compile_for_no_closing_paren_falls_through() {
+        // for without closing paren should fall through to default path.
+        let result = compile_tuff_to_c("for (i in 0..5");
+        assert!(result.contains("return 0;"));
+    }
+
+    #[test]
+    fn test_compile_for_no_in_keyword_falls_through() {
+        // for without 'in' keyword should produce no for-loop output.
+        let result = compile_tuff_to_c("for (i 0..5) sum += i; sum");
+        assert!(!result.contains("for ("), "no for loop should be generated");
+    }
+
+    #[test]
+    fn test_compile_for_no_dotdot_falls_through() {
+        // for without '..' range should produce no for-loop output.
+        let result = compile_tuff_to_c("for (i in 0-5) sum += i; sum");
+        assert!(!result.contains("for ("), "no for loop should be generated");
+    }
+
+    #[test]
+    fn test_compile_while_no_closing_paren_falls_through() {
+        // while without closing paren should fall through to default path.
+        let result = compile_tuff_to_c("while (counter < sum");
         assert!(result.contains("return 0;"));
     }
 
