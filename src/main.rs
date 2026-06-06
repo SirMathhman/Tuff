@@ -1,6 +1,14 @@
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Per-process counter to guarantee unique temp dirs across parallel test runs.
+static INVOCATION_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn next_id() -> u64 {
+    INVOCATION_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
 
 fn compile_tuff_to_c(_tuff_source: &str) -> String {
     // TODO: Parse Tuff source and emit C source.
@@ -16,11 +24,20 @@ fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> i32 {
     let c_source = compile_tuff_to_c(tuff_source);
 
     // 2) Write C source to a temp file and compile with clang.
-    let out_dir = std::env::temp_dir().join("tuffc-out");
+    // Use a unique subdirectory per invocation so parallel tests don't collide.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap();
+    let uid = format!("{:x}{:08x}", now.as_nanos(), next_id());
+    let out_dir = std::env::temp_dir().join(format!("tuffc-out-{}", uid));
     fs::create_dir_all(&out_dir).expect("failed to create output dir");
 
     let c_path = out_dir.join("main.c");
-    let exe_path = out_dir.join("main.exe");
+    #[cfg(windows)]
+    let exe_name = "main.exe";
+    #[cfg(not(windows))]
+    let exe_name = "main";
+    let exe_path = out_dir.join(exe_name);
 
     let mut c_file = fs::File::create(&c_path).expect("failed to create .c file");
     c_file
@@ -88,4 +105,21 @@ fn main() {
     // Pass through stdin if the terminal is a TTY (interactive input available)
     let exit_code = execute_tuff(&source, None);
     std::process::exit(exit_code);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_execute_empty_source_returns_zero() {
+        let exit_code = execute_tuff("", None);
+        assert_eq!(exit_code, 0);
+    }
+
+    #[test]
+    fn test_execute_whitespace_source_returns_zero() {
+        let exit_code = execute_tuff("   \n\t  ", None);
+        assert_eq!(exit_code, 0);
+    }
 }
