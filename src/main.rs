@@ -304,6 +304,40 @@ fn compile_var_copy_init(
     Ok(out)
 }
 
+/// Compile a `let` initializer that is a top-level `if`/`else` expression.
+/// Emits a C ternary: reads the condition, then assigns the result.
+fn compile_if_else_init(
+    if_expr: &str,
+    vn: &str,
+    is_mut: bool,
+    var_type: &str,
+    symbols: &mut HashMap<String, (bool, String, String)>,
+) -> Result<Vec<String>, CompileError> {
+    let (condition, then_expr, else_expr) = parse_if_else(if_expr).ok_or_else(|| CompileError {
+        message: "malformed if expression in let initializer".to_string(),
+    })?;
+    let (cond_body, cond_check) = build_if_cond(condition)?;
+    let mut out: Vec<String> = Vec::new();
+    out.push(format!("int {};", vn));
+    for line in cond_body.lines() {
+        out.push(line.to_string());
+    }
+    out.push(format!(
+        "{} = {} ? {} : {};",
+        vn,
+        cond_check,
+        strip_type_suffix(then_expr),
+        strip_type_suffix(else_expr)
+    ));
+    let final_type = if !var_type.is_empty() {
+        var_type.to_string()
+    } else {
+        String::new()
+    };
+    symbols.insert(vn.to_string(), (is_mut, String::new(), final_type));
+    Ok(out)
+}
+
 fn compile_let_stmt(
     stmt: &str,
     symbols: &mut HashMap<String, (bool, String, String)>,
@@ -326,6 +360,8 @@ fn compile_let_stmt(
                 &decl.var_type,
                 symbols,
             )?;
+        } else if iv.starts_with("if (") {
+            out = compile_if_else_init(iv, &decl.vn, decl.is_mut, &decl.var_type, symbols)?;
         } else if symbols.contains_key(iv) {
             out = compile_var_copy_init(iv, &decl.vn, decl.is_mut, &decl.var_type, symbols)?;
         } else {
@@ -1533,6 +1569,26 @@ mod tests {
     fn test_if_read_u8_condition_falsy() {
         // if (read<U8>()) 3U8 else 5U8 with "0" should return 5 (falsy).
         let (exit_code, _stdout) = execute_tuff("if (read<U8>()) 3U8 else 5U8", Some("0"));
+        assert_eq!(exit_code, 5);
+    }
+
+    #[test]
+    fn test_let_if_else_init_true() {
+        // let temp : U8 = if (read<Bool>()) 3U8 else 5U8; temp with "true" should return 3.
+        let (exit_code, _stdout) = execute_tuff(
+            "let temp : U8 = if (read<Bool>()) 3U8 else 5U8; temp",
+            Some("true"),
+        );
+        assert_eq!(exit_code, 3);
+    }
+
+    #[test]
+    fn test_let_if_else_init_false() {
+        // let temp : U8 = if (read<Bool>()) 3U8 else 5U8; temp with "false" should return 5.
+        let (exit_code, _stdout) = execute_tuff(
+            "let temp : U8 = if (read<Bool>()) 3U8 else 5U8; temp",
+            Some("false"),
+        );
         assert_eq!(exit_code, 5);
     }
 

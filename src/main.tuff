@@ -1,5 +1,2 @@
-fn get() => {
-    100U8   
-}
-
-get()
+let temp : U8 = if (read<Bool>()) 3U8 else 5U8;
+temp
