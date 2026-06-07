@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::io::Write;
@@ -59,12 +60,16 @@ fn strip_type_suffix(s: &str) -> String {
     s.replace("U8", "").replace("I32", "")
 }
 
-/// Compile a `let [mut] <name> [= <init>]` statement into a Vec of C statements
-/// (variable declaration + optional init/read statements).
-fn compile_let_stmt(stmt: &str) -> Vec<String> {
+/// Compile a `let [mut] <name> [= <init>]` statement into C statements,
+/// and register any declared array in the symbol map.
+fn compile_let_stmt(stmt: &str, symbols: &mut HashMap<String, String>) -> Vec<String> {
     let after_let = stmt.strip_prefix("let ").unwrap();
     let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
-    let vn = after_mut.split_whitespace().next().unwrap_or("");
+    let vn = after_mut
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_string();
     let after_name = after_mut[vn.len()..].trim();
 
     // Detect array declaration: `: [I32; N] = ...` or `: [I32; N];`
@@ -83,41 +88,56 @@ fn compile_let_stmt(stmt: &str) -> Vec<String> {
         None
     };
 
-    let mut out = if let Some(ref size) = array_size {
-        vec![format!("int {}[{}];", vn, size)]
-    } else {
-        vec![format!("int {};", vn)]
-    };
+    let mut out: Vec<String> = Vec::new();
 
     if let Some(eq) = after_name.find("= ") {
         let iv = after_name[eq + 2..].trim();
-        if iv == "read<U8>()" {
+        if iv.starts_with('[') {
+            // Array literal: [val, val, ...] — infer size from element count.
+            let inner = &iv[1..iv.len().saturating_sub(1)];
+            let elem_count = inner.split(',').count();
+            let size_str = elem_count.to_string();
+            let c_init = format!("{{ {} }}", inner);
+            out.push(format!(
+                "int {}[{}] = {};",
+                vn,
+                size_str,
+                strip_type_suffix(&c_init)
+            ));
+            symbols.insert(vn, size_str);
+        } else if iv == "read<U8>()" {
+            out.push(format!("int {};", vn));
             out.push(format!("scanf(\"%d\", &{});", vn));
         } else if iv == "read<Bool>()" {
+            out.push(format!("int {};", vn));
             out.push(format!("char {0}_buf[8];", vn));
             out.push(format!("scanf(\"%7s\", {0}_buf);", vn));
             out.push(format!(
                 "{} = strcmp({}_buf, \"true\") == 0 ? 1 : 0;",
                 vn, vn
             ));
-        } else if iv.starts_with('[') {
-            // Array literal: [val, val, ...] → use init on the declaration.
-            // Replace the "int name[N];" with "int name[N] = {val, val, ...};"
-            let c_init = format!("{{ {} }}", &iv[1..iv.len().saturating_sub(1)]);
-            out[0] = format!(
-                "int {}[{}] = {};",
-                vn,
-                array_size.as_ref().unwrap_or(&"".to_string()),
-                strip_type_suffix(&c_init)
-            );
+        } else if let Some(src_size) = symbols.get(iv) {
+            // Array copy: `let temp = array;`
+            let size = src_size.clone();
+            out.push(format!("int {}[{}];", vn, size));
+            out.push(format!("memcpy({}, {}, sizeof(int) * {});", vn, iv, size));
+            symbols.insert(vn, size);
         } else {
+            out.push(format!("int {};", vn));
             out.push(format!("{} = {};", vn, strip_type_suffix(iv)));
         }
+    } else if let Some(ref size) = array_size {
+        // Declaration without init: `let name : [I32; N];`
+        out.push(format!("int {}[{}];", vn, size));
+        symbols.insert(vn.clone(), size.clone());
+    } else {
+        // Scalar without init.
+        out.push(format!("int {};", vn));
     }
     out
 }
 
-fn compile_statements(src: &str) -> Option<String> {
+fn compile_statements(src: &str, mut symbols: &mut HashMap<String, String>) -> Option<String> {
     let parts = split_top_level(src);
     if parts.is_empty() {
         return None;
@@ -135,7 +155,7 @@ fn compile_statements(src: &str) -> Option<String> {
             continue;
         }
         if stmt.starts_with("let ") {
-            c_stmts.extend(compile_let_stmt(stmt));
+            c_stmts.extend(compile_let_stmt(stmt, &mut symbols));
         } else {
             // Plain statement.
             c_stmts.push(format!("{};", strip_type_suffix(stmt)));
@@ -260,6 +280,7 @@ int main() {{
         let parts = split_top_level(trimmed);
         if parts.len() >= 2 {
             let mut c_stmts: Vec<String> = Vec::new();
+            let mut symbols: HashMap<String, String> = HashMap::new();
 
             for i in 0..parts.len() - 1 {
                 let stmt = parts[i].trim();
@@ -268,7 +289,7 @@ int main() {{
                 }
 
                 if stmt.starts_with("let ") {
-                    c_stmts.extend(compile_let_stmt(stmt));
+                    c_stmts.extend(compile_let_stmt(stmt, &mut symbols));
                 } else if stmt.starts_with("while (") {
                     // while (condition) body-statement
                     let after_while = stmt.strip_prefix("while (").unwrap();
@@ -331,13 +352,15 @@ int main() {{
                 let then_stmts = if raw_then.starts_with('{') {
                     // Block body: compile its contents
                     let inner = &raw_then[1..raw_then.len().saturating_sub(1)];
-                    compile_statements(inner).unwrap_or_default()
+                    let mut block_symbols = symbols.clone();
+                    compile_statements(inner, &mut block_symbols).unwrap_or_default()
                 } else {
                     format!("return {};", strip_type_suffix(raw_then))
                 };
                 let else_stmts = if raw_else.starts_with('{') {
                     let inner = &raw_else[1..raw_else.len().saturating_sub(1)];
-                    compile_statements(inner).unwrap_or_default()
+                    let mut block_symbols = symbols.clone();
+                    compile_statements(inner, &mut block_symbols).unwrap_or_default()
                 } else {
                     format!("return {};", strip_type_suffix(raw_else))
                 };
@@ -707,6 +730,15 @@ mod tests {
     fn test_let_array_i32() {
         // let array : [I32; 3] = [1, 2, 3]; array[0] should return 1.
         let (exit_code, stdout) = execute_tuff("let array : [I32; 3] = [1, 2, 3]; array[0]", None);
+        assert_eq!(exit_code, 1);
+        assert_eq!(stdout, "");
+    }
+
+    #[test]
+    fn test_let_array_copy() {
+        // let array = [1, 2, 3]; let temp = array; temp[0] should return 1.
+        let (exit_code, stdout) =
+            execute_tuff("let array = [1, 2, 3]; let temp = array; temp[0]", None);
         assert_eq!(exit_code, 1);
         assert_eq!(stdout, "");
     }
