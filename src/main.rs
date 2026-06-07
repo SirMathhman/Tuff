@@ -102,7 +102,10 @@ fn parse_token(token: &str, context: &str, scope: &Scope) -> Result<i32, String>
 
     // Check if this is a simple identifier (variable name).
     if !token.is_empty()
-        && token.chars().next().map_or(false, |c| c.is_alphabetic() || c == '_')
+        && token
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_alphabetic() || c == '_')
         && !token.contains(|c: char| c == 'U' || c == 'u' || c == 'I' || c == 'i')
     {
         if let Some(&val) = scope.get(token) {
@@ -187,6 +190,33 @@ fn split_by_semicolons(s: &str) -> Vec<&str> {
     parts
 }
 
+/// Find the last occurrence of any operator in `ops` at grouping depth 0.
+fn find_operator_at_depth(
+    s: &str,
+    ops: &[char],
+    skip_leading_minus: bool,
+) -> Option<(usize, char)> {
+    let mut best_pos = None;
+    let mut best_op = '\0';
+    let mut depth = 0i32;
+
+    for (i, ch) in s.char_indices() {
+        if is_opening(ch) {
+            depth += 1;
+        } else if matches!(ch, ')' | '}') {
+            depth -= 1;
+        } else if depth == 0 && ops.contains(&ch) {
+            // Avoid treating a leading '-' as subtraction.
+            if !skip_leading_minus || ch != '-' || i > 0 {
+                best_pos = Some(i);
+                best_op = ch;
+            }
+        }
+    }
+
+    best_pos.map(|pos| (pos, best_op))
+}
+
 /// Evaluate a Tuff expression with variable scope support.
 fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<i32, String> {
     let trimmed = input.trim();
@@ -204,49 +234,21 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<i32, String> {
     }
 
     // Find operators not inside groups, respecting precedence: * and / before + and -.
-    let mut best_pos = None;
-    let mut best_op = '\0';
+    let mut result = find_operator_at_depth(trimmed, &['+', '-'], true);
 
-    // First look for '+' or '-' at depth 0 (lowest precedence).
-    let mut depth = 0i32;
-    for (i, ch) in trimmed.char_indices() {
-        if is_opening(ch) {
-            depth += 1;
-        } else if matches!(ch, ')' | '}') {
-            depth -= 1;
-        } else if depth == 0 && (ch == '+' || ch == '-') {
-            // Avoid treating a leading '-' as subtraction.
-            if ch != '-' || i > 0 {
-                best_pos = Some(i);
-                best_op = ch;
-            }
-        }
-    }
-
-    // If no +/- found at depth 0, look for '*' or '/' outside groups.
-    if best_pos.is_none() {
-        depth = 0;
-        for (i, ch) in trimmed.char_indices() {
-            if is_opening(ch) {
-                depth += 1;
-            } else if matches!(ch, ')' | '}') {
-                depth -= 1;
-            } else if depth == 0 && (ch == '*' || ch == '/') {
-                best_pos = Some(i);
-                best_op = ch;
-            }
-        }
+    if result.is_none() {
+        result = find_operator_at_depth(trimmed, &['*', '/'], false);
     }
 
     // If an operator was found, split and evaluate recursively.
-    if let Some(pos) = best_pos {
+    if let Some((pos, op)) = result {
         let left_str = &trimmed[..pos];
         let right_str = &trimmed[pos + 1..];
 
         let left_val = execute_tuff_with_scope(left_str, scope)?;
         let right_val = execute_tuff_with_scope(right_str, scope)?;
 
-        return match best_op {
+        return match op {
             '+' => Ok(left_val + right_val),
             '-' => Ok(left_val - right_val),
             '*' => Ok(left_val * right_val),
@@ -335,7 +337,9 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
 fn skip_type(s: &str) -> &str {
     let s = s.trim_start();
     // Match optional sign + letter (U/u/I/i) + digits.
-    if !s.is_empty() && (s.starts_with('U') || s.starts_with('u') || s.starts_with('I') || s.starts_with('i')) {
+    if !s.is_empty()
+        && (s.starts_with('U') || s.starts_with('u') || s.starts_with('I') || s.starts_with('i'))
+    {
         let after_letter = &s[1..]; // Skip the type letter.
         let rest = after_letter.trim_start();
         if !rest.is_empty() && rest.chars().next().map_or(false, |c| c.is_ascii_digit()) {
@@ -348,7 +352,28 @@ fn skip_type(s: &str) -> &str {
 /// Public entry point — evaluates an expression with an empty scope.
 pub fn execute_tuff(input: &str) -> Result<i32, String> {
     let scope: Scope = HashMap::new();
+
+    // If input contains top-level semicolons (not inside any grouping), treat it as a script/block.
+    if has_top_level_semicolon(input.trim()) && !input.trim().starts_with('{') {
+        return execute_tuff_with_scope(&format!("{{{}}}", input), &scope);
+    }
+
     execute_tuff_with_scope(input, &scope)
+}
+
+/// Check if the string contains a semicolon at depth 0 (outside all grouping delimiters).
+fn has_top_level_semicolon(s: &str) -> bool {
+    let mut depth = 0i32;
+    for ch in s.chars() {
+        if is_opening(ch) {
+            depth += 1;
+        } else if is_closing(ch) {
+            depth -= 1;
+        } else if ch == ';' && depth == 0 {
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -537,6 +562,19 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_execute_tuff_top_level_let_with_nested_block() {
+        assert_eq!(
+            execute_tuff("let y : U8 = { let temp : U8 = 3U8 + 4U8; temp } * 5U8; y"),
+            Ok(35)
+        );
+    }
+
+    #[test]
+    fn test_execute_tuff_top_level_simple_let() {
+        assert_eq!(execute_tuff("let y : U8 = 35U8; y"), Ok(35));
+    }
+
     // Error paths in parse_value
 
     #[test]
@@ -560,7 +598,7 @@ mod tests {
         assert!(execute_tuff("(").is_err()); // unmatched paren falls through to parse_value error
     }
 
-    // Coverage for split_by_semicolons and evaluate_block paths  
+    // Coverage for split_by_semicolons and evaluate_block paths
     #[test]
     fn test_execute_tuff_empty_brace_block() {
         assert_eq!(execute_tuff("{}"), Ok(0)); // empty block (line 146)
@@ -588,12 +626,18 @@ mod tests {
 
     #[test]
     fn test_execute_tuff_variable_in_expression() {
-        assert_eq!(execute_tuff("{ let a = 2U8; let b = 3U8; a * b + 1U8 }"), Ok(7)); // variable resolution 
+        assert_eq!(
+            execute_tuff("{ let a = 2U8; let b = 3U8; a * b + 1U8 }"),
+            Ok(7)
+        ); // variable resolution 
     }
 
     #[test]
     fn test_execute_tuff_let_with_nested_block_expression() {
-        assert_eq!(execute_tuff("{ let x : U8 = (2U8 + 3U8); x * 4U8 }"), Ok(20)); // nested block in let 
+        assert_eq!(
+            execute_tuff("{ let x : U8 = (2U8 + 3U8); x * 4U8 }"),
+            Ok(20)
+        ); // nested block in let 
     }
 
     #[test]
@@ -601,9 +645,12 @@ mod tests {
         assert_eq!(execute_tuff("16U8 / 4U8 - 2U8"), Ok(2)); // division before subtraction (line ~170)  
     }
 
-    #[test] 
+    #[test]
     fn test_execute_tuff_multiple_semicolons_in_block() {
-        assert_eq!(execute_tuff("{ let a = 1U8; let b = 2U8; let c = 3U8; c + b + a }"), Ok(6)); // multiple stmts (line ~172) 
+        assert_eq!(
+            execute_tuff("{ let a = 1U8; let b = 2U8; let c = 3U8; c + b + a }"),
+            Ok(6)
+        ); // multiple stmts (line ~172) 
     }
 
     #[test]
