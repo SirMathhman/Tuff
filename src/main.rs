@@ -60,11 +60,80 @@ fn strip_type_suffix(s: &str) -> String {
     s.replace("U8", "").replace("I32", "")
 }
 
+/// Count top-level commas (not inside `[...]` nested brackets).
+fn count_top_level_commas(s: &str) -> usize {
+    let mut depth = 0usize;
+    let mut count = 0usize;
+    for c in s.chars() {
+        match c {
+            '[' => depth += 1,
+            ']' => depth -= 1,
+            ',' if depth == 0 => count += 1,
+            _ => {}
+        }
+    }
+    count + 1 // elements = commas + 1
+}
+
+/// Recursively compute the array dimensions from a bracket-delimited literal.
+/// `inner` is the content *between* the outer `[...]`, e.g. for `[[1,2],[3,4]]`
+/// it is `[1,2],[3,4]`. Returns dimensions like `[2, 2]`.
+fn compute_array_dims(inner: &str) -> Vec<usize> {
+    let trimmed = inner.trim();
+    if !trimmed.starts_with('[') {
+        // Scalar elements: count them.
+        let count = trimmed.split(',').count();
+        return vec![count];
+    }
+    let outer = count_top_level_commas(trimmed);
+    // Extract the first top-level element (everything from position 0 to its
+    // matching bracket).
+    let first = extract_first_bracket_element(trimmed);
+    let first = first.trim();
+    let mut dims = vec![outer];
+    if first.starts_with('[') {
+        // Recurse into the inner content of the first sub-array.
+        let first_inner = &first[1..first.len().saturating_sub(1)];
+        dims.extend(compute_array_dims(first_inner));
+    } else if !first.is_empty() {
+        let inner_count = first.split(',').count();
+        dims.push(inner_count);
+    }
+    dims
+}
+
+/// Extract the first bracket-delimited element from a comma-separated list.
+/// E.g. `[[1,2],[3,4]]` → `[1,2]` — correctly tracks bracket nesting.
+fn extract_first_bracket_element(s: &str) -> &str {
+    let trimmed = s.trim();
+    if !trimmed.starts_with('[') {
+        // Scalar: return up to the first comma or end.
+        let end = trimmed.find(',').unwrap_or(trimmed.len());
+        return &trimmed[..end];
+    }
+    let mut depth = 0usize;
+    for (j, c) in trimmed.char_indices() {
+        match c {
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &trimmed[..=j];
+                }
+            }
+            _ => {}
+        }
+    }
+    trimmed
+}
+
 /// Compile a `let [mut] <name> [= <init>]` statement into C statements,
-/// and register any declared array in the symbol map.
-fn compile_let_stmt(stmt: &str, symbols: &mut HashMap<String, String>) -> Vec<String> {
+/// and register any declared variable in the symbol map.
+/// Entries are (is_mut, array_size_or_empty).
+fn compile_let_stmt(stmt: &str, symbols: &mut HashMap<String, (bool, String)>) -> Vec<String> {
     let after_let = stmt.strip_prefix("let ").unwrap();
     let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
+    let is_mut = after_let.starts_with("mut ");
     let vn = after_mut
         .split_whitespace()
         .next()
@@ -94,20 +163,27 @@ fn compile_let_stmt(stmt: &str, symbols: &mut HashMap<String, String>) -> Vec<St
         let iv = after_name[eq + 2..].trim();
         if iv.starts_with('[') {
             // Array literal: [val, val, ...] — infer size from element count.
+            // Also convert all [] to {} for valid C nested initialization.
             let inner = &iv[1..iv.len().saturating_sub(1)];
-            let elem_count = inner.split(',').count();
-            let size_str = elem_count.to_string();
-            let c_init = format!("{{ {} }}", inner);
+            let dims = compute_array_dims(inner);
+            let c_body = inner.replace("[", "{").replace("]", "}");
+            let c_init = format!("{{ {} }}", c_body);
+            let size_str = dims
+                .iter()
+                .map(|d| d.to_string())
+                .collect::<Vec<_>>()
+                .join("][");
             out.push(format!(
                 "int {}[{}] = {};",
                 vn,
                 size_str,
                 strip_type_suffix(&c_init)
             ));
-            symbols.insert(vn, size_str);
+            symbols.insert(vn, (is_mut, size_str));
         } else if iv == "read<U8>()" {
             out.push(format!("int {};", vn));
             out.push(format!("scanf(\"%d\", &{});", vn));
+            symbols.insert(vn, (is_mut, String::new()));
         } else if iv == "read<Bool>()" {
             out.push(format!("int {};", vn));
             out.push(format!("char {0}_buf[8];", vn));
@@ -116,28 +192,36 @@ fn compile_let_stmt(stmt: &str, symbols: &mut HashMap<String, String>) -> Vec<St
                 "{} = strcmp({}_buf, \"true\") == 0 ? 1 : 0;",
                 vn, vn
             ));
-        } else if let Some(src_size) = symbols.get(iv) {
+            symbols.insert(vn, (is_mut, String::new()));
+        } else if let Some((_, src_size)) = symbols.get(iv).map(|e| e.clone()) {
             // Array copy: `let temp = array;`
-            let size = src_size.clone();
-            out.push(format!("int {}[{}];", vn, size));
-            out.push(format!("memcpy({}, {}, sizeof(int) * {});", vn, iv, size));
-            symbols.insert(vn, size);
+            out.push(format!("int {}[{}];", vn, src_size));
+            out.push(format!(
+                "memcpy({}, {}, sizeof(int) * {});",
+                vn, iv, src_size
+            ));
+            symbols.insert(vn, (is_mut, src_size));
         } else {
             out.push(format!("int {};", vn));
             out.push(format!("{} = {};", vn, strip_type_suffix(iv)));
+            symbols.insert(vn, (is_mut, String::new()));
         }
     } else if let Some(ref size) = array_size {
         // Declaration without init: `let name : [I32; N];`
         out.push(format!("int {}[{}];", vn, size));
-        symbols.insert(vn.clone(), size.clone());
+        symbols.insert(vn, (is_mut, size.clone()));
     } else {
         // Scalar without init.
         out.push(format!("int {};", vn));
+        symbols.insert(vn, (is_mut, String::new()));
     }
     out
 }
 
-fn compile_statements(src: &str, mut symbols: &mut HashMap<String, String>) -> Option<String> {
+fn compile_statements(
+    src: &str,
+    mut symbols: &mut HashMap<String, (bool, String)>,
+) -> Option<String> {
     let parts = split_top_level(src);
     if parts.is_empty() {
         return None;
@@ -280,7 +364,7 @@ int main() {{
         let parts = split_top_level(trimmed);
         if parts.len() >= 2 {
             let mut c_stmts: Vec<String> = Vec::new();
-            let mut symbols: HashMap<String, String> = HashMap::new();
+            let mut symbols: HashMap<String, (bool, String)> = HashMap::new();
 
             for i in 0..parts.len() - 1 {
                 let stmt = parts[i].trim();
@@ -323,6 +407,24 @@ int main() {{
                     }
                 } else {
                     // Plain statement / assignment.
+                    // Check for immutable reassignment errors.
+                    let assign_target = stmt.split_whitespace().next().unwrap_or("");
+                    if !assign_target.is_empty()
+                        && !assign_target.starts_with("write<")
+                        && !assign_target.starts_with("read<")
+                        && (stmt.contains('=') || stmt.contains("+=") || stmt.contains("-="))
+                    {
+                        if let Some(&(is_mut, _)) = symbols.get(assign_target) {
+                            if !is_mut {
+                                return Err(CompileError {
+                                    message: format!(
+                                        "cannot reassign immutable variable `{}`",
+                                        assign_target
+                                    ),
+                                });
+                            }
+                        }
+                    }
                     if stmt.contains("read<U8>()") {
                         let read_var = format!("_r{}", i);
                         c_stmts.push(format!("int {};", read_var));
@@ -705,9 +807,21 @@ mod tests {
 
     #[test]
     fn test_let_i32_no_init_then_assign() {
-        // let temp : I32; temp = 100I32; temp should return 100.
-        let (exit_code, _stdout) = execute_tuff("let temp : I32; temp = 100I32; temp", None);
+        // let mut temp : I32; temp = 100I32; temp should return 100.
+        let (exit_code, _stdout) = execute_tuff("let mut temp : I32; temp = 100I32; temp", None);
         assert_eq!(exit_code, 100);
+    }
+
+    #[test]
+    fn test_immutable_reassign_error() {
+        // let x = 0U8; x = 1U8; x should return CompileError.
+        let result = compile_tuff_to_c("let x = 0U8; x = 1U8; x");
+        assert_eq!(
+            result,
+            Err(CompileError {
+                message: "cannot reassign immutable variable `x`".to_string()
+            })
+        );
     }
 
     #[test]
@@ -739,6 +853,33 @@ mod tests {
         // let array = [1, 2, 3]; let temp = array; temp[0] should return 1.
         let (exit_code, stdout) =
             execute_tuff("let array = [1, 2, 3]; let temp = array; temp[0]", None);
+        assert_eq!(exit_code, 1);
+        assert_eq!(stdout, "");
+    }
+
+    #[test]
+    fn test_let_2d_array() {
+        // let array = [[1, 2], [3, 4]]; array[0][0] should return 1.
+        let (exit_code, stdout) = execute_tuff("let array = [[1, 2], [3, 4]]; array[0][0]", None);
+        assert_eq!(exit_code, 1);
+        assert_eq!(stdout, "");
+    }
+
+    #[test]
+    fn test_let_3d_array() {
+        // let array = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]; array[0][1][0] should return 3.
+        let (exit_code, stdout) = execute_tuff(
+            "let array = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]; array[0][1][0]",
+            None,
+        );
+        assert_eq!(exit_code, 3);
+        assert_eq!(stdout, "");
+    }
+
+    #[test]
+    fn test_let_4d_array() {
+        // let array = [[[[1]]]]; array[0][0][0][0] should return 1.
+        let (exit_code, stdout) = execute_tuff("let array = [[[[1]]]]; array[0][0][0][0]", None);
         assert_eq!(exit_code, 1);
         assert_eq!(stdout, "");
     }
