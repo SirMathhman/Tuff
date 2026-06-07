@@ -598,8 +598,101 @@ int main() {{
     ))
 }
 
+/// Pre-process source: extract `fn name() : Type => body;` declarations,
+/// validate their return type against the body's read type, inline calls,
+/// and normalize `read<I32>()` to `read<U8>()`.
+fn preprocess_fns(source: &str) -> Result<String, CompileError> {
+    let mut fn_map: HashMap<String, String> = HashMap::new();
+
+    // Collect all fn declarations and remove them from the text.
+    // A fn declaration looks like: fn name(...) : Type => body;
+    let mut output = source.to_string();
+    loop {
+        if let Some(fn_pos) = output.find("fn ") {
+            // Find the clause from `fn` to the closing `;` of the fn body.
+            if let Some(body_semi) = output[fn_pos..].find("=>") {
+                let after_arrow = &output[fn_pos + body_semi + 2..];
+                // Find the first `;` after `=>` — that's the end of the fn body.
+                if let Some(semi_pos) = after_arrow.find(';') {
+                    let fn_decl = &output[fn_pos..fn_pos + body_semi + 2 + semi_pos + 1];
+                    // Parse the fn name.
+                    let decl_rest = fn_decl.strip_prefix("fn ").unwrap();
+                    if let Some(paren_open) = decl_rest.find('(') {
+                        let name = decl_rest[..paren_open].trim().to_string();
+                        if let Some(paren_close) = decl_rest.find(')') {
+                            let after_paren = decl_rest[paren_close + 1..].trim();
+
+                            // Extract declared return type after `:` before `=>`.
+                            let decl_type = after_paren.find(':').map(|colon_pos| {
+                                let after_colon = after_paren[colon_pos + 1..].trim();
+                                let type_end = after_colon.find("=>").unwrap_or(after_colon.len());
+                                after_colon[..type_end].trim().to_string()
+                            });
+
+                            if let Some(arrow_pos) = after_paren.find("=>") {
+                                let raw_body = after_paren[arrow_pos + 2..].trim();
+                                let body = raw_body
+                                    .strip_suffix(';')
+                                    .unwrap_or(raw_body)
+                                    .trim()
+                                    .to_string();
+
+                                // Validate type compatibility if body contains read<T>().
+                                if let Some(read_type) = body
+                                    .strip_prefix("read<")
+                                    .and_then(|s| s.strip_suffix(">()"))
+                                    && let Some(ref dt) = decl_type
+                                    && dt != "Bool"
+                                    && read_type != dt
+                                    && read_type != "Bool"
+                                {
+                                    return Err(CompileError {
+                                        message: format!(
+                                            "type mismatch in `fn {}`: declared `{}` but body is `read<{}>()`",
+                                            name, dt, read_type
+                                        ),
+                                    });
+                                }
+
+                                fn_map.insert(name, body);
+                                // Remove the fn declaration from output.
+                                output.replace_range(
+                                    fn_pos..fn_pos + body_semi + 2 + semi_pos + 1,
+                                    "",
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // No more fn declarations found.
+        break;
+    }
+
+    // Normalize I32 reads to U8 (both produce `int` via scanf).
+    output = output.replace("read<I32>()", "read<U8>()");
+
+    // Normalize I32 reads in inlined bodies too.
+    let mut normalized_fn_map: HashMap<String, String> = HashMap::new();
+    for (name, body) in &fn_map {
+        let normalized_body = body.replace("read<I32>()", "read<U8>()");
+        normalized_fn_map.insert(name.clone(), normalized_body);
+    }
+
+    // Replace function calls with their inlined bodies.
+    for (name, body) in &normalized_fn_map {
+        output = output.replace(&format!("{}()", name), body);
+    }
+
+    Ok(output)
+}
+
 fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
-    let trimmed = tuff_source.trim();
+    // Pre-process: inline function declarations and normalize I32 reads.
+    let processed = preprocess_fns(tuff_source)?;
+    let trimmed = processed.trim();
 
     let allowed_chars =
         |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | '-' | ' ') || c.is_ascii_alphanumeric();
@@ -1113,6 +1206,34 @@ mod tests {
         // read<Bool>() with stdin "true" should return 1.
         let (exit_code, _stdout) = execute_tuff("read<Bool>()", Some("true"));
         assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_function_decl_inline_read() {
+        // fn get() : I32 => read<I32>(); get() with "100" should return 100.
+        let (exit_code, _stdout) =
+            execute_tuff("fn get() : I32 => read<I32>(); get()", Some("100"));
+        assert_eq!(exit_code, 100);
+    }
+
+    #[test]
+    fn test_function_decl_type_mismatch() {
+        // fn get() : U8 => read<I32>(); get() should error (U8 != I32).
+        let result = compile_tuff_to_c("fn get() : U8 => read<I32>(); get()");
+        assert_eq!(
+            result,
+            Err(CompileError {
+                message: "type mismatch in `fn get`: declared `U8` but body is `read<I32>()`"
+                    .to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_function_decl_type_match() {
+        // fn get() : U8 => read<U8>(); get() with "100" should succeed.
+        let (exit_code, _stdout) = execute_tuff("fn get() : U8 => read<U8>(); get()", Some("100"));
+        assert_eq!(exit_code, 100);
     }
 
     #[test]
