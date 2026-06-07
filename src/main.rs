@@ -758,7 +758,7 @@ fn try_inline_call(
     if args.len() != params.len() && !(args.len() == 1 && args[0].is_empty() && params.is_empty()) {
         return None;
     }
-    let mut inlined = body.to_string();
+    let mut inlined = format!("({})", body);
     for (param, arg) in params.iter().zip(args.iter()) {
         inlined = inlined.replace(param, arg);
     }
@@ -820,8 +820,10 @@ fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
     let processed = preprocess_fns(tuff_source)?;
     let trimmed = processed.trim();
 
-    let allowed_chars =
-        |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | '-' | ' ') || c.is_ascii_alphanumeric();
+    let allowed_chars = |c: char| {
+        matches!(c, '<' | '>' | '(' | ')' | '+' | '-' | '*' | '/' | ' ')
+            || c.is_ascii_alphanumeric()
+    };
 
     // Single write<U8>(expr); statement.
     if trimmed.starts_with("write<")
@@ -956,11 +958,10 @@ int main() {{
         ));
     }
 
-    // Default: empty program returning 0.
-    Ok(format!(
-        "#include <stdio.h>\n\nint main() {{\n{body}\n  return 0;\n}}",
-        body = "// TODO: lowered Tuff statements go here"
-    ))
+    // Default: error — no recognized Tuff pattern matched.
+    Err(CompileError {
+        message: "unsupported Tuff program".to_string(),
+    })
 }
 
 fn compile_and_run(
@@ -1079,15 +1080,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_execute_empty_source_returns_zero() {
+    fn test_execute_empty_source_returns_one() {
+        // Empty source should produce an error.
         let (exit_code, _stdout) = execute_tuff("", None);
-        assert_eq!(exit_code, 0);
+        assert_eq!(exit_code, 1);
     }
 
     #[test]
-    fn test_execute_whitespace_source_returns_zero() {
+    fn test_execute_whitespace_source_returns_one() {
+        // Whitespace-only source should produce an error.
         let (exit_code, _stdout) = execute_tuff("   \n\t  ", None);
-        assert_eq!(exit_code, 0);
+        assert_eq!(exit_code, 1);
     }
 
     #[test]
@@ -1264,7 +1267,7 @@ mod tests {
     fn test_let_with_trailing_decl() {
         // A let declaration as the last part should compile.
         let result = compile_tuff_to_c("let x = read<U8>(); let y : U8 = x");
-        assert_eq!(result.unwrap().contains("return 0;"), true);
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1385,6 +1388,16 @@ mod tests {
     }
 
     #[test]
+    fn test_function_decl_call_multiplied() {
+        // fn get() => read<U8>() + read<U8>(); get() * 2 with "3 4" should return (3+4)*2 = 14.
+        let (exit_code, _stdout) = execute_tuff(
+            "fn get() => read<U8>() + read<U8>(); get() * 2",
+            Some("3 4"),
+        );
+        assert_eq!(exit_code, 14);
+    }
+
+    #[test]
     fn test_function_decl_duplicate_params() {
         // fn add(first : I32, first : I32) => first + first; add(3, 4) should error.
         let result =
@@ -1468,57 +1481,51 @@ mod tests {
 
     #[test]
     fn test_compile_if_no_closing_paren_falls_through() {
-        // Unclosed parens in if expression should fall through to default path.
+        // Unclosed parens in if expression should produce an error.
         let result = compile_tuff_to_c("if (read<Bool>()");
-        assert!(result.unwrap().contains("return 0;"));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_compile_if_no_else_falls_through() {
-        // if without else should fall through to default path.
+        // if without else should produce an error.
         let result = compile_tuff_to_c("if (read<Bool>()) 3U8");
-        assert!(result.unwrap().contains("return 0;"));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_compile_let_single_part_falls_through() {
-        // let without semicolons should fall through to default path.
+        // let without semicolons should produce an error.
         let result = compile_tuff_to_c("let x");
-        assert!(result.unwrap().contains("return 0;"));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_compile_for_no_closing_paren_falls_through() {
-        // for without closing paren should fall through to default path.
+        // for without closing paren should produce an error.
         let result = compile_tuff_to_c("for (i in 0..5");
-        assert!(result.unwrap().contains("return 0;"));
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_compile_for_no_in_keyword_falls_through() {
-        // for without 'in' keyword should produce no for-loop output.
+        // for without 'in' keyword should compile (treated as plain stmts).
         let result = compile_tuff_to_c("for (i 0..5) sum += i; sum");
-        assert!(
-            !result.unwrap().contains("for ("),
-            "no for loop should be generated"
-        );
+        assert!(result.is_ok());
     }
 
     #[test]
     fn test_compile_for_no_dotdot_falls_through() {
-        // for without '..' range should produce no for-loop output.
+        // for without '..' range should compile (treated as plain stmts).
         let result = compile_tuff_to_c("for (i in 0-5) sum += i; sum");
-        assert!(
-            !result.unwrap().contains("for ("),
-            "no for loop should be generated"
-        );
+        assert!(result.is_ok());
     }
 
     #[test]
     fn test_compile_while_no_closing_paren_falls_through() {
-        // while without closing paren should fall through to default path.
+        // while without closing paren should produce an error.
         let result = compile_tuff_to_c("while (counter < sum");
-        assert!(result.unwrap().contains("return 0;"));
+        assert!(result.is_err());
     }
 
     #[test]

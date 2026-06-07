@@ -1,3 +1,1 @@
-fn split_at_matching_paren() => {
-    
-}
+fn get() => read<U8>() + read<U8>(); get() * 2
