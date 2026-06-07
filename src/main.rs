@@ -127,10 +127,23 @@ fn extract_first_bracket_element(s: &str) -> &str {
     trimmed
 }
 
+/// Emit C statements for a Bool read (string-based scanf + strcmp).
+fn emit_bool_read(vn: &str) -> Vec<String> {
+    vec![
+        format!("int {};", vn),
+        format!("char {0}_buf[8];", vn),
+        format!("scanf(\"%7s\", {0}_buf);", vn),
+        format!("{} = strcmp({}_buf, \"true\") == 0 ? 1 : 0;", vn, vn),
+    ]
+}
+
 /// Compile a `let [mut] <name> [= <init>]` statement into C statements,
 /// and register any declared variable in the symbol map.
-/// Entries are (is_mut, array_size_or_empty).
-fn compile_let_stmt(stmt: &str, symbols: &mut HashMap<String, (bool, String)>) -> Vec<String> {
+/// Entries are (is_mut, array_size_or_empty, var_type_or_empty).
+fn compile_let_stmt(
+    stmt: &str,
+    symbols: &mut HashMap<String, (bool, String, String)>,
+) -> Result<Vec<String>, CompileError> {
     let after_let = stmt.strip_prefix("let ").unwrap();
     let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
     let is_mut = after_let.starts_with("mut ");
@@ -140,6 +153,23 @@ fn compile_let_stmt(stmt: &str, symbols: &mut HashMap<String, (bool, String)>) -
         .unwrap_or("")
         .to_string();
     let after_name = after_mut[vn.len()..].trim();
+
+    // Extract the declared type annotation if present (e.g. `: U8`, `: I32`, `: Bool`).
+    let decl_type = if let Some(colon_pos) = after_name.find(':') {
+        let rest = after_name[colon_pos + 1..].trim();
+        let type_end = rest.find("= ").unwrap_or(rest.len());
+        let raw = rest[..type_end].trim();
+        if raw.starts_with('[') {
+            let inner = &raw[1..raw.find(']').unwrap_or(0)];
+            let base = inner.split(';').next().unwrap_or("").trim();
+            Some(base.to_string())
+        } else {
+            Some(raw.to_string())
+        }
+    } else {
+        None
+    };
+    let var_type = decl_type.clone().unwrap_or_default();
 
     // Detect array declaration: `: [I32; N] = ...` or `: [I32; N];`
     let array_size = if after_name.starts_with(": [") {
@@ -162,8 +192,7 @@ fn compile_let_stmt(stmt: &str, symbols: &mut HashMap<String, (bool, String)>) -
     if let Some(eq) = after_name.find("= ") {
         let iv = after_name[eq + 2..].trim();
         if iv.starts_with('[') {
-            // Array literal: [val, val, ...] — infer size from element count.
-            // Also convert all [] to {} for valid C nested initialization.
+            // Array literal.
             let inner = &iv[1..iv.len().saturating_sub(1)];
             let dims = compute_array_dims(inner);
             let c_body = inner.replace("[", "{").replace("]", "}");
@@ -179,57 +208,92 @@ fn compile_let_stmt(stmt: &str, symbols: &mut HashMap<String, (bool, String)>) -
                 size_str,
                 strip_type_suffix(&c_init)
             ));
-            symbols.insert(vn, (is_mut, size_str));
-        } else if iv == "read<U8>()" {
-            out.push(format!("int {};", vn));
-            out.push(format!("scanf(\"%d\", &{});", vn));
-            symbols.insert(vn, (is_mut, String::new()));
+            symbols.insert(vn, (is_mut, size_str, var_type));
+        } else if let Some(read_type) = iv.strip_prefix("read<").and_then(|s| s.strip_suffix(">()"))
+        {
+            // read<T>() — validate types match.
+            if let Some(ref dt) = decl_type {
+                if dt != "Bool" && read_type != dt && read_type != "Bool" {
+                    return Err(CompileError {
+                        message: format!(
+                            "type mismatch: variable is `{}` but `read<{}>()` produces `{}`",
+                            dt, read_type, read_type
+                        ),
+                    });
+                }
+            }
+            if read_type == "Bool" || decl_type.as_deref() == Some("Bool") {
+                out.extend(emit_bool_read(&vn));
+            } else {
+                out.push(format!("int {};", vn));
+                out.push(format!("scanf(\"%d\", &{});", vn));
+            }
+            let inferred = if read_type == "Bool" {
+                read_type.to_string()
+            } else if !var_type.is_empty() {
+                var_type.clone()
+            } else {
+                read_type.to_string()
+            };
+            symbols.insert(vn, (is_mut, String::new(), inferred));
         } else if iv == "read<Bool>()" {
-            out.push(format!("int {};", vn));
-            out.push(format!("char {0}_buf[8];", vn));
-            out.push(format!("scanf(\"%7s\", {0}_buf);", vn));
-            out.push(format!(
-                "{} = strcmp({}_buf, \"true\") == 0 ? 1 : 0;",
-                vn, vn
-            ));
-            symbols.insert(vn, (is_mut, String::new()));
-        } else if let Some((_, src_size)) = symbols.get(iv).map(|e| e.clone()) {
-            // Array copy: `let temp = array;`
-            out.push(format!("int {}[{}];", vn, src_size));
-            out.push(format!(
-                "memcpy({}, {}, sizeof(int) * {});",
-                vn, iv, src_size
-            ));
-            symbols.insert(vn, (is_mut, src_size));
+            out.extend(emit_bool_read(&vn));
+            symbols.insert(vn, (is_mut, String::new(), "Bool".to_string()));
+        } else if let Some((_, src_size, src_type)) = symbols.get(iv) {
+            // Variable copy — validate type compatibility.
+            let src_size = src_size.clone();
+            let src_type = src_type.clone();
+            if !var_type.is_empty()
+                && !src_type.is_empty()
+                && var_type != src_type
+                && var_type != "Bool"
+                && src_type != "Bool"
+            {
+                return Err(CompileError {
+                    message: format!(
+                        "type mismatch: variable is `{}` but `{}` is `{}`",
+                        var_type, iv, src_type
+                    ),
+                });
+            }
+            if src_size.is_empty() {
+                out.push(format!("int {};", vn));
+                out.push(format!("{} = {};", vn, iv));
+            } else {
+                out.push(format!("int {}[{}];", vn, src_size));
+                out.push(format!(
+                    "memcpy({}, {}, sizeof(int) * {});",
+                    vn, iv, src_size
+                ));
+            }
+            symbols.insert(vn, (is_mut, src_size, src_type));
         } else {
             out.push(format!("int {};", vn));
             out.push(format!("{} = {};", vn, strip_type_suffix(iv)));
-            symbols.insert(vn, (is_mut, String::new()));
+            symbols.insert(vn, (is_mut, String::new(), var_type));
         }
     } else if let Some(ref size) = array_size {
-        // Declaration without init: `let name : [I32; N];`
         out.push(format!("int {}[{}];", vn, size));
-        symbols.insert(vn, (is_mut, size.clone()));
+        symbols.insert(vn, (is_mut, size.clone(), var_type));
     } else {
-        // Scalar without init.
         out.push(format!("int {};", vn));
-        symbols.insert(vn, (is_mut, String::new()));
+        symbols.insert(vn, (is_mut, String::new(), var_type));
     }
-    out
+    Ok(out)
 }
 
 fn compile_statements(
     src: &str,
-    mut symbols: &mut HashMap<String, (bool, String)>,
-) -> Option<String> {
+    mut symbols: &mut HashMap<String, (bool, String, String)>,
+) -> Result<String, CompileError> {
     let parts = split_top_level(src);
     if parts.is_empty() {
-        return None;
+        return Ok(String::new());
     }
     if parts.len() == 1 {
         // Single expression — just emit as return.
         let v = parts[0].trim();
-        return Some(format!("return {};", strip_type_suffix(v)));
+        return Ok(format!("return {};", strip_type_suffix(v)));
     }
     let mut c_stmts: Vec<String> = Vec::new();
     // All parts except the last are statements.
@@ -239,7 +303,7 @@ fn compile_statements(
             continue;
         }
         if stmt.starts_with("let ") {
-            c_stmts.extend(compile_let_stmt(stmt, &mut symbols));
+            c_stmts.extend(compile_let_stmt(stmt, &mut symbols)?);
         } else {
             // Plain statement.
             c_stmts.push(format!("{};", strip_type_suffix(stmt)));
@@ -248,7 +312,7 @@ fn compile_statements(
     // Last part is the block's return value.
     let last_expr = parts.last().unwrap().trim();
     c_stmts.push(format!("return {};", strip_type_suffix(last_expr)));
-    Some(c_stmts.join("\n  "))
+    Ok(c_stmts.join("\n  "))
 }
 
 /// Given text like `if (cond) then else else`, parse out the condition, then-expr, and else-expr.
@@ -364,7 +428,7 @@ int main() {{
         let parts = split_top_level(trimmed);
         if parts.len() >= 2 {
             let mut c_stmts: Vec<String> = Vec::new();
-            let mut symbols: HashMap<String, (bool, String)> = HashMap::new();
+            let mut symbols: HashMap<String, (bool, String, String)> = HashMap::new();
 
             for i in 0..parts.len() - 1 {
                 let stmt = parts[i].trim();
@@ -373,7 +437,7 @@ int main() {{
                 }
 
                 if stmt.starts_with("let ") {
-                    c_stmts.extend(compile_let_stmt(stmt, &mut symbols));
+                    c_stmts.extend(compile_let_stmt(stmt, &mut symbols)?);
                 } else if stmt.starts_with("while (") {
                     // while (condition) body-statement
                     let after_while = stmt.strip_prefix("while (").unwrap();
@@ -414,7 +478,7 @@ int main() {{
                         && !assign_target.starts_with("read<")
                         && (stmt.contains('=') || stmt.contains("+=") || stmt.contains("-="))
                     {
-                        if let Some(&(is_mut, _)) = symbols.get(assign_target) {
+                        if let Some(&(is_mut, _, _)) = symbols.get(assign_target) {
                             if !is_mut {
                                 return Err(CompileError {
                                     message: format!(
@@ -448,6 +512,24 @@ int main() {{
             }
 
             let ret_expr = parts.last().unwrap().trim();
+            // If the last part is a `let` declaration, treat it as a statement
+            // and default to return 0.
+            if ret_expr.starts_with("let ") {
+                c_stmts.extend(compile_let_stmt(ret_expr, &mut symbols)?);
+                return Ok(format!(
+                    r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <string.h>
+
+int main() {{
+  {stmts}
+  return 0;
+}}
+"#,
+                    stmts = c_stmts.join("\n  "),
+                ));
+            }
             // If the return expression is a top-level if/else, emit it as an if/else block
             // since C does not allow `return if (...) ... else ...`.
             if let Some((condition, raw_then, raw_else)) = parse_if_else(ret_expr) {
@@ -822,6 +904,38 @@ mod tests {
                 message: "cannot reassign immutable variable `x`".to_string()
             })
         );
+    }
+
+    #[test]
+    fn test_type_mismatch_read_u16_into_u8() {
+        // let x : U8 = read<U16>(); x should fail because U16 may not fit in U8.
+        let result = compile_tuff_to_c("let x : U8 = read<U16>(); x");
+        assert_eq!(
+            result,
+            Err(CompileError {
+                message: "type mismatch: variable is `U8` but `read<U16>()` produces `U16`"
+                    .to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_type_mismatch_var_copy_u16_into_u8() {
+        // let x = read<U16>(); let y : U8 = x; should fail.
+        let result = compile_tuff_to_c("let x = read<U16>(); let y : U8 = x");
+        assert_eq!(
+            result,
+            Err(CompileError {
+                message: "type mismatch: variable is `U8` but `x` is `U16`".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_let_with_trailing_decl() {
+        // A let declaration as the last part should compile.
+        let result = compile_tuff_to_c("let x = read<U8>(); let y : U8 = x");
+        assert_eq!(result.unwrap().contains("return 0;"), true);
     }
 
     #[test]
