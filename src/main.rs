@@ -1033,6 +1033,19 @@ int main() {{
         ));
     }
 
+    // Empty block expression — returns 0.
+    if trimmed == "{}" {
+        return Ok(r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+
+int main() {
+  return 0;
+}
+"#
+        .to_string());
+    }
+
     // Fallthrough for general Tuff expressions that don't start with keywords
     // (e.g. arithmetic after fn inlining like "3 + 4").
     if !trimmed.is_empty()
@@ -1044,6 +1057,16 @@ int main() {{
         && !trimmed.starts_with("write<")
         && !trimmed.contains("fn ")
     {
+        // Validate U8 literal range before stripping suffix.
+        if let Some(num_str) = trimmed.strip_suffix("U8") {
+            if let Ok(val) = num_str.parse::<i64>() {
+                if val < 0 || val > 255 {
+                    return Err(CompileError {
+                        message: format!("literal {} out of range for U8 (0..=255)", val),
+                    });
+                }
+            }
+        }
         let expr = strip_type_suffix(trimmed);
         return Ok(format!(
             r#"
@@ -1665,6 +1688,27 @@ mod tests {
                 message: "unsupported if condition: 100".to_string()
             })
         );
+    }
+
+    #[test]
+    fn test_u8_literal_overflow_rejected() {
+        // 256U8 should return Err (exceeds U8 max value of 255).
+        let result = compile_tuff_to_c("256U8");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_u8_literal_negative_rejected() {
+        // -100U8 should return Err (negative value not valid for U8).
+        let result = compile_tuff_to_c("-100U8");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_empty_block_returns_zero() {
+        // An empty block "{}" should return 0.
+        let (exit_code, _stdout) = execute_tuff("{}", None);
+        assert_eq!(exit_code, 0);
     }
 
     #[test]
