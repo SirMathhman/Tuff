@@ -6,8 +6,10 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Per-process counter to guarantee unique temp dirs across parallel test runs.
+#[allow(dead_code)]
 static INVOCATION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+#[allow(dead_code)]
 fn next_id() -> u64 {
     INVOCATION_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
@@ -961,7 +963,11 @@ int main() {{
     ))
 }
 
-fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> (i32, String) {
+fn compile_and_run(
+    tuff_source: &str,
+    std_in: Option<&str>,
+    out_dir: &std::path::Path,
+) -> (i32, String) {
     // 1) Compile Tuff source to C.
     let c_source = match compile_tuff_to_c(tuff_source) {
         Ok(s) => s,
@@ -971,14 +977,8 @@ fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> (i32, String) {
         }
     };
 
-    // 2) Write C source to a temp file and compile with clang.
-    // Use a unique subdirectory per invocation so parallel tests don't collide.
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap();
-    let uid = format!("{:x}{:08x}", now.as_nanos(), next_id());
-    let out_dir = std::env::temp_dir().join(format!("tuffc-out-{}", uid));
-    fs::create_dir_all(&out_dir).expect("failed to create output dir");
+    // 2) Write C source and compile with clang.
+    fs::create_dir_all(out_dir).expect("failed to create output dir");
 
     let c_path = out_dir.join("main.c");
     #[cfg(windows)]
@@ -1039,22 +1039,33 @@ fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> (i32, String) {
     }
 }
 
+#[allow(dead_code)]
+fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> (i32, String) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap();
+    let uid = format!("{:x}{:08x}", now.as_nanos(), next_id());
+    let out_dir = std::env::temp_dir().join(format!("tuffc-out-{}", uid));
+    compile_and_run(tuff_source, std_in, &out_dir)
+}
+
 fn run(args: &[String]) -> i32 {
     if args.len() < 2 {
         eprintln!("Usage: tuffc <file.tuff>");
         return 1;
     }
 
-    let path = &args[1];
+    let path = std::path::Path::new(&args[1]);
     let source = match fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("failed to read {}: {}", path, e);
+            eprintln!("failed to read {}: {}", path.display(), e);
             return 1;
         }
     };
 
-    execute_tuff(&source, None).0
+    let out_dir = path.parent().unwrap_or(std::path::Path::new("."));
+    compile_and_run(&source, None, out_dir).0
 }
 
 fn main() {
