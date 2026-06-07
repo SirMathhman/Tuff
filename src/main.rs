@@ -598,93 +598,217 @@ int main() {{
     ))
 }
 
-/// Pre-process source: extract `fn name() : Type => body;` declarations,
-/// validate their return type against the body's read type, inline calls,
+/// Pre-process source: extract `fn name(...) : Type => body;` declarations,
+/// validate types, inline calls (with parameter substitution),
 /// and normalize `read<I32>()` to `read<U8>()`.
-fn preprocess_fns(source: &str) -> Result<String, CompileError> {
-    let mut fn_map: HashMap<String, String> = HashMap::new();
+/// Parse parameter names from between parentheses in a function declaration.
+/// Each parameter is `name : Type` — extracts just the name.
+fn parse_fn_params(params_str: &str) -> Vec<String> {
+    let trimmed = params_str.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+    trimmed
+        .split(',')
+        .map(|p| {
+            let t = p.trim();
+            let space = t.find(' ').unwrap_or(t.len());
+            t[..space].to_string()
+        })
+        .collect()
+}
 
-    // Collect all fn declarations and remove them from the text.
-    // A fn declaration looks like: fn name(...) : Type => body;
-    let mut output = source.to_string();
+/// Split comma-separated arguments at top-level (respecting nested brackets).
+fn split_top_level_args(args_str: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0;
+    for (i, c) in args_str.char_indices() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                parts.push(args_str[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(args_str[start..].trim());
+    parts
+}
+
+/// Collect all fn declarations from `output`, remove them, and return the map.
+/// Parse a single fn declaration and return `(name, param_names, body, after_paren)`.
+/// The declaration must span a continguous range in `output`.
+fn parse_single_fn_decl(fn_decl: &str) -> Option<(String, Vec<String>, String, String)> {
+    let decl_rest = fn_decl.strip_prefix("fn ")?;
+    let paren_open = decl_rest.find('(')?;
+    let name = decl_rest[..paren_open].trim().to_string();
+    let paren_close = decl_rest.find(')')?;
+    let param_names = parse_fn_params(&decl_rest[paren_open + 1..paren_close]);
+    let after_paren = decl_rest[paren_close + 1..].trim().to_string();
+    let arrow_pos = after_paren.find("=>")?;
+    let raw_body = after_paren[arrow_pos + 2..].trim();
+    let body = raw_body
+        .strip_suffix(';')
+        .unwrap_or(raw_body)
+        .trim()
+        .to_string();
+    Some((name, param_names, body, after_paren))
+}
+
+/// Validate that param names are unique.
+fn check_duplicate_params(name: &str, param_names: &[String]) -> Result<(), CompileError> {
+    let mut seen = std::collections::HashSet::new();
+    for pn in param_names {
+        if !seen.insert(pn.clone()) {
+            return Err(CompileError {
+                message: format!("duplicate parameter `{}` in `fn {}`", pn, name),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Validate that the fn's declared return type matches the body's read type.
+fn check_fn_read_type(
+    name: &str,
+    body: &str,
+    decl_type: &Option<String>,
+) -> Result<(), CompileError> {
+    if let Some(read_type) = body
+        .strip_prefix("read<")
+        .and_then(|s| s.strip_suffix(">()"))
+        && let Some(dt) = decl_type.as_deref()
+        && dt != "Bool"
+        && read_type != dt
+        && read_type != "Bool"
+    {
+        return Err(CompileError {
+            message: format!(
+                "type mismatch in `fn {}`: declared `{}` but body is `read<{}>()`",
+                name, dt, read_type
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Extract the declared return type from the text between `)` and `=>`.
+fn extract_decl_type(after_paren: &str) -> Option<String> {
+    after_paren.find(':').map(|colon_pos| {
+        let after_colon = after_paren[colon_pos + 1..].trim();
+        let type_end = after_colon.find("=>").unwrap_or(after_colon.len());
+        after_colon[..type_end].trim().to_string()
+    })
+}
+
+fn extract_fn_decls(
+    output: &mut String,
+) -> Result<HashMap<String, (Vec<String>, String)>, CompileError> {
+    let mut fn_map: HashMap<String, (Vec<String>, String)> = HashMap::new();
     loop {
-        if let Some(fn_pos) = output.find("fn ") {
-            // Find the clause from `fn` to the closing `;` of the fn body.
-            if let Some(body_semi) = output[fn_pos..].find("=>") {
-                let after_arrow = &output[fn_pos + body_semi + 2..];
-                // Find the first `;` after `=>` — that's the end of the fn body.
-                if let Some(semi_pos) = after_arrow.find(';') {
-                    let fn_decl = &output[fn_pos..fn_pos + body_semi + 2 + semi_pos + 1];
-                    // Parse the fn name.
-                    let decl_rest = fn_decl.strip_prefix("fn ").unwrap();
-                    if let Some(paren_open) = decl_rest.find('(') {
-                        let name = decl_rest[..paren_open].trim().to_string();
-                        if let Some(paren_close) = decl_rest.find(')') {
-                            let after_paren = decl_rest[paren_close + 1..].trim();
-
-                            // Extract declared return type after `:` before `=>`.
-                            let decl_type = after_paren.find(':').map(|colon_pos| {
-                                let after_colon = after_paren[colon_pos + 1..].trim();
-                                let type_end = after_colon.find("=>").unwrap_or(after_colon.len());
-                                after_colon[..type_end].trim().to_string()
-                            });
-
-                            if let Some(arrow_pos) = after_paren.find("=>") {
-                                let raw_body = after_paren[arrow_pos + 2..].trim();
-                                let body = raw_body
-                                    .strip_suffix(';')
-                                    .unwrap_or(raw_body)
-                                    .trim()
-                                    .to_string();
-
-                                // Validate type compatibility if body contains read<T>().
-                                if let Some(read_type) = body
-                                    .strip_prefix("read<")
-                                    .and_then(|s| s.strip_suffix(">()"))
-                                    && let Some(ref dt) = decl_type
-                                    && dt != "Bool"
-                                    && read_type != dt
-                                    && read_type != "Bool"
-                                {
-                                    return Err(CompileError {
-                                        message: format!(
-                                            "type mismatch in `fn {}`: declared `{}` but body is `read<{}>()`",
-                                            name, dt, read_type
-                                        ),
-                                    });
-                                }
-
-                                fn_map.insert(name, body);
-                                // Remove the fn declaration from output.
-                                output.replace_range(
-                                    fn_pos..fn_pos + body_semi + 2 + semi_pos + 1,
-                                    "",
-                                );
-                                continue;
-                            }
-                        }
-                    }
+        if let Some(fn_pos) = output.find("fn ")
+            && let Some(body_semi) = output[fn_pos..].find("=>")
+        {
+            let after_arrow = &output[fn_pos + body_semi + 2..];
+            if let Some(semi_pos) = after_arrow.find(';') {
+                let fn_decl = &output[fn_pos..fn_pos + body_semi + 2 + semi_pos + 1];
+                if let Some((name, param_names, body, after_paren)) = parse_single_fn_decl(fn_decl)
+                {
+                    check_duplicate_params(&name, &param_names)?;
+                    let decl_type = extract_decl_type(&after_paren);
+                    check_fn_read_type(&name, &body, &decl_type)?;
+                    fn_map.insert(name, (param_names, body));
+                    output.replace_range(fn_pos..fn_pos + body_semi + 2 + semi_pos + 1, "");
+                    continue;
                 }
             }
         }
-        // No more fn declarations found.
         break;
     }
+    Ok(fn_map)
+}
 
-    // Normalize I32 reads to U8 (both produce `int` via scanf).
+/// Inline all function calls in `source` using the provided fn map.
+/// Try to inline a single function call starting at `pos` in `output`.
+/// Returns `Some(new_pos)` if a call was inlined, `None` if no call matched.
+fn try_inline_call(
+    output: &str,
+    pos: usize,
+    name: &str,
+    params: &[String],
+    body: &str,
+) -> Option<(String, usize)> {
+    let bytes = output.as_bytes();
+    if !bytes[pos..].starts_with(name.as_bytes())
+        || (pos > 0 && bytes[pos - 1].is_ascii_alphanumeric())
+    {
+        return None;
+    }
+    let name_end = pos + name.len();
+    if name_end >= bytes.len() || bytes[name_end] != b'(' {
+        return None;
+    }
+    let (args_str, _) = split_at_matching_paren(&output[name_end + 1..])?;
+    let args = split_top_level_args(args_str.trim());
+    if args.len() != params.len() && !(args.len() == 1 && args[0].is_empty() && params.is_empty()) {
+        return None;
+    }
+    let mut inlined = body.to_string();
+    for (param, arg) in params.iter().zip(args.iter()) {
+        inlined = inlined.replace(param, arg);
+    }
+    let new_pos = name_end + 1 + args_str.len() + 1;
+    Some((inlined, new_pos))
+}
+
+fn inline_fn_calls(source: &str, fn_map: &HashMap<String, (Vec<String>, String)>) -> String {
+    let mut sorted_names: Vec<&String> = fn_map.keys().collect();
+    sorted_names.sort_by_key(|n| std::cmp::Reverse(n.len()));
+
+    let mut output = source.to_string();
+    for name in &sorted_names {
+        let (params, body) = fn_map.get(*name).unwrap();
+        let mut result = String::new();
+        let mut pos = 0;
+        let bytes = output.as_bytes();
+        while pos < bytes.len() {
+            if let Some((inlined, new_pos)) = try_inline_call(&output, pos, name, params, body) {
+                result.push_str(&inlined);
+                pos = new_pos;
+                continue;
+            }
+            result.push(bytes[pos] as char);
+            pos += 1;
+        }
+        output = result;
+    }
+    output
+}
+
+/// Pre-process source: extract `fn name(...) : Type => body;` declarations,
+/// validate types, inline calls (with parameter substitution),
+/// and normalize `read<I32>()` to `read<U8>()`.
+fn preprocess_fns(source: &str) -> Result<String, CompileError> {
+    let mut output = source.to_string();
+
+    // 1. Extract and remove all fn declarations, validate types.
+    let fn_map = extract_fn_decls(&mut output)?;
+
+    // 2. Normalize I32 reads to U8 (both produce `int` via scanf).
     output = output.replace("read<I32>()", "read<U8>()");
 
-    // Normalize I32 reads in inlined bodies too.
-    let mut normalized_fn_map: HashMap<String, String> = HashMap::new();
-    for (name, body) in &fn_map {
+    // 3. Normalize I32 reads in inlined bodies too.
+    let mut normalized_fn_map: HashMap<String, (Vec<String>, String)> = HashMap::new();
+    for (name, (params, body)) in &fn_map {
         let normalized_body = body.replace("read<I32>()", "read<U8>()");
-        normalized_fn_map.insert(name.clone(), normalized_body);
+        normalized_fn_map.insert(name.clone(), (params.clone(), normalized_body));
     }
 
-    // Replace function calls with their inlined bodies.
-    for (name, body) in &normalized_fn_map {
-        output = output.replace(&format!("{}()", name), body);
-    }
+    // 4. Inline function calls.
+    output = inline_fn_calls(&output, &normalized_fn_map);
 
     Ok(output)
 }
@@ -750,9 +874,7 @@ int main() {{
                 if stmt.starts_with("let ") {
                     c_stmts.extend(compile_let_stmt(stmt, &mut symbols)?);
                 } else if stmt.starts_with("while (") || stmt.starts_with("for (") {
-                    if let Some(loop_c) = compile_loop_stmt(stmt) {
-                        c_stmts.push(loop_c);
-                    }
+                    c_stmts.extend(compile_loop_stmt(stmt).into_iter());
                 } else {
                     c_stmts.push(compile_plain_stmt(i, stmt, &mut symbols)?);
                 }
@@ -804,6 +926,31 @@ int main() {{
 "#,
             reads = reads.join("\n  "),
             sum = expr
+        ));
+    }
+
+    // Fallthrough for general Tuff expressions that don't start with keywords
+    // (e.g. arithmetic after fn inlining like "3 + 4").
+    if !trimmed.is_empty()
+        && !trimmed.starts_with("let ")
+        && !trimmed.starts_with("while (")
+        && !trimmed.starts_with("for (")
+        && !trimmed.starts_with("if (")
+        && !trimmed.starts_with("read<")
+        && !trimmed.starts_with("write<")
+        && !trimmed.contains("fn ")
+    {
+        let expr = strip_type_suffix(trimmed);
+        return Ok(format!(
+            r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+
+int main() {{
+  return {};
+}}
+"#,
+            expr
         ));
     }
 
@@ -1214,6 +1361,29 @@ mod tests {
         let (exit_code, _stdout) =
             execute_tuff("fn get() : I32 => read<I32>(); get()", Some("100"));
         assert_eq!(exit_code, 100);
+    }
+
+    #[test]
+    fn test_function_decl_add_params() {
+        // fn add(first : I32, second : I32) => first + second; add(3, 4) should return 7.
+        let (exit_code, _stdout) = execute_tuff(
+            "fn add(first : I32, second : I32) => first + second; add(3, 4)",
+            None,
+        );
+        assert_eq!(exit_code, 7);
+    }
+
+    #[test]
+    fn test_function_decl_duplicate_params() {
+        // fn add(first : I32, first : I32) => first + first; add(3, 4) should error.
+        let result =
+            compile_tuff_to_c("fn add(first : I32, first : I32) => first + first; add(3, 4)");
+        assert_eq!(
+            result,
+            Err(CompileError {
+                message: "duplicate parameter `first` in `fn add`".to_string()
+            })
+        );
     }
 
     #[test]
