@@ -14,7 +14,7 @@ fn next_id() -> u64 {
 
 /// Given text starting after the opening `(`, find the matching `)` and return
 /// the content between parens and everything after it.
-fn split_at_matching_paren<'a>(after_open: &'a str) -> Option<(&'a str, &'a str)> {
+fn split_at_matching_paren(after_open: &str) -> Option<(&str, &str)> {
     let mut depth = 1usize;
     for (i, c) in after_open.char_indices() {
         match c {
@@ -31,7 +31,7 @@ fn split_at_matching_paren<'a>(after_open: &'a str) -> Option<(&'a str, &'a str)
 
 /// Like `str::split(';')` but only splits at semicolons at brace-depth 0,
 /// so semicolons inside `{...}` blocks are ignored.
-fn split_top_level<'a>(s: &'a str) -> Vec<&'a str> {
+fn split_top_level(s: &str) -> Vec<&str> {
     let mut result = Vec::new();
     let mut start = 0;
     let mut brace_depth = 0usize;
@@ -140,10 +140,16 @@ fn emit_bool_read(vn: &str) -> Vec<String> {
 /// Compile a `let [mut] <name> [= <init>]` statement into C statements,
 /// and register any declared variable in the symbol map.
 /// Entries are (is_mut, array_size_or_empty, var_type_or_empty).
-fn compile_let_stmt(
-    stmt: &str,
-    symbols: &mut HashMap<String, (bool, String, String)>,
-) -> Result<Vec<String>, CompileError> {
+/// Parse the variable name, mutability, declared type, and array size from a `let` statement.
+struct ParsedLetDecl {
+    vn: String,
+    is_mut: bool,
+    decl_type: Option<String>,
+    var_type: String,
+    array_size: Option<String>,
+}
+
+fn parse_let_decl(stmt: &str) -> ParsedLetDecl {
     let after_let = stmt.strip_prefix("let ").unwrap();
     let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
     let is_mut = after_let.starts_with("mut ");
@@ -154,137 +160,190 @@ fn compile_let_stmt(
         .to_string();
     let after_name = after_mut[vn.len()..].trim();
 
-    // Extract the declared type annotation if present (e.g. `: U8`, `: I32`, `: Bool`).
-    let decl_type = if let Some(colon_pos) = after_name.find(':') {
+    let decl_type = after_name.find(':').map(|colon_pos| {
         let rest = after_name[colon_pos + 1..].trim();
         let type_end = rest.find("= ").unwrap_or(rest.len());
         let raw = rest[..type_end].trim();
         if raw.starts_with('[') {
             let inner = &raw[1..raw.find(']').unwrap_or(0)];
-            let base = inner.split(';').next().unwrap_or("").trim();
-            Some(base.to_string())
+            inner.split(';').next().unwrap_or("").trim().to_string()
         } else {
-            Some(raw.to_string())
+            raw.to_string()
         }
-    } else {
-        None
-    };
+    });
     let var_type = decl_type.clone().unwrap_or_default();
 
-    // Detect array declaration: `: [I32; N] = ...` or `: [I32; N];`
     let array_size = if after_name.starts_with(": [") {
-        if let Some(close_bracket) = after_name.find("]") {
+        after_name.find("]").and_then(|close_bracket| {
             let inner = &after_name[3..close_bracket];
-            if let Some(semi) = inner.find("; ") {
-                Some(inner[semi + 2..].trim().to_string())
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+            inner
+                .find("; ")
+                .map(|semi| inner[semi + 2..].trim().to_string())
+        })
     } else {
         None
     };
 
-    let mut out: Vec<String> = Vec::new();
+    ParsedLetDecl {
+        vn,
+        is_mut,
+        decl_type,
+        var_type,
+        array_size,
+    }
+}
 
-    if let Some(eq) = after_name.find("= ") {
-        let iv = after_name[eq + 2..].trim();
-        if iv.starts_with('[') {
-            // Array literal.
-            let inner = &iv[1..iv.len().saturating_sub(1)];
-            let dims = compute_array_dims(inner);
-            let c_body = inner.replace("[", "{").replace("]", "}");
-            let c_init = format!("{{ {} }}", c_body);
-            let size_str = dims
-                .iter()
-                .map(|d| d.to_string())
-                .collect::<Vec<_>>()
-                .join("][");
-            out.push(format!(
-                "int {}[{}] = {};",
-                vn,
-                size_str,
-                strip_type_suffix(&c_init)
-            ));
-            symbols.insert(vn, (is_mut, size_str, var_type));
-        } else if let Some(read_type) = iv.strip_prefix("read<").and_then(|s| s.strip_suffix(">()"))
-        {
-            // read<T>() — validate types match.
-            if let Some(ref dt) = decl_type {
-                if dt != "Bool" && read_type != dt && read_type != "Bool" {
-                    return Err(CompileError {
-                        message: format!(
-                            "type mismatch: variable is `{}` but `read<{}>()` produces `{}`",
-                            dt, read_type, read_type
-                        ),
-                    });
-                }
-            }
-            if read_type == "Bool" || decl_type.as_deref() == Some("Bool") {
-                out.extend(emit_bool_read(&vn));
-            } else {
-                out.push(format!("int {};", vn));
-                out.push(format!("scanf(\"%d\", &{});", vn));
-            }
-            let inferred = if read_type == "Bool" {
-                read_type.to_string()
-            } else if !var_type.is_empty() {
-                var_type.clone()
-            } else {
-                read_type.to_string()
-            };
-            symbols.insert(vn, (is_mut, String::new(), inferred));
-        } else if iv == "read<Bool>()" {
-            out.extend(emit_bool_read(&vn));
-            symbols.insert(vn, (is_mut, String::new(), "Bool".to_string()));
-        } else if let Some((_, src_size, src_type)) = symbols.get(iv) {
-            // Variable copy — validate type compatibility.
-            let src_size = src_size.clone();
-            let src_type = src_type.clone();
-            if !var_type.is_empty()
-                && !src_type.is_empty()
-                && var_type != src_type
-                && var_type != "Bool"
-                && src_type != "Bool"
-            {
-                return Err(CompileError {
-                    message: format!(
-                        "type mismatch: variable is `{}` but `{}` is `{}`",
-                        var_type, iv, src_type
-                    ),
-                });
-            }
-            if src_size.is_empty() {
-                out.push(format!("int {};", vn));
-                out.push(format!("{} = {};", vn, iv));
-            } else {
-                out.push(format!("int {}[{}];", vn, src_size));
-                out.push(format!(
-                    "memcpy({}, {}, sizeof(int) * {});",
-                    vn, iv, src_size
-                ));
-            }
-            symbols.insert(vn, (is_mut, src_size, src_type));
-        } else {
-            out.push(format!("int {};", vn));
-            out.push(format!("{} = {};", vn, strip_type_suffix(iv)));
-            symbols.insert(vn, (is_mut, String::new(), var_type));
-        }
-    } else if let Some(ref size) = array_size {
-        out.push(format!("int {}[{}];", vn, size));
-        symbols.insert(vn, (is_mut, size.clone(), var_type));
+/// Emit C statements for initializing a variable from an array literal.
+fn compile_array_literal_init(
+    iv: &str,
+    vn: &str,
+    is_mut: bool,
+    var_type: String,
+    symbols: &mut HashMap<String, (bool, String, String)>,
+) -> Vec<String> {
+    let inner = &iv[1..iv.len().saturating_sub(1)];
+    let dims = compute_array_dims(inner);
+    let c_body = inner.replace("[", "{").replace("]", "}");
+    let c_init = format!("{{ {} }}", c_body);
+    let size_str = dims
+        .iter()
+        .map(|d| d.to_string())
+        .collect::<Vec<_>>()
+        .join("][");
+    let out = vec![format!(
+        "int {}[{}] = {};",
+        vn,
+        size_str,
+        strip_type_suffix(&c_init)
+    )];
+    symbols.insert(vn.to_string(), (is_mut, size_str, var_type));
+    out
+}
+
+/// Emit C statements for initializing a variable from a `read<T>()` expression.
+fn compile_read_init(
+    read_type: &str,
+    vn: &str,
+    is_mut: bool,
+    decl_type: &Option<String>,
+    var_type: &str,
+    symbols: &mut HashMap<String, (bool, String, String)>,
+) -> Result<Vec<String>, CompileError> {
+    if let Some(dt) = decl_type.as_deref()
+        && dt != "Bool"
+        && read_type != dt
+        && read_type != "Bool"
+    {
+        return Err(CompileError {
+            message: format!(
+                "type mismatch: variable is `{}` but `read<{}>()` produces `{}`",
+                dt, read_type, read_type
+            ),
+        });
+    }
+
+    let mut out = Vec::new();
+    if read_type == "Bool" || decl_type.as_deref() == Some("Bool") {
+        out.extend(emit_bool_read(vn));
     } else {
         out.push(format!("int {};", vn));
-        symbols.insert(vn, (is_mut, String::new(), var_type));
+        out.push(format!("scanf(\"%d\", &{});", vn));
+    }
+
+    let inferred = if read_type == "Bool" {
+        read_type.to_string()
+    } else if !var_type.is_empty() {
+        var_type.to_string()
+    } else {
+        read_type.to_string()
+    };
+    symbols.insert(vn.to_string(), (is_mut, String::new(), inferred));
+    Ok(out)
+}
+
+/// Emit C statements for initializing a variable as a copy of another variable.
+fn compile_var_copy_init(
+    src_var: &str,
+    vn: &str,
+    is_mut: bool,
+    var_type: &str,
+    symbols: &mut HashMap<String, (bool, String, String)>,
+) -> Result<Vec<String>, CompileError> {
+    let (_, src_size, src_type) = symbols.get(src_var).unwrap();
+    let src_size = src_size.clone();
+    let src_type = src_type.clone();
+
+    if !var_type.is_empty()
+        && !src_type.is_empty()
+        && var_type != src_type
+        && var_type != "Bool"
+        && src_type != "Bool"
+    {
+        return Err(CompileError {
+            message: format!(
+                "type mismatch: variable is `{}` but `{}` is `{}`",
+                var_type, src_var, src_type
+            ),
+        });
+    }
+
+    let mut out = Vec::new();
+    if src_size.is_empty() {
+        out.push(format!("int {};", vn));
+        out.push(format!("{} = {};", vn, src_var));
+    } else {
+        out.push(format!("int {}[{}];", vn, src_size));
+        out.push(format!(
+            "memcpy({}, {}, sizeof(int) * {});",
+            vn, src_var, src_size
+        ));
+    }
+    symbols.insert(vn.to_string(), (is_mut, src_size, src_type));
+    Ok(out)
+}
+
+fn compile_let_stmt(
+    stmt: &str,
+    symbols: &mut HashMap<String, (bool, String, String)>,
+) -> Result<Vec<String>, CompileError> {
+    let decl = parse_let_decl(stmt);
+    let mut out: Vec<String> = Vec::new();
+
+    if let Some(eq_pos) = stmt.find("= ") {
+        let iv = stmt[eq_pos + 2..].trim();
+
+        if iv.starts_with('[') {
+            out = compile_array_literal_init(iv, &decl.vn, decl.is_mut, decl.var_type, symbols);
+        } else if let Some(read_type) = iv.strip_prefix("read<").and_then(|s| s.strip_suffix(">()"))
+        {
+            out = compile_read_init(
+                read_type,
+                &decl.vn,
+                decl.is_mut,
+                &decl.decl_type,
+                &decl.var_type,
+                symbols,
+            )?;
+        } else if symbols.contains_key(iv) {
+            out = compile_var_copy_init(iv, &decl.vn, decl.is_mut, &decl.var_type, symbols)?;
+        } else {
+            out.push(format!("int {};", decl.vn));
+            out.push(format!("{} = {};", decl.vn, strip_type_suffix(iv)));
+            symbols.insert(decl.vn.clone(), (decl.is_mut, String::new(), decl.var_type));
+        }
+    } else if let Some(ref size) = decl.array_size {
+        out.push(format!("int {}[{}];", decl.vn, size));
+        symbols.insert(decl.vn.clone(), (decl.is_mut, size.clone(), decl.var_type));
+    } else {
+        out.push(format!("int {};", decl.vn));
+        symbols.insert(decl.vn.clone(), (decl.is_mut, String::new(), decl.var_type));
     }
     Ok(out)
 }
 
 fn compile_statements(
     src: &str,
-    mut symbols: &mut HashMap<String, (bool, String, String)>,
+    symbols: &mut HashMap<String, (bool, String, String)>,
 ) -> Result<String, CompileError> {
     let parts = split_top_level(src);
     if parts.is_empty() {
@@ -303,7 +362,7 @@ fn compile_statements(
             continue;
         }
         if stmt.starts_with("let ") {
-            c_stmts.extend(compile_let_stmt(stmt, &mut symbols)?);
+            c_stmts.extend(compile_let_stmt(stmt, symbols)?);
         } else {
             // Plain statement.
             c_stmts.push(format!("{};", strip_type_suffix(stmt)));
@@ -317,7 +376,7 @@ fn compile_statements(
 
 /// Given text like `if (cond) then else else`, parse out the condition, then-expr, and else-expr.
 /// Returns None if parsing fails.
-fn parse_if_else<'a>(s: &'a str) -> Option<(&'a str, &'a str, &'a str)> {
+fn parse_if_else(s: &str) -> Option<(&str, &str, &str)> {
     let s = s.trim();
     let after_if = s.strip_prefix("if (")?;
     let (condition, rest) = split_at_matching_paren(after_if)?;
@@ -342,22 +401,10 @@ impl fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
-fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
-    // Trim whitespace and try to match known patterns.
-    let trimmed = tuff_source.trim();
-
-    // Check if source is composed only of read<U8>() calls, '+', '-', and whitespace.
-    let allowed_chars =
-        |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | '-' | ' ') || c.is_ascii_alphanumeric();
-
-    // Single write<U8>(expr); statement.
-    if trimmed.starts_with("write<") {
-        if let Some(val) = trimmed
-            .strip_prefix("write<U8>(")
-            .and_then(|s| s.strip_suffix(");"))
-        {
-            return Ok(format!(
-                r#"
+/// Compile a single `write<U8>(expr);` statement into a complete C program.
+fn compile_write_single(val: &str) -> String {
+    format!(
+        r#"
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 
@@ -366,37 +413,209 @@ int main() {{
   return 0;
 }}
 "#,
-                strip_type_suffix(val.trim())
-            ));
-        }
+        strip_type_suffix(val.trim())
+    )
+}
+
+/// Build the condition-reading C code and the condition check expression for an if/else.
+fn build_if_cond(condition: &str) -> Result<(String, String), CompileError> {
+    let cond_body = if condition == "read<Bool>()" {
+        r#"char cond_buf[8];
+  scanf("%7s", cond_buf);"#
+            .to_string()
+    } else if condition.contains("read<U8>()") {
+        "int cond_val;\n  scanf(\"%d\", &cond_val);".to_string()
+    } else {
+        return Err(CompileError {
+            message: format!("unsupported if condition: {}", condition),
+        });
+    };
+    let cond_check = if condition == "read<Bool>()" {
+        "strcmp(cond_buf, \"true\") == 0"
+    } else if condition.contains("read<U8>()") {
+        "cond_val"
+    } else {
+        condition
+    };
+    Ok((cond_body, cond_check.to_string()))
+}
+
+/// Compile a single statement within a multi-statement block (not a `let`).
+fn compile_plain_stmt(
+    i: usize,
+    stmt: &str,
+    symbols: &mut HashMap<String, (bool, String, String)>,
+) -> Result<String, CompileError> {
+    let assign_target = stmt.split_whitespace().next().unwrap_or("");
+    if !assign_target.is_empty()
+        && !assign_target.starts_with("write<")
+        && !assign_target.starts_with("read<")
+        && (stmt.contains('=') || stmt.contains("+=") || stmt.contains("-="))
+        && let Some(&(is_mut, _, _)) = symbols.get(assign_target)
+        && !is_mut
+    {
+        return Err(CompileError {
+            message: format!("cannot reassign immutable variable `{}`", assign_target),
+        });
     }
 
-    // Match if/else expression: if (condition) then_expr else else_expr
+    let compiled = if stmt.contains("read<U8>()") {
+        let read_var = format!("_r{}", i);
+        let c_line = stmt.replace("read<U8>()", &read_var);
+        format!(
+            "int {};\n  scanf(\"%d\", &{});\n  {};",
+            read_var,
+            read_var,
+            strip_type_suffix(&c_line)
+        )
+    } else if stmt.starts_with("write<U8>(") {
+        if let Some(val) = stmt
+            .strip_prefix("write<U8>(")
+            .and_then(|s| s.strip_suffix(")"))
+        {
+            format!("printf(\"%d\", {});", strip_type_suffix(val.trim()))
+        } else {
+            format!("{};", strip_type_suffix(stmt))
+        }
+    } else {
+        format!("{};", strip_type_suffix(stmt))
+    };
+    Ok(compiled)
+}
+
+/// Compile a while or for loop statement into a C statement.
+/// Returns `None` if the loop syntax cannot be parsed (caller should skip it).
+fn compile_loop_stmt(stmt: &str) -> Option<String> {
+    if stmt.starts_with("while (") {
+        let after_while = stmt.strip_prefix("while (").unwrap();
+        let (condition, body) = split_at_matching_paren(after_while)?;
+        let body = strip_type_suffix(body.trim());
+        Some(format!(
+            "while ({}) {{\n    {};\n  }}",
+            condition.trim(),
+            body
+        ))
+    } else if stmt.starts_with("for (") {
+        let after_for = stmt.strip_prefix("for (").unwrap();
+        let (for_header, body) = split_at_matching_paren(after_for)?;
+        let body = strip_type_suffix(body.trim());
+        let in_pos = for_header.find(" in ")?;
+        let loop_var = for_header[..in_pos].trim();
+        let range_expr = for_header[in_pos + 4..].trim();
+        let dotdot_pos = range_expr.find("..")?;
+        let range_start = strip_type_suffix(range_expr[..dotdot_pos].trim());
+        let range_end = strip_type_suffix(range_expr[dotdot_pos + 2..].trim());
+        Some(format!(
+            "for (int {} = {}; {} <= {}; {}++) {{\n    {};\n  }}",
+            loop_var, range_start, loop_var, range_end, loop_var, body
+        ))
+    } else {
+        None
+    }
+}
+
+/// Compile the return expression for a multi-statement block.
+fn compile_ret_expr(
+    ret_expr: &str,
+    c_stmts: &[String],
+    symbols: &mut HashMap<String, (bool, String, String)>,
+) -> Result<String, CompileError> {
+    let stmts = c_stmts.join("\n  ");
+
+    if ret_expr.starts_with("let ") {
+        let let_stmts = compile_let_stmt(ret_expr, symbols)?;
+        let all_stmts = if c_stmts.is_empty() {
+            let_stmts.join("\n  ")
+        } else {
+            format!("{}\n  {}", stmts, let_stmts.join("\n  "))
+        };
+        return Ok(format!(
+            r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <string.h>
+
+int main() {{
+  {stmts}
+  return 0;
+}}
+"#,
+            stmts = all_stmts
+        ));
+    }
+
+    // If the return expression is a top-level if/else, emit it as an if/else block.
+    if let Some((condition, raw_then, raw_else)) = parse_if_else(ret_expr) {
+        let then_stmts = if raw_then.starts_with('{') {
+            let inner = &raw_then[1..raw_then.len().saturating_sub(1)];
+            let mut block_symbols = symbols.clone();
+            compile_statements(inner, &mut block_symbols).unwrap_or_default()
+        } else {
+            format!("return {};", strip_type_suffix(raw_then))
+        };
+        let else_stmts = if raw_else.starts_with('{') {
+            let inner = &raw_else[1..raw_else.len().saturating_sub(1)];
+            let mut block_symbols = symbols.clone();
+            compile_statements(inner, &mut block_symbols).unwrap_or_default()
+        } else {
+            format!("return {};", strip_type_suffix(raw_else))
+        };
+        return Ok(format!(
+            r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <string.h>
+
+int main() {{
+  {stmts}
+  if ({cond}) {{
+    {then_body}
+  }} else {{
+    {else_body}
+  }}
+}}
+"#,
+            stmts = stmts,
+            cond = condition,
+            then_body = then_stmts,
+            else_body = else_stmts
+        ));
+    }
+
+    Ok(format!(
+        r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <string.h>
+
+int main() {{
+  {stmts}
+  return {ret};
+}}
+"#,
+        stmts = stmts,
+        ret = strip_type_suffix(ret_expr)
+    ))
+}
+
+fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
+    let trimmed = tuff_source.trim();
+
+    let allowed_chars =
+        |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | '-' | ' ') || c.is_ascii_alphanumeric();
+
+    // Single write<U8>(expr); statement.
+    if trimmed.starts_with("write<")
+        && let Some(val) = trimmed
+            .strip_prefix("write<U8>(")
+            .and_then(|s| s.strip_suffix(");"))
+    {
+        return Ok(compile_write_single(val));
+    }
+
+    // Single if/else expression.
     if let Some((condition, raw_then, raw_else)) = parse_if_else(trimmed) {
-        let then_expr = strip_type_suffix(raw_then);
-        let else_expr = strip_type_suffix(raw_else);
-
-        // Compile the condition body.
-        let cond_body = if condition == "read<Bool>()" {
-            r#"char cond_buf[8];
-  scanf("%7s", cond_buf);"#
-                .to_string()
-        } else if condition.contains("read<U8>()") {
-            "int cond_val;\n  scanf(\"%d\", &cond_val);".to_string()
-        } else {
-            return Err(CompileError {
-                message: format!("unsupported if condition: {}", condition),
-            });
-        };
-
-        let cond_check = if condition == "read<Bool>()" {
-            "strcmp(cond_buf, \"true\") == 0"
-        } else if condition.contains("read<U8>()") {
-            "cond_val"
-        } else {
-            condition
-        };
-
+        let (cond_body, cond_check) = build_if_cond(condition)?;
         return Ok(format!(
             r#"
 #define _CRT_SECURE_NO_WARNINGS
@@ -414,12 +633,12 @@ int main() {{
 "#,
             cond = cond_body,
             check = cond_check,
-            then = then_expr,
-            els = else_expr
+            then = strip_type_suffix(raw_then),
+            els = strip_type_suffix(raw_else)
         ));
     }
 
-    // Check for multi-statement programs with let/while/for statements.
+    // Multi-statement programs with let/while/for statements.
     if trimmed.starts_with("let ")
         || trimmed.starts_with("while (")
         || trimmed.starts_with("for (")
@@ -430,195 +649,54 @@ int main() {{
             let mut c_stmts: Vec<String> = Vec::new();
             let mut symbols: HashMap<String, (bool, String, String)> = HashMap::new();
 
-            for i in 0..parts.len() - 1 {
-                let stmt = parts[i].trim();
+            for (i, stmt) in parts[..parts.len() - 1].iter().enumerate() {
+                let stmt = stmt.trim();
                 if stmt.is_empty() {
                     continue;
                 }
-
                 if stmt.starts_with("let ") {
                     c_stmts.extend(compile_let_stmt(stmt, &mut symbols)?);
-                } else if stmt.starts_with("while (") {
-                    // while (condition) body-statement
-                    let after_while = stmt.strip_prefix("while (").unwrap();
-                    if let Some((condition, body)) = split_at_matching_paren(after_while) {
-                        let body = strip_type_suffix(body.trim());
-                        c_stmts.push(format!(
-                            "while ({}) {{\n    {};\n  }}",
-                            condition.trim(),
-                            body
-                        ));
-                    }
-                } else if stmt.starts_with("for (") {
-                    // for (var in start..end) body-statement
-                    let after_for = stmt.strip_prefix("for (").unwrap();
-                    if let Some((for_header, body)) = split_at_matching_paren(after_for) {
-                        let body = strip_type_suffix(body.trim());
-                        if let Some(in_pos) = for_header.find(" in ") {
-                            let loop_var = for_header[..in_pos].trim();
-                            let range_expr = for_header[in_pos + 4..].trim();
-                            if let Some(dotdot_pos) = range_expr.find("..") {
-                                let range_start =
-                                    strip_type_suffix(range_expr[..dotdot_pos].trim());
-                                let range_end =
-                                    strip_type_suffix(range_expr[dotdot_pos + 2..].trim());
-                                c_stmts.push(format!(
-                                    "for (int {} = {}; {} <= {}; {}++) {{\n    {};\n  }}",
-                                    loop_var, range_start, loop_var, range_end, loop_var, body
-                                ));
-                            }
-                        }
+                } else if stmt.starts_with("while (") || stmt.starts_with("for (") {
+                    if let Some(loop_c) = compile_loop_stmt(stmt) {
+                        c_stmts.push(loop_c);
                     }
                 } else {
-                    // Plain statement / assignment.
-                    // Check for immutable reassignment errors.
-                    let assign_target = stmt.split_whitespace().next().unwrap_or("");
-                    if !assign_target.is_empty()
-                        && !assign_target.starts_with("write<")
-                        && !assign_target.starts_with("read<")
-                        && (stmt.contains('=') || stmt.contains("+=") || stmt.contains("-="))
-                    {
-                        if let Some(&(is_mut, _, _)) = symbols.get(assign_target) {
-                            if !is_mut {
-                                return Err(CompileError {
-                                    message: format!(
-                                        "cannot reassign immutable variable `{}`",
-                                        assign_target
-                                    ),
-                                });
-                            }
-                        }
-                    }
-                    if stmt.contains("read<U8>()") {
-                        let read_var = format!("_r{}", i);
-                        c_stmts.push(format!("int {};", read_var));
-                        c_stmts.push(format!("scanf(\"%d\", &{});", read_var));
-                        let c_line = stmt.replace("read<U8>()", &read_var);
-                        c_stmts.push(format!("{};", strip_type_suffix(&c_line)));
-                    } else if stmt.starts_with("write<U8>(") {
-                        if let Some(val) = stmt
-                            .strip_prefix("write<U8>(")
-                            .and_then(|s| s.strip_suffix(")"))
-                        {
-                            c_stmts.push(format!(
-                                "printf(\"%d\", {});",
-                                strip_type_suffix(val.trim())
-                            ));
-                        }
-                    } else {
-                        c_stmts.push(format!("{};", strip_type_suffix(stmt)));
-                    }
+                    c_stmts.push(compile_plain_stmt(i, stmt, &mut symbols)?);
                 }
             }
 
             let ret_expr = parts.last().unwrap().trim();
-            // If the last part is a `let` declaration, treat it as a statement
-            // and default to return 0.
-            if ret_expr.starts_with("let ") {
-                c_stmts.extend(compile_let_stmt(ret_expr, &mut symbols)?);
-                return Ok(format!(
-                    r#"
-#define _CRT_SECURE_NO_WARNINGS
-#include <stdio.h>
-#include <string.h>
-
-int main() {{
-  {stmts}
-  return 0;
-}}
-"#,
-                    stmts = c_stmts.join("\n  "),
-                ));
-            }
-            // If the return expression is a top-level if/else, emit it as an if/else block
-            // since C does not allow `return if (...) ... else ...`.
-            if let Some((condition, raw_then, raw_else)) = parse_if_else(ret_expr) {
-                let then_stmts = if raw_then.starts_with('{') {
-                    // Block body: compile its contents
-                    let inner = &raw_then[1..raw_then.len().saturating_sub(1)];
-                    let mut block_symbols = symbols.clone();
-                    compile_statements(inner, &mut block_symbols).unwrap_or_default()
-                } else {
-                    format!("return {};", strip_type_suffix(raw_then))
-                };
-                let else_stmts = if raw_else.starts_with('{') {
-                    let inner = &raw_else[1..raw_else.len().saturating_sub(1)];
-                    let mut block_symbols = symbols.clone();
-                    compile_statements(inner, &mut block_symbols).unwrap_or_default()
-                } else {
-                    format!("return {};", strip_type_suffix(raw_else))
-                };
-                return Ok(format!(
-                    r#"
-#define _CRT_SECURE_NO_WARNINGS
-#include <stdio.h>
-#include <string.h>
-
-int main() {{
-  {stmts}
-  if ({cond}) {{
-    {then_body}
-  }} else {{
-    {else_body}
-  }}
-}}
-"#,
-                    stmts = c_stmts.join("\n  "),
-                    cond = condition,
-                    then_body = then_stmts,
-                    else_body = else_stmts
-                ));
-            }
-
-            return Ok(format!(
-                r#"
-#define _CRT_SECURE_NO_WARNINGS
-#include <stdio.h>
-#include <string.h>
-
-int main() {{
-  {stmts}
-  return {ret};
-}}
-"#,
-                stmts = c_stmts.join("\n  "),
-                ret = strip_type_suffix(ret_expr)
-            ));
+            return compile_ret_expr(ret_expr, &c_stmts, &mut symbols);
         }
     }
 
-    // Match read<Bool>() — reads "true" or "false" from stdin, returns 1 or 0 as exit code.
+    // Single read<Bool>() — reads "true" or "false" from stdin, returns 1 or 0.
     if trimmed == "read<Bool>()" {
-        return Ok(format!(
-            r#"
+        return Ok(r#"
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <string.h>
 
-int main() {{
+int main() {
   char buf[8];
   scanf("%7s", buf);
   return strcmp(buf, "true") == 0 ? 1 : 0;
-}}
+}
 "#
-        ));
+        .to_string());
     }
 
-    // Count occurrences of read<U8>().
+    // Expression composed only of read<U8>() calls joined by '+'/'-'.
     let num_reads = trimmed.matches("read<U8>()").count();
-
     if num_reads > 0 && trimmed.chars().all(allowed_chars) {
-        // Source consists only of read<U8>() calls joined by '+'/'-'.
         let mut reads = Vec::new();
         for i in 0..num_reads {
             reads.push(format!("int v{};\n  scanf(\"%d\", &v{});", i, i));
         }
-        // Substitute each read<U8>() with v0, v1, v2, ... left to right, preserving original operators.
         let mut expr = trimmed.to_string();
         for i in 0..num_reads {
             expr = expr.replacen("read<U8>()", &format!("v{}", i), 1);
         }
-        // Strip U8 suffix from numeric literals (e.g. 1U8 → 1).
         expr = strip_type_suffix(&expr);
         expr = expr.split_whitespace().collect::<Vec<_>>().join(" ");
         return Ok(format!(
