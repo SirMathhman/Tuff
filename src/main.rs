@@ -98,36 +98,80 @@ pub fn execute_tuff(input: &str) -> Result<i32, String> {
         return Ok(0);
     }
 
-    // Check for binary operators (+, -, *, /) and evaluate as expression.
-    let ops = ['+', '-', '*', '/'];
-    for ch in &ops {
-        if let Some(pos) = trimmed.find(*ch) {
-            // Avoid treating a leading '-' as subtraction (it's part of a negative number).
-            if *ch == '-' && pos == 0 {
-                continue;
+    // Handle parenthesized expressions by stripping matching outer parentheses.
+    if trimmed.starts_with('(') && trimmed.ends_with(')') {
+        let mut depth = 0;
+        for ch in trimmed.chars() {
+            if ch == '(' {
+                depth += 1;
+            } else if ch == ')' {
+                depth -= 1;
             }
-
-            let left_str = &trimmed[..pos];
-            let right_str = &trimmed[pos + 1..];
-
-            // Recursively evaluate each side to support chained expressions.
-            let left_val = execute_tuff(left_str)?;
-            let right_val = execute_tuff(right_str)?;
-
-            return match ch {
-                '+' => Ok(left_val + right_val),
-                '-' => Ok(left_val - right_val),
-                '*' => Ok(left_val * right_val),
-                '/' => {
-                    if right_val == 0 {
-                        Err(format!("division by zero: {}", input))
-                    } else {
-                        Ok(left_val / right_val)
-                    }
-                }
-                _ => unreachable!(),
-            };
         }
+        // If outer parens match (depth returns to 0 at the end), strip them.
+        if depth == 0 {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            return execute_tuff(inner);
+        }
+    }
+
+    // Find operators not inside parentheses, respecting precedence: * and / before + and -.
+    // First look for '+' or '-' at depth 0 (lowest precedence).
+    let mut best_pos = None;
+    let mut best_op = '\0';
+
+    // Scan right-to-left for lowest-precedence operator (+/-) outside parentheses.
+    let mut depth = 0i32;
+    for (i, ch) in trimmed.char_indices() {
+        if ch == '(' {
+            depth += 1;
+        } else if ch == ')' {
+            depth -= 1;
+        } else if depth == 0 && (ch == '+' || ch == '-') {
+            // Avoid treating a leading '-' as subtraction.
+            if ch != '-' || i > 0 {
+                best_pos = Some(i);
+                best_op = ch;
+            }
+        }
+    }
+
+    // If no +/- found at depth 0, look for '*' or '/' outside parentheses.
+    if best_pos.is_none() {
+        depth = 0;
+        for (i, ch) in trimmed.char_indices() {
+            if ch == '(' {
+                depth += 1;
+            } else if ch == ')' {
+                depth -= 1;
+            } else if depth == 0 && (ch == '*' || ch == '/') {
+                best_pos = Some(i);
+                best_op = ch;
+            }
+        }
+    }
+
+    // If an operator was found, split and evaluate recursively.
+    if let Some(pos) = best_pos {
+        let left_str = &trimmed[..pos];
+        let right_str = &trimmed[pos + 1..];
+
+        let left_val = execute_tuff(left_str)?;
+        let right_val = execute_tuff(right_str)?;
+
+        return match best_op {
+            '+' => Ok(left_val + right_val),
+            '-' => Ok(left_val - right_val),
+            '*' => Ok(left_val * right_val),
+            '/' => {
+                if right_val == 0 {
+                    Err(format!("division by zero: {}", input))
+                } else {
+                    Ok(left_val / right_val)
+                }
+            }
+            _ => unreachable!(),
+        };
     }
 
     // No operator found — parse as a single value.
@@ -276,10 +320,30 @@ mod tests {
         assert!(execute_tuff("10U8 / 0U8").is_err());
     }
 
+    #[test]
+    fn test_execute_tuff_chained_add_sub_u8() {
+        assert_eq!(execute_tuff("3U8 + 4U8 - 5U8"), Ok(2));
+    }
+
+    #[test]
+    fn test_execute_tuff_mixed_mul_sub_u8() {
+        assert_eq!(execute_tuff("3U8 * 4U8 - 5U8"), Ok(7));
+    }
+
     // Mixed operator expressions (tests precedence/ordering)
     #[test]
     fn test_execute_tuff_mixed_expression_add_sub() {
         assert_eq!(execute_tuff("10I32 + 5I32 - 3I32"), Ok(12));
+    }
+
+    #[test]
+    fn test_execute_tuff_precedence_mul_before_add() {
+        assert_eq!(execute_tuff("3U8 + 4U8 * 5U8"), Ok(23));
+    }
+
+    #[test]
+    fn test_execute_tuff_parentheses_override_precedence() {
+        assert_eq!(execute_tuff("(3U8 + 4U8) * 5U8"), Ok(35));
     }
 
     // Error paths in parse_value
