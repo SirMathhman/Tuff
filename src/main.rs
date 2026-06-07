@@ -36,8 +36,8 @@ fn split_top_level<'a>(s: &'a str) -> Vec<&'a str> {
     let mut brace_depth = 0usize;
     for (i, c) in s.char_indices() {
         match c {
-            '{' => brace_depth += 1,
-            '}' => brace_depth -= 1,
+            '{' | '[' => brace_depth += 1,
+            '}' | ']' => brace_depth -= 1,
             ';' if brace_depth == 0 => {
                 result.push(&s[start..i]);
                 start = i + 1;
@@ -65,8 +65,30 @@ fn compile_let_stmt(stmt: &str) -> Vec<String> {
     let after_let = stmt.strip_prefix("let ").unwrap();
     let after_mut = after_let.strip_prefix("mut ").unwrap_or(after_let);
     let vn = after_mut.split_whitespace().next().unwrap_or("");
-    let mut out = vec![format!("int {};", vn)];
     let after_name = after_mut[vn.len()..].trim();
+
+    // Detect array declaration: `: [I32; N] = ...` or `: [I32; N];`
+    let array_size = if after_name.starts_with(": [") {
+        if let Some(close_bracket) = after_name.find("]") {
+            let inner = &after_name[3..close_bracket];
+            if let Some(semi) = inner.find("; ") {
+                Some(inner[semi + 2..].trim().to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let mut out = if let Some(ref size) = array_size {
+        vec![format!("int {}[{}];", vn, size)]
+    } else {
+        vec![format!("int {};", vn)]
+    };
+
     if let Some(eq) = after_name.find("= ") {
         let iv = after_name[eq + 2..].trim();
         if iv == "read<U8>()" {
@@ -78,6 +100,16 @@ fn compile_let_stmt(stmt: &str) -> Vec<String> {
                 "{} = strcmp({}_buf, \"true\") == 0 ? 1 : 0;",
                 vn, vn
             ));
+        } else if iv.starts_with('[') {
+            // Array literal: [val, val, ...] → use init on the declaration.
+            // Replace the "int name[N];" with "int name[N] = {val, val, ...};"
+            let c_init = format!("{{ {} }}", &iv[1..iv.len().saturating_sub(1)]);
+            out[0] = format!(
+                "int {}[{}] = {};",
+                vn,
+                array_size.as_ref().unwrap_or(&"".to_string()),
+                strip_type_suffix(&c_init)
+            );
         } else {
             out.push(format!("{} = {};", vn, strip_type_suffix(iv)));
         }
@@ -106,7 +138,7 @@ fn compile_statements(src: &str) -> Option<String> {
             c_stmts.extend(compile_let_stmt(stmt));
         } else {
             // Plain statement.
-            c_stmts.push(format!("{};", stmt.replace("U8", "")));
+            c_stmts.push(format!("{};", strip_type_suffix(stmt)));
         }
     }
     // Last part is the block's return value.
@@ -149,6 +181,27 @@ fn compile_tuff_to_c(tuff_source: &str) -> Result<String, CompileError> {
     // Check if source is composed only of read<U8>() calls, '+', '-', and whitespace.
     let allowed_chars =
         |c: char| matches!(c, '<' | '>' | '(' | ')' | '+' | '-' | ' ') || c.is_ascii_alphanumeric();
+
+    // Single write<U8>(expr); statement.
+    if trimmed.starts_with("write<") {
+        if let Some(val) = trimmed
+            .strip_prefix("write<U8>(")
+            .and_then(|s| s.strip_suffix(");"))
+        {
+            return Ok(format!(
+                r#"
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+
+int main() {{
+  printf("%d", {});
+  return 0;
+}}
+"#,
+                strip_type_suffix(val.trim())
+            ));
+        }
+    }
 
     // Match if/else expression: if (condition) then_expr else else_expr
     if let Some((condition, raw_then, raw_else)) = parse_if_else(trimmed) {
@@ -199,7 +252,10 @@ int main() {{
     }
 
     // Check for multi-statement programs with let/while/for statements.
-    if trimmed.starts_with("let ") || trimmed.starts_with("while (") || trimmed.starts_with("for (")
+    if trimmed.starts_with("let ")
+        || trimmed.starts_with("while (")
+        || trimmed.starts_with("for (")
+        || trimmed.starts_with("write<")
     {
         let parts = split_top_level(trimmed);
         if parts.len() >= 2 {
@@ -217,7 +273,7 @@ int main() {{
                     // while (condition) body-statement
                     let after_while = stmt.strip_prefix("while (").unwrap();
                     if let Some((condition, body)) = split_at_matching_paren(after_while) {
-                        let body = body.trim().replace("U8", "");
+                        let body = strip_type_suffix(body.trim());
                         c_stmts.push(format!(
                             "while ({}) {{\n    {};\n  }}",
                             condition.trim(),
@@ -228,7 +284,7 @@ int main() {{
                     // for (var in start..end) body-statement
                     let after_for = stmt.strip_prefix("for (").unwrap();
                     if let Some((for_header, body)) = split_at_matching_paren(after_for) {
-                        let body = body.trim().replace("U8", "");
+                        let body = strip_type_suffix(body.trim());
                         if let Some(in_pos) = for_header.find(" in ") {
                             let loop_var = for_header[..in_pos].trim();
                             let range_expr = for_header[in_pos + 4..].trim();
@@ -252,6 +308,16 @@ int main() {{
                         c_stmts.push(format!("scanf(\"%d\", &{});", read_var));
                         let c_line = stmt.replace("read<U8>()", &read_var);
                         c_stmts.push(format!("{};", strip_type_suffix(&c_line)));
+                    } else if stmt.starts_with("write<U8>(") {
+                        if let Some(val) = stmt
+                            .strip_prefix("write<U8>(")
+                            .and_then(|s| s.strip_suffix(")"))
+                        {
+                            c_stmts.push(format!(
+                                "printf(\"%d\", {});",
+                                strip_type_suffix(val.trim())
+                            ));
+                        }
                     } else {
                         c_stmts.push(format!("{};", strip_type_suffix(stmt)));
                     }
@@ -370,13 +436,13 @@ int main() {{
     ))
 }
 
-fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> i32 {
+fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> (i32, String) {
     // 1) Compile Tuff source to C.
     let c_source = match compile_tuff_to_c(tuff_source) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("{}", e);
-            return 1;
+            return (1, String::new());
         }
     };
 
@@ -411,19 +477,19 @@ fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> i32 {
         Ok(status) => {
             if !status.success() {
                 eprintln!("clang failed with: {}", status);
-                return 1;
+                return (1, String::new());
             }
         }
         Err(e) => {
             eprintln!("failed to spawn clang: {}", e);
-            return 1;
+            return (1, String::new());
         }
     }
 
-    // 3) Run the .exe with stdIn.
+    // 3) Run the .exe with stdIn, capturing stdout.
     let mut child = Command::new(&exe_path)
         .stdin(Stdio::piped())
-        .stdout(Stdio::inherit())
+        .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
         .expect("failed to spawn executable");
@@ -435,12 +501,15 @@ fn execute_tuff(tuff_source: &str, std_in: Option<&str>) -> i32 {
             .expect("failed to write stdin");
     }
 
-    // 4) Return the exit code.
+    // 4) Return exit code and captured stdout.
     match child.wait_with_output() {
-        Ok(output) => output.status.code().unwrap_or(-1),
+        Ok(output) => {
+            let out_str = String::from_utf8_lossy(&output.stdout).to_string();
+            (output.status.code().unwrap_or(-1), out_str)
+        }
         Err(e) => {
             eprintln!("failed waiting for process: {}", e);
-            -1
+            (-1, String::new())
         }
     }
 }
@@ -460,7 +529,7 @@ fn run(args: &[String]) -> i32 {
         }
     };
 
-    execute_tuff(&source, None)
+    execute_tuff(&source, None).0
 }
 
 fn main() {
@@ -475,68 +544,70 @@ mod tests {
 
     #[test]
     fn test_execute_empty_source_returns_zero() {
-        let exit_code = execute_tuff("", None);
+        let (exit_code, _stdout) = execute_tuff("", None);
         assert_eq!(exit_code, 0);
     }
 
     #[test]
     fn test_execute_whitespace_source_returns_zero() {
-        let exit_code = execute_tuff("   \n\t  ", None);
+        let (exit_code, _stdout) = execute_tuff("   \n\t  ", None);
         assert_eq!(exit_code, 0);
     }
 
     #[test]
     fn test_read_u8_with_stdin_returns_value() {
-        let exit_code = execute_tuff("read<U8>()", Some("100"));
+        let (exit_code, _stdout) = execute_tuff("read<U8>()", Some("100"));
         assert_eq!(exit_code, 100);
     }
 
     #[test]
     fn test_read_u8_reads_only_first_value() {
         // read<U8>() should consume only the first integer from stdin.
-        let exit_code = execute_tuff("read<U8>()", Some("100 20"));
+        let (exit_code, _stdout) = execute_tuff("read<U8>()", Some("100 20"));
         assert_eq!(exit_code, 100);
     }
 
     #[test]
     fn test_read_u8_addition_reads_two_values() {
         // read<U8>() + read<U8>() should sum two integers from stdin.
-        let exit_code = execute_tuff("read<U8>() + read<U8>()", Some("100 20"));
+        let (exit_code, _stdout) = execute_tuff("read<U8>() + read<U8>()", Some("100 20"));
         assert_eq!(exit_code, 120);
     }
 
     #[test]
     fn test_read_u8_addition_reads_three_values() {
         // read<U8>() + read<U8>() + read<U8>() should sum three integers from stdin.
-        let exit_code = execute_tuff("read<U8>() + read<U8>() + read<U8>()", Some("1 2 3"));
+        let (exit_code, _stdout) =
+            execute_tuff("read<U8>() + read<U8>() + read<U8>()", Some("1 2 3"));
         assert_eq!(exit_code, 6);
     }
 
     #[test]
     fn test_read_u8_subtraction_mixed_operators() {
         // read<U8>() + read<U8>() - read<U8>() should compute 3 + 4 - 5 = 2.
-        let exit_code = execute_tuff("read<U8>() + read<U8>() - read<U8>()", Some("3 4 5"));
+        let (exit_code, _stdout) =
+            execute_tuff("read<U8>() + read<U8>() - read<U8>()", Some("3 4 5"));
         assert_eq!(exit_code, 2);
     }
 
     #[test]
     fn test_let_variable_read_u8() {
         // let x : U8 = read<U8>(); x should read one value and return it.
-        let exit_code = execute_tuff("let x : U8 = read<U8>(); x", Some("3 4 5"));
+        let (exit_code, _stdout) = execute_tuff("let x : U8 = read<U8>(); x", Some("3 4 5"));
         assert_eq!(exit_code, 3);
     }
 
     #[test]
     fn test_let_variable_self_addition() {
         // let x : U8 = read<U8>(); x + x should read one value and double it.
-        let exit_code = execute_tuff("let x : U8 = read<U8>(); x + x", Some("3 4 5"));
+        let (exit_code, _stdout) = execute_tuff("let x : U8 = read<U8>(); x + x", Some("3 4 5"));
         assert_eq!(exit_code, 6);
     }
 
     #[test]
     fn test_let_mut_variable_reassignment() {
         // let mut x : U8 = read<U8>(); x = read<U8>(); x should return the reassigned value.
-        let exit_code = execute_tuff(
+        let (exit_code, _stdout) = execute_tuff(
             "let mut x : U8 = read<U8>(); x = read<U8>(); x",
             Some("3 4 5"),
         );
@@ -546,14 +617,14 @@ mod tests {
     #[test]
     fn test_let_mut_init_literal_then_add_assign() {
         // let mut x = 0U8; x += read<U8>(); x with "5" should compute 0 + 5 = 5.
-        let exit_code = execute_tuff("let mut x = 0U8; x += read<U8>(); x", Some("5"));
+        let (exit_code, _stdout) = execute_tuff("let mut x = 0U8; x += read<U8>(); x", Some("5"));
         assert_eq!(exit_code, 5);
     }
 
     #[test]
     fn test_let_temp_read_u8() {
         // let temp = read<U8>(); temp with "5" should return 5.
-        let exit_code = execute_tuff("let temp = read<U8>(); temp", Some("5"));
+        let (exit_code, _stdout) = execute_tuff("let temp = read<U8>(); temp", Some("5"));
         assert_eq!(exit_code, 5);
     }
 
@@ -561,7 +632,7 @@ mod tests {
     fn test_while_loop_counter() {
         // let mut counter = 0U8; let sum = read<U8>(); while (counter < sum) counter += 1; counter
         // with "5" should increment counter from 0 to 5, then return 5.
-        let exit_code = execute_tuff(
+        let (exit_code, _stdout) = execute_tuff(
             "let mut counter = 0U8; let sum = read<U8>(); while (counter < sum) counter += 1; counter",
             Some("5"),
         );
@@ -571,7 +642,7 @@ mod tests {
     #[test]
     fn test_let_bool_if_else() {
         // let temp : Bool = read<Bool>(); if (temp) 3U8 else 5U8 with "false" should return 5.
-        let exit_code = execute_tuff(
+        let (exit_code, _stdout) = execute_tuff(
             "let temp : Bool = read<Bool>(); if (temp) 3U8 else 5U8",
             Some("false"),
         );
@@ -581,7 +652,7 @@ mod tests {
     #[test]
     fn test_let_bool_if_else_block_then() {
         // let temp : Bool = read<Bool>(); if (temp) { let x = 3U8; x } else 5U8 with "false" should return 5.
-        let exit_code = execute_tuff(
+        let (exit_code, _stdout) = execute_tuff(
             "let temp : Bool = read<Bool>(); if (temp) { let x = 3U8; x } else 5U8",
             Some("false"),
         );
@@ -591,7 +662,7 @@ mod tests {
     #[test]
     fn test_let_bool_if_else_block_then_true() {
         // let temp : Bool = read<Bool>(); if (temp) { let x = 3U8; x } else 5U8 with "true" should return 3.
-        let exit_code = execute_tuff(
+        let (exit_code, _stdout) = execute_tuff(
             "let temp : Bool = read<Bool>(); if (temp) { let x = 3U8; x } else 5U8",
             Some("true"),
         );
@@ -602,7 +673,7 @@ mod tests {
     fn test_let_bool_if_else_block_else() {
         // Both branches use block bodies.
         // if (temp) 5U8 else { let x = 3U8; x } with "false" should return 3.
-        let exit_code = execute_tuff(
+        let (exit_code, _stdout) = execute_tuff(
             "let temp : Bool = read<Bool>(); if (temp) 5U8 else { let x = 3U8; x }",
             Some("false"),
         );
@@ -612,15 +683,39 @@ mod tests {
     #[test]
     fn test_let_i32_no_init_then_assign() {
         // let temp : I32; temp = 100I32; temp should return 100.
-        let exit_code = execute_tuff("let temp : I32; temp = 100I32; temp", None);
+        let (exit_code, _stdout) = execute_tuff("let temp : I32; temp = 100I32; temp", None);
         assert_eq!(exit_code, 100);
+    }
+
+    #[test]
+    fn test_write_u8() {
+        // write<U8>(100U8); should print "100" and return 0.
+        let (exit_code, stdout) = execute_tuff("write<U8>(100U8);", None);
+        assert_eq!(exit_code, 0);
+        assert_eq!(stdout, "100");
+    }
+
+    #[test]
+    fn test_write_u8_with_return() {
+        // write<U8>(100U8); 5 should print "100" and return 5.
+        let (exit_code, stdout) = execute_tuff("write<U8>(100U8); 5", None);
+        assert_eq!(exit_code, 5);
+        assert_eq!(stdout, "100");
+    }
+
+    #[test]
+    fn test_let_array_i32() {
+        // let array : [I32; 3] = [1, 2, 3]; array[0] should return 1.
+        let (exit_code, stdout) = execute_tuff("let array : [I32; 3] = [1, 2, 3]; array[0]", None);
+        assert_eq!(exit_code, 1);
+        assert_eq!(stdout, "");
     }
 
     #[test]
     fn test_if_block_single_expr_then() {
         // Block with just a single expression in the then branch.
         // if (temp) { 5U8 } else 3U8 with "true" should return 5.
-        let exit_code = execute_tuff(
+        let (exit_code, _stdout) = execute_tuff(
             "let temp : Bool = read<Bool>(); if (temp) { 5U8 } else 3U8",
             Some("true"),
         );
@@ -630,7 +725,7 @@ mod tests {
     #[test]
     fn test_if_block_bool_init_reassignment() {
         // Block with a let Bool init and reassignment inside.
-        let exit_code = execute_tuff(
+        let (exit_code, _stdout) = execute_tuff(
             "let temp : Bool = read<Bool>(); if (temp) { let x : Bool = read<Bool>(); x } else 0U8",
             Some("true true"),
         );
@@ -641,7 +736,7 @@ mod tests {
     fn test_for_loop_sum_to_count() {
         // let count = read<U8>(); let mut sum = 0U8; for (i in 0..count) sum += i; sum
         // with "5" should compute 0 + 0 + 1 + 2 + 3 + 4 + 5 = 15.
-        let exit_code = execute_tuff(
+        let (exit_code, _stdout) = execute_tuff(
             "let count = read<U8>(); let mut sum = 0U8; for (i in 0..count) sum += i; sum",
             Some("5"),
         );
@@ -651,42 +746,42 @@ mod tests {
     #[test]
     fn test_read_bool_true_returns_one() {
         // read<Bool>() with stdin "true" should return 1.
-        let exit_code = execute_tuff("read<Bool>()", Some("true"));
+        let (exit_code, _stdout) = execute_tuff("read<Bool>()", Some("true"));
         assert_eq!(exit_code, 1);
     }
 
     #[test]
     fn test_read_u8_plus_literal() {
         // read<U8>() + 1U8 should read 100 and add literal 1.
-        let exit_code = execute_tuff("read<U8>() + 1U8", Some("100"));
+        let (exit_code, _stdout) = execute_tuff("read<U8>() + 1U8", Some("100"));
         assert_eq!(exit_code, 101);
     }
 
     #[test]
     fn test_if_read_bool_then_u8_literal() {
         // if (read<Bool>()) 3U8 else 5U8 with "true" should return 3.
-        let exit_code = execute_tuff("if (read<Bool>()) 3U8 else 5U8", Some("true"));
+        let (exit_code, _stdout) = execute_tuff("if (read<Bool>()) 3U8 else 5U8", Some("true"));
         assert_eq!(exit_code, 3);
     }
 
     #[test]
     fn test_if_read_bool_else_u8_literal() {
         // if (read<Bool>()) 3U8 else 5U8 with "false" should return 5.
-        let exit_code = execute_tuff("if (read<Bool>()) 3U8 else 5U8", Some("false"));
+        let (exit_code, _stdout) = execute_tuff("if (read<Bool>()) 3U8 else 5U8", Some("false"));
         assert_eq!(exit_code, 5);
     }
 
     #[test]
     fn test_if_read_u8_condition() {
         // if (read<U8>()) 3U8 else 5U8 with "1" should return 3 (truthy).
-        let exit_code = execute_tuff("if (read<U8>()) 3U8 else 5U8", Some("1"));
+        let (exit_code, _stdout) = execute_tuff("if (read<U8>()) 3U8 else 5U8", Some("1"));
         assert_eq!(exit_code, 3);
     }
 
     #[test]
     fn test_if_read_u8_condition_falsy() {
         // if (read<U8>()) 3U8 else 5U8 with "0" should return 5 (falsy).
-        let exit_code = execute_tuff("if (read<U8>()) 3U8 else 5U8", Some("0"));
+        let (exit_code, _stdout) = execute_tuff("if (read<U8>()) 3U8 else 5U8", Some("0"));
         assert_eq!(exit_code, 5);
     }
 
@@ -782,14 +877,15 @@ mod tests {
     #[test]
     fn test_execute_tuff_compile_error_returns_one() {
         // Literal if condition now returns CompileError, which execute_tuff turns into exit code 1.
-        let exit_code = execute_tuff("if (100) 3U8 else 5U8", None);
+        let (exit_code, _stdout) = execute_tuff("if (100) 3U8 else 5U8", None);
         assert_eq!(exit_code, 1);
     }
 
     #[test]
     fn test_clang_compile_failure() {
         // Invalid then-expr should cause clang to fail.
-        let exit_code = execute_tuff("if (read<Bool>()) read<Bool>() else 0U8", Some("true"));
+        let (exit_code, _stdout) =
+            execute_tuff("if (read<Bool>()) read<Bool>() else 0U8", Some("true"));
         assert_eq!(exit_code, 1);
     }
 
