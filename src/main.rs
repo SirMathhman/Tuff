@@ -652,11 +652,34 @@ fn parse_single_fn_decl(fn_decl: &str) -> Option<(String, Vec<String>, String, S
     let after_paren = decl_rest[paren_close + 1..].trim().to_string();
     let arrow_pos = after_paren.find("=>")?;
     let raw_body = after_paren[arrow_pos + 2..].trim();
-    let body = raw_body
-        .strip_suffix(';')
-        .unwrap_or(raw_body)
-        .trim()
-        .to_string();
+    let body = if raw_body.starts_with('{') {
+        // Block body: find the matching closing brace via brace depth.
+        let mut depth = 0usize;
+        let mut close_idx = None;
+        for (i, c) in raw_body.char_indices() {
+            if c == '{' {
+                depth += 1;
+            } else if c == '}' {
+                depth -= 1;
+            }
+            if depth == 0 {
+                close_idx = Some(i);
+                break;
+            }
+        }
+        if let Some(idx) = close_idx {
+            // Keep content between { and }.
+            raw_body[1..idx].trim().to_string()
+        } else {
+            raw_body.trim().to_string()
+        }
+    } else {
+        raw_body
+            .strip_suffix(';')
+            .unwrap_or(raw_body)
+            .trim()
+            .to_string()
+    };
     Some((name, param_names, body, after_paren))
 }
 
@@ -706,6 +729,47 @@ fn extract_decl_type(after_paren: &str) -> Option<String> {
     })
 }
 
+/// Find the end offset of a fn declaration body that starts at `body_start`.
+/// Handles both `=> body;` (expression) and `=> { ... }` (block) forms.
+fn find_fn_body_end(
+    _output: &str,
+    after_arrow: &str,
+    fn_pos: usize,
+    body_semi: usize,
+) -> Option<usize> {
+    let trimmed = after_arrow.trim_start();
+    if trimmed.starts_with('{') {
+        // Block body `{ ... }` — find the matching closing brace.
+        let mut depth = 0usize;
+        let mut found_body = false;
+        for (i, c) in after_arrow.char_indices() {
+            if c == '{' {
+                depth += 1;
+                found_body = true;
+            } else if c == '}' {
+                depth -= 1;
+            }
+            if found_body && depth == 0 {
+                // Include the `}`
+                let mut end = fn_pos + body_semi + 2 + i + 1;
+                // Consume any whitespace and optional `;` after the closing brace
+                while end < _output.len() && _output.as_bytes()[end].is_ascii_whitespace() {
+                    end += 1;
+                }
+                if end < _output.len() && _output.as_bytes()[end] == b';' {
+                    end += 1;
+                }
+                return Some(end);
+            }
+        }
+        None // unbalanced braces
+    } else {
+        // Expression body `=> body;`
+        let semi_pos = after_arrow.find(';')?;
+        Some(fn_pos + body_semi + 2 + semi_pos + 1)
+    }
+}
+
 fn extract_fn_decls(
     output: &mut String,
 ) -> Result<HashMap<String, (Vec<String>, String)>, CompileError> {
@@ -715,15 +779,15 @@ fn extract_fn_decls(
             && let Some(body_semi) = output[fn_pos..].find("=>")
         {
             let after_arrow = &output[fn_pos + body_semi + 2..];
-            if let Some(semi_pos) = after_arrow.find(';') {
-                let fn_decl = &output[fn_pos..fn_pos + body_semi + 2 + semi_pos + 1];
+            if let Some(decl_end) = find_fn_body_end(output, after_arrow, fn_pos, body_semi) {
+                let fn_decl = &output[fn_pos..decl_end];
                 if let Some((name, param_names, body, after_paren)) = parse_single_fn_decl(fn_decl)
                 {
                     check_duplicate_params(&name, &param_names)?;
                     let decl_type = extract_decl_type(&after_paren);
                     check_fn_read_type(&name, &body, &decl_type)?;
                     fn_map.insert(name, (param_names, body));
-                    output.replace_range(fn_pos..fn_pos + body_semi + 2 + semi_pos + 1, "");
+                    output.replace_range(fn_pos..decl_end, "");
                     continue;
                 }
             }
@@ -1395,6 +1459,13 @@ mod tests {
             Some("3 4"),
         );
         assert_eq!(exit_code, 14);
+    }
+
+    #[test]
+    fn test_function_decl_block_body() {
+        // fn get() => { 100U8 }; get() should return 100.
+        let (exit_code, _stdout) = execute_tuff("fn get() => { 100U8 }; get()", None);
+        assert_eq!(exit_code, 100);
     }
 
     #[test]

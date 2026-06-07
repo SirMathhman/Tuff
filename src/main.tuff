@@ -1,1 +1,5 @@
-fn get() => read<U8>() + read<U8>(); get() * 2
+fn get() => {
+    100U8   
+}
+
+get()
