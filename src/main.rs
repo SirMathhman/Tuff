@@ -27,8 +27,14 @@ impl TuffType {
 /// Variable scope for let bindings within blocks, storing both value and type.
 type Scope = HashMap<String, (i32, TuffType)>;
 
-/// Function scope — maps function names to their return type and body expression string.
-type FnScope = HashMap<String, (TuffType, String)>;
+/// Function definition: name -> (return_type, parameters[(name, type)], body_expression)
+#[derive(Clone)]
+struct FnDef {
+    ret_ty: TuffType,
+    params: Vec<(String, TuffType)>,
+    body: String,
+}
+type FnScope = HashMap<String, FnDef>;
 
 #[cfg(not(coverage))]
 fn main() {
@@ -360,7 +366,10 @@ fn parse_function_call(s: &str) -> Option<(String, String)> {
     // Function name must be an identifier.
     let fn_name = s[..paren_pos].trim().to_string();
     if !fn_name.is_empty()
-        && fn_name.chars().next().map_or(false, |c| c.is_alphabetic() || c == '_')
+        && fn_name
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_alphabetic() || c == '_')
     {
         // Find matching closing paren.
         let after_paren = &s[paren_pos + 1..];
@@ -487,7 +496,11 @@ fn parse_if_expression(s: &str) -> Option<(&str, &str, &str)> {
 }
 
 /// Evaluate a Tuff expression with variable scope support, returning (value, inferred_type).
-fn execute_tuff_with_scope(input: &str, scope: &Scope, fn_scope: &FnScope) -> Result<(i32, TuffType), String> {
+fn execute_tuff_with_scope(
+    input: &str,
+    scope: &Scope,
+    fn_scope: &FnScope,
+) -> Result<(i32, TuffType), String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Ok((0, TuffType::I32));
@@ -508,8 +521,23 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope, fn_scope: &FnScope) -> Re
 
     // Check for function call: name(...)
     if let Some((fn_name, args_str)) = parse_function_call(trimmed) {
-        if let Some(&(ret_ty, ref body)) = fn_scope.get(&fn_name) {
-            return execute_tuff_with_scope(body, scope, fn_scope).map(|(v, _)| (v, ret_ty));
+        if let Some(fn_def) = fn_scope.get(&fn_name) {
+            // Evaluate arguments and bind to parameters.
+            let mut call_scope = scope.clone();
+            let arg_values: Vec<i32> = if args_str.trim().is_empty() {
+                Vec::new()
+            } else {
+                args_str.split(',').map(|a| a.trim()).filter(|s| !s.is_empty())
+                    .flat_map(|arg_expr| execute_tuff_with_scope(arg_expr, scope, fn_scope).ok())
+                    .map(|(v, _)| v)
+                    .collect()
+            };
+
+            for (idx, ((param_name, param_ty), &val)) in fn_def.params.iter().zip(arg_values.iter()).enumerate() {
+                call_scope.insert(param_name.clone(), (val, *param_ty));
+            }
+
+            return execute_tuff_with_scope(&fn_def.body, &call_scope, fn_scope).map(|(v, _)| (v, fn_def.ret_ty));
         }
     }
 
@@ -525,23 +553,35 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope, fn_scope: &FnScope) -> Re
 
     // Check for logical OR (||) operator at depth 0.
     if let Some(pos) = find_binary_operator_at_depth(trimmed, '|') {
-        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + 2..], scope, fn_scope, |l, r| {
-            l != 0 || r != 0
-        });
+        return evaluate_logical_op(
+            &trimmed[..pos],
+            &trimmed[pos + 2..],
+            scope,
+            fn_scope,
+            |l, r| l != 0 || r != 0,
+        );
     }
 
     // Check for logical AND (&&) operator at depth 0.
     if let Some(pos) = find_binary_operator_at_depth(trimmed, '&') {
-        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + 2..], scope, fn_scope, |l, r| {
-            l != 0 && r != 0
-        });
+        return evaluate_logical_op(
+            &trimmed[..pos],
+            &trimmed[pos + 2..],
+            scope,
+            fn_scope,
+            |l, r| l != 0 && r != 0,
+        );
     }
 
     // Check for comparison operators at depth 0: <= >= == != < >.
     if let Some((pos, width)) = find_comparison_at_depth(trimmed) {
         let op_str = &trimmed[pos..pos + width];
-        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + width..], scope, fn_scope, |l, r| {
-            match op_str {
+        return evaluate_logical_op(
+            &trimmed[..pos],
+            &trimmed[pos + width..],
+            scope,
+            fn_scope,
+            |l, r| match op_str {
                 "<=" => l <= r,
                 ">=" => l >= r,
                 "==" => l == r,
@@ -549,8 +589,8 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope, fn_scope: &FnScope) -> Re
                 "<" => l < r,
                 ">" => l > r,
                 _ => unreachable!(),
-            }
-        });
+            },
+        );
     }
 
     // Find operators not inside groups, respecting precedence: * and / before + and -.
@@ -592,7 +632,11 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope, fn_scope: &FnScope) -> Re
 }
 
 /// Evaluate a brace block with semicolon-separated statements, returning (value, inferred_type).
-fn evaluate_block(inner: &str, parent_scope: &Scope, fn_scope: &FnScope) -> Result<(i32, TuffType), String> {
+fn evaluate_block(
+    inner: &str,
+    parent_scope: &Scope,
+    fn_scope: &FnScope,
+) -> Result<(i32, TuffType), String> {
     let mut scope = parent_scope.clone();
     // Merge inherited functions with any new ones defined in this block.
     let mut local_fn_scope = fn_scope.clone();
@@ -608,8 +652,8 @@ fn evaluate_block(inner: &str, parent_scope: &Scope, fn_scope: &FnScope) -> Resu
     for stmt in &raw_parts[..raw_parts.len() - 1] {
         let trimmed = stmt.trim();
         // Handle function definitions.
-        if let Some((name, ret_ty, body)) = parse_fn_definition(trimmed) {
-            local_fn_scope.insert(name, (ret_ty, body));
+        if let Some((name, fn_def)) = parse_fn_definition(trimmed) {
+            local_fn_scope.insert(name, fn_def);
             continue;
         }
         evaluate_statement(trimmed, &mut scope, &local_fn_scope)?;
@@ -735,7 +779,10 @@ fn parse_while_loop(s: &str) -> Option<(&str, &str)> {
 /** Parse a `fn name() : Type => expr` statement.
     Returns (name, return_type, body_expression).
 */
-fn parse_fn_definition(s: &str) -> Option<(String, TuffType, String)> {
+/** Parse a `fn name(params) : Type => expr` statement.
+    Returns (name, FnDef{ret_ty, params, body}).
+*/
+fn parse_fn_definition(s: &str) -> Option<(String, FnDef)> {
     let trimmed = s.trim();
     if !trimmed.starts_with("fn ") && !trimmed.starts_with("Fn ") {
         return None;
@@ -750,13 +797,27 @@ fn parse_fn_definition(s: &str) -> Option<(String, TuffType, String)> {
 
     // Find ")" matching the opening paren.
     let after_name_paren = &after_fn[name_end + 1..];
-    let closing_paren = after_name_paren.find(')')?;
+    let closing_paren = find_matching_closing(after_name_paren, '(')?;
+
+    // Extract parameters from inside parens (comma-separated "name : Type").
+    let params_str = after_name_paren[..closing_paren].trim();
+    let mut params: Vec<(String, TuffType)> = Vec::new();
+    if !params_str.is_empty() {
+        for param in params_str.split(',') {
+            let parts: Vec<&str> = param.trim().split(':').collect();
+            if parts.len() == 2 {
+                let p_name = parts[0].trim().to_string();
+                let p_ty = parse_type_annotation(parts[1]).unwrap_or(TuffType::I32);
+                params.push((p_name, p_ty));
+            }
+        }
+    }
 
     // After ')' expect optional " : Type => body" or just " => body".
     let rest = after_name_paren[closing_paren + 1..].trim_start();
 
     // Skip optional ": Type".
-    let (type_str, body_rest) = if rest.starts_with(':') {
+    let (ret_ty, body_rest) = if rest.starts_with(':') {
         let colon_rest = &rest[1..];
         let type_annotation = parse_type_annotation(colon_rest);
         let after_type = skip_type(colon_rest);
@@ -770,7 +831,7 @@ fn parse_fn_definition(s: &str) -> Option<(String, TuffType, String)> {
         return None;
     }
     let body = &body_rest[2..].trim_start();
-    Some((name, type_str, body.to_string()))
+    Some((name, FnDef { ret_ty, params, body: body.to_string() }))
 }
 
 fn parse_for_loop(s: &str) -> Option<(String, String, String, String)> {
@@ -871,7 +932,8 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope, fn_scope: &FnScope) -> Resu
                 match eq_start.find('=') {
                     Some(eq_pos) => {
                         let expr_str = &eq_start[eq_pos + 1..];
-                        let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope, fn_scope)?;
+                        let (value, inferred_ty) =
+                            execute_tuff_with_scope(expr_str.trim(), scope, fn_scope)?;
 
                         // If declared type is known and differs from inferred type, error.
                         if let Some(dty) = declared_ty {
@@ -896,7 +958,8 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope, fn_scope: &FnScope) -> Resu
                         let name = after_let[..eq_pos].trim().to_string();
 
                         let expr_str = &after_let[eq_pos + 1..];
-                        let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope, fn_scope)?;
+                        let (value, inferred_ty) =
+                            execute_tuff_with_scope(expr_str.trim(), scope, fn_scope)?;
 
                         if is_mut && !scope.contains_key(&name) {
                             scope.insert(name.clone(), (0, inferred_ty)); // Initialize mutable var.
@@ -928,7 +991,8 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope, fn_scope: &FnScope) -> Resu
             };
 
             let expr_str = &assign_str[expr_start_offset..];
-            let (rhs_value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope, fn_scope)?;
+            let (rhs_value, inferred_ty) =
+                execute_tuff_with_scope(expr_str.trim(), scope, fn_scope)?;
 
             // Compute final value based on operator.
             let final_value = match op {
@@ -1065,7 +1129,8 @@ pub fn execute_tuff(input: &str) -> Result<i32, String> {
 
     // If input contains top-level semicolons (not inside any grouping), treat it as a script/block.
     if has_top_level_semicolon(input.trim()) && !input.trim().starts_with('{') {
-        return execute_tuff_with_scope(&format!("{{{}}}", input), &scope, &fn_scope).map(|(v, _)| v);
+        return execute_tuff_with_scope(&format!("{{{}}}", input), &scope, &fn_scope)
+            .map(|(v, _)| v);
     }
 
     execute_tuff_with_scope(input, &scope, &fn_scope).map(|(v, _)| v)
@@ -1528,5 +1593,14 @@ mod tests {
     #[test]
     fn test_execute_tuff_function_definition_and_call() {
         assert_eq!(execute_tuff("fn get() : I32 => 100; get()"), Ok(100));
+    }
+
+    // Function with typed parameters and body using those params
+    #[test]
+    fn test_execute_tuff_function_with_params() {
+        assert_eq!(
+            execute_tuff("fn add(first : I32, second : I32) => first + second; add(25, 75)"),
+            Ok(100)
+        );
     }
 }
