@@ -1,0 +1,2 @@
+- Add logging statements instead of manually tracing.
+- Always add the test case first before considering implementing it.

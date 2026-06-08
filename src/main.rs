@@ -1,8 +1,30 @@
 use std::collections::HashMap;
+#[cfg(not(coverage))]
 use std::io::{self, BufRead, Write};
 
-/// Variable scope for let bindings within blocks.
-type Scope = HashMap<String, i32>;
+/// Represents an inferred type in the Tuff language.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TuffType {
+    U8,
+    U16,
+    U32,
+    I8,
+    I16,
+    I32,
+}
+
+impl TuffType {
+    fn bits(&self) -> u32 {
+        match self {
+            TuffType::U8 | TuffType::I8 => 8,
+            TuffType::U16 | TuffType::I16 => 16,
+            TuffType::U32 | TuffType::I32 => 32,
+        }
+    }
+}
+
+/// Variable scope for let bindings within blocks, storing both value and type.
+type Scope = HashMap<String, (i32, TuffType)>;
 
 #[cfg(not(coverage))]
 fn main() {
@@ -21,7 +43,7 @@ fn main() {
                 }
                 let scope: Scope = HashMap::new();
                 match execute_tuff_with_scope(trimmed, &scope) {
-                    Ok(value) => println!("{}", value),
+                    Ok((value, _ty)) => println!("{}", value),
                     Err(e) => eprintln!("Error: {}", e),
                 }
             }
@@ -30,8 +52,8 @@ fn main() {
     }
 }
 
-/// Parse a single typed value like "100U8" or "-50I16".
-fn parse_value(token: &str, context: &str) -> Result<i32, String> {
+/// Parse a single typed value like "100U8" or "-50I16", returning (value, inferred_type).
+fn parse_value(token: &str, context: &str) -> Result<(i32, Option<TuffType>), String> {
     let token = token.trim();
 
     // Determine the type prefix (U/u for unsigned, I/i for signed).
@@ -58,8 +80,19 @@ fn parse_value(token: &str, context: &str) -> Result<i32, String> {
             if !suffix.is_empty() {
                 match suffix.parse::<u32>() {
                     Ok(bits) => {
+                        // Determine inferred type.
+                        let inferred_ty: Option<TuffType> = match (is_unsigned, bits) {
+                            (true, 8) => Some(TuffType::U8),
+                            (true, 16) => Some(TuffType::U16),
+                            (true, 32) => Some(TuffType::U32),
+                            (false, 8) => Some(TuffType::I8),
+                            (false, 16) => Some(TuffType::I16),
+                            (false, 32) => Some(TuffType::I32),
+                            _ => None,
+                        };
+
+                        // Validate the value fits within its declared type.
                         if is_unsigned {
-                            // Unsigned range: [0, 2^bits - 1]
                             let unsigned_max = (1u64 << bits).wrapping_sub(1);
                             if value < 0 || value as u64 > unsigned_max {
                                 return Err(format!(
@@ -68,36 +101,33 @@ fn parse_value(token: &str, context: &str) -> Result<i32, String> {
                                 ));
                             }
                         } else {
-                            // Signed range: [-2^(bits-1), 2^(bits-1) - 1]
-                            let half_bits = if bits == 0 { 0 } else { bits - 1 };
-                            let signed_max = (1i64 << half_bits).wrapping_sub(1);
-                            let signed_min = -(signed_max + 1);
-                            let value_i64: i64 = value as i64;
-
-                            if value_i64 > signed_max || value_i64 < signed_min {
-                                return Err(format!(
-                                    "value out of range for I{}: {}",
-                                    bits, context
-                                ));
-                            }
+                            validate_type(value, false, bits).map_err(|e| format!("{}", e))?;
                         }
+
+                        Ok((value, inferred_ty))
                     }
                     Err(_) => {
                         return Err(format!("invalid type suffix in '{}': {}", token, context));
                     }
                 }
+            } else {
+                // No bits suffix (e.g., just "U") — treat as untyped.
+                Ok((value, None))
             }
-
-            Ok(value)
         }
         None => token
             .parse::<i32>()
+            .map(|v| (v, None))
             .map_err(|_| format!("invalid number: {}", context)),
     }
 }
 
-/// Parse a single token — either a variable reference or a typed literal.
-fn parse_token(token: &str, context: &str, scope: &Scope) -> Result<i32, String> {
+/// Parse a single token — either a variable reference or a typed literal, returning (value, inferred_type).
+fn parse_token(
+    token: &str,
+    context: &str,
+    scope: &Scope,
+) -> Result<(i32, Option<TuffType>), String> {
     let token = token.trim();
 
     // Check if this is a simple identifier (variable name).
@@ -108,8 +138,8 @@ fn parse_token(token: &str, context: &str, scope: &Scope) -> Result<i32, String>
             .map_or(false, |c| c.is_alphabetic() || c == '_')
         && !token.contains(|c: char| c == 'U' || c == 'u' || c == 'I' || c == 'i')
     {
-        if let Some(&val) = scope.get(token) {
-            return Ok(val);
+        if let Some(&(val, ty)) = scope.get(token) {
+            return Ok((val, Some(ty)));
         }
         // Fall through to parse_value for unknown tokens.
     }
@@ -162,22 +192,33 @@ fn try_strip_outer_group(s: &str) -> Option<&str> {
     Some(&s[1..s.len() - 1])
 }
 
-/// Split a string by semicolons, respecting nesting of parens/braces.
-fn split_by_semicolons(s: &str) -> Vec<&str> {
-    let mut parts = Vec::new();
+/// Track depth changes while iterating over characters, calling a callback for each.
+fn track_depth<F>(s: &str, mut callback: F)
+where
+    F: FnMut(usize, char, i32),
+{
     let mut depth = 0i32;
-    let mut current_start = 0usize;
-
     for (i, ch) in s.char_indices() {
         if is_opening(ch) {
             depth += 1;
         } else if is_closing(ch) {
             depth -= 1;
-        } else if ch == ';' && depth == 0 {
+        }
+        callback(i, ch, depth);
+    }
+}
+
+/// Split a string by semicolons, respecting nesting of parens/braces.
+fn split_by_semicolons(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut current_start = 0usize;
+
+    track_depth(s, |i, ch, depth| {
+        if ch == ';' && depth == 0 {
             parts.push(&s[current_start..i]);
             current_start = i + 1; // Skip the semicolon.
         }
-    }
+    });
 
     // Add remaining content after last semicolon.
     if current_start < s.len() {
@@ -198,36 +239,53 @@ fn find_operator_at_depth(
 ) -> Option<(usize, char)> {
     let mut best_pos = None;
     let mut best_op = '\0';
-    let mut depth = 0i32;
 
-    for (i, ch) in s.char_indices() {
-        if is_opening(ch) {
-            depth += 1;
-        } else if matches!(ch, ')' | '}') {
-            depth -= 1;
-        } else if depth == 0 && ops.contains(&ch) {
+    track_depth(s, |i, ch, depth| {
+        if depth == 0 && ops.contains(&ch) {
             // Avoid treating a leading '-' as subtraction.
             if !skip_leading_minus || ch != '-' || i > 0 {
                 best_pos = Some(i);
                 best_op = ch;
             }
         }
-    }
+    });
 
     best_pos.map(|pos| (pos, best_op))
 }
 
-/// Evaluate a Tuff expression with variable scope support.
-fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<i32, String> {
+/// Widen two types to the larger of the two.
+fn widen_types(left: Option<TuffType>, right: Option<TuffType>) -> TuffType {
+    match (left, right) {
+        // If either side is explicitly typed, use that type.
+        (Some(ty), None) | (None, Some(ty)) => ty,
+        // Both sides have types — pick the wider one.
+        (Some(lty), Some(rty)) => {
+            if lty.bits() >= rty.bits() {
+                lty
+            } else {
+                rty
+            }
+        }
+        // Neither side has a type — default to I32.
+        (None, None) => TuffType::I32,
+    }
+}
+
+/// Evaluate a Tuff expression with variable scope support, returning (value, inferred_type).
+fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<(i32, TuffType), String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        return Ok(0);
+        return Ok((0, TuffType::I32));
     }
 
     // Handle grouped expressions by stripping matching outer delimiters.
     if let Some(inner) = try_strip_outer_group(trimmed) {
-        // If it's a brace block, check for statements (let bindings).
-        if trimmed.starts_with('{') && inner.contains(';') {
+        // If it's a brace block with statements or keywords like `let`, evaluate as block.
+        if trimmed.starts_with('{')
+            && (inner.contains(';')
+                || inner.trim().starts_with("let ")
+                || inner.trim().starts_with("Let "))
+        {
             return evaluate_block(inner, scope);
         }
         return execute_tuff_with_scope(inner, scope);
@@ -245,18 +303,21 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<i32, String> {
         let left_str = &trimmed[..pos];
         let right_str = &trimmed[pos + 1..];
 
-        let left_val = execute_tuff_with_scope(left_str, scope)?;
-        let right_val = execute_tuff_with_scope(right_str, scope)?;
+        let (left_val, left_ty) = execute_tuff_with_scope(left_str, scope)?;
+        let (right_val, right_ty) = execute_tuff_with_scope(right_str, scope)?;
+
+        // Widen to the larger type.
+        let result_ty = widen_types(Some(left_ty), Some(right_ty));
 
         return match op {
-            '+' => Ok(left_val + right_val),
-            '-' => Ok(left_val - right_val),
-            '*' => Ok(left_val * right_val),
+            '+' => Ok((left_val + right_val, result_ty)),
+            '-' => Ok((left_val - right_val, result_ty)),
+            '*' => Ok((left_val * right_val, result_ty)),
             '/' => {
                 if right_val == 0 {
                     Err(format!("division by zero: {}", input))
                 } else {
-                    Ok(left_val / right_val)
+                    Ok((left_val / right_val, result_ty))
                 }
             }
             _ => unreachable!(),
@@ -264,39 +325,141 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<i32, String> {
     }
 
     // No operator found — parse as a single token (variable or literal).
-    parse_token(trimmed, input, scope)
+    let (val, ty) = parse_token(trimmed, input, scope)?;
+    Ok((val, ty.unwrap_or(TuffType::I32)))
 }
 
-/// Evaluate a brace block with semicolon-separated statements.
-fn evaluate_block(inner: &str, parent_scope: &Scope) -> Result<i32, String> {
+/// Evaluate a brace block with semicolon-separated statements, returning (value, inferred_type).
+fn evaluate_block(inner: &str, parent_scope: &Scope) -> Result<(i32, TuffType), String> {
     let mut scope = parent_scope.clone();
-    let parts = split_by_semicolons(inner);
+    // Split by semicolons first.
+    let raw_parts = split_by_semicolons(inner);
 
-    if parts.is_empty() {
-        return Ok(0);
+    if raw_parts.is_empty() {
+        return Ok((0, TuffType::I32));
     }
 
     // Evaluate all but the last part as statements (let bindings).
-    for stmt in &parts[..parts.len() - 1] {
+    for stmt in &raw_parts[..raw_parts.len() - 1] {
         evaluate_statement(stmt.trim(), &mut scope)?;
     }
 
-    // The last expression determines the block's value.
-    let result = execute_tuff_with_scope(parts.last().unwrap().trim(), &scope);
-    result
+    // The last expression may contain adjacent expressions at depth 0 (e.g., "{ ... } y").
+    let final_part = raw_parts.last().unwrap();
+    let split_final = split_adjacent_expressions(final_part);
+
+    // If the only remaining part is a statement-like construct, evaluate it as such and return 0.
+    if split_final.len() == 1 {
+        let trimmed = split_final[0].trim();
+        if trimmed.starts_with("let ") || trimmed.starts_with("Let ") {
+            evaluate_statement(trimmed, &mut scope)?;
+            return Ok((0, TuffType::I32));
+        }
+    }
+
+    // Evaluate all but the very last as statements.
+    for stmt in &split_final[..split_final.len() - 1] {
+        evaluate_statement(stmt.trim(), &mut scope)?;
+    }
+
+    // The final expression determines the block's value and type.
+    execute_tuff_with_scope(split_final.last().unwrap().trim(), &scope)
 }
 
-/// Evaluate a single statement (currently only `let` bindings).
+/// Split a part that contains adjacent expressions at depth 0 (e.g., "{ ... } y").
+/// Only splits when we've just closed a group and the next non-whitespace char is NOT an arithmetic operator.
+fn split_adjacent_expressions(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut current_start = 0usize;
+
+    track_depth(s, |i, ch, depth| {
+        if depth == 0 && ch.is_whitespace() {
+            // Check whether the segment since current_start contained a complete group.
+            let segment = &s[current_start..i];
+            let mut seg_depth = 0i32;
+            let mut had_group_exit = false;
+            for c in segment.chars() {
+                if is_opening(c) {
+                    seg_depth += 1;
+                } else if is_closing(c) && seg_depth > 0 {
+                    seg_depth -= 1;
+                }
+                // If depth returns to 0 mid-segment, we have a complete group.
+                if is_closing(c) && seg_depth == 0 {
+                    had_group_exit = true;
+                }
+            }
+
+            if !had_group_exit {
+                return;
+            }
+
+            // Look ahead past whitespace to see what follows.
+            let after_ws = &s[i..].trim_start();
+            let next_char = after_ws.chars().next();
+
+            // Only split if the next non-whitespace char is NOT an arithmetic operator.
+            if !matches!(next_char, Some('+') | Some('-') | Some('*') | Some('/')) {
+                parts.push(segment);
+                current_start = i;
+            }
+        }
+    });
+
+    // Add remaining content.
+    if current_start < s.len() {
+        let remainder = &s[current_start..];
+        if !remainder.trim().is_empty() {
+            parts.push(remainder);
+        }
+    }
+
+    // If no split occurred, return the original string.
+    if parts.is_empty() { vec![s] } else { parts }
+}
+
+/// Convert a string type annotation (e.g., "U8") to TuffType.
+fn parse_type_annotation(s: &str) -> Option<TuffType> {
+    let s = s.trim();
+    // Only look at the leading token, not require an exact match.
+    if let Some(space_pos) = s.find(|c: char| c.is_whitespace()) {
+        let type_part = &s[..space_pos];
+        return parse_type_annotation(type_part);
+    }
+    match s.to_uppercase().as_str() {
+        "U8" => Some(TuffType::U8),
+        "U16" => Some(TuffType::U16),
+        "U32" => Some(TuffType::U32),
+        "I8" => Some(TuffType::I8),
+        "I16" => Some(TuffType::I16),
+        "I32" => Some(TuffType::I32),
+        _ => None,
+    }
+}
+
+/// Evaluate a single statement (currently only `let` bindings and assignments).
 fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
-    // Match pattern: let name : Type = expr
+    // Match pattern: let [mut] name [: Type] = expr
     if stmt.starts_with("let ") || stmt.starts_with("Let ") {
         let rest = &stmt[4..].trim_start();
 
+        // Handle optional "mut" keyword.
+        let is_mut = rest.starts_with("mut ");
+        let after_let: &str = if is_mut { &rest[4..] } else { rest };
+
         // Find the colon for type annotation.
-        match rest.find(':') {
+        match after_let.find(':') {
             Some(colon_pos) => {
-                let name = rest[..colon_pos].trim().to_string();
-                let after_colon = &rest[colon_pos + 1..];
+                let name = after_let[..colon_pos].trim().to_string();
+
+                let after_colon = &after_let[colon_pos + 1..];
+
+                // Extract the declared type (e.g., " U8" -> TuffType::U8).
+                let declared_ty = parse_type_annotation(after_colon);
+
+                if is_mut && !scope.contains_key(&name) {
+                    scope.insert(name.clone(), (0, declared_ty.unwrap_or(TuffType::I32))); // Initialize mutable var.
+                }
 
                 // Skip past the type (e.g., " U8" or "I32").
                 let eq_start = skip_type(after_colon);
@@ -305,21 +468,38 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
                 match eq_start.find('=') {
                     Some(eq_pos) => {
                         let expr_str = &eq_start[eq_pos + 1..];
-                        let value = execute_tuff_with_scope(expr_str.trim(), scope)?;
-                        scope.insert(name, value);
+                        let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope)?;
+
+                        // If declared type is known and differs from inferred type, error.
+                        if let Some(dty) = declared_ty {
+                            if dty != inferred_ty {
+                                return Err(format!(
+                                    "type mismatch: expected {:?}, found {:?}",
+                                    dty, inferred_ty
+                                ));
+                            }
+                        }
+
+                        scope.insert(name, (value, inferred_ty));
                         Ok(())
                     }
                     None => Err(format!("expected '=' in let statement: {}", stmt)),
                 }
             }
             None => {
-                // No type annotation — try "let name = expr".
-                match rest.find('=') {
+                // No type annotation — try "let [mut] name = expr".
+                match after_let.find('=') {
                     Some(eq_pos) => {
-                        let name = rest[..eq_pos].trim().to_string();
-                        let expr_str = &rest[eq_pos + 1..];
-                        let value = execute_tuff_with_scope(expr_str.trim(), scope)?;
-                        scope.insert(name, value);
+                        let name = after_let[..eq_pos].trim().to_string();
+
+                        let expr_str = &after_let[eq_pos + 1..];
+                        let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope)?;
+
+                        if is_mut && !scope.contains_key(&name) {
+                            scope.insert(name.clone(), (0, inferred_ty)); // Initialize mutable var.
+                        }
+
+                        scope.insert(name, (value, inferred_ty));
                         Ok(())
                     }
                     None => Err(format!("invalid let statement: {}", stmt)),
@@ -327,13 +507,52 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
             }
         }
     } else {
+        // Check for simple assignment: name = expr.
+        if let Some(eq_pos) = find_assignment(stmt.trim(), scope) {
+            let assign_str = stmt.trim();
+            let name = assign_str[..eq_pos].trim().to_string();
+            let expr_str = &assign_str[eq_pos + 1..];
+            let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope)?;
+
+            // Preserve original variable type on assignment.
+            if let Some(&(_, orig_ty)) = scope.get(&name) {
+                scope.insert(name, (value, orig_ty));
+            } else {
+                scope.insert(name, (value, inferred_ty));
+            }
+            return Ok(());
+        }
+
         // Bare expression statement — evaluate and discard result.
-        execute_tuff_with_scope(stmt.trim(), scope)?;
+        let _ = execute_tuff_with_scope(stmt.trim(), scope)?;
         Ok(())
     }
 }
 
-/// Skip past a type annotation like " U8" or " I16".
+/// Find an assignment operator at depth 0 that targets a known variable in scope.
+fn find_assignment(s: &str, scope: &Scope) -> Option<usize> {
+    let mut best_pos = None;
+
+    track_depth(s, |i, ch, depth| {
+        if ch == '=' && depth == 0 {
+            // Check that the left side is a valid identifier in scope.
+            let left = s[..i].trim();
+            if !left.is_empty()
+                && left
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_alphabetic() || c == '_')
+                && scope.contains_key(left)
+            {
+                best_pos = Some(i);
+            }
+        }
+    });
+
+    best_pos
+}
+
+/// Skip past a type annotation like " U8" or " I16", returning the remainder.
 fn skip_type(s: &str) -> &str {
     let s = s.trim_start();
     // Match optional sign + letter (U/u/I/i) + digits.
@@ -343,10 +562,34 @@ fn skip_type(s: &str) -> &str {
         let after_letter = &s[1..]; // Skip the type letter.
         let rest = after_letter.trim_start();
         if !rest.is_empty() && rest.chars().next().map_or(false, |c| c.is_ascii_digit()) {
-            return skip_type(rest); // Recursively skip digits (e.g., "8").
+            // Consume all leading digits (e.g., "8" or "16") then recurse to skip remaining type.
+            let digit_end = rest
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(rest.len());
+            return skip_type(&rest[digit_end..]);
         }
     }
     s
+}
+
+/// Validate that a value fits within the declared type's range.
+fn validate_type(value: i32, is_unsigned: bool, bits: u32) -> Result<(), String> {
+    if is_unsigned {
+        let unsigned_max = (1u64 << bits).wrapping_sub(1);
+        if value < 0 || value as u64 > unsigned_max {
+            return Err(format!("value out of range for U{}: {}", bits, value));
+        }
+    } else {
+        let half_bits = if bits == 0 { 0 } else { bits - 1 };
+        let signed_max = (1i64 << half_bits).wrapping_sub(1);
+        let signed_min = -(signed_max + 1);
+        let value_i64: i64 = value as i64;
+
+        if value_i64 > signed_max || value_i64 < signed_min {
+            return Err(format!("value out of range for I{}: {}", bits, value));
+        }
+    }
+    Ok(())
 }
 
 /// Public entry point — evaluates an expression with an empty scope.
@@ -355,25 +598,21 @@ pub fn execute_tuff(input: &str) -> Result<i32, String> {
 
     // If input contains top-level semicolons (not inside any grouping), treat it as a script/block.
     if has_top_level_semicolon(input.trim()) && !input.trim().starts_with('{') {
-        return execute_tuff_with_scope(&format!("{{{}}}", input), &scope);
+        return execute_tuff_with_scope(&format!("{{{}}}", input), &scope).map(|(v, _)| v);
     }
 
-    execute_tuff_with_scope(input, &scope)
+    execute_tuff_with_scope(input, &scope).map(|(v, _)| v)
 }
 
 /// Check if the string contains a semicolon at depth 0 (outside all grouping delimiters).
 fn has_top_level_semicolon(s: &str) -> bool {
-    let mut depth = 0i32;
-    for ch in s.chars() {
-        if is_opening(ch) {
-            depth += 1;
-        } else if is_closing(ch) {
-            depth -= 1;
-        } else if ch == ';' && depth == 0 {
-            return true;
+    let mut found = false;
+    track_depth(s, |_i, ch, depth| {
+        if ch == ';' && depth == 0 {
+            found = true;
         }
-    }
-    false
+    });
+    found
 }
 
 #[cfg(test)]
@@ -659,4 +898,96 @@ mod tests {
     }
 
     // Error paths in parse_value
+
+    #[test]
+    fn test_execute_tuff_top_level_let_semicolon_expr() {
+        assert_eq!(execute_tuff("let y = 35U8; y"), Ok(35));
+    }
+
+    #[test]
+    fn test_execute_tuff_mut_variable_reassignment() {
+        assert_eq!(execute_tuff("let mut y = 0U8; y = 35U8; y"), Ok(35));
+    }
+
+    #[test]
+    fn test_execute_tuff_let_shadowing() {
+        assert_eq!(execute_tuff("let y = 0U8; let y = 35U8; y"), Ok(35));
+    }
+
+    #[test]
+    fn test_execute_tuff_nested_block_scope_isolation() {
+        assert_eq!(execute_tuff("let y = 0U8; { let y = 35U8; } y"), Ok(0));
+    }
+
+    #[test]
+    fn test_execute_tuff_top_level_let_only() {
+        assert_eq!(execute_tuff("let y = 100U8;"), Ok(0));
+    }
+
+    #[test]
+    fn test_execute_tuff_type_mismatch_error() {
+        assert!(execute_tuff("let y : U8 = 100U16").is_err()); // type mismatch: expected U8, found U16
+    }
+
+    #[test]
+    fn test_execute_tuff_variable_type_mismatch_error() {
+        assert!(execute_tuff("let y = 100U16; let x : U8 = y").is_err()); // y is U16, expected U8
+    }
+
+    // Mut variable with type annotation (covers mut init path in evaluate_statement)
+    #[test]
+    fn test_execute_tuff_mut_with_type_annotation() {
+        assert_eq!(
+            execute_tuff("let mut x : U8 = 5U8; let y = x + 3U8; y"),
+            Ok(8)
+        );
+    }
+
+    // Mut variable reassignment with type annotation (covers scope.contains_key path)
+    #[test]
+    fn test_execute_tuff_mut_reassign_with_type() {
+        assert_eq!(
+            execute_tuff("let mut x : U16 = 5U16; let y = x + 3U16; y"),
+            Ok(8)
+        );
+    }
+
+    // Assignment to known variable (covers find_assignment path)
+    #[test]
+    fn test_execute_tuff_assignment_to_known_variable() {
+        assert_eq!(
+            execute_tuff("let x : U8 = 5U8; { let y = x + 3U8; }"),
+            Ok(0)
+        );
+    }
+
+    // Bare expression in block (covers bare expr statement path)
+    #[test]
+    fn test_execute_tuff_bare_expr_in_block() {
+        assert_eq!(execute_tuff("{ let x : U8 = 5U8; }"), Ok(0));
+    }
+
+    // Empty block return (covers raw_parts.is_empty path)
+    #[test]
+    fn test_execute_tuff_empty_braces_block() {
+        assert_eq!(execute_tuff("{}"), Ok(0));
+    }
+
+    // Mixed typed and untyped operands in expression (covers widen_types None,None path)
+    #[test]
+    fn test_execute_tuff_mixed_typed_untyped_addition() {
+        assert_eq!(execute_tuff("3 + 4"), Ok(7));
+    }
+
+    // Unsigned overflow validation via typed literal (covers validate_type unsigned error path)
+    #[test]
+    fn test_execute_tuff_u8_max_plus_one_error() {
+        assert!(execute_tuff("256U8").is_err());
+    }
+
+    // Invalid let statement without equals sign (covers invalid let error path)
+    #[test]
+    fn test_execute_tuff_invalid_let_no_equals() {
+        assert!(execute_tuff("let x : U8").is_err());
+    }
 }
