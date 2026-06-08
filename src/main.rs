@@ -140,17 +140,21 @@ fn parse_token(
     }
 
     // Check if this is a simple identifier (variable name).
+    // Always check scope first — even if the token contains type-like characters (U/u/I/i),
+    // it may be a valid variable name in scope.
     if !token.is_empty()
         && token
             .chars()
             .next()
             .map_or(false, |c| c.is_alphabetic() || c == '_')
-        && !token.contains(|c: char| c == 'U' || c == 'u' || c == 'I' || c == 'i')
     {
         if let Some(&(val, ty)) = scope.get(token) {
             return Ok((val, Some(ty)));
         }
-        // Fall through to parse_value for unknown tokens.
+        // If not in scope and doesn't look like a type annotation, fall through to parse_value.
+        if !token.contains(|c: char| c == 'U' || c == 'u' || c == 'I' || c == 'i') {
+            return parse_value(token, _context);
+        }
     }
 
     parse_value(token, _context)
@@ -667,8 +671,62 @@ fn parse_while_loop(s: &str) -> Option<(&str, &str)> {
     }
 }
 
+/// Parse a `for (var in start..end) ...` loop and return var name, range bounds, and body string.
+fn parse_for_loop(s: &str) -> Option<(String, String, String, String)> {
+    let chars: Vec<char> = s.chars().collect();
+    if !s.starts_with("for") || (chars.len() > 3 && !chars[3].is_whitespace()) {
+        return None;
+    }
+
+    // Find the opening '(' after "for".
+    let after_for = &s[3..];
+    let trimmed_after = after_for.trim_start();
+
+    // Extract content between matching parens.
+    let (inner, body_offset) = extract_paren_condition(trimmed_after, 0)?;
+    let body = trimmed_after[body_offset..].trim().to_string();
+
+    if body.is_empty() {
+        return None;
+    }
+
+    // Parse "var in start..end" from inner.
+    let parts: Vec<&str> = inner.split_whitespace().collect();
+    if parts.len() < 3 || parts[1] != "in" {
+        return None;
+    }
+
+    let var_name = parts[0].to_string();
+    // Split range by '..'.
+    let range_parts: Vec<&str> = parts[2].split("..").collect();
+    if range_parts.len() != 2 {
+        return None;
+    }
+
+    Some((
+        var_name,
+        range_parts[0].to_string(),
+        range_parts[1].to_string(),
+        body,
+    ))
+}
+
 /// Evaluate a single statement (currently only `let` bindings and assignments).
 fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
+    // Match for loop: for (var in start..end) body
+    if stmt.starts_with("for ") || stmt.starts_with("For ") {
+        if let Some((var_name, start_str, end_str, body)) = parse_for_loop(stmt.trim()) {
+            let (start_val, _) = execute_tuff_with_scope(&start_str, scope)?;
+            let (end_val, _) = execute_tuff_with_scope(&end_str, scope)?;
+
+            for i in start_val..end_val {
+                scope.insert(var_name.clone(), (i, TuffType::I32));
+                evaluate_statement(&body, scope)?;
+            }
+            return Ok(());
+        }
+    }
+
     // Match pattern: let [mut] name [: Type] = expr
     if stmt.starts_with("while ") || stmt.starts_with("While ") {
         if let Some((cond_str, body_str)) = parse_while_loop(stmt.trim()) {
@@ -1352,6 +1410,15 @@ mod tests {
         assert_eq!(
             execute_tuff("let mut x = 0; while (x < 4) x += 1; x"),
             Ok(4)
+        );
+    }
+
+    // For loop with range syntax iterating and accumulating
+    #[test]
+    fn test_execute_tuff_for_loop_range() {
+        assert_eq!(
+            execute_tuff("let mut sum = 0; for (i in 0..4) sum += i; sum"),
+            Ok(6)
         );
     }
 }
