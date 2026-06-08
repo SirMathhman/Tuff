@@ -11,12 +11,13 @@ enum TuffType {
     I8,
     I16,
     I32,
+    Bool,
 }
 
 impl TuffType {
     fn bits(&self) -> u32 {
         match self {
-            TuffType::U8 | TuffType::I8 => 8,
+            TuffType::U8 | TuffType::I8 | TuffType::Bool => 8,
             TuffType::U16 | TuffType::I16 => 16,
             TuffType::U32 | TuffType::I32 => 32,
         }
@@ -125,10 +126,18 @@ fn parse_value(token: &str, context: &str) -> Result<(i32, Option<TuffType>), St
 /// Parse a single token — either a variable reference or a typed literal, returning (value, inferred_type).
 fn parse_token(
     token: &str,
-    context: &str,
+    _context: &str,
     scope: &Scope,
 ) -> Result<(i32, Option<TuffType>), String> {
     let token = token.trim();
+
+    // Handle boolean literals before variable lookup.
+    if token == "true" {
+        return Ok((1, Some(TuffType::Bool)));
+    }
+    if token == "false" {
+        return Ok((0, Some(TuffType::Bool)));
+    }
 
     // Check if this is a simple identifier (variable name).
     if !token.is_empty()
@@ -144,7 +153,7 @@ fn parse_token(
         // Fall through to parse_value for unknown tokens.
     }
 
-    parse_value(token, context)
+    parse_value(token, _context)
 }
 
 /// Check if a character is an opening grouping delimiter (`(` or `{`).
@@ -253,6 +262,89 @@ fn find_operator_at_depth(
     best_pos.map(|pos| (pos, best_op))
 }
 
+/// Find the last occurrence of a two-character operator (e.g., "||" or "&&") at grouping depth 0.
+fn find_binary_operator_at_depth(s: &str, ch: char) -> Option<usize> {
+    let mut best_pos = None;
+    let chars: Vec<char> = s.chars().collect();
+    let mut depth = 0i32;
+
+    for i in 0..chars.len() {
+        if is_opening(chars[i]) {
+            depth += 1;
+        } else if is_closing(chars[i]) {
+            depth -= 1;
+        }
+
+        // Look for two identical chars (e.g., "||" or "&&") at depth 0.
+        if depth == 0 && chars[i] == ch && i + 1 < chars.len() && chars[i + 1] == ch {
+            best_pos = Some(i);
+        }
+    }
+
+    best_pos
+}
+
+/// Find the last occurrence of a comparison operator at grouping depth 0.
+/// Checks two-char operators first (<=, >=, ==, !=), then single-char (<, >).
+fn find_comparison_at_depth(s: &str) -> Option<(usize, usize)> {
+    let chars: Vec<char> = s.chars().collect();
+    let mut depth = 0i32;
+
+    // Track best positions for two-char and single-char operators separately.
+    let mut best_two_char: Option<usize> = None;
+    let mut best_single_char: Option<usize> = None;
+
+    for i in 0..chars.len() {
+        if is_opening(chars[i]) {
+            depth += 1;
+        } else if is_closing(chars[i]) {
+            depth -= 1;
+        }
+
+        // Only consider operators at depth 0.
+        if depth != 0 {
+            continue;
+        }
+
+        // Check two-char comparison operators: <=, >=, ==, !=
+        if i + 1 < chars.len() && matches!(chars[i], '<' | '>' | '=' | '!') {
+            let pair = format!("{}{}", chars[i], chars[i + 1]);
+            if ["<=", ">=", "==", "!="].contains(&pair.as_str()) {
+                best_two_char = Some(i);
+                continue;
+            }
+        }
+
+        // Check single-char comparison operators: <, > (skip if part of two-char)
+        if matches!(chars[i], '<' | '>') {
+            let next_is_eq = i + 1 < chars.len() && chars[i + 1] == '=';
+            if !next_is_eq {
+                best_single_char = Some(i);
+            }
+        }
+    }
+
+    // Prefer two-char operator; fall back to single-char.
+    best_two_char
+        .map(|pos| (pos, 2))
+        .or_else(|| best_single_char.map(|pos| (pos, 1)))
+}
+
+/// Evaluate a logical binary operator (OR/AND or comparison) on two sub-expressions.
+fn evaluate_logical_op<F>(
+    left_str: &str,
+    right_str: &str,
+    scope: &Scope,
+    op: F,
+) -> Result<(i32, TuffType), String>
+where
+    F: Fn(i32, i32) -> bool,
+{
+    let (left_val, _) = execute_tuff_with_scope(left_str, scope)?;
+    let (right_val, _) = execute_tuff_with_scope(right_str, scope)?;
+    Ok((if op(left_val, right_val) { 1 } else { 0 }, TuffType::Bool))
+}
+
 /// Widen two types to the larger of the two.
 fn widen_types(left: Option<TuffType>, right: Option<TuffType>) -> TuffType {
     match (left, right) {
@@ -289,6 +381,36 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<(i32, TuffType)
             return evaluate_block(inner, scope);
         }
         return execute_tuff_with_scope(inner, scope);
+    }
+
+    // Check for logical OR (||) operator at depth 0.
+    if let Some(pos) = find_binary_operator_at_depth(trimmed, '|') {
+        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + 2..], scope, |l, r| {
+            l != 0 || r != 0
+        });
+    }
+
+    // Check for logical AND (&&) operator at depth 0.
+    if let Some(pos) = find_binary_operator_at_depth(trimmed, '&') {
+        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + 2..], scope, |l, r| {
+            l != 0 && r != 0
+        });
+    }
+
+    // Check for comparison operators at depth 0: <= >= == != < >.
+    if let Some((pos, width)) = find_comparison_at_depth(trimmed) {
+        let op_str = &trimmed[pos..pos + width];
+        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + width..], scope, |l, r| {
+            match op_str {
+                "<=" => l <= r,
+                ">=" => l >= r,
+                "==" => l == r,
+                "!=" => l != r,
+                "<" => l < r,
+                ">" => l > r,
+                _ => unreachable!(),
+            }
+        });
     }
 
     // Find operators not inside groups, respecting precedence: * and / before + and -.
@@ -433,6 +555,7 @@ fn parse_type_annotation(s: &str) -> Option<TuffType> {
         "I8" => Some(TuffType::I8),
         "I16" => Some(TuffType::I16),
         "I32" => Some(TuffType::I32),
+        "BOOL" => Some(TuffType::Bool),
         _ => None,
     }
 }
@@ -514,8 +637,14 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
             let expr_str = &assign_str[eq_pos + 1..];
             let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope)?;
 
-            // Preserve original variable type on assignment.
+            // Check type compatibility and preserve original variable type on assignment.
             if let Some(&(_, orig_ty)) = scope.get(&name) {
+                if orig_ty != inferred_ty && inferred_ty.bits() > orig_ty.bits() {
+                    return Err(format!(
+                        "type mismatch: expected {:?}, found {:?}",
+                        orig_ty, inferred_ty
+                    ));
+                }
                 scope.insert(name, (value, orig_ty));
             } else {
                 scope.insert(name, (value, inferred_ty));
@@ -989,5 +1118,41 @@ mod tests {
     #[test]
     fn test_execute_tuff_invalid_let_no_equals() {
         assert!(execute_tuff("let x : U8").is_err());
+    }
+
+    // Mut variable reassignment with type mismatch should error
+    #[test]
+    fn test_execute_tuff_mut_reassign_type_mismatch_error() {
+        assert!(execute_tuff("let mut x = 0U8; x = 100U16; x").is_err());
+    }
+
+    // Bool type with true literal returns 1
+    #[test]
+    fn test_execute_tuff_bool_true_returns_one() {
+        assert_eq!(execute_tuff("let x : Bool = true; x"), Ok(1));
+    }
+
+    // Logical OR operator with boolean variables
+    #[test]
+    fn test_execute_tuff_logical_or_with_variables() {
+        assert_eq!(execute_tuff("let x = true; let y = false; x || y"), Ok(1));
+    }
+
+    // Logical AND operator with boolean variables
+    #[test]
+    fn test_execute_tuff_logical_and_with_variables() {
+        assert_eq!(execute_tuff("let x = true; let y = false; x && y"), Ok(0));
+    }
+
+    // Default numeric type is I32 for untyped literals
+    #[test]
+    fn test_execute_tuff_default_numeric_type_i32() {
+        assert_eq!(execute_tuff("let x = 100; x"), Ok(100));
+    }
+
+    // Comparison operator: less than returns Bool (1 for true)
+    #[test]
+    fn test_execute_tuff_comparison_less_than_true() {
+        assert_eq!(execute_tuff("let x = 0; let y = 1; x < y"), Ok(1));
     }
 }
