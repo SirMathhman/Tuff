@@ -363,6 +363,31 @@ fn widen_types(left: Option<TuffType>, right: Option<TuffType>) -> TuffType {
     }
 }
 
+/// Extract the content between matching parentheses starting at position `start` in `s`.
+/// Returns (condition_string, offset_of_char_after_closing_paren).
+fn extract_paren_condition(s: &str, start: usize) -> Option<(&str, usize)> {
+    let inner = &s[start..];
+    if !inner.starts_with('(') {
+        return None;
+    }
+
+    // Walk past the opening '(' and find matching ')'.
+    let after_open = &inner[1..];
+    let mut depth = 1i32;
+    for (i, ch) in after_open.char_indices() {
+        if ch == '(' {
+            depth += 1;
+        } else if ch == ')' {
+            depth -= 1;
+        }
+        if depth == 0 {
+            return Some((&after_open[..i], start + 1 + i + 1));
+        }
+    }
+
+    None
+}
+
 /// Parse an `if (...) ... else ...` expression and return the condition, then-branch, and else-branch strings.
 fn parse_if_expression(s: &str) -> Option<(&str, &str, &str)> {
     // Must start with "if" at depth 0.
@@ -374,31 +399,12 @@ fn parse_if_expression(s: &str) -> Option<(&str, &str, &str)> {
     // Find the opening '(' after "if".
     let after_if = &s[2..];
     let trimmed_after = after_if.trim_start();
-    if !trimmed_after.starts_with('(') {
-        return None;
-    }
 
     // Extract condition between matching parens.
-    let inner = &trimmed_after[1..];
-    let mut depth = 1i32;
-    let mut cond_end = None;
-    for (i, ch) in inner.char_indices() {
-        if ch == '(' {
-            depth += 1;
-        } else if ch == ')' {
-            depth -= 1;
-        }
-        if depth == 0 {
-            cond_end = Some(i);
-            break;
-        }
-    }
-
-    let cond_end = cond_end?;
-    let condition = &inner[..cond_end];
+    let (condition, after_paren_offset) = extract_paren_condition(trimmed_after, 0)?;
 
     // After closing paren, find "else" at depth 0.
-    let after_paren = &trimmed_after[1 + cond_end + 1..];
+    let after_paren = &trimmed_after[after_paren_offset..];
     let mut else_pos: Option<usize> = None;
     let mut scan_depth = 0i32;
     for (i, ch) in after_paren.char_indices() {
@@ -639,8 +645,44 @@ fn parse_type_annotation(s: &str) -> Option<TuffType> {
     }
 }
 
+/// Parse a `while (...) ...` loop and return the condition string and body string.
+fn parse_while_loop(s: &str) -> Option<(&str, &str)> {
+    let chars: Vec<char> = s.chars().collect();
+    if !s.starts_with("while") || (chars.len() > 5 && !chars[5].is_whitespace()) {
+        return None;
+    }
+
+    // Find the opening '(' after "while".
+    let after_while = &s[5..];
+    let trimmed_after = after_while.trim_start();
+
+    // Extract condition between matching parens.
+    let (condition, body_offset) = extract_paren_condition(trimmed_after, 0)?;
+    let body = trimmed_after[body_offset..].trim();
+
+    if !body.is_empty() {
+        Some((condition, body))
+    } else {
+        None
+    }
+}
+
 /// Evaluate a single statement (currently only `let` bindings and assignments).
 fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
+    // Match pattern: let [mut] name [: Type] = expr
+    if stmt.starts_with("while ") || stmt.starts_with("While ") {
+        if let Some((cond_str, body_str)) = parse_while_loop(stmt.trim()) {
+            loop {
+                let (cond_val, _) = execute_tuff_with_scope(cond_str, scope)?;
+                if cond_val == 0 {
+                    break;
+                }
+                evaluate_statement(body_str, scope)?;
+            }
+            return Ok(());
+        }
+    }
+
     // Match pattern: let [mut] name [: Type] = expr
     if stmt.starts_with("let ") || stmt.starts_with("Let ") {
         let rest = &stmt[4..].trim_start();
@@ -1302,5 +1344,14 @@ mod tests {
     #[test]
     fn test_execute_tuff_compound_assignment_add() {
         assert_eq!(execute_tuff("let mut x = 0; x += 1; x"), Ok(1));
+    }
+
+    // While loop with comparison condition and compound assignment
+    #[test]
+    fn test_execute_tuff_while_loop() {
+        assert_eq!(
+            execute_tuff("let mut x = 0; while (x < 4) x += 1; x"),
+            Ok(4)
+        );
     }
 }
