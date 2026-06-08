@@ -27,6 +27,9 @@ impl TuffType {
 /// Variable scope for let bindings within blocks, storing both value and type.
 type Scope = HashMap<String, (i32, TuffType)>;
 
+/// Function scope — maps function names to their return type and body expression string.
+type FnScope = HashMap<String, (TuffType, String)>;
+
 #[cfg(not(coverage))]
 fn main() {
     let stdin = io::stdin();
@@ -43,7 +46,8 @@ fn main() {
                     continue;
                 }
                 let scope: Scope = HashMap::new();
-                match execute_tuff_with_scope(trimmed, &scope) {
+                let fn_scope: FnScope = HashMap::new();
+                match execute_tuff_with_scope(trimmed, &scope, &fn_scope) {
                     Ok((value, _ty)) => println!("{}", value),
                     Err(e) => eprintln!("Error: {}", e),
                 }
@@ -339,14 +343,54 @@ fn evaluate_logical_op<F>(
     left_str: &str,
     right_str: &str,
     scope: &Scope,
+    fn_scope: &FnScope,
     op: F,
 ) -> Result<(i32, TuffType), String>
 where
     F: Fn(i32, i32) -> bool,
 {
-    let (left_val, _) = execute_tuff_with_scope(left_str, scope)?;
-    let (right_val, _) = execute_tuff_with_scope(right_str, scope)?;
+    let (left_val, _) = execute_tuff_with_scope(left_str, scope, fn_scope)?;
+    let (right_val, _) = execute_tuff_with_scope(right_str, scope, fn_scope)?;
     Ok((if op(left_val, right_val) { 1 } else { 0 }, TuffType::Bool))
+}
+
+/// Parse a function call expression like `name()` and return (function_name, arguments_string).
+fn parse_function_call(s: &str) -> Option<(String, String)> {
+    let paren_pos = s.find('(')?;
+    // Function name must be an identifier.
+    let fn_name = s[..paren_pos].trim().to_string();
+    if !fn_name.is_empty()
+        && fn_name.chars().next().map_or(false, |c| c.is_alphabetic() || c == '_')
+    {
+        // Find matching closing paren.
+        let after_paren = &s[paren_pos + 1..];
+        if let Some(closing) = find_matching_closing(after_paren, '(') {
+            let args_str = after_paren[..closing].to_string();
+            return Some((fn_name, args_str));
+        }
+    }
+    None
+}
+
+/// Find the position of the matching closing delimiter for an opening one.
+fn find_matching_closing(s: &str, open_char: char) -> Option<usize> {
+    let close_char = match open_char {
+        '(' => ')',
+        '{' => '}',
+        _ => return None,
+    };
+    let mut depth = 1i32;
+    for (i, ch) in s.char_indices() {
+        if ch == open_char {
+            depth += 1;
+        } else if ch == close_char {
+            depth -= 1;
+        }
+        if depth == 0 {
+            return Some(i);
+        }
+    }
+    None
 }
 
 /// Widen two types to the larger of the two.
@@ -443,7 +487,7 @@ fn parse_if_expression(s: &str) -> Option<(&str, &str, &str)> {
 }
 
 /// Evaluate a Tuff expression with variable scope support, returning (value, inferred_type).
-fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<(i32, TuffType), String> {
+fn execute_tuff_with_scope(input: &str, scope: &Scope, fn_scope: &FnScope) -> Result<(i32, TuffType), String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Ok((0, TuffType::I32));
@@ -457,31 +501,38 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<(i32, TuffType)
                 || inner.trim().starts_with("let ")
                 || inner.trim().starts_with("Let "))
         {
-            return evaluate_block(inner, scope);
+            return evaluate_block(inner, scope, fn_scope);
         }
-        return execute_tuff_with_scope(inner, scope);
+        return execute_tuff_with_scope(inner, scope, fn_scope);
+    }
+
+    // Check for function call: name(...)
+    if let Some((fn_name, args_str)) = parse_function_call(trimmed) {
+        if let Some(&(ret_ty, ref body)) = fn_scope.get(&fn_name) {
+            return execute_tuff_with_scope(body, scope, fn_scope).map(|(v, _)| (v, ret_ty));
+        }
     }
 
     // Check for if (...) ... else ... expression.
     if let Some((cond_str, then_str, else_str)) = parse_if_expression(trimmed) {
-        let (cond_val, _) = execute_tuff_with_scope(cond_str, scope)?;
+        let (cond_val, _) = execute_tuff_with_scope(cond_str, scope, fn_scope)?;
         return if cond_val != 0 {
-            execute_tuff_with_scope(then_str, scope)
+            execute_tuff_with_scope(then_str, scope, fn_scope)
         } else {
-            execute_tuff_with_scope(else_str, scope)
+            execute_tuff_with_scope(else_str, scope, fn_scope)
         };
     }
 
     // Check for logical OR (||) operator at depth 0.
     if let Some(pos) = find_binary_operator_at_depth(trimmed, '|') {
-        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + 2..], scope, |l, r| {
+        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + 2..], scope, fn_scope, |l, r| {
             l != 0 || r != 0
         });
     }
 
     // Check for logical AND (&&) operator at depth 0.
     if let Some(pos) = find_binary_operator_at_depth(trimmed, '&') {
-        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + 2..], scope, |l, r| {
+        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + 2..], scope, fn_scope, |l, r| {
             l != 0 && r != 0
         });
     }
@@ -489,7 +540,7 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<(i32, TuffType)
     // Check for comparison operators at depth 0: <= >= == != < >.
     if let Some((pos, width)) = find_comparison_at_depth(trimmed) {
         let op_str = &trimmed[pos..pos + width];
-        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + width..], scope, |l, r| {
+        return evaluate_logical_op(&trimmed[..pos], &trimmed[pos + width..], scope, fn_scope, |l, r| {
             match op_str {
                 "<=" => l <= r,
                 ">=" => l >= r,
@@ -514,8 +565,8 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<(i32, TuffType)
         let left_str = &trimmed[..pos];
         let right_str = &trimmed[pos + 1..];
 
-        let (left_val, left_ty) = execute_tuff_with_scope(left_str, scope)?;
-        let (right_val, right_ty) = execute_tuff_with_scope(right_str, scope)?;
+        let (left_val, left_ty) = execute_tuff_with_scope(left_str, scope, fn_scope)?;
+        let (right_val, right_ty) = execute_tuff_with_scope(right_str, scope, fn_scope)?;
 
         // Widen to the larger type.
         let result_ty = widen_types(Some(left_ty), Some(right_ty));
@@ -541,8 +592,11 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<(i32, TuffType)
 }
 
 /// Evaluate a brace block with semicolon-separated statements, returning (value, inferred_type).
-fn evaluate_block(inner: &str, parent_scope: &Scope) -> Result<(i32, TuffType), String> {
+fn evaluate_block(inner: &str, parent_scope: &Scope, fn_scope: &FnScope) -> Result<(i32, TuffType), String> {
     let mut scope = parent_scope.clone();
+    // Merge inherited functions with any new ones defined in this block.
+    let mut local_fn_scope = fn_scope.clone();
+
     // Split by semicolons first.
     let raw_parts = split_by_semicolons(inner);
 
@@ -552,7 +606,13 @@ fn evaluate_block(inner: &str, parent_scope: &Scope) -> Result<(i32, TuffType), 
 
     // Evaluate all but the last part as statements (let bindings).
     for stmt in &raw_parts[..raw_parts.len() - 1] {
-        evaluate_statement(stmt.trim(), &mut scope)?;
+        let trimmed = stmt.trim();
+        // Handle function definitions.
+        if let Some((name, ret_ty, body)) = parse_fn_definition(trimmed) {
+            local_fn_scope.insert(name, (ret_ty, body));
+            continue;
+        }
+        evaluate_statement(trimmed, &mut scope, &local_fn_scope)?;
     }
 
     // The last expression may contain adjacent expressions at depth 0 (e.g., "{ ... } y").
@@ -563,18 +623,18 @@ fn evaluate_block(inner: &str, parent_scope: &Scope) -> Result<(i32, TuffType), 
     if split_final.len() == 1 {
         let trimmed = split_final[0].trim();
         if trimmed.starts_with("let ") || trimmed.starts_with("Let ") {
-            evaluate_statement(trimmed, &mut scope)?;
+            evaluate_statement(trimmed, &mut scope, &local_fn_scope)?;
             return Ok((0, TuffType::I32));
         }
     }
 
     // Evaluate all but the very last as statements.
     for stmt in &split_final[..split_final.len() - 1] {
-        evaluate_statement(stmt.trim(), &mut scope)?;
+        evaluate_statement(stmt.trim(), &mut scope, &local_fn_scope)?;
     }
 
     // The final expression determines the block's value and type.
-    execute_tuff_with_scope(split_final.last().unwrap().trim(), &scope)
+    execute_tuff_with_scope(split_final.last().unwrap().trim(), &scope, &local_fn_scope)
 }
 
 /// Split a part that contains adjacent expressions at depth 0 (e.g., "{ ... } y").
@@ -672,6 +732,47 @@ fn parse_while_loop(s: &str) -> Option<(&str, &str)> {
 }
 
 /// Parse a `for (var in start..end) ...` loop and return var name, range bounds, and body string.
+/** Parse a `fn name() : Type => expr` statement.
+    Returns (name, return_type, body_expression).
+*/
+fn parse_fn_definition(s: &str) -> Option<(String, TuffType, String)> {
+    let trimmed = s.trim();
+    if !trimmed.starts_with("fn ") && !trimmed.starts_with("Fn ") {
+        return None;
+    }
+
+    // Skip "fn" and whitespace.
+    let after_fn = &trimmed[2..].trim_start();
+
+    // Extract function name (up to '(').
+    let name_end = after_fn.find('(')?;
+    let name = after_fn[..name_end].trim().to_string();
+
+    // Find ")" matching the opening paren.
+    let after_name_paren = &after_fn[name_end + 1..];
+    let closing_paren = after_name_paren.find(')')?;
+
+    // After ')' expect optional " : Type => body" or just " => body".
+    let rest = after_name_paren[closing_paren + 1..].trim_start();
+
+    // Skip optional ": Type".
+    let (type_str, body_rest) = if rest.starts_with(':') {
+        let colon_rest = &rest[1..];
+        let type_annotation = parse_type_annotation(colon_rest);
+        let after_type = skip_type(colon_rest);
+        (type_annotation.unwrap_or(TuffType::I32), after_type)
+    } else {
+        (TuffType::I32, rest)
+    };
+
+    // Expect "=>".
+    if !body_rest.starts_with("=>") {
+        return None;
+    }
+    let body = &body_rest[2..].trim_start();
+    Some((name, type_str, body.to_string()))
+}
+
 fn parse_for_loop(s: &str) -> Option<(String, String, String, String)> {
     let chars: Vec<char> = s.chars().collect();
     if !s.starts_with("for") || (chars.len() > 3 && !chars[3].is_whitespace()) {
@@ -712,16 +813,16 @@ fn parse_for_loop(s: &str) -> Option<(String, String, String, String)> {
 }
 
 /// Evaluate a single statement (currently only `let` bindings and assignments).
-fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
+fn evaluate_statement(stmt: &str, scope: &mut Scope, fn_scope: &FnScope) -> Result<(), String> {
     // Match for loop: for (var in start..end) body
     if stmt.starts_with("for ") || stmt.starts_with("For ") {
         if let Some((var_name, start_str, end_str, body)) = parse_for_loop(stmt.trim()) {
-            let (start_val, _) = execute_tuff_with_scope(&start_str, scope)?;
-            let (end_val, _) = execute_tuff_with_scope(&end_str, scope)?;
+            let (start_val, _) = execute_tuff_with_scope(&start_str, scope, fn_scope)?;
+            let (end_val, _) = execute_tuff_with_scope(&end_str, scope, fn_scope)?;
 
             for i in start_val..end_val {
                 scope.insert(var_name.clone(), (i, TuffType::I32));
-                evaluate_statement(&body, scope)?;
+                evaluate_statement(&body, scope, fn_scope)?;
             }
             return Ok(());
         }
@@ -731,11 +832,11 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
     if stmt.starts_with("while ") || stmt.starts_with("While ") {
         if let Some((cond_str, body_str)) = parse_while_loop(stmt.trim()) {
             loop {
-                let (cond_val, _) = execute_tuff_with_scope(cond_str, scope)?;
+                let (cond_val, _) = execute_tuff_with_scope(cond_str, scope, fn_scope)?;
                 if cond_val == 0 {
                     break;
                 }
-                evaluate_statement(body_str, scope)?;
+                evaluate_statement(body_str, scope, fn_scope)?;
             }
             return Ok(());
         }
@@ -770,7 +871,7 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
                 match eq_start.find('=') {
                     Some(eq_pos) => {
                         let expr_str = &eq_start[eq_pos + 1..];
-                        let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope)?;
+                        let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope, fn_scope)?;
 
                         // If declared type is known and differs from inferred type, error.
                         if let Some(dty) = declared_ty {
@@ -795,7 +896,7 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
                         let name = after_let[..eq_pos].trim().to_string();
 
                         let expr_str = &after_let[eq_pos + 1..];
-                        let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope)?;
+                        let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope, fn_scope)?;
 
                         if is_mut && !scope.contains_key(&name) {
                             scope.insert(name.clone(), (0, inferred_ty)); // Initialize mutable var.
@@ -827,7 +928,7 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
             };
 
             let expr_str = &assign_str[expr_start_offset..];
-            let (rhs_value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope)?;
+            let (rhs_value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope, fn_scope)?;
 
             // Compute final value based on operator.
             let final_value = match op {
@@ -864,7 +965,7 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
         }
 
         // Bare expression statement — evaluate and discard result.
-        let _ = execute_tuff_with_scope(stmt.trim(), scope)?;
+        let _ = execute_tuff_with_scope(stmt.trim(), scope, fn_scope)?;
         Ok(())
     }
 }
@@ -960,13 +1061,14 @@ fn validate_type(value: i32, is_unsigned: bool, bits: u32) -> Result<(), String>
 /// Public entry point — evaluates an expression with an empty scope.
 pub fn execute_tuff(input: &str) -> Result<i32, String> {
     let scope: Scope = HashMap::new();
+    let fn_scope: FnScope = HashMap::new();
 
     // If input contains top-level semicolons (not inside any grouping), treat it as a script/block.
     if has_top_level_semicolon(input.trim()) && !input.trim().starts_with('{') {
-        return execute_tuff_with_scope(&format!("{{{}}}", input), &scope).map(|(v, _)| v);
+        return execute_tuff_with_scope(&format!("{{{}}}", input), &scope, &fn_scope).map(|(v, _)| v);
     }
 
-    execute_tuff_with_scope(input, &scope).map(|(v, _)| v)
+    execute_tuff_with_scope(input, &scope, &fn_scope).map(|(v, _)| v)
 }
 
 /// Check if the string contains a semicolon at depth 0 (outside all grouping delimiters).
@@ -1420,5 +1522,11 @@ mod tests {
             execute_tuff("let mut sum = 0; for (i in 0..4) sum += i; sum"),
             Ok(6)
         );
+    }
+
+    // Function definition with return type and call
+    #[test]
+    fn test_execute_tuff_function_definition_and_call() {
+        assert_eq!(execute_tuff("fn get() : I32 => 100; get()"), Ok(100));
     }
 }
