@@ -363,6 +363,75 @@ fn widen_types(left: Option<TuffType>, right: Option<TuffType>) -> TuffType {
     }
 }
 
+/// Parse an `if (...) ... else ...` expression and return the condition, then-branch, and else-branch strings.
+fn parse_if_expression(s: &str) -> Option<(&str, &str, &str)> {
+    // Must start with "if" at depth 0.
+    let chars: Vec<char> = s.chars().collect();
+    if !s.starts_with("if") || (chars.len() > 2 && !chars[2].is_whitespace()) {
+        return None;
+    }
+
+    // Find the opening '(' after "if".
+    let after_if = &s[2..];
+    let trimmed_after = after_if.trim_start();
+    if !trimmed_after.starts_with('(') {
+        return None;
+    }
+
+    // Extract condition between matching parens.
+    let inner = &trimmed_after[1..];
+    let mut depth = 1i32;
+    let mut cond_end = None;
+    for (i, ch) in inner.char_indices() {
+        if ch == '(' {
+            depth += 1;
+        } else if ch == ')' {
+            depth -= 1;
+        }
+        if depth == 0 {
+            cond_end = Some(i);
+            break;
+        }
+    }
+
+    let cond_end = cond_end?;
+    let condition = &inner[..cond_end];
+
+    // After closing paren, find "else" at depth 0.
+    let after_paren = &trimmed_after[1 + cond_end + 1..];
+    let mut else_pos: Option<usize> = None;
+    let mut scan_depth = 0i32;
+    for (i, ch) in after_paren.char_indices() {
+        if ch == '(' || ch == '{' {
+            scan_depth += 1;
+        } else if (ch == ')' || ch == '}') && scan_depth > 0 {
+            scan_depth -= 1;
+        }
+
+        // Look for "else" keyword at depth 0.
+        if scan_depth == 0 && after_paren[i..].starts_with("else") {
+            let next_char = after_paren.chars().nth(i + 4);
+            match next_char {
+                None => {
+                    else_pos = Some(i);
+                    break;
+                }
+                Some(c) if !c.is_alphanumeric() && c != '_' => {
+                    else_pos = Some(i);
+                    break;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let pos = else_pos?;
+    let then_branch = &after_paren[..pos];
+    let else_branch = &after_paren[pos + 4..];
+
+    Some((condition, then_branch.trim(), else_branch.trim()))
+}
+
 /// Evaluate a Tuff expression with variable scope support, returning (value, inferred_type).
 fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<(i32, TuffType), String> {
     let trimmed = input.trim();
@@ -381,6 +450,16 @@ fn execute_tuff_with_scope(input: &str, scope: &Scope) -> Result<(i32, TuffType)
             return evaluate_block(inner, scope);
         }
         return execute_tuff_with_scope(inner, scope);
+    }
+
+    // Check for if (...) ... else ... expression.
+    if let Some((cond_str, then_str, else_str)) = parse_if_expression(trimmed) {
+        let (cond_val, _) = execute_tuff_with_scope(cond_str, scope)?;
+        return if cond_val != 0 {
+            execute_tuff_with_scope(then_str, scope)
+        } else {
+            execute_tuff_with_scope(else_str, scope)
+        };
     }
 
     // Check for logical OR (||) operator at depth 0.
@@ -630,12 +709,44 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
             }
         }
     } else {
-        // Check for simple assignment: name = expr.
-        if let Some(eq_pos) = find_assignment(stmt.trim(), scope) {
+        // Check for assignment: name = expr or compound += / -=.
+        if let Some((eq_pos, op)) = find_assignment(stmt.trim(), scope) {
             let assign_str = stmt.trim();
-            let name = assign_str[..eq_pos].trim().to_string();
-            let expr_str = &assign_str[eq_pos + 1..];
-            let (value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope)?;
+
+            // For compound operators, the variable name is before the operator char (e.g., "x" in "x +=").
+            let (name_start_offset, expr_start_offset) = match op {
+                AssignmentOp::Simple => (0, eq_pos + 1),
+                _ => (0, eq_pos + 1),
+            };
+
+            // Extract variable name (skip compound operator char if present).
+            let raw_name = assign_str[..eq_pos].trim();
+            let name = match op {
+                AssignmentOp::Simple => raw_name.to_string(),
+                _ => raw_name[..raw_name.len() - 1].trim().to_string(),
+            };
+
+            let expr_str = &assign_str[expr_start_offset..];
+            let (rhs_value, inferred_ty) = execute_tuff_with_scope(expr_str.trim(), scope)?;
+
+            // Compute final value based on operator.
+            let final_value = match op {
+                AssignmentOp::Simple => rhs_value,
+                AssignmentOp::Add => {
+                    if let Some(&(lhs_val, _)) = scope.get(&name) {
+                        lhs_val + rhs_value
+                    } else {
+                        rhs_value
+                    }
+                }
+                AssignmentOp::Sub => {
+                    if let Some(&(lhs_val, _)) = scope.get(&name) {
+                        lhs_val - rhs_value
+                    } else {
+                        -rhs_value
+                    }
+                }
+            };
 
             // Check type compatibility and preserve original variable type on assignment.
             if let Some(&(_, orig_ty)) = scope.get(&name) {
@@ -645,9 +756,9 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
                         orig_ty, inferred_ty
                     ));
                 }
-                scope.insert(name, (value, orig_ty));
+                scope.insert(name, (final_value, orig_ty));
             } else {
-                scope.insert(name, (value, inferred_ty));
+                scope.insert(name, (final_value, inferred_ty));
             }
             return Ok(());
         }
@@ -658,22 +769,47 @@ fn evaluate_statement(stmt: &str, scope: &mut Scope) -> Result<(), String> {
     }
 }
 
+/// Represents an assignment operator found in a statement.
+#[derive(Debug, Clone, Copy)]
+enum AssignmentOp {
+    Simple, // =
+    Add,    // +=
+    Sub,    // -=
+}
+
 /// Find an assignment operator at depth 0 that targets a known variable in scope.
-fn find_assignment(s: &str, scope: &Scope) -> Option<usize> {
+/// Returns the position of '=' and whether it's a compound operator (+= or -=).
+fn find_assignment(s: &str, scope: &Scope) -> Option<(usize, AssignmentOp)> {
     let mut best_pos = None;
 
     track_depth(s, |i, ch, depth| {
         if ch == '=' && depth == 0 {
-            // Check that the left side is a valid identifier in scope.
-            let left = s[..i].trim();
-            if !left.is_empty()
-                && left
+            // Determine operator type by looking at char before '='.
+            let op: AssignmentOp = if i > 0 {
+                match s.as_bytes()[i - 1] {
+                    b'+' => AssignmentOp::Add,
+                    b'-' => AssignmentOp::Sub,
+                    _ => AssignmentOp::Simple,
+                }
+            } else {
+                AssignmentOp::Simple
+            };
+
+            // For compound operators, strip the operator char from left side before checking scope.
+            let raw_left = s[..i].trim();
+            let var_name = match op {
+                AssignmentOp::Simple => raw_left.to_string(),
+                _ => raw_left[..raw_left.len() - 1].trim().to_string(),
+            };
+
+            if !var_name.is_empty()
+                && var_name
                     .chars()
                     .next()
                     .map_or(false, |c| c.is_alphabetic() || c == '_')
-                && scope.contains_key(left)
+                && scope.contains_key(&var_name)
             {
-                best_pos = Some(i);
+                best_pos = Some((i, op));
             }
         }
     });
@@ -1154,5 +1290,17 @@ mod tests {
     #[test]
     fn test_execute_tuff_comparison_less_than_true() {
         assert_eq!(execute_tuff("let x = 0; let y = 1; x < y"), Ok(1));
+    }
+
+    // If/else expression with comparison condition
+    #[test]
+    fn test_execute_tuff_if_else_expression() {
+        assert_eq!(execute_tuff("let x = if (3 < 5) 2 else 4; x"), Ok(2));
+    }
+
+    // Compound assignment operator += on mutable variable
+    #[test]
+    fn test_execute_tuff_compound_assignment_add() {
+        assert_eq!(execute_tuff("let mut x = 0; x += 1; x"), Ok(1));
     }
 }
