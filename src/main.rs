@@ -6,6 +6,8 @@ enum Token {
     Minus,
     Multiply,
     Divide,
+    LParen,
+    RParen,
     Eof,
 }
 
@@ -47,6 +49,14 @@ fn tokenize(input: &str) -> Result<Vec<Token>, String> {
                     chars.next();
                     tokens.push(Token::Divide);
                 }
+                '(' => {
+                    chars.next();
+                    tokens.push(Token::LParen);
+                }
+                ')' => {
+                    chars.next();
+                    tokens.push(Token::RParen);
+                }
                 _ => return Err(format!("unexpected character: '{}'", c)),
             }
         }
@@ -57,9 +67,9 @@ fn tokenize(input: &str) -> Result<Vec<Token>, String> {
 
 /// Recursive descent parser/evaluator.
 /// Grammar:
-///   expr  -> term (('+' | '-') term)*
-///   term  -> number (('*' | '/') number)*
-///   number -> INTEGER
+///   expr     -> term (('+' | '-') term)*
+///   term     -> primary (('*' | '/') primary)*
+///   primary  -> NUMBER | '(' expr ')'
 struct Parser {
     tokens: Vec<Token>,
     pos: usize,
@@ -95,12 +105,12 @@ impl Parser {
         Ok(result)
     }
 
-    /// term -> number (('*' | '/') number)*
+    /// term -> primary (('*' | '/') primary)*
     fn parse_term(&mut self) -> Result<i64, String> {
-        let mut result = self.parse_number()?;
+        let mut result = self.parse_primary()?;
         while matches!(self.peek(), Token::Multiply | Token::Divide) {
             let op = self.consume();
-            let rhs = self.parse_number()?;
+            let rhs = self.parse_primary()?;
             match op {
                 Token::Multiply => result *= rhs,
                 Token::Divide => {
@@ -115,14 +125,25 @@ impl Parser {
         Ok(result)
     }
 
-    /// number -> INTEGER
-    fn parse_number(&mut self) -> Result<i64, String> {
+    /// primary -> NUMBER | '(' expr ')'
+    fn parse_primary(&mut self) -> Result<i64, String> {
         match self.peek().clone() {
             Token::Number(n) => {
                 self.consume();
                 Ok(n)
             }
-            other => Err(format!("expected number, got {:?}", other)),
+            Token::LParen => {
+                self.consume(); // consume '('
+                let result = self.parse_expr()?;
+                match self.peek().clone() {
+                    Token::RParen => {
+                        self.consume(); // consume ')'
+                        Ok(result)
+                    }
+                    other => Err(format!("expected ')', got {:?}", other)),
+                }
+            }
+            other => Err(format!("expected primary, got {:?}", other)),
         }
     }
 }
@@ -246,7 +267,12 @@ mod tests {
 
     #[test]
     fn test_operator_without_operand() {
-        // Triggers parse_number error path (operator where number expected)
+        // Triggers parse_primary error path (operator where primary expected)
         assert!(interpret_tuff("+ 5").is_err());
+    }
+
+    #[test]
+    fn test_parenthesized_expression() {
+        assert_eq!(interpret_tuff("(3 + 4) * 2").unwrap(), 14);
     }
 }
