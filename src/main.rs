@@ -137,8 +137,10 @@ fn interpret_tuff(input: &str) -> Result<i64, String> {
     parser.parse_expr()
 }
 
+#[cfg(not(test))]
 use std::io::{self, Write};
 
+#[cfg(not(test))]
 fn main() {
     println!("Welcome to Tuff REPL! Type an expression or 'quit' to exit.");
     loop {
@@ -189,7 +191,62 @@ mod tests {
     }
 
     #[test]
+    fn test_chained_addition() {
+        assert_eq!(interpret_tuff("1 + 2 + 3").unwrap(), 6);
+    }
+
+    #[test]
+    fn test_subtraction() {
+        assert_eq!(interpret_tuff("5 - 3").unwrap(), 2);
+    }
+
+    #[test]
+    fn test_chained_subtraction() {
+        assert_eq!(interpret_tuff("10 - 4 - 2").unwrap(), 4);
+    }
+
+    #[test]
+    fn test_multiplication() {
+        assert_eq!(interpret_tuff("3 * 4").unwrap(), 12);
+    }
+
+    #[test]
+    fn test_division() {
+        assert_eq!(interpret_tuff("10 / 2").unwrap(), 5);
+    }
+
+    #[test]
+    fn test_mixed_precedence() {
+        // multiplication before addition: 1 + 2 * 3 = 7, not 9
+        assert_eq!(interpret_tuff("1 + 2 * 3").unwrap(), 7);
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        // (left-to-right within same precedence)
+        assert_eq!(interpret_tuff("2 * 3 + 4 / 2 - 1").unwrap(), 7);
+    }
+
+    #[test]
+    fn test_division_by_zero() {
+        let err = interpret_tuff("5 / 0").unwrap_err();
+        assert_eq!(err, "division by zero");
+    }
+
+    #[test]
     fn test_invalid_input_returns_error() {
         assert!(interpret_tuff("invalid").is_err());
+    }
+
+    #[test]
+    fn test_unexpected_character() {
+        let err = interpret_tuff("1 + a").unwrap_err();
+        assert_eq!(err, "unexpected character: 'a'");
+    }
+
+    #[test]
+    fn test_operator_without_operand() {
+        // Triggers parse_number error path (operator where number expected)
+        assert!(interpret_tuff("+ 5").is_err());
     }
 }
