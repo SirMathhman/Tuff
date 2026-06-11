@@ -299,46 +299,52 @@ function processBlock(scope: Map<string, ScopeValue>, parts: string[]): void {
   }
 }
 
-/** Check if a string is an assignment like `x = expr`. */
+/** Check if a string is an assignment like `x = expr` or `arr[0] = expr`. */
 function isAssignment(input: string): boolean {
-  return /^\w+\s*=/.test(input.trim());
+  return /^\w+(?:\s*\[[^\]]+\])*\s*=/.test(input.trim());
 }
 
-/** Evaluate an assignment statement like `x = 3` and update the scope. */
+/** Evaluate an assignment statement like `x = 3` or `arr[0] = 100`. */
 function evaluateAssignment(
   input: string,
   scope: Map<string, ScopeValue>,
 ): void {
-  const match = input.match(/^(\w+)\s*=\s*(.+)$/);
-  if (match && match[1] && match[2]) {
+  const match = input.match(/^(\w+)(.*)\s*=\s*(.+)$/);
+  if (match && match[1] && typeof match[2] === "string" && match[3]) {
     const name = match[1];
-    const value = parseValue(match[2], scope);
-    scope.set(name, value);
+    // Extract indices from the middle part like [0][1]
+    const idxMatch = match[2].match(/\[(\d+)\]/g) ?? [];
+
+    if (idxMatch.length === 0) {
+      // Plain assignment: `x = value`
+      scope.set(name, parseValue(match[3], scope));
+      return;
+    }
+
+    // Indexed assignment: ensure target is an array
+    const arr = scope.get(name);
+    if (!Array.isArray(arr)) throw new Error("Cannot index non-array");
+
+    // Walk to parent and set at final index
+    let current: unknown[] = arr;
+    for (let i = 0; i < idxMatch.length - 1; i++) {
+      const ci = parseInt(idxMatch[i]!.slice(1, -1), 10);
+      current = current[ci] as unknown[];
+    }
+    const finalIdx = parseInt(idxMatch.at(-1)!.slice(1, -1), 10);
+    current[finalIdx] = parseValue(match[3], scope);
   }
 }
 
-function evaluateExpressionWithScope(
-  input: string,
-  scope: Map<string, ScopeValue>,
-): number {
-  // Replace variable names with their values from the scope
-  let resolved = input;
-  for (const [name, value] of scope) {
-    const regex = new RegExp(`\\b${name}\\b`, "g");
-    resolved = resolved.replace(regex, String(value));
-  }
-  return evaluateExpression(resolved);
-}
-
-/** Split input by semicolons, respecting brace nesting (don't split inside {}). */
+/** Split input by semicolons, respecting brace and bracket nesting. */
 function splitStatements(input: string): string[] {
   const parts: string[] = [];
   let current = "";
   let depth = 0;
   for (let i = 0; i < input.length; i++) {
     const ch = input.charAt(i);
-    if (ch === "{") depth++;
-    else if (ch === "}") depth--;
+    if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") depth--;
     else if (ch === ";" && depth === 0) {
       parts.push(current.trim());
       current = "";
@@ -373,7 +379,7 @@ function evaluate(source: string): number {
     const scope = new Map<string, ScopeValue>();
     const parts: string[] = splitStatements(trimmed);
     processBlock(scope, parts);
-    return evaluateExpressionWithScope(parts[parts.length - 1]!, scope);
+    return resolveBlocksWithScope(parts[parts.length - 1]!, scope);
   }
 
   // Find any { ... } blocks in the expression and recursively resolve them

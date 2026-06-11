@@ -12,6 +12,7 @@ export default defineConfig([
     rules: {
       "no-new-func": "error",
       "no-eval": "error",
+      "@typescript-eslint/no-explicit-any": "error",
     },
   },
   tseslint.configs.recommended,
