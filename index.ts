@@ -3,8 +3,9 @@ type NumberToken = { type: "number"; value: number };
 type OpToken = { type: "op"; value: string };
 type IdToken = { type: "id"; value: string };
 type BooleanToken = { type: "boolean"; value: boolean };
+type KeywordToken = { type: "keyword"; value: string };
 type ScopeValue = unknown | unknown[];
-type Token = NumberToken | OpToken | IdToken | BooleanToken;
+type Token = NumberToken | OpToken | IdToken | BooleanToken | KeywordToken;
 
 function isOp(token: Token): token is OpToken {
   return token.type === "op";
@@ -39,11 +40,16 @@ function tokenize(input: string): Token[] {
         tokens.push({ type: "boolean", value: true });
       } else if (name === "false") {
         tokens.push({ type: "boolean", value: false });
+      } else if (name === "if" || name === "else") {
+        tokens.push({ type: "keyword", value: name });
       } else {
         tokens.push({ type: "id", value: name });
       }
     } else if (ch === "[") {
       tokens.push({ type: "op", value: "[" });
+      i++;
+    } else if (ch === ")" || ch === "(") {
+      tokens.push({ type: "op", value: ch });
       i++;
     } else if (ch === "]") {
       tokens.push({ type: "op", value: "]" });
@@ -219,11 +225,52 @@ function parseUnary(
   return parsePrimary(tokens, pos, scope);
 }
 
+function parseIfExpr(
+  tokens: Token[],
+  pos: [number],
+  scope: Map<string, unknown>,
+): number {
+  // Consume 'if' keyword
+  consume(tokens, pos);
+
+  // Parse condition (in parens)
+  const parenToken = peek(tokens, pos);
+  if (parenToken && isOp(parenToken) && parenToken.value === "(") {
+    consume(tokens, pos); // consume (
+    const cond = parseExpression(tokens, pos, scope);
+    const closeParen = peek(tokens, pos);
+    if (closeParen && isOp(closeParen) && closeParen.value === ")") {
+      consume(tokens, pos); // consume )
+    }
+
+    // Parse then branch
+    const thenValue = parseExpression(tokens, pos, scope);
+
+    // Check for 'else' keyword and parse else branch if present
+    const nextToken = peek(tokens, pos);
+    if (nextToken && nextToken.type === "keyword" && nextToken.value === "else") {
+      consume(tokens, pos); // consume 'else'
+      const elseValue = parseExpression(tokens, pos, scope);
+      return cond !== 0 ? thenValue : elseValue;
+    }
+
+    return thenValue;
+  }
+
+  throw new Error("Expected condition after if");
+}
+
 function parsePrimary(
   tokens: Token[],
   pos: [number],
   scope: Map<string, unknown>,
 ): number {
+  // Check for 'if' keyword at primary level
+  const token = peek(tokens, pos);
+  if (token && token.type === "keyword" && token.value === "if") {
+    return parseIfExpr(tokens, pos, scope);
+  }
+
   const value = parseValuePrimary(
     tokens,
     pos,
